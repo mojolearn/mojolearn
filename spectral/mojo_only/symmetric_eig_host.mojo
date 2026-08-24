@@ -104,6 +104,21 @@ comptime SAB_ROTATE_UNFUSED = is_defined[
     "MOJOLEARN_SPECTRAL_SABOTAGE_ROTATE_UNFUSED"
 ]()
 
+#: SABOTAGE. Make the ascending sort ANTI-STABLE for ties (`>=` where the
+#: pinned spelling has `>`), so two equal eigenvalues come back in the
+#: reverse of their original index order. This is the arm for DEVIATION
+#: 778's TIE RULE, and it exists because a convention with no arm behind it
+#: is pinned in prose only.
+#:
+#: REACH: shared solver again, so it is EXPECTED INERT against
+#: `check_spectral_device_equals_oracle`. Its instrument is
+#: `check_tsolve_tie_order_is_stable`, a host check on an exactly
+#: degenerate 4x4 that asserts WHICH original index each tied column came
+#: from. That check is the whole reason DEVIATION 778 is falsifiable.
+comptime SAB_TIE_REVERSE = is_defined[
+    "MOJOLEARN_SPECTRAL_SABOTAGE_TIE_REVERSE"
+]()
+
 
 # ---------------------------------------------------------------------------
 # dtype-generic seams: Float32 goes through the IDENTICAL helpers, Float64
@@ -280,7 +295,18 @@ def symmetric_eig_host[
     for i in range(1, n):
         var key = order[i]
         var j = i - 1
-        while j >= 0 and d[order[j]] > d[key]:
+        while j >= 0:
+            # STRICT `>` is the tie rule (DEVIATION 778): equal values keep
+            # their ORIGINAL index order, because insertion sort with a
+            # strict compare is stable. `>=` reverses ties, which is the
+            # sabotage.
+            var shift: Bool
+            comptime if SAB_TIE_REVERSE:
+                shift = d[order[j]] >= d[key]
+            else:
+                shift = d[order[j]] > d[key]
+            if not shift:
+                break
             order[j + 1] = order[j]
             j -= 1
         order[j + 1] = key

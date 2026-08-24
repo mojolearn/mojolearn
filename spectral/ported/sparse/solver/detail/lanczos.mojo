@@ -171,6 +171,7 @@ from spectral.mojo_only.device_io import download_f32, upload_f32
 from spectral.mojo_only.symmetric_eig_host import (
     SAB_ROTATE_UNFUSED,
     SAB_SWEEP_CAP,
+    SAB_TIE_REVERSE,
     symmetric_eig_host,
 )
 from spectral.ported.sparse.linalg.detail.laplacian import DeviceCoo
@@ -241,6 +242,8 @@ def spectral_sabotage_name() -> String:
         s += "SWEEP_CAP "
     comptime if SAB_ROTATE_UNFUSED:
         s += "ROTATE_UNFUSED "
+    comptime if SAB_TIE_REVERSE:
+        s += "TIE_REVERSE "
     if s == "":
         return String("none")
     return s

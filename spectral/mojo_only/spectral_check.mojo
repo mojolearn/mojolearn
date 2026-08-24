@@ -286,6 +286,59 @@ def check_tsolve_sign_pin_skips_signed_zero() raises:
     )
 
 
+def check_tsolve_tie_order_is_stable() raises:
+    """THE INSTRUMENT FOR DEVIATION 778's TIE RULE.
+
+    An exactly degenerate 4x4, `diag(1, 0, 0, 2)`: eigenvalues `0, 0, 1, 2`
+    and eigenvectors the identity columns. The two zeros come from ORIGINAL
+    indices 1 and 2, and the tie rule says they must come back IN THAT
+    ORDER, so eigenvector column 0 is `e_1` and column 1 is `e_2`. Reverse
+    the tie and the two columns swap, which nothing else in this lane can
+    see: the eigenvalues are unchanged, the multiset is unchanged, every
+    tolerance is unchanged, and `check_spectral_device_equals_oracle`
+    cannot see it either because the solver is SHARED by both arms.
+
+    Without this check DEVIATION 778 would be pinned in prose only.
+    `MOJOLEARN_SPECTRAL_SABOTAGE_TIE_REVERSE` must fail HERE.
+    """
+    var n = 4
+    var a = List[Float32]()
+    var diag: List[Float32] = [1.0, 0.0, 0.0, 2.0]
+    for i in range(n):
+        for j in range(n):
+            a.append(diag[i] if i == j else Float32(0.0))
+    var ev = List[Float32]()
+    var vecs = List[Float32]()
+    _ = symmetric_eig_host[DType.float32](a, n, ev, vecs)
+    var want_val: List[Float32] = [0.0, 0.0, 1.0, 2.0]
+    for c in range(n):
+        if _bits(ev[c]) != _bits(want_val[c]):
+            raise Error(
+                "tie order: eigenvalue " + String(c) + " is " + _hex32(ev[c])
+                + ", expected " + _hex32(want_val[c])
+            )
+    # column c must be the identity column of its ORIGINAL index:
+    # order is [1, 2, 0, 3] under the stable tie rule.
+    var want_row: List[Int] = [1, 2, 0, 3]
+    for c in range(n):
+        for r in range(n):
+            var got = vecs[r * n + c]
+            var expect = Float32(1.0) if r == want_row[c] else Float32(0.0)
+            if abs(got) != expect:
+                raise Error(
+                    "tie order (DEVIATION 778) BROKEN: eigenvector column "
+                    + String(c) + " should be e_" + String(want_row[c])
+                    + " (the stable tie keeps original index order), but row "
+                    + String(r) + " is " + String(got)
+                )
+    print(
+        "check_tsolve_tie_order_is_stable OK: diag(1,0,0,2), the DOUBLE"
+        " eigenvalue 0 comes back as columns e_1 then e_2 -- original index"
+        " order, the DEVIATION 778 tie rule, which no other check in this"
+        " lane can see"
+    )
+
+
 def check_oracle_dot_is_the_gemm_contract() raises:
     for k in [100, 1000, 257]:
         var a = List[Float32]()
@@ -570,6 +623,64 @@ def _restart_tag(r: Int, what: String) -> String:
     return "spectral.lanczos.restart" + s + "." + what
 
 
+def _refuse_vacuous(
+    name: String, dpath: String, opath: String, n_cells: Int, min_stages: Int
+) raises:
+    """NEGATIVE CONTROL. A comparison over ZERO cells, or between two EMPTY
+    cards, reports agreement it never tested and passes for ever on every
+    vendor. `first_divergence` in particular returns "" for two empty
+    files, which is indistinguishable from success. Raise VACUOUS rather
+    than let that happen.
+    """
+    if n_cells <= 0:
+        raise Error(
+            "VACUOUS " + name + ": the embedding comparison covered 0 cells,"
+            " so it tested nothing"
+        )
+    var a = read_trace_lines(dpath)
+    var b = read_trace_lines(opath)
+    if len(a) < min_stages or len(b) < min_stages:
+        raise Error(
+            "VACUOUS " + name + ": device card has " + String(len(a))
+            + " stages and the oracle card " + String(len(b)) + ", fewer than"
+            " the " + String(min_stages) + " this pipeline must emit."
+            " first_divergence over an empty card returns AGREEMENT, so a"
+            " gate in that state is green for ever"
+        )
+
+
+def _card_delta(dpath: String, opath: String) raises -> String:
+    """How many stages moved, out of how many, and the FIRST tag that did.
+
+    Pass/fail is not enough: an arm can move thirteen stages and leave the
+    final output bit-identical, and an arm can move zero cells and still be
+    a real catch because it changed a recorded DECISION. This reports the
+    shape.
+    """
+    var a = read_trace_lines(dpath)
+    var b = read_trace_lines(opath)
+    if len(a) != len(b):
+        return (
+            "STRUCTURAL: " + String(len(a)) + " vs " + String(len(b))
+            + " stages (the two runs did not take the same steps)"
+        )
+    var n = 0
+    var first = String("")
+    for i in range(len(a)):
+        var ai = a[i].find("\t")
+        var bi = b[i].find("\t")
+        var arest = String(a[i][byte=ai + 1 :])
+        var brest = String(b[i][byte=bi + 1 :])
+        if arest != brest:
+            n += 1
+            if first == "":
+                var t = arest.find("\t")
+                first = String(arest[byte=0:t])
+    if n == 0:
+        return String("0/") + String(len(a)) + " stages"
+    return String(n) + "/" + String(len(a)) + " stages, first=" + first
+
+
 def _ncv_for(n: Int, k: Int) -> Int:
     var hi = 2 * k + 1
     if hi < 20:
@@ -617,12 +728,14 @@ def _compare_graph_run(
                     "cell " + String(i) + " device " + _hex32(emb[i]) + " oracle "
                     + _hex32(Float32(res.embedding[i]))
                 )
+    _refuse_vacuous(name, dpath, opath, g.n * n_out, 12)
     var div = first_divergence(dpath, opath)
+    var delta = _card_delta(dpath, opath)
     n_diff_total += diff_here
     if diff_here > 0 or div != "":
         return (
-            name + ": " + String(diff_here) + " of " + String(g.n * n_out)
-            + " embedding cells differ; first stage: " + div + "; " + first_cell
+            name + ": " + delta + "; cells " + String(diff_here) + "/"
+            + String(g.n * n_out) + "; " + first_cell
         )
     return String("")
 
@@ -697,11 +810,18 @@ def check_spectral_device_equals_oracle() raises:
             diff_here += 1
             if first_cell == "":
                 first_cell = "cell " + String(i) + " device " + _hex32(emb[i]) + " oracle " + _hex32(Float32(res.embedding[i]))
+    if n * n_out <= 0 or len(lines) < 16 or len(olines) < 12:
+        raise Error(
+            "VACUOUS blobs(dataset path): " + String(n * n_out) + " cells,"
+            " device card " + String(len(lines)) + " stages, oracle card "
+            + String(len(olines)) + " stages"
+        )
     n_diff += diff_here
     if diff_here > 0 or div != "":
         msgs.append(
-            "blobs(dataset path): " + String(diff_here) + " of " + String(n * n_out)
-            + " embedding cells differ; first stage: " + div + "; " + first_cell
+            "blobs(dataset path): " + String(len(olines)) + " oracle stages;"
+            " cells " + String(diff_here) + "/" + String(n * n_out)
+            + "; first stage: " + div + "; " + first_cell
         )
     if len(msgs) > 0:
         var all = String("")
@@ -897,6 +1017,11 @@ def check_spectral_launch_invariance() raises:
     _ = transform_graph(ctx, params, g, b, tr, 64, 32, 37, Float32(13.5))
     _ = transform_graph(ctx, params, g, c, tr, 256, 256, 0, Float32(-987654.0))
     var bad = String("")
+    if g.n * n_out <= 0 or len(a) != g.n * n_out:
+        raise Error(
+            "VACUOUS launch invariance: n_out=" + String(n_out) + ", embedding"
+            " has " + String(len(a)) + " cells for " + String(g.n) + " rows"
+        )
     for i in range(g.n * n_out):
         if _bits(a[i]) != _bits(b[i]):
             bad = "A(256/256/pad0) vs B(64/32/pad37) at cell " + String(i) + ": " + _hex32(a[i]) + " vs " + _hex32(b[i])
@@ -1128,6 +1253,7 @@ def main() raises:
     # HOST (no device touched until the device block)
     check_tsolve_against_float64_jacobi()
     check_tsolve_sign_pin_skips_signed_zero()
+    check_tsolve_tie_order_is_stable()
     check_oracle_dot_is_the_gemm_contract()
     check_spectral_ring_exact()
     check_spectral_path_exact()
