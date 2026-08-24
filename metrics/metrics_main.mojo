@@ -4,14 +4,32 @@
     tools/with_identical_mode.sh pixi run mojo run -I . metrics/metrics_main.mojo
     MOJOLEARN_IDENTITY_TRACE=/tmp/metrics.card tools/with_identical_mode.sh pixi run mojo run -I . metrics/metrics_main.mojo
 
-The card (`core/identity_trace.mojo`) carries one stage per metric -- the
-INPUT bytes first, then the integer products a metric rests on (the
-contingency matrix, the rand pair counts, the trustworthiness rank sum),
-then every returned value by its bits -- so a cross-vendor leg diffs stage
-by stage with `tools/identity_trace_diff.py` and a difference has an
-address: "the contingency matrices agree and the MI bits do not" is a
-different finding from "the matrices differ". Tags are unique and carry
-no launch parameter.
+The card (`core/identity_trace.mojo`) carries, per metric, the INPUT bytes
+first, then the integer products a metric rests on (the contingency matrix,
+the rand pair counts, the trustworthiness rank sum), then THE INTERMEDIATES
+A FINAL SCORE WOULD OTHERWISE ABSORB, then every returned value by its bits
+-- so a cross-vendor leg diffs stage by stage with `tools/identity_trace_
+diff.py` and a difference has an address: "the contingency matrices agree
+and the MI bits do not" is a different finding from "the matrices differ".
+Tags are unique and carry no launch parameter.
+
+WHY THE INTERMEDIATES ARE NOT OPTIONAL. A final scalar is a LOSSY hash of
+the arithmetic that produced it. `r2 = 1 - sse/ssto` absorbs a last-bit
+move in either sum whenever `sse << ssto` -- this lane MEASURED that on
+the 4099-row fixture (`ported/stats/detail/scores.mojo::r2_score_parts`)
+and gated the sums in the checks while the card recorded only the ratio.
+An output-only card is blind in exactly the way three other lanes measured
+on 2026-08-23 (NOVELTY_NOTES 13, 14, 15: a fold sabotage that moves 13 of
+16 stages with the output bit-identical). Every stage added here is a value
+the metric already computed and threw away.
+
+WHAT MAY NOT BE RECORDED HERE. A stage must be a decision or a value the
+ALGORITHM owns, never one the SCHEDULER owns. These cards are asserted
+LAUNCH-INVARIANT (`regression_metrics_check.mojo`: two block widths x two
+grid shapes, same bits), so a stage carrying a block width, a grid shape,
+an occupancy or a core count would differ between two legal launches BY
+CONSTRUCTION and would break the property the invariance gate exists to
+prove. That is `core/identity_trace.mojo` rule 3 read forwards.
 
 Not a port: cuML ships one backend and needs no card. This driver is a
 CONSTRUCTION plus one Apple device's run; no second vendor has run it.
@@ -37,7 +55,7 @@ from metrics.ported.metrics.entropy import entropy
 from metrics.ported.metrics.homogeneity_score import homogeneity_score
 from metrics.ported.metrics.kl_divergence import kl_divergence
 from metrics.ported.metrics.mutual_info_score import mutual_info_score
-from metrics.ported.metrics.r2_score import r2_score_py
+from metrics.ported.metrics.r2_score import r2_score_py_parts
 from metrics.ported.metrics.rand_index import rand_index
 from metrics.ported.metrics.silhouette_score_batched_float import (
     silhouette_score,
@@ -157,8 +175,23 @@ def main() raises:
     trace.record_host("metrics.input.y_hat", yhat_h.unsafe_ptr(), N_FLOAT)
     var dy = upload_f32(ctx, y_h)
     var dyh = upload_f32(ctx, yhat_h)
-    var r2 = r2_score_py(ctx, dy, dyh, N_FLOAT)
+    # ONE call; `r2_parts[3]` IS `r2_score_py`'s return, bit for bit, from
+    # the same launch (r2_score.mojo::r2_score_py_parts). The three sums are
+    # recorded because the ratio ABSORBS them: `1 - sse/ssto` with `sse <<
+    # ssto` rounds a last-bit move in either sum away, MEASURED on this very
+    # fixture (scores.mojo::r2_score_parts). They are also the PRE-VALUES of
+    # `r2_epilogue`'s two washers -- the `ssto == 0` force_finite branch and
+    # `canonicalize_nan` (DEVIATION 657) -- so a divergence that either
+    # washer maps onto one recorded r2 still has a stage of its own.
+    var r2_parts = r2_score_py_parts(ctx, dy, dyh, N_FLOAT)
+    trace.record_scalar_f32("metrics.r2.y_bar", r2_parts[0])
+    trace.record_scalar_f32("metrics.r2.sse", r2_parts[1])
+    trace.record_scalar_f32("metrics.r2.ssto", r2_parts[2])
+    var r2 = r2_parts[3]
     trace.record_scalar_f32("metrics.r2_score", r2)
+    _show32("r2.y_bar", r2_parts[0])
+    _show32("r2.sse", r2_parts[1])
+    _show32("r2.ssto", r2_parts[2])
     _show32("r2_score", r2)
     var p_h = hashed_pdf(N_FLOAT, 19, 101)
     var q_h = hashed_pdf(N_FLOAT, 20, 0)

@@ -10,11 +10,24 @@ for SEMANTICS only and its formula stands beside each of ours in a comment.
 
 CERTIFIED Apple M4 <-> NVIDIA H100 <-> AMD MI325X at leg 11 both halves (commit 144aa5b, judged by tools/e3_round_judge.sh section 7 on 2026-08-23): the IDENTICAL card is bit-identical across the three vendors, 34 stages; the FAST cards differ, recorded, the shipped arm makes no cross-vendor claim; AMD MI325X is OWED (that leg was not run).
 
+**THAT CERTIFICATION WAS JUDGED ON A WEAKER INSTRUMENT THAN THE ONE THIS
+DIRECTORY NOW SHIPS.** The leg-11 card recorded inputs and then a final
+scalar with nothing in between for fourteen scores, so a divergence in a
+value the score ABSORBS -- `r2 = 1 - sse/ssto` with `sse << ssto`, which
+this lane measured and then did not record -- passed it. The 34-stage
+result is not thereby wrong; it is weaker than it reads. The card grew
+this round (CARD_GAPS.md), so **a leg-11 card and a current card do not
+compare stage for stage**: a leg builds both ends from one pinned SHA, so
+that is survivable, but a stale card diffed against a fresh one reports a
+STRUCTURAL divergence and means only that the two builds differ. Re-running
+the three-vendor leg on the grown card is OWED.
+
 All four groups are ported, gated in both modes on one Apple M4, and
 sabotaged: A (the label metrics), B (r2, KL divergence), C (silhouette,
 the batched path cuML dispatches) and D (trustworthiness). `metrics_main.
 mojo` runs every ported metric on one hashed fixture and emits the
-identity card (one stage per metric).
+identity card (per metric: the inputs, the integer products, the
+intermediates the final score would absorb, and the returned bits).
 
 ## Commands
 
@@ -33,8 +46,9 @@ through the build lock; the long forms:
     tools/with_build_lock.sh     pixi run mojo run -I . metrics/mojo_only/trustworthiness_check.mojo
     tools/with_identical_mode.sh pixi run mojo run -I . metrics/mojo_only/trustworthiness_check.mojo
 
-The card (one stage per metric; diff two machines' cards with
-`tools/identity_trace_diff.py`):
+The card (diff two machines' cards with `tools/identity_trace_diff.py`;
+both cards must come from ONE pinned SHA, since the stage list is part of
+the build):
 
     MOJOLEARN_IDENTITY_TRACE=/tmp/metrics.mac.card tools/with_identical_mode.sh pixi run mojo run -I . metrics/metrics_main.mojo
     python3 tools/identity_trace_diff.py /tmp/metrics.mac.card /tmp/metrics.other.card
@@ -210,10 +224,16 @@ IDENTICAL and RECORDED under FAST, see the row 39 audit):
 
 ## The card (`metrics_main.mojo`, Apple M4, 2026-08-23)
 
-34 stages, one `seq`: the inputs (`metrics.input.*`), the integer
-products (`metrics.contingency`, `metrics.rand.a/b`, neighbors'
-`knn.*` six stages, `trust.emb_ind`, `trust.rank_sum`), the per-sample
-silhouettes, and every returned value by its bits. Two IDENTICAL runs:
+One `seq`. THE 34-STAGE CARD BELOW IS THE LEG-11 CARD (commit a32e304);
+the stage list grew this round and the exact new count is OWED from the
+next build slot, which is why a leg-11 card and a current card do not
+compare stage for stage. What was there at leg 11: the inputs
+(`metrics.input.*`), the integer products (`metrics.contingency`,
+`metrics.rand.a/b`, neighbors' `knn.*` six stages, `trust.emb_ind`,
+`trust.rank_sum`), the per-sample silhouettes, and every returned value by
+its bits. What was NOT there, and is the whole of this round's work, is
+listed under "What the card records now". Two IDENTICAL runs of the
+leg-11 card:
 
     python3 tools/identity_trace_diff.py /tmp/metrics.ident.card /tmp/metrics.ident2.card
     RESULT: IDENTICAL. Same stage sequence, same counts, same hashes.
@@ -330,8 +350,9 @@ r2 epilogue moves nothing on the M4 because its ARM host already computes
 the raw NaN is 0xffc00000 and the gate FAILS there, which is exactly why
 the canonical payload is required before the scalar is recorded.
 
-**NaN audit, per recorded stage of the card** (`metrics_main.mojo`, 34
-stages): the inputs are host-recorded fixtures; `metrics.contingency`,
+**NaN audit, per recorded stage of the card** (`metrics_main.mojo`, the
+34 leg-11 stages; the stages added this round are audited under "What the
+card records now"): the inputs are host-recorded fixtures; `metrics.contingency`,
 `metrics.rand.a/b`, `knn.*` (neighbors'), `trust.emb_ind`,
 `trust.rank_sum` are INTEGER; `metrics.accuracy_score` is count / n with
 n > 0 refused otherwise; `metrics.rand_index` / `adjusted_rand_index` /
@@ -369,8 +390,8 @@ FAST now prints `RECORDED [FAST] rank sum differs` and the run finishes
 `ALL GROUP D CHECKS PASSED [FAST]`.
 
 **Check results after the audit (Apple M4, 2026-08-23)**: all four checks
-`ALL GROUP * CHECKS PASSED` in both modes; the card driver's 34 stages and
-every printed value are unchanged from the table above (two IDENTICAL runs
+`ALL GROUP * CHECKS PASSED` in both modes; the card driver's 34 stages (as
+of that date) and every printed value are unchanged from the table above (two IDENTICAL runs
 diff `RESULT: IDENTICAL`). No bit of any existing fixture moved; the
 deviations touch only the undefined cases they name.
 
