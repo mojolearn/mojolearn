@@ -92,6 +92,33 @@ changing the stage list creates a v2).
   (`:208-212`). For a lasso fit that is most coordinates, and the pre-threshold
   gradient is recorded nowhere.
 
+## THE RULE THAT KEEPS THIS PROGRAM FROM BREAKING WHAT WE ALREADY HAVE
+
+Added 2026-08-24 after the holtwinters lane pushed back on a suggestion in
+this audit's own brief, correctly.
+
+**A decision worth hashing is one the ALGORITHM makes, not one the SCHEDULER
+makes.**
+
+The brief listed "chosen block or launch geometry" as a candidate decision.
+It must NOT go in an identity card. The card is ASSERTED LAUNCH-INVARIANT: a
+stage recording launch geometry would differ between two tpb settings BY
+CONSTRUCTION and would break the exact property `check_hw_launch_invariance`
+exists to prove. Launch geometry belongs in a separate assertion, never in the
+identity trace.
+
+The same test applies to every candidate in this file. `chunk_count` is a pure
+function of n, so metrics' chunk partials are the ALGORITHM's structure and are
+legal. `contract_partition` is pure in k and `choose_gemm_plan` is pure in
+(m, n, k), so gemm's plan id is the algorithm's and is legal. Anything whose
+value depends on the machine, the occupancy or the dispatch is not.
+
+Corollary on wording, also from that lane: **"ungated" is the wrong word for a
+branch nobody can reach.** It invites someone to gate it. holtwinters'
+`get_num_blocks` 65535 cap binds only above 33.5 million series, which is more
+than 6 GB of input at n=48, so it is recorded UNPORTED-IN-EFFECT and CLOSED
+rather than left on an owed list for ever.
+
 ## The top five, if only five land
 
 Every one is a scalar or a handful of integers. None adds a large buffer.
