@@ -53,8 +53,9 @@ list, every row of it still unrun.
 
     tools/with_build_lock.sh     pixi run mojo run -I . arima/mojo_only/arima_check.mojo
     tools/with_identical_mode.sh pixi run mojo run -I . arima/mojo_only/arima_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -I . arima/arima_main.mojo
     MOJOLEARN_IDENTITY_TRACE=/tmp/arima.card tools/with_identical_mode.sh \
-        pixi run mojo run -I . arima/mojo_only/arima_check.mojo
+        pixi run mojo run -I . arima/arima_main.mojo
     python3 tools/identity_trace_diff.py /tmp/arima.mac.card /tmp/arima.other.card
 
 No pixi task is registered; `pixi.toml` is not this lane's file. The task
@@ -305,6 +306,7 @@ loop runs zero times and a gate that never enters it proves nothing.
 ### pixi task line (I do not own `pixi.toml`)
 
     check-arima = "mojo run -I . arima/mojo_only/arima_check.mojo"
+    arima-card  = "mojo run -I . arima/arima_main.mojo"
 
 ### IDENTITY_PATHS row (I do not own `IDENTITY_PATHS.md`)
 
@@ -359,10 +361,10 @@ history is readable later.
    chosen by reasoning, and a chosen bound must be sabotaged.
 5. **Price DEVIATION 675's cancellation.** The round-trip number does not
    exist yet. If it is large, replace the identity with a numbered one.
-6. **Write `arima/arima_main.mojo`**, the card driver, in `tsa_main.mojo`'s
-   shape, and produce a card. The check records stages into an
-   `IdentityTrace` already, but a separate small driver is what the
-   cross-vendor diff wants.
+6. **Build and run `arima/arima_main.mojo`** and produce a card. The driver
+   is written (all seven orders, the untransformed parameters, the
+   Jones-transformed parameters, and eleven filter stages each, about 100
+   tags) and has NEVER RUN. It has not been verified to parse either.
 7. **A second vendor.** Nothing here has run anywhere but nowhere.
 8. **Check whether the `it < n_diff` steps can produce a non-finite
    `_1_Fs`** on any fixture, per DEVIATION 673's recorded hole.
