@@ -153,6 +153,31 @@ comptime SAB_S10_DESCENDING = is_defined[
 #: Contract section 4 seam S5-S6, and row 12's whole argument.
 comptime SAB_S5_EXP2 = is_defined["MOJOLEARN_MAMBA_SABOTAGE_S5_EXP2"]()
 
+# WHAT EACH SABOTAGE WAS MEASURED TO DO, 2026-08-23, Apple M4 through MAX,
+# IDENTICAL mode, device card diffed against `mamba_block_oracle`'s. Every
+# one of the five FAILS the diff, and the SHAPE AT WHICH IT FIRST FAILS is
+# the part worth reading:
+#
+#   S8_CUDA_PAIRING   fails at b=1 l=1 d_model=8,  1 ulp on scan.y and scan.h
+#   S11_D_FIRST       fails at b=1 l=1 d_model=8,  and it moves scan.y by the
+#                     WHOLE `D * u` term, not by an ulp, because the seed
+#                     leaks into the stage recorded before D
+#   S10_DESCENDING    fails at b=1 l=1 d_model=8,  1 ulp on scan.y
+#   S9_UNFUSED        agrees at every L = 1 shape, first fails at L = 4
+#   S5_EXP2           agrees at every L = 1 shape, first fails at L = 4
+#
+# **A FIXTURE WHOSE ONLY SHAPE IS L = 1 CANNOT SEE S5, S6 OR S9 AT ALL**, and
+# that is structural rather than unlucky: at the first token `h` is the zero
+# state, so `h = fma(deltaA, 0, deltaB_u)` is `deltaB_u` for EVERY value of
+# `deltaA` and for either rounding. `deltaA` -- and with it the whole of the
+# exp seam -- is multiplied by zero. The gate shapes in contract section 3
+# carry L in {4, 16, 64, 257} and are therefore fine, but gate D's decode arm
+# is exactly an L = 1 call, so a decode-only fixture is blind to three of the
+# seven seams this file owns and must never be the only arm. Recorded here
+# because the next person to trim a fixture for speed will reach for L = 1.
+# (The same shape boundary shows in FAST mode, which agrees with the host
+# oracle at every L = 1 shape and diverges from L = 4 on: same reason.)
+
 comptime ANY_SABOTAGE = (
     SAB_S8_CUDA_PAIRING
     or SAB_S9_UNFUSED
