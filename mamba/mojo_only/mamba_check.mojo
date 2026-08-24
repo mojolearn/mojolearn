@@ -154,11 +154,22 @@ failure:
   one other (B = 2) and beside two others (B = 3), from ONE `x` that is
   sliced, so row 0's input bits are identical by construction. Row 0's cells
   are then compared across all three compositions, and row 1's between B = 2
-  and B = 3. What would hide a failure: comparing whole buffers rather than
-  ROW SLICES, because the buffers are different lengths and a whole-buffer
-  compare cannot even be spelled; and forgetting the per-batch stages
-  (`conv.window`, `scan.h`), which are indexed `[B, ...]` rather than by
-  token and are exactly where a batch-dependent bug would live.
+  and B = 3. PASS on 4,152 compared cells of all 16 stages at B up to 3,
+  L = 4, d_model = 8. What would hide a failure: comparing whole buffers
+  rather than ROW SLICES, because the buffers are three different lengths
+  and a whole-buffer compare cannot even be spelled; and forgetting the
+  per-batch stages (`conv.window`, `scan.h`), which are indexed `[B, ...]`
+  rather than by token and are exactly where a batch-dependent bug would
+  live.
+
+  **AND IT CARRIES A NEGATIVE CONTROL, because without one it is worthless.**
+  If `row_slice` were wrong -- if it returned row 0 whatever row it was asked
+  for -- every comparison would compare a row to ITSELF and pass for ever, on
+  every vendor, hiding any batch dependence there is. So the clause first
+  proves the slicer can tell two rows apart: rows 0 and 1 of the B = 2 run
+  have different input tokens and must differ somewhere. They differ on 15 of
+  15 batched stages. A zero there RAISES and calls the clause vacuous rather
+  than passing it (`[[verify-reach-not-output]]`).
 
 Clause (c) is a device-versus-device invariance claim. It does not re-check
 correctness: a block that was wrong in a batch-INDEPENDENT way would pass it.
@@ -420,7 +431,12 @@ def compare_stage(
 ) raises -> StageDiff:
     """Bitwise, cell by cell. A LENGTH mismatch is reported as such rather
     than compared to the shorter of the two, because a stage that is the
-    wrong size is a different defect from a stage that is the wrong value."""
+    wrong size is a different defect from a stage that is the wrong value.
+
+    `loud` prints per stage. It is False wherever a difference is EXPECTED
+    (clause (c)'s negative control) or wherever the caller reports the
+    failure itself with more context (clauses (b) and (c)), so that the only
+    lines on stdout are lines a reader should act on."""
     if len(host) != len(dev):
         raise Error(
             String("mamba_check: stage ")
@@ -441,7 +457,7 @@ def compare_stage(
     if n_diff == 0:
         if loud:
             print("  OK    " + name + "  (" + String(len(host)) + " cells)")
-    else:
+    elif loud:
         print(
             "  MOVED "
             + name
@@ -687,35 +703,72 @@ def clause_c(
     var d3 = run_block(ctx, w, x3, 3, l, dims, off3, "b3")
 
     var names = stage_names()
+
+    # THE NEGATIVE CONTROL, and clause (c) is worthless without it. If
+    # `row_slice` were wrong -- if it returned row 0 whatever `bb` it was
+    # given -- every comparison below would compare a row to ITSELF and pass
+    # on every cell, for ever, on every vendor. So first prove the slicer
+    # can tell two rows apart: rows 0 and 1 of the B = 2 run have DIFFERENT
+    # input tokens, so they must differ somewhere. `[[verify-reach-not-output]]`.
+    var control = 0
+    for i in range(len(names)):
+        var a0 = row_slice(d2[i], i, 0, l, dims)
+        var a1 = row_slice(d2[i], i, 1, l, dims)
+        if stage_kind(i) == KIND_GLOBAL:
+            continue  # A.out has no batch axis; equal by construction
+        var d = compare_stage(names[i] + " CONTROL row0 vs row1", a0, a1, False)
+        if d.n_diff > 0:
+            control += 1
+    if control == 0:
+        raise Error(
+            "mamba_check: CLAUSE (c) IS VACUOUS. Rows 0 and 1 of the B=2 run"
+            " are bit-identical on every stage, which cannot be true of two"
+            " different input sequences. `row_slice` is not cutting distinct"
+            " rows, so every comparison below is a row against itself"
+            " ([[reached-but-inert]])."
+        )
+    print(
+        "clause (c) control: rows 0 and 1 of the B=2 run differ on "
+        + String(control)
+        + " of 15 batched stages, so the row slicer distinguishes rows"
+    )
+
     var cells = 0
     var bad = 0
+    var first_bad = String("")
     for i in range(len(names)):
         var r0_1 = row_slice(d1[i], i, 0, l, dims)
         var r0_2 = row_slice(d2[i], i, 0, l, dims)
         var r0_3 = row_slice(d3[i], i, 0, l, dims)
         cells += len(r0_1) * 2
         var a = compare_stage(
-            names[i] + " row0 B=1 vs B=2", r0_1, r0_2, False
+            names[i] + " row0 B=1 vs B=2", r0_1, r0_2, True
         )
         var b = compare_stage(
-            names[i] + " row0 B=1 vs B=3", r0_1, r0_3, False
+            names[i] + " row0 B=1 vs B=3", r0_1, r0_3, True
         )
         if a.n_diff > 0 or b.n_diff > 0:
             bad += 1
+            if first_bad == "":
+                first_bad = names[i] + " row 0"
         # row 1 exists in B=2 and B=3 and must also be composition-free
         var r1_2 = row_slice(d2[i], i, 1, l, dims)
         var r1_3 = row_slice(d3[i], i, 1, l, dims)
         cells += len(r1_2)
         var c = compare_stage(
-            names[i] + " row1 B=2 vs B=3", r1_2, r1_3, False
+            names[i] + " row1 B=2 vs B=3", r1_2, r1_3, True
         )
         if c.n_diff > 0:
             bad += 1
+            if first_bad == "":
+                first_bad = names[i] + " row 1"
     if bad != 0:
         raise Error(
             String("mamba_check: CLAUSE (c) FAILED on ")
             + String(bad)
-            + " stages: a row's bits depend on who shares its launch"
+            + " stages, first at "
+            + first_bad
+            + ": a row's bits depend on who shares its launch"
         )
     print(
         "clause (c): PASS, row 0 identical at B=1, B=2 and B=3 and row 1"
