@@ -1227,6 +1227,7 @@ def check_hw_decision_branches() raises:
     var tr = IdentityTrace.disabled()
     var names = ["additive", "multiplicative", "constant", "zero", "mixed"]
     var seen = 0
+    var max_halv = 0
     for fi in range(len(names)):
         var name = names[fi]
         var seasonal = SEASONAL_ADDITIVE
@@ -1252,7 +1253,14 @@ def check_hw_decision_branches() raises:
             else:
                 print("  RECORDED [FAST] " + bad)
         for s in range(BATCH):
-            seen |= Int(f.decisions[s])
+            # OR the FLAG bits only. ORing the packed halving COUNT would
+            # produce a number that is not any fixture's count (the first
+            # run of this census printed halvings=255, which is the OR of
+            # 145, 112 and 68 and means nothing); the max is the useful one.
+            seen |= Int(f.decisions[s]) & 0xFFFF
+            var hv = Int(f.decisions[s]) >> 16
+            if hv > max_halv:
+                max_halv = hv
         print("  census " + name + " s0: " + _dec_names(Int(f.decisions[0])))
 
     # (2) the two LIMIT branches, reached exactly.
@@ -1325,7 +1333,8 @@ def check_hw_decision_branches() raises:
     print(
         "check_hw_decision_branches " + ("OK" if IDENTICAL else "REPORT") + " [" + _mode_name()
         + "]: decisions device == oracle on 5 fixtures; union of bits seen on the"
-        " standard fixtures = [" + _dec_names(seen) + "]; bfgs_iter_limit=2 reached"
+        " standard fixtures = [" + _dec_names(seen) + "] max halvings " + String(max_halv)
+        + "; bfgs_iter_limit=2 reached"
         " ITER_LIMIT on " + String(n_limit) + "/" + String(BATCH) + " series, criterion "
         + criterion_name(Int(cc[0]))
     )

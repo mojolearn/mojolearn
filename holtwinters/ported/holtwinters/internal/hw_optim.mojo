@@ -593,10 +593,8 @@ def holtwinters_optim_gpu_global_kernel(
     season: MutPointer[Float32, MutAnyOrigin],
     xhat: MutPointer[Float32, MutAnyOrigin],
     error: MutPointer[Float32, MutAnyOrigin],
-    optim_result: MutPointer[Int32, MutAnyOrigin],
+    opt_ints: MutPointer[Int32, MutAnyOrigin],
     iter_trace: MutPointer[Float32, MutAnyOrigin],
-    niter_out: MutPointer[Int32, MutAnyOrigin],
-    decisions_out: MutPointer[Int32, MutAnyOrigin],
     flags_in: Int32,
     write_mask_in: Int32,
     eps: Float32,
@@ -612,7 +610,23 @@ def holtwinters_optim_gpu_global_kernel(
 ):
     """`holtwinters_optim_gpu_global_kernel` (`hw_optim.cuh:711-830`), the
     BFGS arm. `flags_in` bits: 1 use_beta, 2 use_gamma, 4 optim_alpha, 8
-    optim_beta, 16 optim_gamma, 32 additive, 64 write_error."""
+    optim_beta, 16 optim_gamma, 32 additive, 64 write_error.
+
+    ============ A HARDWARE LIMIT, MEASURED 2026-08-24 ====================
+    METAL REFUSES A KERNEL WITH MORE THAN 31 ARGUMENTS. This kernel stood
+    at exactly 31; DEVIATION 699's one extra Int32 output made 32 and the
+    build failed with `Metal Compiler failed to compile metallib`, which
+    names no argument and no line. It is a BACKEND failure, so it appears
+    only for the Metal column and only at link time.
+    THE FIX, and why it is not a deviation: `criterion`, `niter` and
+    `decisions` are one `Int32` buffer of `3 * batch_size` with three
+    slices instead of three buffers. Pure PLACEMENT -- no arithmetic
+    changes, no term order changes, and the launcher hands the three
+    caller-facing buffers back unchanged, so nothing outside this file
+    knows. Theirs has no equivalent (they write one `optim_result` and
+    nothing else), so there is no spelling of theirs being departed from.
+    A future output must reuse a slice here rather than add an argument.
+    ======================================================================"""
     var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var n = Int(n_in)
     var batch_size = Int(batch_size_in)
@@ -679,9 +693,12 @@ def holtwinters_optim_gpu_global_kernel(
             beta.unsafe_store(tid, bound_device(beta_))
         if optim_gamma:
             gamma.unsafe_store(tid, bound_device(gamma_))
-        optim_result.unsafe_store(tid, Int32(optim))
-        niter_out.unsafe_store(tid, Int32(niter))
-        decisions_out.unsafe_store(tid, Int32(decisions))
+        # ONE Int32 buffer, three slices: criterion, niter, decisions.
+        # METAL CAPS A KERNEL AT 31 ARGUMENTS and this kernel was at 31
+        # before DEVIATION 699 added one. See the note above the kernel.
+        opt_ints.unsafe_store(tid, Int32(optim))
+        opt_ints.unsafe_store(batch_size + tid, Int32(niter))
+        opt_ints.unsafe_store(2 * batch_size + tid, Int32(decisions))
 
         if write_error or write_mask != 0:
             # Final fit
@@ -769,14 +786,18 @@ def holtwinters_optim_gpu(
     if write_error:
         flags |= 64
     var total_blocks = (batch_size + tpb - 1) // tpb
+    # Metal's 31-argument cap (see the kernel's docstring): criterion, niter
+    # and decisions travel as one buffer and are split back out below, so
+    # this function's signature is unchanged for every caller.
+    var opt_ints = ctx.enqueue_create_buffer[DType.int32](3 * batch_size)
+    ctx.synchronize()
     ctx.enqueue_function[holtwinters_optim_gpu_global_kernel](
         ts.unsafe_ptr(), Int32(n), Int32(batch_size), Int32(frequency),
         start_level.unsafe_ptr(), start_trend.unsafe_ptr(), start_season.unsafe_ptr(),
         pseason.unsafe_ptr(),
         alpha.unsafe_ptr(), beta.unsafe_ptr(), gamma.unsafe_ptr(),
         level.unsafe_ptr(), trend.unsafe_ptr(), season.unsafe_ptr(), xhat.unsafe_ptr(),
-        error.unsafe_ptr(), optim_result.unsafe_ptr(), iter_trace.unsafe_ptr(),
-        niter.unsafe_ptr(), decisions.unsafe_ptr(),
+        error.unsafe_ptr(), opt_ints.unsafe_ptr(), iter_trace.unsafe_ptr(),
         Int32(flags), Int32(write_mask),
         eps, min_param_diff, min_error_diff, min_grad_norm,
         Int32(bfgs_iter_limit), Int32(linesearch_iter_limit),
@@ -786,3 +807,20 @@ def holtwinters_optim_gpu(
         block_dim=(tpb, 1, 1),
     )
     ctx.synchronize()
+    var c_src = opt_ints.create_sub_buffer[DType.int32](0, batch_size)
+    var n_src = opt_ints.create_sub_buffer[DType.int32](batch_size, batch_size)
+    var d_src = opt_ints.create_sub_buffer[DType.int32](2 * batch_size, batch_size)
+    var c_dst = optim_result.create_sub_buffer[DType.int32](0, batch_size)
+    var n_dst = niter.create_sub_buffer[DType.int32](0, batch_size)
+    var d_dst = decisions.create_sub_buffer[DType.int32](0, batch_size)
+    ctx.enqueue_copy(dst_buf=c_dst, src_buf=c_src)
+    ctx.enqueue_copy(dst_buf=n_dst, src_buf=n_src)
+    ctx.enqueue_copy(dst_buf=d_dst, src_buf=d_src)
+    ctx.synchronize()
+    _ = c_src^
+    _ = n_src^
+    _ = d_src^
+    _ = c_dst^
+    _ = n_dst^
+    _ = d_dst^
+    _ = opt_ints^

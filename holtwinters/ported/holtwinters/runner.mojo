@@ -337,18 +337,6 @@ def holtwinters_fit_helper(
 
     # Step 3: Find optimal alpha, beta and gamma values (seasonal HW)
     var p = default_optim_params(epsilon)
-    # THEIR OVERRIDE BLOCK (`runner.cuh:236-253`), the two members a GATE
-    # needs, under their own `> 0` rule. UNPORTED.tsv previously listed the
-    # whole block as unreachable because `HoltWintersFitHelper` passes a
-    # nullptr `OptimParams`; that is still true of the FIT path, which is
-    # untouched. These two exist so a check can reach `OPTIM_BFGS_ITER_LIMIT`
-    # and the `linesearch_iter_limit` branch (cuml#888's path) at the
-    # SMALLEST size that reaches them, instead of hunting for a series that
-    # fails to converge in 1000 iterations.
-    if bfgs_iter_limit > 0:
-        p.bfgs_iter_limit = bfgs_iter_limit
-    if linesearch_iter_limit > 0:
-        p.linesearch_iter_limit = linesearch_iter_limit
     holtwinters_optim_gpu(
         ctx, dataset_d, n, batch_size, frequency,
         level_seed_d, trend_seed_d, start_season_d,
@@ -504,6 +492,18 @@ def holtwinters_optim(
         _ = view^
     ctx.synchronize()
     var p = default_optim_params(epsilon)
+    # THEIR OVERRIDE BLOCK (`runner.cuh:236-253`), the two members a GATE
+    # needs, under their own `> 0` rule. UNPORTED.tsv previously listed the
+    # whole block as unreachable because `HoltWintersFitHelper` passes a
+    # nullptr `OptimParams`; that is still true of the FIT path, which is
+    # untouched. These two exist so a check can reach `OPTIM_BFGS_ITER_LIMIT`
+    # and the `linesearch_iter_limit` branch (cuml#888's path) at the
+    # SMALLEST size that reaches them, instead of hunting for a series that
+    # fails to converge in 1000 iterations.
+    if bfgs_iter_limit > 0:
+        p.bfgs_iter_limit = bfgs_iter_limit
+    if linesearch_iter_limit > 0:
+        p.linesearch_iter_limit = linesearch_iter_limit
     holtwinters_optim_gpu(
         ctx, ts_time_major, n, batch_size, frequency, start_level, start_trend, start_season,
         alpha, True, beta, True, gamma, True,
