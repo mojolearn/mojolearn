@@ -259,7 +259,17 @@ paper.
    transposed-dump control that fails exactly the 7 channel-major stages and
    no others -- a control that bit EVERYTHING would have been weaker than one
    that bites exactly what it corrupts.
-   Evidence: IDENTITY_PATHS rows 55 and 59, `spectral/mojo_only/spectral_check.mojo`,
+   A FIFTH mechanism, from arima 2026-08-24, and it inverts the obvious way to
+   widen a fixture. A LONGER CHAIN IS NOT MORE COVERAGE IF THE CHAIN IS OVER
+   EXACT VALUES. Its fold-order sabotage moves 0.3% on the order with the
+   LONGEST state chain (rd=8) and 25% on one of the shortest (rd=2), because a
+   differenced or seasonal transition matrix is mostly structural exact 0.0 and
+   1.0, and a fold over exact values is order-independent however long it runs.
+   The driver is the count of genuinely arithmetic terms, not the chain length.
+   The lane had predicted the opposite in writing and left the wrong prediction
+   in the docstring beside the outcome. Widening a fixture means widening the
+   part that carries ARITHMETIC, not the part that carries STRUCTURE.
+   Evidence: IDENTITY_PATHS rows 55, 58 and 59, `spectral/mojo_only/spectral_check.mojo`,
    `mamba/mojo_only/mamba_check.mojo`.
    PRIOR-ART CHECK NEEDED, against mutation-testing coverage literature, where
    the neighbouring notion is mutant-killing test minimality.
