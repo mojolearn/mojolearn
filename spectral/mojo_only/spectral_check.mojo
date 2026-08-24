@@ -339,6 +339,70 @@ def check_tsolve_tie_order_is_stable() raises:
     )
 
 
+def check_vacuous_control_fires() raises:
+    """THE SELF-TEST FOR THE NEGATIVE CONTROL ITSELF.
+
+    `_refuse_vacuous` guards every embedding comparison in this lane, and
+    across ten sabotage runs it never fired once. That is the correct
+    outcome and it is also exactly the shape of the problem the control
+    exists to catch: **a control that has never fired is a control nobody
+    has shown to work.** So force it, both clauses, and refuse to let the
+    lane claim the guard until it has been seen to raise.
+
+    Clause 1 is a comparison covering ZERO cells. Clause 2 is two EMPTY
+    cards, which is the dangerous one: `first_divergence` over two empty
+    files returns "", indistinguishable from agreement, so a gate in that
+    state would be green for ever on every vendor.
+    """
+    var p1 = SCRATCH + "/mojolearn_spectral_vacuous_1.card"
+    var p2 = SCRATCH + "/mojolearn_spectral_vacuous_2.card"
+    # `to_path` truncates, so these are two genuinely empty cards.
+    var t1 = IdentityTrace.to_path(p1)
+    var t2 = IdentityTrace.to_path(p2)
+    _ = t1^
+    _ = t2^
+    # THE HAZARD, demonstrated before it is guarded: two empty cards agree.
+    if first_divergence(p1, p2) != "":
+        raise Error(
+            "vacuous self-test: two empty cards were expected to compare"
+            " EQUAL (that is the hazard); they did not"
+        )
+    var fired = 0
+    # clause 1: zero cells
+    try:
+        _refuse_vacuous("selftest_zero_cells", p1, p2, 0, 12)
+        raise Error("VACUOUS control did NOT fire on a zero-cell comparison")
+    except e:
+        if not String(e).startswith("VACUOUS "):
+            raise e
+        fired += 1
+    # clause 2: nonzero cells, but empty cards
+    try:
+        _refuse_vacuous("selftest_empty_cards", p1, p2, 64, 12)
+        raise Error("VACUOUS control did NOT fire on two empty cards")
+    except e:
+        if not String(e).startswith("VACUOUS "):
+            raise e
+        fired += 1
+    # and it must NOT fire on a card that is actually populated
+    var t3 = IdentityTrace.to_path(p1)
+    for i in range(12):
+        t3.record_scalar_f32("selftest.stage" + String(i), Float32(i))
+    _ = t3^
+    var t4 = IdentityTrace.to_path(p2)
+    for i in range(12):
+        t4.record_scalar_f32("selftest.stage" + String(i), Float32(i))
+    _ = t4^
+    _refuse_vacuous("selftest_populated", p1, p2, 64, 12)
+    print(
+        "check_vacuous_control_fires OK: " + String(fired) + " of 2 clauses"
+        " RAISED VACUOUS (zero cells, and two empty cards -- which"
+        " first_divergence reports as AGREEMENT, confirmed here before the"
+        " guard runs), and the guard stays silent on a populated 12-stage"
+        " card"
+    )
+
+
 def check_oracle_dot_is_the_gemm_contract() raises:
     for k in [100, 1000, 257]:
         var a = List[Float32]()
@@ -1264,6 +1328,7 @@ def main() raises:
     check_tsolve_against_float64_jacobi()
     check_tsolve_sign_pin_skips_signed_zero()
     check_tsolve_tie_order_is_stable()
+    check_vacuous_control_fires()
     check_oracle_dot_is_the_gemm_contract()
     check_spectral_ring_exact()
     check_spectral_path_exact()
