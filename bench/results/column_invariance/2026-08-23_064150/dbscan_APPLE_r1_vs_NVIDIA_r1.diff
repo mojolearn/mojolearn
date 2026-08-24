@@ -1,0 +1,26 @@
+==============================================================================
+IDENTITY TRACE DIFF
+==============================================================================
+  A = /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/column_invariance/2026-08-23_064150/dbscan_APPLE_r1.card
+  B = /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/column_invariance/2026-08-23_064150/dbscan_NVIDIA_r1.card
+
+STEP 1 -- PARSE
+  A: 3 record(s), 2 comment line(s), 1 blank line(s)
+  B: 3 record(s), 2 comment line(s), 1 blank line(s)
+
+STEP 1b -- DUMP INTEGRITY (re-hash every .bin found)
+
+STEP 2 -- ALIGNMENT (tag sequence, computed BEFORE any hash compare)
+  matched stage pairs: 3
+  unmatched in A: 0    unmatched in B: 0
+  TAG SEQUENCES ARE IDENTICAL.
+
+STEP 3 -- HASH WALK over 3 matched pair(s)
+  All 3 matched pair(s) agree on dtype, count and hash.
+
+==============================================================================
+RESULT: IDENTICAL. Same stage sequence, same counts, same hashes.
+  Caveat: a matching hash means the buffers agreed at each
+  checkpoint, NOT that the computation was identical, and nothing
+  is known about whatever the trace did not checkpoint.
+==============================================================================

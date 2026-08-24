@@ -1,0 +1,20 @@
+{
+  "year": {
+    "mojolearn-et-gpu": {
+      "accuracy": {
+        "MeanAbsError": 7.21523227784007,
+        "MeanSquaredError": 98.0398732238183,
+        "MedianAbsError": 5.67950439453125
+      },
+      "train_time": 24.66011791699566
+    },
+    "skl-et-cpu": {
+      "accuracy": {
+        "MeanAbsError": 7.119338823687988,
+        "MeanSquaredError": 96.25398090778418,
+        "MedianAbsError": 5.476914339716814
+      },
+      "train_time": 91.02007075003348
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "year": {
+    "lgbm-rf-cpu": {
+      "accuracy": {
+        "MeanAbsError": 6.803677376643089,
+        "MeanSquaredError": 92.01909955389598,
+        "MedianAbsError": 4.839405715286489
+      },
+      "train_time": 19.99407479201909
+    },
+    "mojolearn-rf-gpu": {
+      "accuracy": {
+        "MeanAbsError": 6.812558174133301,
+        "MeanSquaredError": 91.71202850341797,
+        "MedianAbsError": 4.91473388671875
+      },
+      "train_time": 26.728308083023876
+    }
+  }
+}

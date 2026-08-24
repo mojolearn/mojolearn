@@ -1,0 +1,20 @@
+{
+  "year": {
+    "lgbm-et-cpu": {
+      "accuracy": {
+        "MeanAbsError": 6.9436422520727294,
+        "MeanSquaredError": 92.84895077056204,
+        "MedianAbsError": 5.243317532928586
+      },
+      "train_time": 25.471376957953908
+    },
+    "mojolearn-et-gpu": {
+      "accuracy": {
+        "MeanAbsError": 7.134564375669578,
+        "MeanSquaredError": 96.57011148079309,
+        "MedianAbsError": 5.52252197265625
+      },
+      "train_time": 31.6466541250702
+    }
+  }
+}

@@ -1,0 +1,6 @@
+# knn n_index=4096 n_queries=512 d=8 k=10 method=2 sqrt=True
+# format: mojolearn-identity-trace v1
+0	knn.index_norm	f32	4096	95c092676b5c19f2
+1	knn.query_norm	f32	512	91ba6fa88a2f2dfd
+2	knn.out_dist	f32	5120	87eec98a26b2e605
+3	knn.out_idx	u32	5120	e90eea37da79a3e2
