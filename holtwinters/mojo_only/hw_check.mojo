@@ -1,7 +1,11 @@
 """Holt-Winters: refusals, oracle sanity, device identity, launch
-invariance, signed zero, NaN, reach.
+invariance, signed zero, NaN, reach, and the packed pointer surface.
 
-DEVIATIONS 660-665's gates. The checks, in order:
+DEVIATIONS 660-665, 697-699 and 930's gates. (The sentence this replaced
+said "DEVIATIONS 660-665's gates" and listed nine checks; DEVIATION 699's
+`check_hw_decision_branches` had been added to `main` without being added
+here, and DEVIATION 930's `check_hw_pack_round_trip` is new.) The checks,
+in order:
 
     check_hw_refusals                  every parameter cuML's wrapper refuses
                                        RAISES BY NAME; DEVIATION 664's NaN /
@@ -56,6 +60,47 @@ DEVIATIONS 660-665's gates. The checks, in order:
                                        and oracle; prints iter000's bits
     check_hw_card_is_emitted           the stage list and the run-to-run
                                        control
+    check_hw_decision_branches         DEVIATION 699: the decision mask is
+                                       the oracle's on five fixtures; the
+                                       REACH CENSUS of which branch bits the
+                                       standard fixtures set, and on how many
+                                       of the 35 series each, so a bit held up
+                                       by ONE series prints as THIN
+                                       (DEVIATION 962); a bounded 128-fit
+                                       search for LS_LIMIT and RHO_ZERO whose
+                                       result is printed BEFORE anything can
+                                       raise, feeding the RHO_ZERO fixture two
+                                       named numbers rather than one packed
+                                       integer a human decodes (DEVIATION
+                                       960, which is how this gate came to
+                                       abort on its own reach assertion from
+                                       79b238d until it was repaired);
+                                       bfgs_iter_limit = 2 for ITER_LIMIT and
+                                       linesearch_iter_limit = 1 for LS_LIMIT,
+                                       both now ASSERTED and not merely
+                                       claimed (DEVIATION 961)
+    check_hw_pack_round_trip           DEVIATION 930, and the only gate that
+                                       BREAKS THE ROUND TRIP: what
+                                       `holtwinters_fit_ptr` packs into one
+                                       flat buffer for `bindings/` is
+                                       asserted cell by cell, BITWISE,
+                                       against `holtwinters_fit_host`'s
+                                       structured level / trend / season /
+                                       stats / flags, which never saw the
+                                       pack; each block is read the way
+                                       `_tsa_impl.py` reads it and compared
+                                       against series s fitted ALONE, which
+                                       is what pins TIME-MAJOR; and
+                                       `holtwinters_forecast_ptr` on the flat
+                                       buffer is asserted against
+                                       `holtwinters_forecast_host` on the
+                                       structured `HWFit`. A self-consistent
+                                       pack mistake round-trips through every
+                                       end-to-end test; only a comparison
+                                       against a witness that never saw the
+                                       pack can see it. ASSERTS IN BOTH
+                                       MODES: nothing here is a numerics
+                                       question
 
 SABOTAGES (each a `-D MOJOLEARN_HW_SABOTAGE_<NAME>=1` build, run under
 IDENTICAL, nothing edited; the README carries the failing lines and the
@@ -75,13 +120,51 @@ measured verdict of every arm):
       HW_MAX_CLAMP      bound_device as min(max(0.0, v), 1.0) -- the
                         constant zero lets LLVM fold the maxnum away
 
+THE PACK ARMS (DEVIATION 930) are the same `-D MOJOLEARN_HW_SABOTAGE_<NAME>=1`
+switch, but they are declared in THIS file rather than on the switchboard in
+`holtwinters/ported/holtwinters/internal/hw_utils.mojo`, because they do not
+sabotage a kernel: they corrupt the flat buffer after the pointer entry wrote
+it, which is byte for byte what a wrongly spelled writer would have left, and
+the buffer is all the assertions can see. Each must break the clauses named
+beside it and NO others; a run prints a `CLAUSES ...=BROKE/held` line whenever
+any arm is named, so the table is checkable rather than asserted.
+    PACK_SWAP_TREND_SEASON  the trend and season blocks exchanged. Breaks
+                            (a) comps and (e) time-major. Clause (f) HOLDS,
+                            deliberately: the arm hands the forecast the
+                            pristine buffer, which is the dangerous defect
+                            drawn exactly -- writer and reader wrong the same
+                            way, forecast still round-tripping
+    PACK_SWAP_LEVEL_TREND   the level and trend blocks exchanged. Same two
+    PACK_SERIES_MAJOR       each block written series-major, `s * rows + i`,
+                            instead of time-major, `s + i * batch_size`.
+                            Same two
+    PACK_STRIDE_BATCH       `batch_size` used as the block stride where
+                            `components_len` belongs. Same two
+    PACK_SWAP_SSE_ALPHA     the stats pack's first two blocks exchanged.
+                            Breaks (c) stats only
+    PACK_SWAP_BETA_GAMMA    the stats pack's last two blocks exchanged.
+                            Breaks (c) stats only
+    PACK_SWAP_FLAGS         niter and criterion exchanged. Breaks (d) flags
+                            only
+    PACK_FORECAST_SWAP      the FORECAST side only reads the buffer with
+                            trend and season exchanged, the fit clauses
+                            seeing the pristine one. Breaks (f) forecast
+                            only: a writer and a reader that disagree
+
 Run:
 
     tools/with_build_lock.sh     pixi run mojo run -I . holtwinters/mojo_only/hw_check.mojo
     tools/with_identical_mode.sh pixi run mojo run -I . holtwinters/mojo_only/hw_check.mojo
+
+and one sabotage arm, which must FAIL:
+
+    tools/with_identical_mode.sh pixi run mojo run -I . \
+        -D MOJOLEARN_HW_SABOTAGE_PACK_SWAP_TREND_SEASON=1 \
+        holtwinters/mojo_only/hw_check.mojo
 """
 
 from std.memory import bitcast
+from std.sys.compile import is_defined
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -90,8 +173,12 @@ from holtwinters.estimator import (
     HWFit,
     download_f32,
     download_i32,
+    holtwinters_fit_host,
     holtwinters_fit_host_traced,
+    holtwinters_fit_ptr,
+    holtwinters_forecast_host,
     holtwinters_forecast_host_traced,
+    holtwinters_forecast_ptr,
     upload_f32,
 )
 from holtwinters.mojo_only.hw_fixture import (
@@ -148,6 +235,31 @@ comptime START_PERIODS = 2
 comptime BATCH = 7
 comptime TRACE_ITERS = 64
 comptime H = 24
+
+# THE PACK FIXTURE (DEVIATION 930), separate from the six above and chosen
+# so that no index arithmetic error can alias onto a correct answer:
+# `batch_size`, `frequency`, the per-series row count `n - frequency` and
+# `components_len = (n - frequency) * batch_size` are PAIRWISE DISTINCT (3,
+# 5, 15, 45), and so is every other extent the pack uses (h = 7,
+# 3*components_len = 135, 4*batch_size = 12, 2*batch_size = 6, h*batch_size
+# = 21). `check_hw_pack_round_trip` ASSERTS that rather than leaving a
+# reader to re-derive it. The standard fixture's extents would separate too
+# (N = 72, FREQ = 12, BATCH = 7 gives 420 and 60, distinct from 7 and 12),
+# so this is not a fixture the standard one could not have been; it is a
+# smaller one, because the gate runs four extra fits and three forecasts,
+# and a separate one, because the pack's separation argument should not
+# silently depend on a fixture chosen for a different clause.
+comptime PACK_N = 20
+comptime PACK_FREQ = 5
+comptime PACK_BATCH = 3
+comptime PACK_H = 7
+comptime PACK_SALT = 930
+#: cells past the end of every packed buffer, poisoned and asserted
+#: untouched, so an over-striding writer is a failure and not a silent
+#: overwrite of whatever numpy put next in memory.
+comptime PACK_GUARD = 16
+comptime PACK_POISON = Float32(-424242.0)
+comptime PACK_POISON_I = Int32(-424242)
 
 
 def _mode_name() -> String:
@@ -1176,58 +1288,116 @@ def check_hw_card_is_emitted() raises:
     print("check_hw_card_is_emitted OK [" + _mode_name() + "]: " + String(len(expect)) + " stages (" + expect[0] + " ... " + String(shown) + " iteration stages ... hw.forecast), run-to-run control identical")
 
 
+def _dec_bit_names() -> List[String]:
+    """DEVIATION 699's mask, bit 0 first.
+
+    ONE list. `_dec_names` spells a mask with it and the reach tally counts
+    with it, so a bit added to the optimizer cannot be spelled in one place
+    and forgotten in the other -- which is the shape of the defect DEVIATION
+    960 repaired one function below.
+    """
+    var out = List[String]()
+    out.append(String("ZERO_DIR"))
+    out.append(String("HESSIAN_RESET"))
+    out.append(String("LS_LIMIT"))
+    out.append(String("RHO_ZERO"))
+    out.append(String("H_NAN"))
+    out.append(String("BOTH_CRIT"))
+    out.append(String("ITER_LIMIT"))
+    out.append(String("ALPHA_LO"))
+    out.append(String("ALPHA_HI"))
+    out.append(String("BETA_LO"))
+    out.append(String("BETA_HI"))
+    out.append(String("GAMMA_LO"))
+    out.append(String("GAMMA_HI"))
+    return out^
+
+
 def _dec_names(d: Int) -> String:
     """DEVIATION 699's mask, spelled out."""
+    var nm = _dec_bit_names()
     var out = String("")
-    if (d & 1) != 0:
-        out += "ZERO_DIR "
-    if (d & 2) != 0:
-        out += "HESSIAN_RESET "
-    if (d & 4) != 0:
-        out += "LS_LIMIT "
-    if (d & 8) != 0:
-        out += "RHO_ZERO "
-    if (d & 16) != 0:
-        out += "H_NAN "
-    if (d & 32) != 0:
-        out += "BOTH_CRIT "
-    if (d & 64) != 0:
-        out += "ITER_LIMIT "
-    if (d & 128) != 0:
-        out += "ALPHA_LO "
-    if (d & 256) != 0:
-        out += "ALPHA_HI "
-    if (d & 512) != 0:
-        out += "BETA_LO "
-    if (d & 1024) != 0:
-        out += "BETA_HI "
-    if (d & 2048) != 0:
-        out += "GAMMA_LO "
-    if (d & 4096) != 0:
-        out += "GAMMA_HI "
+    for b in range(len(nm)):
+        if (d & (1 << b)) != 0:
+            out += nm[b] + " "
     var halv = d >> 16
     if out == "":
         out = "(none) "
     return out + "halvings=" + String(halv)
 
 
+#: DEVIATION 960: the RHO_ZERO fixture the last RECORDED run of the census
+#: selected, as two numbers in the units the fixture actually takes -- the
+#: `hw_fixture` salt, and 0 for additive / 1 for multiplicative. `-1` means
+#: no run has recorded one yet, and the census prints the pair it selects so
+#: it can be pasted here. It is a WITNESS, not a filter: the census never
+#: fits only what is pinned here, it fits what the search finds and says out
+#: loud whether that still matches the pin. Never edit these to make a run
+#: pass; the point of the pair is that a change in WHICH series reaches the
+#: branch is a change in the port, and has to be read before it is recorded.
+# MEASURED 2026-08-24, and the drift detector found it on its FIRST use.
+# THE PIN IS THE IDENTICAL ARM'S WITNESS AND IT CANNOT SERVE BOTH MODES.
+#
+#   IDENTICAL   RHO_ZERO first at salt 102 multiplicative, 12/128 fits
+#   FAST        RHO_ZERO first at salt 119 multiplicative
+#
+# Both arms are ALL OK and the branch is covered in both. They disagree about
+# WHICH series gets there, and that is not a defect: `rho_ == 0.0` fires when
+# two consecutive gradients are BITWISE EQUAL, which is a plateau event, and
+# FAST and IDENTICAL are different arithmetic, so they plateau on different
+# series. A single pin therefore reports DRIFTED under FAST by construction,
+# and that message is information rather than a failure. Read it; do not
+# silence it by widening the pin to accept both, because then a genuine drift
+# inside one arm would have nowhere to show up.
+comptime HW_RHO_PIN_SALT = 102
+comptime HW_RHO_PIN_KIND = 1
+
+
 def check_hw_decision_branches() raises:
     """DEVIATION 699's gate, and the REACH CENSUS the lane could not take
     before it.
 
-    Two jobs. (1) Print which decision bits the six standard fixtures
-    actually set, so `LS_LIMIT`, `RHO_ZERO`, `ITER_LIMIT` and the clamp arms
-    stop being branches nobody can say are reached. (2) Reach the two LIMIT
-    branches deliberately, at the smallest size that reaches them, using
-    cuML's own `bfgs_iter_limit` / `linesearch_iter_limit` (their override
-    block, `runner.cuh:236-253`) rather than hunting for a series that fails
-    to converge in 1000 iterations.
+    Four jobs. (1) Print which decision bits the five standard fixtures
+    actually set, and on HOW MANY of the 35 series each, so `LS_LIMIT`,
+    `RHO_ZERO`, `ITER_LIMIT` and the clamp arms stop being branches nobody
+    can say are reached -- and so a bit reached by exactly ONE series is
+    named THIN while it is still covered, rather than after it goes vacuous.
+    (1b) Search a bounded family of natural series for the two bits the
+    standard fixtures do not set. (1c) Re-fit the series the search names
+    for `RHO_ZERO` and assert the branch is genuinely taken, by the device
+    AND by the host oracle, with the whole mask compared. (2) Reach the two
+    LIMIT branches deliberately, at the smallest size that reaches them,
+    using cuML's own `bfgs_iter_limit` / `linesearch_iter_limit` (their
+    override block, `runner.cuh:236-253`) rather than hunting for a series
+    that fails to converge in 1000 iterations.
+
+    DEVIATION 960 (2026-08-24). Jobs 1b and 1c used to be joined by a HUMAN:
+    the search printed its hit as one packed integer, `salt * 10 + kind`, and
+    the fixture below was pinned by hand from that print as `multiplicative,
+    salt 102`. That pin sets `RHO_ZERO` on NO series, so from 79b238d
+    onwards this gate aborted on its own reach assertion, on the committed
+    tree, in both modes -- and once `check_hw_pack_round_trip` was added
+    after it in `main`, that gate could never run at all. The census caught
+    its own coverage going vacuous, which is what it is for; what it could
+    not do was tell anyone WHICH series to pin instead, because the search
+    line was built before the raise and printed after it. Both are fixed
+    here: the search carries the salt and the kind as two named numbers that
+    the fixture consumes directly, and it prints before anything can raise.
     """
     var ctx = DeviceContext()
     var tr = IdentityTrace.disabled()
     var names = ["additive", "multiplicative", "constant", "zero", "mixed"]
     var seen = 0
     var max_halv = 0
+    # DEVIATION 962: the UNION of bits is blind to thinness. A bit set by one
+    # series in 35 is covered by an accident that the next arithmetic change
+    # takes away, and it is indistinguishable in `seen` from a bit set by all
+    # 35. Tally per bit and name the ones at 1.
+    var bit_names = _dec_bit_names()
+    var bit_hits = List[Int]()
+    for _ in range(len(bit_names)):
+        bit_hits.append(0)
+    var n_std_series = 0
     for fi in range(len(names)):
         var name = names[fi]
         var seasonal = SEASONAL_ADDITIVE
@@ -1261,7 +1431,29 @@ def check_hw_decision_branches() raises:
             var hv = Int(f.decisions[s]) >> 16
             if hv > max_halv:
                 max_halv = hv
+            for b in range(len(bit_names)):
+                if (Int(f.decisions[s]) & (1 << b)) != 0:
+                    bit_hits[b] += 1
+            n_std_series += 1
         print("  census " + name + " s0: " + _dec_names(Int(f.decisions[0])))
+
+    # (1a) HOW THIN each bit's coverage is, in series out of `n_std_series`.
+    # DEVIATION 962. Printed, not asserted: the standard fixtures are pinned
+    # for the identity comparison, not chosen to reach bits, so a bit falling
+    # to zero here is a fact to read rather than a failure. A bit at exactly 1
+    # is named THIN, because that is what RHO_ZERO's own pinned fixture was
+    # claimed to be (1 series of 7) right before it turned out to be 0.
+    var tally = String("")
+    var thin = String("")
+    for b in range(len(bit_names)):
+        if b > 0:
+            tally += " "
+        tally += bit_names[b] + "=" + String(bit_hits[b])
+        if bit_hits[b] == 1:
+            thin += bit_names[b] + " "
+    print("  census reach over " + String(n_std_series) + " standard series: " + tally)
+    if thin != "":
+        print("  census THIN (one series only, a bit away from vacuous): " + thin)
 
     # (1b) A BOUNDED REACH SEARCH for the two bits the standard fixtures do
     # NOT set: LS_LIMIT (bit 2, cuml#888's path) and RHO_ZERO (bit 3, the
@@ -1269,54 +1461,165 @@ def check_hw_decision_branches() raises:
     # pathological parameter, so the honest way to look is to LOOK: 64
     # hashed salts x two seasonal types, all at the standard small size.
     # This is a reach search, not a sweep and not a benchmark -- it either
-    # names a salt to pin as a fixture or it records, with a number, that 128
-    # tries did not reach the branch.
-    var found_ls = -1
-    var found_rho = -1
+    # names a series for (1c) to re-fit, or it records, with a number, that
+    # 128 tries did not reach the branch.
+    #
+    # DEVIATION 960: the salt and the seasonal kind are carried as TWO NAMED
+    # numbers in the units `hw_fixture` and `_seasonal_str` take, and (1c)
+    # consumes them directly. They used to be squashed into one `salt * 10 +
+    # kind` integer that a human decoded into a hand-written fixture, and the
+    # decode was wrong. Nothing between the search and the fixture is read by
+    # eye now. The COUNTS matter as much as the first hit: `1/128` is a bit
+    # that will go vacuous the next time the arithmetic moves, `40/128` will
+    # not, and the difference is invisible in a first-hit-only search.
+    var rho_salt = -1
+    var rho_kind = -1
+    var rho_fits = 0
+    var rho_series = 0
+    var ls_salt = -1
+    var ls_kind = -1
+    var ls_fits = 0
     for salt in range(64):
         for k in range(2):
             var sp2 = spec_additive() if k == 0 else spec_multiplicative()
             var seas2 = SEASONAL_ADDITIVE if k == 0 else SEASONAL_MULTIPLICATIVE
             var dsc = hw_fixture(sp2, N, BATCH, FREQ, salt + 100)
             var fsc = _device_fit(ctx, dsc, N, BATCH, _seasonal_str(seas2), tr)
+            var hit_ls = 0
+            var hit_rho = 0
             for s in range(BATCH):
                 var dv = Int(fsc.decisions[s])
-                if (dv & 4) != 0 and found_ls < 0:
-                    found_ls = salt * 10 + k
-                if (dv & 8) != 0 and found_rho < 0:
-                    found_rho = salt * 10 + k
-    var searched = String("; reach search 128 fits: LS_LIMIT ")
-    searched += ("salt*10+kind " + String(found_ls)) if found_ls >= 0 else "NOT REACHED"
-    searched += ", RHO_ZERO "
-    searched += ("salt*10+kind " + String(found_rho)) if found_rho >= 0 else "NOT REACHED"
+                if (dv & 4) != 0:
+                    hit_ls += 1
+                if (dv & 8) != 0:
+                    hit_rho += 1
+            if hit_ls > 0:
+                ls_fits += 1
+                if ls_salt < 0:
+                    ls_salt = salt + 100
+                    ls_kind = k
+            if hit_rho > 0:
+                rho_fits += 1
+                rho_series += hit_rho
+                if rho_salt < 0:
+                    rho_salt = salt + 100
+                    rho_kind = k
+    # PRINTED HERE, before anything below can raise. The previous spelling
+    # built this line first and printed it last, so the one run that needed
+    # it -- the run where the pinned fixture stopped reaching -- was the one
+    # run that never saw it.
+    var ls_kind_str = _seasonal_str(SEASONAL_ADDITIVE) if ls_kind == 0 else _seasonal_str(SEASONAL_MULTIPLICATIVE)
+    var rho_kind_str = _seasonal_str(SEASONAL_ADDITIVE) if rho_kind == 0 else _seasonal_str(SEASONAL_MULTIPLICATIVE)
+    var srch = String("  reach search 128 fits (64 hashed salts, seed = salt, x additive and multiplicative): LS_LIMIT ")
+    srch += ("REACHED, first at salt " + String(ls_salt) + " " + ls_kind_str + ", " + String(ls_fits) + "/128 fits") if ls_salt >= 0 else "NOT REACHED in 128 fits"
+    srch += "; RHO_ZERO "
+    srch += ("REACHED, first at salt " + String(rho_salt) + " " + rho_kind_str + ", " + String(rho_fits) + "/128 fits, " + String(rho_series) + " series") if rho_salt >= 0 else "NOT REACHED in 128 fits"
+    print(srch)
+    if ls_salt >= 0:
+        print(
+            "  NOTE: LS_LIMIT is now REACHED BY A NATURAL SERIES on DEFAULT"
+            " limits, which is what holtwinters/README.md's OWED item 1 says"
+            " 128 fits could not do. Read that row before trusting it."
+        )
 
-    # (1c) THE PINNED RHO_ZERO FIXTURE. The search above found the second
-    # NaN route on a NATURAL series -- salt 102, multiplicative -- so
-    # UNPORTED.tsv's claim that the route "terminates deterministically on
-    # every vendor" is now a thing a fixture exercises instead of an
-    # argument. Pinned by salt, asserted BOTH ways: the bit must still be
-    # set (a fixture that silently stops reaching its branch turns an
-    # uncovered branch into an apparently covered one) and the whole
-    # decision mask must equal the oracle's.
-    var d_rho = hw_fixture(spec_multiplicative(), N, BATCH, FREQ, 102)
-    var f_rho = _device_fit(ctx, d_rho, N, BATCH, "multiplicative", tr)
-    var o_rho = oracle_fit[DType.float32](d_rho, N, BATCH, FREQ, START_PERIODS, SEASONAL_MULTIPLICATIVE, HW_DEFAULT_EPS, TRACE_ITERS)
+    # (1c) THE RHO_ZERO FIXTURE, re-fitted from what the search just named.
+    # UNPORTED.tsv ARGUES that the second NaN route "terminates
+    # deterministically on every vendor"; this is the fixture that exercises
+    # it instead. Asserted four ways, because a reach claim is worth nothing
+    # unless the branch is shown to be taken rather than assumed:
+    #   the search's hit must REPRODUCE on a fresh fit of the same fixture
+    #     (two fits of one fixture that disagree is not a fixture problem,
+    #      it is a determinism problem, and it gets its own message);
+    #   the DEVICE must set the bit on at least one series;
+    #   the HOST ORACLE, which shares no line of code with the kernel, must
+    #     set it on the SAME COUNT of series, so the branch is a property of
+    #     the algorithm and not of one kernel's rounding;
+    #   the whole decision mask must equal the oracle's, cell for cell.
+    # The last two are IDENTICAL-only raises for the usual reason: under FAST
+    # the two are allowed to diverge, and that divergence is the recorded
+    # result, not a failure.
+    if rho_salt < 0:
+        raise Error(
+            "check_hw_decision_branches REACH FAILURE: RHO_ZERO (the second NaN"
+            " route) is set by NO series in 128 natural fits (64 hashed salts x"
+            " additive and multiplicative at n=" + String(N) + ", batch "
+            + String(BATCH) + "), so the branch is UNCOVERED. Do not hand-pin a"
+            " fixture to make this line go away. Either a reaching series exists"
+            " and the search has to be widened, or the route is unreachable on"
+            " this arithmetic and UNPORTED.tsv's claim that it 'terminates"
+            " deterministically on every vendor' has to be rewritten as an"
+            " unreachable-branch row -- an acknowledged gap beats a census that"
+            " pretends to cover it."
+        )
+    var pin_line = String("  RHO_ZERO pin: ")
+    if HW_RHO_PIN_SALT < 0:
+        pin_line += (
+            "UNRECORDED. The census selects salt " + String(rho_salt) + " "
+            + rho_kind_str + "; put that pair in HW_RHO_PIN_SALT / HW_RHO_PIN_KIND"
+            " so the NEXT run can tell drift from agreement"
+        )
+    elif HW_RHO_PIN_SALT == rho_salt and HW_RHO_PIN_KIND == rho_kind:
+        pin_line += "CONFIRMED at salt " + String(rho_salt) + " " + rho_kind_str
+    else:
+        pin_line += (
+            "DRIFTED. The recorded witness is salt " + String(HW_RHO_PIN_SALT)
+            + " kind " + String(HW_RHO_PIN_KIND) + ", the census now selects salt "
+            + String(rho_salt) + " " + rho_kind_str + ". The branch is still"
+            " covered, by a DIFFERENT series, and WHICH series reaches a NaN"
+            " route is a fact about the port -- read it before recording it"
+        )
+    print(pin_line)
+    var rho_spec = spec_additive() if rho_kind == 0 else spec_multiplicative()
+    var rho_seasonal = SEASONAL_ADDITIVE if rho_kind == 0 else SEASONAL_MULTIPLICATIVE
+    var d_rho = hw_fixture(rho_spec, N, BATCH, FREQ, rho_salt)
+    var f_rho = _device_fit(ctx, d_rho, N, BATCH, rho_kind_str, tr)
+    var o_rho = oracle_fit[DType.float32](d_rho, N, BATCH, FREQ, START_PERIODS, rho_seasonal, HW_DEFAULT_EPS, TRACE_ITERS)
     var n_rho = 0
+    var n_rho_oracle = 0
+    var n_rho_hnan = 0
     for s in range(BATCH):
         if (Int(f_rho.decisions[s]) & 8) != 0:
             n_rho += 1
+            if (Int(f_rho.decisions[s]) & 16) != 0:
+                n_rho_hnan += 1
+        if (o_rho.decisions[s] & 8) != 0:
+            n_rho_oracle += 1
     if n_rho == 0:
         raise Error(
-            "check_hw_decision_branches REACH FAILURE: the pinned RHO_ZERO"
-            " fixture (multiplicative, salt 102) no longer sets RHO_ZERO on any"
-            " series, so the second NaN route is uncovered again"
+            "check_hw_decision_branches NONDETERMINISM: the reach search set"
+            " RHO_ZERO on the fixture at salt " + String(rho_salt) + " "
+            + rho_kind_str + ", and re-fitting that same fixture in the same"
+            " process sets it on no series. Two fits of one fixture must agree"
+            " bit for bit; the suspect is the optimizer's run-to-run"
+            " determinism, not the fixture."
         )
+    if n_rho_oracle != n_rho:
+        var oracle_msg = String(
+            "check_hw_decision_branches: RHO_ZERO is set by the device on "
+        ) + String(n_rho) + " series and by the HOST ORACLE on " + String(n_rho_oracle) + " at salt " + String(rho_salt) + " " + rho_kind_str + " (sabotage " + hw_sabotage_name() + "). The oracle shares no code with the kernel, so the branch is only really reached when both take it."
+        comptime if IDENTICAL:
+            raise Error(oracle_msg)
+        else:
+            print("  RECORDED [FAST] " + oracle_msg)
     var bad_rho = _first_diff_i("rho_zero hw.opt.decisions", f_rho.decisions, o_rho.decisions)
     if bad_rho != "":
         comptime if IDENTICAL:
-            raise Error("check_hw_decision_branches FAILED on the pinned RHO_ZERO fixture (sabotage " + hw_sabotage_name() + "): " + bad_rho)
+            raise Error("check_hw_decision_branches FAILED on the RHO_ZERO fixture (sabotage " + hw_sabotage_name() + "): " + bad_rho)
         else:
             print("  RECORDED [FAST] " + bad_rho)
+    # H_NAN rides along, and whether it does is arithmetic, not luck: `rho_ ==
+    # 0` makes `rho = 1/0 = +-inf`, and every H entry then takes an `inf * 0`
+    # or an `inf - inf`. It is NOT asserted, because `inf - (-inf)` stays inf
+    # and `H11 == H11` is true of an infinity, so the implication is a
+    # near-certainty rather than a theorem. Printed instead, on every run,
+    # because if it holds then README.md's OWED item 4 ("H_NAN remains
+    # unreached by any natural fixture") is false and has to go.
+    print(
+        "  RHO_ZERO fixture: device " + String(n_rho) + "/" + String(BATCH)
+        + " series, oracle " + String(n_rho_oracle) + "/" + String(BATCH)
+        + ", H_NAN co-reached on " + String(n_rho_hnan) + " of those "
+        + String(n_rho) + ("; mask == oracle" if IDENTICAL else "; mask vs oracle RECORDED, not asserted [FAST]")
+    )
 
     # (2) the two LIMIT branches, reached exactly.
     var d2 = hw_fixture(spec_additive(), N, BATCH, FREQ, 2)
@@ -1368,9 +1671,19 @@ def check_hw_decision_branches() raises:
     var dd = download_i32(ctx, de, BATCH)
     var cc = download_i32(ctx, cr, BATCH)
     var n_limit = 0
+    var n_ls_limit = 0
     for s in range(BATCH):
         if (Int(dd[s]) & 64) != 0:
             n_limit += 1
+        # DEVIATION 961: count LS_LIMIT here too. This block is titled "the
+        # two LIMIT branches, reached exactly" and passes
+        # `linesearch_iter_limit = 1` for no other reason, but only
+        # ITER_LIMIT had a reach assertion; LS_LIMIT was a branch the README
+        # CLAIMED this fixture covers with nothing in the gate that would
+        # notice if it stopped. That is the same shape as the RHO_ZERO
+        # failure, one line away from it, and it is closed here.
+        if (Int(dd[s]) & 4) != 0:
+            n_ls_limit += 1
         if Int(dd[s]) != Int(ob.decisions[s]):
             comptime if IDENTICAL:
                 raise Error(
@@ -1385,14 +1698,28 @@ def check_hw_decision_branches() raises:
             " set ITER_LIMIT on any series, so the fall-through return is still"
             " uncovered and the fixture does not do what it claims"
         )
+    if n_ls_limit == 0 and ls_salt < 0:
+        raise Error(
+            "check_hw_decision_branches REACH FAILURE: LS_LIMIT (cuml#888's"
+            " path, where `x = nx` stores the LAST trial step rather than the"
+            " best one) is set by NO series anywhere in this census -- not by"
+            " the linesearch_iter_limit = 1 override fixture, and not by any of"
+            " the 128 natural fits. holtwinters/README.md states the override"
+            " fixture reaches the BRANCH; if this line is printing, that"
+            " sentence is false and the branch is uncovered. Delete the"
+            " sentence before touching the fixture."
+        )
     print(
         "check_hw_decision_branches " + ("OK" if IDENTICAL else "REPORT") + " [" + _mode_name()
         + "]: decisions device == oracle on 5 fixtures; union of bits seen on the"
         " standard fixtures = [" + _dec_names(seen) + "] max halvings " + String(max_halv)
-        + searched + "; pinned RHO_ZERO fixture sets the bit on " + String(n_rho)
-        + "/" + String(BATCH) + " series, decisions == oracle; bfgs_iter_limit=2 reached"
-        " ITER_LIMIT on " + String(n_limit) + "/" + String(BATCH) + " series, criterion "
-        + criterion_name(Int(cc[0]))
+        + "; RHO_ZERO reached on a natural series at salt " + String(rho_salt) + " "
+        + rho_kind_str + " (" + String(rho_fits) + "/128 fits in the search, "
+        + String(n_rho) + "/" + String(BATCH) + " series on the re-fit, oracle agrees),"
+        " decisions == oracle; bfgs_iter_limit=2 reached ITER_LIMIT on "
+        + String(n_limit) + "/" + String(BATCH) + " series and linesearch_iter_limit=1"
+        " reached LS_LIMIT on " + String(n_ls_limit) + "/" + String(BATCH)
+        + " series, criterion " + criterion_name(Int(cc[0]))
     )
     _ = ts_d^
     _ = sl^
@@ -1414,8 +1741,770 @@ def check_hw_decision_branches() raises:
     _ = itr^
 
 
+# ---------------------------------------------------------------------------
+# THE PACKED POINTER SURFACE (DEVIATION 930)
+# ---------------------------------------------------------------------------
+# `holtwinters/estimator.mojo`'s `holtwinters_fit_ptr` and
+# `holtwinters_forecast_ptr` are what `bindings/_mojolearn_tsa.mojo` and
+# `python/mojolearn/_tsa_impl.py` call. They exist because
+# `PythonModuleBuilder.def_function` infers its signature from arity and
+# gives out around nine arguments, so `fit` cannot hand back eight separate
+# addresses. The three component series share ONE float32 buffer, the four
+# per-series scalars share another, and the two integer flags share a third.
+#
+# THE LAYOUT, in the same words as the other three files:
+#
+#     comps   3 * components_len float32
+#         [0 * components_len, 1 * components_len)   level
+#         [1 * components_len, 2 * components_len)   trend
+#         [2 * components_len, 3 * components_len)   season
+#       each block TIME-MAJOR, series `s` at step `i` at `[s + i *
+#       batch_size]` (`holtwinters.pyx:341-344`), which is a TRANSPOSE of
+#       the series-major input `fit` reads
+#     stats   4 * batch_size float32:  sse | alpha | beta | gamma
+#     flags   2 * batch_size int32:    niter | criterion
+#
+# WHY THIS GATE EXISTS. `holtwinters_fit_ptr` writes that pack and
+# `holtwinters_forecast_ptr` reads it back, and the two live eighty lines
+# apart in ONE file. A SELF-CONSISTENT mistake -- trend and season swapped
+# in both, or written series-major and read series-major -- round-trips
+# perfectly. `fit(...).forecast(h)` then returns plausible numbers that are
+# simply the wrong component, every end-to-end smoke test passes, and the
+# three copies of the layout comment catch nothing, because the three copies
+# agree with each other and not one of them is executed. Nothing else in the
+# build can see this class of defect.
+#
+# So this gate BREAKS THE ROUND TRIP. `holtwinters_fit_host` returns the
+# same fit as three structured `List`s and never sees the pack: it is the
+# INDEPENDENT WITNESS, and the flat buffer is asserted against it cell by
+# cell, BITWISE. `holtwinters_forecast_host` on a structured `HWFit` is the
+# witness from the other side. There is no tolerance anywhere below and
+# there must not be: both sides run the same arithmetic on the same inputs
+# through the same `holtwinters_fit_host`, so the only thing a tolerance
+# could absorb is the defect being hunted. Run-to-run determinism is not
+# assumed here either; `check_hw_card_is_emitted` asserts it, in both
+# numeric modes, before this check runs.
+#
+# AND THE CLAUSES ASSERT IN BOTH MODES. Everywhere else in this file a
+# device-vs-oracle comparison RECORDS under FAST and raises under
+# IDENTICAL, because FAST is allowed to take a different float path from
+# the host oracle. Nothing here is a numerics question: both sides of every
+# comparison are the SAME `holtwinters_fit_host` call's output, and a
+# reordered buffer is wrong in every mode.
+#
+# THE VACUITY PROBLEM. A fixture where `batch_size` equals `components_len`,
+# or where `batch_size` is 1, or where the three components have similar
+# magnitudes, lets a swapped or transposed layout agree with the witness by
+# accident. Three answers, all of them checked at run time rather than
+# argued in a comment:
+#   (i)   the fixture's extents are PAIRWISE DISTINCT (see PACK_N and
+#         friends beside the other fixture constants);
+#   (ii)  the fitted level, trend and season sit at plainly different
+#         magnitudes and the season changes sign (on this fixture level is
+#         ~1e3 to ~3e3, season ~5e1 to ~9e2 and signed, trend ~3e-1 to ~2),
+#         so a block swap moves essentially every cell rather than a few;
+#   (iii) THE SEPARATION CENSUS below re-emits the very buffer the pointer
+#         entry wrote under each named mis-spelling and counts the cells
+#         that move. A count of zero means the fixture cannot tell the
+#         pinned layout from that mis-spelling, and the gate raises VACUOUS
+#         instead of passing. That census runs on EVERY build, clean ones
+#         included, so nobody has to rebuild to learn the gate is empty.
+#
+# THE SABOTAGE ARMS. Nine arms already in this lane are `-D
+# MOJOLEARN_HW_SABOTAGE_<NAME>=1` switches on the ONE switchboard in
+# `holtwinters/ported/holtwinters/internal/hw_utils.mojo`, because they
+# sabotage device kernels. These eight do not: they corrupt the flat BUFFER
+# after the pointer entry has written it, which is byte for byte what a
+# wrong writer would have left there, and the buffer is the only thing the
+# assertions can see anyway. They are declared here, next to the assertions
+# they must break, because the code they model lives in a file this gate
+# does not own.
+#
+# TWO DEFECT CLASSES, TWO KINDS OF ARM, and the difference is the whole
+# point. `PACK_SWAP_*`, `PACK_SERIES_MAJOR` and `PACK_STRIDE_BATCH` corrupt
+# the buffer the FIT clauses read and hand `holtwinters_forecast_ptr` the
+# PRISTINE one. That is the dangerous defect drawn exactly: writer and
+# reader wrong in the same way, forecast still round-tripping, and only the
+# witness clause firing. `PACK_FORECAST_SWAP` does the opposite -- pristine
+# fit clauses, corrupted forecast input -- which is a writer and a reader
+# that disagree.
+
+comptime SAB_PACK_SWAP_TREND_SEASON = is_defined[
+    "MOJOLEARN_HW_SABOTAGE_PACK_SWAP_TREND_SEASON"
+]()
+comptime SAB_PACK_SWAP_LEVEL_TREND = is_defined[
+    "MOJOLEARN_HW_SABOTAGE_PACK_SWAP_LEVEL_TREND"
+]()
+comptime SAB_PACK_SERIES_MAJOR = is_defined["MOJOLEARN_HW_SABOTAGE_PACK_SERIES_MAJOR"]()
+comptime SAB_PACK_STRIDE_BATCH = is_defined["MOJOLEARN_HW_SABOTAGE_PACK_STRIDE_BATCH"]()
+comptime SAB_PACK_SWAP_SSE_ALPHA = is_defined["MOJOLEARN_HW_SABOTAGE_PACK_SWAP_SSE_ALPHA"]()
+comptime SAB_PACK_SWAP_BETA_GAMMA = is_defined[
+    "MOJOLEARN_HW_SABOTAGE_PACK_SWAP_BETA_GAMMA"
+]()
+comptime SAB_PACK_SWAP_FLAGS = is_defined["MOJOLEARN_HW_SABOTAGE_PACK_SWAP_FLAGS"]()
+comptime SAB_PACK_FORECAST_SWAP = is_defined["MOJOLEARN_HW_SABOTAGE_PACK_FORECAST_SWAP"]()
+
+
+def _pack_comps_sabotage() -> String:
+    """The comps-pack arm this build names, "" on a clean build."""
+    comptime if SAB_PACK_SWAP_TREND_SEASON:
+        return String("SWAP_TREND_SEASON")
+    comptime if SAB_PACK_SWAP_LEVEL_TREND:
+        return String("SWAP_LEVEL_TREND")
+    comptime if SAB_PACK_SERIES_MAJOR:
+        return String("SERIES_MAJOR")
+    comptime if SAB_PACK_STRIDE_BATCH:
+        return String("STRIDE_BATCH")
+    return String("")
+
+
+def _pack_stats_sabotage() -> String:
+    comptime if SAB_PACK_SWAP_SSE_ALPHA:
+        return String("SWAP_SSE_ALPHA")
+    comptime if SAB_PACK_SWAP_BETA_GAMMA:
+        return String("SWAP_BETA_GAMMA")
+    return String("")
+
+
+def _pack_flags_sabotage() -> String:
+    comptime if SAB_PACK_SWAP_FLAGS:
+        return String("SWAP_FLAGS")
+    return String("")
+
+
+def _pack_forecast_sabotage() -> String:
+    comptime if SAB_PACK_FORECAST_SWAP:
+        return String("SWAP_TREND_SEASON")
+    return String("")
+
+
+def _pack_sabotage_name() -> String:
+    """The pack arms this build names, in the shape `hw_sabotage_name` uses."""
+    var s = String("")
+    if _pack_comps_sabotage() != "":
+        s += "PACK_" + _pack_comps_sabotage() + " "
+    if _pack_stats_sabotage() != "":
+        s += "PACK_" + _pack_stats_sabotage() + " "
+    if _pack_flags_sabotage() != "":
+        s += "PACK_" + _pack_flags_sabotage() + " "
+    if _pack_forecast_sabotage() != "":
+        s += "PACK_FORECAST_SWAP "
+    if s == "":
+        return String("none")
+    return s
+
+
+def _first_diff_bits(tag: String, a: List[Float32], b: List[Float32]) -> String:
+    """`_first_diff` WITHOUT the NaN canonicalization.
+
+    A pack is a copy, not arithmetic. `_first_diff` canonicalizes because it
+    compares two different computations of one quantity, which may reach
+    different NaN payloads for the same reason. Here both sides come out of
+    the SAME `holtwinters_fit_host` call, so a payload that changed
+    on the way through the flat buffer is a defect, and canonicalizing it
+    away would hide a member of the exact class this gate hunts.
+    """
+    if len(a) != len(b):
+        return tag + ": length " + String(len(a)) + " vs " + String(len(b))
+    for i in range(len(a)):
+        if bitcast[DType.uint32](a[i]) != bitcast[DType.uint32](b[i]):
+            return (
+                tag + "[" + String(i) + "]: " + hex32(a[i]) + " vs " + hex32(b[i])
+                + " (" + String(a[i]) + " vs " + String(b[i]) + ")"
+            )
+    return String("")
+
+
+def _first_diff_i32(tag: String, a: List[Int32], b: List[Int32]) -> String:
+    if len(a) != len(b):
+        return tag + ": length " + String(len(a)) + " vs " + String(len(b))
+    for i in range(len(a)):
+        if a[i] != b[i]:
+            return tag + "[" + String(i) + "]: " + String(a[i]) + " vs " + String(b[i])
+    return String("")
+
+
+def _count_diff_bits(a: List[Float32], b: List[Float32]) -> Int:
+    var n = len(a) if len(a) < len(b) else len(b)
+    var c = 0
+    for i in range(n):
+        if bitcast[DType.uint32](a[i]) != bitcast[DType.uint32](b[i]):
+            c += 1
+    return c
+
+
+def _count_diff_i32(a: List[Int32], b: List[Int32]) -> Int:
+    var n = len(a) if len(a) < len(b) else len(b)
+    var c = 0
+    for i in range(n):
+        if a[i] != b[i]:
+            c += 1
+    return c
+
+
+def _pack_reorder(
+    variant: String, comps: List[Float32], cl: Int, batch: Int, rows: Int
+) raises -> List[Float32]:
+    """The `3 * cl` comps buffer as a DIFFERENTLY SPELLED writer would have
+    left it.
+
+    The three blocks are read out of `comps` per the DOCUMENTED layout and
+    re-emitted per `variant` in `holtwinters_fit_ptr`'s own loop order --
+    level, then trend, then season, `i` ascending -- so an arm whose stores
+    overlap its own earlier stores lands exactly where the real mis-spelling
+    would land. A cell the variant never writes keeps `PACK_POISON`: the
+    Python surface hands the binding an `np.empty`, so an unwritten cell is
+    garbage, and a definite poison is the honest stand-in for garbage.
+    """
+    if 2 * batch + cl > 3 * cl:
+        raise Error(
+            "_pack_reorder: the STRIDE_BATCH spelling would write past the"
+            " buffer on this fixture (2*batch + cl = " + String(2 * batch + cl)
+            + " > " + String(3 * cl) + "), so the arm is not expressible here"
+        )
+    var out = List[Float32]()
+    out.reserve(3 * cl)
+    for _ in range(3 * cl):
+        out.append(PACK_POISON)
+    for i in range(cl):
+        var lv = comps[i]
+        var tr = comps[cl + i]
+        var sn = comps[2 * cl + i]
+        if variant == "SWAP_TREND_SEASON":
+            out[i] = lv
+            out[cl + i] = sn
+            out[2 * cl + i] = tr
+        elif variant == "SWAP_LEVEL_TREND":
+            out[i] = tr
+            out[cl + i] = lv
+            out[2 * cl + i] = sn
+        elif variant == "SERIES_MAJOR":
+            # the TRANSPOSE: cell (series `s`, step `k`) of each block put at
+            # `s * rows + k` instead of `k * batch + s`
+            var s = i % batch
+            var k = i // batch
+            var j = s * rows + k
+            out[j] = lv
+            out[cl + j] = tr
+            out[2 * cl + j] = sn
+        elif variant == "STRIDE_BATCH":
+            # `batch_size` used where `components_len` belongs, which is the
+            # stats pack's stride copied into the comps loop by hand
+            out[i] = lv
+            out[batch + i] = tr
+            out[2 * batch + i] = sn
+        else:
+            raise Error("_pack_reorder: unknown variant '" + variant + "'")
+    return out^
+
+
+def _stats_reorder(variant: String, stats: List[Float32], batch: Int) raises -> List[Float32]:
+    """The `4 * batch` stats buffer under a named mis-spelling."""
+    var out = List[Float32]()
+    out.reserve(4 * batch)
+    for _ in range(4 * batch):
+        out.append(PACK_POISON)
+    for b in range(batch):
+        var sse = stats[b]
+        var alpha = stats[batch + b]
+        var beta = stats[2 * batch + b]
+        var gamma = stats[3 * batch + b]
+        if variant == "SWAP_SSE_ALPHA":
+            out[b] = alpha
+            out[batch + b] = sse
+            out[2 * batch + b] = beta
+            out[3 * batch + b] = gamma
+        elif variant == "SWAP_BETA_GAMMA":
+            out[b] = sse
+            out[batch + b] = alpha
+            out[2 * batch + b] = gamma
+            out[3 * batch + b] = beta
+        else:
+            raise Error("_stats_reorder: unknown variant '" + variant + "'")
+    return out^
+
+
+def _flags_reorder(variant: String, flags: List[Int32], batch: Int) raises -> List[Int32]:
+    """The `2 * batch` flags buffer under a named mis-spelling."""
+    var out = List[Int32]()
+    out.reserve(2 * batch)
+    for _ in range(2 * batch):
+        out.append(PACK_POISON_I)
+    for b in range(batch):
+        if variant == "SWAP_FLAGS":
+            out[b] = flags[batch + b]
+            out[batch + b] = flags[b]
+        else:
+            raise Error("_flags_reorder: unknown variant '" + variant + "'")
+    return out^
+
+
+def check_hw_pack_round_trip() raises:
+    """DEVIATION 930: the flat pack `bindings/` reads is the structured fit.
+
+    Seven clauses, every one bitwise, and every one of them a comparison
+    against something that never saw the pack:
+
+      (a) comps    `holtwinters_fit_ptr`'s `3 * components_len` buffer,
+                   unpacked per the documented layout, cell by cell against
+                   `holtwinters_fit_host`'s `level` / `trend` / `season`
+      (b) extent   the return value, and guard cells past the end of all
+                   four buffers still holding their poison -- a writer that
+                   over-strides is a wrong answer, not a crash
+      (c) stats    `sse` / `alpha` / `beta` / `gamma`, same principle
+      (d) flags    `niter` / `criterion`, same principle
+      (e) meaning  each block read the way `_tsa_impl.py` reads it, `[s + i
+                   * batch_size]`, against series `s` FITTED ALONE. This is
+                   the clause that pins TIME-MAJOR: (a) would pass a pack
+                   that faithfully copied a wrongly ordered `HWFit`, and
+                   this one would not. When the structured witness itself
+                   disagrees with the batch-of-1 fit the message says so,
+                   because that is `check_hw_launch_invariance`'s claim and
+                   not this gate's.
+      (f) forecast `holtwinters_forecast_ptr` reading the flat buffer
+                   against `holtwinters_forecast_host` on the structured
+                   `HWFit`, plus its own guard cells and return value
+      (g) refusals `holtwinters_forecast_ptr`'s three by-name refusals (its
+                   own `n <= frequency` and `batch_size < 1`, plus the `h
+                   must be > 0` it inherits), which nothing else reaches
+
+    Plus the controls, which raise VACUOUS rather than pass: the fixture's
+    extents are pairwise distinct, the separation census finds every named
+    mis-spelling visible on this fixture, and a mis-read comps buffer moves
+    the FORECAST and not only the buffer.
+    """
+    var ctx = DeviceContext()
+    var rows = PACK_N - PACK_FREQ
+    var cl = rows * PACK_BATCH
+    var n_comps = 3 * cl
+    var n_stats = 4 * PACK_BATCH
+    var n_flags = 2 * PACK_BATCH
+    var n_fc = PACK_H * PACK_BATCH
+
+    # CONTROL 1: the fixture's extents, asserted and not merely asserted in
+    # prose. If any two of these coincide, an index arithmetic error can
+    # land on a correct answer and every clause below is worth less than it
+    # looks.
+    var dims: List[Int] = [
+        PACK_BATCH, PACK_FREQ, rows, cl, PACK_H, n_comps, n_stats, n_flags, n_fc
+    ]
+    var dnames: List[String] = [
+        "batch_size", "frequency", "rows_per_series", "components_len", "h",
+        "3*components_len", "4*batch_size", "2*batch_size", "h*batch_size",
+    ]
+    for i in range(len(dims)):
+        for j in range(i + 1, len(dims)):
+            if dims[i] == dims[j]:
+                raise Error(
+                    "check_hw_pack_round_trip VACUOUS FIXTURE [" + _mode_name() + "]: "
+                    + dnames[i] + " == " + dnames[j] + " == " + String(dims[i])
+                    + ", so an index arithmetic error can alias onto a correct"
+                    " answer here; change PACK_N / PACK_FREQ / PACK_BATCH / PACK_H"
+                )
+
+    # The three series are three DIFFERENT families, fitted with one
+    # seasonal type, so the optimizer has no reason to land on the same
+    # parameters twice (the stats pack's swap arms need at least one series
+    # where the swapped pair differs, and CONTROL 2 checks that it got one).
+    var specs: List[HWFixtureSpec] = [
+        spec_additive(), spec_multiplicative(), spec_additive_noiseless()
+    ]
+    var data = hw_fixture_mixed(specs, PACK_N, PACK_BATCH, PACK_FREQ, PACK_SALT)
+
+    # THE INDEPENDENT WITNESS. `holtwinters_fit_ptr` calls exactly this
+    # function inside itself and then packs; this call is the same fit with
+    # the packing left out.
+    var fitted = holtwinters_fit_host(
+        data, PACK_N, PACK_BATCH, PACK_FREQ, START_PERIODS, "additive", HW_DEFAULT_EPS
+    )
+    if len(fitted.level) != cl or len(fitted.sse) != PACK_BATCH:
+        raise Error(
+            "check_hw_pack_round_trip: the witness returned " + String(len(fitted.level))
+            + " component cells and " + String(len(fitted.sse)) + " stats cells,"
+            " expected " + String(cl) + " and " + String(PACK_BATCH)
+        )
+
+    # The four host buffers, every cell poisoned first so an UNWRITTEN cell
+    # inside the documented extent fails a clause instead of reading as a
+    # coincidence, and PACK_GUARD poisoned cells past the end of each.
+    var hdata = ctx.enqueue_create_host_buffer[DType.float32](PACK_N * PACK_BATCH)
+    for i in range(PACK_N * PACK_BATCH):
+        hdata.unsafe_ptr().unsafe_store(i, data[i])
+    var hcomps = ctx.enqueue_create_host_buffer[DType.float32](n_comps + PACK_GUARD)
+    for i in range(n_comps + PACK_GUARD):
+        hcomps.unsafe_ptr().unsafe_store(i, PACK_POISON)
+    var hstats = ctx.enqueue_create_host_buffer[DType.float32](n_stats + PACK_GUARD)
+    for i in range(n_stats + PACK_GUARD):
+        hstats.unsafe_ptr().unsafe_store(i, PACK_POISON)
+    var hflags = ctx.enqueue_create_host_buffer[DType.int32](n_flags + PACK_GUARD)
+    for i in range(n_flags + PACK_GUARD):
+        hflags.unsafe_ptr().unsafe_store(i, PACK_POISON_I)
+
+    var got_cl = holtwinters_fit_ptr(
+        hdata.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+        hcomps.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+        hstats.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+        hflags.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+        PACK_N, PACK_BATCH, PACK_FREQ, START_PERIODS, "additive", HW_DEFAULT_EPS,
+    )
+
+    var comps = List[Float32]()
+    comps.reserve(n_comps)
+    for i in range(n_comps):
+        comps.append(hcomps.unsafe_ptr().unsafe_load(i))
+    var stats = List[Float32]()
+    stats.reserve(n_stats)
+    for i in range(n_stats):
+        stats.append(hstats.unsafe_ptr().unsafe_load(i))
+    var flags = List[Int32]()
+    flags.reserve(n_flags)
+    for i in range(n_flags):
+        flags.append(hflags.unsafe_ptr().unsafe_load(i))
+
+    # CONTROL 2: THE SEPARATION CENSUS, on the buffer the entry actually
+    # wrote and on every build. Each named mis-spelling is re-emitted and
+    # its moved cells counted; a zero means this fixture cannot tell that
+    # mis-spelling from the pinned layout, which makes the matching arm
+    # unfalsifiable and the clause it guards worth nothing.
+    var sep = String("")
+    var cvars: List[String] = [
+        "SWAP_TREND_SEASON", "SWAP_LEVEL_TREND", "SERIES_MAJOR", "STRIDE_BATCH"
+    ]
+    for vi in range(len(cvars)):
+        var v = cvars[vi]
+        var moved = _count_diff_bits(_pack_reorder(v, comps, cl, PACK_BATCH, rows), comps)
+        if moved == 0:
+            raise Error(
+                "check_hw_pack_round_trip VACUOUS [" + _mode_name() + "]: the comps"
+                " mis-spelling " + v + " leaves all " + String(n_comps) + " cells"
+                " unchanged on this fixture, so clause (a) cannot see it and the"
+                " PACK_" + v + " arm cannot fail; change PACK_SALT or the fixture"
+            )
+        sep += v + " " + String(moved) + "/" + String(n_comps) + " "
+    var svars: List[String] = ["SWAP_SSE_ALPHA", "SWAP_BETA_GAMMA"]
+    for si in range(len(svars)):
+        var sv = svars[si]
+        var smoved = _count_diff_bits(_stats_reorder(sv, stats, PACK_BATCH), stats)
+        if smoved == 0:
+            raise Error(
+                "check_hw_pack_round_trip VACUOUS [" + _mode_name() + "]: the stats"
+                " mis-spelling " + sv + " leaves all " + String(n_stats) + " cells"
+                " unchanged, so the two swapped blocks are bit-equal on every one"
+                " of the " + String(PACK_BATCH) + " series and clause (c) cannot"
+                " see the swap; change PACK_SALT or the fixture families"
+            )
+        sep += sv + " " + String(smoved) + "/" + String(n_stats) + " "
+    var fmoved = _count_diff_i32(_flags_reorder("SWAP_FLAGS", flags, PACK_BATCH), flags)
+    if fmoved == 0:
+        raise Error(
+            "check_hw_pack_round_trip VACUOUS [" + _mode_name() + "]: niter equals"
+            " criterion on every series, so SWAP_FLAGS is invisible and clause (d)"
+            " cannot see it; change PACK_SALT or the fixture families"
+        )
+    sep += "SWAP_FLAGS " + String(fmoved) + "/" + String(n_flags)
+
+    # The arms. `comps_seen` is what the fit clauses read; the forecast
+    # clause gets `comps` itself unless PACK_FORECAST_SWAP is named, which
+    # is what makes the fit arms a model of the SELF-CONSISTENT defect (a
+    # writer and a reader wrong the same way) rather than of a disagreement.
+    var comps_seen = comps.copy()
+    if _pack_comps_sabotage() != "":
+        comps_seen = _pack_reorder(
+            _pack_comps_sabotage(), comps, cl, PACK_BATCH, rows
+        )
+    var stats_seen = stats.copy()
+    if _pack_stats_sabotage() != "":
+        stats_seen = _stats_reorder(_pack_stats_sabotage(), stats, PACK_BATCH)
+    var flags_seen = flags.copy()
+    if _pack_flags_sabotage() != "":
+        flags_seen = _flags_reorder(_pack_flags_sabotage(), flags, PACK_BATCH)
+
+    var cnames = List[String]()
+    var cmsgs = List[String]()
+
+    # (a) comps vs the structured witness, cell by cell.
+    var want = List[Float32]()
+    want.reserve(n_comps)
+    for i in range(cl):
+        want.append(fitted.level[i])
+    for i in range(cl):
+        want.append(fitted.trend[i])
+    for i in range(cl):
+        want.append(fitted.season[i])
+    cnames.append("a comps")
+    cmsgs.append(_first_diff_bits("comps pack vs fit_host level|trend|season", comps_seen, want))
+
+    # (b) the extent: the returned length, and the guard cells.
+    var bad_ext = String("")
+    if got_cl != cl:
+        bad_ext = (
+            "holtwinters_fit_ptr returned " + String(got_cl) + ", expected"
+            " (n - frequency) * batch_size = " + String(cl)
+        )
+    for i in range(PACK_GUARD):
+        if bad_ext == "" and bitcast[DType.uint32](hcomps.unsafe_ptr().unsafe_load(n_comps + i)) != bitcast[DType.uint32](PACK_POISON):
+            bad_ext = "comps guard cell " + String(i) + " past " + String(n_comps) + " was written"
+        if bad_ext == "" and bitcast[DType.uint32](hstats.unsafe_ptr().unsafe_load(n_stats + i)) != bitcast[DType.uint32](PACK_POISON):
+            bad_ext = "stats guard cell " + String(i) + " past " + String(n_stats) + " was written"
+        if bad_ext == "" and hflags.unsafe_ptr().unsafe_load(n_flags + i) != PACK_POISON_I:
+            bad_ext = "flags guard cell " + String(i) + " past " + String(n_flags) + " was written"
+    cnames.append("b extent")
+    cmsgs.append(bad_ext)
+
+    # (c) stats.
+    var want_stats = List[Float32]()
+    want_stats.reserve(n_stats)
+    for b in range(PACK_BATCH):
+        want_stats.append(fitted.sse[b])
+    for b in range(PACK_BATCH):
+        want_stats.append(fitted.alpha[b])
+    for b in range(PACK_BATCH):
+        want_stats.append(fitted.beta[b])
+    for b in range(PACK_BATCH):
+        want_stats.append(fitted.gamma[b])
+    cnames.append("c stats")
+    cmsgs.append(_first_diff_bits("stats pack vs fit_host sse|alpha|beta|gamma", stats_seen, want_stats))
+
+    # (d) flags.
+    var want_flags = List[Int32]()
+    want_flags.reserve(n_flags)
+    for b in range(PACK_BATCH):
+        want_flags.append(fitted.niter[b])
+    for b in range(PACK_BATCH):
+        want_flags.append(fitted.criterion[b])
+    cnames.append("d flags")
+    cmsgs.append(_first_diff_i32("flags pack vs fit_host niter|criterion", flags_seen, want_flags))
+
+    # (e) THE MEANING OF THE INDEX. Series `s` fitted ALONE, against the
+    # cells `_tsa_impl.py`'s `reshape((ts_num, num_rows), order="F")` reads
+    # for that series. Clause (a) compares the pack to the `HWFit` and would
+    # pass a faithful copy of a wrongly ordered one; this compares the pack
+    # to a fit that shares no buffer, no launch geometry and no batch with
+    # it.
+    var bad_tm = String("")
+    var bad_bi = String("")
+    for s in range(PACK_BATCH):
+        var one = List[Float32]()
+        one.reserve(PACK_N)
+        for t in range(PACK_N):
+            one.append(data[s * PACK_N + t])
+        var f1 = holtwinters_fit_host(
+            one, PACK_N, 1, PACK_FREQ, START_PERIODS, "additive", HW_DEFAULT_EPS
+        )
+        var w_lv = List[Float32]()
+        var w_tr = List[Float32]()
+        var w_sn = List[Float32]()
+        var p_lv = List[Float32]()
+        var p_tr = List[Float32]()
+        var p_sn = List[Float32]()
+        for i in range(rows):
+            var k = s + i * PACK_BATCH
+            w_lv.append(fitted.level[k])
+            w_tr.append(fitted.trend[k])
+            w_sn.append(fitted.season[k])
+            p_lv.append(comps_seen[k])
+            p_tr.append(comps_seen[cl + k])
+            p_sn.append(comps_seen[2 * cl + k])
+        var tag1 = "series " + String(s) + " batch-1 vs batch-" + String(PACK_BATCH) + " "
+        if bad_bi == "":
+            bad_bi = _first_diff_bits(tag1 + "level", f1.level, w_lv)
+        if bad_bi == "":
+            bad_bi = _first_diff_bits(tag1 + "trend", f1.trend, w_tr)
+        if bad_bi == "":
+            bad_bi = _first_diff_bits(tag1 + "season", f1.season, w_sn)
+        var tag2 = "series " + String(s) + " batch-1 vs comps[block + s + i*batch_size] "
+        if bad_tm == "":
+            bad_tm = _first_diff_bits(tag2 + "level", f1.level, p_lv)
+        if bad_tm == "":
+            bad_tm = _first_diff_bits(tag2 + "trend", f1.trend, p_tr)
+        if bad_tm == "":
+            bad_tm = _first_diff_bits(tag2 + "season", f1.season, p_sn)
+    if bad_bi != "":
+        # NOT the pack. The STRUCTURED witness already disagrees with the
+        # batch-of-1 fit, which is check_hw_launch_invariance's claim, so
+        # say whose claim broke instead of blaming the buffer.
+        bad_tm = (
+            "BATCH INVARIANCE, not the pack (" + bad_bi + "); the structured HWFit"
+            " itself disagrees with a batch-of-1 fit, which is"
+            " check_hw_launch_invariance's clause"
+        )
+    cnames.append("e time-major")
+    cmsgs.append(bad_tm)
+
+    # (f) the forecast, from the other side.
+    var comps_fc = comps.copy()
+    if _pack_forecast_sabotage() != "":
+        comps_fc = _pack_reorder(
+            _pack_forecast_sabotage(), comps, cl, PACK_BATCH, rows
+        )
+    var hfc_in = ctx.enqueue_create_host_buffer[DType.float32](n_comps)
+    for i in range(n_comps):
+        hfc_in.unsafe_ptr().unsafe_store(i, comps_fc[i])
+    var hfc_out = ctx.enqueue_create_host_buffer[DType.float32](n_fc + PACK_GUARD)
+    for i in range(n_fc + PACK_GUARD):
+        hfc_out.unsafe_ptr().unsafe_store(i, PACK_POISON)
+    var got_fc = holtwinters_forecast_ptr(
+        hfc_in.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+        hfc_out.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+        PACK_N, PACK_BATCH, PACK_FREQ, "additive", PACK_H,
+    )
+    var fc_ptr = List[Float32]()
+    fc_ptr.reserve(n_fc)
+    for i in range(n_fc):
+        fc_ptr.append(hfc_out.unsafe_ptr().unsafe_load(i))
+    var fc_host = holtwinters_forecast_host(fitted, PACK_H)
+    var bad_fc = String("")
+    if got_fc != n_fc:
+        bad_fc = (
+            "holtwinters_forecast_ptr returned " + String(got_fc) + ", expected h *"
+            " batch_size = " + String(n_fc)
+        )
+    for i in range(PACK_GUARD):
+        if bad_fc == "" and bitcast[DType.uint32](hfc_out.unsafe_ptr().unsafe_load(n_fc + i)) != bitcast[DType.uint32](PACK_POISON):
+            bad_fc = "forecast guard cell " + String(i) + " past " + String(n_fc) + " was written"
+    if bad_fc == "":
+        bad_fc = _first_diff_bits("forecast_ptr(comps) vs forecast_host(HWFit)", fc_ptr, fc_host)
+    cnames.append("f forecast")
+    cmsgs.append(bad_fc)
+
+    # CONTROL 3: clause (f) is a chain of comparisons that would pass for
+    # ever if the forecast did not depend on the packed order at all. So
+    # prove the dependence: the same entry, on a comps buffer read with
+    # trend and season exchanged, must move the forecast.
+    var hfc_in2 = ctx.enqueue_create_host_buffer[DType.float32](n_comps)
+    var comps_sw = _pack_reorder("SWAP_TREND_SEASON", comps, cl, PACK_BATCH, rows)
+    for i in range(n_comps):
+        hfc_in2.unsafe_ptr().unsafe_store(i, comps_sw[i])
+    var hfc_out2 = ctx.enqueue_create_host_buffer[DType.float32](n_fc)
+    for i in range(n_fc):
+        hfc_out2.unsafe_ptr().unsafe_store(i, PACK_POISON)
+    _ = holtwinters_forecast_ptr(
+        hfc_in2.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+        hfc_out2.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+        PACK_N, PACK_BATCH, PACK_FREQ, "additive", PACK_H,
+    )
+    var fc_sw = List[Float32]()
+    fc_sw.reserve(n_fc)
+    for i in range(n_fc):
+        fc_sw.append(hfc_out2.unsafe_ptr().unsafe_load(i))
+    var fc_moved = _count_diff_bits(fc_sw, fc_host)
+    if fc_moved == 0:
+        raise Error(
+            "check_hw_pack_round_trip VACUOUS [" + _mode_name() + "]: a comps buffer"
+            " with trend and season EXCHANGED forecasts the same " + String(n_fc)
+            + " bits, so clause (f) cannot see a mis-read pack and its pass means"
+            " nothing"
+        )
+
+    # (g) the three by-name refusals `holtwinters_forecast_ptr` makes: its
+    # own `n <= frequency` and `batch_size < 1`, and the `h must be > 0` it
+    # inherits from `holtwinters_forecast_host_traced`. `check_hw_refusals`
+    # reaches only the last of the three, and only through the list-shaped
+    # entry, so the two the pointer entry owns are reached nowhere else.
+    var bad_ref = String("")
+    var n_ref = 0
+    var raised = False
+    try:
+        _ = holtwinters_forecast_ptr(
+            hfc_in.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            hfc_out.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            PACK_FREQ, PACK_BATCH, PACK_FREQ, "additive", PACK_H,
+        )
+    except e:
+        raised = True
+        if String(e).find("must exceed frequency") < 0:
+            bad_ref = "n == frequency raised '" + String(e) + "' without naming 'must exceed frequency'"
+    if not raised:
+        bad_ref = "n == frequency did not raise"
+    else:
+        n_ref += 1
+    raised = False
+    try:
+        _ = holtwinters_forecast_ptr(
+            hfc_in.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            hfc_out.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            PACK_N, 0, PACK_FREQ, "additive", PACK_H,
+        )
+    except e:
+        raised = True
+        if bad_ref == "" and String(e).find("batch_size must be >= 1") < 0:
+            bad_ref = "batch_size 0 raised '" + String(e) + "' without naming 'batch_size must be >= 1'"
+    if not raised:
+        if bad_ref == "":
+            bad_ref = "batch_size 0 did not raise"
+    else:
+        n_ref += 1
+    raised = False
+    try:
+        _ = holtwinters_forecast_ptr(
+            hfc_in.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            hfc_out.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            PACK_N, PACK_BATCH, PACK_FREQ, "additive", 0,
+        )
+    except e:
+        raised = True
+        if bad_ref == "" and String(e).find("h must be > 0") < 0:
+            bad_ref = "h 0 raised '" + String(e) + "' without naming 'h must be > 0'"
+    if not raised:
+        if bad_ref == "":
+            bad_ref = "h 0 did not raise"
+    else:
+        n_ref += 1
+    cnames.append("g refusals")
+    cmsgs.append(bad_ref)
+
+    # The verdict, one line per broken clause, because an operator running
+    # eight arms wants to read which clauses each arm moves and not just the
+    # first assertion that happened to fire.
+    var n_failed = 0
+    var failed = String("")
+    var first_msg = String("")
+    for i in range(len(cmsgs)):
+        if cmsgs[i] != "":
+            n_failed += 1
+            failed += " " + cnames[i]
+            if first_msg == "":
+                first_msg = cnames[i] + ": " + cmsgs[i]
+    if n_failed != 0 or _pack_sabotage_name() != "none":
+        var line = String("")
+        for i in range(len(cmsgs)):
+            line += cnames[i] + "=" + ("BROKE" if cmsgs[i] != "" else "held") + " "
+        print("  CLAUSES " + line)
+    _ = hdata^
+    _ = hcomps^
+    _ = hstats^
+    _ = hflags^
+    _ = hfc_in^
+    _ = hfc_out^
+    _ = hfc_in2^
+    _ = hfc_out2^
+    _ = fitted^
+    if n_failed != 0:
+        raise Error(
+            "check_hw_pack_round_trip FAILED [" + _mode_name() + "] (pack sabotage "
+            + _pack_sabotage_name() + "): " + String(n_failed) + " of "
+            + String(len(cmsgs)) + " clauses broke [" + failed + " ]; first "
+            + first_msg
+        )
+    print(
+        "check_hw_pack_round_trip OK [" + _mode_name() + "]: fit_ptr's "
+        + String(n_comps) + "-cell comps, " + String(n_stats) + "-cell stats and "
+        + String(n_flags) + "-cell flags packs are bitwise equal to fit_host's"
+        " structured lists (n " + String(PACK_N) + ", batch_size " + String(PACK_BATCH)
+        + ", frequency " + String(PACK_FREQ) + ", components_len " + String(cl)
+        + ", rows " + String(rows) + ", all extents distinct); guards past all four"
+        " buffers untouched; " + String(PACK_BATCH) + " batch-of-1 fits pin every"
+        " block TIME-MAJOR at [s + i*batch_size]; forecast_ptr == forecast_host over "
+        + String(n_fc) + " cells (" + String(n_ref) + " refusals by name); SEPARATION "
+        + sep + "; swapped-read forecast moves " + String(fc_moved) + "/" + String(n_fc)
+    )
+
+
 def main() raises:
-    print("== holtwinters/mojo_only/hw_check.mojo [" + _mode_name() + "] sabotage=" + hw_sabotage_name() + " ==")
+    print(
+        "== holtwinters/mojo_only/hw_check.mojo [" + _mode_name() + "] sabotage="
+        + hw_sabotage_name() + " pack_sabotage=" + _pack_sabotage_name() + " =="
+    )
     check_hw_refusals()
     check_hw_decompose_vs_reference()
     check_hw_optimizer_reduces_sse()
@@ -1426,4 +2515,5 @@ def main() raises:
     check_hw_launch_invariance()
     check_hw_card_is_emitted()
     check_hw_decision_branches()
+    check_hw_pack_round_trip()
     print("== hw_check: ALL OK [" + _mode_name() + "] ==")
