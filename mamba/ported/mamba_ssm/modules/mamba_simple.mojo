@@ -662,7 +662,9 @@ def check_decode_equals_prefill(
                 )
 
     if not quiet:
-        var per_token = 1 + dm + 2 * di + di * D_STATE + xr + 8 * di + 2 * dm
+        # The seven `d_inner`-wide stages are conv.out, silu.out,
+        # dt_proj.out, softplus.out, scan.y, skip.out and gate.out.
+        var per_token = 1 + dm + 2 * di + di * D_STATE + xr + 7 * di + 2 * dm
         print(
             "  ",
             c.name,
