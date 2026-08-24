@@ -141,6 +141,29 @@ fixture (n > 100 with slow convergence) instead of deferring it. Eight of nine
 arms in that lane now bite. A decision stage did what a heavy fixture could
 not.
 
+### A third corollary: check where your REFERENCE starts
+
+From the arima lane, 2026-08-24, and it generalizes past cards to every
+oracle in the repo. **A reference that starts downstream of a transform does
+not cover that transform, no matter how tight its tolerance looks.**
+
+arima's Float64 reference `kalman_host_f64` is fed THE SAME Float32
+transformed parameters the device gets, so it begins AFTER the Jones
+transform. Its headline agreement figures therefore do not contain DEVIATION
+675 at all, and could not have detected an error in it. The lane found this
+while deciding whether 675 was worth fixing and correctly refused to decide
+without a measurement that actually covers the code in question; the cheap fix
+is to give the oracle its own Float64 Jones transform, which moves no device
+bit.
+
+Contrast the mamba corpus, which is independent from the START: it regenerates
+its inputs from the hash spec and was byte-compared to the committed files,
+11/11 tensors, before any stage was compared. That is what makes its 12/12
+stage agreement mean something.
+
+So for every oracle, ask two questions before trusting a green: where does it
+START, and does it share any code with the thing it is checking?
+
 ## The top five, if only five land
 
 Every one is a scalar or a handful of integers. None adds a large buffer.
