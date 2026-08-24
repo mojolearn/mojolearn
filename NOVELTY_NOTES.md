@@ -148,6 +148,24 @@ paper.
    four-axes floor-amortization law (A.2) -- this is its quantization
    corollary.
 
+13. **An output-only equality gate is BLIND to fold-order violations, measured.**
+   The mamba block's `S1_FOLD_DESCENDING` sabotage (reverse the RMSNorm sum-of-
+   squares fold) was run at two widths on one Apple M4. At d_model 8 it moves
+   `norm.sumsq` on 1 of 4 rows and NOTHING else: the divide and the reciprocal
+   square root absorb a 1 ulp change and `norm.out` is identical again. At
+   d_model 16 it moves 3 of 4 rows and 13 of 16 stages, with `out_proj.out`
+   differing on 23 of 64 cells -- and `residual.out` is STILL bit-identical,
+   because the residual add puts an out_proj of order 1e-3 beside an input of
+   order 1. So at the shape where the arm is STRONGEST, a gate comparing only
+   the block's output calls it inert and licenses any fold order at S1. Four of
+   the block's six arms move no cell of the final output at all. The claim is
+   therefore not that per-stage traces are convenient: it is that output
+   equality is the WRONG INSTRUMENT for a determinism contract, and cannot
+   falsify the clauses such a contract is made of. Evidence:
+   `mamba/mojo_only/mamba_check.mojo`'s sabotage ledger, IDENTITY_PATHS row 55.
+   PRIOR-ART CHECK NEEDED: reproducibility work generally reports final-output
+   equality, so the question is whether anyone has shown it INSUFFICIENT.
+
 ## C. Toolchain findings (report upstream, never paper claims)
 
 8. **Metal AOT suppression + cache poisoning (replaces the retracted
