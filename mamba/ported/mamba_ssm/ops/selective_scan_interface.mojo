@@ -502,8 +502,19 @@ def selective_scan_fn(
     trace's tag-uniqueness invariant raises on a duplicate):
 
         <prefix>.scan.y      [M, dim]        S5-S10, before D
-        <prefix>.skip.out    [M, dim]        S11
         <prefix>.scan.h      [B, dim, 16]    the state after the last token
+        <prefix>.skip.out    [M, dim]        S11
+
+    THAT IS CONTRACT SECTION 7'S CARD ORDER, `scan.y`, `scan.h`, `skip.out`,
+    and it is the order these records are emitted in. It is NOT the order the
+    seams run in -- S11 is computed inside the token loop, before the final
+    state is stored -- and the difference does not matter, because a record is
+    a hash of a finished buffer taken after the launch has drained. What DOES
+    matter is that the differ aligns two traces by their TAG SEQUENCES
+    (`core/identity_trace.mojo`'s rule 2 and the uniqueness invariant), so a
+    driver emitting the card in one order and this file in another would make
+    every stage after the first transposition align against the wrong record.
+    The card order is the contract's; the emission order follows it.
 
     `block_size` is an EXECUTION plan quantity in the sense of the gemm
     charter's split: no float crosses a thread boundary in the kernel, so
@@ -589,11 +600,12 @@ def selective_scan_fn(
         )
         ctx.synchronize()
 
+    # CONTRACT SECTION 7's card order, exactly: scan.y, scan.h, skip.out.
     trace.record_device(ctx, prefix + ".scan.y", y, m * dim)
-    trace.record_device(ctx, prefix + ".skip.out", out, m * dim)
     trace.record_device(
         ctx, prefix + ".scan.h", h_state, batch * dim * MAX_DSTATE
     )
+    trace.record_device(ctx, prefix + ".skip.out", out, m * dim)
 
 
 def _require(got: Int, want: Int, name: String, shape: String) raises:
