@@ -294,6 +294,44 @@ def build_tree_iterative_global(
                 observed_max_depth if observed_max_depth > depth else depth
             )
 
+            # `:158`, ported verbatim. THIS BRANCH IS UNREACHABLE, and the
+            # proof is short enough to keep next to it so nobody writes a
+            # gate that can never fire (adjudicated 2026-08-24; the
+            # repo-wide card audit flagged it as a possible dangling-node
+            # defect, CARD_GAPS.md:232-236).
+            #
+            #   `max_nodes_per_tree = min(2*max_samples - 1,
+            #   2^(max_depth+1) - 1)` with `max_samples >= 1` and
+            #   `max_depth >= 0` both enforced by a raise in
+            #   `compute_global_max_nodes_per_tree`, so it is >= 1.
+            #
+            #   There are exactly THREE sites that ever push a node index:
+            #   the root push of 0, and the two child pushes below. 0 <
+            #   max_nodes_per_tree because the bound is >= 1. The child
+            #   pushes are reachable ONLY past the capacity arm of the
+            #   stopping condition, so at the moment they run
+            #   `n_nodes + 2 <= max_nodes_per_tree`, and they push
+            #   `left_child = n_nodes <= max_nodes_per_tree - 2` and
+            #   `right_child = n_nodes + 1 <= max_nodes_per_tree - 1`.
+            #   Both are < max_nodes_per_tree, and an index does not change
+            #   after it is pushed.
+            #
+            #   Therefore every popped `node_idx` is < max_nodes_per_tree
+            #   and the `continue` never runs. It is cuML's defensive
+            #   spelling and we keep it because we mirror them, not because
+            #   any shape reaches it. NO DEVIATION: theirs is identical
+            #   (`isolation_tree_builder.cuh:158`), so there is no bug of
+            #   theirs to fix and nothing of ours to number.
+            #
+            # If it ever DID run it would be a real defect, not a hash gap:
+            # the node stays at the poison fill while its parent still
+            # points at it. It would NOT be invisible, though -- the audit's
+            # secondary claim is wrong. A dropped index is always < n_nodes
+            # (it was produced by incrementing n_nodes), and the card
+            # records `for i in range(n_used)` with `n_used = n_nodes`
+            # (`isolation_forest.mojo:608,627`), so a poisoned dangling
+            # child lands INSIDE the hashed range and diverges from the
+            # oracle on `structure.feat` at that index.
             if node_idx >= max_nodes_per_tree:
                 continue
 

@@ -153,6 +153,48 @@ gate runs 6 x 256 draws at nonzero offsets and confirms that offset 1 is
 perturbation this whole lane is built to detect, planted deliberately and
 observed.
 
+## The dangling-node branch is UNREACHABLE (adjudicated 2026-08-24)
+
+The repo-wide card audit (`CARD_GAPS.md:232-236`) flagged
+`isolation_tree_builder.mojo`'s `if node_idx >= max_nodes_per_tree:
+continue` as a possible defect: a node silently dropped, left at the poison
+fill, with a parent still pointing at it and no gate able to see it.
+Adjudicated here with the three questions that decide it.
+
+**Is upstream the same?** Yes, verbatim:
+`isolation_tree_builder.cuh:158` is `if (node_idx >= max_nodes_per_tree) {
+continue; }`. We did not invent it. So DEVIATION policy is not engaged:
+there is no bug of theirs to fix and nothing of ours to number.
+
+**Is it reachable?** No, and the proof is three lines.
+`max_nodes_per_tree = min(2*max_samples - 1, 2^(max_depth+1) - 1)` with
+`max_samples >= 1` and `max_depth >= 0` both enforced by a raise, so it is
+at least 1. Exactly three sites ever push a node index: the root push of
+`0`, and the two child pushes. `0 < max_nodes_per_tree` because the bound
+is at least 1. The child pushes sit past the capacity arm of the stopping
+condition, so when they run `n_nodes + 2 <= max_nodes_per_tree`, and they
+push `n_nodes` and `n_nodes + 1`, both `< max_nodes_per_tree`. An index
+does not change after it is pushed. Therefore every popped `node_idx` is
+below the bound and the `continue` never runs.
+
+**What would happen if it did?** It would be a real defect, not a hash gap.
+Under the all-zero poison the dangling child reads feature 0, threshold
+0.0, left 0, right 0, and a traversal that reaches it loops back to the
+root forever: a hang, not a wrong answer. Under the NaN poison
+(`0xffc0dead`) the feature word is negative, the node reads as a leaf, and
+the traversal silently returns the poison as a path length: a wrong score.
+
+The audit's secondary claim, that the card could not see it, **is wrong**.
+A dropped index is always `< n_nodes`, because it was produced by
+incrementing `n_nodes`, and the card records `for i in range(n_used)` with
+`n_used = n_nodes`. A poisoned dangling child lands inside the hashed range
+and would diverge from the oracle on `structure.feat` at that index.
+
+**Verdict: UNREACHABLE and CLOSED.** Not "ungated" -- calling it ungated
+invites the next reader to write a gate that can never fire. The proof is
+kept in the source beside the branch so it is re-checked whenever the bound
+or the push sites change.
+
 ## The seed-truncation trap does not apply here
 
 cuML's Random Forest is not reproducible across GPU *models* above
