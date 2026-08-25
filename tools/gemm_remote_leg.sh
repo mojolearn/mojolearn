@@ -2550,7 +2550,15 @@ forest)
     # gate above is per-extension; this is the thing the arms themselves do.
     # Recorded rather than fatal: if it fails the lanes will refuse by name
     # anyway, and this line says WHY in one place instead of six times.
-    python3 -c "import mojolearn, sys; print('mojolearn imports OK', mojolearn.__file__)" \
+    # FROM `python/`, WHICH IS WHERE THE PACKAGE LIVES. The first version of
+    # this check ran from the repo root and reported
+    # `ModuleNotFoundError: No module named 'mojolearn'` while all ten
+    # extensions were built, installed and importable -- a red light on a
+    # healthy build, which is the worst kind of check to have. The arms get
+    # this right on their own (`forest_speed_arm.py` puts `python/` on
+    # sys.path), so the check has to do what the arms do rather than
+    # something adjacent to it.
+    ( cd python && python3 -c "import mojolearn; print('mojolearn imports OK', mojolearn.__file__)" ) \
         > "$LOGS/import_mojolearn.log" 2>&1
     echo "import_mojolearn_exit=$?" >> "$OUT/leg.txt"
     tail -3 "$LOGS/import_mojolearn.log" >> "$OUT/console.log" 2>&1 || true
