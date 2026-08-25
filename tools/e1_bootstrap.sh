@@ -13,8 +13,16 @@
 # tools/with_identical_mode.sh; bindings into python/mojolearn/identical/;
 # drivers select it with MOJOLEARN_NUMERIC_MODE=identical). No file in the
 # tree is edited, nothing is reverted, the shipped FAST binaries are never
-# touched. On AMD a FAST build is a compile error at the 64-wide wavefront
-# asserts, by design, so IDENTICAL is the only mode that runs there.
+# touched.
+#
+# THIS PARAGRAPH USED TO END "on AMD a FAST build is a compile error at the
+# 64-wide wavefront asserts, by design, so IDENTICAL is the only mode that
+# runs there." LEG 13 (2026-08-25, MI325X) FALSIFIED IT. Every FAST lane in
+# phase 8 BUILT and RAN on the AMD box: gemm's FAST device check reported 128
+# OK lines, and cd, kde, linkage, svm and metrics all produced FAST cards that
+# diverge from Apple's. The sentence is deleted rather than softened, because
+# it is the sentence that would have made a missing AMD FAST column look
+# intentional.
 set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -46,8 +54,8 @@ step "mode: IDENTICAL by build define (no source flip since 2026-08-23)"
 # bindings build into python/mojolearn/identical/ and the Python drivers
 # select that set with MOJOLEARN_NUMERIC_MODE=identical. Nothing in the
 # tree is edited, so there is nothing to revert and no shipped binary to
-# restore afterwards. On AMD a FAST build is still a compile error at the
-# 64-wide wavefront asserts, by design.
+# restore afterwards. (The claim that FAST cannot build on AMD stood here too
+# and was falsified by leg 13; see the header.)
 IDENT="$REPO/tools/with_identical_mode.sh"
 export MOJOLEARN_NUMERIC_MODE=identical
 

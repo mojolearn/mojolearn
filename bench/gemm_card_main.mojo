@@ -34,6 +34,29 @@ for the stage, and a sidecar is the difference between the differ saying
 class is denormal-vs-zero. On a cross-vendor divergence that is the whole
 investigation.
 
+THIS DRIVER HAS NO FAST ARM, AND ITS `[FAST]` CARD IS NOT A CONTROL
+--------------------------------------------------------------------
+DEVIATION 1091, 2026-08-25, found on the leg-13 AMD column. The banner prints
+`_mode_name()`, which reads the compiled `GLOBAL_NUMERIC_MODE` honestly, so a
+run under `MOJOLEARN_NUMERIC_MODE=fast` is labelled `[FAST]`. The KERNEL is
+not selected that way. `_device_product` calls `identical_gemm_into`
+unconditionally: it imports the identical kernel directly and never reaches
+`core/gemm.mojo`'s dispatcher, which is the thing that would pick MAX
+`linalg.matmul` under FAST. So the FAST card is the IDENTICAL card with a
+different banner.
+
+MEASURED, not deduced: on BOTH Apple and the MI325X, `gemm.fast.card` and
+`gemm.identical.card` are byte-identical after stripping comments, while the
+other six phase-8 lanes' FAST cards diverge between those same two machines.
+
+Two things follow and neither is optional to state. **The IDENTICAL claim is
+untouched** -- those cards are real, they came off the device, and they match
+across three vendors. **The gemm FAST card is not evidence of anything** and
+must never be read as the control arm for this lane; a leg that shows "gemm
+FAST identical across vendors" is showing that this driver ignored the mode.
+The gemm row of `tools/lanes_price.sh` inherits the same defect: it times
+identical against identical and its ratio is not a price.
+
 The oracle arm and the device arm are the SAME DRIVER, so the fixtures, the
 tags, the ordering and the record format are shared by construction rather
 than by two authors agreeing. Their cards are byte-identical whenever they
