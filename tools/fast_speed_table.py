@@ -280,6 +280,51 @@ def main():
               f"{a.get('metric','?')} | {a.get('value','?')} |")
         w("")
 
+    # WHERE TO SPEND THE NEXT DAY, ranked, so the optimization target is a
+    # measurement rather than an intuition. Only the BEST opponent per row
+    # counts: losing 70x to a TF32 arm and 12x to an FP32 arm is one fact,
+    # not two, and the honest headline is the smaller gap we could close
+    # against the strongest thing that actually ran.
+    worst = []
+    for lane in lanes:
+        for shape in sorted({k[2] for k in stats if k[0] == lane}):
+            ours = stats.get((lane, "ours", shape))
+            if ours is None:
+                continue
+            opps = [(stats[(lane, o, shape)]["median"], o)
+                    for o in sorted(k[1] for k in stats
+                                    if k[0] == lane and k[2] == shape and k[1] != "ours")]
+            opps = [(t, o) for t, o in opps if t > 0]
+            if not opps:
+                continue
+            best_t, best_o = min(opps)
+            worst.append((ours["median"] / best_t, lane, shape, best_o,
+                          ours["median"], best_t))
+    worst.sort(reverse=True)
+    if worst:
+        w("## Where we lose most, ranked")
+        w("")
+        w("Against the FASTEST opponent that actually ran on each row, because")
+        w("losing 70x to a TF32 arm and 12x to an FP32 arm is one fact and not")
+        w("two. This is the optimization queue: it is a measurement, not an")
+        w("intuition about which kernel feels slow.")
+        w("")
+        w("| rank | lane | shape | ours ms | best opponent | their ms | we are |")
+        w("|---|---|---|---|---|---|---|")
+        for i, (r, lane, shape, o, om, tm) in enumerate(worst[:25], 1):
+            verdict = ("%.2fx SLOWER" % r) if r > 1.0 else ("%.2fx FASTER" % (1.0 / r))
+            w("| %d | %s | %s | %s | %s | %s | **%s** |"
+              % (i, lane, shape, fmt(om), o, fmt(tm), verdict))
+        if len(worst) > 25:
+            w("")
+            w("%d further rows not listed; %d rows in total have an opponent."
+              % (len(worst) - 25, len(worst)))
+        wins = [x for x in worst if x[0] <= 1.0]
+        w("")
+        w("**%d of %d rows with an opponent are wins for us.**"
+          % (len(wins), len(worst)))
+        w("")
+
     if run.agree:
         w("## Did the two sides compute the same thing")
         w("")
