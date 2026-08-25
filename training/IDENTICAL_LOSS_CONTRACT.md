@@ -742,7 +742,20 @@ instead of to a shape.
 **Why `+0.0` and not `-0.0`, and why it matters.** L12's leaf accumulator is
 seeded `+0.0` and every term it adds is a row loss. `fma(x, 1.0, acc)` is
 `acc + x`, and `acc + (+0.0) == acc` for every `acc` except `acc = -0.0`,
-which the `+0.0` seed forbids. So an ignored row is BITWISE INERT in the
+which the `+0.0` seed does NOT forbid.
+
+**DEVIATION 1327, 2026-08-25.** The seed forbids reaching `-0.0` by ADDITION.
+It does not forbid `ftz` of a negative subnormal partial sum, and `ftz` runs
+at every seam. Verified by direct computation: from a `+0.0` seed,
+`+ 0x80C00000` then `+ 0x00800000` gives `0x80400000`, a negative subnormal,
+and `ftz` of that is `0x80000000`. Both operands are ordinary normals. The
+same false sentence stood in `transformer/IDENTICAL_TRANSFORMER_CONTRACT.md`
+7.1 and is corrected there.
+
+Whether the hole is REACHABLE for `ce.row` is a separate question this lane
+has not answered: it needs a row whose partial log-prob sum cancels into the
+subnormal range. The clause below is therefore true of every fixture shipped
+today and is NOT proven of the contract. So an ignored row is BITWISE INERT in the
 batch fold. **It is not inert in `P`** -- the fold still has `N` terms and
 `P = f(N)` -- and it is not inert on the card, because `ce.row` records it.
 That is the transformer's 7.1 theorem with a row where it had a masked key,
@@ -785,7 +798,7 @@ that can see this clause at all" at a second site.
 | `ce.logp_target` | `+0.0` when the target IS the argmax and `denom` is exactly `1.0` | `ce.nll` |
 | `ce.nll` | `neg_by_bits(+0.0)` is `-0.0`. **Reachable at `V = 1`, and at any `V` where every non-target exponential underflows to `+0.0`** | the eps-zero branch of 6.2(c) and the `L_NEG_VIA_ZERO_SUB` sabotage |
 | `ce.row` for an ignored row | `+0.0` by clause 7.3, never `-0.0` | the inertness proof of 7.3 |
-| `ce.total` | `+0.0` when every row is ignored or every row loss is `+-0.0`. The `+0.0` leaf seed forbids `-0.0` | -- |
+| `ce.total` | `+0.0` when every row is ignored or every row loss is `+-0.0`. **The `+0.0` leaf seed does NOT forbid `-0.0`** -- see DEVIATION 1327 below | -- |
 | `ce.weights` | `identical_div(+0.0, denom)` is `+0.0` for `denom > 0` | -- |
 | `ce.dlogits` | `ftz(w - t)` is `+0.0` when `w == t` exactly, by IEEE's `x - x = +0` in round-to-nearest | -- |
 

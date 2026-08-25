@@ -496,8 +496,33 @@ Now the two folds. S17 seeds `+0.0` and adds nonnegative terms, so its
 accumulator is never `-0.0`, and `x + (+0.0) == x` for every value it can
 hold. S19 seeds `+0.0` and its masked terms contribute
 `fma(+0.0, v, acc)`, which is `acc + (+-0.0)`, which is `acc` for every
-`acc` except `acc = -0.0` and the seed forbids that. **So the masked tail is
-bitwise inert in both folds.**
+`acc` except `acc = -0.0`.
+
+**THE SENTENCE THAT STOOD HERE SAID "and the seed forbids that". IT IS FALSE
+AND THE COUNTEREXAMPLE IS TWO ADDS LONG.** DEVIATION 1327, found by the
+embedding lane 2026-08-25 and verified by direct computation. The `+0.0` seed
+forbids reaching `-0.0` by ADDITION. It does not forbid reaching it through
+`ftz` OF A NEGATIVE SUBNORMAL PARTIAL SUM, and `ftz` runs at every seam:
+
+    seed            +0.0
+    + 0x80C00000 -> 0x80C00000   (-1.7632e-38, an ordinary NORMAL)
+    + 0x00800000 -> 0x80400000   (-5.8775e-39, SUBNORMAL)
+    ftz(...)     -> 0x80000000   = -0.0
+
+Both operands are ordinary normals. A third exactly-`+0.0` contributor then
+moves the bit back to `0x00000000`, so the masked tail is NOT inert on that
+accumulator.
+
+**For S19 the hole is REACHABLE BY CONSTRUCTION**, because value contributions
+carry both signs. It is unreachable on the fixtures this lane ships today,
+which is why every gate has passed, and that is exactly the condition this
+project calls `[[reached-but-inert]]` -- a clause that is true of the fixtures
+and false of the contract.
+
+So the masked tail is bitwise inert in both folds **for every accumulator that
+is not `-0.0`, and an accumulator CAN be `-0.0`.** OWED: a fixture that plants
+the subnormal-cancellation case (the embedding lane ships one as F-SUBACC),
+and a decision about whether S19 seeds differently or the clause is narrowed.
 
 ### 7.2 Decode equals prefill, and it is structural
 
