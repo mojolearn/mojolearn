@@ -209,8 +209,36 @@ step "phase 8: the classical lanes (gemm, cd, kde, linkage, svm, metrics) -- bot
 # Apple vs NVIDIA vs AMD through identity_trace_diff; FAST cards recorded.
 # A lane that fails here is a FINDING, never an abort: the others still run.
 mkdir -p "$OUT/lanes"
+# MOJOLEARN_E1_LANES: WHICH PHASE-8 LANES RUN, AND IN THIS ORDER (DEVIATION 973)
+#
+# Unset means all of them, so every existing caller is unchanged. Gated inside
+# run_lane_arm and run_lane_check rather than around each of the fourteen call
+# sites, because one gate cannot be forgotten and fourteen can.
+#
+# WHY. Leg 12's phase-8-only run reached the work bound with identical_cards=2:
+# gemm and cd landed, the other five did not. Phase 8's order is
+# `gemm cd kde linkage svm metrics mamba` and MAMBA IS LAST, while gemm's
+# device check is the largest compile in the set. On the M4 all seven take 74
+# seconds against a warm mojo cache; on a cold rented box the first two ate a
+# fifty-minute budget. A lane that is last is a lane that does not run.
+#
+#   MOJOLEARN_E1_LANES=mamba bash tools/e1_bootstrap.sh
+#
+# This selects, it does not reorder: the calls below still run in their written
+# order and the filter only skips. To put a lane FIRST, ask for that lane ALONE.
+# A skipped lane is announced, never silent, so a column cannot be mistaken for
+# a fuller one -- and the judge already treats a missing IDENTICAL card as a
+# hard failure, which is the behavior that keeps this honest.
+lane_enabled() {
+  [ -z "${MOJOLEARN_E1_LANES:-}" ] && return 0
+  case " $(printf '%s' "$MOJOLEARN_E1_LANES" | tr ',' ' ') " in
+    *" $1 "*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 run_lane_arm() {  # <lane> <mode fast|identical> <cmd...>
   local lane="$1" mode="$2"; shift 2
+  lane_enabled "$lane" || { echo "  $lane [$mode]: SKIPPED (MOJOLEARN_E1_LANES=$MOJOLEARN_E1_LANES)"; return 0; }
   local card="$OUT/lanes/$lane.$mode.card" log="$OUT/lanes/$lane.$mode.log"
   rm -f "$card"
   if [ "$mode" = identical ]; then
@@ -230,6 +258,7 @@ run_lane_arm() {  # <lane> <mode fast|identical> <cmd...>
 }
 run_lane_check() {  # <lane> <mode> <cmd...>
   local lane="$1" mode="$2"; shift 2
+  lane_enabled "$lane" || return 0
   local log="$OUT/lanes/$lane.$mode.check.log"
   if [ "$mode" = identical ]; then
     "$IDENT" "$@" > "$log" 2>&1 && echo "  $lane [$mode] check OK ($(grep -c ' OK' "$log") OK lines)" \
