@@ -81,6 +81,7 @@ class Run:
         self.acc = []
         self.notes = []
         self.refused = []
+        self.agree = []
 
     def add_line(self, line, source):
         if not KIND.match(line):
@@ -107,6 +108,13 @@ class Run:
             self.acc.append(kv)
         elif head == "FSPEED-REFUSED":
             self.refused.append(kv)
+        elif head == "FSPEED-AGREE":
+            # ITS OWN SECTION, not a note. A speed number for a block that
+            # computes something different from its opponent is worthless,
+            # and this is the only line that says whether the two sides
+            # agreed. Burying it among free-text notes is how it gets
+            # skipped by the reader who most needs it.
+            self.agree.append(kv)
         else:
             kv["text"] = rest.strip()
             self.notes.append(kv)
@@ -270,6 +278,23 @@ def main():
         for a in run.acc:
             w(f"| {a.get('lane','?')} | {a.get('arm','?')} | "
               f"{a.get('metric','?')} | {a.get('value','?')} |")
+        w("")
+
+    if run.agree:
+        w("## Did the two sides compute the same thing")
+        w("")
+        w("A speed number for an arm that computes something different from")
+        w("its opponent is worthless. This is that check, reported and not")
+        w("gated: a large difference does not fail the run, it disqualifies")
+        w("the ROW, and the row has to be readable to be disqualified.")
+        w("")
+        w("| lane | max abs diff | max rel diff | n | source |")
+        w("|---|---|---|---|---|")
+        for a in run.agree:
+            w("| %s | %s | %s | %s | %s |" % (
+                a.get("lane", "?"), a.get("max_abs_diff", "-"),
+                a.get("max_rel_diff", "-"), a.get("n", "-"),
+                a.get("_source", "?")))
         w("")
 
     if run.refused:

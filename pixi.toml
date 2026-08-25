@@ -38,6 +38,42 @@ max = ">=26.5.0,<27"
 # build step to keep in sync.
 probe = "mojo run -I . probe_main.mojo"
 
+# ---------------------------------------------------------------------------
+# THE FAST SPEED LANE (bench/speed/README.md). Ours against the vendor's own
+# library, on the vendor's own silicon, in FAST mode.
+#
+# **DELIBERATELY NOT WRAPPED IN tools/with_identical_mode.sh.** This lane IS
+# the FAST arm and the whole point is that no `-D` define is passed. Every
+# driver prints the mode it COMPILED in, read from the comptime constant, and
+# the leg refuses a run whose `ours` header says IDENTICAL, so a mistake here
+# goes red rather than producing a correctly-labelled measurement of the wrong
+# arm.
+#
+# One lane per process, chosen by MOJOLEARN_SPEED_LANE. MOJOLEARN_SPEED_ROUNDS
+# sets the timed round count, MOJOLEARN_SPEED_SIZE=smoke selects the small
+# fixtures, and every printed line carries `size=` so a smoke number can never
+# be mistaken for a shipped one. In the shared checkout, run under
+# tools/with_build_lock.sh.
+#
+# THE VENDOR ARMS ARE NOT TASKS HERE, ON PURPOSE. cuml, cuvs and cudf are not
+# on conda-forge for osx-arm64 at all, and adding them would re-solve
+# pixi.lock for every environment -- the exact hazard [feature.skgpu]'s
+# comment was written about. They also cannot share an interpreter with the
+# prebuilt python/mojolearn/*.so, which are built against 3.14 while RAPIDS
+# ships for 3.10 through 3.13. They run on the pod's system python:
+#
+#   python3 tools/speed_gemm_arm.py            cuBLAS, both allow_tf32 arms
+#   python3 tools/speed_torch_seq.py           PyTorch and mamba-ssm
+#   python3 tools/speed_cuml_arm.py --lane L   cuML and cuVS
+#   python3 tools/speed_gbdt_arm.py --lane L   CatBoost, XGBoost, LightGBM
+#
+# and the table is built at home over the fetched logs:
+#
+#   python3 tools/fast_speed_table.py <run-dir> --out <table>.md
+speed-gemm = "mojo run -I . bench/speed/gemm_speed_main.mojo"
+speed-seq = "mojo run -I . bench/speed/seq_speed_main.mojo"
+speed-classical = "mojo run -I . bench/speed/classical_speed_main.mojo"
+
 # The ONLY check that compares against CatBoost rather than against a tally
 # written in this repository. Needs `bench/oracle.txt`, which is committed;
 # regenerate it with `oracle-gen` when a setting or the CatBoost version

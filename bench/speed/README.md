@@ -44,12 +44,26 @@ reported rather than judged.
 Every arm, in either language, prints these and nothing else that the parser
 reads:
 
-    FSPEED-HEADER family= lane= arm= mode= device= rounds= size=
+    FSPEED-HEADER  family= lane= arm= mode= device= rounds= size=
     FSPEED         lane= arm= shape= round= ms= hash=
     FSPEED-WARMUP  lane= arm= shape= ms=
     FSPEED-ACC     lane= arm= metric= value=
+    FSPEED-AGREE   lane= max_abs_diff= max_rel_diff= n=
+    FSPEED-WEIGHTS lane= arm= tensor= hash=
     FSPEED-NOTE    lane= arm= <free text>
     FSPEED-REFUSED lane= arm= reason=
+    FSPEED-DONE    lane= arm=
+
+`FSPEED-AGREE` and `FSPEED-WEIGHTS` are the two lines that decide whether a
+row means anything at all. A speed number for an arm that computed something
+different from its opponent is worthless, and a pair of arms that ran on
+DIFFERENT WEIGHTS is not a comparison. Both are reported and neither is
+gated: a large difference does not fail the run, it disqualifies the row, and
+the row has to be readable in order to be disqualified. The table builder
+gives `FSPEED-AGREE` its own section for that reason.
+
+Any other `FSPEED-*` kind falls through to the notes section rather than
+being dropped, so an arm may add one without silently losing its output.
 
 `arm` is `ours` or the real library and device: `cublas-tf32`, `cuml-gpu`,
 `sklearn-cpu`, `catboost-gpu`, `torch-gpu-fp32`, `mamba-ssm-cuda`. An arm
@@ -154,3 +168,29 @@ CUDA. The first run is a BUILD.
   build.
 * Nothing about inference, only about the entry each driver times. Where a
   lane times `fit` and not `predict`, its own file says so.
+
+## Findings this lane produced before it measured anything
+
+**DEVIATION 1810 (fixed, `bench/bench_sklearn.py`).** Building the cuML arm
+meant reading the existing scikit-learn arm against `bench_main.mojo` line by
+line, and the k-means initial centroids did not match. `u01(rows, cols,
+salt)` returns a `rows x cols` block indexed `0..rows-1`, and the centroids
+were built as `u01(c * 7919 + 1, km_cols, 5)[0]` -- row ZERO for every `c`.
+The `+ 1` is the tell: it exists to make row `c * 7919` the last row of the
+block, and the subscript then asked for the first one. The Mojo side uses row
+`c * 7919`.
+
+So our k-means started from 64 distinct centroids and scikit-learn's started
+from one centroid repeated 64 times. **Every k-means ratio in
+`bench/results/` taken against that file has to be re-read rather than
+believed**, and which direction it moved is not something that can be
+asserted here: a degenerate initialization can converge instantly and flatter
+them, or thrash on empty-cluster relocation and flatter us. It was not one
+variable, so it was not a comparison.
+
+Nothing was red. No check covered it. It was found by reading two files
+against each other, which is the only thing that finds this class.
+
+The lane also carries the deviations its own harness recorded: 1810-1829
+(classical), 1830-1849 (forest), 1850-1869 (sequence), 1870 (the leg
+payload). Each is written up in the markdown beside the file that records it.

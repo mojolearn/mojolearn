@@ -628,7 +628,7 @@ if [ "$PAYLOAD" = "speed" ]; then
     # DRIVER is missing at this commit is refused earlier, by the archive
     # check, for nothing.
     case "$SPEED_FAMILY" in
-        gemmseq)   SPEED_LANES="${MOJOLEARN_SPEED_LANES:-gemm transformer mamba}" ;;
+        gemmseq)   SPEED_LANES="${MOJOLEARN_SPEED_LANES:-gemm transformer attention mlp rmsnorm mamba selective_scan}" ;;
         classical) SPEED_LANES="${MOJOLEARN_SPEED_LANES:-kmeans dbscan pca ols knn cd kde linkage svm metrics ivf hdbscan cholesky gmm gp krr}" ;;
         forest)    SPEED_LANES="${MOJOLEARN_SPEED_LANES:-gbdt-symmetric gbdt-depthwise gbdt-lossguide rf et iforest}" ;;
     esac
@@ -2180,6 +2180,26 @@ python3 -c 'import sys; print(sys.version)' >> "$OUT/python_which.txt" 2>&1 || t
 export MOJOLEARN_SPEED_ROUNDS="@SPEEDROUNDS@"
 export MOJOLEARN_SPEED_SIZE="@SPEEDSIZE@"
 
+# THE DEVICE NAME ON THE HEADER LINE. `bench/speed/seq_speed_main.mojo` takes
+# it from the environment rather than from `DeviceContext`, so if this is left
+# unset every one of its headers reads `device=unset` and the table cannot say
+# which silicon it is about. Taken from the vendor's own tool, first field,
+# with the spaces squeezed because the header is space-delimited `k=v`.
+MOJOLEARN_SPEED_DEVICE=$(@SMI@ 2>/dev/null | head -1 | sed 's/,.*//' | sed 's/^ *//; s/ *$//; s/  */_/g')
+if [ -z "$MOJOLEARN_SPEED_DEVICE" ]; then MOJOLEARN_SPEED_DEVICE="unknown-@VENDOR@"; fi
+export MOJOLEARN_SPEED_DEVICE
+echo "device=$MOJOLEARN_SPEED_DEVICE" >> "$OUT/leg.txt"
+
+# WHERE THE TWO SIDES MEET. Several lanes have Mojo-only fixture builders and
+# several compare outputs, so our arm writes the fixture (and, for the
+# sequence lanes, its raw float32 output) here and the vendor arm reads it.
+# Without this the vendor arm either refuses the lane by name or runs on data
+# our arm never saw, and the second of those is much worse.
+MOJOLEARN_SPEED_DUMP="$OUT/dump"
+MOJOLEARN_SPEED_DUMP_DIR="$MOJOLEARN_SPEED_DUMP"
+export MOJOLEARN_SPEED_DUMP MOJOLEARN_SPEED_DUMP_DIR
+mkdir -p "$MOJOLEARN_SPEED_DUMP"
+
 # ONE ARM, BOUNDED, ITS EXIT RECORDED, AND NEVER FATAL.
 runarm() {
     _log="$1"; shift
@@ -2214,6 +2234,11 @@ case "@FAMILY@" in
 gemmseq)
     # The cheapest family: torch is already in the image, so nothing is
     # installed and the whole lease goes to compiling and measuring.
+    # OURS FIRST, EVERY LANE, because the torch arm reads the raw output our
+    # arm dumped in order to answer whether the two sides computed the same
+    # thing. A vendor arm that ran before its dump existed refuses the
+    # agreement line and the row becomes a pair of timings with nothing
+    # tying them together.
     for L in @SPEEDLANES@; do
         MOJOLEARN_SPEED_LANE="$L"; export MOJOLEARN_SPEED_LANE
         case "$L" in
@@ -2224,7 +2249,11 @@ gemmseq)
         esac
     done
     runarm "gemm.gemm.cublas.log" python3 tools/speed_gemm_arm.py --rounds "@SPEEDROUNDS@"
-    runarm "seq.all.torch.log"    python3 tools/speed_torch_seq.py --rounds "@SPEEDROUNDS@"
+    for L in @SPEEDLANES@; do
+        [ "$L" = "gemm" ] && continue
+        runarm "seq.$L.torch.log" python3 tools/speed_torch_seq.py \
+            --lane "$L" --rounds "@SPEEDROUNDS@" --dump-dir "$MOJOLEARN_SPEED_DUMP"
+    done
     ;;
 classical)
     # RAPIDS is the install that can eat the lease. It runs FIRST so that a
@@ -2235,8 +2264,12 @@ classical)
         MOJOLEARN_SPEED_LANE="$L"; export MOJOLEARN_SPEED_LANE
         runarm "classical.$L.ours.log" \
             pixi run mojo run -I . bench/speed/classical_speed_main.mojo
+        # NO --lane FLAG: tools/speed_cuml_arm.py takes its lane from
+        # MOJOLEARN_SPEED_LANE, which is already exported above, and has no
+        # argparse at all. Passing a flag it does not know would abort the
+        # arm on every lane.
         runarm "classical.$L.vendor.log" \
-            python3 tools/speed_cuml_arm.py --lane "$L" --rounds "@SPEEDROUNDS@"
+            python3 tools/speed_cuml_arm.py
     done
     ;;
 forest)
