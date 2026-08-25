@@ -2481,17 +2481,56 @@ forest)
     # A LOCAL BUILD ARTIFACT WAS LOAD-BEARING AND NOBODY KNEW, which is the
     # same class of thing as a benchmark that only passes because a cache is
     # warm. It is invisible on any machine that has ever built the package.
-    for _b in base estimators gbdt rf trees svm; do
-        if [ "$_b" = "base" ]; then _bs="bindings/build.sh"; else _bs="bindings/build_$_b.sh"; fi
-        printf '\n=== %s ===\n' "$_bs" >> "$OUT/console.log"
-        if command -v timeout > /dev/null 2>&1; then
-            timeout -k 30 @BUILDBUDGET@ bash "$_bs" \
-                > "$LOGS/build.binding.$_b.log" 2>&1
-        else
-            bash "$_bs" > "$LOGS/build.binding.$_b.log" 2>&1
-        fi
-        echo "binding_build_exit ${_b}=$?" >> "$OUT/leg.txt"
-        tail -5 "$LOGS/build.binding.$_b.log" >> "$OUT/console.log" 2>&1 || true
+    # DEVIATION 1880 -- TWO PASSES, AND NO ORDERING CAN REPLACE THEM.
+    #
+    # Every build_*.sh ends in a smoke test that copies `python/mojolearn/`
+    # into a temp directory, drops in the ONE .so it just built, and imports
+    # the package. `__init__.py` pulls in several submodules, so that import
+    # needs EVERY sibling extension present -- and each script installs its
+    # own .so only AFTER its smoke passes. The dependency is circular and it
+    # cannot be ordered away: with base first, base's smoke died on a missing
+    # `_mojolearn_estimators`; with estimators first, the others died on a
+    # missing `_mojolearn`. Both were observed, an hour apart, on two rented
+    # boxes.
+    #
+    # THE REPOSITORY ALREADY KNEW. bindings/build.sh:315 says it in as many
+    # words -- "four gates fail on the siblings' not-yet-built .so files. The
+    # caller that sets this owns end-to-end verification" -- and provides
+    # MOJOLEARN_SKIP_BUILD_GATE, which installs the artifact and skips the
+    # smoke. It is invisible on any machine that has ever built the package,
+    # because there the siblings are already sitting in the directory.
+    #
+    # PASS 1 installs all six with the gate skipped. PASS 2 re-runs them with
+    # the gate LIVE, against a now-complete package, so nothing is taken on
+    # trust: the smoke tests are the only thing that launches kernels through
+    # these extensions, and every broken build in this family's history
+    # imported fine and died at the first launch. Pass 2's exit codes are the
+    # ones recorded as `binding_build_exit`; pass 1's are recorded separately
+    # so a failure can be attributed to the right pass.
+    for _pass in 1 2; do
+        for _b in base estimators gbdt rf trees svm; do
+            if [ "$_b" = "base" ]; then _bs="bindings/build.sh"; else _bs="bindings/build_$_b.sh"; fi
+            printf '\n=== pass %s: %s ===\n' "$_pass" "$_bs" >> "$OUT/console.log"
+            if [ "$_pass" = "1" ]; then
+                _skip=1
+            else
+                _skip=""
+            fi
+            if command -v timeout > /dev/null 2>&1; then
+                MOJOLEARN_SKIP_BUILD_GATE="$_skip" timeout -k 30 @BUILDBUDGET@ \
+                    bash "$_bs" > "$LOGS/build.binding.$_b.pass$_pass.log" 2>&1
+            else
+                MOJOLEARN_SKIP_BUILD_GATE="$_skip" \
+                    bash "$_bs" > "$LOGS/build.binding.$_b.pass$_pass.log" 2>&1
+            fi
+            _brc=$?
+            if [ "$_pass" = "1" ]; then
+                echo "binding_install_exit ${_b}=$_brc" >> "$OUT/leg.txt"
+            else
+                echo "binding_build_exit ${_b}=$_brc" >> "$OUT/leg.txt"
+            fi
+            tail -4 "$LOGS/build.binding.$_b.pass$_pass.log" >> "$OUT/console.log" 2>&1 || true
+        done
     done
     ls -la python/mojolearn/*.so > "$OUT/bindings_listing.txt" 2>&1 \
         || echo "NO .so BUILT AT ALL" > "$OUT/bindings_listing.txt"
