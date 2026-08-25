@@ -1,0 +1,54 @@
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Included from /root/mojolearn/mojo_only/e2_growth_cards.mojo:103:
+Included from /root/mojolearn/gbdt/train.mojo:52:
+/root/mojolearn/gbdt/methods/doc_parallel_boosting.mojo:1214:25: warning: assignment to 'not_pd_blocks' was never used; assign to '_' instead?
+    var not_pd_blocks = 0
+                        ^
+Included from /root/mojolearn/mojo_only/e2_growth_cards.mojo:95:
+Included from /root/mojolearn/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:122:
+/root/mojolearn/gbdt/methods/greedy_subsets_searcher/kernel/split_points.mojo:1141:23: warning: assignment to 'dst' was never used; assign to '_' instead?
+            var dst = 0
+                      ^
+Included from /root/mojolearn/mojo_only/e2_growth_cards.mojo:100:
+Included from /root/mojolearn/gbdt/methods/oblivious_tree_structure_searcher.mojo:119:
+/root/mojolearn/gbdt/methods/pointwise_optimization_subsets.mojo:1213:24: warning: assignment to 'adapt_blocks' was never used; assign to '_' instead?
+        adapt_blocks = 1
+                       ^
+e2 growth cards, numeric mode IDENTICAL -> /root/mojolearn/bench/results/e1/2026-08-24_234801-41881c85a0c2/control
+  gbdt_depthwise: 94 records -> /root/mojolearn/bench/results/e1/2026-08-24_234801-41881c85a0c2/control/gbdt_depthwise.card
+  gbdt_lossguide: 205 records -> /root/mojolearn/bench/results/e1/2026-08-24_234801-41881c85a0c2/control/gbdt_lossguide.card
+4078 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x70a800000000, nodemask=1)
+  gbdt_multiclass_ova: 112 records -> /root/mojolearn/bench/results/e1/2026-08-24_234801-41881c85a0c2/control/gbdt_multiclass_ova.card
+  gbdt_feature_parallel: 4 records -> /root/mojolearn/bench/results/e1/2026-08-24_234801-41881c85a0c2/control/gbdt_feature_parallel.card
+e2 growth cards: done [IDENTICAL]
+-- run-to-run control --
+   gbdt_depthwise: REPRODUCIBLE [IDENTICAL]
+   gbdt_lossguide: REPRODUCIBLE [IDENTICAL]
+   gbdt_multiclass_ova: REPRODUCIBLE [IDENTICAL]
+   gbdt_feature_parallel: REPRODUCIBLE [IDENTICAL]
+   gbdt_depthwise: 94 records, control_match=True
+   gbdt_lossguide: 205 records, control_match=True
+   gbdt_multiclass_ova: 112 records, control_match=True
+   gbdt_feature_parallel: 4 records, control_match=True
+e2_mojo_cards: wrote /root/mojolearn/bench/results/e1/2026-08-24_234801-41881c85a0c2/e2_mojo_cards.json
+
+=== phase 5: the unsupervised cards (k-means, k-NN, DBSCAN) -- IDENTICAL === 00:03:21
+== E1 Phase 3u: unsupervised cards ==
+   out: /root/mojolearn/bench/results/e1/2026-08-24_234801-41881c85a0c2/e1u
+   source sha256: 454fbb7c5f8133ce06338f6d6ca00a59
+vendor=nvidia
+payload=phase8
+commit=48e4fbb8305266be606c407cc1ef25ce4a4c63f5
+work_timeout=3000
+started=2026-08-24T23:45:58Z
+bootstrap_exit=124
+note: a bootstrap_exit of 124 is the work timeout firing
+e1dir_source=newest directory under bench/results/e1 (the bootstrap never printed 'artifacts in')
+e1dir=/root/mojolearn/bench/results/e1/2026-08-24_234801-41881c85a0c2
+identical_cards=0
+fast_cards=0
+phase8_findings=0
+finished=2026-08-25T00:38:01Z
+REMOTE_BODY_DONE

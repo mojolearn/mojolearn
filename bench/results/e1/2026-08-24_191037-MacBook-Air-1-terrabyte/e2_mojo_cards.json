@@ -1,0 +1,30 @@
+{
+  "gbdt_depthwise": {
+    "card": "gbdt_depthwise.card",
+    "control_match": true,
+    "description": "fit_depthwise_tree on depthwise_check.Fixture (4096 rows, 8 binary + 4 half-byte + 4 one-byte features, hashed bins, divergent target), depth 4; every stage of the depthwise ladder",
+    "numeric_mode": "IDENTICAL",
+    "record_count": 94
+  },
+  "gbdt_feature_parallel": {
+    "card": "gbdt_feature_parallel.card",
+    "control_match": true,
+    "description": "fit_feature_parallel_oblivious_tree_structure (rung 2) on feature_parallel_identity_check's fixture at 16434 rows (three compression blocks), depth 4, sm_count 10; OUTPUT-LEVEL card: splits + per-document docBins, no in-searcher stages",
+    "numeric_mode": "IDENTICAL",
+    "record_count": 4
+  },
+  "gbdt_lossguide": {
+    "card": "gbdt_lossguide.card",
+    "control_match": true,
+    "description": "fit_non_symmetric_tree under GROW_LOSSGUIDE on the same fixture, depth 6, max_leaves 9; the merged non-symmetric driver's Lossguide branches, every stage",
+    "numeric_mode": "IDENTICAL",
+    "record_count": 205
+  },
+  "gbdt_multiclass_ova": {
+    "card": "gbdt_multiclass_ova.card",
+    "control_match": true,
+    "description": "train(loss='MultiClassOneVsAll') on multiclass_train_check's splitmix fixture (4096 rows, 5 features, 5 learnable classes), border_count 32, 10 trees, depth 4, lr 0.3; borders + per-tree hist/pstats/winners/leaves through the env-read trace",
+    "numeric_mode": "IDENTICAL",
+    "record_count": 112
+  }
+}

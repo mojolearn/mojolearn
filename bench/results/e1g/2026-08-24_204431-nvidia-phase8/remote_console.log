@@ -1,0 +1,46 @@
+
+=== provenance === 00:47:29
+fatal: not a git repository (or any of the parent directories): .git
+Linux 70f13ab750c2 6.8.0-117-generic #117-Ubuntu SMP PREEMPT_DYNAMIC Tue May  5 19:26:24 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+
+=== pixi === 00:47:29
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 00:49:35
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 8: the classical lanes (gemm, cd, kde, linkage, svm, metrics) -- both modes, cards + checks === 00:49:35
+-- lanes, identical --
+  gemm [identical]: card 60 records -- [IDENTICAL]
+  gemm [identical] check OK (128 OK lines)
+  cd [identical]: card 20 records -- [IDENTICAL]
+vendor=nvidia
+payload=phase8
+commit=8aa4dc1852d0f4f572d7199a37531b0598ba4192
+work_timeout=3000
+e1_phases=8
+started=2026-08-25T00:46:42Z
+bootstrap_exit=124
+note: a bootstrap_exit of 124 is the work timeout firing
+e1dir_source=newest directory under bench/results/e1 (the bootstrap never printed 'artifacts in')
+e1dir=/root/mojolearn/bench/results/e1/2026-08-25_004729-70f13ab750c2
+identical_cards=2
+fast_cards=0
+phase8_findings=0
+finished=2026-08-25T01:37:29Z
+REMOTE_BODY_DONE

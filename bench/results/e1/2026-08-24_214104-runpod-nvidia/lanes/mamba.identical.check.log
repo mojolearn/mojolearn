@@ -1,0 +1,33 @@
+Imported from /root/mojolearn/mamba/mojo_only/mamba_check.mojo:436:
+/root/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/mojo_only/mamba_check.mojo:436:
+/root/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/mamba/mojo_only/mamba_check.mojo:436:
+/root/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/root/mojolearn/mamba/mojo_only/mamba_check.mojo:1589:30: warning: assignment to 'xr' was never used; assign to '_' instead?
+    var xr = dims.x_proj_rows()
+                             ^
+=== mamba block identity gate, profile mojolearn.identical.mamba1.fp32.v1
+mode IDENTICAL   block sabotage: none
+shape B=1 L=4 d_model=8 d_inner=16 dt_rank=1
+reach: S14's input lands in (10, 20] on 13 of 64 cells  (fixture F7's band; 0 would make S14_THRESHOLD_10 vacuous)
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU driver version is not supported.
+  Required: driver version >= 580 (CUDA >= 13.0)
+  Detected: 570.169 (CUDA 12.8)
+
+To run on an older driver, set the MODULAR_NVPTX_COMPILER_PATH environment variable to the path of a system `ptxas` binary. For more information, see https://modul.ar/gpu-requirements.
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1

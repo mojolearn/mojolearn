@@ -1,0 +1,4 @@
+PHASE8-FINDING: mamba [identical] failed (see /root/mojolearn/bench/results/e1/2026-08-25_014315-c01d3aa2e61f/lanes/mamba.identical.log)
+PHASE8-FINDING: mamba [identical] check FAILED: Unhandled exception caught during execution: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU driver version is not supported.
+PHASE8-FINDING: mamba [fast] failed (see /root/mojolearn/bench/results/e1/2026-08-25_014315-c01d3aa2e61f/lanes/mamba.fast.log)
+PHASE8-FINDING: mamba [fast] check FAILED: Unhandled exception caught during execution: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU driver version is not supported.

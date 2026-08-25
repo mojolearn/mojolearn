@@ -1,0 +1,53 @@
+
+=== provenance === 01:43:15
+fatal: not a git repository (or any of the parent directories): .git
+Linux c01d3aa2e61f 6.8.0-79-generic #79-Ubuntu SMP PREEMPT_DYNAMIC Tue Aug 12 14:42:46 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
+
+=== pixi === 01:43:16
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 01:45:54
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 8: the classical lanes (gemm, cd, kde, linkage, svm, metrics) -- both modes, cards + checks === 01:45:54
+-- lanes, identical --
+  gemm [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  cd [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  kde [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  linkage [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  svm [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+PHASE8-FINDING: mamba [identical] failed (see /root/mojolearn/bench/results/e1/2026-08-25_014315-c01d3aa2e61f/lanes/mamba.identical.log)
+  mamba [identical]: NO CARD written (stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-err)
+PHASE8-FINDING: mamba [identical] check FAILED: Unhandled exception caught during execution: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU driver version is not supported.
+  metrics [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+-- lanes, fast --
+  gemm [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  cd [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  kde [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  linkage [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  svm [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+PHASE8-FINDING: mamba [fast] failed (see /root/mojolearn/bench/results/e1/2026-08-25_014315-c01d3aa2e61f/lanes/mamba.fast.log)
+  mamba [fast]: NO CARD written (stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-err)
+PHASE8-FINDING: mamba [fast] check FAILED: Unhandled exception caught during execution: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU driver version is not supported.
+  metrics [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+
+=== done === 01:46:37
+artifacts in /root/mojolearn/bench/results/e1/2026-08-25_014315-c01d3aa2e61f
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

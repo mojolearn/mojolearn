@@ -1,0 +1,133 @@
+✨ Pixi task (check-kde in default): mojo run -I . kde/mojo_only/kde_check.mojo
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/kde/mojo_only/kde_check.mojo:99:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn/kde/mojo_only/kde_check.mojo:554:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'g'
+    """gaussian, h = 0.25, a query 10 away from every training point: each
+       ^
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/kde/mojo_only/kde_check.mojo:99:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/kde/mojo_only/kde_check.mojo:99:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/kde/mojo_only/kde_check.mojo:99:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/kde/mojo_only/kde_check.mojo:106:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/kde/ported/kde/kde.mojo:23:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/kde/ported/neighbors/kernel_density.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/kde/ported/distance/distance.mojo:35:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:97:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = value
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/kde/mojo_only/kde_check.mojo:106:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/kde/ported/kde/kde.mojo:23:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/kde/ported/neighbors/kernel_density.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/kde/ported/distance/distance.mojo:35:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:102:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/kde/mojo_only/kde_check.mojo:106:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/kde/ported/kde/kde.mojo:23:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/kde/ported/neighbors/kernel_density.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/kde/ported/distance/distance.mojo:35:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:102:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/kde/mojo_only/kde_check.mojo:106:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/kde/ported/kde/kde.mojo:23:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/kde/ported/neighbors/kernel_density.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/kde/ported/distance/distance.mojo:35:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:102:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                                      ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/kde/mojo_only/kde_check.mojo:106:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/kde/ported/kde/kde.mojo:23:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/kde/ported/neighbors/kernel_density.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/kde/ported/distance/distance.mojo:35:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:105:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var total = red[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/kde/mojo_only/kde_check.mojo:99:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn/kde/mojo_only/kde_check.mojo:646:9: warning: ref 'i' was never used, remove it?
+    for i in range(N_TRAIN):
+        ^
+== kde/mojo_only/kde_check.mojo [FAST] ==
+  refused  kernel='triangular': invalid kernel: 'triangular'
+  refused  metric='cosine' (in their table, unported): kde: metric='cosine' is in cuML's pairwise_distances table but is NOT PORTED (kde/UNPORTED.tsv); ported: euclidean, l2, sqeuclidean, l1, cityblock, manhattan, chebyshev
+  refused  metric='minkowski' (in their table, unported): kde: metric='minkowski' is in cuML's pairwise_distances table but is NOT PORTED (kde/UNPORTED.tsv); ported: euclidean, l2, sqeuclidean, l1, cityblock, manhattan, chebyshev
+  refused  metric='nan_euclidean' (in their table, unported): kde: metric='nan_euclidean' is in cuML's pairwise_distances table but is NOT PORTED (kde/UNPORTED.tsv); ported: euclidean, l2, sqeuclidean, l1, cityblock, manhattan, chebyshev
+  refused  metric='haversine' (unknown): Unknown metric: haversine
+  refused  bandwidth=0: bandwidth must be positive
+  refused  bandwidth=-1: bandwidth must be positive
+  refused  sample_weight with a zero: sample_weight must have positive values
+  refused  sample_weight of the wrong length: sample_weight: expected 200 values, got 199
+  refused  bandwidth=1e-20 (below 2^-63, h*h underflows): bandwidth=1e-20 is below 2^-63: h*h underflows float32 (DEVIATION 604)
+  refused  sample_weight with a subnormal (1e-40): sample_weight[5]=1e-40 is subnormal or infinite: log(w) is not finite in float32 (DEVIATION 604)
+  refused  sample_weight with +inf: sample_weight[6]=inf is subnormal or infinite: log(w) is not finite in float32 (DEVIATION 604)
+  refused  metric_arg=3.0: kde: metric_arg=3.0 is read only by metric='minkowski', which is NOT PORTED; pass 2.0 (the default)
+check_kde_refusals OK [FAST]: 13 refusals by name, 13 names resolve, h=2^-63 and w=2^-126 accepted
+check_kde_zero_sign_cannot_leak OK [FAST]: log(1)=+0.0, exp(+/-0)=1, exp(FLOAT_MIN-0)=0, tophat row max -0.0 (1 inside) scores 0xbf766065 either way
+check_kde_log_norm_closed_form OK [FAST]: 39 closed-form cases within 2e-5 (worst 2.2558156231866633e-07); 6 kernels x d=1..12 vs float64 within 5e-5 (worst 1.1390023537671823e-06)
+check_kde_oracle_vs_float64 OK [FAST]: 6 kernels x 4 metrics, 808 finite cells within 2e-4 (worst |diff| 5.196020223863229e-06), 80 -inf cells at <= -1e38
+check_kde_logsumexp_beats_naive OK [FAST]: naive log-sum -inf (underflowed), logsumexp -1708.7214 vs float64 -1708.7213588720942 (row max -1706.8835)
+  report gaussian/euclidean: 1 of 37 scores differ; first stage: 3	kde.logsumexp	f32	37	17dac5b85b356a70   VS   3	kde.logsumexp	f32	37	062a12dfb8900907; query 9 device 0xc17363c9 oracle 0xc17363ca
+  report epanechnikov/euclidean: 0 of 37 scores differ; first stage: 3	kde.logsumexp	f32	37	a6a6f09ddbece4e1   VS   3	kde.logsumexp	f32	37	0c0b7e4e3b8aa05e; 
+  report exponential/euclidean: 0 of 37 scores differ; first stage: 3	kde.logsumexp	f32	37	5b65b91e90cd2bb3   VS   3	kde.logsumexp	f32	37	dd645e67380791a3; 
+  report linear/euclidean: 0 of 37 scores differ; first stage: 3	kde.logsumexp	f32	37	9f150a87d34f05d1   VS   3	kde.logsumexp	f32	37	0b849bf967dc438b; 
+  report cosine/euclidean: 1 of 37 scores differ; first stage: 1	kde.logk	f32	7400	cedf8c00247d5d3e   VS   1	kde.logk	f32	7400	713f4aa1cf6798f4; query 24 device 0xc1378d22 oracle 0xc1378d23
+  report gaussian/sqeuclidean: 0 of 37 scores differ; first stage: 3	kde.logsumexp	f32	37	6a23738a88ef8ce3   VS   3	kde.logsumexp	f32	37	0a40ca9bc82c3295; 
+  report epanechnikov/sqeuclidean: 0 of 37 scores differ; first stage: 3	kde.logsumexp	f32	37	760ee177f0767146   VS   3	kde.logsumexp	f32	37	f3d837fdf4f84cab; 
+  report exponential/sqeuclidean: 0 of 37 scores differ; first stage: 3	kde.logsumexp	f32	37	7e5f9b7d9ec37ed0   VS   3	kde.logsumexp	f32	37	1284082c9e153ef6; 
+  report linear/sqeuclidean: 0 of 37 scores differ; first stage: 3	kde.logsumexp	f32	37	cae994973718561b   VS   3	kde.logsumexp	f32	37	64704c056f4af48a; 
+  report cosine/sqeuclidean: 0 of 37 scores differ; first stage: 1	kde.logk	f32	7400	debc4cba65f9c52f   VS   1	kde.logk	f32	7400	01937ec2024419bf; 
+  report gaussian/l1: 0 of 37 scores differ; first stage: 3	kde.logsumexp	f32	37	9fb52427d6c067f3   VS   3	kde.logsumexp	f32	37	a93900c22f839cca; 
+  report exponential/l1: 3 of 37 scores differ; first stage: 3	kde.logsumexp	f32	37	7ecfc1565dc96821   VS   3	kde.logsumexp	f32	37	3a0175ec5f2a2a4b; query 9 device 0xc1a70dec oracle 0xc1a70ded
+  report cosine/l1: 1 of 37 scores differ; first stage: 1	kde.logk	f32	7400	23590dc7b6875f74   VS   1	kde.logk	f32	7400	3dd031f95e30c568; query 3 device 0xc14ad4c7 oracle 0xc14ad4c8
+  report gaussian/chebyshev: 0 of 37 scores differ; first stage: 3	kde.logsumexp	f32	37	589bcf0975103d67   VS   3	kde.logsumexp	f32	37	a2f660b665f71102; 
+  report epanechnikov/chebyshev: 5 of 37 scores differ; first stage: 3	kde.logsumexp	f32	37	bccc77036ea1fc5f   VS   3	kde.logsumexp	f32	37	61029fb65177a48a; query 13 device 0xc10253a3 oracle 0xc10253a4
+  report exponential/chebyshev: 2 of 37 scores differ; first stage: 3	kde.logsumexp	f32	37	c2e68961d1cba15a   VS   3	kde.logsumexp	f32	37	c1bb1873ae31da38; query 6 device 0xc191d3ef oracle 0xc191d3f0
+  report linear/chebyshev: 3 of 37 scores differ; first stage: 3	kde.logsumexp	f32	37	1b4e6f1c154c3c94   VS   3	kde.logsumexp	f32	37	6ddb7f72ecee1f34; query 13 device 0xc10159ca oracle 0xc10159cb
+  report cosine/chebyshev: 1 of 37 scores differ; first stage: 1	kde.logk	f32	7400	4da40a0ae398ea3e   VS   1	kde.logk	f32	7400	4c626c0dea98a4c6; query 0 device 0xc10eca65 oracle 0xc10eca64
+check_kde_device_equals_oracle REPORT [FAST]: 6 kernels x 4 metrics, 222 score cells bit-equal to the oracle, 17 differ (FAST: the vendor exp/log/sqrt/product spellings are free to differ); six kernels pairwise distinct on every query
+  report gaussian: weighted device vs oracle differ at 3 scores (FAST)
+  report epanechnikov: weighted device vs oracle differ at 2 scores (FAST)
+  report linear: weighted device vs oracle differ at 2 scores (FAST)
+  report cosine: weighted device vs oracle differ at 2 scores (FAST)
+check_kde_weights OK [FAST]: 6 kernels; all-ones weights == unweighted bit for bit; hashed weights moved 222 of 222 scores
+check_kde_launch_invariance OK [FAST]: 12 kernel/metric pairs byte-identical across elem_tpb 256/64, lse_tpb 128/32, pad 0/37, two poisons, run twice, and query in batch 3 == batch 37 == batch 3000
+check_kde_card_is_emitted OK [FAST]: 7 stages (kde.dists ... kde.scores), run-to-run control identical
+check_kde_row39_signed_zero_rowmax OK [FAST]: 8 planted rows x lse_tpb 128/32/1: device AND oracle rowmax are the lower-index zero's bits (both orders, both ends); 2 real coincident rows (tophat max -0.0, epanechnikov max +0.0) card-identical device vs oracle where asserted
+  refused  X with NaN at row 1, column 2: kde: X contains NaN at row 1, column 2 (DEVIATION 604)
+  refused  X with +inf at row 0, column 0: kde: X contains infinity at row 0, column 0 (DEVIATION 604)
+  refused  X with -inf at row 3, column 6: kde: X contains infinity at row 3, column 6 (DEVIATION 604)
+  refused  X with 2^62 under sqeuclidean (norm overflows): kde: metric='sqeuclidean' needs |X| < 2^63/sqrt(7) so the expanded identity cannot form inf - inf; row 2, column 1 is 4.611686e+18 (DEVIATION 604)
+check_kde_nan_cannot_reach_a_stage OK [FAST]: 4 non-finite/overflow inputs refused by name (DEVIATION 604), 2^62 under euclidean saturates without NaN; gaussian+exponential all--inf rows at h=2^-62 are 0xff800000 at rowmax/logsumexp/scores on device and oracle (DEVIATION 603), mixed row finite; 2 cards identical device vs oracle where asserted

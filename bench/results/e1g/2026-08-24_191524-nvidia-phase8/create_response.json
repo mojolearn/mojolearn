@@ -1,0 +1,1 @@
+{"detail":"Request validation failed.","errors":["$: missing property 'image'","$: additional properties 'cloudType', 'containerDiskInGb', 'gpuCount', 'gpuTypeIds', 'imageName', 'interruptible', 'supportPublicIp', 'volumeInGb' not allowed"],"status":422,"title":"Unprocessable Entity"}

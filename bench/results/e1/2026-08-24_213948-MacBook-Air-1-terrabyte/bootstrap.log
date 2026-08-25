@@ -1,0 +1,52 @@
+
+=== provenance === 21:39:48
+8aa4dc1852d0f4f572d7199a37531b0598ba4192
+Darwin MacBook-Air-1-terrabyte.local 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:26:22 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T8132 arm64
+
+=== pixi === 21:39:49
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 21:39:49
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 8: the classical lanes (gemm, cd, kde, linkage, svm, metrics) -- both modes, cards + checks === 21:39:49
+-- lanes, identical --
+  gemm [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  cd [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  kde [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  linkage [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  svm [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  mamba [identical]: card 17 records -- mode IDENTICAL
+  mamba [identical] check OK (16 OK lines)
+  metrics [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+-- lanes, fast --
+  gemm [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  cd [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  kde [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  linkage [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  svm [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+PHASE8-FINDING: mamba [fast] failed (see /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e1/2026-08-24_213948-MacBook-Air-1-terrabyte/lanes/mamba.fast.log)
+  mamba [fast]: card 17 records -- mode FAST
+PHASE8-FINDING: mamba [fast] check FAILED: Unhandled exception caught during execution: mamba_check: CLAUSE (a) FAILED, 10 stages differ from the oracle, first at A.out on 102 of 256 cells
+  metrics [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+
+=== done === 21:39:54
+artifacts in /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e1/2026-08-24_213948-MacBook-Air-1-terrabyte
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

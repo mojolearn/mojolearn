@@ -1,0 +1,56 @@
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 8: the classical lanes (gemm, cd, kde, linkage, svm, metrics) -- both modes, cards + checks === 02:25:55
+-- lanes, identical --
+  gemm [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  cd [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  kde [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  linkage [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  svm [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  mamba [identical]: card 17 records -- mode IDENTICAL
+  mamba [identical] check OK (16 OK lines)
+  metrics [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+-- lanes, fast --
+  gemm [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  cd [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  kde [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  linkage [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+  svm [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+PHASE8-FINDING: mamba [fast] failed (see /root/mojolearn/bench/results/e1/2026-08-25_015131-a3994ce53237/lanes/mamba.fast.log)
+  mamba [fast]: card 17 records -- mode FAST
+PHASE8-FINDING: mamba [fast] check FAILED: Unhandled exception caught during execution: mamba_check: CLAUSE (a) FAILED, 14 stages differ from the oracle, first at norm.out on 10 of 32 cells
+  metrics [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba)
+
+=== done === 02:26:41
+artifacts in /root/mojolearn/bench/results/e1/2026-08-25_015131-a3994ce53237
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card
+vendor=nvidia
+payload=phase8
+commit=1b7c916a50cb70b965f617283c7d69384aef9ffb
+work_timeout=3000
+e1_phases=8
+e1_lanes=mamba
+started=2026-08-25T01:51:00Z
+bootstrap_exit=0
+note: a bootstrap_exit of 124 is the work timeout firing
+e1dir_source=the bootstrap's own 'artifacts in' line
+e1dir=/root/mojolearn/bench/results/e1/2026-08-25_015131-a3994ce53237
+identical_cards=1
+fast_cards=1
+phase8_findings=2
+finished=2026-08-25T02:26:41Z
+REMOTE_BODY_DONE

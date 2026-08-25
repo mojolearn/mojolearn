@@ -1,0 +1,2 @@
+PHASE8-FINDING: mamba [fast] failed (see /root/mojolearn/bench/results/e1/2026-08-25_015131-a3994ce53237/lanes/mamba.fast.log)
+PHASE8-FINDING: mamba [fast] check FAILED: Unhandled exception caught during execution: mamba_check: CLAUSE (a) FAILED, 14 stages differ from the oracle, first at norm.out on 10 of 32 cells

@@ -1,0 +1,6 @@
+pod=jtn31q287slyo4
+armed=1
+terminated=1
+deadman_pid=73612
+exit=1
+at=2026-08-25T02:26:54Z
