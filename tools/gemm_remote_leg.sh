@@ -387,6 +387,11 @@ SPEED_SIZE="${MOJOLEARN_SPEED_SIZE:-shipped}"
 # hour. 600 is deliberately generous for a measurement and deliberately
 # far below the lease.
 ARM_BUDGET="${MOJOLEARN_SPEED_ARM_BUDGET:-600}"
+# PER DRIVER BUILD. Separate from the arm budget because a first-ever CUDA
+# compile of a 2,400-line driver is a different order of wait from a
+# measurement, and because a compile that hangs must not be given the whole
+# lease on the theory that it might be nearly done.
+BUILD_BUDGET="${MOJOLEARN_SPEED_BUILD_BUDGET:-900}"
 # LightGBM's CUDA learner is not in any wheel and is measured at fifteen to
 # thirty minutes from source. Bounded so a build that goes wrong cannot take
 # the whole forest family with it.
@@ -2221,6 +2226,51 @@ runarm() {
     return 0
 }
 
+# BUILD ONCE, RUN MANY, AND IT IS NOT A MICRO-OPTIMIZATION.
+#
+# `mojo run` COMPILES EVERY INVOCATION. One lane per process is a hard
+# requirement here -- it is what stops one lane's failure taking the run down
+# -- but paying a full compile per lane means the classical family compiles
+# the SAME 2,400-line file twenty-two times inside a sixty-minute lease, and
+# the sequence family six times. On a cold box that is the difference between
+# a table and an empty directory.
+#
+# So each driver is BUILT once into a binary and the binary is executed per
+# lane. The process isolation is unchanged: still one process per lane, still
+# one lane's crash contained. What is dropped is only the repeated compile.
+#
+# A BUILD THAT FAILS IS RECORDED AND THE FAMILY CONTINUES. It is the single
+# likeliest failure on this box -- no line of most of these lanes has ever
+# been compiled for CUDA -- so it must produce a readable log rather than a
+# silent absence, and the vendor arms must still run so the leg comes home
+# with half a table instead of none.
+BUILT=""
+buildone() {
+    _name="$1"; _src="$2"
+    printf '
+=== build %s ===
+' "$_name" >> "$OUT/console.log"
+    if command -v timeout > /dev/null 2>&1; then
+        timeout -k 30 @BUILDBUDGET@ pixi run mojo build -I . "$_src" -o "$OUT/bin_$_name"             > "$LOGS/build.$_name.log" 2>&1
+    else
+        pixi run mojo build -I . "$_src" -o "$OUT/bin_$_name" > "$LOGS/build.$_name.log" 2>&1
+    fi
+    _rc=$?
+    echo "build_exit ${_name}=$_rc" >> "$OUT/leg.txt"
+    if [ "$_rc" = "0" ] && [ -x "$OUT/bin_$_name" ]; then
+        BUILT="$BUILT $_name"
+        return 0
+    fi
+    echo "  BUILD FAILED for $_name (exit $_rc); its lanes will have no arm of ours" >> "$OUT/console.log"
+    tail -30 "$LOGS/build.$_name.log" >> "$OUT/console.log" 2>&1 || true
+    return 1
+}
+
+builtok() {
+    case " $BUILT " in *" $1 "*) return 0 ;; esac
+    return 1
+}
+
 pipget() {
     # Best effort, logged, never fatal. A vendor library that will not
     # install is a finding about this image, recorded as such.
@@ -2239,13 +2289,13 @@ gemmseq)
     # thing. A vendor arm that ran before its dump existed refuses the
     # agreement line and the row becomes a pair of timings with nothing
     # tying them together.
+    buildone gemmspeed bench/speed/gemm_speed_main.mojo
+    buildone seqspeed  bench/speed/seq_speed_main.mojo
     for L in @SPEEDLANES@; do
         MOJOLEARN_SPEED_LANE="$L"; export MOJOLEARN_SPEED_LANE
         case "$L" in
-            gemm) runarm "gemm.gemm.ours.log" \
-                    pixi run mojo run -I . bench/speed/gemm_speed_main.mojo ;;
-            *)    runarm "seq.$L.ours.log" \
-                    pixi run mojo run -I . bench/speed/seq_speed_main.mojo ;;
+            gemm) builtok gemmspeed && runarm "gemm.gemm.ours.log" "$OUT/bin_gemmspeed" ;;
+            *)    builtok seqspeed  && runarm "seq.$L.ours.log"    "$OUT/bin_seqspeed" ;;
         esac
     done
     runarm "gemm.gemm.cublas.log" python3 tools/speed_gemm_arm.py --rounds "@SPEEDROUNDS@"
@@ -2260,10 +2310,10 @@ classical)
     # failure is known before any Mojo time is spent, and it is bounded.
     pipget --extra-index-url=https://pypi.nvidia.com "cuml-cu12" "cuvs-cu12"
     pipget scikit-learn scipy
+    buildone classicalspeed bench/speed/classical_speed_main.mojo
     for L in @SPEEDLANES@; do
         MOJOLEARN_SPEED_LANE="$L"; export MOJOLEARN_SPEED_LANE
-        runarm "classical.$L.ours.log" \
-            pixi run mojo run -I . bench/speed/classical_speed_main.mojo
+        builtok classicalspeed && runarm "classical.$L.ours.log" "$OUT/bin_classicalspeed"
         # NO --lane FLAG: tools/speed_cuml_arm.py takes its lane from
         # MOJOLEARN_SPEED_LANE, which is already exported above, and has no
         # argparse at all. Passing a flag it does not know would abort the
@@ -2328,6 +2378,7 @@ leg_check_remote_body() {
         -e "s|@SPEEDROUNDS@|$SPEED_ROUNDS|g" \
         -e "s|@SPEEDSIZE@|$SPEED_SIZE|g" \
         -e "s|@ARMBUDGET@|$ARM_BUDGET|g" \
+        -e "s|@BUILDBUDGET@|$BUILD_BUDGET|g" \
         -e "s|@LGBMBUILD@|$LGBM_BUILD|g" \
         -e "s|@CARDFULL@|$CARD_FULL|g" \
         -e "s|@SWEEP@|$SWEEP|g" \
