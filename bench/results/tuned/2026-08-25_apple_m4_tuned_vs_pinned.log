@@ -1,0 +1,24 @@
+== tuned vs pinned, BITS ==
+   GEMM TUNED ARM (EXPERIMENTAL, UNGATED, column=apple, tpb=256, veclen=4) -- ENABLED -- sabotage=none
+   OK  gram.32x32x1M  m=32 n=32 k=1000000  BITS MATCH  pinned=2760.1476666666667ms tuned=2735.655333333333ms  speedup=1.0089530040699572x
+   OK  gram.32x32x64K  m=32 n=32 k=65536  BITS MATCH  pinned=57.599ms tuned=58.985ms  speedup=0.9765025006357548x
+   OK  gram.128sq.x100003  m=128 n=128 k=100003  BITS MATCH  pinned=154.91333333333333ms tuned=107.50933333333333ms  speedup=1.440929159638853x
+   OK  ols.step1.16x16x64K  m=16 n=16 k=65536  BITS MATCH  pinned=10.862ms tuned=11.008333333333333ms  speedup=0.9867070401211204x
+   OK  pca.transform.8192x4x4  m=8192 n=4 k=4  BITS MATCH  pinned=0.756ms tuned=0.5336666666666666ms  speedup=1.4166146158650845x
+   OK  pca.transform.wide.8192x64x128  m=8192 n=64 k=128  BITS MATCH  pinned=5.781333333333333ms tuned=1.6693333333333333ms  speedup=3.463258785942492x
+   OK  kmeans.dist.4096x64x64  m=4096 n=64 k=64  BITS MATCH  pinned=1.8906666666666667ms tuned=0.6026666666666667ms  speedup=3.1371681415929205x
+   OK  ols.predict.gemv.64Kx16  m=65536 n=1 k=16  BITS MATCH  pinned=1.4286666666666668ms tuned=1.5286666666666666ms  speedup=0.9345835150457916x
+   OK  llama8b.qkv.t1  m=1 n=4096 k=4096  BITS MATCH  pinned=3.037ms tuned=3.1803333333333335ms  speedup=0.954931348915208x
+   OK  llama8b.qkv.t8  m=8 n=4096 k=4096  BITS MATCH  pinned=11.112666666666666ms tuned=10.661ms  speedup=1.0423662570740706x
+   OK  llama8b.qkv.t512  m=512 n=4096 k=4096  BITS MATCH  pinned=425.31666666666666ms tuned=120.76766666666667ms  speedup=3.5217759720454977x
+   OK  llama8b.mlp_up.t1  m=1 n=14336 k=4096  BITS MATCH  pinned=30.326333333333334ms tuned=29.467333333333332ms  speedup=1.0291509241872356x
+   OK  llama8b.mlp_up.t8  m=8 n=14336 k=4096  BITS MATCH  pinned=28.493ms tuned=28.378666666666668ms  speedup=1.0040288479609094x
+   OK  llama8b.mlp_up.t512  m=512 n=14336 k=4096  BITS MATCH  pinned=1358.529ms tuned=393.63666666666666ms  speedup=3.4512257496337573x
+   OK  llama8b.mlp_down.t1  m=1 n=4096 k=14336  BITS MATCH  pinned=12.695333333333334ms tuned=18.31833333333333ms  speedup=0.6930397598034757x
+   OK  llama8b.mlp_down.t8  m=8 n=4096 k=14336  BITS MATCH  pinned=31.997ms tuned=32.032666666666664ms  speedup=0.9988865533101626x
+   OK  llama8b.mlp_down.t512  m=512 n=4096 k=14336  BITS MATCH  pinned=1409.2503333333334ms tuned=409.557ms  speedup=3.440913800358273x
+   OK  llama8b.lm_head.t1  m=1 n=128256 k=4096  BITS MATCH  pinned=194.343ms tuned=193.52833333333334ms  speedup=1.0042095472669808x
+   OK  llama8b.lm_head.t8  m=8 n=128256 k=4096  BITS MATCH  pinned=197.58766666666668ms tuned=201.82333333333332ms  speedup=0.9790129981667136x
+   OK  llama8b.lm_head.t512  m=64 n=128256 k=4096  BITS MATCH  pinned=1496.8083333333334ms tuned=420.12733333333335ms  speedup=3.5627492299953505x
+
+   20 match, 0 MOVED, 0 refused.
