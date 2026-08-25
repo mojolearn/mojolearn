@@ -2309,8 +2309,25 @@ pipget() {
 
 case "@FAMILY@" in
 gemmseq)
-    # The cheapest family: torch is already in the image, so nothing is
-    # installed and the whole lease goes to compiling and measuring.
+    # torch is already in the image, so this family installs almost nothing.
+    # `einops` is the exception and it is NOT optional: the corpus generator
+    # both sequence arms import for their hash spec and their reference scan
+    # uses `rearrange` and `repeat` at module scope. Measured 2026-08-25 --
+    # without it EVERY torch arm died at import with "No module named
+    # 'einops'" and the whole sequence half of the leg came home with our
+    # side only and no opponent at all.
+    pipget einops
+    # The real mamba opponent, attempted ONCE and bounded. It publishes
+    # wheels keyed to an exact (torch, CUDA, abi, python) tuple; when the
+    # tuple matches this lands in under a minute, and when it does not pip
+    # starts running nvcc over several dtype and dstate instantiations, which
+    # does not fit in a lease. If it does not arrive, the torch reference
+    # scan is the labelled fallback and the write-up has to say which ran.
+    if command -v timeout > /dev/null 2>&1; then
+        timeout -k 15 240 python3 -m pip install --no-input --no-build-isolation \
+            causal-conv1d mamba-ssm >> "$OUT/pip.log" 2>&1
+        echo "mamba_ssm_install_exit=$?" >> "$OUT/leg.txt"
+    fi
     # OURS FIRST, EVERY LANE, because the torch arm reads the raw output our
     # arm dumped in order to answer whether the two sides computed the same
     # thing. A vendor arm that ran before its dump existed refuses the

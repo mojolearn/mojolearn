@@ -1,0 +1,1 @@
+speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): No module named 'einops'

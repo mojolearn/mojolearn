@@ -1,0 +1,6 @@
+pod=0xb3bkfqz3o3qw
+armed=1
+terminated=1
+deadman_pid=86742
+exit=0
+at=2026-08-25T20:03:03Z

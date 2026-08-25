@@ -331,13 +331,49 @@ def main() raises:
         # THE WARM-UP IS TIMED AND PRINTED AND NEVER AVERAGED IN. On a cold
         # context the first call pays for kernel selection; a reader who
         # cannot see that number cannot tell it from a cost.
+        # DEVIATION 1872 -- ONE SHAPE MAY NOT TAKE THE PROCESS DOWN.
+        #
+        # Measured on an H100 on 2026-08-25: `llama8b.lm_head.t1` (m=1,
+        # n=128256, k=4096) raised out of MAX's own gemv kernel,
+        # `max/kernels/src/linalg/gemv.mojo:1201`, with
+        # `CUDA_ERROR_INVALID_VALUE`. The three m=1 rows BELOW 65,536 columns
+        # ran fine, so the boundary is `n`, and 128256 is past the 65,535 cap
+        # a CUDA grid has on its y and z dimensions. That is a real limit in
+        # the arm a FAST user gets and it is worth recording; what it must
+        # not do is end the run. Before this, the crash took rows 17, 18 and
+        # 19 with it -- including the two lm_head rows that DO have m > 1 and
+        # would have dispatched elsewhere.
+        #
+        # So the row refuses by name, with the vendor's own message attached,
+        # and the loop continues. A REFUSED ROW IS A RESULT. Skipping it
+        # silently would leave a table that reads as full coverage of the
+        # twenty shapes.
         _poison(ctx, dc, mn)
         var t0 = perf_counter_ns()
-        if op == TBL_OP_NT:
-            gemm_nt(ctx, dc, da, db, m, n, k)
-        else:
-            gemm_tn(ctx, dc, da, db, dx2, m, n, k)
-        ctx.synchronize()
+        try:
+            if op == TBL_OP_NT:
+                gemm_nt(ctx, dc, da, db, m, n, k)
+            else:
+                gemm_tn(ctx, dc, da, db, dx2, m, n, k)
+            ctx.synchronize()
+        except e:
+            print(
+                "FSPEED-REFUSED lane=gemm arm=ours reason="
+                + name
+                + " (m="
+                + String(m)
+                + " n="
+                + String(n)
+                + " k="
+                + String(k)
+                + ") raised out of the vendor kernel: "
+                + String(e)
+            )
+            _ = da
+            _ = db
+            _ = dx2
+            _ = dc
+            continue
         var t1 = perf_counter_ns()
         var warm = _digest(ctx, dc, mn, name + " warmup")
         print(

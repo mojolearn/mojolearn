@@ -1,0 +1,62 @@
+
+=== build gemmspeed ===
+
+=== build seqspeed ===
+
+=== gemm.gemm.ours.log :: /root/gemm_leg_out/bin_gemmspeed ===
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: max/kernels/src/linalg/gemv.mojo:1201:41 failed calling 'def[::DType, ::TensorLayout & ::RegisterPassable & ::TrivialRegisterPassable & ::AnyType & ::Copyable & ::ImplicitlyCopyable & ::Deinitable & ::Movable, ::TensorStorage & ::AnyType, ::DType, ::TensorLayout & ::RegisterPassable & ::TrivialRegisterPassable & ::AnyType & ::Copyable & ::ImplicitlyCopyable & ::Deinitable & ::Movable, ::TensorStorage & ::AnyType, ::DType, ::TensorLayout & ::RegisterPassable & ::TrivialRegisterPassable & ::AnyType & ::Copyable & ::ImplicitlyCopyable & ::Deinitable & ::Movable, ::TensorStorage & ::AnyType, LITImmOrigin, ::Origin[::Bool(False), $9]](*args: **?) capturing thin -> None|def(output: ::TileTensor[::Bool(True), MutUnsafeAnyOrigin, $1|0, $1|1, *?, $1|2, ::AddressSpace(::SIMDLength(0)), ::AddressSpace)[$1|1](::AddressSpace(::SIMDLength(0)))], act: ::TileTensor[::Bool(False), ImmUnsafeAnyOrigin, $1|3, $1|4, *?, $1|5, ::AddressSpace(::SIMDLength(0)), ::AddressSpace)[$1|4](::AddressSpace(::SIMDLength(0)))], weight: ::TileTensor[::Bool(False), ImmUnsafeAnyOrigin, $1|6, $1|7, *?, $1|8, ::AddressSpace(::SIMDLength(0)), ::AddressSpace)[$1|7](::AddressSpace(::SIMDLength(0)))], m: ::SIMD[::DType(int32), ::SIMDLength(1)], n: ::SIMD[::DType(int32), ::SIMDLength(1)], k: ::SIMD[::DType(int32), ::SIMDLength(1)]) capturing thin -> None|0692c30dbe9554ef' on device cuda:0 with error 'CUDA call failed: CUDA_ERROR_INVALID_VALUE (invalid argument)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.'
+
+=== seq.transformer.ours.log :: /root/gemm_leg_out/bin_seqspeed ===
+FSPEED lane=transformer arm=ours shape=llama8b.decode.t1.ctx512 round=5 ms=884.994936 hash=6668337efb9587ce
+FSPEED-NOTE lane=transformer arm=ours dump shape=llama8b.decode.t1.ctx512 n=4096 path=/root/gemm_leg_out/dump/seq.transformer.llama8b.decode.t1.ctx512.f32.bin
+FSPEED-DONE lane=transformer mode=FAST
+
+=== seq.attention.ours.log :: /root/gemm_leg_out/bin_seqspeed ===
+FSPEED lane=attention arm=ours shape=llama8b.decode.t1.ctx512 round=5 ms=1.835078 hash=f3a8a9ab17618152
+FSPEED-NOTE lane=attention arm=ours dump shape=llama8b.decode.t1.ctx512 n=4096 path=/root/gemm_leg_out/dump/seq.attention.llama8b.decode.t1.ctx512.f32.bin
+FSPEED-DONE lane=attention mode=FAST
+
+=== seq.mlp.ours.log :: /root/gemm_leg_out/bin_seqspeed ===
+FSPEED lane=mlp arm=ours shape=llama8b.decode.t1.ctx512 round=5 ms=1.442455 hash=b2c6639e2c16bc37
+FSPEED-NOTE lane=mlp arm=ours dump shape=llama8b.decode.t1.ctx512 n=4096 path=/root/gemm_leg_out/dump/seq.mlp.llama8b.decode.t1.ctx512.f32.bin
+FSPEED-DONE lane=mlp mode=FAST
+
+=== seq.rmsnorm.ours.log :: /root/gemm_leg_out/bin_seqspeed ===
+FSPEED lane=rmsnorm arm=ours shape=llama8b.decode.t1.ctx512 round=5 ms=0.287172 hash=7a1c1841fd45ef80
+FSPEED-NOTE lane=rmsnorm arm=ours dump shape=llama8b.decode.t1.ctx512 n=4096 path=/root/gemm_leg_out/dump/seq.rmsnorm.llama8b.decode.t1.ctx512.f32.bin
+FSPEED-DONE lane=rmsnorm mode=FAST
+
+=== seq.mamba.ours.log :: /root/gemm_leg_out/bin_seqspeed ===
+FSPEED lane=mamba arm=ours shape=mamba130m.prefill.t512 round=5 ms=13.611466 hash=964aa9594e778ba1
+FSPEED-NOTE lane=mamba arm=ours dump shape=mamba130m.prefill.t512 n=393216 path=/root/gemm_leg_out/dump/seq.mamba.mamba130m.prefill.t512.f32.bin
+FSPEED-DONE lane=mamba mode=FAST
+
+=== seq.selective_scan.ours.log :: /root/gemm_leg_out/bin_seqspeed ===
+FSPEED lane=selective_scan arm=ours shape=mamba130m.prefill.t512 round=5 ms=0.384975 hash=154cd1605363fdfc
+FSPEED-NOTE lane=selective_scan arm=ours dump shape=mamba130m.prefill.t512 n=786432 path=/root/gemm_leg_out/dump/seq.selective_scan.mamba130m.prefill.t512.f32.bin
+FSPEED-DONE lane=selective_scan mode=FAST
+
+=== gemm.gemm.cublas.log :: python3 tools/speed_gemm_arm.py --rounds 5 ===
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t512 round=3 ms=1.371781 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t512 round=4 ms=1.366385 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t512 round=5 ms=1.367028 hash=-
+
+=== seq.transformer.torch.log :: python3 tools/speed_torch_seq.py --lane transformer --rounds 5 --dump-dir /root/gemm_leg_out/dump ===
+speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): No module named 'einops'
+
+=== seq.attention.torch.log :: python3 tools/speed_torch_seq.py --lane attention --rounds 5 --dump-dir /root/gemm_leg_out/dump ===
+speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): No module named 'einops'
+
+=== seq.mlp.torch.log :: python3 tools/speed_torch_seq.py --lane mlp --rounds 5 --dump-dir /root/gemm_leg_out/dump ===
+speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): No module named 'einops'
+
+=== seq.rmsnorm.torch.log :: python3 tools/speed_torch_seq.py --lane rmsnorm --rounds 5 --dump-dir /root/gemm_leg_out/dump ===
+speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): No module named 'einops'
+
+=== seq.mamba.torch.log :: python3 tools/speed_torch_seq.py --lane mamba --rounds 5 --dump-dir /root/gemm_leg_out/dump ===
+speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): No module named 'einops'
+
+=== seq.selective_scan.torch.log :: python3 tools/speed_torch_seq.py --lane selective_scan --rounds 5 --dump-dir /root/gemm_leg_out/dump ===
+speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): No module named 'einops'
