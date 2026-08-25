@@ -395,6 +395,12 @@ WORK_TIMEOUT="${MOJOLEARN_GEMM_LEG_WORK_TIMEOUT:-0}"
 # correctly. Only section 7 is answerable. tools/e1_bootstrap.sh says the same
 # thing at more length and it is the file that enforces it.
 E1_PHASES="${MOJOLEARN_GEMM_LEG_E1_PHASES:-}"
+# DEVIATION 973: which phase-8 lanes the box runs. Empty means all of them.
+# Leg 12 proved the need: the lane order puts mamba LAST behind gemm's device
+# check, the largest compile in the set, so on a cold box mamba was never
+# reached whatever the bound was. Recorded in leg.txt beside e1_phases so a
+# narrowed column can never read as a full one.
+E1_LANES="${MOJOLEARN_GEMM_LEG_E1_LANES:-}"
 WORK_RESERVE=600
 # phase8 only: where the box's bootstrap directory lands on this Mac.
 E1_DEST=""
@@ -1784,6 +1790,7 @@ cd "$ROOT" || exit 9
   echo "commit=@COMMIT@"
   echo "work_timeout=@WORKTIMEOUT@"
   echo "e1_phases=@E1PHASES@"
+  echo "e1_lanes=@E1LANES@"
   echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$OUT/leg.txt"
 
@@ -1826,13 +1833,13 @@ command -v bash > "$OUT/bash_which.txt" 2>&1 || \
 # has not run yet. @WORKTIMEOUT@ seconds leaves the lease its reserve, so a
 # leg that runs out of hour comes home with the lanes that finished.
 if command -v timeout > /dev/null 2>&1; then
-    MOJOLEARN_E1_PHASES="@E1PHASES@" timeout -k 30 @WORKTIMEOUT@ bash tools/e1_bootstrap.sh > "$OUT/bootstrap_console.log" 2>&1
+    MOJOLEARN_E1_PHASES="@E1PHASES@" MOJOLEARN_E1_LANES="@E1LANES@" timeout -k 30 @WORKTIMEOUT@ bash tools/e1_bootstrap.sh > "$OUT/bootstrap_console.log" 2>&1
     echo "bootstrap_exit=$?" >> "$OUT/leg.txt"
     echo "note: a bootstrap_exit of 124 is the work timeout firing" >> "$OUT/leg.txt"
 else
     echo "no timeout(1) on this image: THE BOOTSTRAP RAN UNBOUNDED and the" >> "$OUT/leg.txt"
     echo "  lease watchdog is the only thing between it and the hour" >> "$OUT/leg.txt"
-    MOJOLEARN_E1_PHASES="@E1PHASES@" bash tools/e1_bootstrap.sh > "$OUT/bootstrap_console.log" 2>&1
+    MOJOLEARN_E1_PHASES="@E1PHASES@" MOJOLEARN_E1_LANES="@E1LANES@" bash tools/e1_bootstrap.sh > "$OUT/bootstrap_console.log" 2>&1
     echo "bootstrap_exit=$?" >> "$OUT/leg.txt"
 fi
 tail -40 "$OUT/bootstrap_console.log"
@@ -1888,6 +1895,7 @@ leg_check_remote_body() {
         -e "s|@DUMP@|$LEG_DUMP|g" \
         -e "s|@WORKTIMEOUT@|$WORK_TIMEOUT|g" \
         -e "s|@E1PHASES@|$E1_PHASES|g" \
+        -e "s|@E1LANES@|$E1_LANES|g" \
         -e "s|@SMI@|$SMI_CMD|g" \
         "$_body" > "$_body.subst"
     mv "$_body.subst" "$_body"
