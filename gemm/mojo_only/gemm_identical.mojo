@@ -1421,6 +1421,37 @@ def _fast_vendor_gemm(
       the shape. At `n == 1` this IS a matrix-vector product and it goes to
       `gemv_gpu`, which is what RAFT does for the same case.
 
+    DEVIATION 1877 -- **THIS PATH DOES NOT SYNCHRONIZE AND DOES NOT NEED TO.**
+
+    `identical_gemm`'s docstring says "THIS FORM SYNCHRONIZES BEFORE IT
+    RETURNS, and it has to", and the reason it gives is specific: it
+    ALLOCATES ITS OWN WORKSPACE, and `[[mojo-buffer-freed-at-last-use]]`
+    means a buffer created in that function is dead at its `.unsafe_ptr()`,
+    so returning without waiting would free it out from under a kernel that
+    had not run yet.
+
+    NONE OF THAT APPLIES HERE. This path allocates nothing. Every buffer it
+    touches -- `a`, `b`, `c` -- is the caller's and outlives the call, and
+    the enqueue is stream-ordered, so anything the caller enqueues next
+    already sees the result. A caller that reads `c` on the host does it
+    with `enqueue_copy` followed by a synchronize, which is ordered on the
+    same stream.
+
+    WHY IT IS WORTH REMOVING RATHER THAN LEAVING ALONE. A Llama block issues
+    roughly thirty of these, and a sync per call turns a pipeline into thirty
+    serialized round trips. The shape of that cost is visible in the numbers
+    already taken: `mlp` at ONE token costs 1.446 ms while its three GEMMs
+    measure about 0.27 ms in the gemm lane, a floor of over a millisecond
+    that does not scale with work. `rmsnorm`, `mlp` and `attention` all sit
+    within a factor of two of each other at t1 despite doing wildly
+    different amounts of arithmetic, which is what a fixed per-call overhead
+    looks like rather than a slow kernel.
+
+    THIS CHANGES A DOCUMENTED POSTCONDITION and that is not something to do
+    on reasoning alone. It is why the gemmseq leg runs `transformer_check`
+    and `mamba_check` on the box: if any in-tree caller depended on the
+    implicit wait, those gates are where it shows.
+
     FAST IS NOT BIT-STABLE AND NEVER WAS. This changes which bits FAST
     produces for the sequence lanes, because a different kernel sums in a
     different order. That is what FAST means; the profile's promise lives
@@ -1437,20 +1468,17 @@ def _fast_vendor_gemm(
             var vx = TileTensor(a, row_major(m, k))
             var vy = TileTensor(b, row_major(k, 1))
             gemv_gpu(vz, vx, vy, ctx)
-            ctx.synchronize()
             return True
         var tc = TileTensor(c, row_major(m, n))
         var ta = TileTensor(a, row_major(m, k))
         var tb = TileTensor(b, row_major(n, k))
         matmul[transpose_b=True, target="gpu"](tc, ta, tb, ctx)
-        ctx.synchronize()
         return True
     if op == OP_NN:
         var tc2 = TileTensor(c, row_major(m, n))
         var ta2 = TileTensor(a, row_major(m, k))
         var tb2 = TileTensor(b, row_major(k, n))
         matmul[transpose_b=False, target="gpu"](tc2, ta2, tb2, ctx)
-        ctx.synchronize()
         return True
     return False
 
