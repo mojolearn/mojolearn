@@ -194,3 +194,41 @@ against each other, which is the only thing that finds this class.
 The lane also carries the deviations its own harness recorded: 1810-1829
 (classical), 1830-1849 (forest), 1850-1869 (sequence), 1870 (the leg
 payload). Each is written up in the markdown beside the file that records it.
+
+## Owed investigations, from the first H100 numbers
+
+Written down so they are not rediscovered. None of these is fixed.
+
+**`rmsnorm` is 4.8x slower than torch at ONE token** (0.282 ms against
+0.058 ms) and 18x at t512. `llama_rms_norm` is a single asynchronous kernel
+with `grid_dim = (_grid(m), 1, 1)`, so at `m == 1` it launches ONE block onto
+a 132-SM H100 and 131 of them idle. That explains a bad number; it does not
+explain 280 microseconds for 4096 floats, which is roughly ten times what a
+launch plus a synchronize costs. Something else is in that path and it has
+not been profiled. Do not guess at it -- measure it on the box.
+
+**The four TN rows are still 1.8x to 3.8x cuBLAS after DEVIATION 1873.** The
+redundant transpose is gone, but ONE transpose remains, and cuBLAS does the
+same product with none: it is column-major native, so a TN is an op flag
+rather than a data movement. The remaining routes are a `transpose_a` that
+MAX does not expose, or letting `core/gram_splitk.mojo` serve NVIDIA under
+FAST. That second one is a KERNEL MATRIX row
+(`gram_splitk_is_target_arm`), which is the sanctioned place to make a
+vendor decision, and it is currently comptime-False off Apple on the
+argument that MAX has its own split-K there. **That argument never accounted
+for the transpose the vendor route has to pay first**, so it deserves to be
+re-decided against a measurement rather than left as reasoning.
+
+**`mamba-ssm` has never been the opponent.** The bounded install hit its
+240s timeout, so every Mamba number so far is against the pure-PyTorch
+reference scan, which is sequential in sequence length and is not what
+anybody deploys. The fix is a prebuilt wheel matching the image's
+(torch, CUDA, abi, python) tuple, or baking it into a pod image once,
+outside a lease.
+
+**`llama8b.lm_head.t1` cannot run at all** (DEVIATION 1872): MAX's gemv
+kernel raises `CUDA_ERROR_INVALID_VALUE` at n = 128,256, which is past the
+65,535 cap on a CUDA grid's y and z dimensions. That is the lm_head at batch
+one -- the single most common operation in LLM decode -- and it is a limit in
+the arm a FAST user gets. It is refused by row now rather than killing the
+process, but it is not FIXED, and it is worth reporting upstream.
