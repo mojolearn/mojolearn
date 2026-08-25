@@ -113,6 +113,7 @@ from training.mojo_only.loss_oracle import (
     REDUCTION_NONE,
     ce_divisor,
     ce_one_minus_eps,
+    ce_refuse_inputs,
     ce_smoothing_targets,
     neg_by_bits,
 )
@@ -1201,6 +1202,67 @@ def _grid_for(count: Int) -> Int:
 # which is the shape the whole file exists for.
 
 
+def ce_refuse_device_inputs(
+    ctx: DeviceContext,
+    mut logits: DeviceBuffer[DType.float32],
+    mut targets: DeviceBuffer[DType.int32],
+    n_rows: Int,
+    cfg: CeConfig,
+) raises:
+    """Contract section 8 ON THE DEVICE ENTRY POINT, which is where it was
+    missing. DEVIATION 1495.
+
+    **THE GAP THIS CLOSES WAS MEASURED, NOT SUSPECTED.** `loss_check.mojo`
+    clause (f), first execution 2026-08-25, planted a quiet NaN in `logits`
+    and it reached **40 recorded cells, first at `ce.max`**. Contract section
+    8 says non-finite inputs are "REFUSED BY NAME before any recorded stage";
+    that was true of `ce_refuse_inputs` in `loss_oracle.mojo` and FALSE of
+    `identical_ce_forward_into`, which never called it. A caller reaching the
+    device entry directly put a **vendor-shaped NaN payload into a certified
+    stage** -- IDENTITY_PATHS row 39 measured three different payloads for one
+    IEEE answer (`0x7fc00000` Apple, `0x7fffffff` NVIDIA, `0xffc00000` AMD),
+    so a stage hash containing one cannot match across vendors and the
+    profile's whole claim fails on that input.
+
+    **IT CALLS THE ORACLE'S OWN `ce_refuse_inputs` AND DOES NOT RESTATE IT.**
+    A second copy of the refusal is a second thing to keep in step, and the
+    property that matters is that the two sides fail IDENTICALLY -- same
+    order, same name, same message. The transformer lane's
+    `llama_refuse_bad_inputs` is the precedent and it downloads for the same
+    reason.
+
+    **THE COST IS A FULL DOWNLOAD OF `logits`, AND IT IS REAL.** At the
+    shipped vocabulary that is `n_rows * 128256` floats crossing the bus
+    before any arithmetic. This is correctness before speed and it is stated
+    rather than hidden. A device-side scan writing one count would be
+    cheaper; it is OWED, and it must produce the SAME message for the SAME
+    first offending cell or it is a different refusal wearing this one's name.
+
+    **THE REFUSAL COVERS INPUTS AND NOT INTERMEDIATES**, the same stated gap
+    the transformer lane carries at its DEVIATION 815. A computed non-finite
+    is caught by the card, since a stage hash holding a vendor-shaped payload
+    cannot match.
+    """
+    var nv = n_rows * cfg.vocab
+    var hl = ctx.enqueue_create_host_buffer[DType.float32](nv if nv > 0 else 1)
+    var ht = ctx.enqueue_create_host_buffer[DType.int32](
+        n_rows if n_rows > 0 else 1
+    )
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_ptr=hl.unsafe_ptr(), src_buf=logits)
+    ctx.enqueue_copy(dst_ptr=ht.unsafe_ptr(), src_buf=targets)
+    ctx.synchronize()
+    var hx = List[Float32]()
+    for i in range(nv):
+        hx.append(hl.unsafe_ptr().unsafe_load(i))
+    var ht_l = List[Int32]()
+    for i in range(n_rows):
+        ht_l.append(ht.unsafe_ptr().unsafe_load(i))
+    _ = ce_refuse_inputs(hx, ht_l, cfg)
+    _ = hl
+    _ = ht
+
+
 def identical_ce_forward_into(
     ctx: DeviceContext,
     mut max_v: DeviceBuffer[DType.float32],
@@ -1253,6 +1315,12 @@ def identical_ce_forward_into(
     head is 2.1 GB per buffer at `N = 4096`. **Only L12 folds over `n_rows`**,
     and it folds `[N]` floats rather than `[N, V]`.
     """
+    # DEVIATION 1495: contract section 8, on the DEVICE path. Measured
+    # missing by loss_check clause (f) -- a planted NaN reached 40
+    # recorded cells, first at `ce.max`. This is the FIRST statement in
+    # the body because "before any recorded stage" is the clause.
+    ce_refuse_device_inputs(ctx, logits, targets, n_rows, cfg)
+
     if n_rows < 1 or cfg.vocab < 1:
         return
     var vocab = cfg.vocab

@@ -125,6 +125,7 @@ from training.mojo_only.optimizer_oracle import (
     StepScalars,
     clip_eps,
     pow_int_f32,
+    refuse_nonfinite,
     refuse_nonfinite_scalar,
     step_scalars,
 )
@@ -1061,6 +1062,89 @@ def identical_optimizer_workspace_floats(offsets: List[Int]) -> Int:
     return w
 
 
+def opt_refuse_device_inputs(
+    ctx: DeviceContext,
+    mut param: DeviceBuffer[DType.float32],
+    mut grad: DeviceBuffer[DType.float32],
+    mut m_state: DeviceBuffer[DType.float32],
+    mut v_state: DeviceBuffer[DType.float32],
+    offsets: List[Int],
+    cfg: OptimizerConfig,
+) raises:
+    """Contract 8a ON THE DEVICE ENTRY POINT, which is where it was missing.
+    DEVIATION 1496.
+
+    **THE GAP THIS CLOSES WAS MEASURED, NOT SUSPECTED.**
+    `optimizer_check.mojo` clause (f), first execution 2026-08-25: with
+    clipping OFF, a NaN planted in a PARAMETER reached `param.out`.
+    `identical_optimizer_step` had no refusal of its own, and
+    `identical_clip_grad_norm` -- the only refusal anywhere on the device
+    side -- **does not run at all when clipping is off**. So contract 8a's
+    "REFUSED BY NAME before any recorded stage" was a property of
+    `optimizer_step_oracle` and not of the profile.
+
+    **FOUR BUFFERS, NOT ONE, AND THAT IS THE POINT.** The loss lane's gap was
+    one input; here `param`, `grad`, `m` and `v` are all inputs to a step,
+    and `m`/`v` are CARRIED STATE. A non-finite that enters `v` is permanent
+    -- every later step divides by `sqrt(v)` -- so an unrefused `v` poisons a
+    run rather than a step. The clipping-on path caught `grad` alone, which
+    is one of four.
+
+    **IT CALLS THE ORACLE'S OWN `refuse_nonfinite` AND DOES NOT RESTATE IT**,
+    so the two sides fail with the same name and the same message and can be
+    compared at all. Same reason the loss lane's DEVIATION 1495 does it, and
+    the same precedent (`llama_refuse_bad_inputs`).
+
+    **THE COST IS A DOWNLOAD OF ALL FOUR BUFFERS PER STEP.** For a real model
+    that is the whole parameter set crossing the bus every step, which is not
+    affordable and is stated rather than hidden. A device-side scan writing
+    one count per buffer is OWED; it must produce the SAME name and the SAME
+    first offending index or it is a different refusal wearing this one's
+    name. Until then a caller who needs the speed and accepts the risk can
+    build with `-D MOJOLEARN_OPT_TRUST_INPUTS=1`, which is a DELIBERATE
+    downgrade of the profile and is named so it appears in the banner.
+
+    **INPUTS, NOT INTERMEDIATES**, the stated gap every lane here carries.
+    """
+    comptime if is_defined["MOJOLEARN_OPT_TRUST_INPUTS"]():
+        return
+    var n = offsets[len(offsets) - 1] if len(offsets) > 0 else 0
+    if n <= 0:
+        return
+    var hp = ctx.enqueue_create_host_buffer[DType.float32](n)
+    var hg = ctx.enqueue_create_host_buffer[DType.float32](n)
+    var hm = ctx.enqueue_create_host_buffer[DType.float32](n)
+    var hv = ctx.enqueue_create_host_buffer[DType.float32](n)
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_ptr=hp.unsafe_ptr(), src_buf=param)
+    ctx.enqueue_copy(dst_ptr=hg.unsafe_ptr(), src_buf=grad)
+    ctx.enqueue_copy(dst_ptr=hm.unsafe_ptr(), src_buf=m_state)
+    ctx.enqueue_copy(dst_ptr=hv.unsafe_ptr(), src_buf=v_state)
+    ctx.synchronize()
+    var lp = List[Float32]()
+    var lg = List[Float32]()
+    var lm = List[Float32]()
+    var lv = List[Float32]()
+    for i in range(n):
+        lp.append(hp.unsafe_ptr().unsafe_load(i))
+        lg.append(hg.unsafe_ptr().unsafe_load(i))
+        lm.append(hm.unsafe_ptr().unsafe_load(i))
+        lv.append(hv.unsafe_ptr().unsafe_load(i))
+    # ORDER MATCHES THE ORACLE'S so the two sides name the SAME buffer first
+    # on an input that is bad in more than one place.
+    refuse_nonfinite(String("param"), lp)
+    refuse_nonfinite(String("grad"), lg)
+    if cfg.kind != OPT_SGD:
+        refuse_nonfinite(String("exp_avg"), lm)
+        refuse_nonfinite(String("exp_avg_sq"), lv)
+    else:
+        refuse_nonfinite(String("momentum_buffer"), lm)
+    _ = hp
+    _ = hg
+    _ = hm
+    _ = hv
+
+
 def identical_optimizer_step(
     ctx: DeviceContext,
     mut param: DeviceBuffer[DType.float32],
@@ -1123,6 +1207,15 @@ def identical_optimizer_step(
     that the recording and non-recording builds are ONE kernel with ONE
     signature.
     """
+    # DEVIATION 1496: contract 8a, on the DEVICE path. Measured missing
+    # by optimizer_check clause (f) -- with clipping OFF a NaN planted
+    # in a PARAMETER reached param.out, because the only device-side
+    # refusal lives in identical_clip_grad_norm and does not run.
+    # FIRST statement in the body: "before any recorded stage".
+    opt_refuse_device_inputs(
+        ctx, param, grad, m_state, v_state, offsets, cfg
+    )
+
     var j_count = len(offsets) - 1
     if j_count <= 0:
         return

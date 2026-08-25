@@ -1852,6 +1852,31 @@ def clause_d(ctx: DeviceContext, c: OptCase) raises -> Int:
     )
 
     # ---- CONTROL 1: a resume that FORGOT `t` ---------------------------
+    # DEVIATION 1494, AND THE FIRST RUN OF THIS CLAUSE FOUND IT. Control 1
+    # restarts the step index at 1 and requires the state to move. It fired
+    # correctly on `adam_t8` (372 cells) and CANNOT FIRE ON SGD AT ALL, and
+    # the clause correctly raised VACUOUS there.
+    #
+    # The control's own stated premise is the reason: "and therefore used the
+    # wrong bias correction on every remaining step". BIAS CORRECTION IS AN
+    # ADAM MECHANISM. Contract 4.2's SGD update reads `lr`, the gradient, the
+    # momentum buffer and the dampening flag, and NEVER READS `t`. So
+    # restarting the step index is a no-op for SGD no matter how broken the
+    # resume is, and a control that cannot move is not a control.
+    #
+    # This file ALREADY handles the mirror image correctly -- control 2 needs
+    # SGD-with-momentum and is skipped for Adam, and says so. Control 1 needs
+    # bias correction and was not skipped for SGD. The guard below makes the
+    # pair symmetric. `t` remains a checkpoint field contract 11(d) lists;
+    # what changes is only WHICH case can falsify its absence.
+    if cfg.kind == OPT_SGD:
+        print(
+            "  clause (d) control 1: SKIPPED -- it corrupts the step index,"
+            " and contract 4.2's SGD update never reads `t`, so bias"
+            " correction (the mechanism this control names) does not exist"
+            " here. Control 2 is SGD's falsifier. DEVIATION 1494."
+        )
+        return 0
     var forgot = DeviceOptState(ctx, c, ck_param, ck_m, ck_v)
     forgot.buf_initialized = ck_flags.copy()
     var forgot_last = List[List[Float32]]()
@@ -2044,8 +2069,65 @@ def clause_e() raises:
 
     # ---- THE MEASUREMENT, at T = 512 ------------------------------------
     var t_tokens = 512
-    var a_vec = _hashed_vec(UInt64(0x4D42414C31), t_tokens)
-    var b_vec = _hashed_vec(UInt64(0x4D42414C32), t_tokens)
+    # DEVIATION 1493, AND THE FIRST RUN OF THIS CLAUSE FOUND IT. These two
+    # were `_hashed_vec`, whose docstring says the values sit in ONE BINADE
+    # "so the fold has to work for its differences rather than being
+    # dominated by one term". That is a good instinct and it is exactly what
+    # made this clause BLIND. At `A = 4` all four leaf sums come out near
+    # equal, so `ftz(ftz(p0+p1) + ftz(p2+p3))` and
+    # `ftz(ftz(ftz(p0+p1) + p2) + p3)` round the same way and AGREE. The
+    # clause correctly raised VACUOUS: contract 9.3's condition 5 had no
+    # falsifier, which is the ONLY reason the `A = 4` fixture is required at
+    # all (G5's measurement used two pieces, where a running sum and a tree
+    # are the same operation).
+    #
+    # A separator needs the OPPOSITE of one binade: one huge partial and
+    # three tiny ones. With `b` all `1.0`, `a[0:128] = 2^17` gives leaf 0 a
+    # sum of exactly `2^24`, and `a[128:512] = 2^-7` gives each remaining
+    # leaf exactly `1.0`. Then
+    #
+    #     tree   (2^24 + 1) + (1 + 1) = 16777218   0x4b800001
+    #     serial ((2^24 + 1) + 1) + 1 = 16777216   0x4b800000
+    #
+    # one ULP apart, because `2^24 + 1` is not representable and rounds to
+    # `2^24` under round-half-even while `2^24 + 2` is. EVERY VALUE HERE IS
+    # EXACTLY REPRESENTABLE and every leaf sum is exact, so the separation is
+    # the COMBINATION ORDER and nothing else. Verified on the host before
+    # being written here.
+    #
+    # The hashed pair is kept and REPORTED below, because "the fold agrees at
+    # near-equal partials" is a true and useful fact -- it just is not a
+    # falsifier.
+    var a_vec = List[Float32]()
+    var b_vec = List[Float32]()
+    for i in range(t_tokens):
+        b_vec.append(Float32(1.0))
+        if i < 128:
+            a_vec.append(Float32(131072.0))
+        else:
+            a_vec.append(Float32(0.0078125))
+    var a_hashed = _hashed_vec(UInt64(0x4D42414C31), t_tokens)
+    var b_hashed = _hashed_vec(UInt64(0x4D42414C32), t_tokens)
+    var wh = gemm_oracle(a_hashed, b_hashed, OP_NT, 1, 1, t_tokens)
+    var hashed_parts = List[Float32]()
+    for piece in range(4):
+        var ha = List[Float32]()
+        var hb = List[Float32]()
+        for i in range(t_tokens // 4):
+            ha.append(a_hashed[piece * (t_tokens // 4) + i])
+            hb.append(b_hashed[piece * (t_tokens // 4) + i])
+        var hg = gemm_oracle(ha, hb, OP_NT, 1, 1, t_tokens // 4)
+        hashed_parts.append(hg[0])
+    print(
+        "  [REPORTED, NOT ASSERTED] the ONE-BINADE hashed pair at A = 4:"
+        " tree and serial agree = "
+        + String(
+            bits_of(_tree_combine(hashed_parts))
+            == bits_of(_serial_combine(hashed_parts))
+        )
+        + ", which is why DEVIATION 1493 replaced it as the falsifier."
+    )
+    _ = wh
     var whole = gemm_oracle(a_vec, b_vec, OP_NT, 1, 1, t_tokens)
     if len(whole) == 0:
         raise Error("optimizer_check: clause (e) got an empty unsplit fold")
@@ -2295,20 +2377,67 @@ def clause_f(ctx: DeviceContext) raises:
             + String(nonfinite_cells(back))
             + " non-finite cells read back, expected exactly 1)."
         )
-    var dev = device_step(ctx, st, c, cfg, opt_case_grad(c, 1), 1)
-    var leaked = nonfinite_cells(dev[OS_PARAM_OUT])
-    if leaked == 0:
+    # DEVIATION 1497. This arm USED to measure a leak and it now asserts a
+    # refusal, which is the branch the message below anticipated in writing:
+    # "Either `optimizer.mojo` has grown a refusal since this file was
+    # written (in which case DEVIATION 1478 is closed and this arm must be
+    # rewritten as an assertion that it refuses BY NAME), or the NaN was
+    # LAUNDERED."
+    #
+    # It grew one. DEVIATION 1496 added `opt_refuse_device_inputs` to
+    # `identical_optimizer_step`, covering `param`, `grad`, `m` and `v`,
+    # after THIS CLAUSE measured a NaN in a parameter reaching `param.out`
+    # on a run with clipping off. So 1478 is CLOSED and the arm is inverted.
+    #
+    # **THE DISTINCTION THE OLD MESSAGE DREW IS THE WHOLE REASON THIS IS NOT
+    # A `try` AND A SHRUG.** A finite `param.out` has two causes and they are
+    # opposite in severity: a REFUSAL (good, and what we now require) or a
+    # LAUNDERED NaN (much worse than propagation, because it means a stage is
+    # not a function of its input). Catching the raise and reading the NAME
+    # out of it separates them; merely observing that nothing was non-finite
+    # does not.
+    var refused = False
+    var refuse_msg = String("")
+    var leaked = -1
+    try:
+        var dev = device_step(ctx, st, c, cfg, opt_case_grad(c, 1), 1)
+        leaked = nonfinite_cells(dev[OS_PARAM_OUT])
+    except e:
+        refused = True
+        refuse_msg = String(e)
+    if not refused:
+        if leaked == 0:
+            raise Error(
+                String("optimizer_check: CLAUSE (f) -- a NaN was planted in")
+                + " a PARAMETER, the device did NOT refuse, and `param.out`"
+                + " came back entirely finite. That is a LAUNDERED NaN and"
+                + " it is a worse finding than a propagated one, because it"
+                + " means a stage is not a function of its input."
+            )
         raise Error(
-            String("optimizer_check: CLAUSE (f) -- a NaN was planted in a")
-            + " PARAMETER, MEASURED on the device, and `param.out` came"
-            + " back entirely finite on a run with clipping OFF. Either"
-            + " `optimizer.mojo` has grown a refusal since this file was"
-            + " written (in which case DEVIATION 1478 is closed and this"
-            + " arm must be rewritten as an assertion that it refuses BY"
-            + " NAME), or the NaN was LAUNDERED -- and a laundered NaN is"
-            + " a worse finding than a propagated one, because it means a"
-            + " stage is not a function of its input."
+            String("optimizer_check: CLAUSE (f) -- DEVIATION 1496's refusal")
+            + " did not fire. A NaN planted in a PARAMETER reached "
+            + String(leaked)
+            + " cells of param.out with clipping OFF. Contract 8a is again a"
+            + " property of the oracle and not of the profile."
         )
+    if refuse_msg.find("param") < 0:
+        raise Error(
+            String("optimizer_check: CLAUSE (f) -- the device refused, but")
+            + " NOT BY THE NAME contract 8a requires. A refusal that does"
+            + " not name the offending buffer cannot be compared against"
+            + " the oracle's, which is the only thing that makes two"
+            + " refusals the same refusal. Got: "
+            + refuse_msg
+        )
+    print(
+        "clause (f) DEVICE REFUSAL, ASSERTED (DEVIATION 1478 CLOSED by"
+        " 1496): with clipping OFF, a NaN planted in a PARAMETER is now"
+        " REFUSED BY NAME by the device entry point, not merely by the"
+        " oracle. The refusal names the buffer: "
+        + refuse_msg
+    )
+    return
     print(
         "clause (f) DEVICE GAP, MEASURED (DEVIATION 1478): with clipping"
         " OFF, a NaN planted in a PARAMETER reached "
