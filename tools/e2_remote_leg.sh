@@ -233,6 +233,11 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
       # report. tools/gemm_price.sh already takes the median over rounds; it
       # was being told to take the median of one.
       gemm-price)    CMD="env MOJOLEARN_GEMM_PRICE_ROUNDS=${GEMM_PRICE_ROUNDS:-5} MOJOLEARN_GEMM_PRICE_ARM=device MOJOLEARN_GEMM_PRICE_DEV_MAC_BUDGET=${GEMM_PRICE_DEV_BUDGET:-50000000000} sh tools/gemm_price.sh"; WRAP=0 ;;
+      # THE TUNED ARM: does it hold the bits on silicon that is not Apple,
+      # and is the 3.5x Apple's or the kernel's. Both arms in ONE binary,
+      # output poisoned before each, poison counted, so a kernel that never
+      # wrote cannot agree by accident.
+      tuned-probe)   CMD='pixi run mojo run -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_TUNED_ARM=1 gemm/mojo_only/gemm_tuned_probe.mojo'; WRAP=0 ;;
       # THE ONE-VARIABLE PRICE OF THE FOLD PIN. Three arms in ONE binary
       # alternating call by call, so the governor drift cancels at the arm
       # level instead of being averaged over rounds. Measured 1.52x-1.55x on

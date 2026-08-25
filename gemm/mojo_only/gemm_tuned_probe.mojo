@@ -1,25 +1,4 @@
-"""Does the TUNED kernel produce the PINNED kernel's exact bits, and how fast?
-
-MEASURED ON AN M4, 2026-08-25, FIRST EXECUTION: **20 of 20 shapes BITS MATCH,
-0 moved, 0 refused**, and 3.44x-3.52x faster at the compute-bound `t512` rows.
-`gemm/TUNING_PLAN.md` predicted 1.8x-3.0x combined, so the prediction was
-WRONG on the HIGH side for once.
-
-THAT RESULT IS THE POINT. Register blocking, double buffering, vectorized
-global loads, a padded shared stride, a hoisted operand flush and a wider tile
-all change WHEN AND WHERE BYTES MOVE and none of them changes WHICH VALUES ARE
-ADDED TO WHICH. This file proves that per shape against the shipped kernel
-rather than arguing it from the contract.
-
-THREE ROWS GOT SLOWER AND THEY BELONG IN THE TABLE: `mlp_down.t1` 0.69x,
-`ols.predict.gemv` 0.93x, `qkv.t1` 0.95x. Register blocking is a loss when
-there is one row of output to block. That is what a plan dispatch is for, and
-it is why the tuned arm must be SELECTED and must never become the default at
-every shape.
-
-NOTHING MAY ROUTE HERE YET. `gemm_device_check.mojo` has not been extended, so
-the tuned kernel has no launch-invariance, batch-invariance or sabotage
-coverage; this file checks output bits at twenty shapes and nothing more.
+"""Does the TUNED kernel produce the PINNED kernel's exact bits?
 
 A faster GEMM that moves one bit is worthless here, so this is the only
 question worth asking first. Compares FNV-1a64 over the raw output bits of
