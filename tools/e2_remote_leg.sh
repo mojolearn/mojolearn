@@ -224,7 +224,15 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
       # measured on both arms or skipped on both; a full-shape vendor number
       # beside a capped one of ours would be a ratio between two different
       # questions.
-      gemm-price)    CMD='env MOJOLEARN_GEMM_PRICE_ROUNDS=1 MOJOLEARN_GEMM_PRICE_ARM=device MOJOLEARN_GEMM_PRICE_DEV_MAC_BUDGET=50000000000 sh tools/gemm_price.sh'; WRAP=0 ;;
+      #
+      # FIVE ROUNDS, NOT ONE. DEVIATION 1094, 2026-08-25. Leg 15 and leg 16
+      # both ran ROUNDS=1 on an H100 an hour apart and our own v1 arm measured
+      # 4.90 ms and 8.799 ms at llama8b.qkv.t512 -- the SAME shape, the SAME
+      # commit, a 1.8x spread. A single round is a sample, not a measurement,
+      # and a 1.8x band swallows most of the effects this lane is trying to
+      # report. tools/gemm_price.sh already takes the median over rounds; it
+      # was being told to take the median of one.
+      gemm-price)    CMD="env MOJOLEARN_GEMM_PRICE_ROUNDS=${GEMM_PRICE_ROUNDS:-5} MOJOLEARN_GEMM_PRICE_ARM=device MOJOLEARN_GEMM_PRICE_DEV_MAC_BUDGET=${GEMM_PRICE_DEV_BUDGET:-50000000000} sh tools/gemm_price.sh"; WRAP=0 ;;
       # The vendor LIBRARY (cuBLAS / hipBLASLt), not MAX's linalg.matmul.
       # torch goes into a THROWAWAY VENV, never into the pinned pixi
       # environment every recorded timing in this repository was taken under.

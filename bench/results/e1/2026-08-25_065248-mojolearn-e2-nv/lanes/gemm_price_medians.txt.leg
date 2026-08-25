@@ -1,0 +1,400 @@
+== bench/gemm_price_main.mojo [IDENTICAL] ==
+profile mojolearn.identical.gemm.fp32.v1
+arm device
+THIS ARM IS A GPU LEG (contract 13.5, assumption A5), in BOTH directions: it is contaminated by any other lane's GPU work on this box AND it contaminates theirs. tools/gemm_price.sh looks for a concurrent mojo/pixi process at both ends and reports what it found; it does not refuse, so read that line.
+EVERY DEVICE NUMBER BELOW IS INDICATIVE. The M4's governor pins at MINIMUM clock under heat -- 96% of an 11-second trace while 93.8% busy -- and drifts up to 1.7x across twenty minutes. Timing is the identity lane's to certify and nothing here is a certification.
+
+check_op_encodings_are_not_interchangeable OK: table (NT,TN,NN) = (0,1,2) -> oracle (1,2,0)
+check_device_op_encoding_matches_the_kernel OK: all 20 rows match contract section 3 through the KERNEL's own stride function; 20 would address DIFFERENTLY if the table code were passed raw
+check_fold_sweep_k_realizes_the_p_sweep OK: all 8 swept P realized exactly through k; 2 of them CARRY (P=1018 at k=131200, L=129, carries 2 levels; P=1024 carries 0)
+check_serial_fold_probe_is_the_other_topology OK: agree at P=1 and P=2, separate by 6 at F5's P=8 (tree 16777222.0 vs serial 16777216.0 )
+check_workspace_formula_matches_contract_13_5 OK: all three of 13.5's stated figures (128 MiB, 2 GiB, 64 GiB) reproduced from contract_leaf_size and m*n*P*4
+
+-- 13.6.1  the fold in isolation, both topologies, P sweep --
+   fixed output 64x64 = 4096 cells; partials are bit-assembled and IDENTICAL between the arms
+   DEVICE ARMS PRESENT (DEVIATION 535). The host pair is the two TOPOLOGIES; the device pair is ONE topology in two REALIZATIONS, at 64x64 OP_NT with k chosen to realize each P. Device times are INDICATIVE: one thermally unstable M4, and timing is the identity lane's to certify.
+PRICE IDENTICAL m1.P1.tree 0.3973185
+PRICE IDENTICAL m1.P1.serial 0.216017
+         P=1     adds/cell=0   depth=0   carries=0     nodes/cell=1       tree 0.397 ms       serial 0.216 ms   1.839x
+PRICE IDENTICAL m1.P2.tree 0.811951
+PRICE IDENTICAL m1.P2.serial 0.4518375
+         P=2     adds/cell=1   depth=1   carries=0     nodes/cell=3       tree 0.812 ms       serial 0.452 ms   1.797x
+PRICE IDENTICAL m1.P3.tree 1.4121535
+PRICE IDENTICAL m1.P3.serial 0.625115
+         P=3     adds/cell=2   depth=2   carries=1     nodes/cell=6       tree 1.412 ms       serial 0.625 ms   2.259x
+PRICE IDENTICAL m1.P8.tree 2.324848
+PRICE IDENTICAL m1.P8.serial 0.901381
+         P=8     adds/cell=7   depth=3   carries=0    nodes/cell=15       tree 2.325 ms       serial 0.901 ms   2.579x
+PRICE IDENTICAL m1.P32.tree 4.6483875
+PRICE IDENTICAL m1.P32.serial 2.0294005
+        P=32    adds/cell=31   depth=5   carries=0    nodes/cell=63       tree 4.648 ms       serial 2.029 ms   2.291x
+PRICE IDENTICAL m1.P128.tree 8.6971955
+PRICE IDENTICAL m1.P128.serial 5.517698
+       P=128   adds/cell=127   depth=7   carries=0   nodes/cell=255       tree 8.697 ms       serial 5.518 ms   1.576x
+PRICE IDENTICAL m1.P1018.tree 27.0871195
+PRICE IDENTICAL m1.P1018.serial 35.0421705
+      P=1018  adds/cell=1017  depth=10   carries=2  nodes/cell=2037      tree 27.087 ms      serial 35.042 ms   0.773x
+PRICE IDENTICAL m1.P1024.tree 27.0654635
+PRICE IDENTICAL m1.P1024.serial 35.259258
+      P=1024  adds/cell=1023  depth=10   carries=0  nodes/cell=2047      tree 27.065 ms      serial 35.259 ms   0.768x
+   sink 3331279870 (printed so no arm is optimized away)
+
+-- 13.6.1  the same P sweep AS DEVICE LAUNCHES (INDICATIVE) --
+   64x64 OP_NT, k chosen to realize each P (fold_sweep_k). Both arms are the SHIPPED balanced tree; they differ in WHERE it is folded, not in what it computes.
+          P        k     L    flat ms   splitk ms     s/f  stage MiB  GF/s flat  GF/s splitk
+PRICE IDENTICAL m1.P1.device.flat 0.040546
+   device-bits m1.P1.device.flat 0.040546/0x3fa4c271fff79c84
+PRICE IDENTICAL m1.P1.device.splitk 0.0316395
+   device-bits m1.P1.device.splitk 0.0316395/0x3fa0330d7386099a
+          1      128   128      0.041       0.032   0.78x       0.02      25.86        33.14
+PRICE IDENTICAL m1.P2.device.flat 0.0618015
+   device-bits m1.P2.device.flat 0.0618015/0x3fafa4723aafff37
+PRICE IDENTICAL m1.P2.device.splitk 0.031005
+   device-bits m1.P2.device.splitk 0.031005/0x3f9fbfc6540cc78f
+          2      256   128      0.062       0.031   0.50x       0.03      33.93        67.64
+PRICE IDENTICAL m1.P3.device.flat 0.083645
+   device-bits m1.P3.device.flat 0.083645/0x3fb569c23b7952d2
+PRICE IDENTICAL m1.P3.device.splitk 0.0327065
+   device-bits m1.P3.device.splitk 0.0327065/0x3fa0bee807bbb624
+          3      384   128      0.084       0.033   0.39x       0.05      37.61        96.18
+PRICE IDENTICAL m1.P8.device.flat 0.1891055
+   device-bits m1.P8.device.flat 0.1891055/0x3fc8349be8ff327b
+PRICE IDENTICAL m1.P8.device.splitk 0.043713
+   device-bits m1.P8.device.splitk 0.043713/0x3fa6618ce2d1f1d0
+          8     1024   128      0.189       0.044   0.23x       0.13      44.36       191.90
+PRICE IDENTICAL m1.P32.device.flat 0.704226
+   device-bits m1.P32.device.flat 0.704226/0x3fe68904f6dfc5ce
+PRICE IDENTICAL m1.P32.device.splitk 0.158431
+   device-bits m1.P32.device.splitk 0.158431/0x3fc447778dd616f8
+         32     4096   128      0.704       0.158   0.22x       0.50      47.65       211.79
+PRICE IDENTICAL m1.P128.device.flat 2.7338985
+   device-bits m1.P128.device.flat 2.7338985/0x4005df062d40aaeb
+PRICE IDENTICAL m1.P128.device.splitk 0.557571
+   device-bits m1.P128.device.splitk 0.557571/0x3fe1d79f23465626
+        128    16384   128      2.734       0.558   0.20x       2.00      49.09       240.72
+PRICE IDENTICAL m1.P1018.device.flat 24.6767415
+   device-bits m1.P1018.device.flat 24.6767415/0x4038ad3eee525892
+PRICE IDENTICAL m1.P1018.device.splitk 3.2833865
+   device-bits m1.P1018.device.splitk 3.2833865/0x400a4460242d05f3
+       1018   131200   129     24.677       3.283   0.13x      15.91      43.55       327.34
+PRICE IDENTICAL m1.P1024.device.flat 24.66489
+   device-bits m1.P1024.device.flat 24.66489/0x4038aa363b256ffc
+PRICE IDENTICAL m1.P1024.device.splitk 4.1368305
+   device-bits m1.P1024.device.splitk 4.1368305/0x40108c1d4b6a619e
+       1024   131072   128     24.665       4.137   0.17x      16.00      43.53       259.56
+   GF/s columns are DEVICE arms only and are INDICATIVE. There is no host GFLOP/s column anywhere in this file and there is not going to be one: a host scalar-loop figure in these units gets quoted as a GPU number inside a week.
+   splitk - flat is the extra LAUNCH plus the staging round trip (the stage MiB column, written once and read once) plus an occupancy difference between two differently shaped kernels. It is an UPPER BOUND on what 13.4's extra kernel costs, not a measurement of launch overhead on its own.
+
+-- 13.6.2  fully staged vs single-block-fused (INDICATIVE) --
+         P   D  13.6.2 st  actual st  actual fu  nodes/cell  note
+         1   0          1          2          2           1  P=1: NO fold addition (contract 7.3)
+         2   1          2          3          2           3  
+         3   2          3          4          2           6  odd P: the tree CARRIES
+         8   3          4          5          2          15  
+        32   5          6          7          2          63  
+       128   7          8          9          2         255  
+      1018  10         11         12          2        2037  
+      1024  10         11         12          2        2047  
+   Column '13.6.2 st' is the contract's count (D + 1) and 'actual st' is what identical_gemm_with_plan enqueues (D + 2: the emit kernel). The gap is one launch at every P and it is the staged arm's, so the contract's arithmetic UNDERSTATES the arm it is warning about.
+   Contract 13.4's expectation, which is an ARGUMENT and not a measurement: the fused column is achievable at every legal k because MAX_LEAVES caps P at 1024 and 1024 float32 partials is 4 KB of threadgroup memory.
+
+-- 13.6.2  staged vs fused AS DEVICE LAUNCHES (INDICATIVE) --
+         P        k  launches   fused ms   staged ms   st/fu  fused MiB  staged MiB
+PRICE IDENTICAL m2.P1.device.fused 0.0337825
+   device-bits m2.P1.device.fused 0.0337825/0x3fa14bf0995aaf79
+PRICE IDENTICAL m2.P1.device.staged 0.0276265
+   device-bits m2.P1.device.staged 0.0276265/0x3f9c4a1f080303c0
+         1      128       2/2      0.034       0.028   0.82x       0.02        0.02
+PRICE IDENTICAL m2.P2.device.fused 0.0340095
+   device-bits m2.P2.device.fused 0.0340095/0x3fa169b17481b21c
+PRICE IDENTICAL m2.P2.device.staged 0.0309295
+   device-bits m2.P2.device.staged 0.0309295/0x3f9fabfb9bed30f0
+         2      256       2/3      0.034       0.031   0.91x       0.03        0.05
+PRICE IDENTICAL m2.P3.device.fused 0.035359
+   device-bits m2.P3.device.fused 0.035359/0x3fa21a93293d102c
+PRICE IDENTICAL m2.P3.device.staged 0.03232
+   device-bits m2.P3.device.staged 0.03232/0x3fa08c3f3e0370ce
+         3      384       2/4      0.035       0.032   0.91x       0.05        0.09
+PRICE IDENTICAL m2.P8.device.fused 0.0471275
+   device-bits m2.P8.device.fused 0.0471275/0x3fa821187e7c06e2
+PRICE IDENTICAL m2.P8.device.staged 0.0457415
+   device-bits m2.P8.device.staged 0.0457415/0x3fa76b6e0d23d4f1
+         8     1024       2/5      0.047       0.046   0.97x       0.13        0.23
+PRICE IDENTICAL m2.P32.device.fused 0.1616855
+   device-bits m2.P32.device.fused 0.1616855/0x3fc4b21c475e6363
+PRICE IDENTICAL m2.P32.device.staged 0.163454
+   device-bits m2.P32.device.staged 0.163454/0x3fc4ec0f88333fc8
+        32     4096       2/7      0.162       0.163   1.01x       0.50        0.98
+PRICE IDENTICAL m2.P128.device.fused 0.560399
+   device-bits m2.P128.device.fused 0.560399/0x3fe1eec9e236c15d
+PRICE IDENTICAL m2.P128.device.staged 0.564575
+   device-bits m2.P128.device.staged 0.564575/0x3fe210ff97247454
+       128    16384       2/9      0.560       0.565   1.01x       2.00        3.98
+PRICE IDENTICAL m2.P1018.device.fused 3.2901665
+   device-bits m2.P1018.device.fused 3.2901665/0x400a5242d05f2885
+PRICE IDENTICAL m2.P1018.device.staged 3.324706
+   device-bits m2.P1018.device.staged 3.324706/0x400a98ff75968512
+      1018   131200      2/12      3.290       3.325   1.01x      15.91       31.83
+PRICE IDENTICAL m2.P1024.device.fused 4.1402625
+   device-bits m2.P1024.device.fused 4.1402625/0x40108fa0f9096bba
+PRICE IDENTICAL m2.P1024.device.staged 4.1648355
+   device-bits m2.P1024.device.staged 4.1648355/0x4010a8caa326e115
+      1024   131072      2/12      4.140       4.165   1.01x      16.00       31.98
+   launches is fused/staged, from the launcher and not from 13.6.2's arithmetic. st/fu above 1.00 is the staged arm costing more; the workspace columns are why it can cost more for a reason that is NOT the launches, since the staged plan also stages every interior node of the tree and the fused plan stages only level 0.
+   13.7: if the staged arm is slow the answer is to fuse levels into one block, which is legal and produces the same bits. It is NEVER to change the pairing.
+
+-- 13.6.3  end to end over bench/gemm_shapes.mojo --
+   FIVE ARMS. host: oracle (normative v1) and serial (diagnostic whole-k chain). device: the v1 kernel, the FAST vendor matmul, and the shipped pinned kernel -- 13.6.3's three. DEVICE TIMES ARE INDICATIVE (one thermally unstable M4; timing is the identity lane's to certify).
+   m and n are CAPPED to a 2000000 MAC budget on the host arms and to a 50000000000 MAC budget on the device arms; k is EXACT on both, so L, P, the ragged tail and the tree are the full shape's. Per-cell price is measured; full-shape host cost is DERIVED by multiplication (contract 0.3: cells are independent).
+   name                             op        m         n         k        L       P    tail  oracle ms  serial ms      o/s    DERIVED ms
+PRICE IDENTICAL m3.gram.32x32x1M.oracle 15.032057
+PRICE IDENTICAL m3.gram.32x32x1M.serial 14.5154055
+   gram.32x32x1M                    TN       2<32         1<32   1000000    L=977  P=1024   t=529     15.032     14.515   1.036x        7696.4
+PRICE IDENTICAL m3.gram.32x32x1M.device 49.708341
+   device-bits m3.gram.32x32x1M.device 49.708341/0x4048daaaeafab53d
+PRICE IDENTICAL m3.gram.32x32x64K.oracle 8.024029
+PRICE IDENTICAL m3.gram.32x32x64K.serial 7.6122135
+   gram.32x32x64K                   TN       4<32         4<32     65536    L=128   P=512   t=128      8.024      7.612   1.054x         513.5
+PRICE IDENTICAL m3.gram.32x32x64K.device 0.9562955
+   device-bits m3.gram.32x32x64K.device 0.9562955/0x3fee99f90539fba4
+PRICE IDENTICAL m3.gram.128sq.x100003.oracle 12.3550355
+PRICE IDENTICAL m3.gram.128sq.x100003.serial 11.8024555
+   gram.128sq.x100003               TN      4<128        4<128    100003    L=128   P=782    t=35     12.355     11.802   1.047x       12651.6
+PRICE IDENTICAL m3.gram.128sq.x100003.device 9.143479
+   device-bits m3.gram.128sq.x100003.device 9.143479/0x4022497614595358
+PRICE IDENTICAL m3.ols.step1.16x16x64K.oracle 8.0182795
+PRICE IDENTICAL m3.ols.step1.16x16x64K.serial 7.627238
+   ols.step1.16x16x64K              TN       4<16         4<16     65536    L=128   P=512   t=128      8.018      7.627   1.051x         128.3
+PRICE IDENTICAL m3.ols.step1.16x16x64K.device 0.2016905
+   device-bits m3.ols.step1.16x16x64K.device 0.2016905/0x3fc9d0fe8ab4fa48
+PRICE IDENTICAL m3.pca.transform.8192x4x4.oracle 2.912828
+PRICE IDENTICAL m3.pca.transform.8192x4x4.serial 1.025781
+   pca.transform.8192x4x4           NT       8192            4         4      L=4     P=1     t=4      2.913      1.026   2.840x           2.9
+PRICE IDENTICAL m3.pca.transform.8192x4x4.device 0.024144
+   device-bits m3.pca.transform.8192x4x4.device 0.024144/0x3f98b93469941850
+PRICE IDENTICAL m3.pca.transform.8192x4x4.device.vendor 0.058436
+   device-bits m3.pca.transform.8192x4x4.device.vendor 0.058436/0x3fadeb52c9d16fca
+PRICE IDENTICAL m3.pca.transform.8192x4x4.device.pinned 0.015431
+   device-bits m3.pca.transform.8192x4x4.device.pinned 0.015431/0x3f8f9a49c2c1b110
+PRICE IDENTICAL m3.pca.transform.wide.8192x64x128.oracle 8.4164665
+PRICE IDENTICAL m3.pca.transform.wide.8192x64x128.serial 7.674854
+   pca.transform.wide.8192x64x128   NT   128<8192           64       128    L=128     P=1   t=128      8.416      7.675   1.097x         538.7
+PRICE IDENTICAL m3.pca.transform.wide.8192x64x128.device 0.101975
+   device-bits m3.pca.transform.wide.8192x64x128.device 0.101975/0x3fba1b089a027525
+PRICE IDENTICAL m3.pca.transform.wide.8192x64x128.device.vendor 0.050227
+   device-bits m3.pca.transform.wide.8192x64x128.device.vendor 0.050227/0x3fa9b75a74c09c3d
+PRICE IDENTICAL m3.pca.transform.wide.8192x64x128.device.pinned 0.290336
+   device-bits m3.pca.transform.wide.8192x64x128.device.pinned 0.290336/0x3fd294dd72367e41
+PRICE IDENTICAL m3.kmeans.dist.4096x64x64.oracle 9.0036115
+PRICE IDENTICAL m3.kmeans.dist.4096x64x64.serial 7.750824
+   kmeans.dist.4096x64x64           NT   256<4096           64        64     L=64     P=1    t=64      9.004      7.751   1.162x         144.1
+PRICE IDENTICAL m3.kmeans.dist.4096x64x64.device 0.0437365
+   device-bits m3.kmeans.dist.4096x64x64.device 0.0437365/0x3fa664a16a487336
+PRICE IDENTICAL m3.kmeans.dist.4096x64x64.device.vendor 0.0452975
+   device-bits m3.kmeans.dist.4096x64x64.device.vendor 0.0452975/0x3fa7313be22e5de1
+PRICE IDENTICAL m3.kmeans.dist.4096x64x64.device.pinned 0.0840415
+   device-bits m3.kmeans.dist.4096x64x64.device.pinned 0.0840415/0x3fb583be6601bc99
+PRICE IDENTICAL m3.ols.predict.gemv.64Kx16.oracle 11.50845
+PRICE IDENTICAL m3.ols.predict.gemv.64Kx16.serial 7.7898425
+   ols.predict.gemv.64Kx16          NT      65536            1        16     L=16     P=1    t=16     11.508      7.790   1.477x          11.5
+PRICE IDENTICAL m3.ols.predict.gemv.64Kx16.device 0.0492325
+   device-bits m3.ols.predict.gemv.64Kx16.device 0.0492325/0x3fa9350092ccf6be
+PRICE IDENTICAL m3.ols.predict.gemv.64Kx16.device.pinned 0.01807
+   device-bits m3.ols.predict.gemv.64Kx16.device.pinned 0.01807/0x3f9280f12c27a637
+PRICE IDENTICAL m3.llama8b.qkv.t1.oracle 8.22997
+PRICE IDENTICAL m3.llama8b.qkv.t1.serial 7.693395
+   llama8b.qkv.t1                   NT          1     256<4096      4096    L=128    P=32   t=128      8.230      7.693   1.070x         131.7
+PRICE IDENTICAL m3.llama8b.qkv.t1.device 0.176032
+   device-bits m3.llama8b.qkv.t1.device 0.176032/0x3fc6883771865519
+PRICE IDENTICAL m3.llama8b.qkv.t1.device.vendor 0.041368
+   device-bits m3.llama8b.qkv.t1.device.vendor 0.041368/0x3fa52e2fbe33acd6
+PRICE IDENTICAL m3.llama8b.qkv.t1.device.pinned 0.5968285
+   device-bits m3.llama8b.qkv.t1.device.pinned 0.5968285/0x3fe31938151a4378
+PRICE IDENTICAL m3.llama8b.qkv.t8.oracle 8.171139
+PRICE IDENTICAL m3.llama8b.qkv.t8.serial 7.6157365
+   llama8b.qkv.t8                   NT          8      32<4096      4096    L=128    P=32   t=128      8.171      7.616   1.073x        1045.9
+PRICE IDENTICAL m3.llama8b.qkv.t8.device 0.4681675
+   device-bits m3.llama8b.qkv.t8.device 0.4681675/0x3fddf674d1633483
+PRICE IDENTICAL m3.llama8b.qkv.t8.device.vendor 0.1015605
+   device-bits m3.llama8b.qkv.t8.device.vendor 0.1015605/0x3fb9ffde7210be94
+PRICE IDENTICAL m3.llama8b.qkv.t8.device.pinned 0.586037
+   device-bits m3.llama8b.qkv.t8.device.pinned 0.586037/0x3fe2c0d0aaa7ded7
+PRICE IDENTICAL m3.llama8b.qkv.t512.oracle 8.149274
+PRICE IDENTICAL m3.llama8b.qkv.t512.serial 7.6062005
+   llama8b.qkv.t512                 NT     16<512      16<4096      4096    L=128    P=32   t=128      8.149      7.606   1.071x       66758.9
+PRICE IDENTICAL m3.llama8b.qkv.t512.device 8.799342
+   device-bits m3.llama8b.qkv.t512.device 8.799342/0x402199435ac8a372
+PRICE IDENTICAL m3.llama8b.qkv.t512.device.vendor 0.1338785
+   device-bits m3.llama8b.qkv.t512.device.vendor 0.1338785/0x3fc122ee41919ac8
+PRICE IDENTICAL m3.llama8b.qkv.t512.device.pinned 34.9166285
+   device-bits m3.llama8b.qkv.t512.device.pinned 34.9166285/0x40417554152b0a70
+PRICE IDENTICAL m3.llama8b.mlp_up.t1.oracle 14.2661535
+PRICE IDENTICAL m3.llama8b.mlp_up.t1.serial 13.328635
+   llama8b.mlp_up.t1                NT          1    448<14336      4096    L=128    P=32   t=128     14.266     13.329   1.070x         456.5
+PRICE IDENTICAL m3.llama8b.mlp_up.t1.device 0.756761
+   device-bits m3.llama8b.mlp_up.t1.device 0.756761/0x3fe83762d83c6c98
+PRICE IDENTICAL m3.llama8b.mlp_up.t1.device.vendor 0.0978725
+   device-bits m3.llama8b.mlp_up.t1.device.vendor 0.0978725/0x3fb90e2c12ad81ae
+PRICE IDENTICAL m3.llama8b.mlp_up.t1.device.pinned 0.605092
+   device-bits m3.llama8b.mlp_up.t1.device.pinned 0.605092/0x3fe35ce9e5e24788
+PRICE IDENTICAL m3.llama8b.mlp_up.t8.oracle 14.241409
+PRICE IDENTICAL m3.llama8b.mlp_up.t8.serial 13.3141415
+   llama8b.mlp_up.t8                NT          8     56<14336      4096    L=128    P=32   t=128     14.241     13.314   1.070x        3645.8
+PRICE IDENTICAL m3.llama8b.mlp_up.t8.device 0.7515395
+   device-bits m3.llama8b.mlp_up.t8.device 0.7515395/0x3fe80c9c90c4dec2
+PRICE IDENTICAL m3.llama8b.mlp_up.t8.device.vendor 0.17554
+   device-bits m3.llama8b.mlp_up.t8.device.vendor 0.17554/0x3fc678183f91e647
+PRICE IDENTICAL m3.llama8b.mlp_up.t8.device.pinned 2.2240705
+   device-bits m3.llama8b.mlp_up.t8.device.pinned 2.2240705/0x4001cae5796bfca8
+PRICE IDENTICAL m3.llama8b.mlp_up.t512.oracle 14.255828
+PRICE IDENTICAL m3.llama8b.mlp_up.t512.serial 13.3428785
+   llama8b.mlp_up.t512              NT     16<512     28<14336      4096    L=128    P=32   t=128     14.256     13.343   1.068x      233567.5
+PRICE IDENTICAL m3.llama8b.mlp_up.t512.device 30.09999
+   device-bits m3.llama8b.mlp_up.t512.device 30.09999/0x403e1998f1d3ed52
+PRICE IDENTICAL m3.llama8b.mlp_up.t512.device.vendor 0.2743795
+   device-bits m3.llama8b.mlp_up.t512.device.vendor 0.2743795/0x3fd18f6f08cc575c
+PRICE IDENTICAL m3.llama8b.mlp_up.t512.device.pinned 118.4243355
+   device-bits m3.llama8b.mlp_up.t512.device.pinned 118.4243355/0x405d9b285015c209
+PRICE IDENTICAL m3.llama8b.mlp_down.t1.oracle 14.125198
+PRICE IDENTICAL m3.llama8b.mlp_down.t1.serial 13.340969
+   llama8b.mlp_down.t1              NT          1     128<4096     14336    L=128   P=112   t=128     14.125     13.341   1.059x         452.0
+PRICE IDENTICAL m3.llama8b.mlp_down.t1.device 0.531092
+   device-bits m3.llama8b.mlp_down.t1.device 0.531092/0x3fe0feb4a66559f7
+PRICE IDENTICAL m3.llama8b.mlp_down.t1.device.vendor 0.0998505
+   device-bits m3.llama8b.mlp_down.t1.device.vendor 0.0998505/0x3fb98fcd67fd3f5b
+PRICE IDENTICAL m3.llama8b.mlp_down.t1.device.pinned 2.0832925
+   device-bits m3.llama8b.mlp_down.t1.device.pinned 2.0832925/0x4000aa95421c0443
+PRICE IDENTICAL m3.llama8b.mlp_down.t8.oracle 14.0944605
+PRICE IDENTICAL m3.llama8b.mlp_down.t8.serial 13.320823
+   llama8b.mlp_down.t8              NT          8      16<4096     14336    L=128   P=112   t=128     14.094     13.321   1.058x        3608.2
+PRICE IDENTICAL m3.llama8b.mlp_down.t8.device 1.61695
+   device-bits m3.llama8b.mlp_down.t8.device 1.61695/0x3ff9df06f6944674
+PRICE IDENTICAL m3.llama8b.mlp_down.t8.device.vendor 0.1673375
+   device-bits m3.llama8b.mlp_down.t8.device.vendor 0.1673375/0x3fc56b50b0f27bb3
+PRICE IDENTICAL m3.llama8b.mlp_down.t8.device.pinned 2.0219465
+   device-bits m3.llama8b.mlp_down.t8.device.pinned 2.0219465/0x40002cf2495e17e3
+PRICE IDENTICAL m3.llama8b.mlp_down.t512.oracle 14.0877225
+PRICE IDENTICAL m3.llama8b.mlp_down.t512.serial 13.33253
+   llama8b.mlp_down.t512            NT     16<512       8<4096     14336    L=128   P=112   t=128     14.088     13.333   1.057x      230813.2
+PRICE IDENTICAL m3.llama8b.mlp_down.t512.device 30.653104
+   device-bits m3.llama8b.mlp_down.t512.device 30.653104/0x403ea731d2e0e304
+PRICE IDENTICAL m3.llama8b.mlp_down.t512.device.vendor 0.308062
+   device-bits m3.llama8b.mlp_down.t512.device.vendor 0.308062/0x3fd3b749adc8fb87
+PRICE IDENTICAL m3.llama8b.mlp_down.t512.device.pinned 119.811198
+   device-bits m3.llama8b.mlp_down.t512.device.pinned 119.811198/0x405df3eaab042529
+   VENDOR-ARM CRASHED at llama8b.lm_head.t1 (m=1 n=128256 k=4096). The vendor column is REFUSED from here on, in this run and every later shape. This is MAX's matmul failing, not ours, and the v1 and pinned arms continue. Error: max/kernels/src/linalg/gemv.mojo:1201:41 failed calling 'def[::DType, ::TensorLayout & ::RegisterPassable & ::TrivialRegisterPassable & ::AnyType & ::Copyable & ::ImplicitlyCopyabl
+PRICE IDENTICAL m3.llama8b.lm_head.t1.oracle 7.985305
+PRICE IDENTICAL m3.llama8b.lm_head.t1.serial 7.465778
+   llama8b.lm_head.t1               NT          1   251<128256      4096    L=128    P=32   t=128      7.985      7.466   1.070x        4080.3
+PRICE IDENTICAL m3.llama8b.lm_head.t1.device 4.6957435
+   device-bits m3.llama8b.lm_head.t1.device 4.6957435/0x4012c870fbeb9e49
+PRICE IDENTICAL m3.llama8b.lm_head.t1.device.pinned 2.212194
+   device-bits m3.llama8b.lm_head.t1.device.pinned 2.212194/0x4001b292c4934268
+PRICE IDENTICAL m3.llama8b.lm_head.t8.oracle 8.148598
+PRICE IDENTICAL m3.llama8b.lm_head.t8.serial 7.607613
+   llama8b.lm_head.t8               NT          8    32<128256      4096    L=128    P=32   t=128      8.149      7.608   1.071x       32659.6
+PRICE IDENTICAL m3.llama8b.lm_head.t8.device 4.737266
+   device-bits m3.llama8b.lm_head.t8.device 4.737266/0x4012f2f5dbb9cf9a
+PRICE IDENTICAL m3.llama8b.lm_head.t8.device.pinned 16.8768935
+   device-bits m3.llama8b.lm_head.t8.device.pinned 16.8768935/0x4030e07c17a89332
+PRICE IDENTICAL m3.llama8b.lm_head.t512.oracle 8.155994
+PRICE IDENTICAL m3.llama8b.lm_head.t512.serial 7.623607
+   llama8b.lm_head.t512             NT     16<512    16<128256      4096    L=128    P=32   t=128      8.156      7.624   1.070x     2092110.3
+PRICE IDENTICAL m3.llama8b.lm_head.t512.device 33.5554775
+   device-bits m3.llama8b.lm_head.t512.device 33.5554775/0x4040c719e30014f9
+PRICE IDENTICAL m3.llama8b.lm_head.t512.device.pinned 131.9988095
+   device-bits m3.llama8b.lm_head.t512.device.pinned 131.9988095/0x40607ff63f572de4
+   ran 20 shapes, 0 over budget; sink 2613691281
+   The DERIVED column is arithmetic on the measured per-cell price, NOT a measurement, and it is a HOST cost. It is printed because a reader comparing 'oracle 3 ms' across rows whose m n differ by a factor of 10^5 would otherwise compare nothing.
+
+-- 13.6.3  the DEVICE arms (INDICATIVE, one M4, not certified) --
+      name                            op   dev m x n         k      v1 ms  vendor ms  pinned ms    v1 GF/s  plan (full name, trailing: it is wider than any column and is the launcher's own)
+   DEV gram.32x32x1M                  TN       32x32   1000000     49.708        n/a        n/a      41.20  SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+   DEV gram.32x32x64K                 TN       32x32     65536      0.956        n/a        n/a     140.35  SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+   DEV gram.128sq.x100003             TN     128x128    100003      9.143        n/a        n/a     358.39  TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+   DEV ols.step1.16x16x64K            TN       16x16     65536      0.202        n/a        n/a     166.37  SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+   DEV pca.transform.8192x4x4         NT      8192x4         4      0.024      0.058      0.015      10.86  TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+   DEV pca.transform.wide.8192x64x128 NT     8192x64       128      0.102      0.050      0.290    1316.18  TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+   DEV kmeans.dist.4096x64x64         NT     4096x64        64      0.044      0.045      0.084     767.20  TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+   DEV ols.predict.gemv.64Kx16        NT     65536x1        16      0.049        n/a      0.018      42.60  TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+   DEV llama8b.qkv.t1                 NT      1x4096      4096      0.176      0.041      0.597     190.62  SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+   DEV llama8b.qkv.t8                 NT      8x4096      4096      0.468      0.102      0.586     573.37  TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+   DEV llama8b.qkv.t512               NT    512x4096      4096      8.799      0.134     34.917    1952.40  TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+   DEV llama8b.mlp_up.t1              NT     1x14336      4096      0.757      0.098      0.605     155.19  TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+   DEV llama8b.mlp_up.t8              NT     8x14336      4096      0.752      0.176      2.224    1250.13  TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+   DEV llama8b.mlp_up.t512            NT   512x14336      4096     30.100      0.274    118.424    1997.66  TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+   DEV llama8b.mlp_down.t1            NT      1x4096     14336      0.531      0.100      2.083     221.13  SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+   DEV llama8b.mlp_down.t8            NT      8x4096     14336      1.617      0.167      2.022     581.05  TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+   DEV llama8b.mlp_down.t512          NT    512x4096     14336     30.653      0.308    119.811    1961.61  TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+   DEV llama8b.lm_head.t1             NT    1x128256      4096      4.696        n/a      2.212     223.75  TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+   DEV llama8b.lm_head.t8             NT    8x128256      4096      4.737        n/a     16.877    1774.31  TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+   DEV llama8b.lm_head.t512           NT   512x16032      4096     33.555        n/a    131.999    2003.94  TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+   ran 20 device shapes, 0 over the device budget, 4 with n/a in the vendor and pinned columns because those two arms are NT-ONLY (the repository ships no pinned TN product outside the Gram special case and no NN product at all). n/a is a REFUSAL, not a zero.
+   GF/s is achieved, at the DEVICE shape in the column beside it, for the v1 kernel only. No host arm in this file prints this column and none is going to.
+   IDENTICAL against FAST -- 13.6.3's first two arms -- is the m3.<shape>.device row of tools/gemm_price.sh's median table, not a column here: GLOBAL_NUMERIC_MODE is comptime, so the two modes are two BINARIES and one process cannot hold both.
+
+-- 13.6.4  the leaf loop's seams: ftz priced apart from fma --
+   k = 262144 x 8 passes = 2097152 multiply-accumulates per arm per repeat
+PRICE IDENTICAL m4.leaf.plain 2.726503
+PRICE IDENTICAL m4.leaf.fma 2.7220185
+PRICE IDENTICAL m4.leaf.contract 10.2139005
+PRICE IDENTICAL m4.leaf.denorm 10.304336
+   sink 3320444086 (printed so no arm is optimized away)
+   fma cost = fma - plain. ftz cost = contract - fma, and ONLY in the IDENTICAL binary; under FAST the contract arm should collapse onto the plain arm and that collapse is the mode witness.
+
+-- 13.6.5  workspace bytes per shape, at the FULL m and n --
+   budget 4096 MiB (MOJOLEARN_GEMM_PRICE_WS_BUDGET_MB). Not a hardware constant: a threshold read from the device would make this table unreproducible across machines.
+   name                                  m       n         k     P   splitK MiB   staged MiB  tile edge  verdict
+   gram.32x32x1M                        32      32   1000000  1024         4.00         8.00       1024  fits
+   gram.32x32x64K                       32      32     65536   512         2.00         4.00       1448  fits
+   gram.128sq.x100003                  128     128    100003   782        48.88        98.00       1171  fits
+   ols.step1.16x16x64K                  16      16     65536   512         0.50         1.00       1448  fits
+   pca.transform.8192x4x4             8192       4         4     1         0.13         0.13      32768  fits (P=1: no fold; partials ARE the output)
+   pca.transform.wide.8192x64x128     8192      64       128     1         2.00         2.00      32768  fits (P=1: no fold; partials ARE the output)
+   kmeans.dist.4096x64x64             4096      64        64     1         1.00         1.00      32768  fits (P=1: no fold; partials ARE the output)
+   ols.predict.gemv.64Kx16           65536       1        16     1         0.25         0.25      32768  fits (P=1: no fold; partials ARE the output)
+   llama8b.qkv.t1                        1    4096      4096    32         0.50         0.98       5792  fits
+   llama8b.qkv.t8                        8    4096      4096    32         4.00         7.88       5792  fits
+   llama8b.qkv.t512                    512    4096      4096    32       256.00       504.00       5792  fits
+   llama8b.mlp_up.t1                     1   14336      4096    32         1.75         3.45       5792  fits
+   llama8b.mlp_up.t8                     8   14336      4096    32        14.00        27.56       5792  fits
+   llama8b.mlp_up.t512                 512   14336      4096    32       896.00      1764.00       5792  fits
+   llama8b.mlp_down.t1                   1    4096     14336   112         1.75         3.50       3096  fits
+   llama8b.mlp_down.t8                   8    4096     14336   112        14.00        28.00       3096  fits
+   llama8b.mlp_down.t512               512    4096     14336   112       896.00      1792.00       3096  fits
+   llama8b.lm_head.t1                    1  128256      4096    32        15.66        30.82       5792  fits
+   llama8b.lm_head.t8                    8  128256      4096    32       125.25       246.59       5792  fits
+   llama8b.lm_head.t512                512  128256      4096    32      8016.00     15781.50       5792  OVER BUDGET -- must tile the output
+   1 of 20 shapes exceed the budget.
+   Section 6.1 FORBIDS fixing this by making L depend on m or n -- that is the batch-invariance clause. The two legal ways out are OUTPUT TILING and ONE-BLOCK-OWNS-ITS-K, both pure execution plan, both moving no bits. Choosing between them on m, n and the device is legal; choosing the NUMERICAL TREE on them is not.
+
+-- 13.6.6  limiter inputs and a RELATIVE verdict per shape --
+   name                                   MFLOP  operand MiB  flop/byte  staging MiB   fold %  limiter
+   gram.32x32x1M                         2048.0       244.14       8.00         4.00   0.1023  NEITHER: latency/launch at this size [32x32 41.2 GF/s 5.2 GB/s]
+   gram.32x32x64K                         134.2        16.00       8.00         2.00   0.7797  NEITHER: latency/launch at this size [32x32 140.4 GF/s 17.5 GB/s]
+   gram.128sq.x100003                    3276.9        97.72      31.98        48.88   0.7810  NEITHER: latency/launch at this size [128x128 358.4 GF/s 11.2 GB/s]
+   ols.step1.16x16x64K                     33.6         8.00       4.00         0.50   0.7797  NEITHER: latency/launch at this size [16x16 166.4 GF/s 41.6 GB/s]
+   pca.transform.8192x4x4                   0.3         0.25       1.00         0.13   0.0000  NEITHER: latency/launch at this size [8192x4 10.9 GF/s 10.9 GB/s]
+   pca.transform.wide.8192x64x128         134.2         6.03      21.22         2.00   0.0000  COMPUTE-ish [8192x64 1316.2 GF/s 62.0 GB/s]
+   kmeans.dist.4096x64x64                  33.6         2.02      15.88         1.00   0.0000  NEITHER: latency/launch at this size [4096x64 767.2 GF/s 48.3 GB/s]
+   ols.predict.gemv.64Kx16                  2.1         4.25       0.47         0.25   0.0000  NEITHER: latency/launch at this size [65536x1 42.6 GF/s 90.5 GB/s]
+   llama8b.qkv.t1                          33.6        64.03       0.50         0.50   0.7568  BANDWIDTH-ish [1x4096 190.6 GF/s 381.4 GB/s]
+   llama8b.qkv.t8                         268.4        64.25       3.98         4.00   0.7568  NEITHER: latency/launch at this size [8x4096 573.4 GF/s 143.9 GB/s]
+   llama8b.qkv.t512                     17179.9        80.00     204.80       256.00   0.7568  COMPUTE-ish [512x4096 1952.4 GF/s 9.5 GB/s]
+   llama8b.mlp_up.t1                      117.4       224.07       0.50         1.75   0.7568  BANDWIDTH-ish [1x14336 155.2 GF/s 310.5 GB/s]
+   llama8b.mlp_up.t8                      939.5       224.56       3.99        14.00   0.7568  COMPUTE-ish [8x14336 1250.1 GF/s 313.3 GB/s]
+   llama8b.mlp_up.t512                  60129.5       260.00     220.55       896.00   0.7568  COMPUTE-ish [512x14336 1997.7 GF/s 9.1 GB/s]
+   llama8b.mlp_down.t1                    117.4       224.07       0.50         1.75   0.7743  BANDWIDTH-ish [1x4096 221.1 GF/s 442.4 GB/s]
+   llama8b.mlp_down.t8                    939.5       224.56       3.99        14.00   0.7743  NEITHER: latency/launch at this size [8x4096 581.0 GF/s 145.6 GB/s]
+   llama8b.mlp_down.t512                60129.5       260.00     220.55       896.00   0.7743  COMPUTE-ish [512x4096 1961.6 GF/s 8.9 GB/s]
+   llama8b.lm_head.t1                    1050.7      2004.50       0.50        15.66   0.7568  BANDWIDTH-ish [1x128256 223.8 GF/s 447.6 GB/s]
+   llama8b.lm_head.t8                    8405.4      2008.04       3.99       125.25   0.7568  COMPUTE-ish [8x128256 1774.3 GF/s 444.5 GB/s]
+   llama8b.lm_head.t512                537944.7      2262.50     226.75      8016.00   0.7568  COMPUTE-ish [512x16032 2003.9 GF/s 9.1 GB/s]
+   check_fold_fraction_is_under_the_13_3_bound OK: every row's (P-1)/k is strictly below its own 1/L, and 1/L <= 1/128 = 0.78125%, which is 13.3's bound at full precision.
+   That bound is on the fold's ARITHMETIC share and says nothing about its EXPOSED LATENCY at small m n, which is the shape 13.3 names as the one where the fold can still matter -- and four rows above have m n small enough to be exactly that shape.
+   THE VERDICT IS RELATIVE AND THE CEILINGS ARE THIS RUN'S, NOT THE DEVICE'S. Best observed: 2003.9375606560807/0x409f4fc00fe68f88 GF/s and 447.61297374952443/0x407bf9cebd8ff839 GB/s (compulsory operand traffic only).
+   Those are LOWER BOUNDS on peak: every row here may be far from the hardware, and a row called COMPUTE-ish is compute-ish next to the best this run reached and next to nothing else. A peak-relative classification needs device counters and a vendor peak figure, and this file has neither and will not invent them.
+   Threshold: a row is called after the first of GF/s or GB/s that reaches 0.5/0x3fe0000000000000 of the corresponding best. That is a REPORTING CHOICE printed so it travels with the column, not a bound anybody derived.
+   The bracket on each row is the shape the clock actually ran at, which is the CAPPED device shape and not the full m n in the columns to its left. check_limiter_rates_use_the_MEASURED_shape refuses a row that has one without the other.
+
+== done [IDENTICAL] ==

@@ -1,0 +1,59 @@
+[vendor-torch] NVIDIA detected: GPU 0: NVIDIA H100 80GB HBM3 (UUID: GPU-02bd1a18-a92f-c6d0-f1bc-6bc5786ec160)
+[vendor-torch] python3 -m venv unavailable; installing python3-venv
+[vendor-torch] installing torch from https://download.pytorch.org/whl/cu129 (this is the long step)
+/root/.venv-vendor-torch/lib/python3.10/site-packages/torch/_subclasses/functional_tensor.py:368: UserWarning: Failed to initialize NumPy: No module named 'numpy' (Triggered internally at /__w/pytorch/pytorch/torch/csrc/utils/tensor_numpy.cpp:84.)
+  cpu = _conversion_method_template(device=torch.device("cpu"))
+[vendor-torch] torch 2.13.0+cu129 cuda 12.9 hip None available True
+/root/.venv-vendor-torch/lib/python3.10/site-packages/torch/_subclasses/functional_tensor.py:368: UserWarning: Failed to initialize NumPy: No module named 'numpy' (Triggered internally at /__w/pytorch/pytorch/torch/csrc/utils/tensor_numpy.cpp:84.)
+  cpu = _conversion_method_template(device=torch.device("cpu"))
+== tools/vendor_gemm_price.py ==
+  device      : NVIDIA H100 80GB HBM3 (cuda)
+  library     : cuBLAS
+  build       : CUDA 12.9, torch 2.13.0+cu129
+  shapes      : 20, parsed from bench/gemm_shapes.mojo
+  repeats     : 10 timed, 3 warm-up, median reported
+  arms        : strict (allow_tf32=False, true FP32) and tf32 (allow_tf32=True,
+                10 explicit mantissa bits -- NOT the same arithmetic as ours)
+
+VENDORPRICE strict     gram.32x32x1M                    TN m=32      n=32      k=1000000       0.2544 ms     8048.9 GF/s
+VENDORPRICE tf32       gram.32x32x1M                    TN m=32      n=32      k=1000000       0.1255 ms    16318.3 GF/s
+VENDORPRICE strict     gram.32x32x64K                   TN m=32      n=32      k=65536         0.0534 ms     2514.1 GF/s
+VENDORPRICE tf32       gram.32x32x64K                   TN m=32      n=32      k=65536         0.0438 ms     3066.4 GF/s
+VENDORPRICE strict     gram.128sq.x100003               TN m=128     n=128     k=100003        0.1111 ms    29500.1 GF/s
+VENDORPRICE tf32       gram.128sq.x100003               TN m=128     n=128     k=100003        0.0737 ms    44433.4 GF/s
+VENDORPRICE strict     ols.step1.16x16x64K              TN m=16      n=16      k=65536         0.0533 ms      629.9 GF/s
+VENDORPRICE tf32       ols.step1.16x16x64K              TN m=16      n=16      k=65536         0.0436 ms      769.9 GF/s
+VENDORPRICE strict     pca.transform.8192x4x4           NT m=8192    n=4       k=4             0.0440 ms        6.0 GF/s
+VENDORPRICE tf32       pca.transform.8192x4x4           NT m=8192    n=4       k=4             0.0399 ms        6.6 GF/s
+VENDORPRICE strict     pca.transform.wide.8192x64x128   NT m=8192    n=64      k=128           0.0442 ms     3035.4 GF/s
+VENDORPRICE tf32       pca.transform.wide.8192x64x128   NT m=8192    n=64      k=128           0.0405 ms     3315.1 GF/s
+VENDORPRICE strict     kmeans.dist.4096x64x64           NT m=4096    n=64      k=64            0.0439 ms      764.6 GF/s
+VENDORPRICE tf32       kmeans.dist.4096x64x64           NT m=4096    n=64      k=64            0.0403 ms      832.1 GF/s
+VENDORPRICE strict     ols.predict.gemv.64Kx16          NT m=65536   n=1       k=16            0.0397 ms       52.8 GF/s
+VENDORPRICE tf32       ols.predict.gemv.64Kx16          NT m=65536   n=1       k=16            0.0400 ms       52.5 GF/s
+VENDORPRICE strict     llama8b.qkv.t1                   NT m=1       n=4096    k=4096          0.0570 ms      589.2 GF/s
+VENDORPRICE tf32       llama8b.qkv.t1                   NT m=1       n=4096    k=4096          0.0553 ms      606.6 GF/s
+VENDORPRICE strict     llama8b.qkv.t8                   NT m=8       n=4096    k=4096          0.0746 ms     3596.7 GF/s
+VENDORPRICE tf32       llama8b.qkv.t8                   NT m=8       n=4096    k=4096          0.0628 ms     4277.3 GF/s
+VENDORPRICE strict     llama8b.qkv.t512                 NT m=512     n=4096    k=4096          0.3866 ms    44440.4 GF/s
+VENDORPRICE tf32       llama8b.qkv.t512                 NT m=512     n=4096    k=4096          0.0828 ms   207448.8 GF/s
+VENDORPRICE strict     llama8b.mlp_up.t1                NT m=1       n=14336   k=4096          0.1082 ms     1085.6 GF/s
+VENDORPRICE tf32       llama8b.mlp_up.t1                NT m=1       n=14336   k=4096          0.1079 ms     1088.3 GF/s
+VENDORPRICE strict     llama8b.mlp_up.t8                NT m=8       n=14336   k=4096          0.1736 ms     5411.6 GF/s
+VENDORPRICE tf32       llama8b.mlp_up.t8                NT m=8       n=14336   k=4096          0.1235 ms     7609.1 GF/s
+VENDORPRICE strict     llama8b.mlp_up.t512              NT m=512     n=14336   k=4096          1.4035 ms    42842.4 GF/s
+VENDORPRICE tf32       llama8b.mlp_up.t512              NT m=512     n=14336   k=4096          0.2064 ms   291346.5 GF/s
+VENDORPRICE strict     llama8b.mlp_down.t1              NT m=1       n=4096    k=14336         0.1096 ms     1071.7 GF/s
+VENDORPRICE tf32       llama8b.mlp_down.t1              NT m=1       n=4096    k=14336         0.1090 ms     1077.5 GF/s
+VENDORPRICE strict     llama8b.mlp_down.t8              NT m=8       n=4096    k=14336         0.2121 ms     4429.7 GF/s
+VENDORPRICE tf32       llama8b.mlp_down.t8              NT m=8       n=4096    k=14336         0.1206 ms     7793.3 GF/s
+VENDORPRICE strict     llama8b.mlp_down.t512            NT m=512     n=4096    k=14336         1.2063 ms    49845.5 GF/s
+VENDORPRICE tf32       llama8b.mlp_down.t512            NT m=512     n=4096    k=14336         0.2281 ms   263667.1 GF/s
+VENDORPRICE strict     llama8b.lm_head.t1               NT m=1       n=128256  k=4096          0.6930 ms     1516.2 GF/s
+VENDORPRICE tf32       llama8b.lm_head.t1               NT m=1       n=128256  k=4096          0.6920 ms     1518.3 GF/s
+VENDORPRICE strict     llama8b.lm_head.t8               NT m=8       n=128256  k=4096          1.1855 ms     7089.9 GF/s
+VENDORPRICE tf32       llama8b.lm_head.t8               NT m=8       n=128256  k=4096          0.7415 ms    11336.1 GF/s
+  SKIPPED llama8b.lm_head.t512             NT  m=512 n=128256 k=4096  (2.69e+11 MACs > --max-macs 5e+10)
+
+  wrote bench/results/e1/2026-08-25_065248-mojolearn-e2-nv//lanes/vendor_price.json
+[vendor-torch] vendor_gemm_price exit=0
