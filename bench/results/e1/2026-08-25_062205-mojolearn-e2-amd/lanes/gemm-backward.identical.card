@@ -1,0 +1,69 @@
+# gemm backward card, profile mojolearn.identical.gemm.fp32.v1
+# mode IDENTICAL
+# bwd sabotage none
+# fwd sabotage none
+# compare the .in.* stages BEFORE any .out stage; two cards whose inputs differ are diffing their fixtures
+# format: mojolearn-identity-trace v1
+0	bwd.dA/NN.5x7x3.in.dc	f32	35	8bc5ef1d899491d1
+1	bwd.dA/NN.5x7x3.in.w	f32	21	2e85c74ed86f1e11
+2	bwd.dA/NN.5x7x3.out	f32	15	54461fbed16d1351
+3	bwd.dA/NT.5x7x3.in.dc	f32	35	8bc5ef1d899491d1
+4	bwd.dA/NT.5x7x3.in.w	f32	21	2e85c74ed86f1e11
+5	bwd.dA/NT.5x7x3.out	f32	15	29c2cf7241245a05
+6	bwd.dA/TN.5x7x3.in.dc	f32	35	8bc5ef1d899491d1
+7	bwd.dA/TN.5x7x3.in.w	f32	21	2e85c74ed86f1e11
+8	bwd.dA/TN.5x7x3.out	f32	15	7f4209b7c5d37fbd
+9	bwd.dB/NN.5x7x3.in.dc	f32	35	8bc5ef1d899491d1
+10	bwd.dB/NN.5x7x3.in.w	f32	15	af6b4d441800d77c
+11	bwd.dB/NN.5x7x3.out	f32	21	a574026004f958d9
+12	bwd.dB/NT.5x7x3.in.dc	f32	35	8bc5ef1d899491d1
+13	bwd.dB/NT.5x7x3.in.w	f32	15	af6b4d441800d77c
+14	bwd.dB/NT.5x7x3.out	f32	21	1c62ca6298178a01
+15	bwd.dB/TN.5x7x3.in.dc	f32	35	8bc5ef1d899491d1
+16	bwd.dB/TN.5x7x3.in.w	f32	15	af6b4d441800d77c
+17	bwd.dB/TN.5x7x3.out	f32	21	7c3f4df392286efb
+18	bwd.dbias.5x7x3.in.dc	f32	35	8bc5ef1d899491d1
+19	bwd.dbias.5x7x3.in.w	f32	5	17263910e60ca9f8
+20	bwd.dbias.5x7x3.out	f32	7	aa482da902dee7ec
+21	bwd.dA/NN.130x70x17.in.dc	f32	9100	ee22196e287d6e43
+22	bwd.dA/NN.130x70x17.in.w	f32	1190	1ab5251cd79ba7f1
+23	bwd.dA/NN.130x70x17.out	f32	2210	83f49a9054447fa0
+24	bwd.dA/NT.130x70x17.in.dc	f32	9100	ee22196e287d6e43
+25	bwd.dA/NT.130x70x17.in.w	f32	1190	1ab5251cd79ba7f1
+26	bwd.dA/NT.130x70x17.out	f32	2210	99f26ec896bf7a5f
+27	bwd.dA/TN.130x70x17.in.dc	f32	9100	ee22196e287d6e43
+28	bwd.dA/TN.130x70x17.in.w	f32	1190	1ab5251cd79ba7f1
+29	bwd.dA/TN.130x70x17.out	f32	2210	f26938cfd566d89c
+30	bwd.dB/NN.130x70x17.in.dc	f32	9100	ee22196e287d6e43
+31	bwd.dB/NN.130x70x17.in.w	f32	2210	c115c7603e6b8dc3
+32	bwd.dB/NN.130x70x17.out	f32	1190	a7f0479d832ef8e4
+33	bwd.dB/NT.130x70x17.in.dc	f32	9100	ee22196e287d6e43
+34	bwd.dB/NT.130x70x17.in.w	f32	2210	c115c7603e6b8dc3
+35	bwd.dB/NT.130x70x17.out	f32	1190	b1debfbe96005e0c
+36	bwd.dB/TN.130x70x17.in.dc	f32	9100	ee22196e287d6e43
+37	bwd.dB/TN.130x70x17.in.w	f32	2210	c115c7603e6b8dc3
+38	bwd.dB/TN.130x70x17.out	f32	1190	4c4294d1e176fe5c
+39	bwd.dbias.130x70x17.in.dc	f32	9100	ee22196e287d6e43
+40	bwd.dbias.130x70x17.in.w	f32	130	d81781511a818d75
+41	bwd.dbias.130x70x17.out	f32	70	5b1a9088902aecb2
+42	bwd.dA/NN.517x33x9.in.dc	f32	17061	ff86078a45068748
+43	bwd.dA/NN.517x33x9.in.w	f32	297	0242a3b96b5eb7a3
+44	bwd.dA/NN.517x33x9.out	f32	4653	3626c0abfda454ac
+45	bwd.dA/NT.517x33x9.in.dc	f32	17061	ff86078a45068748
+46	bwd.dA/NT.517x33x9.in.w	f32	297	0242a3b96b5eb7a3
+47	bwd.dA/NT.517x33x9.out	f32	4653	a3c214da80db7937
+48	bwd.dA/TN.517x33x9.in.dc	f32	17061	ff86078a45068748
+49	bwd.dA/TN.517x33x9.in.w	f32	297	0242a3b96b5eb7a3
+50	bwd.dA/TN.517x33x9.out	f32	4653	f9e90c414da99904
+51	bwd.dB/NN.517x33x9.in.dc	f32	17061	ff86078a45068748
+52	bwd.dB/NN.517x33x9.in.w	f32	4653	3745d532a15f9d15
+53	bwd.dB/NN.517x33x9.out	f32	297	e8115fb7a2e8c32c
+54	bwd.dB/NT.517x33x9.in.dc	f32	17061	ff86078a45068748
+55	bwd.dB/NT.517x33x9.in.w	f32	4653	3745d532a15f9d15
+56	bwd.dB/NT.517x33x9.out	f32	297	979205b8c4f2e0a0
+57	bwd.dB/TN.517x33x9.in.dc	f32	17061	ff86078a45068748
+58	bwd.dB/TN.517x33x9.in.w	f32	4653	3745d532a15f9d15
+59	bwd.dB/TN.517x33x9.out	f32	297	9f17f1649ac942ee
+60	bwd.dbias.517x33x9.in.dc	f32	17061	ff86078a45068748
+61	bwd.dbias.517x33x9.in.w	f32	517	fdc2c79bc8f7f9f8
+62	bwd.dbias.517x33x9.out	f32	33	9695ee17f1967e6c

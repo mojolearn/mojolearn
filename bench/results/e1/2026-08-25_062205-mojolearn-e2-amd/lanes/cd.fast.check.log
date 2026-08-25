@@ -1,0 +1,91 @@
+✨ Pixi task (check-cd in default): mojo run -I . solver/mojo_only/cd_check.mojo
+Imported from /root/mojolearn/solver/mojo_only/cd_check.mojo:132:
+/root/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/solver/mojo_only/cd_check.mojo:161:
+Imported from /root/mojolearn/solver/ported/solver/cd.mojo:119:
+Imported from /root/mojolearn/solver/ported/functions/linear_reg.mojo:31:
+/root/mojolearn/core/column_stats.mojo:389:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        tile[ty * (TRANSPOSE_TILE + 1) + tx] = src.unsafe_load(r * n_cols + c)
+        ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/solver/mojo_only/cd_check.mojo:161:
+Imported from /root/mojolearn/solver/ported/solver/cd.mojo:119:
+Imported from /root/mojolearn/solver/ported/functions/linear_reg.mojo:31:
+/root/mojolearn/core/column_stats.mojo:396:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            r2 * n_rows + c2, tile[tx * (TRANSPOSE_TILE + 1) + ty]
+                              ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/solver/mojo_only/cd_check.mojo:132:
+/root/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/solver/mojo_only/cd_check.mojo:132:
+/root/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/solver/mojo_only/cd_check.mojo:132:
+/root/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/solver/mojo_only/cd_check.mojo:132:
+/root/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+== solver/mojo_only/cd_check.mojo [FAST] gemm-sabotage=none oracle-sabotage=none zero-fold-sabotage=none canon-sabotage=none ==
+  [FAST] refused shuffle=true: Parameter shuffle: REFUSED BY NAME (cuML selection='random'). std::shuffle's algorithm is unspecified by the C++ standard, so cuML's permutation is not a pure function of its seed; only the cyclic order (shuffle=false, selection='cyclic') is ported. See solver/ported/solver/shuffle.mojo
+  [FAST] refused sample_weight: Parameter sample_weight: REFUSED BY NAME. cd.cuh:136-163 and :240-251 (the weighted preprocess, the sqrt-weight scaling of input and labels, and their undo) are not ported
+  [FAST] refused loss=HINGE: Parameter loss: Only SQRT_LOSS function is supported for now (got HINGE)
+  [FAST] refused n_cols=0: Parameter n_cols: number of columns cannot be less than one
+  [FAST] refused n_rows=1: Parameter n_rows: number of rows cannot be less than two
+  [FAST] refused alpha<0: Expected alpha >= 0, got -0.1
+  [FAST] refused l1_ratio=1.5: Expected 0.0 <= l1_ratio <= 1.0, got 1.5
+  [FAST] refused predict loss=HINGE: Parameter loss: Only SQRT_LOSS function is supported for now (got HINGE)
+  [FAST] refused alpha=NaN: Parameter alpha: must be a finite number, got nan
+  [FAST] refused alpha=inf: Parameter alpha: must be a finite number, got inf
+  [FAST] refused l1_ratio=NaN: Parameter l1_ratio: must not be NaN
+  [FAST] refused tol=NaN: Parameter tol: must not be NaN
+check_cd_refuses_by_name OK [FAST]: 12 parameter values refused by name (DEVIATION 613: the four NaN/inf ones)
+  [FAST] n_iter device 3 oracle 3 float64 3; final diffMax 0.00012207031 coefMax 2.6655917 (ratio 4.5794826e-05 < tol 0.001)
+check_cd_recovers_the_planted_support OK [FAST]: 4 of 16 planted nonzeros recovered exactly; worst |device - float64| 1.8126222101066958e-07 (tol 2e-3)
+  [FAST] n_rows=2048 (P=16): profile vs serial oracle differ at 8 of 8 colnorms, 2 of 8 coefficients, 2044 of 2048 residual cells; n_iter 3 vs 3; first cell 1 device 0x400bd882 oracle 0x400bd886
+check_cd_serial_fold_is_a_different_answer OK [FAST]
+  [FAST] gemm sabotage: none; oracle sabotage: none
+  [FAST] planted: n_iter device 3 oracle 3; differing cells coef 2/16 resid 2027/2048 x_after 2853 y_after 358 intercept 1; first cell 9 device 0xbfe8fe8b oracle 0xbfe8fe88; first resid cell 0 device 0x3d92fe7e oracle 0x3d92feb3
+  [FAST] planted: first card divergence: 2	cd.mu_input	f32	16	d6689d14f4c6bde4   VS   2	cd.mu_input	f32	16	6c7c182e6bf11f64
+  [FAST] denormal: n_iter device 1 oracle 1; differing cells coef 4/4 resid 982/1024 x_after 0 y_after 0 intercept 0; first cell 0 device 0x02081ceb oracle 0x02081ce8; first resid cell 0 device 0x00000000 oracle 0x80000001
+  [FAST] denormal: first card divergence: 4	cd.colnorm	f32	4	f8bb259668d6b211   VS   4	cd.colnorm	f32	4	a19e79a0d4383538
+  [FAST] large: n_iter device 2 oracle 2; differing cells coef 0/4 resid 1077/20000 x_after 321 y_after 469 intercept 1; first resid cell 17 device 0x3d0ff468 oracle 0x3d0ff469
+  [FAST] large: first card divergence: 2	cd.mu_input	f32	4	fc5399f0b7e25015   VS   2	cd.mu_input	f32	4	d67eb2c8468b9153
+check_cd_device_equals_oracle REPORTED [FAST]: 8098 disagreements (the vendor gemv and the RAFT fold have their own shapes; not an assertion)
+  [FAST] cells moved: A vs B 0, A vs C 0, A vs D 0, A vs A' 0 of 2066 (coef + residual + intercept + n_iter)
+check_cd_is_launch_invariant REPORTED [FAST]: the dot is the vendor gemv, whose bits are its own; plans and padding are not exercised by that arm
+  [FAST] ||w||_1 lasso 4.141319394111633 enet(0.5) 3.906222343444824 alpha=0 4.6500027211150154 float64 alpha=0 4.650002956962151; no-intercept intercept 0.0; cells moved vs lasso: enet 2 ols 8 no-intercept 2
+check_cd_elasticnet_arms_reach OK [FAST]: the l2 arm, the alpha=0 arm and the no-intercept arm each move the bits as the objective says
+  [FAST] predict: 477 of 1000 rows differ from the host; worst relative 3.449760669514184e-05; row 1 device 0x3e3e1e20 host 0x3e3e1e21
+check_cd_predict_matches_host OK [FAST]
+check_cd_card_is_emitted OK [FAST]: 20 records (3 epochs), run-to-run control identical
+check_cd_soft_threshold_operand_order [FAST]: not a SOFT_SWAP build; baseline device-vs-oracle coef 1 resid 1003 (build with -D MOJOLEARN_CD_SABOTAGE_SOFT_SWAP=1 for the report)
+  [FAST] signed_zero_pos: device coef[0] 0x801d0718 oracle 0x801d0718; -0.0 coefficients 0 +0.0 0 of 8; n_iter 2/2; differing cells coef 5 resid 0; first cell 2 device 0x0069c91a oracle 0x0069c91b; oracle coefMax/diffMax bits 0x0071dd62/0x00000000; first card divergence: 4	cd.colnorm	f32	8	4f24fe9a4ee3d419   VS   4	cd.colnorm	f32	8	0931030a44c0a1d8
+  RECORDED [FAST] signed_zero_pos: coefMax/diffMax are not +0.0 in 2 sweeps (the quotients did not all flush)
+  RECORDED [FAST] signed_zero_pos: the fixture did not plant both zeros (-0.0 0, +0.0 0)
+  [FAST] signed_zero_neg: device coef[0] 0x001d0718 oracle 0x001d0718; -0.0 coefficients 0 +0.0 0 of 8; n_iter 2/2; differing cells coef 5 resid 0; first cell 2 device 0x8069c91a oracle 0x8069c91b; oracle coefMax/diffMax bits 0x0071dd62/0x00000000; first card divergence: 4	cd.colnorm	f32	8	4f24fe9a4ee3d419   VS   4	cd.colnorm	f32	8	0931030a44c0a1d8
+  RECORDED [FAST] signed_zero_neg: coefMax/diffMax are not +0.0 in 2 sweeps (the quotients did not all flush)
+  RECORDED [FAST] signed_zero_neg: the fixture did not plant both zeros (-0.0 0, +0.0 0)
+  RECORDED [FAST] the first coordinate was -0.0 in 0 and +0.0 in 0 of the two fixtures (both orders required)
+check_cd_signed_zero_coefficients REPORTED [FAST]: 2 of 2 fixtures disagree with the oracle (the FAST arm's flush and gemv are the vendor's)
+  [FAST] nan_computed: NaN residual cells device 256 oracle 256 of 256; raw payload device 0xffc00000 host 0xffc00000; coef[0] device 0x00000000 oracle 0x00000000; n_iter 2/2; differing cells (NaN-canonical) coef 0 resid 0; first card divergence: 4	cd.colnorm	f32	4	317a4e74efe23f63   VS   4	cd.colnorm	f32	4	fe9f40c0eefd78c1
+  [FAST] nan_propagated: NaN residual cells device 1 oracle 1 of 256; raw payload device 0x7fc0beef host 0x7fc0beef; coef[0] device 0x00000000 oracle 0x00000000; n_iter 1/1; differing cells (NaN-canonical) coef 0 resid 0; first card divergence: 4	cd.colnorm	f32	4	317a4e74efe23f63   VS   4	cd.colnorm	f32	4	fe9f40c0eefd78c1
+check_cd_nan_payload_is_canonical REPORTED [FAST]: 2 of 2 fixtures disagree with the oracle
+== solver/mojo_only/cd_check.mojo [FAST] ALL PASSED ==

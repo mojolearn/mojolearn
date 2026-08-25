@@ -996,12 +996,20 @@ claiming three.
 
 ## 8. Open questions, and things a reader should not assume
 
-- **The gates have now run, ONCE, on ONE box.** All ten green on Apple M4
-  under IDENTICAL on 2026-08-25, first execution, and G5 overturned section
-  3.2's point 2 (above). What has NOT happened: no sabotage arm has been
-  fired, no second vendor, no card emitted, and the forward six sabotages
-  have no predicted cell counts through backward entry points. The sentence
-  that follows was written before any of that and is kept for the record.
+- **The gates have now run on TWO VENDORS.** All ten green on Apple M4 under
+  IDENTICAL on 2026-08-25, first execution, and G5 overturned section 3.2's
+  point 2 (above). The SAME ten ran green the same day on an **AMD Instinct
+  MI325X** (leg 13, `cc0b387`, `tools/e2_remote_leg.sh amd`), including
+  `check_backward_k_range` at eleven token counts up to four million with
+  every cell bit-identical to `gemm_oracle`, on a build that
+  `check_hardware_matrix` and `probe_main` both confirm resolved every kernel
+  against the **amd** column. What has NOT happened: **no sabotage arm has
+  been fired on either box**, no NVIDIA column, and the forward six sabotages
+  have no predicted cell counts through backward entry points. Ten green
+  gates with zero sabotages fired is a suite that has never been shown able
+  to fail, which is the condition this project treats as unproven, not as
+  evidence. The sentence that follows was written before any of that and is
+  kept for the record.
 - **Nothing here had run when this plan was written.** Not one gate, not one fixture, not one device
   call. The routing table is derived and coded; whether the code compiles is
   unknown to this document.
