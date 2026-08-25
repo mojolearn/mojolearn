@@ -1713,6 +1713,29 @@ def _timed_shape_with_device(
                  `device` what `serial` is to `oracle` -- the same pair of
                  questions asked on the other side of the bus.
 
+    **NO ARM HERE ISOLATES THE COST OF IDENTITY, AND THE MISSING ONE IS
+    NAMED SO NOBODY INFERS IT FROM `pinned`.** DEVIATION 1092, 2026-08-25.
+    `device` against `pinned` is tempting to read as "identity against no
+    identity" and it is not that. `pinned_gemm_nt_kernel` is FLAT -- one
+    thread per output cell, a serial whole-`k` loop, no tiling and no shared
+    memory -- while `device` picks among eight plans including tiled and
+    split-K arms. Measured on the M4 at full llama8b shapes on 2026-08-25,
+    `device` BEATS `pinned` by 1.6x to 1.8x at every `t512` row. That result
+    says tiling beats not-tiling. It says nothing about the fold pin, and
+    reading it as "identity is cheap" would be reading an engineering gap as
+    a numerical one.
+
+    `device` against `vendor` is not that experiment either: it is our
+    kernel engineering plus the pin, against Modular's kernel engineering.
+    Both terms move at once.
+
+    The arm that WOULD answer it does not exist anywhere in this repository:
+    the identical kernel's OWN tiled plan with ONLY the fold-order pin
+    removed, everything else held. One variable. Until that is built and
+    run, the cost of `mojolearn.identical.gemm.fp32.v1` as distinct from the
+    cost of writing our own GEMM is UNMEASURED, and this file says so rather
+    than letting a reader take the nearest available ratio.
+
     **THE LAST TWO ARE NT-ONLY AND ARE SKIPPED, NOT FAKED, ELSEWHERE.** Both
     read `A` as `m x k` and `B` as `n x k`; the shipped repository has no
     pinned TN product that is not the Gram special case (`gemm_tn`, which
