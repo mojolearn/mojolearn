@@ -399,6 +399,11 @@ PAYLOAD="${MOJOLEARN_GEMM_LEG_PAYLOAD:-gemm}"
 #   forest     CatBoost, XGBoost and LightGBM, both devices each. Pays a
 #              LightGBM-from-source build for its CUDA arm.
 SPEED_FAMILY="${MOJOLEARN_SPEED_FAMILY:-gemmseq}"
+# `trees` and `forest` are the SAME family and `trees` is the better name.
+# The lane list is gbdt-symmetric, gbdt-depthwise, gbdt-lossguide, rf, et and
+# iforest -- BOOSTING IS IN IT. Calling the family `forest` reads as though
+# the gradient-boosted learners were somewhere else, and they are not.
+if [ "$SPEED_FAMILY" = "trees" ]; then SPEED_FAMILY="forest"; fi
 SPEED_ROUNDS="${MOJOLEARN_SPEED_ROUNDS:-5}"
 SPEED_SIZE="${MOJOLEARN_SPEED_SIZE:-shipped}"
 # PER ARM, in seconds. One lane that hangs must not eat the lease that
@@ -668,7 +673,10 @@ if [ "$PAYLOAD" = "speed" ]; then
         gemmseq|classical|forest) : ;;
         *)
             echo "gemm_remote_leg: --family must be one of gemmseq, classical," >&2
-            echo "  forest. Got '$SPEED_FAMILY'." >&2
+            echo "  trees (alias: forest). Got '$SPEED_FAMILY'." >&2
+            echo "  trees covers EVERY decision-tree learner, boosting" >&2
+            echo "  included: gbdt-symmetric, gbdt-depthwise, gbdt-lossguide," >&2
+            echo "  rf, et, iforest." >&2
             echo "  ONE FAMILY PER LEASE, and that is arithmetic rather than" >&2
             echo "  taste: a cold box has to pixi-install, compile drivers" >&2
             echo "  for CUDA for the first time, and pip-install the vendor" >&2

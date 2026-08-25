@@ -287,6 +287,73 @@ def gemm_nt(
     matmul[transpose_b=True, target="gpu"](tz, tx, ty, ctx)
 
 
+def gemm_nt_gram(
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    xt: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+) raises:
+    """`z[m x n] = xt[m x k] . xt[n x k]^T`: `gemm_nt` with ONE operand.
+
+    DEVIATION 1873. This exists for a reason that is about the LANGUAGE and
+    not about arithmetic, and it is worth stating plainly because the cost it
+    removes is large.
+
+    `gemm_nt` takes `mut x` and `mut y`. Neither is written -- only `z` is --
+    but they are declared `mut`, so the borrow checker refuses the same
+    buffer for both, and the Gram case IS the same buffer for both.
+    `gemm_tn_via_transpose` worked around that by transposing X into TWO
+    destination buffers with byte-identical kernel calls and handing one to
+    each parameter. The second transpose is a full redundant pass over
+    `k * m` floats and a second `k * m` of device memory, bought purely to
+    satisfy an aliasing rule.
+
+    At the shipped `gram.32x32x1M` row that is 128 MB written and 128 MB read
+    for nothing, against a product whose entire useful traffic is one read of
+    the same 128 MB.
+
+    So this entry takes the operand ONCE and builds both views from it. The
+    FAST arm builds two `TileTensor`s over one buffer, which is a read-only
+    aliasing the vendor kernel is perfectly happy with; the IDENTICAL arm
+    passes the same pointer to both kernel arguments, which it already
+    supports because a pointer is not a borrow.
+
+    THE PINNED ARM IS UNCHANGED BIT FOR BIT. Same kernel, same launch
+    geometry, same fold order; only the pointer it reads its second operand
+    from moves, and it moves to a buffer holding the identical bytes.
+    """
+    if n == 1:
+        # The Gram case at n == 1 is a 1 x 1 output and m == n == 1, so the
+        # gemv route `gemm_nt` takes here cannot be reached with two
+        # DIFFERENT operands. Refused by name rather than routed, because
+        # gemv_n has the same two-mut-parameter aliasing problem and
+        # papering over it here would hide it.
+        raise Error(
+            "gemm_nt_gram: n == 1 is not a Gram shape this entry serves."
+            " gemm_nt's gemv route takes two mut buffers and cannot be"
+            " handed one buffer twice; a 1 x 1 Gram is a dot product and"
+            " belongs somewhere else."
+        )
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        ctx.enqueue_function[pinned_gemm_nt_kernel](
+            z.unsafe_ptr(),
+            xt.unsafe_ptr(),
+            xt.unsafe_ptr(),
+            Int32(m),
+            Int32(n),
+            Int32(k),
+            grid_dim=((m * n + PINNED_GEMM_TPB - 1) // PINNED_GEMM_TPB, 1, 1),
+            block_dim=(PINNED_GEMM_TPB, 1, 1),
+        )
+        return
+    var tz = TileTensor(z, row_major(m, n))
+    var tx = TileTensor(xt, row_major(m, k))
+    var ty = TileTensor(xt, row_major(n, k))
+    matmul[transpose_b=True, target="gpu"](tz, tx, ty, ctx)
+
+
 def gemm_tn(
     ctx: DeviceContext,
     mut z: DeviceBuffer[DType.float32],
@@ -411,8 +478,49 @@ def gemm_tn_via_transpose(
     """
     from core.column_stats import TRANSPOSE_TILE, transpose_kernel
 
-    # Xt and Xt2 are two copies because `matmul` refuses one buffer as two
-    # mutable arguments (PORTING.md 24), and `Xt . Xt^T` names it twice.
+    # DEVIATION 1874 -- `m != n` WAS SILENTLY WRONG AND IS NOW REFUSED.
+    #
+    # The contract is `z[m x n] = x[k x m]^T . x[k x n]`, one operand read at
+    # two widths. Both transposes below took `Int32(m)` as the width, so at
+    # `m != n` the second operand was an `m x k` block being read as `n x k`:
+    # off the end of the shorter, or a truncation of the longer. Every
+    # shipped call site passes `m, m, k`, so it never fired -- which is
+    # exactly the latent case that surfaces the day someone reuses the entry.
+    if m != n:
+        raise Error(
+            "gemm_tn_via_transpose: m="
+            + String(m)
+            + " n="
+            + String(n)
+            + ". This entry is the GRAM case: one operand, one width. Its"
+            " transpose is built at width m, and reading that block at width"
+            " n runs off it. A genuine two-operand TN needs a second"
+            " transpose at width n, which this does not do."
+        )
+
+    # DEVIATION 1873 -- ONE TRANSPOSE, NOT TWO.
+    #
+    # This used to transpose X into `xt` AND into `xt2` with byte-identical
+    # kernel calls: same source, same dims, same launch geometry, different
+    # destination. The comment that stood here named the reason correctly and
+    # then accepted it -- `matmul` refuses one buffer as two mutable
+    # arguments (PORTING.md 24), and `Xt . Xt^T` names it twice.
+    #
+    # THAT IS A LANGUAGE CONSTRAINT, NOT AN ARITHMETIC ONE, and it was being
+    # paid for in bandwidth. `gemm_nt` writes only `z`; its two operands are
+    # declared `mut` and never mutated. So the fix is an entry that takes the
+    # operand ONCE and builds both views from it, which is `gemm_nt_gram`.
+    #
+    # MEASURED COST OF THE WORKAROUND, H100, 2026-08-25: the four TN rows
+    # were the worst in the whole GEMM lane at 1.9x to 4.0x cuBLAS, while
+    # every NT row sat at or near parity. At `gram.32x32x1M` the redundant
+    # pass is 128 MB written and 128 MB read, against a product whose entire
+    # useful traffic is one 128 MB read.
+    #
+    # `xt2` is kept in the signature and is now UNUSED. Dropping it changes
+    # the arity of a function three other lanes' drivers call and this
+    # checkout is shared, so that cleanup is OWED and named here rather than
+    # done silently under them.
     ctx.enqueue_function[transpose_kernel](
         xt.unsafe_ptr(),
         x.unsafe_ptr(),
@@ -425,21 +533,10 @@ def gemm_tn_via_transpose(
         ),
         block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
     )
-    ctx.enqueue_function[transpose_kernel](
-        xt2.unsafe_ptr(),
-        x.unsafe_ptr(),
-        Int32(k),
-        Int32(m),
-        grid_dim=(
-            (m + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE,
-            (k + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE,
-            1,
-        ),
-        block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
-    )
     ctx.synchronize()
-    gemm_nt(ctx, z, xt, xt2, m, n, k)
+    gemm_nt_gram(ctx, z, xt, m, n, k)
     ctx.synchronize()
+    _ = xt2
 
 
 # THE GRAM SHAPE'S UPSTREAM ROUTE IS CLOSED. `transpose_a` IS STILL REFUSED.
