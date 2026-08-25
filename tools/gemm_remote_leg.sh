@@ -2458,6 +2458,28 @@ forest)
         || echo "NO .so BUILT AT ALL" > "$OUT/bindings_listing.txt"
 
     pipget catboost xgboost lightgbm scikit-learn
+    # THE DATASETS ARE FETCHED AS THEIR OWN NAMED STEP, ONCE, BEFORE ANY ARM.
+    #
+    # `year` is a 211 MB zip plus a decode to a ~170 MB npz, and `covtype`
+    # comes through sklearn's fetcher. Both CACHE -- year into
+    # GBM_BENCH_DATA/year_speed.npz, covtype into ~/scikit_learn_data -- so
+    # the cost is paid once and every later lane reads the cache.
+    #
+    # LEFT INSIDE THE ARMS IT WOULD BE PAID INSIDE A 600s PER-ARM BUDGET, and
+    # worse than that: an arm killed mid-download leaves no cache, so the NEXT
+    # lane starts the same download from zero, and six lanes could spend a
+    # whole lease downloading the same file six times and timing nothing. The
+    # budget here is generous because this is a network fetch and not a
+    # measurement, and its exit code is recorded so a table missing the year
+    # rows says WHY.
+    if command -v timeout > /dev/null 2>&1; then
+        timeout -k 30 1200 python3 tools/speed_gbdt_arm.py --download year \
+            > "$LOGS/download.year.log" 2>&1
+        echo "download_exit year=$?" >> "$OUT/leg.txt"
+        timeout -k 30 600 python3 tools/speed_gbdt_arm.py --download covtype \
+            > "$LOGS/download.covtype.log" 2>&1
+        echo "download_exit covtype=$?" >> "$OUT/leg.txt"
+    fi
     pipget --extra-index-url=https://pypi.nvidia.com "cuml-cu12"
     # LightGBM's CUDA learner is NOT in the wheel and has to be built. It is
     # attempted LAST of the installs and bounded, because it has been
