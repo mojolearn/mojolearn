@@ -233,6 +233,13 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
       # report. tools/gemm_price.sh already takes the median over rounds; it
       # was being told to take the median of one.
       gemm-price)    CMD="env MOJOLEARN_GEMM_PRICE_ROUNDS=${GEMM_PRICE_ROUNDS:-5} MOJOLEARN_GEMM_PRICE_ARM=device MOJOLEARN_GEMM_PRICE_DEV_MAC_BUDGET=${GEMM_PRICE_DEV_BUDGET:-50000000000} sh tools/gemm_price.sh"; WRAP=0 ;;
+      # THE ONE-VARIABLE PRICE OF THE FOLD PIN. Three arms in ONE binary
+      # alternating call by call, so the governor drift cancels at the arm
+      # level instead of being averaged over rounds. Measured 1.52x-1.55x on
+      # an M4; this is the leg that asks whether that number is Apple's or
+      # the profile's. WRAP=0: the driver builds its own arms and forcing it
+      # under one mode would make both of them the same binary.
+      unpinned-price) CMD='pixi run mojo run -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_UNPINNED_ARM=1 gemm/mojo_only/gemm_unpinned_price.mojo'; WRAP=0 ;;
       # The vendor LIBRARY (cuBLAS / hipBLASLt), not MAX's linalg.matmul.
       # torch goes into a THROWAWAY VENV, never into the pinned pixi
       # environment every recorded timing in this repository was taken under.
