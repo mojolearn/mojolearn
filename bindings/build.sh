@@ -145,8 +145,35 @@ LINK_FLAGS="-Xlinker -platform_version -Xlinker macos -Xlinker $MACOS_FLOOR -Xli
 # build --print-supported-accelerators` lists `apple-m1` .. `apple-m5-metal4`
 # -- but that is the smaller half: PASSING THE FLAG AT ALL, right value or
 # wrong, suppresses ahead-of-time Metal compilation.
+#
+# 2026-08-25: THE HOSTED RUNNER NO LONGER COMPILES THIS AT ALL, AND THE
+# FAILURE IS FORTY LINES OF MAX INTERNALS ENDING IN "Unknown GPU architecture
+# detected". Wheel CI has NEVER passed -- `gh run list --workflow="Wheel CI"`
+# shows zero successes in its whole history. The August measurement recorded
+# in `.github/workflows/wheel-ci.yml` was that a trivial kernel RUNS on the
+# hosted runner and one `block_sum` FAILS AT RUNTIME. It is now worse than
+# that: `knn_search_binding` fails to INSTANTIATE, because
+# `std/gpu/host/info.mojo:2145` cannot identify the virtual M1's GPU at
+# COMPILE TIME. That is a change in GitHub's macos-15 image, not in this
+# repository.
+#
+# MOJOLEARN_ALLOW_NO_GPU=1 pins `--target-accelerator apple-m1` so the build
+# completes on a machine whose GPU cannot be detected. **THE RESULTING WHEEL
+# HAS ZERO AIR BLOBS AND IS NOT SHIPPABLE** -- measured 2026-08-21 and
+# recorded below: passing the flag at all, right value or wrong, suppresses
+# ahead-of-time Metal compilation. It exists so a packaging-only job can
+# verify wheel tags, `requires-python` and the macOS floor, which are real
+# claims that do not need a GPU. It must never be set on a release build, and
+# the banner says so at build time rather than in a comment nobody reads.
 TARGET_FLAGS="--target-cpu apple-m1"
 [ "$(uname)" = "Darwin" ] || TARGET_FLAGS=""
+if [ "${MOJOLEARN_ALLOW_NO_GPU:-0}" = "1" ]; then
+    TARGET_FLAGS="$TARGET_FLAGS --target-accelerator apple-m1"
+    echo "!! MOJOLEARN_ALLOW_NO_GPU=1: pinning --target-accelerator apple-m1."
+    echo "!! THIS WHEEL WILL CONTAIN ZERO GPU KERNELS AND IS NOT SHIPPABLE."
+    echo "!! It verifies PACKAGING only -- wheel tag, requires-python, macOS"
+    echo "!! floor, imports. Any GPU launch from it will fail at run time."
+fi
 # Explicit kernel-matrix column: MOJOLEARN_TARGET_COLUMN=apple|nvidia|amd|amd_rdna
 # becomes a -D define that overrides TARGET_COLUMN autodetection.
 COLUMN_DEFINE=""
