@@ -123,6 +123,8 @@ from mojo_only.kernel_matrix import (
 from embedding.mojo_only.embedding_oracle import (
     EMB_NO_PADDING_IDX,
     EmbConfig,
+    emb_refuse_ids,
+    refuse_nonfinite,
 )
 
 
@@ -1037,6 +1039,59 @@ def emb_run_scratch_ints(vocab: Int, n_positions: Int) -> Int:
     return need
 
 
+def emb_refuse_device_ids(
+    ctx: DeviceContext,
+    mut ids: DeviceBuffer[DType.int32],
+    n_positions: Int,
+    cfg: EmbConfig,
+) raises:
+    """Contract section 8 and 9.1 ON THE DEVICE ENTRY POINTS, which is where
+    they were missing. DEVIATION 1598.
+
+    **THIS ONE IS NOT A NUMERICAL DEFECT. IT IS AN OUT-OF-BOUNDS READ.**
+    `emb_gather_kernel` computes `weight.unsafe_load(v * width + j)` with NO
+    bounds branch on the normative path -- the only bounds handling in the
+    file lives inside `SAB_GATHER_CLAMP_OOR`, a SABOTAGE arm, so a build
+    without that define has none at all. At `v == -1` the load addresses
+    `weight - width + j`, which is BEFORE THE BUFFER. Found by
+    `embedding_check.mojo` on 2026-08-25 (DEVIATION 1506), which measured
+    the NaN half and DELIBERATELY DID NOT RUN the out-of-range half, on the
+    grounds that performing an out-of-bounds read to demonstrate an
+    out-of-bounds read is the bug rather than the test. That was the right
+    call and this is the fix it named.
+
+    **THE THIRD LANE WITH THE SAME SHAPE OF HOLE.** `loss.mojo` (DEVIATION
+    1495) and `optimizer.mojo` (1496) both promised "refused by name before
+    any recorded stage" in a contract, delivered it in the ORACLE, and
+    omitted it from the device entry. Three for three. The pattern is that a
+    refusal written once, in the reference implementation, reads as done.
+
+    **IT CALLS THE ORACLE'S OWN `emb_refuse_ids`** rather than restating the
+    range test, so both sides fail with the same name, the same position and
+    the same value in the message -- which is the only thing that makes two
+    refusals comparable. Contract section 8's own words are NOT CLAMPED, NOT
+    WRAPPED, NOT SILENTLY DROPPED, and a clamp would turn a data bug into a
+    wrong gradient on a real vocabulary row with no stage at which it becomes
+    visible.
+
+    **COST**: one download of `ids`, which is `n_positions` int32 and is the
+    cheapest of the three lanes' refusals by a wide margin -- ids are one per
+    token, not one per parameter. A device-side scan is OWED here as
+    elsewhere and matters far less.
+    """
+    if n_positions <= 0:
+        return
+    var h = ctx.enqueue_create_host_buffer[DType.int32](n_positions)
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=ids)
+    ctx.synchronize()
+    var lids = List[Int32]()
+    for i in range(n_positions):
+        lids.append(h.unsafe_ptr().unsafe_load(i))
+    emb_refuse_ids(lids, cfg)
+    _ = h
+
+
 def identical_embedding_forward_into(
     ctx: DeviceContext,
     mut out_y: DeviceBuffer[DType.float32],
@@ -1062,6 +1117,11 @@ def identical_embedding_forward_into(
 
     `T == 0` and `d == 0` enqueue a kernel that returns, contract section 8.
     """
+    # DEVIATION 1598: contract section 8 on the DEVICE path. The gather
+    # has NO bounds branch outside a sabotage arm, so a negative id reads
+    # BEFORE the weight buffer. FIRST statement in the body.
+    emb_refuse_device_ids(ctx, ids, n_positions, cfg)
+
     if cfg.width < 1 or n_positions < 1:
         return
     var cells = n_positions * cfg.width
@@ -1133,6 +1193,11 @@ def identical_embedding_backward_into(
     and the bits do not move. Only the run structure sees all `T` positions
     at once, and it is INTEGER.
     """
+    # DEVIATION 1598: contract section 8 on the DEVICE path. The gather
+    # has NO bounds branch outside a sabotage arm, so a negative id reads
+    # BEFORE the weight buffer. FIRST statement in the body.
+    emb_refuse_device_ids(ctx, ids, n_positions, cfg)
+
     if cfg.vocab < 1 or cfg.width < 1:
         return
     var cells = cfg.vocab * cfg.width
