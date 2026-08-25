@@ -1,0 +1,61 @@
+6425 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x13eb40000000, nodemask=1)
+Imported from /root/mojolearn/bench/speed/gemm_speed_main.mojo:82:
+Imported from /root/mojolearn/core/gemm.mojo:412:
+/root/mojolearn/core/column_stats.mojo:389:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        tile[ty * (TRANSPOSE_TILE + 1) + tx] = src.unsafe_load(r * n_cols + c)
+        ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/speed/gemm_speed_main.mojo:82:
+Imported from /root/mojolearn/core/gemm.mojo:412:
+/root/mojolearn/core/column_stats.mojo:396:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            r2 * n_rows + c2, tile[tx * (TRANSPOSE_TILE + 1) + ty]
+                              ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/speed/gemm_speed_main.mojo:82:
+Imported from /root/mojolearn/core/gemm.mojo:72:
+/root/mojolearn/core/gram_splitk.mojo:610:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = ftz(
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/speed/gemm_speed_main.mojo:82:
+Imported from /root/mojolearn/core/gemm.mojo:72:
+/root/mojolearn/core/gram_splitk.mojo:615:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = x.unsafe_load(t * m + i)
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/speed/gemm_speed_main.mojo:82:
+Imported from /root/mojolearn/core/gemm.mojo:72:
+/root/mojolearn/core/gram_splitk.mojo:630:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        cv[b] = tile[base + bj0 + b]
+                                ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/speed/gemm_speed_main.mojo:82:
+Imported from /root/mojolearn/core/gemm.mojo:72:
+/root/mojolearn/core/gram_splitk.mojo:632:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        var xi = tile[base + bi0 + a]
+                                 ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/speed/gemm_speed_main.mojo:82:
+Imported from /root/mojolearn/core/gemm.mojo:72:
+/root/mojolearn/core/gram_splitk.mojo:649:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var xj = tile[base + jm]
+                         ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/speed/gemm_speed_main.mojo:82:
+Imported from /root/mojolearn/core/gemm.mojo:72:
+/root/mojolearn/core/gram_splitk.mojo:654:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])], xj, acc[c]
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/speed/gemm_speed_main.mojo:82:
+Imported from /root/mojolearn/core/gemm.mojo:72:
+/root/mojolearn/core/gram_splitk.mojo:668:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/speed/gemm_speed_main.mojo:82:
+Imported from /root/mojolearn/core/gemm.mojo:72:
+/root/mojolearn/core/gram_splitk.mojo:669:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(jj[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here

@@ -1,0 +1,138 @@
+FSPEED-HEADER family=seq lane=mamba arm=torch mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-NOTE lane=mamba arm=torch build=CUDA 12.4 torch=2.4.1+cu124 tf32_switches=cuda.matmul.allow_tf32,cudnn.allow_tf32 deterministic=off
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=norm.weight n=8 hash=82d54a938d591baf
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=in_proj.weight n=256 hash=f22fc6a25b5a0910
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=conv1d.weight n=64 hash=90cc6f6dd561f6e4
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=conv1d.bias n=16 hash=edb3d28d0d124257
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=x_proj.weight n=528 hash=7e44686404574eaf
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=dt_proj.weight n=16 hash=6c1b908f90a2f0e4
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=dt_proj.bias n=16 hash=b95295e1de8ff21f
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=A_log n=256 hash=3075ef7a49146f3c
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=D n=16 hash=0b155ba1ec3dd1e0
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=out_proj.weight n=128 hash=bbf7e7dac9bfaacc
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=x n=64 hash=8ee57faefcc7733d
+FSPEED-REFUSED lane=mamba arm=mamba-ssm-cuda reason=mamba_ssm is not importable (No module named 'mamba_ssm'). The only opponent left is the PURE-PYTORCH sequential reference scan, which is NOT what anyone deploys.
+FSPEED-WARMUP lane=mamba arm=torch-ref-scan-gpu shape=lane.b2_l4_d8 ms=0.695301
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=lane.b2_l4_d8 round=1 ms=0.711594 hash=4eefaa4a619c7219
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=lane.b2_l4_d8 round=2 ms=0.822503 hash=4eefaa4a619c7219
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=lane.b2_l4_d8 round=3 ms=0.736620 hash=4eefaa4a619c7219
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=lane.b2_l4_d8 round=4 ms=0.707438 hash=4eefaa4a619c7219
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=lane.b2_l4_d8 round=5 ms=0.694785 hash=4eefaa4a619c7219
+FSPEED-NOTE lane=mamba arm=torch-ref-scan-gpu output witness shape=lane.b2_l4_d8 n=64 hash=4eefaa4a619c7219
+FSPEED-WARMUP lane=mamba arm=torch-ref-scan-gpu-tf32 shape=lane.b2_l4_d8 ms=0.665780
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=lane.b2_l4_d8 round=1 ms=0.653476 hash=3621694635e65892
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=lane.b2_l4_d8 round=2 ms=0.732029 hash=3621694635e65892
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=lane.b2_l4_d8 round=3 ms=0.700064 hash=3621694635e65892
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=lane.b2_l4_d8 round=4 ms=0.694616 hash=3621694635e65892
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=lane.b2_l4_d8 round=5 ms=0.690695 hash=3621694635e65892
+FSPEED-NOTE lane=mamba arm=torch-ref-scan-gpu-tf32 output witness shape=lane.b2_l4_d8 n=64 hash=3621694635e65892
+FSPEED-AGREE lane=mamba max_abs_diff=0 max_rel_diff=0 n=64
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=norm.weight n=768 hash=935bef95533ae1ec
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=in_proj.weight n=2359296 hash=3b23ea144a46a005
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=conv1d.weight n=6144 hash=35f623af5f3ba70e
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=conv1d.bias n=1536 hash=90da985da6eb43d3
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=x_proj.weight n=122880 hash=5f14325f2227fe36
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=dt_proj.weight n=73728 hash=dd4c6a116a702514
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=dt_proj.bias n=1536 hash=d9646bbf3578e7e5
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=A_log n=24576 hash=60f6da4a1075bf66
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=D n=1536 hash=98eff32333cba8fb
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=out_proj.weight n=1179648 hash=056439617b9552d1
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=x n=768 hash=9628d92b7a03fefa
+FSPEED-REFUSED lane=mamba arm=mamba-ssm-cuda reason=mamba_ssm is not importable (No module named 'mamba_ssm'). The only opponent left is the PURE-PYTORCH sequential reference scan, which is NOT what anyone deploys.
+FSPEED-WARMUP lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t1 ms=0.525178
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t1 round=1 ms=0.508850 hash=539eea7de7dd42a6
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t1 round=2 ms=0.561258 hash=539eea7de7dd42a6
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t1 round=3 ms=0.537148 hash=539eea7de7dd42a6
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t1 round=4 ms=0.529479 hash=539eea7de7dd42a6
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t1 round=5 ms=0.524644 hash=539eea7de7dd42a6
+FSPEED-NOTE lane=mamba arm=torch-ref-scan-gpu output witness shape=mamba130m.prefill.t1 n=768 hash=539eea7de7dd42a6
+FSPEED-WARMUP lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t1 ms=0.508470
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t1 round=1 ms=0.484258 hash=539eea7de7dd42a6
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t1 round=2 ms=0.518480 hash=539eea7de7dd42a6
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t1 round=3 ms=0.504302 hash=539eea7de7dd42a6
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t1 round=4 ms=0.520775 hash=539eea7de7dd42a6
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t1 round=5 ms=0.504011 hash=539eea7de7dd42a6
+FSPEED-NOTE lane=mamba arm=torch-ref-scan-gpu-tf32 output witness shape=mamba130m.prefill.t1 n=768 hash=539eea7de7dd42a6
+FSPEED-AGREE lane=mamba max_abs_diff=5.96046e-08 max_rel_diff=4.71162e-07 n=768
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=norm.weight n=768 hash=29ffa76f7d830538
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=in_proj.weight n=2359296 hash=3cf6cd86f1f4630b
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=conv1d.weight n=6144 hash=ebc04a57b11317ca
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=conv1d.bias n=1536 hash=addcdfea6820daa4
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=x_proj.weight n=122880 hash=e768eba837f92e18
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=dt_proj.weight n=73728 hash=78915298f8d9d5ee
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=dt_proj.bias n=1536 hash=868ca7bfad1eb09a
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=A_log n=24576 hash=713bed8bffae603b
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=D n=1536 hash=451274e066ddc12a
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=out_proj.weight n=1179648 hash=0d6694627e9ed6f7
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=x n=6144 hash=e7528e4ba876320b
+FSPEED-REFUSED lane=mamba arm=mamba-ssm-cuda reason=mamba_ssm is not importable (No module named 'mamba_ssm'). The only opponent left is the PURE-PYTORCH sequential reference scan, which is NOT what anyone deploys.
+FSPEED-WARMUP lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t8 ms=0.963142
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t8 round=1 ms=0.936553 hash=5cbeb28b0ccd30cb
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t8 round=2 ms=1.014043 hash=5cbeb28b0ccd30cb
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t8 round=3 ms=0.978155 hash=5cbeb28b0ccd30cb
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t8 round=4 ms=0.970419 hash=5cbeb28b0ccd30cb
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t8 round=5 ms=0.988450 hash=5cbeb28b0ccd30cb
+FSPEED-NOTE lane=mamba arm=torch-ref-scan-gpu output witness shape=mamba130m.prefill.t8 n=6144 hash=5cbeb28b0ccd30cb
+FSPEED-WARMUP lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t8 ms=0.902429
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t8 round=1 ms=0.905059 hash=178fe924d53298f4
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t8 round=2 ms=1.054063 hash=178fe924d53298f4
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t8 round=3 ms=0.972634 hash=178fe924d53298f4
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t8 round=4 ms=0.973707 hash=178fe924d53298f4
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t8 round=5 ms=0.932079 hash=178fe924d53298f4
+FSPEED-NOTE lane=mamba arm=torch-ref-scan-gpu-tf32 output witness shape=mamba130m.prefill.t8 n=6144 hash=178fe924d53298f4
+FSPEED-AGREE lane=mamba max_abs_diff=1.19209e-07 max_rel_diff=1.37664e-05 n=6144
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=norm.weight n=768 hash=4aa921f523b6ac42
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=in_proj.weight n=2359296 hash=eac9458ce9da8173
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=conv1d.weight n=6144 hash=59dfbb854fae9768
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=conv1d.bias n=1536 hash=ee97dbf487ffd3ea
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=x_proj.weight n=122880 hash=1110dc85a856bfa3
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=dt_proj.weight n=73728 hash=55e52d9433c01e4c
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=dt_proj.bias n=1536 hash=8d6ed90034b79bb2
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=A_log n=24576 hash=2c09f76fe78d151e
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=D n=1536 hash=7289bf2a82fc7f6c
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=out_proj.weight n=1179648 hash=5241f52ed48743dd
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=x n=98304 hash=da5b40b810dc107b
+FSPEED-REFUSED lane=mamba arm=mamba-ssm-cuda reason=mamba_ssm is not importable (No module named 'mamba_ssm'). The only opponent left is the PURE-PYTORCH sequential reference scan, which is NOT what anyone deploys.
+FSPEED-WARMUP lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t128 ms=7.539807
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t128 round=1 ms=7.511087 hash=-
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t128 round=2 ms=7.526882 hash=-
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t128 round=3 ms=15.860330 hash=-
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t128 round=4 ms=9.747474 hash=-
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t128 round=5 ms=7.805521 hash=-
+FSPEED-NOTE lane=mamba arm=torch-ref-scan-gpu output witness shape=mamba130m.prefill.t128 n=98304 hash=51636b64b7a5582b
+FSPEED-WARMUP lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t128 ms=7.505944
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t128 round=1 ms=7.523175 hash=-
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t128 round=2 ms=7.640852 hash=-
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t128 round=3 ms=7.633762 hash=-
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t128 round=4 ms=7.569019 hash=-
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t128 round=5 ms=7.534619 hash=-
+FSPEED-NOTE lane=mamba arm=torch-ref-scan-gpu-tf32 output witness shape=mamba130m.prefill.t128 n=98304 hash=57f31b919c203997
+FSPEED-AGREE lane=mamba max_abs_diff=1.19209e-07 max_rel_diff=5.02249e-05 n=98304
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=norm.weight n=768 hash=f1d1236e08c89e88
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=in_proj.weight n=2359296 hash=bb05213b637f1a4a
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=conv1d.weight n=6144 hash=e9c9a84f1a766ce1
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=conv1d.bias n=1536 hash=651606aae79d5f9d
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=x_proj.weight n=122880 hash=c195cf9bcc2f6792
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=dt_proj.weight n=73728 hash=cd355825a97db4bd
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=dt_proj.bias n=1536 hash=1fa1588a6c1c718d
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=A_log n=24576 hash=6e4e811ed61a3e05
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=D n=1536 hash=db420a6dc68a0c5a
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=out_proj.weight n=1179648 hash=f531e2ff03764cb1
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=x n=393216 hash=c83b7a7b649e48d5
+FSPEED-REFUSED lane=mamba arm=mamba-ssm-cuda reason=mamba_ssm is not importable (No module named 'mamba_ssm'). The only opponent left is the PURE-PYTORCH sequential reference scan, which is NOT what anyone deploys.
+FSPEED-WARMUP lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t512 ms=29.673303
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t512 round=1 ms=29.746799 hash=-
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t512 round=2 ms=29.556360 hash=-
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t512 round=3 ms=29.449748 hash=-
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t512 round=4 ms=29.713100 hash=-
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t512 round=5 ms=29.493775 hash=-
+FSPEED-NOTE lane=mamba arm=torch-ref-scan-gpu output witness shape=mamba130m.prefill.t512 n=393216 hash=0e016b56c8929328
+FSPEED-WARMUP lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t512 ms=29.644696
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t512 round=1 ms=33.501536 hash=-
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t512 round=2 ms=29.956823 hash=-
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t512 round=3 ms=29.673858 hash=-
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t512 round=4 ms=31.021731 hash=-
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t512 round=5 ms=29.818436 hash=-
+FSPEED-NOTE lane=mamba arm=torch-ref-scan-gpu-tf32 output witness shape=mamba130m.prefill.t512 n=393216 hash=48ab46c3bc2d5bee
+FSPEED-AGREE lane=mamba max_abs_diff=2.38419e-07 max_rel_diff=0.00211732 n=393216
+FSPEED-DONE lane=mamba arm=torch

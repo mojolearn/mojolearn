@@ -1,0 +1,74 @@
+
+=== build gemmspeed ===
+
+=== build seqspeed ===
+
+=== gemm.gemm.ours.log :: /root/gemm_leg_out/bin_gemmspeed ===
+FSPEED lane=gemm arm=ours shape=llama8b.lm_head.t512 round=3 ms=1.410993 hash=1703b99d86de912f
+FSPEED lane=gemm arm=ours shape=llama8b.lm_head.t512 round=4 ms=1.400688 hash=1703b99d86de912f
+FSPEED lane=gemm arm=ours shape=llama8b.lm_head.t512 round=5 ms=1.488031 hash=1703b99d86de912f
+
+=== seq.transformer.ours.log :: /root/gemm_leg_out/bin_seqspeed ===
+FSPEED lane=transformer arm=ours shape=llama8b.decode.t1.ctx512 round=5 ms=962.239369 hash=6668337efb9587ce
+FSPEED-NOTE lane=transformer arm=ours dump shape=llama8b.decode.t1.ctx512 n=4096 path=/root/gemm_leg_out/dump/seq.transformer.llama8b.decode.t1.ctx512.f32.bin
+FSPEED-DONE lane=transformer mode=FAST
+
+=== seq.attention.ours.log :: /root/gemm_leg_out/bin_seqspeed ===
+FSPEED lane=attention arm=ours shape=llama8b.decode.t1.ctx512 round=5 ms=1.732577 hash=f3a8a9ab17618152
+FSPEED-NOTE lane=attention arm=ours dump shape=llama8b.decode.t1.ctx512 n=4096 path=/root/gemm_leg_out/dump/seq.attention.llama8b.decode.t1.ctx512.f32.bin
+FSPEED-DONE lane=attention mode=FAST
+
+=== seq.mlp.ours.log :: /root/gemm_leg_out/bin_seqspeed ===
+FSPEED lane=mlp arm=ours shape=llama8b.decode.t1.ctx512 round=5 ms=1.443031 hash=b2c6639e2c16bc37
+FSPEED-NOTE lane=mlp arm=ours dump shape=llama8b.decode.t1.ctx512 n=4096 path=/root/gemm_leg_out/dump/seq.mlp.llama8b.decode.t1.ctx512.f32.bin
+FSPEED-DONE lane=mlp mode=FAST
+
+=== seq.rmsnorm.ours.log :: /root/gemm_leg_out/bin_seqspeed ===
+FSPEED lane=rmsnorm arm=ours shape=llama8b.decode.t1.ctx512 round=5 ms=0.281654 hash=7a1c1841fd45ef80
+FSPEED-NOTE lane=rmsnorm arm=ours dump shape=llama8b.decode.t1.ctx512 n=4096 path=/root/gemm_leg_out/dump/seq.rmsnorm.llama8b.decode.t1.ctx512.f32.bin
+FSPEED-DONE lane=rmsnorm mode=FAST
+
+=== seq.mamba.ours.log :: /root/gemm_leg_out/bin_seqspeed ===
+FSPEED lane=mamba arm=ours shape=mamba130m.prefill.t512 round=5 ms=13.754034 hash=964aa9594e778ba1
+FSPEED-NOTE lane=mamba arm=ours dump shape=mamba130m.prefill.t512 n=393216 path=/root/gemm_leg_out/dump/seq.mamba.mamba130m.prefill.t512.f32.bin
+FSPEED-DONE lane=mamba mode=FAST
+
+=== seq.selective_scan.ours.log :: /root/gemm_leg_out/bin_seqspeed ===
+FSPEED lane=selective_scan arm=ours shape=mamba130m.prefill.t512 round=5 ms=0.378838 hash=154cd1605363fdfc
+FSPEED-NOTE lane=selective_scan arm=ours dump shape=mamba130m.prefill.t512 n=786432 path=/root/gemm_leg_out/dump/seq.selective_scan.mamba130m.prefill.t512.f32.bin
+FSPEED-DONE lane=selective_scan mode=FAST
+
+=== gemm.gemm.cublas.log :: python3 tools/speed_gemm_arm.py --rounds 5 ===
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t512 round=3 ms=1.387140 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t512 round=4 ms=1.386566 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t512 round=5 ms=1.391103 hash=-
+
+=== seq.transformer.torch.log :: python3 tools/speed_torch_seq.py --lane transformer --rounds 5 --dump-dir /root/gemm_leg_out/dump ===
+FSPEED-REFUSED lane=transformer arm=torch-gpu-flash-bf16 reason=RuntimeError at shape llama8b.decode.t1.ctx512: No available kernel. Aborting execution.
+FSPEED-AGREE lane=transformer max_abs_diff=8.01086e-05 max_rel_diff=0.0194647 n=4096
+FSPEED-DONE lane=transformer arm=torch
+
+=== seq.attention.torch.log :: python3 tools/speed_torch_seq.py --lane attention --rounds 5 --dump-dir /root/gemm_leg_out/dump ===
+FSPEED-REFUSED lane=attention arm=torch-gpu-flash-bf16 reason=RuntimeError at shape llama8b.decode.t1.ctx512: No available kernel. Aborting execution.
+FSPEED-AGREE lane=attention max_abs_diff=1.33514e-05 max_rel_diff=0.00238808 n=4096
+FSPEED-DONE lane=attention arm=torch
+
+=== seq.mlp.torch.log :: python3 tools/speed_torch_seq.py --lane mlp --rounds 5 --dump-dir /root/gemm_leg_out/dump ===
+FSPEED-NOTE lane=mlp arm=torch-gpu-tf32 output witness shape=llama8b.decode.t1.ctx512 n=4096 hash=c1777403df51bc26
+FSPEED-AGREE lane=mlp max_abs_diff=7.53403e-05 max_rel_diff=0.024884 n=4096
+FSPEED-DONE lane=mlp arm=torch
+
+=== seq.rmsnorm.torch.log :: python3 tools/speed_torch_seq.py --lane rmsnorm --rounds 5 --dump-dir /root/gemm_leg_out/dump ===
+FSPEED-NOTE lane=rmsnorm arm=torch-gpu-tf32 output witness shape=llama8b.decode.t1.ctx512 n=4096 hash=409660f2f0359908
+FSPEED-AGREE lane=rmsnorm max_abs_diff=7.15256e-07 max_rel_diff=4.22088e-07 n=4096
+FSPEED-DONE lane=rmsnorm arm=torch
+
+=== seq.mamba.torch.log :: python3 tools/speed_torch_seq.py --lane mamba --rounds 5 --dump-dir /root/gemm_leg_out/dump ===
+FSPEED-NOTE lane=mamba arm=torch-ref-scan-gpu-tf32 output witness shape=mamba130m.prefill.t512 n=393216 hash=48ab46c3bc2d5bee
+FSPEED-AGREE lane=mamba max_abs_diff=2.38419e-07 max_rel_diff=0.00211732 n=393216
+FSPEED-DONE lane=mamba arm=torch
+
+=== seq.selective_scan.torch.log :: python3 tools/speed_torch_seq.py --lane selective_scan --rounds 5 --dump-dir /root/gemm_leg_out/dump ===
+FSPEED-NOTE lane=selective_scan arm=torch-ref-scan-gpu-tf32 output witness shape=mamba130m.prefill.t512 n=786432 hash=ffa0dd24c2a21877
+FSPEED-AGREE lane=selective_scan max_abs_diff=8.9407e-07 max_rel_diff=0.0947765 n=786432
+FSPEED-DONE lane=selective_scan arm=torch
