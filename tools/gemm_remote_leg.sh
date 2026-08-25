@@ -2410,6 +2410,41 @@ classical)
     done
     ;;
 forest)
+    # THE BINDINGS HAVE TO BE BUILT HERE AND THEY NEVER HAVE BEEN.
+    #
+    # `python/mojolearn/*.so` are NOT committed (`git ls-files` finds zero),
+    # and this leg ships `git archive` at a pinned sha, so the box receives
+    # no binaries at all. The ones on the Mac would be useless anyway: they
+    # are Apple objects. Every one of these is therefore a FIRST-EVER CUDA
+    # BUILD of that binding, which is the likeliest thing in this family to
+    # fail, so each is bounded and each records its own exit code and none of
+    # them is fatal. A family that comes home with the vendor arms timed and
+    # ours missing still says something true about this box.
+    #
+    # WHICH FOUR, AND WHY THOSE: gbdt (all three boosting lanes), rf, trees
+    # (extratrees), svm (which carries isolation forest). estimators comes
+    # first because build_gbdt.sh links against it.
+    #
+    # SYSTEM python3 IS THE RIGHT INTERPRETER FOR THESE, and that is checked
+    # rather than assumed: `bindings/build_rf.sh` smoke-tests its own output
+    # with `python3`, so the extension is meant to import there. That matters
+    # because the vendor arms cannot run under pixi at all -- RAPIDS and
+    # CatBoost want 3.10 to 3.13 and the gbmbench feature pins 3.14 -- so
+    # both sides of this family have to meet on the image's python.
+    for _b in estimators gbdt rf trees svm; do
+        printf '\n=== bindings/build_%s.sh ===\n' "$_b" >> "$OUT/console.log"
+        if command -v timeout > /dev/null 2>&1; then
+            timeout -k 30 @BUILDBUDGET@ bash "bindings/build_$_b.sh" \
+                > "$LOGS/build.binding.$_b.log" 2>&1
+        else
+            bash "bindings/build_$_b.sh" > "$LOGS/build.binding.$_b.log" 2>&1
+        fi
+        echo "binding_build_exit ${_b}=$?" >> "$OUT/leg.txt"
+        tail -5 "$LOGS/build.binding.$_b.log" >> "$OUT/console.log" 2>&1 || true
+    done
+    ls -la python/mojolearn/*.so > "$OUT/bindings_listing.txt" 2>&1 \
+        || echo "NO .so BUILT AT ALL" > "$OUT/bindings_listing.txt"
+
     pipget catboost xgboost lightgbm scikit-learn
     pipget --extra-index-url=https://pypi.nvidia.com "cuml-cu12"
     # LightGBM's CUDA learner is NOT in the wheel and has to be built. It is
