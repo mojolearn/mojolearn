@@ -1,0 +1,38 @@
+kernel matrix, resolved per column. No device was touched.
+
+  column          shared   lanes   fold   smem pages   warpsort blk
+   bit-identical 	 32 KB	 32 	 32 	 1 		 256
+   apple 	 32 KB	 32 	 32 	 1 		 256
+   nvidia 	 48 KB	 32 	 32 	 2 		 256
+   amd 	 64 KB	 64 	 32 	 2 		 512
+
+  THIS BUILD compiles every kernel against: nvidia
+
+  constant            section                  value
+    NORM_TPB          core/row_norms             128
+    STATS_TPB         core/column_stats          128
+    PLUS_PLUS_TPB     cluster/plus_plus          128
+    REDUCE_MIN_TPB    cluster/unfused_distance   256
+    REDUCE_MIN_LANES  cluster/unfused_distance   32
+    VD_TPB            dbscan/vertexdeg           128
+    JACOBI_TPB        decomposition/jacobi       32
+    smem pages        contraction (Policy4x4)    2
+    lane width        indexing only              32
+
+  Not one of those is a literal in its own file. Each is lib_*_for[..., TARGET_COLUMN]().
+
+  vendor minimums. 'build' = Mojo emits code for it today; everything else is the vendor's documented floor.
+
+  column         build  smem   lanes    maxblk  f32atom  i32atom  smem-hw  IDENTICAL
+   bit-identical 	 yes 	 32 KB	 32 	 1024 	 yes 	 yes 	 yes 	 yes
+   apple 	 yes 	 32 KB	 32 	 1024 	 yes 	 yes 	 yes 	 yes
+   nvidia 	 yes 	 48 KB	 32 	 1024 	 yes 	 yes 	 yes 	 yes
+   amd 	 yes 	 64 KB	 64 	 1024 	 yes 	 yes 	 yes 	 yes
+   amd-rdna 	 yes 	 64 KB	 32 	 1024 	 yes 	 yes 	 yes 	 yes
+   qualcomm 	 NO 	 32 KB	 8+var 	 1024 	 NO 	 yes 	 yes 	 yes
+   intel 	 NO 	 64 KB	 8+var 	 1024 	 yes 	 yes 	 yes 	 yes
+   spec-baseline 	 NO 	 16 KB	 1+var 	 128 	 NO 	 yes 	 NO 	 NO
+      refused: spec-baseline allows 16 KB of threadgroup memory per block; the identity floor (profile 1) needs 32 KB, because the block size it buys decides the replication factor and the replication factor decides which partial sums combine
+
+  identity floor, profile 1 :  32 KB threadgroup, 32 logical lanes, block 512 , threadgroup int atomics.
+  FROZEN. A vendor that misses it is refused for IDENTICAL and runs FAST; the floor never drops to fit one, because dropping it changes every model already produced under this profile.

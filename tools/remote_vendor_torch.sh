@@ -32,7 +32,23 @@ else
   exit 3
 fi
 
-python3 -m venv "$VENV" >/dev/null 2>&1 || { echo "[vendor-torch] venv creation failed"; exit 4; }
+# `python3 -m venv` is NOT present on a minimal Ubuntu 24.04: the stdlib
+# `venv` module ships in a separate `python3-venv` package and the failure is
+# a bare non-zero exit with no useful message. Measured on the DigitalOcean
+# H100 image, 2026-08-25, leg 15, where it cost the whole vendor arm.
+if ! python3 -m venv "$VENV" >/dev/null 2>&1; then
+  echo "[vendor-torch] python3 -m venv unavailable; installing python3-venv"
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -qq >/dev/null 2>&1
+  apt-get install -y -qq python3-venv python3-pip >/dev/null 2>&1
+  python3 -m venv "$VENV" >/dev/null 2>&1 || {
+    echo "[vendor-torch] venv still unavailable after apt-get; REFUSING rather"
+    echo "[vendor-torch] than installing torch into the system python, which"
+    echo "[vendor-torch] would be a mutation of a box whose pixi environment"
+    echo "[vendor-torch] every other measurement on this leg depends on."
+    exit 4
+  }
+fi
 "$VENV/bin/pip" install -q --upgrade pip >/dev/null 2>&1
 echo "[vendor-torch] installing torch from $INDEX (this is the long step)"
 "$VENV/bin/pip" install -q torch --index-url "$INDEX" || { echo "[vendor-torch] pip install failed"; exit 5; }

@@ -1686,6 +1686,7 @@ def _timed_shape_with_device(
     mut ns_vendor: Int,
     mut ns_pinned: Int,
     mut sink: UInt32,
+    mut vendor_ok: Bool,
 ) raises -> Int:
     """One shape, FIVE arms, ONE timed loop, alternating call by call.
 
@@ -1759,7 +1760,7 @@ def _timed_shape_with_device(
         nws = 1
     var na = _a_elems(op, dm, dn, k)
     var nb = _b_elems(op, dm, dn, k)
-    var do_vendor = op == OP_NT and dn > 1
+    var do_vendor = op == OP_NT and dn > 1 and vendor_ok
     var do_pinned = op == OP_NT
 
     var da = ctx.enqueue_create_buffer[DType.float32](na if na > 0 else 1)
@@ -1783,17 +1784,63 @@ def _timed_shape_with_device(
     var dig = _dev_digest(ctx, dc, dmn, String("m3.") + name + ".device")
     sink ^= UInt32(Int(dig & UInt64(0xFFFFFFFF)))
 
+    # DEVIATION 1093: THE VENDOR ARM'S WARM-UP IS ALLOWED TO CRASH, AND A CRASH
+    # DISABLES THAT ARM FOR THE REST OF THE RUN RATHER THAN ENDING IT.
+    #
+    # Measured on an H100 80GB, 2026-08-25, leg 15: at `llama8b.lm_head.t1`
+    # (`m = 1`, `n = 128256`, `k = 4096`) MAX's own `linalg.matmul` dispatches
+    # into `max/kernels/src/linalg/gemv.mojo:1201` and the launch comes back
+    # `CUDA_ERROR_INVALID_VALUE`. `llama8b.qkv.t1` is also `m = 1` and runs
+    # fine, so the trigger is the very wide `n` in the gemv path and NOT `m ==
+    # 1`; no formula is guessed here because the one measured point does not
+    # determine one.
+    #
+    # Before this, that raise ended the process on shape 17 of 20 and
+    # `tools/gemm_price.sh` DISCARDED BOTH LEGS -- nineteen shapes of good
+    # measurement on a rented H100 thrown away because the twentieth crashed
+    # inside a dependency. The shell was right to discard a failed leg; the
+    # bug was that this file let one arm's failure become the run's.
+    #
+    # The arm is disabled for the REMAINDER OF THE RUN, not just this shape.
+    # A CUDA launch failure can leave the context in a state where the next
+    # launch fails for a reason that has nothing to do with the next shape,
+    # and a vendor column that resumed after a crash would be reporting
+    # numbers nobody can defend. A REFUSAL LINE IS PRINTED, so a missing
+    # vendor cell is never mistaken for an agreeing one.
     if do_vendor:
         _dev_poison(ctx, dc, dmn)
         var wz = TileTensor(dc, row_major(dm, dn))
         var wx = TileTensor(da, row_major(dm, k))
         var wy = TileTensor(db, row_major(dn, k))
-        matmul[transpose_b=True, target="gpu"](wz, wx, wy, ctx)
-        ctx.synchronize()
-        var dv = _dev_digest(
-            ctx, dc, dmn, String("m3.") + name + ".device.vendor"
-        )
-        sink ^= UInt32(Int(dv & UInt64(0xFFFFFFFF)))
+        try:
+            matmul[transpose_b=True, target="gpu"](wz, wx, wy, ctx)
+            ctx.synchronize()
+        except e:
+            print(
+                "   VENDOR-ARM CRASHED at ",
+                name,
+                " (m=",
+                dm,
+                " n=",
+                dn,
+                " k=",
+                k,
+                "). The vendor column is REFUSED from here on, in this run",
+                " and every later shape. This is MAX's matmul failing, not",
+                " ours, and the v1 and pinned arms continue. Error: ",
+                # `s[:n]` is refused on a Mojo String (UTF-8, so a byte range and
+                # a codepoint range are different questions). Bytes is what a
+                # CUDA message is.
+                String(e)[byte=0:180],
+                sep="",
+            )
+            do_vendor = False
+            vendor_ok = False
+        if do_vendor:
+            var dv = _dev_digest(
+                ctx, dc, dmn, String("m3.") + name + ".device.vendor"
+            )
+            sink ^= UInt32(Int(dv & UInt64(0xFFFFFFFF)))
     if do_pinned:
         _dev_poison(ctx, dc, dmn)
         ctx.enqueue_function[pinned_gemm_nt_kernel](
@@ -1948,6 +1995,11 @@ def measure_end_to_end(
     var nt_only_skipped = 0
     var total_sink = UInt32(0)
     var dev_rows = List[String]()
+    # DEVIATION 1093's run-scoped flag. Declared OUTSIDE the shape loop on
+    # purpose: a vendor-arm crash disables that arm for every LATER shape
+    # too, because a failed CUDA launch can leave the context in a state
+    # where the next launch fails for an unrelated reason.
+    var vendor_ok = True
     for i in range(GEMM_SHAPE_COUNT):
         # Appended FIRST and for EVERY shape, before any `continue`, so the
         # three out-lists stay index-aligned with the shape table. A list that
@@ -2008,6 +2060,7 @@ def measure_end_to_end(
             plan = _timed_shape_with_device(
                 devs[0], a, b, op, m, n, k, dm, dn, name, i,
                 ns_oracle, ns_serial, ns_device, ns_vendor, ns_pinned, sink,
+                vendor_ok,
             )
         else:
             for _ in range(REPEATS):
