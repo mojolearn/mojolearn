@@ -111,17 +111,38 @@ box gives torch.
 cuBLAS strict FP32 reaches **66%** of the H100's 67 TF/s vector peak. We reach
 **3 to 5%**.
 
-### 3.3 AMD Instinct MI325X
+### 3.3 AMD Instinct MI325X, full shapes
 
-*(hipBLASLt column pending; the mojo arms are measured and complete at all
-twenty shapes.)*
+torch 2.9.1+rocm6.4, ROCm 6.4.43484, hipBLASLt/rocBLAS, 10 repeats, median.
 
-Ours, full shapes: **4306 - 4587 GF/s** at the `t512` rows, which is about
-**5.5%** of the MI325X's 81.7 TF/s FP32 vector peak.
+| `llama8b` | ours (strict FP32) | hipBLASLt strict FP32 | ratio |
+|---|---|---|---|
+| qkv.t512 | 4.31 TF/s | **77.1** | 17.9x |
+| mlp_up.t512 | 4.52 | **70.9** | 15.7x |
+| mlp_down.t512 | 4.37 | **50.4** | 11.5x |
+| lm_head.t8 | 3.81 | **12.9** | 3.4x |
 
-AMD is the interesting column precisely because CDNA3's matrix cores do
-**full-precision FP32** at 163 TF/s, unlike NVIDIA's TF32. If the precision
-confound is absent there, the AMD ratio is the cleanest number in this file.
+hipBLASLt reaches **62% to 94%** of the MI325X's 81.7 TF/s FP32 vector peak.
+We reach about **5%**.
+
+**One caveat that keeps this from being called confound-free.** CDNA3 does
+have an XF32 matrix mode, AMD's analogue of TF32, and on ROCm torch the same
+`allow_tf32` switch reaches it. This harness does not touch that flag on the
+hip backend, so what is measured is torch's default, which is off. That makes
+the number a strict-FP32 number by default rather than by assertion, and the
+XF32 arm is OWED here the way the TF32 arm is measured on NVIDIA.
+
+### 3.4 The three columns together
+
+| | ours | vendor lib, strict FP32 | ratio | ours as share of FP32 peak |
+|---|---|---|---|---|
+| Apple M4 | 0.078 TF/s | 2.33 (MPS) | ~30x | ~2% |
+| H100 80GB | 1.95 - 3.51 | 44.4 (cuBLAS) | 12.7x - 22.8x | 3 - 5% |
+| MI325X | 4.31 | 77.1 (hipBLASLt) | 17.9x | ~5% |
+
+The consistency is the result worth reporting. **We sit at 2 to 5 percent of
+FP32 peak on all three vendors**, which says the gap is structural to the
+kernel rather than an accident of one backend.
 
 ---
 

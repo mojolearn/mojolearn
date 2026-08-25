@@ -1,9 +1,9 @@
 
-=== provenance === 06:52:48
-81ab360ce79ff1c4a7a214a6990019b573cd3d15
+=== provenance === 06:44:57
+ba350962653630ea9119d8243a86bbd9a4014ee5
 Linux mojolearn-e2-nv 5.15.0-185-generic #195-Ubuntu SMP Fri Jun 19 17:11:50 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
 
-=== pixi === 06:52:49
+=== pixi === 06:44:57
 This script will automatically download and install Pixi (latest) for you.
 Getting it from this url: https://github.com/prefix-dev/pixi/releases/latest/download/pixi-x86_64-unknown-linux-musl.tar.gz
 The 'pixi' binary is installed into '/root/.pixi/bin'
@@ -11,7 +11,7 @@ Updating '/root/.bashrc'
 Please restart or source your shell.
 ✔ The default environment has been installed.
 
-=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 06:52:52
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 06:45:00
 
 === phase 0 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
 
@@ -29,7 +29,7 @@ Please restart or source your shell.
 
 === phase 7 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
 
-=== phase 8: the classical lanes (gemm, cd, kde, linkage, svm, metrics) -- both modes, cards + checks === 06:52:52
+=== phase 8: the classical lanes (gemm, cd, kde, linkage, svm, metrics) -- both modes, cards + checks === 06:45:00
 -- lanes, identical --
   gemm [identical]: card 60 records -- [IDENTICAL]
   gemm [identical] check OK (128 OK lines)
@@ -49,8 +49,8 @@ Please restart or source your shell.
   mamba [fast]: SKIPPED (MOJOLEARN_E1_LANES=gemm)
   metrics [fast]: SKIPPED (MOJOLEARN_E1_LANES=gemm)
 
-=== done === 06:53:28
-artifacts in /root/mojolearn/bench/results/e1/2026-08-25_065248-mojolearn-e2-nv
+=== done === 06:45:37
+artifacts in /root/mojolearn/bench/results/e1/2026-08-25_064457-mojolearn-e2-nv
 next: fetch this directory beside the other machine's and run
   python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
   python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

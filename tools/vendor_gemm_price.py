@@ -38,8 +38,12 @@ So both are timed and both are reported, as separate arms:
     tf32     torch.backends.cuda.matmul.allow_tf32 = True    (the default a
              user usually gets, and NOT the same arithmetic)
 
-On AMD and Apple the flag does not apply and only `strict` is emitted; the
-reason is printed rather than left as a missing row.
+On Apple the flag does not apply. On AMD it DOES -- CDNA3 has an XF32 matrix
+mode that the same `allow_tf32` switch reaches -- but this harness does not
+touch the flag on the hip backend, so the AMD row is torch's default, which is
+off. That makes it strict FP32 BY DEFAULT rather than by assertion, and an
+XF32 arm is OWED there. Only `strict` is emitted on both, and the reason is
+printed rather than left as a missing row.
 
 IT REFUSES RATHER THAN FALLING BACK
 ====================================
@@ -252,8 +256,11 @@ def main():
         print("  arms        : strict (allow_tf32=False, true FP32) and tf32 (allow_tf32=True,")
         print("                10 explicit mantissa bits -- NOT the same arithmetic as ours)")
     else:
-        print("  arms        : strict only. TF32 is an NVIDIA tensor-core mode and the")
-        print("                allow_tf32 switch does not apply on this backend.")
+        print("  arms        : strict only, meaning torch's DEFAULT for this backend.")
+        print("                On ROCm that default is off, but CDNA3 does have an XF32")
+        print("                matrix mode that the same allow_tf32 switch reaches, so")
+        print("                this is strict FP32 by default rather than by assertion.")
+        print("                An XF32 arm is OWED here the way tf32 is measured on CUDA.")
     print()
 
     rows = []

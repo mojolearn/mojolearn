@@ -101,7 +101,7 @@ answer to "which fixture can tell".
     S07_ROPE_RELATIVE_POSITION   (none; clause (d))      base_b1_l4_nrep1
     S09_ROPE_HALVES_SWAPPED      q_rope.out              base_b1_l4_nrep1
     S10_ROPE_FUSED               q_rope.out              base_b1_l4_nrep1
-    S12_SCALE_INTO_Q             attn.scores             base_b1_l4_nrep1
+    S12_SCALE_INTO_Q             attn.scores             odd_head_dim_24  (see 1102)
     S13_MASK_NEG_INF             attn.masked             adv_score_extreme
     S13_MASK_SELECT              attn.masked             adv_score_neg_zero
     S14_MAX_PLAIN_COMPARE        attn.max                adv_masked_zero_row
@@ -2586,10 +2586,33 @@ def arm_expectation(arm: String) raises -> ArmExpectation:
         # untagged per-head scratch `qbh` and not the recorded `q_rope`
         # stage. That is the "no earlier one" half of the discipline and it
         # is checkable precisely because the scratch carries no tag.
+        #
+        # DEVIATION 1102: THE WITNESS IS `odd_head_dim_24`, NOT
+        # `base_b1_l4_nrep1`, AND THE FIRST RUN OF THIS ARM PROVED WHY.
+        # Armed on the base case it MOVED NO BIT and this file raised, which
+        # is the correct outcome and not a false alarm. At `head_dim 16` the
+        # attention scale is `0.25`, an EXACT power of two (this file's own
+        # preflight prints `head_dim 16 -> 0x3e800000 ... EXACT, blind to the
+        # spelling`). Multiplying by `2^-2` is exact for every normal float,
+        # so `scale * (q . k)` and `(scale * q) . k` produce the SAME BITS and
+        # the arm is inert BY ARITHMETIC rather than by a defect. The witness
+        # was the one shape in the fixture set that cannot see it.
+        #
+        # `odd_head_dim_24` gives `1/sqrt(24) = 0x3e5105eb`, INEXACT, which is
+        # the only case in the set where the two spellings can separate. The
+        # preflight already knew this and printed it; the expectation table
+        # did not use it. That gap is exactly what firing the arm found, and
+        # it is why an unfired sabotage set is not evidence.
+        #
+        # The base case is now the INERT half, so this arm carries the same
+        # two-sided reach proof S13_MASK_SELECT and S14_MAX_PLAIN_COMPARE do.
         return ArmExpectation(
-            arm, String("attn.scores"), String("base_b1_l4_nrep1"),
-            String(""), False, String(""),
-            String("scaling the finished dot, not q"),
+            arm, String("attn.scores"), String("odd_head_dim_24"),
+            String("base_b1_l4_nrep1"), False, String(""),
+            String(
+                "scaling the finished dot, not q -- inert at head_dim 16"
+                " because 1/sqrt(16) is an exact power of two"
+            ),
         )
     if arm == "S13_MASK_NEG_INF":
         return ArmExpectation(

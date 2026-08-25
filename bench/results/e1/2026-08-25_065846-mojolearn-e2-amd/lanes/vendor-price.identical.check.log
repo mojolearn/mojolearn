@@ -1,0 +1,40 @@
+[vendor-torch] AMD detected: GPU[0]		: Card Series: 		AMD Instinct Mi325X VF
+[vendor-torch] python3 -m venv unavailable; installing python3-venv
+[vendor-torch] installing torch from https://download.pytorch.org/whl/rocm6.4 (this is the long step)
+/root/.venv-vendor-torch/lib/python3.12/site-packages/torch/_subclasses/functional_tensor.py:279: UserWarning: Failed to initialize NumPy: No module named 'numpy' (Triggered internally at /pytorch/torch/csrc/utils/tensor_numpy.cpp:84.)
+  cpu = _conversion_method_template(device=torch.device("cpu"))
+[vendor-torch] torch 2.9.1+rocm6.4 cuda None hip 6.4.43484-123eb5128 available True
+/root/.venv-vendor-torch/lib/python3.12/site-packages/torch/_subclasses/functional_tensor.py:279: UserWarning: Failed to initialize NumPy: No module named 'numpy' (Triggered internally at /pytorch/torch/csrc/utils/tensor_numpy.cpp:84.)
+  cpu = _conversion_method_template(device=torch.device("cpu"))
+== tools/vendor_gemm_price.py ==
+  device      : AMD Instinct Mi325X VF (cuda)
+  library     : hipBLASLt/rocBLAS
+  build       : ROCm 6.4.43484-123eb5128, torch 2.9.1+rocm6.4
+  shapes      : 20, parsed from bench/gemm_shapes.mojo
+  repeats     : 10 timed, 3 warm-up, median reported
+  arms        : strict only. TF32 is an NVIDIA tensor-core mode and the
+                allow_tf32 switch does not apply on this backend.
+
+VENDORPRICE strict     gram.32x32x1M                    TN m=32      n=32      k=1000000       0.5883 ms     3481.0 GF/s
+VENDORPRICE strict     gram.32x32x64K                   TN m=32      n=32      k=65536         0.0583 ms     2303.0 GF/s
+VENDORPRICE strict     gram.128sq.x100003               TN m=128     n=128     k=100003        0.1131 ms    28966.3 GF/s
+VENDORPRICE strict     ols.step1.16x16x64K              TN m=16      n=16      k=65536         0.0529 ms      634.6 GF/s
+VENDORPRICE strict     pca.transform.8192x4x4           NT m=8192    n=4       k=4             0.0229 ms       11.4 GF/s
+VENDORPRICE strict     pca.transform.wide.8192x64x128   NT m=8192    n=64      k=128           0.0231 ms     5816.7 GF/s
+VENDORPRICE strict     kmeans.dist.4096x64x64           NT m=4096    n=64      k=64            0.0230 ms     1460.2 GF/s
+VENDORPRICE strict     ols.predict.gemv.64Kx16          NT m=65536   n=1       k=16            0.0234 ms       89.8 GF/s
+VENDORPRICE strict     llama8b.qkv.t1                   NT m=1       n=4096    k=4096          0.0585 ms      573.6 GF/s
+VENDORPRICE strict     llama8b.qkv.t8                   NT m=8       n=4096    k=4096          0.0608 ms     4415.9 GF/s
+VENDORPRICE strict     llama8b.qkv.t512                 NT m=512     n=4096    k=4096          0.2229 ms    77066.7 GF/s
+VENDORPRICE strict     llama8b.mlp_up.t1                NT m=1       n=14336   k=4096          0.0768 ms     1528.2 GF/s
+VENDORPRICE strict     llama8b.mlp_up.t8                NT m=8       n=14336   k=4096          0.0784 ms    11983.9 GF/s
+VENDORPRICE strict     llama8b.mlp_up.t512              NT m=512     n=14336   k=4096          0.8476 ms    70937.1 GF/s
+VENDORPRICE strict     llama8b.mlp_down.t1              NT m=1       n=4096    k=14336         0.0702 ms     1672.5 GF/s
+VENDORPRICE strict     llama8b.mlp_down.t8              NT m=8       n=4096    k=14336         0.0721 ms    13031.8 GF/s
+VENDORPRICE strict     llama8b.mlp_down.t512            NT m=512     n=4096    k=14336         1.1934 ms    50386.9 GF/s
+VENDORPRICE strict     llama8b.lm_head.t1               NT m=1       n=128256  k=4096          0.6252 ms     1680.4 GF/s
+VENDORPRICE strict     llama8b.lm_head.t8               NT m=8       n=128256  k=4096          0.6538 ms    12855.5 GF/s
+  SKIPPED llama8b.lm_head.t512             NT  m=512 n=128256 k=4096  (2.69e+11 MACs > --max-macs 5e+10)
+
+  wrote bench/results/e1/2026-08-25_065846-mojolearn-e2-amd//lanes/vendor_price.json
+[vendor-torch] vendor_gemm_price exit=0
