@@ -2350,6 +2350,21 @@ gemmseq)
             *)    builtok seqspeed  && runarm "seq.$L.ours.log"    "$OUT/bin_seqspeed" ;;
         esac
     done
+    # THE CORRECTNESS GATES RUN BESIDE THE SPEED DRIVERS, on the same box,
+    # in the same lease, and they are NOT optional here.
+    #
+    # DEVIATION 1876 changed which kernel the FAST arm of transformer/ and
+    # mamba/ uses. FAST has never been bit-stable and the profile's promise
+    # lives entirely on the IDENTICAL side, so that is legitimate -- but
+    # those two lanes have FAST-mode gates with tolerances as tight as
+    # rtol 1e-7, and a different summation order can cross that. A speed win
+    # measured while a correctness gate quietly went red is not a win, and
+    # this Mac is not allowed to run them. So they run here, and their exit
+    # codes come home in leg.txt beside the numbers they justify.
+    runarm "verify.transformer_block.log" \
+        pixi run mojo run -I . transformer/mojo_only/transformer_check.mojo
+    runarm "verify.mamba_block.log" \
+        pixi run mojo run -I . mamba/mojo_only/mamba_check.mojo
     runarm "gemm.gemm.cublas.log" python3 tools/speed_gemm_arm.py --rounds "@SPEEDROUNDS@"
     for L in @SPEEDLANES@; do
         [ "$L" = "gemm" ] && continue

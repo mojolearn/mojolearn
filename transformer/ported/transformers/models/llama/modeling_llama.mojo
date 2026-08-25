@@ -871,6 +871,36 @@ struct LlamaDeviceWeights(Movable):
         _expect_len("gate_proj.weight", len(w_gate), it * dm)
         _expect_len("up_proj.weight", len(w_up), it * dm)
         _expect_len("down_proj.weight", len(w_down), dm * it)
+        # DEVIATION 1875 -- THE WEIGHTS ARE REFUSED HERE, ON THE HOST, ONCE.
+        #
+        # `llama_refuse_bad_inputs` walks all thirteen named inputs and it
+        # DOWNLOADS every weight tensor to do it. That is correct and it was
+        # being paid on EVERY forward call. Measured on an H100 2026-08-25 at
+        # the Llama-3-8B shapes: 218 million floats, about 872 MB per call,
+        # 825 to 967 ms -- and the whole block measured 936 to 1010 ms, flat
+        # in token count from t1 to t512. A forward pass whose cost does not
+        # move with its input is not computing the input.
+        #
+        # THE WEIGHTS DO NOT CHANGE BETWEEN CALLS, and here they are still on
+        # the HOST, so this check costs no device traffic at all. It also
+        # fires EARLIER than the old one and under the SAME upstream names,
+        # which is what the oracle comparison needs.
+        #
+        # WHAT THIS DOES NOT COVER, said plainly: a caller that writes into a
+        # weight BUFFER after construction. `llama_refuse_bad_inputs` is
+        # unchanged and still walks all thirteen names in its original order
+        # for anyone who needs that, and it is what
+        # `transformer_check.mojo`'s refusal audit calls directly, so the
+        # audit's coverage of every name is untouched.
+        _refuse_nonfinite_named("input_layernorm.weight", norm1_w)
+        _refuse_nonfinite_named("post_attention_layernorm.weight", norm2_w)
+        _refuse_nonfinite_named("q_proj.weight", w_q)
+        _refuse_nonfinite_named("k_proj.weight", w_k)
+        _refuse_nonfinite_named("v_proj.weight", w_v)
+        _refuse_nonfinite_named("o_proj.weight", w_o)
+        _refuse_nonfinite_named("gate_proj.weight", w_gate)
+        _refuse_nonfinite_named("up_proj.weight", w_up)
+        _refuse_nonfinite_named("down_proj.weight", w_down)
         self.norm1_w = _upload(ctx, norm1_w)
         self.norm2_w = _upload(ctx, norm2_w)
         self.w_q = _upload(ctx, w_q)
@@ -2118,6 +2148,50 @@ def _refuse_nonfinite_named(name: String, values: List[Float32]) raises:
             )
 
 
+def llama_refuse_bad_call(
+    ctx: DeviceContext,
+    mut w: LlamaDeviceWeights,
+    mut rope: LlamaRopeTable,
+    mut x: DeviceBuffer[DType.float32],
+    mut kv: LlamaKVCache,
+    b: Int,
+    l: Int,
+) raises:
+    """The inputs that ACTUALLY CHANGE from one block call to the next.
+
+    DEVIATION 1875. `llama_refuse_bad_inputs` walks thirteen names, ten of
+    which are weights that are identical on every call and are now refused
+    once, on the host, in `LlamaDeviceWeights.__init__`. What is left here is
+    what a second call can genuinely differ in: the hidden states, the rotary
+    table, and the carried key and value caches.
+
+    The names and their ORDER are the same as the corresponding entries in
+    `llama_refuse_bad_inputs`, because the point of using the upstream names
+    at all is that this side and the oracle's side fail identically.
+
+    The KV entries are the reason this cannot be hoisted with the weights.
+    They are WRITTEN BY THE BLOCK, so a decode step's input is the previous
+    step's output, and two of the refusal audit's plants land there
+    specifically to exercise a refusal on a SECOND call.
+    """
+    var dims = w.dims.copy()
+    var dm = dims.d_model
+    var hd = dims.head_dim
+    _refuse_nonfinite_named("hidden_states", _download(ctx, x, b * l * dm))
+    _refuse_nonfinite_named(
+        "rotary_emb.inv_freq", _download(ctx, rope.inv_freq, dims.half())
+    )
+    if kv.s > 0:
+        _refuse_nonfinite_named(
+            "past_key_values.key_cache",
+            _download(ctx, kv.k, b * dims.n_kv * kv.s * hd),
+        )
+        _refuse_nonfinite_named(
+            "past_key_values.value_cache",
+            _download(ctx, kv.v, b * dims.n_kv * kv.s * hd),
+        )
+
+
 def llama_refuse_bad_inputs(
     ctx: DeviceContext,
     mut w: LlamaDeviceWeights,
@@ -2924,7 +2998,12 @@ def llama_decoder_layer_forward_planted(
         )
 
     # Contract section 8, before ANY recorded stage.
-    llama_refuse_bad_inputs(ctx, w, rope, x, kv, b, l)
+    # DEVIATION 1875: the WEIGHT half of this refusal moved to
+    # `LlamaDeviceWeights.__init__`, where the tensors are still on the host
+    # and cost nothing to scan. What is left is what a call can actually
+    # differ in. `llama_refuse_bad_inputs` is unchanged and still walks all
+    # thirteen names for anyone who wants them in one call.
+    llama_refuse_bad_call(ctx, w, rope, x, kv, b, l)
 
     trace.record_device[DType.float32](ctx, prefix + ".input.x", x, m * dm)
 

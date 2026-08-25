@@ -116,6 +116,13 @@ from gemm.mojo_only.gemm_oracle import (
 )
 from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
 
+# DEVIATION 1876 -- THE FAST ARM REACHES THE VENDOR KERNEL. See
+# `_fast_vendor_gemm` below for why these three imports are here at all.
+from layout import TileTensor
+from layout.tile_layout import row_major
+from linalg.matmul import matmul
+from linalg.gemv import gemv_gpu
+
 
 # ===========================================================================
 # THE SABOTAGE SWITCHES
@@ -1360,6 +1367,94 @@ def identical_gemm_into(
     )
 
 
+def _fast_vendor_gemm(
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+) raises -> Bool:
+    """MAX's tuned matmul for the FAST arm. True if it served the shape.
+
+    DEVIATION 1876 -- **THE FAST ARM HAD NO FAST PATH, AND THAT IS WHAT THE
+    SEQUENCE LANES WERE PAYING.**
+
+    `identical_gemm` had NO MODE BRANCH AT ALL. It ran the pinned
+    balanced-tree kernel in both modes, and FAST only stripped `ftz` and the
+    FMA pins from inside it. `core/gemm.mojo` DOES branch -- under FAST it
+    calls `linalg.matmul` -- but `transformer/` and `mamba/` do not go
+    through `core/gemm.mojo`; they import this file directly. So every
+    projection, every score and every MLP matmul in those two lanes ran the
+    hand-written kernel even when nobody had asked for identity.
+
+    MEASURED ON AN H100, 2026-08-25, ONE RUN, SAME BOX, SAME SHAPES:
+
+        our MLP block, llama8b t512                  51.07 ms
+        the same three GEMMs via linalg.matmul   0.23 + 0.23 + 0.24 ms
+
+    Seventy times, and not one instruction of it is the algorithm. It is the
+    same three matrix products handed to the wrong kernel.
+
+    WHAT THIS DOES NOT DO, and the boundaries are the point:
+
+    * **NOTHING UNDER `NUMERIC_IDENTICAL`.** The caller of this function is
+      comptime-gated, so under IDENTICAL this code is not compiled in. A
+      vendor kernel's tile shape and k-split are per-vendor and a k-split IS
+      a summation order; routing identity through a closed library is the
+      one thing this whole profile exists to refuse.
+    * **NOT `OP_TN`.** The vendor kernel expresses `transpose_b` and not
+      `transpose_a`, so a TN shape would need a materialized transpose. That
+      is a real cost with a real tradeoff and neither sequence lane asks for
+      it -- `modeling_llama.mojo:282` imports `OP_NN` and `OP_NT` and
+      nothing else. TN returns False here and falls through to the pinned
+      kernel, which is correct, just not fast.
+    * **NOT `n == 1` UNDER `OP_NT`.** `core/gemm.mojo` records what happens
+      there and it is not an edge case to wave at: measured 2026-08-19 at
+      m=64, n=1, k=32 with the output poisoned first, **63 of the 64 rows
+      still held the poison afterwards.** `transpose_b=True` does not write
+      them. A caller reusing a buffer reads whatever was in it last time,
+      which is worse than zeros. The same product with `transpose_b=False`
+      is correct at the identical shape, so the fault is the flag and not
+      the shape. At `n == 1` this IS a matrix-vector product and it goes to
+      `gemv_gpu`, which is what RAFT does for the same case.
+
+    FAST IS NOT BIT-STABLE AND NEVER WAS. This changes which bits FAST
+    produces for the sequence lanes, because a different kernel sums in a
+    different order. That is what FAST means; the profile's promise lives
+    entirely on the IDENTICAL side and is untouched here. Any FAST-mode
+    tolerance gate downstream has to be RE-RUN rather than assumed, and this
+    lane's next rented leg runs the transformer and mamba correctness checks
+    beside the speed drivers for exactly that reason.
+    """
+    if op == OP_NT:
+        if n == 1:
+            # `z[m] = a[m x k] . b[k]`: b is a contiguous k-vector whether
+            # it is read as (1, k) or (k, 1), and c is a contiguous m-vector.
+            var vz = TileTensor(c, row_major(m, 1))
+            var vx = TileTensor(a, row_major(m, k))
+            var vy = TileTensor(b, row_major(k, 1))
+            gemv_gpu(vz, vx, vy, ctx)
+            ctx.synchronize()
+            return True
+        var tc = TileTensor(c, row_major(m, n))
+        var ta = TileTensor(a, row_major(m, k))
+        var tb = TileTensor(b, row_major(n, k))
+        matmul[transpose_b=True, target="gpu"](tc, ta, tb, ctx)
+        ctx.synchronize()
+        return True
+    if op == OP_NN:
+        var tc2 = TileTensor(c, row_major(m, n))
+        var ta2 = TileTensor(a, row_major(m, k))
+        var tb2 = TileTensor(b, row_major(k, n))
+        matmul[transpose_b=False, target="gpu"](tc2, ta2, tb2, ctx)
+        ctx.synchronize()
+        return True
+    return False
+
+
 def identical_gemm(
     ctx: DeviceContext,
     mut c: DeviceBuffer[DType.float32],
@@ -1388,6 +1483,13 @@ def identical_gemm(
     `identical_gemm_into`; the `_ = ws` below is what keeps this one's alive
     past the wait.
     """
+    # DEVIATION 1876: under FAST, hand the shape to the vendor kernel. Under
+    # IDENTICAL this branch is not compiled at all. Read `_fast_vendor_gemm`
+    # before changing anything here; the `n == 1` clause in it is a
+    # correctness requirement and not an optimization.
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        if _fast_vendor_gemm(ctx, c, a, b, m, n, k, op):
+            return
     var nws = identical_gemm_workspace_max_floats(m, n, k)
     var ws = ctx.enqueue_create_buffer[DType.float32](nws)
     ctx.synchronize()
