@@ -2532,11 +2532,28 @@ forest)
     else
         echo "lightgbm_cuda_build=SKIPPED, no timeout(1) to bound it" >> "$OUT/leg.txt"
     fi
+    # ONE PROCESS PER LANE, BOTH SIDES IN IT, ALTERNATING ROUND BY ROUND.
+    #
+    # This used to be two processes per lane: `--ours-only` here and
+    # tools/speed_gbdt_arm.py separately. That splits the arms across two
+    # processes, and a ratio built from two processes is exposed to
+    # everything that can change between them. This box is shared and
+    # throttled and this repository has measured one drifting 1.7x inside
+    # twenty minutes; the whole reason the interleaved format exists is that
+    # a box which throttles mid-run throttles BOTH arms and the ratio
+    # survives what an absolute number does not.
+    #
+    # Without `--ours-only`, forest_speed_arm.py appends the opponents to its
+    # own rotation -- ours first, then theirs, no arm twice in a row -- which
+    # is the format every other comparison in this repository quotes.
+    #
+    # `--ours-only` stays in that file for the case it was written for: two
+    # CUDA runtimes that will not coexist in one process. If a lane crashes
+    # on import, splitting it is the fallback, and then the split has to be
+    # said out loud beside the number.
     for L in @SPEEDLANES@; do
-        runarm "forest.$L.ours.log" \
-            python3 bench/speed/forest_speed_arm.py --lane "$L" --ours-only
-        runarm "forest.$L.vendor.log" \
-            python3 tools/speed_gbdt_arm.py --lane "$L"
+        runarm "forest.$L.log" \
+            python3 bench/speed/forest_speed_arm.py --lane "$L"
     done
     ;;
 esac

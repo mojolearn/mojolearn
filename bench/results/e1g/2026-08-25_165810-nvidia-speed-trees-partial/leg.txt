@@ -1,0 +1,25 @@
+vendor=nvidia
+payload=speed
+family=forest
+lanes=gbdt-symmetric gbdt-depthwise gbdt-lossguide rf et iforest
+commit=851dcdf7d050818bf831db041a8b464f1c81dc46
+rounds=3
+size=shipped
+arm_budget=600
+work_timeout=3000
+started=2026-08-25T21:00:24Z
+device=NVIDIA_H100_80GB_HBM3
+binding_build_exit estimators=0
+binding_build_exit gbdt=1
+binding_build_exit rf=1
+binding_build_exit trees=1
+binding_build_exit svm=0
+pip_exit catboost xgboost lightgbm scikit-learn=0
+pip_exit --extra-index-url=https://pypi.nvidia.com cuml-cu12=0
+lightgbm_cuda_build_exit=0
+arm_exit forest.gbdt-symmetric.ours.log=1
+arm_exit forest.gbdt-symmetric.vendor.log=0
+arm_exit forest.gbdt-depthwise.ours.log=1
+arm_exit forest.gbdt-depthwise.vendor.log=0
+arm_exit forest.gbdt-lossguide.ours.log=1
+arm_exit forest.gbdt-lossguide.vendor.log=0

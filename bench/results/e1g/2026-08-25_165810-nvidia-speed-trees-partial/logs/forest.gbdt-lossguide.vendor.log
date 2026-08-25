@@ -1,0 +1,36 @@
+speed_gbdt_arm: dataset 'year' unavailable (year is not downloaded: /root/datasets/gbm-bench/year/YearPredictionMSD.txt.zip is missing. Run `python tools/speed_gbdt_arm.py --download year` first (211 MB), OUTSIDE the timed run.); falling back to the synthetic fixture. Every line will say so in shape=.
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=catboost-cpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=catboost-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=xgboost-cpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=xgboost-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=lightgbm-cpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=lightgbm-cuda mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-WARMUP lane=gbdt-lossguide arm=catboost-cpu shape=synth-720000x100 ms=8365.494
+FSPEED-WARMUP lane=gbdt-lossguide arm=catboost-gpu shape=synth-720000x100 ms=2177.072
+FSPEED-WARMUP lane=gbdt-lossguide arm=xgboost-cpu shape=synth-720000x100 ms=2996.459
+FSPEED-WARMUP lane=gbdt-lossguide arm=xgboost-gpu shape=synth-720000x100 ms=1340.860
+FSPEED-WARMUP lane=gbdt-lossguide arm=lightgbm-cpu shape=synth-720000x100 ms=2237.300
+[LightGBM] [Fatal] CUDA Tree Learner was not enabled in this build.
+Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cuda reason=LightGBMError during warm-up: CUDA Tree Learner was not enabled in this build. Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=synth-720000x100 round=1 ms=8162.788 hash=15b3b3d25391938e
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=synth-720000x100 round=1 ms=1669.874 hash=4919f593ba3a95c9
+FSPEED lane=gbdt-lossguide arm=xgboost-cpu shape=synth-720000x100 round=1 ms=2826.822 hash=0d80dd914c8f4750
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=synth-720000x100 round=1 ms=1200.599 hash=5534af2508433204
+FSPEED lane=gbdt-lossguide arm=lightgbm-cpu shape=synth-720000x100 round=1 ms=2229.476 hash=2c3fc5718f0457db
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=synth-720000x100 round=2 ms=8055.143 hash=15b3b3d25391938e
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=synth-720000x100 round=2 ms=1628.402 hash=4919f593ba3a95c9
+FSPEED lane=gbdt-lossguide arm=xgboost-cpu shape=synth-720000x100 round=2 ms=2739.535 hash=0d80dd914c8f4750
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=synth-720000x100 round=2 ms=1188.644 hash=5534af2508433204
+FSPEED lane=gbdt-lossguide arm=lightgbm-cpu shape=synth-720000x100 round=2 ms=2223.144 hash=134cf0a85e8c75d3
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=synth-720000x100 round=3 ms=7908.986 hash=15b3b3d25391938e
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=synth-720000x100 round=3 ms=1620.714 hash=4919f593ba3a95c9
+FSPEED lane=gbdt-lossguide arm=xgboost-cpu shape=synth-720000x100 round=3 ms=2797.242 hash=0d80dd914c8f4750
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=synth-720000x100 round=3 ms=1198.877 hash=5534af2508433204
+FSPEED lane=gbdt-lossguide arm=lightgbm-cpu shape=synth-720000x100 round=3 ms=2268.189 hash=134cf0a85e8c75d3
+FSPEED-ACC lane=gbdt-lossguide arm=catboost-cpu metric=rmse value=0.209616
+FSPEED-ACC lane=gbdt-lossguide arm=catboost-gpu metric=rmse value=0.192553
+FSPEED-ACC lane=gbdt-lossguide arm=xgboost-cpu metric=rmse value=0.192966
+FSPEED-ACC lane=gbdt-lossguide arm=xgboost-gpu metric=rmse value=0.192966
+FSPEED-ACC lane=gbdt-lossguide arm=lightgbm-cpu metric=rmse value=0.195169
+FSPEED-NOTE lane=gbdt-lossguide arms=catboost-cpu,catboost-gpu metric=rmse delta=0.081401 reason=two arms of catboost differ by 8.14% on rmse (tolerance 2.00%); their configurations were NOT identical, so the timing ratio compares two different problems

@@ -1,0 +1,14 @@
+speed_gbdt_arm: dataset 'year' unavailable (year is not downloaded: /root/datasets/gbm-bench/year/YearPredictionMSD.txt.zip is missing. Run `python tools/speed_gbdt_arm.py --download year` first (211 MB), OUTSIDE the timed run.); falling back to the synthetic fixture. Every line will say so in shape=.
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-cpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-WARMUP lane=gbdt-symmetric arm=catboost-cpu shape=synth-720000x100 ms=2419.821
+FSPEED-WARMUP lane=gbdt-symmetric arm=catboost-gpu shape=synth-720000x100 ms=1583.596
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=synth-720000x100 round=1 ms=2320.224 hash=119d705511f926fe
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=synth-720000x100 round=1 ms=1060.579 hash=bbe14171a5472138
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=synth-720000x100 round=2 ms=2338.433 hash=119d705511f926fe
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=synth-720000x100 round=2 ms=1066.241 hash=bbe14171a5472138
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=synth-720000x100 round=3 ms=2375.685 hash=119d705511f926fe
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=synth-720000x100 round=3 ms=1055.302 hash=bbe14171a5472138
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-cpu metric=rmse value=0.205222
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=rmse value=0.192092
+FSPEED-NOTE lane=gbdt-symmetric arms=catboost-cpu,catboost-gpu metric=rmse delta=0.063983 reason=two arms of catboost differ by 6.40% on rmse (tolerance 2.00%); their configurations were NOT identical, so the timing ratio compares two different problems

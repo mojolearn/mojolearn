@@ -1,0 +1,67 @@
+
+=== bindings/build_estimators.sh ===
+Included from ./glm/ported/glm/qn/qn.mojo:36:
+./glm/ported/glm/qn/qn_solvers.mojo:177:17: warning: assignment to 'lsret' was never used; assign to '_' instead?
+    var lsret = LS_SUCCESS
+                ^
+built python/mojolearn/_mojolearn_estimators.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== bindings/build_gbdt.sh ===
+and if there are any, move the whole cache aside and build again.
+The cache is regenerable; a poisoned one is not detectable any other
+way, because the build succeeds and the artifact merely does not work.
+
+See the comment at the top of this script and PORTING.md 70.
+
+=== bindings/build_rf.sh ===
+FAILED: the RandomForest extension did not come out complete.
+THE FIRST THING TO SUSPECT IS THE COMPILER CACHE, not this source:
+$MODULAR_HOME/cache/.mojo_cache keys ignore the deployment target,
+so one build made with MACOSX_DEPLOYMENT_TARGET set poisons it with
+empty 134-byte metallibs. See bindings/build_gbdt.sh's header.
+
+=== bindings/build_trees.sh ===
+THE FIRST THING TO SUSPECT IS THE COMPILER CACHE, not this source:
+$MODULAR_HOME/cache/.mojo_cache keys ignore the deployment target,
+so one build made with MACOSX_DEPLOYMENT_TARGET set poisons it with
+empty 134-byte metallibs. See bindings/build_gbdt.sh's header for
+the find command and the full write-up.
+
+=== bindings/build_svm.sh ===
+                           ^
+/root/mojolearn/bindings/_mojolearn_svm.mojo:322:27: warning: assignment to 'res' was never used; assign to '_' instead?
+    var res = IFRunOutputs()
+                          ^
+built python/mojolearn/_mojolearn_svm.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== forest.gbdt-symmetric.ours.log :: python3 bench/speed/forest_speed_arm.py --lane gbdt-symmetric --ours-only ===
+speed_gbdt_arm: dataset 'year' unavailable (year is not downloaded: /root/datasets/gbm-bench/year/YearPredictionMSD.txt.zip is missing. Run `python tools/speed_gbdt_arm.py --download year` first (211 MB), OUTSIDE the timed run.); falling back to the synthetic fixture. Every line will say so in shape=.
+FSPEED-REFUSED lane=gbdt-symmetric arm=ours reason=ImportError: cannot import name '_mojolearn' from partially initialized module 'mojolearn' (most likely due to a circular import) (/root/mojolearn/python/mojolearn/__init__.py)
+FSPEED-REFUSED lane=gbdt-symmetric arm=all reason=nothing could be constructed on this box; see the refusals above
+
+=== forest.gbdt-symmetric.vendor.log :: python3 tools/speed_gbdt_arm.py --lane gbdt-symmetric ===
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-cpu metric=rmse value=0.205222
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=rmse value=0.192092
+FSPEED-NOTE lane=gbdt-symmetric arms=catboost-cpu,catboost-gpu metric=rmse delta=0.063983 reason=two arms of catboost differ by 6.40% on rmse (tolerance 2.00%); their configurations were NOT identical, so the timing ratio compares two different problems
+
+=== forest.gbdt-depthwise.ours.log :: python3 bench/speed/forest_speed_arm.py --lane gbdt-depthwise --ours-only ===
+speed_gbdt_arm: dataset 'year' unavailable (year is not downloaded: /root/datasets/gbm-bench/year/YearPredictionMSD.txt.zip is missing. Run `python tools/speed_gbdt_arm.py --download year` first (211 MB), OUTSIDE the timed run.); falling back to the synthetic fixture. Every line will say so in shape=.
+FSPEED-REFUSED lane=gbdt-depthwise arm=ours reason=ImportError: cannot import name '_mojolearn' from partially initialized module 'mojolearn' (most likely due to a circular import) (/root/mojolearn/python/mojolearn/__init__.py)
+FSPEED-REFUSED lane=gbdt-depthwise arm=all reason=nothing could be constructed on this box; see the refusals above
+
+=== forest.gbdt-depthwise.vendor.log :: python3 tools/speed_gbdt_arm.py --lane gbdt-depthwise ===
+FSPEED-ACC lane=gbdt-depthwise arm=xgboost-cpu metric=rmse value=0.192966
+FSPEED-ACC lane=gbdt-depthwise arm=xgboost-gpu metric=rmse value=0.192966
+FSPEED-NOTE lane=gbdt-depthwise arms=catboost-cpu,catboost-gpu metric=rmse delta=0.072389 reason=two arms of catboost differ by 7.24% on rmse (tolerance 2.00%); their configurations were NOT identical, so the timing ratio compares two different problems
+
+=== forest.gbdt-lossguide.ours.log :: python3 bench/speed/forest_speed_arm.py --lane gbdt-lossguide --ours-only ===
+speed_gbdt_arm: dataset 'year' unavailable (year is not downloaded: /root/datasets/gbm-bench/year/YearPredictionMSD.txt.zip is missing. Run `python tools/speed_gbdt_arm.py --download year` first (211 MB), OUTSIDE the timed run.); falling back to the synthetic fixture. Every line will say so in shape=.
+FSPEED-REFUSED lane=gbdt-lossguide arm=ours reason=ImportError: cannot import name '_mojolearn' from partially initialized module 'mojolearn' (most likely due to a circular import) (/root/mojolearn/python/mojolearn/__init__.py)
+FSPEED-REFUSED lane=gbdt-lossguide arm=all reason=nothing could be constructed on this box; see the refusals above
+
+=== forest.gbdt-lossguide.vendor.log :: python3 tools/speed_gbdt_arm.py --lane gbdt-lossguide ===
+FSPEED-ACC lane=gbdt-lossguide arm=xgboost-gpu metric=rmse value=0.192966
+FSPEED-ACC lane=gbdt-lossguide arm=lightgbm-cpu metric=rmse value=0.195169
+FSPEED-NOTE lane=gbdt-lossguide arms=catboost-cpu,catboost-gpu metric=rmse delta=0.081401 reason=two arms of catboost differ by 8.14% on rmse (tolerance 2.00%); their configurations were NOT identical, so the timing ratio compares two different problems
+
+=== forest.rf.ours.log :: python3 bench/speed/forest_speed_arm.py --lane rf --ours-only ===

@@ -1,0 +1,2 @@
+-rwxr-xr-x 1 root root 1634728 Aug 25 21:01 python/mojolearn/_mojolearn_estimators.so
+-rwxr-xr-x 1 root root 1173504 Aug 25 21:03 python/mojolearn/_mojolearn_svm.so
