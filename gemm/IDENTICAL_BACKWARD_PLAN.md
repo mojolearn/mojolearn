@@ -38,9 +38,12 @@ The short answer, before the detail.
 
 | thing | state |
 |---|---|
-| forward `mojolearn.identical.gemm.fp32.v1` | CLOSED on three vendors, IDENTITY_PATHS row 40, leg 11 at `144aa5b`, 60 card stages bit identical Apple M4 / NVIDIA H100 / AMD MI325X |
+| forward `mojolearn.identical.gemm.fp32.v1` | CLOSED on three vendors, IDENTITY_PATHS row 40, leg 11 at `144aa5b`, 60 card stages bit identical Apple M4 / NVIDIA H100 / AMD MI325X, and holding on a fourth part, an NVIDIA RTX 4090 (Ada sm_89, a different architecture from the H100's Hopper sm_90) |
 | the backward routing table (section 2) | derived here, coded in `gemm_backward.mojo`, **UNGATED** |
 | the bias gradient as a v1 GEMM (section 3.3) | derived here, coded, **UNGATED** |
+| the gates of section 5, G1 to G9 | **WRITTEN AND NEVER RUN**, `gemm/mojo_only/gemm_backward_check.mojo`, 2026-08-25. Never compiled, no device call, and every predicted count in it is on paper |
+| the backward identity card (G9) | written, emitted from the check file rather than from a new `bench/` driver, **NEVER RUN**. No card exists on any vendor |
+| the three-vendor leg (G10) | NOT STARTED |
 | everything else identical training needs (section 4) | enumerated here, mostly NOT BUILT |
 
 The completion claim this lane may make when the gates of section 5 are green
@@ -258,9 +261,16 @@ mechanically.
    block counts at a fixed token count.** That is the property this profile
    sells and it is untouched.
 2. **`dB` at `T` tokens is not the same bits as two `dB` calls at `T/2`
-   summed.** It cannot be, under any partition scheme, because those are two
-   different sums of the same terms in a different order. Anyone expecting
-   otherwise is expecting float addition to be associative.
+   summed, EXCEPT AT AN ALIGNED SPLIT.** This bullet said "it cannot be,
+   under any partition scheme" until 2026-08-25, and G5 MEASURED THAT TO BE
+   FALSE on the first run. A split at a token boundary that is both a LEAF
+   boundary and a SUBTREE boundary of v1's balanced tree, accumulated with
+   the contract's own flushed add, reproduces the unsplit bits exactly.
+   Measured: `T=512` split 256/256 and `T=384` split 256/128 both moved
+   **0 of 35 cells**, host and device agreeing; `T=300` split 150/150,
+   `T=512` split 200/312 and `T=384` split 192/192 moved 31, 30 and 31
+   cells. `dA` moved 0 cells under EVERY split, aligned or not. Section 5.2
+   carries the arms and the worked argument.
 3. Therefore **the microbatch schedule is part of a training run's numerical
    specification**, not an execution detail a scheduler may choose. Two runs
    of the same code with different gradient-accumulation factors are two
@@ -378,7 +388,7 @@ their outputs.
 | T2 | bias gradient | yes, a reduction | PIN as a v1 GEMM (3.3) | `gemm_backward.mojo`, ungated |
 | T3 | loss reduction (mean over tokens) | yes, a fold plus a division | PIN as a v1 GEMM against ones, then `identical_div` | `identical_div` exists, DEVIATION 740, row 49; the composition does not |
 | T4 | loss elementwise part (cross entropy) | the log-softmax max reduction, and `exp`/`log` | PIN | `identical_exp` / `identical_log` exist (row 12); the row max has row 13's signed-zero hazard and no pinned form here |
-| T5 | activation backward | elementwise, no fold | PIN per activation | SiLU and sigmoid derivatives expressible from `portable_sigmoidf` (rows 52, 53). **GELU is REFUSE today**: `mojo_only/numerics.mojo` has no `portable_erff` and no `portable_tanhf` |
+| T5 | activation backward | elementwise, no fold | PIN per activation | SiLU and sigmoid derivatives expressible from `portable_sigmoidf` (rows 52, 53). **GELU is PIN, not REFUSE.** This row said `mojo_only/numerics.mojo` "has no `portable_erff` and no `portable_tanhf`" until 2026-08-25; BOTH EXIST and are Cephes ports, `portable_tanhf:1465` and `portable_erff:1672`, with `portable_gelu_erf:1722`, `portable_gelu_tanh:1778`, `identical_erf:2009`, `identical_gelu_erf:2023` and `identical_gelu_tanh:2039`, DEVIATIONS 820-825. They landed the same day this plan was written |
 | T6 | norm backward (LayerNorm, RMSNorm) | yes, two folds over the feature axis | REPLACE | forward RMSNorm primitives exist (rows 50 to 54). The backward folds do not, and they must choose v1's tree or state their own |
 | T7 | softmax and attention backward | yes; every FlashAttention backward accumulates `dK`/`dV` across blocks with a float atomic | REFUSE for now | nothing. Charter boundary, and the atomic makes it a REPLACE when it is taken up |
 | T8 | RNG for init, dropout masks, shuffling | a stream position is an order | PIN, counter based | **`core/philox.mojo` exists and is gated against RAFT's own compiled oracle at six separable layers.** Directly reusable |
@@ -499,11 +509,19 @@ few operations it performs.
 
 ## 5. The gates and the sabotages
 
-Specified here, not written. The house rule is that a kernel that is bit
-identical and cannot be SHOWN to be is a belief, and that every pin needs a
-fixture separating it from the unpinned spelling plus a demonstrated failure
-when the pin is removed. Every gate below names what it asserts and what
-sabotage must break it. A gate with no sabotage is not on this list.
+**WRITTEN 2026-08-25 AND NEVER RUN.** `gemm/mojo_only/gemm_backward_check.mojo`
+is the file. It has never been compiled, no device has executed a backward
+call, and every number below is a PREDICTION derived on paper. The point of
+writing the predictions down before the run is that a disagreement is then a
+FINDING rather than something rationalized afterward. When this has run, the
+counts become MEASURED and this paragraph is the sentence to delete.
+
+The house rule is that a kernel that is bit identical and cannot be SHOWN to
+be is a belief, and that every pin needs a fixture separating it from the
+unpinned spelling plus a demonstrated failure when the pin is removed. Every
+gate below names what it asserts, what sabotage must break it, and WHAT MAKES
+IT NON VACUOUS. A gate with no sabotage is not on this list, and a gate with
+no negative control is not evidence.
 
 The sabotage switches already exist in `gemm_backward.mojo` and are OFF in
 every build that does not name them.
@@ -520,151 +538,379 @@ shown to fail THROUGH the backward entry points as well as through the
 forward ones. That is the proof that the backward path actually reaches the
 contract's arithmetic rather than some other path that happens to agree.
 
+### 5.0 The predicted sabotage ledger, per route
+
+Six routes, indexed the way the check file indexes them.
+
+    0  dA / forward OP_NN      3  dB / forward OP_NN
+    1  dA / forward OP_NT      4  dB / forward OP_NT
+    2  dA / forward OP_TN      5  dB / forward OP_TN
+
+| arm | routes it must move | count | mask | which gate owns it |
+|---|---|---|---|---|
+| `BWD_UNTRANSPOSED` | 0, 2, 3, 4 | 4 of 6 | 29 | G1, G2, G3 |
+| `BWD_OPERAND_ORDER` | 2, 3, 5 | 3 of 6 | 44 | G1, G2, G3 |
+| `BWD_BIAS_AXIS` | none | 0 of 6 | 0 | G6 only |
+
+**TWO OF THE SIX ROUTES ARE INERT UNDER `BWD_UNTRANSPOSED`, AND THAT IS
+STRUCTURAL RATHER THAN A DEFECT IN THE ARM.** The arm routes everything as
+`OP_NN`, and for `dA` at forward `OP_NT` and for `dB` at forward `OP_TN` the
+CORRECT route already is `OP_NN`, at the same shape, with the same operand
+order. On those two the sabotage is the right answer bit for bit. A gate that
+reported "BWD_UNTRANSPOSED fails" without saying which routes it failed on
+would be reporting a 4-of-6 result as a 6-of-6 one, and this is
+`[[reached-but-inert]]` in its purest form. G1 and G2 therefore compare the
+moved ROUTE SET against the mask above, and a mask BELOW the prediction and a
+mask ABOVE it are both failures.
+
+Likewise `BWD_BIAS_AXIS` must move NOTHING in G1, G2's matmul arms, G3, G4 or
+G5, and must move G6. Reach is per branch, and an arm that fires everywhere
+localizes nothing.
+
+### 5.1 What is different from the specification this section used to carry
+
+Five deliberate departures, each with a reason and a deviation number.
+
+1. **G2 does not use a central difference.** DEVIATION 1051. The old text
+   proposed `(L(A + h) - L(A - h)) / 2h` at `h = 1` on an integer fixture,
+   and the exactness argument for it is sound. It is also more machinery than
+   the question needs: on the same integer fixture the DERIVATIVE ITSELF is
+   exactly representable and can be written down directly, one plain
+   ascending sum per cell. Comparing two exact numbers is simpler than
+   comparing two exact differences of exact numbers, and the fixture's
+   exactness is CHECKED (`_check_operands_are_exact`, `_exact_bound`) rather
+   than argued.
+2. **G2's self test runs in a CLEAN build.** DEVIATION 1053. The old text
+   asked for a `BWD_UNTRANSPOSED` build against a square symmetric fixture,
+   shown to pass. That works and it costs an extra build plus an operator who
+   remembers to run it. `check_the_square_fixture_is_vacuous` re-spells the
+   untransposed route locally and demonstrates the inertness on every default
+   run, with an asymmetric-square control and a pairwise-distinct control
+   beside it so the demonstration cannot itself be vacuous.
+3. **G5 gained a POSITIVE arm, and it may overturn section 3.2 point 2.** See
+   5.2. DEVIATION 1056.
+4. **G7's destructive under-allocation arm is REFUSED.** DEVIATION 1058. See
+   the G7 entry.
+5. **G9 is emitted from the check file, not from `bench/gemm_bwd_card_main.mojo`.**
+   DEVIATION 1060. A second driver is a second spelling of the fixtures, and
+   the forward card's own header makes exactly that argument about its two
+   arms. See the G9 entry.
+
+### 5.2 The alignment finding, predicted before it is measured
+
+Section 3.2 point 2 currently says:
+
+> `dB` at `T` tokens is not the same bits as two `dB` calls at `T/2` summed.
+> It cannot be, under any partition scheme, because those are two different
+> sums of the same terms in a different order.
+
+**That sentence is predicted to be TOO STRONG, and G5 is written to find
+out.** v1's leaf rule holds `L` at 128 for every `k` up to 131,072 and v1's
+fold is a balanced binary tree over ADJACENT leaves. So a split at a token
+boundary that is both a LEAF boundary and a SUBTREE boundary of that tree
+reproduces the unsplit tree exactly, provided the accumulation across
+microbatches is spelled as the fold's own flushed add. Worked at `T = 512`
+split `256 / 256`:
+
+    unsplit    L = 128, P = 4, leaves L0..L3
+               node(1,0) = ftz(ftz(L0) + ftz(L1))
+               node(1,1) = ftz(ftz(L2) + ftz(L3))
+               out       = ftz(ftz(node(1,0)) + ftz(node(1,1)))
+    half 1     k' = 256, L = 128, P = 2   ->  ftz(node(1,0))
+    half 2     k' = 256, L = 128, P = 2   ->  ftz(node(1,1))
+    accum      ftz(ftz(half1) + ftz(half2))  ==  out, ftz being idempotent
+
+and at `T = 384` split `256 / 128`, where the second half is a single leaf and
+the unsplit tree's level 1 carries it unchanged. **Predicted: ZERO cells move
+in both.** A split at 150 of 300, at 200 of 512 or at 192 of 384 lands inside
+a leaf and the two partitions then share no boundary at all; predicted, many
+cells move, and the HOST ORACLE is what says exactly how many before the
+device is asked.
+
+If the prediction holds, the consequence for T11 is SHARPER than the current
+text and not weaker. The microbatch schedule is part of a training run's
+numerical specification UNLESS the accumulation factor divides the token count
+into leaf-aligned, subtree-aligned pieces AND the accumulator is the
+contract's own flushed add, in which case it is free. That is a designable
+property, it is cheap to arrange, and a trainer would want to know it.
+
+If the prediction fails, section 3.2 point 2 stands as written and this
+subsection is the thing to delete. **The gate raises rather than adjusting the
+fixture**, and the failure text says so in those words.
+
 ### G1 `check_backward_routing_is_the_table` (HOST ONLY, no device)
 
 Asserts `gemm_backward_a_call` and `gemm_backward_b_call` return exactly the
-six rows of section 2.2, at three shapes each with `m`, `n` and `k` pairwise
+six rows of section 2.2, at three shapes with `m`, `n` and `k` pairwise
 distinct, and separately asserts that the returned `(m', n')` equals `A`'s
 shape and `B`'s shape computed independently from the forward op. Cheap,
-instant, runs in any lane.
+instant, runs in any lane and with no GPU present.
 
-Sabotage: `SAB_BWD_UNTRANSPOSED` and `SAB_BWD_OPERAND_ORDER` must both make
-it fail, and the failure text must name the row.
+Non vacuous because the expected table is written out a SECOND time by hand
+(`_want_route`, DEVIATION 1052) rather than derived from the code under test,
+and because the shapes are REFUSED if any two dimensions are equal.
+
+Sabotage: `BWD_UNTRANSPOSED` must move mask 29 and `BWD_OPERAND_ORDER` mask
+44, exactly. `BWD_BIAS_AXIS` must move NOTHING here.
 
 ### G2 `check_backward_gradients_are_correct` (HOST ONLY)
 
-**This is the gate that answers a different question from all the others.**
+**THIS IS THE GATE THAT ANSWERS A DIFFERENT QUESTION FROM ALL THE OTHERS.**
 Bit identity says the answer is the same everywhere. It does not say the
 answer is the RIGHT derivative, and a transpose error is bit identical on
-three vendors. Both are needed.
+three vendors. Both are needed, and G3 without G2 certifies a wrong gradient.
 
-Method, and it is exact rather than approximate. A GEMM is bilinear, so for
-the scalar `L = sum over cells of C * G` with a fixed seed gradient `G`, the
-derivative with respect to any entry of `A` is EXACTLY the central difference
-at any step size. So build the fixture from small integers whose products and
-sums are exactly representable in Float32, take `h = 1`, and assert
-**BITWISE** rather than to a tolerance. There is no epsilon to tune and no
-noise floor to argue about.
+Method, exact rather than approximate. Every operand is a nonzero integer in
+`[-8, 8]`, so every product is an integer in `[-64, 64]` and every partial sum
+an integer of magnitude at most `64 k'`. While that stays under `2^24` the sum
+is exact in Float32 in EVERY order, so the contract's partitioned tree, a
+plain ascending host loop and any vendor's library all agree, and the only
+thing that can move a bit is reading the wrong element. There is no epsilon to
+tune and no noise floor to argue about.
 
-Asserts, for all three forward ops and for the bias:
-`(L(A + h e_ip) - L(A - h e_ip)) / (2h)` equals `dA[i][p]` bit for bit at
-every `(i, p)`, and the same for `B`, and `sum over i of G[i][j]` equals
-`db[j]`.
+Asserts, for all three forward orientations at three pairwise-distinct shapes:
+the routed call's output equals `_ref_da` / `_ref_db`, bit for bit, at every
+cell, where those two are derived from the forward's own definition with the
+routing table nowhere in scope. Plus the bias against `_ref_bias`, a plain
+column sum.
 
-**Vacuity guard, required.** The check must REFUSE to pass unless `m`, `n`
-and `k` are pairwise distinct and the fixture is asymmetric, because at a
-square symmetric fixture a transpose error computes the same numbers.
-Suggested shape `5 x 7 x 3`.
+**Vacuity guards, all three enforced.** `m`, `n` and `k` pairwise distinct or
+the check raises. Every operand integral, nonzero and within `[-8, 8]` or the
+check raises. The contraction length inside the exact range or the check
+raises. And `check_the_square_fixture_is_vacuous` DEMONSTRATES the shape
+constraint rather than asserting it, in a clean build, with two controls.
 
-**Self test, and it is the interesting half.** The check should DEMONSTRATE
-its own fixture requirement rather than assert it: run `SAB_BWD_UNTRANSPOSED`
-on a square symmetric fixture, show that it PASSES, and print that as the
-reason the shape constraint exists. This repository has done that move
-before, and the mamba lane's finding that an adversarial corpus case was
-BITWISE INERT under a sabotage is the pattern.
+ASSERTED IN BOTH MODES, which is unusual and is a consequence of the fixture:
+on exact integers a contracted multiply-add and an uncontracted one produce
+the same bits, so a FAST failure here is a real routing defect.
 
-Sabotages that must fail: `SAB_BWD_UNTRANSPOSED`, `SAB_BWD_OPERAND_ORDER`,
-`SAB_BWD_BIAS_AXIS`, plus a fourth built into the check itself, a ones vector
-poisoned to `1.0000001` at one entry, which must move `db` and only `db`.
+Sabotages: `BWD_UNTRANSPOSED` mask 29, `BWD_OPERAND_ORDER` mask 44,
+`BWD_BIAS_AXIS` on the bias arm only, plus a ones vector poisoned at one
+entry, which must move `db` and only `db` (G6 arm 3).
 
 ### G3 `check_backward_matches_oracle` (DEVICE)
 
-For each of the six calls, the device output equals `gemm_oracle` evaluated
-at the BACKWARD `(op', m', n', k')` on the same operand bytes, per cell,
-bitwise. This is the identity gate and it is the backward twin of
+For each of the six routes and the bias, the device output equals
+`gemm_oracle` evaluated at the BACKWARD `(op', m', n', k')` on the same
+operand bytes, per cell, bitwise. The backward twin of
 `check_device_matches_oracle`.
 
-Shapes: the six routings crossed with the forward gate's synthetic partition
-cases translated into backward shapes, so that `k'` hits `0`, `1`, `128`
-(`P = 1`), `129`, `300` (`P = 3`, ragged and odd, the case contract 12.1
-names), `517` (`P = 5`, the smallest `P` that carries twice), `4097`
-(`P = 33`, one-element last leaf), `130900`, `131073` (past the `L`
-crossover) and `4000000`. Plus one all-`-0.0` leaf-partial fixture, since
-that is the only input that separates a CARRY from `+0.0` padding.
+**THE SHAPE LIST IS DRIVEN BY `k'`, NOT BY `k`**, and that inversion is the
+whole reason this gate cannot reuse the forward gate's list. `k'` is `n` for a
+`dA` call and `m` for a `dB` call, so putting a `dB` call at `P = 3` needs a
+forward shape with 300 TOKENS and putting a `dA` call there needs an output
+width of 300. Getting that wrong produces a sweep that looks thorough and
+exercises `P = 1` throughout. The list forces `k'` to hit `0`, `1`, `128`,
+`129`, `300` (`P = 3`, ragged and odd), `517` (`P = 5`, the smallest `P` that
+carries twice) and `4097` (`P = 33`, one-element last leaf), once per route,
+plus ragged `m'` and `n'` that no tile divides, plus one exact-integer fixture
+per route so a moved route fails here too.
+
+Plus the all-`-0.0` leaf fixture, ROUTED THROUGH `dB` (DEVIATION 1063), which
+is the only input in the file that separates a CARRY from `+0.0` padding, and
+which REFUSES ITSELF if the oracle does not come back `-0.0`.
+
+Non vacuous because every output buffer is POISONED with `-987654.0` before
+every launch and a surviving poison is counted and reported; a never-written
+cell that happens to compare equal is not evidence of anything. The WORKSPACE
+is poisoned too, so a plan that reads a slot it did not write reads a value
+that cannot be mistaken for a partial.
 
 Sabotages that must fail: the forward six, invoked through this path.
-`FOLD_STRIDE` and `PAD_PLUS_ZERO` need the odd `P` shapes to bite, so the
-gate must fail if those shapes are absent.
+`FOLD_STRIDE` needs the odd-`P` shapes and `PAD_PLUS_ZERO` needs the `-0.0`
+fixture, and the gate is built so both are present.
 
 ### G4 `check_backward_is_launch_invariant` (DEVICE)
 
-Each of the six calls run under all eight named execution plans via
-`identical_gemm_with_plan` must produce ONE byte pattern. This is the claim
-the profile exists to make, asserted on the backward shapes.
+Each of the six routes run under all eight named execution plans via
+`identical_gemm_with_plan` must produce ONE byte pattern. The claim the
+profile exists to make, asserted on the backward shapes.
 
-Sabotages: `LEAF_ROTATE` and `NODE_ORDER`, which are the two that move a bit
-only when the launch changes.
+Forward `(m, n, k) = (520, 517, 17)` gives every `dA` route `k' = 517` and
+every `dB` route `k' = 520`, both `P = 5`, the smallest `P` that carries
+twice and therefore the fold shape a launch-dependent tree is most likely to
+get wrong. The six `(m', n')` differ, so the dispatcher's own choice differs
+across them.
+
+**This gate deliberately bypasses the backward launchers**, which take no plan
+argument and must not grow one. It asks the KERNEL's question at the backward
+SHAPES; G3 is what asks the launcher's question. Neither backward sabotage can
+reach it, because all eight plans are given the same route and a routing
+defect moves all eight together. That is the division of labor and it is
+stated so nobody reads a green G4 as evidence about routing.
+
+Sabotages: `LEAF_ROTATE` and `NODE_ORDER`, the two forward arms that move a
+bit only when the launch changes.
 
 ### G5 `check_backward_b_depends_on_the_token_count_and_says_so` (DEVICE)
 
 A gate on a NEGATIVE property, so that section 3.2 is measured rather than
-asserted. Two arms.
+asserted, and on the POSITIVE property beside it so the negative one means
+something. Four claims:
 
-- `dB` at a fixed `T` is bitwise identical across launches, plans and repeat
-  runs. (The positive half.)
-- `dB` at `T` tokens DIFFERS from `dB(first T/2) + dB(second T/2)`. (The
-  negative half, and the point.)
+1. `dB` at `T` tokens DIFFERS from two accumulated calls when the split lands
+   INSIDE a leaf. The host oracle predicts the exact cell count and the exact
+   first differing cell, and the device must reproduce both.
+2. `dB` at `T` tokens is BIT IDENTICAL to two accumulated calls when the split
+   is leaf aligned and subtree aligned. Predicted ZERO moved cells at
+   `512 = 256 + 256` and `384 = 256 + 128`. See 5.2.
+3. `dA` under the same splits does not move at all, because its `k'` is the
+   OUTPUT WIDTH and a batch split does not touch it. Predicted ZERO of `m k`
+   cells, for aligned and misaligned splits alike, including one arm that
+   crosses a dispatch boundary.
+4. The exact-integer control agrees under EVERY split, which is what makes
+   claim 1's number a rounding-order measurement rather than a bug in the
+   harness.
 
-**Vacuity guard, required.** The check must first show that the two arms
-agree in EXACT arithmetic on an integer fixture, so that the difference it
-then measures on a rounding-sensitive fixture is a rounding-order difference
-and not a bug in the split. If the two arms agree on the rounding-sensitive
-fixture, the gate must raise VACUOUS rather than pass, because that means the
-fixture could not separate them and the claim is untested.
+**Vacuity guards.** If the exact control disagrees, the split is buggy and the
+gate raises rather than reporting the rounding number. If a misaligned arm's
+host oracle finds ZERO moved cells, the gate raises VACUOUS, because the
+fixture could not separate the two summation orders and the negative claim is
+untested. If an aligned arm's host oracle finds a NONZERO count, the gate
+raises and says in those words that 5.2's finding has to be withdrawn and
+section 3.2 point 2 stands.
 
-Record the measured difference as a number (how many cells moved, and by how
-many ulps), because that number is the blast radius of a microbatch schedule
-change and somebody will ask for it.
+The accumulation across microbatches is `fold_balanced_tree` over two
+elements, DEVIATION 1057, so it IS the contract's own arithmetic node rather
+than a re-spelling of it. A trainer that accumulates with a bare `+` gets the
+same bits except where a subnormal appears; that is a smaller gap than it
+sounds and it is still a gap, and it is why T11 is a PIN and not a
+"usually fine".
+
+Record the measured difference as a number, because that number is the blast
+radius of a microbatch schedule change and somebody will ask for it.
 
 ### G6 `check_backward_bias_is_the_contract_sum` (DEVICE)
 
-Two arms, and the second is the one that matters.
+Four arms, and the second of the two references is the one that matters.
 
 - `db` equals `gemm_oracle` at `(1, n, m)` `OP_NN` with the ones vector.
-- `db` equals a HOST computation done directly from `dC` with no ones vector
-  in it: an ascending flushed chain per leaf, folded by
-  `gemm_oracle::fold_balanced_tree`. **This arm is the proof that the ones
-  trick is the reduction it claims to be** rather than a coincidence, and
-  without it G6 only checks that a GEMM is a GEMM.
+- `db` equals a HOST computation done directly from `dC` with NO ONES VECTOR
+  IN IT: an ascending flushed chain per leaf, folded by
+  `fold_balanced_tree`. **This arm is the proof that the ones trick is the
+  reduction it claims to be** rather than a coincidence, and without it G6
+  only checks that a GEMM is a GEMM. DEVIATION 1054. It is ASSERTED IN BOTH
+  MODES, because `1.0 * x` is exact whether or not the backend contracts, so
+  `fma(1, x, acc)` and `acc + x` are the same correctly-rounded add in either.
+- A ones vector poisoned to `2.0` at one entry. **Predicted: EXACTLY `n` of
+  `n` cells move**, because the change to `db[j]` is exactly `dC[r][j]` and
+  the fixture generator never returns zero. DEVIATION 1055.
+- A ones vector poisoned to `1.0000001` at one entry, the realistic version of
+  the same mistake. **This arm is a MEASUREMENT and not an assertion**,
+  because whether a relative perturbation of 1.2e-7 on one of `m` terms
+  survives the rounding of the sum is a property of the fixture. The count is
+  printed so the answer is on record, and it is predicted to come out well
+  below `n`.
 
-Sabotages: `SAB_BWD_BIAS_AXIS` at `m != n`, plus a poisoned ones entry.
+Sabotage `SAB_BWD_BIAS_AXIS`, with exact predictions at two shapes:
 
-### G7 `check_backward_workspace_sizing` (DEVICE)
+| shape | what the arm writes | predicted |
+|---|---|---|
+| `m = 5, n = 7` | 5 row sums where 7 column sums are expected | 5 of 7 hold the wrong value, 2 of 7 NEVER WRITTEN, 7 of 7 moved |
+| `m = 7, n = 7` | 7 row sums, the RIGHT LENGTH and the wrong contents | 7 of 7 moved, 0 unwritten |
 
-Allocate exactly `identical_gemm_backward_*_workspace_max_floats` and run;
-then deliberately allocate the FORWARD shape's number at a shape where the
-two differ, and show the output comes back with `+0.0` regions. This is the
-forward lane's own documented near-miss re-run on the backward side, where it
-is more likely because the shapes genuinely differ rather than coincide.
+The second is the arm that proves the gate compares VALUES and not shapes,
+which `gemm_backward.mojo`'s own docstring demands of it.
 
-The gate must choose the shape by CHECKING that the two numbers differ, not
-by assuming, and must poison the workspace before every launch.
+### G7 `check_backward_workspace_sizing` (HOST + DEVICE)
+
+**THE DESTRUCTIVE ARM THIS SECTION USED TO ASK FOR IS REFUSED. DEVIATION
+1058.** Handing a deliberately too-small `DeviceBuffer` to a SPLITK dispatch
+is an out-of-bounds DEVICE WRITE, and undefined behavior is not a repeatable
+ledger entry: it can crash, it can return the right answer because the
+allocation had slack (which is exactly what happened on the forward side at
+`64 x 4` before `64 x 64` showed it), and it can do something different on
+each vendor. The repository's record of that under-allocation is a BUG IT HIT,
+not a test it keeps. What is asserted instead:
+
+- **The number is right.** On the host, each helper's answer is at least
+  `identical_gemm_workspace_floats` at the ROUTED shape on the plan
+  `choose_gemm_plan` will actually pick, and the combined helper is at least
+  the max of the three.
+- **The number is not the forward number.** The gate SEARCHES a shape list for
+  a case where the forward and backward numbers differ and RAISES if none
+  does, so it cannot pass on a coincidence. The shape it is expected to find,
+  worked on paper: forward `OP_NN` at `(520, 5, 17)`, where the forward call
+  has `m n = 2600` and `P(17) = 1` so SPLITK is refused for want of leaves and
+  the workspace is the floor 1, while the `dB` route is `OP_TN` at
+  `(17, 5, 520)` with `m' n' = 85` and `P(520) = 5`, which takes SPLITK and
+  needs `85 * 5 = 425`. **425 against 1**, and a training step that sized its
+  scratch from the forward shape would write 424 floats past the end of it.
+- **The number is sufficient.** Every launch in the file runs against a
+  workspace allocated at exactly the helper's answer and POISONED first.
+- **The shared DIRTY workspace.** DEVIATION 1059. `dA`, `dB` and `db` enqueued
+  back to back on ONE context through ONE workspace with no synchronize
+  between them, each compared to its own solo launch. That is the composition
+  `identical_gemm_backward_workspace_max_floats` exists to license.
 
 ### G8 `check_backward_k_range` (DEVICE)
 
-The token sweep for `dB`, at `k'` in `{0, 1, 128, 129, 131072, 131073,
-130900, 1000000, 4000000}`, comparing against the oracle at reduced `m'` and
-`n'` (sound for the same reason the forward gate reduces them: the arithmetic
-sees `k` and the profile alone). Anything past 4,000,000 is RECORDED as
-untested rather than asserted, unless the sweep is extended and priced.
+The token sweep for `dB`, at `k'` in `{0, 1, 128, 129, 300, 517, 4097,
+130900, 131073, 1000000, 4000000}`, comparing against the oracle at reduced
+`m'` and `n'` (sound for the same reason the forward gate reduces them: the
+arithmetic sees `k` and the profile alone). Anything past 4,000,000 is
+RECORDED as untested rather than asserted. DEVIATION 1062.
+
+**THIS GATE CANNOT SEE A TRANSPOSE ERROR AND IS NOT FOR THAT.** At the
+degenerate `(m, n, k) = (T, 1, 2)` a wrong orientation could land on the right
+cells. G2 is the gate for the routing and G3 for the orientation; this one is
+about the PARTITION and only about the partition, and the sentence is in the
+docstring so that nobody reads a green G8 as evidence about transposes.
 
 ### G9 the backward card
 
-`bench/gemm_bwd_card_main.mojo`, following DEVIATION 533 and 534's pattern.
-Per-stage hashes `bwd.da.*`, `bwd.db.*`, `bwd.dbias.*` plus the fold-ladder
-levels, so a cross-vendor divergence localizes to a call, a fold level and a
-leaf rather than reporting that the gradient moved. The forward lane's
-experience is the argument: an output-only comparison called a thirteen-stage
-divergence inert on the mamba block, and only the per-stage card could see
-it.
+Emitted from `gemm_backward_check.mojo` itself through
+`core/identity_trace.mojo`, gated on `MOJOLEARN_IDENTITY_TRACE`, and NOT from
+a new `bench/` driver. DEVIATION 1060. Three reasons, the first strongest:
+
+1. A second driver is a SECOND SPELLING OF THE FIXTURES. The forward card's
+   own header makes exactly this argument about its oracle arm and its device
+   arm, and a backward card with its own generator would diff two fixtures
+   whenever it diverged. Finding that out costs a rented hour.
+2. Every stage the card wants is already computed by G3.
+3. `bench/` is not this lane's to write into.
+
+Stages: `bwd.<route>.<shape>.in.dc`, `.in.w` and `.out` for the six routes
+plus `bwd.dbias.<shape>.*`, at three shapes. **Compare the input stages before
+comparing any output stage**; two cards whose inputs differ are diffing their
+fixtures.
+
+**THE FOLD-LADDER LEVELS ARE NOT IN IT, AND THAT IS AN ADMITTED GAP.**
+DEVIATION 533's per-level hashes are `bench/gemm_ladder_main.mojo`'s
+instrument and it belongs to another lane. The backward needs no NEW ladder,
+because a backward call at `(m', n', k')` is the forward at `(m', n', k')`, so
+running the EXISTING ladder at the six backward shapes is the whole of it, and
+that is a shape-list change in a file this lane may not edit. Until it is
+made, a backward divergence localizes to a CALL and a CELL and not to a fold
+level, and the forward lane's own experience says that is one instrument
+short: an output-only comparison called a thirteen-stage divergence inert on
+the mamba block, and only the per-stage card could see it.
 
 ### G10 the three-vendor leg
 
-`tools/gemm_remote_leg.sh` and `gemm/E1G_RUNBOOK.md` are the procedure and
-the forward lane's leg 11 is the precedent. Nothing here is a cross-vendor
-claim until the card is byte identical on an Apple M4, an NVIDIA H100 and an
-AMD MI325X, and the standing lesson is that two backends agreeing closes
-nothing: Apple and AMD agreed through 302 stages while NVIDIA diverged.
+`tools/gemm_remote_leg.sh` and `gemm/E1G_RUNBOOK.md` are the procedure and the
+forward lane's leg 11 is the precedent. Nothing here is a cross-vendor claim
+until the card is byte identical on an Apple M4, an NVIDIA H100 and an AMD
+MI325X, and the standing lesson is that two backends agreeing closes nothing:
+Apple and AMD agreed through 302 stages while NVIDIA diverged.
+
+### 5.3 The "no arithmetic" claim is mechanically checkable
+
+`gemm_backward.mojo`'s first sentence is that the file contains no multiply,
+no add, no `ftz` and no kernel. That is checkable without reading it, and the
+check is three facts:
+
+1. It does not import `mojo_only.numerics`. Its whole import block is four
+   lines and none of them is that module, so `ftz` and `identical_mul_add` are
+   not in scope and cannot be called.
+2. After stripping docstrings, comment lines and string literals, the file
+   contains no `Float32`, no `SIMD`, no `fma`, no `*` and no `/`.
+3. The only `+` that survives that strip is ten String concatenations inside
+   `gemm_backward_call_name`, at lines 327 to 336.
+
+`tools/no_arithmetic_scan.py` is the request, not the artifact; the scan is
+in this lane's report as an inline command until somebody owns a tools file
+for it.
 
 ---
 
@@ -750,7 +996,13 @@ claiming three.
 
 ## 8. Open questions, and things a reader should not assume
 
-- **Nothing here has run.** Not one gate, not one fixture, not one device
+- **The gates have now run, ONCE, on ONE box.** All ten green on Apple M4
+  under IDENTICAL on 2026-08-25, first execution, and G5 overturned section
+  3.2's point 2 (above). What has NOT happened: no sabotage arm has been
+  fired, no second vendor, no card emitted, and the forward six sabotages
+  have no predicted cell counts through backward entry points. The sentence
+  that follows was written before any of that and is kept for the record.
+- **Nothing here had run when this plan was written.** Not one gate, not one fixture, not one device
   call. The routing table is derived and coded; whether the code compiles is
   unknown to this document.
 - **The backward file has never been compiled.** It mirrors
