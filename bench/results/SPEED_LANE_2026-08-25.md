@@ -112,6 +112,40 @@ hide behind memory latency (1.02x to 1.03x at two rows). At `t512` there is
 nothing to hide behind and the pin shows at full price. That predicts where
 the cost lands on a shape nobody has run.
 
+### 1.2c THREE VENDORS, AND APPLE IS THE OUTLIER
+
+| llama8b t512 | M4 | H100 | MI325X |
+|---|---|---|---|
+| qkv | 1.52x | 2.33x | **2.21x** |
+| mlp_up | 1.54x | 2.32x | **2.20x** |
+| mlp_down | 1.55x | 2.31x | **2.17x** |
+| lm_head | 1.54x | 2.32x | **2.06x** |
+
+**AMD sits with NVIDIA, not with Apple.** The honest headline for the fold pin
+on datacenter silicon is **2.1x to 2.3x**, and the M4 figure was 35% LOW. A
+paper quoting 1.5x from the box it was developed on would have understated the
+cost of its own contract by a third.
+
+**AND THE VENDORS DIFFER IN WHICH CLAUSE IS EXPENSIVE, NOT ONLY BY HOW MUCH.**
+A mechanism proposed after the H100 leg -- that the cost is `ftz` plus
+forbidding FMA contraction, so it should vanish where the kernel is bandwidth
+bound -- covers NVIDIA and DOES NOT SURVIVE AMD:
+
+| | M4 | H100 | MI325X |
+|---|---|---|---|
+| seams share at t512 (`pin/strict`) | 1.24x of 1.55x | 1.83x of 2.31x | 2.12x of 2.21x |
+| `mlp_down.t1` `pin/strict` | -- | 0.93x | **1.00x** |
+| `mlp_down.t1` `pin/unpinned` | -- | 1.02x | **2.30x** |
+
+On the MI325X at `t1` the seams cost NOTHING (`pin/strict` = 1.00) while the
+whole 2.30x comes from the no-sub-partition clause. On the H100 at the same
+row both are ~1.0. On the M4 the two split evenly at `t512`. **There is no
+single mechanism yet, and the file says so rather than keeping the tidy one.**
+
+What this means for anyone quoting these numbers: the fold pin's price is a
+function of the vendor AND the shape AND which clause that vendor happens to
+find expensive. Report the range with the table, never a scalar.
+
 ### 1.2b The confounds this does not remove
 
 DEVIATION 1092. Three arms exist and none of them is the experiment:
