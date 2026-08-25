@@ -79,6 +79,7 @@ teardown() {
 trap teardown EXIT
 
 mkdir -p "$(dirname "$STATE")"
+LEG_START=$(date +%s)   # every bound below is measured from here, not from the step that uses it
 
 # THE DEAD-MAN, ARMED BEFORE THE CREATE CALL AND KEYED BY NAME, NOT ID.
 # Leg 10 (2026-08-23 12:11): the create call made the droplet but returned
@@ -163,8 +164,68 @@ scp -q -o StrictHostKeyChecking=accept-new "$BUNDLE" "root@$IP:/root/e2.bundle" 
 $SSH "rm -rf /root/mojolearn && git clone -q -b e2-run /root/e2.bundle /root/mojolearn && cd /root/mojolearn && git rev-parse HEAD && git status --short | head -3 && grep -c 'is_defined\\[\"MOJOLEARN_NUMERIC_IDENTICAL\"\\]' mojo_only/numerics.mojo" \
   || { log "remote clone/checkout failed"; exit 6; }
 
-log "bootstrap (phases 0-4) -- this is the long step"
-$SSH 'export PATH=/root/.pixi/bin:$PATH; cd /root/mojolearn && bash tools/e1_bootstrap.sh > /root/e2_run.log 2>&1; echo "BOOTSTRAP-EXIT=$?"; tail -20 /root/e2_run.log'
+# THE WORK BOUND, COMPUTED FROM THE LEASE AND NOT FROM A GUESS.
+# DEVIATION 1090, 2026-08-25. This step used to be an unbounded `$SSH` that
+# ran the whole bootstrap. If the payload hung -- a pixi solve that never
+# finishes, a device that never answers -- the ONLY thing that ended the leg
+# was the dead-man, which destroys the droplet WITH THE ARTIFACTS STILL ON IT
+# and the fetch below never runs. A leg that dies that way costs the full hour
+# and comes home with nothing, which is the worst of the two failures.
+#
+# So the remote work gets its own `timeout`, and its budget is what is LEFT of
+# the lease after provisioning, minus a fetch reserve. It is absolute, not a
+# fixed number: a slow provision shortens the work, it does not push the fetch
+# past the dead-man. `timeout` is coreutils on the Ubuntu image; it does not
+# exist on the launching Mac and is deliberately not used there.
+FETCH_RESERVE="${FETCH_RESERVE:-420}"
+# WAVES: THE LANE THAT MATTERS MOST RUNS FIRST, IN ITS OWN BOOTSTRAP.
+# E2_LANE_WAVES="mamba;gemm;cd,kde,linkage,svm,metrics" runs three bootstraps
+# on the one droplet, each with its own bound, each writing its own stamped
+# directory. Unset means a single wave whose lanes are MOJOLEARN_E1_LANES.
+#
+# WHY NOT ONE CALL WITH ALL SEVEN. Phase 8's loop order is fixed (gemm first,
+# mamba sixth) and `MOJOLEARN_E1_LANES` selects without reordering, so on a
+# rented box a slow gemm compile decides that mamba does not run at all --
+# exactly what happened to leg 12 (identical_cards=2, five lanes missing). A
+# wave is the only way to say "this one first" without editing phase 8's order
+# for everybody. The waves share the box's pixi env and mojo cache, so only
+# the first pays the setup.
+WAVES="${E2_LANE_WAVES:-${MOJOLEARN_E1_LANES:-}}"
+WAVE_N=0
+IFS=';' read -r -a WAVE_ARR <<< "$WAVES"
+[ ${#WAVE_ARR[@]} -eq 0 ] && WAVE_ARR=("")
+for WAVE in "${WAVE_ARR[@]}"; do
+  WAVE_N=$((WAVE_N+1))
+  NOW=$(date +%s)
+  WORK_SECONDS=$(( LEG_START + DEADMAN_SECONDS - NOW - FETCH_RESERVE ))
+  if [ "$WORK_SECONDS" -lt 120 ]; then
+    log "wave $WAVE_N (${WAVE:-all}) SKIPPED -- only ${WORK_SECONDS}s of lease left"
+    continue
+  fi
+  log "wave $WAVE_N: phases=${MOJOLEARN_E1_PHASES:-all} lanes=${WAVE:-all}, bound ${WORK_SECONDS}s"
+  $SSH "export PATH=/root/.pixi/bin:\$PATH; cd /root/mojolearn && MOJOLEARN_E1_PHASES='${MOJOLEARN_E1_PHASES:-}' MOJOLEARN_E1_LANES='$WAVE' timeout -k 30 $WORK_SECONDS bash tools/e1_bootstrap.sh > /root/e2_run_w$WAVE_N.log 2>&1; echo \"WAVE-$WAVE_N-EXIT=\$?  (124 = hit the work bound)\"; tail -30 /root/e2_run_w$WAVE_N.log"
+done
+
+# EXTRA CHECKS: things phase 8 does not know about yet, run only when asked.
+# Named explicitly rather than swept, so this leg's payload is readable from
+# this file alone. Each gets its own slice of what is left, so one hang cannot
+# eat the others.
+if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
+  for chk in $E2_EXTRA_CHECKS; do
+    case "$chk" in
+      gemm-backward) CMD='pixi run mojo run -I . gemm/mojo_only/gemm_backward_check.mojo' ;;
+      # (no `transformer` case: the device spelling in transformer/ported/ has
+      #  no check driver yet, so there is nothing here to run. Add the case in
+      #  the same commit that adds the driver.)
+      *) log "unknown extra check '$chk' -- skipped"; continue ;;
+    esac
+    NOW=$(date +%s)
+    LEFT=$(( LEG_START + DEADMAN_SECONDS - NOW - FETCH_RESERVE ))
+    [ "$LEFT" -lt 60 ] && { log "extra check $chk SKIPPED (${LEFT}s left)"; continue; }
+    log "extra check: $chk (bound ${LEFT}s)"
+    $SSH "export PATH=/root/.pixi/bin:\$PATH; cd /root/mojolearn && OUT=\$(ls -td bench/results/e1/*/ | head -1) && mkdir -p \"\$OUT/lanes\" && MOJOLEARN_IDENTITY_TRACE=\"\$OUT/lanes/$chk.identical.card\" timeout -k 30 $LEFT bash tools/with_identical_mode.sh $CMD > \"\$OUT/lanes/$chk.identical.check.log\" 2>&1; echo \"EXTRA-$chk-EXIT=\$?\"; tail -8 \"\$OUT/lanes/$chk.identical.check.log\""
+  done
+fi
 
 # TRAIN-HERE-INFER-THERE, the Mac -> box direction: the Mac reference
 # run's models (MAC_REF_DIR, optional) are loaded on the box with the
@@ -187,7 +248,9 @@ mkdir -p "$REPO/bench/results/e1"
 rsync -az "root@$IP:/root/mojolearn/bench/results/e1/" "$REPO/bench/results/e1/" \
   && log "fetched: $(ls -t "$REPO/bench/results/e1" | head -1)" \
   || log "FETCH FAILED (the remote log is /root/e2_run.log; droplet is being destroyed regardless)"
-rsync -az "root@$IP:/root/e2_run.log" "$REPO/bench/results/e1/e2_run_$VENDOR.log" 2>/dev/null || true
+for wl in $($SSH "ls /root/e2_run*.log 2>/dev/null"); do
+  rsync -az "root@$IP:$wl" "$REPO/bench/results/e1/${VENDOR}_$(basename "$wl")" 2>/dev/null || true
+done
 
 log "leg done; destroying"
 # teardown runs via the EXIT trap
