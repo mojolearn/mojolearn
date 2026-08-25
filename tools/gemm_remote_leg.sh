@@ -371,6 +371,28 @@ LEASE_DIR="${MOJOLEARN_LEASE_DIR:-bench/results/runpod_leases}"
 # `phase8` runs tools/e1_bootstrap.sh so that phase 8's seven lanes come home
 # for tools/e3_round_judge.sh section 7.
 PAYLOAD="${MOJOLEARN_GEMM_LEG_PAYLOAD:-gemm}"
+# speed only. ONE FAMILY PER LEASE; see the refusal above for why that is
+# arithmetic rather than taste.
+#   gemmseq    gemm + transformer + mamba. torch is already in the image, so
+#              this family installs almost nothing and is the cheapest leg.
+#   classical  the cuML and cuVS opponents. Pays a RAPIDS install.
+#   forest     CatBoost, XGBoost and LightGBM, both devices each. Pays a
+#              LightGBM-from-source build for its CUDA arm.
+SPEED_FAMILY="${MOJOLEARN_SPEED_FAMILY:-gemmseq}"
+SPEED_ROUNDS="${MOJOLEARN_SPEED_ROUNDS:-5}"
+SPEED_SIZE="${MOJOLEARN_SPEED_SIZE:-shipped}"
+# PER ARM, in seconds. One lane that hangs must not eat the lease that
+# fifteen other lanes are waiting for, and a lane whose driver spins on a
+# shape nobody sized for an H100 is the likeliest way this leg loses its
+# hour. 600 is deliberately generous for a measurement and deliberately
+# far below the lease.
+ARM_BUDGET="${MOJOLEARN_SPEED_ARM_BUDGET:-600}"
+# LightGBM's CUDA learner is not in any wheel and is measured at fifteen to
+# thirty minutes from source. Bounded so a build that goes wrong cannot take
+# the whole forest family with it.
+LGBM_BUILD="${MOJOLEARN_SPEED_LGBM_BUILD:-1500}"
+# Filled in after the lane list function is defined; see leg_speed_lanes.
+SPEED_LANES=""
 # phase8 only: the Apple column this box's column will be judged against.
 APPLE_DIR="${MOJOLEARN_GEMM_LEG_APPLE_DIR:-}"
 APPLE_MISSING=0
@@ -471,10 +493,13 @@ leg_usage() {
     echo "options: --rent --dry-run --minutes N --gpu ID --image REF"
     echo "         --ssh TARGET --local-card PATH --column-sweep"
     echo "         --ready-timeout SECONDS"
-    echo "         --payload gemm|phase8   (--phase8 is the short form)"
+    echo "         --payload gemm|phase8|speed  (--phase8 is the short form)"
     echo "         --apple-dir DIR         phase8: the Apple column to be"
     echo "                                 judged against"
-    echo "         --work-timeout SECONDS  phase8: bound the bootstrap"
+    echo "         --work-timeout SECONDS  phase8/speed: bound the work"
+    echo "         --family NAME           speed: gemmseq | classical |"
+    echo "                                 forest. One family per leg."
+    echo "         --rounds N              speed: timed rounds per arm"
 }
 
 leg_say() { printf '[%s %s] %s\n' "$(date +%T)" "${VENDOR:-leg}" "$*"; }
@@ -508,6 +533,10 @@ while [ $# -gt 0 ]; do
         --column-sweep)  SWEEP=1 ;;
         --payload)       shift; PAYLOAD="${1:-}" ;;
         --phase8)        PAYLOAD="phase8" ;;
+        --speed)         PAYLOAD="speed" ;;
+        --family)        shift; SPEED_FAMILY="${1:-}" ;;
+        --rounds)        shift; SPEED_ROUNDS="${1:-}" ;;
+        --smoke)         SPEED_SIZE="smoke" ;;
         --apple-dir)     shift; APPLE_DIR="${1:-}" ;;
         --work-timeout)  shift; WORK_TIMEOUT="${1:-}" ;;
         -h|--help|help)  leg_usage; exit 0 ;;
@@ -555,7 +584,7 @@ esac
 # a payload this script does not understand must not fall through to the
 # default one and rent a box to run the wrong program.
 case "$PAYLOAD" in
-    gemm|phase8) : ;;
+    gemm|phase8|speed) : ;;
     *)
         echo "gemm_remote_leg: unknown payload '$PAYLOAD'." >&2
         echo "  gemm   (default) gemm_device_check.mojo + gemm_card.sh" >&2
@@ -565,8 +594,61 @@ case "$PAYLOAD" in
         echo "                   the seven lanes' cards; judged by" >&2
         echo "                   tools/e3_round_judge.sh section 7, not by" >&2
         echo "                   this leg." >&2
+        echo "  speed            THE FAST PATH AGAINST THE VENDOR. Builds" >&2
+        echo "                   and runs the bench/speed/ drivers with NO" >&2
+        echo "                   -D MOJOLEARN_NUMERIC_IDENTICAL, beside the" >&2
+        echo "                   vendor's own library on the same box, and" >&2
+        echo "                   brings the FSPEED lines home for" >&2
+        echo "                   tools/fast_speed_table.py. One --family" >&2
+        echo "                   per leg; it does not fit in one lease." >&2
         exit 2 ;;
 esac
+
+if [ "$PAYLOAD" = "speed" ]; then
+    # THE SPEED PAYLOAD HAS NO APPLE REFERENCE AND NO CARD DIFF, so the two
+    # gemm-payload flags that name one are refused rather than ignored. An
+    # ignored flag is an operator who believes something ran.
+    if [ "$SWEEP" = "1" ]; then
+        echo "gemm_remote_leg: --column-sweep belongs to the gemm payload." >&2
+        echo "  The speed payload measures WALL CLOCK on one box; a column" >&2
+        echo "  sweep is a bit-identity gate and has no timing to give." >&2
+        exit 2
+    fi
+    if [ -n "$LOCAL_CARD" ]; then
+        echo "gemm_remote_leg: --local-card belongs to the gemm payload." >&2
+        echo "  The speed payload has no Apple reference at all. It is a" >&2
+        echo "  measurement of ONE box against the libraries on THAT box," >&2
+        echo "  and a card from a different machine cannot enter it." >&2
+        exit 2
+    fi
+    # THE LANE LIST PER FAMILY, COMPOSED HERE AND NOT ON THE BOX, so that
+    # what ran is recorded in this leg's own artifacts rather than being
+    # whatever the box happened to find. A lane named here whose driver does
+    # not know it fails ONE lane and is a line in the log; a family whose
+    # DRIVER is missing at this commit is refused earlier, by the archive
+    # check, for nothing.
+    case "$SPEED_FAMILY" in
+        gemmseq)   SPEED_LANES="${MOJOLEARN_SPEED_LANES:-gemm transformer mamba}" ;;
+        classical) SPEED_LANES="${MOJOLEARN_SPEED_LANES:-kmeans dbscan pca ols knn cd kde linkage svm metrics ivf hdbscan cholesky gmm gp krr}" ;;
+        forest)    SPEED_LANES="${MOJOLEARN_SPEED_LANES:-gbdt-symmetric gbdt-depthwise gbdt-lossguide rf et iforest}" ;;
+    esac
+    case "$SPEED_FAMILY" in
+        gemmseq|classical|forest) : ;;
+        *)
+            echo "gemm_remote_leg: --family must be one of gemmseq, classical," >&2
+            echo "  forest. Got '$SPEED_FAMILY'." >&2
+            echo "  ONE FAMILY PER LEASE, and that is arithmetic rather than" >&2
+            echo "  taste: a cold box has to pixi-install, compile drivers" >&2
+            echo "  for CUDA for the first time, and pip-install the vendor" >&2
+            echo "  libraries. Measured elsewhere in this file: a full" >&2
+            echo "  bootstrap took fifty minutes on a 4090 and died on its" >&2
+            echo "  work bound, and --minutes is capped at $MINUTES_CAP BY NAME." >&2
+            exit 2 ;;
+    esac
+    case "$SPEED_ROUNDS" in
+        ''|*[!0-9]*) leg_die "gemm_remote_leg: --rounds must be a count, got '$SPEED_ROUNDS'." ;;
+    esac
+fi
 
 if [ "$PAYLOAD" = "phase8" ]; then
     # Two gemm-payload options that phase8 cannot honor. Refused by name
@@ -607,6 +689,7 @@ fi
 STAMP=$(date +%Y-%m-%d_%H%M%S)
 PSUF=""
 if [ "$PAYLOAD" = "phase8" ]; then PSUF="-phase8"; fi
+if [ "$PAYLOAD" = "speed" ]; then PSUF="-speed-$SPEED_FAMILY"; fi
 if [ "$MODE" = "dry" ]; then
     OUT="${MOJOLEARN_GEMM_LEG_OUT:-bench/results/e1g/${STAMP}-${VENDOR}${PSUF}-dryrun}"
 else
@@ -851,6 +934,14 @@ LEG_SOURCE_PATHS="gemm/mojo_only bench/gemm_card_main.mojo bench/gemm_shapes.moj
 # commit or stash, then rent.
 LEG_SOURCE_PATHS_PHASE8="tools/e1_bootstrap.sh tools/with_identical_mode.sh tools/with_build_lock.sh tools/gemm_card.sh bench/gemm_card_main.mojo bench/gemm_shapes.mojo gemm/mojo_only solver kde hierarchy svm metrics mamba mojo_only bindings python/mojolearn pixi.toml pixi.lock"
 
+# THE SPEED PAYLOAD'S SOURCE FOOTPRINT. Wider than either of the others,
+# because it compiles a driver per family and every lane those drivers call.
+# It is deliberately NOT the whole tree: the tree-clean gate exists so the
+# thing being measured is the device, and documentation cannot reach a
+# millisecond. But a benchmark driver, a lane it imports, or a vendor arm
+# script CAN, so all three are in here.
+LEG_SOURCE_PATHS_SPEED="bench/speed tools/speed_gemm_arm.py tools/speed_cuml_arm.py tools/speed_torch_seq.py tools/speed_gbdt_arm.py tools/vendor_gemm_price.py tools/fast_speed_table.py bench/gemm_shapes.mojo core gemm mojo_only bindings python/mojolearn pixi.toml pixi.lock"
+
 leg_check_tree_clean() {
     # THE LOCAL CARD COMES FROM THE WORKING TREE AND THE REMOTE CARD COMES
     # FROM THE COMMIT. If those differ for any file that can reach the bits,
@@ -861,6 +952,7 @@ leg_check_tree_clean() {
     # compiles one (DEVIATION 865).
     _paths="$LEG_SOURCE_PATHS"
     if [ "$PAYLOAD" = "phase8" ]; then _paths="$LEG_SOURCE_PATHS_PHASE8"; fi
+    if [ "$PAYLOAD" = "speed" ]; then _paths="$LEG_SOURCE_PATHS_SPEED"; fi
     # The list is a deliberate word list, so it is unquoted.
     # shellcheck disable=SC2086
     _dirty=$(git status --porcelain -- $_paths 2>/dev/null || true)
@@ -1062,6 +1154,86 @@ leg_witness_lane_mode() {
         | head -1 | sed -e 's/^\[//' -e 's/\]$//' -e 's/^mode //'
 }
 
+# ---------------------------------------------------------------------------
+# WHAT CAME HOME FROM A SPEED LEG, AND THE ONE THING THAT MAKES IT RED
+#
+# This payload has no card and no diff, so "red" cannot mean "the bits
+# disagree". It means one of three things, and only three:
+#
+#   1. NOTHING MEASURABLE CAME HOME. No FSPEED round lines at all is a leg
+#      that rented a box and produced no measurement.
+#   2. AN `ours` ARM REPORTED THE WRONG MODE. Every driver prints the mode it
+#      COMPILED in, read from the comptime constant rather than from the flag
+#      it was invoked with. This whole payload is the FAST path; one header
+#      saying IDENTICAL is a correctly-labelled measurement of the wrong arm,
+#      which this repository was bitten by three times on 2026-08-23, and it
+#      voids the table rather than one row of it.
+#   3. THE SOURCE SHA DID NOT MATCH, which step 8 checks for every payload.
+#
+# A REFUSED ARM IS NOT RED. cuML declining to install, LightGBM's CUDA
+# learner not building inside the lease, a lane whose first-ever CUDA compile
+# fails -- every one of those is a RESULT about this box and this image, it
+# is counted and printed, and it does not make the leg fail. Treating it as a
+# failure would create pressure to quietly drop the arm that refuses, and a
+# table whose arms were selected by whether they cooperated is not a table.
+# ---------------------------------------------------------------------------
+leg_speed_artifacts() {
+    _lt="$OUT/remote/leg.txt"
+    _ld="$OUT/remote/logs"
+    if [ ! -d "$_ld" ]; then
+        echo "  NO logs/ DIRECTORY CAME HOME. The box produced no arm logs at"
+        echo "  all, so there is nothing to build a table from. Read"
+        echo "  $OUT/remote/console.log and $OUT/remote/leg.txt."
+        return 1
+    fi
+    _rounds=$(cat "$_ld"/*.log 2>/dev/null | grep -c '^FSPEED ' || true)
+    _refused=$(cat "$_ld"/*.log 2>/dev/null | grep -c '^FSPEED-REFUSED' || true)
+    _fast=$(grep -h '^FSPEED-HEADER' "$_ld"/*.log 2>/dev/null | grep -c 'arm=ours mode=FAST' || true)
+    _ident=$(grep -h '^FSPEED-HEADER' "$_ld"/*.log 2>/dev/null | grep -c 'arm=ours mode=IDENTICAL' || true)
+    echo "  arm logs:        $(ls "$_ld" | wc -l | tr -d ' ')"
+    echo "  timed rounds:    ${_rounds:-0}"
+    echo "  refused arms:    ${_refused:-0}   (a result about this box, NOT a failure)"
+    echo "  ours headers:    ${_fast:-0} FAST, ${_ident:-0} IDENTICAL"
+
+    # PER LANE, so a lane that produced a vendor arm and no arm of ours is
+    # visible here rather than as a missing row in the table forty minutes
+    # from now. A row with no `ours` arm is the shape a first-ever CUDA
+    # compile failure takes.
+    for _l in $SPEED_LANES; do
+        _o=$(grep -h "^FSPEED .*lane=$_l .*arm=ours " "$_ld"/*.log 2>/dev/null | wc -l | tr -d ' ')
+        _v=$(grep -h "^FSPEED .*lane=$_l " "$_ld"/*.log 2>/dev/null | grep -vc 'arm=ours ' || true)
+        if [ "${_o:-0}" = "0" ] && [ "${_v:-0}" = "0" ]; then
+            echo "    $_l: NOTHING (neither arm produced a round)"
+        elif [ "${_o:-0}" = "0" ]; then
+            echo "    $_l: vendor only (${_v} rounds) -- OUR ARM DID NOT RUN"
+        elif [ "${_v:-0}" = "0" ]; then
+            echo "    $_l: ours only (${_o} rounds) -- no opponent ran on this box"
+        else
+            echo "    $_l: ours ${_o} rounds, opponents ${_v} rounds"
+        fi
+    done
+
+    _bad=0
+    if [ "${_rounds:-0}" -lt 1 ]; then
+        echo "  NO TIMED ROUND CAME HOME AT ALL. This leg rented a box and"
+        echo "  measured nothing. Read the arm logs before rerunning; the"
+        echo "  likeliest cause is that the first-ever CUDA build of these"
+        echo "  drivers failed, which is a finding and is in $_ld."
+        _bad=1
+    fi
+    if [ "${_ident:-0}" -gt 0 ]; then
+        echo "  MODE WITNESS FAILED: ${_ident} 'ours' header(s) report"
+        echo "  IDENTICAL. This payload is the FAST path and builds with no"
+        echo "  -D define, so a binary that compiled IDENTICAL means the"
+        echo "  environment on that box carried the mode in. Every ratio in"
+        echo "  this run is void: it would be the cost of the pin wearing the"
+        echo "  label of the fast arm."
+        _bad=1
+    fi
+    if [ -f "$_lt" ]; then sed 's/^/    /' "$_lt"; fi
+    return "$_bad"
+}
+
 leg_phase8_artifacts() {
     # WHAT CAME HOME, lane by lane. This leg does NOT judge these cards --
     # tools/e3_round_judge.sh section 7 does, against the Apple column. What
@@ -1137,7 +1309,22 @@ leg_phase8_artifacts() {
 leg_archive_required() {
     # What must be inside the archive for THIS payload to be worth shipping.
     # A word list on purpose, so the caller can iterate it.
-    if [ "$PAYLOAD" = "phase8" ]; then
+    if [ "$PAYLOAD" = "speed" ]; then
+        # PER FAMILY, for the same reason phase8's list is per lane: a
+        # driver that is not committed at this sha is caught HERE, for
+        # nothing, instead of surfacing forty minutes into a rental with no
+        # numbers to show for it. The table builder is in every list because
+        # a leg that brings home lines nothing can parse has brought home
+        # nothing.
+        case "$SPEED_FAMILY" in
+            gemmseq)
+                echo "bench/speed/gemm_speed_main.mojo bench/speed/seq_speed_main.mojo tools/speed_gemm_arm.py tools/speed_torch_seq.py tools/fast_speed_table.py" ;;
+            classical)
+                echo "bench/speed/classical_speed_main.mojo tools/speed_cuml_arm.py tools/fast_speed_table.py" ;;
+            forest)
+                echo "bench/speed/forest_speed_arm.py tools/speed_gbdt_arm.py tools/fast_speed_table.py" ;;
+        esac
+    elif [ "$PAYLOAD" = "phase8" ]; then
         # EVERY LANE PHASE 8 DRIVES, not only the two this file is named
         # after (DEVIATION 866). G2 checks each of these is inside the
         # archive, so a lane whose driver is not committed at this sha is
@@ -1690,7 +1877,9 @@ leg_check_key_not_in_ps() {
 
 leg_build_remote_body() {
     _body="$OUT/remote_body.sh"
-    if [ "$PAYLOAD" = "phase8" ]; then
+    if [ "$PAYLOAD" = "speed" ]; then
+        leg_body_speed > "$_body"
+    elif [ "$PAYLOAD" = "phase8" ]; then
         leg_body_phase8 > "$_body"
     else
         leg_body_gemm > "$_body"
@@ -1907,6 +2096,192 @@ echo REMOTE_BODY_DONE
 REMOTE_BODY_P8
 }
 
+# ---------------------------------------------------------------------------
+# THE SPEED PAYLOAD'S BODY (DEVIATION 1870). RUNS ON THE POD.
+#
+# It answers a question none of this file's other payloads asks: how fast is
+# the arm an ORDINARY USER GETS, against the library an NVIDIA user would
+# actually reach for, on NVIDIA silicon. So:
+#
+#   * NO `-D MOJOLEARN_NUMERIC_IDENTICAL=1` ANYWHERE IN HERE. Every Mojo
+#     invocation below is a bare `pixi run mojo run`, which is the FAST path.
+#     That is the whole point of the payload and it is the one thing about it
+#     that must not be got wrong, which is why every driver prints the mode
+#     it COMPILED in and the driving host refuses a leg whose arms reported
+#     IDENTICAL.
+#   * NO CARD DIFF, NO APPLE REFERENCE, NO IDENTITY CLAIM. A millisecond is
+#     not a hash and this payload makes no statement about bits except one:
+#     it records whether the FAST output moved between rounds, which is the
+#     evidence for what IDENTICAL buys, measured on the same box in the same
+#     hour.
+#
+# THE VENDOR ARMS RUN ON THE IMAGE'S SYSTEM PYTHON AND NOT UNDER PIXI, and
+# that is deliberate rather than lazy. `[feature.gbmbench.dependencies]` pins
+# python 3.14 because the prebuilt `python/mojolearn/*.so` were built against
+# it, and RAPIDS ships for 3.10 through 3.13. Those two cannot share an
+# interpreter, so putting cuML into the pixi environment would fail to
+# resolve and take the Mojo half of the leg down with it. The RunPod pytorch
+# image already carries a 3.11 with torch in it, which is exactly what the
+# vendor arms need.
+#
+# EVERY ARM IS BOUNDED AND EVERY ARM IS ALLOWED TO FAIL. `set -u` and NOT
+# `set -e`: an arm that cannot run is a RESULT about this box and this image,
+# it is recorded as FSPEED-REFUSED and the leg goes on. Dying at the first
+# non-zero would fetch an empty directory and lose every arm that worked,
+# which is the failure DEVIATION 863 was written about.
+# ---------------------------------------------------------------------------
+leg_body_speed() {
+    cat <<'REMOTE_BODY_SPEED'
+#!/bin/sh
+# Generated by tools/gemm_remote_leg.sh (--payload speed). RUNS ON THE POD.
+# POSIX sh only: RunPod's Ubuntu images link /bin/sh to dash.
+set -u
+ROOT=/root/mojolearn
+OUT=/root/gemm_leg_out
+LOGS="$OUT/logs"
+mkdir -p "$LOGS"
+cd "$ROOT" || exit 9
+
+{
+  echo "vendor=@VENDOR@"
+  echo "payload=speed"
+  echo "family=@FAMILY@"
+  echo "lanes=@SPEEDLANES@"
+  echo "commit=@COMMIT@"
+  echo "rounds=@SPEEDROUNDS@"
+  echo "size=@SPEEDSIZE@"
+  echo "arm_budget=@ARMBUDGET@"
+  echo "work_timeout=@WORKTIMEOUT@"
+  echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+} > "$OUT/leg.txt"
+
+uname -a > "$OUT/uname.txt" 2>&1
+@SMI@ > "$OUT/gpu.txt" 2>&1 || echo "no vendor smi tool answered" >> "$OUT/gpu.txt"
+
+# THE SOURCE HASH, computed BEFORE anything installs, with the same recipe
+# the Mac used on the extracted archive. This box has no .git by design, so
+# this is the only comparison of what was shipped against what ran.
+{ find . -name '*.mojo' -not -path './.pixi/*' -not -path './bench/results/*' \
+    | LC_ALL=C sort | xargs shasum -a 256 2>/dev/null || \
+  find . -name '*.mojo' -not -path './.pixi/*' -not -path './bench/results/*' \
+    | LC_ALL=C sort | xargs sha256sum ; } \
+  | { shasum -a 256 2>/dev/null || sha256sum ; } \
+  | awk '{print $1}' > "$OUT/source_sha256.txt"
+
+if [ ! -x "$HOME/.pixi/bin/pixi" ] && ! command -v pixi > /dev/null 2>&1; then
+    curl -fsSL https://pixi.sh/install.sh | sh > "$OUT/pixi_install.log" 2>&1
+fi
+PATH="$HOME/.pixi/bin:$PATH"
+export PATH
+command -v pixi > "$OUT/pixi_which.txt" 2>&1 || echo "NO PIXI" >> "$OUT/pixi_which.txt"
+command -v python3 > "$OUT/python_which.txt" 2>&1 || echo "NO SYSTEM PYTHON3" >> "$OUT/python_which.txt"
+python3 -c 'import sys; print(sys.version)' >> "$OUT/python_which.txt" 2>&1 || true
+
+export MOJOLEARN_SPEED_ROUNDS="@SPEEDROUNDS@"
+export MOJOLEARN_SPEED_SIZE="@SPEEDSIZE@"
+
+# ONE ARM, BOUNDED, ITS EXIT RECORDED, AND NEVER FATAL.
+runarm() {
+    _log="$1"; shift
+    printf '\n=== %s :: %s ===\n' "$_log" "$*" >> "$OUT/console.log"
+    if command -v timeout > /dev/null 2>&1; then
+        timeout -k 15 @ARMBUDGET@ "$@" > "$LOGS/$_log" 2>&1
+    else
+        "$@" > "$LOGS/$_log" 2>&1
+    fi
+    _rc=$?
+    echo "arm_exit ${_log}=$_rc" >> "$OUT/leg.txt"
+    if [ "$_rc" = "124" ]; then
+        # WRITTEN INTO THE ARM'S OWN LOG so the table builder carries it.
+        # An arm killed by the clock that came home looking merely empty is
+        # a silent cap, and a silent cap reads as coverage.
+        echo "FSPEED-NOTE lane=${_log} arm=- KILLED BY THE PER-ARM BUDGET (@ARMBUDGET@s)" >> "$LOGS/$_log"
+    fi
+    tail -3 "$LOGS/$_log" >> "$OUT/console.log" 2>&1 || true
+    return 0
+}
+
+pipget() {
+    # Best effort, logged, never fatal. A vendor library that will not
+    # install is a finding about this image, recorded as such.
+    printf '\n=== pip install %s ===\n' "$*" >> "$OUT/pip.log"
+    python3 -m pip install --no-input --disable-pip-version-check "$@" >> "$OUT/pip.log" 2>&1
+    echo "pip_exit $*=$?" >> "$OUT/pip.log"
+    return 0
+}
+
+case "@FAMILY@" in
+gemmseq)
+    # The cheapest family: torch is already in the image, so nothing is
+    # installed and the whole lease goes to compiling and measuring.
+    for L in @SPEEDLANES@; do
+        MOJOLEARN_SPEED_LANE="$L"; export MOJOLEARN_SPEED_LANE
+        case "$L" in
+            gemm) runarm "gemm.gemm.ours.log" \
+                    pixi run mojo run -I . bench/speed/gemm_speed_main.mojo ;;
+            *)    runarm "seq.$L.ours.log" \
+                    pixi run mojo run -I . bench/speed/seq_speed_main.mojo ;;
+        esac
+    done
+    runarm "gemm.gemm.cublas.log" python3 tools/speed_gemm_arm.py --rounds "@SPEEDROUNDS@"
+    runarm "seq.all.torch.log"    python3 tools/speed_torch_seq.py --rounds "@SPEEDROUNDS@"
+    ;;
+classical)
+    # RAPIDS is the install that can eat the lease. It runs FIRST so that a
+    # failure is known before any Mojo time is spent, and it is bounded.
+    pipget --extra-index-url=https://pypi.nvidia.com "cuml-cu12" "cuvs-cu12"
+    pipget scikit-learn scipy
+    for L in @SPEEDLANES@; do
+        MOJOLEARN_SPEED_LANE="$L"; export MOJOLEARN_SPEED_LANE
+        runarm "classical.$L.ours.log" \
+            pixi run mojo run -I . bench/speed/classical_speed_main.mojo
+        runarm "classical.$L.vendor.log" \
+            python3 tools/speed_cuml_arm.py --lane "$L" --rounds "@SPEEDROUNDS@"
+    done
+    ;;
+forest)
+    pipget catboost xgboost lightgbm scikit-learn
+    pipget --extra-index-url=https://pypi.nvidia.com "cuml-cu12"
+    # LightGBM's CUDA learner is NOT in the wheel and has to be built. It is
+    # attempted LAST of the installs and bounded, because it has been
+    # measured at fifteen to thirty minutes and this lease is sixty.
+    if command -v timeout > /dev/null 2>&1; then
+        timeout -k 30 @LGBMBUILD@ python3 -m pip install --no-input \
+            --no-binary lightgbm \
+            --config-settings=cmake.define.USE_CUDA=ON lightgbm \
+            >> "$OUT/pip.log" 2>&1
+        echo "lightgbm_cuda_build_exit=$?" >> "$OUT/leg.txt"
+    else
+        echo "lightgbm_cuda_build=SKIPPED, no timeout(1) to bound it" >> "$OUT/leg.txt"
+    fi
+    for L in @SPEEDLANES@; do
+        runarm "forest.$L.ours.log" \
+            python3 bench/speed/forest_speed_arm.py --lane "$L" --ours-only
+        runarm "forest.$L.vendor.log" \
+            python3 tools/speed_gbdt_arm.py --lane "$L"
+    done
+    ;;
+esac
+
+# WHAT ACTUALLY CAME OUT, counted on the box, so a fetch that loses files is
+# distinguishable from a run that produced none.
+echo "fspeed_lines=$(cat "$LOGS"/*.log 2>/dev/null | grep -c '^FSPEED')" >> "$OUT/leg.txt"
+echo "fspeed_rounds=$(cat "$LOGS"/*.log 2>/dev/null | grep -c '^FSPEED ')" >> "$OUT/leg.txt"
+echo "fspeed_refused=$(cat "$LOGS"/*.log 2>/dev/null | grep -c '^FSPEED-REFUSED')" >> "$OUT/leg.txt"
+# THE MODE WITNESS, READ BACK ON THE BOX. Every `ours` header must say FAST.
+# One that says IDENTICAL means a correctly-labelled measurement of the WRONG
+# ARM, which is the failure this repository has already been bitten by three
+# times in one day.
+echo "ours_headers_fast=$(grep -h '^FSPEED-HEADER' "$LOGS"/*.log 2>/dev/null | grep -c 'arm=ours mode=FAST')" >> "$OUT/leg.txt"
+echo "ours_headers_identical=$(grep -h '^FSPEED-HEADER' "$LOGS"/*.log 2>/dev/null | grep -c 'arm=ours mode=IDENTICAL')" >> "$OUT/leg.txt"
+
+echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/leg.txt"
+cat "$OUT/leg.txt"
+: > /root/gemm_leg.done
+echo REMOTE_BODY_DONE
+REMOTE_BODY_SPEED
+}
+
 leg_check_remote_body() {
     _body="$OUT/remote_body.sh"
     # SUBSTITUTION, AND THEN A CHECK THAT IT HAPPENED. A `sed` without `/g`
@@ -1915,6 +2290,12 @@ leg_check_remote_body() {
     # trust /g, it verifies that no placeholder survived.
     sed -e "s|@VENDOR@|$VENDOR|g" \
         -e "s|@COMMIT@|$COMMIT|g" \
+        -e "s|@FAMILY@|$SPEED_FAMILY|g" \
+        -e "s|@SPEEDLANES@|$SPEED_LANES|g" \
+        -e "s|@SPEEDROUNDS@|$SPEED_ROUNDS|g" \
+        -e "s|@SPEEDSIZE@|$SPEED_SIZE|g" \
+        -e "s|@ARMBUDGET@|$ARM_BUDGET|g" \
+        -e "s|@LGBMBUILD@|$LGBM_BUILD|g" \
         -e "s|@CARDFULL@|$CARD_FULL|g" \
         -e "s|@SWEEP@|$SWEEP|g" \
         -e "s|@DUMP@|$LEG_DUMP|g" \
@@ -2488,8 +2869,14 @@ leg_rehearse() {
 
     # -- D and E belong to the gemm payload: leg_require_identical and
     # leg_diff_cards are on ITS path and not on phase8's, where the mode
-    # read-back is per lane (group P) and the judge does the diffing.
-    if [ "$PAYLOAD" != "phase8" ]; then
+    # read-back is per lane (group P) and the judge does the diffing, and
+    # not on speed's, which has no card and asserts the OPPOSITE mode --
+    # `leg_require_identical` would refuse every log a speed leg produces,
+    # correctly, because a FAST banner is exactly what that payload wants.
+    if [ "$PAYLOAD" = "speed" ]; then
+        rok "D/E skipped: the speed payload has no card and requires FAST, not IDENTICAL"
+    fi
+    if [ "$PAYLOAD" != "phase8" ] && [ "$PAYLOAD" != "speed" ]; then
 
     # -- D. the contamination guard -----------------------------------------
     printf '== bench/gemm_card_main.mojo [FAST] ==\nstages: 60 over 20 shapes; 0 skipped\n' > "$TMPD/fast.log"
@@ -2894,8 +3281,13 @@ leg_rehearse() {
         else
             rok "L1 the Apple column exists at this commit ($APPLE_DIR)"
         fi
-    elif [ "${LOCAL_CARD_SYNTHETIC:-0}" = "1" ]; then
-        rblock "L1 the Apple reference card is a real measurement" "IT IS SYNTHETIC. The local device arm failed, so the checks above tested the plumbing against a card that measures nothing. Renting now would buy a remote card with nothing to compare it to."
+    elif [ "$PAYLOAD" = "speed" ]; then
+        # NOT `rok`, and the distinction matters. There is no Apple
+        # reference here at all and there is not supposed to be one: a
+        # millisecond from an M4 cannot enter a table of H100 milliseconds.
+        # Printing "ok, the reference is a real measurement" would be a
+        # green check on a thing that does not exist.
+        rok "L1 no Apple reference is required: a speed leg compares two libraries on ONE box"
     else
         rok "L1 the Apple reference card is a real measurement"
     fi
@@ -2986,6 +3378,14 @@ echo "== gemm.fp32.v1 remote leg (DEVIATION 536) =="
 echo "   profile:  mojolearn.identical.gemm.fp32.v1"
 echo "   vendor:   $VENDOR    label in the diff: $VLABEL"
 echo "   payload:  $PAYLOAD$( [ "$PAYLOAD" = phase8 ] && echo '   (tools/e1_bootstrap.sh; phase 8 is seven lanes)' )"
+if [ "$PAYLOAD" = "speed" ]; then
+echo "   family:   $SPEED_FAMILY"
+echo "   lanes:    $SPEED_LANES"
+echo "   rounds:   $SPEED_ROUNDS timed per arm, size=$SPEED_SIZE, per-arm budget ${ARM_BUDGET}s"
+echo "   MODE:     FAST. No -D MOJOLEARN_NUMERIC_IDENTICAL anywhere in this"
+echo "             payload. This leg measures the arm a user gets and makes"
+echo "             NO identity claim about it."
+fi
 echo "   mode:     $MODE$( [ "$MODE" = dry ] && echo '  (nothing is rented; --rent opts in)' )"
 echo "   gpu:      $GPU_ID"
 echo "   image:    $IMAGE"
@@ -3012,7 +3412,21 @@ COMMIT_LINE=$(git log -1 --format='%h parent %p' 2>/dev/null || echo unknown)
 echo "   commit:   $COMMIT_LINE"
 echo
 
-if [ "$PAYLOAD" = "phase8" ]; then
+if [ "$PAYLOAD" = "speed" ]; then
+
+echo "== step 1: THERE IS NO APPLE REFERENCE, AND THAT IS THE POINT =="
+echo "   This payload builds NOTHING on this Mac and compares nothing to it."
+echo "   A wall-clock number is a property of ONE box, and the comparison"
+echo "   that matters is made ON the rented box, in one hour, between our"
+echo "   FAST arm and the vendor's own library running on the same silicon"
+echo "   under the same thermal conditions. Carrying an M4 millisecond into"
+echo "   that table would be comparing two machines and calling it a"
+echo "   comparison of two libraries."
+echo
+echo "   What comes home is FSPEED lines. The verdict is"
+echo "   tools/fast_speed_table.py, run HERE, over the fetched logs."
+
+elif [ "$PAYLOAD" = "phase8" ]; then
 
 echo "== step 1: the Apple reference column =="
 echo "   The phase8 payload builds NOTHING on this Mac. Its reference is an"
@@ -3106,9 +3520,24 @@ if [ "$MODE" = "dry" ]; then
     echo "      from the pinned sha; read each lane's mode back"
     echo "   9. NO DIFF HERE. tools/e3_round_judge.sh section 7 judges it"
     else
+    if [ "$PAYLOAD" = "speed" ]; then
+    echo "   7. the bench/speed/ drivers, FAST (NO -D define), and the"
+    echo "      vendor arms, on the box, one arm per process, each bounded"
+    echo "      at ${ARM_BUDGET}s: family=$SPEED_FAMILY"
+    echo "      lanes: $SPEED_LANES"
+    echo "   8. fetch the FSPEED logs; REFUSE any 'ours' header that says"
+    echo "      IDENTICAL, because this payload is the FAST arm"
+    echo "   9. no diff. tools/fast_speed_table.py builds the ratio table"
+    echo "      HERE, from the logs, after the box is gone"
+    elif [ "$PAYLOAD" = "phase8" ]; then
+    echo "   7. tools/e1_bootstrap.sh, phases ${E1_PHASES:-all}, bounded"
+    echo "   8. fetch the bootstrap directory; read the mode back per lane"
+    echo "   9. no diff. tools/e3_round_judge.sh section 7 is the verdict"
+    else
     echo "   7. gemm_device_check.mojo, then gemm_card.sh device, IDENTICAL"
     echo "   8. fetch; read the mode back out of BOTH remote logs"
     echo "   9. diff against the Apple card; name the FIRST diverging stage"
+    fi
     fi
     echo "  10. reap, verify by asking the API, print the lease remaining"
     echo
@@ -3182,7 +3611,9 @@ leg_fetch
 echo
 echo "== step 8: what came home =="
 RED=$FETCH_RED
-if [ "$PAYLOAD" = "phase8" ]; then
+if [ "$PAYLOAD" = "speed" ]; then
+    leg_speed_artifacts || RED=1
+elif [ "$PAYLOAD" = "phase8" ]; then
     leg_phase8_artifacts || RED=1
 else
     REMOTE_CARD="$OUT/remote/$VENDOR.card"
@@ -3222,7 +3653,9 @@ fi
 if [ -f "$OUT/remote/leg.txt" ]; then
     sed 's/^/    /' "$OUT/remote/leg.txt"
 fi
-if [ "$PAYLOAD" = "phase8" ]; then
+if [ "$PAYLOAD" = "speed" ]; then
+    :
+elif [ "$PAYLOAD" = "phase8" ]; then
     if grep -q 'bootstrap_exit=0' "$OUT/remote/leg.txt" 2>/dev/null; then
         echo "  the bootstrap ran to the end on this box"
     elif grep -q 'bootstrap_exit=124' "$OUT/remote/leg.txt" 2>/dev/null; then
@@ -3249,7 +3682,20 @@ else
 fi
 
 echo
-if [ "$PAYLOAD" = "phase8" ]; then
+if [ "$PAYLOAD" = "speed" ]; then
+echo "== step 9: the table, which is built HERE =="
+echo "  Nothing is diffed. The verdict is a ratio table over the FSPEED"
+echo "  lines the box printed:"
+echo
+echo "    python3 tools/fast_speed_table.py $OUT/remote/logs \\"
+echo "        --out bench/results/fast_speed/${STAMP}-${VENDOR}-${SPEED_FAMILY}.md"
+echo
+echo "  Read its ratio column with the arm name in view. Above 1.0 means WE"
+echo "  ARE SLOWER, and for the gemm lane the fair opponent is cublas-tf32"
+echo "  rather than cublas-fp32, because our FAST arm took the same"
+echo "  precision cut. That is written at length in"
+echo "  bench/speed/gemm_speed_main.mojo's docstring."
+elif [ "$PAYLOAD" = "phase8" ]; then
 echo "== step 9: the judge, which is not this leg =="
 echo "  This leg does not diff phase-8 cards and must not:"
 echo "  tools/e3_round_judge.sh is what the round is recorded from, it"
@@ -3284,6 +3730,12 @@ fi
         echo "e1_dir=$E1_DEST"
         echo "apple_dir=${APPLE_DIR:-<none>}"
     fi
+    if [ "$PAYLOAD" = "speed" ]; then
+        echo "family=$SPEED_FAMILY"
+        echo "lanes=$SPEED_LANES"
+        echo "rounds=$SPEED_ROUNDS"
+        echo "size=$SPEED_SIZE"
+    fi
     echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } >> "$OUT/leg.txt"
 
@@ -3294,7 +3746,13 @@ leg_terminate
 
 echo
 echo "artifacts: $OUT"
-if [ "$PAYLOAD" = "phase8" ]; then
+if [ "$PAYLOAD" = "speed" ]; then
+    echo "the arms:    $OUT/remote/logs"
+    echo "next: build the table and write the row before this scrollback is"
+    echo "the only place the pod's details exist:"
+    echo "  python3 tools/fast_speed_table.py $OUT/remote/logs \\"
+    echo "      --out bench/results/fast_speed/${STAMP}-${VENDOR}-${SPEED_FAMILY}.md"
+elif [ "$PAYLOAD" = "phase8" ]; then
     echo "the column:  $E1_DEST"
     echo "$E1_DEST" > "$OUT/e1_dir.txt"
     echo "next: gemm/E1G_RUNBOOK.md, 'the phase8 payload'. The verdict is"
