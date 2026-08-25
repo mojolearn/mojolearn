@@ -214,6 +214,13 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
   for chk in $E2_EXTRA_CHECKS; do
     case "$chk" in
       gemm-backward) CMD='pixi run mojo run -I . gemm/mojo_only/gemm_backward_check.mojo' ;;
+      # THE REACH EVIDENCE. A phase-8-only leg proves the CARDS agree; it does
+      # not prove the kernels ran on the rented GPU rather than falling back.
+      # These two print what the build targeted and what the device answered,
+      # which is the only thing that separates a cross-vendor result from a
+      # pair of host runs on two machines.
+      column)        CMD='pixi run mojo run -I . matrix_main.mojo' ;;
+      gpu-probe)     CMD='pixi run mojo run -I . probe_main.mojo' ;;
       # (no `transformer` case: the device spelling in transformer/ported/ has
       #  no check driver yet, so there is nothing here to run. Add the case in
       #  the same commit that adds the driver.)
