@@ -1,0 +1,34 @@
+/Users/andrewhendel/CascadeProjects/mojolearn/gemm/mojo_only/gemm_unpinned_price.mojo:442:35: warning: assignment to 'L' was never used; assign to '_' instead?
+        var L = contract_leaf_size(k)
+                                  ^
+== gemm/mojo_only/gemm_unpinned_price.mojo [IDENTICAL] ==
+   UNPINNED CONTROL ARM (NOT a profile, NOT reproducible, NACC=4) -- ENABLED
+   THE ONE-VARIABLE PRICE. Same plan, same tiles, same grid, same staging, same leaf schedule; ONLY the fold-order pin removed.
+   Three arms in ONE binary alternating CALL BY CALL, so the governor drift cancels at the arm level rather than being averaged over rounds.
+   PREDICTION ON RECORD (gemm/UNPINNED_CONTROL.md): 1.10x-1.45x at the tiled t512 rows, 1.00x-1.06x at the t1 rows, 1.3x-1.8x at gram.32x32x1M, and the fold under 2% anywhere.
+
+   name                            op     m x n            k       P   pinned ms  unpin ms  strict ms   unpin/pin  strict/pin  bits
+   gram.32x32x1M                   TN  32x32  k=1000000  P=1024   2627.601  2406.195  2650.182333333333   1.0920149863165702x  0.991479328403442x  differ
+   gram.32x32x64K                  TN  32x32  k=65536  P=512   57.702666666666666  61.05866666666666  59.01466666666667   0.9450364676595188x  0.9777682384040125x  differ
+   gram.128sq.x100003              TN  128x128  k=100003  P=782   65.05933333333333  41.26433333333333  51.568999999999996   1.5766481141906246x  1.2615977299023315x  differ
+   ols.step1.16x16x64K             TN  16x16  k=65536  P=512   11.253666666666668  12.268  12.434333333333333   0.9173187696989458x  0.9050478513792457x  differ
+   pca.transform.8192x4x4          NT  8192x4  k=4  P=1   0.436  0.35733333333333334  0.47333333333333333   1.2201492537313432x  0.9211267605633803x  differ
+   pca.transform.wide.8192x64x128  NT  8192x64  k=128  P=1   2.81  1.9716666666666667  2.5066666666666664   1.4251901944209637x  1.1210106382978724x  differ
+   kmeans.dist.4096x64x64          NT  4096x64  k=64  P=1   1.0273333333333332  0.7226666666666667  0.773   1.4215867158671585x  1.3290211297973262x  differ
+   ols.predict.gemv.64Kx16         NT  65536x1  k=16  P=1   0.8826666666666667  0.6193333333333334  0.6863333333333334   1.42518837459634x  1.2860611947547353x  differ
+   llama8b.qkv.t1                  NT  1x4096  k=4096  P=32   1.5143333333333333  1.4336666666666666  1.4349999999999998   1.0562659846547315x  1.0552845528455286x  differ
+   llama8b.qkv.t8                  NT  8x4096  k=4096  P=32   4.733666666666667  3.221  4.0200000000000005   1.469626410017593x  1.1775290215588723x  differ
+   llama8b.qkv.t512                NT  512x4096  k=4096  P=32   261.89  172.063  212.287   1.5220587807954065x  1.233660092233627x  differ
+   llama8b.mlp_up.t1               NT  1x14336  k=4096  P=32   15.605333333333334  10.620333333333333  12.584333333333333   1.4693826308025486x  1.2400603925515854x  differ
+   llama8b.mlp_up.t8               NT  8x14336  k=4096  P=32   16.586000000000002  11.795666666666667  14.518333333333333   1.4061095882668777x  1.1424176328779705x  differ
+   llama8b.mlp_up.t512             NT  512x14336  k=4096  P=32   917.4096666666666  596.4363333333333  747.9973333333334   1.538151878742017x  1.2264878840922782x  differ
+   llama8b.mlp_down.t1             NT  1x4096  k=14336  P=112   4.413  4.0296666666666665  4.2683333333333335   1.0951278021341717x  1.0338930105427568x  differ
+   llama8b.mlp_down.t8             NT  8x4096  k=14336  P=112   15.966000000000001  10.588333333333333  13.571666666666667   1.50788603809224x  1.1764214662900652x  differ
+   llama8b.mlp_down.t512           NT  512x4096  k=14336  P=112   916.6833333333334  593.0726666666667  738.5653333333333   1.545650954520469x  1.24116756089283x  differ
+   llama8b.lm_head.t1              NT  1x128256  k=4096  P=32   133.376  88.14066666666668  113.55466666666666   1.5132175083767614x  1.1745532254655615x  differ
+   llama8b.lm_head.t8              NT  8x128256  k=4096  P=32   134.282  91.31933333333335  114.83800000000001   1.470466275852503x  1.1693167766767099x  differ
+   llama8b.lm_head.t512            NT  64x128256  k=4096  P=32   1018.1316666666667  660.3673333333334  816.506   1.5417656435660556x  1.246937152533682x  differ
+
+   ran 20 shapes, refused 0 (0 for a plan mismatch), 0 bitwise INERT. An INERT row removed nothing and its ratio is NOT a price; an INERT(UNEXPECTED) row at P > 1 is a FINDING about the unpinned arm and not about the pin.
+   unpin/pin above 1.00 is the PINNED arm costing more, which is the direction the pin is expected to push. strict/pin isolates the seams with the dependency chain held as long as the pinned kernel's; the gap between the two columns is contract 7.1's no-sub-partition clause.
+   SCOPE: this box, this build, these twenty shapes, 3 timed calls per arm per shape after one untimed warm-up. gemm/UNPINNED_CONTROL.md lists seven confounds this file does not remove, C1 (the pinned fold's register cost acting through occupancy) being the one timing alone cannot separate.

@@ -31,7 +31,58 @@ Comparing our strict FP32 against a TF32 baseline and calling the difference
 "the cost of identity" charges this contract for someone else's precision cut.
 On these shapes that mistake is worth about **5x**.
 
-### 1.2 Nothing here isolates the cost of identity
+### 1.2 The cost of identity is 1.52x, and it is NOT the summation tree
+
+**MEASURED 2026-08-25, Apple M4**, by `gemm/mojo_only/gemm_unpinned_price.mojo`:
+three arms in ONE binary alternating call by call, twenty shapes, zero
+refused, **zero bitwise inert**.
+
+| llama8b t512 | pinned / unpinned | pinned / strict (NACC=1) |
+|---|---|---|
+| qkv | **1.522x** | 1.234x |
+| mlp_up | **1.538x** | 1.226x |
+| mlp_down | **1.546x** | 1.241x |
+| lm_head | **1.542x** | 1.247x |
+
+**The prediction on record was 1.10x to 1.45x. It was wrong, on the low side.**
+`gemm/UNPINNED_CONTROL.md` wrote it down before the run, which is why the miss
+is usable.
+
+The decomposition is the part worth carrying into the paper:
+
+| | cost | share |
+|---|---|---|
+| the seams (`ftz` at 7 places, refusing FMA contraction) | 1.23x | ~46% |
+| refusing to sub-partition a leaf (contract 7.1) | 1.24x | ~54% |
+| **the balanced fold tree itself** | **small** | the `P == 1` rows, which have NO tree to remove, still show 1.42x |
+
+**The thing the contract is named after is not the expensive part.** What costs
+is per-operation: flushing denormals at every seam, and forbidding the
+compiler to contract a multiply-add into an FMA.
+
+`UNPINNED_CONTROL.md`'s prediction 2 -- flagged there as the one most likely
+to be wrong -- HELD: pinned-to-strict and strict-to-unpinned came out 1.23x
+and 1.24x, within 1%.
+
+**So of the 12x to 25x gap to a vendor library, about 1.5x is the constraint
+and 8x to 16x is kernel engineering.** That is the sentence this whole lane
+was built to be able to write.
+
+FIXTURE NOTE, and it is why this section can be trusted. The first run of this
+driver used a generator emitting integers scaled by `2^-4`. Every such product
+is exactly representable, so FMA contraction was bit-neutral and `ftz` could
+never fire, and SIXTEEN of twenty rows came back with the two arms producing
+IDENTICAL BITS. The timing was unaffected (1.554x then, 1.522x now) but the
+bit half of the experiment was vacuous. DEVIATION 1147 replaced it with a
+full-mantissa generator and all twenty rows now differ. The driver reported
+those rows as `INERT` rather than as agreement, which is the only reason it
+was visible instead of reading as success.
+
+STILL OWED: a subnormal-bearing fixture. Nothing here is small enough to make
+`ftz` fire, so the denormal half of the seam cost is measured in TIME and
+never in bits. And this is ONE box; the H100 and MI325X columns are owed.
+
+### 1.2b The confounds this does not remove
 
 DEVIATION 1092. Three arms exist and none of them is the experiment:
 

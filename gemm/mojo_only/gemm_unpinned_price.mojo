@@ -193,17 +193,43 @@ def _mix(i: Int, salt: Int) -> UInt64:
 
 
 def _exact(i: Int, salt: Int) -> Float32:
-    """A small exactly-representable value, ASSEMBLED FROM BITS.
+    """A FULL-MANTISSA value in `[-2, 2)`, ASSEMBLED FROM BITS.
 
     Never parsed from a decimal string, because `String(float)` does not
-    round-trip in this toolchain. The value is a signed integer in
-    `[-128, 127]` scaled by `2^-4`, which is exact in FP32 and keeps products
-    and their sums well inside the normal range at every `k` here, so the
-    arms are separated by their ORDER and not by an overflow.
+    round-trip in this toolchain.
+
+    DEVIATION 1147, AND THE FIRST RUN OF THIS FILE IS WHY IT EXISTS. This
+    generator first emitted a signed integer in `[-128, 127]` scaled by
+    `2^-4`. Every such value is exact, every PRODUCT of two of them is an
+    exact multiple of `2^-8`, and every partial sum at these `k` stays exact
+    in FP32. Under those inputs **FMA contraction and a separate multiply-add
+    agree BIT FOR BIT, and `ftz` never fires because no denormal can arise**,
+    so the unpinned arm produced the pinned arm's exact output at sixteen of
+    twenty shapes. Twelve of those were at `P > 1` and came back
+    `INERT(UNEXPECTED)`. The TIMING was still real -- the two arms execute
+    different instruction sequences either way, which is what the ratio
+    measures -- but the BIT half of the experiment was vacuous, and a fixture
+    that cannot separate the arms cannot certify that the arms differ.
+
+    A full 24-bit mantissa makes the product of two operands generically
+    INEXACT, so the rounding of `a*b + c` in one instruction and in two is
+    generically different, which is the separation this file needs. The range
+    is kept at `[-2, 2)` so that a sum of four million such products stays
+    far inside the FP32 normal range and the arms are separated by their
+    ORDER rather than by an overflow.
+
+    What this still does NOT reach is the denormal seams: nothing here is
+    small enough to make `ftz` fire. A subnormal-bearing fixture is OWED, and
+    until it exists the `ftz` half of the 1.25x seam cost is measured only in
+    TIME and never in bits.
     """
     var h = _mix(i, salt)
-    var v = Int(h & UInt64(0xFF)) - 128
-    return Float32(v) * Float32(0.0625)
+    var mant = UInt32(h & UInt64(0x7FFFFF))
+    # exponent 0x3F800000 puts it in [1, 2); the sign bit comes off bit 23
+    var bitsf = UInt32(0x3F800000) | mant
+    if (h >> 23) & UInt64(1) == UInt64(1):
+        bitsf = bitsf | UInt32(0x80000000)
+    return bitcast[DType.float32](bitsf)
 
 
 def _dev_fill(
