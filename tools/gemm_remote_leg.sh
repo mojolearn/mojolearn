@@ -2393,10 +2393,25 @@ gemmseq)
     # measured while a correctness gate quietly went red is not a win, and
     # this Mac is not allowed to run them. So they run here, and their exit
     # codes come home in leg.txt beside the numbers they justify.
-    runarm "verify.transformer_block.log" \
+    runarm "verify.transformer_block.fast.log" \
         pixi run mojo run -I . transformer/mojo_only/transformer_check.mojo
-    runarm "verify.mamba_block.log" \
+    runarm "verify.mamba_block.fast.log" \
         pixi run mojo run -I . mamba/mojo_only/mamba_check.mojo
+    # AND UNDER IDENTICAL, WHICH IS THE HALF THAT IS EASY TO SKIP.
+    #
+    # DEVIATION 1876 puts the vendor kernel behind a comptime gate, so the
+    # claim is that IDENTICAL is untouched -- not slower, not different, not
+    # compiled at all. That is REASONING about a `comptime if`, and the
+    # profile this whole repository is built on is the thing it would break.
+    # Reasoning is not what this lane accepts anywhere else and it is not
+    # accepted here. The two gates run again with the define set, on the same
+    # box, in the same lease.
+    runarm "verify.transformer_block.identical.log" \
+        sh tools/with_identical_mode.sh pixi run mojo run -I . \
+            transformer/mojo_only/transformer_check.mojo
+    runarm "verify.mamba_block.identical.log" \
+        sh tools/with_identical_mode.sh pixi run mojo run -I . \
+            mamba/mojo_only/mamba_check.mojo
     runarm "gemm.gemm.cublas.log" python3 tools/speed_gemm_arm.py --rounds "@SPEEDROUNDS@"
     for L in @SPEEDLANES@; do
         [ "$L" = "gemm" ] && continue
