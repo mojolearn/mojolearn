@@ -403,7 +403,11 @@ SPEED_FAMILY="${MOJOLEARN_SPEED_FAMILY:-gemmseq}"
 # The lane list is gbdt-symmetric, gbdt-depthwise, gbdt-lossguide, rf, et and
 # iforest -- BOOSTING IS IN IT. Calling the family `forest` reads as though
 # the gradient-boosted learners were somewhere else, and they are not.
-if [ "$SPEED_FAMILY" = "trees" ]; then SPEED_FAMILY="forest"; fi
+#
+# THE NORMALIZATION IS NOT HERE. It has to run AFTER the argument loop, or it
+# only ever reaches the environment form and never `--family trees`. That is
+# where it was, and `--family trees` was refused by a message that offered
+# `trees` as the accepted spelling in the same breath.
 SPEED_ROUNDS="${MOJOLEARN_SPEED_ROUNDS:-5}"
 SPEED_SIZE="${MOJOLEARN_SPEED_SIZE:-shipped}"
 # PER ARM, in seconds. One lane that hangs must not eat the lease that
@@ -645,6 +649,14 @@ case "$PAYLOAD" in
 esac
 
 if [ "$PAYLOAD" = "speed" ]; then
+    # THE ALIAS IS RESOLVED HERE, after the argument loop, so that BOTH the
+    # `--family trees` flag and the MOJOLEARN_SPEED_FAMILY environment form
+    # reach it. It used to sit up with the defaults, which the flag overwrites
+    # afterwards, so the flag form was refused by a message that named `trees`
+    # as accepted in the same breath. Nothing was rented; the refusal is the
+    # first thing this payload validates.
+    if [ "$SPEED_FAMILY" = "trees" ]; then SPEED_FAMILY="forest"; fi
+
     # THE SPEED PAYLOAD HAS NO APPLE REFERENCE AND NO CARD DIFF, so the two
     # gemm-payload flags that name one are refused rather than ignored. An
     # ignored flag is an operator who believes something ran.
