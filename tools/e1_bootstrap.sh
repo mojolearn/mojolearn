@@ -51,9 +51,45 @@ step "mode: IDENTICAL by build define (no source flip since 2026-08-23)"
 IDENT="$REPO/tools/with_identical_mode.sh"
 export MOJOLEARN_NUMERIC_MODE=identical
 
+# ---------------------------------------------------------------------------
+# MOJOLEARN_E1_PHASES: WHICH PHASES THIS RUN EXECUTES (DEVIATION 972)
+# ---------------------------------------------------------------------------
+# Unset means ALL of them. That is what every existing caller gets and it is
+# what a real round must use. A space or comma separated list runs only those.
+#
+# WHY THIS EXISTS. Leg 12 (2026-08-24) rented an RTX 4090, spent fifty minutes
+# in phases 0 through 7, hit the payload's 3000s bound at bootstrap_exit=124
+# and came home with identical_cards=0. tools/gemm_remote_leg.sh caps a lease
+# at 60 minutes BY NAME and refuses more, so on that box the full bootstrap
+# does not fit in one lease at all. That is structural rather than a tuning
+# problem: phases 0-4 alone took fifteen minutes and 5-7 took the rest.
+#
+# Phase 8 is self-contained. Its lane arms are `pixi run mojo run -I . <driver>`
+# which compile from source, so it needs nothing phase 3 builds.
+#
+#   MOJOLEARN_E1_PHASES=8 bash tools/e1_bootstrap.sh
+#
+# READ THIS BEFORE USING IT ON A ROUND. A PHASE-SUBSET COLUMN IS NOT A ROUND.
+# tools/e3_round_judge.sh sections 1 to 6 read the tree matrix, E2U, the E1U
+# cards, the gate lines and cross-infer; a column missing those FAILS them,
+# correctly, because the evidence is not there. Only section 7, the lane
+# cards, is answerable from a phase-8-only column. Use this to answer ONE lane
+# question cheaply. Never use it to record a round.
+run_phase() {
+  [ -z "${MOJOLEARN_E1_PHASES:-}" ] && return 0
+  case " $(printf '%s' "$MOJOLEARN_E1_PHASES" | tr ',' ' ') " in
+    *" $1 "*) return 0 ;;
+    *) echo; echo "=== phase $1 SKIPPED (MOJOLEARN_E1_PHASES=$MOJOLEARN_E1_PHASES) ==="; return 1 ;;
+  esac
+}
+
+if run_phase 0; then
 step "phase 0: smoke (hardware matrix, column detection)"
 "$IDENT" pixi run check-hardware-matrix || echo "PHASE0-FINDING: hardware matrix (see log)"
 
+fi
+
+if run_phase 1; then
 step "phase 1: vendor characterization (row 10 precondition)"
 "$IDENT" pixi run check-ieee-arith || echo "PHASE1-FINDING: ieee-arith (see log)"
 # row 12's certificate line: the printed device hash must be the SAME
@@ -61,6 +97,9 @@ step "phase 1: vendor characterization (row 10 precondition)"
 "$IDENT" pixi run check-portable-translog || echo "PHASE1-FINDING: portable-translog (see log)"
 "$IDENT" pixi run check-portable-sqrtcos || echo "PHASE1-FINDING: portable-sqrtcos (see log)"
 
+fi
+
+if run_phase 2; then
 step "phase 2: gates under IDENTICAL"
 for gate in check-depthwise check-lossguide-policy check-random-strength; do
   echo "--- $gate"
@@ -69,6 +108,9 @@ done
 echo "--- extratrees suite"
 "$IDENT" bash extratrees/tools/check.sh || echo "PHASE2-FINDING: extratrees suite (see log)"
 
+fi
+
+if run_phase 3; then
 step "phase 3: build IDENTICAL .so + traced fits"
 # ALL FIVE bindings: the python package's __init__ imports cluster ->
 # _mojolearn.so and friends, so an rsync'd foreign-platform .so anywhere
@@ -109,6 +151,9 @@ PYTHONPATH="$REPO/python" pixi run -e gbmbench python3 tools/e1_traced_fit.py "$
   || PYTHONPATH="$REPO/python" python3 tools/e1_traced_fit.py "$OUT" \
   || echo "PHASE3-FINDING: traced driver failed (see log)"
 
+fi
+
+if run_phase 4; then
 step "phase 4: E2 sub-feature matrix (every loss/bootstrap/score/estimator/searcher/bins/cat/NaN/criterion)"
 # one subprocess per cell, so a device fault in one configuration leaves
 # the other cards intact; e2_cells.json is rewritten after every cell.
@@ -123,12 +168,18 @@ if [ -x tools/e2_mojo_cards.sh ]; then
   bash tools/e2_mojo_cards.sh "$OUT" || echo "PHASE4-FINDING: e2_mojo_cards failed (see log)"
 fi
 
+fi
+
+if run_phase 5; then
 step "phase 5: the unsupervised cards (k-means, k-NN, DBSCAN) -- IDENTICAL"
 # tools/e1_unsupervised.sh is the unsupervised lane's leg (rows 19-26); it
 # re-enters itself through the injector and writes bench/results/e1u/<stamp>;
 # a copy of that directory lands beside this run's artifacts
 sh tools/e1_unsupervised.sh "$OUT/e1u" || echo "PHASE5-FINDING: unsupervised leg (see log)"
 
+fi
+
+if run_phase 6; then
 step "phase 6: the linear-algebra identity gates (GEMM, column stats, Jacobi/PCA, OLS) -- both modes"
 # rows 27-32; verdicts, not numbers (both modes, ~22 device runs). The
 # decomposition bindings did not BUILD on AMD before 4ecf43c; the gate
@@ -136,6 +187,9 @@ step "phase 6: the linear-algebra identity gates (GEMM, column stats, Jacobi/PCA
 pixi run check-linalg-identity || echo "PHASE6-FINDING: linalg identity (see log)"
 pixi run check-unsupervised-identity || echo "PHASE6-FINDING: unsupervised identity (see log)"
 
+fi
+
+if run_phase 7; then
 step "phase 7: E2U -- the unsupervised sub-feature matrix through the Python surface, IDENTICAL"
 # tools/e2u_matrix_fit.py (67 cells: KMeans/NearestNeighbors/DBSCAN/PCA/tSVD/OLS);
 # judged by tools/e2_matrix_diff.py against the Mac's e2u directory
@@ -143,6 +197,9 @@ PYTHONPATH="$REPO/python" pixi run -e gbmbench python3 tools/e2u_matrix_fit.py "
   || PYTHONPATH="$REPO/python" python3 tools/e2u_matrix_fit.py "$OUT/e2u" \
   || echo "PHASE7-FINDING: E2U matrix driver failed (see log)"
 
+fi
+
+if run_phase 8; then
 step "phase 8: the classical lanes (gemm, cd, kde, linkage, svm, metrics) -- both modes, cards + checks"
 # Andrew's order 2026-08-23 (via the orchestrator): everything that exists
 # today must be bit-identical across all three GPUs. One card per lane per
@@ -227,6 +284,7 @@ for mode in identical fast; do
   done
 done
 
+fi
 step "done"
 echo "artifacts in $OUT"
 echo "next: fetch this directory beside the other machine's and run"

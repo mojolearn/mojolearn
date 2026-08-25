@@ -380,6 +380,21 @@ APPLE_MISSING=0
 # with every card still on it because the fetch never runs. 0 means "the
 # lease minus the reserve".
 WORK_TIMEOUT="${MOJOLEARN_GEMM_LEG_WORK_TIMEOUT:-0}"
+# DEVIATION 972: which e1_bootstrap phases the box runs. EMPTY MEANS ALL, so
+# every existing caller is unchanged. Set it to 8 to answer one lane question
+# for the price of a compile instead of an hour.
+#
+# Leg 12 is why. The full bootstrap took fifty minutes on an RTX 4090 and died
+# on the work bound at phase 5 with identical_cards=0, and --minutes is capped
+# at 60 BY NAME, so on that box a full round does not fit in a lease at all.
+# A phase-8-only run measured 74 SECONDS on the M4 and produced all seven lane
+# cards BYTE-IDENTICAL to the full run's, which is the evidence that skipping
+# 0-7 does not move a lane card.
+#
+# A PHASE-SUBSET COLUMN IS NOT A ROUND. Judge sections 1-6 will fail on it,
+# correctly. Only section 7 is answerable. tools/e1_bootstrap.sh says the same
+# thing at more length and it is the file that enforces it.
+E1_PHASES="${MOJOLEARN_GEMM_LEG_E1_PHASES:-}"
 WORK_RESERVE=600
 # phase8 only: where the box's bootstrap directory lands on this Mac.
 E1_DEST=""
@@ -1523,7 +1538,36 @@ leg_wait_ready() {
             rp_call GET "$RP_PODS_PATH/$POD_ID"
         fi
         _ip=$(rp_json "d.get('publicIp') or (d.get('pod') or {}).get('publicIp') or ''")
-        _port=$(rp_json "([str(m.get('publicPort','')) for m in (d.get('portMappings') or (d.get('runtime') or {}).get('ports') or []) if str(m.get('privatePort',''))=='22'] or [''])[0]")
+        # DEVIATION 971: portMappings has TWO SHAPES and this read knew one.
+        #
+        # api.runpod.io/v2 returns a LIST of {privatePort, publicPort} dicts.
+        # rest.runpod.io/v1 returns a DICT, {"22": 28885}. Iterating a dict
+        # yields its KEYS, which are strings, so `m.get(...)` raised, rp_json
+        # swallowed it by design, and _port came back EMPTY. The leg then had
+        # no ssh target, waited out its full 600s READY TIMEOUT and terminated
+        # a perfectly healthy box. Measured 2026-08-24 on pod qh9dudcqznnuua:
+        # ssh -p 28885 root@213.181.111.2 answered SSH-OK and nvidia-smi named
+        # the 4090 from a plain shell, while the leg saw nothing.
+        #
+        # The v1 POST body schema is the one this script already sends (the
+        # /v1/openapi.json spec lists gpuTypeIds, imageName, cloudType,
+        # containerDiskInGb, volumeInGb, gpuCount and interruptible, and the
+        # v2 POST rejects every one of them), so v1 is where this leg belongs
+        # and this read has to speak v1's shape.
+        # TWO EXPRESSIONS, TRIED IN ORDER, AND NEITHER MAY USE A BUILTIN.
+        # rp_json evals in a sandbox whose globals are exactly
+        # {"__builtins__": {"str": str}}, so `isinstance` is a NameError, the
+        # bare `except` swallows it BY DESIGN, and the caller sees "". That is
+        # how the first attempt at this fix failed: it read correctly in a
+        # plain python3 and returned empty inside the leg, which is the worst
+        # possible combination for diagnosing it.
+        #
+        # So the shapes are separated instead of branched. The DICT form's
+        # `.get` raises on a list and the LIST form's `m.get` raises on a
+        # dict's string keys, so each is self-selecting and the wrong one
+        # simply yields "".
+        _port=$(rp_json "str((d.get('portMappings') or {}).get('22') or (d.get('portMappings') or {}).get(22) or '')")
+        [ -n "$_port" ] || _port=$(rp_json "([str(m.get('publicPort','')) for m in (d.get('portMappings') or (d.get('runtime') or {}).get('ports') or []) if str(m.get('privatePort',''))=='22'] or [''])[0]")
         if [ -n "$SSH_TARGET" ] || { [ -n "$_ip" ] && [ -n "$_port" ]; }; then
             [ -n "$SSH_TARGET" ] || SSH_TARGET="-p $_port root@$_ip"
             leg_say "ssh target: $SSH_TARGET"
@@ -1739,6 +1783,7 @@ cd "$ROOT" || exit 9
   echo "payload=phase8"
   echo "commit=@COMMIT@"
   echo "work_timeout=@WORKTIMEOUT@"
+  echo "e1_phases=@E1PHASES@"
   echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$OUT/leg.txt"
 
@@ -1781,13 +1826,13 @@ command -v bash > "$OUT/bash_which.txt" 2>&1 || \
 # has not run yet. @WORKTIMEOUT@ seconds leaves the lease its reserve, so a
 # leg that runs out of hour comes home with the lanes that finished.
 if command -v timeout > /dev/null 2>&1; then
-    timeout -k 30 @WORKTIMEOUT@ bash tools/e1_bootstrap.sh > "$OUT/bootstrap_console.log" 2>&1
+    MOJOLEARN_E1_PHASES="@E1PHASES@" timeout -k 30 @WORKTIMEOUT@ bash tools/e1_bootstrap.sh > "$OUT/bootstrap_console.log" 2>&1
     echo "bootstrap_exit=$?" >> "$OUT/leg.txt"
     echo "note: a bootstrap_exit of 124 is the work timeout firing" >> "$OUT/leg.txt"
 else
     echo "no timeout(1) on this image: THE BOOTSTRAP RAN UNBOUNDED and the" >> "$OUT/leg.txt"
     echo "  lease watchdog is the only thing between it and the hour" >> "$OUT/leg.txt"
-    bash tools/e1_bootstrap.sh > "$OUT/bootstrap_console.log" 2>&1
+    MOJOLEARN_E1_PHASES="@E1PHASES@" bash tools/e1_bootstrap.sh > "$OUT/bootstrap_console.log" 2>&1
     echo "bootstrap_exit=$?" >> "$OUT/leg.txt"
 fi
 tail -40 "$OUT/bootstrap_console.log"
@@ -1842,6 +1887,7 @@ leg_check_remote_body() {
         -e "s|@SWEEP@|$SWEEP|g" \
         -e "s|@DUMP@|$LEG_DUMP|g" \
         -e "s|@WORKTIMEOUT@|$WORK_TIMEOUT|g" \
+        -e "s|@E1PHASES@|$E1_PHASES|g" \
         -e "s|@SMI@|$SMI_CMD|g" \
         "$_body" > "$_body.subst"
     mv "$_body.subst" "$_body"
