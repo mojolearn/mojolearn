@@ -2507,9 +2507,23 @@ forest)
     # imported fine and died at the first launch. Pass 2's exit codes are the
     # ones recorded as `binding_build_exit`; pass 1's are recorded separately
     # so a failure can be attributed to the right pass.
+    # DEVIATION 1881 -- EVERY BINDING, NOT THE SIX THIS FAMILY USES.
+    #
+    # `mojolearn/__init__.py` imports the WHOLE package surface, so `import
+    # mojolearn` needs every extension present regardless of which lane is
+    # being timed. With six built, the base gate died on `_mojolearn_solver`
+    # (`__init__.py:106` -> `_hierarchy_impl` -> `_mojolearn_solver`) and the
+    # ARMS would have died on it too: nothing in this family touches the
+    # solver, and it is still required to import the package at all.
+    #
+    # THE LIST IS DERIVED FROM THE FILESYSTEM rather than written out, so it
+    # cannot drift the way the six-name list did. `bindings/build.sh` is
+    # named on its own because it is the one script that is not
+    # `build_<name>.sh`, which is what hid it in the first place.
+    _bscripts="bindings/build.sh $(ls bindings/build_*.sh 2>/dev/null | tr '\n' ' ')"
     for _pass in 1 2; do
-        for _b in base estimators gbdt rf trees svm; do
-            if [ "$_b" = "base" ]; then _bs="bindings/build.sh"; else _bs="bindings/build_$_b.sh"; fi
+        for _bs in $_bscripts; do
+            _b=$(basename "$_bs" .sh | sed 's/^build_//; s/^build$/base/')
             printf '\n=== pass %s: %s ===\n' "$_pass" "$_bs" >> "$OUT/console.log"
             if [ "$_pass" = "1" ]; then
                 _skip=1
@@ -2532,6 +2546,14 @@ forest)
             tail -4 "$LOGS/build.binding.$_b.pass$_pass.log" >> "$OUT/console.log" 2>&1 || true
         done
     done
+    # THE ONE CHECK THAT ACTUALLY PREDICTS WHETHER THE ARMS CAN RUN. Every
+    # gate above is per-extension; this is the thing the arms themselves do.
+    # Recorded rather than fatal: if it fails the lanes will refuse by name
+    # anyway, and this line says WHY in one place instead of six times.
+    python3 -c "import mojolearn, sys; print('mojolearn imports OK', mojolearn.__file__)" \
+        > "$LOGS/import_mojolearn.log" 2>&1
+    echo "import_mojolearn_exit=$?" >> "$OUT/leg.txt"
+    tail -3 "$LOGS/import_mojolearn.log" >> "$OUT/console.log" 2>&1 || true
     ls -la python/mojolearn/*.so > "$OUT/bindings_listing.txt" 2>&1 \
         || echo "NO .so BUILT AT ALL" > "$OUT/bindings_listing.txt"
 
