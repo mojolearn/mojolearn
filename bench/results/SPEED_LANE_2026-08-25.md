@@ -82,6 +82,36 @@ STILL OWED: a subnormal-bearing fixture. Nothing here is small enough to make
 `ftz` fire, so the denormal half of the seam cost is measured in TIME and
 never in bits. And this is ONE box; the H100 and MI325X columns are owed.
 
+### 1.2a AND IT IS NOT THE SAME PRICE ON EVERY VENDOR
+
+**H100 80GB, same driver, same twenty shapes, zero refused, zero inert:**
+
+| llama8b | t1 | t8 | t512 |
+|---|---|---|---|
+| qkv | 1.03x | 1.42x | **2.33x** |
+| mlp_up | 1.65x | 1.61x | **2.32x** |
+| mlp_down | 1.02x | 1.42x | **2.31x** |
+| lm_head | 1.53x | 1.53x | **2.32x** |
+
+**The pin costs 2.31x on an H100 against 1.55x on an M4.** Fifty percent more
+on NVIDIA, from one source.
+
+Had this lane only ever measured Apple, "identity costs 1.5x" would have gone
+into a paper as a property of the CONTRACT. It is not. It is a property of the
+contract AND the silicon, and Apple is the cheap end.
+
+The decomposition moves too. On the M4 the seams and the no-sub-partition
+clause split it evenly, 1.24x and 1.24x. On the H100 **the seams alone are
+1.83x of the 2.31x**, so there the dominant cost is `ftz` plus refusing FMA
+contraction rather than the partition rule. The plausible mechanism is that
+the H100 has FMA throughput we are forbidding it to use.
+
+**The cost tracks arithmetic intensity, which is a mechanism rather than a
+number.** At `t1` the kernel is bandwidth bound and the extra instructions
+hide behind memory latency (1.02x to 1.03x at two rows). At `t512` there is
+nothing to hide behind and the pin shows at full price. That predicts where
+the cost lands on a shape nobody has run.
+
 ### 1.2b The confounds this does not remove
 
 DEVIATION 1092. Three arms exist and none of them is the experiment:
