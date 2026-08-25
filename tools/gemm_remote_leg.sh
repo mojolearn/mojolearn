@@ -2458,13 +2458,37 @@ forest)
     # because the vendor arms cannot run under pixi at all -- RAPIDS and
     # CatBoost want 3.10 to 3.13 and the gbmbench feature pins 3.14 -- so
     # both sides of this family have to meet on the image's python.
-    for _b in estimators gbdt rf trees svm; do
-        printf '\n=== bindings/build_%s.sh ===\n' "$_b" >> "$OUT/console.log"
+    # THE BASE EXTENSION IS FIRST AND ITS SCRIPT IS NOT NAMED LIKE THE
+    # OTHERS. `bindings/build.sh` emits `python/mojolearn/_mojolearn.so`;
+    # every other script is `build_<name>.sh`. Leaving it out of the loop is
+    # what broke the 2026-08-25 trees leg, and the failure did not look like
+    # a missing dependency at all:
+    #
+    #   ImportError: cannot import name '_mojolearn' from partially
+    #   initialized module 'mojolearn' ... (circular import)
+    #
+    # THREE OF FIVE BUILDS "FAILED" AND NOT ONE OF THEM WAS A COMPILE ERROR.
+    # Each script's smoke test copies `python/mojolearn/` into a temp
+    # directory and drops in the ONE .so it just built. On this Mac that
+    # directory already holds `_mojolearn.so` from some earlier build, so the
+    # package imports and the smoke passes. On the box it holds only .py
+    # files -- the .so are untracked and the leg ships `git archive` -- so
+    # `__init__.py`'s `from .cluster import KMeans` reaches
+    # `from . import _mojolearn` and there is nothing there. gbdt, rf and
+    # trees each compiled correctly and then failed to import a package that
+    # was missing its base.
+    #
+    # A LOCAL BUILD ARTIFACT WAS LOAD-BEARING AND NOBODY KNEW, which is the
+    # same class of thing as a benchmark that only passes because a cache is
+    # warm. It is invisible on any machine that has ever built the package.
+    for _b in base estimators gbdt rf trees svm; do
+        if [ "$_b" = "base" ]; then _bs="bindings/build.sh"; else _bs="bindings/build_$_b.sh"; fi
+        printf '\n=== %s ===\n' "$_bs" >> "$OUT/console.log"
         if command -v timeout > /dev/null 2>&1; then
-            timeout -k 30 @BUILDBUDGET@ bash "bindings/build_$_b.sh" \
+            timeout -k 30 @BUILDBUDGET@ bash "$_bs" \
                 > "$LOGS/build.binding.$_b.log" 2>&1
         else
-            bash "bindings/build_$_b.sh" > "$LOGS/build.binding.$_b.log" 2>&1
+            bash "$_bs" > "$LOGS/build.binding.$_b.log" 2>&1
         fi
         echo "binding_build_exit ${_b}=$?" >> "$OUT/leg.txt"
         tail -5 "$LOGS/build.binding.$_b.log" >> "$OUT/console.log" 2>&1 || true
