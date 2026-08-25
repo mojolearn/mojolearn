@@ -417,6 +417,9 @@ ARM_BUDGET="${MOJOLEARN_SPEED_ARM_BUDGET:-600}"
 # measurement, and because a compile that hangs must not be given the whole
 # lease on the theory that it might be nearly done.
 BUILD_BUDGET="${MOJOLEARN_SPEED_BUILD_BUDGET:-900}"
+# PER PIP INSTALL. RAPIDS is a multi-gigabyte resolve and is the single step
+# that can consume a lease and return nothing.
+PIP_BUDGET="${MOJOLEARN_SPEED_PIP_BUDGET:-900}"
 # LightGBM's CUDA learner is not in any wheel and is measured at fifteen to
 # thirty minutes from source. Bounded so a build that goes wrong cannot take
 # the whole forest family with it.
@@ -666,7 +669,7 @@ if [ "$PAYLOAD" = "speed" ]; then
     # check, for nothing.
     case "$SPEED_FAMILY" in
         gemmseq)   SPEED_LANES="${MOJOLEARN_SPEED_LANES:-gemm transformer attention mlp rmsnorm mamba selective_scan}" ;;
-        classical) SPEED_LANES="${MOJOLEARN_SPEED_LANES:-kmeans dbscan pca ols knn cd kde linkage svm metrics ivf hdbscan cholesky gmm gp krr}" ;;
+        classical) SPEED_LANES="${MOJOLEARN_SPEED_LANES:-kmeans dbscan pca ols knn cd kde linkage svm metrics ivf hdbscan cholesky gmm gp krr nystroem rbfsampler resample spectral holtwinters kpss}" ;;
         forest)    SPEED_LANES="${MOJOLEARN_SPEED_LANES:-gbdt-symmetric gbdt-depthwise gbdt-lossguide rf et iforest}" ;;
     esac
     case "$SPEED_FAMILY" in
@@ -2307,11 +2310,28 @@ builtok() {
 }
 
 pipget() {
-    # Best effort, logged, never fatal. A vendor library that will not
-    # install is a finding about this image, recorded as such.
+    # Best effort, logged, BOUNDED, never fatal. A vendor library that will
+    # not install is a finding about this image and is recorded as one.
+    #
+    # THE BOUND IS THE POINT. RAPIDS is a multi-gigabyte resolve and it is
+    # the one step in the classical family that can eat a sixty-minute
+    # lease outright, leaving a box that was rented to measure things and
+    # measured none. If it does not land inside the budget the vendor arms
+    # refuse by name and OUR side is still timed, which is half a table
+    # rather than none.
     printf '\n=== pip install %s ===\n' "$*" >> "$OUT/pip.log"
-    python3 -m pip install --no-input --disable-pip-version-check "$@" >> "$OUT/pip.log" 2>&1
-    echo "pip_exit $*=$?" >> "$OUT/pip.log"
+    if command -v timeout > /dev/null 2>&1; then
+        timeout -k 30 @PIPBUDGET@ python3 -m pip install --no-input \
+            --disable-pip-version-check "$@" >> "$OUT/pip.log" 2>&1
+    else
+        python3 -m pip install --no-input --disable-pip-version-check "$@" >> "$OUT/pip.log" 2>&1
+    fi
+    _prc=$?
+    echo "pip_exit $*=$_prc" >> "$OUT/pip.log"
+    echo "pip_exit $*=$_prc" >> "$OUT/leg.txt"
+    if [ "$_prc" = "124" ]; then
+        echo "  PIP INSTALL HIT ITS BUDGET (@PIPBUDGET@s): $*" >> "$OUT/console.log"
+    fi
     return 0
 }
 
@@ -2446,6 +2466,7 @@ leg_check_remote_body() {
         -e "s|@SPEEDSIZE@|$SPEED_SIZE|g" \
         -e "s|@ARMBUDGET@|$ARM_BUDGET|g" \
         -e "s|@BUILDBUDGET@|$BUILD_BUDGET|g" \
+        -e "s|@PIPBUDGET@|$PIP_BUDGET|g" \
         -e "s|@LGBMBUILD@|$LGBM_BUILD|g" \
         -e "s|@CARDFULL@|$CARD_FULL|g" \
         -e "s|@SWEEP@|$SWEEP|g" \
