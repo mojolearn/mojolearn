@@ -342,7 +342,27 @@ LEG_IMAGE_AMD="${MOJOLEARN_GEMM_LEG_IMAGE_AMD:-rocm/dev-ubuntu-22.04:6.4.1-compl
 # message in this file and one that would otherwise never have run. It is not
 # a production knob. `tools/runpod_guard.sh` has its own hardcoded host and
 # this does not move it.
-RP_HOST="${MOJOLEARN_RUNPOD_API_HOST:-https://api.runpod.io}"
+# DEVIATION 1871 -- THE DEFAULT MOVED TO rest.runpod.io/v1 BECAUSE
+# api.runpod.io/v2 REFUSES THIS BODY. Measured 2026-08-25, HTTP 422:
+#
+#   "$: missing property 'image'"
+#   "$: additional properties 'allowedCudaVersions', 'cloudType',
+#    'containerDiskInGb', 'gpuCount', 'gpuTypeIds', 'imageName',
+#    'interruptible', 'supportPublicIp', 'volumeInGb' not allowed"
+#
+# So v2 is a DIFFERENT SCHEMA, not a different host for the same one. The
+# body this file composes is v1's, confirmed field for field against
+# rest.runpod.io/v1/openapi.json's PodCreateInput, which lists every one of
+# the properties v2 rejected.
+#
+# DEVIATION 867 predicted exactly this and left the host overridable and the
+# path NOT, which is a knob that cannot fix the thing it is for; DEVIATION
+# 972 later made the path overridable too. What was still wrong was the
+# DEFAULT, so a leg run without either override armed a dead-man, called a
+# paid endpoint and got a 422. It cost nothing this time -- the create is the
+# first paid call and it failed -- but the next schema drift might not fail
+# so cleanly, which is why this is a default change and not a runbook line.
+RP_HOST="${MOJOLEARN_RUNPOD_API_HOST:-https://rest.runpod.io}"
 # v1 is deprecated and is kept ONLY as a fallback for the DELETE, for the
 # reason tools/runpod_guard.sh gives at the same seam: this is the only thing
 # standing between an orphan and the bill, and an API deprecation that
@@ -362,7 +382,7 @@ RP_HOST_V1="${MOJOLEARN_RUNPOD_API_HOST_V1:-https://rest.runpod.io}"
 # its own hardcoded v2-then-v1 pair, so the box still self-terminates however
 # this is set. That separation is deliberate: the layer that survives this
 # Mac must not depend on an environment variable set on this Mac.
-RP_PODS_PATH="${MOJOLEARN_RUNPOD_PODS_PATH:-/v2/pods}"
+RP_PODS_PATH="${MOJOLEARN_RUNPOD_PODS_PATH:-/v1/pods}"
 # The guard's lease directory, mirrored (not owned) so a terminate can leave
 # `check` and `list` telling the truth afterwards.
 LEASE_DIR="${MOJOLEARN_LEASE_DIR:-bench/results/runpod_leases}"
@@ -451,7 +471,14 @@ E1_LANES="${MOJOLEARN_GEMM_LEG_E1_LANES:-}"
 #
 # Set MOJOLEARN_GEMM_LEG_CUDA to widen it if MAX's floor ever drops. Widening
 # it below MAX's actual floor just moves the failure back to where it was.
-CUDA_VERSIONS="${MOJOLEARN_GEMM_LEG_CUDA:-\"13.0\"}"
+# EVERY DRIVER THAT CAN RUN THE IMAGE, not just the newest. The default was
+# `"13.0"` alone, which asks RunPod for hosts carrying one specific driver
+# generation. The images this leg uses are CUDA 12.4, and a 12.4 container
+# runs on any driver at or above it, so pinning the newest only narrows the
+# pool of machines that can satisfy the request -- and on a scarce GPU type
+# that is the difference between a box and a wait. Listed newest first
+# because the API reads it as an acceptable set, not a preference order.
+CUDA_VERSIONS="${MOJOLEARN_GEMM_LEG_CUDA:-\"13.0\",\"12.9\",\"12.8\",\"12.7\",\"12.6\",\"12.5\",\"12.4\"}"
 WORK_RESERVE=600
 # phase8 only: where the box's bootstrap directory lands on this Mac.
 E1_DEST=""
