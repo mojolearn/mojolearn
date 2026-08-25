@@ -401,6 +401,30 @@ E1_PHASES="${MOJOLEARN_GEMM_LEG_E1_PHASES:-}"
 # reached whatever the bound was. Recorded in leg.txt beside e1_phases so a
 # narrowed column can never read as a full one.
 E1_LANES="${MOJOLEARN_GEMM_LEG_E1_LANES:-}"
+
+# DEVIATION 974: THE HOST'S CUDA VERSION IS A RENTAL CRITERION, NOT LUCK.
+#
+# MAX refuses to run at all below a floor, and says so precisely:
+#
+#   Your current NVIDIA GPU driver version is not supported.
+#     Required: driver version >= 580 (CUDA >= 13.0)
+#     Detected: 570.169 (CUDA 12.8)
+#
+# RunPod hosts differ. Leg 12 rented the SAME gpu type from the SAME image
+# twice: the first box ran gemm and cd to byte-identical cards against the
+# M4, and the second refused every kernel launch on a 570.169 host. That is a
+# machine lottery, and losing it costs a whole lease and produces a column
+# that looks like a failure of ours.
+#
+# `allowedCudaVersions` is a create-time constraint in the v1 schema
+# (/v1/openapi.json, enum 13.0 down to 11.8), so the pod is only placed on a
+# host that satisfies it. Defaulting to 13.0 makes an incompatible host a
+# CREATE failure, which is free and instant, rather than a launch failure
+# fifty minutes in on a paid box.
+#
+# Set MOJOLEARN_GEMM_LEG_CUDA to widen it if MAX's floor ever drops. Widening
+# it below MAX's actual floor just moves the failure back to where it was.
+CUDA_VERSIONS="${MOJOLEARN_GEMM_LEG_CUDA:-\"13.0\"}"
 WORK_RESERVE=600
 # phase8 only: where the box's bootstrap directory lands on this Mac.
 E1_DEST=""
@@ -1488,6 +1512,7 @@ leg_create_pod() {
   "imageName": "$IMAGE",
   "gpuTypeIds": ["$GPU_ID"],
   "gpuCount": 1,
+  "allowedCudaVersions": [$CUDA_VERSIONS],
   "cloudType": "SECURE",
   "containerDiskInGb": 60,
   "volumeInGb": 0,
