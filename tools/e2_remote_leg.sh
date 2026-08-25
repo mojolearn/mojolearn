@@ -212,8 +212,25 @@ done
 # eat the others.
 if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
   for chk in $E2_EXTRA_CHECKS; do
+    # WRAP=1 runs the command under tools/with_identical_mode.sh, which injects
+    # -D MOJOLEARN_NUMERIC_IDENTICAL=1. WRAP=0 IS NOT A CONVENIENCE: a check
+    # that alternates the modes ITSELF must not be forced into one of them, or
+    # both of its arms are the same binary and its ratio is 1.0 by
+    # construction. That is DEVIATION 1091 in a different costume.
+    WRAP=1
     case "$chk" in
       gemm-backward) CMD='pixi run mojo run -I . gemm/mojo_only/gemm_backward_check.mojo' ;;
+      # THE SPEED LANE. Both sides run under ONE MAC cap so a row is either
+      # measured on both arms or skipped on both; a full-shape vendor number
+      # beside a capped one of ours would be a ratio between two different
+      # questions.
+      gemm-price)    CMD='env MOJOLEARN_GEMM_PRICE_ROUNDS=1 MOJOLEARN_GEMM_PRICE_ARM=device MOJOLEARN_GEMM_PRICE_DEV_MAC_BUDGET=50000000000 sh tools/gemm_price.sh'; WRAP=0 ;;
+      # The vendor LIBRARY (cuBLAS / hipBLASLt), not MAX's linalg.matmul.
+      # torch goes into a THROWAWAY VENV, never into the pinned pixi
+      # environment every recorded timing in this repository was taken under.
+      # The script refuses on a CPU torch, so a wheel that resolves to the
+      # wrong backend fails loudly instead of timing the host.
+      vendor-price)  CMD='bash tools/remote_vendor_torch.sh'; WRAP=0 ;;
       # THE REACH EVIDENCE. A phase-8-only leg proves the CARDS agree; it does
       # not prove the kernels ran on the rented GPU rather than falling back.
       # These two print what the build targeted and what the device answered,
@@ -230,7 +247,9 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
     LEFT=$(( LEG_START + DEADMAN_SECONDS - NOW - FETCH_RESERVE ))
     [ "$LEFT" -lt 60 ] && { log "extra check $chk SKIPPED (${LEFT}s left)"; continue; }
     log "extra check: $chk (bound ${LEFT}s)"
-    $SSH "export PATH=/root/.pixi/bin:\$PATH; cd /root/mojolearn && OUT=\$(ls -td bench/results/e1/*/ | head -1) && mkdir -p \"\$OUT/lanes\" && MOJOLEARN_IDENTITY_TRACE=\"\$OUT/lanes/$chk.identical.card\" timeout -k 30 $LEFT bash tools/with_identical_mode.sh $CMD > \"\$OUT/lanes/$chk.identical.check.log\" 2>&1; echo \"EXTRA-$chk-EXIT=\$?\"; tail -8 \"\$OUT/lanes/$chk.identical.check.log\""
+    PREFIX="bash tools/with_identical_mode.sh"
+    [ "$WRAP" = 0 ] && PREFIX=""
+    $SSH "export PATH=/root/.pixi/bin:\$PATH; cd /root/mojolearn && OUT=\$(ls -td bench/results/e1/*/ | head -1) && mkdir -p \"\$OUT/lanes\" && MOJOLEARN_IDENTITY_TRACE=\"\$OUT/lanes/$chk.identical.card\" VENDOR_PRICE_OUT=\"\$OUT/lanes/vendor_price.json\" MOJOLEARN_GEMM_PRICE_OUT=\"\$OUT/lanes/gemm_price_medians.txt\" timeout -k 30 $LEFT $PREFIX $CMD > \"\$OUT/lanes/$chk.identical.check.log\" 2>&1; echo \"EXTRA-$chk-EXIT=\$?\"; tail -8 \"\$OUT/lanes/$chk.identical.check.log\""
   done
 fi
 
