@@ -46,10 +46,18 @@ DEVIATION 1092. Three arms exist and none of them is the experiment:
 - **`device` vs cuBLAS** is the same, against a mature vendor library.
 
 The arm that would answer it is the identical kernel's OWN tiled plan with
-ONLY the fold-order pin removed, everything else held. It is being built
-(`gemm/mojo_only/gemm_unpinned.mojo`, `gemm/UNPINNED_CONTROL.md`). **Until it
-runs, the cost of the profile as distinct from the cost of writing our own
-GEMM is UNMEASURED.** Do not take the nearest available ratio.
+ONLY the fold-order pin removed, everything else held. It is now WRITTEN
+(`gemm/mojo_only/gemm_unpinned.mojo`, 945 lines; `gemm/UNPINNED_CONTROL.md`,
+439) and is NOT YET WIRED INTO THE PRICE HARNESS OR RUN. **Until it runs, the
+cost of the profile as distinct from the cost of writing our own GEMM is
+UNMEASURED.** Do not take the nearest available ratio.
+
+Its prediction is on record ahead of the measurement, which is this project's
+habit because a wrong prediction is the most useful thing a gate produces:
+**1.10x to 1.45x** at the tiled `t512` rows, 1.00x to 1.06x at the
+bandwidth-bound `t1` rows, and **the fold itself contributing under 2%**
+anywhere. If that holds, the pin is a small part of the 12x to 30x and the
+rest is ours to fix.
 
 ### 1.3 The variance is large and the sample was one
 

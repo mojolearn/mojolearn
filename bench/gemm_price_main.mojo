@@ -1730,12 +1730,22 @@ def _timed_shape_with_device(
     kernel engineering plus the pin, against Modular's kernel engineering.
     Both terms move at once.
 
-    The arm that WOULD answer it does not exist anywhere in this repository:
-    the identical kernel's OWN tiled plan with ONLY the fold-order pin
-    removed, everything else held. One variable. Until that is built and
-    run, the cost of `mojolearn.identical.gemm.fp32.v1` as distinct from the
-    cost of writing our own GEMM is UNMEASURED, and this file says so rather
-    than letting a reader take the nearest available ratio.
+    The arm that answers it is `gemm/mojo_only/gemm_unpinned.mojo`, written
+    2026-08-25 under DEVIATIONS 1130-1136: the identical kernel's OWN plan
+    selection and tile constants, imported rather than copied, with the leaf
+    loop kept AS A SCHEDULE so the staging window does not move, and only the
+    fold-order pin removed. `gemm/UNPINNED_CONTROL.md` carries the
+    clause-by-clause table of what was dropped, the confounds that remain,
+    and a prediction written down before the run.
+
+    (The sentence that stood here said the arm "does not exist anywhere in
+    this repository". It did when it was written and it is false now, so it
+    is deleted rather than left with a caveat.)
+
+    IT IS NOT WIRED INTO THIS FILE YET, so no column below reports it, and
+    until it is timed the cost of `mojolearn.identical.gemm.fp32.v1` as
+    distinct from the cost of writing our own GEMM is still UNMEASURED. Do
+    not take the nearest available ratio in the meantime.
 
     **THE LAST TWO ARE NT-ONLY AND ARE SKIPPED, NOT FAKED, ELSEWHERE.** Both
     read `A` as `m x k` and `B` as `n x k`; the shipped repository has no
