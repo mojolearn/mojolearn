@@ -143,11 +143,48 @@ def u01(rows, cols, salt):
     return (z >> np.uint64(11)).astype(np.float64) * (1.0 / 9007199254740992.0)
 
 
+def u01_at(row, cols, salt):
+    """One ROW of `u01`'s block, by its index, without building the block.
+
+    Introduced by DEVIATION 1810. The recurrence is a pure function of
+    `(row, k, salt)`, so a single row is computable directly; the only reason
+    the block form existed is that every other caller here wants the block.
+
+    IT IS ASSERTED AGAINST `u01` RATHER THAN TRUSTED. A second transcription
+    of a mixer is a second definition of the fixture, and the whole point of
+    this file is that both languages see the same bytes. The check is one
+    row and costs nothing.
+    """
+    r = np.uint64(row)
+    k = np.arange(cols, dtype=np.uint64)
+    z = (r * np.uint64(M1) + (k + np.uint64(1)) * np.uint64(M2)
+         + np.uint64(salt + 1) * np.uint64(M3))
+    z = (z ^ (z >> np.uint64(30))) * np.uint64(M2)
+    z = (z ^ (z >> np.uint64(27))) * np.uint64(M3)
+    z = z ^ (z >> np.uint64(31))
+    return (z >> np.uint64(11)).astype(np.float64) * (1.0 / 9007199254740992.0)
+
+
+def _assert_u01_at_matches_u01():
+    """Both spellings, one row, every run. Cheap, and it is the only thing
+    standing between a second transcription and a second fixture."""
+    for row, salt in ((0, 5), (1, 5), (7919, 5), (3, 1)):
+        block = u01(row + 1, 8, salt)[row]
+        direct = u01_at(row, 8, salt)
+        if not np.array_equal(block, direct):
+            raise SystemExit(
+                "u01_at disagrees with u01 at row %d salt %d. The fixture is "
+                "no longer one definition, so nothing below is comparable."
+                % (row, salt)
+            )
+
+
 def emit(name, seconds):
     print(f"ARM {name} {seconds * 1000.0:.4f}")
 
 
 def main():
+    _assert_u01_at_matches_u01()
     km_rows, km_cols, km_k, km_iter = 4000000, 32, 64, 20
     knn_index, knn_queries, knn_cols, knn_k = 400000, 4000, 32, 10
     pca_rows, pca_cols, pca_comp = 4000000, 32, 8
@@ -155,13 +192,39 @@ def main():
     ols_rows, ols_cols = 4000000, 32
 
     km_x = np.ascontiguousarray(u01(km_rows, km_cols, 0) * 10.0, dtype=np.float32)
+    # DEVIATION 1810 -- SCIKIT-LEARN WAS BEING HANDED 64 IDENTICAL CENTROIDS.
+    #
+    # This block used to be two assignments, the first of which was dead:
+    #
+    #     km_init = ... u01(1, km_cols, 5)[0] ...          # overwritten below
+    #     km_init = ... u01(c * 7919 + 1, km_cols, 5)[0] ...
+    #
+    # and the surviving one carried the same bug the dead one had. `u01(rows,
+    # cols, salt)` returns a `rows x cols` block whose row index runs 0..rows-1,
+    # so `[0]` is ROW ZERO no matter what `c` is. The `+ 1` in the row count is
+    # the tell: it exists to make row `c * 7919` the LAST row of the block, and
+    # then the subscript asked for the first one.
+    #
+    # The Mojo side (bench_main.mojo:106) uses `_u01(c * 7919, f, 5)`, which is
+    # row `c * 7919`. So for as long as this line has been here, OUR k-means
+    # started from 64 distinct centroids and THEIRS started from 64 copies of
+    # one centroid -- 63 of which are empty on the first assignment pass. That
+    # is not a slower or faster k-means, it is a DIFFERENT PROBLEM, and every
+    # kmeans ratio in bench/results/ taken against this file has to be re-read
+    # rather than believed.
+    #
+    # Verified before the fix, arithmetically and with no GPU in the question:
+    # eight centroids built the old way collapse to ONE distinct row; built the
+    # new way they are eight distinct rows, and they equal the Mojo side's rows
+    # element for element.
+    #
+    # `u01_at` also stops this costing what it used to. The old spelling
+    # materialized a `(c * 7919 + 1) x 32` block for every centroid and then
+    # threw away all but one row -- about 128 MB of transient allocation for the
+    # last centroid alone. Indexing the recurrence directly is the same
+    # arithmetic on one row.
     km_init = np.ascontiguousarray(
-        np.stack([u01(1, km_cols, 5)[0] * 10.0 for _ in range(km_k)]),
-        dtype=np.float32,
-    )
-    # Match the Mojo side's per-centroid seed exactly.
-    km_init = np.ascontiguousarray(
-        np.stack([u01(c * 7919 + 1, km_cols, 5)[0] * 10.0 for c in range(km_k)]),
+        np.stack([u01_at(c * 7919, km_cols, 5) * 10.0 for c in range(km_k)]),
         dtype=np.float32,
     )
 
