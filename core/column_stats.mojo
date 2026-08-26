@@ -84,7 +84,7 @@ from mojo_only.kernel_matrix import (
 )
 
 
-from std.gpu import block_dim, block_idx, thread_idx
+from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
@@ -343,6 +343,15 @@ def scale_in_place_kernel(
 
 comptime TRANSPOSE_TILE = 32
 
+# CUDA's grid Y and Z dimensions are capped at 65,535; X is 2^31 - 1. This is
+# a HARDWARE/DRIVER limit, checked at launch, and exceeding it fails the
+# launch with CUDA_ERROR_INVALID_VALUE before any thread runs -- there is no
+# partial result and no wrong answer, just an unhandled exception. Named here
+# rather than spelled 65535 at a call site, because DEVIATION 1883 is the
+# SECOND lane this cap has taken (DEVIATION 1872 was MAX's gemv at
+# n = 128256) and it will not be the last.
+comptime CUDA_MAX_GRID_YZ = 65535
+
 
 def transpose_kernel(
     dst: MutPointer[Float32, MutAnyOrigin],
@@ -380,18 +389,63 @@ def transpose_kernel(
 
     var tx = Int(thread_idx.x)
     var ty = Int(thread_idx.y)
-    var r0 = Int(block_idx.y) * TRANSPOSE_TILE
     var c0 = Int(block_idx.x) * TRANSPOSE_TILE
 
-    var r = r0 + ty
-    var c = c0 + tx
-    if r < n_rows and c < n_cols:
-        tile[ty * (TRANSPOSE_TILE + 1) + tx] = src.unsafe_load(r * n_cols + c)
-    barrier()
+    # DEVIATION 1883 -- A GRID-STRIDE LOOP OVER THE ROW TILES, BECAUSE THE
+    # ROW TILE INDEX WAS `block_idx.y` AND CUDA CAPS grid_dim.y AT 65,535.
+    #
+    # This kernel used to take its row tile straight from `block_idx.y`,
+    # which forced the caller to launch one block per row tile in Y. On CUDA
+    # the Y and Z grid dimensions are capped at 65,535 (X is 2^31 - 1), so
+    # at TRANSPOSE_TILE = 32 the LARGEST MATRIX THIS COULD TRANSPOSE WAS
+    # 65,535 * 32 = 2,097,120 ROWS. One row past that and the LAUNCH ITSELF
+    # is rejected: CUDA_ERROR_INVALID_VALUE, before a single thread runs.
+    #
+    # MEASURED, H100, 2026-08-26. The classical speed leg ran `ols` and
+    # `pca` at their shipped 4,000,000 x 32 and BOTH DIED HERE. Not a wrong
+    # answer -- no answer at all, an unhandled exception out of
+    # `gemm_tn_via_transpose`, and two lanes came home with a cuML row and
+    # no row of ours. It is the same family as DEVIATION 1872 (MAX's gemv
+    # over the same 65,535 cap at n = 128256) and it is the second time this
+    # cap has taken a lane in one day.
+    #
+    # THE APPLE RUNS COULD NOT HAVE SEEN IT. Metal has no equivalent
+    # threadgroup-grid cap in this range, and every Apple fixture that
+    # reaches this kernel is small. A limit that only one vendor imposes,
+    # only above a size no local fixture reaches, is exactly the defect a
+    # cross-vendor leg exists to find.
+    #
+    # The fix is the standard grid-stride loop: the caller now caps Y and
+    # each block walks the row tiles it owns. `n_row_tiles`, `stride` and
+    # the loop bound are all block-uniform -- `block_idx.y` and `grid_dim.y`
+    # are the same for every thread in a block -- so every thread in a block
+    # runs the SAME number of iterations and the `barrier()` calls below are
+    # reached uniformly. A divergent barrier here would be a hang, not a
+    # wrong number, so this is the property that matters.
+    var n_row_tiles = (n_rows + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE
+    var stride = Int(grid_dim.y)
+    var t = Int(block_idx.y)
+    while t < n_row_tiles:
+        var r0 = t * TRANSPOSE_TILE
 
-    var r2 = c0 + ty
-    var c2 = r0 + tx
-    if r2 < n_cols and c2 < n_rows:
-        dst.unsafe_store(
-            r2 * n_rows + c2, tile[tx * (TRANSPOSE_TILE + 1) + ty]
-        )
+        var r = r0 + ty
+        var c = c0 + tx
+        if r < n_rows and c < n_cols:
+            tile[ty * (TRANSPOSE_TILE + 1) + tx] = src.unsafe_load(
+                r * n_cols + c
+            )
+        barrier()
+
+        var r2 = c0 + ty
+        var c2 = r0 + tx
+        if r2 < n_cols and c2 < n_rows:
+            dst.unsafe_store(
+                r2 * n_rows + c2, tile[tx * (TRANSPOSE_TILE + 1) + ty]
+            )
+        # THE SECOND BARRIER IS NOT DECORATION. The shared tile is REUSED by
+        # the next iteration, and without this a thread that has finished
+        # its store can race ahead and overwrite a tile entry another thread
+        # in the same block has not read yet. With one tile per launch that
+        # hazard did not exist; with a loop it does.
+        barrier()
+        t += stride

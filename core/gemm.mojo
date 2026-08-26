@@ -476,7 +476,11 @@ def gemm_tn_via_transpose(
     is two extra passes over `k x m` floats against a product that is
     `O(k * m * n)`, and it buys the tuned kernel.
     """
-    from core.column_stats import TRANSPOSE_TILE, transpose_kernel
+    from core.column_stats import (
+        CUDA_MAX_GRID_YZ,
+        TRANSPOSE_TILE,
+        transpose_kernel,
+    )
 
     # DEVIATION 1874 -- `m != n` WAS SILENTLY WRONG AND IS NOW REFUSED.
     #
@@ -526,9 +530,18 @@ def gemm_tn_via_transpose(
         x.unsafe_ptr(),
         Int32(k),
         Int32(m),
+        # DEVIATION 1883 -- Y IS CAPPED AT CUDA'S GRID LIMIT.
+        #
+        # `k` is the ROW COUNT of the operand and it is the big dimension
+        # here: `ols` and `pca` ship 4,000,000 x 32. One block per row tile
+        # in Y needs 125,000 blocks, and CUDA caps grid_dim.y at 65,535, so
+        # the LAUNCH was rejected outright -- CUDA_ERROR_INVALID_VALUE, both
+        # lanes dead on an H100 on 2026-08-26 with a cuML row and no row of
+        # ours. `transpose_kernel` now walks its row tiles with a grid-stride
+        # loop, so this cap costs occupancy at absurd sizes and nothing else.
         grid_dim=(
             (m + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE,
-            (k + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE,
+            min((k + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE, CUDA_MAX_GRID_YZ),
             1,
         ),
         block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),

@@ -1,0 +1,12 @@
+/root/mojolearn/bench/bench_sklearn.py:139: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=kpss arm=cuml-gpu cuml.tsa.stationarity.kpss_test at d=1, D=0, s=0, pval_threshold=0.05, the same batch of 8 series
+FSPEED-HEADER family=classical lane=kpss arm=cuml-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+/root/mojolearn/tools/speed_cuml_arm.py:1238: FutureWarning: `cuml.tsa.stationarity.kpss_test`, along with the entire `cuml.tsa` module, was deprecated in version 26.08 and will be removed in version 26.12.
+  return (np.asarray(to_numpy(cuml_kpss(y, d=1, D=0, s=0,
+FSPEED-WARMUP lane=kpss arm=cuml-gpu shape=8x520 ms=292.669717
+FSPEED lane=kpss arm=cuml-gpu shape=8x520 round=1 ms=1.219593 hash=7270ce3a3ef261c5
+FSPEED lane=kpss arm=cuml-gpu shape=8x520 round=2 ms=0.759128 hash=7270ce3a3ef261c5
+FSPEED lane=kpss arm=cuml-gpu shape=8x520 round=3 ms=0.715982 hash=7270ce3a3ef261c5

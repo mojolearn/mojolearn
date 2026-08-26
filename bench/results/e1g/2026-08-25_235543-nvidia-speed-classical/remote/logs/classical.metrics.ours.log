@@ -1,0 +1,7 @@
+2067 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5ac800000000, nodemask=2)
+wrote fixture dump /root/gemm_leg_out/dump/metrics.fixture
+FSPEED-HEADER family=classical lane=metrics arm=ours mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-WARMUP lane=metrics arm=ours shape=lab2053.flt2053.sil521x4.tru301x6 ms=528.959999
+FSPEED lane=metrics arm=ours shape=lab2053.flt2053.sil521x4.tru301x6 round=1 ms=0.869344 hash=53c1c906884da70e
+FSPEED lane=metrics arm=ours shape=lab2053.flt2053.sil521x4.tru301x6 round=2 ms=0.839256 hash=53c1c906884da70e
+FSPEED lane=metrics arm=ours shape=lab2053.flt2053.sil521x4.tru301x6 round=3 ms=0.838162 hash=53c1c906884da70e

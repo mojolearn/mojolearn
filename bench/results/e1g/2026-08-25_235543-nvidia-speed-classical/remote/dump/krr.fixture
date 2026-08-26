@@ -1,0 +1,124 @@
+# mojolearn-speed-fixture v1 lane=krr
+PARAM fixture RBF
+PARAM n 16
+PARAM d 5
+PARAM n_query 3
+PARAM n_components 8
+PARAM gamma 0.25
+PARAMHEX alpha 3f000000
+PARAM kernel rbf
+PARAM seed 20260825
+ARRAY x f32 80
+3f6a8d9b
+3f33f551
+3f210c3c
+3ff5570d
+3f75012c
+3f17a0a9
+3f007865
+3fb6cbc8
+3ffbecff
+3f03520c
+3fbbc3b1
+3fe6aac3
+3f4120fa
+3ff4b4ac
+3fd029a5
+3ff82201
+3f989ca6
+3f41cae0
+3f53b0bb
+3fff9651
+3fb675a0
+3fc4d35d
+3f723a38
+3fede7f5
+3f6bca7a
+3fcf195f
+3f205185
+3f2d65ae
+3f0fda1b
+3f744441
+3fb9c06e
+3f905800
+3f8ffa74
+3fa7a429
+3faf23ed
+3f8106aa
+3f91da97
+3f001e25
+3fc8ba1c
+3fc2f09c
+3fcd461c
+3fa5936e
+3ff711d8
+3fa922a9
+3faa0de2
+3f058ea8
+3fed0265
+3f73c3ac
+3fb5ab74
+3fcd921b
+3f9f907b
+3f5e02a4
+3f7247e5
+3fc897de
+3f7e42f7
+3fbfb683
+3fb716e0
+3fce60e3
+3f36c5e0
+3f977197
+3f8c5490
+3f877aed
+3f3e178f
+3f95499d
+3f0ddae2
+3f6269e7
+3f81b517
+3f3ae093
+3ff45a20
+3f02ea59
+3fd74d7e
+3fd80dd4
+3f5b3883
+3fd88533
+3f9dde33
+3f2970b4
+3faf58c4
+3f1db2e7
+3fbc1b3f
+3f7c018f
+ARRAY y f32 16
+3e800000
+bf000000
+bf400000
+3f000000
+3f400000
+3f000000
+be800000
+3f000000
+bf000000
+00000000
+3e800000
+bf000000
+3e800000
+3e800000
+3e800000
+3f000000
+ARRAY x_query f32 15
+3f71603c
+3f342401
+3ff48ea0
+3f9248e1
+3fa72365
+3f2d1f05
+3f1c7ed6
+3f0fe0c8
+3f27a8ed
+3f8913c3
+3f24b9dc
+3fd301d4
+3f03b424
+3f09e62f
+3fee8a17

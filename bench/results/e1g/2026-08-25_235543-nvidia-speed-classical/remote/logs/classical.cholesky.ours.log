@@ -1,0 +1,7 @@
+2559 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x599600000000, nodemask=2)
+wrote fixture dump /root/gemm_leg_out/dump/cholesky.fixture
+FSPEED-HEADER family=classical lane=cholesky arm=ours mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-WARMUP lane=cholesky arm=ours shape=RBF.64x64r4 ms=408.920652
+FSPEED lane=cholesky arm=ours shape=RBF.64x64r4 round=1 ms=0.316487 hash=d43ded17a30cf369
+FSPEED lane=cholesky arm=ours shape=RBF.64x64r4 round=2 ms=0.310066 hash=d43ded17a30cf369
+FSPEED lane=cholesky arm=ours shape=RBF.64x64r4 round=3 ms=0.311029 hash=d43ded17a30cf369

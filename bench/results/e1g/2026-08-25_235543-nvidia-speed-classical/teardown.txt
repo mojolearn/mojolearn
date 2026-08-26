@@ -1,0 +1,6 @@
+pod=pplneetze7jh1s
+armed=1
+terminated=1
+deadman_pid=69187
+exit=0
+at=2026-08-26T04:03:10Z

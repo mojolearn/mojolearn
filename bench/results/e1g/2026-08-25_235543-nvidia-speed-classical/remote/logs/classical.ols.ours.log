@@ -1,0 +1,5 @@
+1095 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a3340000000, nodemask=2)
+FSPEED-HEADER family=classical lane=ols arm=ours mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: /root/mojolearn/core/gemm.mojo:524:43 failed calling 'def[LITImmOrigin, ::Origin[::Bool(False), $0]](*args: **?) thin -> None|def(dst: ::Pointer[::Bool(True), MutUnsafeAnyOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))], src: ::Pointer[::Bool(True), MutUnsafeAnyOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))], n_rows_in: ::SIMD[::DType(int32), ::SIMDLength(1)], n_cols_in: ::SIMD[::DType(int32), ::SIMDLength(1)]) thin -> None|620a3eab15d03604' on device cuda:0 with error 'CUDA call failed: CUDA_ERROR_INVALID_VALUE (invalid argument)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.'

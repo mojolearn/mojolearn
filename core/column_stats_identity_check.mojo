@@ -728,8 +728,157 @@ def check_xty_contraction_pin() raises:
             )
 
 
+def check_transpose_grid_stride() raises:
+    """DEVIATION 1883. `transpose_kernel` walks its row tiles with a
+    grid-stride loop; this runs the SAME transpose at four different Y grid
+    heights and demands they agree with the host, cell for cell.
+
+    WHY IT CANNOT BE TESTED THE OBVIOUS WAY. The bug is that CUDA caps
+    `grid_dim.y` at 65,535, so the kernel could not transpose a matrix
+    taller than 65,535 * 32 = 2,097,120 rows -- the LAUNCH was rejected
+    before a thread ran. Reproducing that literally needs a two-million-row
+    fixture on a CUDA box, which is not a unit test.
+
+    So the test attacks the FIX instead of the bug. Capping Y at 1, 2 or 3
+    forces the loop to wrap many times at a tiny size, which is exactly the
+    control flow a 4,000,000-row launch takes and which a full-height launch
+    never enters. Y = n_row_tiles is the old single-pass behavior and is the
+    control.
+
+    AND THE CAPPED ARMS ARE THEMSELVES THE SABOTAGE. Against the code as it
+    stood yesterday -- row tile taken straight from `block_idx.y`, no loop --
+    the Y = 1 arm would transpose ONLY THE FIRST 32 ROWS and leave the rest
+    of `dst` untouched. It cannot pass without the loop. There is no version
+    of this check that is green on both the old kernel and the new one.
+
+    HASHED VALUES, NOT A RAMP, per the standing rule: a transpose is a
+    PERMUTATION, and a fixture whose cells are interchangeable cannot see a
+    permutation go wrong. Every cell here is `_spread_full(r, c)`, distinct
+    per (row, column), so a misplaced element is a mismatch at a named cell
+    rather than a plausible-looking matrix.
+    """
+    from core.column_stats import TRANSPOSE_TILE, transpose_kernel
+
+    var ctx = DeviceContext()
+    # Deliberately NOT a multiple of the tile in either dimension, so the
+    # ragged edges of the first and last tile are inside the test.
+    var n_rows = 5 * TRANSPOSE_TILE + 7
+    var n_cols = 2 * TRANSPOSE_TILE + 5
+    var n_row_tiles = (n_rows + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE
+    var n_col_tiles = (n_cols + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE
+
+    var src = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
+    var hsrc = ctx.enqueue_create_host_buffer[DType.float32](n_rows * n_cols)
+    ctx.synchronize()
+    for r in range(n_rows):
+        for c in range(n_cols):
+            hsrc.unsafe_ptr().unsafe_store(r * n_cols + c, _spread_full(r, c))
+    ctx.enqueue_copy(dst_buf=src, src_ptr=hsrc.unsafe_ptr())
+    ctx.synchronize()
+
+    var heights = List[Int]()
+    heights.append(n_row_tiles)   # the control: one block per row tile
+    heights.append(1)             # every tile through ONE block
+    heights.append(2)
+    heights.append(3)
+
+    var failures = 0
+    for hi in range(len(heights)):
+        var gy = heights[hi]
+        var dst = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
+        var hdst = ctx.enqueue_create_host_buffer[DType.float32](
+            n_rows * n_cols
+        )
+        ctx.synchronize()
+        # POISON THE DESTINATION. A kernel that writes nothing must fail,
+        # not inherit a previous arm's answer or a zeroed allocation that
+        # happens to match an all-zero expectation.
+        for i in range(n_rows * n_cols):
+            hdst.unsafe_ptr().unsafe_store(i, Float32(-7777.0))
+        ctx.enqueue_copy(dst_buf=dst, src_ptr=hdst.unsafe_ptr())
+        ctx.synchronize()
+
+        ctx.enqueue_function[transpose_kernel](
+            dst.unsafe_ptr(),
+            src.unsafe_ptr(),
+            Int32(n_rows),
+            Int32(n_cols),
+            grid_dim=(n_col_tiles, gy, 1),
+            block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
+        )
+        ctx.synchronize()
+        ctx.enqueue_copy(dst_ptr=hdst.unsafe_ptr(), src_buf=dst)
+        ctx.synchronize()
+
+        var bad = 0
+        var first_r = -1
+        var first_c = -1
+        for r in range(n_rows):
+            for c in range(n_cols):
+                # dst is [n_cols x n_rows]; dst[c][r] must be src[r][c].
+                var got = hdst.unsafe_ptr().unsafe_load(c * n_rows + r)
+                var want = _spread_full(r, c)
+                if _bits(got) != _bits(want):
+                    if bad == 0:
+                        first_r = r
+                        first_c = c
+                    bad += 1
+        if bad != 0:
+            failures += 1
+            print(
+                "  FAIL grid_dim.y=",
+                gy,
+                ": ",
+                bad,
+                " of ",
+                n_rows * n_cols,
+                " cells wrong, first at src[",
+                first_r,
+                "][",
+                first_c,
+                "] want ",
+                _show(_spread_full(first_r, first_c)),
+                " got ",
+                _show(hdst.unsafe_ptr().unsafe_load(first_c * n_rows + first_r)),
+            )
+        else:
+            print(
+                "  ok   grid_dim.y=",
+                gy,
+                " (",
+                (n_row_tiles + gy - 1) // gy,
+                " row tiles per block): all ",
+                n_rows * n_cols,
+                " cells bit-exact",
+            )
+        _ = dst^
+        _ = hdst^
+    _ = src^
+    _ = hsrc^
+
+    if failures != 0:
+        raise Error(
+            "transpose_kernel grid-stride: "
+            + String(failures)
+            + " of "
+            + String(len(heights))
+            + " grid heights disagreed with the host. DEVIATION 1883."
+        )
+    print(
+        "  transpose_kernel: ",
+        n_rows,
+        "x",
+        n_cols,
+        " transposed identically at ",
+        len(heights),
+        " grid heights including Y=1, which the pre-1883 kernel could not"
+        " do at all.",
+    )
+
+
 def main() raises:
     print("core/column_stats identity checks, mode", _mode_name())
     check_column_stats_row_is_pinned()
     check_column_stats_fold_shape()
     check_xty_contraction_pin()
+    check_transpose_grid_stride()

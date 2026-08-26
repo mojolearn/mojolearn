@@ -1,0 +1,12 @@
+/root/mojolearn/bench/bench_sklearn.py:139: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=holtwinters arm=cuml-gpu seasonal=additive, seasonal_periods, start_periods, ts_num and eps all passed explicitly. The dump is series-major (batch_size x n), which is cuML's own (ts_num, n) layout, so no transpose is needed
+FSPEED-HEADER family=classical lane=holtwinters arm=cuml-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+/root/mojolearn/tools/speed_cuml_arm.py:1199: FutureWarning: `cuml.tsa.ExponentialSmoothing`, along with the entire `cuml.tsa` module, was deprecated in version 26.08 and will be removed in version 26.12.
+  m = ExponentialSmoothing(y, seasonal="additive",
+FSPEED-WARMUP lane=holtwinters arm=cuml-gpu shape=7x72f12 ms=373.208586
+FSPEED lane=holtwinters arm=cuml-gpu shape=7x72f12 round=1 ms=8.758310 hash=97c0d626da007a91
+FSPEED lane=holtwinters arm=cuml-gpu shape=7x72f12 round=2 ms=8.288275 hash=97c0d626da007a91
+FSPEED lane=holtwinters arm=cuml-gpu shape=7x72f12 round=3 ms=8.223012 hash=97c0d626da007a91

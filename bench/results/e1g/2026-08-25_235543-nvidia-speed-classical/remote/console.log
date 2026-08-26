@@ -1,0 +1,222 @@
+
+=== build classicalspeed ===
+
+=== classical.kmeans.ours.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=kmeans arm=ours shape=4000000x32k64i20 round=1 ms=167.145189 hash=c5f012ba7bff508e
+FSPEED lane=kmeans arm=ours shape=4000000x32k64i20 round=2 ms=167.628014 hash=c5f012ba7bff508e
+FSPEED lane=kmeans arm=ours shape=4000000x32k64i20 round=3 ms=167.079696 hash=c5f012ba7bff508e
+
+=== classical.kmeans.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED lane=kmeans arm=cuml-gpu shape=4000000x32k64i20 round=2 ms=231.536862 hash=-
+FSPEED-NOTE lane=kmeans arm=cuml-gpu output is 16008192 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=kmeans arm=cuml-gpu shape=4000000x32k64i20 round=3 ms=234.458525 hash=-
+
+=== classical.dbscan.ours.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=dbscan arm=ours shape=4000x16 round=1 ms=0.703104 hash=4869c285f078c0a5
+FSPEED lane=dbscan arm=ours shape=4000x16 round=2 ms=0.691993 hash=4869c285f078c0a5
+FSPEED lane=dbscan arm=ours shape=4000x16 round=3 ms=0.692968 hash=4869c285f078c0a5
+
+=== classical.dbscan.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED lane=dbscan arm=cuml-gpu shape=4000x16 round=1 ms=2.279174 hash=4869c285f078c0a5
+FSPEED lane=dbscan arm=cuml-gpu shape=4000x16 round=2 ms=2.411701 hash=4869c285f078c0a5
+FSPEED lane=dbscan arm=cuml-gpu shape=4000x16 round=3 ms=2.465133 hash=4869c285f078c0a5
+
+=== classical.pca.ours.log :: /root/gemm_leg_out/bin_classicalspeed ===
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: /root/mojolearn/core/gemm.mojo:524:43 failed calling 'def[LITImmOrigin, ::Origin[::Bool(False), $0]](*args: **?) thin -> None|def(dst: ::Pointer[::Bool(True), MutUnsafeAnyOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))], src: ::Pointer[::Bool(True), MutUnsafeAnyOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))], n_rows_in: ::SIMD[::DType(int32), ::SIMDLength(1)], n_cols_in: ::SIMD[::DType(int32), ::SIMDLength(1)]) thin -> None|620a3eab15d03604' on device cuda:0 with error 'CUDA call failed: CUDA_ERROR_INVALID_VALUE (invalid argument)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.'
+
+=== classical.pca.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED-NOTE lane=pca arm=cuml-gpu svd_solver=covariance_eigh, algorithm-matched
+FSPEED-HEADER family=classical lane=pca arm=cuml-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-REFUSED lane=pca arm=unknown reason=raised at run time: ValueError("Expected `svd_solver` to be one of ['auto', 'full', 'jacobi'], got 'covariance_eigh'")
+
+=== classical.ols.ours.log :: /root/gemm_leg_out/bin_classicalspeed ===
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: /root/mojolearn/core/gemm.mojo:524:43 failed calling 'def[LITImmOrigin, ::Origin[::Bool(False), $0]](*args: **?) thin -> None|def(dst: ::Pointer[::Bool(True), MutUnsafeAnyOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))], src: ::Pointer[::Bool(True), MutUnsafeAnyOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))], n_rows_in: ::SIMD[::DType(int32), ::SIMDLength(1)], n_cols_in: ::SIMD[::DType(int32), ::SIMDLength(1)]) thin -> None|620a3eab15d03604' on device cuda:0 with error 'CUDA call failed: CUDA_ERROR_INVALID_VALUE (invalid argument)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.'
+
+=== classical.ols.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED lane=ols arm=cuml-gpu shape=4000000x32 round=1 ms=175.365571 hash=6a660f0646505394
+FSPEED lane=ols arm=cuml-gpu shape=4000000x32 round=2 ms=173.848331 hash=6a660f0646505394
+FSPEED lane=ols arm=cuml-gpu shape=4000000x32 round=3 ms=173.674725 hash=6a660f0646505394
+
+=== classical.knn.ours.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=knn arm=ours shape=400000x32q4000k10 round=2 ms=243.711474 hash=a8b524266ef7e58e
+FSPEED lane=knn arm=ours shape=400000x32q4000k10 round=3 ms=243.862201 hash=57bd98850029ce6e
+FSPEED-NOTE lane=knn arm=ours hash moved across rounds: 60696ef51c0f93d6 a8b524266ef7e58e
+
+=== classical.knn.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED lane=knn arm=cuml-gpu shape=400000x32q4000k10 round=2 ms=10.223627 hash=-
+FSPEED-NOTE lane=knn arm=cuml-gpu output is 480000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=knn arm=cuml-gpu shape=400000x32q4000k10 round=3 ms=9.994466 hash=-
+
+=== classical.cd.ours.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=cd arm=ours shape=2048x16 round=1 ms=1.162182 hash=3bc909a47ebc9bda
+FSPEED lane=cd arm=ours shape=2048x16 round=2 ms=1.138815 hash=3bc909a47ebc9bda
+FSPEED lane=cd arm=ours shape=2048x16 round=3 ms=1.13861 hash=3bc909a47ebc9bda
+
+=== classical.cd.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED lane=cd arm=cuml-gpu shape=2048x16 round=1 ms=1.628965 hash=1708eb34307fb7a0
+FSPEED lane=cd arm=cuml-gpu shape=2048x16 round=2 ms=1.438417 hash=1708eb34307fb7a0
+FSPEED lane=cd arm=cuml-gpu shape=2048x16 round=3 ms=1.301944 hash=1708eb34307fb7a0
+
+=== classical.kde.ours.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=kde arm=ours shape=1024x256x8 round=1 ms=0.226243 hash=4ec9d98c61d3ae83
+FSPEED lane=kde arm=ours shape=1024x256x8 round=2 ms=0.20219 hash=4ec9d98c61d3ae83
+FSPEED lane=kde arm=ours shape=1024x256x8 round=3 ms=0.199062 hash=4ec9d98c61d3ae83
+
+=== classical.kde.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED lane=kde arm=cuml-gpu shape=1024x256x8 round=1 ms=0.628632 hash=1a75f5b84752fcd8
+FSPEED lane=kde arm=cuml-gpu shape=1024x256x8 round=2 ms=0.407826 hash=1a75f5b84752fcd8
+FSPEED lane=kde arm=cuml-gpu shape=1024x256x8 round=3 ms=0.383779 hash=1a75f5b84752fcd8
+
+=== classical.linkage.ours.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=linkage arm=ours shape=blobs_dups.102x5 round=1 ms=1.047661 hash=d486f76f518b97e2
+FSPEED lane=linkage arm=ours shape=blobs_dups.102x5 round=2 ms=0.97322 hash=d486f76f518b97e2
+FSPEED lane=linkage arm=ours shape=blobs_dups.102x5 round=3 ms=0.967226 hash=d486f76f518b97e2
+
+=== classical.linkage.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED lane=linkage arm=cuml-gpu shape=blobs_dups.102x5 round=1 ms=2.554055 hash=1ff4250dd4aab576
+FSPEED lane=linkage arm=cuml-gpu shape=blobs_dups.102x5 round=2 ms=2.307609 hash=1ff4250dd4aab576
+FSPEED lane=linkage arm=cuml-gpu shape=blobs_dups.102x5 round=3 ms=2.289850 hash=1ff4250dd4aab576
+
+=== classical.svm.ours.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=svm arm=ours shape=F2.xor.240x2 round=1 ms=1.384225 hash=89a8b6ec1d86118a
+FSPEED lane=svm arm=ours shape=F2.xor.240x2 round=2 ms=1.367805 hash=89a8b6ec1d86118a
+FSPEED lane=svm arm=ours shape=F2.xor.240x2 round=3 ms=1.355184 hash=89a8b6ec1d86118a
+
+=== classical.svm.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED lane=svm arm=cuml-gpu shape=F2.xor.240x2 round=1 ms=4.831228 hash=28f0580866fb9354
+FSPEED lane=svm arm=cuml-gpu shape=F2.xor.240x2 round=2 ms=4.867814 hash=28f0580866fb9354
+FSPEED lane=svm arm=cuml-gpu shape=F2.xor.240x2 round=3 ms=4.889734 hash=28f0580866fb9354
+
+=== classical.metrics.ours.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=metrics arm=ours shape=lab2053.flt2053.sil521x4.tru301x6 round=1 ms=0.869344 hash=53c1c906884da70e
+FSPEED lane=metrics arm=ours shape=lab2053.flt2053.sil521x4.tru301x6 round=2 ms=0.839256 hash=53c1c906884da70e
+FSPEED lane=metrics arm=ours shape=lab2053.flt2053.sil521x4.tru301x6 round=3 ms=0.838162 hash=53c1c906884da70e
+
+=== classical.metrics.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED lane=metrics arm=cuml-gpu shape=lab2053.flt2053.sil521x4.tru301x6 round=1 ms=14.112365 hash=-
+FSPEED lane=metrics arm=cuml-gpu shape=lab2053.flt2053.sil521x4.tru301x6 round=2 ms=11.343870 hash=-
+FSPEED lane=metrics arm=cuml-gpu shape=lab2053.flt2053.sil521x4.tru301x6 round=3 ms=11.229381 hash=-
+
+=== classical.ivf.ours.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=ivf arm=ours shape=512x8q64L8p3k8 round=1 ms=7.533349 hash=0908d00a25ccbed4
+FSPEED lane=ivf arm=ours shape=512x8q64L8p3k8 round=2 ms=7.20639 hash=0908d00a25ccbed4
+FSPEED lane=ivf arm=ours shape=512x8q64L8p3k8 round=3 ms=7.223011 hash=0908d00a25ccbed4
+
+=== classical.ivf.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED lane=ivf arm=cuvs-gpu shape=512x8q64L8p3k8 round=1 ms=10.635976 hash=cb8f1cef2816d70f
+FSPEED lane=ivf arm=cuvs-gpu shape=512x8q64L8p3k8 round=2 ms=10.145579 hash=cb8f1cef2816d70f
+FSPEED lane=ivf arm=cuvs-gpu shape=512x8q64L8p3k8 round=3 ms=10.412153 hash=cb8f1cef2816d70f
+
+=== classical.hdbscan.ours.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=hdbscan arm=ours shape=blobs96.96x4 round=1 ms=1.285419 hash=8e1998063cb24ce6
+FSPEED lane=hdbscan arm=ours shape=blobs96.96x4 round=2 ms=1.22537 hash=8e1998063cb24ce6
+FSPEED lane=hdbscan arm=ours shape=blobs96.96x4 round=3 ms=1.201653 hash=8e1998063cb24ce6
+
+=== classical.hdbscan.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED lane=hdbscan arm=cuml-gpu shape=blobs96.96x4 round=1 ms=4.781742 hash=5199770714da8525
+FSPEED lane=hdbscan arm=cuml-gpu shape=blobs96.96x4 round=2 ms=4.481297 hash=5199770714da8525
+FSPEED lane=hdbscan arm=cuml-gpu shape=blobs96.96x4 round=3 ms=4.394703 hash=5199770714da8525
+
+=== classical.cholesky.ours.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=cholesky arm=ours shape=RBF.64x64r4 round=1 ms=0.316487 hash=d43ded17a30cf369
+FSPEED lane=cholesky arm=ours shape=RBF.64x64r4 round=2 ms=0.310066 hash=d43ded17a30cf369
+FSPEED lane=cholesky arm=ours shape=RBF.64x64r4 round=3 ms=0.311029 hash=d43ded17a30cf369
+
+=== classical.cholesky.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED lane=cholesky arm=torch-gpu shape=RBF.64x64r4 round=1 ms=0.303984 hash=8ec71c2a1e3fbcca
+FSPEED lane=cholesky arm=torch-gpu shape=RBF.64x64r4 round=2 ms=0.178806 hash=8ec71c2a1e3fbcca
+FSPEED lane=cholesky arm=torch-gpu shape=RBF.64x64r4 round=3 ms=0.167646 hash=8ec71c2a1e3fbcca
+
+=== classical.gmm.ours.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=gmm arm=ours shape=SEPARATED.24x2K3 round=1 ms=2.437281 hash=b934e26ee2bc5277
+FSPEED lane=gmm arm=ours shape=SEPARATED.24x2K3 round=2 ms=2.440872 hash=b934e26ee2bc5277
+FSPEED lane=gmm arm=ours shape=SEPARATED.24x2K3 round=3 ms=2.40959 hash=b934e26ee2bc5277
+
+=== classical.gmm.vendor.log :: python3 tools/speed_cuml_arm.py ===
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=gmm arm=cuml-gpu reason=RAPIDS ships no GaussianMixture; the arm below is scikit-learn on the CPU and is labeled sklearn-cpu
+FSPEED-REFUSED lane=gmm arm=sklearn-cpu reason=GPU-PATH-ONLY: this box is a GPU vendor's box and sklearn-cpu is their CPU path. On NVIDIA and AMD we compare against the vendor's GPU arm only; the CPU arm is the MacBook's. This lane therefore has no legal opponent here, which is a fact about the vendor's GPU coverage and not a failure of this run.
+
+=== classical.gp.ours.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=gp arm=ours shape=ard.12x3s6 round=1 ms=0.56123 hash=fb8d7954ab8a7807
+FSPEED lane=gp arm=ours shape=ard.12x3s6 round=2 ms=0.499435 hash=fb8d7954ab8a7807
+FSPEED lane=gp arm=ours shape=ard.12x3s6 round=3 ms=0.481825 hash=fb8d7954ab8a7807
+
+=== classical.gp.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED-NOTE lane=gp arm=sklearn-cpu optimizer=None and normalize_y=False on both sides: our gpr_fit_host implements no hyperparameter optimizer (DEVIATION 1761), so an arm that optimized would be doing different work
+FSPEED-NOTE lane=gp arm=sklearn-cpu scikit-learn works in float64 and we work in float32; that is a real difference in the amount of arithmetic and it cannot be turned off on their side
+FSPEED-REFUSED lane=gp arm=sklearn-cpu reason=GPU-PATH-ONLY: this box is a GPU vendor's box and sklearn-cpu is their CPU path. On NVIDIA and AMD we compare against the vendor's GPU arm only; the CPU arm is the MacBook's. This lane therefore has no legal opponent here, which is a fact about the vendor's GPU coverage and not a failure of this run.
+
+=== classical.krr.ours.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=krr arm=ours shape=RBF.16x5 round=1 ms=0.315031 hash=7a4f6340f5352471
+FSPEED lane=krr arm=ours shape=RBF.16x5 round=2 ms=0.480348 hash=7a4f6340f5352471
+FSPEED lane=krr arm=ours shape=RBF.16x5 round=3 ms=0.290341 hash=7a4f6340f5352471
+
+=== classical.krr.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED lane=krr arm=cuml-gpu shape=RBF.16x5 round=1 ms=2.348587 hash=bf101d3b60c2f648
+FSPEED lane=krr arm=cuml-gpu shape=RBF.16x5 round=2 ms=1.917839 hash=bf101d3b60c2f648
+FSPEED lane=krr arm=cuml-gpu shape=RBF.16x5 round=3 ms=1.873817 hash=bf101d3b60c2f648
+
+=== classical.nystroem.ours.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=nystroem arm=ours shape=RBF.16x5q8 round=1 ms=0.395179 hash=6fc983bed8f114ea
+FSPEED lane=nystroem arm=ours shape=RBF.16x5q8 round=2 ms=0.562458 hash=6fc983bed8f114ea
+FSPEED lane=nystroem arm=ours shape=RBF.16x5q8 round=3 ms=0.37833 hash=6fc983bed8f114ea
+
+=== classical.nystroem.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED-REFUSED lane=nystroem arm=cuml-gpu reason=RAPIDS ships no Nystroem; the arm below is scikit-learn on the CPU and is labeled sklearn-cpu
+FSPEED-NOTE lane=nystroem arm=sklearn-cpu hash=- : the BASIS SAMPLE differs. Ours permutes with a pinned Philox stream and theirs with numpy RandomState, so the two fit different rows. The WORK is the same (sample q rows, form q x q, eigendecompose, scale, cross kernel, matmul) and that is what is being timed
+FSPEED-REFUSED lane=nystroem arm=sklearn-cpu reason=GPU-PATH-ONLY: this box is a GPU vendor's box and sklearn-cpu is their CPU path. On NVIDIA and AMD we compare against the vendor's GPU arm only; the CPU arm is the MacBook's. This lane therefore has no legal opponent here, which is a fact about the vendor's GPU coverage and not a failure of this run.
+
+=== classical.rbfsampler.ours.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=rbfsampler arm=ours shape=3x5q8 round=1 ms=0.142657 hash=b20f76c0e12fe7fd
+FSPEED lane=rbfsampler arm=ours shape=3x5q8 round=2 ms=0.279566 hash=b20f76c0e12fe7fd
+FSPEED lane=rbfsampler arm=ours shape=3x5q8 round=3 ms=0.130583 hash=b20f76c0e12fe7fd
+
+=== classical.rbfsampler.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED-REFUSED lane=rbfsampler arm=cuml-gpu reason=RAPIDS ships no RBFSampler / random Fourier features; the arm below is scikit-learn on the CPU and is labeled sklearn-cpu
+FSPEED-NOTE lane=rbfsampler arm=sklearn-cpu hash=- : the random draws differ (a pinned Philox stream against numpy RandomState.normal). Both arms draw a d x q weight matrix and a q offset, then one matmul and one cosine over 3 rows
+FSPEED-REFUSED lane=rbfsampler arm=sklearn-cpu reason=GPU-PATH-ONLY: this box is a GPU vendor's box and sklearn-cpu is their CPU path. On NVIDIA and AMD we compare against the vendor's GPU arm only; the CPU arm is the MacBook's. This lane therefore has no legal opponent here, which is a fact about the vendor's GPU coverage and not a failure of this run.
+
+=== classical.resample.ours.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=resample arm=ours shape=200x2r10000 round=1 ms=0.551235 hash=38bb5e267f2ef221
+FSPEED lane=resample arm=ours shape=200x2r10000 round=2 ms=0.517451 hash=38bb5e267f2ef221
+FSPEED lane=resample arm=ours shape=200x2r10000 round=3 ms=0.746095 hash=38bb5e267f2ef221
+
+=== classical.resample.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED-NOTE lane=resample arm=scipy-cpu statistic=mean of column 0, method=percentile, n_resamples=10000, confidence_level passed explicitly. Our bootstrap_host resamples ROWS of the two-column sample (SciPy's paired=True shape) and computes the mean of column 0, which is what this arm does
+FSPEED-NOTE lane=resample arm=scipy-cpu with_bca_diagnostics is False on our side, so neither arm computes a jackknife
+FSPEED-REFUSED lane=resample arm=scipy-cpu reason=GPU-PATH-ONLY: this box is a GPU vendor's box and scipy-cpu is their CPU path. On NVIDIA and AMD we compare against the vendor's GPU arm only; the CPU arm is the MacBook's. This lane therefore has no legal opponent here, which is a fact about the vendor's GPU coverage and not a failure of this run.
+
+=== classical.spectral.ours.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=spectral arm=ours shape=48x4c3 round=1 ms=6.759514 hash=553b52e4f09df7cb
+FSPEED lane=spectral arm=ours shape=48x4c3 round=2 ms=6.797161 hash=553b52e4f09df7cb
+FSPEED lane=spectral arm=ours shape=48x4c3 round=3 ms=6.771717 hash=553b52e4f09df7cb
+
+=== classical.spectral.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED-NOTE lane=spectral arm=sklearn-cpu affinity=nearest_neighbors with the same n_neighbors, same n_clusters, same n_components, same n_init: both arms build a kNN affinity, take a Lanczos eigendecomposition of the normalized Laplacian and run k-means on the embedding. The eigensolvers are two Lanczos implementations (ours restarts, theirs is ARPACK)
+FSPEED-NOTE lane=spectral arm=sklearn-cpu hash=- : cluster label NUMBERING is arbitrary in both and the two are at best a permutation of each other
+FSPEED-REFUSED lane=spectral arm=sklearn-cpu reason=GPU-PATH-ONLY: this box is a GPU vendor's box and sklearn-cpu is their CPU path. On NVIDIA and AMD we compare against the vendor's GPU arm only; the CPU arm is the MacBook's. This lane therefore has no legal opponent here, which is a fact about the vendor's GPU coverage and not a failure of this run.
+
+=== classical.holtwinters.ours.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=holtwinters arm=ours shape=7x72f12 round=1 ms=10.425744 hash=4fb56da659c4ec4b
+FSPEED lane=holtwinters arm=ours shape=7x72f12 round=2 ms=10.416827 hash=4fb56da659c4ec4b
+FSPEED lane=holtwinters arm=ours shape=7x72f12 round=3 ms=10.422013 hash=4fb56da659c4ec4b
+
+=== classical.holtwinters.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED lane=holtwinters arm=cuml-gpu shape=7x72f12 round=1 ms=8.758310 hash=97c0d626da007a91
+FSPEED lane=holtwinters arm=cuml-gpu shape=7x72f12 round=2 ms=8.288275 hash=97c0d626da007a91
+FSPEED lane=holtwinters arm=cuml-gpu shape=7x72f12 round=3 ms=8.223012 hash=97c0d626da007a91
+
+=== classical.kpss.ours.log :: /root/gemm_leg_out/bin_classicalspeed ===
+FSPEED lane=kpss arm=ours shape=8x520 round=1 ms=0.127836 hash=91a858d57a2f7156
+FSPEED lane=kpss arm=ours shape=8x520 round=2 ms=0.126269 hash=91a858d57a2f7156
+FSPEED lane=kpss arm=ours shape=8x520 round=3 ms=0.126266 hash=91a858d57a2f7156
+
+=== classical.kpss.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED lane=kpss arm=cuml-gpu shape=8x520 round=1 ms=1.219593 hash=7270ce3a3ef261c5
+FSPEED lane=kpss arm=cuml-gpu shape=8x520 round=2 ms=0.759128 hash=7270ce3a3ef261c5
+FSPEED lane=kpss arm=cuml-gpu shape=8x520 round=3 ms=0.715982 hash=7270ce3a3ef261c5

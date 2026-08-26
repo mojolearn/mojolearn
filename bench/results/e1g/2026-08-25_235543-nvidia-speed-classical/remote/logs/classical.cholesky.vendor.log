@@ -1,0 +1,10 @@
+/root/mojolearn/bench/bench_sklearn.py:139: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=cholesky arm=torch-gpu torch.linalg.cholesky is cuSOLVER potrf and torch.cholesky_solve is potrs; the ridge, the logdet and the solve are all inside the clock on both sides
+FSPEED-HEADER family=classical lane=cholesky arm=torch-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-WARMUP lane=cholesky arm=torch-gpu shape=RBF.64x64r4 ms=82.174443
+FSPEED lane=cholesky arm=torch-gpu shape=RBF.64x64r4 round=1 ms=0.303984 hash=8ec71c2a1e3fbcca
+FSPEED lane=cholesky arm=torch-gpu shape=RBF.64x64r4 round=2 ms=0.178806 hash=8ec71c2a1e3fbcca
+FSPEED lane=cholesky arm=torch-gpu shape=RBF.64x64r4 round=3 ms=0.167646 hash=8ec71c2a1e3fbcca
