@@ -475,6 +475,13 @@ SPEED_FAMILY="${MOJOLEARN_SPEED_FAMILY:-gemmseq}"
 # whose lanes are symmetric boosting and forests, where LightGBM is a
 # secondary opponent and the build would cost half the rungs.
 SPEED_LGBM_CUDA="${MOJOLEARN_SPEED_LGBM_CUDA:-1}"
+# Concurrent legs on one account. The pre-flight normally REFUSES to rent
+# while any mojolearn-gemm-* pod is up, and that refusal is the orphan guard:
+# a leg that finds someone else's pod cannot know whether it is a live run or
+# a leak. With this flag it warns and names them instead of dying. Safe only
+# because every teardown targets its own POD ID and every dead-man is keyed
+# by its own pod NAME, so two legs never reap each other.
+LEG_ALLOW_CONCURRENT="${MOJOLEARN_LEG_ALLOW_CONCURRENT:-0}"
 SPEED_DATASET="${MOJOLEARN_SPEED_DATASET:-}"
 SPEED_ROWS="${MOJOLEARN_SPEED_ROWS:-}"
 SPEED_ROUNDS="${MOJOLEARN_SPEED_ROUNDS:-5}"
@@ -652,6 +659,7 @@ while [ $# -gt 0 ]; do
         --dataset)       shift; SPEED_DATASET="${1:-}" ;;
         --rows)          shift; SPEED_ROWS="${1:-}" ;;
         --no-lgbm-cuda)  SPEED_LGBM_CUDA=0 ;;
+        --allow-concurrent) LEG_ALLOW_CONCURRENT=1 ;;
         --smoke)         SPEED_SIZE="smoke" ;;
         --apple-dir)     shift; APPLE_DIR="${1:-}" ;;
         --work-timeout)  shift; WORK_TIMEOUT="${1:-}" ;;
@@ -1801,8 +1809,18 @@ leg_preflight() {
     esac
     _mine=$(rp_json "','.join([str(p.get('id','')) for p in (d.get('items') or d.get('pods') or d.get('data') or []) if str(p.get('name','')).startswith('mojolearn-gemm-')])")
     if [ -n "$_mine" ]; then
-        leg_die "REFUSING to rent: this lane already has pod(s) up: $_mine
-  Terminate them first:  tools/gemm_remote_leg.sh reap <pod-id>"
+        if [ "$LEG_ALLOW_CONCURRENT" = "1" ]; then
+            echo "    CONCURRENT: pod(s) already up and NOT reaped: $_mine"
+            echo "    --allow-concurrent was passed. This leg creates its own"
+            echo "    pod, terminates BY ITS OWN POD ID, and arms a dead-man"
+            echo "    keyed to its own name, so it will not touch those. YOU"
+            echo "    are now responsible for confirming ALL of them are gone:"
+            echo "      tools/gemm_remote_leg.sh reap <pod-id>"
+        else
+            leg_die "REFUSING to rent: this lane already has pod(s) up: $_mine
+  Terminate them first:  tools/gemm_remote_leg.sh reap <pod-id>
+  Or pass --allow-concurrent if those are legs you started on purpose."
+        fi
     fi
     echo "    none named mojolearn-gemm-*"
 }
