@@ -43,8 +43,11 @@ WHAT IS DELIBERATELY ADVERSARIAL ABOUT THE FIXTURE
    is not the argmax leaves the arms live but not DECISIVE, and a check can
    then pass with an arm broken. So the group is built from the exact
    argmax's own key: five candidates share its rational and its float score,
-   two of them share a `colid` as well, and the winner is therefore the one
-   the `colid` arm and then the `quesval` arm select.
+   in exactly TWO colid classes of three members each, so that whichever
+   class DEVIATION 463's rank arm crowns (or the max-colid arm, under the
+   `MOJOLEARN_ET_TIE_MAX_COLID` build), the winner within it is selected by
+   the `quesval` arm -- both tie arms decisive on every planted node, for
+   any rank outcome.
 4. **The DEVIATION 145 pair.** For every Gini node the fixture searches for a
    candidate whose `Float32` gain is BIT-EQUAL to the winner's but whose
    exact proxy is strictly smaller, and gives it the largest `colid` in the
@@ -500,14 +503,29 @@ def build_candidates(
 
             # Five copies of the argmax's KEY and SCORE, spread across the
             # list so they land in different warps and different blocks:
-            # colid -1 / +0 / +0 / +1 / +1, quesvals all distinct. The winner
-            # is then decided by the `colid` arm and then the `quesval` arm,
-            # which is what makes those arms decisive and their sabotage red.
+            # colid +1 / +0 / +0 / +1 / +1, quesvals all distinct.
+            #
+            # WHY EVERY COLID CLASS HAS AT LEAST TWO MEMBERS (deltas were
+            # -1/0/0/+1/+1 before DEVIATION 463, and that shape went RED
+            # under the keyed rule). The tie set's colid classes are now
+            # {c0: a_best, +0, +0} and {c0+1: +1, +1, +1}. Under the keyed
+            # rule the FIRST decisive arm is the rank over the class ids --
+            # whichever of the two classes the per-node rank crowns, the
+            # winner is then picked WITHIN that class by the quesval arm,
+            # because a rank tie between class members IS a colid tie. With
+            # the old -1 singleton, three of the five planted nodes' ranks
+            # crowned c0-1 (computed, not observed: the rank is a pure
+            # function of (CHECK_TREE_ID, nidx, colid)) and the quesval arm
+            # was then live but NOT decisive there -- E1's own defect
+            # condition. Two members per class makes the quesval arm
+            # decisive on every planted node FOR ANY rank outcome, and under
+            # the MOJOLEARN_ET_TIE_MAX_COLID build the max-colid rule crowns
+            # the c0+1 class, where the quesval arm is equally decisive.
             var stride = spec.count // 6
             if stride < 1:
                 stride = 1
             var offs = [1, 2, 3, 4, 1]
-            var deltas = [Int32(-1), Int32(0), Int32(0), Int32(1), Int32(1)]
+            var deltas = [Int32(1), Int32(0), Int32(0), Int32(1), Int32(1)]
             for k in range(5):
                 var slot = (best + offs[k] * stride + k) % spec.count
                 while slot == best or slot == collide:
@@ -733,6 +751,13 @@ def run_arm[
     ctx.enqueue_copy(dst_buf=o_nw, src_buf=d_nw)
     ctx.synchronize()
 
+    # Mojo frees a buffer at its LAST USE, and the salt buffers' last natural
+    # uses are an enqueue (`d_ts` at the launch, `h_ts` at its copy) -- hold
+    # both past the drain so the queued reads cannot outlive them, exactly as
+    # `regression_score_check` holds `d_tree_ids`/`h_tree_ids`.
+    _ = d_ts^
+    _ = h_ts^
+
     var r_q = List[Float32]()
     var r_c = List[Int32]()
     var r_m = List[Float32]()
@@ -901,7 +926,11 @@ def main() raises:
 
     # E1: both tie-break arms are DECISIVE, not merely present -- the winner
     # of each planted node is a member of the tie group, and the group holds
-    # a colid tie and a (colid, quesval) tie at the top.
+    # a (key, metric) tie at the top (decided by DEVIATION 463's rank arm,
+    # or by the colid arm under the max-colid build) AND a colid tie at the
+    # top (decided by the quesval arm). The fixture plants two colid classes
+    # of three, so BOTH counters hit on every planted node whatever the
+    # per-node rank values are.
     var e_colid = 0
     var e_quesval = 0
     for nid in range(n_nodes):
@@ -925,9 +954,9 @@ def main() raises:
         if eq_colid > 1:
             e_quesval += 1
     print(
-        "  E1 nodes whose winner was decided by the colid arm:",
+        "  E1 nodes whose winner was decided below the key (rank/colid arm):",
         e_colid,
-        "; by the quesval arm:",
+        "; below the colid (quesval arm):",
         e_quesval,
     )
     if e_colid < 4 or e_quesval < 4:

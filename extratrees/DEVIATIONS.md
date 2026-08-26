@@ -3673,6 +3673,30 @@ deliberately broken on any fit that ever hit an exact tie.
 `regression_score_check` arm E, `host_splitter_check` via the shared
 `_wins_on_total_order`, and the A/B above.
 
+**CHECK-ROUND ADDENDUM (2026-08-26, first Apple run of the merged branch).**
+Three checks went red and each taught something. (1) `split_reduce_check`,
+two arms: the planted tie group's colid classes were {singleton, pair, pair}
+and the per-node rank crowned the SINGLETON in three of five nodes
+(recomputed exactly from the rank arithmetic, not observed), so E1's
+quesval-decisiveness floor and the NO_QUESVAL sabotage's must-not-move cells
+both failed -- the fixture assumed max-colid would always crown a
+multi-member class. Fixed by planting TWO classes of THREE members each,
+decisive under any rank outcome and under the max-colid build alike. (2)
+`host_splitter_check`: its independent argmax broke exact-rational ties by
+FIRST-WINS (strict `>` only) -- dead code by luck until 465's re-rolled
+draws produced a real tie (features 0 and 4, hashed/gini fixture) that the
+keyed rule resolves to feature 4. The check now re-derives the rank in its
+own transcription (`_tie_rank_ref`). (3) `regression_score_check`, one arm:
+an exact host-side recomputation of every draw-dependent gate under the new
+chain (thresholds, statuses, keys, winners, pair orders -- validated against
+the run's own "20 scored cells" line) shows every floor passing and the
+reduce's host/device folds equal in exact arithmetic, so the remaining
+suspect is the new salt staging buffers' LIFETIME (freed at their last
+enqueue, the trap this repo documents and this very check already defends
+`d_tree_ids` against); both checks now hold their salt buffers past the
+drain, and the reduce arm's mismatch print now reports the tie multiplicity
+so a recurrence names its mechanism.
+
 ---
 
 ## DEVIATION 464 -- `excess_selection_hash` runs through a full-avalanche finalizer
