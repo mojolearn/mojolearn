@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "/root/mojolearn/python/mojolearn/__init__.py", line 73, in <module>
+    from .cluster import KMeans
+  File "/root/mojolearn/python/mojolearn/cluster.py", line 3, in <module>
+    import numpy as np
+ModuleNotFoundError: No module named 'numpy'

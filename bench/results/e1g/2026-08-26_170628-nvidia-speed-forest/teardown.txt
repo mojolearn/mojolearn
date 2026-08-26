@@ -1,0 +1,6 @@
+pod=vahj166rca617f
+armed=1
+terminated=1
+deadman_pid=39921
+exit=0
+at=2026-08-26T21:41:44Z
