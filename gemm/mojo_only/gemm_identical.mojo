@@ -1362,6 +1362,23 @@ def identical_gemm_into(
     the output come back `+0.0`. `check_device_is_batch_invariant` is what
     caught it. Use the helper, not a guess.
     """
+    # DEVIATION 1900 -- DEVIATION 1876'S SIBLING: THE _INTO FORM HAD NO MODE
+    # BRANCH EITHER. `identical_gemm` grew its FAST branch (1876, below) and
+    # this entry did not, so every caller that owns its workspace -- the
+    # training loop's lm_head, the loss reductions, the GP mean -- kept
+    # landing on the pinned kernel under FAST (~70x off the vendor GEMM on
+    # H100). Same branch, same boundaries: `_fast_vendor_gemm` writes the
+    # SAME caller-owned `c` with the same row-major shape semantics, is
+    # stream-ordered on the same ctx and returns without waiting -- which is
+    # this entry's documented contract already (ASYNCHRONOUS above), so no
+    # postcondition moves. `ws` is simply unused on the vendor path; it is
+    # the caller's buffer, not ours to free. OP_TN and any shape the vendor
+    # arm declines return False and FALL THROUGH to the pinned plan exactly
+    # as 1876 does. Under IDENTICAL this branch is not compiled at all:
+    # bit-unchanged by construction.
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        if _fast_vendor_gemm(ctx, c, a, b, m, n, k, op):
+            return
     identical_gemm_with_plan(
         ctx, c, a, b, ws, m, n, k, op, choose_gemm_plan(m, n, k)
     )

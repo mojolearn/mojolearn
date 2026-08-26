@@ -57,7 +57,7 @@ changes no value.
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import abs
 from std.memory import stack_allocation
-from std.atomic import Atomic
+from std.atomic import Atomic, Ordering
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
@@ -409,7 +409,9 @@ def compute_split_properties_nb_kernel[
                 comptime if m > 1:
                     # several document blocks per feature, so the writes
                     # collide; theirs is a global float atomicAdd
-                    _ = Atomic.fetch_add(
+                    # DEVIATION 1898: upstream's atomicAdd is relaxed; the non-
+                    # Apple Mojo default is seq_cst.
+                    _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                         bin_sums.unsafe_offset(at), val
                     )
                 else:

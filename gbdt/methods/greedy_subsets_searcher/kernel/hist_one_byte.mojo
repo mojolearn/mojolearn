@@ -43,7 +43,7 @@ asks for exactly 32,768 and keeps their per-warp slice arithmetic intact,
 since 8 warps times 1024 floats is 8192 floats.
 """
 
-from std.atomic import Atomic
+from std.atomic import Atomic, Ordering
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.gpu.intrinsics import ldg
 
@@ -766,7 +766,9 @@ def one_byte_hist_kernel[bits: Int, smem_mode: Int](
                 var q = rebind[Scalar[DType.int32]](cell)
                 if q != Int32(0):
                     if active_block_count > 1:
-                        _ = Atomic.fetch_add(
+                        # DEVIATION 1898: upstream's atomicAdd is relaxed; the
+                        # non-Apple Mojo default is seq_cst.
+                        _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                             acc_i32.unsafe_offset(dst_base + fold), q
                         )
                     else:
@@ -800,7 +802,9 @@ def one_byte_hist_kernel[bits: Int, smem_mode: Int](
                             # on which block lands first. That is the
                             # property CatBoost's float atomic gives up.
                             var q = Int32(val * fixed_scale)
-                            _ = Atomic.fetch_add(
+                            # DEVIATION 1898: upstream's atomicAdd is relaxed;
+                            # the non-Apple Mojo default is seq_cst.
+                            _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                                 acc_i32.unsafe_offset(dst_base + fold), q
                             )
                         else:
@@ -826,7 +830,9 @@ def one_byte_hist_kernel[bits: Int, smem_mode: Int](
                         # 4. It was not the atomic. It was this branch not
                         # having one.
                         if active_block_count > 1:
-                            _ = Atomic.fetch_add(
+                            # DEVIATION 1898: upstream's atomicAdd is relaxed;
+                            # the non-Apple Mojo default is seq_cst.
+                            _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                                 dst.unsafe_offset(fold), val
                             )
                         else:
@@ -1220,7 +1226,9 @@ def one_byte_hist_gather_kernel[bits: Int, smem_mode: Int](
                 var q = rebind[Scalar[DType.int32]](cell)
                 if q != Int32(0):
                     if active_block_count > 1:
-                        _ = Atomic.fetch_add(
+                        # DEVIATION 1898: upstream's atomicAdd is relaxed; the
+                        # non-Apple Mojo default is seq_cst.
+                        _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                             acc_i32.unsafe_offset(dst_base + fold), q
                         )
                     else:
@@ -1254,7 +1262,9 @@ def one_byte_hist_gather_kernel[bits: Int, smem_mode: Int](
                             # on which block lands first. That is the
                             # property CatBoost's float atomic gives up.
                             var q = Int32(val * fixed_scale)
-                            _ = Atomic.fetch_add(
+                            # DEVIATION 1898: upstream's atomicAdd is relaxed;
+                            # the non-Apple Mojo default is seq_cst.
+                            _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                                 acc_i32.unsafe_offset(dst_base + fold), q
                             )
                         else:
@@ -1280,7 +1290,9 @@ def one_byte_hist_gather_kernel[bits: Int, smem_mode: Int](
                         # 4. It was not the atomic. It was this branch not
                         # having one.
                         if active_block_count > 1:
-                            _ = Atomic.fetch_add(
+                            # DEVIATION 1898: upstream's atomicAdd is relaxed;
+                            # the non-Apple Mojo default is seq_cst.
+                            _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                                 dst.unsafe_offset(fold), val
                             )
                         else:

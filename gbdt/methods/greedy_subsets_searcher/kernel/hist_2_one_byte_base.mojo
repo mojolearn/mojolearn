@@ -82,7 +82,7 @@ a pure function of the data position, the Apple arm's histogram is
 DETERMINISTIC run to run, which CatBoost's own float path is not.
 """
 
-from std.atomic import Atomic
+from std.atomic import Atomic, Ordering
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.gpu.intrinsics import ldg
 from std.memory import stack_allocation
@@ -481,7 +481,9 @@ def hist2_add_to_global_memory[
                     var q = rebind[Scalar[DType.int32]](cell)
                     if q != Int32(0):
                         if block_count > 1:
-                            _ = Atomic.fetch_add(
+                            # DEVIATION 1898: upstream's atomicAdd is relaxed;
+                            # the non-Apple Mojo default is seq_cst.
+                            _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                                 acc_i32.unsafe_offset(dst_base + fold), q
                             )
                         else:
@@ -509,7 +511,12 @@ def hist2_add_to_global_memory[
                             if block_count > 1:
                                 # `NUMERIC_IDENTICAL`: partials sum as Int32.
                                 var q = Int32(val * fixed_scale)
-                                _ = Atomic.fetch_add(
+                                # DEVIATION 1898: upstream's atomicAdd is
+                                # relaxed; the non-Apple Mojo default is
+                                # seq_cst.
+                                _ = Atomic.fetch_add[
+                                    ordering = Ordering.RELAXED
+                                ](
                                     acc_i32.unsafe_offset(dst_base + fold), q
                                 )
                             else:
@@ -518,7 +525,12 @@ def hist2_add_to_global_memory[
                             # `atomicAdd(dst + fold, val)`, theirs verbatim
                             # (`hist_2_one_byte_base.cuh:137`).
                             if block_count > 1:
-                                _ = Atomic.fetch_add(
+                                # DEVIATION 1898: upstream's atomicAdd is
+                                # relaxed; the non-Apple Mojo default is
+                                # seq_cst.
+                                _ = Atomic.fetch_add[
+                                    ordering = Ordering.RELAXED
+                                ](
                                     dst.unsafe_offset(fold), val
                                 )
                             else:

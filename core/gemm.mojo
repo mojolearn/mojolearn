@@ -546,9 +546,16 @@ def gemm_tn_via_transpose(
         ),
         block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
     )
-    ctx.synchronize()
+    # DEVIATION 1899 -- BOTH UNCONDITIONAL SYNCS DELETED (the class DEVIATION
+    # 1877 names in gemm/mojo_only/gemm_identical.mojo). This function
+    # allocates NOTHING: `z`, `x`, `xt`, `xt2` are all caller-owned, so no
+    # local buffer's lifetime hangs on a wait here. The transpose above and
+    # `gemm_nt_gram` below are enqueued on the SAME ctx and are
+    # stream-ordered, so the gram kernel already sees the finished
+    # transpose without a host round trip; and a caller that reads `z` does
+    # it with an enqueue_copy + synchronize ordered on the same stream.
+    # Fences only -- IDENTICAL's bits do not move.
     gemm_nt_gram(ctx, z, xt, m, n, k)
-    ctx.synchronize()
     _ = xt2
 
 

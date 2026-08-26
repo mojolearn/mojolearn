@@ -30,7 +30,7 @@ Their thread mapping for the writeback, copied: `fid = threadIdx.x >> 4` and
 the bounds test is `fold < features[fid].Folds`.
 """
 
-from std.atomic import Atomic
+from std.atomic import Atomic, Ordering
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.gpu.intrinsics import ldg
 from std.memory import stack_allocation
@@ -505,7 +505,9 @@ def half_byte_hist_kernel(
                 if det:
                     if active_block_count > 1:
                         var q = Int32(val * fixed_scale)
-                        _ = Atomic.fetch_add(
+                        # DEVIATION 1898: upstream's atomicAdd is relaxed; the
+                        # non-Apple Mojo default is seq_cst.
+                        _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                             acc_i32.unsafe_offset(
                                 device_offset
                                 + Int(block_idx.y) * entries_per_leaf
@@ -537,7 +539,11 @@ def half_byte_hist_kernel(
                     # wanted; that branch is now a CHOICE rather than the
                     # only thing that compiles.
                     if active_block_count > 1:
-                        _ = Atomic.fetch_add(dst.unsafe_offset(fold), val)
+                        # DEVIATION 1898: upstream's atomicAdd is relaxed; the
+                        # non-Apple Mojo default is seq_cst.
+                        _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
+                            dst.unsafe_offset(fold), val
+                        )
                     else:
                         dst.unsafe_store(fold, val)
 
@@ -957,7 +963,9 @@ def half_byte_hist_gather_kernel(
                 if det:
                     if active_block_count > 1:
                         var q = Int32(val * fixed_scale)
-                        _ = Atomic.fetch_add(
+                        # DEVIATION 1898: upstream's atomicAdd is relaxed; the
+                        # non-Apple Mojo default is seq_cst.
+                        _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                             acc_i32.unsafe_offset(
                                 device_offset
                                 + Int(block_idx.y) * entries_per_leaf
@@ -989,6 +997,10 @@ def half_byte_hist_gather_kernel(
                     # wanted; that branch is now a CHOICE rather than the
                     # only thing that compiles.
                     if active_block_count > 1:
-                        _ = Atomic.fetch_add(dst.unsafe_offset(fold), val)
+                        # DEVIATION 1898: upstream's atomicAdd is relaxed; the
+                        # non-Apple Mojo default is seq_cst.
+                        _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
+                            dst.unsafe_offset(fold), val
+                        )
                     else:
                         dst.unsafe_store(fold, val)

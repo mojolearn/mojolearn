@@ -60,3 +60,41 @@ def as_f32_c(x, name):
         a = np.ascontiguousarray(a, dtype=np.float32)
         copied = True
     return a, copied
+
+
+def as_f32_colmajor(x, name):
+    """A COLUMN-MAJOR float32 flat buffer over `x`, at most one copy.
+
+    Returns `(array, flat, copied)`: `array` is 2-D F-contiguous float32,
+    `flat` its flat column-major view (`flat[f * n_rows + r] ==
+    array[r, f]`), and the two share ONE buffer -- `flat.base` keeps it
+    alive, so holding either in a local satisfies the borrow contract at
+    the top of this module.
+
+    DEVIATION 1887 -- ONE HOST MATERIALIZATION OF X, NOT TWO. The fit
+    path used to run `as_f32_c` (a copy to C order for anything not
+    already float32 C-contiguous) and then `ascontiguousarray(Xa.T)` (a
+    second, always-taken copy back to column-major). `asfortranarray`
+    converts dtype and layout in one pass straight from the caller's
+    buffer, so a C-order or float64 input costs ONE copy -- the floor,
+    since the quantizer walks columns -- and a float32 F-contiguous
+    input is a ZERO-COPY borrow, which is what `ensemble.py`'s module
+    docstring had promised all along ("pass `X` already in Fortran order
+    to avoid it") while the old pair still copied it twice. Same element
+    values, same flat order: the float64 -> float32 cast is the same
+    elementwise cast either way, so no output bit can move.
+    """
+    a = np.asarray(x)
+    if a.ndim != 2:
+        raise ValueError(
+            f"mojolearn: {name} must be 2-D, got {a.ndim}-D shape {a.shape}"
+        )
+    if a.size == 0:
+        raise ValueError(f"mojolearn: {name} is empty, shape {a.shape}")
+    copied = False
+    if a.dtype != np.float32 or not a.flags["F_CONTIGUOUS"]:
+        a = np.asfortranarray(a, dtype=np.float32)
+        copied = True
+    # `a.T` of an F-contiguous array is C-contiguous, so this reshape is
+    # a VIEW; nothing after this line copies.
+    return a, a.T.reshape(-1), copied

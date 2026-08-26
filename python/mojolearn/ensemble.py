@@ -30,9 +30,13 @@ and `'Lossguide'` grow CatBoost's NON-SYMMETRIC trees (on the surface since
 2026-08-23, DEVIATION 259), and a Depthwise tree IS the level-wise binary
 tree scikit-learn grows -- same shape, CatBoost's score and estimator.
 
-X IS ROW-MAJOR HERE AND COLUMN-MAJOR INSIDE. `fit` transposes once. On a
-800,000 x 100 matrix that is a 320 MB copy, and it is reported rather than
-hidden -- pass `X` already in Fortran order to avoid it.
+X IS ROW-MAJOR HERE AND COLUMN-MAJOR INSIDE. `fit` materializes Fortran
+order ONCE, straight from the caller's buffer (`_arrays.as_f32_colmajor`,
+DEVIATION 1887). On a 800,000 x 100 C-order matrix that is a 320 MB copy,
+and it is reported rather than hidden -- pass `X` already float32 and in
+Fortran order and it is a zero-copy borrow, a promise this docstring made
+before the code kept it (the old path copied F-order input TWICE, once to
+C order and once back).
 
 THE LOSS PICKS THE LEAF ESTIMATOR, and that is CatBoost's decision, not this
 wrapper's. `leaf_estimation_method=None` (the default) means "let the loss
@@ -89,7 +93,7 @@ import numpy as np
 # being lost to `MACOSX_DEPLOYMENT_TARGET` in the environment plus a compiler
 # cache that does not key on it, and the basename never mattered.
 from . import _mojolearn_gbdt, _serialize
-from ._arrays import _addr, _addr_ro, as_f32_c
+from ._arrays import _addr, _addr_ro, as_f32_colmajor
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-gbdt-1"
@@ -940,7 +944,9 @@ class GradientBoosting:
                 "mojolearn: eval_set must be (X_eval, y_eval)"
             ) from None
 
-        Xea, _ = as_f32_c(Xe, "eval_set X")
+        # one column-major materialization at most (zero for float32
+        # F-order input); see DEVIATION 1887 in `_arrays.as_f32_colmajor`
+        Xea, Ecol, _ = as_f32_colmajor(Xe, "eval_set X")
         n_eval_rows, n_eval_features = Xea.shape
         if n_eval_features != n_features:
             raise ValueError(
@@ -957,8 +963,6 @@ class GradientBoosting:
                 f"mojolearn: eval_set y has {yea.shape[0]} values for "
                 f"{n_eval_rows} rows"
             )
-        # the same transpose `fit` prices for the learn matrix
-        Ecol = np.ascontiguousarray(Xea.T).reshape(-1)
         return Ecol, yea, n_eval_rows
 
     def fit(self, X, y, sample_weight=None, eval_set=None):
@@ -987,7 +991,13 @@ class GradientBoosting:
         iteration, `best_iteration_` its argmin, and `stopped_early_` says
         whether the detector fired before `n_estimators`.
         """
-        Xa, _ = as_f32_c(X, "X")
+        # COLUMN-MAJOR is what the quantizer walks, so X is materialized
+        # STRAIGHT to Fortran order: one copy at most, zero when the
+        # caller already passes float32 F-order. The old `as_f32_c` +
+        # `ascontiguousarray(Xa.T)` pair cost up to two full copies of X
+        # inside the timed fit. DEVIATION 1887, declared in
+        # `_arrays.as_f32_colmajor`.
+        Xa, Xcol, _ = as_f32_colmajor(X, "X")
         n_rows, n_features = Xa.shape
 
         ya = np.ascontiguousarray(np.asarray(y).ravel(), dtype=np.float32)
@@ -1020,11 +1030,6 @@ class GradientBoosting:
                     "bin the NaNs silently with no NaN bin. Use "
                     "nan_mode='Min' or 'Max', or clean the column."
                 )
-
-        # COLUMN-MAJOR is what the quantizer walks. This is the transpose
-        # the module docstring prices; `ascontiguousarray` on the .T view
-        # is what materialises it.
-        Xcol = np.ascontiguousarray(Xa.T).reshape(-1)
 
         flags = self._flags(n_features)
         n_flags = 0 if flags is None else n_features
@@ -1115,14 +1120,17 @@ class GradientBoosting:
     def _check_fitted(self, X):
         if self.model_ is None:
             raise RuntimeError("mojolearn: predict() before fit()")
-        Xa, _ = as_f32_c(X, "X")
+        # one column-major materialization at most (zero for float32
+        # F-order input); see DEVIATION 1887 in `_arrays.as_f32_colmajor`.
+        # `Xcol.base` keeps the backing buffer alive across the Mojo call.
+        Xa, Xcol, _ = as_f32_colmajor(X, "X")
         n_rows, n_features = Xa.shape
         if n_features != self.n_features_in_:
             raise ValueError(
                 f"mojolearn: model was fitted on {self.n_features_in_} "
                 f"features, got {n_features}"
             )
-        return np.ascontiguousarray(Xa.T).reshape(-1), n_rows
+        return Xcol, n_rows
 
     def predict(self, X):
         """RAW SCORES, not probabilities. See the module docstring.
