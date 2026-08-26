@@ -389,15 +389,21 @@ def build_parser():
     )
     p.add_argument("--lane", required=True, choices=spec.LANE_NAMES)
     p.add_argument("--dataset", default=None,
-                   help="year, covtype, covtype2, synth, synthclf, anomaly; "
-                        "the lane's own default if unset")
+                   help="higgs, year, covtype, covtype2, synth, synthclf, "
+                        "anomaly; the lane's own default if unset. `higgs` "
+                        "is the LARGE-LOAD dataset (11M x 28) and is what "
+                        "--rows climbs.")
     p.add_argument("--devices", default="cpu,gpu",
                    help="which device arms of each opponent to run; the "
                         "default runs BOTH, which is the whole point on "
                         "NVIDIA")
     p.add_argument("--rows", type=int, default=None,
-                   help="cap the training rows (debugging only; the shipped "
-                        "size is the default and every line says which)")
+                   help="cap the training rows. On `higgs` this IS the load "
+                        "ladder: rungs are nested prefixes of the same "
+                        "data scored against the same fixed 500,000-row "
+                        "tail, so 1000000 vs 5000000 is a comparison of "
+                        "LOAD and not of two problems. Every line carries "
+                        "the row count in shape=.")
     p.add_argument("--ours-only", action="store_true",
                    help="skip the opponents; use when two CUDA runtimes in "
                         "one process will not coexist")

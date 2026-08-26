@@ -323,8 +323,59 @@
 #                                  spawns so a rehearsal can never rent.
 set -e
 
-cd "$(dirname "$0")/.."
+# The snapshot below re-execs this file from /tmp, where `dirname $0` is no
+# longer the repository. REPO is therefore resolved ONCE, here, from the
+# original path, and carried across the exec in the environment.
+if [ -n "${MOJOLEARN_LEG_REPO:-}" ]; then
+    cd "$MOJOLEARN_LEG_REPO"
+else
+    cd "$(dirname "$0")/.."
+fi
 REPO="$(pwd)"
+MOJOLEARN_LEG_REPO="$REPO"
+export MOJOLEARN_LEG_REPO
+
+# ---------------------------------------------------------------------------
+# DEVIATION 1882 -- RUN FROM AN IMMUTABLE SNAPSHOT OF THIS FILE.
+#
+# `sh` does not read a script into memory. It reads it LAZILY, BY BYTE
+# OFFSET, returning to the file for the next command after each one it runs.
+# So editing this file while a leg is executing it shifts every offset past
+# the edit out from under the running shell.
+#
+# That is not hypothetical. On 2026-08-25 this file was edited and committed
+# at 18:05 while a leg started at 17:58 was still inside it. The shell
+# resumed mid-word inside a comment and tried to execute `SERTED,` -- the
+# tail of `ASSERTED,` on line 3961 -- and died at exit 127 BEFORE THE FETCH.
+# The payload on the box had finished correctly. Four tree lanes had been
+# measured. The pod was terminated on schedule with every log still on it,
+# and `et` and `iforest` were lost.
+#
+# A LEG RUNS FOR AN HOUR AND AN HOUR IS LONG ENOUGH TO WANT TO EDIT
+# SOMETHING. So the fix is not a rule about not editing; it is this. The
+# first thing this script does is copy itself somewhere the working tree
+# cannot reach, make the copy READ-ONLY, and re-exec into it. From that
+# point the working tree can be edited, committed, rebased or deleted and
+# the running leg does not notice.
+#
+# MOJOLEARN_LEG_SNAPSHOT is how the copy knows it is the copy. It carries
+# the path so the banner can print where the leg is actually running from,
+# and unsetting it by hand only buys back the bug.
+if [ -z "${MOJOLEARN_LEG_SNAPSHOT:-}" ]; then
+    _snapdir="${TMPDIR:-/tmp}/mojolearn-leg-snapshot-$$"
+    mkdir -p "$_snapdir"
+    _snap="$_snapdir/gemm_remote_leg.sh"
+    cat "$0" > "$_snap"
+    # 555, not 444: NOT WRITABLE is the whole point, but the dry run's
+    # rehearsal checks re-invoke "$0" DIRECTLY, and a snapshot without the
+    # execute bit turns all seven of them into exit 126.
+    chmod 555 "$_snap"
+    MOJOLEARN_LEG_SNAPSHOT="$_snap"
+    export MOJOLEARN_LEG_SNAPSHOT
+    # The snapshot outlives this exec and nothing else will remove it, so it
+    # is removed by the copy's own exit trap, not here.
+    exec /bin/sh "$_snap" "$@"
+fi
 
 # ---------------------------------------------------------------------------
 # defaults and the vendor table
@@ -408,6 +459,24 @@ SPEED_FAMILY="${MOJOLEARN_SPEED_FAMILY:-gemmseq}"
 # only ever reaches the environment form and never `--family trees`. That is
 # where it was, and `--family trees` was refused by a message that offered
 # `trees` as the accepted spelling in the same breath.
+# THE LOAD LADDER (trees family only).
+#
+# `year` stops at 463,715 rows and `covtype` at 522,911, and every NVIDIA
+# tree ratio this project has is from that size. Half a million rows is not
+# where a GPU tree learner is decided. SPEED_DATASET=higgs plus a SPEED_ROWS
+# list runs the SAME lane at several row counts in ONE lease, so the answer
+# to "does the gap close with load" is a column and not an opinion.
+#
+# Empty SPEED_ROWS means one run at the dataset's shipped size, which is the
+# old behavior exactly.
+# The LightGBM CUDA learner is a FIFTEEN-TO-THIRTY MINUTE source build in a
+# sixty-minute lease. It is worth that in the lossguide lane, where LightGBM
+# is the algorithm's own author. It is not worth it in a load-ladder leg
+# whose lanes are symmetric boosting and forests, where LightGBM is a
+# secondary opponent and the build would cost half the rungs.
+SPEED_LGBM_CUDA="${MOJOLEARN_SPEED_LGBM_CUDA:-1}"
+SPEED_DATASET="${MOJOLEARN_SPEED_DATASET:-}"
+SPEED_ROWS="${MOJOLEARN_SPEED_ROWS:-}"
 SPEED_ROUNDS="${MOJOLEARN_SPEED_ROUNDS:-5}"
 SPEED_SIZE="${MOJOLEARN_SPEED_SIZE:-shipped}"
 # PER ARM, in seconds. One lane that hangs must not eat the lease that
@@ -580,6 +649,9 @@ while [ $# -gt 0 ]; do
         --speed)         PAYLOAD="speed" ;;
         --family)        shift; SPEED_FAMILY="${1:-}" ;;
         --rounds)        shift; SPEED_ROUNDS="${1:-}" ;;
+        --dataset)       shift; SPEED_DATASET="${1:-}" ;;
+        --rows)          shift; SPEED_ROWS="${1:-}" ;;
+        --no-lgbm-cuda)  SPEED_LGBM_CUDA=0 ;;
         --smoke)         SPEED_SIZE="smoke" ;;
         --apple-dir)     shift; APPLE_DIR="${1:-}" ;;
         --work-timeout)  shift; WORK_TIMEOUT="${1:-}" ;;
@@ -2205,6 +2277,8 @@ cd "$ROOT" || exit 9
   echo "commit=@COMMIT@"
   echo "rounds=@SPEEDROUNDS@"
   echo "size=@SPEEDSIZE@"
+  echo "dataset=@SPEEDDATASET@"
+  echo "rows_ladder=@SPEEDROWS@"
   echo "arm_budget=@ARMBUDGET@"
   echo "work_timeout=@WORKTIMEOUT@"
   echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -2587,17 +2661,75 @@ forest)
         timeout -k 30 600 python3 tools/speed_gbdt_arm.py --download covtype \
             > "$LOGS/download.covtype.log" 2>&1
         echo "download_exit covtype=$?" >> "$OUT/leg.txt"
+        # HIGGS IS 2.6 GB AND ONLY FETCHED WHEN THE LADDER ASKS FOR IT.
+        # The budget is 2400s because it is a 2.6 GB pull PLUS a gzip csv
+        # parse of 11M x 29 that runs several minutes, and both happen here,
+        # once, rather than inside a 600s per-arm budget six times over.
+        if [ "@SPEEDDATASET@" = "higgs" ]; then
+            timeout -k 30 2400 python3 tools/speed_gbdt_arm.py --download higgs \
+                > "$LOGS/download.higgs.log" 2>&1
+            echo "download_exit higgs=$?" >> "$OUT/leg.txt"
+        fi
     fi
     pipget --extra-index-url=https://pypi.nvidia.com "cuml-cu12"
     # LightGBM's CUDA learner is NOT in the wheel and has to be built. It is
     # attempted LAST of the installs and bounded, because it has been
     # measured at fifteen to thirty minutes and this lease is sixty.
     if command -v timeout > /dev/null 2>&1; then
+        # `lightgbm_cuda_build_exit=0` WAS A LYING EXIT CODE.
+        #
+        # On 2026-08-25 this build reported success and produced a CPU-ONLY
+        # wheel, and every `lightgbm-cuda` arm in every lane then refused
+        # with "CUDA Tree Learner was not enabled in this build". LightGBM
+        # is the lossguide lane's OWN ALGORITHM, so the missing opponent is
+        # missing exactly where it would be strongest, and its absence
+        # flatters us. That is not a gap to leave unexamined.
+        #
+        # Two changes, and then a PROBE that does not trust either of them:
+        #
+        #   --no-cache-dir   pip caches a wheel built from an sdist keyed by
+        #                    the sdist, NOT by --config-settings. A build
+        #                    from an earlier install WITHOUT the CUDA flag
+        #                    is therefore a cache hit for this one, and it
+        #                    installs, and it reports success.
+        #   CMAKE_ARGS       the same define by the second route, so a
+        #                    backend that drops --config-settings still
+        #                    gets it.
+        rm -rf /root/.cache/pip/wheels 2>/dev/null || true
+        if [ "@LGBMCUDA@" != "1" ]; then
+            echo "lightgbm_cuda_build=SKIPPED by --no-lgbm-cuda; the wheel's" \
+                 "CPU learner still runs and every lightgbm-cuda arm will" \
+                 "refuse by name" >> "$OUT/leg.txt"
+        else
+        CMAKE_ARGS="-DUSE_CUDA=ON" \
         timeout -k 30 @LGBMBUILD@ python3 -m pip install --no-input \
+            --no-cache-dir --force-reinstall \
             --no-binary lightgbm \
             --config-settings=cmake.define.USE_CUDA=ON lightgbm \
             >> "$OUT/pip.log" 2>&1
         echo "lightgbm_cuda_build_exit=$?" >> "$OUT/leg.txt"
+        # THE PROBE. An exit code says the build ran; only a fit on the
+        # device says the learner is in it. Sixteen rows, two leaves, one
+        # iteration -- it costs nothing and it is the difference between
+        # "we built it" and "it works". Recorded as its own line so the
+        # table's reader can see WHY a lightgbm-cuda row is missing without
+        # reading a 40 MB pip log.
+        python3 - >> "$LOGS/lightgbm_cuda_probe.log" 2>&1 <<'LGBMPROBE'
+import numpy as np, lightgbm as lgb
+x = np.random.default_rng(0).normal(size=(64, 4)).astype(np.float32)
+y = (x[:, 0] > 0).astype(np.float32)
+m = lgb.LGBMRegressor(device="cuda", n_estimators=1, num_leaves=2,
+                      min_child_samples=1, verbose=-1)
+m.fit(x, y)
+print("LIGHTGBM_CUDA_PROBE=ok")
+LGBMPROBE
+        if grep -q LIGHTGBM_CUDA_PROBE=ok "$LOGS/lightgbm_cuda_probe.log" 2>/dev/null; then
+            echo "lightgbm_cuda_works=yes" >> "$OUT/leg.txt"
+        else
+            echo "lightgbm_cuda_works=NO" >> "$OUT/leg.txt"
+            echo "lightgbm_cuda_probe_says=$(tail -1 "$LOGS/lightgbm_cuda_probe.log" 2>/dev/null)" >> "$OUT/leg.txt"
+        fi
+        fi
     else
         echo "lightgbm_cuda_build=SKIPPED, no timeout(1) to bound it" >> "$OUT/leg.txt"
     fi
@@ -2620,9 +2752,34 @@ forest)
     # CUDA runtimes that will not coexist in one process. If a lane crashes
     # on import, splitting it is the fallback, and then the split has to be
     # said out loud beside the number.
+    #
+    # THE LADDER IS THE INNER LOOP, ON PURPOSE. Rungs of one lane run
+    # back to back, so the thing that varies between two rungs is the row
+    # count and not forty minutes of a shared box's thermal history. Each
+    # rung is a separate process because each rung is a different fit; what
+    # is interleaved WITHIN a rung is ours against theirs, which is the
+    # comparison the ratio is made of.
     for L in @SPEEDLANES@; do
-        runarm "forest.$L.log" \
-            python3 bench/speed/forest_speed_arm.py --lane "$L"
+        # THE iforest LANE KEEPS ITS OWN DATASET AND THE LINE SAYS SO.
+        # An isolation forest scored on data with no planted anomalies has
+        # no accuracy column, and a timing with no accuracy column is the
+        # thing this whole slice refuses to print. So the ladder's dataset
+        # is NOT forced onto it; it runs its `anomaly` fixture, whose row
+        # count --rows still climbs.
+        _dsflag=""
+        if [ -n "@SPEEDDATASET@" ] && [ "$L" != "iforest" ]; then
+            _dsflag="--dataset @SPEEDDATASET@"
+        fi
+        if [ -z "@SPEEDROWS@" ]; then
+            runarm "forest.$L.log" \
+                python3 bench/speed/forest_speed_arm.py --lane "$L" $_dsflag
+        else
+            for R in @SPEEDROWS@; do
+                runarm "forest.$L.r$R.log" \
+                    python3 bench/speed/forest_speed_arm.py --lane "$L" \
+                        $_dsflag --rows "$R"
+            done
+        fi
     done
     ;;
 esac
@@ -2657,6 +2814,9 @@ leg_check_remote_body() {
         -e "s|@FAMILY@|$SPEED_FAMILY|g" \
         -e "s|@SPEEDLANES@|$SPEED_LANES|g" \
         -e "s|@SPEEDROUNDS@|$SPEED_ROUNDS|g" \
+        -e "s|@SPEEDDATASET@|$SPEED_DATASET|g" \
+        -e "s|@SPEEDROWS@|$SPEED_ROWS|g" \
+        -e "s|@LGBMCUDA@|$SPEED_LGBM_CUDA|g" \
         -e "s|@SPEEDSIZE@|$SPEED_SIZE|g" \
         -e "s|@ARMBUDGET@|$ARM_BUDGET|g" \
         -e "s|@BUILDBUDGET@|$BUILD_BUDGET|g" \
@@ -3748,6 +3908,13 @@ if [ "$PAYLOAD" = "speed" ]; then
 echo "   family:   $SPEED_FAMILY"
 echo "   lanes:    $SPEED_LANES"
 echo "   rounds:   $SPEED_ROUNDS timed per arm, size=$SPEED_SIZE, per-arm budget ${ARM_BUDGET}s"
+if [ -n "$SPEED_DATASET" ] || [ -n "$SPEED_ROWS" ]; then
+    echo "   dataset:  ${SPEED_DATASET:-<lane default>}"
+    echo "   LADDER:   rows = ${SPEED_ROWS:-<shipped>}"
+    echo "             Each rung is a separate fit of the SAME lane at a"
+    echo "             different row count, scored on the SAME held-out"
+    echo "             tail, so the rungs are comparable to each other."
+fi
 echo "   MODE:     FAST. No -D MOJOLEARN_NUMERIC_IDENTICAL anywhere in this"
 echo "             payload. This leg measures the arm a user gets and makes"
 echo "             NO identity claim about it."
@@ -4101,6 +4268,8 @@ fi
         echo "lanes=$SPEED_LANES"
         echo "rounds=$SPEED_ROUNDS"
         echo "size=$SPEED_SIZE"
+        echo "dataset=$SPEED_DATASET"
+        echo "rows_ladder=$SPEED_ROWS"
     fi
     echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } >> "$OUT/leg.txt"

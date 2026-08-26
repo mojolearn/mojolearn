@@ -511,6 +511,77 @@ def load_anomaly(size, rows_cap=None):
     return d
 
 
+def load_higgs(size, rows_cap=None):
+    """HIGGS, 11,000,000 x 28, binary. THE LARGE-LOAD DATASET.
+
+    `year` and `covtype` both stop near half a million rows, and half a
+    million rows is not where a GPU tree learner is decided. Every ratio in
+    the first NVIDIA trees table was taken at that size, and the question
+    it cannot answer is the one that matters: our per-row work has measured
+    FASTER than CatBoost's while our fixed per-tree cost measured 5.7x
+    theirs, so the ratios should improve monotonically with rows and the
+    forest gap should close hardest. That is a prediction, and it is
+    untestable on a dataset that ends at 522,911 rows.
+
+    HIGGS is the dataset NVIDIA's own gbm-bench uses for exactly this, so
+    the ladder runs on data the vendors already benchmark themselves on
+    rather than on a synthetic fixture we chose. The split is gbm-bench's:
+    the LAST 500,000 rows are test, everything before them is train, no
+    shuffle.
+
+    `rows_cap` is the ladder. It caps the TRAINING rows only and takes them
+    from the FRONT, deterministically, so `--rows 1000000` and
+    `--rows 5000000` are nested prefixes of the same data and every arm at
+    every rung scores the SAME 500,000 test rows. A rung is therefore a
+    comparison of load, not of two different problems.
+
+    THE DOWNLOAD IS 2.6 GB and it is a SEPARATE, EXPLICITLY NAMED STEP
+    (`--download higgs`), never something a timed run does on its own, for
+    the reason `load_year` gives: the orchestrator budgets a lease around
+    it. The decoded cache is another 1.3 GB of float32.
+    """
+    folder = os.path.join(data_root(), "higgs")
+    gz_path = os.path.join(folder, "HIGGS.csv.gz")
+    npz_path = os.path.join(folder, "higgs_speed.npz")
+    if os.path.exists(npz_path):
+        z = np.load(npz_path)
+        x, y = z["x"], z["y"]
+    else:
+        if not os.path.isfile(gz_path):
+            raise RuntimeError(
+                "higgs is not downloaded: %s is missing. Run "
+                "`python tools/speed_gbdt_arm.py --download higgs` first "
+                "(2.6 GB), OUTSIDE the timed run." % gz_path
+            )
+        import pandas as pd
+        # Chunked, because the frame is 11M x 29 and reading it whole
+        # alongside the float32 copy peaks near 5 GB of host memory on a
+        # box whose whole job is the GPU.
+        xs, ys = [], []
+        for chunk in pd.read_csv(gz_path, header=None, dtype=np.float32,
+                                 chunksize=1_000_000):
+            arr = chunk.to_numpy(dtype=np.float32)
+            ys.append(arr[:, 0])
+            xs.append(arr[:, 1:])
+        x = np.ascontiguousarray(np.concatenate(xs))
+        y = np.ascontiguousarray(np.concatenate(ys))
+        del xs, ys
+        np.savez(npz_path, x=x, y=y)
+    n_test = 500000
+    n_train = x.shape[0] - n_test
+    if size == "smoke":
+        rows_cap = min(rows_cap or 50000, 50000)
+    if rows_cap:
+        n_train = min(n_train, rows_cap)
+    # THE TEST ROWS ARE THE FIXED TAIL AT EVERY RUNG. Slicing them off the
+    # end rather than off `n_train` is what makes two rungs comparable.
+    x_train = np.ascontiguousarray(x[:n_train])
+    y_train = np.ascontiguousarray(y[:n_train])
+    x_test = np.ascontiguousarray(x[-n_test:])
+    y_test = np.ascontiguousarray(y[-n_test:])
+    return Data("higgs", x_train, x_test, y_train, y_test, "binary", 2)
+
+
 #: Which dataset each lane runs by default, and what it falls back to.
 #: `year` for the boosting lanes because it is the regression dataset the
 #: existing M4 GBDT tables were taken on; `covtype` for the forest lanes
@@ -526,6 +597,8 @@ LANE_DEFAULT_DATASET = {
 
 
 def load_dataset(name, size, rows_cap=None):
+    if name == "higgs":
+        return load_higgs(size, rows_cap)
     if name == "year":
         return load_year(size, rows_cap)
     if name == "covtype":
@@ -554,7 +627,7 @@ def load_with_fallback(name, size, rows_cap=None):
             "the synthetic fixture. Every line will say so in shape=.\n"
             % (name, exc)
         )
-        if name in ("covtype", "covtype2", "synthclf"):
+        if name in ("covtype", "covtype2", "synthclf", "higgs"):
             return load_dataset("synthclf", size, rows_cap)
         if name == "anomaly":
             return load_dataset("anomaly", size, rows_cap)
@@ -564,6 +637,27 @@ def load_with_fallback(name, size, rows_cap=None):
 def download(name):
     """The explicitly named, untimed fetch step. Prints the size it pulled so
     the orchestrator can budget the lease around it."""
+    if name == "higgs":
+        import urllib.request
+        folder = os.path.join(data_root(), "higgs")
+        os.makedirs(folder, exist_ok=True)
+        url = ("https://archive.ics.uci.edu/ml/machine-learning-databases/"
+               "00280/HIGGS.csv.gz")
+        dest = os.path.join(folder, "HIGGS.csv.gz")
+        if os.path.isfile(dest):
+            print("higgs already present: %s (%.1f MB)"
+                  % (dest, os.path.getsize(dest) / 1e6))
+        else:
+            print("downloading %s -> %s (about 2.6 GB)" % (url, dest))
+            urllib.request.urlretrieve(url, dest)
+            print("higgs: %.1f MB" % (os.path.getsize(dest) / 1e6))
+        # Decode once, here. The gzip csv parse is several MINUTES and it
+        # must not happen inside a timed run's setup on a leased box.
+        d = load_higgs("shipped")
+        print("higgs decoded to %s (train %d x %d, test %d)"
+              % (os.path.join(folder, "higgs_speed.npz"),
+                 d.X_train.shape[0], d.X_train.shape[1], d.X_test.shape[0]))
+        return
     if name == "year":
         import urllib.request
         folder = os.path.join(data_root(), "year")
@@ -1395,15 +1489,21 @@ def build_parser(prog=None):
                    help="which lane to run; ONE lane per process, because a "
                         "lane that segfaults must not take the others down")
     p.add_argument("--dataset", default=None,
-                   help="year, covtype, covtype2, synth, synthclf, anomaly; "
-                        "the lane's own default if unset")
+                   help="higgs, year, covtype, covtype2, synth, synthclf, "
+                        "anomaly; the lane's own default if unset. `higgs` "
+                        "is the LARGE-LOAD dataset (11M x 28) and is what "
+                        "--rows climbs.")
     p.add_argument("--devices", default="cpu,gpu",
                    help="which device arms of each opponent to run; the "
                         "default runs BOTH, which is the whole point on "
                         "NVIDIA")
     p.add_argument("--rows", type=int, default=None,
-                   help="cap the training rows (debugging only; the shipped "
-                        "size is the default and every line says which)")
+                   help="cap the training rows. On `higgs` this IS the load "
+                        "ladder: rungs are nested prefixes of the same "
+                        "data scored against the same fixed 500,000-row "
+                        "tail, so 1000000 vs 5000000 is a comparison of "
+                        "LOAD and not of two problems. Every line carries "
+                        "the row count in shape=.")
     p.add_argument("--download", default=None,
                    help="fetch a dataset and exit; a SEPARATE step, outside "
                         "any timed run")
