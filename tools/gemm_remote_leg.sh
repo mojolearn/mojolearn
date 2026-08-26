@@ -3284,7 +3284,7 @@ leg_rehearse() {
         rbad "A3 --minutes 90 is refused" "got exit $_rc: $_out"
     fi
 
-    _out=$( ( unset RUNPOD_API_KEY; MOJOLEARN_GEMM_LEG_REHEARSAL=1 "$0" nvidia --rent 2>&1 ) ) && _rc=0 || _rc=$?
+    _out=$( ( unset RUNPOD_API_KEY MOJOLEARN_RUNPOD_KEY_FILE; MOJOLEARN_GEMM_LEG_REHEARSAL=1 "$0" nvidia --rent 2>&1 ) ) && _rc=0 || _rc=$?
     if [ "$_rc" != "0" ] && echo "$_out" | grep -q "RUNPOD_API_KEY"; then
         rok "A4 --rent without a key refuses and rents nothing"
     else
@@ -3326,7 +3326,7 @@ leg_rehearse() {
     fi
 
     # -- C. the guard's refusal paths (the real guard, no pod) --------------
-    _out=$( ( unset RUNPOD_API_KEY; tools/runpod_guard.sh arm gemm-dryrun-pod "dry target" 60 2>&1 ) ) && _rc=0 || _rc=$?
+    _out=$( ( unset RUNPOD_API_KEY MOJOLEARN_RUNPOD_KEY_FILE; tools/runpod_guard.sh arm gemm-dryrun-pod "dry target" 60 2>&1 ) ) && _rc=0 || _rc=$?
     if [ "$_rc" != "0" ] && echo "$_out" | grep -q "REFUSING to arm"; then
         rok "C1 runpod_guard.sh arm REFUSES without a key"
     else
@@ -3340,7 +3340,7 @@ leg_rehearse() {
         rbad "C2 runpod_guard.sh check on an unknown pod" "got exit $_rc: $_out"
     fi
 
-    _out=$( ( unset RUNPOD_API_KEY; tools/runpod_guard.sh reap --force gemm-dryrun-no-such-pod 2>&1 ) ) && _rc=0 || _rc=$?
+    _out=$( ( unset RUNPOD_API_KEY MOJOLEARN_RUNPOD_KEY_FILE; tools/runpod_guard.sh reap --force gemm-dryrun-no-such-pod 2>&1 ) ) && _rc=0 || _rc=$?
     if [ "$_rc" != "0" ] && echo "$_out" | grep -q "reap needs RUNPOD_API_KEY"; then
         rok "C3 runpod_guard.sh reap refuses without a key"
     else
@@ -3354,7 +3354,7 @@ leg_rehearse() {
     # POD_ID and SSH_TARGET are set INSIDE the subshell on purpose: the
     # rehearsal must not leave a fake pod id where the teardown can see it.
     # shellcheck disable=SC2030
-    _out=$( ( trap - EXIT; unset RUNPOD_API_KEY
+    _out=$( ( trap - EXIT; unset RUNPOD_API_KEY MOJOLEARN_RUNPOD_KEY_FILE
               POD_ID=gemm-dryrun-pod; SSH_TARGET="dry target"
               leg_arm 2>&1 ) ) && _rc=0 || _rc=$?
     if [ "$_rc" != "0" ] && echo "$_out" | grep -q "ARM REFUSED"; then
@@ -3373,7 +3373,7 @@ leg_rehearse() {
     _cfake="rpa_FAKE_KEY_FOR_REHEARSAL_0000"
     ( umask 077; printf '%s' "$_cfake" > "$TMPD/cfake.key" )
 
-    _out=$( ( unset RUNPOD_API_KEY; tools/runpod_guard.sh reap --force 2>&1 ) ) && _rc=0 || _rc=$?
+    _out=$( ( unset RUNPOD_API_KEY MOJOLEARN_RUNPOD_KEY_FILE; tools/runpod_guard.sh reap --force 2>&1 ) ) && _rc=0 || _rc=$?
     if [ "$_rc" = "2" ] && echo "$_out" | grep -q "would terminate EVERY"; then
         rok "C5 'reap --force' with no pod id is REFUSED (it used to reap every lease)"
     else
@@ -3383,15 +3383,15 @@ leg_rehearse() {
     # THE ACCEPT CASE FOR C5: the same command WITH --all must get PAST the
     # form check and die at the key gate instead. Without this, a reap that
     # refused every invocation would pass C5.
-    _out=$( ( unset RUNPOD_API_KEY; tools/runpod_guard.sh reap --force --all 2>&1 ) ) && _rc=0 || _rc=$?
+    _out=$( ( unset RUNPOD_API_KEY MOJOLEARN_RUNPOD_KEY_FILE; tools/runpod_guard.sh reap --force --all 2>&1 ) ) && _rc=0 || _rc=$?
     if [ "$_rc" = "2" ] && echo "$_out" | grep -q "reap needs RUNPOD_API_KEY"; then
         rok "C5b 'reap --force --all' is ACCEPTED by the form check (it stops at the key)"
     else
         rbad "C5b the reap-everything form is still reachable by name" "got exit $_rc: $_out"
     fi
 
-    _out=$( ( unset RUNPOD_API_KEY; tools/runpod_guard.sh reap --wat 2>&1 ) ) && _rc=0 || _rc=$?
-    _out2=$( ( unset RUNPOD_API_KEY; tools/runpod_guard.sh reap podA podB 2>&1 ) ) && _rc2=0 || _rc2=$?
+    _out=$( ( unset RUNPOD_API_KEY MOJOLEARN_RUNPOD_KEY_FILE; tools/runpod_guard.sh reap --wat 2>&1 ) ) && _rc=0 || _rc=$?
+    _out2=$( ( unset RUNPOD_API_KEY MOJOLEARN_RUNPOD_KEY_FILE; tools/runpod_guard.sh reap podA podB 2>&1 ) ) && _rc2=0 || _rc2=$?
     if [ "$_rc" = "2" ] && echo "$_out" | grep -q "unknown option" \
        && [ "$_rc2" = "2" ] && echo "$_out2" | grep -q "two pod ids"; then
         rok "C6 reap refuses an unknown option and two pod ids, both by name"
