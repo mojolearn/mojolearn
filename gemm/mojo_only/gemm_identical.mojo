@@ -1453,12 +1453,46 @@ def _fast_vendor_gemm(
     implicit wait, those gates are where it shows.
 
     FAST IS NOT BIT-STABLE AND NEVER WAS. This changes which bits FAST
-    produces for the sequence lanes, because a different kernel sums in a
-    different order. That is what FAST means; the profile's promise lives
-    entirely on the IDENTICAL side and is untouched here. Any FAST-mode
-    tolerance gate downstream has to be RE-RUN rather than assumed, and this
-    lane's next rented leg runs the transformer and mamba correctness checks
-    beside the speed drivers for exactly that reason.
+    produces for the sequence lanes. The profile's promise lives entirely on
+    the IDENTICAL side and is untouched here: the whole entry is gated behind
+    `comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL`.
+
+    **AND IT IS NOT ONLY A SUMMATION ORDER. IT IS A SHORTER MANTISSA.**
+    DEVIATION 1885. The sentence that stood here said the bits move "because
+    a different kernel sums in a different order", which is true and is not
+    the whole truth, and being almost right is exactly why nobody re-derived
+    it. `matmul` on an NVIDIA target is a TENSOR-CORE PATH: on the H100 it
+    measured 200 TFLOP/s against `cublas-fp32`'s 44.4 and `cublas-tf32`'s
+    207.5. It is on the TF32 line. **TF32 carries 10 explicit mantissa bits
+    against fp32's 23.**
+
+    THE CONTROL THAT PROVES IT, measured 2026-08-26 on one H100, agreement
+    against the SAME torch fp32 reference before and after this entry landed:
+
+        rmsnorm     (NO GEMM)   4.77e-06 -> 4.77e-06     UNCHANGED
+        attention   (GEMM)        0.0183 -> 0.859         47x worse
+        transformer (GEMM)        0.0889 -> 4.334         49x worse
+        mlp         (GEMM)        0.0163 -> 3.888        239x worse
+
+    A reordered summation does not move an absolute error by two orders of
+    magnitude. `rmsnorm` routes no GEMM and did not move by one bit.
+
+    SO THE CALLER OWES ITS READER A SENTENCE. A FAST path may be
+    non-deterministic and may take the vendor's fastest kernel; it may NOT
+    take a precision cut silently. Every lane that reaches this entry must
+    say so beside its number, and its fair vendor opponent is a TF32 arm --
+    `torch-gpu-tf32`, `cublas-tf32` -- not an fp32 one, for the same reason
+    `bench/speed/gemm_speed_main.mojo`'s docstring already gives for the
+    gemm lane. That reasoning was written down for `gemm` and then this
+    entry let the identical cut into `transformer`, `attention` and `mlp`
+    through the back door without anyone re-deriving it.
+
+    Any FAST-mode tolerance gate downstream has to be RE-RUN rather than
+    assumed. `verify.mamba_block.fast` FAILED on the leg that landed this
+    (15 stages differ from the oracle, first at `norm.out`) while
+    `verify.mamba_block.identical` PASSED -- the comptime gate held, and
+    that failure is this precision cut arriving at a bit-exactness
+    assertion, not a regression in the block.
     """
     if op == OP_NT:
         if n == 1:

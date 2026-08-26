@@ -1164,6 +1164,37 @@ def main() raises:
         " eager_attention_forward synchronizes per (batch, head). See"
         " bench/speed/SEQ_SPEED.md."
     )
+    # DEVIATION 1885 -- THE PRECISION CUT TRAVELS WITH THE NUMBER.
+    #
+    # Under FAST every GEMM in these lanes goes through
+    # `_fast_vendor_gemm`, which on an NVIDIA target is MAX's tensor-core
+    # `matmul`: measured at 200 TFLOP/s on an H100 against `cublas-fp32`'s
+    # 44.4 and `cublas-tf32`'s 207.5, i.e. on the TF32 line, i.e. TEN
+    # explicit mantissa bits rather than twenty-three.
+    #
+    # It made the Llama block 92x to 536x faster and it made the agreement
+    # against a torch FP32 reference 47x to 239x worse, while `rmsnorm` --
+    # which routes no GEMM -- did not move by one bit. A FAST path may be
+    # non-deterministic and may take the vendor's fastest kernel. It may
+    # NOT take a precision cut silently, and a speedup printed beside an
+    # fp32 agreement column reads as "faster AND as accurate", which is
+    # false.
+    #
+    # Emitted on EVERY lane, including rmsnorm and the mamba pair, because
+    # "this lane is unaffected" is itself the information -- rmsnorm is the
+    # control that made the cut visible at all.
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        print(
+            "FSPEED-NOTE lane=" + lane + " arm=ours PRECISION: FAST routes"
+            " every GEMM through MAX matmul, which on NVIDIA is a TENSOR-CORE"
+            " (TF32-class, 10 mantissa bits) path -- measured 200 TFLOP/s"
+            " against cublas-fp32 44.4 and cublas-tf32 207.5 on an H100."
+            " The fair vendor opponent for a lane that routes a GEMM is"
+            " therefore a TF32 arm (torch-gpu-tf32), NOT an fp32 one, and an"
+            " FSPEED-AGREE line computed against an fp32 reference is"
+            " measuring THIS CUT and not a defect. Lanes routing no GEMM"
+            " (rmsnorm) are unaffected and are the control. DEVIATION 1885."
+        )
 
     var ctx = DeviceContext()
     for row in range(SEQ_SHAPE_COUNT):

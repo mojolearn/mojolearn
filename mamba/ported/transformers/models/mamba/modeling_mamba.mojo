@@ -397,6 +397,8 @@ struct MambaDeviceWeights(Movable):
     """
 
     var dims: MambaDims
+    #: DEVIATION 1886. Have the ten weight names been refused yet?
+    var weights_checked: Bool
     var norm_w: DeviceBuffer[DType.float32]  # [d_model]
     var w_in: DeviceBuffer[DType.float32]  # [2*d_inner, d_model]
     var conv_w: DeviceBuffer[DType.float32]  # [d_inner, D_CONV]
@@ -409,6 +411,10 @@ struct MambaDeviceWeights(Movable):
     var w_out: DeviceBuffer[DType.float32]  # [d_model, d_inner]
 
     def __init__(out self, ctx: DeviceContext, w: MambaWeights) raises:
+        # DEVIATION 1886. False until the first block call has walked the ten
+        # WEIGHT names; see `mamba_refuse_bad_inputs`. It is NOT set here,
+        # and that is deliberate -- see the long comment there.
+        self.weights_checked = False
         self.dims = w.dims.copy()
         self.norm_w = mamba_upload(ctx, w.norm_w)
         self.w_in = mamba_upload(ctx, w.w_in)
@@ -1060,35 +1066,78 @@ def mamba_refuse_bad_inputs(
 ) raises:
     """Every named input and parameter of one block call, refused if it holds
     a NaN or an infinity. The names are the oracle's `refuse_bad_inputs`
-    names, in its order, so the two sides fail identically."""
+    names, in its order, so the two sides fail identically.
+
+    DEVIATION 1886 -- THE TEN WEIGHT NAMES ARE WALKED ONCE, NOT EVERY CALL.
+
+    This walk DOWNLOADS every operand from the device. For mamba-130m that
+    is `in_proj.weight` at 2 x 1536 x 768 and `out_proj.weight` at 768 x
+    1536 among eight others -- roughly fifteen megabytes off the device,
+    per block call, in the direction hardware is slowest at. It is the same
+    defect DEVIATION 1875 removed from the Llama block, and the measurement
+    says so plainly: after 1875 the Llama block went 92x to 536x faster on
+    an H100 while MAMBA, WHICH NEVER GOT THE FIX, IMPROVED 1.15x and stayed
+    25x behind a pure-PyTorch reference scan at t1.
+
+    WHY THIS IS A CACHE AND NOT A HOIST INTO `MambaDeviceWeights.__init__`,
+    which is what 1875 did on the Llama side. `mamba_check`'s clause (e) is
+    a PLANTED REFUSAL AUDIT, and it does something a weaker gate would not:
+    for each of the thirteen names it plants one non-finite cell in the HOST
+    weights, CONSTRUCTS the device weights, DOWNLOADS the buffer back and
+    proves the plant actually ARRIVED (`reached != 1` is a VACUOUS-clause
+    error), and only then calls the block and requires the refusal. Refusing
+    inside the constructor would make that construction raise, so the reach
+    proof could never run, and clause (e) would have to be rewritten to
+    stop proving the thing it exists to prove. Trading a proof for
+    milliseconds is the wrong trade.
+
+    A per-instance flag keeps both. The FIRST call still walks all ten names
+    IN ORDER -- so a plant in `out_proj.weight`, the last of them, still
+    only raises if the walk got past the nine before it, which is exactly
+    what clause (e)'s ordering requirement tests. Later calls skip the
+    download, because a weight buffer is written once at upload and nothing
+    in the block writes to it.
+
+    `x` and the two STATE buffers stay on every call and must: the block
+    WRITES the state, so a second call's input is the first call's output,
+    and two of the audit's plants land there specifically to exercise a
+    refusal on a SECOND call.
+    """
     var dims = w.dims.copy()
     var dm = dims.d_model
     var di = dims.d_inner
     var r = dims.dt_rank
     var xr = dims.x_proj_rows()
+    # `x` CHANGES ON EVERY CALL and is always walked.
     _refuse_nonfinite_named("x", mamba_download(ctx, x, b * l * dm))
-    _refuse_nonfinite_named("norm.weight", mamba_download(ctx, w.norm_w, dm))
-    _refuse_nonfinite_named(
-        "in_proj.weight", mamba_download(ctx, w.w_in, 2 * di * dm)
-    )
-    _refuse_nonfinite_named(
-        "conv1d.weight", mamba_download(ctx, w.conv_w, di * D_CONV)
-    )
-    _refuse_nonfinite_named("conv1d.bias", mamba_download(ctx, w.conv_b, di))
-    _refuse_nonfinite_named(
-        "x_proj.weight", mamba_download(ctx, w.w_x, xr * di)
-    )
-    _refuse_nonfinite_named(
-        "dt_proj.weight", mamba_download(ctx, w.w_dt, di * r)
-    )
-    _refuse_nonfinite_named("dt_proj.bias", mamba_download(ctx, w.b_dt, di))
-    _refuse_nonfinite_named(
-        "A_log", mamba_download(ctx, w.a_log, di * D_STATE)
-    )
-    _refuse_nonfinite_named("D", mamba_download(ctx, w.d_skip, di))
-    _refuse_nonfinite_named(
-        "out_proj.weight", mamba_download(ctx, w.w_out, dm * di)
-    )
+    if not w.weights_checked:
+        _refuse_nonfinite_named(
+            "norm.weight", mamba_download(ctx, w.norm_w, dm)
+        )
+        _refuse_nonfinite_named(
+            "in_proj.weight", mamba_download(ctx, w.w_in, 2 * di * dm)
+        )
+        _refuse_nonfinite_named(
+            "conv1d.weight", mamba_download(ctx, w.conv_w, di * D_CONV)
+        )
+        _refuse_nonfinite_named("conv1d.bias", mamba_download(ctx, w.conv_b, di))
+        _refuse_nonfinite_named(
+            "x_proj.weight", mamba_download(ctx, w.w_x, xr * di)
+        )
+        _refuse_nonfinite_named(
+            "dt_proj.weight", mamba_download(ctx, w.w_dt, di * r)
+        )
+        _refuse_nonfinite_named("dt_proj.bias", mamba_download(ctx, w.b_dt, di))
+        _refuse_nonfinite_named(
+            "A_log", mamba_download(ctx, w.a_log, di * D_STATE)
+        )
+        _refuse_nonfinite_named("D", mamba_download(ctx, w.d_skip, di))
+        _refuse_nonfinite_named(
+            "out_proj.weight", mamba_download(ctx, w.w_out, dm * di)
+        )
+        w.weights_checked = True
+    # The STATE changes on every call: the block WRITES it, so a second
+    # call's input is the first call's output.
     _refuse_nonfinite_named(
         "state.conv_win",
         mamba_download(ctx, state.conv_win, b * di * D_CONV),
