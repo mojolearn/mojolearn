@@ -508,23 +508,31 @@ def arm_e_workload() raises -> Int:
     for i in range(len(counts)):
         items.append(NodeWorkItem(i, Int32(2), InstanceRange(0, counts[i])))
 
-    var wl = List[WorkloadInfo]()
-    var n = update_workload_info(items, wl)
-
+    # `update_workload_info` now writes INTO an array in place, as
+    # upstream fills its pinned `h_workload_info` (`builder.cuh:401`).
+    # The array is poisoned first, so "wrote exactly n entries" is
+    # checked as "entry n is still poison" -- stronger than the old
+    # `len(wl)` test, which could not see an over-write.
     var want_blocks = [1, 1, 1, 2, 4]  # max(ceildiv(c,128), 1)
     var want_total = 1 + 1 + 1 + 2 + 4
+    var wl = List[WorkloadInfo]()
+    for _ in range(want_total + 1):
+        wl.append(WorkloadInfo(Int32(-1), Int32(-1), Int32(-1)))
+    var n = update_workload_info(items, wl.unsafe_ptr())
+
     var fails = 0
     if n != want_total:
         fails += 1
         print("  arm E: n_blocks_dimx", n, "want", want_total)
-    if len(wl) != want_total:
+    if Int(wl[want_total].nodeid) != -1:
         fails += 1
-        print("  arm E: wrote", len(wl), "entries, want", want_total)
+        print("  arm E: entry", want_total, "was written; expected the"
+              " poison tail untouched")
 
     var k = 0
     for i in range(len(counts)):
         for b in range(want_blocks[i]):
-            if k >= len(wl):
+            if k >= want_total:
                 break
             var e = wl[k]
             if (
@@ -538,6 +546,9 @@ def arm_e_workload() raises -> Int:
                     e.num_blocks, ") want (", i, b, want_blocks[i], ")",
                 )
             k += 1
+    # `[[mojo-buffer-freed-at-last-use]]`: `.unsafe_ptr()` above must not
+    # be `wl`'s last use while the writes land.
+    _ = wl^
 
     # the bound their constructor allocates must actually hold
     if max_blocks_dimx_for(Int32(len(counts)), 630) < n:
@@ -674,7 +685,10 @@ def arm_f_sabotage() raises -> Int:
     for i in range(len(counts)):
         items.append(NodeWorkItem(i, Int32(2), InstanceRange(0, counts[i])))
     var wl4 = List[WorkloadInfo]()
-    var n4 = update_workload_info[4](items, wl4)
+    for _ in range(16):
+        wl4.append(WorkloadInfo(Int32(-1), Int32(-1), Int32(-1)))
+    var n4 = update_workload_info[4](items, wl4.unsafe_ptr())
+    _ = wl4^
     if n4 != 8:
         fails += 1
         print(

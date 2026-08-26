@@ -122,7 +122,7 @@ algorithm does not select it.
 # =========================================================================
 """
 
-from std.atomic import Atomic
+from std.atomic import Atomic, Ordering
 from std.gpu import thread_idx, lane_id, WARP_SIZE
 from std.gpu.primitives import warp
 from std.math import ceildiv
@@ -234,6 +234,8 @@ def block_flush_count_i32(
     See DEVIATION 125 for why the target is `Int32` and why that is exact.
     """
     if Int(thread_idx.x) == 0 and block_count > Int64(0):
-        _ = Atomic.fetch_add(
+        # Upstream `atomicAdd` is relaxed; the non-Apple default here is
+        # seq_cst. Fences only -- the total cannot move.
+        _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
             splits_local_nleft.unsafe_offset(nid), Int32(block_count)
         )
