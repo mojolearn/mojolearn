@@ -949,7 +949,13 @@ def gemm_tn_splitk_into(
     """
     if gram_splitk_scratch_covers(m, k):
         _splitk_launch(ctx, z, x, scratch, m, k)
-        ctx.synchronize()
+        # DEVIATION 1899 -- SYNC DELETED ON THE SCRATCH-REUSE BRANCH ONLY
+        # (the DEVIATION-1877 class). This branch allocates nothing: `z`,
+        # `x` and `scratch` are all caller-owned and outlive the call, and
+        # the partial+reduce pair is stream-ordered on the caller's ctx, so
+        # whatever the caller enqueues next already sees `z`. The sibling
+        # `gemm_tn_splitk` below allocates its OWN partials and KEEPS its
+        # sync. Fences only -- IDENTICAL's bits do not move.
         return
     gemm_tn_splitk(ctx, z, x, m, k)
 
@@ -994,6 +1000,10 @@ def gram_centered_splitk_into(
     `gemm_tn_splitk_into` does for the plain arm; small k allocates."""
     if gram_splitk_scratch_covers(m, k):
         _splitk_launch_centered(ctx, z, x, mu, scratch, m, k)
-        ctx.synchronize()
+        # DEVIATION 1899 -- SYNC DELETED ON THE SCRATCH-REUSE BRANCH ONLY,
+        # same reasoning as `gemm_tn_splitk_into` above: every buffer is
+        # caller-owned, nothing is allocated here, and the launch pair is
+        # stream-ordered. The allocating sibling `gram_centered_splitk`
+        # keeps its sync. Fences only -- IDENTICAL's bits do not move.
         return
     gram_centered_splitk(ctx, z, x, mu, m, k)

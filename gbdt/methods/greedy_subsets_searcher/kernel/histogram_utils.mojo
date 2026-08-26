@@ -19,7 +19,7 @@ a thread: it never has to walk bins in order, because the walking already
 happened here.
 """
 
-from std.atomic import Atomic
+from std.atomic import Atomic, Ordering
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import floor
 from max.gpu.memory import AddressSpace
@@ -143,7 +143,9 @@ def hist2_smem_add[
 
     @parameter
     if dt == DType.int32:
-        _ = Atomic.fetch_add(
+        # DEVIATION 1898: upstream's atomicAdd is relaxed; the non-Apple Mojo
+        # default is seq_cst.
+        _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
             smem.unsafe_offset(offset), rebind[Scalar[dt]](qval)
         )
     else:
