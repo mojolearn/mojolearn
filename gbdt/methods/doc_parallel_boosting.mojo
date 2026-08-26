@@ -509,6 +509,77 @@ def _tree_tag(iteration: Int) -> String:
     return String("tree") + s
 
 
+struct TEstimationWorkspace(Movable):
+    """The leaf-estimation stage's per-shape buffers, owned by the FIT.
+
+    ================= DEVIATION 1890 =================
+    CatBoost does not allocate the estimator's gathers per tree and
+    neither should this: their `TCudaManager` hands every estimator
+    buffer out of the per-device memory pool (`cuda_lib/memory_pool.h`),
+    so tree 2's `TDocParallelLeavesEstimator` reuses tree 1's device
+    memory. This port called `enqueue_create_buffer` inside
+    `_estimate_and_apply` -- THREE fresh `n_rows`-sized buffers (target,
+    weights, `approx_dim * n_rows` of cursor), the two partition-offset
+    buffers plus their host staging, and the estimate's device/host pair,
+    for EVERY estimation task, and Logloss runs one task per permutation
+    per tree. Same repair as `TTreeWorkspace`'s (its DEVIATION BLOCK is
+    the precedent, POOL OF ONE and all): the fit holds the list across
+    trees, keyed by the dataset shape, and a shape change rebuilds it.
+
+    `n_leaves_cap` is a CAPACITY, not an exact key: a non-symmetric tree
+    that stopped early has fewer leaves, and every consumer walks exactly
+    `n_leaves` entries (grid y, `bin_count` loops), so a wider buffer is
+    bit-inert. Growing reallocates; shrinking reuses.
+
+    THE LIFETIME RULE RIDES ALONG [[mojo-buffer-freed-at-last-use]]: the
+    workspace OWNS these buffers across trees, so nothing in
+    `_estimate_and_apply` dies under a queued copy any more -- the
+    staging halves (`h_po`/`h_ps`/`h_est`) are rewritten by the NEXT call
+    only after this call's tail drain, which is what makes the reuse
+    race-free (see DEVIATION 1891 at that drain).
+    ==================================================
+    """
+
+    var n_rows_key: Int
+    var approx_dim_key: Int
+    var n_leaves_cap: Int
+    var g_target: DeviceBuffer[DType.float32]
+    var g_weights: DeviceBuffer[DType.float32]
+    var g_cursor: DeviceBuffer[DType.float32]
+    var d_p_off: DeviceBuffer[DType.uint32]
+    var d_p_sz: DeviceBuffer[DType.uint32]
+    var h_po: HostBuffer[DType.uint32]
+    var h_ps: HostBuffer[DType.uint32]
+    var d_est: DeviceBuffer[DType.float32]
+    var h_est: HostBuffer[DType.float32]
+
+    def __init__(
+        out self,
+        ctx: DeviceContext,
+        n_rows: Int,
+        approx_dim: Int,
+        n_leaves: Int,
+    ) raises:
+        self.n_rows_key = n_rows
+        self.approx_dim_key = approx_dim
+        self.n_leaves_cap = n_leaves
+        self.g_target = ctx.enqueue_create_buffer[DType.float32](n_rows)
+        self.g_weights = ctx.enqueue_create_buffer[DType.float32](n_rows)
+        self.g_cursor = ctx.enqueue_create_buffer[DType.float32](
+            approx_dim * n_rows
+        )
+        self.d_p_off = ctx.enqueue_create_buffer[DType.uint32](n_leaves)
+        self.d_p_sz = ctx.enqueue_create_buffer[DType.uint32](n_leaves)
+        self.h_po = ctx.enqueue_create_host_buffer[DType.uint32](n_leaves)
+        self.h_ps = ctx.enqueue_create_host_buffer[DType.uint32](n_leaves)
+        self.d_est = ctx.enqueue_create_buffer[DType.float32](
+            n_leaves * approx_dim
+        )
+        self.h_est = ctx.enqueue_create_host_buffer[DType.float32](
+            n_leaves * approx_dim
+        )
+
+
 def _estimate_and_apply(
     ctx: DeviceContext,
     n_rows: Int,
@@ -536,6 +607,8 @@ def _estimate_and_apply(
     mut trace: IdentityTrace,
     mut stage_times: StageTimes,
     leaf_tag: String,
+    # DEVIATION 1890: the fit-owned estimation workspace (pool of one)
+    mut est_ws: List[TEstimationWorkspace],
 ) raises:
     """One estimation task: their `TDocParallelLeavesEstimator::Estimate`
     plus the `AppendModels` that follows it, for ONE (dataset, cursor).
@@ -558,13 +631,31 @@ def _estimate_and_apply(
     # the rescaled model touch the cursor. `row_index` left the
     # searcher bin-sorted, so target/weights/cursor gather straight
     # into the oracle's order (their factory sorts; we inherit).
-    var g_target = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    var g_weights = ctx.enqueue_create_buffer[DType.float32](
-        n_rows
-    )
-    var g_cursor = ctx.enqueue_create_buffer[DType.float32](
-        approx_dim * n_rows
-    )
+    #
+    # DEVIATION 1890: the buffers come from the fit's pool of one, not
+    # from per-tree `enqueue_create_buffer` (see `TEstimationWorkspace`'s
+    # block). Reuse is safe because every consumer of the previous task's
+    # contents drained at that task's tail (DEVIATION 1891), and the
+    # gathers below overwrite every cell this task reads.
+    if (
+        len(est_ws) == 0
+        or est_ws[0].n_rows_key != n_rows
+        or est_ws[0].approx_dim_key != approx_dim
+        or est_ws[0].n_leaves_cap < n_leaves
+    ):
+        est_ws.clear()
+        est_ws.append(
+            TEstimationWorkspace(ctx, n_rows, approx_dim, n_leaves)
+        )
+    ref g_target = est_ws[0].g_target
+    ref g_weights = est_ws[0].g_weights
+    ref g_cursor = est_ws[0].g_cursor
+    ref d_p_off = est_ws[0].d_p_off
+    ref d_p_sz = est_ws[0].d_p_sz
+    ref h_po = est_ws[0].h_po
+    ref h_ps = est_ws[0].h_ps
+    ref d_est = est_ws[0].d_est
+    ref h_est = est_ws[0].h_est
     launch_gather_with_mask_f32(
         ctx, g_target, targets, row_index, n_rows,
         UInt32(0xFFFFFFFF),
@@ -582,48 +673,52 @@ def _estimate_and_apply(
         ctx, g_cursor, cursor, row_index, n_rows,
         UInt32(0xFFFFFFFF), approx_dim, n_rows,
     )
-    var d_p_off = ctx.enqueue_create_buffer[DType.uint32](n_leaves)
-    var d_p_sz = ctx.enqueue_create_buffer[DType.uint32](n_leaves)
-    var h_po = ctx.enqueue_create_host_buffer[DType.uint32](
-        n_leaves
-    )
-    var h_ps = ctx.enqueue_create_host_buffer[DType.uint32](
-        n_leaves
-    )
-    ctx.synchronize()
+    # ================= DEVIATION 1891 =================
+    # A `ctx.synchronize()` stood here and it settled NOTHING a later op
+    # needs: every enqueue above it (the pool's creates on a rebuild, the
+    # three gathers) is stream-ordered before every device op below, and
+    # writing a host buffer straight after `enqueue_create_host_buffer`
+    # is this repo's settled practice (`TTreeWorkspace.__init__`'s
+    # constant fills, `make_bin_optimized_oracle`'s `h_leaves`). The host
+    # writes below reuse `h_po`/`h_ps` across tasks, and THAT hazard is
+    # held to the tail drain: the previous task's `enqueue_copy` of these
+    # buffers became a RUN at its own tail `ctx.synchronize()`, which
+    # returned before this call began. Removed 2026-08-26; one full
+    # device drain per estimation task, and Logloss at 10 walker
+    # iterations ran ~34 full-n_rows passes between drains 1 and 2, so
+    # the drain was pure serialization. Bit-inert: a drain reorders
+    # nothing on one stream.
+    # ==================================================
     # THE DEVICE'S OWN OFFSETS: the final partitions sit in memory
     # in bit-reversed leaf order, so a prefix sum of the sizes is
     # the WRONG segmentation (see run_tree_layout's tail).
-    var widest = 1
     for i in range(n_leaves):
         h_po.unsafe_ptr().unsafe_store(
             i, UInt32(leaf_offsets[i])
         )
         h_ps.unsafe_ptr().unsafe_store(i, UInt32(sizes[i]))
-        if sizes[i] > widest:
-            widest = sizes[i]
     ctx.enqueue_copy(dst_buf=d_p_off, src_ptr=h_po.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_p_sz, src_ptr=h_ps.unsafe_ptr())
-    # THE BUFFERS MUST OUTLIVE THE COPY. `h_po` and `h_ps` are LAST USED at
-    # the two `enqueue_copy`s above, so Mojo may free them there -- and the
-    # very next host allocation is `h_leaves` inside
-    # `make_bin_optimized_oracle`, SAME POOL, SAME DTYPE, SAME LENGTH, filled
-    # `[i] = i` immediately. That is DEVIATION 134's pointwise half, and it
-    # is not a hypothesis: forcing exactly that write reproduced the observed
-    # run's structure exactly (8 of 12 splits, first divergence at tree 8)
-    # with the loss agreeing to five significant figures.
-    # [[mojo-buffer-freed-at-last-use]] -- same defect as DEVIATION 125a.
-    #
-    # HELD TO THE EXISTING SYNC rather than drained here. A `ctx.synchronize()`
-    # at this line would also fix it and would cost one full device drain PER
-    # TREE, which is the wrong price for a lifetime bug: the two `_ = h^`
-    # below sit just past the `ctx.synchronize()` this function already runs
-    # before applying the estimate, so the copy is known complete and the
-    # blocks cannot be recycled in between.
+    # THE BUFFERS MUST OUTLIVE THE COPY -- and now they structurally do.
+    # When `h_po`/`h_ps` were locals, their last use was the two
+    # `enqueue_copy`s above, so Mojo could free them there -- and the very
+    # next host allocation was `h_leaves` inside
+    # `make_bin_optimized_oracle`, SAME POOL, SAME DTYPE, SAME LENGTH,
+    # filled `[i] = i` immediately. That was DEVIATION 134's pointwise
+    # half (measured: 8 of 12 splits reproduced, first divergence at tree
+    # 8), [[mojo-buffer-freed-at-last-use]], same defect as DEVIATION
+    # 125a, and it was held to a mid-function sync. DEVIATION 1890 closes
+    # it at the OWNERSHIP level instead: the workspace owns the staging
+    # across trees, so no copy in this function ever outlives its source.
 
+    # The oracle receives HANDLE COPIES (`DeviceBuffer.copy()` copies the
+    # handle, not the bytes -- see the `cursors` note in `fit_with_test`),
+    # so the workspace keeps the memory alive across trees while the
+    # oracle's handles die with it at this task's tail drain.
     var oracle = make_bin_optimized_oracle(
         ctx, n_rows, n_leaves, sizes,
-        g_target^, g_weights^, g_cursor^, d_p_off^, d_p_sz^,
+        g_target.copy(), g_weights.copy(), g_cursor.copy(),
+        d_p_off.copy(), d_p_sz.copy(),
         has_weights,
         objective,
         alpha,
@@ -674,15 +769,13 @@ def _estimate_and_apply(
     # `n_leaves * approx_dim` and is BIN-MAJOR, which is the layout
     # `add_model_value_kernel`'s z axis reads.
     var est_len = n_leaves * approx_dim
-    var d_est = ctx.enqueue_create_buffer[DType.float32](est_len)
-    var h_est = ctx.enqueue_create_host_buffer[DType.float32](
-        est_len
-    )
-    ctx.synchronize()
-    # The far end of the hold opened above: past this drain the two host
-    # staging buffers may die, because their copies have certainly run.
-    _ = h_po^
-    _ = h_ps^
+    # DEVIATION 1891: a second full drain stood here, whose only real work
+    # was the lifetime hold for `h_po`/`h_ps` ("the far end of the hold").
+    # The workspace owns them now (DEVIATION 1890), so the hold has no
+    # buffers to protect and the drain folded into the tail one below.
+    # `h_est` is safe to write without a drain for the same reason
+    # `h_po`/`h_ps` are: the previous task's copy of it ran before that
+    # task's tail drain returned.
     if len(estimated) != est_len:
         raise Error(
             "the estimator returned " + String(len(estimated))
@@ -711,11 +804,18 @@ def _estimate_and_apply(
         grid_dim=(amv_gx, n_leaves, approx_dim),
         block_dim=(256, 1, 1),
     )
+    # THE ONE SETTLE POINT of the task (DEVIATION 1891). This drain is
+    # KEPT, and it now carries every hold the removed drains carried:
+    # (a) the workspace staging (`h_po`/`h_ps`/`h_est`) may be host-
+    #     rewritten by the NEXT task only because their copies became
+    #     runs here;
+    # (b) the oracle dies PAST it, pinned by the explicit discard below.
+    #     Its last implicit use is the launch above, and dying there
+    #     would free its exclusive buffers (`d_bins`, `d_shift`, the
+    #     Exact path's trailing `move_to` operands) under queued work --
+    #     the step-33 race class, device side.
     ctx.synchronize()
-    _ = d_est^  # past the drain (step-33 race class, device side)
-    # past the drain, not before it: `h_est`'s last use was its enqueue,
-    # which freed it under a queued copy (the step-33 race class)
-    _ = h_est^
+    _ = oracle^  # past the drain (step-33 race class, device side)
 
 
 def fit_with_test(
@@ -1225,6 +1325,11 @@ def fit_with_test(
     # the non-symmetric arm's per-leaf pool (`TDepthwiseWorkspace`), same
     # span; `fit_non_symmetric_tree` re-keys it on the shape and reuses it
     var dws = List[TDepthwiseWorkspace]()
+    # the ESTIMATOR's pool (DEVIATION 1890), same span: every
+    # `_estimate_and_apply` task of every permutation of every tree reuses
+    # one set of gather/staging buffers, keyed by (n_rows, approx_dim) with
+    # a leaf-count capacity
+    var est_ws = List[TEstimationWorkspace]()
 
     # `secondDerAsWeights = IsSecondOrderScoreFunction(scoreFunction)`.
     # BOTH their searchers key the stat planes' content on it -- the greedy
@@ -1628,6 +1733,7 @@ def fit_with_test(
                     trace, stage_times,
                     _tree_tag(iteration) + ".perm" + String(p)
                     + ".leaves.estimated",
+                    est_ws,
                 )
                 if p == est_p:
                     leaf_values.clear()
@@ -1735,6 +1841,7 @@ def fit_with_test(
                     leaf_values, not_pd_total,
                     trace, stage_times,
                     _tree_tag(iteration) + ".leaves.estimated",
+                    est_ws,
                 )
         else:
             sizes = run_tree_layout_traced(
@@ -1799,6 +1906,7 @@ def fit_with_test(
                         trace, stage_times,
                         _tree_tag(iteration) + ".perm" + String(p)
                         + ".leaves.estimated",
+                        est_ws,
                     )
                 else:
                     var d_bins = ctx.enqueue_create_buffer[DType.uint32](
@@ -1827,6 +1935,7 @@ def fit_with_test(
                         trace, stage_times,
                         _tree_tag(iteration) + ".perm" + String(p)
                         + ".leaves.estimated",
+                        est_ws,
                     )
                 # the EXPORTED ensemble is the estimation permutation's
                 # (`doc_parallel_boosting.h:526-528`); the others exist to

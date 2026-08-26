@@ -850,8 +850,27 @@ def run_tree(
     # afterwards. Integer addition is associative, so the histogram does not
     # depend on which block lands first. `NUMERIC_FAST` leaves this buffer at
     # zero and takes CatBoost's float `atomicAdd`.
-    var acc_i32 = ctx.enqueue_create_buffer[DType.int32](hist_cells)
-    ctx.enqueue_memset(acc_i32, Int32(0))
+    #
+    # DEVIATION 1892: when the flush is NOT fixed point, this driver's
+    # kernels never write the accumulator and `fixed_to_float_kernel`
+    # would read `hist_cells` of guaranteed zeros per level (the same
+    # dead work the fused bridge's docstring priced at ~7 ms/tree of pure
+    # reading, no CatBoost counterpart). So the float arm allocates ONE
+    # cell -- the kernels still take the pointer but their accumulator
+    # branch is comptime-dead -- and skips the memset and the conversion
+    # launch. `run_tree` launches only the BINARY family, which has no
+    # `hist2` shared-memory arm, so the flush row alone decides; the
+    # block drivers below add the `HIST_SMEM_SHARED2_I32` term
+    # (`acc_i32_is_live`). The fixed-point arm is byte-for-byte unchanged.
+    comptime _ACC_LIVE = deterministic_flush_for[
+        TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
+    ]()
+    var acc_cells = hist_cells
+    comptime if not _ACC_LIVE:
+        acc_cells = 1
+    var acc_i32 = ctx.enqueue_create_buffer[DType.int32](acc_cells)
+    comptime if _ACC_LIVE:
+        ctx.enqueue_memset(acc_i32, Int32(0))
 
     # The scale bounds every partial sum. A cell can hold at most the sum of
     # magnitudes of the plane it accumulates, and one scale serves both
@@ -1158,14 +1177,18 @@ def run_tree(
             )
 
         # Convert the replicated partials back to floats before the scan.
-        ctx.enqueue_function[fixed_to_float_kernel](
-            acc_i32.unsafe_ptr(),
-            hist.unsafe_ptr(),
-            Int32(hist_cells),
-            fixed_scale,
-            grid_dim=(hist_cells + 255) // 256,
-            block_dim=256,
-        )
+        # DEVIATION 1892: only when the fixed-point flush filled them --
+        # the float arm's accumulator is one never-written cell, and this
+        # launch would have read `hist_cells` zeros and stored nothing.
+        comptime if _ACC_LIVE:
+            ctx.enqueue_function[fixed_to_float_kernel](
+                acc_i32.unsafe_ptr(),
+                hist.unsafe_ptr(),
+                Int32(hist_cells),
+                fixed_scale,
+                grid_dim=(hist_cells + 255) // 256,
+                block_dim=256,
+            )
         # `numBlocks.x = CeilDivide(fCount * 32, blockSize)`
         # (`histogram_utils.cu:442`), theirs at one WARP per feature. Ours is
         # one THREAD per feature, so the same rule is
@@ -2397,6 +2420,34 @@ def resolve_split(
     )
 
 
+def acc_i32_is_live[hist2_smem_mode: Int]() -> Bool:
+    """DEVIATION 1892: whether ANY kernel of a block driver at this
+    shared-memory mode can touch the fixed-point accumulator.
+
+    ONE RULE, DELEGATED, for the same reason `deterministic_flush_for`
+    delegates to `column_has_float_atomics`: two expressions of one rule
+    is how a rule drifts. The accumulator is written exactly when
+
+    * the FLUSH is fixed point (`deterministic_flush_for`: `IDENTICAL`
+      everywhere, and `FAST` on a column without float atomics), OR
+    * the `hist2` one-byte family runs the shared-Int32 slice
+      (`HIST_SMEM_SHARED2_I32`), whose writebacks land single-block
+      cells in the accumulator EVEN UNDER `FAST` -- the
+      `run_fixed_bridge` arm at the histogram launcher, and the reason
+      the gate cannot be a bare mode test.
+
+    When this is False the buffer is allocated at ONE cell and never
+    memset: every consumer either only forwards the pointer (the
+    histogram kernels' accumulator branch is comptime-dead) or is itself
+    gated on the same truth (the fused writeback's `run_fixed_bridge` /
+    `scratch_dead` arms, `fixed_to_float_kernel` in `run_tree`). When it
+    is True nothing changes byte for byte.
+    """
+    return deterministic_flush_for[
+        TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
+    ]() or hist2_smem_mode == HIST_SMEM_SHARED2_I32
+
+
 struct TTreeWorkspace(Movable):
     """The three large planes a tree grows in, owned by the FIT.
 
@@ -2430,6 +2481,11 @@ struct TTreeWorkspace(Movable):
     var block_hist: DeviceBuffer[DType.float32]
     var hist_cells: Int
     var block_cells: Int
+    # DEVIATION 1892: whether `acc_i32` was sized for real use
+    # (`hist_cells`) or is the float arm's one-cell placeholder. Part of
+    # the pool KEY: a pool built by a driver whose gate is off must not
+    # be reused by one whose gate is on.
+    var acc_live_key: Bool
     # ---- the rest of the per-tree setup, hoisted 2026-08-21 ----
     # Everything below is sized by the DATASET SHAPE and either holds
     # layout-derived constants (filled once here, kernels only read) or is
@@ -2506,6 +2562,10 @@ struct TTreeWorkspace(Movable):
         n_rows: Int,
         stat_count: Int,
         max_depth: Int,
+        # DEVIATION 1892: the caller's `acc_i32_is_live[...]()` verdict --
+        # a comptime truth at every construction site, passed as a value
+        # because the workspace itself has no shared-memory mode
+        acc_live: Bool,
     ) raises:
         var max_leaves = 1 << max_depth
         var n_features = len(layout.features)
@@ -2540,8 +2600,12 @@ struct TTreeWorkspace(Movable):
         self.hist_cells_per_leaf_key = hist_cells_per_leaf
         self.hist_cells = hist_cells
         self.block_cells = block_cells
+        self.acc_live_key = acc_live
         self.hist = ctx.enqueue_create_buffer[DType.float32](hist_cells)
-        self.acc_i32 = ctx.enqueue_create_buffer[DType.int32](hist_cells)
+        # DEVIATION 1892: one placeholder cell when no kernel can touch it
+        self.acc_i32 = ctx.enqueue_create_buffer[DType.int32](
+            hist_cells if acc_live else 1
+        )
         self.block_hist = ctx.enqueue_create_buffer[DType.float32](
             block_cells
         )
@@ -2856,6 +2920,8 @@ def run_tree_layout_traced[
     # ---- THE POOL, which since 2026-08-21 carries the WHOLE setup ----
     # (see TTreeWorkspace's deviation block). A key mismatch means a
     # different dataset shape reached this searcher; rebuild everything.
+    # DEVIATION 1892: the accumulator's liveness is part of the key.
+    comptime _ACC_LIVE = acc_i32_is_live[hist2_smem_mode]()
     if (
         len(ws) == 0
         or ws[0].n_rows_key != n_rows
@@ -2863,10 +2929,12 @@ def run_tree_layout_traced[
         or ws[0].max_leaves_key != max_leaves
         or ws[0].n_features_key != len(fold_counts)
         or ws[0].hist_cells_per_leaf_key != hist_cells_per_leaf
+        or ws[0].acc_live_key != _ACC_LIVE
     ):
         ws.clear()
         ws.append(TTreeWorkspace(
-            ctx, layout, blocks, n_rows, stat_count, max_depth
+            ctx, layout, blocks, n_rows, stat_count, max_depth,
+            _ACC_LIVE,
         ))
     ref hist = ws[0].hist
     ref block_hist = ws[0].block_hist
@@ -2945,7 +3013,15 @@ def run_tree_layout_traced[
     ctx.enqueue_copy(dst_buf=hp_off, src_ptr=h_off.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=hp_sz, src_ptr=h_sz.unsafe_ptr())
     ctx.enqueue_memset(hist, Float32(0.0))
-    ctx.enqueue_memset(acc_i32, Int32(0))
+    # DEVIATION 1892: the accumulator memset is dead work under a float
+    # flush -- `NUMERIC_FAST` on a float-atomics column with the
+    # warp-private `hist2` arm never writes OR reads `acc_i32` (the file's
+    # own fused-bridge notes say so in as many words), so `hist_cells` of
+    # Int32 zeroing per tree bought nothing. Gated on the same comptime
+    # truth the bridge arms read; the fixed-point builds keep it
+    # byte-for-byte.
+    comptime if _ACC_LIVE:
+        ctx.enqueue_memset(acc_i32, Int32(0))
 
     # See the note in `run_tree`: one scale serves both accumulated planes,
     # so the bound is the larger of the two sums of magnitudes, and
