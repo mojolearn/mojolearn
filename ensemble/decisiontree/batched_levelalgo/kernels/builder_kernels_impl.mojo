@@ -120,16 +120,22 @@ unchecked path, so neither of these is opt-in.
 --- 103c. THE LEAF HISTOGRAM IS A COMPTIME CAP ---------------------
 THEIRS: `smem_size = sizeof(BinT) * dataset.num_outputs`
 (`builder.cuh:654`), a runtime product.
-OURS: `LEAF_SMEM_BIN_SLOTS`, comptime, defaulting to the same
-`TUNABLE_SPLIT_HISTOGRAM_DYNAMIC_SMEM_LIMIT_BYTES // size_of[BinT]()`.
-Their `smem_size` argument is still ACCEPTED by `launch_leaf_kernel`, so
-the caller's arithmetic is unchanged and the two files still diff, and it
-is asserted against the cap at launch rather than silently ignored --
-a caller asking for more slots than the instantiation holds gets an error
-and not a corrupted leaf.
-PRICE: identical in character to 103a; a regression tree
-(`num_outputs == 1`) reserves the cap rather than `sizeof(BinT)` bytes.
-The same OPEN item and the same one-parameter fix apply.
+OURS: `LEAF_SMEM_BIN_SLOTS`, comptime, defaulting (since DEVIATION
+1894) to `LEAF_SMEM_MAX_OUTPUTS` = 1024 slots -- 4 KiB for the integer
+classification bin -- instead of the 16 KiB
+`TUNABLE_SPLIT_HISTOGRAM_DYNAMIC_SMEM_LIMIT_BYTES // size_of[BinT]()`
+it shipped with, which reserved the whole histogram tunable for a
+kernel whose need is `sizeof(BinT) * num_outputs` (8-28 bytes at the
+default configs). Their `smem_size` argument is still ACCEPTED by
+`launch_leaf_kernel`, so the caller's arithmetic is unchanged and the
+two files still diff, and it is asserted against the cap at launch
+rather than silently ignored -- a caller asking for more slots than the
+instantiation holds gets an error and not a corrupted leaf.
+PRICE: a regression tree (`num_outputs == 1`) still reserves the cap
+rather than `sizeof(BinT)` bytes, now 1024 slots rather than 16 KiB;
+and a forest with more than 1024 classes must instantiate a larger
+`LEAF_SMEM_BIN_SLOTS` explicitly (it raises by name, as >4096 classes
+already did under the old default).
 
 DEVIATION 127. NO 64-BIT INTEGER ATOMIC. `countLocalLeftKernel` ends
 (`:79-81`) with
@@ -202,13 +208,32 @@ because `DatasetView` and `Quantiles` are `Copyable, Movable` and the
 compiler requires the explicit `Deinitable` for a struct field of a
 generic parameter type.
 PRICE: one device allocation of `size_of[Args]()` bytes and one
-host-to-device copy of the same size PER LAUNCHER CALL -- not per launch
-inside it -- plus one uniform (therefore broadcast, therefore cached)
-global load per thread. The buffers are owned by the CALLER
-(`DeviceArgs`, `NodeSplitScratch`) and reused every level, because a
-kernel inside a tree builder must not allocate. No value changes. If a
-later toolchain documents `DevicePassable` for user structs, every
-`argsp[unsafe_offset=0]` becomes a plain parameter and no caller moves.
+host-to-device copy of the same size PER UPLOAD, plus one uniform
+(therefore broadcast, therefore cached) global load per thread. The
+buffers are owned by the CALLER (`DeviceArgs`, `NodeSplitScratch`) and
+reused every level, because a kernel inside a tree builder must not
+allocate. No value changes. If a later toolchain documents
+`DevicePassable` for user structs, every `argsp[unsafe_offset=0]`
+becomes a plain parameter and no caller moves.
+
+DEVIATION 1893 (2026-08-26). THE UPLOAD MOVES TO THE CALLER'S CADENCE.
+This block used to read "per launcher call": every launcher re-packed
+and re-copied the ~130-byte blob on every call, i.e. once per COLUMN
+BLOCK for the two split kernels. The blob's contents are constant
+within a sampling round -- the only field that moves between rounds is
+`dataset.n_sampled_cols` (`builder.cuh:439-440`) -- so `builder.mojo`
+now uploads once per round (histogram, find-best), once per batch
+(node split) and once per tree (leaf), and each launcher takes the
+DEVICE POINTER instead of a `DeviceArgs` to fill. cuML has no upload
+at all (the structs ride the launch parameter block, `:286-295`), so
+fewer copies is strictly closer to theirs; the kernels' output bytes
+cannot move because the bytes READ are identical. The second half of
+the same deviation narrows every kernel prologue: instead of
+materializing the whole blob (`var args = argsp[...].copy()` plus one
+`.copy()` per member, pinning the full struct in registers), each
+kernel binds `ref args` and copies or loads ONLY the fields it reads
+-- which is what their by-value parameters cost after the compiler
+drops the dead ones. Per-kernel notes sit at each prologue.
 
 --- 128b. THE SCAN FUNCTOR DUPLICATES FOUR `Dataset` FIELDS --------
 `core/scan_by_key.ScanByKeyOps` requires `TrivialRegisterPassable`,
@@ -429,6 +454,19 @@ def default_smem_bin_slots[B: Bin]() -> Int:
     return TUNABLE_SPLIT_HISTOGRAM_DYNAMIC_SMEM_LIMIT_BYTES // size_of[B]()
 
 
+# DEVIATION 1894 -- the leaf kernel's shared histogram is sized to its
+# NEED, not to 103a's 16 KiB blob. Their `smem_size = sizeof(BinT) *
+# dataset.num_outputs` (`builder.cuh:654`) is 4-12 bytes for regression
+# and `4 * n_classes` for classification; the old default reserved
+# `default_smem_bin_slots` (16 KiB) whatever the need. 1024 outputs is a
+# comptime bound, not a heuristic: `launch_leaf_kernel` still checks the
+# caller's `smem_size` against the instantiation and RAISES past it, so
+# a >1024-class forest fails by name at launch (as it previously did
+# past 16 KiB / size_of[BinT] classes) instead of corrupting a leaf; the
+# fix there is a larger explicit `LEAF_SMEM_BIN_SLOTS` instantiation.
+comptime LEAF_SMEM_MAX_OUTPUTS = 1024
+
+
 # ===========================================================================
 # DEVIATION 129c -- `lower_bound` with an address space.
 # ===========================================================================
@@ -525,6 +563,14 @@ struct DeviceArgs[F: Copyable & Deinitable](Movable):
         ] = args.copy()
         log_launch("xfer_args_upload")
         ctx.enqueue_copy(dst_buf=self.dev, src_ptr=self.host.unsafe_ptr())
+        return self.device_ptr()
+
+    def device_ptr(mut self) -> MutPointer[Self.F, MutUntrackedOrigin]:
+        """The device-side pointer of the LAST `upload`. DEVIATION 1893:
+        the launchers take this instead of re-uploading, so a caller
+        whose args have not changed since its last `upload` re-hands the
+        same bytes without a copy. Valid only after at least one
+        `upload`; the contents are whatever that upload staged."""
         return (
             self.dev.unsafe_ptr()
             .unsafe_origin_cast[MutUntrackedOrigin]()
@@ -643,8 +689,11 @@ def count_local_left_kernel[
     split still counts rows and the partition writer -- which keeps the
     guard -- then places against a count that should have been zero.
     """
-    var args = argsp[unsafe_offset=0].copy()
-    var dataset = args.dataset.copy()
+    # DEVIATION 1893: `ref`, not a whole-blob copy -- this kernel reads
+    # `row_ids` once and `value()` once per thread, so the fields load
+    # where they are used, as their by-value `dataset` costs after DCE.
+    ref args = argsp[unsafe_offset=0]
+    ref dataset = args.dataset
 
     # `:63-67`
     ref workload_info_cta = workload_info[unsafe_offset = Int(block_idx.x)]
@@ -834,8 +883,9 @@ def node_split_copy_back_kernel[
     guard exists to prevent, and exactly what a check that only inspects
     the nodes that DID split cannot see.
     """
-    var args = argsp[unsafe_offset=0].copy()
-    var dataset = args.dataset.copy()
+    # DEVIATION 1893: the copy-back reads exactly ONE dataset field
+    # (`row_ids`, `:139`), so exactly one pointer loads.
+    var row_ids = argsp[unsafe_offset=0].dataset.row_ids
 
     # `:123-127`
     ref workload_info_cta = workload_info[unsafe_offset = Int(block_idx.x)]
@@ -855,9 +905,7 @@ def node_split_copy_back_kernel[
     )
     if range_pos < range_len:
         var idx = range_start + range_pos
-        dataset.row_ids[unsafe_offset=idx] = partition_row_ids[
-            unsafe_offset=idx
-        ]
+        row_ids[unsafe_offset=idx] = partition_row_ids[unsafe_offset=idx]
 
 
 struct NodeSplitScratch[dtype: DType, TPB: Int](Movable):
@@ -921,9 +969,14 @@ def launch_node_split_kernel[
     n_work_items: Int,
     partition_row_ids: MutPointer[Int32, MutUntrackedOrigin],
     mut scratch: NodeSplitScratch[dtype, TPB],
-    mut args_blob: DeviceArgs[NodeSplitArgs[dtype, label_dtype]],
+    argsp: MutPointer[NodeSplitArgs[dtype, label_dtype], MutUntrackedOrigin],
 ) raises:
     """`launchNodeSplitKernel`, `:144-212`, in their order.
+
+    DEVIATION 1893: `argsp` is the caller's already-uploaded
+    `NodeSplitArgs` blob (`DeviceArgs.upload`), staged once per batch in
+    `builder.mojo` rather than re-copied here; `dataset` stays a
+    parameter because the scan functor below is built from its fields.
 
     `sabotage` is a CHECK HOOK: 1, 2 and 3 are forwarded to
     `core/scan_by_key` (segment reset, inter-block carry, head flag);
@@ -932,8 +985,6 @@ def launch_node_split_kernel[
     # `:153`
     if n_blocks_dimx == 0:
         return
-
-    var argsp = args_blob.upload(ctx, NodeSplitArgs(dataset.copy()))
 
     # `:155-160` -- `constexpr int reset_tpb = 128;`
     comptime RESET_TPB = 128
@@ -1068,7 +1119,11 @@ def leaf_kernel[
     same), and 2 drops the `IsLeaf()` early return at `:227` so that
     internal nodes get leaf values written over them.
     """
-    var args = argsp[unsafe_offset=0].copy()
+    # DEVIATION 1893: `ref` + member copies, not a whole-blob copy. The
+    # two members are both live here (the objective's methods and the
+    # dataset's row_ids/labels/num_outputs feed the loop), so they stay
+    # register copies; only the dead blob materialization goes.
+    ref args = argsp[unsafe_offset=0]
     var objective = args.objective.copy()
     var dataset = args.dataset.copy()
 
@@ -1132,20 +1187,24 @@ def leaf_kernel[
 def launch_leaf_kernel[
     O: ObjectiveLike,
     TPB: Int = TPB_DEFAULT,
-    LEAF_SMEM_BIN_SLOTS: Int = default_smem_bin_slots[O.BinT](),
+    LEAF_SMEM_BIN_SLOTS: Int = LEAF_SMEM_MAX_OUTPUTS,
     sabotage: Int = 0,
 ](
     ctx: DeviceContext,
-    objective: O,
-    dataset: DatasetView[O.DataT, O.LabelT],
     tree: MutPointer[SparseTreeNode[O.DataT], MutUntrackedOrigin],
     instance_ranges: MutPointer[InstanceRange, MutUntrackedOrigin],
     leaves: MutPointer[Scalar[O.DataT], MutUntrackedOrigin],
     batch_size: Int,
     smem_size: Int,
-    mut args_blob: DeviceArgs[LeafArgs[O]],
+    argsp: MutPointer[LeafArgs[O], MutUntrackedOrigin],
 ) raises:
-    """`launchLeafKernel`, `:243-255`. `int num_blocks = batch_size;`"""
+    """`launchLeafKernel`, `:243-255`. `int num_blocks = batch_size;`
+
+    DEVIATION 1893: `argsp` is the caller's already-uploaded `LeafArgs`
+    blob (objective + dataset), staged once per tree in `builder.mojo`.
+    DEVIATION 1894: the default blob is `LEAF_SMEM_MAX_OUTPUTS` slots,
+    not 103a's 16 KiB carve-out.
+    """
     if batch_size <= 0:
         return
     # DEVIATION 103c: their `smem_size` is still the caller's arithmetic
@@ -1156,9 +1215,8 @@ def launch_leaf_kernel[
             + String(smem_size)
             + " exceeds LEAF_SMEM_BIN_SLOTS * size_of[BinT] = "
             + String(LEAF_SMEM_BIN_SLOTS * size_of[O.BinT]())
-            + " (DEVIATION 103c)"
+            + " (DEVIATION 103c/1894)"
         )
-    var argsp = args_blob.upload(ctx, LeafArgs[O](objective.copy(), dataset.copy()))
     comptime k = leaf_kernel[O, TPB, LEAF_SMEM_BIN_SLOTS, sabotage]
     log_launch("leaf")
     ctx.enqueue_function[k](
@@ -1316,9 +1374,14 @@ def build_histograms_kernel[
         " tunable_split_histogram_dynamic_smem_limit_bytes (builder.cuh:163)"
     )
 
-    var args = argsp[unsafe_offset=0].copy()
+    # DEVIATION 1893: the prologue loads only what this kernel reads.
+    # `dataset` and `objective` stay register copies -- their fields feed
+    # every iteration of the inner loop (`:336-342`), which is where
+    # their by-value parameters (`:288`, `:292`) also live. `Quantiles`
+    # is NOT copied: its two members are loaded once each below, exactly
+    # the two loads their `:308` and `:330` perform.
+    ref args = argsp[unsafe_offset=0]
     var dataset = args.dataset.copy()
-    var quantiles = args.quantiles.copy()
     var objective = args.objective.copy()
 
     # `:299-305`
@@ -1337,7 +1400,10 @@ def build_histograms_kernel[
         unsafe_offset = Int(nid) * Int(dataset.n_sampled_cols)
         + Int(col_index)
     ]
-    var n_bins = quantiles.n_bins_array[unsafe_offset = Int(col)]
+    var n_bins = args.quantiles.n_bins_array[unsafe_offset = Int(col)]
+    # DEVIATION 1893: the quantile ARRAY pointer, loaded once; used by
+    # the searching arms only, dead in the binned instantiations.
+    var quantiles_array = args.quantiles.quantiles_array
 
     # `:312-320`
     var n_classes = objective.NumClasses()
@@ -1375,7 +1441,7 @@ def build_histograms_kernel[
                 objective,
                 dataset,
                 global_histogram,
-                quantiles.quantiles_array.unsafe_offset(
+                quantiles_array.unsafe_offset(
                     Int(max_n_bins) * Int(col)
                 ),
                 col,
@@ -1405,7 +1471,7 @@ def build_histograms_kernel[
             var b = Int(thread_idx.x)
             while b < Int(n_bins):
                 shared_quantiles[unsafe_offset=b] = (
-                    quantiles.quantiles_array[
+                    quantiles_array[
                         unsafe_offset = Int(max_n_bins) * Int(col) + b
                     ]
                 )
@@ -1461,16 +1527,14 @@ def launch_build_histograms_kernel[
     histograms: MutPointer[O.BinT, MutUntrackedOrigin],
     max_n_bins: Int,
     dataset: DatasetView[O.DataT, O.LabelT],
-    quantiles: Quantiles[O.DataT],
     work_items: MutPointer[NodeWorkItem, MutUntrackedOrigin],
     col_start: Int,
     column_samples: MutPointer[Int32, MutUntrackedOrigin],
-    objective: O,
     workload_info: MutPointer[WorkloadInfo, MutUntrackedOrigin],
     histogram_grid_x: Int,
     histogram_grid_y: Int,
     smem_config: SharedMemoryConfig,
-    mut args_blob: DeviceArgs[HistogramArgs[O]],
+    argsp: MutPointer[HistogramArgs[O], MutUntrackedOrigin],
 ) raises:
     """`launchBuildHistogramsKernel`, `:396-421`.
 
@@ -1479,14 +1543,15 @@ def launch_build_histograms_kernel[
     argument here (DEVIATION 103a); the SAME
     `smem_config.use_global_memory_histogram` selects the arm
     (DEVIATION 103b).
+
+    DEVIATION 1893: `argsp` is the caller's already-uploaded
+    `HistogramArgs` blob (dataset + quantiles + objective), staged once
+    per sampling round in `builder.mojo` -- the contents cannot move
+    inside a round, so re-copying them per column block bought nothing.
+    `dataset` stays a parameter for the `has_bins` dispatch below only.
     """
     if histogram_grid_x <= 0 or histogram_grid_y <= 0:
         return
-    var argsp = args_blob.upload(
-        ctx, HistogramArgs[O](
-            dataset.copy(), quantiles.copy(), objective.copy()
-        )
-    )
     if smem_config.use_global_memory_histogram:
         if dataset.has_bins:
             # DEVIATION 314: same launch, the binned loop body.
@@ -1684,9 +1749,13 @@ def find_best_splits_kernel[
         address_space = AddressSpace.SHARED,
     ]()
 
-    var args = argsp[unsafe_offset=0].copy()
-    var dataset = args.dataset.copy()
-    var quantiles = args.quantiles.copy()
+    # DEVIATION 1893: this kernel reads ONE dataset field
+    # (`n_sampled_cols`, the `column_samples` stride at `:373`) and two
+    # quantile members, so those load individually and only the
+    # objective -- whose fields feed `Gain` -- stays a register copy.
+    # The whole-blob `.copy()` this replaces pinned ~130 bytes per
+    # thread for three loads' worth of use.
+    ref args = argsp[unsafe_offset=0]
     var objective = args.objective.copy()
 
     # `:369`
@@ -1695,10 +1764,10 @@ def find_best_splits_kernel[
     # `:371-374`
     var col_index = col_start + Int32(Int(block_idx.y))
     var col = column_samples[
-        unsafe_offset = Int(nid) * Int(dataset.n_sampled_cols)
+        unsafe_offset = Int(nid) * Int(args.dataset.n_sampled_cols)
         + Int(col_index)
     ]
-    var n_bins = quantiles.n_bins_array[unsafe_offset = Int(col)]
+    var n_bins = args.quantiles.n_bins_array[unsafe_offset = Int(col)]
 
     # `:376-380`
     var n_classes = objective.NumClasses()
@@ -1708,7 +1777,7 @@ def find_best_splits_kernel[
         * Int(n_classes)
     )
     var histogram = histograms.unsafe_offset(histograms_offset)
-    var quantiles_for_split = quantiles.quantiles_array.unsafe_offset(
+    var quantiles_for_split = args.quantiles.quantiles_array.unsafe_offset(
         Int(max_n_bins) * Int(col)
     )
 
@@ -1785,25 +1854,22 @@ def launch_find_best_splits_kernel[
     ctx: DeviceContext,
     histograms: MutPointer[O.BinT, MutUntrackedOrigin],
     max_n_bins: Int,
-    dataset: DatasetView[O.DataT, O.LabelT],
-    quantiles: Quantiles[O.DataT],
     col_start: Int,
     column_samples: MutPointer[Int32, MutUntrackedOrigin],
     mutex: MutPointer[Int32, MutUntrackedOrigin],
     splits: MutPointer[Split[O.DataT], MutUntrackedOrigin],
-    objective: O,
     split_grid_x: Int,
     split_grid_y: Int,
-    mut args_blob: DeviceArgs[FindBestSplitsArgs[O]],
+    argsp: MutPointer[FindBestSplitsArgs[O], MutUntrackedOrigin],
 ) raises:
-    """`launchFindBestSplitsKernel`, `:423-445`."""
+    """`launchFindBestSplitsKernel`, `:423-445`.
+
+    DEVIATION 1893: `argsp` is the caller's already-uploaded
+    `FindBestSplitsArgs` blob (dataset + quantiles + objective), staged
+    once per sampling round in `builder.mojo`.
+    """
     if split_grid_x <= 0 or split_grid_y <= 0:
         return
-    var argsp = args_blob.upload(
-        ctx, FindBestSplitsArgs[O](
-            dataset.copy(), quantiles.copy(), objective.copy()
-        )
-    )
     comptime k = find_best_splits_kernel[O, TPB, sabotage, pinned_reduce]
     log_launch("find_best_splits")
     ctx.enqueue_function[k](
