@@ -1,0 +1,26 @@
+FSPEED-NOTE lane=rf arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+5877 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1b6080000000, nodemask=2)
+FSPEED-REFUSED lane=rf arm=sklearn-rf-cpu reason=GPU-PATH-ONLY: sklearn-rf-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=rf arm=lightgbm-cpu reason=GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-HEADER family=forest lane=rf arm=ours mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=cuml-rf-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=lightgbm-cuda mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+5877 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1b60c0000000, nodemask=2)
+5877 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x50fcc0000000, nodemask=1)
+FSPEED-WARMUP lane=rf arm=ours shape=higgs-2000000x28 ms=12520.125
+FSPEED-WARMUP lane=rf arm=cuml-rf-gpu shape=higgs-2000000x28 ms=5092.506
+[LightGBM] [Fatal] CUDA Tree Learner was not enabled in this build.
+Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+FSPEED-REFUSED lane=rf arm=lightgbm-cuda reason=LightGBMError during warm-up: CUDA Tree Learner was not enabled in this build. Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+5877 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x50fd00000000, nodemask=1)
+5877 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x50fd40000000, nodemask=1)
+FSPEED lane=rf arm=ours shape=higgs-2000000x28 round=1 ms=9788.949 hash=67d883dc6079b90f
+FSPEED lane=rf arm=cuml-rf-gpu shape=higgs-2000000x28 round=1 ms=4529.949 hash=dab1ee10bc85da38
+FSPEED lane=rf arm=ours shape=higgs-2000000x28 round=2 ms=9738.379 hash=67d883dc6079b90f
+FSPEED lane=rf arm=cuml-rf-gpu shape=higgs-2000000x28 round=2 ms=4670.978 hash=dab1ee10bc85da38
+FSPEED lane=rf arm=ours shape=higgs-2000000x28 round=3 ms=9851.497 hash=67d883dc6079b90f
+FSPEED lane=rf arm=cuml-rf-gpu shape=higgs-2000000x28 round=3 ms=4596.671 hash=dab1ee10bc85da38
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.537060
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.811483
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=logloss value=0.537039
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=auc value=0.811519

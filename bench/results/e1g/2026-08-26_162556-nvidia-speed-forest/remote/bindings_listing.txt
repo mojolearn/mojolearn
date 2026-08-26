@@ -1,0 +1,10 @@
+-rwxr-xr-x 1 root root 2735192 Aug 26 20:33 python/mojolearn/_mojolearn.so
+-rwxr-xr-x 1 root root 1634728 Aug 26 20:34 python/mojolearn/_mojolearn_estimators.so
+-rwxr-xr-x 1 root root 7680776 Aug 26 20:34 python/mojolearn/_mojolearn_gbdt.so
+-rwxr-xr-x 1 root root  556544 Aug 26 20:34 python/mojolearn/_mojolearn_linalg.so
+-rwxr-xr-x 1 root root 3419344 Aug 26 20:34 python/mojolearn/_mojolearn_metrics.so
+-rwxr-xr-x 1 root root 1119872 Aug 26 20:34 python/mojolearn/_mojolearn_rf.so
+-rwxr-xr-x 1 root root  920040 Aug 26 20:34 python/mojolearn/_mojolearn_solver.so
+-rwxr-xr-x 1 root root 1173504 Aug 26 20:35 python/mojolearn/_mojolearn_svm.so
+-rwxr-xr-x 1 root root 1064344 Aug 26 20:35 python/mojolearn/_mojolearn_trees.so
+-rwxr-xr-x 1 root root  632984 Aug 26 20:35 python/mojolearn/_mojolearn_tsa.so

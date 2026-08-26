@@ -1,0 +1,2 @@
+/usr/bin/python3
+3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]

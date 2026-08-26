@@ -1,0 +1,20 @@
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+4743 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x398700000000, nodemask=2)
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+4743 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x398740000000, nodemask=2)
+4743 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x398780000000, nodemask=2)
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=higgs-5000000x28 ms=5430.996
+FSPEED-WARMUP lane=gbdt-symmetric arm=catboost-gpu shape=higgs-5000000x28 ms=2594.468
+4743 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3987c0000000, nodemask=2)
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-5000000x28 round=1 ms=5524.347 hash=c16d69d2a8d2458a
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-5000000x28 round=1 ms=2547.870 hash=3daff69fcf937813
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-5000000x28 round=2 ms=5515.420 hash=c16d69d2a8d2458a
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-5000000x28 round=2 ms=2570.084 hash=6e9bef19b606c0d1
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-5000000x28 round=3 ms=5354.918 hash=c16d69d2a8d2458a
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-5000000x28 round=3 ms=2577.597 hash=465055f74857dace
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.542133
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.800668
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=logloss value=0.542086
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=auc value=0.800956
