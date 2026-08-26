@@ -566,10 +566,10 @@ struct SplitSummary[dtype: DType](TrivialRegisterPassable):
 
 
 def update_workload_info[
-    sabotage: Int = 0
+    o: MutOrigin, //, sabotage: Int = 0
 ](
     work_items: List[NodeWorkItem],
-    mut h_workload_info: List[WorkloadInfo],
+    h_workload_info: MutPointer[WorkloadInfo, o],
 ) -> Int:
     """`Builder::updateWorkloadInfo`, `builder.cuh:393-407`.
 
@@ -588,11 +588,17 @@ def update_workload_info[
     seeds on. Conflating the two is a live hazard and is called out in
     `kernels/builder_kernels.mojo` from the other side.
 
-    Returns their `n_blocks_dimx`. The device copy their `raft::update_device`
-    at `:405` performs is the caller's, so this stays a pure host function
-    and can be checked without a GPU.
+    Returns their `n_blocks_dimx`. WRITES STRAIGHT INTO `h_workload_info`
+    -- RESTORES upstream: theirs fills the pinned `h_workload_info` array
+    in place (`:401`) and this used to rebuild a `List` (growth reallocs
+    on every level) that `_upload_workload` then copied into the pinned
+    buffer element by element. The pointer must hold at least
+    `max_blocks_dimx_for(...)` entries, the same bound their array is
+    allocated at (`:250`, proven in `max_blocks_dimx_for`'s docstring).
+    The device copy their `raft::update_device` at `:405` performs is the
+    caller's, so this stays a pure host function and can be checked
+    without a GPU (hand it any host array's pointer).
     """
-    h_workload_info.clear()
     var n_blocks_dimx = 0
     for i in range(len(work_items)):
         var item = work_items[i]
@@ -605,7 +611,7 @@ def update_workload_info[
             # visited by any kernel.
             n_blocks_per_node = ceildiv(item.instances.count, TPB_DEFAULT)
         for b in range(n_blocks_per_node):
-            h_workload_info.append(
+            h_workload_info[unsafe_offset = n_blocks_dimx + b] = (
                 WorkloadInfo(Int32(i), Int32(b), Int32(n_blocks_per_node))
             )
         n_blocks_dimx += n_blocks_per_node
@@ -859,6 +865,61 @@ struct TreeState[O: ObjectiveLike](Movable):
     var done: Bool
 
 
+struct _DevPrefixView(Movable):
+    """A cached prefix view of one device workspace buffer.
+
+    RESTORES their carve-once shape: upstream carves every pointer out of
+    `d_buff` ONCE (`builder.cuh:334-368`) and then passes COUNTS to
+    count-parameterized APIs, so no per-level object is ever created.
+    `enqueue_copy`/`enqueue_memset` here are buffer-shaped (the byte
+    count IS the buffer), so the live-prefix byte counts -- which are
+    THEIRS, see e.g. `_upload_work_items` -- need a view object; this
+    cache recreates that view only when the byte count actually moves
+    (level to level it is usually pinned at `max_batch_size`'s worth once
+    the frontier saturates). Replacing a view whose enqueue is still in
+    flight is the already-established contract of this file (`_ = dst^`
+    directly after `enqueue_copy` predates this cache).
+    """
+
+    var view: DeviceBuffer[DType.uint8]
+    var nbytes: Int
+
+    def __init__(
+        out self, parent: DeviceBuffer[DType.uint8], nbytes: Int
+    ) raises:
+        self.view = parent.create_sub_buffer[DType.uint8](0, nbytes)
+        self.nbytes = nbytes
+
+    def ensure(
+        mut self, parent: DeviceBuffer[DType.uint8], nbytes: Int
+    ) raises:
+        """Point `view` at the first `nbytes` of `parent`; reuse the
+        existing view when the bounds already match."""
+        if nbytes != self.nbytes:
+            self.view = parent.create_sub_buffer[DType.uint8](0, nbytes)
+            self.nbytes = nbytes
+
+
+struct _HostPrefixView(Movable):
+    """`_DevPrefixView`'s pinned-host sibling."""
+
+    var view: HostBuffer[DType.uint8]
+    var nbytes: Int
+
+    def __init__(
+        out self, parent: HostBuffer[DType.uint8], nbytes: Int
+    ) raises:
+        self.view = parent.create_sub_buffer[DType.uint8](0, nbytes)
+        self.nbytes = nbytes
+
+    def ensure(
+        mut self, parent: HostBuffer[DType.uint8], nbytes: Int
+    ) raises:
+        if nbytes != self.nbytes:
+            self.view = parent.create_sub_buffer[DType.uint8](0, nbytes)
+            self.nbytes = nbytes
+
+
 # ===========================================================================
 # `Builder`, `builder.cuh:147-698`. The device half, wired.
 # ===========================================================================
@@ -954,6 +1015,14 @@ struct Builder[O: ObjectiveLike](Movable):
     var h_workload_info: HostBuffer[DType.uint8]
     var h_splits: HostBuffer[DType.uint8]
 
+    # --- cached live-prefix views of the buffers above (see
+    # `_DevPrefixView`) -----------------------------------------------------
+    var wi_view: _DevPrefixView
+    var wl_view: _DevPrefixView
+    var splits_d_view: _DevPrefixView
+    var splits_h_view: _HostPrefixView
+    var hist_view: _DevPrefixView
+
     # --- DEVIATION 128a's argument blobs, one per launcher --------------
     var hist_args: DeviceArgs[HistogramArgs[Self.O]]
     var find_args: DeviceArgs[FindBestSplitsArgs[Self.O]]
@@ -969,6 +1038,13 @@ struct Builder[O: ObjectiveLike](Movable):
     # tree's node count exceeds every earlier tree's. `leaf_capacity` is
     # in NODES, batched the way theirs batches (`min(100000, n_nodes)`).
     var leaf_capacity: Int
+    # The HOST staging is sized in NODES-OF-THE-TREE, not batch: upstream
+    # stages each batch out of the FULL-SIZE host vectors
+    # (`tree->sparsetree`, `tree->vector_leaf`, `builder.cuh:648-651`,
+    # `:663-666`), which is what lets its batches enqueue with no sync
+    # between them. `leaf_host_capacity` tracks that full size; the
+    # device trio stays batch-sized, as theirs is.
+    var leaf_host_capacity: Int
     var leaf_d_tree: DeviceBuffer[DType.uint8]
     var leaf_h_tree: HostBuffer[DType.uint8]
     var leaf_d_ranges: DeviceBuffer[DType.uint8]
@@ -1123,6 +1199,24 @@ struct Builder[O: ObjectiveLike](Movable):
             size_of[NodeWorkItem]() * max_batch
         )
 
+        # Cached live-prefix views, seeded at full capacity; the first
+        # use at a smaller live count re-carves (see `_DevPrefixView`).
+        self.wi_view = _DevPrefixView(
+            self.d_work_items, size_of[NodeWorkItem]() * max_batch
+        )
+        self.wl_view = _DevPrefixView(
+            self.workload_info, size_of[WorkloadInfo]() * max_blocks
+        )
+        self.splits_d_view = _DevPrefixView(
+            self.splits, size_of[Split[Self.O.DataT]]() * max_batch
+        )
+        self.splits_h_view = _HostPrefixView(
+            self.h_splits, size_of[Split[Self.O.DataT]]() * max_batch
+        )
+        self.hist_view = _DevPrefixView(
+            self.histograms, size_of[Self.O.BinT]() * max_len_histograms
+        )
+
         self.hist_args = DeviceArgs[HistogramArgs[Self.O]](ctx)
         self.find_args = DeviceArgs[FindBestSplitsArgs[Self.O]](ctx)
         self.leaf_args = DeviceArgs[LeafArgs[Self.O]](ctx)
@@ -1138,6 +1232,7 @@ struct Builder[O: ObjectiveLike](Movable):
         # common case this never regrows; past their `min(100000, ...)`
         # cap the batching loop reuses the same buffers anyway.
         self.leaf_capacity = min(100000, max_nodes(params.max_depth))
+        self.leaf_host_capacity = self.leaf_capacity
         var n_out = Int(num_outputs)
         self.leaf_d_tree = ctx.enqueue_create_buffer[DType.uint8](
             size_of[SparseTreeNode[Self.O.DataT]]() * self.leaf_capacity
@@ -1242,11 +1337,12 @@ struct Builder[O: ObjectiveLike](Movable):
                                  params.split_criterion,
                                  params.min_impurity_decrease);
 
-        Built FRESH from `params` on every call, as theirs is -- once per
-        column block inside `computeSplit`. The value cannot move inside a
-        fit, so constructing it once would give the same answer; it is
-        built here anyway because `params` being the only source is the
-        property worth keeping, not the call count."""
+        Built FRESH from `params` on every call. Theirs constructs once
+        per column block inside `computeSplit`; since DEVIATION 1893 the
+        one caller is `enqueue_best_splits`, once per sampling round, at
+        the args-blob staging site. The value cannot move inside a fit,
+        so the cadence is immaterial; `params` being the only source is
+        the property worth keeping, not the call count."""
         return Self.O(
             self.num_outputs,
             self.params.min_samples_leaf,
@@ -1293,35 +1389,41 @@ struct Builder[O: ObjectiveLike](Movable):
         var nbytes = len(items) * size_of[NodeWorkItem]()
         if nbytes == 0:
             return
-        var dst = self.d_work_items.create_sub_buffer[DType.uint8](0, nbytes)
+        self.wi_view.ensure(self.d_work_items, nbytes)
         log_launch("xfer_work_items")
         ctx.enqueue_copy(
-            dst_buf=dst, src_ptr=self.h_work_items.unsafe_ptr()
+            dst_buf=self.wi_view.view, src_ptr=self.h_work_items.unsafe_ptr()
         )
-        _ = dst^
+
+    @always_inline
+    def _h_workload_ptr(
+        mut self,
+    ) -> MutPointer[WorkloadInfo, MutUntrackedOrigin]:
+        """The pinned array `update_workload_info` fills in place --
+        upstream's `h_workload_info` member (`builder.cuh:198`)."""
+        return (
+            self.h_workload_info.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+            .unsafe_bitcast[WorkloadInfo]()
+        )
 
     def _upload_workload(
-        mut self, ctx: DeviceContext, wl: List[WorkloadInfo]
+        mut self, ctx: DeviceContext, n_blocks_dimx: Int
     ) raises:
         """`raft::update_device(workload_info, h_workload_info,
         n_blocks_dimx, stream)`, `:405`. Their count is `n_blocks_dimx`;
-        the buffer holds `max_blocks_dimx`. See `_upload_work_items`."""
-        var p = (
-            self.h_workload_info.unsafe_ptr().unsafe_bitcast[WorkloadInfo]()
-        )
-        for i in range(len(wl)):
-            p[unsafe_offset=i] = wl[i]
-        var nbytes = len(wl) * size_of[WorkloadInfo]()
+        the buffer holds `max_blocks_dimx`. The pinned source was already
+        filled IN PLACE by `update_workload_info` (as theirs is), so this
+        is the one H2D copy and nothing else."""
+        var nbytes = n_blocks_dimx * size_of[WorkloadInfo]()
         if nbytes == 0:
             return
-        var dst = self.workload_info.create_sub_buffer[DType.uint8](
-            0, nbytes
-        )
+        self.wl_view.ensure(self.workload_info, nbytes)
         log_launch("xfer_workload_info")
         ctx.enqueue_copy(
-            dst_buf=dst, src_ptr=self.h_workload_info.unsafe_ptr()
+            dst_buf=self.wl_view.view,
+            src_ptr=self.h_workload_info.unsafe_ptr(),
         )
-        _ = dst^
 
     def _enqueue_splits_download(mut self, ctx: DeviceContext, n: Int) raises:
         """The COPY half of `raft::update_host(h_splits, splits, ...)`
@@ -1331,12 +1433,13 @@ struct Builder[O: ObjectiveLike](Movable):
         var nbytes = n * size_of[Split[Self.O.DataT]]()
         if nbytes > 0:
             # `:479` -- their count is `work_items.size()`.
-            var hdst = self.h_splits.create_sub_buffer[DType.uint8](0, nbytes)
-            var dsrc = self.splits.create_sub_buffer[DType.uint8](0, nbytes)
+            self.splits_h_view.ensure(self.h_splits, nbytes)
+            self.splits_d_view.ensure(self.splits, nbytes)
             log_launch("xfer_splits_download")
-            ctx.enqueue_copy(dst_buf=hdst, src_buf=dsrc)
-            _ = hdst^
-            _ = dsrc^
+            ctx.enqueue_copy(
+                dst_buf=self.splits_h_view.view,
+                src_buf=self.splits_d_view.view,
+            )
 
     def _read_splits(
         mut self, n: Int
@@ -1346,6 +1449,10 @@ struct Builder[O: ObjectiveLike](Movable):
         a `synchronize` that covers `_enqueue_splits_download`."""
         var p = self.h_splits.unsafe_ptr().unsafe_bitcast[Split[Self.O.DataT]]()
         var out = List[SplitSummary[Self.O.DataT]]()
+        # The summaries are the return contract (NodeQueue::Push consumes
+        # them); reserving up front removes the growth reallocs, which is
+        # all the waste there was -- the reads are already in place.
+        out.reserve(n)
         for i in range(n):
             ref s = p[unsafe_offset=i]
             out.append(
@@ -1412,7 +1519,6 @@ struct Builder[O: ObjectiveLike](Movable):
         mut self,
         ctx: DeviceContext,
         dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
-        quantiles: Quantiles[Self.O.DataT],
         col: Int,
         n_blocks_dimx: Int,
         n_work_items: Int,
@@ -1421,7 +1527,9 @@ struct Builder[O: ObjectiveLike](Movable):
         mut instr: FitInstruments,
         tag_prefix: String,
     ) raises:
-        """`Builder::computeSplit`, `:570-626`.
+        """`Builder::computeSplit`, `:570-626`. The quantiles and the
+        objective travel in the round's staged args blobs (DEVIATION
+        1893); `dataset` remains for the `has_bins` dispatch.
 
         Their `n_blocks_dimy = min(n_blks_for_cols, n_sampled_cols - col)`
         is what makes the histogram buffer hold up to ten columns at once,
@@ -1447,29 +1555,30 @@ struct Builder[O: ObjectiveLike](Movable):
         # the default `max_batch_size` 4096 that is a constant ~100x the
         # bytes their launch touches whenever the live batch is small.)
         var len_histograms = n_bins * n_classes * n_blocks_dimy * n_work_items
-        var hist_prefix = self.histograms.create_sub_buffer[DType.uint8](
-            0, size_of[Self.O.BinT]() * len_histograms
+        self.hist_view.ensure(
+            self.histograms, size_of[Self.O.BinT]() * len_histograms
         )
-        ctx.enqueue_memset(hist_prefix, UInt8(0))
-        _ = hist_prefix^
-        var objective = self._objective()
+        ctx.enqueue_memset(self.hist_view.view, UInt8(0))
 
+        # DEVIATION 1893: the args blobs were staged once for this round
+        # by `enqueue_best_splits`; the launchers take the device
+        # pointers. The objective their `:592-596` builds per column
+        # block is built once per round at the staging site -- same
+        # value, `params` still the only source.
         launch_build_histograms_kernel[Self.O](
             ctx,
             self._hist_ptr(),
             n_bins,
             dataset,
-            quantiles,
             self._work_items_ptr(),
             col,
             self.column_samples.unsafe_ptr()
             .unsafe_origin_cast[MutUntrackedOrigin](),
-            objective,
             self._workload_ptr(),
             n_blocks_dimx,
             n_blocks_dimy,
             smem_config,
-            self.hist_args,
+            self.hist_args.device_ptr(),
         )
         # DEVIATION 401 -- the column block's REDUCED histograms, hashed
         # between the histogram kernel and the split kernel so the record
@@ -1494,18 +1603,15 @@ struct Builder[O: ObjectiveLike](Movable):
             ctx,
             self._hist_ptr(),
             n_bins,
-            dataset,
-            quantiles,
             col,
             self.column_samples.unsafe_ptr()
             .unsafe_origin_cast[MutUntrackedOrigin](),
             self.mutex.unsafe_ptr()
             .unsafe_origin_cast[MutUntrackedOrigin](),
             self._splits_ptr(),
-            objective,
             n_work_items,
             n_blocks_dimy,
-            self.find_args,
+            self.find_args.device_ptr(),
         )
 
     def enqueue_best_splits(
@@ -1536,9 +1642,30 @@ struct Builder[O: ObjectiveLike](Movable):
         ctx.enqueue_memset(self.mutex, Int32(0))
         self._upload_work_items(ctx, work_items)
 
-        var wl = List[WorkloadInfo]()
-        var n_blocks_dimx = update_workload_info(work_items, wl)
-        self._upload_workload(ctx, wl)
+        # `:393-407` -- straight into the pinned array, as theirs.
+        var n_blocks_dimx = update_workload_info(
+            work_items, self._h_workload_ptr()
+        )
+        self._upload_workload(ctx, n_blocks_dimx)
+
+        # DEVIATION 1893: stage the two split kernels' argument blobs
+        # ONCE for this round. Everything in them is constant inside the
+        # round -- `dataset` already carries this round's
+        # `n_sampled_cols` (`_enqueue_round` narrows it), and the
+        # objective is a pure function of `params` (their `:592-596`).
+        var objective = self._objective()
+        _ = self.hist_args.upload(
+            ctx,
+            HistogramArgs[Self.O](
+                dataset.copy(), quantiles.copy(), objective.copy()
+            ),
+        )
+        _ = self.find_args.upload(
+            ctx,
+            FindBestSplitsArgs[Self.O](
+                dataset.copy(), quantiles.copy(), objective.copy()
+            ),
+        )
 
         self._sample_features(ctx, n, sample_offset, n_sampled_cols)
         # DEVIATION 401 (added with the 2026-08-22 identity audit) -- the
@@ -1564,7 +1691,7 @@ struct Builder[O: ObjectiveLike](Movable):
         var c = 0
         while c < n_sampled_cols:
             self._compute_split(
-                ctx, dataset, quantiles, c, n_blocks_dimx, n,
+                ctx, dataset, c, n_blocks_dimx, n,
                 n_sampled_cols, smem_config, instr, tag_prefix,
             )
             c += N_BLKS_FOR_COLS
@@ -1862,19 +1989,24 @@ struct Builder[O: ObjectiveLike](Movable):
         # buffer.
         var sp_bytes = n * size_of[Split[Self.O.DataT]]()
         if sp_bytes > 0:
-            var sdst = self.splits.create_sub_buffer[DType.uint8](
-                0, sp_bytes
-            )
+            self.splits_d_view.ensure(self.splits, sp_bytes)
             log_launch("xfer_splits_upload")
             ctx.enqueue_copy(
-                dst_buf=sdst, src_ptr=self.h_splits.unsafe_ptr()
+                dst_buf=self.splits_d_view.view,
+                src_ptr=self.h_splits.unsafe_ptr(),
             )
-            _ = sdst^
         self._upload_work_items(ctx, work_items)
-        var wl = List[WorkloadInfo]()
-        var n_partition_blocks = update_workload_info(work_items, wl)
-        self._upload_workload(ctx, wl)
+        # `:393-407` -- straight into the pinned array, as theirs.
+        var n_partition_blocks = update_workload_info(
+            work_items, self._h_workload_ptr()
+        )
+        self._upload_workload(ctx, n_partition_blocks)
 
+        # DEVIATION 1893: the partition's args blob (dataset only), staged
+        # once per batch and shared by its three kernel launches.
+        var argsp = self.node_split_args.upload(
+            ctx, NodeSplitArgs(ds.copy())
+        )
         launch_node_split_kernel(
             ctx,
             ds,
@@ -1886,7 +2018,7 @@ struct Builder[O: ObjectiveLike](Movable):
             self.partition_row_ids.unsafe_ptr()
             .unsafe_origin_cast[MutUntrackedOrigin](),
             self.node_split_scratch,
-            self.node_split_args,
+            argsp,
         )
         self._enqueue_splits_download(ctx, n)
 
@@ -1961,61 +2093,94 @@ struct Builder[O: ObjectiveLike](Movable):
         # only when a tree outgrows every earlier one. At entry the
         # previous tree's leaf pass has drained (its own final
         # `synchronize` below), so reassigning the buffers cannot free
-        # memory under an in-flight launch.
+        # memory under an in-flight launch. The DEVICE trio is
+        # batch-sized, as their `d_tree`/`d_instance_ranges`/`d_leaves`
+        # are (`builder.cuh:638-641`); the HOST trio is tree-sized,
+        # because upstream stages every batch out of the FULL-SIZE host
+        # vectors (`:648-651`, `:663-666`) -- that per-batch-disjoint
+        # host staging is what lets the batches below enqueue with no
+        # sync between them.
         if batch > self.leaf_capacity:
             self.leaf_capacity = batch
             self.leaf_d_tree = ctx.enqueue_create_buffer[DType.uint8](
                 size_of[SparseTreeNode[Self.O.DataT]]() * batch
             )
-            self.leaf_h_tree = ctx.enqueue_create_host_buffer[DType.uint8](
-                size_of[SparseTreeNode[Self.O.DataT]]() * batch
-            )
             self.leaf_d_ranges = ctx.enqueue_create_buffer[DType.uint8](
                 size_of[InstanceRange]() * batch
             )
-            self.leaf_h_ranges = ctx.enqueue_create_host_buffer[
-                DType.uint8
-            ](size_of[InstanceRange]() * batch)
             self.leaf_d_leaves = ctx.enqueue_create_buffer[Self.O.DataT](
                 batch * n_out
             )
+        if n_nodes > self.leaf_host_capacity:
+            self.leaf_host_capacity = n_nodes
+            self.leaf_h_tree = ctx.enqueue_create_host_buffer[DType.uint8](
+                size_of[SparseTreeNode[Self.O.DataT]]() * n_nodes
+            )
+            self.leaf_h_ranges = ctx.enqueue_create_host_buffer[
+                DType.uint8
+            ](size_of[InstanceRange]() * n_nodes)
             self.leaf_h_leaves = ctx.enqueue_create_host_buffer[
                 Self.O.DataT
-            ](batch * n_out)
+            ](n_nodes * n_out)
         var objective = self._leaf_objective()
         # `:652` -- their smem is `sizeof(BinT) * num_outputs`.
         var smem_size = size_of[Self.O.BinT]() * n_out
+
+        # Stage EVERY node once -- the pinned trio plays their full-size
+        # host vectors' part, so each batch's H2D reads a disjoint
+        # region and no batch waits for an earlier one's copy to drain.
+        var tp = self.leaf_h_tree.unsafe_ptr().unsafe_bitcast[
+            SparseTreeNode[Self.O.DataT]
+        ]()
+        var rp = (
+            self.leaf_h_ranges.unsafe_ptr().unsafe_bitcast[InstanceRange]()
+        )
+        for i in range(n_nodes):
+            tp[unsafe_offset=i] = tree.sparsetree[i]
+            rp[unsafe_offset=i] = instance_ranges[i]
+
+        # DEVIATION 1893: the leaf args blob (objective + dataset),
+        # staged once per tree and shared by every batch's launch.
+        var leaf_argsp = self.leaf_args.upload(
+            ctx, LeafArgs[Self.O](objective.copy(), dataset.copy())
+        )
+
+        # Per-batch views, kept alive past the drain below.
+        var d_views = List[DeviceBuffer[DType.uint8]]()
+        var l_views = List[DeviceBuffer[Self.O.DataT]]()
+        var h_views = List[HostBuffer[Self.O.DataT]]()
 
         var begin = 0
         while begin < n_nodes:
             var end = min(begin + batch, n_nodes)
             var size = end - begin
-            var tp = self.leaf_h_tree.unsafe_ptr().unsafe_bitcast[
-                SparseTreeNode[Self.O.DataT]
-            ]()
-            var rp = (
-                self.leaf_h_ranges.unsafe_ptr().unsafe_bitcast[InstanceRange]()
-            )
-            for i in range(size):
-                tp[unsafe_offset=i] = tree.sparsetree[begin + i]
-                rp[unsafe_offset=i] = instance_ranges[begin + i]
             # Prefix views keep the copied and zeroed byte counts at
             # THEIRS -- `update_device(..., batch size)` at `:655-658` and
             # `sizeof(DataT) * d_leaves.size()` at `:652-653` -- now that
-            # the pooled buffers can be larger than the live batch.
+            # the pooled buffers can be larger than the live batch. The
+            # device trio is REUSED by every batch with no sync: the
+            # queue is in-order, so batch N+1's uploads execute after
+            # batch N's kernel and download, exactly the stream ordering
+            # their reuse of `d_tree` relies on.
             var dt = self.leaf_d_tree.create_sub_buffer[DType.uint8](
                 0, size_of[SparseTreeNode[Self.O.DataT]]() * size
             )
             log_launch("xfer_leaf_tree")
             ctx.enqueue_copy(
-                dst_buf=dt, src_ptr=self.leaf_h_tree.unsafe_ptr()
+                dst_buf=dt,
+                src_ptr=self.leaf_h_tree.unsafe_ptr().unsafe_offset(
+                    begin * size_of[SparseTreeNode[Self.O.DataT]]()
+                ),
             )
             var dr = self.leaf_d_ranges.create_sub_buffer[DType.uint8](
                 0, size_of[InstanceRange]() * size
             )
             log_launch("xfer_leaf_ranges")
             ctx.enqueue_copy(
-                dst_buf=dr, src_ptr=self.leaf_h_ranges.unsafe_ptr()
+                dst_buf=dr,
+                src_ptr=self.leaf_h_ranges.unsafe_ptr().unsafe_offset(
+                    begin * size_of[InstanceRange]()
+                ),
             )
             var dl = self.leaf_d_leaves.create_sub_buffer[Self.O.DataT](
                 0, size * n_out
@@ -2024,8 +2189,6 @@ struct Builder[O: ObjectiveLike](Movable):
 
             launch_leaf_kernel[Self.O](
                 ctx,
-                objective,
-                dataset,
                 self.leaf_d_tree.unsafe_ptr()
                 .unsafe_origin_cast[MutUntrackedOrigin]()
                 .unsafe_bitcast[SparseTreeNode[Self.O.DataT]](),
@@ -2036,27 +2199,39 @@ struct Builder[O: ObjectiveLike](Movable):
                 .unsafe_origin_cast[MutUntrackedOrigin](),
                 size,
                 smem_size,
-                self.leaf_args,
+                leaf_argsp,
             )
+            # `:663-666` -- downloaded to THIS batch's slice of the
+            # host staging (their `tree->vector_leaf.data() +
+            # batch_begin * num_outputs`), so no batch overwrites
+            # another's landing zone.
             var hl = self.leaf_h_leaves.create_sub_buffer[Self.O.DataT](
-                0, size * n_out
+                begin * n_out, size * n_out
             )
             var dls = self.leaf_d_leaves.create_sub_buffer[Self.O.DataT](
                 0, size * n_out
             )
             log_launch("xfer_leaf_download")
             ctx.enqueue_copy(dst_buf=hl, src_buf=dls)
-            ctx.synchronize()
-            _ = dt^
-            _ = dr^
-            _ = dl^
-            _ = hl^
-            _ = dls^
-            for i in range(size * n_out):
-                tree.vector_leaf[begin * n_out + i] = (
-                    self.leaf_h_leaves.unsafe_ptr().unsafe_load(i)
-                )
+            d_views.append(dt^)
+            d_views.append(dr^)
+            l_views.append(dl^)
+            l_views.append(dls^)
+            h_views.append(hl^)
             begin = end
+
+        # RESTORES upstream: their `SetLeafPredictions` carries NO sync
+        # inside the batch loop (`builder.cuh:643-667`); this used to
+        # drain the whole device -- all K pipelined trees -- once per
+        # batch. One drain covers every batch, then the host reads.
+        ctx.synchronize()
+        _ = d_views^
+        _ = l_views^
+        _ = h_views^
+        for i in range(n_nodes * n_out):
+            tree.vector_leaf[i] = (
+                self.leaf_h_leaves.unsafe_ptr().unsafe_load(i)
+            )
 
     def train[
         sabotage: Int = 0

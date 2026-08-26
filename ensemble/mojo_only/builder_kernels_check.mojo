@@ -533,6 +533,11 @@ def run_histogram[
     var obj = ClassificationObjectiveFunction[DT, LT, BinT](
         Int32(N_CLASSES), Int32(1), CRITERION_GINI
     )
+    # DEVIATION 1893: the caller stages the args blob; the launcher
+    # takes the device pointer.
+    var argsp = blob.upload(
+        ctx, HistogramArgs[ObjT](fx.dataset(), fx.quantiles(), obj^)
+    )
     launch_build_histograms_kernel[ObjT, TPB=TPB, sabotage=sabotage](
         ctx,
         hists.unsafe_ptr()
@@ -540,16 +545,14 @@ def run_histogram[
         .unsafe_bitcast[BinT](),
         MAX_N_BINS,
         fx.dataset(),
-        fx.quantiles(),
         fx.wi_ptr(),
         COL_START,
         fx.cs_ptr(),
-        obj,
         fx.wl_ptr(),
         fx.n_blocks_dimx,
         GRID_Y,
         SharedMemoryConfig(use_global, 0),
-        blob,
+        argsp,
     )
     ctx.synchronize()
 
@@ -581,6 +584,12 @@ def arm_histogram[
     var obj = ClassificationObjectiveFunction[DT, LT, BinT](
         Int32(N_CLASSES), Int32(1), CRITERION_GINI
     )
+    # DEVIATION 1893: the caller stages the args blob; the launcher
+    # takes the device pointer. `blob`'s keep-alive below still covers
+    # the kernel's read of the staged bytes.
+    var argsp = blob.upload(
+        ctx, HistogramArgs[ObjT](fx.dataset(), fx.quantiles(), obj^)
+    )
     launch_build_histograms_kernel[ObjT, TPB=TPB, sabotage=sabotage](
         ctx,
         hists.unsafe_ptr()
@@ -588,16 +597,14 @@ def arm_histogram[
         .unsafe_bitcast[BinT](),
         MAX_N_BINS,
         fx.dataset(),
-        fx.quantiles(),
         fx.wi_ptr(),
         COL_START,
         fx.cs_ptr(),
-        obj,
         fx.wl_ptr(),
         fx.n_blocks_dimx,
         GRID_Y,
         SharedMemoryConfig(use_global, 0),
-        blob,
+        argsp,
     )
     ctx.synchronize()
 
@@ -788,6 +795,12 @@ def arm_c_cdf_and_splits[
         Int32(C_CLASSES), Int32(1), CRITERION_GINI
     )
     var blob = DeviceArgs[FindBestSplitsArgs[ObjT]](ctx)
+    # DEVIATION 1893: the caller stages the args blob; the launcher
+    # takes the device pointer. `blob`'s keep-alive below still covers
+    # the kernel's read of the staged bytes.
+    var argsp = blob.upload(
+        ctx, FindBestSplitsArgs[ObjT](ds.copy(), quantiles.copy(), obj^)
+    )
     launch_find_best_splits_kernel[
         ObjT, TPB=TPB, sabotage=sabotage, pinned_reduce=pinned
     ](
@@ -796,18 +809,15 @@ def arm_c_cdf_and_splits[
         .unsafe_origin_cast[MutUntrackedOrigin]()
         .unsafe_bitcast[BinT](),
         C_NBINS,
-        ds,
-        quantiles,
         0,
         cs.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
         mutex.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
         splits.unsafe_ptr()
         .unsafe_origin_cast[MutUntrackedOrigin]()
         .unsafe_bitcast[Split[DT]](),
-        obj,
         C_NODES,
         C_SLOTS,
-        blob,
+        argsp,
     )
     ctx.synchronize()
     # KEEP-ALIVE, and it is not decoration -- see `upload_i32`'s comment.
@@ -1004,6 +1014,10 @@ def arm_d_partition[
         ctx, fx.n_blocks_dimx * TPB, N_NODES
     )
     var blob = DeviceArgs[NodeSplitArgs[DT, LT]](ctx)
+    # DEVIATION 1893: the caller stages the args blob; the launcher
+    # takes the device pointer. `blob`'s keep-alive below still covers
+    # the kernels' reads of the staged bytes.
+    var argsp = blob.upload(ctx, NodeSplitArgs(ds.copy()))
     launch_node_split_kernel[TPB=TPB, sabotage=sabotage](
         ctx, ds, fx.wi_ptr(),
         splits.unsafe_ptr()
@@ -1012,7 +1026,7 @@ def arm_d_partition[
         fx.wl_ptr(),
         fx.n_blocks_dimx, N_NODES,
         prid.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
-        scratch, blob,
+        scratch, argsp,
     )
     ctx.synchronize()
     # KEEP-ALIVE past the synchronize; see `upload_i32`'s comment.
@@ -1171,8 +1185,12 @@ def arm_e_leaf[
         Int32(N_CLASSES), Int32(1), CRITERION_GINI
     )
     var blob = DeviceArgs[LeafArgs[ObjT]](ctx)
+    # DEVIATION 1893: the caller stages the args blob; the launcher
+    # takes the device pointer. `blob`'s keep-alive below still covers
+    # the kernel's read of the staged bytes.
+    var argsp = blob.upload(ctx, LeafArgs[ObjT](obj^, fx.dataset()))
     launch_leaf_kernel[ObjT, TPB=TPB, sabotage=sabotage](
-        ctx, obj, fx.dataset(),
+        ctx,
         tree.unsafe_ptr()
         .unsafe_origin_cast[MutUntrackedOrigin]()
         .unsafe_bitcast[SparseTreeNode[DT]](),
@@ -1181,7 +1199,7 @@ def arm_e_leaf[
         .unsafe_bitcast[InstanceRange](),
         leaves.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
         N_NODES, N_CLASSES * size_of[BinT](),
-        blob,
+        argsp,
     )
     ctx.synchronize()
     # KEEP-ALIVE past the synchronize; see `upload_i32`'s comment.

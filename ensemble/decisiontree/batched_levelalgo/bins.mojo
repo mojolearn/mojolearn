@@ -134,7 +134,7 @@ single-device library; nothing else in their tree calls them.
 =================================================================
 """
 
-from std.atomic import Atomic
+from std.atomic import Atomic, Ordering
 from max.gpu.memory import AddressSpace
 
 
@@ -371,7 +371,10 @@ struct ClassificationBin(Bin):
         path and reads back through the field, per cell, so a wrong slot
         is visible rather than assumed away.
         """
-        _ = Atomic.fetch_add(
+        # Upstream `atomicAdd` is relaxed; Mojo's non-Apple default here
+        # is seq_cst, so the ordering is pinned to match (fences only --
+        # an atomic add's total is ordering-independent).
+        _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
             address.unsafe_bitcast[UInt32]().unsafe_offset(0), val.count
         )
 
@@ -457,10 +460,12 @@ struct WeightedClassificationBin(Bin):
     ):
         """`bins.cuh:71-75` -- two atomics, count then weight. Both are
         integer atomics here; theirs is integer then float64."""
-        _ = Atomic.fetch_add(
+        # Upstream `atomicAdd` is relaxed; the non-Apple default here is
+        # seq_cst. Fences only -- the totals cannot move.
+        _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
             address.unsafe_bitcast[UInt32]().unsafe_offset(0), val.count
         )
-        _ = Atomic.fetch_add(
+        _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
             address.unsafe_bitcast[Int32]().unsafe_offset(1), val.weight
         )
 
@@ -546,10 +551,12 @@ struct RegressionBin(RegressionBinLike):
         val: Self,
     ):
         """`bins.cuh:112-116` -- label_sum then count, their order."""
-        _ = Atomic.fetch_add(
+        # Upstream `atomicAdd` is relaxed; the non-Apple default here is
+        # seq_cst. Fences only -- the totals cannot move.
+        _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
             address.unsafe_bitcast[Int32]().unsafe_offset(0), val.label_sum
         )
-        _ = Atomic.fetch_add(
+        _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
             address.unsafe_bitcast[UInt32]().unsafe_offset(1), val.count
         )
 
@@ -668,13 +675,15 @@ struct WeightedRegressionBin(RegressionBinLike):
         val: Self,
     ):
         """`bins.cuh:158-163` -- label_sum, count, weight, their order."""
-        _ = Atomic.fetch_add(
+        # Upstream `atomicAdd` is relaxed; the non-Apple default here is
+        # seq_cst. Fences only -- the totals cannot move.
+        _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
             address.unsafe_bitcast[Int32]().unsafe_offset(0), val.label_sum
         )
-        _ = Atomic.fetch_add(
+        _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
             address.unsafe_bitcast[UInt32]().unsafe_offset(1), val.count
         )
-        _ = Atomic.fetch_add(
+        _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
             address.unsafe_bitcast[Int32]().unsafe_offset(2), val.weight
         )
 
