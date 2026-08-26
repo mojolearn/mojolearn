@@ -37,11 +37,13 @@ THE POLICY CHOICES
 
 2. **THE ARRAYS ARE COPIED INTO `List`s.** `train` takes `List[Float32]`, so
    `x`, `y` and the weights are read out of the caller's buffers into owned
-   lists here. At 800k x 100 that is 80 million float reads before any device
-   work starts. It is a real cost on the fixed-cost side of
-   `ms/tree = a + b*rows` and it is stated rather than absorbed; removing it
-   means teaching `train` to take pointers, which is a change to a ported
-   file's signature and belongs in its own session.
+   lists here -- as one flat memcpy per array since 2026-08-26; the
+   per-element append loops that stood here were ~70 ms per 1M x 28 rows,
+   all inside the timed fit. At 800k x 100 it is still 80 million float
+   reads before any device work starts, a real cost on the fixed-cost side
+   of `ms/tree = a + b*rows`, and it is stated rather than absorbed;
+   removing the copy itself means teaching `train` to take pointers, which
+   is a change to a ported file's signature and belongs in its own session.
 
 3. **PREDICTIONS ARE RAW APPROXES FOR EVERY LOSS**, as `train`'s docstring
    says and as their `predict` without a `prediction_type` does. A Logloss
@@ -51,6 +53,7 @@ THE POLICY CHOICES
 """
 
 from max.gpu.host import DeviceContext
+from std.memory import memcpy
 
 from gbdt.models.model_text import load_model_text, model_text
 from gbdt.options.catboost_options import (
@@ -295,12 +298,19 @@ def gbdt_fit(
             + String(n_eval_rows)
         )
 
+    # one flat resize + memcpy per array; the unreserved append loops this
+    # replaces were ~70 ms per 1M x 28 rows of bounds-checked
+    # doubling-and-copying appends (~2.5 ns each), all inside the timed
+    # fit -- the same swap `train`'s column build made
+    # (`gbdt/train.mojo:885`). Same bytes in the same order: the caller's
+    # buffer is already the column-major layout `train` takes.
+    var n_x = n_rows * n_features
     var xs = List[Float32]()
-    for i in range(n_rows * n_features):
-        xs.append(x.unsafe_load(i))
+    xs.resize(n_x, Float32(0.0))
+    memcpy(dest=xs.unsafe_ptr(), src=x, count=n_x)
     var ys = List[Float32]()
-    for i in range(n_rows):
-        ys.append(y.unsafe_load(i))
+    ys.resize(n_rows, Float32(0.0))
+    memcpy(dest=ys.unsafe_ptr(), src=y, count=n_rows)
 
     var cats = List[Bool]()
     var one_hot = List[Bool]()
@@ -315,16 +325,17 @@ def gbdt_fit(
     # `weights` is never read, the same contract `kmeans_fit` has.
     var ws = List[Float32]()
     if n_weights != 0:
-        for i in range(n_rows):
-            ws.append(weights.unsafe_load(i))
+        ws.resize(n_rows, Float32(0.0))
+        memcpy(dest=ws.unsafe_ptr(), src=weights, count=n_rows)
 
     var eval_xs = List[Float32]()
     var eval_ys = List[Float32]()
     if n_eval_rows != 0:
-        for i in range(n_eval_rows * n_features):
-            eval_xs.append(eval_x.unsafe_load(i))
-        for i in range(n_eval_rows):
-            eval_ys.append(eval_y.unsafe_load(i))
+        var n_ex = n_eval_rows * n_features
+        eval_xs.resize(n_ex, Float32(0.0))
+        memcpy(dest=eval_xs.unsafe_ptr(), src=eval_x, count=n_ex)
+        eval_ys.resize(n_eval_rows, Float32(0.0))
+        memcpy(dest=eval_ys.unsafe_ptr(), src=eval_y, count=n_eval_rows)
 
     # `TOverfittingDetectorOptions::Load` (`:24-40`), which is where the
     # detector TYPE comes from when the caller named only a wait or only a
@@ -448,9 +459,12 @@ def gbdt_predict_multi(
     var dim = model_approx_dim(tm.model)
     var n_features = model_input_features(tm)
 
+    # resize + memcpy, the same swap gbdt_fit made; the append loop this
+    # replaces re-read the whole matrix element-wise on every predict
+    var n_x = n_rows * n_features
     var xs = List[Float32]()
-    for i in range(n_rows * n_features):
-        xs.append(x.unsafe_load(i))
+    xs.resize(n_x, Float32(0.0))
+    memcpy(dest=xs.unsafe_ptr(), src=x, count=n_x)
 
     var ap = predict_multi_floats(ctx, tm, xs, n_rows)
     if mode == PREDICT_RAW:
@@ -500,9 +514,11 @@ def gbdt_predict(
     var tm = load_model_text(text)
     var n_features = model_input_features(tm)
 
+    # resize + memcpy, the same swap gbdt_fit made
+    var n_x = n_rows * n_features
     var xs = List[Float32]()
-    for i in range(n_rows * n_features):
-        xs.append(x.unsafe_load(i))
+    xs.resize(n_x, Float32(0.0))
+    memcpy(dest=xs.unsafe_ptr(), src=x, count=n_x)
 
     var p = predict_floats(ctx, tm, xs, n_rows)
     for i in range(n_rows):
