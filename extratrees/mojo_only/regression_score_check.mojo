@@ -191,22 +191,50 @@ comptime TREE_ID = 9
 comptime SEED: UInt64 = 0xB0A710A5
 
 comptime BIG_NODE = 1
-"""The node whose labels leave the fixed-point slot in the second plane. It has
-THREE rows, so every split of it is 1|2 or 2|1 and every one of them puts a
-sum outside the slot -- a predictable refusal set."""
+"""The node whose labels leave the fixed-point slot in the second plane. It
+has THREE rows, so every split of it is 1|2 or 2|1 -- equivalently, every
+split ISOLATES exactly one row `x` on one side, giving side sums `x` and
+`sT - x` and `|A| = |3x - sT|` (A = sl*nr - sr*nl, either orientation).
+With the poison below (`sT = 0`), isolating EITHER big-labeled row puts
++/-BIG_POS on BOTH sides (outside the slot: refused) and wraps the
+unguarded numerator; isolating the zero-labeled row gives 0|0 (inside the
+slot: it scores, with a zero key). Which row a column isolates is decided
+by the DRAW, so the refusal/wrap set is 2-of-3 per cell by construction,
+not universal -- the pre-463-round comment claimed every split refuses,
+which was false even for the old values (a lone -1070000000 side sat
+INSIDE the 2^30 slot)."""
 
 comptime OVER_SLOT: Int32 = 1200000000
 """Just over the `2^30` slot and nowhere near a wrap: the refusal must be a
 PRECONDITION test, not an overflow test."""
 
-comptime BIG_POS: Int32 = 2140000000
-comptime BIG_NEG: Int32 = -1070000000
-"""Just inside `Int32` so the ACCUMULATION is still sound and only the KEY's
+comptime BIG_POS: Int32 = 2066666667
+comptime BIG_NEG: Int32 = -2066666667
+comptime BIG_THIRD: Int32 = 0
+"""Inside `Int32` so the ACCUMULATION is still sound and only the KEY's
 precondition is violated -- otherwise the sabotage would be testing the wrong
-thing. At three rows these also make the unguarded numerator actually WRAP
-(|A| reaches 6.42e9, `|A| >> 1` is 3.21e9, and its square is 1.03e19 against
-Int64's 9.22e18), so DEVIATION 193's guard is observed catching a wrap rather
-than an inconvenience."""
+thing.
+
+THE WRAP, DERIVED RATHER THAN TUNED (re-derived after DEVIATION 465
+re-rolled every draw and the old poison stopped wrapping). At three rows a
+split isolates one row `x`, and with `sT = BIG_POS + BIG_NEG + BIG_THIRD =
+0` the numerator magnitude is `|A| = |3x|`. The wrap bound is `(|A| >> j)^2
+> Int64.MAX` with `j = 1` at three rows, i.e. `|A| >= 6074001000`
+(`3037000500^2` is the first square past 2^63 - 1). Isolating either big
+row gives `|A| = 3 * 2066666667 = 6200000001 >= 6074001000`, so the
+unguarded numerator is `3100000000^2 = 9.61e18`, which wraps to the
+NEGATIVE Int64 `-8836744073709551616`; the same isolation puts
+`+/-2066666667 > 2^30` on BOTH sides, so the shipping arm REFUSES exactly
+those cells. Only isolating the zero row (sides 0|0) neither refuses nor
+wraps. An all-three-rows poison is IMPOSSIBLE: the three `A` values `3x_i -
+sT` sum to zero, so two of them would have to carry opposite signs at >=
+6.074e9 each while every label stays inside Int32 -- the required spread
+exceeds `6 * Int32.MAX / 3`. Two-of-three is the maximum, and DEVIATION
+193's guard is still observed catching a REAL wrap, not an inconvenience.
+(The old values 2140000000 / -1070000000 wrapped only when a draw isolated
+the ONE positive row; DEVIATION 465's draws never do at this seed --
+verified cell by cell in exact arithmetic -- which is why the guard's wrap
+arm went red on 2026-08-26.)"""
 
 
 def _vendor() -> String:
@@ -492,8 +520,17 @@ def main() raises:
     # is a branch, and an unchecked branch is an unreached branch.
     var labels_big = labels_q.copy()
     var big_begin = Int(ranges[BIG_NODE].begin)
-    labels_big[Int(row_ids[big_begin])] = BIG_POS
-    labels_big[Int(row_ids[big_begin + 1])] = BIG_NEG
+    # The two BIG labels sit on positions begin+1 and begin+2, the zero on
+    # begin+0: any column that isolates begin+1 or begin+2 refuses AND (once
+    # unguarded) wraps -- see BIG_POS's docstring for the derivation -- and
+    # under the current DEVIATION-465 draws the four scored columns of this
+    # node isolate begin+2 three times and begin+1 once (recomputed in exact
+    # arithmetic from the drawn thresholds), so all four refused cells wrap.
+    # Position begin+0 is the one no current draw isolates; parking the zero
+    # there is verified placement of the 2-of-3 construction, not its
+    # substance.
+    labels_big[Int(row_ids[big_begin])] = BIG_THIRD
+    labels_big[Int(row_ids[big_begin + 1])] = BIG_POS
     labels_big[Int(row_ids[big_begin + 2])] = BIG_NEG
     # And ONE row of node 0, just over the slot. Node 1 makes the numerator
     # actually WRAP; this one makes the guard refuse WITHOUT a wrap, which is
