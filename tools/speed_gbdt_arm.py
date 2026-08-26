@@ -130,6 +130,7 @@ import hashlib
 import os
 import platform
 import subprocess
+import shutil
 import sys
 import time
 
@@ -1316,12 +1317,93 @@ def opponent_builders(lane, cfg, data, devices):
     return builders
 
 
+def accel_visible():
+    """Is this a GPU vendor's box?"""
+    try:
+        import torch                                   # noqa: PLC0415
+        if torch.cuda.is_available():
+            return True
+    except Exception:                                  # noqa: BLE001
+        pass
+    for var in ("CUDA_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES"):
+        if os.environ.get(var, "").strip() not in ("", "-1"):
+            return True
+    return bool(shutil.which("nvidia-smi") or shutil.which("rocm-smi"))
+
+
+def resolve_devices(requested, lane=None):
+    """Which device arms of each opponent may run here.
+
+    THE RULE, AND IT IS NOT A PREFERENCE. On NVIDIA and on AMD we compare
+    against the vendor's GPU path ONLY. Their CPU path is for the MacBook,
+    where it is the only path they have.
+
+    A GPU-versus-CPU ratio is not the claim this project makes. Beating
+    CatBoost's CPU learner by 1.70x on an H100 is not a result, it is a
+    category error, and printing it beside the GPU column invites the table
+    to be graded on the easy comparison. It also costs the lease:
+    `lightgbm-cpu` took 89 SECONDS on 522,911 rows in the rf lane, and at a
+    5,000,000-row rung it would spend most of a per-arm budget measuring
+    something nobody asked about.
+
+    `auto` -- the default -- is `gpu` wherever an accelerator is visible and
+    `cpu` on the MacBook. An explicit list still wins, because the Apple
+    runs need to ask for `cpu` by name, and because a deliberate override
+    should be possible; what is not possible is getting the CPU arms by
+    ACCIDENT on a box that is billing by the minute.
+
+    THE CONSEQUENCE IS STATED, NOT WORKED AROUND. cuML ships no ExtraTrees
+    and no IsolationForest, so on NVIDIA the `et` and `iforest` lanes have
+    NO legal opponent, and every arm they would have had is refused BY NAME.
+    That is a finding about the vendor's GPU coverage. It is not a licence
+    to run scikit-learn on the host CPU and call it an opponent.
+    """
+    want = [d.strip().lower() for d in (requested or "").split(",")
+            if d.strip()]
+    if not want or want == ["auto"]:
+        want = ["gpu"] if accel_visible() else ["cpu"]
+        auto = True
+    else:
+        auto = False
+    if "cpu" in want and accel_visible():
+        dropped = [d for d in want if d == "cpu"]
+        want = [d for d in want if d != "cpu"]
+        if lane is not None and dropped:
+            emit_refused(
+                lane, "*-cpu",
+                "GPU-PATH-ONLY: an accelerator is visible on this box, so the "
+                "vendors' CPU arms do not run. On NVIDIA and AMD we compare "
+                "against the vendor's GPU arm only; the CPU arm is the "
+                "MacBook's. Set MOJOLEARN_SPEED_DEVICES=cpu to override, and "
+                "then say out loud beside the number that you did.")
+    if not want:
+        want = ["gpu"]
+    return want, auto
+
+
 def build_opponents(lane, cfg, data, devices):
     """Run every builder inside its own `try` and turn a failure into
     refusals. Nothing here may take the process down: an opponent that will
     not install on a rented box is the NORMAL case, not the exception."""
     arms = []
+    allow_cpu = "cpu" in devices
     for names, thunk in opponent_builders(lane, cfg, data, devices):
+        # THE CHOKEPOINT FOR THE GPU-PATH-ONLY RULE, and it is here rather
+        # than in each builder because two of the forest builders --
+        # `sklearn_forest_arm` and `sklearn_iforest_arm` -- never took
+        # `devices` at all. Gating at the call sites would have left those
+        # two running scikit-learn on an H100's host CPU while every other
+        # arm obeyed the rule, which is the worst of both: the table would
+        # look GPU-only and would not be.
+        blocked = [n for n in names if n.endswith("-cpu")] if not allow_cpu else []
+        for name in blocked:
+            emit_refused(lane, name,
+                         "GPU-PATH-ONLY: %s is a CPU arm and this box has an "
+                         "accelerator. On NVIDIA and AMD we compare against "
+                         "the vendor's GPU path only; their CPU path is the "
+                         "MacBook's." % name)
+        if blocked and len(blocked) == len(names):
+            continue
         try:
             arms.extend(thunk())
         except Exception as exc:                   # noqa: BLE001

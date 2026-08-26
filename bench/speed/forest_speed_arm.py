@@ -393,10 +393,14 @@ def build_parser():
                         "anomaly; the lane's own default if unset. `higgs` "
                         "is the LARGE-LOAD dataset (11M x 28) and is what "
                         "--rows climbs.")
-    p.add_argument("--devices", default="cpu,gpu",
-                   help="which device arms of each opponent to run; the "
-                        "default runs BOTH, which is the whole point on "
-                        "NVIDIA")
+    p.add_argument("--devices", default="auto",
+                   help="which device arms of each opponent to run. `auto` "
+                        "(the default) is GPU-ONLY wherever an accelerator "
+                        "is visible and cpu on the MacBook: on NVIDIA and "
+                        "AMD we compare against the vendor's GPU path only, "
+                        "because a GPU-versus-CPU ratio is not the claim "
+                        "this project makes. An explicit list still wins, "
+                        "and the refusal lines say when one was applied.")
     p.add_argument("--rows", type=int, default=None,
                    help="cap the training rows. On `higgs` this IS the load "
                         "ladder: rungs are nested prefixes of the same "
@@ -417,7 +421,7 @@ def main(argv=None):
     lane = args.lane
     size = spec.size_tag()
     dataset = args.dataset or spec.LANE_DEFAULT_DATASET[lane]
-    devices = [d.strip() for d in args.devices.split(",") if d.strip()]
+    devices, devices_auto = spec.resolve_devices(args.devices, lane)
 
     if lane.startswith("gbdt-") and dataset == "covtype":
         # DEVIATION 1838. Refuse the 7-class task by name and move to the
@@ -442,6 +446,14 @@ def main(argv=None):
                 print(name)
         return 0
 
+    # THE DEVICE POLICY IS ON THE CARD, not only in this file. A reader who
+    # sees three arms where the Apple table had six has to be able to find
+    # out why without reading the harness.
+    spec.emit_note(lane, ["ours"], "devices", float(len(devices)),
+                   "devices=%s (%s); on a GPU vendor's box the vendors' CPU "
+                   "arms do not run, so a lane whose only opponent is a CPU "
+                   "library has NO legal opponent here and says so"
+                   % (",".join(devices), "auto" if devices_auto else "explicit"))
     arms = build_ours(lane, cfg, data)
     if not args.ours_only:
         # The opponents are appended AFTER ours so that the rotation starts

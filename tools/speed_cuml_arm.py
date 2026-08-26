@@ -101,6 +101,7 @@ Environment:
 import importlib.util
 import os
 import sys
+import shutil
 import time
 
 import numpy as np
@@ -385,10 +386,66 @@ class Fixture:
 # The round loop. Every lane hands back a closure and a hash function.
 # ---------------------------------------------------------------------------
 
+def gpu_only():
+    """True when this box is a GPU vendor's box and the vendor's CPU path is
+    therefore ILLEGAL as an opponent.
+
+    THE RULE, AND IT IS NOT A PREFERENCE. On NVIDIA and on AMD we compare
+    against the vendor's GPU path ONLY. Their CPU path is for the MacBook,
+    where it is the only path they have.
+
+    A GPU-versus-CPU ratio is not the claim this project makes and it is
+    not the claim a reader will take from it. `catboost-cpu` beside
+    `catboost-gpu` on an H100 invites the table to be graded on the easy
+    comparison, and the easy comparison is meaningless: the interesting
+    number is ours against their own CUDA kernel on the same silicon.
+
+    It is also not free. `lightgbm-cpu` took 89 SECONDS on 522,911 rows in
+    the rf lane. At a 5,000,000-row rung that is most of a per-arm budget
+    spent measuring something nobody asked about.
+
+    Default ON wherever CUDA or ROCm is visible. `MOJOLEARN_SPEED_DEVICES`
+    can say `cpu` to turn it off, which is what the Apple runs do, and the
+    header line records which way it went so a table can never be read
+    without knowing.
+    """
+    want = os.environ.get("MOJOLEARN_SPEED_DEVICES", "").strip().lower()
+    if want:
+        return "cpu" not in [w.strip() for w in want.split(",")]
+    return _accel_visible()
+
+
+def _accel_visible():
+    try:
+        import torch                                    # noqa: PLC0415
+        if torch.cuda.is_available():
+            return True
+    except Exception:                                   # noqa: BLE001
+        pass
+    for var in ("CUDA_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES"):
+        if os.environ.get(var, "").strip() not in ("", "-1"):
+            return True
+    return bool(shutil.which("nvidia-smi") or shutil.which("rocm-smi"))
+
+
 def race(lane, arm, shape, rounds, size, device, call):
     """One warm-up plus `rounds` timed calls of `call`, which returns the
     outputs to hash (a tuple, or `None` for a lane whose output is not
     comparable with ours)."""
+    # THE VENDOR'S CPU PATH DOES NOT RUN ON THE VENDOR'S GPU BOX.
+    #
+    # Refused BY NAME rather than dropped, because "cuML has no GaussianMixture
+    # and so this lane has no legal opponent on NVIDIA" is a finding about
+    # their coverage. A lane that silently prints nothing reads as a lane
+    # nobody ran.
+    if arm.endswith("-cpu") and gpu_only():
+        refuse(lane, arm, "GPU-PATH-ONLY: this box is a GPU vendor's box and "
+                          "%s is their CPU path. On NVIDIA and AMD we compare "
+                          "against the vendor's GPU arm only; the CPU arm is "
+                          "the MacBook's. This lane therefore has no legal "
+                          "opponent here, which is a fact about the vendor's "
+                          "GPU coverage and not a failure of this run." % arm)
+        return
     header(lane, arm, device, rounds, size)
     hashes = []
     for r in range(rounds + 1):
