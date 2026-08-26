@@ -2437,10 +2437,72 @@ gemmseq)
     # starts running nvcc over several dtype and dstate instantiations, which
     # does not fit in a lease. If it does not arrive, the torch reference
     # scan is the labelled fallback and the write-up has to say which ran.
-    if command -v timeout > /dev/null 2>&1; then
-        timeout -k 15 240 python3 -m pip install --no-input --no-build-isolation \
-            causal-conv1d mamba-ssm >> "$OUT/pip.log" 2>&1
+    #
+    # THE PyPI INSTALL WAS THE WRONG INSTALL AND IT COST US THE OPPONENT.
+    #
+    # `pip install mamba-ssm` has no matching wheel on PyPI for this
+    # (torch, CUDA, abi, python) tuple, so it falls back to a SOURCE BUILD
+    # that runs nvcc over many dtype/dstate instantiations. It does not
+    # finish in 240 seconds and it does not finish in a lease. The 240s
+    # bound then expired, `mamba-ssm-cuda` refused, and the mamba lane was
+    # measured against `torch-ref-scan-gpu` -- A SEQUENTIAL PyTorch LOOP
+    # OVER THE SEQUENCE. Being 2.14x faster than that is not a result about
+    # Mamba; it is a result about a reference implementation, and it was
+    # reported as though it were the former.
+    #
+    # The project publishes PREBUILT WHEELS on its GitHub releases, keyed by
+    # exactly that tuple. So ASK THE BOX what its tuple is rather than
+    # hardcoding one, build the two URLs, and install those. A wheel lands
+    # in under a minute.
+    _mm_tag=$(python3 - <<'MMTAG' 2>/dev/null
+import sys
+try:
+    import torch
+    tv = ".".join(torch.__version__.split(".")[:2])
+    cu = "cu12" if (torch.version.cuda or "").startswith("12") else "cu11"
+    abi = "TRUE" if torch._C._GLIBCXX_USE_CXX11_ABI else "FALSE"
+    print("%storch%scxx11abi%s|cp%d%d" % (cu, tv, abi, sys.version_info[0], sys.version_info[1]))
+except Exception:
+    pass
+MMTAG
+)
+    echo "mamba_wheel_tag=$_mm_tag" >> "$OUT/leg.txt"
+    if [ -n "$_mm_tag" ] && command -v timeout > /dev/null 2>&1; then
+        _mm_abi=${_mm_tag%|*}
+        _mm_py=${_mm_tag#*|}
+        _cc_url="https://github.com/Dao-AILab/causal-conv1d/releases/download/v1.4.0/causal_conv1d-1.4.0+${_mm_abi}-${_mm_py}-${_mm_py}-linux_x86_64.whl"
+        _mm_url="https://github.com/state-spaces/mamba/releases/download/v2.2.4/mamba_ssm-2.2.4+${_mm_abi}-${_mm_py}-${_mm_py}-linux_x86_64.whl"
+        echo "mamba_wheel_url=$_mm_url" >> "$OUT/leg.txt"
+        timeout -k 15 420 python3 -m pip install --no-input --no-build-isolation \
+            "$_cc_url" "$_mm_url" >> "$OUT/pip.log" 2>&1
         echo "mamba_ssm_install_exit=$?" >> "$OUT/leg.txt"
+    else
+        echo "mamba_ssm_install=SKIPPED, could not read this box's torch tuple" >> "$OUT/leg.txt"
+    fi
+    # THE PROBE, for the same reason the LightGBM one exists: an install
+    # exit code says pip ran, and only a CALL says the fused kernel is
+    # there. If this says NO then the mamba lane's only opponent is the
+    # reference scan, and THAT HAS TO BE SAID BESIDE THE NUMBER rather than
+    # discovered later in a log.
+    python3 - >> "$LOGS/mamba_ssm_probe.log" 2>&1 <<'MMPROBE'
+import torch
+from mamba_ssm.ops.selective_scan_interface import selective_scan_fn
+d, n, L = 4, 8, 16
+dev = "cuda"
+u = torch.randn(1, d, L, device=dev)
+delta = torch.rand(1, d, L, device=dev)
+A = -torch.rand(d, n, device=dev)
+B = torch.randn(1, n, L, device=dev)
+C = torch.randn(1, n, L, device=dev)
+out = selective_scan_fn(u, delta, A, B, C)
+torch.cuda.synchronize()
+print("MAMBA_SSM_PROBE=ok shape=%s" % (tuple(out.shape),))
+MMPROBE
+    if grep -q MAMBA_SSM_PROBE=ok "$LOGS/mamba_ssm_probe.log" 2>/dev/null; then
+        echo "mamba_ssm_works=yes" >> "$OUT/leg.txt"
+    else
+        echo "mamba_ssm_works=NO" >> "$OUT/leg.txt"
+        echo "mamba_ssm_probe_says=$(tail -1 "$LOGS/mamba_ssm_probe.log" 2>/dev/null)" >> "$OUT/leg.txt"
     fi
     # OURS FIRST, EVERY LANE, because the torch arm reads the raw output our
     # arm dumped in order to answer whether the two sides computed the same
