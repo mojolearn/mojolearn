@@ -128,6 +128,7 @@ from extratrees.ported.decisiontree.batched_levelalgo.split import (
     split_reduce_init_kernel,
     split_reduce_kernel,
     split_reduce_shared_bytes,
+    split_tie_salt_for,
     SPLIT_SAB_NONE,
 )
 from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels import (
@@ -1460,8 +1461,10 @@ def main() raises:
     var host_best = List[SplitExact]()
     for nid in range(n_nodes):
         var acc = SplitExact()
+        # DEVIATION 463: the same per-node rank salt the launch below stages.
+        var ts = split_tie_salt_for(UInt32(TREE_ID), UInt32(nid))
         for fslot in range(N_COLS):
-            _ = acc.update(cand[nid * N_COLS + fslot], SPLIT_SAB_NONE)
+            _ = acc.update(cand[nid * N_COLS + fslot], SPLIT_SAB_NONE, ts)
         host_best.append(acc)
 
     var n_c = len(cand)
@@ -1484,6 +1487,7 @@ def main() raises:
     var e_mx = ctx.enqueue_create_buffer[DType.int32](n_nodes)
     var e_nb = ctx.enqueue_create_buffer[DType.int32](n_nodes)
     var e_nc = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+    var e_ts = ctx.enqueue_create_buffer[DType.uint32](n_nodes)
 
     var t_q = ctx.enqueue_create_host_buffer[DType.float32](n_c)
     var t_c = ctx.enqueue_create_host_buffer[DType.int32](n_c)
@@ -1494,6 +1498,7 @@ def main() raises:
     var t_v = ctx.enqueue_create_host_buffer[DType.int32](n_c)
     var t_nb = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
     var t_nc = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
+    var t_ts = ctx.enqueue_create_host_buffer[DType.uint32](n_nodes)
     ctx.synchronize()
     for i in range(n_c):
         t_q.unsafe_ptr().unsafe_store(i, cand[i].split.quesval)
@@ -1506,6 +1511,9 @@ def main() raises:
     for i in range(n_nodes):
         t_nb.unsafe_ptr().unsafe_store(i, Int32(i * N_COLS))
         t_nc.unsafe_ptr().unsafe_store(i, Int32(N_COLS))
+        t_ts.unsafe_ptr().unsafe_store(
+            i, split_tie_salt_for(UInt32(TREE_ID), UInt32(i))
+        )
     ctx.enqueue_copy(dst_buf=c_q, src_ptr=t_q.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=c_c, src_ptr=t_c.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=c_m, src_ptr=t_m.unsafe_ptr())
@@ -1515,6 +1523,7 @@ def main() raises:
     ctx.enqueue_copy(dst_buf=c_v, src_ptr=t_v.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=e_nb, src_ptr=t_nb.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=e_nc, src_ptr=t_nc.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=e_ts, src_ptr=t_ts.unsafe_ptr())
     ctx.enqueue_memset(e_mx, Int32(0))
     ctx.synchronize()
 
@@ -1552,6 +1561,7 @@ def main() raises:
         c_v.unsafe_ptr(),
         e_nb.unsafe_ptr(),
         e_nc.unsafe_ptr(),
+        e_ts.unsafe_ptr(),
         Int32(1),
         Int32(SPLIT_SAB_NONE),
         grid_dim=(1, n_nodes, 1),
@@ -1637,10 +1647,12 @@ def main() raises:
     var blind = List[SplitExact]()
     for nid in range(n_nodes):
         var acc = SplitExact()
+        var ts = split_tie_salt_for(UInt32(TREE_ID), UInt32(nid))
         for fslot in range(N_COLS):
             var c = cand[nid * N_COLS + fslot].copy()
+            # No key -> the salt is inert; the fold is Split.update exactly.
             _ = acc.update(
-                SplitExact(c.split, ExactKey()), SPLIT_SAB_NONE
+                SplitExact(c.split, ExactKey()), SPLIT_SAB_NONE, ts
             )
         blind.append(acc)
     var differs = 0

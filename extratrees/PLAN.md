@@ -205,15 +205,22 @@ What the fix bought, measured on the same harness that found the defect:
 `quality_band_check` passes, and `tools/check.sh` is green again.
 
 **One row remains outside sklearn's band and it is not a defect:**
-`shaped_constant_heavy`, where deviation 151 says we stop splitting once every
-sampled column is constant and sklearn keeps drawing until one is not. We grow
-depth 0.74 against their 16.3 — and score 0.543 against their band of
-[0.430, 0.480], i.e. BETTER, because the fixture's labels are noise and not
-overfitting it is an advantage there. On a fixture with real signal in a
-constant-heavy frame the sign would flip. Priced, not fixed: closing it means
-re-drawing when every sampled column is constant, which neither upstream does.
+`shaped_constant_heavy`, where deviation 151 says a node ALL of whose sampled
+columns are constant becomes a leaf here, while sklearn's loop guard keeps
+drawing past `max_features` in exactly that regime (its second disjunct
+extends the loop only while every feature drawn so far was constant) and so
+can still find a split. That regime is the whole difference: the covtype
+audit (2026-08-26, deviation 132's retraction) proved sklearn spends its
+per-node draw budget on already-known constants exactly like us, so its
+effective `max_features` over non-constant features is NOT larger than ours
+— the superseded claim that used to stand here. We grow depth 0.74 against
+their 16.3 — and score 0.543 against their band of [0.430, 0.480], i.e.
+BETTER, because the fixture's labels are noise and not overfitting it is an
+advantage there. On a fixture with real signal in a constant-heavy frame the
+sign would flip. Priced, not fixed: closing it means re-drawing when every
+sampled column is constant, which neither upstream does for a mixed draw.
 
-## Still open## Still open
+## Still open
 
 1. **`n_estimators` / forest-level defaults.** Not touched. This lane is
    building the LEARNER; sklearn's `ExtraTreesClassifier` defaults
