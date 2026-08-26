@@ -1581,6 +1581,13 @@ def main() raises:
     ctx.enqueue_copy(dst_buf=u_v, src_buf=e_v)
     ctx.synchronize()
 
+    # Mojo frees a buffer at its LAST USE, and the salt buffers' last natural
+    # uses are an enqueue (`e_ts` at the launch, `t_ts` at its copy) -- hold
+    # both past the drain so the queued reads cannot outlive them, exactly as
+    # `d_tree_ids`/`h_tree_ids` are held above.
+    _ = e_ts^
+    _ = t_ts^
+
     var e_bad = 0
     var e_real = 0
     var e_distinct_cols = List[Int]()
@@ -1605,6 +1612,18 @@ def main() raises:
             or u_v.unsafe_ptr().unsafe_load(nid) != w.key.valid
         ):
             e_bad += 1
+            # How many candidates tie the host winner's key exactly: a
+            # mismatch with `tied > 1` is the KEYED TIE-BREAK (DEVIATION
+            # 463) disagreeing between host and device -- since both call
+            # the same `keyed_tie_wins` on the same staged salt, that
+            # specifically means the kernel did not read the salt this
+            # check staged; a mismatch with `tied == 1` is the reduction
+            # itself.
+            var tied = 0
+            for fslot in range(N_COLS):
+                var cc = cand[nid * N_COLS + fslot].copy()
+                if cc.key.valid != 0 and compare_exact_key(cc.key, w.key) == 0:
+                    tied += 1
             print(
                 "  WINNER MISMATCH node",
                 nid,
@@ -1616,6 +1635,8 @@ def main() raises:
                 w.split.colid,
                 "num",
                 w.key.num,
+                "| candidates tying the host winner's key:",
+                tied,
             )
     if e_bad == 0:
         print(
