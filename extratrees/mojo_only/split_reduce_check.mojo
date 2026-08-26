@@ -99,12 +99,14 @@ from extratrees.ported.decisiontree.batched_levelalgo.objectives import (
 )
 from extratrees.ported.decisiontree.batched_levelalgo.split import (
     compare_exact_key,
+    ET_TIE_BREAK_KEYED,
     ExactKey,
     Split,
     SplitExact,
     split_reduce_init_kernel,
     split_reduce_kernel,
     split_reduce_shared_bytes,
+    split_tie_salt_for,
     SPLIT_SAB_BLOCK0_ONLY,
     SPLIT_SAB_FLOAT_KEY,
     SPLIT_SAB_NO_COLID_ARM,
@@ -146,6 +148,31 @@ def mix64(x: UInt64) -> UInt64:
     return h
 
 
+comptime CHECK_TREE_ID: UInt32 = 7
+"""The fixture's tree id for DEVIATION 463's per-node tie salt."""
+
+
+def node_salt(nid: Int) -> UInt32:
+    """The rank salt this fixture stages for node `nid` -- an INPUT to both
+    the kernel and the oracle, computed by the shipping helper (the value is
+    data; only the RANK arithmetic below is independently re-expressed)."""
+    return split_tie_salt_for(CHECK_TREE_ID, UInt32(nid))
+
+
+def oracle_rank(tie_salt: UInt32, colid: Int32) -> UInt32:
+    """DEVIATION 463's rank, INDEPENDENTLY transcribed: one fnv1a32 round
+    over the colid's four bytes and murmur3's fmix32, written out here rather
+    than imported, so the kernel's `split_tie_rank` is checked against a
+    second expression of the same arithmetic."""
+    var h = tie_salt
+    var txt = colid.cast[DType.uint32]()
+    for byte in range(4):
+        h = (h ^ ((txt >> UInt32(8 * byte)) & 0xFF)) * UInt32(16777619)
+    h = (h ^ (h >> 16)) * 0x85EBCA6B
+    h = (h ^ (h >> 13)) * 0xC2B2AE35
+    return h ^ (h >> 16)
+
+
 # ============================================================================
 # The oracle side. Written to look nothing like `SplitExact.update`.
 # ============================================================================
@@ -164,36 +191,54 @@ def host_cmp_key(a: ExactKey, b: ExactKey) -> Int:
     )
 
 
-def independent_better(a: SplitExact, b: SplitExact) -> Bool:
+def independent_better(a: SplitExact, b: SplitExact, tie_salt: UInt32) -> Bool:
     """Is `a` strictly better than `b`, as a flat lexicographic chain?
 
     Deliberately NOT `SplitExact.update`'s shape: no accumulator, no early-out
-    flag, no assignment, and the exact half calls the host comparator. If both
-    expressions of the order agree everywhere, a slip has to have been made
-    twice, in two different arithmetics.
+    flag, no assignment, the exact half calls the host comparator, and
+    DEVIATION 463's rank arm calls `oracle_rank`, the in-file transcription.
+    If both expressions of the order agree everywhere, a slip has to have
+    been made twice, in two different arithmetics.
+
+    The rank arm sits where the kernel puts it: below the key, above colid,
+    and ONLY between two VALID keys (the no-key degeneration stays cuML's
+    metric/colid/quesval chain, DEVIATION 166 / arm A').
     """
     var c = host_cmp_key(a.key, b.key)
     if c != 0:
         return c > 0
     if a.split.best_metric_val != b.split.best_metric_val:
         return a.split.best_metric_val > b.split.best_metric_val
+    comptime if ET_TIE_BREAK_KEYED:
+        if a.key.valid != 0 and b.key.valid != 0:
+            var ra = oracle_rank(tie_salt, a.split.colid)
+            var rb = oracle_rank(tie_salt, b.split.colid)
+            if ra != rb:
+                return ra > rb
     if a.split.colid != b.split.colid:
         return a.split.colid > b.split.colid
     return a.split.quesval > b.split.quesval
 
 
-def host_best(cands: List[SplitExact], begin: Int, count: Int) -> SplitExact:
+def host_best(
+    cands: List[SplitExact], begin: Int, count: Int, tie_salt: UInt32
+) -> SplitExact:
     """The oracle: a linear maximum under `independent_better`, starting from
     the identity `SplitExact()`, which every real candidate must beat."""
     var best = SplitExact()
     for i in range(begin, begin + count):
-        if independent_better(cands[i], best):
+        if independent_better(cands[i], best, tie_salt):
             best = cands[i]
     return best^
 
 
 def host_best_subset(
-    cands: List[SplitExact], begin: Int, count: Int, period: Int, width: Int
+    cands: List[SplitExact],
+    begin: Int,
+    count: Int,
+    period: Int,
+    width: Int,
+    tie_salt: UInt32,
 ) -> SplitExact:
     """The oracle restricted to a STRIDED SUBSET of a node's candidates.
 
@@ -211,7 +256,7 @@ def host_best_subset(
     for o in range(count):
         if o % period >= width:
             continue
-        if independent_better(cands[begin + o], best):
+        if independent_better(cands[begin + o], best, tie_salt):
             best = cands[begin + o]
     return best^
 
@@ -429,7 +474,9 @@ def build_candidates(
             # planted. It is a near-pure candidate by construction.
             var best = 0
             for i in range(1, spec.count):
-                if independent_better(out[begin + i], out[begin + best]):
+                if independent_better(
+                    out[begin + i], out[begin + best], node_salt(nidx)
+                ):
                     best = i
             argmax = best
             var a_best = out[begin + best]
@@ -584,6 +631,7 @@ def run_arm[
     var c_v = ctx.enqueue_create_buffer[DType.int32](n_c)
     var d_nb = ctx.enqueue_create_buffer[DType.int32](n_nodes)
     var d_nc = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+    var d_ts = ctx.enqueue_create_buffer[DType.uint32](n_nodes)
 
     var h_q = ctx.enqueue_create_host_buffer[DType.float32](n_c)
     var h_c = ctx.enqueue_create_host_buffer[DType.int32](n_c)
@@ -594,6 +642,7 @@ def run_arm[
     var h_v = ctx.enqueue_create_host_buffer[DType.int32](n_c)
     var h_nb = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
     var h_nc = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
+    var h_ts = ctx.enqueue_create_host_buffer[DType.uint32](n_nodes)
     ctx.synchronize()
 
     for i in range(n_c):
@@ -607,6 +656,8 @@ def run_arm[
     for i in range(n_nodes):
         h_nb.unsafe_ptr().unsafe_store(i, node_begin[i])
         h_nc.unsafe_ptr().unsafe_store(i, node_count[i])
+        # DEVIATION 463: the per-node rank salt the kernel reduces under.
+        h_ts.unsafe_ptr().unsafe_store(i, node_salt(i))
 
     ctx.enqueue_copy(dst_buf=c_q, src_ptr=h_q.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=c_c, src_ptr=h_c.unsafe_ptr())
@@ -617,6 +668,7 @@ def run_arm[
     ctx.enqueue_copy(dst_buf=c_v, src_ptr=h_v.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_nb, src_ptr=h_nb.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_nc, src_ptr=h_nc.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_ts, src_ptr=h_ts.unsafe_ptr())
     ctx.enqueue_memset(d_mx, Int32(0))
     ctx.synchronize()
 
@@ -654,6 +706,7 @@ def run_arm[
         c_v.unsafe_ptr(),
         d_nb.unsafe_ptr(),
         d_nc.unsafe_ptr(),
+        d_ts.unsafe_ptr(),
         Int32(bpn),
         Int32(sabotage),
         grid_dim=(bpn, n_nodes, 1),
@@ -840,7 +893,10 @@ def main() raises:
     var want = List[SplitExact]()
     for nid in range(n_nodes):
         want.append(
-            host_best(cands, Int(node_begin[nid]), Int(node_count[nid]))
+            host_best(
+                cands, Int(node_begin[nid]), Int(node_count[nid]),
+                node_salt(nid),
+            )
         )
 
     # E1: both tie-break arms are DECISIVE, not merely present -- the winner
@@ -1014,11 +1070,14 @@ def main() raises:
     var probe_n = 400
     if probe_n > n_c:
         probe_n = n_c
+    # One salt for every E4 pair: the pairwise-agreement property is per
+    # comparison, so any salt works as long as BOTH expressions see it.
+    var e4_salt = node_salt(0)
     for i in range(probe_n):
         for j in range(probe_n):
             var a = cands[i]
-            var moved = a.update(cands[j], Int32(SPLIT_SAB_NONE))
-            if moved != independent_better(cands[j], cands[i]):
+            var moved = a.update(cands[j], Int32(SPLIT_SAB_NONE), e4_salt)
+            if moved != independent_better(cands[j], cands[i], e4_salt):
                 pair_bad += 1
             pairs += 1
     print("  E4 pairwise agreement of SplitExact.update with the flat"
@@ -1313,10 +1372,14 @@ def main() raises:
             f = 2
         exp_float.append(f)
 
-        var ww = host_best_subset(cands, b, c, TPB_MULTI, WARP_SIZE)
+        var ww = host_best_subset(
+            cands, b, c, TPB_MULTI, WARP_SIZE, node_salt(nid)
+        )
         exp_warp.append(0 if same_payload(ww, w) else 1)
 
-        var bw = host_best_subset(cands, b, c, TPB_MULTI * bpn_multi, TPB_MULTI)
+        var bw = host_best_subset(
+            cands, b, c, TPB_MULTI * bpn_multi, TPB_MULTI, node_salt(nid)
+        )
         exp_block.append(0 if same_payload(bw, w) else 1)
 
         # A tie-break arm can only move a node whose winner was SELECTED by

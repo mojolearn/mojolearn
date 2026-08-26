@@ -39,12 +39,38 @@ Checked cell-for-cell against the upstreams' own arithmetic by
 """
 
 from std.math import fma
+from std.sys.compile import is_defined
 
 
 
 # cuML kernels/builder_kernels.cuh:100-101.
 comptime FNV1A32_PRIME: UInt32 = 16777619
 comptime FNV1A32_BASIS: UInt32 = 2166136261
+
+
+def fmix32(h_in: UInt32) -> UInt32:
+    """murmur3's 32-bit finalizer: a full-avalanche bijection on `UInt32`.
+
+    OURS (well, Austin Appleby's), DEVIATION 464. It exists because a bare
+    fnv1a32 chain has NO avalanche on a small final word: for `txt < 256`
+    only the first byte round does anything and the trailing three rounds
+    collapse to an affine map `K + perm(txt) * C mod 2^32` with
+    `C = FNV1A32_PRIME^3`, whose high bits walk a coarse Weyl rotation
+    (`C / 2^32` is within 2^-9 of 5/16, so consecutive inputs land in ~16
+    clusters). Ranking or subsetting BY such a hash is uniform per input in
+    the marginal sense but structured JOINTLY across inputs. Running the
+    combined word through this finalizer restores full bit diffusion; it is
+    a bijection, so it cannot introduce collisions the chain did not have.
+
+    Integer-only, vendor-neutral, callable from host and device alike.
+    """
+    var h = h_in
+    h ^= h >> 16
+    h *= 0x85EBCA6B
+    h ^= h >> 13
+    h *= 0xC2B2AE35
+    h ^= h >> 16
+    return h
 
 
 def fnv1a32(hash: UInt32, txt: UInt32) -> UInt32:
@@ -317,6 +343,20 @@ struct SplitKey(Copyable, Movable):
         return PCGenerator(self.seed, self.subsequence, offset)
 
 
+comptime THRESHOLD_KEY_SALT: UInt32 = 0xA24BAED4
+"""DEVIATION 465: the salt that makes `key_for`'s stream DISJOINT from the
+excess sampler's. Fresh constant, used nowhere else in the tree (grep); its
+value is arbitrary and pinned only by `tools/rng_oracle/pcg_reference.txt`."""
+
+
+comptime KEY_FOR_UNSALTED = is_defined["MOJOLEARN_ET_KEY_UNSALTED"]()
+"""A/B arm for DEVIATION 465: build with `-D MOJOLEARN_ET_KEY_UNSALTED=1` to
+restore the pre-465 three-link chain (the one that COLLIDES with
+`excess_subsequence` at `feature_id == thread_id`). Measurement arm only --
+`pcg_rng_check`'s chain pins are against the salted default and go red under
+this define, by design."""
+
+
 def key_for(
     seed: UInt64, tree_id: UInt32, node_id: UInt32, feature_id: UInt32
 ) -> SplitKey:
@@ -330,18 +370,32 @@ def key_for(
         subsequence = fnv1a32(subsequence, uint32_t(treeid));
         subsequence = fnv1a32(subsequence, uint32_t(nodeid));
 
-    We chain FOUR, with the SAME `fnv1a32` and the same basis, in the order
-    `feature_id, tree_id, node_id` -- deliberately mirroring their
-    `threadIdx, treeid, nodeid`, with `feature_id` in the per-candidate slot
-    their `threadIdx.x` occupies. The extension is needed because ExtraTrees
-    draws a threshold per `(node, feature)` where their sampler draws per
-    `(node, thread)`. Nothing else about the chain moves.
+    We chain FOUR, with the SAME `fnv1a32` and the same basis:
+    `THRESHOLD_KEY_SALT, feature_id, tree_id, node_id` -- the last three
+    deliberately mirroring their `threadIdx, treeid, nodeid`, with
+    `feature_id` in the per-candidate slot their `threadIdx.x` occupies (the
+    extension ExtraTrees needs because it draws a threshold per
+    `(node, feature)` where their sampler draws per `(node, thread)`).
+
+    THE SALT IS LOAD-BEARING, NOT DECORATION (DEVIATION 465). Until
+    2026-08-26 this function chained only the three ids -- byte-identical to
+    `excess_subsequence`'s chain in `builder_kernels.mojo` -- so for
+    `feature_id == thread_id` the threshold stream and the sampler stream
+    were the SAME PCG stream. On covtype that collision sat on the
+    informative columns 0-7, exactly where the sampler's threads 0-7 draw.
+    The comments at `builder_kernels.mojo` (`excess_selection_hash`) and
+    `rescue.mojo::RESCUE_FEATURE_SALT` already asserted the streams were
+    disjoint; this docstring even said "we chain FOUR" while the body
+    chained three. Now it chains four. `MOJOLEARN_ET_KEY_UNSALTED` restores
+    the old chain for an A/B.
 
     The seed is NOT hashed in; like cuML it stays the `seed` argument of the
     generator, so the subsequence is a pure function of the position in the
     forest and the seed is the only global knob.
     """
     var subsequence = FNV1A32_BASIS
+    comptime if not KEY_FOR_UNSALTED:
+        subsequence = fnv1a32(subsequence, THRESHOLD_KEY_SALT)
     subsequence = fnv1a32(subsequence, feature_id)
     subsequence = fnv1a32(subsequence, tree_id)
     subsequence = fnv1a32(subsequence, node_id)

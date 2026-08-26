@@ -267,11 +267,16 @@ HDI uint32_t fnv1a32(uint32_t hash, uint32_t txt)
 }
 
 // cuML kernels/builder_kernels.cuh:167-170, with the extra `feature` component
-// that is OUR deviation 130. Order mirrors theirs: the per-candidate component
-// first (they use threadIdx.x), then treeid, then nodeid.
+// that is OUR deviation 130 and the salt link that is OUR deviation 465. Order
+// mirrors theirs after the salt: the per-candidate component first (they use
+// threadIdx.x), then treeid, then nodeid. The salt (`THRESHOLD_KEY_SALT` in
+// pcg_rng.mojo) is what keeps this stream disjoint from the sampler's
+// three-link chain -- without it the two collide at feature == threadIdx.x.
+static const uint32_t threshold_key_salt = 0xA24BAED4u;
 static uint64_t key_chain(uint32_t feature, uint32_t tree, uint32_t node)
 {
   uint64_t subsequence(fnv1a32_basis);
+  subsequence = fnv1a32(uint32_t(subsequence), threshold_key_salt);
   subsequence = fnv1a32(uint32_t(subsequence), feature);
   subsequence = fnv1a32(uint32_t(subsequence), tree);
   subsequence = fnv1a32(uint32_t(subsequence), node);
