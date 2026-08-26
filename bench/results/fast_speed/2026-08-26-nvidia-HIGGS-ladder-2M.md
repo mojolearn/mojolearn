@@ -70,3 +70,23 @@ cuts, relaxed atomics, FAST-dead memset gated) is the A arm; this leg is
 the B baseline. The follow-up leg at 6fd4621 on the same ladder answers:
 does the 1M gap close (prep fix), and does the 2M→5M bend survive (if yes,
 the radix-sort port is the next campaign, DEVIATION number reserved).
+
+## POST-FIX ADDENDUM (leg 2026-08-26_170628, commit 132d754, same day)
+
+CatBoost's own arm moved <2% between the two boxes (995/1312/2544 vs
+904/1324/2570 ms), so this pair of legs is comparable. Ours:
+
+| rows | pre-fix | post-fix | verdict moved |
+|---|---|---|---|
+| 1M | 1073.1 (1.19x slower) | **668.1 (1.49x FASTER)** | -38% |
+| 2M | 1346.7 (1.02x slower) | **1185.9 (1.11x FASTER)** | -12% |
+| 5M | 5515.4 (2.15x slower) | **2760.2 (1.09x slower)** | -50% |
+
+The 2M->5M superlinear bend is GONE: our marginal is 518/525 ms per 1M
+rows across both intervals (linear), vs 274->1390 pre-fix. Marginal ratio
+vs CatBoost: 1.57x -> ~1.26x. The crossover moved from ~1M on this box
+class to past 4M. gbdt logloss 0.542247 at 1M -- unchanged to the sixth
+decimal, as the bit-identity gates promised. rf 2.04/1.98/2.19x barely
+moved: this leg predates the rf-port merge (0a8ba2f); the rf H100 A/B is
+the owed next leg. Deviations credited: 1887 (host prep), 1890-1892
+(estimation pool + drains + dead memset), 1898 (relaxed atomics).

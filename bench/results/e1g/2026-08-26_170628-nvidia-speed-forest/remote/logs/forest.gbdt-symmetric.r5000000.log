@@ -1,0 +1,19 @@
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+4065 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1285c0000000, nodemask=1)
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+4065 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x128600000000, nodemask=1)
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=higgs-5000000x28 ms=3601.965
+FSPEED-WARMUP lane=gbdt-symmetric arm=catboost-gpu shape=higgs-5000000x28 ms=2654.700
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-5000000x28 round=1 ms=2760.228 hash=c16d69d2a8d2458a
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-5000000x28 round=1 ms=2543.586 hash=2f6f5380c2cd9670
+4065 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x128640000000, nodemask=1)
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-5000000x28 round=2 ms=2767.198 hash=c16d69d2a8d2458a
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-5000000x28 round=2 ms=2587.139 hash=54cca783c7b255de
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-5000000x28 round=3 ms=2745.802 hash=c16d69d2a8d2458a
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-5000000x28 round=3 ms=2535.110 hash=63e6396e9fd60a49
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.542133
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.800668
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=logloss value=0.542201
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=auc value=0.800665

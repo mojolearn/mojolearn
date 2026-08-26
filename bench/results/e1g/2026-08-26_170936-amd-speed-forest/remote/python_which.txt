@@ -1,0 +1,2 @@
+/opt/conda/bin/python3
+3.12.2 | packaged by Anaconda, Inc. | (main, Feb 27 2024, 17:35:02) [GCC 11.2.0]

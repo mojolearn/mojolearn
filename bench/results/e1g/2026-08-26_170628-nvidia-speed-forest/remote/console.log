@@ -1,0 +1,163 @@
+
+=== pass 1: bindings/build.sh ===
+./neighbors/estimator.mojo:698:9: warning: ref 'i' was never used, remove it?
+    for i in range(n_outputs):
+        ^
+built python/mojolearn/_mojolearn.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_estimators.sh ===
+./glm/ported/glm/qn/qn_solvers.mojo:177:17: warning: assignment to 'lsret' was never used; assign to '_' instead?
+    var lsret = LS_SUCCESS
+                ^
+built python/mojolearn/_mojolearn_estimators.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_gbdt.sh ===
+./gbdt/methods/pointwise_optimization_subsets.mojo:1213:24: warning: assignment to 'adapt_blocks' was never used; assign to '_' instead?
+        adapt_blocks = 1
+                       ^
+built python/mojolearn/_mojolearn_gbdt.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_linalg.sh ===
+784 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x52b480000000, nodemask=1)
+built python/mojolearn/_mojolearn_linalg.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_metrics.sh ===
+/root/mojolearn/./cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:196:50: warning: assignment to 'centroid_batch' was never used; assign to '_' instead?
+    var centroid_batch = get_centroids_batch_size(batch_centroids, n_clusters)
+                                                 ^
+built python/mojolearn/_mojolearn_metrics.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_rf.sh ===
+/root/mojolearn/bindings/_mojolearn_rf.mojo:566:17: warning: assignment to 'wrote' was never used; assign to '_' instead?
+    var wrote = 0
+                ^
+built python/mojolearn/_mojolearn_rf.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_solver.sh ===
+/root/mojolearn/bindings/_mojolearn_solver.mojo:200:18: warning: assignment to 'rounds' was never used; assign to '_' instead?
+    var rounds = 0
+                 ^
+built python/mojolearn/_mojolearn_solver.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_svm.sh ===
+/root/mojolearn/bindings/_mojolearn_svm.mojo:322:27: warning: assignment to 'res' was never used; assign to '_' instead?
+    var res = IFRunOutputs()
+                          ^
+built python/mojolearn/_mojolearn_svm.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_trees.sh ===
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+built python/mojolearn/_mojolearn_trees.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_tsa.sh ===
+/root/mojolearn/bindings/_mojolearn_tsa.mojo:265:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+built python/mojolearn/_mojolearn_tsa.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build.sh ===
+    for i in range(n_outputs):
+        ^
+1453 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11be00000000, nodemask=1)
+built python/mojolearn/_mojolearn.so (0 AIR blobs, minos 11.0)
+
+=== pass 2: bindings/build_estimators.sh ===
+./glm/ported/glm/qn/qn_solvers.mojo:177:17: warning: assignment to 'lsret' was never used; assign to '_' instead?
+    var lsret = LS_SUCCESS
+                ^
+built python/mojolearn/_mojolearn_estimators.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_gbdt.sh ===
+                       ^
+1730 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x327d80000000, nodemask=1)
+1730 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x586540000000, nodemask=2)
+built python/mojolearn/_mojolearn_gbdt.so (0 AIR blobs, minos 11.0)
+
+=== pass 2: bindings/build_linalg.sh ===
+1877 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x125280000000, nodemask=1)
+built python/mojolearn/_mojolearn_linalg.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_metrics.sh ===
+/root/mojolearn/./cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:196:50: warning: assignment to 'centroid_batch' was never used; assign to '_' instead?
+    var centroid_batch = get_centroids_batch_size(batch_centroids, n_clusters)
+                                                 ^
+built python/mojolearn/_mojolearn_metrics.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_rf.sh ===
+                ^
+2090 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x532c80000000, nodemask=1)
+2090 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x79e0c0000000, nodemask=2)
+built python/mojolearn/_mojolearn_rf.so (0 AIR blobs, minos 11.0)
+
+=== pass 2: bindings/build_solver.sh ===
+/root/mojolearn/bindings/_mojolearn_solver.mojo:200:18: warning: assignment to 'rounds' was never used; assign to '_' instead?
+    var rounds = 0
+                 ^
+built python/mojolearn/_mojolearn_solver.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_svm.sh ===
+/root/mojolearn/bindings/_mojolearn_svm.mojo:322:27: warning: assignment to 'res' was never used; assign to '_' instead?
+    var res = IFRunOutputs()
+                          ^
+built python/mojolearn/_mojolearn_svm.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_trees.sh ===
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+2450 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x129a00000000, nodemask=1)
+built python/mojolearn/_mojolearn_trees.so (0 AIR blobs, minos 11.0)
+
+=== pass 2: bindings/build_tsa.sh ===
+/root/mojolearn/bindings/_mojolearn_tsa.mojo:265:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+built python/mojolearn/_mojolearn_tsa.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+2634 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b1600000000, nodemask=2)
+mojolearn imports OK /root/mojolearn/python/mojolearn/__init__.py
+
+=== forest.gbdt-symmetric.r1000000.log :: python3 bench/speed/forest_speed_arm.py --lane gbdt-symmetric --dataset higgs --rows 1000000 ===
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.800447
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=logloss value=0.542424
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=auc value=0.800373
+
+=== forest.gbdt-symmetric.r2000000.log :: python3 bench/speed/forest_speed_arm.py --lane gbdt-symmetric --dataset higgs --rows 2000000 ===
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.800573
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=logloss value=0.542353
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=auc value=0.800336
+
+=== forest.gbdt-symmetric.r5000000.log :: python3 bench/speed/forest_speed_arm.py --lane gbdt-symmetric --dataset higgs --rows 5000000 ===
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.800668
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=logloss value=0.542201
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=auc value=0.800665
+
+=== forest.rf.r1000000.log :: python3 bench/speed/forest_speed_arm.py --lane rf --dataset higgs --rows 1000000 ===
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.809906
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=logloss value=0.538814
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=auc value=0.809834
+
+=== forest.rf.r2000000.log :: python3 bench/speed/forest_speed_arm.py --lane rf --dataset higgs --rows 2000000 ===
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.811483
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=logloss value=0.537039
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=auc value=0.811519
+
+=== forest.rf.r5000000.log :: python3 bench/speed/forest_speed_arm.py --lane rf --dataset higgs --rows 5000000 ===
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.812881
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=logloss value=0.535689
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=auc value=0.812976
+
+=== forest.et.r1000000.log :: python3 bench/speed/forest_speed_arm.py --lane et --dataset higgs --rows 1000000 ===
+FSPEED lane=et arm=ours shape=higgs-1000000x28 round=3 ms=4099.810 hash=fdce1a43cb984497
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.621923
+FSPEED-ACC lane=et arm=ours metric=auc value=0.762823
+
+=== forest.et.r2000000.log :: python3 bench/speed/forest_speed_arm.py --lane et --dataset higgs --rows 2000000 ===
+FSPEED lane=et arm=ours shape=higgs-2000000x28 round=3 ms=6770.348 hash=04071a5fab79ffe8
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.623010
+FSPEED-ACC lane=et arm=ours metric=auc value=0.761916
+
+=== forest.et.r5000000.log :: python3 bench/speed/forest_speed_arm.py --lane et --dataset higgs --rows 5000000 ===
+FSPEED lane=et arm=ours shape=higgs-5000000x28 round=3 ms=14191.491 hash=437913e2aacc6c01
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.624324
+FSPEED-ACC lane=et arm=ours metric=auc value=0.761727
