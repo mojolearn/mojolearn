@@ -817,7 +817,13 @@ fi
 if [ "$MODE" != "reap" ]; then
     case "$VENDOR" in
         nvidia) : "${GPU_ID:=$LEG_GPU_NVIDIA}"; : "${IMAGE:=$LEG_IMAGE_NVIDIA}"; SMI_CMD='nvidia-smi --query-gpu=name,driver_version --format=csv,noheader' ;;
-        amd)    : "${GPU_ID:=$LEG_GPU_AMD}";    : "${IMAGE:=$LEG_IMAGE_AMD}";    SMI_CMD='rocm-smi --showproductname' ;;
+        amd)    : "${GPU_ID:=$LEG_GPU_AMD}";    : "${IMAGE:=$LEG_IMAGE_AMD}";    SMI_CMD='rocm-smi --showproductname'
+                # AMD hosts advertise no CUDA version, so the CUDA allow-list
+                # filters out EVERY host that could hold this pod: the
+                # 2026-08-26_162559 create died "no instances currently
+                # available" with the list attached. Send it only when the
+                # operator asked for one by name.
+                CUDA_VERSIONS="${MOJOLEARN_GEMM_LEG_CUDA:-}" ;;
     esac
     VLABEL=$(echo "$VENDOR" | tr '[:lower:]' '[:upper:]')
 fi
@@ -1839,13 +1845,20 @@ leg_create_pod() {
     # the create would leave uncovered the one instant it exists for -- the
     # create that succeeds and is never parsed.
     leg_arm_deadman
+    # An empty CUDA_VERSIONS (the AMD default) omits the field entirely --
+    # "allowedCudaVersions": [] is a constraint no host satisfies, not the
+    # absence of one.
+    CUDA_LINE=""
+    if [ -n "$CUDA_VERSIONS" ]; then
+        CUDA_LINE="\"allowedCudaVersions\": [$CUDA_VERSIONS],"
+    fi
     cat > "$TMPD/create.json" <<JSONEOF
 {
   "name": "$POD_NAME",
   "imageName": "$IMAGE",
   "gpuTypeIds": ["$GPU_ID"],
   "gpuCount": 1,
-  "allowedCudaVersions": [$CUDA_VERSIONS],
+  $CUDA_LINE
   "cloudType": "SECURE",
   "containerDiskInGb": 60,
   "volumeInGb": 0,
