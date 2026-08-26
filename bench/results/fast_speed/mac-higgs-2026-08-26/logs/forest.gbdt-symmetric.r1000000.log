@@ -1,0 +1,15 @@
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=cpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=FAST device=Darwin_arm64 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-cpu mode=FAST device=Darwin_arm64 rounds=3 size=shipped
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 ms=3977.090
+FSPEED-WARMUP lane=gbdt-symmetric arm=catboost-cpu shape=higgs-1000000x28 ms=3643.295
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=1 ms=3762.358 hash=ac7cf7badff08c6b
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=higgs-1000000x28 round=1 ms=3464.231 hash=8757eed035588bf8
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=2 ms=3710.756 hash=ac7cf7badff08c6b
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=higgs-1000000x28 round=2 ms=3806.136 hash=8757eed035588bf8
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=3 ms=3866.485 hash=ac7cf7badff08c6b
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=higgs-1000000x28 round=3 ms=4171.009 hash=8757eed035588bf8
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.542247
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.800537
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-cpu metric=logloss value=0.543225
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-cpu metric=auc value=0.799673

@@ -1,0 +1,18 @@
+FSPEED-NOTE lane=et arms=ours metric=devices delta=1.000000 reason=devices=cpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+FSPEED-REFUSED lane=et arm=cuml-et-gpu reason=ModuleNotFoundError: No module named 'cuml'
+FSPEED-REFUSED lane=et arm=lightgbm-cpu reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-REFUSED lane=et arm=lightgbm-cuda reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-HEADER family=forest lane=et arm=ours mode=FAST device=Darwin_arm64 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=et arm=sklearn-et-cpu mode=FAST device=Darwin_arm64 rounds=3 size=shipped
+FSPEED-WARMUP lane=et arm=ours shape=higgs-1000000x28 ms=19157.416
+FSPEED-WARMUP lane=et arm=sklearn-et-cpu shape=higgs-1000000x28 ms=30148.936
+FSPEED lane=et arm=ours shape=higgs-1000000x28 round=1 ms=20448.300 hash=fdce1a43cb984497
+FSPEED lane=et arm=sklearn-et-cpu shape=higgs-1000000x28 round=1 ms=28494.875 hash=86a66a839d7850e9
+FSPEED lane=et arm=ours shape=higgs-1000000x28 round=2 ms=20944.393 hash=fdce1a43cb984497
+FSPEED lane=et arm=sklearn-et-cpu shape=higgs-1000000x28 round=2 ms=28761.257 hash=a6b05a9011aaf6af
+FSPEED lane=et arm=ours shape=higgs-1000000x28 round=3 ms=24367.175 hash=fdce1a43cb984497
+FSPEED lane=et arm=sklearn-et-cpu shape=higgs-1000000x28 round=3 ms=31483.933 hash=31c2033b93a6f81a
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.621923
+FSPEED-ACC lane=et arm=ours metric=auc value=0.762823
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=logloss value=0.621178
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=auc value=0.764018
