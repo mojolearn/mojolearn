@@ -36,7 +36,7 @@ family's stage 1, then one thread per fold writes both stats through
 the same dual-branch flush every histogram kernel in this package uses.
 """
 
-from std.atomic import Atomic
+from std.atomic import Atomic, Ordering
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.gpu.intrinsics import ldg
 from std.memory import stack_allocation
@@ -89,8 +89,14 @@ def h8_add_point(
         var f = (tid + i) & 3
         var bin = Int((ci >> UInt32(24 - 8 * f)) & UInt32(255))
         var cell = slice_base + (bin << 3) + (f << 1)
-        _ = Atomic.fetch_add(smem.unsafe_offset(cell), q1)
-        _ = Atomic.fetch_add(smem.unsafe_offset(cell + 1), q2)
+        # DEVIATION 1898: upstream's atomicAdd is relaxed; the non-Apple Mojo
+        # default is seq_cst.
+        _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
+            smem.unsafe_offset(cell), q1
+        )
+        _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
+            smem.unsafe_offset(cell + 1), q2
+        )
 
 
 def h8_reduce_and_flush(
@@ -156,7 +162,9 @@ def h8_reduce_and_flush(
                         + fold_off
                     )
                     if active_block_count > 1:
-                        _ = Atomic.fetch_add(
+                        # DEVIATION 1898: upstream's atomicAdd is relaxed; the
+                        # non-Apple Mojo default is seq_cst.
+                        _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                             acc_i32.unsafe_offset(dst_base + fold), q
                         )
                     else:
