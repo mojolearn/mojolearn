@@ -1,0 +1,6 @@
+1152 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3b7bc0000000, nodemask=2)
+FSPEED-HEADER family=classical lane=dbscan arm=ours mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-WARMUP lane=dbscan arm=ours shape=4000x16 ms=1.49673
+FSPEED lane=dbscan arm=ours shape=4000x16 round=1 ms=0.716302 hash=4869c285f078c0a5
+FSPEED lane=dbscan arm=ours shape=4000x16 round=2 ms=0.71069 hash=4869c285f078c0a5
+FSPEED lane=dbscan arm=ours shape=4000x16 round=3 ms=0.710735 hash=4869c285f078c0a5

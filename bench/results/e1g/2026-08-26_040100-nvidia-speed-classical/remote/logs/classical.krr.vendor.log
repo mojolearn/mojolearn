@@ -1,0 +1,10 @@
+/root/mojolearn/bench/bench_sklearn.py:139: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=krr arm=cuml-gpu kernel=rbf, gamma and alpha passed explicitly; fit plus predict inside the clock, matching our lane
+FSPEED-HEADER family=classical lane=krr arm=cuml-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-WARMUP lane=krr arm=cuml-gpu shape=RBF.16x5 ms=1348.565197
+FSPEED lane=krr arm=cuml-gpu shape=RBF.16x5 round=1 ms=2.634011 hash=bf101d3b60c2f648
+FSPEED lane=krr arm=cuml-gpu shape=RBF.16x5 round=2 ms=2.256453 hash=bf101d3b60c2f648
+FSPEED lane=krr arm=cuml-gpu shape=RBF.16x5 round=3 ms=2.212204 hash=bf101d3b60c2f648

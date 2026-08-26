@@ -428,6 +428,46 @@ def _accel_visible():
     return bool(shutil.which("nvidia-smi") or shutil.which("rocm-smi"))
 
 
+def to_device(lane, arm, *arrays):
+    """Move host arrays to the GPU BEFORE the clock starts.
+
+    THIS EXISTS BECAUSE THE ARMS WERE NOT MEASURING THE SAME REGION, AND THE
+    ASYMMETRY RAN IN OUR FAVOUR AT EXACTLY THE SHAPES THAT MATTER.
+
+    Our Mojo arm uploads its fixture once, before the round loop, and times
+    the fit alone. The cuML arms were handing `estimator.fit()` a HOST NUMPY
+    ARRAY inside the timed region, so every round cuML paid a host-to-device
+    transfer our arm had already paid outside the clock. At `ols` and
+    `kmeans` that array is 4,000,000 x 32 float32 -- FIVE HUNDRED AND TWELVE
+    MEGABYTES, every round, on their side only.
+
+    Measured 2026-08-26, before this fix: ols ours 8.6 ms against cuML 176.9
+    ms (20.6x) and kmeans ours 155.1 ms against 236.8 ms (1.53x). Those were
+    the two largest-shape rows in the classical set and therefore the only
+    two that were quotable at all, and a chunk of both was PCIe.
+
+    `output_type="cupy"` is the other half: it keeps the result on the
+    device so the device-to-host copy of, for instance, kmeans' 4,000,000
+    int32 labels does not land inside the clock either. `_host_view` takes
+    the copy afterwards, where our arm takes its own.
+
+    IF CUPY IS NOT IMPORTABLE the arrays are returned unchanged and a NOTE
+    says so on the row, because a silently host-fed arm is the bug this
+    function exists to remove and it must not come back quietly.
+    """
+    try:
+        import cupy as cp                               # noqa: PLC0415
+    except Exception as e:                              # noqa: BLE001
+        note(lane, arm, "cupy is not importable (%r), so this arm's inputs "
+                        "stay on the HOST and every timed round pays a "
+                        "transfer our arm pays once outside the clock. The "
+                        "ratio on this row is NOT comparable." % (e,))
+        return arrays if len(arrays) != 1 else arrays[0]
+    out = tuple(cp.asarray(a) for a in arrays)
+    cp.cuda.runtime.deviceSynchronize()
+    return out if len(out) != 1 else out[0]
+
+
 def race(lane, arm, shape, rounds, size, device, call):
     """One warm-up plus `rounds` timed calls of `call`, which returns the
     outputs to hash (a tuple, or `None` for a lane whose output is not
@@ -512,6 +552,10 @@ def lane_kmeans(rounds, size, smoke):
     init = np.ascontiguousarray(
         u01_at(np.arange(s["km_k"]) * 7919, s["km_cols"], 5) * 10.0,
         dtype=np.float32)
+    # ON THE DEVICE BEFORE THE CLOCK, matching our arm. At 4,000,000 x 32
+    # this array is 512 MB and it was being transferred inside every timed
+    # round on their side only.
+    X, init = to_device(lane, arm, X, init)
     km = None
 
     def call():
@@ -520,7 +564,7 @@ def lane_kmeans(rounds, size, smoke):
         # in __init__; fit is where everything happens. Matching our arm,
         # which also re-uploads its initial centroids each round.
         km = KMeans(n_clusters=s["km_k"], init=init, n_init=1,
-                    max_iter=s["km_iter"], tol=1e-7, output_type="numpy")
+                    max_iter=s["km_iter"], tol=1e-7, output_type="cupy")
         km.fit(X)
         return (km.cluster_centers_, km.labels_)
 
@@ -571,10 +615,27 @@ def lane_pca(rounds, size, smoke):
     # actually ran is printed. `auto` is NOT used: a comparison that depends
     # on somebody's heuristic staying put is a comparison that stops being one
     # without telling you.
+    # PROBE BY FITTING, NOT BY CONSTRUCTING. cuml.PCA's constructor does not
+    # validate `svd_solver`, so the old probe "accepted" covariance_eigh and
+    # the ValueError arrived at fit() -- inside the timed region, killing the
+    # arm. On 2026-08-25 that is exactly what happened and the pca lane came
+    # home with no opponent at all:
+    #
+    #   ValueError: Expected `svd_solver` to be one of
+    #               ['auto', 'full', 'jacobi'], got 'covariance_eigh'
+    #
+    # `jacobi` is listed FIRST because it is the real algorithm match: cuML's
+    # jacobi solver takes an iterative eigendecomposition, and our `pca_fit`
+    # forms the covariance and runs `jacobi_eigh_device` on it. `full` is the
+    # fallback and is a DIFFERENT decomposition (SVD of the data matrix), so
+    # the note below says so when it is what ran.
+    _probe = np.ascontiguousarray(
+        u01(64, s["pca_cols"], 99), dtype=np.float32)
     solver = None
-    for cand in ("covariance_eigh", "full", "jacobi"):
+    for cand in ("jacobi", "full", "covariance_eigh"):
         try:
-            PCA(n_components=s["pca_comp"], svd_solver=cand)
+            PCA(n_components=s["pca_comp"], svd_solver=cand,
+                output_type="numpy").fit(_probe)
             solver = cand
             break
         except Exception:
@@ -582,17 +643,24 @@ def lane_pca(rounds, size, smoke):
     if solver is None:
         refuse(lane, arm, "cuml.PCA accepted none of covariance_eigh/full/jacobi")
         return
-    if solver != "covariance_eigh":
-        note(lane, arm, "svd_solver=%s: cuML has no covariance_eigh on this "
-                        "build, so this arm is a DIFFERENT decomposition from "
-                        "ours and the ratio is algorithm plus device, not "
-                        "device alone" % solver)
-    else:
+    if solver == "jacobi":
+        note(lane, arm, "svd_solver=jacobi, algorithm-matched: their "
+                        "iterative eigendecomposition against our pca_fit, "
+                        "which forms the covariance and runs "
+                        "jacobi_eigh_device on it")
+    elif solver == "covariance_eigh":
         note(lane, arm, "svd_solver=covariance_eigh, algorithm-matched")
+    else:
+        note(lane, arm, "svd_solver=%s: this is an SVD OF THE DATA MATRIX, a "
+                        "DIFFERENT decomposition from our covariance-plus-"
+                        "eigen route, so the ratio on this row is algorithm "
+                        "plus device and not device alone" % solver)
+
+    X = to_device(lane, arm, X)
 
     def call():
         p = PCA(n_components=s["pca_comp"], svd_solver=solver,
-                output_type="numpy")
+                output_type="cupy")
         p.fit(X)
         return (p.components_, p.explained_variance_, p.singular_values_)
 
@@ -619,9 +687,13 @@ def lane_ols(rounds, size, smoke):
     note(lane, arm, "algorithm=eig fit_intercept=False, algorithm-matched "
                     "with lstsq_eig (normal equations, eigen route)")
 
+    # ON THE DEVICE BEFORE THE CLOCK. `A` is 4,000,000 x 32 float32 = 512 MB
+    # and was crossing PCIe inside every timed round on their side alone.
+    A, b = to_device(lane, arm, A, b)
+
     def call():
         m = LinearRegression(algorithm="eig", fit_intercept=False,
-                             output_type="numpy")
+                             output_type="cupy")
         m.fit(A, b)
         return (m.coef_,)
 
@@ -646,8 +718,12 @@ def lane_knn(rounds, size, smoke):
     # two `compute_norms` calls ARE inside ours, and cuML's `kneighbors`
     # computes its norms inside itself, so the two regions cover the same
     # work.
+    # Symmetric with the other lanes even though the asymmetry here ran
+    # AGAINST them: `qry` is only 4,000 x 32 and the transfer was inside
+    # their clock, so our 21.6x loss on this row was if anything understated.
+    idx, qry = to_device(lane, arm, idx, qry)
     nn = NearestNeighbors(n_neighbors=s["knn_k"], algorithm="brute",
-                          metric="euclidean", output_type="numpy")
+                          metric="euclidean", output_type="cupy")
     nn.fit(idx)
     _sync()
     note(lane, arm, "cuML returns EUCLIDEAN distances and our arm returns "

@@ -1,0 +1,80 @@
+# mojolearn-speed-fixture v1 lane=gp
+PARAM fixture ard
+PARAM n_train 12
+PARAM n_star 6
+PARAM d 3
+PARAMHEX alpha 35800000
+PARAM kernel rbf_ard
+ARRAY length_scale f32 3
+3f000000
+3f800000
+40e00000
+ARRAY x f32 36
+3ff8b386
+bf1f65ee
+bf636bb5
+3f1f96b7
+3f898076
+bf636bb5
+bfea0f85
+bf7872f9
+bf636bb5
+bf850862
+3f17083f
+bf636bb5
+bf30ceac
+3fe421d5
+bf636bb5
+bf26bcbb
+3f32fa87
+bf636bb5
+3fb58043
+bfe12ae6
+bf636bb5
+3f18afa3
+3f2fdec3
+bf636bb5
+bfef5227
+3f8c6adc
+bf636bb5
+bfa93b23
+3f87064b
+bf636bb5
+bf3e2421
+3f9a4e41
+bf636bb5
+bfaa369e
+bf561bb4
+bf636bb5
+ARRAY y f32 12
+3f400000
+3e800000
+bf400000
+3f000000
+3f000000
+bf400000
+bf400000
+3f400000
+be800000
+bf400000
+3e800000
+3f400000
+ARRAY x_star f32 18
+3f2a7e08
+bfbdab49
+bf636bb5
+bff70cf7
+bfe79beb
+bf636bb5
+bfb23194
+bffb0bcf
+bf636bb5
+3f9d6f26
+bf100472
+bf636bb5
+bfc3631f
+bf0f09fc
+bf636bb5
+bf2007a3
+3f3b4196
+bf636bb5
