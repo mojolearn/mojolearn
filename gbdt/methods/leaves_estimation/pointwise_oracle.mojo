@@ -208,6 +208,14 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
     #: the partition once per tree; `MoveTo`'s kernel indexes it flat
     var d_bins: DeviceBuffer[DType.uint32]
     var d_leaves: DeviceBuffer[DType.uint32]
+    #: `d_leaves`' host staging, HELD AS A FIELD so its enqueued copy can
+    #: never outlive it (DEVIATION 1891): as a local in
+    #: `make_bin_optimized_oracle` it forced a full per-tree drain whose
+    #: only purpose was making that copy a run before the local died.
+    #: Riding the oracle, it dies with the oracle -- which every caller
+    #: holds past at least one eval drain (the walker syncs every
+    #: evaluation; the boosting loop pins the oracle past its tail drain).
+    var h_leaves: HostBuffer[DType.uint32]
     var d_p_off: DeviceBuffer[DType.uint32]
     var d_p_sz: DeviceBuffer[DType.uint32]
     var d_shift: DeviceBuffer[DType.float32]
@@ -394,6 +402,14 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             self.ctx.enqueue_copy(
                 dst_ptr=self.h_fv.unsafe_ptr(), src_buf=self.d_fv
             )
+            # KEPT (DEVIATION 1891 audit): the ONE drain per walker
+            # evaluation, and it is required -- the host reads
+            # `h_part_stats` and `h_fv` immediately below to decide the
+            # line search. Both readbacks are already batched ahead of
+            # this single drain, and no per-evaluation allocation exists
+            # on this path, so this is the floor CatBoost's pinned-memory
+            # `ReadReduce` also pays (theirs is cheaper per drain, not
+            # fewer drains).
             self.ctx.synchronize()
             self.times.end(self.ctx, "est.readback")
 
@@ -990,15 +1006,23 @@ def make_bin_optimized_oracle(
         )
 
     # THE HOST STAGING BUFFER MUST OUTLIVE ITS ENQUEUED COPY. `h_leaves`'
-    # last use was its `enqueue_copy`, so Mojo freed it there while the
-    # copy sat in the queue -- a use-after-free whose window OPENS UNDER
-    # CPU CONTENTION (the freed pages get reused before the queue
+    # last use used to be its `enqueue_copy`, so Mojo freed it there while
+    # the copy sat in the queue -- a use-after-free whose window OPENS
+    # UNDER CPU CONTENTION (the freed pages get reused before the queue
     # drains), which is precisely the signature of the divergent
-    # full-higgs fit of 2026-08-22 (PREP_BILL step 33). The drain makes
-    # the copy a RUN; only then may the buffer die. Same rule as the
-    # 730cc20 hardening: an enqueue is not a run.
-    ctx.synchronize()
-    _ = h_leaves^
+    # full-higgs fit of 2026-08-22 (PREP_BILL step 33). The first fix was
+    # a `ctx.synchronize()` here plus `_ = h_leaves^`: the drain made the
+    # copy a RUN, only then could the buffer die (the 730cc20 rule: an
+    # enqueue is not a run).
+    #
+    # DEVIATION 1891 keeps the rule and drops the drain: `h_leaves` is now
+    # a FIELD of the oracle (declared beside `d_leaves`), so it lives as
+    # long as every other buffer the estimation reads and its copy is a
+    # run long before the oracle can die -- the walker drains at every
+    # evaluation, `estimate_exact`'s readback drains, and the boosting
+    # loop additionally pins the oracle past the task's tail drain. One
+    # full device drain per estimation task removed; enqueue order is
+    # untouched, so the change is bit-inert.
 
     # FORCE-DISABLED regardless of the environment: the fit reads the env
     # ONCE (its own `StageTimes()`), and the walker's timed overload
@@ -1035,6 +1059,7 @@ def make_bin_optimized_oracle(
         d_identity^,
         d_bins^,
         d_leaves^,
+        h_leaves^,
         d_p_off^,
         d_p_sz^,
         d_shift^,

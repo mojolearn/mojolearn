@@ -98,6 +98,7 @@ from gbdt.gpu_util.partitions_reduce import compute_partition_stats
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     CFEATURE_BYTES,
     TTreeWorkspace,
+    acc_i32_is_live,
     compute_target_std_dev,
     launch_histograms_for_blocks,
     resolve_split,
@@ -726,6 +727,9 @@ def fit_non_symmetric_tree[
         wide = 1
 
     # ---- THE POOLS. The symmetric lane's, unchanged, plus this lane's ----
+    # DEVIATION 1892: the accumulator's liveness is part of the key (see
+    # `acc_i32_is_live`'s docstring in `greedy_search_helper.mojo`).
+    comptime _ACC_LIVE = acc_i32_is_live[hist2_smem_mode]()
     if (
         len(ws) == 0
         or ws[0].n_rows_key != n_rows
@@ -733,11 +737,13 @@ def fit_non_symmetric_tree[
         or ws[0].max_leaves_key != max_leaves
         or ws[0].n_features_key != len(fold_counts)
         or ws[0].hist_cells_per_leaf_key != hist_cells_per_leaf
+        or ws[0].acc_live_key != _ACC_LIVE
     ):
         ws.clear()
         ws.append(
             TTreeWorkspace(
-                ctx, layout, blocks, n_rows, stat_count, max_depth
+                ctx, layout, blocks, n_rows, stat_count, max_depth,
+                _ACC_LIVE,
             )
         )
     if (
@@ -852,7 +858,12 @@ def fit_non_symmetric_tree[
     ctx.enqueue_copy(dst_buf=hp_off, src_ptr=h_off.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=hp_sz, src_ptr=h_sz.unsafe_ptr())
     ctx.enqueue_memset(hist, Float32(0.0))
-    ctx.enqueue_memset(acc_i32, Int32(0))
+    # DEVIATION 1892: same gate as the symmetric driver's per-tree memset
+    # -- under a float flush with the warp-private `hist2` arm nothing
+    # writes or reads `acc_i32`, so the per-tree zeroing is skipped and
+    # the buffer is the pool's one-cell placeholder.
+    comptime if _ACC_LIVE:
+        ctx.enqueue_memset(acc_i32, Int32(0))
 
     # The fixed-point scale, host-derived. DEVIATION 95's device derivation
     # is not wired here: it exists to remove the boosting loop's per-tree
