@@ -301,28 +301,115 @@ def main():
             worst.append((ours["median"] / best_t, lane, shape, best_o,
                           ours["median"], best_t))
     worst.sort(reverse=True)
-    if worst:
-        w("## Where we lose most, ranked")
+
+    # THROUGHPUT ROWS AND FIXED-COST ROWS ARE NOT THE SAME KIND OF NUMBER,
+    # AND MIXING THEM IS HOW A TABLE LIES.
+    #
+    # A lane at 4,000,000 rows measures arithmetic. A lane at 96 rows -- or
+    # 16, which is what `krr` ships -- measures what one fit costs end to
+    # end, and that is mostly launch and dispatch latency on both sides.
+    # Both come out as milliseconds and both divide into a ratio, so nothing
+    # in the shape of the data distinguishes them.
+    #
+    # On 2026-08-25 a summary of the first classical leg against cuML
+    # reported ELEVEN WINS OUT OF FOURTEEN. Ten were at 8 to 4,000 rows.
+    # Exactly one -- kmeans at 4,000,000 x 32 -- was a claim about kernels.
+    # The write-up was not fabricated; it read a table that had no way of
+    # telling it the difference.
+    #
+    # There is a second asymmetry that only bites the small rows: the vendor
+    # arms are called through PYTHON inside the timed region while our arm
+    # is a compiled binary. At sub-millisecond totals a real share of the
+    # ratio is Python call overhead. That is something a cuML user genuinely
+    # pays, and it is NOT a fact about anybody's CUDA kernels.
+    #
+    # So the lanes declare which kind they are (`scale=` in the FSPEED
+    # header, defaulting to `fixed` so an unconsidered lane comes out
+    # unclaimable), the two kinds get separate tables, and THE HEADLINE
+    # COUNTS ONLY THROUGHPUT ROWS.
+    scale_of = {}
+    for h in run.headers:
+        if h.get("arm") == "ours" and h.get("scale"):
+            scale_of[h.get("lane")] = h["scale"]
+    thr = [x for x in worst if scale_of.get(x[1]) == "throughput"]
+    fixd = [x for x in worst if scale_of.get(x[1]) != "throughput"]
+    # A RUN THAT PREDATES THE FIELD MUST NOT BE SILENTLY CALLED FIXED-COST.
+    # No `scale=` anywhere means the logs are older than the declaration, not
+    # that every lane is small -- and one of them (kmeans, 4,000,000 x 32)
+    # demonstrably is not. Saying "unknown" is the honest answer; saying
+    # "fixed" would be a second wrong label replacing the first.
+    unscaled = not scale_of
+
+    def _rank_table(rows, title, blurb, headline):
+        if not rows:
+            return
+        w("## " + title)
         w("")
-        w("Against the FASTEST opponent that actually ran on each row, because")
-        w("losing 70x to a TF32 arm and 12x to an FP32 arm is one fact and not")
-        w("two. This is the optimization queue: it is a measurement, not an")
-        w("intuition about which kernel feels slow.")
+        for line in blurb:
+            w(line)
         w("")
         w("| rank | lane | shape | ours ms | best opponent | their ms | we are |")
         w("|---|---|---|---|---|---|---|")
-        for i, (r, lane, shape, o, om, tm) in enumerate(worst[:25], 1):
+        for i, (r, lane, shape, o, om, tm) in enumerate(rows[:25], 1):
             verdict = ("%.2fx SLOWER" % r) if r > 1.0 else ("%.2fx FASTER" % (1.0 / r))
             w("| %d | %s | %s | %s | %s | %s | **%s** |"
               % (i, lane, shape, fmt(om), o, fmt(tm), verdict))
-        if len(worst) > 25:
+        if len(rows) > 25:
             w("")
-            w("%d further rows not listed; %d rows in total have an opponent."
-              % (len(worst) - 25, len(worst)))
-        wins = [x for x in worst if x[0] <= 1.0]
+            w("%d further rows not listed; %d rows in this table."
+              % (len(rows) - 25, len(rows)))
+        if headline:
+            wins = [x for x in rows if x[0] <= 1.0]
+            w("")
+            w("**%d of %d THROUGHPUT rows with an opponent are wins for us.**"
+              % (len(wins), len(rows)))
         w("")
-        w("**%d of %d rows with an opponent are wins for us.**"
-          % (len(wins), len(worst)))
+
+    _rank_table(
+        thr,
+        "Where we lose most, ranked -- THROUGHPUT rows",
+        ["These are the rows big enough for the ratio to be about",
+         "arithmetic. THIS IS THE ONLY TABLE ANY SPEED CLAIM MAY BE DRAWN",
+         "FROM. Against the fastest opponent that actually ran on each row,",
+         "because losing 70x to a TF32 arm and 12x to an FP32 arm is one",
+         "fact and not two."],
+        True,
+    )
+    if unscaled:
+        w("## Scale UNKNOWN for every row in this run")
+        w("")
+        w("No arm in these logs emitted `scale=` in its FSPEED header, so")
+        w("this run is OLDER than the throughput/fixed-cost declaration and")
+        w("the split below could not be made. The rows are listed under")
+        w("FIXED-COST because that is the conservative bucket, but the label")
+        w("is NOT a measurement here -- some of these lanes are genuinely")
+        w("large (kmeans ships 4,000,000 x 32) and some are genuinely tiny")
+        w("(krr ships 16 rows). Check each shape tag by hand before quoting")
+        w("anything from this file, or re-run so the arms declare it.")
+        w("")
+    _rank_table(
+        fixd,
+        ("Rows, ranked -- scale UNDECLARED, check each shape by hand"
+         if unscaled else "FIXED-COST rows -- NOT a speed claim"),
+        ["Every row here is a lane whose fixture is small enough that both",
+         "arms are dominated by launch and dispatch latency, plus the Python",
+         "call overhead the vendor arm pays inside the clock and ours does",
+         "not. Read each as WHAT ONE FIT COSTS END TO END on this box.",
+         "",
+         "A ratio here is not wrong, it is UNCLAIMABLE: it does not tell you",
+         "whose kernel is faster. Some of these lanes cannot be made bigger",
+         "for stated reasons -- `hdbscan`'s dense mutual-reachability arm",
+         "materializes an m x m matrix, and inventing a larger fixture to",
+         "make the number look like throughput would be inventing a dataset.",
+         "Others simply have no size knob yet, and that is owed work.",
+         "",
+         "They are ranked and kept rather than deleted because the fixed",
+         "cost is a real thing a user pays on a small problem."],
+        False,
+    )
+    if thr or fixd:
+        w("%d rows in total have an opponent: %d throughput, %d fixed-cost."
+          % (len(worst), len(thr), len(fixd)))
         w("")
 
     if run.agree:

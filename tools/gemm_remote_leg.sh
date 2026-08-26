@@ -661,6 +661,7 @@ while [ $# -gt 0 ]; do
         --no-lgbm-cuda)  SPEED_LGBM_CUDA=0 ;;
         --allow-concurrent) LEG_ALLOW_CONCURRENT=1 ;;
         --smoke)         SPEED_SIZE="smoke" ;;
+        --large)         SPEED_SIZE="large" ;;
         --apple-dir)     shift; APPLE_DIR="${1:-}" ;;
         --work-timeout)  shift; WORK_TIMEOUT="${1:-}" ;;
         -h|--help|help)  leg_usage; exit 0 ;;

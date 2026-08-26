@@ -379,6 +379,37 @@ def _env_int(name: String, default: Int) raises -> Int:
     return Int(atol(s))
 
 
+def _sz(size: String, smoke_v: Int, shipped_v: Int, large_v: Int) -> Int:
+    """Pick a dimension for the size tier. THE THIRD TIER IS NEW AND IT IS
+    THE POINT OF THIS FILE'S NEXT ROUND.
+
+    The first classical leg against cuML on an H100 (2026-08-25) reported
+    eleven wins out of fourteen lanes that had an opponent. TEN OF THOSE
+    ELEVEN WERE AT FIXTURES BETWEEN 8 AND 4,000 ROWS -- krr at SIXTEEN rows,
+    hdbscan at 96, linkage at 102, svm at 240. At those sizes both arms are
+    dominated by launch and dispatch latency, and there is a structural
+    asymmetry on top of it: the vendor arm is called through PYTHON inside
+    the timed region while ours is a compiled binary. Beating cuML by 6x at
+    sixteen rows is substantially a measurement of Python call overhead.
+
+    Those numbers were not wrong, they were UNCLAIMABLE, and they were
+    reported as though they were a result about kernels. `kmeans` at
+    4,000,000 x 32 was the one large-shape win in the set and it is the only
+    one of the eleven that stands on its own.
+
+    `large` exists so the rest can be asked the same question at a size
+    where the answer is about arithmetic. The tier is CARRIED IN THE FSPEED
+    `size=` FIELD and in the shape tag's row count, so a large row can never
+    be read as a shipped one, and the shipped tier is left exactly as it was
+    so the existing tables stay comparable.
+    """
+    if size == "smoke":
+        return smoke_v
+    if size == "large":
+        return large_v
+    return shipped_v
+
+
 def _no_spaces(s: String) -> String:
     """A device name with its spaces turned into underscores.
 
@@ -644,13 +675,53 @@ struct Emitter(Movable):
     var arm: String
     var shape: String
     var size: String
+    #: `fixed` or `throughput`. SEE THE COMMENT ON `__init__`.
+    var scale: String
     var hashes: List[UInt64]
 
-    def __init__(out self, lane: String, shape: String, size: String):
+    def __init__(
+        out self,
+        lane: String,
+        shape: String,
+        size: String,
+        scale: String = "fixed",
+    ):
+        """`scale` DEFAULTS TO `fixed`, AND THE DEFAULT IS THE WHOLE POINT.
+
+        A lane whose fixture is small is measuring what ONE FIT COSTS END TO
+        END, most of which is launch and dispatch latency on both sides. A
+        lane at 4,000,000 rows is measuring arithmetic. Those two numbers
+        look identical in a table -- both are milliseconds, both divide into
+        a ratio -- and on 2026-08-25 a summary of the first NVIDIA classical
+        leg reported ELEVEN WINS out of fourteen without distinguishing
+        them. Ten of the eleven were at 8 to 4,000 rows. krr was SIXTEEN
+        ROWS. Only `kmeans`, at 4,000,000 x 32, was a claim about kernels.
+
+        The vendor arm makes it worse in one direction: cuML is called
+        through PYTHON inside the timed region while our arm is a compiled
+        binary, so at sub-millisecond totals a chunk of the ratio is Python
+        call overhead. That is a real thing a cuML user pays and it is NOT
+        a fact about anyone's CUDA kernels.
+
+        So every lane declares which kind of number it is, the declaration
+        rides in the FSPEED header, and `tools/fast_speed_table.py` keeps
+        the two kinds in separate tables and counts only throughput rows in
+        any headline. The DEFAULT IS `fixed` because a lane nobody has
+        thought about must come out UNCLAIMABLE rather than silently
+        claimed -- which is exactly the failure this field exists to stop.
+
+        `fixed` is not an apology. `hdbscan` says in its own docstring that
+        its dense mutual-reachability arm materializes an `m x m` matrix and
+        that inventing a bigger fixture to make the number look like
+        throughput would be inventing a dataset. That reasoning was already
+        in the code and correct; what was missing was any way for it to
+        reach the table.
+        """
         self.lane = lane
         self.arm = String("ours")
         self.shape = shape
         self.size = size
+        self.scale = scale
         self.hashes = List[UInt64]()
 
     def header(self, device: String, rounds: Int):
@@ -658,6 +729,7 @@ struct Emitter(Movable):
             "FSPEED-HEADER family=classical lane=" + self.lane + " arm="
             + self.arm + " mode=" + _mode_name() + " device=" + device
             + " rounds=" + String(rounds) + " size=" + self.size
+            + " scale=" + self.scale
         )
 
     def warmup(self, ns: Int):
@@ -778,6 +850,7 @@ def run_kmeans(ctx: DeviceContext, smoke: Bool, rounds: Int, size: String) raise
         "kmeans",
         String(rows) + "x" + String(cols) + "k" + String(k) + "i" + String(iters),
         size,
+        String("throughput"),
     )
     em.header(_no_spaces(ctx.name()), rounds)
     for r in range(rounds + 1):
@@ -886,7 +959,8 @@ def run_pca(ctx: DeviceContext, smoke: Bool, rounds: Int, size: String) raises:
     ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.synchronize()
     var em = Emitter(
-        "pca", String(rows) + "x" + String(cols) + "c" + String(comp), size
+        "pca", String(rows) + "x" + String(cols) + "c" + String(comp), size,
+        String("throughput"),
     )
     em.header(_no_spaces(ctx.name()), rounds)
     for r in range(rounds + 1):
@@ -950,7 +1024,9 @@ def run_ols(ctx: DeviceContext, smoke: Bool, rounds: Int, size: String) raises:
     ctx.enqueue_copy(dst_buf=a, src_ptr=ha.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=b, src_ptr=hb.unsafe_ptr())
     ctx.synchronize()
-    var em = Emitter("ols", String(rows) + "x" + String(cols), size)
+    var em = Emitter(
+        "ols", String(rows) + "x" + String(cols), size, String("throughput")
+    )
     em.header(_no_spaces(ctx.name()), rounds)
     for r in range(rounds + 1):
         # `lstsq_eig` centers and un-centers `a` and `b` in place on some
@@ -1036,6 +1112,7 @@ def run_knn(ctx: DeviceContext, smoke: Bool, rounds: Int, size: String) raises:
         "knn",
         String(index) + "x" + String(cols) + "q" + String(queries) + "k"
         + String(k),
+        String("throughput"),
         size,
     )
     em.header(_no_spaces(ctx.name()), rounds)
@@ -1087,8 +1164,8 @@ def run_cd(ctx: DeviceContext, smoke: Bool, rounds: Int, size: String) raises:
     so without the re-upload the warm-up hash and the round hashes differ for
     a reason that has nothing to do with the kernel.
     """
-    var n = 256 if smoke else 2048
-    var d = 4 if smoke else 16
+    var n = _sz(size, 256, 2048, 1000000)
+    var d = _sz(size, 4, 16, 32)
     var alpha = Float32(0.01)
     var l1_ratio = Float32(1.0)
     var epochs = 1000
@@ -1114,7 +1191,9 @@ def run_cd(ctx: DeviceContext, smoke: Bool, rounds: Int, size: String) raises:
     var coef = ctx.enqueue_create_buffer[DType.float32](d)
     var resid = ctx.enqueue_create_buffer[DType.float32](n)
     ctx.synchronize()
-    var em = Emitter("cd", String(n) + "x" + String(d), size)
+    var em = Emitter(
+        "cd", String(n) + "x" + String(d), size, String("throughput") if size == "large" else String("fixed")
+    )
     em.header(_no_spaces(ctx.name()), rounds)
     for r in range(rounds + 1):
         ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
@@ -1159,8 +1238,8 @@ def run_kde(ctx: DeviceContext, smoke: Bool, rounds: Int, size: String) raises:
     validation and the upload happen once, before the loop, exactly as
     `kde_score_samples_host` does them, so the timed region is the score pass.
     """
-    var n_train = 128 if smoke else 1024
-    var n_query = 32 if smoke else 256
+    var n_train = _sz(size, 128, 1024, 200000)
+    var n_query = _sz(size, 32, 256, 20000)
     var d = 8
     var bandwidth = Float32(2.75)
     var train = train_fixture(n_train, d, 1)
@@ -1197,6 +1276,7 @@ def run_kde(ctx: DeviceContext, smoke: Bool, rounds: Int, size: String) raises:
         "kde",
         String(n_train) + "x" + String(n_query) + "x" + String(d),
         size,
+        String("throughput") if size == "large" else String("fixed"),
     )
     em.header(_no_spaces(ctx.name()), rounds)
     for r in range(rounds + 1):
@@ -1396,10 +1476,10 @@ def run_metrics(ctx: DeviceContext, smoke: Bool, rounds: Int, size: String) rais
     Same builders and the same salts (4099 / 17,18 / 19,20 / 23 / 29,38).
     Shipped sizes are the main's; smoke shrinks the row counts.
     """
-    var n_lab = 257 if smoke else MET_N_LABELS_ROWS
-    var n_flt = 257 if smoke else MET_N_FLOAT
-    var n_sil = 67 if smoke else MET_N_SIL
-    var n_tru = 61 if smoke else MET_N_TRUST
+    var n_lab = _sz(size, 257, MET_N_LABELS_ROWS, 2000000)
+    var n_flt = _sz(size, 257, MET_N_FLOAT, 2000000)
+    var n_sil = _sz(size, 67, MET_N_SIL, 100000)
+    var n_tru = _sz(size, 61, MET_N_TRUST, 50000)
     var lp = labels_true_pred(n_lab, MET_N_TRUE, MET_N_PRED, 0.66, 4099)
     var yt_h = lp[0].copy()
     var yp_h = lp[1].copy()
@@ -1462,6 +1542,7 @@ def run_metrics(ctx: DeviceContext, smoke: Bool, rounds: Int, size: String) rais
         + "x" + String(MET_D_SIL) + ".tru" + String(n_tru) + "x"
         + String(MET_M_TRUST),
         size,
+        String("throughput") if size == "large" else String("fixed"),
     )
     em.header(_no_spaces(ctx.name()), rounds)
     for r in range(rounds + 1):
@@ -2373,10 +2454,14 @@ def main() raises:
     var size_env = String(getenv("MOJOLEARN_SPEED_SIZE"))
     if size_env == "":
         size_env = String("shipped")
-    if size_env != "shipped" and size_env != "smoke":
+    if (
+        size_env != "shipped"
+        and size_env != "smoke"
+        and size_env != "large"
+    ):
         raise Error(
-            "classical_speed: MOJOLEARN_SPEED_SIZE must be `shipped` or"
-            " `smoke`; got '" + size_env + "'"
+            "classical_speed: MOJOLEARN_SPEED_SIZE must be `shipped`,"
+            " `smoke` or `large`; got '" + size_env + "'"
         )
     var smoke = size_env == "smoke"
     if rounds < 1:
