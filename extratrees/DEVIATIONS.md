@@ -3697,6 +3697,28 @@ enqueue, the trap this repo documents and this very check already defends
 drain, and the reduce arm's mismatch print now reports the tie multiplicity
 so a recurrence names its mechanism.
 
+**CHECK-ROUND 2 (2026-08-26, after the fixture fixes).** `split_reduce_check`
+went green; the regression red arm was then LOCATED: not the reduce at all,
+but the slot guard's WRAP arm. The old poison (2140000000 / -1070000000 /
+-1070000000) could only refuse-and-wrap when a draw ISOLATED the one
+positive row, and 465's re-rolled draws never do at this seed -- so all five
+refused cells were node 0's OVER_SLOT cells, whose numerators cannot reach
+the wrap bound (max `(|A| >> 5)^2 ~ 4.5e18 < 2^63`). The poison is now
+derived, not tuned: labels (+2066666667, -2066666667, 0) sum to zero, so a
+3-row split isolating row `x` has `|A| = |3x|`; either big row gives
+`|A| = 6200000001 >= 6074001000` (the first `(|A| >> 1)^2` past
+`Int64.MAX`) AND puts `> 2^30` on both sides -- refuse-and-wrap on 2 of 3
+rows, the provable maximum (the three `A`s sum to zero, so all three
+exceeding 6.074e9 in magnitude needs a spread Int32 labels cannot span).
+The zero label parks on the one position no current draw isolates (verified
+in exact arithmetic; placement, not substance). `host_splitter_check` had a
+SECOND verbatim old-rule assertion (`check_tie_break`: "greater colid wins
+the tie", colid 1 pinned); it now derives the expected winner per tree from
+the rank -- and reports the winner flipping with the tree id, which is the
+uniform-among-ties property made visible. A file-wide sweep found no other
+pinned tie winners (the analytic gap/step/145 sections all pin STRICT
+orders).
+
 ---
 
 ## DEVIATION 464 -- `excess_selection_hash` runs through a full-avalanche finalizer

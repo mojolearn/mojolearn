@@ -916,13 +916,18 @@ def check_mixed_constants() raises -> Int:
 
 
 # ==========================================================================
-# 6. The tie-break: two bit-identical features, both drawn into the gap
+# 6. The tie-break: two bit-identical features, both drawn into the gap.
+#    The expected winner is DEVIATION 463's keyed rank (the max-colid rule
+#    only under the MOJOLEARN_ET_TIE_MAX_COLID build); this assertion read
+#    `colid == 1` verbatim until the 2026-08-26 check round.
 # ==========================================================================
 
 
 def check_tie_break() raises -> Int:
-    print("[tie] duplicate features, exact tie, greater colid wins")
+    print("[tie] duplicate features, exact tie, the keyed rank picks")
     var cells = 0
+    var wins0 = 0
+    var wins1 = 0
     var fix = analytic_tie_pair(0x99)
     var box = Box(fix.data, True, False)
     var dataset = box.view()
@@ -961,17 +966,45 @@ def check_tie_break() raises -> Int:
                 0,
                 "the exact comparator must call it a tie",
             )
-            # `split.cuh:80-89`: on an equal score the GREATER colid wins.
+            # DEVIATION 463: on an exact tie the GREATER keyed rank over
+            # (tree, node 0, colid) wins -- re-derived here by
+            # `_tie_rank_ref`, NOT read back from the oracle. The winner
+            # flips with the tree id, which is the uniform-among-ties
+            # property the rule exists for, made visible; `wins0`/`wins1`
+            # report the split. `split.cuh:80-89`'s max-colid arm (this
+            # assertion's pre-463 expectation, colid 1 always) is the
+            # expectation only under the `MOJOLEARN_ET_TIE_MAX_COLID`
+            # build. A rank collision (a 2^-32 event) falls to the colid
+            # arm, where 1 wins -- hence `>=` on rank 1's side.
+            var want_col = 1
+            comptime if ET_TIE_BREAK_KEYED:
+                var r0 = _tie_rank_ref(UInt32(tree), UInt32(0), UInt32(0))
+                var r1 = _tie_rank_ref(UInt32(tree), UInt32(0), UInt32(1))
+                if r0 > r1:
+                    want_col = 0
             assert_equal(
-                Int(res.split.colid), 1, "greater colid wins the tie"
+                Int(res.split.colid),
+                want_col,
+                "the tie's winner, re-derived from the keyed rank",
             )
+            if want_col == 1:
+                wins1 += 1
+            else:
+                wins0 += 1
+            var want_thr = b.threshold if want_col == 1 else a.threshold
             assert_equal(
                 res.split.quesval.to_bits(),
-                b.threshold.to_bits(),
+                want_thr.to_bits(),
                 "and carries ITS threshold, not the other's",
             )
             cells += 5
     assert_true(ties >= 8, "not enough double-in-gap draws to test the tie")
+    print(
+        "    keyed tie winners across the double-in-gap trees: colid 0 won",
+        wins0,
+        ", colid 1 won",
+        wins1,
+    )
 
     # The `quesval` arm of the total order (`split.cuh:86-88`) can only fire
     # on EQUAL colids, which a sampler never produces. Supplying the same
