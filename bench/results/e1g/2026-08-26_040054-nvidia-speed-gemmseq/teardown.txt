@@ -1,0 +1,6 @@
+pod=le6he3lh22exql
+armed=1
+terminated=1
+deadman_pid=45974
+exit=0
+at=2026-08-26T08:14:19Z

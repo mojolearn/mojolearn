@@ -1,0 +1,99 @@
+1230 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x504640000000, nodemask=1)
+FSPEED-HEADER family=seq lane=mamba arm=ours mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-NOTE lane=mamba arm=ours entry costs the port pays and the opponent does not: llama_refuse_bad_inputs / mamba_refuse_bad_inputs download every weight per call, and eager_attention_forward synchronizes per (batch, head). See bench/speed/SEQ_SPEED.md.
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=norm.weight n=8 hash=50c65afc06287cd7
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=in_proj.weight n=256 hash=e08dc872b261976f
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=conv1d.weight n=64 hash=87567a7cd21ae244
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=conv1d.bias n=16 hash=fffb5b6163f3b167
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=x_proj.weight n=528 hash=e6f1d28bec911569
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=dt_proj.weight n=16 hash=ff1a20b85cbe6334
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=dt_proj.bias n=16 hash=f9fd9e3769ba990f
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=A_log n=256 hash=fd875e94f94076a3
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=D n=16 hash=427cb25db82f4bd0
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=out_proj.weight n=128 hash=9fce64d8212a8eec
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=x n=64 hash=622c7d6b00d2329d
+FSPEED-NOTE lane=mamba arm=ours mamba_refuse_bad_inputs alone shape=lane.b2_l4_d8 ms=0.191209 (inside the mamba lane's round, not inside selective_scan)
+FSPEED-WARMUP lane=mamba arm=ours shape=lane.b2_l4_d8 ms=0.377532
+FSPEED lane=mamba arm=ours shape=lane.b2_l4_d8 round=1 ms=0.349217 hash=094451532d3a52e9
+FSPEED lane=mamba arm=ours shape=lane.b2_l4_d8 round=2 ms=0.350667 hash=094451532d3a52e9
+FSPEED lane=mamba arm=ours shape=lane.b2_l4_d8 round=3 ms=0.35132 hash=094451532d3a52e9
+FSPEED lane=mamba arm=ours shape=lane.b2_l4_d8 round=4 ms=0.34811 hash=094451532d3a52e9
+FSPEED lane=mamba arm=ours shape=lane.b2_l4_d8 round=5 ms=0.345831 hash=094451532d3a52e9
+FSPEED-NOTE lane=mamba arm=ours dump shape=lane.b2_l4_d8 n=64 path=/root/gemm_leg_out/dump/seq.mamba.lane.b2_l4_d8.f32.bin
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=norm.weight n=768 hash=80ffb6eceac983c1
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=in_proj.weight n=2359296 hash=9a4025f0cad505d9
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=conv1d.weight n=6144 hash=4f37ca5c86596e26
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=conv1d.bias n=1536 hash=3730d3d1a4bd30d5
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=x_proj.weight n=122880 hash=d8becf46fdf2b30f
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=dt_proj.weight n=73728 hash=3333a7a393aaf4c1
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=dt_proj.bias n=1536 hash=670910bd72deb317
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=A_log n=24576 hash=30d9abc8d0f88426
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=D n=1536 hash=4af9cecf78461e69
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=out_proj.weight n=1179648 hash=03bc8590d6d08f9f
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=x n=768 hash=5832c6c66c7945eb
+FSPEED-NOTE lane=mamba arm=ours mamba_refuse_bad_inputs alone shape=mamba130m.prefill.t1 ms=14.487605 (inside the mamba lane's round, not inside selective_scan)
+FSPEED-WARMUP lane=mamba arm=ours shape=mamba130m.prefill.t1 ms=14.61019
+FSPEED lane=mamba arm=ours shape=mamba130m.prefill.t1 round=1 ms=20.128157 hash=fad7b323c6b9145c
+FSPEED lane=mamba arm=ours shape=mamba130m.prefill.t1 round=2 ms=15.442101 hash=fad7b323c6b9145c
+FSPEED lane=mamba arm=ours shape=mamba130m.prefill.t1 round=3 ms=12.998886 hash=fad7b323c6b9145c
+FSPEED lane=mamba arm=ours shape=mamba130m.prefill.t1 round=4 ms=12.905819 hash=fad7b323c6b9145c
+FSPEED lane=mamba arm=ours shape=mamba130m.prefill.t1 round=5 ms=12.861851 hash=fad7b323c6b9145c
+FSPEED-NOTE lane=mamba arm=ours dump shape=mamba130m.prefill.t1 n=768 path=/root/gemm_leg_out/dump/seq.mamba.mamba130m.prefill.t1.f32.bin
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=norm.weight n=768 hash=8ca9a62b03bb0b69
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=in_proj.weight n=2359296 hash=e5e828782fc4c377
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=conv1d.weight n=6144 hash=1fe9d376751939c2
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=conv1d.bias n=1536 hash=284b95c47159d2e2
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=x_proj.weight n=122880 hash=58fc41a3c66083f9
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=dt_proj.weight n=73728 hash=354e3487a0f90c0b
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=dt_proj.bias n=1536 hash=1729f7678a315600
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=A_log n=24576 hash=71d966732193f1fb
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=D n=1536 hash=146d24138daf5ed0
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=out_proj.weight n=1179648 hash=5f7e08294f2017f1
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=x n=6144 hash=aea97b3003677e03
+FSPEED-NOTE lane=mamba arm=ours mamba_refuse_bad_inputs alone shape=mamba130m.prefill.t8 ms=10.816911 (inside the mamba lane's round, not inside selective_scan)
+FSPEED-WARMUP lane=mamba arm=ours shape=mamba130m.prefill.t8 ms=10.490957
+FSPEED lane=mamba arm=ours shape=mamba130m.prefill.t8 round=1 ms=10.460767 hash=2fde47a98e094374
+FSPEED lane=mamba arm=ours shape=mamba130m.prefill.t8 round=2 ms=10.452199 hash=2fde47a98e094374
+FSPEED lane=mamba arm=ours shape=mamba130m.prefill.t8 round=3 ms=10.437214 hash=2fde47a98e094374
+FSPEED lane=mamba arm=ours shape=mamba130m.prefill.t8 round=4 ms=10.45174 hash=2fde47a98e094374
+FSPEED lane=mamba arm=ours shape=mamba130m.prefill.t8 round=5 ms=10.446093 hash=2fde47a98e094374
+FSPEED-NOTE lane=mamba arm=ours dump shape=mamba130m.prefill.t8 n=6144 path=/root/gemm_leg_out/dump/seq.mamba.mamba130m.prefill.t8.f32.bin
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=norm.weight n=768 hash=9d0c85053f9dbe1b
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=in_proj.weight n=2359296 hash=1a8a102874a8f357
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=conv1d.weight n=6144 hash=0e615d0b95e74f90
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=conv1d.bias n=1536 hash=87a4bee5bec76720
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=x_proj.weight n=122880 hash=24305c34fd48b3a6
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=dt_proj.weight n=73728 hash=6b5d720462192045
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=dt_proj.bias n=1536 hash=68b70160bd63976c
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=A_log n=24576 hash=4d659006cfa457de
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=D n=1536 hash=1f5fdef06a2e6f1e
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=out_proj.weight n=1179648 hash=be795e26211acaff
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=x n=98304 hash=25fed7518eb79bb2
+FSPEED-NOTE lane=mamba arm=ours mamba_refuse_bad_inputs alone shape=mamba130m.prefill.t128 ms=12.992944 (inside the mamba lane's round, not inside selective_scan)
+FSPEED-WARMUP lane=mamba arm=ours shape=mamba130m.prefill.t128 ms=11.373517
+FSPEED lane=mamba arm=ours shape=mamba130m.prefill.t128 round=1 ms=11.142104 hash=53f74bccbeeb5197
+FSPEED lane=mamba arm=ours shape=mamba130m.prefill.t128 round=2 ms=11.064458 hash=53f74bccbeeb5197
+FSPEED lane=mamba arm=ours shape=mamba130m.prefill.t128 round=3 ms=11.052553 hash=53f74bccbeeb5197
+FSPEED lane=mamba arm=ours shape=mamba130m.prefill.t128 round=4 ms=11.029183 hash=53f74bccbeeb5197
+FSPEED lane=mamba arm=ours shape=mamba130m.prefill.t128 round=5 ms=11.019879 hash=53f74bccbeeb5197
+FSPEED-NOTE lane=mamba arm=ours dump shape=mamba130m.prefill.t128 n=98304 path=/root/gemm_leg_out/dump/seq.mamba.mamba130m.prefill.t128.f32.bin
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=norm.weight n=768 hash=8a1f60d0ecc7f985
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=in_proj.weight n=2359296 hash=93cf34e9b609c366
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=conv1d.weight n=6144 hash=f2f7fd124b119079
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=conv1d.bias n=1536 hash=13b6f9e0acc0cdc3
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=x_proj.weight n=122880 hash=858ca82562b215ab
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=dt_proj.weight n=73728 hash=099f48c5ccdb6f44
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=dt_proj.bias n=1536 hash=8bc414b2e6db2757
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=A_log n=24576 hash=0895a62212804fc5
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=D n=1536 hash=d5239bfe63a8472c
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=out_proj.weight n=1179648 hash=b41416f53f8b72c7
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=x n=393216 hash=baa7b8e45c791eef
+FSPEED-NOTE lane=mamba arm=ours mamba_refuse_bad_inputs alone shape=mamba130m.prefill.t512 ms=12.449783 (inside the mamba lane's round, not inside selective_scan)
+FSPEED-WARMUP lane=mamba arm=ours shape=mamba130m.prefill.t512 ms=12.416839
+FSPEED lane=mamba arm=ours shape=mamba130m.prefill.t512 round=1 ms=12.613507 hash=756d0f1dabce09ff
+FSPEED lane=mamba arm=ours shape=mamba130m.prefill.t512 round=2 ms=12.411444 hash=756d0f1dabce09ff
+FSPEED lane=mamba arm=ours shape=mamba130m.prefill.t512 round=3 ms=12.370565 hash=756d0f1dabce09ff
+FSPEED lane=mamba arm=ours shape=mamba130m.prefill.t512 round=4 ms=12.363184 hash=756d0f1dabce09ff
+FSPEED lane=mamba arm=ours shape=mamba130m.prefill.t512 round=5 ms=12.352554 hash=756d0f1dabce09ff
+FSPEED-NOTE lane=mamba arm=ours dump shape=mamba130m.prefill.t512 n=393216 path=/root/gemm_leg_out/dump/seq.mamba.mamba130m.prefill.t512.f32.bin
+FSPEED-DONE lane=mamba mode=FAST

@@ -1,0 +1,15 @@
+
+=== pip install einops ===
+Collecting einops
+  Downloading einops-0.8.2-py3-none-any.whl.metadata (13 kB)
+Downloading einops-0.8.2-py3-none-any.whl (65 kB)
+Installing collected packages: einops
+Successfully installed einops-0.8.2
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable.It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+pip_exit einops=0
+Collecting causal-conv1d==1.4.0+cu12torch2.4cxx11abiFALSE
+  ERROR: HTTP error 404 while getting https://github.com/Dao-AILab/causal-conv1d/releases/download/v1.4.0/causal_conv1d-1.4.0+cu12torch2.4cxx11abiFALSE-cp311-cp311-linux_x86_64.whl
+
+[notice] A new release of pip is available: 24.2 -> 26.2.1
+[notice] To update, run: python3 -m pip install --upgrade pip
+ERROR: Could not install requirement causal-conv1d==1.4.0+cu12torch2.4cxx11abiFALSE from https://github.com/Dao-AILab/causal-conv1d/releases/download/v1.4.0/causal_conv1d-1.4.0+cu12torch2.4cxx11abiFALSE-cp311-cp311-linux_x86_64.whl because of HTTP error 404 Client Error: Not Found for url: https://github.com/Dao-AILab/causal-conv1d/releases/download/v1.4.0/causal_conv1d-1.4.0+cu12torch2.4cxx11abiFALSE-cp311-cp311-linux_x86_64.whl for URL https://github.com/Dao-AILab/causal-conv1d/releases/download/v1.4.0/causal_conv1d-1.4.0+cu12torch2.4cxx11abiFALSE-cp311-cp311-linux_x86_64.whl

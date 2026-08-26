@@ -1,0 +1,115 @@
+1095 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a3a00000000, nodemask=2)
+FSPEED-HEADER family=seq lane=transformer arm=ours mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-NOTE lane=transformer arm=ours entry costs the port pays and the opponent does not: llama_refuse_bad_inputs / mamba_refuse_bad_inputs download every weight per call, and eager_attention_forward synchronizes per (batch, head). See bench/speed/SEQ_SPEED.md.
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=norm1.weight n=32 hash=10553ebe1cacb130
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=norm2.weight n=32 hash=43392443a35b61f3
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=q_proj.weight n=1024 hash=b73a1a48e0c0d9f7
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=k_proj.weight n=1024 hash=de208e4e2a16ff1f
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=v_proj.weight n=1024 hash=427375797d9ef375
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=o_proj.weight n=1024 hash=1947e064f026cb25
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=gate_proj.weight n=2048 hash=284aeae6d05c4f7c
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=up_proj.weight n=2048 hash=b2fdf8deeea86017
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=down_proj.weight n=2048 hash=d1d0e3eb84d5f951
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=x n=256 hash=a55d417a40e61d75
+FSPEED-NOTE lane=transformer arm=ours llama_refuse_bad_inputs alone shape=lane.b2_l4_d32_kv2 ms=0.191104 (inside the transformer lane's round, not inside attention/mlp/rmsnorm)
+FSPEED-WARMUP lane=transformer arm=ours shape=lane.b2_l4_d32_kv2 ms=0.476678
+FSPEED lane=transformer arm=ours shape=lane.b2_l4_d32_kv2 round=1 ms=0.466417 hash=0b2376058aabee05
+FSPEED lane=transformer arm=ours shape=lane.b2_l4_d32_kv2 round=2 ms=0.467511 hash=0b2376058aabee05
+FSPEED lane=transformer arm=ours shape=lane.b2_l4_d32_kv2 round=3 ms=0.467022 hash=0b2376058aabee05
+FSPEED lane=transformer arm=ours shape=lane.b2_l4_d32_kv2 round=4 ms=0.463327 hash=0b2376058aabee05
+FSPEED lane=transformer arm=ours shape=lane.b2_l4_d32_kv2 round=5 ms=0.470491 hash=0b2376058aabee05
+FSPEED-NOTE lane=transformer arm=ours dump shape=lane.b2_l4_d32_kv2 n=256 path=/root/gemm_leg_out/dump/seq.transformer.lane.b2_l4_d32_kv2.f32.bin
+1095 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11a280000000, nodemask=1)
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=norm1.weight n=4096 hash=2633ac9556859b7d
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=norm2.weight n=4096 hash=03b0bbae422c35f2
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=q_proj.weight n=16777216 hash=65536eef389758f8
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=k_proj.weight n=4194304 hash=2d21f4a6f190e936
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=v_proj.weight n=4194304 hash=2032c9fee9598af5
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=o_proj.weight n=16777216 hash=54a671c58956b474
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=gate_proj.weight n=58720256 hash=22d060eb830e8fa7
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=up_proj.weight n=58720256 hash=6adb4a35fc897af1
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=down_proj.weight n=58720256 hash=623f9a160be08bbb
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=x n=4096 hash=50601e14d24b1558
+FSPEED-NOTE lane=transformer arm=ours llama_refuse_bad_inputs alone shape=llama8b.prefill.t1 ms=929.79061 (inside the transformer lane's round, not inside attention/mlp/rmsnorm)
+FSPEED-WARMUP lane=transformer arm=ours shape=llama8b.prefill.t1 ms=1.998083
+FSPEED lane=transformer arm=ours shape=llama8b.prefill.t1 round=1 ms=1.93042 hash=79188d142b226eaa
+FSPEED lane=transformer arm=ours shape=llama8b.prefill.t1 round=2 ms=1.920738 hash=79188d142b226eaa
+FSPEED lane=transformer arm=ours shape=llama8b.prefill.t1 round=3 ms=1.884974 hash=79188d142b226eaa
+FSPEED lane=transformer arm=ours shape=llama8b.prefill.t1 round=4 ms=1.878612 hash=79188d142b226eaa
+FSPEED lane=transformer arm=ours shape=llama8b.prefill.t1 round=5 ms=1.879355 hash=79188d142b226eaa
+FSPEED-NOTE lane=transformer arm=ours dump shape=llama8b.prefill.t1 n=4096 path=/root/gemm_leg_out/dump/seq.transformer.llama8b.prefill.t1.f32.bin
+1095 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11a2c0000000, nodemask=1)
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=norm1.weight n=4096 hash=2554a09c79b9bec3
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=norm2.weight n=4096 hash=54e8bdb50be343e8
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=q_proj.weight n=16777216 hash=7f5e346f0f234ca1
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=k_proj.weight n=4194304 hash=628683891b4ef505
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=v_proj.weight n=4194304 hash=a6e71091674bf598
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=o_proj.weight n=16777216 hash=f322159c55f94428
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=gate_proj.weight n=58720256 hash=e4ae7d5f3c49e108
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=up_proj.weight n=58720256 hash=e1e76c5d8ad14599
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=down_proj.weight n=58720256 hash=cd680ef665764882
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=x n=32768 hash=5fae3cdceecdb9e2
+FSPEED-NOTE lane=transformer arm=ours llama_refuse_bad_inputs alone shape=llama8b.prefill.t8 ms=851.688971 (inside the transformer lane's round, not inside attention/mlp/rmsnorm)
+FSPEED-WARMUP lane=transformer arm=ours shape=llama8b.prefill.t8 ms=3.053639
+FSPEED lane=transformer arm=ours shape=llama8b.prefill.t8 round=1 ms=2.889977 hash=e4318a399c9c205f
+FSPEED lane=transformer arm=ours shape=llama8b.prefill.t8 round=2 ms=2.885539 hash=e4318a399c9c205f
+FSPEED lane=transformer arm=ours shape=llama8b.prefill.t8 round=3 ms=2.885421 hash=e4318a399c9c205f
+FSPEED lane=transformer arm=ours shape=llama8b.prefill.t8 round=4 ms=2.882782 hash=e4318a399c9c205f
+FSPEED lane=transformer arm=ours shape=llama8b.prefill.t8 round=5 ms=2.876435 hash=e4318a399c9c205f
+FSPEED-NOTE lane=transformer arm=ours dump shape=llama8b.prefill.t8 n=32768 path=/root/gemm_leg_out/dump/seq.transformer.llama8b.prefill.t8.f32.bin
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=norm1.weight n=4096 hash=8e82620235b4b085
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=norm2.weight n=4096 hash=c813f5e53899180d
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=q_proj.weight n=16777216 hash=c1de6ff4941afb8e
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=k_proj.weight n=4194304 hash=803e4f6ec477b10e
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=v_proj.weight n=4194304 hash=1d4fa08f9f620c73
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=o_proj.weight n=16777216 hash=27755bc1220fd650
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=gate_proj.weight n=58720256 hash=2cc46a3f987b2a35
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=up_proj.weight n=58720256 hash=8df6060ace203936
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=down_proj.weight n=58720256 hash=8005f6e866ca1053
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=x n=524288 hash=4cfda6cf929d166b
+FSPEED-NOTE lane=transformer arm=ours llama_refuse_bad_inputs alone shape=llama8b.prefill.t128 ms=632.553635 (inside the transformer lane's round, not inside attention/mlp/rmsnorm)
+FSPEED-WARMUP lane=transformer arm=ours shape=llama8b.prefill.t128 ms=6.035942
+FSPEED lane=transformer arm=ours shape=llama8b.prefill.t128 round=1 ms=5.795969 hash=2e7fe6554579f94e
+FSPEED lane=transformer arm=ours shape=llama8b.prefill.t128 round=2 ms=5.657244 hash=2e7fe6554579f94e
+FSPEED lane=transformer arm=ours shape=llama8b.prefill.t128 round=3 ms=5.604032 hash=2e7fe6554579f94e
+FSPEED lane=transformer arm=ours shape=llama8b.prefill.t128 round=4 ms=5.613616 hash=2e7fe6554579f94e
+FSPEED lane=transformer arm=ours shape=llama8b.prefill.t128 round=5 ms=5.59612 hash=2e7fe6554579f94e
+FSPEED-NOTE lane=transformer arm=ours dump shape=llama8b.prefill.t128 n=524288 path=/root/gemm_leg_out/dump/seq.transformer.llama8b.prefill.t128.f32.bin
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=norm1.weight n=4096 hash=267ae3b42cf4bd1e
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=norm2.weight n=4096 hash=fd8c830453040971
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=q_proj.weight n=16777216 hash=40d0cc6a048d905d
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=k_proj.weight n=4194304 hash=b5af8e64afe64f60
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=v_proj.weight n=4194304 hash=73e1eafa7abcd857
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=o_proj.weight n=16777216 hash=f8a091300d6898c7
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=gate_proj.weight n=58720256 hash=8b7b13c66c2b3235
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=up_proj.weight n=58720256 hash=f61e5f2f2b37b282
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=down_proj.weight n=58720256 hash=35adb0b4c5e445b4
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=x n=2097152 hash=4dea4dee43008247
+FSPEED-NOTE lane=transformer arm=ours llama_refuse_bad_inputs alone shape=llama8b.prefill.t512 ms=651.690365 (inside the transformer lane's round, not inside attention/mlp/rmsnorm)
+FSPEED-WARMUP lane=transformer arm=ours shape=llama8b.prefill.t512 ms=11.928855
+FSPEED lane=transformer arm=ours shape=llama8b.prefill.t512 round=1 ms=11.172002 hash=3f5bdd0262ad8c75
+FSPEED lane=transformer arm=ours shape=llama8b.prefill.t512 round=2 ms=10.990843 hash=3f5bdd0262ad8c75
+FSPEED lane=transformer arm=ours shape=llama8b.prefill.t512 round=3 ms=10.782805 hash=3f5bdd0262ad8c75
+FSPEED lane=transformer arm=ours shape=llama8b.prefill.t512 round=4 ms=10.7175 hash=3f5bdd0262ad8c75
+FSPEED lane=transformer arm=ours shape=llama8b.prefill.t512 round=5 ms=10.629353 hash=3f5bdd0262ad8c75
+FSPEED-NOTE lane=transformer arm=ours dump shape=llama8b.prefill.t512 n=2097152 path=/root/gemm_leg_out/dump/seq.transformer.llama8b.prefill.t512.f32.bin
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=norm1.weight n=4096 hash=a16c25d484966855
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=norm2.weight n=4096 hash=fdf0b3b94538d853
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=q_proj.weight n=16777216 hash=dc126cf683d35c94
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=k_proj.weight n=4194304 hash=9bb615a45cfbb66d
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=v_proj.weight n=4194304 hash=b189eaa5691f2cc2
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=o_proj.weight n=16777216 hash=f460975b0ff8b858
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=gate_proj.weight n=58720256 hash=4b88f0c6df895117
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=up_proj.weight n=58720256 hash=0bcff2e323b1e524
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=down_proj.weight n=58720256 hash=513387fa68b57e5e
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=x n=4096 hash=a1509d4577b1d620
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=ctx.x n=2097152 hash=cf5b380dda81451a
+FSPEED-NOTE lane=transformer arm=ours llama_refuse_bad_inputs alone shape=llama8b.decode.t1.ctx512 ms=638.828805 (inside the transformer lane's round, not inside attention/mlp/rmsnorm)
+FSPEED-WARMUP lane=transformer arm=ours shape=llama8b.decode.t1.ctx512 ms=4.748765
+FSPEED lane=transformer arm=ours shape=llama8b.decode.t1.ctx512 round=1 ms=4.655748 hash=aec60cdba019c822
+FSPEED lane=transformer arm=ours shape=llama8b.decode.t1.ctx512 round=2 ms=4.628322 hash=aec60cdba019c822
+FSPEED lane=transformer arm=ours shape=llama8b.decode.t1.ctx512 round=3 ms=4.60741 hash=aec60cdba019c822
+FSPEED lane=transformer arm=ours shape=llama8b.decode.t1.ctx512 round=4 ms=4.614746 hash=aec60cdba019c822
+FSPEED lane=transformer arm=ours shape=llama8b.decode.t1.ctx512 round=5 ms=4.593934 hash=aec60cdba019c822
+FSPEED-NOTE lane=transformer arm=ours dump shape=llama8b.decode.t1.ctx512 n=4096 path=/root/gemm_leg_out/dump/seq.transformer.llama8b.decode.t1.ctx512.f32.bin
+FSPEED-DONE lane=transformer mode=FAST

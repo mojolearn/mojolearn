@@ -1,0 +1,244 @@
+FSPEED-HEADER family=gemm lane=gemm arm=cublas-fp32 mode=FAST device=NVIDIA H100 80GB HBM3 rounds=5 size=shipped
+FSPEED-NOTE lane=gemm arm=cublas-fp32 library=cuBLAS build=CUDA 12.4 torch=2.4.1+cu124 allow_tf32=False
+FSPEED-WARMUP lane=gemm arm=cublas-fp32 shape=gram.32x32x1M ms=0.244435
+FSPEED lane=gemm arm=cublas-fp32 shape=gram.32x32x1M round=1 ms=0.241416 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=gram.32x32x1M round=2 ms=0.240726 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=gram.32x32x1M round=3 ms=0.240456 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=gram.32x32x1M round=4 ms=0.244010 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=gram.32x32x1M round=5 ms=0.241177 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-fp32 shape=gram.32x32x64K ms=0.041751
+FSPEED lane=gemm arm=cublas-fp32 shape=gram.32x32x64K round=1 ms=0.040576 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=gram.32x32x64K round=2 ms=0.039250 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=gram.32x32x64K round=3 ms=0.038965 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=gram.32x32x64K round=4 ms=0.038905 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=gram.32x32x64K round=5 ms=0.040384 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-fp32 shape=gram.128sq.x100003 ms=0.104738
+FSPEED lane=gemm arm=cublas-fp32 shape=gram.128sq.x100003 round=1 ms=0.098437 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=gram.128sq.x100003 round=2 ms=0.099842 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=gram.128sq.x100003 round=3 ms=0.097249 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=gram.128sq.x100003 round=4 ms=0.097586 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=gram.128sq.x100003 round=5 ms=0.098953 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-fp32 shape=ols.step1.16x16x64K ms=0.044808
+FSPEED lane=gemm arm=cublas-fp32 shape=ols.step1.16x16x64K round=1 ms=0.039497 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=ols.step1.16x16x64K round=2 ms=0.038456 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=ols.step1.16x16x64K round=3 ms=0.038985 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=ols.step1.16x16x64K round=4 ms=0.038415 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=ols.step1.16x16x64K round=5 ms=0.041081 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-fp32 shape=pca.transform.8192x4x4 ms=0.029657
+FSPEED lane=gemm arm=cublas-fp32 shape=pca.transform.8192x4x4 round=1 ms=0.025706 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=pca.transform.8192x4x4 round=2 ms=0.024470 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=pca.transform.8192x4x4 round=3 ms=0.023069 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=pca.transform.8192x4x4 round=4 ms=0.026613 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=pca.transform.8192x4x4 round=5 ms=0.023009 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-fp32 shape=pca.transform.wide.8192x64x128 ms=0.029128
+FSPEED lane=gemm arm=cublas-fp32 shape=pca.transform.wide.8192x64x128 round=1 ms=0.026906 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=pca.transform.wide.8192x64x128 round=2 ms=0.027020 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=pca.transform.wide.8192x64x128 round=3 ms=0.026448 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=pca.transform.wide.8192x64x128 round=4 ms=0.026831 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=pca.transform.wide.8192x64x128 round=5 ms=0.025742 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-fp32 shape=kmeans.dist.4096x64x64 ms=0.030756
+FSPEED lane=gemm arm=cublas-fp32 shape=kmeans.dist.4096x64x64 round=1 ms=0.024468 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=kmeans.dist.4096x64x64 round=2 ms=0.024326 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=kmeans.dist.4096x64x64 round=3 ms=0.023948 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=kmeans.dist.4096x64x64 round=4 ms=0.023805 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=kmeans.dist.4096x64x64 round=5 ms=0.022985 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-fp32 shape=ols.predict.gemv.64Kx16 ms=0.023121
+FSPEED lane=gemm arm=cublas-fp32 shape=ols.predict.gemv.64Kx16 round=1 ms=0.020484 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=ols.predict.gemv.64Kx16 round=2 ms=0.022981 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=ols.predict.gemv.64Kx16 round=3 ms=0.024473 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=ols.predict.gemv.64Kx16 round=4 ms=0.019820 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=ols.predict.gemv.64Kx16 round=5 ms=0.020355 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-fp32 shape=llama8b.qkv.t1 ms=0.047559
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.qkv.t1 round=1 ms=0.042962 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.qkv.t1 round=2 ms=0.042764 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.qkv.t1 round=3 ms=0.043264 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.qkv.t1 round=4 ms=0.042187 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.qkv.t1 round=5 ms=0.042737 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-fp32 shape=llama8b.qkv.t8 ms=0.063740
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.qkv.t8 round=1 ms=0.062468 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.qkv.t8 round=2 ms=0.062171 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.qkv.t8 round=3 ms=0.060916 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.qkv.t8 round=4 ms=0.060730 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.qkv.t8 round=5 ms=0.061011 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-fp32 shape=llama8b.qkv.t512 ms=0.378085
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.qkv.t512 round=1 ms=0.374893 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.qkv.t512 round=2 ms=0.371039 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.qkv.t512 round=3 ms=0.372201 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.qkv.t512 round=4 ms=0.369951 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.qkv.t512 round=5 ms=0.370758 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-fp32 shape=llama8b.mlp_up.t1 ms=0.100365
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_up.t1 round=1 ms=0.098329 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_up.t1 round=2 ms=0.097254 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_up.t1 round=3 ms=0.097789 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_up.t1 round=4 ms=0.097431 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_up.t1 round=5 ms=0.097299 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-fp32 shape=llama8b.mlp_up.t8 ms=0.172233
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_up.t8 round=1 ms=0.161014 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_up.t8 round=2 ms=0.159169 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_up.t8 round=3 ms=0.162028 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_up.t8 round=4 ms=0.158288 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_up.t8 round=5 ms=0.162845 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-fp32 shape=llama8b.mlp_up.t512 ms=1.389740
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_up.t512 round=1 ms=1.383225 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_up.t512 round=2 ms=1.377748 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_up.t512 round=3 ms=1.384875 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_up.t512 round=4 ms=1.383601 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_up.t512 round=5 ms=1.383202 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-fp32 shape=llama8b.mlp_down.t1 ms=0.102445
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_down.t1 round=1 ms=0.099031 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_down.t1 round=2 ms=0.096753 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_down.t1 round=3 ms=0.096360 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_down.t1 round=4 ms=0.097768 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_down.t1 round=5 ms=0.096768 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-fp32 shape=llama8b.mlp_down.t8 ms=0.206050
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_down.t8 round=1 ms=0.199722 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_down.t8 round=2 ms=0.199750 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_down.t8 round=3 ms=0.198685 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_down.t8 round=4 ms=0.198999 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_down.t8 round=5 ms=0.200801 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-fp32 shape=llama8b.mlp_down.t512 ms=1.187151
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_down.t512 round=1 ms=1.185579 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_down.t512 round=2 ms=1.180159 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_down.t512 round=3 ms=1.179254 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_down.t512 round=4 ms=1.181150 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.mlp_down.t512 round=5 ms=1.184015 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-fp32 shape=llama8b.lm_head.t1 ms=0.706745
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.lm_head.t1 round=1 ms=0.698932 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.lm_head.t1 round=2 ms=0.697805 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.lm_head.t1 round=3 ms=0.698227 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.lm_head.t1 round=4 ms=0.697831 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.lm_head.t1 round=5 ms=0.701284 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-fp32 shape=llama8b.lm_head.t8 ms=1.155354
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.lm_head.t8 round=1 ms=1.150744 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.lm_head.t8 round=2 ms=1.152707 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.lm_head.t8 round=3 ms=1.155918 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.lm_head.t8 round=4 ms=1.150968 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.lm_head.t8 round=5 ms=1.158079 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-fp32 shape=llama8b.lm_head.t512 ms=10.820935
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.lm_head.t512 round=1 ms=10.809680 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.lm_head.t512 round=2 ms=10.808151 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.lm_head.t512 round=3 ms=10.541486 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.lm_head.t512 round=4 ms=10.829974 hash=-
+FSPEED lane=gemm arm=cublas-fp32 shape=llama8b.lm_head.t512 round=5 ms=10.856908 hash=-
+FSPEED-HEADER family=gemm lane=gemm arm=cublas-tf32 mode=FAST device=NVIDIA H100 80GB HBM3 rounds=5 size=shipped
+FSPEED-NOTE lane=gemm arm=cublas-tf32 library=cuBLAS build=CUDA 12.4 torch=2.4.1+cu124 allow_tf32=True
+FSPEED-WARMUP lane=gemm arm=cublas-tf32 shape=gram.32x32x1M ms=0.124050
+FSPEED lane=gemm arm=cublas-tf32 shape=gram.32x32x1M round=1 ms=0.115767 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=gram.32x32x1M round=2 ms=0.116372 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=gram.32x32x1M round=3 ms=0.114638 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=gram.32x32x1M round=4 ms=0.114832 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=gram.32x32x1M round=5 ms=0.114672 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-tf32 shape=gram.32x32x64K ms=0.031913
+FSPEED lane=gemm arm=cublas-tf32 shape=gram.32x32x64K round=1 ms=0.029840 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=gram.32x32x64K round=2 ms=0.029966 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=gram.32x32x64K round=3 ms=0.029804 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=gram.32x32x64K round=4 ms=0.029789 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=gram.32x32x64K round=5 ms=0.030031 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-tf32 shape=gram.128sq.x100003 ms=0.063883
+FSPEED lane=gemm arm=cublas-tf32 shape=gram.128sq.x100003 round=1 ms=0.061937 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=gram.128sq.x100003 round=2 ms=0.062278 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=gram.128sq.x100003 round=3 ms=0.061462 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=gram.128sq.x100003 round=4 ms=0.060743 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=gram.128sq.x100003 round=5 ms=0.059893 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-tf32 shape=ols.step1.16x16x64K ms=0.032410
+FSPEED lane=gemm arm=cublas-tf32 shape=ols.step1.16x16x64K round=1 ms=0.029670 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=ols.step1.16x16x64K round=2 ms=0.029596 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=ols.step1.16x16x64K round=3 ms=0.028720 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=ols.step1.16x16x64K round=4 ms=0.029113 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=ols.step1.16x16x64K round=5 ms=0.028919 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-tf32 shape=pca.transform.8192x4x4 ms=0.020975
+FSPEED lane=gemm arm=cublas-tf32 shape=pca.transform.8192x4x4 round=1 ms=0.018705 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=pca.transform.8192x4x4 round=2 ms=0.018066 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=pca.transform.8192x4x4 round=3 ms=0.019105 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=pca.transform.8192x4x4 round=4 ms=0.018049 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=pca.transform.8192x4x4 round=5 ms=0.018429 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-tf32 shape=pca.transform.wide.8192x64x128 ms=0.021389
+FSPEED lane=gemm arm=cublas-tf32 shape=pca.transform.wide.8192x64x128 round=1 ms=0.019679 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=pca.transform.wide.8192x64x128 round=2 ms=0.019973 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=pca.transform.wide.8192x64x128 round=3 ms=0.019170 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=pca.transform.wide.8192x64x128 round=4 ms=0.019811 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=pca.transform.wide.8192x64x128 round=5 ms=0.019472 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-tf32 shape=kmeans.dist.4096x64x64 ms=0.020931
+FSPEED lane=gemm arm=cublas-tf32 shape=kmeans.dist.4096x64x64 round=1 ms=0.019342 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=kmeans.dist.4096x64x64 round=2 ms=0.019150 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=kmeans.dist.4096x64x64 round=3 ms=0.023758 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=kmeans.dist.4096x64x64 round=4 ms=0.019532 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=kmeans.dist.4096x64x64 round=5 ms=0.019263 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-tf32 shape=ols.predict.gemv.64Kx16 ms=0.020908
+FSPEED lane=gemm arm=cublas-tf32 shape=ols.predict.gemv.64Kx16 round=1 ms=0.020228 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=ols.predict.gemv.64Kx16 round=2 ms=0.020735 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=ols.predict.gemv.64Kx16 round=3 ms=0.019567 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=ols.predict.gemv.64Kx16 round=4 ms=0.019340 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=ols.predict.gemv.64Kx16 round=5 ms=0.019815 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-tf32 shape=llama8b.qkv.t1 ms=0.045083
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.qkv.t1 round=1 ms=0.043126 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.qkv.t1 round=2 ms=0.042982 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.qkv.t1 round=3 ms=0.047695 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.qkv.t1 round=4 ms=0.043375 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.qkv.t1 round=5 ms=0.042953 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-tf32 shape=llama8b.qkv.t8 ms=0.051098
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.qkv.t8 round=1 ms=0.050409 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.qkv.t8 round=2 ms=0.048699 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.qkv.t8 round=3 ms=0.049056 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.qkv.t8 round=4 ms=0.048155 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.qkv.t8 round=5 ms=0.049734 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-tf32 shape=llama8b.qkv.t512 ms=0.076946
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.qkv.t512 round=1 ms=0.071581 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.qkv.t512 round=2 ms=0.070669 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.qkv.t512 round=3 ms=0.068169 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.qkv.t512 round=4 ms=0.070147 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.qkv.t512 round=5 ms=0.071662 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-tf32 shape=llama8b.mlp_up.t1 ms=0.105200
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_up.t1 round=1 ms=0.098683 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_up.t1 round=2 ms=0.096584 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_up.t1 round=3 ms=0.096973 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_up.t1 round=4 ms=0.098674 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_up.t1 round=5 ms=0.097554 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-tf32 shape=llama8b.mlp_up.t8 ms=0.113871
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_up.t8 round=1 ms=0.109542 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_up.t8 round=2 ms=0.110112 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_up.t8 round=3 ms=0.109071 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_up.t8 round=4 ms=0.109201 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_up.t8 round=5 ms=0.108747 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-tf32 shape=llama8b.mlp_up.t512 ms=0.194630
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_up.t512 round=1 ms=0.189412 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_up.t512 round=2 ms=0.187537 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_up.t512 round=3 ms=0.185858 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_up.t512 round=4 ms=0.186639 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_up.t512 round=5 ms=0.186205 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-tf32 shape=llama8b.mlp_down.t1 ms=0.101946
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_down.t1 round=1 ms=0.099357 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_down.t1 round=2 ms=0.099210 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_down.t1 round=3 ms=0.098515 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_down.t1 round=4 ms=0.098046 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_down.t1 round=5 ms=0.097560 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-tf32 shape=llama8b.mlp_down.t8 ms=0.117071
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_down.t8 round=1 ms=0.114013 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_down.t8 round=2 ms=0.111153 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_down.t8 round=3 ms=0.109851 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_down.t8 round=4 ms=0.110146 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_down.t8 round=5 ms=0.109471 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-tf32 shape=llama8b.mlp_down.t512 ms=0.223672
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_down.t512 round=1 ms=0.218952 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_down.t512 round=2 ms=0.218509 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_down.t512 round=3 ms=0.216695 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_down.t512 round=4 ms=0.218287 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.mlp_down.t512 round=5 ms=0.218717 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t1 ms=0.707895
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t1 round=1 ms=0.700563 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t1 round=2 ms=0.699628 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t1 round=3 ms=0.698408 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t1 round=4 ms=0.698213 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t1 round=5 ms=0.698188 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t8 ms=0.783214
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t8 round=1 ms=0.779927 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t8 round=2 ms=0.779672 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t8 round=3 ms=0.784107 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t8 round=4 ms=0.780452 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t8 round=5 ms=0.777382 hash=-
+FSPEED-WARMUP lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t512 ms=1.376711
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t512 round=1 ms=1.370812 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t512 round=2 ms=1.372291 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t512 round=3 ms=1.370817 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t512 round=4 ms=1.368882 hash=-
+FSPEED lane=gemm arm=cublas-tf32 shape=llama8b.lm_head.t512 round=5 ms=1.365524 hash=-

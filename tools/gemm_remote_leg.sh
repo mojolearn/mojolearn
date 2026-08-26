@@ -2473,30 +2473,69 @@ gemmseq)
     # exactly that tuple. So ASK THE BOX what its tuple is rather than
     # hardcoding one, build the two URLs, and install those. A wheel lands
     # in under a minute.
-    _mm_tag=$(python3 - <<'MMTAG' 2>/dev/null
-import sys
+    # DISCOVER THE ASSET, DO NOT GUESS IT, AND INSTALL THE TWO SEPARATELY.
+    #
+    # The first attempt hardcoded `causal-conv1d v1.4.0` and `mamba-ssm
+    # v2.2.4` and put BOTH in one pip command. The causal-conv1d asset name
+    # was wrong, GitHub returned 404, and because they shared a command pip
+    # never even tried the mamba_ssm wheel -- whose URL was correct. One
+    # guessed version number cost the whole opponent for a second leg.
+    #
+    # So: ask the GitHub releases API which assets actually exist, match the
+    # box's own (cuda, torch, abi, python) tag against them, and install each
+    # wheel in ITS OWN command so one 404 cannot take the other down.
+    # `mamba_ssm`'s `selective_scan_fn` -- the only thing this leg probes --
+    # does not need causal_conv1d, so losing that one is survivable and
+    # losing mamba_ssm is not.
+    python3 - > /root/mamba_urls.txt 2>> "$OUT/pip.log" <<'MMTAG'
+import json, sys, urllib.request
+
 try:
     import torch
     tv = ".".join(torch.__version__.split(".")[:2])
     cu = "cu12" if (torch.version.cuda or "").startswith("12") else "cu11"
     abi = "TRUE" if torch._C._GLIBCXX_USE_CXX11_ABI else "FALSE"
-    print("%storch%scxx11abi%s|cp%d%d" % (cu, tv, abi, sys.version_info[0], sys.version_info[1]))
-except Exception:
-    pass
+except Exception as e:
+    sys.stderr.write("no torch tuple: %r\n" % (e,))
+    raise SystemExit(0)
+py = "cp%d%d" % (sys.version_info[0], sys.version_info[1])
+want = "%storch%scxx11abi%s" % (cu, tv, abi)
+sys.stderr.write("mamba wheel tag wanted: %s / %s\n" % (want, py))
+
+for repo in ("state-spaces/mamba", "Dao-AILab/causal-conv1d"):
+    try:
+        req = urllib.request.Request(
+            "https://api.github.com/repos/%s/releases?per_page=30" % repo,
+            headers={"Accept": "application/vnd.github+json",
+                     "User-Agent": "mojolearn-leg"})
+        rels = json.load(urllib.request.urlopen(req, timeout=60))
+    except Exception as e:
+        sys.stderr.write("%s: releases API failed %r\n" % (repo, e))
+        continue
+    hit = None
+    for rel in rels:                      # newest first
+        for a in rel.get("assets") or []:
+            n = a.get("name", "")
+            if want in n and py in n and n.endswith(".whl"):
+                hit = a["browser_download_url"]
+                break
+        if hit:
+            break
+    if hit:
+        print(hit)
+    else:
+        sys.stderr.write("%s: NO asset matches %s / %s\n" % (repo, want, py))
 MMTAG
-)
-    echo "mamba_wheel_tag=$_mm_tag" >> "$OUT/leg.txt"
-    if [ -n "$_mm_tag" ] && command -v timeout > /dev/null 2>&1; then
-        _mm_abi=${_mm_tag%|*}
-        _mm_py=${_mm_tag#*|}
-        _cc_url="https://github.com/Dao-AILab/causal-conv1d/releases/download/v1.4.0/causal_conv1d-1.4.0+${_mm_abi}-${_mm_py}-${_mm_py}-linux_x86_64.whl"
-        _mm_url="https://github.com/state-spaces/mamba/releases/download/v2.2.4/mamba_ssm-2.2.4+${_mm_abi}-${_mm_py}-${_mm_py}-linux_x86_64.whl"
-        echo "mamba_wheel_url=$_mm_url" >> "$OUT/leg.txt"
-        timeout -k 15 420 python3 -m pip install --no-input --no-build-isolation \
-            "$_cc_url" "$_mm_url" >> "$OUT/pip.log" 2>&1
-        echo "mamba_ssm_install_exit=$?" >> "$OUT/leg.txt"
+    echo "mamba_wheel_urls=$(tr '\n' ' ' < /root/mamba_urls.txt)" >> "$OUT/leg.txt"
+    if [ -s /root/mamba_urls.txt ] && command -v timeout > /dev/null 2>&1; then
+        while read -r _w; do
+            [ -n "$_w" ] || continue
+            timeout -k 15 420 python3 -m pip install --no-input \
+                --no-build-isolation "$_w" >> "$OUT/pip.log" 2>&1
+            echo "mamba_wheel_exit $(basename "$_w" | cut -c1-24)=$?" >> "$OUT/leg.txt"
+        done < /root/mamba_urls.txt
     else
-        echo "mamba_ssm_install=SKIPPED, could not read this box's torch tuple" >> "$OUT/leg.txt"
+        echo "mamba_ssm_install=SKIPPED, no matching wheel was discovered" >> "$OUT/leg.txt"
     fi
     # THE PROBE, for the same reason the LightGBM one exists: an install
     # exit code says pip ran, and only a CALL says the fused kernel is

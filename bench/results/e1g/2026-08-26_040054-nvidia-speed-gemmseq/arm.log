@@ -1,0 +1,4 @@
+arming a 60-minute self-kill on pod le6he3lh22exql ...
+ARMED. Pod le6he3lh22exql is TERMINATED through the API in 60 minutes.
+  lease: /Users/andrewhendel/CascadeProjects/mojolearn/tools/../bench/results/runpod_leases/le6he3lh22exql.lease
+  extend with: tools/runpod_guard.sh extend le6he3lh22exql '-p 19573 root@103.207.149.138' <minutes>

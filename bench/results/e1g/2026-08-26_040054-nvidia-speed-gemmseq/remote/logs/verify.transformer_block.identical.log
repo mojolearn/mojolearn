@@ -1,0 +1,52 @@
+1511 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x30fd00000000, nodemask=1)
+Imported from /root/mojolearn/transformer/mojo_only/transformer_check.mojo:240:
+/root/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/transformer/mojo_only/transformer_check.mojo:240:
+/root/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/transformer/mojo_only/transformer_check.mojo:240:
+/root/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+=== transformer block identity gate, profile mojolearn.identical.transformer.fp32.v1
+=== NOTHING IN THIS FILE HAS EVER BEEN COMPILED OR RUN BEFORE THIS PROCESS. Read the header.
+mode IDENTICAL   block sabotage: none
+ledger: this binary is CLEAN -- no sabotage arm is compiled in. Set MOJOLEARN_TRANSFORMER_EXPECT_SABOTAGE to have the binary check its own -D.
+preflight: the assertions the fixture and the oracle asked for
+  frozen constants OK: eps 0x358637bd, theta 0x461c4000, mask fill 0xff7fffff
+  identical_mul == identical_mul_add(a, b, -0.0) on 64 probes including both zero signs
+  +1e35 0x799a130c + mask -> 0xff7fecbd   (a SELECT would leave 0xff7fffff)
+  -1e35 0xf99a130c + mask -> 0xff800000   (the -inf mask arm would give 0xff800000)
+  attention scale: head_dim 16 -> 0x3e800000 (wants 0x3e800000, EXACT, blind to the spelling), head_dim 24 -> 0x3e5105eb (INEXACT, the only shape that can see DEVIATION 802)
+  splitmix64: the transformer copy and mamba's agree on 5 seeds (DEVIATION 1000's stated cost, checked)
+clause (a): 13 fixture cases, every stage, device vs host oracle, BITWISE
+  case 0 base_b1_l4_nrep1  B=1 L=4 S=4 cap=4 dm=32 nh=2 nkv=2 hd=16 inter=64  11296 cells: 30/30 stages bit-identical
+  case 1 base_b2_l4_nrep2  B=2 L=4 S=4 cap=4 dm=32 nh=2 nkv=1 hd=16 inter=64  13752 cells: 30/30 stages bit-identical
+  case 2 base_b1_l1_nrep2  B=1 L=1 S=1 cap=1 dm=32 nh=2 nkv=1 hd=16 inter=64  8870 cells: 30/30 stages bit-identical
+  case 3 base_b3_l16_nrep2  B=3 L=16 S=16 cap=16 dm=32 nh=2 nkv=1 hd=16 inter=64  46120 cells: 30/30 stages bit-identical
+  case 4 wide_inter300  B=1 L=4 S=4 cap=4 dm=32 nh=2 nkv=1 hd=16 inter=300  14752 cells: 30/30 stages bit-identical
+  case 5 odd_head_dim_24  B=1 L=4 S=4 cap=4 dm=48 nh=2 nkv=1 hd=24 inter=64  15876 cells: 30/30 stages bit-identical
+  case 7 long_l64  B=1 L=64 S=64 cap=64 dm=32 nh=2 nkv=1 hd=16 inter=64  83336 cells: 30/30 stages bit-identical
+  case 9 adv_signed_zeros  B=2 L=4 S=4 cap=4 dm=32 nh=2 nkv=1 hd=16 inter=64  13752 cells: 30/30 stages bit-identical
+  case 10 adv_subnormal_x  B=1 L=4 S=4 cap=4 dm=32 nh=2 nkv=1 hd=16 inter=64  10976 cells: 30/30 stages bit-identical
+  case 11 adv_score_neg_zero  B=1 L=4 S=4 cap=4 dm=32 nh=2 nkv=1 hd=16 inter=64  10976 cells: 30/30 stages bit-identical
+  case 12 adv_score_extreme  B=1 L=4 S=4 cap=4 dm=32 nh=2 nkv=1 hd=16 inter=64  10976 cells: 30/30 stages bit-identical
+  case 13 adv_cache_hot_tail  B=1 L=4 S=4 cap=16 dm=32 nh=2 nkv=1 hd=16 inter=64  10976 cells: 30/30 stages bit-identical
+  case 14 adv_masked_zero_row  B=1 L=4 S=4 cap=4 dm=32 nh=2 nkv=1 hd=16 inter=64  10976 cells: 30/30 stages bit-identical
+card: 30 records at /tmp/mojolearn_transformer_block.trace, contract section 9 wants 30
+card: 30/30 tags in contract section 9's order, all unique
+clause (a): PASS, 13 cases, 30/30 stages bit-identical to the oracle on all 262634 cells, 30/30 card tags
+clause (b): SKIPPED (set MOJOLEARN_TRANSFORMER_CHECK_CLAUSE_B=1)
+clause (c): SKIPPED (set MOJOLEARN_TRANSFORMER_CHECK_CLAUSE_C=1). BOTH HALVES ARE SKIPPED TOGETHER and that is deliberate: batch composition and sequence length are two different fixtures and a lane that ran one would have half a clause with a whole clause's name.
+clause (d): SKIPPED (set MOJOLEARN_TRANSFORMER_CHECK_CLAUSE_D=1). NOTE: two sabotage arms (S07_ROPE_RELATIVE_POSITION and S19_VALUE_SUM_VIA_GEMM) are falsifiable ONLY here, so a lane that never runs clause (d) has eleven arms and not thirteen.
+clause (e): SKIPPED (set MOJOLEARN_TRANSFORMER_CHECK_CLAUSE_E=1)
+SCOPE: this build, this column, IDENTICAL only. What is NOT closed by anything printed above: an INDEPENDENT reference (transformer/corpus/ does not exist, so every clause here is our device against our oracle and both are ours); FAST mode; every column that is not this one; and the twelve sabotage builds this binary is not. Contract section 11: nothing cross-vendor until a leg runs, and two backends agreeing closes nothing -- Apple and AMD agreed bit for bit through 302 GEMM stages while NVIDIA diverged at tree001.winners.scores.
