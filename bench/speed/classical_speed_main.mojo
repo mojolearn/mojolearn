@@ -172,6 +172,9 @@ from glm.ported.linalg.detail.lstsq import lstsq_eig
 from neighbors.ported.neighbors.detail.knn_brute_force import (
     brute_force_knn_impl,
     compute_norms,
+    KNN_METHOD_AUTO,
+    KNN_METHOD_FUSED,
+    KNN_METHOD_TILED,
 )
 
 # ---- cd --------------------------------------------------------------------
@@ -685,6 +688,7 @@ struct Emitter(Movable):
         shape: String,
         size: String,
         scale: String = "fixed",
+        arm: String = "ours",
     ):
         """`scale` DEFAULTS TO `fixed`, AND THE DEFAULT IS THE WHOLE POINT.
 
@@ -718,7 +722,11 @@ struct Emitter(Movable):
         reach the table.
         """
         self.lane = lane
-        self.arm = String("ours")
+        # `ours` unless a lane is A/B-ing TWO OF OUR OWN ARMS against each
+        # other, in which case the alternate is named `ours-<arm>` and
+        # tools/fast_speed_table.py keeps it out of the opponent set: our own
+        # second kernel is not a vendor and must never be counted as one.
+        self.arm = arm
         self.shape = shape
         self.size = size
         self.scale = scale
@@ -1115,24 +1123,82 @@ def run_knn(ctx: DeviceContext, smoke: Bool, rounds: Int, size: String) raises:
         String("throughput"),
         size,
     )
-    em.header(_no_spaces(ctx.name()), rounds)
-    for r in range(rounds + 1):
-        var t0 = perf_counter_ns()
-        compute_norms(ctx, idx, inorm, index, cols, False)
-        compute_norms(ctx, qr, qnorm, queries, cols, False)
-        brute_force_knn_impl(
-            ctx, qr, qnorm, idx, inorm, dist, bv, bi, od, oi, oi32,
-            queries, index, cols, k, tile, bl, False,
+    # THREE ARMS, AND THE REASON IS THAT OUR ARM CHOICE WAS DECIDED ON ONE
+    # VENDOR.
+    #
+    # DEVIATION 36 picks between cuVS's fused kernel and cuVS's tiled `else`
+    # by running THEIR launch computation on OUR hardware -- fused when it
+    # says `grid_x == 1`, tiled when it would engage the x-split. That rule
+    # is sound. What is not sound is that EVERY MEASUREMENT BEHIND IT WAS
+    # TAKEN ON AN M4: read the table above `KNN_METHOD_AUTO` and every row
+    # of it is an Apple millisecond.
+    #
+    # On an H100 on 2026-08-25 this lane came in 23.9x SLOWER than
+    # `cuml-gpu`, which is by a wide margin the worst classical row we have
+    # and the only one at a size where the ratio is about arithmetic
+    # (400,000 x 32, 4,000 queries). cuML at k = 10 <= 64 dispatches to
+    # `fusedL2Knn` unconditionally. We may well be on the other arm, for a
+    # reason measured on a laptop.
+    #
+    # THAT IS A QUESTION FOR A LEG, NOT FOR A REWRITE. So the lane now times
+    # the shipped AUTO choice as `ours` -- which keeps every existing ratio
+    # meaning what it meant -- and BOTH explicit arms beside it as
+    # `ours-fused` and `ours-tiled`. One run then says whether AUTO is
+    # choosing wrong on this column, and the answer becomes a KERNEL MATRIX
+    # ROW rather than an `if nvidia`.
+    #
+    # `ours-fused` is expected to REFUSE on a 64-wide wavefront: the FAISS
+    # queue is a 32-lane bitonic network and `fused_l2_knn` declines at its
+    # own entry there. A refusal is the correct output for that column and
+    # is emitted as one rather than raised.
+    var methods = List[Int]()
+    var names = List[String]()
+    methods.append(KNN_METHOD_AUTO)
+    names.append(String("ours"))
+    methods.append(KNN_METHOD_FUSED)
+    names.append(String("ours-fused"))
+    methods.append(KNN_METHOD_TILED)
+    names.append(String("ours-tiled"))
+
+    for a in range(len(methods)):
+        var arm_em = Emitter(
+            "knn",
+            String(index) + "x" + String(cols) + "q" + String(queries) + "k"
+            + String(k),
+            size,
+            String("throughput"),
+            names[a],
         )
-        ctx.synchronize()
-        var t1 = perf_counter_ns()
-        var h = _hash_device_f32(ctx, FNV_OFFSET, od, queries * k)
-        h = _hash_device_u32(ctx, h, oi, queries * k)
-        if r == 0:
-            em.warmup(t1 - t0)
+        arm_em.header(_no_spaces(ctx.name()), rounds)
+        var failed = String("")
+        for r in range(rounds + 1):
+            var t0 = perf_counter_ns()
+            try:
+                compute_norms(ctx, idx, inorm, index, cols, False)
+                compute_norms(ctx, qr, qnorm, queries, cols, False)
+                brute_force_knn_impl(
+                    ctx, qr, qnorm, idx, inorm, dist, bv, bi, od, oi, oi32,
+                    queries, index, cols, k, tile, bl, False,
+                    False, True, True, methods[a],
+                )
+                ctx.synchronize()
+            except e:
+                failed = String(e)
+                break
+            var t1 = perf_counter_ns()
+            var h = _hash_device_f32(ctx, FNV_OFFSET, od, queries * k)
+            h = _hash_device_u32(ctx, h, oi, queries * k)
+            if r == 0:
+                arm_em.warmup(t1 - t0)
+            else:
+                arm_em.emit(r, t1 - t0, h)
+        if failed != "":
+            print(
+                "FSPEED-REFUSED lane=knn arm=" + names[a] + " reason="
+                + _no_spaces(failed)
+            )
         else:
-            em.emit(r, t1 - t0, h)
-    em.note()
+            arm_em.note()
     _ = hi^
     _ = hq^
     _ = idx^

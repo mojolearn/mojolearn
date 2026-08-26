@@ -291,9 +291,21 @@ def main():
             ours = stats.get((lane, "ours", shape))
             if ours is None:
                 continue
+            # OUR OWN SECOND KERNEL IS NOT AN OPPONENT.
+            #
+            # A lane may A/B two of ITS OWN arms -- `knn` times the shipped
+            # AUTO choice as `ours` and both explicit arms beside it as
+            # `ours-fused` and `ours-tiled`, because DEVIATION 36's arm
+            # choice was measured entirely on an M4 and the H100 row came in
+            # 23.9x behind cuML. Those alternates must not enter the vendor
+            # comparison: counting one as an opponent would let us "beat"
+            # ourselves into the win tally, and picking the fastest opponent
+            # per row would silently compare our slow arm against our fast
+            # one instead of against cuML.
             opps = [(stats[(lane, o, shape)]["median"], o)
                     for o in sorted(k[1] for k in stats
-                                    if k[0] == lane and k[2] == shape and k[1] != "ours")]
+                                    if k[0] == lane and k[2] == shape
+                                    and not k[1].startswith("ours"))]
             opps = [(t, o) for t, o in opps if t > 0]
             if not opps:
                 continue
@@ -410,6 +422,37 @@ def main():
     if thr or fixd:
         w("%d rows in total have an opponent: %d throughput, %d fixed-cost."
           % (len(worst), len(thr), len(fixd)))
+        w("")
+
+    # OUR OWN ARMS, SIDE BY SIDE. Separate from every vendor table because
+    # it answers a different question: not "are we fast" but "is our own
+    # dispatch picking the right kernel ON THIS COLUMN".
+    ab = sorted({(k[0], k[2]) for k in stats if k[1].startswith("ours-")})
+    if ab:
+        w("## Our own arms, A/B")
+        w("")
+        w("Two of OUR kernels on the same row. This is not a speed claim")
+        w("against anyone; it asks whether our own dispatch is choosing the")
+        w("right arm on THIS vendor. An arm chosen by a measurement taken on")
+        w("a different vendor is the failure this table exists to catch.")
+        w("")
+        w("| lane | shape | arm | median ms | vs shipped `ours` |")
+        w("|---|---|---|---|---|")
+        for lane, shape in ab:
+            base = stats.get((lane, "ours", shape))
+            arms = sorted(k[1] for k in stats
+                          if k[0] == lane and k[2] == shape
+                          and k[1].startswith("ours"))
+            for a in arms:
+                st = stats[(lane, a, shape)]
+                if base and base["median"] and a != "ours":
+                    rel = st["median"] / base["median"]
+                    tag = ("%.2fx slower" % rel) if rel > 1.0 else (
+                        "**%.2fx FASTER**" % (1.0 / rel))
+                else:
+                    tag = "(the shipped choice)" if a == "ours" else "-"
+                w("| %s | %s | %s | %s | %s |"
+                  % (lane, shape, a, fmt(st["median"]), tag))
         w("")
 
     if run.agree:
