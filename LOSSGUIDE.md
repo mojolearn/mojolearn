@@ -668,3 +668,35 @@ passes by construction.
   hides; both are exercised only by fixtures with one-hot / binary winners.
   A cheap probe: FAST vs IDENTICAL part_stats trace rows (`dN.partstats`)
   on a 4k-row fixture should differ by ULPs, not by sides.
+
+### DEVIATION 1903 -- histogram aliasing: no per-split copy, no blanket zero. LANDED
+
+* **Mechanism.** LightGBM's `cuda_hist_pool_` aliases the parent's slot to
+  the larger child and zeroes the arena once per tree
+  (`cuda_data_partition.cu:825-831,895-898`,
+  `cuda_histogram_constructor.cpp:76-80` -- recon mechanism a3 / borrow 3).
+  This port's slots are leaf-id-indexed by every kernel from the build to
+  the scorer, so a pointer pool proper would touch the other lane's files;
+  the FAST arm instead exploits the aliasing the id scheme already gives:
+  the left child KEEPS the parent's id, so the parent's histogram already
+  sits where an in-place `big == left` subtraction needs it. The
+  unconditional split-time `copy_histograms` launch is deleted on the FAST
+  arm; a copy runs at PLAN time only for `big == right` pairs (left
+  strictly smaller -- ties derive the left sibling, PORTING.md 136, so
+  balanced splits copy NOTHING). The per-level zero pass runs only over
+  compute slots that were ever written this tree (`hist_slot_dirty`);
+  fresh right-child slots still hold the once-per-tree memset's zeros.
+* **Price.** Deleted per split on the FAST arm: one full-histogram copy
+  (`hist_cells x stat_count x 4 B` read + write) for every tied/left-heavy
+  pair, and one full-histogram zero for every fresh slot -- x ~63 splits
+  per lossguide tree. Bit-inert by construction (same bytes at every read
+  as the old schedule), so unlike 1901 this deviation cannot move FAST
+  trees; it only removes launches and traffic.
+* **Citations.** recon_lightgbm_cuda.md mechanism a3;
+  `copy_histograms[_vec4]_kernel` / `zero_histograms_kernel`
+  (`kernel/histogram_utils.mojo`, unmodified -- only the launch schedule in
+  `greedy_search_helper_depthwise.mojo` moved).
+* **Gate note.** The `hist_slot_dirty` proof rests on two invariants: leaf
+  ids are never reused within a tree, and the arena memset at
+  `CreateInitialSubsets` runs once per fit call. Both hold today in this
+  driver; a future slot-reuse scheme must revisit the elision.

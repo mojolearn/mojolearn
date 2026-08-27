@@ -346,6 +346,17 @@ struct TDepthwiseWorkspace(Movable):
     # copied only on the FAST arm.
     var d_win_cells: DeviceBuffer[DType.uint32]
     var h_win_cells: HostBuffer[DType.uint32]
+    # DEVIATION 1903: the DEFERRED parent-histogram copy's pair lists --
+    # source (the left child holding the parent's histogram) and destination
+    # (the bigger right sibling that will be derived in place). Their own
+    # staging pairs, per DEVIATION 261's rule; `h_left`/`h_right` are the
+    # SPLIT stage's pairs and the deferred copy stages at PLAN time.
+    # Allocated in both numeric modes, written and copied only on the FAST
+    # arm.
+    var d_copy_src: DeviceBuffer[DType.uint32]
+    var h_copy_src: HostBuffer[DType.uint32]
+    var d_copy_dst: DeviceBuffer[DType.uint32]
+    var h_copy_dst: HostBuffer[DType.uint32]
 
     def __init__(
         out self,
@@ -391,6 +402,14 @@ struct TDepthwiseWorkspace(Movable):
         )
         self.d_win_cells = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
         self.h_win_cells = ctx.enqueue_create_host_buffer[DType.uint32](
+            max_leaves
+        )
+        self.d_copy_src = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        self.h_copy_src = ctx.enqueue_create_host_buffer[DType.uint32](
+            max_leaves
+        )
+        self.d_copy_dst = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        self.h_copy_dst = ctx.enqueue_create_host_buffer[DType.uint32](
             max_leaves
         )
 
@@ -836,6 +855,10 @@ def fit_non_symmetric_tree[
     ref h_part_stats = dws[0].h_part_stats
     ref d_win_cells = dws[0].d_win_cells
     ref h_win_cells = dws[0].h_win_cells
+    ref d_copy_src = dws[0].d_copy_src
+    ref h_copy_src = dws[0].h_copy_src
+    ref d_copy_dst = dws[0].d_copy_dst
+    ref h_copy_dst = dws[0].h_copy_dst
 
     var table = TBinFeatureTable(layout)
 
@@ -934,6 +957,19 @@ def fit_non_symmetric_tree[
     # under IDENTICAL the list exists and stays at -1.
     var best_cells = List[Int32]()
     best_cells.append(Int32(-1))
+    # DEVIATION 1903: whether a leaf id's histogram slot has EVER been
+    # written this tree. The arena is memset ONCE per tree
+    # (`CreateInitialSubsets` below, LightGBM's own cadence --
+    # `cuda_histogram_constructor.cpp:76-80`), leaf ids are never reused
+    # within a tree, and only the zero/build/scan/subtract/copy launches
+    # write a slot -- all of them over id lists this driver stages. So a
+    # False here is a proof the slot still holds the tree memset's zeros,
+    # and the per-level zero pass can skip it. Conservative in the other
+    # direction: every id in a level's `updated` set is marked True, even
+    # ones that were only zeroed. FAST-arm bookkeeping; under IDENTICAL the
+    # list exists and every compute slot is zeroed exactly as before.
+    var hist_slot_dirty = List[Bool]()
+    hist_slot_dirty.append(False)
 
     var emit_digests = trace.enabled
     var hist_live_stride = stat_count * hist_cells_per_leaf
@@ -1070,6 +1106,107 @@ def fit_non_symmetric_tree[
             d_tag + "plan.nonzero", _u32_as_i32(non_zero)
         )
 
+        # ============================ DEVIATION 1903 ============================
+        # THE PARENT-HISTOGRAM COPY MOVES FROM EVERY SPLIT TO THE PAIRS THAT
+        # NEED IT, AND THE ZERO PASS TO THE SLOTS THAT NEED IT. LightGBM's
+        # learner never copies a histogram at a split and never zeroes one
+        # per level: `cuda_hist_pool_` makes the larger child ALIAS the
+        # parent's slot and the fresh slot arrives zero from a once-per-tree
+        # memset (`cuda_data_partition.cu:825-831,895-898`;
+        # `cuda_histogram_constructor.cpp:76-80` -- recon_lightgbm_cuda.md,
+        # mechanism a3 / borrow 3). This port's slots are leaf-id-indexed and
+        # every kernel from the build to the scorer addresses them by the SAME
+        # id it reads the partition with, so a pointer pool proper would touch
+        # `greedy_search_helper.mojo`'s launcher and `kernel/compute_scores`
+        # -- the other lane's files. What lands here is the aliasing the id
+        # scheme gives for free:
+        #
+        #   * the LEFT child keeps the parent's id (`MakeSplit`, `:861-862`),
+        #     so the parent's histogram already sits in the left child's slot
+        #     -- when the plan derives the LEFT sibling (`big == left`, which
+        #     includes every exact-size tie, PORTING.md 136), the split-time
+        #     copy was writing a slot that the very next level ZEROED. Copy
+        #     deleted, subtraction unchanged: `from` is the left id and its
+        #     slot holds the parent's totals, as `substract_histograms`
+        #     requires.
+        #   * when the plan derives the RIGHT sibling (`big == right`, left
+        #     strictly smaller), the parent's totals must reach the right
+        #     slot before the left one is zeroed and rebuilt -- the SAME
+        #     kernel, launched HERE at plan time over exactly those pairs,
+        #     src = the small left id, dst = the big right id.
+        #   * a fresh right child's slot still holds the tree memset's zeros
+        #     (`hist_slot_dirty` above), so zeroing it is a full
+        #     hist-plane write for nothing; the pass runs over the dirty
+        #     compute slots only.
+        #
+        # Bit-inert BY CONSTRUCTION on the FAST arm it runs on: every slot
+        # holds the same bytes at every read as under the old schedule (a
+        # deferred copy copies the same untouched bytes; an elided zero
+        # leaves the memset's zeros where the kernel would have written
+        # zeros). Price deleted per split: one full-histogram copy
+        # (`hist_cells * stat_count * 4` bytes each way) on tied pairs, and
+        # one full-histogram zero on fresh slots, x ~63 splits per lossguide
+        # tree. IDENTICAL keeps the split-time copy and the full zero pass
+        # byte for byte.
+        # =======================================================================
+        comptime if not SPLIT_COST_IDENTICAL:
+            if len(plan.subtract_from) > 0:
+                var n_copy = 0
+                for i in range(len(plan.subtract_from)):
+                    if Int(plan.subtract_from[i]) > Int(
+                        plan.subtract_what[i]
+                    ):
+                        h_copy_src.unsafe_ptr().unsafe_store(
+                            n_copy, plan.subtract_what[i]
+                        )
+                        h_copy_dst.unsafe_ptr().unsafe_store(
+                            n_copy, plan.subtract_from[i]
+                        )
+                        n_copy += 1
+                if n_copy > 0:
+                    stage_times.begin(ctx)
+                    # DEVIATION 1903 / 261: their own staging pairs
+                    ctx.enqueue_copy(
+                        dst_buf=d_copy_src, src_ptr=h_copy_src.unsafe_ptr()
+                    )
+                    ctx.enqueue_copy(
+                        dst_buf=d_copy_dst, src_ptr=h_copy_dst.unsafe_ptr()
+                    )
+                    # WIDTH DISPATCH, the same kernels the split-time copy
+                    # ran, over the reduced pair list.
+                    if (hist_cells_per_leaf * stat_count) % 4 == 0:
+                        ctx.enqueue_function[copy_histograms_vec4_kernel](
+                            d_copy_src.unsafe_ptr(),
+                            d_copy_dst.unsafe_ptr(),
+                            Int32(stat_count),
+                            Int32(hist_cells_per_leaf),
+                            hist.unsafe_ptr(),
+                            grid_dim=(
+                                (hist_cells_per_leaf * stat_count // 4 + 255)
+                                // 256,
+                                n_copy,
+                                1,
+                            ),
+                            block_dim=(256, 1, 1),
+                        )
+                    else:
+                        ctx.enqueue_function[copy_histograms_kernel](
+                            d_copy_src.unsafe_ptr(),
+                            d_copy_dst.unsafe_ptr(),
+                            Int32(stat_count),
+                            Int32(hist_cells_per_leaf),
+                            hist.unsafe_ptr(),
+                            grid_dim=(
+                                (hist_cells_per_leaf * stat_count + 255)
+                                // 256,
+                                n_copy,
+                                1,
+                            ),
+                            block_dim=(256, 1, 1),
+                        )
+                    mgr.stream_kernel()
+                    stage_times.end(ctx, "hist.copy")
+
         if len(plan.compute_ids) > 0:
             # their `ZeroLeavesHistograms(zeroLeaves, subsets)`
             # (`:1350`), applied to EVERY compute slot rather than only the
@@ -1077,26 +1214,44 @@ def fit_non_symmetric_tree[
             # either way and an empty leaf's zeros ARE its histogram, so
             # this subsumes their split; it is the symmetric lane's choice
             # and is kept identical so the two cannot drift.
-            stage_times.begin(ctx)
-            for i in range(len(plan.compute_ids)):
-                h_zero_ids.unsafe_ptr().unsafe_store(i, plan.compute_ids[i])
-            # DEVIATION 261: its own staging pair
-            ctx.enqueue_copy(
-                dst_buf=d_zero_ids, src_ptr=h_zero_ids.unsafe_ptr()
-            )
-            ctx.enqueue_function[zero_histograms_kernel](
-                d_zero_ids.unsafe_ptr(),
-                Int32(hist_cells_per_leaf),
-                hist.unsafe_ptr(),
-                grid_dim=(
-                    (hist_cells_per_leaf + 255) // 256,
-                    len(plan.compute_ids),
-                    stat_count,
-                ),
-                block_dim=(256, 1, 1),
-            )
-            mgr.stream_kernel()
-            stage_times.end(ctx, "hist.zero")
+            #
+            # DEVIATION 1903: on the FAST arm the list drops the slots that
+            # provably still hold the tree memset's zeros (`hist_slot_dirty`
+            # False) -- writing zeros over zeros is the one launch in this
+            # step that can be deleted without an argument about the build.
+            var zero_count = 0
+            comptime if SPLIT_COST_IDENTICAL:
+                for i in range(len(plan.compute_ids)):
+                    h_zero_ids.unsafe_ptr().unsafe_store(
+                        i, plan.compute_ids[i]
+                    )
+                zero_count = len(plan.compute_ids)
+            else:
+                for i in range(len(plan.compute_ids)):
+                    if hist_slot_dirty[Int(plan.compute_ids[i])]:
+                        h_zero_ids.unsafe_ptr().unsafe_store(
+                            zero_count, plan.compute_ids[i]
+                        )
+                        zero_count += 1
+            if zero_count > 0:
+                stage_times.begin(ctx)
+                # DEVIATION 261: its own staging pair
+                ctx.enqueue_copy(
+                    dst_buf=d_zero_ids, src_ptr=h_zero_ids.unsafe_ptr()
+                )
+                ctx.enqueue_function[zero_histograms_kernel](
+                    d_zero_ids.unsafe_ptr(),
+                    Int32(hist_cells_per_leaf),
+                    hist.unsafe_ptr(),
+                    grid_dim=(
+                        (hist_cells_per_leaf + 255) // 256,
+                        zero_count,
+                        stat_count,
+                    ),
+                    block_dim=(256, 1, 1),
+                )
+                mgr.stream_kernel()
+                stage_times.end(ctx, "hist.zero")
 
         if len(non_zero) > 0:
             # their `ComputeSplitProperties(loadPolicy, nonZeroComputeLeaves,
@@ -1202,6 +1357,12 @@ def fit_non_symmetric_tree[
             var id = Int(updated[i])
             leaves[id].histograms_type = EHistogramsType.CurrentPath
             leaves[id].best_split = TBestSplitProperties()
+            # DEVIATION 1903: every updated slot was written (zeroed,
+            # built, copied into or derived), so it can no longer skip the
+            # zero pass. Marked conservatively -- a slot that was only
+            # zeroed is marked too.
+            comptime if not SPLIT_COST_IDENTICAL:
+                hist_slot_dirty[id] = True
 
         # THEIR ORDER, AND IT IS NOT COSMETIC (`greedy_search_helper.cpp`):
         #
@@ -1718,6 +1879,10 @@ def fit_non_symmetric_tree[
                 # exactly as `SplitLeaf` resets their `BestSplit`.
                 best_cells[left_id] = Int32(-1)
                 best_cells.append(Int32(-1))
+                # DEVIATION 1903: the right child's slot has never been
+                # written -- fresh id, once-per-tree memset -- so it starts
+                # clean. The left slot keeps its parent's True.
+                hist_slot_dirty.append(False)
 
             var n_split = len(to_split)
             ctx.enqueue_copy(dst_buf=sp_feats, src_ptr=sp_feats_h.unsafe_ptr())
@@ -1803,35 +1968,42 @@ def fit_non_symmetric_tree[
             # slot; this puts the same histogram in the right child's, so
             # both are `PreviousPath` and next level can pair them.
             # WIDTH DISPATCH, same story as the subtraction above.
-            if (hist_cells_per_leaf * stat_count) % 4 == 0:
-                ctx.enqueue_function[copy_histograms_vec4_kernel](
-                    d_left.unsafe_ptr(),
-                    d_right.unsafe_ptr(),
-                    Int32(stat_count),
-                    Int32(hist_cells_per_leaf),
-                    hist.unsafe_ptr(),
-                    grid_dim=(
-                        (hist_cells_per_leaf * stat_count // 4 + 255) // 256,
-                        n_split,
-                        1,
-                    ),
-                    block_dim=(256, 1, 1),
-                )
-            else:
-                ctx.enqueue_function[copy_histograms_kernel](
-                    d_left.unsafe_ptr(),
-                    d_right.unsafe_ptr(),
-                    Int32(stat_count),
-                    Int32(hist_cells_per_leaf),
-                    hist.unsafe_ptr(),
-                    grid_dim=(
-                        (hist_cells_per_leaf * stat_count + 255) // 256,
-                        n_split,
-                        1,
-                    ),
-                    block_dim=(256, 1, 1),
-                )
-            mgr.stream_kernel()
+            #
+            # DEVIATION 1903: IDENTICAL arm only. On the FAST arm the copy
+            # happens at PLAN time, and only for the pairs whose derived
+            # sibling is the right child -- see the block above the zero
+            # pass. Same kernels, same bytes, fewer launches.
+            comptime if SPLIT_COST_IDENTICAL:
+                if (hist_cells_per_leaf * stat_count) % 4 == 0:
+                    ctx.enqueue_function[copy_histograms_vec4_kernel](
+                        d_left.unsafe_ptr(),
+                        d_right.unsafe_ptr(),
+                        Int32(stat_count),
+                        Int32(hist_cells_per_leaf),
+                        hist.unsafe_ptr(),
+                        grid_dim=(
+                            (hist_cells_per_leaf * stat_count // 4 + 255)
+                            // 256,
+                            n_split,
+                            1,
+                        ),
+                        block_dim=(256, 1, 1),
+                    )
+                else:
+                    ctx.enqueue_function[copy_histograms_kernel](
+                        d_left.unsafe_ptr(),
+                        d_right.unsafe_ptr(),
+                        Int32(stat_count),
+                        Int32(hist_cells_per_leaf),
+                        hist.unsafe_ptr(),
+                        grid_dim=(
+                            (hist_cells_per_leaf * stat_count + 255) // 256,
+                            n_split,
+                            1,
+                        ),
+                        block_dim=(256, 1, 1),
+                    )
+                mgr.stream_kernel()
 
             ctx.enqueue_function[update_partitions_after_split_kernel](
                 d_left.unsafe_ptr(),
