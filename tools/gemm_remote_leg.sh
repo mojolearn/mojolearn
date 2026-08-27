@@ -2728,6 +2728,17 @@ forest)
     # named on its own because it is the one script that is not
     # `build_<name>.sh`, which is what hid it in the first place.
     _bscripts="bindings/build.sh $(ls bindings/build_*.sh 2>/dev/null | tr '\n' ' ')"
+    # The build scripts' own smoke gates run `python3 - <<PY` with numpy.
+    # On the AMD images /opt/conda's python3 has no numpy, so on the
+    # 2026-08-27_181248 leg the gbdt MOJO BUILD SUCCEEDED and the gate then
+    # died on `import numpy` -- reported as a build failure. Same cure as
+    # the forest driver: pixi's interpreter first on PATH, but ONLY for
+    # these build invocations -- the later pip step must keep installing
+    # into the image's python, not pixi's env.
+    _BPATH="$PATH"
+    if [ "@VENDOR@" = "amd" ]; then
+        _BPATH="$PWD/.pixi/envs/default/bin:$PATH"
+    fi
     for _pass in 1 2; do
         for _bs in $_bscripts; do
             _b=$(basename "$_bs" .sh | sed 's/^build_//; s/^build$/base/')
@@ -2738,10 +2749,10 @@ forest)
                 _skip=""
             fi
             if command -v timeout > /dev/null 2>&1; then
-                MOJOLEARN_SKIP_BUILD_GATE="$_skip" timeout -k 30 @BUILDBUDGET@ \
+                PATH="$_BPATH" MOJOLEARN_SKIP_BUILD_GATE="$_skip" timeout -k 30 @BUILDBUDGET@ \
                     bash "$_bs" > "$LOGS/build.binding.$_b.pass$_pass.log" 2>&1
             else
-                MOJOLEARN_SKIP_BUILD_GATE="$_skip" \
+                PATH="$_BPATH" MOJOLEARN_SKIP_BUILD_GATE="$_skip" \
                     bash "$_bs" > "$LOGS/build.binding.$_b.pass$_pass.log" 2>&1
             fi
             _brc=$?
