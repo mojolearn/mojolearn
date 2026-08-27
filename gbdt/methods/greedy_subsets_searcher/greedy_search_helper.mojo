@@ -212,6 +212,9 @@ from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
     PARTITION_BLOCK,
     launch_stable_partition,
 )
+from gbdt.gpu_util.kernel.reorder_single_pass import (
+    launch_stable_partition_routed,
+)
 
 
 def compute_target_std_dev(
@@ -675,7 +678,7 @@ def run_one_level(
     var chunk_zeros = ctx.enqueue_create_buffer[DType.uint32](max_chunks)
     var chunk_offsets = ctx.enqueue_create_buffer[DType.uint32](max_chunks)
     var leaf_zeros = ctx.enqueue_create_buffer[DType.uint32](1)
-    launch_stable_partition(
+    launch_stable_partition_routed[HIST_BUILD_MODE == NUMERIC_IDENTICAL](
         ctx,
         1,
         n_rows,
@@ -1356,7 +1359,7 @@ def run_tree(
             block_dim=(SPLIT_BLOCK_SIZE, 1, 1),
         )
 
-        launch_stable_partition(
+        launch_stable_partition_routed[HIST_BUILD_MODE == NUMERIC_IDENTICAL](
             ctx, n_live, max_live_rows, ids_a, p_off, p_sz, flags,
             chunk_zeros, chunk_offsets, leaf_zeros, gmap, sflags,
         )
@@ -3635,7 +3638,7 @@ def run_tree_layout_traced[
         )
         mgr.stream_kernel()
 
-        launch_stable_partition(
+        launch_stable_partition_routed[HIST_BUILD_MODE == NUMERIC_IDENTICAL](
             ctx, n_live, max_live_rows, dense_ids, p_off, p_sz, flags,
             chunk_zeros, chunk_offsets, leaf_zeros, gmap, sflags,
             sm_count=sm_count,

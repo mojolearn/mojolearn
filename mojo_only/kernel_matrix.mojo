@@ -1411,6 +1411,53 @@ def greedy_sub_byte_excluded_for[column: Int, identical: Bool]() -> Bool:
     return column_lane_width(column) == 64
 
 
+def reorder_single_pass_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row (DEVIATION 1907): whether the leaf reorder's stable
+    one-bit partition may take the SINGLE-PASS decoupled-lookback path
+    (`gbdt/gpu_util/kernel/reorder_single_pass.mojo`) for a level whose
+    leaf bound is above CatBoost's `FastSortSize()` == 500,000 rows.
+
+    CatBoost's own dispatch (`split_points.cu:737-741`) hands leaves above
+    that threshold to `cub::DeviceRadixSort` instead of its scan-plus-
+    reorder path; our port had only the scan path, whose serial per-leaf
+    phase grows linearly with the largest leaf and is the recorded cause
+    of the FAST speed lane's remaining 5M-rung deficit. The single-pass
+    formulation is CUB's own `DispatchScan` machinery (decoupled lookback,
+    `single_pass_scan_operators.cuh`), the same machinery XGBoost's row
+    partitioner runs (`row_partitioner.cuh:98-201`).
+
+    WHY THIS IS A ROW AND NOT A DEFAULT: decoupled lookback spins on
+    another block's published status word, which requires co-resident
+    thread blocks to make INDEPENDENT FORWARD PROGRESS. CUDA and HIP
+    provide that guarantee -- CUB and rocPRIM shipping the protocol is the
+    vendors' own attestation -- so the NVIDIA and AMD columns take the
+    path under FAST. Metal promises nothing of the shape (and a Metal
+    kernel that spins is not interrupted, `random_gen.mojo:105`), so the
+    APPLE column keeps the 3-launch block-scan partition byte for byte.
+    `IDENTICAL` returns False on every column: the identical route must
+    not move, exactly as DEVIATION 1906's row holds it. The variable-width
+    columns (amd-rdna, qualcomm, intel, spec-baseline) are NOT claimed --
+    nobody has stated their forward-progress terms here.
+
+    A SCHEDULING row, not a numeric one, stated deliberately: the
+    single-pass path produces the SAME PERMUTATION as the 3-launch path
+    by construction (its scatter is `partition_place_kernel`'s arithmetic
+    over the same exact integers -- see the file banner), so the row moves
+    launches and passes, never a value. `DEVIATION 115a`
+    (`core/scan_by_key.mojo`) declined the lookback across all columns for
+    want of a stated guarantee; this row narrows that decline to the
+    columns whose vendors decline it themselves.
+
+    THE PRICE: a second code path for one kernel family, alive only on
+    FAST NVIDIA/AMD above the threshold. The A/B is the orchestrator's 5M
+    rung intra-leg, and this row is where the routing flips if the number
+    disagrees.
+    """
+    comptime if identical:
+        return False
+    return column == COLUMN_NVIDIA or column == COLUMN_AMD
+
+
 def hist_smem_mode_for[column: Int, identical: Bool]() -> Int:
     """NUMERIC row: HOW the hist_2 family accumulates in shared memory.
 

@@ -67,9 +67,12 @@ comptime REORDER_BLOCK = 512
 comptime REORDER_UNROLL = 1
 
 #: `FastSortSize()` (`split_points.cu:737`). Above this they take the CUB
-#: 1-bit radix sort instead; we have no device sort to take, so this is
-#: recorded and the scan path runs at every size. Ported so the threshold is
-#: visible rather than absent.
+#: 1-bit radix sort instead. This was recorded as a gap while the scan path
+#: ran at every size; DEVIATION 1907 closed it with the single-pass
+#: decoupled-lookback partition (`reorder_single_pass.mojo`), routed to
+#: FAST NVIDIA/AMD by the `reorder_single_pass_for` kernel-matrix row and
+#: thresholded on THIS constant. Apple and IDENTICAL keep the scan path at
+#: every size.
 comptime FAST_SORT_SIZE = 500000
 
 

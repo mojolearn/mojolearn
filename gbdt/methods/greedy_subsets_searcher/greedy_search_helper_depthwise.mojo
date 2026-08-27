@@ -134,6 +134,9 @@ from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
     update_partition_stats_from_split_kernel,
     update_partitions_after_split_kernel,
 )
+from gbdt.gpu_util.kernel.reorder_single_pass import (
+    launch_stable_partition_routed,
+)
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
     StageTimes,
 )
@@ -2141,7 +2144,7 @@ def fit_non_symmetric_tree[
             )
             mgr.stream_kernel()
 
-            launch_stable_partition(
+            launch_stable_partition_routed[SPLIT_COST_IDENTICAL](
                 ctx, n_split, n_rows, d_left, p_off, p_sz, flags,
                 chunk_zeros, chunk_offsets, leaf_zeros, gmap, sflags,
                 sm_count=sm_count,
