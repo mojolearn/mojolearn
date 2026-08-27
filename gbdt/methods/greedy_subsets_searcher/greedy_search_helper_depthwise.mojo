@@ -953,8 +953,9 @@ def fit_non_symmetric_tree[
     # propagation kernel needs -- the scanned prefix at the winner IS the
     # left child's stat sums. Written exactly where `update_best_split` is
     # called, so the two cannot desynchronize; -1 is "no winner stored",
-    # mirroring the record's own undefined state. FAST-arm bookkeeping;
-    # under IDENTICAL the list exists and stays at -1.
+    # mirroring the record's own undefined state. The bookkeeping runs in
+    # BOTH numeric modes (host integers, numerically inert); only the
+    # staging, the guard and the kernel that CONSUME it are FAST-gated.
     var best_cells = List[Int32]()
     best_cells.append(Int32(-1))
     # DEVIATION 1903: whether a leaf id's histogram slot has EVER been
