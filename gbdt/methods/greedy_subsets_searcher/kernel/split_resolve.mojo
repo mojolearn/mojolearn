@@ -65,11 +65,18 @@ comptime WINNER_SENTINEL = UInt32(0xFFFFFFFF)
 #   [2] gain         (Float32 bits, THEIR sign: the kernel's gain negated,
 #                    exactly what the host fold stored)
 #   [3] status       (one of the three constants below)
+#   [4] winning CELL (the raw flat bin-feature of the winner, un-clamped;
+#                    0xFFFFFFFF when UNDEFINED). DEVIATION 1901's
+#                    `best_cell`: the partition-stats propagation kernel
+#                    addresses the scanned histogram by CELL and
+#                    `to_split` discards it, so the fold carries it out
+#                    beside the resolved record exactly as the host fold
+#                    kept it beside `best`.
 # Small enough that the whole per-iteration readback is
-# `WINNER_RECORD_WORDS * leaves_scored * 4` bytes -- 32 bytes at the
-# depthwise/lossguide cap of two leaves, the same order as LightGBM's
-# 8-int per-split readback (`cuda_best_split_finder.cu:2161-2191`).
-comptime WINNER_RECORD_WORDS = 4
+# `WINNER_RECORD_WORDS * leaves_scored * 4` bytes -- 40 bytes at the
+# lossguide cap of two leaves, the same order as LightGBM's 8-int
+# per-split readback (`cuda_best_split_finder.cu:2161-2191`).
+comptime WINNER_RECORD_WORDS = 5
 
 comptime WINNER_STATUS_UNDEFINED = UInt32(0)
 comptime WINNER_STATUS_DEFINED = UInt32(1)
@@ -284,21 +291,21 @@ def leaf_winner_fold_kernel(
     reconstructs the default record (feature -1, bin 0, gain Float32.MAX,
     defined False). Nothing downstream can tell the folds apart.
 
-    THE WIRING IS THE OTHER LANE'S. The call sites -- the depthwise
-    driver's `score.read` + host reduce and the lossguide leaf queue --
-    live in `greedy_search_helper_depthwise.mojo` /
-    `greedy_search_helper_lossguide.mojo`, which belong to another lane
-    this round. The driver owes: (a) upload the four `TBinFeatureTable`
-    columns once per tree (`feature`, `bin`, `one_hot`, `folds`, each
-    `hist_cells` long -- the table is already built once per tree, this
-    is one staging pass more); (b) launch this kernel with grid x = the
-    scored-leaf count (their CB_ENSURE caps it at 2) behind the score
-    kernel; (c) replace the two block-record copies with one
-    `WINNER_RECORD_WORDS * leaves` copy and keep the single
-    `wait_complete`; (d) unpack per the record layout above, raising on
-    BIN_OUT_OF_RANGE with the host fold's message. NEW SCHEDULING GOES
-    UNDER THE FAST COMPTIME BRANCH (the DEVIATION-1876 pattern):
-    IDENTICAL keeps today's host fold byte-for-byte even though the
+    WIRED 2026-08-27 in `greedy_search_helper_depthwise.mojo` (the merged
+    non-symmetric driver -- the lossguide arm flows through the SAME fold
+    site; `greedy_search_helper_lossguide.mojo` contains no fold, and its
+    `find_best_leaf_to_split` argmin over the host leaf queue stays host
+    by design: O(leaves), zero device traffic). The wiring is exactly the
+    four steps this block specified: (a) the four `TBinFeatureTable`
+    columns upload once per tree from workspace-owned staging pairs;
+    (b) this kernel launches behind the score kernel with grid x = the
+    scored-leaf count; (c) the two block-record copies became one
+    `WINNER_RECORD_WORDS * leaves` copy under the SAME single
+    `wait_complete`; (d) the unpack raises on BIN_OUT_OF_RANGE with the
+    host fold's message and feeds `update_best_split` / `best_cells`
+    (DEVIATION 1901's cell rides out in record word [4]). ALL OF IT UNDER
+    THE FAST COMPTIME BRANCH (`SPLIT_COST_IDENTICAL`, the DEVIATION-1876
+    pattern): IDENTICAL keeps the host fold byte-for-byte even though the
     winner is provably the same, because IDENTICAL's contract is the code
     path, not just the bits.
     ==================================================
@@ -316,6 +323,9 @@ def leaf_winner_fold_kernel(
     var best_gain = FLOAT32_MAX
     var status = WINNER_STATUS_UNDEFINED
     var bad_bf = UInt32(0)
+    # DEVIATION 1901's `best_cell`, carried beside the record exactly as
+    # the host fold carried it beside `best`
+    var best_cell = WINNER_SENTINEL
 
     for b in range(argmax_blocks):
         var slot = row * argmax_blocks + b
@@ -362,6 +372,7 @@ def leaf_winner_fold_kernel(
             best_feature = cand_feature
             best_bin = cand_bin
             best_gain = cand_gain
+            best_cell = bf
             status = WINNER_STATUS_DEFINED
 
     var base = row * WINNER_RECORD_WORDS
@@ -372,3 +383,4 @@ def leaf_winner_fold_kernel(
         winner_records.unsafe_store(base + 1, best_bin.cast[DType.uint32]())
     winner_records.unsafe_store(base + 2, bitcast[DType.uint32](best_gain))
     winner_records.unsafe_store(base + 3, status)
+    winner_records.unsafe_store(base + 4, best_cell)

@@ -109,6 +109,14 @@ from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import (
     compute_optimal_split_kernel,
     compute_optimal_splits_region_kernel,
 )
+from gbdt.methods.greedy_subsets_searcher.kernel.split_resolve import (
+    WINNER_FOLD_BLOCK_SIZE,
+    WINNER_RECORD_WORDS,
+    WINNER_STATUS_BIN_OUT_OF_RANGE,
+    WINNER_STATUS_DEFINED,
+    leaf_winner_fold_kernel,
+)
+from std.memory import bitcast
 from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     copy_histograms_kernel,
     copy_histograms_vec4_kernel,
@@ -176,12 +184,15 @@ from gbdt.options.catboost_options import (
 # ============================ DEVIATION 1901 ============================
 # THE ONE MODE TEST THIS DRIVER'S FAST SPLIT-COST ARMS HANG ON. Under
 # `NUMERIC_IDENTICAL` every branch keyed on this constant compiles the code
-# path that shipped before DEVIATIONS 1901/1903 landed, character for
-# character in what it executes -- the merge gate byte-compares the
-# IDENTICAL column against main, and that comparison must pass by
-# construction, not by argument. FAST makes no bit promise, and it is the
-# arm the H100 speed rows measure; the per-deviation blocks below say what
-# each FAST branch buys and what it re-associates.
+# path that shipped before DEVIATIONS 1901/1903 and 1904's wiring landed,
+# character for character in what it executes -- the merge gate
+# byte-compares the IDENTICAL column against main, and that comparison must
+# pass by construction, not by argument. FAST makes no bit promise, and it
+# is the arm the H100 speed rows measure; the per-deviation blocks below say
+# what each FAST branch buys and what it re-associates. (DEVIATION 1904's
+# FAST arm re-associates NOTHING -- its fold is the host fold transcribed --
+# but it keys on the same constant because IDENTICAL's contract is the code
+# path, not just the bits.)
 comptime SPLIT_COST_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # ========================================================================
 
@@ -357,6 +368,28 @@ struct TDepthwiseWorkspace(Movable):
     var h_copy_src: HostBuffer[DType.uint32]
     var d_copy_dst: DeviceBuffer[DType.uint32]
     var h_copy_dst: HostBuffer[DType.uint32]
+    # DEVIATION 1904 (wired): the device-resident winner fold's planes.
+    # The four `TBinFeatureTable` columns (feature, clamp-raw bin, one-hot
+    # flag, fold count -- each `hist_cells` long, their own staging pairs
+    # per DEVIATION 261's rule) and the per-leaf winner records
+    # (`WINNER_RECORD_WORDS` words each). `hist_cells` joins the pool KEY
+    # for them: the table's content is layout-derived and the old key
+    # (max_leaves, stat_count, argmax_blocks) cannot see a layout change
+    # at equal argmax_blocks -- 256-cell granularity means two different
+    # layouts can share every old key field. Allocated in both numeric
+    # modes, written and copied only on the FAST arm (DEVIATION 1901's
+    # precedent).
+    var hist_cells_key: Int
+    var d_bf_feature: DeviceBuffer[DType.int32]
+    var h_bf_feature: HostBuffer[DType.int32]
+    var d_bf_bin: DeviceBuffer[DType.int32]
+    var h_bf_bin: HostBuffer[DType.int32]
+    var d_bf_one_hot: DeviceBuffer[DType.uint8]
+    var h_bf_one_hot: HostBuffer[DType.uint8]
+    var d_bf_folds: DeviceBuffer[DType.int32]
+    var h_bf_folds: HostBuffer[DType.int32]
+    var d_winner: DeviceBuffer[DType.uint32]
+    var h_winner: HostBuffer[DType.uint32]
 
     def __init__(
         out self,
@@ -364,10 +397,12 @@ struct TDepthwiseWorkspace(Movable):
         max_leaves: Int,
         stat_count: Int,
         argmax_blocks: Int,
+        hist_cells: Int,
     ) raises:
         self.max_leaves_key = max_leaves
         self.stat_count_key = stat_count
         self.argmax_blocks_key = argmax_blocks
+        self.hist_cells_key = hist_cells
         var records = argmax_blocks * max_leaves
         self.region_score = ctx.enqueue_create_buffer[DType.float32](records)
         self.region_bin = ctx.enqueue_create_buffer[DType.uint32](records)
@@ -411,6 +446,29 @@ struct TDepthwiseWorkspace(Movable):
         self.d_copy_dst = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
         self.h_copy_dst = ctx.enqueue_create_host_buffer[DType.uint32](
             max_leaves
+        )
+        # DEVIATION 1904 (wired): see the field block above
+        self.d_bf_feature = ctx.enqueue_create_buffer[DType.int32](hist_cells)
+        self.h_bf_feature = ctx.enqueue_create_host_buffer[DType.int32](
+            hist_cells
+        )
+        self.d_bf_bin = ctx.enqueue_create_buffer[DType.int32](hist_cells)
+        self.h_bf_bin = ctx.enqueue_create_host_buffer[DType.int32](
+            hist_cells
+        )
+        self.d_bf_one_hot = ctx.enqueue_create_buffer[DType.uint8](hist_cells)
+        self.h_bf_one_hot = ctx.enqueue_create_host_buffer[DType.uint8](
+            hist_cells
+        )
+        self.d_bf_folds = ctx.enqueue_create_buffer[DType.int32](hist_cells)
+        self.h_bf_folds = ctx.enqueue_create_host_buffer[DType.int32](
+            hist_cells
+        )
+        self.d_winner = ctx.enqueue_create_buffer[DType.uint32](
+            WINNER_RECORD_WORDS * max_leaves
+        )
+        self.h_winner = ctx.enqueue_create_host_buffer[DType.uint32](
+            WINNER_RECORD_WORDS * max_leaves
         )
 
 
@@ -797,10 +855,17 @@ def fit_non_symmetric_tree[
         or dws[0].max_leaves_key != max_leaves
         or dws[0].stat_count_key != stat_count
         or dws[0].argmax_blocks_key != argmax_blocks
+        # DEVIATION 1904 (wired): the bin-feature table planes are sized
+        # and filled from the layout, which the three keys above cannot
+        # see at equal argmax_blocks
+        or dws[0].hist_cells_key != hist_cells_per_leaf
     ):
         dws.clear()
         dws.append(
-            TDepthwiseWorkspace(ctx, max_leaves, stat_count, argmax_blocks)
+            TDepthwiseWorkspace(
+                ctx, max_leaves, stat_count, argmax_blocks,
+                hist_cells_per_leaf,
+            )
         )
 
     ref hist = ws[0].hist
@@ -859,8 +924,45 @@ def fit_non_symmetric_tree[
     ref h_copy_src = dws[0].h_copy_src
     ref d_copy_dst = dws[0].d_copy_dst
     ref h_copy_dst = dws[0].h_copy_dst
+    ref d_bf_feature = dws[0].d_bf_feature
+    ref h_bf_feature = dws[0].h_bf_feature
+    ref d_bf_bin = dws[0].d_bf_bin
+    ref h_bf_bin = dws[0].h_bf_bin
+    ref d_bf_one_hot = dws[0].d_bf_one_hot
+    ref h_bf_one_hot = dws[0].h_bf_one_hot
+    ref d_bf_folds = dws[0].d_bf_folds
+    ref h_bf_folds = dws[0].h_bf_folds
+    ref d_winner = dws[0].d_winner
+    ref h_winner = dws[0].h_winner
 
     var table = TBinFeatureTable(layout)
+
+    # ============ DEVIATION 1904 (wired): the table goes to the device ====
+    # The four columns the device-side winner fold resolves through --
+    # the SAME `TBinFeatureTable` the host fold resolved through, uploaded
+    # once per tree so record and cell cannot disagree with `to_split`.
+    # FAST only: IDENTICAL never launches the fold and keeps its schedule
+    # byte-for-byte. No drain: the staging pairs are pool-owned
+    # (DEVIATION 261's rule -- one pair per list, written once per tree),
+    # the first `score.read` wait settles the copies, and the next tree's
+    # rewrite sits behind this tree's own waits.
+    comptime if not SPLIT_COST_IDENTICAL:
+        for bf0 in range(hist_cells_per_leaf):
+            h_bf_feature.unsafe_ptr().unsafe_store(bf0, table.feature[bf0])
+            h_bf_bin.unsafe_ptr().unsafe_store(bf0, table.bin[bf0])
+            h_bf_one_hot.unsafe_ptr().unsafe_store(
+                bf0, UInt8(1) if table.one_hot[bf0] else UInt8(0)
+            )
+            h_bf_folds.unsafe_ptr().unsafe_store(bf0, table.folds[bf0])
+        ctx.enqueue_copy(
+            dst_buf=d_bf_feature, src_ptr=h_bf_feature.unsafe_ptr()
+        )
+        ctx.enqueue_copy(dst_buf=d_bf_bin, src_ptr=h_bf_bin.unsafe_ptr())
+        ctx.enqueue_copy(
+            dst_buf=d_bf_one_hot, src_ptr=h_bf_one_hot.unsafe_ptr()
+        )
+        ctx.enqueue_copy(dst_buf=d_bf_folds, src_ptr=h_bf_folds.unsafe_ptr())
+    # ======================================================================
 
     # ============ THEIR `subsets.FeatureWeights`, WHICH WAS BEING DROPPED ===
     # `CreateInitialSubsets` writes `Options.FeatureWeights` into
@@ -1585,129 +1687,221 @@ def fit_non_symmetric_tree[
 
             # ===== HOST WAIT ONE OF TWO: their `bestProps.Read(propsCpu)`
             # (`greedy_search_helper.cpp:517`). =====
-            stage_times.begin(ctx)
-            ctx.enqueue_copy(
-                dst_ptr=h_region_score.unsafe_ptr(), src_buf=region_score
-            )
-            ctx.enqueue_copy(
-                dst_ptr=h_region_bin.unsafe_ptr(), src_buf=region_bin
-            )
-            mgr.wait_complete()
-            stage_times.end(ctx, "score.read")
-            trace.record_device(
-                ctx, d_tag + "scores.gain", region_score,
-                argmax_blocks * len(visit),
-            )
-            trace.record_device(
-                ctx, d_tag + "scores.bin", region_bin,
-                argmax_blocks * len(visit),
-            )
-            trace.record_list_i32(d_tag + "visit", _as_i32(visit))
+            comptime if SPLIT_COST_IDENTICAL:
+                stage_times.begin(ctx)
+                ctx.enqueue_copy(
+                    dst_ptr=h_region_score.unsafe_ptr(), src_buf=region_score
+                )
+                ctx.enqueue_copy(
+                    dst_ptr=h_region_bin.unsafe_ptr(), src_buf=region_bin
+                )
+                mgr.wait_complete()
+                stage_times.end(ctx, "score.read")
+                trace.record_device(
+                    ctx, d_tag + "scores.gain", region_score,
+                    argmax_blocks * len(visit),
+                )
+                trace.record_device(
+                    ctx, d_tag + "scores.bin", region_bin,
+                    argmax_blocks * len(visit),
+                )
+                trace.record_list_i32(d_tag + "visit", _as_i32(visit))
 
-            # their cross-block reduce, `:520-531`, ONE WINNER PER SCORE
-            # BLOCK where the symmetric arm reduces to one for the level:
-            #
-            #     for (scoreBlockId ...) {
-            #         blockProps = propsCpu.data() + scoreBlockId * argmaxBlockCount;
-            #         for (i < argmaxBlockCount)
-            #             if (blockProps[i] < bestSplits[scoreBlockId])
-            #                 bestSplits[scoreBlockId] = blockProps[i];
-            #     }
-            #
-            # `operator<` orders by GAIN then FeatureId (as ui32) then BinId
-            # -- `best_split_properties_less`, already ported for the
-            # doc-parallel searcher. A SEQUENTIAL fold under a total order,
-            # so the block count cannot move the answer.
-            #
-            # THE RECORD LAYOUT IS THEIRS, UNCHANGED. This comment used to
-            # open "THE RECORD LAYOUT IS TRANSPOSED FROM THEIRS" and then
-            # contradict itself in its own next clause. It is not
-            # transposed: their kernel writes
-            # `result += blockIdx.x + blockIdx.y * gridDim.x` with
-            # `gridDim.x == argmaxBlockCount` (`compute_scores.cu:319`) and
-            # their host reads `propsCpu.data() + scoreBlockId *
-            # argmaxBlockCount` then `[i]` (`greedy_search_helper.cpp:524`).
-            # Both sides are `leaf * argmax_blocks + block`, and so is this.
-            stage_times.begin(ctx)
-            for i in range(len(visit)):
-                var best = TBestSplitProperties()
-                # DEVIATION 1901: the winner's flat histogram cell, kept
-                # beside the resolved record -- the propagation kernel
-                # addresses the scanned histogram by CELL, and `to_split`
-                # discards it.
-                var best_cell = Int32(-1)
-                for b in range(argmax_blocks):
-                    var slot = i * argmax_blocks + b
-                    var bf = h_region_bin.unsafe_ptr().unsafe_load(slot)
-                    if bf == UInt32(0xFFFFFFFF):
-                        # =============== CORRECTED 2026-08-22 ===============
-                        # This used to say "their poison record IS a
-                        # default-constructed `TBestSplitProperties`, so
-                        # skipping it and comparing against it are the same
-                        # thing". BOTH HALVES WERE WRONG.
-                        #
-                        #   their ARGMAX poison  (compute_scores.cu:46-49)
-                        #       FeatureId=-1  BinId=-1  Score=FLT_MAX  Gain=FLT_MAX
-                        #   their default ctor   (gpu_structures.h:65-68)
-                        #       FeatureId=-1  BinId= 0  Score=+inf     Gain=+inf
-                        #
-                        # Two of four fields differ, and `FLT_MAX < inf` is
-                        # TRUE, so in THEIR host reduce an all-poison block
-                        # actually REPLACES the accumulator rather than
-                        # losing to it.
-                        #
-                        # THE OUTCOME IS THE SAME AND THAT IS WHY IT IS SAFE
-                        # to skip: `Defined()` is `FeatureId != (ui32)-1`,
-                        # and the poison carries the sentinel feature id, so
-                        # a leaf whose every block was poisoned ends
-                        # undefined either way. `BinId` is the only field
-                        # that differs afterwards and nothing reads it on an
-                        # undefined split.
-                        #
-                        # Recorded rather than "fixed" because reproducing
-                        # their replacement would mean constructing a record
-                        # with `Gain = FLT_MAX` purely to lose to nothing.
-                        # ====================================================
-                        continue
-                    if Int(bf) >= hist_cells_per_leaf:
+                # their cross-block reduce, `:520-531`, ONE WINNER PER SCORE
+                # BLOCK where the symmetric arm reduces to one for the level:
+                #
+                #     for (scoreBlockId ...) {
+                #         blockProps = propsCpu.data() + scoreBlockId * argmaxBlockCount;
+                #         for (i < argmaxBlockCount)
+                #             if (blockProps[i] < bestSplits[scoreBlockId])
+                #                 bestSplits[scoreBlockId] = blockProps[i];
+                #     }
+                #
+                # `operator<` orders by GAIN then FeatureId (as ui32) then BinId
+                # -- `best_split_properties_less`, already ported for the
+                # doc-parallel searcher. A SEQUENTIAL fold under a total order,
+                # so the block count cannot move the answer.
+                #
+                # THE RECORD LAYOUT IS THEIRS, UNCHANGED. This comment used to
+                # open "THE RECORD LAYOUT IS TRANSPOSED FROM THEIRS" and then
+                # contradict itself in its own next clause. It is not
+                # transposed: their kernel writes
+                # `result += blockIdx.x + blockIdx.y * gridDim.x` with
+                # `gridDim.x == argmaxBlockCount` (`compute_scores.cu:319`) and
+                # their host reads `propsCpu.data() + scoreBlockId *
+                # argmaxBlockCount` then `[i]` (`greedy_search_helper.cpp:524`).
+                # Both sides are `leaf * argmax_blocks + block`, and so is this.
+                stage_times.begin(ctx)
+                for i in range(len(visit)):
+                    var best = TBestSplitProperties()
+                    # DEVIATION 1901: the winner's flat histogram cell, kept
+                    # beside the resolved record -- the propagation kernel
+                    # addresses the scanned histogram by CELL, and `to_split`
+                    # discards it.
+                    var best_cell = Int32(-1)
+                    for b in range(argmax_blocks):
+                        var slot = i * argmax_blocks + b
+                        var bf = h_region_bin.unsafe_ptr().unsafe_load(slot)
+                        if bf == UInt32(0xFFFFFFFF):
+                            # =============== CORRECTED 2026-08-22 ===============
+                            # This used to say "their poison record IS a
+                            # default-constructed `TBestSplitProperties`, so
+                            # skipping it and comparing against it are the same
+                            # thing". BOTH HALVES WERE WRONG.
+                            #
+                            #   their ARGMAX poison  (compute_scores.cu:46-49)
+                            #       FeatureId=-1  BinId=-1  Score=FLT_MAX  Gain=FLT_MAX
+                            #   their default ctor   (gpu_structures.h:65-68)
+                            #       FeatureId=-1  BinId= 0  Score=+inf     Gain=+inf
+                            #
+                            # Two of four fields differ, and `FLT_MAX < inf` is
+                            # TRUE, so in THEIR host reduce an all-poison block
+                            # actually REPLACES the accumulator rather than
+                            # losing to it.
+                            #
+                            # THE OUTCOME IS THE SAME AND THAT IS WHY IT IS SAFE
+                            # to skip: `Defined()` is `FeatureId != (ui32)-1`,
+                            # and the poison carries the sentinel feature id, so
+                            # a leaf whose every block was poisoned ends
+                            # undefined either way. `BinId` is the only field
+                            # that differs afterwards and nothing reads it on an
+                            # undefined split.
+                            #
+                            # Recorded rather than "fixed" because reproducing
+                            # their replacement would mean constructing a record
+                            # with `Gain = FLT_MAX` purely to lose to nothing.
+                            # ====================================================
+                            continue
+                        if Int(bf) >= hist_cells_per_leaf:
+                            raise Error(
+                                String("score kernel returned bin-feature ")
+                                + String(Int(bf))
+                                + " outside the histogram's "
+                                + String(hist_cells_per_leaf)
+                                + " cells"
+                            )
+                        var our_gain = h_region_score.unsafe_ptr().unsafe_load(
+                            slot
+                        )
+                        # THEIR sign, restored for the comparator: this port's
+                        # gain is theirs negated (see `kernel/compute_scores`),
+                        # and `best_split_properties_less` is a transcription of
+                        # THEIR `operator<`.
+                        var split = table.to_split(Int(bf))
+                        var cand = TBestSplitProperties(
+                            split.feature_id,
+                            split.bin_idx,
+                            -our_gain,
+                            -our_gain,
+                        )
+                        if best_split_properties_less(cand, best):
+                            best = cand
+                            best_cell = Int32(Int(bf))
+                    # `subsets->Leaves[leafId].UpdateBestSplit(bestSplits[i])`
+                    # (`:551`). NOTE what is NOT here: the oblivious arm's
+                    # `CB_ENSURE(FeatureId != (ui32)-1, "All splits have
+                    # infinite score...")` (`:535`) is inside
+                    # `if (IsObliviousSplit())`. A non-oblivious leaf whose
+                    # every candidate was unusable simply keeps an UNDEFINED
+                    # best split and is never selected to split.
+                    leaves[visit[i]].update_best_split(best)
+                    # DEVIATION 1901: stored at the ONE site that stores the
+                    # record, so record and cell agree by construction --
+                    # `update_best_split` overwrites unconditionally, and so
+                    # does this.
+                    best_cells[visit[i]] = best_cell
+                stage_times.end(ctx, "score.hostreduce")
+            # ============ DEVIATION 1904 (wired) ============
+            # The fold moved onto the device: one block per scored leaf
+            # runs the IDENTICAL arm's host reduce VERBATIM -- same sequential
+            # block order, same poison skip, same ToSplit clamp, same
+            # `best_split_properties_less` tie rule, incumbent keeps a
+            # full tie -- so the winner records are bit-for-bit the host
+            # fold's output (`kernel/split_resolve.mojo`, DEVIATION 1904
+            # block). The ONE wait of this stage then brings home
+            # `WINNER_RECORD_WORDS` words per leaf instead of
+            # `2 * argmax_blocks` values per leaf, and the host loop
+            # that follows only UNPACKS -- it resolves and compares
+            # nothing. IDENTICAL keeps the host fold byte-for-byte.
+            comptime if not SPLIT_COST_IDENTICAL:
+                stage_times.begin(ctx)
+                ctx.enqueue_function[leaf_winner_fold_kernel](
+                    region_score.unsafe_ptr(),
+                    region_bin.unsafe_ptr(),
+                    Int32(argmax_blocks),
+                    Int32(hist_cells_per_leaf),
+                    d_bf_feature.unsafe_ptr(),
+                    d_bf_bin.unsafe_ptr(),
+                    d_bf_one_hot.unsafe_ptr(),
+                    d_bf_folds.unsafe_ptr(),
+                    d_winner.unsafe_ptr(),
+                    grid_dim=(len(visit), 1, 1),
+                    block_dim=(WINNER_FOLD_BLOCK_SIZE, 1, 1),
+                )
+                mgr.stream_kernel()
+                ctx.enqueue_copy(
+                    dst_ptr=h_winner.unsafe_ptr(), src_buf=d_winner
+                )
+                mgr.wait_complete()
+                stage_times.end(ctx, "score.read")
+                # the identity ladder's records are UNCHANGED: the
+                # per-block score records still sit in the device
+                # buffers, so a traced FAST run digests the same bytes
+                # the host-fold path digested
+                trace.record_device(
+                    ctx, d_tag + "scores.gain", region_score,
+                    argmax_blocks * len(visit),
+                )
+                trace.record_device(
+                    ctx, d_tag + "scores.bin", region_bin,
+                    argmax_blocks * len(visit),
+                )
+                trace.record_list_i32(d_tag + "visit", _as_i32(visit))
+
+                # the host fold's OUTPUT, reconstructed: DEFINED rebuilds
+                # the stored `TBestSplitProperties(f, bin, gain, gain)`
+                # (the fold kept one number in Score and Gain); UNDEFINED
+                # keeps the default record; BIN_OUT_OF_RANGE raises the
+                # host fold's own diagnostic, with the leaves before it
+                # updated exactly as the host loop would have left them.
+                stage_times.begin(ctx)
+                for i in range(len(visit)):
+                    var rec = i * WINNER_RECORD_WORDS
+                    var status = h_winner.unsafe_ptr().unsafe_load(rec + 3)
+                    if status == WINNER_STATUS_BIN_OUT_OF_RANGE:
                         raise Error(
                             String("score kernel returned bin-feature ")
-                            + String(Int(bf))
+                            + String(Int(
+                                h_winner.unsafe_ptr().unsafe_load(rec + 1)
+                            ))
                             + " outside the histogram's "
                             + String(hist_cells_per_leaf)
                             + " cells"
                         )
-                    var our_gain = h_region_score.unsafe_ptr().unsafe_load(
-                        slot
-                    )
-                    # THEIR sign, restored for the comparator: this port's
-                    # gain is theirs negated (see `kernel/compute_scores`),
-                    # and `best_split_properties_less` is a transcription of
-                    # THEIR `operator<`.
-                    var split = table.to_split(Int(bf))
-                    var cand = TBestSplitProperties(
-                        split.feature_id,
-                        split.bin_idx,
-                        -our_gain,
-                        -our_gain,
-                    )
-                    if best_split_properties_less(cand, best):
-                        best = cand
-                        best_cell = Int32(Int(bf))
-                # `subsets->Leaves[leafId].UpdateBestSplit(bestSplits[i])`
-                # (`:551`). NOTE what is NOT here: the oblivious arm's
-                # `CB_ENSURE(FeatureId != (ui32)-1, "All splits have
-                # infinite score...")` (`:535`) is inside
-                # `if (IsObliviousSplit())`. A non-oblivious leaf whose
-                # every candidate was unusable simply keeps an UNDEFINED
-                # best split and is never selected to split.
-                leaves[visit[i]].update_best_split(best)
-                # DEVIATION 1901: stored at the ONE site that stores the
-                # record, so record and cell agree by construction --
-                # `update_best_split` overwrites unconditionally, and so
-                # does this.
-                best_cells[visit[i]] = best_cell
-            stage_times.end(ctx, "score.hostreduce")
+                    var best = TBestSplitProperties()
+                    var best_cell = Int32(-1)
+                    if status == WINNER_STATUS_DEFINED:
+                        var w_feat = h_winner.unsafe_ptr().unsafe_load(rec)
+                        var w_bin = h_winner.unsafe_ptr().unsafe_load(
+                            rec + 1
+                        )
+                        var gain = bitcast[DType.float32](
+                            h_winner.unsafe_ptr().unsafe_load(rec + 2)
+                        )
+                        best = TBestSplitProperties(
+                            w_feat.cast[DType.int32](),
+                            w_bin.cast[DType.int32](),
+                            gain,
+                            gain,
+                        )
+                        best_cell = h_winner.unsafe_ptr().unsafe_load(
+                            rec + 4
+                        ).cast[DType.int32]()
+                    leaves[visit[i]].update_best_split(best)
+                    # DEVIATION 1901: the same one-site store the host
+                    # fold makes, from record word [4]
+                    best_cells[visit[i]] = best_cell
+                stage_times.end(ctx, "score.hostreduce")
 
             # THE WINNERS, which is the last host state before the split
             # chain. A divergence that first appears here and not in
