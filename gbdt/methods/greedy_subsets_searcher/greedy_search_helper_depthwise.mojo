@@ -85,6 +85,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.host.device_attribute import DeviceAttribute
 
 from mojo_only.fixed_point import choose_scale
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gbdt.gpu_lib.gpu_manager import TCudaManager
 from gbdt.data.leaf_path import TLeafPath, split_leaf_path
 from gbdt.data.permutation import TRandom
@@ -122,6 +123,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
     launch_stable_partition,
     split_and_make_sequence_kernel,
     split_points_grid_x,
+    update_partition_stats_from_split_kernel,
     update_partitions_after_split_kernel,
 )
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
@@ -169,6 +171,19 @@ from gbdt.options.catboost_options import (
     SCORE_FUNCTION_L2,
     SCORE_FUNCTION_NEWTON_L2,
 )
+
+
+# ============================ DEVIATION 1901 ============================
+# THE ONE MODE TEST THIS DRIVER'S FAST SPLIT-COST ARMS HANG ON. Under
+# `NUMERIC_IDENTICAL` every branch keyed on this constant compiles the code
+# path that shipped before DEVIATIONS 1901/1903 landed, character for
+# character in what it executes -- the merge gate byte-compares the
+# IDENTICAL column against main, and that comparison must pass by
+# construction, not by argument. FAST makes no bit promise, and it is the
+# arm the H100 speed rows measure; the per-deviation blocks below say what
+# each FAST branch buys and what it re-associates.
+comptime SPLIT_COST_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# ========================================================================
 
 
 struct TBinFeatureTable(Copyable, Movable):
@@ -323,6 +338,14 @@ struct TDepthwiseWorkspace(Movable):
     var d_all_ids: DeviceBuffer[DType.uint32]
     var h_all_ids: HostBuffer[DType.uint32]
     var h_part_stats: HostBuffer[DType.float32]
+    # DEVIATION 1901: the winning HISTOGRAM CELL of every splitting leaf,
+    # staged with the split payload so the partition-stats propagation
+    # kernel can read the scanned prefix it names. Its own pair, per
+    # DEVIATION 261's rule -- no host buffer is rewritten under a queued
+    # copy. Allocated in both numeric modes (max_leaves words), written and
+    # copied only on the FAST arm.
+    var d_win_cells: DeviceBuffer[DType.uint32]
+    var h_win_cells: HostBuffer[DType.uint32]
 
     def __init__(
         out self,
@@ -365,6 +388,10 @@ struct TDepthwiseWorkspace(Movable):
         )
         self.h_part_stats = ctx.enqueue_create_host_buffer[DType.float32](
             max_leaves * stat_count
+        )
+        self.d_win_cells = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        self.h_win_cells = ctx.enqueue_create_host_buffer[DType.uint32](
+            max_leaves
         )
 
 
@@ -807,6 +834,8 @@ def fit_non_symmetric_tree[
     ref d_all_ids = dws[0].d_all_ids
     ref h_all_ids = dws[0].h_all_ids
     ref h_part_stats = dws[0].h_part_stats
+    ref d_win_cells = dws[0].d_win_cells
+    ref h_win_cells = dws[0].h_win_cells
 
     var table = TBinFeatureTable(layout)
 
@@ -895,6 +924,16 @@ def fit_non_symmetric_tree[
     # is `Zeroes`, so its value is never read.
     var parent_of = List[Int]()
     parent_of.append(0)
+    # DEVIATION 1901: the winning HISTOGRAM CELL per leaf, parallel to
+    # `leaves`. The reduce below resolves the cell to `(feature, bin)` for
+    # the split record and then FORGETS it, but the cell is the address the
+    # propagation kernel needs -- the scanned prefix at the winner IS the
+    # left child's stat sums. Written exactly where `update_best_split` is
+    # called, so the two cannot desynchronize; -1 is "no winner stored",
+    # mirroring the record's own undefined state. FAST-arm bookkeeping;
+    # under IDENTICAL the list exists and stays at -1.
+    var best_cells = List[Int32]()
+    best_cells.append(Int32(-1))
 
     var emit_digests = trace.enabled
     var hist_live_stride = stat_count * hist_cells_per_leaf
@@ -1184,22 +1223,50 @@ def fit_non_symmetric_tree[
         # their file.
         var visit = select_leaves_to_visit(leaves)
         if len(visit) > 0:
-            # their `AllReduceThroughMaster(subsets->CurrentPartStats(),
-            # ...)` (`:443`) over leaves `[0, leafCount)`. See DEVIATION 352.
-            stage_times.begin(ctx)
-            for i in range(len(leaves)):
-                h_all_ids.unsafe_ptr().unsafe_store(i, UInt32(i))
-            # DEVIATION 261: its own staging pair
-            ctx.enqueue_copy(
-                dst_buf=d_all_ids, src_ptr=h_all_ids.unsafe_ptr()
-            )
-            compute_partition_stats(
-                ctx, len(leaves), n_rows, stat_count, n_rows,
-                d_all_ids, p_off, p_sz, stats, stat_partials, part_stats,
-                sm_count=sm_count,
-            )
-            mgr.stream_kernel()
-            stage_times.end(ctx, "partstats")
+            # ============================ DEVIATION 1901 ============================
+            # THE PER-LEVEL ALL-ROWS SWEEP IS THE IDENTICAL COLUMN'S ONLY.
+            # DEVIATION 352's `compute_partition_stats` over `d_all_ids`
+            # reads EVERY leaf's rows on EVERY level -- O(max_leaves x
+            # n_rows x stat_count) per tree, and Lossguide runs
+            # `max_leaves - 1` sequential levels, so at 1M rows x 64 leaves
+            # x 2 stats that is ~128M row-stat reads per tree of pure
+            # recomputation (recon_lightgbm_cuda.md, mechanism e2).
+            # LightGBM's learner never runs it: the child sums come off the
+            # split record (`cuda_data_partition.cu:798-903`), O(1) per
+            # split.
+            #
+            # The FAST arm keeps ONE sweep, at the first iteration, to seed
+            # the root's row -- every later entry is written by
+            # `update_partition_stats_from_split_kernel` in the split chain
+            # below, from the parent's entry and the winner's scanned
+            # histogram cell. Propagated sums re-associate against the
+            # fresh reduction (the histogram-subtraction tradeoff, applied
+            # to the partition stats), which is why IDENTICAL keeps the
+            # sweep byte for byte. The END-OF-TREE sweep further down stays
+            # in BOTH modes: leaf values always come from the exact
+            # reduction.
+            # =======================================================================
+            var run_part_sweep = True
+            comptime if not SPLIT_COST_IDENTICAL:
+                run_part_sweep = iteration == 1
+            if run_part_sweep:
+                # their `AllReduceThroughMaster(subsets->CurrentPartStats(),
+                # ...)` (`:443`) over leaves `[0, leafCount)`. See DEVIATION
+                # 352.
+                stage_times.begin(ctx)
+                for i in range(len(leaves)):
+                    h_all_ids.unsafe_ptr().unsafe_store(i, UInt32(i))
+                # DEVIATION 261: its own staging pair
+                ctx.enqueue_copy(
+                    dst_buf=d_all_ids, src_ptr=h_all_ids.unsafe_ptr()
+                )
+                compute_partition_stats(
+                    ctx, len(leaves), n_rows, stat_count, n_rows,
+                    d_all_ids, p_off, p_sz, stats, stat_partials, part_stats,
+                    sm_count=sm_count,
+                )
+                mgr.stream_kernel()
+                stage_times.end(ctx, "partstats")
             trace.record_device(
                 ctx, d_tag + "partstats", part_stats,
                 len(leaves) * stat_count,
@@ -1402,6 +1469,11 @@ def fit_non_symmetric_tree[
             stage_times.begin(ctx)
             for i in range(len(visit)):
                 var best = TBestSplitProperties()
+                # DEVIATION 1901: the winner's flat histogram cell, kept
+                # beside the resolved record -- the propagation kernel
+                # addresses the scanned histogram by CELL, and `to_split`
+                # discards it.
+                var best_cell = Int32(-1)
                 for b in range(argmax_blocks):
                     var slot = i * argmax_blocks + b
                     var bf = h_region_bin.unsafe_ptr().unsafe_load(slot)
@@ -1459,6 +1531,7 @@ def fit_non_symmetric_tree[
                     )
                     if best_split_properties_less(cand, best):
                         best = cand
+                        best_cell = Int32(Int(bf))
                 # `subsets->Leaves[leafId].UpdateBestSplit(bestSplits[i])`
                 # (`:551`). NOTE what is NOT here: the oblivious arm's
                 # `CB_ENSURE(FeatureId != (ui32)-1, "All splits have
@@ -1467,6 +1540,11 @@ def fit_non_symmetric_tree[
                 # every candidate was unusable simply keeps an UNDEFINED
                 # best split and is never selected to split.
                 leaves[visit[i]].update_best_split(best)
+                # DEVIATION 1901: stored at the ONE site that stores the
+                # record, so record and cell agree by construction --
+                # `update_best_split` overwrites unconditionally, and so
+                # does this.
+                best_cells[visit[i]] = best_cell
             stage_times.end(ctx, "score.hostreduce")
 
             # THE WINNERS, which is the last host state before the split
@@ -1605,6 +1683,22 @@ def fit_non_symmetric_tree[
                 sp_bins_h.unsafe_ptr().unsafe_store(i, UInt32(bs.bin_id))
                 h_left.unsafe_ptr().unsafe_store(i, UInt32(left_id))
                 h_right.unsafe_ptr().unsafe_store(i, UInt32(right_id))
+                # DEVIATION 1901: the winner's cell rides with the split
+                # payload. A defined record without a stored cell is a
+                # bookkeeping break, not a data condition -- the two are
+                # written at one site -- so it raises rather than
+                # propagating from a wrong address.
+                comptime if not SPLIT_COST_IDENTICAL:
+                    if best_cells[left_id] < Int32(0):
+                        raise Error(
+                            String("leaf ")
+                            + String(left_id)
+                            + " has a defined best split but no stored"
+                            " winning cell (DEVIATION 1901 bookkeeping)"
+                        )
+                    h_win_cells.unsafe_ptr().unsafe_store(
+                        i, UInt32(Int(best_cells[left_id]))
+                    )
 
                 # `TLeaf leaf = subsets->Leaves[leftId];` -- the SNAPSHOT.
                 # Both children are derived from the parent, so the parent
@@ -1620,14 +1714,49 @@ def fit_non_symmetric_tree[
                 # left child kept.
                 parent_of[left_id] = left_id
                 parent_of.append(left_id)
+                # DEVIATION 1901: children start with no stored cell,
+                # exactly as `SplitLeaf` resets their `BestSplit`.
+                best_cells[left_id] = Int32(-1)
+                best_cells.append(Int32(-1))
 
             var n_split = len(to_split)
             ctx.enqueue_copy(dst_buf=sp_feats, src_ptr=sp_feats_h.unsafe_ptr())
             ctx.enqueue_copy(dst_buf=sp_bins, src_ptr=sp_bins_h.unsafe_ptr())
             ctx.enqueue_copy(dst_buf=d_left, src_ptr=h_left.unsafe_ptr())
             ctx.enqueue_copy(dst_buf=d_right, src_ptr=h_right.unsafe_ptr())
+            comptime if not SPLIT_COST_IDENTICAL:
+                # DEVIATION 1901 / 261: its own staging pair
+                ctx.enqueue_copy(
+                    dst_buf=d_win_cells, src_ptr=h_win_cells.unsafe_ptr()
+                )
             stage_times.end(ctx, "split.host")
             stage_times.begin(ctx)
+
+            # ============================ DEVIATION 1901 ============================
+            # Their split's own "Update part stats"
+            # (`split_properties_helper.cpp:918`), replaced by LightGBM's
+            # O(1)-per-split propagation (`cuda_data_partition.cu:798-903`)
+            # -- the full block is on the kernel. Enqueued FIRST in the
+            # chain: it reads the parent's `part_stats` row and the
+            # parent's scanned histogram, and nothing later in the chain
+            # touches either, so the position is a statement of intent, not
+            # an ordering need. FAST arm only; IDENTICAL's stats come from
+            # the sweep above, byte for byte as before.
+            # =======================================================================
+            comptime if not SPLIT_COST_IDENTICAL:
+                ctx.enqueue_function[update_partition_stats_from_split_kernel](
+                    d_left.unsafe_ptr(),
+                    d_right.unsafe_ptr(),
+                    d_win_cells.unsafe_ptr(),
+                    sp_feats.unsafe_ptr().bitcast[CFeature](),
+                    Int32(hist_cells_per_leaf),
+                    Int32(stat_count),
+                    hist.unsafe_ptr(),
+                    part_stats.unsafe_ptr(),
+                    grid_dim=(1, n_split, 1),
+                    block_dim=(32, 1, 1),
+                )
+                mgr.stream_kernel()
 
             # their `TSplitPointsKernel`, whose five steps are five calls
             # here (`split_points.cpp:64-136`): flag and sequence, stable

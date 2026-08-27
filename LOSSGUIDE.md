@@ -632,3 +632,39 @@ diverged; and **the vec4 histogram fast paths are symmetric-only, so both
 non-symmetric policies silently miss a measured 5.9x** -- the largest single
 item on the list.
 
+
+## The split-cost round, 2026-08-27: DEVIATIONS 1901-1903 (fast-speed series)
+
+Two source recons (LightGBM CUDA, XGBoost GPU hist) converge on the same
+verdict about the 1M-2M H100 gap (lossguide 2.42x/2.83x, depthwise 1.91x):
+the loss is the cost of ONE SPLIT, multiplied by `max_leaves - 1` sequential
+splits per lossguide tree. Three deviations answer it. All of them are
+FAST-arm only, behind `SPLIT_COST_IDENTICAL` in
+`greedy_search_helper_depthwise.mojo`: the IDENTICAL column executes the
+pre-round path unchanged, so the merge gate's byte-compare against main
+passes by construction.
+
+### DEVIATION 1901 -- partition stats propagate from the split record. LANDED
+
+* **Mechanism.** `update_partition_stats_from_split_kernel`
+  (`kernel/split_points.mojo`) writes both children's `part_stats` rows at
+  split time from the parent's row and the winner's SCANNED histogram cell
+  (ordered: cell = left, complement = right; one-hot: inverted, because the
+  flag test is equality and one-hot bins are never scanned). The per-level
+  `compute_partition_stats` sweep over `d_all_ids` (DEVIATION 352) runs only
+  at iteration 1 on the FAST arm, to seed the root. The end-of-tree sweep
+  stays in BOTH modes, so leaf values still come from the exact reduction.
+* **Price.** O(max_leaves x n_rows x stat_count) per tree becomes
+  O(max_leaves) plus one root pass -- at 1M rows x 64 leaves x 2 stats,
+  ~128M row-stat reads per tree deleted. In exchange, the gains a level
+  scores with ride on re-associated float sums (the histogram-subtraction
+  tradeoff applied to partition stats), so FAST trees can differ from
+  IDENTICAL trees in low-bit tie regions.
+* **Citations.** recon_lightgbm_cuda.md mechanism e2 / borrow 1
+  (`cuda_data_partition.cu:798-903`, `cuda_best_split_finder.cu:434-443`);
+  our sweep at `greedy_search_helper_depthwise.mojo` (DEVIATION 352 block).
+* **Gate note for the orchestrator.** The one-hot inversion and the
+  folds<=1 (binary-feature) prefix identity are the two places a sign error
+  hides; both are exercised only by fixtures with one-hot / binary winners.
+  A cheap probe: FAST vs IDENTICAL part_stats trace rows (`dN.partstats`)
+  on a 4k-row fixture should differ by ULPs, not by sides.
