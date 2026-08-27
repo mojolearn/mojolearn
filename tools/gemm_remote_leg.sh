@@ -2900,6 +2900,17 @@ LGBMPROBE
     # rung is a separate process because each rung is a different fit; what
     # is interleaved WITHIN a rung is ours against theirs, which is the
     # comparison the ratio is made of.
+    # WHICH PYTHON DRIVES THE FOREST ARMS. On the NVIDIA images python3 is
+    # the interpreter the opponents were pip-installed into, and it stays.
+    # On the AMD images /opt/conda's python3 has no numpy and its libstdc++
+    # predates GLIBCXX_3.4.30, the Mojo runtime's floor (leg 2026-08-26:
+    # our arms crashed at import while the refusal lines printed fine), and
+    # every opponent on AMD refuses by name anyway -- so the driver runs on
+    # pixi's interpreter, the one the bindings were built against.
+    FOREST_PY=python3
+    if [ "@VENDOR@" = "amd" ]; then
+        FOREST_PY=".pixi/envs/default/bin/python"
+    fi
     for L in @SPEEDLANES@; do
         # THE iforest LANE KEEPS ITS OWN DATASET AND THE LINE SAYS SO.
         # An isolation forest scored on data with no planted anomalies has
@@ -2913,11 +2924,11 @@ LGBMPROBE
         fi
         if [ -z "@SPEEDROWS@" ]; then
             runarm "forest.$L.log" \
-                python3 bench/speed/forest_speed_arm.py --lane "$L" $_dsflag
+                "$FOREST_PY" bench/speed/forest_speed_arm.py --lane "$L" $_dsflag
         else
             for R in @SPEEDROWS@; do
                 runarm "forest.$L.r$R.log" \
-                    python3 bench/speed/forest_speed_arm.py --lane "$L" \
+                    "$FOREST_PY" bench/speed/forest_speed_arm.py --lane "$L" \
                         $_dsflag --rows "$R"
             done
         fi
