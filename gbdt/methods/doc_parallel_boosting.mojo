@@ -189,7 +189,11 @@ from gbdt.gpu_data.compressed_index_builder import (
     build_layout,
 )
 from gbdt.models.kernel.add_bin_values import compute_bins_and_add_kernel
-from mojo_only.kernel_matrix import TARGET_COLUMN, deterministic_flush_for
+from mojo_only.kernel_matrix import (
+    TARGET_COLUMN,
+    deterministic_flush_for,
+    greedy_one_byte_fixed_for,
+)
 from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
 from mojo_only.numerics import NUMERIC_IDENTICAL
 from gbdt.gpu_util.kernel.fill import launch_make_sequence
@@ -1201,13 +1205,22 @@ def fit_with_test(
     # magnitude reduce -- the same block-reduce-plus-one-atomicAdd shape as
     # its `functionValue` -- into TWO scalars read back below. This replaces
     # a full-stats readback (6.4 MB at 800k rows) plus a `2 * n_rows` host
-    # loop per tree. A build that quantizes nothing (NVIDIA/AMD FAST, whose
-    # hist_2 arm keeps CatBoost's warp-private float design) skips the
-    # launch flag, the copy and the sync at comptime.
+    # loop per tree. A build that quantizes nothing (NVIDIA and 32-lane AMD
+    # FAST, whose hist_2 arm keeps CatBoost's warp-private float design)
+    # skips the launch flag, the copy and the sync at comptime. A 64-lane
+    # column's FAST build quantizes: its one-byte blocks route through the
+    # fused 8-bit fixed-point kernel (`greedy_one_byte_fixed_for`,
+    # DEVIATION 1901), so it needs the bound exactly as the Apple column
+    # does -- an unbounded scale here is the WHY THIS EXISTS failure below.
     comptime _flush_fixed = deterministic_flush_for[
         TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
     ]()
-    comptime _needs_magnitudes = _flush_fixed or HIST2_SMEM_IS_I32
+    comptime _one_byte_fixed = greedy_one_byte_fixed_for[
+        TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
+    ]()
+    comptime _needs_magnitudes = (
+        _flush_fixed or HIST2_SMEM_IS_I32 or _one_byte_fixed
+    )
     var mags = ctx.enqueue_create_buffer[DType.float32](2)
     var h_mags = ctx.enqueue_create_host_buffer[DType.float32](2)
 

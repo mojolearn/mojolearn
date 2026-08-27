@@ -151,6 +151,7 @@ from mojo_only.kernel_matrix import (
     HIST_SMEM_SHARED2_I32,
     TARGET_COLUMN,
     deterministic_flush_for,
+    greedy_one_byte_fixed_for,
     partition_chunks_sm_for,
 )
 from mojo_only.numerics import NUMERIC_IDENTICAL
@@ -1512,9 +1513,11 @@ def launch_hist2_8bit(
 ) raises:
     """The fused two-stat 8-bit arm (DEVIATION BLOCK in
     `kernel/hist_2_one_byte_8bit.mojo`): one launch, grid z = 1, where
-    the PASS design launches z = stat_count walks. Reached only when the
-    `hist_smem_mode_for` row is the shared-Int32 arm; the float columns
-    dispatch `launch_one_byte[8]` exactly as CatBoost's ladder does."""
+    the PASS design launches z = stat_count walks. Reached when the
+    `hist_smem_mode_for` row is the shared-Int32 arm, and for EVERY
+    one-byte width on a 64-lane column (`greedy_one_byte_fixed_for`,
+    DEVIATION 1901); the 32-lane float columns dispatch
+    `launch_one_byte[8]` exactly as CatBoost's ladder does."""
     if stat_count != 2:
         raise Error("the fused 8-bit arm is two-stat by construction")
     var groups = feature_groups_for(POLICY_ONE_BYTE, Int(blk.n_features))
@@ -2067,11 +2070,19 @@ def launch_histograms_for_blocks[
         comptime _flush_is_fixed_point = deterministic_flush_for[
             TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
         ]()
+        # DEVIATION 1901: a 64-lane column's one-byte blocks run the fused
+        # 8-bit fixed-point kernel even under FAST (`greedy_one_byte_fixed_for`),
+        # so their cells land in the accumulator exactly as the shared-Int32
+        # arm's do, and the bridge must read it. Comptime False on every
+        # 32-lane column.
+        comptime _one_byte_fixed = greedy_one_byte_fixed_for[
+            TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
+        ]()
         var run_fixed_bridge = _flush_is_fixed_point
 
         @parameter
         if (
-            hist2_smem_mode == HIST_SMEM_SHARED2_I32
+            (hist2_smem_mode == HIST_SMEM_SHARED2_I32 or _one_byte_fixed)
             and not _flush_is_fixed_point
         ):
             if blk.policy == POLICY_ONE_BYTE:
@@ -2218,63 +2229,99 @@ def launch_histograms_for_blocks[
             # wider than the data changes where bins land. A byte-level
             # probe established that for the PASS family (64-fold block at
             # 8 bits: 2 of 4 features wrong).
-            if blk.max_folds <= 32:
-                launch_hist2_one_byte[5, hist2_smem_mode](
-                    ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
-                    sm_count, line, base, cindex, row_index, stats, p_off,
-                    p_sz, ids, block_hist, acc_i32, fixed_scale,
-                )
-            elif blk.max_folds <= 64:
-                launch_hist2_one_byte[6, hist2_smem_mode](
-                    ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
-                    sm_count, line, base, cindex, row_index, stats, p_off,
-                    p_sz, ids, block_hist, acc_i32, fixed_scale,
-                )
-            elif blk.max_folds <= 128:
-                launch_hist2_one_byte[7, hist2_smem_mode](
-                    ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
-                    sm_count, line, base, cindex, row_index, stats, p_off,
-                    p_sz, ids, block_hist, acc_i32, fixed_scale,
-                )
+            # ================= DEVIATION 1901 =================
+            # ON A 64-LANE COLUMN UNDER FAST THE LADDER DOES NOT EXIST.
+            # Every kernel it names is 32-lane by construction -- the
+            # 1024-float slice is 32 lanes times 32 floats per thread, and
+            # `hist2_slice_offset` / `one_byte_slice_offset` refuse
+            # `LANE_WIDTH == 64` with a comptime assert -- so instantiating
+            # any of them is a compile error, by design. The
+            # `greedy_one_byte_fixed_for` matrix row routes ALL one-byte
+            # widths to the fused 8-bit fixed-point kernel instead, whose
+            # atomics-plus-block-barrier design carries no lockstep
+            # assumption (its docstring and the row's carry the argument),
+            # the same routing shape `pointwise_one_byte_fixed_for` took
+            # for the pointwise family. The branch is comptime, so 32-lane
+            # columns compile the ladder EXACTLY as before and the asserts
+            # stay in force for anything else that reaches those kernels.
+            # The fused arm is two-stat by construction; a multi-stat shape
+            # on a 64-lane column REFUSES at runtime rather than falling
+            # back to a kernel that cannot compile.
+            # ==================================================
+            @parameter
+            if _one_byte_fixed:
+                if stat_count == 2:
+                    launch_hist2_8bit(
+                        ctx, blk, depth, n_live, n_rows, stat_count,
+                        max_leaves, sm_count, line, base, cindex,
+                        row_index, stats, p_off, p_sz, ids,
+                        block_hist, acc_i32, fixed_scale,
+                    )
+                else:
+                    raise Error(
+                        "one-byte histograms on a 64-lane column need the"
+                        " fused two-stat kernel (DEVIATION 1901); the"
+                        " multi-stat PASS family has no wide-wavefront"
+                        " layout yet"
+                    )
             else:
+                if blk.max_folds <= 32:
+                    launch_hist2_one_byte[5, hist2_smem_mode](
+                        ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
+                        sm_count, line, base, cindex, row_index, stats, p_off,
+                        p_sz, ids, block_hist, acc_i32, fixed_scale,
+                    )
+                elif blk.max_folds <= 64:
+                    launch_hist2_one_byte[6, hist2_smem_mode](
+                        ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
+                        sm_count, line, base, cindex, row_index, stats, p_off,
+                        p_sz, ids, block_hist, acc_i32, fixed_scale,
+                    )
+                elif blk.max_folds <= 128:
+                    launch_hist2_one_byte[7, hist2_smem_mode](
+                        ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
+                        sm_count, line, base, cindex, row_index, stats, p_off,
+                        p_sz, ids, block_hist, acc_i32, fixed_scale,
+                    )
+                else:
 
-                @parameter
-                if hist2_smem_mode == HIST_SMEM_SHARED2_I32:
-                    if stat_count == 2:
-                        # the fused two-stat 8-bit arm: one walk over the
-                        # cindex where PASS(8) makes stat_count of them
-                        # (its DEVIATION BLOCK carries the shared-memory
-                        # arithmetic their ladder's fallback exists to
-                        # avoid)
-                        launch_hist2_8bit(
-                            ctx, blk, depth, n_live, n_rows, stat_count,
-                            max_leaves, sm_count, line, base, cindex,
-                            row_index, stats, p_off, p_sz, ids,
-                            block_hist, acc_i32, fixed_scale,
-                        )
+                    @parameter
+                    if hist2_smem_mode == HIST_SMEM_SHARED2_I32:
+                        if stat_count == 2:
+                            # the fused two-stat 8-bit arm: one walk over the
+                            # cindex where PASS(8) makes stat_count of them
+                            # (its DEVIATION BLOCK carries the shared-memory
+                            # arithmetic their ladder's fallback exists to
+                            # avoid)
+                            launch_hist2_8bit(
+                                ctx, blk, depth, n_live, n_rows, stat_count,
+                                max_leaves, sm_count, line, base, cindex,
+                                row_index, stats, p_off, p_sz, ids,
+                                block_hist, acc_i32, fixed_scale,
+                            )
+                        else:
+                            # MultiClass carries 1 + (K-1) stat planes and the
+                            # fused arm is two-stat by construction. When it
+                            # landed (8010b2f) every caller WAS two-stat;
+                            # MultiClass arrived later in another lane, and the
+                            # first 254-border multiclass fit hit the fused
+                            # arm's guard instead of a histogram. Multi-stat
+                            # shapes take the PASS route, whose shared-Int32
+                            # arm walks stat pairs on the z axis exactly as
+                            # their ladder does.
+                            launch_one_byte[8, hist2_smem_mode](
+                                ctx, blk, depth, n_live, n_rows, stat_count,
+                                max_leaves, sm_count, line, base, cindex,
+                                row_index, stats, p_off, p_sz, ids,
+                                block_hist, acc_i32, fixed_scale,
+                            )
                     else:
-                        # MultiClass carries 1 + (K-1) stat planes and the
-                        # fused arm is two-stat by construction. When it
-                        # landed (8010b2f) every caller WAS two-stat;
-                        # MultiClass arrived later in another lane, and the
-                        # first 254-border multiclass fit hit the fused
-                        # arm's guard instead of a histogram. Multi-stat
-                        # shapes take the PASS route, whose shared-Int32
-                        # arm walks stat pairs on the z axis exactly as
-                        # their ladder does.
                         launch_one_byte[8, hist2_smem_mode](
                             ctx, blk, depth, n_live, n_rows, stat_count,
                             max_leaves, sm_count, line, base, cindex,
-                            row_index, stats, p_off, p_sz, ids,
-                            block_hist, acc_i32, fixed_scale,
+                            row_index, stats, p_off, p_sz, ids, block_hist,
+                            acc_i32, fixed_scale,
                         )
-                else:
-                    launch_one_byte[8, hist2_smem_mode](
-                        ctx, blk, depth, n_live, n_rows, stat_count,
-                        max_leaves, sm_count, line, base, cindex,
-                        row_index, stats, p_off, p_sz, ids, block_hist,
-                        acc_i32, fixed_scale,
-                    )
 
         # THE BRIDGE. Scatter this block's slice into the flat histogram the
         # score kernel reads. `skip_bridge` leaves the result in the
@@ -2434,7 +2481,11 @@ def acc_i32_is_live[hist2_smem_mode: Int]() -> Bool:
       (`HIST_SMEM_SHARED2_I32`), whose writebacks land single-block
       cells in the accumulator EVEN UNDER `FAST` -- the
       `run_fixed_bridge` arm at the histogram launcher, and the reason
-      the gate cannot be a bare mode test.
+      the gate cannot be a bare mode test, OR
+    * a 64-lane column routes every one-byte width through the fused
+      8-bit fixed-point kernel (`greedy_one_byte_fixed_for`,
+      DEVIATION 1901), whose writebacks land in the accumulator the
+      same way -- the third writer, same rule, same delegation.
 
     When this is False the buffer is allocated at ONE cell and never
     memset: every consumer either only forwards the pointer (the
@@ -2443,9 +2494,15 @@ def acc_i32_is_live[hist2_smem_mode: Int]() -> Bool:
     `scratch_dead` arms, `fixed_to_float_kernel` in `run_tree`). When it
     is True nothing changes byte for byte.
     """
-    return deterministic_flush_for[
-        TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
-    ]() or hist2_smem_mode == HIST_SMEM_SHARED2_I32
+    return (
+        deterministic_flush_for[
+            TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
+        ]()
+        or hist2_smem_mode == HIST_SMEM_SHARED2_I32
+        or greedy_one_byte_fixed_for[
+            TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
+        ]()
+    )
 
 
 struct TTreeWorkspace(Movable):

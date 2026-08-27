@@ -224,7 +224,10 @@ def hist2_slice_offset[bits: Int, smem_mode: Int](tid: Int) -> Int:
     thread this accumulator takes. A 64-lane wavefront needs a 2048-float
     slice and CatBoost never wrote that layout, so the assert makes it a
     compile error rather than two warps quietly sharing one private copy --
-    the same guard `hist_one_byte.mojo` carries.
+    the same guard `hist_one_byte.mojo` carries. A 64-lane column never
+    instantiates this family: `greedy_one_byte_fixed_for` (DEVIATION 1901)
+    routes its one-byte work to the fused 8-bit kernel at the dispatch, and
+    the assert stays for whatever reaches this file some other way.
 
     ================= DEVIATION BLOCK =================
     Under `HIST_SMEM_SHARED2_I32` the slice a thread lands in is keyed by its

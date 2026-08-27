@@ -1318,6 +1318,53 @@ def pointwise_one_byte_fixed_for[column: Int, identical: Bool]() -> Bool:
     return column == COLUMN_APPLE
 
 
+def greedy_one_byte_fixed_for[column: Int, identical: Bool]() -> Bool:
+    """NUMERIC row (DEVIATION 1901): whether the GREEDY one-byte family
+    routes EVERY width through the fused 8-bit fixed-point kernel
+    (`hist_2_one_byte_8bit.mojo`) instead of CatBoost's maxBins ladder.
+
+    The ladder's kernels are 32-LANE BY CONSTRUCTION: the hist_2 5/6/7-bit
+    slices and the PASS family's sub-copies are 1024 floats = 32 lanes x 32
+    floats per thread, and their own files refuse `LANE_WIDTH == 64` with a
+    comptime assert rather than let two wavefront halves share one private
+    copy (`hist_2_one_byte_base.mojo`, `hist_one_byte.mojo`). CatBoost never
+    wrote the 64-wide layout -- their HIP builds compile warp-32 semantics --
+    so a CDNA column (wavefront 64) under FAST had NO one-byte kernel at all.
+
+    The fused 8-bit kernel is LANE-AGNOSTIC where the ladder is not: its
+    shared-memory adds are Int32 atomics, its only syncs are threadgroup
+    barriers (`sync_granularity_for` is `SYNC_BLOCK` everywhere), its
+    iteration counts are uniform per block, and its `H8_LANE = 32` is a
+    LOGICAL striping constant with no lockstep assumption behind it -- the
+    same argument `column_lane_width`'s docstring makes for the pinned
+    identity lanes. Its slot arithmetic is bin-based with no `bits`
+    parameter, so any one-byte width lands correctly, and a narrow width's
+    skip mark (`1 << bits`, the one encodable value past a full feature)
+    lands in a cell the flush never reads -- `fold < folds` bounds every
+    write -- which is the same drop the ladder's `pass` guard performs.
+
+    So a 64-lane column under FAST routes ALL one-byte widths to the fused
+    kernel, the exact routing shape `pointwise_one_byte_fixed_for` already
+    took for Apple. `IDENTICAL` is UNTOUCHED and returns False: identity
+    pins `PINNED_REPLICATION_LANES = 32`, the ladder compiles as-is, and
+    the identical route must not move. 32-lane columns return False and
+    keep today's dispatch byte for byte; variable-width columns (qualcomm,
+    intel, spec-baseline) are NOT claimed here and still refuse at the
+    asserts.
+
+    THE PRICE: the ladder's narrow kernels exist because fewer bins buy
+    more private sub-copies and less shared-memory traffic; the fused
+    kernel gives a 64-lane column the general 256-bin layout for a 32-fold
+    feature until someone writes the wide-wavefront specialization. That
+    is a FAST-mode kernel choice on a column that previously refused to
+    build -- the A/B against a 64-lane ladder specialization does not
+    exist yet, and this row is where it will flip.
+    """
+    comptime if identical:
+        return False
+    return column_lane_width(column) == 64
+
+
 def hist_smem_mode_for[column: Int, identical: Bool]() -> Int:
     """NUMERIC row: HOW the hist_2 family accumulates in shared memory.
 
