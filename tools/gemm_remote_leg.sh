@@ -2834,7 +2834,15 @@ forest)
                  "CPU learner still runs and every lightgbm-cuda arm will" \
                  "refuse by name" >> "$OUT/leg.txt"
         else
+        # CUDACXX: pip's isolated build env resolves the CUDA compiler
+        # through CMake's enable_language(CUDA), which walks CUDACXX and
+        # PATH -- and the leg's non-interactive ssh shell has neither.
+        # Leg 2026-08-27_031904: "No CMAKE_CUDA_COMPILER could be found",
+        # build exit 1, wheel came out CPU-only and every lightgbm-cuda
+        # arm refused. The devel images keep nvcc at /usr/local/cuda/bin.
         CMAKE_ARGS="-DUSE_CUDA=ON" \
+        CUDACXX=/usr/local/cuda/bin/nvcc \
+        PATH="/usr/local/cuda/bin:$PATH" \
         timeout -k 30 @LGBMBUILD@ python3 -m pip install --no-input \
             --no-cache-dir --force-reinstall \
             --no-binary lightgbm \
