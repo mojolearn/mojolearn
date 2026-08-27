@@ -931,6 +931,105 @@ def launch_reorder_in_leaves(
     return launches + 2
 
 
+def update_partition_stats_from_split_kernel(
+    left_leaves: MutPointer[UInt32, MutAnyOrigin],
+    right_leaves: MutPointer[UInt32, MutAnyOrigin],
+    win_cells: MutPointer[UInt32, MutAnyOrigin],
+    split_features: MutPointer[CFeature, MutAnyOrigin],
+    bin_feature_count_in: Int32,
+    stat_count_in: Int32,
+    histograms: MutPointer[Float32, MutAnyOrigin],
+    part_stats: MutPointer[Float32, MutAnyOrigin],
+):
+    """Both children's partition stats from the split record. FAST ARM ONLY.
+
+    ===================== DEVIATION 1901 =====================
+    THE OTHER HALF OF `TSplitPointsKernel`, REPLACED RATHER THAN PORTED.
+    Their split updates `subsets->PartitionStats` inside the split ("Update
+    part stats", `split_properties_helper.cpp:918`); this port never carried
+    that half, and the driver instead re-reduces EVERY leaf's rows at the top
+    of EVERY level (`compute_partition_stats` over `d_all_ids`,
+    `greedy_search_helper_depthwise.mojo` DEVIATION 352) -- an
+    O(max_leaves x n_rows x stat_count) sweep per tree where leaf-wise growth
+    runs `max_leaves - 1` sequential splits. The recon against LightGBM's
+    CUDA learner (recon_lightgbm_cuda.md, mechanism e2) prices that as the
+    single largest asymptotic difference on the 1M-2M H100 gap: they write
+    `left/right_sum_gradients/hessians/count` into the child leaf structs
+    FROM THE SPLIT RECORD (`cuda_data_partition.cu:798-903`), sums their
+    split finder already read off the histogram
+    (`cuda_best_split_finder.cu:434-443`), and pay O(1) per split for the
+    same information.
+
+    This kernel is that mechanism on this port's planes. The split leaf's
+    slot holds its SCANNED histogram (built when the leaf was scored, and a
+    leaf splits only after it was scored), so the winning cell's inclusive
+    prefix IS the sum over the rows that fail the `>` test -- exactly the
+    rows `split_and_make_sequence_kernel` flags as "goes left":
+
+        left  = histogram[leaf][stat][winning cell]     (ordered feature)
+        right = part_stats[leaf][stat] - left
+
+    A ONE-HOT winner inverts the pairing, because its flag test is EQUALITY
+    (`feature_val == value` goes RIGHT, above) and its bins are never
+    scanned (`ScanHistogramsImpl` skips one-hot features,
+    `histogram_utils.cu:395-397`), so the cell holds the equal rows' own
+    sums -- the RIGHT side -- and the left is the complement.
+
+    The stat-0 clamp is `SubstractHistogramsImpl`'s, for the same reason it
+    is theirs: stat 0 is the weight plane and the complement's cancellation
+    can drive a derived count slightly negative, which would poison the
+    leaf-value division. Gradients stay unclamped; a gradient sum is
+    legitimately negative.
+
+    PRICE, and why this is a FAST-mode arm and not the one path: the
+    propagated sums are the SAME numbers only in exact arithmetic. In
+    float32 they re-associate against the fresh reduction -- it is the
+    histogram-subtraction tradeoff the lane already accepts, applied to the
+    partition stats -- so the IDENTICAL column keeps DEVIATION 352's sweep
+    byte for byte and this kernel is never launched there. The driver's
+    end-of-tree sweep stays in BOTH modes, so leaf VALUES still come from
+    the exact reduction; only the gains a level scores with ride on
+    propagated stats.
+
+    One thread per (split, stat): the parent's entry is read before either
+    child's is written, and the left child overwrites the parent's slot
+    (`MakeSplit` gives the left child the parent's id, `:861-862`), so the
+    read-then-write must stay inside one thread. Control plane, not compute:
+    the grid is `(1, leavesCount)` where the sweep it replaces was sized by
+    `n_rows`.
+    ==========================================================
+    """
+    var bin_feature_count = Int(bin_feature_count_in)
+    var stat_count = Int(stat_count_in)
+    var leaf_slot = Int(block_idx.y)
+    var left_leaf = Int(left_leaves.unsafe_load(leaf_slot))
+    var right_leaf = Int(right_leaves.unsafe_load(leaf_slot))
+    var cell = Int(win_cells.unsafe_load(leaf_slot))
+    # field read, not a whole-struct load; the Metal reason recorded on
+    # `split_and_make_sequence_kernel`.
+    var one_hot = split_features[unsafe_offset=leaf_slot].one_hot_feature
+
+    var stat_id = Int(thread_idx.x)
+    while stat_id < stat_count:
+        var parent = part_stats.unsafe_load(left_leaf * stat_count + stat_id)
+        var cell_sum = histograms.unsafe_load(
+            left_leaf * bin_feature_count * stat_count
+            + stat_id * bin_feature_count
+            + cell
+        )
+        var derived = parent - cell_sum
+        if stat_id == 0:
+            # the weight plane's non-negativity guard, exactly where
+            # `substract_histograms_kernel` applies theirs.
+            cell_sum = max(cell_sum, Float32(0.0))
+            derived = max(derived, Float32(0.0))
+        var left_sum = derived if one_hot else cell_sum
+        var right_sum = cell_sum if one_hot else derived
+        part_stats.unsafe_store(left_leaf * stat_count + stat_id, left_sum)
+        part_stats.unsafe_store(right_leaf * stat_count + stat_id, right_sum)
+        stat_id += Int(block_dim.x)
+
+
 # =========================================================================
 # DEVIATION BLOCK: everything below replaces ONE CALL in their file.
 #

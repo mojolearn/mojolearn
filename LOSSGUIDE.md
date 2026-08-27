@@ -632,3 +632,138 @@ diverged; and **the vec4 histogram fast paths are symmetric-only, so both
 non-symmetric policies silently miss a measured 5.9x** -- the largest single
 item on the list.
 
+
+## The split-cost round, 2026-08-27: DEVIATIONS 1901-1903 (fast-speed series)
+
+Two source recons (LightGBM CUDA, XGBoost GPU hist) converge on the same
+verdict about the 1M-2M H100 gap (lossguide 2.42x/2.83x, depthwise 1.91x):
+the loss is the cost of ONE SPLIT, multiplied by `max_leaves - 1` sequential
+splits per lossguide tree. Three deviations answer it. All of them are
+FAST-arm only, behind `SPLIT_COST_IDENTICAL` in
+`greedy_search_helper_depthwise.mojo`: the IDENTICAL column executes the
+pre-round path unchanged, so the merge gate's byte-compare against main
+passes by construction.
+
+### DEVIATION 1901 -- partition stats propagate from the split record. LANDED
+
+* **Mechanism.** `update_partition_stats_from_split_kernel`
+  (`kernel/split_points.mojo`) writes both children's `part_stats` rows at
+  split time from the parent's row and the winner's SCANNED histogram cell
+  (ordered: cell = left, complement = right; one-hot: inverted, because the
+  flag test is equality and one-hot bins are never scanned). The per-level
+  `compute_partition_stats` sweep over `d_all_ids` (DEVIATION 352) runs only
+  at iteration 1 on the FAST arm, to seed the root. The end-of-tree sweep
+  stays in BOTH modes, so leaf values still come from the exact reduction.
+* **Price.** O(max_leaves x n_rows x stat_count) per tree becomes
+  O(max_leaves) plus one root pass -- at 1M rows x 64 leaves x 2 stats,
+  ~128M row-stat reads per tree deleted. In exchange, the gains a level
+  scores with ride on re-associated float sums (the histogram-subtraction
+  tradeoff applied to partition stats), so FAST trees can differ from
+  IDENTICAL trees in low-bit tie regions.
+* **Citations.** recon_lightgbm_cuda.md mechanism e2 / borrow 1
+  (`cuda_data_partition.cu:798-903`, `cuda_best_split_finder.cu:434-443`);
+  our sweep at `greedy_search_helper_depthwise.mojo` (DEVIATION 352 block).
+* **Gate note for the orchestrator.** The one-hot inversion and the
+  folds<=1 (binary-feature) prefix identity are the two places a sign error
+  hides; both are exercised only by fixtures with one-hot / binary winners.
+  A cheap probe: FAST vs IDENTICAL part_stats trace rows (`dN.partstats`)
+  on a 4k-row fixture should differ by ULPs, not by sides.
+
+### DEVIATION 1903 -- histogram aliasing: no per-split copy, no blanket zero. LANDED
+
+* **Mechanism.** LightGBM's `cuda_hist_pool_` aliases the parent's slot to
+  the larger child and zeroes the arena once per tree
+  (`cuda_data_partition.cu:825-831,895-898`,
+  `cuda_histogram_constructor.cpp:76-80` -- recon mechanism a3 / borrow 3).
+  This port's slots are leaf-id-indexed by every kernel from the build to
+  the scorer, so a pointer pool proper would touch the other lane's files;
+  the FAST arm instead exploits the aliasing the id scheme already gives:
+  the left child KEEPS the parent's id, so the parent's histogram already
+  sits where an in-place `big == left` subtraction needs it. The
+  unconditional split-time `copy_histograms` launch is deleted on the FAST
+  arm; a copy runs at PLAN time only for `big == right` pairs (left
+  strictly smaller -- ties derive the left sibling, PORTING.md 136, so
+  balanced splits copy NOTHING). The per-level zero pass runs only over
+  compute slots that were ever written this tree (`hist_slot_dirty`);
+  fresh right-child slots still hold the once-per-tree memset's zeros.
+* **Price.** Deleted per split on the FAST arm: one full-histogram copy
+  (`hist_cells x stat_count x 4 B` read + write) for every tied/left-heavy
+  pair, and one full-histogram zero for every fresh slot -- x ~63 splits
+  per lossguide tree. Bit-inert by construction (same bytes at every read
+  as the old schedule), so unlike 1901 this deviation cannot move FAST
+  trees; it only removes launches and traffic.
+* **Citations.** recon_lightgbm_cuda.md mechanism a3;
+  `copy_histograms[_vec4]_kernel` / `zero_histograms_kernel`
+  (`kernel/histogram_utils.mojo`, unmodified -- only the launch schedule in
+  `greedy_search_helper_depthwise.mojo` moved).
+* **Gate note.** The `hist_slot_dirty` proof rests on two invariants: leaf
+  ids are never reused within a tree, and the arena memset at
+  `CreateInitialSubsets` runs once per fit call. Both hold today in this
+  driver; a future slot-reuse scheme must revisit the elision.
+
+### DEVIATION 1902 -- move only the row index at a split. DESIGN NOTE, NOT IMPLEMENTED
+
+**Why this is a note and not code: every load-bearing edit lands in the
+other lane's files.** The number is reserved and this section is the
+hand-off; nothing of 1902 is half-implemented in the tree.
+
+* **The bill today.** On any splitting leaf over 1024 rows,
+  `launch_reorder_in_leaves` (`kernel/split_points.mojo:751-931` before this
+  round's insertions) runs the slow arm: `2 * ceil(stat_count / 8) + 2`
+  launches that move every stat column PLUS the row index out to scratch and
+  gather them back -- `(stat_count + 1) * 4` bytes per row, twice. At 1M-5M
+  rows the early, expensive splits are ALL over 1024 rows, and lossguide
+  pays the arm ~63 sequential times per tree. Both recons converge on the
+  alternative: LightGBM moves 4 bytes/row of the split leaf in ~4 lean
+  kernels and NEVER moves a gradient (`cuda_data_partition.cu:288-334,
+  679-783, 907-944`; its hist kernel gathers through `data_indices_in_leaf`,
+  `cuda_histogram_constructor.cu:53-55`); XGBoost's `RowPartitioner`
+  is the same design (`row_partitioner.cuh:112-201`, gather at
+  `histogram.cu:186,212`).
+* **The mechanism, on this port's planes.** Stop permuting `stats` at a
+  split; keep permuting `row_index` (4 B/row, the existing partition +
+  index copy/gather pair, or the inplace arm). Every consumer that today
+  reads `stats` CONTIGUOUSLY over a partition range `[offset, offset+size)`
+  instead gathers `stats[row_index[offset + i] + stat * line_size]` -- the
+  same indirection those kernels ALREADY perform for the compressed index
+  through `load_indices`. `stats` then holds document order for the life of
+  the fit, exactly as the compressed index does, and the split's payload
+  drops from `(stat_count + 1)` columns twice to one column twice (or once,
+  on the inplace arm).
+* **The edits, by file and owner.**
+  1. `kernel/hist_2_one_byte_base.mojo` + the `hist_2_one_byte_{5,6,7,8}bit`
+     twins and `hist_binary` / `hist_half_byte`: the stat loads become
+     gathers through the already-loaded row index (they load
+     `indices[p_offset + pe]` for the cindex TODAY -- the same register
+     feeds the stat address). OTHER LANE (hist_2_* is named out of bounds
+     for this round).
+  2. `greedy_search_helper.mojo` (`launch_histograms_for_blocks`, the
+     symmetric driver's reorder call sites, `compute_target_std_dev` if it
+     reads per-partition): plumb the flag/remove the stat reorder launches.
+     OTHER LANE.
+  3. `gpu_util/partitions_reduce.mojo` (`compute_partition_stats`): gather
+     instead of contiguous read. Under 1901's FAST arm this runs twice per
+     tree (root seed + leaf values), so its marginal cost is small. OTHER
+     LANE'S FILE by this round's boundary.
+  4. `kernel/split_points.mojo` + the non-symmetric driver (THIS lane):
+     delete the stat copy/gather launches from `launch_reorder_in_leaves`'s
+     slow arm and the stat blocks from `gather_inplace_kernel`'s grid
+     (`grid.x` drops from `1 + statCount` to 1); `new_stats` scratch dies.
+  5. The estimation/bootstrap writers (`doc_parallel_boosting` and the
+     objective): they must WRITE the stat planes in the order the readers
+     now assume (document order), not the permuted order. This is the one
+     place the design can silently break: today the planes are re-permuted
+     every split so writer and reader agree by construction.
+* **Staging plan (why this is LAST).** Behind the same
+  `SPLIT_COST_IDENTICAL` gate, one consumer at a time, each staged against
+  the uniform-data trap ([[uniform-test-data-hides-permutation]]): plant
+  HASHED per-row stat values and compare per cell, because a uniform plane
+  makes a dropped permutation invisible. The hist gather is the risky read
+  (coalescing changes from contiguous to indirect on exactly the hot
+  kernel); the recons' answer is that both competitors eat that gather and
+  win anyway, but it must be MEASURED, not assumed -- if the gather costs
+  more than the reorder saves at 255 bins x 2 stats, the deviation dies on
+  the bench, not in review.
+* **Interaction with 1901/1903.** Independent of both: 1901 removes the
+  per-level stats sweep (fewer contiguous readers to convert), 1903 does
+  not touch the stat planes at all. Land order 1901 -> 1903 -> 1902 stands.
