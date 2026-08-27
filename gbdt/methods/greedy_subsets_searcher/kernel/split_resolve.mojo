@@ -46,6 +46,7 @@ the split kernels expect), and the bin within the feature.
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.memory import bitcast
 
 from gbdt.gpu_data.gpu_structures import CFeature
 from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import (
@@ -55,6 +56,26 @@ from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import (
 comptime RESOLVE_BLOCK_SIZE = 64
 
 comptime WINNER_SENTINEL = UInt32(0xFFFFFFFF)
+
+# ---- DEVIATION 1904: the leaf-winner fold's record layout ---------------
+# One record per scored leaf, `WINNER_RECORD_WORDS` UInt32 words:
+#   [0] feature id   (Int32 bits; the sentinel -1 when UNDEFINED)
+#   [1] bin id       (Int32 bits, `to_split`-clamped) -- or, under
+#                    BIN_OUT_OF_RANGE, the offending raw bin-feature
+#   [2] gain         (Float32 bits, THEIR sign: the kernel's gain negated,
+#                    exactly what the host fold stored)
+#   [3] status       (one of the three constants below)
+# Small enough that the whole per-iteration readback is
+# `WINNER_RECORD_WORDS * leaves_scored * 4` bytes -- 32 bytes at the
+# depthwise/lossguide cap of two leaves, the same order as LightGBM's
+# 8-int per-split readback (`cuda_best_split_finder.cu:2161-2191`).
+comptime WINNER_RECORD_WORDS = 4
+
+comptime WINNER_STATUS_UNDEFINED = UInt32(0)
+comptime WINNER_STATUS_DEFINED = UInt32(1)
+comptime WINNER_STATUS_BIN_OUT_OF_RANGE = UInt32(2)
+
+comptime WINNER_FOLD_BLOCK_SIZE = 32
 
 
 def resolve_and_pack_kernel(
@@ -193,3 +214,161 @@ def plan_level_kernel(
         ids_compute.unsafe_store(i, UInt32(small))
         sub_from.unsafe_store(i, UInt32(big))
         sub_what.unsafe_store(i, UInt32(small))
+
+
+def leaf_winner_fold_kernel(
+    region_score: MutPointer[Float32, MutAnyOrigin],
+    region_bin: MutPointer[UInt32, MutAnyOrigin],
+    argmax_blocks_in: Int32,
+    hist_cells_in: Int32,
+    bf_feature: MutPointer[Int32, MutAnyOrigin],
+    bf_bin: MutPointer[Int32, MutAnyOrigin],
+    bf_one_hot: MutPointer[UInt8, MutAnyOrigin],
+    bf_folds: MutPointer[Int32, MutAnyOrigin],
+    winner_records: MutPointer[UInt32, MutAnyOrigin],
+):
+    """The depthwise/lossguide host reduce, on the device: one block per
+    scored leaf folds that leaf's `argmax_blocks` block-winner records to
+    ONE winner record, so the driver reads back `WINNER_RECORD_WORDS`
+    words per leaf instead of `2 * argmax_blocks` and never folds on the
+    host.
+
+    ================= DEVIATION 1904 =================
+    DEVICE-RESIDENT BEST-SPLIT SELECTION. The non-symmetric drivers block
+    the host at `score.read` -- two `argmax_blocks * leaves`-sized copies
+    plus a `wait_complete` -- and then fold sequentially on the host under
+    `best_split_properties_less`
+    (`greedy_search_helper_depthwise.mojo:1357-1470`,
+    `find_best_leaf_to_split` downstream of it). That shape is CatBoost's
+    own (`bestProps.Read(propsCpu)`, `greedy_search_helper.cpp:517-529`);
+    LightGBM's CUDA learner keeps the same fold ON DEVICE and reads back
+    only the winner (`SyncBestSplitForLeafKernel` /
+    `FindBestFromAllSplitsKernel`, `cuda_best_split_finder.cu:1920-2191`,
+    8 ints per split). This kernel is that borrow: SCHEDULING, not
+    arithmetic. The blocking boundary it removes is one of the two host
+    waits per split the lossguide lane pays 63 times per tree.
+
+    ORDER-DETERMINISTIC BY TRANSCRIPTION, NOT BY REDUCTION DESIGN. The
+    fold below is the host loop VERBATIM, in the host loop's order --
+    sequential over blocks `b` ascending, one incumbent record -- so
+    there is no reduction-order freedom to differ across vendors or from
+    the host fold it replaces. Every clause is the host's, in the host's
+    sequence:
+
+    * POISON SKIP FIRST: a record whose bin is 0xFFFFFFFF is skipped, and
+      a leaf whose every record is poison ends UNDEFINED -- the corrected
+      2026-08-22 semantics (their argmax poison vs default-ctor mismatch
+      is outcome-equivalent to the skip; see the block at
+      `greedy_search_helper_depthwise.mojo:1409-1436`).
+    * BOUNDS SECOND: a non-poison bin-feature at or past `hist_cells`
+      stops the fold and marks BIN_OUT_OF_RANGE with the offending value
+      in the bin slot; the host raises the exact diagnostic the host fold
+      raised, from the record instead of from the loop.
+    * RESOLVE THIRD: flat bin-feature -> (feature, bin) through the
+      caller-uploaded `TBinFeatureTable` columns, WITH their `ToSplit`
+      clamp (`helpers.cpp:157-171`: cat bins clamp to `folds`, float bins
+      to `folds - 1`) -- the host fold resolves through `table.to_split`
+      and the comparator reads the CLAMPED bin, so the clamp must sit
+      before the compare here too.
+    * COMPARE LAST: `best_split_properties_less(cand, best)` transcribed
+      (`helpers.mojo:112-141`, their `operator<`,
+      `gpu_structures.h:80-93`): gain ascending under THEIR sign (the
+      score kernel's gain negated), feature id as ui32, bin id as ui32,
+      all strict -- so a full tie keeps the INCUMBENT, i.e. the earlier
+      block, exactly as `if (less(cand, best)) best = cand` does.
+
+    THE RECORD IS THE HOST'S STATE, BIT FOR BIT. Status DEFINED
+    reconstructs `TBestSplitProperties(feature, bin, gain, gain)` (the
+    fold stored the same number in Score and Gain, which is what
+    `find_best_leaf_to_split`'s argmin reads); status UNDEFINED
+    reconstructs the default record (feature -1, bin 0, gain Float32.MAX,
+    defined False). Nothing downstream can tell the folds apart.
+
+    THE WIRING IS THE OTHER LANE'S. The call sites -- the depthwise
+    driver's `score.read` + host reduce and the lossguide leaf queue --
+    live in `greedy_search_helper_depthwise.mojo` /
+    `greedy_search_helper_lossguide.mojo`, which belong to another lane
+    this round. The driver owes: (a) upload the four `TBinFeatureTable`
+    columns once per tree (`feature`, `bin`, `one_hot`, `folds`, each
+    `hist_cells` long -- the table is already built once per tree, this
+    is one staging pass more); (b) launch this kernel with grid x = the
+    scored-leaf count (their CB_ENSURE caps it at 2) behind the score
+    kernel; (c) replace the two block-record copies with one
+    `WINNER_RECORD_WORDS * leaves` copy and keep the single
+    `wait_complete`; (d) unpack per the record layout above, raising on
+    BIN_OUT_OF_RANGE with the host fold's message. NEW SCHEDULING GOES
+    UNDER THE FAST COMPTIME BRANCH (the DEVIATION-1876 pattern):
+    IDENTICAL keeps today's host fold byte-for-byte even though the
+    winner is provably the same, because IDENTICAL's contract is the code
+    path, not just the bits.
+    ==================================================
+    """
+    if Int(thread_idx.x) != 0:
+        return
+    var row = Int(block_idx.x)
+    var argmax_blocks = Int(argmax_blocks_in)
+    var hist_cells = Int(hist_cells_in)
+
+    # the host fold's seed: a default `TBestSplitProperties()` -- feature
+    # sentinel, bin 0, gain Float32.MAX on THEIR lower-is-better sign
+    var best_feature = Int32(-1)
+    var best_bin = Int32(0)
+    var best_gain = FLOAT32_MAX
+    var status = WINNER_STATUS_UNDEFINED
+    var bad_bf = UInt32(0)
+
+    for b in range(argmax_blocks):
+        var slot = row * argmax_blocks + b
+        var bf = region_bin.unsafe_load(slot)
+        if bf == WINNER_SENTINEL:
+            # their poison record; skipping it is outcome-equivalent to
+            # their compare-against-poison (see the deviation block)
+            continue
+        if Int(bf) >= hist_cells:
+            # the host fold raises here and abandons the level; the
+            # record carries the offending bin-feature out instead
+            status = WINNER_STATUS_BIN_OUT_OF_RANGE
+            bad_bf = bf
+            break
+        var our_gain = region_score.unsafe_load(slot)
+        # THEIR sign, restored exactly where the host fold restored it
+        var cand_gain = -our_gain
+        var cand_feature = bf_feature.unsafe_load(Int(bf))
+        var cand_bin = bf_bin.unsafe_load(Int(bf))
+        # `ToSplit`'s clamp (`helpers.cpp:157-171`), before the compare,
+        # because the host comparator saw the clamped bin
+        var max_bin = bf_folds.unsafe_load(Int(bf)) - Int32(1)
+        if bf_one_hot.unsafe_load(Int(bf)) != UInt8(0):
+            max_bin = bf_folds.unsafe_load(Int(bf))
+        if cand_bin > max_bin:
+            cand_bin = max_bin
+        # `best_split_properties_less(cand, best)`, transcribed: strict
+        # everywhere, feature and bin compared as ui32 so the -1 sentinel
+        # loses every gain tie instead of winning it
+        var take = False
+        if cand_gain < best_gain:
+            take = True
+        elif cand_gain == best_gain:
+            var f1 = cand_feature.cast[DType.uint32]()
+            var f2 = best_feature.cast[DType.uint32]()
+            if f1 < f2:
+                take = True
+            elif f1 == f2:
+                take = (
+                    cand_bin.cast[DType.uint32]()
+                    < best_bin.cast[DType.uint32]()
+                )
+        if take:
+            best_feature = cand_feature
+            best_bin = cand_bin
+            best_gain = cand_gain
+            status = WINNER_STATUS_DEFINED
+
+    var base = row * WINNER_RECORD_WORDS
+    winner_records.unsafe_store(base + 0, best_feature.cast[DType.uint32]())
+    if status == WINNER_STATUS_BIN_OUT_OF_RANGE:
+        winner_records.unsafe_store(base + 1, bad_bf)
+    else:
+        winner_records.unsafe_store(base + 1, best_bin.cast[DType.uint32]())
+    winner_records.unsafe_store(base + 2, bitcast[DType.uint32](best_gain))
+    winner_records.unsafe_store(base + 3, status)
