@@ -65,7 +65,10 @@ from extratrees.ported.decisiontree.batched_levelalgo.objectives import (
     GiniProxyExact,
     MSEObjectiveFunction,
 )
-from extratrees.ported.decisiontree.batched_levelalgo.split import Split
+from extratrees.ported.decisiontree.batched_levelalgo.split import (
+    ET_TIE_BREAK_KEYED,
+    Split,
+)
 from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels import (
     InstanceRange,
     NodeWorkItem,
@@ -81,6 +84,27 @@ comptime F = DType.float64
 """The oracle's accumulator type. `float64` here on purpose: DEVIATION 135 is
 OPEN about what the DEVICE accumulates in, and an oracle that pre-committed to
 `float32` would settle it by accident."""
+
+
+comptime _TIE_SALT: UInt32 = 0x7B31C853
+"""DEVIATION 463's `SPLIT_TIE_SALT`, spelled locally so this file's tie
+re-derivation shares no line with the shipping `split_tie_rank`."""
+
+
+def _tie_rank_ref(tree_id: UInt32, node_id: UInt32, colid: UInt32) -> UInt32:
+    """DEVIATION 463's rank, INDEPENDENTLY transcribed: fnv1a32 from the
+    basis over (salt, tree, node, colid), then murmur3's fmix32. The oracle
+    computes the same value through `split_tie_salt_for` + `split_tie_rank`;
+    two expressions of one arithmetic, the way `split_reduce_check` holds
+    `oracle_rank` against the kernel."""
+    var h = UInt32(2166136261)
+    var words = [_TIE_SALT, tree_id, node_id, colid]
+    for w in range(len(words)):
+        for b in range(4):
+            h = (h ^ ((words[w] >> UInt32(8 * b)) & 0xFF)) * UInt32(16777619)
+    h = (h ^ (h >> 16)) * 0x85EBCA6B
+    h = (h ^ (h >> 13)) * 0xC2B2AE35
+    return h ^ (h >> 16)
 
 
 # ==========================================================================
@@ -449,7 +473,32 @@ def check_hashed_classification() raises -> Int:
             else:
                 var lhs = Int128(num) * Int128(best_den)
                 var rhs = Int128(best_num) * Int128(den)
-                if lhs > rhs:
+                var wins = lhs > rhs
+                if lhs == rhs:
+                    # An EXACT rational tie between two features. This branch
+                    # used to be dead by luck: the check kept the FIRST tied
+                    # feature (strict `>` only) and no draw before DEVIATION
+                    # 465 produced a tie on this fixture. 465's salted keys
+                    # re-rolled every threshold, the hashed/gini fixture then
+                    # tied features 0 and 4 exactly at one node, and the
+                    # first-wins shortcut disagreed with the SPEC -- which is
+                    # DEVIATION 463's keyed rank: the GREATER rank over
+                    # (tree=11, this node, colid) wins, re-derived here by
+                    # `_tie_rank_ref`, not read back from the oracle. On a
+                    # rank COLLISION (a 2^-32 event between distinct colids)
+                    # the spec falls to the colid arm, where the ascending
+                    # `ci` scan's newcomer is always the greater -- hence
+                    # `>=`. Under the `MOJOLEARN_ET_TIE_MAX_COLID` build the
+                    # higher colid wins outright, again the newcomer.
+                    comptime if ET_TIE_BREAK_KEYED:
+                        wins = _tie_rank_ref(
+                            UInt32(11), UInt32(Int(node_id)), UInt32(ci)
+                        ) >= _tie_rank_ref(
+                            UInt32(11), UInt32(Int(node_id)), UInt32(best_ref)
+                        )
+                    else:
+                        wins = True
+                if wins:
                     best_ref = ci
                     best_num = num
                     best_den = den
@@ -577,7 +626,24 @@ def check_hashed_regression() raises -> Int:
             )
             cells += 1
 
-            if best_ref < 0 or t.mse_proxy() > best_proxy:
+            var take_mse = best_ref < 0 or t.mse_proxy() > best_proxy
+            if best_ref >= 0 and t.mse_proxy() == best_proxy:
+                # The same tie rule as the gini section above (DEVIATION
+                # 463), tree id 4 here. A float MSE-proxy tie on hashed data
+                # is a measure-zero event, but the check's independent argmax
+                # must still carry the spec's tie order, not first-wins.
+                comptime if ET_TIE_BREAK_KEYED:
+                    # `>=` for the same rank-collision fallback as the gini
+                    # section: the ascending scan's newcomer holds the
+                    # greater colid.
+                    take_mse = _tie_rank_ref(
+                        UInt32(4), UInt32(Int(node_id)), UInt32(ci)
+                    ) >= _tie_rank_ref(
+                        UInt32(4), UInt32(Int(node_id)), UInt32(best_ref)
+                    )
+                else:
+                    take_mse = True
+            if take_mse:
                 best_ref = ci
                 best_proxy = t.mse_proxy()
 
@@ -850,13 +916,18 @@ def check_mixed_constants() raises -> Int:
 
 
 # ==========================================================================
-# 6. The tie-break: two bit-identical features, both drawn into the gap
+# 6. The tie-break: two bit-identical features, both drawn into the gap.
+#    The expected winner is DEVIATION 463's keyed rank (the max-colid rule
+#    only under the MOJOLEARN_ET_TIE_MAX_COLID build); this assertion read
+#    `colid == 1` verbatim until the 2026-08-26 check round.
 # ==========================================================================
 
 
 def check_tie_break() raises -> Int:
-    print("[tie] duplicate features, exact tie, greater colid wins")
+    print("[tie] duplicate features, exact tie, the keyed rank picks")
     var cells = 0
+    var wins0 = 0
+    var wins1 = 0
     var fix = analytic_tie_pair(0x99)
     var box = Box(fix.data, True, False)
     var dataset = box.view()
@@ -895,17 +966,45 @@ def check_tie_break() raises -> Int:
                 0,
                 "the exact comparator must call it a tie",
             )
-            # `split.cuh:80-89`: on an equal score the GREATER colid wins.
+            # DEVIATION 463: on an exact tie the GREATER keyed rank over
+            # (tree, node 0, colid) wins -- re-derived here by
+            # `_tie_rank_ref`, NOT read back from the oracle. The winner
+            # flips with the tree id, which is the uniform-among-ties
+            # property the rule exists for, made visible; `wins0`/`wins1`
+            # report the split. `split.cuh:80-89`'s max-colid arm (this
+            # assertion's pre-463 expectation, colid 1 always) is the
+            # expectation only under the `MOJOLEARN_ET_TIE_MAX_COLID`
+            # build. A rank collision (a 2^-32 event) falls to the colid
+            # arm, where 1 wins -- hence `>=` on rank 1's side.
+            var want_col = 1
+            comptime if ET_TIE_BREAK_KEYED:
+                var r0 = _tie_rank_ref(UInt32(tree), UInt32(0), UInt32(0))
+                var r1 = _tie_rank_ref(UInt32(tree), UInt32(0), UInt32(1))
+                if r0 > r1:
+                    want_col = 0
             assert_equal(
-                Int(res.split.colid), 1, "greater colid wins the tie"
+                Int(res.split.colid),
+                want_col,
+                "the tie's winner, re-derived from the keyed rank",
             )
+            if want_col == 1:
+                wins1 += 1
+            else:
+                wins0 += 1
+            var want_thr = b.threshold if want_col == 1 else a.threshold
             assert_equal(
                 res.split.quesval.to_bits(),
-                b.threshold.to_bits(),
+                want_thr.to_bits(),
                 "and carries ITS threshold, not the other's",
             )
             cells += 5
     assert_true(ties >= 8, "not enough double-in-gap draws to test the tie")
+    print(
+        "    keyed tie winners across the double-in-gap trees: colid 0 won",
+        wins0,
+        ", colid 1 won",
+        wins1,
+    )
 
     # The `quesval` arm of the total order (`split.cuh:86-88`) can only fire
     # on EQUAL colids, which a sampler never produces. Supplying the same

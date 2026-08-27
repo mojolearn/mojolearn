@@ -137,7 +137,13 @@ yr = X[:, 1].astype(np.float32)
 
 # CLASSIFIER, gpu arm vs cpu arm: the lane's device_forest_check proves the
 # two forests bit-identical, so the wrapper must agree everywhere.
-kw = dict(n_estimators=3, max_depth=6, random_state=7)
+# TEN trees, not three. At n_estimators=3 the 0.9 accuracy bar below is a
+# property of the SEED, not of the code: measured 2026-08-27 (variance
+# probe, DEVIATION 465's rollout), 4 of 20 random_states score below 0.9
+# on a correct build, and any change to the threshold RNG stream re-rolls
+# that die. At 10 trees every probed seed clears it with margin while the
+# fixture stays milliseconds.
+kw = dict(n_estimators=10, max_depth=6, random_state=7)
 pg = et.ExtraTreesClassifier(device="gpu", **kw).fit(X, yc)
 pc = et.ExtraTreesClassifier(device="cpu", **kw).fit(X, yc)
 if not np.array_equal(pg.predict(X), pc.predict(X)):

@@ -128,6 +128,7 @@ from extratrees.ported.decisiontree.batched_levelalgo.split import (
     split_reduce_init_kernel,
     split_reduce_kernel,
     split_reduce_shared_bytes,
+    split_tie_salt_for,
     SPLIT_SAB_NONE,
 )
 from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels import (
@@ -190,22 +191,50 @@ comptime TREE_ID = 9
 comptime SEED: UInt64 = 0xB0A710A5
 
 comptime BIG_NODE = 1
-"""The node whose labels leave the fixed-point slot in the second plane. It has
-THREE rows, so every split of it is 1|2 or 2|1 and every one of them puts a
-sum outside the slot -- a predictable refusal set."""
+"""The node whose labels leave the fixed-point slot in the second plane. It
+has THREE rows, so every split of it is 1|2 or 2|1 -- equivalently, every
+split ISOLATES exactly one row `x` on one side, giving side sums `x` and
+`sT - x` and `|A| = |3x - sT|` (A = sl*nr - sr*nl, either orientation).
+With the poison below (`sT = 0`), isolating EITHER big-labeled row puts
++/-BIG_POS on BOTH sides (outside the slot: refused) and wraps the
+unguarded numerator; isolating the zero-labeled row gives 0|0 (inside the
+slot: it scores, with a zero key). Which row a column isolates is decided
+by the DRAW, so the refusal/wrap set is 2-of-3 per cell by construction,
+not universal -- the pre-463-round comment claimed every split refuses,
+which was false even for the old values (a lone -1070000000 side sat
+INSIDE the 2^30 slot)."""
 
 comptime OVER_SLOT: Int32 = 1200000000
 """Just over the `2^30` slot and nowhere near a wrap: the refusal must be a
 PRECONDITION test, not an overflow test."""
 
-comptime BIG_POS: Int32 = 2140000000
-comptime BIG_NEG: Int32 = -1070000000
-"""Just inside `Int32` so the ACCUMULATION is still sound and only the KEY's
+comptime BIG_POS: Int32 = 2066666667
+comptime BIG_NEG: Int32 = -2066666667
+comptime BIG_THIRD: Int32 = 0
+"""Inside `Int32` so the ACCUMULATION is still sound and only the KEY's
 precondition is violated -- otherwise the sabotage would be testing the wrong
-thing. At three rows these also make the unguarded numerator actually WRAP
-(|A| reaches 6.42e9, `|A| >> 1` is 3.21e9, and its square is 1.03e19 against
-Int64's 9.22e18), so DEVIATION 193's guard is observed catching a wrap rather
-than an inconvenience."""
+thing.
+
+THE WRAP, DERIVED RATHER THAN TUNED (re-derived after DEVIATION 465
+re-rolled every draw and the old poison stopped wrapping). At three rows a
+split isolates one row `x`, and with `sT = BIG_POS + BIG_NEG + BIG_THIRD =
+0` the numerator magnitude is `|A| = |3x|`. The wrap bound is `(|A| >> j)^2
+> Int64.MAX` with `j = 1` at three rows, i.e. `|A| >= 6074001000`
+(`3037000500^2` is the first square past 2^63 - 1). Isolating either big
+row gives `|A| = 3 * 2066666667 = 6200000001 >= 6074001000`, so the
+unguarded numerator is `3100000000^2 = 9.61e18`, which wraps to the
+NEGATIVE Int64 `-8836744073709551616`; the same isolation puts
+`+/-2066666667 > 2^30` on BOTH sides, so the shipping arm REFUSES exactly
+those cells. Only isolating the zero row (sides 0|0) neither refuses nor
+wraps. An all-three-rows poison is IMPOSSIBLE: the three `A` values `3x_i -
+sT` sum to zero, so two of them would have to carry opposite signs at >=
+6.074e9 each while every label stays inside Int32 -- the required spread
+exceeds `6 * Int32.MAX / 3`. Two-of-three is the maximum, and DEVIATION
+193's guard is still observed catching a REAL wrap, not an inconvenience.
+(The old values 2140000000 / -1070000000 wrapped only when a draw isolated
+the ONE positive row; DEVIATION 465's draws never do at this seed --
+verified cell by cell in exact arithmetic -- which is why the guard's wrap
+arm went red on 2026-08-26.)"""
 
 
 def _vendor() -> String:
@@ -491,8 +520,17 @@ def main() raises:
     # is a branch, and an unchecked branch is an unreached branch.
     var labels_big = labels_q.copy()
     var big_begin = Int(ranges[BIG_NODE].begin)
-    labels_big[Int(row_ids[big_begin])] = BIG_POS
-    labels_big[Int(row_ids[big_begin + 1])] = BIG_NEG
+    # The two BIG labels sit on positions begin+1 and begin+2, the zero on
+    # begin+0: any column that isolates begin+1 or begin+2 refuses AND (once
+    # unguarded) wraps -- see BIG_POS's docstring for the derivation -- and
+    # under the current DEVIATION-465 draws the four scored columns of this
+    # node isolate begin+2 three times and begin+1 once (recomputed in exact
+    # arithmetic from the drawn thresholds), so all four refused cells wrap.
+    # Position begin+0 is the one no current draw isolates; parking the zero
+    # there is verified placement of the 2-of-3 construction, not its
+    # substance.
+    labels_big[Int(row_ids[big_begin])] = BIG_THIRD
+    labels_big[Int(row_ids[big_begin + 1])] = BIG_POS
     labels_big[Int(row_ids[big_begin + 2])] = BIG_NEG
     # And ONE row of node 0, just over the slot. Node 1 makes the numerator
     # actually WRAP; this one makes the guard refuse WITHOUT a wrap, which is
@@ -1460,8 +1498,10 @@ def main() raises:
     var host_best = List[SplitExact]()
     for nid in range(n_nodes):
         var acc = SplitExact()
+        # DEVIATION 463: the same per-node rank salt the launch below stages.
+        var ts = split_tie_salt_for(UInt32(TREE_ID), UInt32(nid))
         for fslot in range(N_COLS):
-            _ = acc.update(cand[nid * N_COLS + fslot], SPLIT_SAB_NONE)
+            _ = acc.update(cand[nid * N_COLS + fslot], SPLIT_SAB_NONE, ts)
         host_best.append(acc)
 
     var n_c = len(cand)
@@ -1484,6 +1524,7 @@ def main() raises:
     var e_mx = ctx.enqueue_create_buffer[DType.int32](n_nodes)
     var e_nb = ctx.enqueue_create_buffer[DType.int32](n_nodes)
     var e_nc = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+    var e_ts = ctx.enqueue_create_buffer[DType.uint32](n_nodes)
 
     var t_q = ctx.enqueue_create_host_buffer[DType.float32](n_c)
     var t_c = ctx.enqueue_create_host_buffer[DType.int32](n_c)
@@ -1494,6 +1535,7 @@ def main() raises:
     var t_v = ctx.enqueue_create_host_buffer[DType.int32](n_c)
     var t_nb = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
     var t_nc = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
+    var t_ts = ctx.enqueue_create_host_buffer[DType.uint32](n_nodes)
     ctx.synchronize()
     for i in range(n_c):
         t_q.unsafe_ptr().unsafe_store(i, cand[i].split.quesval)
@@ -1506,6 +1548,9 @@ def main() raises:
     for i in range(n_nodes):
         t_nb.unsafe_ptr().unsafe_store(i, Int32(i * N_COLS))
         t_nc.unsafe_ptr().unsafe_store(i, Int32(N_COLS))
+        t_ts.unsafe_ptr().unsafe_store(
+            i, split_tie_salt_for(UInt32(TREE_ID), UInt32(i))
+        )
     ctx.enqueue_copy(dst_buf=c_q, src_ptr=t_q.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=c_c, src_ptr=t_c.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=c_m, src_ptr=t_m.unsafe_ptr())
@@ -1515,6 +1560,7 @@ def main() raises:
     ctx.enqueue_copy(dst_buf=c_v, src_ptr=t_v.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=e_nb, src_ptr=t_nb.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=e_nc, src_ptr=t_nc.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=e_ts, src_ptr=t_ts.unsafe_ptr())
     ctx.enqueue_memset(e_mx, Int32(0))
     ctx.synchronize()
 
@@ -1552,6 +1598,7 @@ def main() raises:
         c_v.unsafe_ptr(),
         e_nb.unsafe_ptr(),
         e_nc.unsafe_ptr(),
+        e_ts.unsafe_ptr(),
         Int32(1),
         Int32(SPLIT_SAB_NONE),
         grid_dim=(1, n_nodes, 1),
@@ -1570,6 +1617,13 @@ def main() raises:
     ctx.enqueue_copy(dst_buf=u_de, src_buf=e_de)
     ctx.enqueue_copy(dst_buf=u_v, src_buf=e_v)
     ctx.synchronize()
+
+    # Mojo frees a buffer at its LAST USE, and the salt buffers' last natural
+    # uses are an enqueue (`e_ts` at the launch, `t_ts` at its copy) -- hold
+    # both past the drain so the queued reads cannot outlive them, exactly as
+    # `d_tree_ids`/`h_tree_ids` are held above.
+    _ = e_ts^
+    _ = t_ts^
 
     var e_bad = 0
     var e_real = 0
@@ -1595,6 +1649,18 @@ def main() raises:
             or u_v.unsafe_ptr().unsafe_load(nid) != w.key.valid
         ):
             e_bad += 1
+            # How many candidates tie the host winner's key exactly: a
+            # mismatch with `tied > 1` is the KEYED TIE-BREAK (DEVIATION
+            # 463) disagreeing between host and device -- since both call
+            # the same `keyed_tie_wins` on the same staged salt, that
+            # specifically means the kernel did not read the salt this
+            # check staged; a mismatch with `tied == 1` is the reduction
+            # itself.
+            var tied = 0
+            for fslot in range(N_COLS):
+                var cc = cand[nid * N_COLS + fslot].copy()
+                if cc.key.valid != 0 and compare_exact_key(cc.key, w.key) == 0:
+                    tied += 1
             print(
                 "  WINNER MISMATCH node",
                 nid,
@@ -1606,6 +1672,8 @@ def main() raises:
                 w.split.colid,
                 "num",
                 w.key.num,
+                "| candidates tying the host winner's key:",
+                tied,
             )
     if e_bad == 0:
         print(
@@ -1637,10 +1705,12 @@ def main() raises:
     var blind = List[SplitExact]()
     for nid in range(n_nodes):
         var acc = SplitExact()
+        var ts = split_tie_salt_for(UInt32(TREE_ID), UInt32(nid))
         for fslot in range(N_COLS):
             var c = cand[nid * N_COLS + fslot].copy()
+            # No key -> the salt is inert; the fold is Split.update exactly.
             _ = acc.update(
-                SplitExact(c.split, ExactKey()), SPLIT_SAB_NONE
+                SplitExact(c.split, ExactKey()), SPLIT_SAB_NONE, ts
             )
         blind.append(acc)
     var differs = 0

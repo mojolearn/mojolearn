@@ -74,7 +74,12 @@ from extratrees.ported.decisiontree.batched_levelalgo.objectives import (
     MSEObjectiveFunction,
     impurity_improvement,
 )
-from extratrees.ported.decisiontree.batched_levelalgo.split import Split
+from extratrees.ported.decisiontree.batched_levelalgo.split import (
+    ET_TIE_BREAK_KEYED,
+    Split,
+    keyed_tie_wins,
+    split_tie_salt_for,
+)
 from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels import (
     NodeWorkItem,
 )
@@ -384,6 +389,14 @@ struct HostSplitResult[dtype: DType](Copyable, Movable):
     """`len(colids)`. Their `n_visited_features` (`:556`, `:578`) counts the
     same thing under DEVIATION 151."""
 
+    var n_tied_best: Int32
+    """DEVIATION 463's exact-tie counter: how many SCORED candidates' selection
+    key exactly ties the winner's (the winner itself included), so `>= 2`
+    means this node's split was decided by the tie-break arm and not by the
+    key. The key is the exact rational for classification and the float proxy
+    for MSE. `0` when no candidate was scored. The exact-tie RATE a caller
+    reports is `count(n_tied_best >= 2) / count(found)` over nodes."""
+
     var impurity_parent: Scalar[Self.dtype]
     """`criterion.node_impurity()` over the node's totals. Zero when no split
     was found."""
@@ -435,25 +448,29 @@ def _empty_candidate[
     )
 
 
-def _wins_on_total_order(cand: Split, best: Split) -> Bool:
-    """cuML `split.cuh:76-90` WITHOUT its first test, which the caller has
-    already resolved.
+def _wins_on_total_order(cand: Split, best: Split, tie_salt: UInt32) -> Bool:
+    """The tie order below the selection key, which the caller has already
+    resolved (the exact rational for Gini, DEVIATION 145; sklearn's proxy for
+    MSE, DEVIATION 153).
 
-    Their chain is: greater metric wins; equal metric, greater `colid` wins;
-    equal `colid`, greater `quesval` wins. The caller here has decided the
-    first arm with a comparator that is NOT `best_metric_val` -- the exact
-    rational for Gini (DEVIATION 145), sklearn's proxy for MSE (DEVIATION
-    153) -- so what remains is arms two and three, transcribed.
+    DEVIATION 463: the shipping tie order is the keyed pseudorandom rank of
+    `split.mojo::keyed_tie_wins` -- CALLED, not transcribed, so host and
+    device cannot drift -- with `tie_salt = split_tie_salt_for(tree_id,
+    node_id)` computed once per node by the callers above. sklearn's own tie
+    semantics are first-in-a-uniformly-random-visit-order, i.e. uniform among
+    the tied; the keyed rank reproduces the uniformity without depending on a
+    visit order this parallel formulation does not have. The pre-463 arm --
+    cuML `split.cuh:85`/`88`, greater `colid` then greater `quesval`, a
+    systematic bias toward high column ids -- is kept below under
+    `MOJOLEARN_ET_TIE_MAX_COLID` for the A/B.
 
-    THIS IS THE SUBSTITUTION DEVIATION 145 MANDATES, spelled out because it
-    is easy to get wrong by calling `Split.update` instead: `update`'s first
-    test is `other.best_metric_val > this->best_metric_val` on a `Float32`
-    that carries cuML's gain, and two candidates whose EXACT proxies differ
-    can round to the same `Float32`. Using `update` would then fall through
-    to the colid tie-break and pick by feature index -- a silent,
-    data-dependent divergence from sklearn's argmax, which is the whole thing
-    145 exists to prevent.
+    STILL NOT `Split.update`, and for DEVIATION 145's original reason:
+    `update`'s first test is the `Float32` metric, and two candidates whose
+    EXACT proxies differ can round to the same `Float32`; falling through it
+    would pick by rounding noise.
     """
+    comptime if ET_TIE_BREAK_KEYED:
+        return keyed_tie_wins(tie_salt, cand, best)
     if cand.colid > best.colid:
         return True
     if cand.colid == best.colid:
@@ -577,6 +594,7 @@ def node_split_random_gini[
                 best_exact=GiniProxyExact(0, 0, Int64(count), False),
                 n_constant=Int32(0),
                 n_visited=Int32(0),
+                n_tied_best=Int32(0),
                 impurity_parent=Scalar[dtype](0),
                 impurity_left=Scalar[dtype](0),
                 impurity_right=Scalar[dtype](0),
@@ -591,6 +609,10 @@ def node_split_random_gini[
     var best_exact = GiniProxyExact(0, 0, Int64(count), False)
     var best_index = -1
     var n_constant = 0
+
+    # DEVIATION 463: the tie order's per-node rank key, the SAME value the
+    # builder stages for the device reduction (`node_tie_salt`).
+    var tie_salt = split_tie_salt_for(UInt32(Int(tree_id)), node_id)
 
     var records = List[CandidateRecord[dtype]]()
 
@@ -703,7 +725,7 @@ def node_split_random_gini[
             if order > 0:
                 take = True
             elif order == 0:
-                take = _wins_on_total_order(cand, best)
+                take = _wins_on_total_order(cand, best, tie_salt)
         if take:
             best = cand
             best_exact = proxy_exact
@@ -774,6 +796,22 @@ def node_split_random_gini[
         )
         _ = hist_total.unsafe_ptr()
 
+    # DEVIATION 463's exact-tie tally: scored candidates whose exact key ties
+    # the winner's, winner included. Order-independent (a property of the
+    # candidate set, not of the fold), so a device check can recompute it.
+    var n_tied_best = 0
+    if best_index >= 0:
+        for i in range(len(records)):
+            if not records[i].scored:
+                continue
+            if (
+                GiniObjectiveFunction[dtype].CompareProxyExact(
+                    records[i].proxy_exact, best_exact
+                )
+                == 0
+            ):
+                n_tied_best += 1
+
     return HostSplitResult[dtype](
         split=best,
         found=best_index >= 0,
@@ -787,6 +825,7 @@ def node_split_random_gini[
         best_exact=best_exact,
         n_constant=Int32(n_constant),
         n_visited=Int32(len(colids)),
+        n_tied_best=Int32(n_tied_best),
         impurity_parent=impurity_parent,
         impurity_left=impurity_left,
         impurity_right=impurity_right,
@@ -840,6 +879,9 @@ def node_split_random_mse[
     var best_proxy = Scalar[dtype].MIN_FINITE
     var best_index = -1
     var n_constant = 0
+
+    # DEVIATION 463, exactly as in the Gini form above.
+    var tie_salt = split_tie_salt_for(UInt32(Int(tree_id)), node_id)
 
     var records = List[CandidateRecord[dtype]]()
 
@@ -919,7 +961,7 @@ def node_split_random_mse[
         elif proxy_float > best_proxy:
             take = True
         elif proxy_float == best_proxy:
-            take = _wins_on_total_order(cand, best)
+            take = _wins_on_total_order(cand, best, tie_salt)
         if take:
             best = cand
             best_proxy = proxy_float
@@ -974,6 +1016,16 @@ def node_split_random_mse[
             impurity_parent, impurity_left, impurity_right, wn, wtotal, wl, wr
         )
 
+    # DEVIATION 463's exact-tie tally, on the MSE key (the float proxy;
+    # DEVIATION 153 says there is no exact rational here).
+    var n_tied_best = 0
+    if best_index >= 0:
+        for i in range(len(records)):
+            if not records[i].scored:
+                continue
+            if records[i].proxy_float == best_proxy:
+                n_tied_best += 1
+
     return HostSplitResult[dtype](
         split=best,
         found=best_index >= 0,
@@ -987,6 +1039,7 @@ def node_split_random_mse[
         best_exact=GiniProxyExact(0, 0, Int64(count), False),
         n_constant=Int32(n_constant),
         n_visited=Int32(len(colids)),
+        n_tied_best=Int32(n_tied_best),
         impurity_parent=impurity_parent,
         impurity_left=impurity_left,
         impurity_right=impurity_right,

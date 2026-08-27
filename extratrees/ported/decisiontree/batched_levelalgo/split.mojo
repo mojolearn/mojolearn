@@ -50,6 +50,14 @@ this commit.
 # PRICE: on an exact tie we take a different feature than sklearn would. Ties
 #   are what the duplicate-feature analytic fixture exists to produce, so the
 #   behaviour is pinned by a check rather than left to chance.
+# AMENDED BY DEVIATION 463 (2026-08-26): the price above turned out to be
+#   PAID IN ACCURACY on covtype -- "greater colid wins" is a systematic bias
+#   toward high column ids, not a neutral coin. The shipping tie order is now
+#   the keyed pseudorandom rank of DEVIATION BLOCK 463 below; `Split.update`
+#   ITSELF is unchanged (it is cuML's transcription, `split_check`'s
+#   subject, and still the whole no-key reduction), and the max-colid rule
+#   stays reachable via `MOJOLEARN_ET_TIE_MAX_COLID` /
+#   `SPLIT_SAB_MAX_COLID_TIE` so this block's gate keeps its subject.
 # ==========================================================================
 
 
@@ -353,8 +361,94 @@ from std.atomic import Atomic, Ordering
 from std.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, lane_id, thread_idx
 from std.gpu.primitives import warp
 from std.memory import stack_allocation
+from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+
+from extratrees.mojo_only.pcg_rng import FNV1A32_BASIS, fmix32, fnv1a32
+
+
+# ==========================================================================
+# DEVIATION BLOCK 463 -- on an EXACT tie the winner is a keyed pseudorandom
+# rank over (tree, node, colid), not the highest column id
+#
+# THEIRS (sklearn, `_splitter.pyx:693`): strict `>`, so a tie goes to the
+#   FIRST candidate in a uniformly-random visit order -- which makes the
+#   tied winner UNIFORM AMONG THE TIED, per node, per draw.
+# OURS UNTIL 2026-08-26: cuML's `colid` arm -- every exact tie resolved
+#   toward the HIGHEST column id, deterministically, tree after tree. Our
+#   exact integer rational (DEVIATION 145) makes ties REAL events, and on
+#   covtype (44 one-hot indicator columns at ids 10-53, 10 continuous ones
+#   at 0-9) the max-colid rule systematically funneled every tied node into
+#   the one-hot block: 0.6701 against sklearn's 0.6768 at depth 16.
+# NOW: on `compare_exact_key(...) == 0` (both keys valid), challengers are
+#   ranked by `split_tie_rank` -- `fmix32(fnv1a32(tie_salt, colid))` with
+#   `tie_salt` chained from `(SPLIT_TIE_SALT, tree_id, node_id)` -- and the
+#   GREATEST rank wins; only a rank collision falls back to the colid arm
+#   (then quesval), so the order stays TOTAL and the reduction stays
+#   order-independent. Uniform-among-ties in sklearn's sense, deterministic
+#   from `(seed-independent) (tree, node, colid)` alone, identical on host
+#   (`host_splitter._wins_on_total_order`) and device (this file), integer
+#   math only, so the IDENTICAL cross-vendor mode is untouched.
+# ARMS: comptime `-D MOJOLEARN_ET_TIE_MAX_COLID=1` restores the max-colid
+#   rule build-wide (host AND device together, so oracle parity holds in
+#   both builds); runtime `SPLIT_SAB_MAX_COLID_TIE` restores it in the
+#   shipping binary for the reduce check, so DEVIATION 133's
+#   reproducibility gate keeps its subject. The NO-KEY degeneration
+#   (DEVIATION 166: both keys invalid) is untouched and still reduces by
+#   `Split.update` exactly -- cuML's own chain -- because no shipping
+#   caller reaches it (device regression carries valid keys, DEVIATION
+#   189) and `split_reduce_check` arm A' pins that shape by name.
+# ==========================================================================
+
+comptime ET_TIE_BREAK_KEYED = not is_defined["MOJOLEARN_ET_TIE_MAX_COLID"]()
+"""DEVIATION 463's build switch. Default: keyed rank. `-D
+MOJOLEARN_ET_TIE_MAX_COLID=1`: the pre-463 max-colid tie-break, everywhere."""
+
+comptime SPLIT_TIE_SALT: UInt32 = 0x7B31C853
+"""DEVIATION 463's salt. Fresh constant (grep: used nowhere else), declared
+the way `EXCESS_SELECTION_SALT` and `THRESHOLD_KEY_SALT` are, so the rank
+stream is disjoint from every other fnv1a32 stream in the tree."""
+
+
+def split_tie_salt_for(tree_id: UInt32, node_id: UInt32) -> UInt32:
+    """The per-node half of DEVIATION 463's rank key, computed ONCE per node.
+
+    `fnv1a32(fnv1a32(fnv1a32(BASIS, SPLIT_TIE_SALT), tree_id), node_id)`.
+    Host and device must call THIS function -- the builder stages one value
+    per work item (`node_tie_salt`), the host splitter computes it at the
+    top of the node loop -- so the rule cannot drift between the two.
+    """
+    var h = fnv1a32(FNV1A32_BASIS, SPLIT_TIE_SALT)
+    h = fnv1a32(h, tree_id)
+    return fnv1a32(h, node_id)
+
+
+def split_tie_rank(tie_salt: UInt32, colid: Int32) -> UInt32:
+    """DEVIATION 463's rank: one more fnv1a32 round for the column, then the
+    `fmix32` avalanche (DEVIATION 464's lesson: an un-finalized fnv chain on
+    a small word is a Weyl rotation, not a permutation)."""
+    return fmix32(fnv1a32(tie_salt, colid.cast[DType.uint32]()))
+
+
+def keyed_tie_wins(tie_salt: UInt32, cand: Split, best: Split) -> Bool:
+    """Does `cand` beat `best` under DEVIATION 463's tie order?
+
+    Greatest `split_tie_rank` wins; a rank collision falls back to the colid
+    arm and then the quesval arm (cuML `split.cuh:85`, `:88`), so the
+    relation is a total order on the same boundary DEVIATION 154 recorded.
+    ONE copy: `SplitExact.update` and `host_splitter._wins_on_total_order`
+    both call this function rather than transcribing it.
+    """
+    var rc = split_tie_rank(tie_salt, cand.colid)
+    var rb = split_tie_rank(tie_salt, best.colid)
+    if rc != rb:
+        return rc > rb
+    if cand.colid > best.colid:
+        return True
+    if cand.colid == best.colid:
+        return cand.quesval > best.quesval
+    return False
 
 
 # Sabotage selectors. A kernel ARGUMENT and not a comptime parameter, for the
@@ -402,6 +496,14 @@ comptime SPLIT_SAB_BLOCK0_ONLY = 7
 """Publish only from block 0, so a node served by several blocks sees one
 block's slice. Nothing in cuML corresponds; it is the cross-BLOCK counterpart
 of NO_CROSS_WARP."""
+
+comptime SPLIT_SAB_MAX_COLID_TIE = 8
+"""Restore the pre-463 tie-break: on an exact key tie the HIGHEST column id
+wins outright, no keyed rank. This is the arm DEVIATION 133's reproducibility
+gate keeps as its subject, and the arm the orchestrator A/Bs against the
+keyed rule; on covtype it is the one that funnels ties into the one-hot
+columns. Inert when the build itself selects the old rule
+(`MOJOLEARN_ET_TIE_MAX_COLID`)."""
 
 
 @fieldwise_init
@@ -538,17 +640,21 @@ struct SplitExact(ImplicitlyCopyable, Movable):
         self.split = Split()
         self.key = ExactKey()
 
-    def update(mut self, other: Self, sabotage: Int32) -> Bool:
+    def update(mut self, other: Self, sabotage: Int32, tie_salt: UInt32) -> Bool:
         """Their `update` (`split.cuh:76-90`) with the exact key ahead of it.
 
-        The chain is: exact rational first; on an exact tie, `Split.update`'s
-        own three arms, IN THEIR CODE and not transcribed again -- the copy
-        below exists only so that this function can use the boolean their
-        function returns as a predicate and then assign the WHOLE payload,
-        key included. Returns whether the update happened, as theirs does.
+        The chain is: exact rational first; on an exact tie, DEVIATION 463's
+        keyed rank (falling back to colid, then quesval); with no rational at
+        all, `Split.update`'s own three arms, IN THEIR CODE and not
+        transcribed again -- the copy below exists only so that this function
+        can use the boolean their function returns as a predicate and then
+        assign the WHOLE payload, key included. Returns whether the update
+        happened, as theirs does.
 
-        `sabotage` selects the arms; `SPLIT_SAB_NONE` is the shipping path
-        and is the only arm that reaches `Split.update` untouched.
+        `tie_salt` is `split_tie_salt_for(tree_id, node_id)`, block-uniform
+        within one node's reduction; it only matters on an exact tie between
+        two VALID keys. `sabotage` selects the arms; `SPLIT_SAB_NONE` is the
+        shipping path.
         """
         var c = compare_exact_key(other.key, self.key)
         if sabotage == SPLIT_SAB_FLOAT_KEY:
@@ -640,8 +746,18 @@ struct SplitExact(ImplicitlyCopyable, Movable):
                 ):
                     # BOTH rationals are valid and EQUAL, so the true gains
                     # are equal and any float difference is noise: skip the
-                    # metric arm.
-                    if other.split.colid > self.split.colid:
+                    # metric arm. DEVIATION 463: the keyed rank decides the
+                    # tie (colid, then quesval, only on a rank collision);
+                    # the comptime switch and the MAX_COLID_TIE sabotage arm
+                    # keep the pre-463 max-colid rule reachable.
+                    var keyed = False
+                    comptime if ET_TIE_BREAK_KEYED:
+                        keyed = sabotage != SPLIT_SAB_MAX_COLID_TIE
+                    if keyed:
+                        update_result = keyed_tie_wins(
+                            tie_salt, other.split, self.split
+                        )
+                    elif other.split.colid > self.split.colid:
                         update_result = True
                     elif other.split.colid == self.split.colid:
                         if other.split.quesval > self.split.quesval:
@@ -661,7 +777,9 @@ struct SplitExact(ImplicitlyCopyable, Movable):
         return update_result
 
 
-def split_warp_reduce(s: SplitExact, sabotage: Int32) -> SplitExact:
+def split_warp_reduce(
+    s: SplitExact, sabotage: Int32, tie_salt: UInt32
+) -> SplitExact:
     """`Split::warpReduce`, `split.cuh:92-105`. DEVIATION BLOCK 168.
 
     A butterfly over the TARGET's `WARP_SIZE`, seven shuffles a step. Every
@@ -687,7 +805,7 @@ def split_warp_reduce(s: SplitExact, sabotage: Int32) -> SplitExact:
                 warp.shuffle_xor(acc.key.valid, off),
             ),
         )
-        _ = acc.update(other, sabotage)
+        _ = acc.update(other, sabotage, tie_salt)
         off //= 2
     return acc
 
@@ -758,10 +876,16 @@ def split_reduce_kernel[
     cand_valid: MutPointer[Int32, MutAnyOrigin],
     node_begin: MutPointer[Int32, MutAnyOrigin],
     node_count: MutPointer[Int32, MutAnyOrigin],
+    node_tie_salt: MutPointer[UInt32, MutAnyOrigin],
     blocks_per_node_in: Int32,
     sabotage_in: Int32,
 ):
     """The best candidate per node, reduced on device. `split.cuh:92-152`.
+
+    `node_tie_salt[nid]` is `split_tie_salt_for(tree_id, node_id)` for the
+    node this cell reduces -- DEVIATION 463's per-node rank key, staged by
+    the caller (the builder computes it in `stage_batch` from the SAME
+    `(item_trees[i], work_items[i].idx)` the host oracle keys on).
 
     GRID. `grid_dim = (blocks_per_node, n_nodes)`, `block_dim = TPB`.
     `block_idx.y` is the node -- the cell -- and `block_idx.x` is which slice
@@ -798,6 +922,7 @@ def split_reduce_kernel[
     var sab = sabotage_in
     var begin = Int(node_begin[unsafe_offset=nid])
     var count = Int(node_count[unsafe_offset=nid])
+    var tie_salt = node_tie_salt[unsafe_offset=nid]
     var bpn = Int(blocks_per_node_in)
 
     # The per-thread fold. Their `computeSplitKernel` walks the bins of one
@@ -821,12 +946,12 @@ def split_reduce_kernel[
                 cand_valid[unsafe_offset=i],
             ),
         )
-        _ = acc.update(cand, sab)
+        _ = acc.update(cand, sab, tie_salt)
         i += stride
 
     # ---- `Split::evalBestSplit`, `split.cuh:107-152` ----------------------
     # `:120` -- warpReduce().
-    acc = split_warp_reduce(acc, sab)
+    acc = split_warp_reduce(acc, sab, tie_salt)
 
     var lane = Int(lane_id())
     var warp_id = Int(thread_idx.x) // WARP_SIZE
@@ -902,7 +1027,7 @@ def split_reduce_kernel[
         var n_contrib = warp.sum(mine)
 
         # `:132` -- warpReduce() again.
-        acc = split_warp_reduce(acc, sab)
+        acc = split_warp_reduce(acc, sab, tie_salt)
 
         # `:134` -- `if (threadIdx.x == 0 && this->colid != -1)`.
         if Int(thread_idx.x) == 0 and acc.split.is_valid():
@@ -958,7 +1083,7 @@ def split_reduce_kernel[
                         spin += 1
 
                 # `:143-144` -- `bool update_result = split_reg.update({...})`.
-                var moved = cur.update(acc, sab)
+                var moved = cur.update(acc, sab, tie_salt)
                 if sab == SPLIT_SAB_INVERT_GUARD:
                     cur = acc
                     moved = not moved
@@ -988,3 +1113,55 @@ def split_reduce_kernel[
                     Atomic.store[ordering = Ordering.RELEASE](
                         mutexes.unsafe_offset(slot), Int32(0)
                     )
+
+
+def split_tie_count_kernel(
+    out_ties: MutPointer[Int32, MutAnyOrigin],
+    win_colid: MutPointer[Int32, MutAnyOrigin],
+    win_num: MutPointer[Int64, MutAnyOrigin],
+    win_den: MutPointer[Int64, MutAnyOrigin],
+    win_valid: MutPointer[Int32, MutAnyOrigin],
+    cand_num: MutPointer[Int64, MutAnyOrigin],
+    cand_den: MutPointer[Int64, MutAnyOrigin],
+    cand_valid: MutPointer[Int32, MutAnyOrigin],
+    node_begin: MutPointer[Int32, MutAnyOrigin],
+    node_count: MutPointer[Int32, MutAnyOrigin],
+    len: Int32,
+):
+    """DEVIATION 463's exact-tie counter, per node, AFTER the reduce.
+
+    `out_ties[nid]` = how many VALID candidates in the node's cell range
+    exactly tie the reduced winner's key under `compare_exact_key` (the
+    winner itself included), or 0 when the node has no valid winner. A value
+    `>= 2` means the tie-break arm -- not the key -- decided the node, so
+    `count(out_ties >= 2) / count(winner valid)` is the exact-tie RATE the
+    covtype audit pre-registered as high at depth 16. Order-independent (a
+    property of the candidate set), and the same quantity the host oracle
+    reports as `HostSplitResult.n_tied_best`. No cuML counterpart; launched
+    only under `-D MOJOLEARN_ET_TIE_STATS=1` (the builder's gate), so the
+    shipping fit pays nothing for it.
+    """
+    var nid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while nid < Int(len):
+        var ties = Int32(0)
+        if win_colid[unsafe_offset=nid] >= 0:
+            var wkey = ExactKey(
+                win_num[unsafe_offset=nid],
+                win_den[unsafe_offset=nid],
+                win_valid[unsafe_offset=nid],
+            )
+            var b = Int(node_begin[unsafe_offset=nid])
+            var e = b + Int(node_count[unsafe_offset=nid])
+            for i in range(b, e):
+                if cand_valid[unsafe_offset=i] == 0:
+                    continue
+                var ck = ExactKey(
+                    cand_num[unsafe_offset=i],
+                    cand_den[unsafe_offset=i],
+                    cand_valid[unsafe_offset=i],
+                )
+                if compare_exact_key(ck, wkey) == Int32(0):
+                    ties += 1
+        out_ties[unsafe_offset=nid] = ties
+        nid += stride

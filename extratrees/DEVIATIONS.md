@@ -93,14 +93,23 @@ there (`max <= min + FEATURE_THRESHOLD`, `_splitter.pyx:616-617`, with
 carried in the same `features` array the Fisher-Yates walk permutes, and the
 permutation IS the state. Reproducing it would serialize the frontier.
 
-**Price, and it is paid twice.** (a) Work: a constant feature is re-scanned at
-every descendant that samples it. The range pass is one gather-min/max, so the
-cost is bounded by the range pass itself; it is NOT re-scored, because a
-constant feature is excluded before the draw. (b) Behaviour: because sklearn
-excludes known constants from the DRAW, its effective `max_features` over
-non-constant features is larger than ours deep in the tree. This is a real
-quality difference on datasets with many constant columns and is what the
-adversarial constant-feature fixture exists to expose.
+**Price.** (a) Work: a constant feature is re-scanned at every descendant that
+samples it. The range pass is one gather-min/max, so the cost is bounded by the
+range pass itself; it is NOT re-scored, because a constant feature is excluded
+before the draw.
+
+**Price (b), RETRACTED 2026-08-26 by the covtype audit.** This entry used to
+claim that because sklearn excludes known constants from the DRAW, its
+effective `max_features` over non-constant features is larger than ours deep in
+the tree. Reading `node_split_random`'s loop guard against its draw shows
+otherwise: a KNOWN constant drawn again still consumes a visit
+(`n_drawn_constants` counts toward `n_visited_features`, `_splitter.pyx:
+573-577`, `:585-603`), so sklearn spends its per-node draw budget on known
+constants exactly like us. The only behavioural residue of inheritance is
+DEVIATION 151's fact (b) — the guard's second disjunct keeps drawing past
+`max_features` only while EVERY feature drawn so far was constant — which that
+entry already carries. The covtype gap this sentence was once suspected of
+explaining is DEVIATION 463's tie-break bias, not this.
 
 ---
 
@@ -118,6 +127,14 @@ colid the greater `quesval` wins.
 **Reason.** Loop order does not exist here (130). A total order over the
 candidate's own fields is the only tie-break that is reproducible when the
 candidates are reduced in an unspecified order, and cuML already wrote it.
+
+**AMENDED by DEVIATION 463 (2026-08-26).** The total-order requirement stands;
+the ORDER changed. "Greater colid wins" is a systematic bias, not a neutral
+choice, and it was measured costing accuracy on covtype. The shipping tie
+order is now a keyed pseudorandom rank over `(tree, node, colid)`; the
+max-colid rule survives as `MOJOLEARN_ET_TIE_MAX_COLID` /
+`SPLIT_SAB_MAX_COLID_TIE`, so this entry's reproducibility gate keeps its
+subject.
 
 ---
 
@@ -3586,3 +3603,211 @@ The 21-slot contract never shipped in a release, so no compatibility arm
 is kept.
 
 DEVIATION 462 is reserved and unused by this round.
+
+---
+
+## DEVIATION 463 -- exact ties resolve by a keyed pseudorandom rank, not by the highest column id
+
+**MOTIVATION, measured before any fix.** covtype (522,911 x 54, depth 16,
+`max_features=sqrt` -> 7, seed pinned both arms): our ET 0.6701 accuracy
+against sklearn's 0.6768. An audit of the three tie-adjacent seams found this
+one first and rated it the likely cause: DEVIATION 145's exact integer
+rational makes ties REAL, frequent events (integer class counts over
+duplicate-heavy columns collide exactly, not within-an-ulp), and every one of
+them resolved through cuML's `other.colid > colid` arm -- toward the HIGHEST
+column id. covtype's columns are 10 informative continuous ones at ids 0-9
+and 44 one-hot indicators at ids 10-53, so the max-colid rule systematically
+funneled tied nodes into the one-hot block, tree after tree, at every depth.
+sklearn's `>` at `_splitter.pyx:693` gives a tie to the FIRST candidate in a
+uniformly-random visit order -- uniform among the tied.
+
+**Ours now.** On `compare_exact_key(...) == 0` between two VALID keys,
+challengers are ranked by `split_tie_rank(tie_salt, colid) =
+fmix32(fnv1a32(tie_salt, colid))` with `tie_salt =
+split_tie_salt_for(tree_id, node_id)` (a fresh salt constant
+`SPLIT_TIE_SALT`, then tree, then node -- fnv1a32 throughout), and the
+GREATEST rank wins; a rank collision falls back to colid, then quesval, so
+the order stays TOTAL and the reduction stays blind to grouping and arrival
+order (DEVIATION BLOCK 166's argument is untouched). Uniform-among-ties in
+sklearn's sense, deterministic from `(tree, node, colid)` alone, pure integer
+math, identical on host and device -- the IDENTICAL cross-vendor mode is
+unaffected. One copy: `split.mojo::keyed_tie_wins`, CALLED by
+`SplitExact.update` and by `host_splitter._wins_on_total_order`. The device
+reduction gets the salt as a per-node kernel input (`node_tie_salt`, staged
+by `stage_batch` from the same `(item_trees[i], work_items[i].idx)` the host
+oracle keys on). The NO-KEY degeneration (both keys invalid, DEVIATION 166)
+is untouched: still `Split.update` exactly, still arm A's subject; no
+shipping caller reaches it (device regression carries valid MSE keys,
+DEVIATION 189).
+
+**Arms.** `-D MOJOLEARN_ET_TIE_MAX_COLID=1` rebuilds the OLD max-colid rule
+everywhere (host and device together, so oracle parity holds in both
+builds); `SPLIT_SAB_MAX_COLID_TIE` (= 8) restores it at runtime in the
+shipping reduce kernel for the checks. DEVIATION 133 is amended, not
+retired.
+
+**The counter, so the rate is a number and not an argument.** Host:
+`HostSplitResult.n_tied_best` -- scored candidates whose key exactly ties the
+winner's, winner included; `>= 2` means the tie-break arm decided the node.
+Device: `split_tie_count_kernel` (launched, with its readback and a
+per-batch `ET_TIE_STATS batch decided=<d> tied=<t>` print, only under
+`-D MOJOLEARN_ET_TIE_STATS=1`) computes the same per-node quantity from the
+reduced winner and the candidate arrays; the exact-tie RATE is
+`sum(tied)/sum(decided)` over the printed lines.
+
+**Pre-registered predictions (written before the A/B ran).** (1) The
+exact-tie rate on covtype is HIGH at depth 16 -- deep nodes are small and
+integer-count collisions dominate -- and the keyed arm's accuracy moves
+toward 0.6768 while `MOJOLEARN_ET_TIE_MAX_COLID` reproduces ~0.6701. (2) The
+per-tree structure changes on a large fraction of trees (any tied node
+cascades). If the rate comes back LOW, this entry's "likely cause" rating is
+wrong and must be re-argued against 464/465.
+
+**Price.** Two hash evaluations per exact-tie comparison (a handful of
+integer ops; ties only), 4 bytes per work item staged per batch, and one
+more kernel argument. Bit-compatibility with every pre-463 model is
+deliberately broken on any fit that ever hit an exact tie.
+
+**Gate.** `split_reduce_check` (oracle re-expressed independently as
+`oracle_rank`, fixture ties planted at the top, permutation arm B),
+`regression_score_check` arm E, `host_splitter_check` via the shared
+`_wins_on_total_order`, and the A/B above.
+
+**CHECK-ROUND ADDENDUM (2026-08-26, first Apple run of the merged branch).**
+Three checks went red and each taught something. (1) `split_reduce_check`,
+two arms: the planted tie group's colid classes were {singleton, pair, pair}
+and the per-node rank crowned the SINGLETON in three of five nodes
+(recomputed exactly from the rank arithmetic, not observed), so E1's
+quesval-decisiveness floor and the NO_QUESVAL sabotage's must-not-move cells
+both failed -- the fixture assumed max-colid would always crown a
+multi-member class. Fixed by planting TWO classes of THREE members each,
+decisive under any rank outcome and under the max-colid build alike. (2)
+`host_splitter_check`: its independent argmax broke exact-rational ties by
+FIRST-WINS (strict `>` only) -- dead code by luck until 465's re-rolled
+draws produced a real tie (features 0 and 4, hashed/gini fixture) that the
+keyed rule resolves to feature 4. The check now re-derives the rank in its
+own transcription (`_tie_rank_ref`). (3) `regression_score_check`, one arm:
+an exact host-side recomputation of every draw-dependent gate under the new
+chain (thresholds, statuses, keys, winners, pair orders -- validated against
+the run's own "20 scored cells" line) shows every floor passing and the
+reduce's host/device folds equal in exact arithmetic, so the remaining
+suspect is the new salt staging buffers' LIFETIME (freed at their last
+enqueue, the trap this repo documents and this very check already defends
+`d_tree_ids` against); both checks now hold their salt buffers past the
+drain, and the reduce arm's mismatch print now reports the tie multiplicity
+so a recurrence names its mechanism.
+
+**CHECK-ROUND 2 (2026-08-26, after the fixture fixes).** `split_reduce_check`
+went green; the regression red arm was then LOCATED: not the reduce at all,
+but the slot guard's WRAP arm. The old poison (2140000000 / -1070000000 /
+-1070000000) could only refuse-and-wrap when a draw ISOLATED the one
+positive row, and 465's re-rolled draws never do at this seed -- so all five
+refused cells were node 0's OVER_SLOT cells, whose numerators cannot reach
+the wrap bound (max `(|A| >> 5)^2 ~ 4.5e18 < 2^63`). The poison is now
+derived, not tuned: labels (+2066666667, -2066666667, 0) sum to zero, so a
+3-row split isolating row `x` has `|A| = |3x|`; either big row gives
+`|A| = 6200000001 >= 6074001000` (the first `(|A| >> 1)^2` past
+`Int64.MAX`) AND puts `> 2^30` on both sides -- refuse-and-wrap on 2 of 3
+rows, the provable maximum (the three `A`s sum to zero, so all three
+exceeding 6.074e9 in magnitude needs a spread Int32 labels cannot span).
+The zero label parks on the one position no current draw isolates (verified
+in exact arithmetic; placement, not substance). `host_splitter_check` had a
+SECOND verbatim old-rule assertion (`check_tie_break`: "greater colid wins
+the tie", colid 1 pinned); it now derives the expected winner per tree from
+the rank -- and reports the winner flipping with the tree id, which is the
+uniform-among-ties property made visible. A file-wide sweep found no other
+pinned tie winners (the analytic gap/step/145 sections all pin STRICT
+orders).
+
+---
+
+## DEVIATION 464 -- `excess_selection_hash` runs through a full-avalanche finalizer
+
+**The defect.** DEVIATION 215's fix ranked an overshoot's unique columns by
+`fnv1a32(fnv1a32(fnv1a32(fnv1a32(BASIS, SALT), tree), node), col)` and kept
+the `k` smallest by hash. For `col < 256` only the first byte round of the
+final step does anything; the three trailing zero-byte rounds collapse to an
+affine map `K + perm(col) * C mod 2^32` with `C = FNV1A32_PRIME^3`, and
+`C / 2^32` is within 2^-9 of 5/16 -- so ranking columns by this hash walks a
+~16-cluster Weyl rotation, not a random permutation. Every MARGINAL stays
+uniform (each column's inclusion rate is fine), but the JOINT k-of-uniques
+selection -- which columns co-occur in a node's candidate set -- is
+structured, on every node that takes the overshoot branch (~58% of covtype
+nodes at `(n=54, k=7)`).
+
+**The gate that missed it, named.** The sampler distribution gate
+(`sampler_kernel_check` section 8) only ever asserted `(n=28, k=5)`
+MARGINALS -- per-column counts in a +/-15% band. A marginal gate cannot see
+a joint distortion, which is why `SAMP_SAB_RAW_SELECTION_HASH` is documented
+as an arm that gate does NOT catch; a co-occurrence assertion is the missing
+gate and is left to the check's owner, on the record here.
+
+**Ours now.** The combined word runs through murmur3's `fmix32`
+(`pcg_rng.mojo`) after the FNV combine -- `h ^= h>>16; h *= 0x85ebca6b;
+h ^= h>>13; h *= 0xc2b2ae35; h ^= h>>16` -- a bijection, so marginals stay
+uniform and no collisions are introduced; the joint selection becomes what
+DEVIATION 215 claimed. Host and device share the one function, so the
+slot-for-slot host-vs-device control stays bit-identical in both builds.
+
+**Arms.** `-D MOJOLEARN_ET_RAW_SELECTION_HASH=1` rebuilds the un-finalized
+chain everywhere; `SAMP_SAB_RAW_SELECTION_HASH` (= 10) selects it at runtime
+in the device kernel (differs from the host oracle exactly on overshoot
+nodes).
+
+**Pre-registered prediction.** Column MARGINALS were fine before this fix
+and stay fine after it (the existing section-8 band moves by noise only);
+what moves is co-occurrence, and with it which candidate sets deep covtype
+nodes see. Expected accuracy contribution: smaller than 463's, possibly nil;
+it is a correctness fix for 215's stated claim either way.
+
+**Price.** Five integer ops per hash evaluation, only on the overshoot
+gather. Column sets change on every overshoot node, so pre-464 fits are not
+bit-reproducible under the default build.
+
+---
+
+## DEVIATION 465 -- `key_for` gets its own salt link; the threshold stream no longer collides with the sampler's
+
+**The invariant violation, one line.** `key_for` (pcg_rng.mojo) chained
+`fnv1a32(fnv1a32(fnv1a32(BASIS, feature_id), tree_id), node_id)`;
+`excess_subsequence` (builder_kernels.mojo) chains
+`fnv1a32(fnv1a32(fnv1a32(BASIS, thread_id), tree_id), node_id)`. For
+`feature_id == thread_id` -- covtype's informative columns 0-7 against the
+sampler's threads 0-7, every node -- the two produced the SAME PCG
+subsequence: the threshold draw and the sampler draw were correlated streams
+by construction. The surrounding comments already asserted disjointness
+(`excess_selection_hash`'s "the salt keeps this stream disjoint from
+`excess_subsequence`'s and `key_for`'s", `rescue.mojo`'s reserved-slot
+argument), and `key_for`'s own docstring said "We chain FOUR" over a body
+that chained three. The comments were right and the code was wrong; fixed in
+the code's direction that the comments describe.
+
+**Ours now.** `THRESHOLD_KEY_SALT` (fresh constant `0xA24BAED4`) is the
+FIRST link, making the chain actually four: salt, feature, tree, node. The
+stale docstring is rewritten. Every threshold in every fit changes;
+host and device move together because both call the one `key_for`.
+
+**The oracle pins moved with it.** `tools/rng_oracle/main.cpp::key_chain`
+carries the same salt, and `pcg_reference.txt`'s seven `chain` lines were
+regenerated by an independent Python transcription of fnv1a32 that FIRST
+reproduced all seven OLD committed values bit-for-bit (so the transcription
+is checked against the upstream-built reference before being trusted for the
+new values). The stream/uint/ufloat sections are self-describing
+(seed, subsequence, offset recorded per case) and remain valid pins
+unchanged; a full re-run of `build.sh` regenerates their subsequences under
+the new chain without changing what they assert. Under
+`-D MOJOLEARN_ET_KEY_UNSALTED=1` (the A/B arm) the chain pins go RED by
+design -- that define is for measurement, not for gates.
+
+**Pre-registered prediction.** This fix changes every draw, so its covtype
+delta is NOISE-LIKE (a re-seed), plus whatever systematic effect the 0-7
+stream correlation had; it is not expected to carry the 0.0067 on its own.
+The invariant, not the accuracy, is the reason it ships.
+
+**Price.** Four more FNV rounds per key (once per (node, feature) draw), and
+every pre-465 model, fixture hash and identity trace that embedded a
+threshold is invalidated.
+
+**Gate.** `pcg_rng_check`'s chain pins (regenerated), `range_draw_check` /
+`score_kernel_check` / `host_splitter_check` / `device_*_check`
+host-vs-device parity (both sides move together), and the build smoke.

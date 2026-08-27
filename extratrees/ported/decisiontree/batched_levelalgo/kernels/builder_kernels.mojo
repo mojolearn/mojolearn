@@ -133,10 +133,12 @@ def split_not_valid(
 # ===========================================================================
 
 from std.ffi import external_call
+from std.sys.compile import is_defined
 
 from extratrees.mojo_only.pcg_rng import (
     FNV1A32_BASIS,
     PCGenerator,
+    fmix32,
     fnv1a32,
     uniform_int_u64,
 )
@@ -194,10 +196,14 @@ def excess_subsequence(
         subsequence = fnv1a32(subsequence, uint32_t(nodeid));
 
     THREE components, in that order, from `fnv1a32_basis`. This lane's
-    `key_for` in `extratrees/mojo_only/pcg_rng.mojo` chains FOUR, because
-    DEVIATION 130 needs a per-FEATURE threshold key. That extension belongs to
-    the threshold draw and to nothing else: the sampler's key is cuML's, so
-    that a node's candidate column set is bit-identical to theirs.
+    `key_for` in `extratrees/mojo_only/pcg_rng.mojo` chains FOUR -- a salt
+    and then a per-FEATURE slot, because DEVIATION 130 needs a per-feature
+    threshold key. That extension belongs to the threshold draw and to
+    nothing else: the sampler's key is cuML's, so that a node's candidate
+    column set is bit-identical to theirs. (DEVIATION 465: until 2026-08-26
+    `key_for` in fact chained THREE -- byte-identical to this function at
+    `feature_id == thread_id` -- so the two streams collided on covtype's
+    low column ids; the salt link is what makes this paragraph true.)
 
     Note their `subsequence` is a `uint64_t` holding a 32-bit hash -- the high
     32 bits are always zero -- and `PCGenerator` shifts it left by one and
@@ -213,6 +219,29 @@ def excess_subsequence(
 
 comptime EXCESS_SELECTION_SALT = UInt32(0x5E1EC7ED)
 
+comptime ET_SELECTION_HASH_FINALIZED = not is_defined[
+    "MOJOLEARN_ET_RAW_SELECTION_HASH"
+]()
+"""A/B arm for DEVIATION 464: build with `-D MOJOLEARN_ET_RAW_SELECTION_HASH=1`
+to restore the pre-464 un-finalized fnv chain, host and device together (so
+`sampler_kernel_check`'s host-vs-device control stays bit-identical in BOTH
+builds)."""
+
+
+def excess_selection_hash_raw(
+    tree_id: UInt32, node_id: UInt32, col: UInt32
+) -> UInt32:
+    """The bare fnv1a32 chain -- the pre-DEVIATION-464 selection key, kept as
+    the sabotage/A-B arm. See `excess_selection_hash` for why it is not the
+    shipping form: for `col < 256` this chain is affine in `perm(col)` with a
+    multiplier whose top bits rotate by ~5/16 of the circle, so ranking by it
+    is a 16-cluster Weyl walk, not a permutation."""
+    var h = fnv1a32(FNV1A32_BASIS, EXCESS_SELECTION_SALT)
+    h = fnv1a32(h, tree_id)
+    h = fnv1a32(h, node_id)
+    h = fnv1a32(h, col)
+    return h
+
 
 def excess_selection_hash(
     tree_id: UInt32, node_id: UInt32, col: UInt32
@@ -226,16 +255,29 @@ def excess_selection_hash(
     sample at 0.38x column 0's rate. That is cuML's own bug, and this lane's
     standing rule is to fix their bugs, not port them (164 and 165 fixed two
     others in this same kernel). The fix: rank the uniques by THIS keyed hash
-    instead of by column id, and keep the `k` smallest BY HASH -- by
-    symmetry an exactly uniform `k`-subset of the uniques, deterministic
-    from `(tree, node, col)` alone, identical on host and device, and free
-    of any cross-thread draw order. The salt keeps this stream disjoint
-    from `excess_subsequence`'s and `key_for`'s.
+    instead of by column id, and keep the `k` smallest BY HASH -- a uniform
+    `k`-subset of the uniques, deterministic from `(tree, node, col)` alone,
+    identical on host and device, and free of any cross-thread draw order.
+    The salt keeps this stream disjoint from `excess_subsequence`'s and
+    `key_for`'s.
+
+    DEVIATION 464 (2026-08-26): the combined word now runs through `fmix32`.
+    The bare chain had NO avalanche on the final `col` round: for `col < 256`
+    the three trailing zero-byte rounds collapse to `K + perm(col) * C mod
+    2^32` with `C = FNV1A32_PRIME^3` and `C / 2^32` within 2^-9 of 5/16 -- a
+    16-cluster Weyl set, not a permutation. Rank-by-hash under that map keeps
+    every MARGINAL uniform (each column's rate is fine, which is why the
+    (n=28, k=5) marginal gate stayed green) but distorts the JOINT k-of-
+    uniques selection -- which columns co-occur -- on every node that takes
+    the overshoot branch (~58% of covtype nodes). `fmix32` is a bijection,
+    so the marginals stay uniform and the joint selection becomes what
+    DEVIATION 215 claimed it was. The un-finalized form survives as
+    `excess_selection_hash_raw` (`SAMP_SAB_RAW_SELECTION_HASH`, and the
+    `MOJOLEARN_ET_RAW_SELECTION_HASH` build define).
     """
-    var h = fnv1a32(FNV1A32_BASIS, EXCESS_SELECTION_SALT)
-    h = fnv1a32(h, tree_id)
-    h = fnv1a32(h, node_id)
-    h = fnv1a32(h, col)
+    var h = excess_selection_hash_raw(tree_id, node_id, col)
+    comptime if ET_SELECTION_HASH_FINALIZED:
+        return fmix32(h)
     return h
 
 
@@ -1135,6 +1177,16 @@ keyed-hash subset. This is the bug arm: it under-samples high-indexed columns
 `sampler_kernel_check` must go red under it -- that is what proves the gate
 watches the selection distribution and not just the set's validity."""
 
+comptime SAMP_SAB_RAW_SELECTION_HASH: Int32 = 10
+"""DEVIATION 464's pre-fix arm: rank the overshoot's uniques by the
+UN-FINALIZED fnv chain (`excess_selection_hash_raw`) instead of the
+avalanche-finalized hash. Against the host oracle this differs exactly on
+overshoot nodes (a slot comparison sees it there); the (n=28, k=5)
+MARGINAL uniformity gate does NOT see it -- the raw hash's marginals are
+uniform, its defect is the JOINT selection, which no existing gate asserts
+(the distribution gate only ever asserted marginals). It is an A/B and
+reach arm, not a required-RED arm of the marginal gate."""
+
 
 # --- host-side sizing, so the caller never guesses a length ----------------
 
@@ -1462,14 +1514,23 @@ def excess_sample_kernel[
                         unsafe_offset=slot
                     ]
         else:
+            # DEVIATION 464: the shipping rank is the avalanche-finalized
+            # hash; SAMP_SAB_RAW_SELECTION_HASH restores the bare fnv chain.
+            var raw_hash = sab == SAMP_SAB_RAW_SELECTION_HASH
             for l in range(M):
                 var slot = M * tid + l
                 if mask[unsafe_offset=l] == Int32(0):
                     continue
                 var col = items[unsafe_offset=slot]
-                var h = excess_selection_hash(
-                    tree_u, node_id, col.cast[DType.uint32]()
-                )
+                var h: UInt32
+                if raw_hash:
+                    h = excess_selection_hash_raw(
+                        tree_u, node_id, col.cast[DType.uint32]()
+                    )
+                else:
+                    h = excess_selection_hash(
+                        tree_u, node_id, col.cast[DType.uint32]()
+                    )
                 var rank = 0
                 for s in range(N_SLOTS):
                     var c2 = items[unsafe_offset=s]
@@ -1482,9 +1543,15 @@ def excess_sample_kernel[
                         is_head = c2 != items[unsafe_offset = s - 1]
                     if not is_head:
                         continue
-                    var h2 = excess_selection_hash(
-                        tree_u, node_id, c2.cast[DType.uint32]()
-                    )
+                    var h2: UInt32
+                    if raw_hash:
+                        h2 = excess_selection_hash_raw(
+                            tree_u, node_id, c2.cast[DType.uint32]()
+                        )
+                    else:
+                        h2 = excess_selection_hash(
+                            tree_u, node_id, c2.cast[DType.uint32]()
+                        )
                     if h2 < h or (h2 == h and c2 < col):
                         rank += 1
                 if rank < k:

@@ -119,10 +119,13 @@ from extratrees.ported.decisiontree.batched_levelalgo.kernels.partition_multiblo
 from extratrees.ported.decisiontree.batched_levelalgo.split import (
     split_reduce_init_kernel,
     split_reduce_kernel,
+    split_tie_count_kernel,
+    split_tie_salt_for,
 )
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv, fma
+from std.sys.compile import is_defined
 from std.sys.info import size_of
 
 from mojo_only.numerics import ftz
@@ -1427,6 +1430,15 @@ struct LevelWorkspace(Movable):
     """DEVIATION 211: one tree id per work item in the staged batch, read by
     the score, finalize and sampler kernels as the tree component of every
     draw key. A single-tree batch stages one value repeated."""
+    var d_tsalt: DeviceBuffer[DType.uint32]
+    var h_tsalt: HostBuffer[DType.uint32]
+    """DEVIATION 463: one tie-break rank salt per work item,
+    `split_tie_salt_for(item_trees[i], work_items[i].idx)`, staged by
+    `stage_batch` and read by `split_reduce_kernel` as `node_tie_salt`."""
+    var d_ties: DeviceBuffer[DType.int32]
+    var o_ties: HostBuffer[DType.int32]
+    """DEVIATION 463's exact-tie counter cells (`split_tie_count_kernel`),
+    written and read back only under `-D MOJOLEARN_ET_TIE_STATS=1`."""
     var d_nb: DeviceBuffer[DType.int32]
     var d_nc: DeviceBuffer[DType.int32]
     var d_iters: DeviceBuffer[DType.int32]
@@ -1524,6 +1536,10 @@ def make_level_workspace(
         r_mx=ctx.enqueue_create_buffer[DType.int32](nodes),
         d_tree=ctx.enqueue_create_buffer[DType.int32](nodes),
         h_tree=ctx.enqueue_create_host_buffer[DType.int32](nodes),
+        d_tsalt=ctx.enqueue_create_buffer[DType.uint32](nodes),
+        h_tsalt=ctx.enqueue_create_host_buffer[DType.uint32](nodes),
+        d_ties=ctx.enqueue_create_buffer[DType.int32](nodes),
+        o_ties=ctx.enqueue_create_host_buffer[DType.int32](nodes),
         d_nb=ctx.enqueue_create_buffer[DType.int32](nodes),
         d_nc=ctx.enqueue_create_buffer[DType.int32](nodes),
         d_iters=ctx.enqueue_create_buffer[DType.int32](nodes),
@@ -1762,6 +1778,14 @@ def stage_batch(
         items_ptr[unsafe_offset=i] = work_items[i]
         # DEVIATION 211: the per-item tree id rides with the item.
         ws.h_tree.unsafe_ptr().unsafe_store(i, item_trees[i])
+        # DEVIATION 463: the tie-break rank salt rides with it too, keyed on
+        # the SAME (tree, node) the host oracle keys on.
+        ws.h_tsalt.unsafe_ptr().unsafe_store(
+            i,
+            split_tie_salt_for(
+                UInt32(Int(item_trees[i])), UInt32(Int(work_items[i].idx))
+            ),
+        )
     var wl_ptr = h_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo]()
     for i in range(plan.n_blocks_dimx):
         wl_ptr[unsafe_offset=i] = plan.info[i]
@@ -1781,6 +1805,7 @@ def stage_batch(
 
     ctx.enqueue_copy(dst_buf=d_items, src_ptr=h_items.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=ws.d_tree, src_ptr=ws.h_tree.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=ws.d_tsalt, src_ptr=ws.h_tsalt.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_wl, src_ptr=h_wl.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_nb, src_ptr=h_nb.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_nc, src_ptr=h_nc.unsafe_ptr())
@@ -2156,11 +2181,30 @@ def search_batch(
         c_v.unsafe_ptr(),
         d_nb.unsafe_ptr(),
         d_nc.unsafe_ptr(),
+        ws.d_tsalt.unsafe_ptr(),
         Int32(bpn),
         Int32(0),
         grid_dim=(bpn, n_nodes, 1),
         block_dim=(TPB, 1, 1),
     )
+    # DEVIATION 463: the exact-tie counter, only when the build asks for it.
+    comptime if is_defined["MOJOLEARN_ET_TIE_STATS"]():
+        ctx.enqueue_function[split_tie_count_kernel](
+            ws.d_ties.unsafe_ptr(),
+            r_c.unsafe_ptr(),
+            r_nu.unsafe_ptr(),
+            r_de.unsafe_ptr(),
+            r_v.unsafe_ptr(),
+            c_nu.unsafe_ptr(),
+            c_de.unsafe_ptr(),
+            c_v.unsafe_ptr(),
+            d_nb.unsafe_ptr(),
+            d_nc.unsafe_ptr(),
+            Int32(n_nodes),
+            grid_dim=ceildiv(n_nodes, 64),
+            block_dim=64,
+        )
+        ctx.enqueue_copy(dst_buf=ws.o_ties, src_buf=ws.d_ties)
 
     # --- 7. the splits come back to the host, as `:492-494` does ------
     # ONLY THE SPLITS CROSS, which is exactly what
@@ -2208,6 +2252,19 @@ def search_batch(
                 o_q.unsafe_ptr()[unsafe_offset=i], colid, metric, n_left
             )
         )
+
+    # DEVIATION 463: report the batch's exact-tie tally. The counter cells
+    # rode the queue with the reduce readback, so the sync above completed
+    # them; one line per batch, summed by whoever asked for the define.
+    comptime if is_defined["MOJOLEARN_ET_TIE_STATS"]():
+        var tie_decided = 0
+        var tie_tied = 0
+        for i in range(n_nodes):
+            if o_c.unsafe_ptr()[unsafe_offset=i] >= 0:
+                tie_decided += 1
+                if ws.o_ties.unsafe_ptr()[unsafe_offset=i] >= Int32(2):
+                    tie_tied += 1
+        print("ET_TIE_STATS batch decided=", tie_decided, " tied=", tie_tied)
 
     clock.tick(ctx, PHASE_HOST_SPLITS)
     return (
@@ -3215,11 +3272,30 @@ def search_batch_regression(
         c_v.unsafe_ptr(),
         d_nb.unsafe_ptr(),
         d_nc.unsafe_ptr(),
+        ws.d_tsalt.unsafe_ptr(),
         Int32(bpn),
         Int32(0),
         grid_dim=(bpn, n_nodes, 1),
         block_dim=(TPB, 1, 1),
     )
+    # DEVIATION 463: the exact-tie counter, only when the build asks for it.
+    comptime if is_defined["MOJOLEARN_ET_TIE_STATS"]():
+        ctx.enqueue_function[split_tie_count_kernel](
+            ws.d_ties.unsafe_ptr(),
+            r_c.unsafe_ptr(),
+            r_nu.unsafe_ptr(),
+            r_de.unsafe_ptr(),
+            r_v.unsafe_ptr(),
+            c_nu.unsafe_ptr(),
+            c_de.unsafe_ptr(),
+            c_v.unsafe_ptr(),
+            d_nb.unsafe_ptr(),
+            d_nc.unsafe_ptr(),
+            Int32(n_nodes),
+            grid_dim=ceildiv(n_nodes, 64),
+            block_dim=64,
+        )
+        ctx.enqueue_copy(dst_buf=ws.o_ties, src_buf=ws.d_ties)
 
     ref o_q = ws.o_q
     ref o_c = ws.o_c
@@ -3253,6 +3329,19 @@ def search_batch_regression(
                 o_l.unsafe_ptr()[unsafe_offset=i],
             )
         )
+
+    # DEVIATION 463: report the batch's exact-tie tally. The counter cells
+    # rode the queue with the reduce readback, so the sync above completed
+    # them; one line per batch, summed by whoever asked for the define.
+    comptime if is_defined["MOJOLEARN_ET_TIE_STATS"]():
+        var tie_decided = 0
+        var tie_tied = 0
+        for i in range(n_nodes):
+            if o_c.unsafe_ptr()[unsafe_offset=i] >= 0:
+                tie_decided += 1
+                if ws.o_ties.unsafe_ptr()[unsafe_offset=i] >= Int32(2):
+                    tie_tied += 1
+        print("ET_TIE_STATS batch decided=", tie_decided, " tied=", tie_tied)
 
     clock.tick(ctx, PHASE_HOST_SPLITS)
     return (
