@@ -1365,6 +1365,52 @@ def greedy_one_byte_fixed_for[column: Int, identical: Bool]() -> Bool:
     return column_lane_width(column) == 64
 
 
+def greedy_sub_byte_excluded_for[column: Int, identical: Bool]() -> Bool:
+    """ROUTING row (DEVIATION 1910), sibling of `greedy_one_byte_fixed_for`:
+    whether the GREEDY sub-byte histogram families -- BINARY (32 features
+    per word) and HALF-BYTE (8 per word) -- are comptime-EXCLUDED from the
+    build, their launch sites refusing at runtime BY NAME.
+
+    Both families accumulate through
+    `point_hist_half_byte_template.slice_offset`, whose 512-float slices
+    and 4 sub-copies are 32-lane by construction and whose comptime assert
+    refuses `LANE_WIDTH == 64` (its docstring carries the geometry). On the
+    first MI300X leg that ONE assert killed the whole gbdt binding: the
+    launch sites live in non-generic functions, so the kernels instantiate
+    whenever the module builds, reachable or not.
+
+    THIS IS SHAPE (2) -- EXCLUDE AND REFUSE -- AND NOT SHAPE (1), ROUTING
+    TO THE FUSED 8-BIT KERNEL, BECAUSE THE SEMANTICS DO NOT MAP. The
+    mismatch is not the bin range (every sub-byte bin is trivially under
+    256); it is the COMPRESSED-INDEX PACKING. The fused kernel decodes
+    `(ci >> (24 - 8*f)) & 255` with `f = (tid + i) & 3` -- four one-byte
+    features per 32-bit word. A half-byte block packs EIGHT features per
+    word in nibbles and the binary block THIRTY-TWO single bits; handing
+    either cindex to the one-byte decode reads garbage bins from real
+    memory. Re-packing narrow features one-byte for 64-lane columns would
+    be a grid-creator layout change -- a different, larger deviation --
+    not a routing row.
+
+    So: a 64-lane column under FAST builds WITHOUT the binary and
+    half-byte kernels, and a dataset whose grid actually contains a
+    sub-byte block refuses at the dispatch with this deviation's name --
+    refusal over fallback, per the standing rule. 255-border float
+    datasets (the FAST lane's fixtures) produce only one-byte blocks and
+    never hit it. `IDENTICAL` returns False: identity pins the lanes to
+    32 and both families compile and run as today. 32-lane FAST columns
+    return False and are byte-for-byte untouched.
+
+    THE PRICE: on 64-lane columns, low-cardinality features (<= 15 folds,
+    including one-hot and binary splits) cannot be histogrammed until the
+    wide-wavefront sub-byte layout is written or the grid creator learns
+    to promote them to one-byte packing on these columns. Stated rather
+    than papered over; the refusal names it at runtime.
+    """
+    comptime if identical:
+        return False
+    return column_lane_width(column) == 64
+
+
 def hist_smem_mode_for[column: Int, identical: Bool]() -> Int:
     """NUMERIC row: HOW the hist_2 family accumulates in shared memory.
 

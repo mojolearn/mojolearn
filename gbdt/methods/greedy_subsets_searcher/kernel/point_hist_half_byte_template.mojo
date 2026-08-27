@@ -159,6 +159,13 @@ def slice_offset(tid: Int) -> Int:
     is derived from `LANE_WIDTH` and would move to 1024 while these two
     literals stayed at 512 and 32, and stage 1 would then fold cells that
     belong to different bins.
+
+    A 64-lane FAST column never instantiates this template:
+    `greedy_sub_byte_excluded_for` (DEVIATION 1910) comptime-excludes the
+    binary and half-byte launch sites, which refuse at runtime by name --
+    they cannot take the one-byte route, their cindex packing is 8 and 32
+    features per word against the fused kernel's 4. The assert stays for
+    whatever reaches this file some other way.
     """
     comptime assert LANE_WIDTH == 32, (
         "the half-byte accumulator's slice layout is 32-lane by construction"

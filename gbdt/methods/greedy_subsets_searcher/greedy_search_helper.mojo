@@ -152,6 +152,7 @@ from mojo_only.kernel_matrix import (
     TARGET_COLUMN,
     deterministic_flush_for,
     greedy_one_byte_fixed_for,
+    greedy_sub_byte_excluded_for,
     partition_chunks_sm_for,
 )
 from mojo_only.numerics import NUMERIC_IDENTICAL
@@ -471,28 +472,40 @@ def run_one_level(
     var h_scale = ctx.enqueue_create_host_buffer[DType.float32](1)
     h_scale.unsafe_ptr().unsafe_store(0, Float32(1.0))
     ctx.enqueue_copy(dst_buf=scale_dev, src_ptr=h_scale.unsafe_ptr())
-    ctx.enqueue_function[binary_hist_kernel](
-        folds.unsafe_ptr(),
-        fold_off.unsafe_ptr(),
-        grp_off.unsafe_ptr(),
-        grp_sz.unsafe_ptr(),
-        Int32(n_features),
-        cindex.unsafe_ptr(),
-        Int32(n_rows),
-        Int32(0),
-        stats.unsafe_ptr(),
-        Int32(n_rows),
-        p_off.unsafe_ptr(),
-        p_sz.unsafe_ptr(),
-        leaf0.unsafe_ptr(),
-        hist.unsafe_ptr(),
-        acc_scratch.unsafe_ptr(),
-        scale_dev.unsafe_ptr(),
-        Int32(n_leaves),
-        Int32(stat_count),
-        grid_dim=(1, 1, stat_count),
-        block_dim=(BLOCK_SIZE, 1, 1),
-    )
+    # DEVIATION 1910: the binary family is comptime-excluded on 64-lane
+    # FAST columns (its accumulator template is 32-lane by construction);
+    # this probe-only entry refuses there like `run_tree` does.
+    @parameter
+    if greedy_sub_byte_excluded_for[
+        TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
+    ]():
+        raise Error(
+            "run_one_level launches the binary family, which a 64-lane"
+            " column excludes (DEVIATION 1910)"
+        )
+    else:
+        ctx.enqueue_function[binary_hist_kernel](
+            folds.unsafe_ptr(),
+            fold_off.unsafe_ptr(),
+            grp_off.unsafe_ptr(),
+            grp_sz.unsafe_ptr(),
+            Int32(n_features),
+            cindex.unsafe_ptr(),
+            Int32(n_rows),
+            Int32(0),
+            stats.unsafe_ptr(),
+            Int32(n_rows),
+            p_off.unsafe_ptr(),
+            p_sz.unsafe_ptr(),
+            leaf0.unsafe_ptr(),
+            hist.unsafe_ptr(),
+            acc_scratch.unsafe_ptr(),
+            scale_dev.unsafe_ptr(),
+            Int32(n_leaves),
+            Int32(stat_count),
+            grid_dim=(1, 1, stat_count),
+            block_dim=(BLOCK_SIZE, 1, 1),
+        )
 
     # 3. SCAN. Binary features are one fold, so the scan is a no-op here and
     # is issued anyway: the sequence is what is being exercised, and leaving
@@ -1163,45 +1176,60 @@ def run_tree(
         # never permuted, so position names row only while the index is the
         # identity. Direct loads below depth 0 read unrelated rows' bins,
         # which looks like healthy plumbing and splits nothing.
-        if depth == 0:
-            ctx.enqueue_function[binary_hist_kernel](
-                folds.unsafe_ptr(), fold_off.unsafe_ptr(),
-                grp_off.unsafe_ptr(), grp_sz.unsafe_ptr(),
-                Int32(n_features), cindex.unsafe_ptr(), Int32(n_rows),
-                Int32(0),
-                stats.unsafe_ptr(), Int32(n_rows),
-                p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids_a.unsafe_ptr(),
-                hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
-                Int32(max_leaves), Int32(stat_count),
-                grid_dim=(
-                    hist_replicas if hist_replicas > 0 else replication_for(
-                        1, n_live, stat_count, sm_count
-                    ),
-                    n_live,
-                    stat_count,
-                ),
-                block_dim=(BLOCK_SIZE, 1, 1),
+        #
+        # DEVIATION 1910: this checked path launches only the BINARY
+        # family, whose accumulator template is 32-lane by construction, so
+        # a 64-lane FAST column excludes it at comptime and refuses here by
+        # name -- see `greedy_sub_byte_excluded_for` and the block driver's
+        # policy branches for the full case.
+        @parameter
+        if greedy_sub_byte_excluded_for[
+            TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
+        ]():
+            raise Error(
+                "run_tree launches the binary family, which a 64-lane"
+                " column excludes (DEVIATION 1910)"
             )
         else:
-            ctx.enqueue_function[binary_hist_gather_kernel](
-                folds.unsafe_ptr(), fold_off.unsafe_ptr(),
-                grp_off.unsafe_ptr(), grp_sz.unsafe_ptr(),
-                Int32(n_features), cindex.unsafe_ptr(), Int32(n_rows),
-                Int32(0),
-                row_index.unsafe_ptr(),
-                stats.unsafe_ptr(), Int32(n_rows),
-                p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids_a.unsafe_ptr(),
-                hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
-                Int32(max_leaves), Int32(stat_count),
-                grid_dim=(
-                    hist_replicas if hist_replicas > 0 else replication_for(
-                        1, n_live, stat_count, sm_count, gather=True
+            if depth == 0:
+                ctx.enqueue_function[binary_hist_kernel](
+                    folds.unsafe_ptr(), fold_off.unsafe_ptr(),
+                    grp_off.unsafe_ptr(), grp_sz.unsafe_ptr(),
+                    Int32(n_features), cindex.unsafe_ptr(), Int32(n_rows),
+                    Int32(0),
+                    stats.unsafe_ptr(), Int32(n_rows),
+                    p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids_a.unsafe_ptr(),
+                    hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
+                    Int32(max_leaves), Int32(stat_count),
+                    grid_dim=(
+                        hist_replicas if hist_replicas > 0 else replication_for(
+                            1, n_live, stat_count, sm_count
+                        ),
+                        n_live,
+                        stat_count,
                     ),
-                    n_live,
-                    stat_count,
-                ),
-                block_dim=(BLOCK_SIZE, 1, 1),
-            )
+                    block_dim=(BLOCK_SIZE, 1, 1),
+                )
+            else:
+                ctx.enqueue_function[binary_hist_gather_kernel](
+                    folds.unsafe_ptr(), fold_off.unsafe_ptr(),
+                    grp_off.unsafe_ptr(), grp_sz.unsafe_ptr(),
+                    Int32(n_features), cindex.unsafe_ptr(), Int32(n_rows),
+                    Int32(0),
+                    row_index.unsafe_ptr(),
+                    stats.unsafe_ptr(), Int32(n_rows),
+                    p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids_a.unsafe_ptr(),
+                    hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
+                    Int32(max_leaves), Int32(stat_count),
+                    grid_dim=(
+                        hist_replicas if hist_replicas > 0 else replication_for(
+                            1, n_live, stat_count, sm_count, gather=True
+                        ),
+                        n_live,
+                        stat_count,
+                    ),
+                    block_dim=(BLOCK_SIZE, 1, 1),
+                )
 
         # Convert the replicated partials back to floats before the scan.
         # DEVIATION 1892: only when the fixed-point flush filled them --
@@ -2119,6 +2147,12 @@ def launch_histograms_for_blocks[
         comptime _one_byte_fixed = greedy_one_byte_fixed_for[
             TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
         ]()
+        # DEVIATION 1910: on the same 64-lane columns the sub-byte families
+        # (binary, half-byte) are comptime-excluded entirely -- see the
+        # refusal at their policy branches below.
+        comptime _sub_byte_excluded = greedy_sub_byte_excluded_for[
+            TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
+        ]()
         var run_fixed_bridge = _flush_is_fixed_point
 
         @parameter
@@ -2142,31 +2176,57 @@ def launch_histograms_for_blocks[
             ctx.enqueue_memset(block_hist, Float32(0.0))
 
         if blk.policy == POLICY_BINARY:
-            if depth == 0:
-                ctx.enqueue_function[binary_hist_kernel](
-                    blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
-                    blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
-                    Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line), Int32(base),
-                    stats.unsafe_ptr(), Int32(n_rows),
-                    p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
-                    block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
-                    Int32(max_leaves), Int32(stat_count),
-                    grid_dim=(groups * replicas, n_live, stat_count),
-                    block_dim=(BLOCK_SIZE, 1, 1),
+            # ================= DEVIATION 1910 =================
+            # The binary and half-byte kernels accumulate through
+            # `point_hist_half_byte_template.slice_offset`, which is 32-lane
+            # by construction and refuses `LANE_WIDTH == 64` at comptime --
+            # and these launch sites live in non-generic code, so the
+            # kernels instantiate whenever the module builds, reachable or
+            # not. On the first MI300X leg that one assert killed the WHOLE
+            # gbdt binding. `greedy_sub_byte_excluded_for` comptime-excludes
+            # both families on 64-lane FAST columns and this dispatch
+            # refuses BY NAME instead: the fused 8-bit kernel cannot take
+            # this work -- it decodes 4 one-byte features per word, the
+            # half-byte cindex packs 8 in nibbles and the binary cindex 32
+            # single bits, so routing there would read garbage bins (the
+            # row's docstring carries the full shape-1-vs-shape-2 case).
+            # 32-lane columns and IDENTICAL fold this away at comptime.
+            # ==================================================
+            @parameter
+            if _sub_byte_excluded:
+                raise Error(
+                    "binary-feature histograms on a 64-lane column: the"
+                    " binary/half-byte accumulator template is 32-lane by"
+                    " construction (DEVIATION 1910); this build excludes"
+                    " the sub-byte families -- write the wide-wavefront"
+                    " layout or promote these features to one-byte packing"
                 )
             else:
-                ctx.enqueue_function[binary_hist_gather_kernel](
-                    blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
-                    blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
-                    Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line), Int32(base),
-                    row_index.unsafe_ptr(),
-                    stats.unsafe_ptr(), Int32(n_rows),
-                    p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
-                    block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
-                    Int32(max_leaves), Int32(stat_count),
-                    grid_dim=(groups * replicas, n_live, stat_count),
-                    block_dim=(BLOCK_SIZE, 1, 1),
-                )
+                if depth == 0:
+                    ctx.enqueue_function[binary_hist_kernel](
+                        blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
+                        blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
+                        Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line), Int32(base),
+                        stats.unsafe_ptr(), Int32(n_rows),
+                        p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
+                        block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
+                        Int32(max_leaves), Int32(stat_count),
+                        grid_dim=(groups * replicas, n_live, stat_count),
+                        block_dim=(BLOCK_SIZE, 1, 1),
+                    )
+                else:
+                    ctx.enqueue_function[binary_hist_gather_kernel](
+                        blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
+                        blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
+                        Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line), Int32(base),
+                        row_index.unsafe_ptr(),
+                        stats.unsafe_ptr(), Int32(n_rows),
+                        p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
+                        block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
+                        Int32(max_leaves), Int32(stat_count),
+                        grid_dim=(groups * replicas, n_live, stat_count),
+                        block_dim=(BLOCK_SIZE, 1, 1),
+                    )
         elif blk.policy == POLICY_HALF_BYTE:
             # The half-byte kernels now carry the same fixed-point Int32
             # flush the binary ones do, so replicated blocks sum their
@@ -2220,31 +2280,43 @@ def launch_histograms_for_blocks[
             # purpose so it fails rather than passes if it stops reaching
             # the flush.
             # ==================================================================
-            if depth == 0:
-                ctx.enqueue_function[half_byte_hist_kernel](
-                    blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
-                    blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
-                    Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line), Int32(base),
-                    stats.unsafe_ptr(), Int32(n_rows),
-                    p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
-                    block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
-                    Int32(max_leaves), Int32(stat_count),
-                    grid_dim=(groups * replicas, n_live, stat_count),
-                    block_dim=(BLOCK_SIZE, 1, 1),
+            # DEVIATION 1910: same exclusion as the binary branch above --
+            # this family shares the 32-lane accumulator template.
+            @parameter
+            if _sub_byte_excluded:
+                raise Error(
+                    "half-byte histograms on a 64-lane column: the"
+                    " binary/half-byte accumulator template is 32-lane by"
+                    " construction (DEVIATION 1910); this build excludes"
+                    " the sub-byte families -- write the wide-wavefront"
+                    " layout or promote these features to one-byte packing"
                 )
             else:
-                ctx.enqueue_function[half_byte_hist_gather_kernel](
-                    blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
-                    blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
-                    Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line), Int32(base),
-                    row_index.unsafe_ptr(),
-                    stats.unsafe_ptr(), Int32(n_rows),
-                    p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
-                    block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
-                    Int32(max_leaves), Int32(stat_count),
-                    grid_dim=(groups * replicas, n_live, stat_count),
-                    block_dim=(BLOCK_SIZE, 1, 1),
-                )
+                if depth == 0:
+                    ctx.enqueue_function[half_byte_hist_kernel](
+                        blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
+                        blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
+                        Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line), Int32(base),
+                        stats.unsafe_ptr(), Int32(n_rows),
+                        p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
+                        block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
+                        Int32(max_leaves), Int32(stat_count),
+                        grid_dim=(groups * replicas, n_live, stat_count),
+                        block_dim=(BLOCK_SIZE, 1, 1),
+                    )
+                else:
+                    ctx.enqueue_function[half_byte_hist_gather_kernel](
+                        blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
+                        blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
+                        Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line), Int32(base),
+                        row_index.unsafe_ptr(),
+                        stats.unsafe_ptr(), Int32(n_rows),
+                        p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
+                        block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
+                        Int32(max_leaves), Int32(stat_count),
+                        grid_dim=(groups * replicas, n_live, stat_count),
+                        block_dim=(BLOCK_SIZE, 1, 1),
+                    )
         else:
             # THEIR maxBins LADDER, `ComputeHistOneByte`
             # (`hist_one_byte.cu:314-328`):
