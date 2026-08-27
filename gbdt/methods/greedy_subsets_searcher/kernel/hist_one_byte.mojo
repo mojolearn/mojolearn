@@ -197,7 +197,11 @@ def one_byte_slice_offset[bits: Int, smem_mode: Int](tid: Int) -> Int:
     again. `Reduce`'s stage 1 folds at the same 1024 (`hist_one_byte.cu:182`).
     A 64-lane wavefront needs a 2048-float slice and sixteen sub-copies, and
     CatBoost never wrote that layout, so the assert makes it a compile error
-    rather than two warps quietly sharing one private copy.
+    rather than two warps quietly sharing one private copy. A 64-lane
+    column never instantiates this family: `greedy_one_byte_fixed_for`
+    (DEVIATION 1906) routes its one-byte work to the fused 8-bit kernel at
+    the dispatch, and the assert stays for whatever reaches this file some
+    other way.
     """
     comptime assert LANE_WIDTH == 32, (
         "the one-byte accumulator's slice layout is 32-lane by construction"

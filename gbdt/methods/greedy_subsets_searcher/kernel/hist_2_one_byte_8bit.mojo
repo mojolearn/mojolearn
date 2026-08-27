@@ -12,9 +12,14 @@ The Apple shared-Int32 arm removes the constraint their fallback exists
 for: slices are SHARED and the adds are ATOMIC, so FOUR warps share one
 8 KB slice and a 512-thread block holds 4 slices in exactly 32 KB. One
 walk, both stats, half the launches, half the cindex traffic. Measured
-standings live in RESUME; the arm exists ONLY for the
-`HIST_SMEM_SHARED2_I32` matrix row -- NVIDIA/AMD float columns keep
-CatBoost's PASS(8) design verbatim, and the dispatch keys on the row.
+standings live in RESUME; the arm exists for the
+`HIST_SMEM_SHARED2_I32` matrix row and, at EVERY one-byte width, for
+64-lane columns (`greedy_one_byte_fixed_for`, DEVIATION 1906: nothing
+here indexes by hardware lane -- Int32 atomics, block barriers, uniform
+trip counts, `H8_LANE` a logical striping constant -- so it is the one
+one-byte kernel a 64-wide wavefront can run). 32-lane NVIDIA/AMD float
+columns keep CatBoost's PASS(8) design verbatim, and the dispatch keys
+on the rows.
 
 EXACTNESS IS STRUCTURAL, NOT STATISTICAL: the quantized addends are the
 same `hist2_quantize(stat, fixed_scale, dither(position))` values the
