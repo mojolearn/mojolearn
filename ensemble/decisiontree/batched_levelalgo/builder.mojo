@@ -591,8 +591,8 @@ def update_workload_info[
     Returns their `n_blocks_dimx`. WRITES STRAIGHT INTO `h_workload_info`
     -- RESTORES upstream: theirs fills the pinned `h_workload_info` array
     in place (`:401`) and this used to rebuild a `List` (growth reallocs
-    on every level) that `_upload_workload` then copied into the pinned
-    buffer element by element. The pointer must hold at least
+    on every level) that the upload then copied into the pinned buffer
+    element by element. The pointer must hold at least
     `max_blocks_dimx_for(...)` entries, the same bound their array is
     allocated at (`:250`, proven in `max_blocks_dimx_for`'s docstring).
     The device copy their `raft::update_device` at `:405` performs is the
@@ -873,7 +873,7 @@ struct _DevPrefixView(Movable):
     count-parameterized APIs, so no per-level object is ever created.
     `enqueue_copy`/`enqueue_memset` here are buffer-shaped (the byte
     count IS the buffer), so the live-prefix byte counts -- which are
-    THEIRS, see e.g. `_upload_work_items` -- need a view object; this
+    THEIRS, see e.g. `_stage_work_items` -- need a view object; this
     cache recreates that view only when the byte count actually moves
     (level to level it is usually pinned at `max_batch_size`'s worth once
     the frontier saturates). Replacing a view whose enqueue is still in
@@ -883,20 +883,31 @@ struct _DevPrefixView(Movable):
 
     var view: DeviceBuffer[DType.uint8]
     var nbytes: Int
+    # DEVIATION 1908 -- a fixed base offset into `parent`, so a view can
+    # track the live prefix OF A REGION (a packed phase span, a staging
+    # slot) and not only of a whole buffer. 0 preserves the original
+    # meaning at every pre-1908 site.
+    var offset: Int
 
     def __init__(
-        out self, parent: DeviceBuffer[DType.uint8], nbytes: Int
+        out self,
+        parent: DeviceBuffer[DType.uint8],
+        nbytes: Int,
+        offset: Int = 0,
     ) raises:
-        self.view = parent.create_sub_buffer[DType.uint8](0, nbytes)
+        self.view = parent.create_sub_buffer[DType.uint8](offset, nbytes)
         self.nbytes = nbytes
+        self.offset = offset
 
     def ensure(
         mut self, parent: DeviceBuffer[DType.uint8], nbytes: Int
     ) raises:
-        """Point `view` at the first `nbytes` of `parent`; reuse the
-        existing view when the bounds already match."""
+        """Point `view` at `nbytes` of `parent` starting at the fixed
+        `offset`; reuse the existing view when the bounds already match."""
         if nbytes != self.nbytes:
-            self.view = parent.create_sub_buffer[DType.uint8](0, nbytes)
+            self.view = parent.create_sub_buffer[DType.uint8](
+                self.offset, nbytes
+            )
             self.nbytes = nbytes
 
 
@@ -905,19 +916,104 @@ struct _HostPrefixView(Movable):
 
     var view: HostBuffer[DType.uint8]
     var nbytes: Int
+    var offset: Int
 
     def __init__(
-        out self, parent: HostBuffer[DType.uint8], nbytes: Int
+        out self,
+        parent: HostBuffer[DType.uint8],
+        nbytes: Int,
+        offset: Int = 0,
     ) raises:
-        self.view = parent.create_sub_buffer[DType.uint8](0, nbytes)
+        self.view = parent.create_sub_buffer[DType.uint8](offset, nbytes)
         self.nbytes = nbytes
+        self.offset = offset
 
     def ensure(
         mut self, parent: HostBuffer[DType.uint8], nbytes: Int
     ) raises:
         if nbytes != self.nbytes:
-            self.view = parent.create_sub_buffer[DType.uint8](0, nbytes)
+            self.view = parent.create_sub_buffer[DType.uint8](
+                self.offset, nbytes
+            )
             self.nbytes = nbytes
+
+
+# ===========================================================================
+# DEVIATION 1908 -- the K slots' split results travel as ONE readback per
+# pipeline cycle.
+# ===========================================================================
+
+
+struct SplitStaging(Movable):
+    """One contiguous device/pinned pair holding EVERY pipeline slot's
+    `splits` region, DEVIATION 1908.
+
+    cuML's four streams each run their own cheap async `update_host`
+    (`builder.cuh:479`, `:501`); this port's one queue paid a separate
+    host-priced transfer PER IN-FLIGHT TREE per cycle instead. With every
+    slot's region carved out of this one allocation (512-byte slot
+    stride, the arena's own `ALIGN_VALUE`), the forest loop reads all of
+    them back in ONE `enqueue_copy` per cycle (`flush_splits_downloads`),
+    ~K transfers per cycle down to 1. NO VALUE MOVES: the kernels write
+    the same split bytes at a different address, each builder still reads
+    exactly its own `[0, n)` prefix, and the copy itself computes
+    nothing.
+
+    The prefix copy does carry the dead stretch between a slot's live
+    `n` splits and the next slot's base -- the price of one transfer
+    instead of K. Bounded by `(K-1) * slot_stride` (~590 KB at K=4,
+    max_batch_size 4096, float32) per cycle, against a saved host-priced
+    enqueue per slot per cycle; the census, not this comment, prices the
+    trade on each vendor.
+    """
+
+    var d: DeviceBuffer[DType.uint8]
+    var h: HostBuffer[DType.uint8]
+    var slot_stride: Int
+    var d_view: _DevPrefixView
+    var h_view: _HostPrefixView
+
+    def __init__(
+        out self, ctx: DeviceContext, n_slots: Int, slot_bytes: Int
+    ) raises:
+        self.slot_stride = calculate_aligned_bytes(slot_bytes)
+        var total = self.slot_stride * n_slots
+        self.d = ctx.enqueue_create_buffer[DType.uint8](total)
+        self.h = ctx.enqueue_create_host_buffer[DType.uint8](total)
+        self.d_view = _DevPrefixView(self.d, total)
+        self.h_view = _HostPrefixView(self.h, total)
+
+
+def flush_splits_downloads[
+    O: ObjectiveLike
+](
+    ctx: DeviceContext,
+    mut staging: SplitStaging,
+    mut builders: List[Builder[O]],
+) raises:
+    """The cycle's ONE splits readback, DEVIATION 1908.
+
+    Collects every adopted builder's pending byte count (recorded by
+    `_enqueue_splits_download` instead of enqueued), clears them, and
+    copies the staging prefix that covers the furthest pending slot.
+    Builders are indexed BY SLOT: `builders[k]` must have adopted slot
+    `k`, which is how `fit_forest` wires them. Call after a cycle's
+    enqueues and before its synchronize -- the queue is in-order, so the
+    copy lands after every kernel that writes a slot's splits."""
+    var extent = 0
+    for k in range(len(builders)):
+        var pending = builders[k].pending_splits_bytes
+        if pending > 0:
+            builders[k].pending_splits_bytes = 0
+            var end = k * staging.slot_stride + pending
+            if end > extent:
+                extent = end
+    if extent == 0:
+        return
+    staging.d_view.ensure(staging.d, extent)
+    staging.h_view.ensure(staging.h, extent)
+    log_launch("xfer_splits_download")
+    ctx.enqueue_copy(dst_buf=staging.h_view.view, src_buf=staging.d_view.view)
 
 
 # ===========================================================================
@@ -1011,23 +1107,60 @@ struct Builder[O: ObjectiveLike](Movable):
     var workload_info: DeviceBuffer[DType.uint8]
     var column_samples: DeviceBuffer[DType.int32]
     var partition_row_ids: DeviceBuffer[DType.int32]
-    var h_work_items: HostBuffer[DType.uint8]
     var h_workload_info: HostBuffer[DType.uint8]
     var h_splits: HostBuffer[DType.uint8]
 
+    # --- DEVIATION 1908's phase-upload staging ---------------------------
+    # One pinned span per builder holding a phase's [work items | pad |
+    # workload map], sent to the `d_work_items`/`workload_info` arena
+    # stretch as ONE H2D copy (`_enqueue_phase_upload`) where the port
+    # used to pay two (their `update_device` pair, `:466` + `:405`).
+    # `h_work_items` (a separate pinned staging -- theirs copies from a
+    # pageable vector, `:467`, so their arena has none) is SUBSUMED by
+    # this span; `h_workload_info` above keeps its carve so the host
+    # arena's layout stays byte-for-byte theirs (builder_check), but the
+    # live workload now stages here, at `cur_wl_rel` -- the next 512-byte
+    # boundary past the phase's live work items.
+    var h_phase: HostBuffer[DType.uint8]
+    var phase_view: _DevPrefixView
+    var cur_wl_rel: Int
+
+    # --- DEVIATION 1908's shared splits staging --------------------------
+    # False until `adopt_shared_splits` repoints `splits`/`h_splits` at a
+    # `SplitStaging` slot; then `_enqueue_splits_download` RECORDS its
+    # byte count here and the forest loop's `flush_splits_downloads`
+    # copies every slot in one transfer per cycle.
+    var splits_shared: Bool
+    var pending_splits_bytes: Int
+
     # --- cached live-prefix views of the buffers above (see
     # `_DevPrefixView`) -----------------------------------------------------
-    var wi_view: _DevPrefixView
-    var wl_view: _DevPrefixView
     var splits_d_view: _DevPrefixView
     var splits_h_view: _HostPrefixView
     var hist_view: _DevPrefixView
 
     # --- DEVIATION 128a's argument blobs, one per launcher --------------
+    # DEVIATION 1909: staged PER TREE, not per round/batch. Inside one
+    # tree the split blobs are a pure function of the round's
+    # `n_sampled_cols` -- everything else in them (dataset pointers and
+    # counts, quantiles, the objective built from `params`) is fixed by
+    # `begin_tree`/`reset_for_tree` -- and that width takes at most TWO
+    # values per tree: the full `original_n_sampled_cols` and the short
+    # last round's remainder (`sampled_cols_in_round`). Two cached slots
+    # per launcher hold both; `args_cols_a`/`args_cols_b` record which
+    # width each slot's device bytes carry, -1 = not staged for this
+    # tree. The partition blob (`node_split_args`, width always restored
+    # to `original_n_sampled_cols`, `:458`) needs one Bool. `leaf_args`
+    # was already once per tree (DEVIATION 1893) and keeps its cadence.
     var hist_args: DeviceArgs[HistogramArgs[Self.O]]
     var find_args: DeviceArgs[FindBestSplitsArgs[Self.O]]
+    var hist_args_alt: DeviceArgs[HistogramArgs[Self.O]]
+    var find_args_alt: DeviceArgs[FindBestSplitsArgs[Self.O]]
+    var args_cols_a: Int
+    var args_cols_b: Int
     var leaf_args: DeviceArgs[LeafArgs[Self.O]]
     var node_split_args: DeviceArgs[NodeSplitArgs[Self.O.DataT, Self.O.LabelT]]
+    var node_split_args_ready: Bool
     var node_split_scratch: NodeSplitScratch[Self.O.DataT, TPB_DEFAULT]
 
     # --- the leaf pass's staging, DEVIATION 313's second half ------------
@@ -1175,6 +1308,10 @@ struct Builder[O: ObjectiveLike](Movable):
         self.d_work_items = self.d_buff.create_sub_buffer[DType.uint8](
             wl.d_work_items, size_of[NodeWorkItem]() * max_batch
         )
+        # DEVIATION 1908: the live workload map now rides the packed
+        # phase span and lands at `cur_wl_rel` past `wl.d_work_items`
+        # (still inside this stretch); the carve is kept so the arena's
+        # layout stays byte-for-byte theirs.
         self.workload_info = self.d_buff.create_sub_buffer[DType.uint8](
             wl.workload_info, size_of[WorkloadInfo]() * max_blocks
         )
@@ -1194,19 +1331,30 @@ struct Builder[O: ObjectiveLike](Movable):
         )
         # NOT in their arena: theirs copies `d_work_items` from a pageable
         # `std::vector` (`:467`), so there is no host staging to carve.
-        # `enqueue_copy` here is host<->device only, so ours needs one.
-        self.h_work_items = ctx.enqueue_create_host_buffer[DType.uint8](
+        # `enqueue_copy` here is host<->device only, so ours needs one --
+        # DEVIATION 1908 shapes it as the packed phase span: aligned
+        # work-item capacity, then workload capacity. The device target is
+        # the existing `d_work_items` + `workload_info` arena stretch,
+        # which the layout above places adjacently (their order), so a
+        # full-capacity span ends exactly at the workload region's live
+        # end and never reaches `column_samples`.
+        var wi_span = calculate_aligned_bytes(
             size_of[NodeWorkItem]() * max_batch
         )
+        self.h_phase = ctx.enqueue_create_host_buffer[DType.uint8](
+            wi_span + size_of[WorkloadInfo]() * max_blocks
+        )
+        self.phase_view = _DevPrefixView(
+            self.d_buff,
+            wi_span + size_of[WorkloadInfo]() * max_blocks,
+            offset=wl.d_work_items,
+        )
+        self.cur_wl_rel = 0
+        self.splits_shared = False
+        self.pending_splits_bytes = 0
 
         # Cached live-prefix views, seeded at full capacity; the first
         # use at a smaller live count re-carves (see `_DevPrefixView`).
-        self.wi_view = _DevPrefixView(
-            self.d_work_items, size_of[NodeWorkItem]() * max_batch
-        )
-        self.wl_view = _DevPrefixView(
-            self.workload_info, size_of[WorkloadInfo]() * max_blocks
-        )
         self.splits_d_view = _DevPrefixView(
             self.splits, size_of[Split[Self.O.DataT]]() * max_batch
         )
@@ -1219,10 +1367,15 @@ struct Builder[O: ObjectiveLike](Movable):
 
         self.hist_args = DeviceArgs[HistogramArgs[Self.O]](ctx)
         self.find_args = DeviceArgs[FindBestSplitsArgs[Self.O]](ctx)
+        self.hist_args_alt = DeviceArgs[HistogramArgs[Self.O]](ctx)
+        self.find_args_alt = DeviceArgs[FindBestSplitsArgs[Self.O]](ctx)
+        self.args_cols_a = -1
+        self.args_cols_b = -1
         self.leaf_args = DeviceArgs[LeafArgs[Self.O]](ctx)
         self.node_split_args = DeviceArgs[NodeSplitArgs[Self.O.DataT, Self.O.LabelT]](
             ctx
         )
+        self.node_split_args_ready = False
         self.node_split_scratch = NodeSplitScratch[Self.O.DataT, TPB_DEFAULT](
             ctx, max_blocks * TPB_DEFAULT, max_batch
         )
@@ -1296,6 +1449,62 @@ struct Builder[O: ObjectiveLike](Movable):
         self.treeid = treeid
         # DEVIATION 401 -- per-tree batch numbering restarts with the tree.
         self.trace_batch = -1
+        self._invalidate_args_cache()
+
+    def _invalidate_args_cache(mut self):
+        """DEVIATION 1909: the cached args blobs embed the CURRENT
+        tree's dataset (row pointers, sampled-row count), so they are
+        dropped wherever the dataset a drive hands down may change --
+        `reset_for_tree` and every drive entry (`begin_tree`,
+        `do_split`, `_compute_best_splits`). A reused builder can
+        therefore never launch against a stale blob; the cost of the
+        widest guard is two re-uploads per drive entry, paid only on
+        the serial check arms."""
+        self.args_cols_a = -1
+        self.args_cols_b = -1
+        self.node_split_args_ready = False
+
+    def splits_capacity_bytes(self) -> Int:
+        """One pipeline slot's worth of split staging -- what
+        `SplitStaging` must reserve per adopted builder (DEVIATION
+        1908)."""
+        return size_of[Split[Self.O.DataT]]() * Int(self.params.max_batch_size)
+
+    def adopt_shared_splits(
+        mut self, staging: SplitStaging, slot: Int
+    ) raises:
+        """DEVIATION 1908: repoint this builder's split traffic at slot
+        `slot` of a staging shared by every pipeline slot, so the forest
+        loop can read all K slots back in one copy per cycle
+        (`flush_splits_downloads`).
+
+        The builder's own `wl.splits` / `wl.h_splits` carves go dormant;
+        the arena keeps their layout, which is what `builder_check`
+        compares to their sizing. Call after the constructor (whose
+        trailing synchronize has drained the arena's enqueues) and before
+        any tree work.
+
+        AN ADOPTED BUILDER MUST BE DRIVEN BY A LOOP THAT FLUSHES: its
+        `_enqueue_splits_download` only records a pending count, and only
+        `flush_splits_downloads` (per cycle) or `_download_splits`' own
+        flush actually moves the bytes. `fit_forest` is that loop; the
+        serial `train`/`do_split` drives run on never-adopted builders,
+        as every check constructs its own."""
+        var cap = self.splits_capacity_bytes()
+        if cap > staging.slot_stride:
+            raise Error(
+                "SplitStaging slot stride "
+                + String(staging.slot_stride)
+                + " smaller than this builder's splits capacity "
+                + String(cap)
+            )
+        var off = slot * staging.slot_stride
+        self.splits = staging.d.create_sub_buffer[DType.uint8](off, cap)
+        self.h_splits = staging.h.create_sub_buffer[DType.uint8](off, cap)
+        self.splits_d_view = _DevPrefixView(self.splits, cap)
+        self.splits_h_view = _HostPrefixView(self.h_splits, cap)
+        self.splits_shared = True
+        self.pending_splits_bytes = 0
 
     @always_inline
     def _splits_ptr(mut self) -> MutPointer[Split[Self.O.DataT], MutUntrackedOrigin]:
@@ -1315,8 +1524,14 @@ struct Builder[O: ObjectiveLike](Movable):
 
     @always_inline
     def _workload_ptr(mut self) -> MutPointer[WorkloadInfo, MutUntrackedOrigin]:
+        """DEVIATION 1908: the CURRENT phase's workload map, which the
+        packed upload put at `cur_wl_rel` bytes past the work items --
+        inside the `d_work_items`/`workload_info` arena stretch, at a
+        512-byte boundary. Valid between `_stage_work_items` and the next
+        phase's staging; every launch captures the value by then."""
         return (
-            self.workload_info.unsafe_ptr()
+            self.d_work_items.unsafe_ptr()
+            .unsafe_offset(self.cur_wl_rel)
             .unsafe_origin_cast[MutUntrackedOrigin]()
             .unsafe_bitcast[WorkloadInfo]()
         )
@@ -1338,11 +1553,12 @@ struct Builder[O: ObjectiveLike](Movable):
                                  params.min_impurity_decrease);
 
         Built FRESH from `params` on every call. Theirs constructs once
-        per column block inside `computeSplit`; since DEVIATION 1893 the
-        one caller is `enqueue_best_splits`, once per sampling round, at
-        the args-blob staging site. The value cannot move inside a fit,
-        so the cadence is immaterial; `params` being the only source is
-        the property worth keeping, not the call count."""
+        per column block inside `computeSplit`; since DEVIATIONS
+        1893/1909 the one caller is `enqueue_best_splits`, at the
+        args-blob staging site -- once per tree per sampled-cols width.
+        The value cannot move inside a fit, so the cadence is
+        immaterial; `params` being the only source is the property worth
+        keeping, not the call count."""
         return Self.O(
             self.num_outputs,
             self.params.min_samples_leaf,
@@ -1371,28 +1587,22 @@ struct Builder[O: ObjectiveLike](Movable):
             self.scales,
         )
 
-    def _upload_work_items(
-        mut self, ctx: DeviceContext, items: List[NodeWorkItem]
-    ) raises:
-        """`raft::update_device(d_work_items, work_items.data(),
-        work_items.size(), stream)`, `:466`, `:492`.
-
-        THEIR COUNT IS `work_items.size()`, not the buffer's capacity.
-        The buffer is sized for `max_batch_size` (4096 by default) and a
-        batch is usually far smaller, so copying the whole thing moved up
-        to 4096 items where theirs moves `n`. Correctness was never at
-        stake -- the kernels index `[0, n)` -- only bandwidth, on a copy
-        that happens once per sampling round per level."""
-        var p = self.h_work_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem]()
+    def _stage_work_items(mut self, items: List[NodeWorkItem]):
+        """The pinned half of `raft::update_device(d_work_items,
+        work_items.data(), work_items.size(), stream)` (`:466`, `:492`).
+        DEVIATION 1908: the copy itself is deferred to
+        `_enqueue_phase_upload`, which sends this phase's work items and
+        its workload map as ONE transfer. THEIR COUNT stays
+        `work_items.size()` -- the packed span's live bytes -- not the
+        buffer's capacity; the workload block begins at the next 512-byte
+        boundary (`ALIGN_VALUE`, the arena's own alignment) past the live
+        items, so the device pointer the kernels get is as aligned as the
+        old carve's."""
+        var p = self.h_phase.unsafe_ptr().unsafe_bitcast[NodeWorkItem]()
         for i in range(len(items)):
             p[unsafe_offset=i] = items[i]
-        var nbytes = len(items) * size_of[NodeWorkItem]()
-        if nbytes == 0:
-            return
-        self.wi_view.ensure(self.d_work_items, nbytes)
-        log_launch("xfer_work_items")
-        ctx.enqueue_copy(
-            dst_buf=self.wi_view.view, src_ptr=self.h_work_items.unsafe_ptr()
+        self.cur_wl_rel = calculate_aligned_bytes(
+            len(items) * size_of[NodeWorkItem]()
         )
 
     @always_inline
@@ -1400,46 +1610,65 @@ struct Builder[O: ObjectiveLike](Movable):
         mut self,
     ) -> MutPointer[WorkloadInfo, MutUntrackedOrigin]:
         """The pinned array `update_workload_info` fills in place --
-        upstream's `h_workload_info` member (`builder.cuh:198`)."""
+        upstream's `h_workload_info` member (`builder.cuh:198`).
+        DEVIATION 1908: it lives in the packed phase span, directly after
+        this phase's work items; call only after `_stage_work_items` has
+        set `cur_wl_rel`."""
         return (
-            self.h_workload_info.unsafe_ptr()
+            self.h_phase.unsafe_ptr()
+            .unsafe_offset(self.cur_wl_rel)
             .unsafe_origin_cast[MutUntrackedOrigin]()
             .unsafe_bitcast[WorkloadInfo]()
         )
 
-    def _upload_workload(
+    def _enqueue_phase_upload(
         mut self, ctx: DeviceContext, n_blocks_dimx: Int
     ) raises:
-        """`raft::update_device(workload_info, h_workload_info,
-        n_blocks_dimx, stream)`, `:405`. Their count is `n_blocks_dimx`;
-        the buffer holds `max_blocks_dimx`. The pinned source was already
-        filled IN PLACE by `update_workload_info` (as theirs is), so this
-        is the one H2D copy and nothing else."""
-        var nbytes = n_blocks_dimx * size_of[WorkloadInfo]()
+        """DEVIATION 1908: ONE H2D copy for the phase's control plane.
+        Their two `update_device`s (`:466` work items, `:405` workload)
+        are cheap CUDA async ops; here each enqueue is host-priced, so
+        the pair rides one packed span into the SAME
+        `d_work_items`/`workload_info` arena stretch. Byte count is
+        live-only, exactly the sum of theirs plus the alignment gap.
+        Same bytes at the same-or-aligned addresses; no value moves."""
+        var nbytes = self.cur_wl_rel + n_blocks_dimx * size_of[WorkloadInfo]()
         if nbytes == 0:
             return
-        self.wl_view.ensure(self.workload_info, nbytes)
-        log_launch("xfer_workload_info")
+        self.phase_view.ensure(self.d_buff, nbytes)
+        log_launch("xfer_phase_upload")
         ctx.enqueue_copy(
-            dst_buf=self.wl_view.view,
-            src_ptr=self.h_workload_info.unsafe_ptr(),
+            dst_buf=self.phase_view.view,
+            src_ptr=self.h_phase.unsafe_ptr(),
+        )
+
+    def _copy_splits_now(mut self, ctx: DeviceContext, nbytes: Int) raises:
+        """This builder's own splits readback -- the pre-1908 copy,
+        shared by the private-mode path and the serial arm's flush."""
+        # `:479` -- their count is `work_items.size()`.
+        self.splits_h_view.ensure(self.h_splits, nbytes)
+        self.splits_d_view.ensure(self.splits, nbytes)
+        log_launch("xfer_splits_download")
+        ctx.enqueue_copy(
+            dst_buf=self.splits_h_view.view,
+            src_buf=self.splits_d_view.view,
         )
 
     def _enqueue_splits_download(mut self, ctx: DeviceContext, n: Int) raises:
         """The COPY half of `raft::update_host(h_splits, splits, ...)`
         (`:479`, `:501`). The sync is the CALLER's, because in the
         pipelined forest loop (DEVIATION 117) one synchronize serves every
-        in-flight tree's downloads at once."""
+        in-flight tree's downloads at once.
+
+        DEVIATION 1908: under a shared staging (`adopt_shared_splits`)
+        nothing is enqueued here either -- the byte count is RECORDED and
+        the forest loop's `flush_splits_downloads` sends every in-flight
+        tree's slot as ONE copy per pipeline cycle."""
         var nbytes = n * size_of[Split[Self.O.DataT]]()
         if nbytes > 0:
-            # `:479` -- their count is `work_items.size()`.
-            self.splits_h_view.ensure(self.h_splits, nbytes)
-            self.splits_d_view.ensure(self.splits, nbytes)
-            log_launch("xfer_splits_download")
-            ctx.enqueue_copy(
-                dst_buf=self.splits_h_view.view,
-                src_buf=self.splits_d_view.view,
-            )
+            if self.splits_shared:
+                self.pending_splits_bytes = nbytes
+                return
+            self._copy_splits_now(ctx, nbytes)
 
     def _read_splits(
         mut self, n: Int
@@ -1473,8 +1702,17 @@ struct Builder[O: ObjectiveLike](Movable):
         """`raft::update_host(h_splits, splits, ...)` + `sync_stream`,
         `:479-480`, `:676-677` -- the serial composition of the two
         halves above, kept so `train()`'s single-tree path reads exactly
-        as their code does."""
+        as their code does.
+
+        DEVIATION 1908: on an ADOPTED builder the enqueue only records a
+        pending count, so this serial arm flushes its own slot here --
+        a check driving `train`/`do_split` on an adopted builder still
+        reads real bytes, at the pre-1908 cadence."""
         self._enqueue_splits_download(ctx, n)
+        if self.splits_shared and self.pending_splits_bytes > 0:
+            var nbytes = self.pending_splits_bytes
+            self.pending_splits_bytes = 0
+            self._copy_splits_now(ctx, nbytes)
         ctx.synchronize()
         return self._read_splits(n)
 
@@ -1526,10 +1764,16 @@ struct Builder[O: ObjectiveLike](Movable):
         smem_config: SharedMemoryConfig,
         mut instr: FitInstruments,
         tag_prefix: String,
+        hist_argsp: MutPointer[HistogramArgs[Self.O], MutUntrackedOrigin],
+        find_argsp: MutPointer[
+            FindBestSplitsArgs[Self.O], MutUntrackedOrigin
+        ],
     ) raises:
         """`Builder::computeSplit`, `:570-626`. The quantiles and the
-        objective travel in the round's staged args blobs (DEVIATION
-        1893); `dataset` remains for the `has_bins` dispatch.
+        objective travel in the staged args blobs -- per tree per width
+        since DEVIATION 1909, selected by `enqueue_best_splits` and
+        handed down here as `hist_argsp`/`find_argsp`; `dataset` remains
+        for the `has_bins` dispatch.
 
         Their `n_blocks_dimy = min(n_blks_for_cols, n_sampled_cols - col)`
         is what makes the histogram buffer hold up to ten columns at once,
@@ -1560,11 +1804,11 @@ struct Builder[O: ObjectiveLike](Movable):
         )
         ctx.enqueue_memset(self.hist_view.view, UInt8(0))
 
-        # DEVIATION 1893: the args blobs were staged once for this round
-        # by `enqueue_best_splits`; the launchers take the device
-        # pointers. The objective their `:592-596` builds per column
-        # block is built once per round at the staging site -- same
-        # value, `params` still the only source.
+        # DEVIATION 1893/1909: the args blobs were staged by
+        # `enqueue_best_splits` (once per tree per sampled-cols width);
+        # the launchers take the device pointers. The objective their
+        # `:592-596` builds per column block is built at the staging
+        # site -- same value, `params` still the only source.
         launch_build_histograms_kernel[Self.O](
             ctx,
             self._hist_ptr(),
@@ -1578,7 +1822,7 @@ struct Builder[O: ObjectiveLike](Movable):
             n_blocks_dimx,
             n_blocks_dimy,
             smem_config,
-            self.hist_args.device_ptr(),
+            hist_argsp,
         )
         # DEVIATION 401 -- the column block's REDUCED histograms, hashed
         # between the histogram kernel and the split kernel so the record
@@ -1611,7 +1855,7 @@ struct Builder[O: ObjectiveLike](Movable):
             self._splits_ptr(),
             n_work_items,
             n_blocks_dimy,
-            self.find_args.device_ptr(),
+            find_argsp,
         )
 
     def enqueue_best_splits(
@@ -1640,32 +1884,67 @@ struct Builder[O: ObjectiveLike](Movable):
         # `:490` -- the mutex is re-zeroed EVERY batch, over max_batch_size
         # entries and not just the live ones.
         ctx.enqueue_memset(self.mutex, Int32(0))
-        self._upload_work_items(ctx, work_items)
-
+        # DEVIATION 1908: stage both, then ONE packed upload.
+        self._stage_work_items(work_items)
         # `:393-407` -- straight into the pinned array, as theirs.
         var n_blocks_dimx = update_workload_info(
             work_items, self._h_workload_ptr()
         )
-        self._upload_workload(ctx, n_blocks_dimx)
+        self._enqueue_phase_upload(ctx, n_blocks_dimx)
 
-        # DEVIATION 1893: stage the two split kernels' argument blobs
-        # ONCE for this round. Everything in them is constant inside the
-        # round -- `dataset` already carries this round's
-        # `n_sampled_cols` (`_enqueue_round` narrows it), and the
-        # objective is a pure function of `params` (their `:592-596`).
-        var objective = self._objective()
-        _ = self.hist_args.upload(
-            ctx,
-            HistogramArgs[Self.O](
-                dataset.copy(), quantiles.copy(), objective.copy()
-            ),
-        )
-        _ = self.find_args.upload(
-            ctx,
-            FindBestSplitsArgs[Self.O](
-                dataset.copy(), quantiles.copy(), objective.copy()
-            ),
-        )
+        # DEVIATION 1893/1909: the two split kernels' argument blobs are
+        # a pure function of this tree's dataset and the round's
+        # `n_sampled_cols` (`_enqueue_round` narrows it; the objective is
+        # a pure function of `params`, their `:592-596`) -- at most two
+        # widths per tree, so each width uploads once per tree into its
+        # own slot and every later round with that width re-hands the
+        # device pointer. Overwriting a slot is safe at this cadence:
+        # this builder's previous phase drained at the caller's last
+        # synchronize before a new enqueue can reach here.
+        var cols = Int(dataset.n_sampled_cols)
+        var hist_argsp: MutPointer[HistogramArgs[Self.O], MutUntrackedOrigin]
+        var find_argsp: MutPointer[
+            FindBestSplitsArgs[Self.O], MutUntrackedOrigin
+        ]
+        if cols == self.args_cols_a:
+            hist_argsp = self.hist_args.device_ptr()
+            find_argsp = self.find_args.device_ptr()
+        elif cols == self.args_cols_b:
+            hist_argsp = self.hist_args_alt.device_ptr()
+            find_argsp = self.find_args_alt.device_ptr()
+        else:
+            var objective = self._objective()
+            if self.args_cols_a == -1:
+                self.args_cols_a = cols
+                hist_argsp = self.hist_args.upload(
+                    ctx,
+                    HistogramArgs[Self.O](
+                        dataset.copy(), quantiles.copy(), objective.copy()
+                    ),
+                )
+                find_argsp = self.find_args.upload(
+                    ctx,
+                    FindBestSplitsArgs[Self.O](
+                        dataset.copy(), quantiles.copy(), objective.copy()
+                    ),
+                )
+            else:
+                # A third width cannot occur on the fit paths (see the
+                # field block); a sabotage arm that forces one lands
+                # here and simply restages the alt slot.
+                self.args_cols_b = cols
+                hist_argsp = self.hist_args_alt.upload(
+                    ctx,
+                    HistogramArgs[Self.O](
+                        dataset.copy(), quantiles.copy(), objective.copy()
+                    ),
+                )
+                find_argsp = self.find_args_alt.upload(
+                    ctx,
+                    FindBestSplitsArgs[Self.O](
+                        dataset.copy(), quantiles.copy(), objective.copy()
+                    ),
+                )
 
         self._sample_features(ctx, n, sample_offset, n_sampled_cols)
         # DEVIATION 401 (added with the 2026-08-22 identity audit) -- the
@@ -1693,6 +1972,7 @@ struct Builder[O: ObjectiveLike](Movable):
             self._compute_split(
                 ctx, dataset, c, n_blocks_dimx, n,
                 n_sampled_cols, smem_config, instr, tag_prefix,
+                hist_argsp, find_argsp,
             )
             c += N_BLKS_FOR_COLS
         self._enqueue_splits_download(ctx, n)
@@ -1712,6 +1992,9 @@ struct Builder[O: ObjectiveLike](Movable):
         `sync_stream`. Instruments are DISABLED here (DEVIATION 401): the
         callers of this serial arm are checks, and a check must not change
         behavior under an exported trace variable."""
+        # DEVIATION 1909 -- serial entry with a caller-supplied dataset:
+        # never trust an earlier drive's cached blobs.
+        self._invalidate_args_cache()
         var instr = FitInstruments.disabled()
         self.enqueue_best_splits(
             ctx, dataset, quantiles, work_items, sample_offset,
@@ -1945,6 +2228,9 @@ struct Builder[O: ObjectiveLike](Movable):
         Instruments are DISABLED (DEVIATION 401): this arm serves checks,
         which must not change behavior under an exported trace variable.
         """
+        # DEVIATION 1909 -- serial entry with a caller-supplied dataset:
+        # never trust an earlier drive's cached blobs.
+        self._invalidate_args_cache()
         var instr = FitInstruments.disabled()
         var st = self.begin_batch[sabotage](
             ctx, dataset, quantiles, work_items, smem_config, instr
@@ -1986,7 +2272,11 @@ struct Builder[O: ObjectiveLike](Movable):
                 Int32(-1),
             )
         # `:462-466` -- `sizeof(SplitT) * work_items.size()`, not the
-        # buffer.
+        # buffer. NOT foldable into the phase span (DEVIATION 1908): the
+        # partition kernels read AND update these splits in place and the
+        # batch's final download reads them back, so the upload's
+        # destination must be the `splits` region itself -- in shared
+        # mode, this builder's `SplitStaging` slot.
         var sp_bytes = n * size_of[Split[Self.O.DataT]]()
         if sp_bytes > 0:
             self.splits_d_view.ensure(self.splits, sp_bytes)
@@ -1995,18 +2285,23 @@ struct Builder[O: ObjectiveLike](Movable):
                 dst_buf=self.splits_d_view.view,
                 src_ptr=self.h_splits.unsafe_ptr(),
             )
-        self._upload_work_items(ctx, work_items)
+        # DEVIATION 1908: stage both, then ONE packed upload.
+        self._stage_work_items(work_items)
         # `:393-407` -- straight into the pinned array, as theirs.
         var n_partition_blocks = update_workload_info(
             work_items, self._h_workload_ptr()
         )
-        self._upload_workload(ctx, n_partition_blocks)
+        self._enqueue_phase_upload(ctx, n_partition_blocks)
 
-        # DEVIATION 1893: the partition's args blob (dataset only), staged
-        # once per batch and shared by its three kernel launches.
-        var argsp = self.node_split_args.upload(
-            ctx, NodeSplitArgs(ds.copy())
-        )
+        # DEVIATION 1893/1909: the partition's args blob (dataset only,
+        # `n_sampled_cols` restored to `original_n_sampled_cols` above)
+        # is the same bytes for every batch of a tree -- staged on the
+        # tree's first partition, re-handed until the args cache is
+        # invalidated (`reset_for_tree` / the drive entries).
+        if not self.node_split_args_ready:
+            _ = self.node_split_args.upload(ctx, NodeSplitArgs(ds.copy()))
+            self.node_split_args_ready = True
+        var argsp = self.node_split_args.device_ptr()
         launch_node_split_kernel(
             ctx,
             ds,
@@ -2299,6 +2594,9 @@ struct Builder[O: ObjectiveLike](Movable):
         not expandable (max_depth 0, min_samples_split larger than the
         node) the tree finishes HERE, leaf pass included -- check `done`
         before waiting on a sync for it."""
+        # DEVIATION 1909 -- this dataset is the one the cached args
+        # blobs will embed; drop whatever an earlier drive staged.
+        self._invalidate_args_cache()
         var ds = dataset.copy()
         ds.n_sampled_cols = Int32(self.original_n_sampled_cols)
         var smem_config = self.shared_memory_config()

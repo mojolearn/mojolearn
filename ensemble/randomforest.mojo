@@ -311,7 +311,9 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from ensemble.decisiontree.batched_levelalgo.bins import Bin
 from ensemble.decisiontree.batched_levelalgo.builder import (
     Builder,
+    SplitStaging,
     TreeState,
+    flush_splits_downloads,
 )
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import (
     launch_bin_dataset,
@@ -2648,6 +2650,16 @@ def fit_forest[
             )
         )
 
+    # DEVIATION 1908: ONE splits staging for all K slots, so the cycle
+    # below reads every in-flight tree's split results back in a single
+    # copy (`flush_splits_downloads`) instead of one host-priced enqueue
+    # per slot. `builders[k]` owns slot k -- the flush indexes by that.
+    var split_staging = SplitStaging(
+        ctx, k_streams, builders[0].splits_capacity_bytes()
+    )
+    for k in range(k_streams):
+        builders[k].adopt_shared_splits(split_staging, k)
+
     # `:337-367` -- their tree loop, K-WAY PIPELINED (DEVIATION 117; see
     # the block above `k_streams`). Trees finish out of order, so the
     # forest is preallocated and each tree lands at ITS index.
@@ -2731,6 +2743,14 @@ def fit_forest[
     # host threads it never needed.
     var active = len(states)
     while active > 0:
+        # DEVIATION 1908 -- every in-flight tree's pending splits
+        # readback rides ONE copy. Enqueued here, after the previous
+        # pass's kernels (the queue is in-order) and before the drain
+        # that makes the host bytes readable; the first pass flushes the
+        # prime loop's enqueues. When the loop exits, nothing is
+        # pending: a slot records a pending count only by enqueueing a
+        # phase, and a slot that enqueued one stays active.
+        flush_splits_downloads(ctx, split_staging, builders)
         # DEVIATION 402 -- "device_wait" is the one drain that serves
         # every in-flight tree's enqueued phase; `stop_host` because the
         # queue is empty at the stamp by construction.
@@ -2801,8 +2821,10 @@ def fit_forest[
     ctx.synchronize()
     # Mojo frees a value at its LAST USE; the builders' buffers must
     # outlive every launch that read them, so they are released only
-    # after the drain above.
+    # after the drain above. The shared splits staging (DEVIATION 1908)
+    # is under the same rule: every slot's kernels wrote into it.
     _ = builders^
+    _ = split_staging^
 
     # `randomforest_common.pyx:669-670` -- after the tree loop, and only
     # if it was asked for.
