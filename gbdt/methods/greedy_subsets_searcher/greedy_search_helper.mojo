@@ -297,6 +297,26 @@ struct LevelResult(Copyable, Movable):
 # `size_of[CFeature]()` is for.
 comptime CFEATURE_BYTES = size_of[CFeature]()
 
+# ================= DEVIATION 1905 =================
+# THE SYNCHRONIZE AUDIT. Every `ctx.synchronize()` in this file was
+# classified -- serves a host read that still exists / serves staging
+# lifetime (the step-33 race class) / serves nothing reachable -- and the
+# full 24-site table is in this deviation's commit message. The training
+# path (`run_tree_layout_traced`) was already at ONE drain per tree
+# (DEVIATION 94); what the audit found dead were five drains that ordered
+# nothing the queue did not already order and freed no staging: three in
+# `run_tree`'s level loop, one after its leaf-values launch, and the
+# rollback branch's drain in the traced driver. Those five compile out
+# under FAST behind this comptime truth, the DEVIATION-1876 pattern:
+# IDENTICAL keeps today's schedule byte-for-byte, drains included,
+# because IDENTICAL's contract is the code path and the identity gate
+# rebuilds it against main. Kept-but-mergeable drains (staging-lifetime
+# holders in the check-tier probes `run_one_level` / `run_tree`) are
+# DECLINED with the price stated in the ledger: merging them moves
+# `_ = staging^` destruction points, the file's named recurring bug
+# class, to save microseconds on paths no benchmark runs.
+comptime IDENTICAL_DRAIN_SCHEDULE = HIST_BUILD_MODE == NUMERIC_IDENTICAL
+
 
 def make_split_features_buffers(
     ctx: DeviceContext, count: Int
@@ -1118,7 +1138,13 @@ def run_tree(
         for i in range(n_live):
             h_ids_a.unsafe_ptr().unsafe_store(i, UInt32(i))
         ctx.enqueue_copy(dst_buf=ids_a, src_ptr=h_ids_a.unsafe_ptr())
-        ctx.synchronize()
+        # DEVIATION 1905: dead drain. The kernels below read `ids_a`
+        # behind this copy on the same queue, and the next HOST touch of
+        # `h_ids_a` (next iteration's refill, or the post-loop refill) sits
+        # behind the level's kept size-read drain. FAST deletes it;
+        # IDENTICAL keeps today's schedule.
+        comptime if IDENTICAL_DRAIN_SCHEDULE:
+            ctx.synchronize()
 
         # `numBlocks.x = CeilDivide(binFeatureCount, blockSize)` with
         # blockSize 256 (`histogram_utils.cu:236-238`). Grid x of 1 cleared
@@ -1218,7 +1244,12 @@ def run_tree(
             ids_a, p_off, p_sz, stats, stat_partials, part_stats,
             sm_count=sm_count,
         )
-        ctx.synchronize()
+        # DEVIATION 1905: dead drain. `compute_partition_stats` only
+        # enqueues, the score kernel below reads `part_stats` behind it on
+        # the same queue, and no host read or staging release sits between
+        # them. FAST deletes it; IDENTICAL keeps today's schedule.
+        comptime if IDENTICAL_DRAIN_SCHEDULE:
+            ctx.synchronize()
 
         # ---- 3. one split for the whole level ---------------------------
         # `bff` and `ffw` are their `subsets->BinFeatures` and
@@ -1251,7 +1282,12 @@ def run_tree(
             grid_dim=(1, 1, 1),
             block_dim=(SCORE_BLOCK_SIZE, 1, 1),
         )
-        ctx.synchronize()
+        # DEVIATION 1905: dead drain. The copy below is queue-ordered
+        # behind the score kernel; only the drain AFTER the copy makes
+        # `hob` readable, and that one stays. FAST deletes this one;
+        # IDENTICAL keeps today's schedule.
+        comptime if IDENTICAL_DRAIN_SCHEDULE:
+            ctx.synchronize()
         ctx.enqueue_copy(dst_ptr=hob.unsafe_ptr(), src_buf=out_bin)
         ctx.synchronize()
         var best = Int(hob.unsafe_ptr().unsafe_load(0))
@@ -1403,7 +1439,12 @@ def run_tree(
         grid_dim=(n_live + LEAF_BLOCK - 1) // LEAF_BLOCK,
         block_dim=LEAF_BLOCK,
     )
-    ctx.synchronize()
+    # DEVIATION 1905: dead drain. The two copies below are queue-ordered
+    # behind the kernel and the drain after THEM is what makes their host
+    # buffers readable. FAST deletes this one; IDENTICAL keeps today's
+    # schedule.
+    comptime if IDENTICAL_DRAIN_SCHEDULE:
+        ctx.synchronize()
 
     ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
     ctx.enqueue_copy(dst_ptr=h_leaf_values.unsafe_ptr(), src_buf=leaf_values)
@@ -3664,7 +3705,13 @@ def run_tree_layout_traced[
                 h_sz.unsafe_ptr().unsafe_store(i, merged)
             live = h2
         ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
-        ctx.synchronize()
+        # DEVIATION 1905: dead drain. `h_sz` is pool-owned (it outlives
+        # the fit, so no staging lifetime hangs here), the host does not
+        # write it again before the tail's own `wait_complete`, and every
+        # device read of `p_sz` below is queue-ordered behind this
+        # upload. FAST deletes it; IDENTICAL keeps today's schedule.
+        comptime if IDENTICAL_DRAIN_SCHEDULE:
+            ctx.synchronize()
         n_live = live
 
     # ================================================================
