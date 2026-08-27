@@ -199,7 +199,7 @@ def one_byte_slice_offset[bits: Int, smem_mode: Int](tid: Int) -> Int:
     CatBoost never wrote that layout, so the assert makes it a compile error
     rather than two warps quietly sharing one private copy. A 64-lane
     column never instantiates this family: `greedy_one_byte_fixed_for`
-    (DEVIATION 1901) routes its one-byte work to the fused 8-bit kernel at
+    (DEVIATION 1906) routes its one-byte work to the fused 8-bit kernel at
     the dispatch, and the assert stays for whatever reaches this file some
     other way.
     """

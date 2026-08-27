@@ -1516,7 +1516,7 @@ def launch_hist2_8bit(
     the PASS design launches z = stat_count walks. Reached when the
     `hist_smem_mode_for` row is the shared-Int32 arm, and for EVERY
     one-byte width on a 64-lane column (`greedy_one_byte_fixed_for`,
-    DEVIATION 1901); the 32-lane float columns dispatch
+    DEVIATION 1906); the 32-lane float columns dispatch
     `launch_one_byte[8]` exactly as CatBoost's ladder does."""
     if stat_count != 2:
         raise Error("the fused 8-bit arm is two-stat by construction")
@@ -2070,7 +2070,7 @@ def launch_histograms_for_blocks[
         comptime _flush_is_fixed_point = deterministic_flush_for[
             TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
         ]()
-        # DEVIATION 1901: a 64-lane column's one-byte blocks run the fused
+        # DEVIATION 1906: a 64-lane column's one-byte blocks run the fused
         # 8-bit fixed-point kernel even under FAST (`greedy_one_byte_fixed_for`),
         # so their cells land in the accumulator exactly as the shared-Int32
         # arm's do, and the bridge must read it. Comptime False on every
@@ -2229,7 +2229,7 @@ def launch_histograms_for_blocks[
             # wider than the data changes where bins land. A byte-level
             # probe established that for the PASS family (64-fold block at
             # 8 bits: 2 of 4 features wrong).
-            # ================= DEVIATION 1901 =================
+            # ================= DEVIATION 1906 =================
             # ON A 64-LANE COLUMN UNDER FAST THE LADDER DOES NOT EXIST.
             # Every kernel it names is 32-lane by construction -- the
             # 1024-float slice is 32 lanes times 32 floats per thread, and
@@ -2260,7 +2260,7 @@ def launch_histograms_for_blocks[
                 else:
                     raise Error(
                         "one-byte histograms on a 64-lane column need the"
-                        " fused two-stat kernel (DEVIATION 1901); the"
+                        " fused two-stat kernel (DEVIATION 1906); the"
                         " multi-stat PASS family has no wide-wavefront"
                         " layout yet"
                     )
@@ -2484,7 +2484,7 @@ def acc_i32_is_live[hist2_smem_mode: Int]() -> Bool:
       the gate cannot be a bare mode test, OR
     * a 64-lane column routes every one-byte width through the fused
       8-bit fixed-point kernel (`greedy_one_byte_fixed_for`,
-      DEVIATION 1901), whose writebacks land in the accumulator the
+      DEVIATION 1906), whose writebacks land in the accumulator the
       same way -- the third writer, same rule, same delegation.
 
     When this is False the buffer is allocated at ONE cell and never

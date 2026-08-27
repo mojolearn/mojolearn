@@ -1319,7 +1319,7 @@ def pointwise_one_byte_fixed_for[column: Int, identical: Bool]() -> Bool:
 
 
 def greedy_one_byte_fixed_for[column: Int, identical: Bool]() -> Bool:
-    """NUMERIC row (DEVIATION 1901): whether the GREEDY one-byte family
+    """NUMERIC row (DEVIATION 1906): whether the GREEDY one-byte family
     routes EVERY width through the fused 8-bit fixed-point kernel
     (`hist_2_one_byte_8bit.mojo`) instead of CatBoost's maxBins ladder.
 

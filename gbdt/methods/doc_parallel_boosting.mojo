@@ -1210,7 +1210,7 @@ def fit_with_test(
     # skips the launch flag, the copy and the sync at comptime. A 64-lane
     # column's FAST build quantizes: its one-byte blocks route through the
     # fused 8-bit fixed-point kernel (`greedy_one_byte_fixed_for`,
-    # DEVIATION 1901), so it needs the bound exactly as the Apple column
+    # DEVIATION 1906), so it needs the bound exactly as the Apple column
     # does -- an unbounded scale here is the WHY THIS EXISTS failure below.
     comptime _flush_fixed = deterministic_flush_for[
         TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL

@@ -14,7 +14,7 @@ for: slices are SHARED and the adds are ATOMIC, so FOUR warps share one
 walk, both stats, half the launches, half the cindex traffic. Measured
 standings live in RESUME; the arm exists for the
 `HIST_SMEM_SHARED2_I32` matrix row and, at EVERY one-byte width, for
-64-lane columns (`greedy_one_byte_fixed_for`, DEVIATION 1901: nothing
+64-lane columns (`greedy_one_byte_fixed_for`, DEVIATION 1906: nothing
 here indexes by hardware lane -- Int32 atomics, block barriers, uniform
 trip counts, `H8_LANE` a logical striping constant -- so it is the one
 one-byte kernel a 64-wide wavefront can run). 32-lane NVIDIA/AMD float
