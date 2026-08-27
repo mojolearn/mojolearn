@@ -700,3 +700,70 @@ passes by construction.
   ids are never reused within a tree, and the arena memset at
   `CreateInitialSubsets` runs once per fit call. Both hold today in this
   driver; a future slot-reuse scheme must revisit the elision.
+
+### DEVIATION 1902 -- move only the row index at a split. DESIGN NOTE, NOT IMPLEMENTED
+
+**Why this is a note and not code: every load-bearing edit lands in the
+other lane's files.** The number is reserved and this section is the
+hand-off; nothing of 1902 is half-implemented in the tree.
+
+* **The bill today.** On any splitting leaf over 1024 rows,
+  `launch_reorder_in_leaves` (`kernel/split_points.mojo:751-931` before this
+  round's insertions) runs the slow arm: `2 * ceil(stat_count / 8) + 2`
+  launches that move every stat column PLUS the row index out to scratch and
+  gather them back -- `(stat_count + 1) * 4` bytes per row, twice. At 1M-5M
+  rows the early, expensive splits are ALL over 1024 rows, and lossguide
+  pays the arm ~63 sequential times per tree. Both recons converge on the
+  alternative: LightGBM moves 4 bytes/row of the split leaf in ~4 lean
+  kernels and NEVER moves a gradient (`cuda_data_partition.cu:288-334,
+  679-783, 907-944`; its hist kernel gathers through `data_indices_in_leaf`,
+  `cuda_histogram_constructor.cu:53-55`); XGBoost's `RowPartitioner`
+  is the same design (`row_partitioner.cuh:112-201`, gather at
+  `histogram.cu:186,212`).
+* **The mechanism, on this port's planes.** Stop permuting `stats` at a
+  split; keep permuting `row_index` (4 B/row, the existing partition +
+  index copy/gather pair, or the inplace arm). Every consumer that today
+  reads `stats` CONTIGUOUSLY over a partition range `[offset, offset+size)`
+  instead gathers `stats[row_index[offset + i] + stat * line_size]` -- the
+  same indirection those kernels ALREADY perform for the compressed index
+  through `load_indices`. `stats` then holds document order for the life of
+  the fit, exactly as the compressed index does, and the split's payload
+  drops from `(stat_count + 1)` columns twice to one column twice (or once,
+  on the inplace arm).
+* **The edits, by file and owner.**
+  1. `kernel/hist_2_one_byte_base.mojo` + the `hist_2_one_byte_{5,6,7,8}bit`
+     twins and `hist_binary` / `hist_half_byte`: the stat loads become
+     gathers through the already-loaded row index (they load
+     `indices[p_offset + pe]` for the cindex TODAY -- the same register
+     feeds the stat address). OTHER LANE (hist_2_* is named out of bounds
+     for this round).
+  2. `greedy_search_helper.mojo` (`launch_histograms_for_blocks`, the
+     symmetric driver's reorder call sites, `compute_target_std_dev` if it
+     reads per-partition): plumb the flag/remove the stat reorder launches.
+     OTHER LANE.
+  3. `gpu_util/partitions_reduce.mojo` (`compute_partition_stats`): gather
+     instead of contiguous read. Under 1901's FAST arm this runs twice per
+     tree (root seed + leaf values), so its marginal cost is small. OTHER
+     LANE'S FILE by this round's boundary.
+  4. `kernel/split_points.mojo` + the non-symmetric driver (THIS lane):
+     delete the stat copy/gather launches from `launch_reorder_in_leaves`'s
+     slow arm and the stat blocks from `gather_inplace_kernel`'s grid
+     (`grid.x` drops from `1 + statCount` to 1); `new_stats` scratch dies.
+  5. The estimation/bootstrap writers (`doc_parallel_boosting` and the
+     objective): they must WRITE the stat planes in the order the readers
+     now assume (document order), not the permuted order. This is the one
+     place the design can silently break: today the planes are re-permuted
+     every split so writer and reader agree by construction.
+* **Staging plan (why this is LAST).** Behind the same
+  `SPLIT_COST_IDENTICAL` gate, one consumer at a time, each staged against
+  the uniform-data trap ([[uniform-test-data-hides-permutation]]): plant
+  HASHED per-row stat values and compare per cell, because a uniform plane
+  makes a dropped permutation invisible. The hist gather is the risky read
+  (coalescing changes from contiguous to indirect on exactly the hot
+  kernel); the recons' answer is that both competitors eat that gather and
+  win anyway, but it must be MEASURED, not assumed -- if the gather costs
+  more than the reorder saves at 255 bins x 2 stats, the deviation dies on
+  the bench, not in review.
+* **Interaction with 1901/1903.** Independent of both: 1901 removes the
+  per-level stats sweep (fewer contiguous readers to convert), 1903 does
+  not touch the stat planes at all. Land order 1901 -> 1903 -> 1902 stands.
