@@ -1140,10 +1140,27 @@ struct Builder[O: ObjectiveLike](Movable):
     var hist_view: _DevPrefixView
 
     # --- DEVIATION 128a's argument blobs, one per launcher --------------
+    # DEVIATION 1909: staged PER TREE, not per round/batch. Inside one
+    # tree the split blobs are a pure function of the round's
+    # `n_sampled_cols` -- everything else in them (dataset pointers and
+    # counts, quantiles, the objective built from `params`) is fixed by
+    # `begin_tree`/`reset_for_tree` -- and that width takes at most TWO
+    # values per tree: the full `original_n_sampled_cols` and the short
+    # last round's remainder (`sampled_cols_in_round`). Two cached slots
+    # per launcher hold both; `args_cols_a`/`args_cols_b` record which
+    # width each slot's device bytes carry, -1 = not staged for this
+    # tree. The partition blob (`node_split_args`, width always restored
+    # to `original_n_sampled_cols`, `:458`) needs one Bool. `leaf_args`
+    # was already once per tree (DEVIATION 1893) and keeps its cadence.
     var hist_args: DeviceArgs[HistogramArgs[Self.O]]
     var find_args: DeviceArgs[FindBestSplitsArgs[Self.O]]
+    var hist_args_alt: DeviceArgs[HistogramArgs[Self.O]]
+    var find_args_alt: DeviceArgs[FindBestSplitsArgs[Self.O]]
+    var args_cols_a: Int
+    var args_cols_b: Int
     var leaf_args: DeviceArgs[LeafArgs[Self.O]]
     var node_split_args: DeviceArgs[NodeSplitArgs[Self.O.DataT, Self.O.LabelT]]
+    var node_split_args_ready: Bool
     var node_split_scratch: NodeSplitScratch[Self.O.DataT, TPB_DEFAULT]
 
     # --- the leaf pass's staging, DEVIATION 313's second half ------------
@@ -1350,10 +1367,15 @@ struct Builder[O: ObjectiveLike](Movable):
 
         self.hist_args = DeviceArgs[HistogramArgs[Self.O]](ctx)
         self.find_args = DeviceArgs[FindBestSplitsArgs[Self.O]](ctx)
+        self.hist_args_alt = DeviceArgs[HistogramArgs[Self.O]](ctx)
+        self.find_args_alt = DeviceArgs[FindBestSplitsArgs[Self.O]](ctx)
+        self.args_cols_a = -1
+        self.args_cols_b = -1
         self.leaf_args = DeviceArgs[LeafArgs[Self.O]](ctx)
         self.node_split_args = DeviceArgs[NodeSplitArgs[Self.O.DataT, Self.O.LabelT]](
             ctx
         )
+        self.node_split_args_ready = False
         self.node_split_scratch = NodeSplitScratch[Self.O.DataT, TPB_DEFAULT](
             ctx, max_blocks * TPB_DEFAULT, max_batch
         )
@@ -1427,6 +1449,20 @@ struct Builder[O: ObjectiveLike](Movable):
         self.treeid = treeid
         # DEVIATION 401 -- per-tree batch numbering restarts with the tree.
         self.trace_batch = -1
+        self._invalidate_args_cache()
+
+    def _invalidate_args_cache(mut self):
+        """DEVIATION 1909: the cached args blobs embed the CURRENT
+        tree's dataset (row pointers, sampled-row count), so they are
+        dropped wherever the dataset a drive hands down may change --
+        `reset_for_tree` and every drive entry (`begin_tree`,
+        `do_split`, `_compute_best_splits`). A reused builder can
+        therefore never launch against a stale blob; the cost of the
+        widest guard is two re-uploads per drive entry, paid only on
+        the serial check arms."""
+        self.args_cols_a = -1
+        self.args_cols_b = -1
+        self.node_split_args_ready = False
 
     def splits_capacity_bytes(self) -> Int:
         """One pipeline slot's worth of split staging -- what
@@ -1517,11 +1553,12 @@ struct Builder[O: ObjectiveLike](Movable):
                                  params.min_impurity_decrease);
 
         Built FRESH from `params` on every call. Theirs constructs once
-        per column block inside `computeSplit`; since DEVIATION 1893 the
-        one caller is `enqueue_best_splits`, once per sampling round, at
-        the args-blob staging site. The value cannot move inside a fit,
-        so the cadence is immaterial; `params` being the only source is
-        the property worth keeping, not the call count."""
+        per column block inside `computeSplit`; since DEVIATIONS
+        1893/1909 the one caller is `enqueue_best_splits`, at the
+        args-blob staging site -- once per tree per sampled-cols width.
+        The value cannot move inside a fit, so the cadence is
+        immaterial; `params` being the only source is the property worth
+        keeping, not the call count."""
         return Self.O(
             self.num_outputs,
             self.params.min_samples_leaf,
@@ -1727,10 +1764,16 @@ struct Builder[O: ObjectiveLike](Movable):
         smem_config: SharedMemoryConfig,
         mut instr: FitInstruments,
         tag_prefix: String,
+        hist_argsp: MutPointer[HistogramArgs[Self.O], MutUntrackedOrigin],
+        find_argsp: MutPointer[
+            FindBestSplitsArgs[Self.O], MutUntrackedOrigin
+        ],
     ) raises:
         """`Builder::computeSplit`, `:570-626`. The quantiles and the
-        objective travel in the round's staged args blobs (DEVIATION
-        1893); `dataset` remains for the `has_bins` dispatch.
+        objective travel in the staged args blobs -- per tree per width
+        since DEVIATION 1909, selected by `enqueue_best_splits` and
+        handed down here as `hist_argsp`/`find_argsp`; `dataset` remains
+        for the `has_bins` dispatch.
 
         Their `n_blocks_dimy = min(n_blks_for_cols, n_sampled_cols - col)`
         is what makes the histogram buffer hold up to ten columns at once,
@@ -1761,11 +1804,11 @@ struct Builder[O: ObjectiveLike](Movable):
         )
         ctx.enqueue_memset(self.hist_view.view, UInt8(0))
 
-        # DEVIATION 1893: the args blobs were staged once for this round
-        # by `enqueue_best_splits`; the launchers take the device
-        # pointers. The objective their `:592-596` builds per column
-        # block is built once per round at the staging site -- same
-        # value, `params` still the only source.
+        # DEVIATION 1893/1909: the args blobs were staged by
+        # `enqueue_best_splits` (once per tree per sampled-cols width);
+        # the launchers take the device pointers. The objective their
+        # `:592-596` builds per column block is built at the staging
+        # site -- same value, `params` still the only source.
         launch_build_histograms_kernel[Self.O](
             ctx,
             self._hist_ptr(),
@@ -1779,7 +1822,7 @@ struct Builder[O: ObjectiveLike](Movable):
             n_blocks_dimx,
             n_blocks_dimy,
             smem_config,
-            self.hist_args.device_ptr(),
+            hist_argsp,
         )
         # DEVIATION 401 -- the column block's REDUCED histograms, hashed
         # between the histogram kernel and the split kernel so the record
@@ -1812,7 +1855,7 @@ struct Builder[O: ObjectiveLike](Movable):
             self._splits_ptr(),
             n_work_items,
             n_blocks_dimy,
-            self.find_args.device_ptr(),
+            find_argsp,
         )
 
     def enqueue_best_splits(
@@ -1849,24 +1892,59 @@ struct Builder[O: ObjectiveLike](Movable):
         )
         self._enqueue_phase_upload(ctx, n_blocks_dimx)
 
-        # DEVIATION 1893: stage the two split kernels' argument blobs
-        # ONCE for this round. Everything in them is constant inside the
-        # round -- `dataset` already carries this round's
-        # `n_sampled_cols` (`_enqueue_round` narrows it), and the
-        # objective is a pure function of `params` (their `:592-596`).
-        var objective = self._objective()
-        _ = self.hist_args.upload(
-            ctx,
-            HistogramArgs[Self.O](
-                dataset.copy(), quantiles.copy(), objective.copy()
-            ),
-        )
-        _ = self.find_args.upload(
-            ctx,
-            FindBestSplitsArgs[Self.O](
-                dataset.copy(), quantiles.copy(), objective.copy()
-            ),
-        )
+        # DEVIATION 1893/1909: the two split kernels' argument blobs are
+        # a pure function of this tree's dataset and the round's
+        # `n_sampled_cols` (`_enqueue_round` narrows it; the objective is
+        # a pure function of `params`, their `:592-596`) -- at most two
+        # widths per tree, so each width uploads once per tree into its
+        # own slot and every later round with that width re-hands the
+        # device pointer. Overwriting a slot is safe at this cadence:
+        # this builder's previous phase drained at the caller's last
+        # synchronize before a new enqueue can reach here.
+        var cols = Int(dataset.n_sampled_cols)
+        var hist_argsp: MutPointer[HistogramArgs[Self.O], MutUntrackedOrigin]
+        var find_argsp: MutPointer[
+            FindBestSplitsArgs[Self.O], MutUntrackedOrigin
+        ]
+        if cols == self.args_cols_a:
+            hist_argsp = self.hist_args.device_ptr()
+            find_argsp = self.find_args.device_ptr()
+        elif cols == self.args_cols_b:
+            hist_argsp = self.hist_args_alt.device_ptr()
+            find_argsp = self.find_args_alt.device_ptr()
+        else:
+            var objective = self._objective()
+            if self.args_cols_a == -1:
+                self.args_cols_a = cols
+                hist_argsp = self.hist_args.upload(
+                    ctx,
+                    HistogramArgs[Self.O](
+                        dataset.copy(), quantiles.copy(), objective.copy()
+                    ),
+                )
+                find_argsp = self.find_args.upload(
+                    ctx,
+                    FindBestSplitsArgs[Self.O](
+                        dataset.copy(), quantiles.copy(), objective.copy()
+                    ),
+                )
+            else:
+                # A third width cannot occur on the fit paths (see the
+                # field block); a sabotage arm that forces one lands
+                # here and simply restages the alt slot.
+                self.args_cols_b = cols
+                hist_argsp = self.hist_args_alt.upload(
+                    ctx,
+                    HistogramArgs[Self.O](
+                        dataset.copy(), quantiles.copy(), objective.copy()
+                    ),
+                )
+                find_argsp = self.find_args_alt.upload(
+                    ctx,
+                    FindBestSplitsArgs[Self.O](
+                        dataset.copy(), quantiles.copy(), objective.copy()
+                    ),
+                )
 
         self._sample_features(ctx, n, sample_offset, n_sampled_cols)
         # DEVIATION 401 (added with the 2026-08-22 identity audit) -- the
@@ -1894,6 +1972,7 @@ struct Builder[O: ObjectiveLike](Movable):
             self._compute_split(
                 ctx, dataset, c, n_blocks_dimx, n,
                 n_sampled_cols, smem_config, instr, tag_prefix,
+                hist_argsp, find_argsp,
             )
             c += N_BLKS_FOR_COLS
         self._enqueue_splits_download(ctx, n)
@@ -1913,6 +1992,9 @@ struct Builder[O: ObjectiveLike](Movable):
         `sync_stream`. Instruments are DISABLED here (DEVIATION 401): the
         callers of this serial arm are checks, and a check must not change
         behavior under an exported trace variable."""
+        # DEVIATION 1909 -- serial entry with a caller-supplied dataset:
+        # never trust an earlier drive's cached blobs.
+        self._invalidate_args_cache()
         var instr = FitInstruments.disabled()
         self.enqueue_best_splits(
             ctx, dataset, quantiles, work_items, sample_offset,
@@ -2146,6 +2228,9 @@ struct Builder[O: ObjectiveLike](Movable):
         Instruments are DISABLED (DEVIATION 401): this arm serves checks,
         which must not change behavior under an exported trace variable.
         """
+        # DEVIATION 1909 -- serial entry with a caller-supplied dataset:
+        # never trust an earlier drive's cached blobs.
+        self._invalidate_args_cache()
         var instr = FitInstruments.disabled()
         var st = self.begin_batch[sabotage](
             ctx, dataset, quantiles, work_items, smem_config, instr
@@ -2208,11 +2293,15 @@ struct Builder[O: ObjectiveLike](Movable):
         )
         self._enqueue_phase_upload(ctx, n_partition_blocks)
 
-        # DEVIATION 1893: the partition's args blob (dataset only), staged
-        # once per batch and shared by its three kernel launches.
-        var argsp = self.node_split_args.upload(
-            ctx, NodeSplitArgs(ds.copy())
-        )
+        # DEVIATION 1893/1909: the partition's args blob (dataset only,
+        # `n_sampled_cols` restored to `original_n_sampled_cols` above)
+        # is the same bytes for every batch of a tree -- staged on the
+        # tree's first partition, re-handed until the args cache is
+        # invalidated (`reset_for_tree` / the drive entries).
+        if not self.node_split_args_ready:
+            _ = self.node_split_args.upload(ctx, NodeSplitArgs(ds.copy()))
+            self.node_split_args_ready = True
+        var argsp = self.node_split_args.device_ptr()
         launch_node_split_kernel(
             ctx,
             ds,
@@ -2505,6 +2594,9 @@ struct Builder[O: ObjectiveLike](Movable):
         not expandable (max_depth 0, min_samples_split larger than the
         node) the tree finishes HERE, leaf pass included -- check `done`
         before waiting on a sync for it."""
+        # DEVIATION 1909 -- this dataset is the one the cached args
+        # blobs will embed; drop whatever an earlier drive staged.
+        self._invalidate_args_cache()
         var ds = dataset.copy()
         ds.n_sampled_cols = Int32(self.original_n_sampled_cols)
         var smem_config = self.shared_memory_config()
