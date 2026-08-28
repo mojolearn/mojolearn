@@ -164,6 +164,66 @@ def pinned_gemm_nt_kernel(
     z.unsafe_store(cell, ftz(Float32(0.0) + ftz(acc)))
 
 
+def pinned_gemm_nt_gram_kernel(
+    z: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    k_in: Int32,
+):
+    """`z[m x n] = x[m x k] . x[n x k]^T`: `pinned_gemm_nt_kernel` with ONE
+    operand pointer instead of two.
+
+    WHY THIS EXISTS, AND WHY IT IS A SECOND KERNEL RATHER THAN A CALL.
+    `gemm_nt_gram` needs the Gram product under IDENTICAL, which means one
+    buffer feeding BOTH operands. Handing the same pointer to
+    `pinned_gemm_nt_kernel`'s `x` and `y` does not compile:
+    `enqueue_function` treats every pointer argument as a mutable borrow
+    and refuses two that alias --
+
+        aliasing values passed mutably to 'args' argument and passed
+        mutably to 'args' argument in 'enqueue_function' call
+
+    -- and that refusal survives materialising the pointer into a single
+    local first, so "a pointer is not a borrow" is not true of this API.
+    The alternatives were worse: DEVIATION 1873 deleted the second
+    transpose precisely to stop writing and reading `k * m` floats for
+    nothing, and re-adding it under IDENTICAL would buy compilability with
+    the cost 1873 was written to remove.
+
+    So the operand is collapsed in the SIGNATURE, where the aliasing rule
+    cannot see it, and the body below is `pinned_gemm_nt_kernel`'s body
+    with `y` spelled `x`. Nothing else differs -- same `p` ascending 0..k-1,
+    same single `identical_mul_add` per step, same `ftz` on both loads and
+    on the accumulator, same unconditional `+0.0` fold at the end for the
+    signed-zero reason `gemm/IDENTICAL_FP32_CONTRACT.md` section 9.2(b)
+    gives. The two kernels must be read side by side and changed together;
+    that duplication is deliberate and is cheaper than a wrapper that would
+    have to defeat the same rule.
+
+    BITS: for `x is y` this computes what `pinned_gemm_nt_kernel` computes,
+    operation for operation and in the same order.
+    """
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var k = Int(k_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= m * n:
+        return
+    var i = cell // n
+    var j = cell % n
+    var acc = Float32(0.0)
+    for p in range(k):
+        acc = ftz(
+            identical_mul_add(
+                ftz(x.unsafe_load(i * k + p)),
+                ftz(x.unsafe_load(j * k + p)),
+                acc,
+            )
+        )
+    z.unsafe_store(cell, ftz(Float32(0.0) + ftz(acc)))
+
+
 def pinned_gemv_n_kernel(
     z: MutPointer[Float32, MutAnyOrigin],
     x: MutPointer[Float32, MutAnyOrigin],
@@ -337,10 +397,42 @@ def gemm_nt_gram(
             " belongs somewhere else."
         )
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        ctx.enqueue_function[pinned_gemm_nt_kernel](
+        # ONE POINTER, TAKEN ONCE, PASSED TWICE -- AND BOTH HALVES OF THAT
+        # SENTENCE ARE LOAD-BEARING.
+        #
+        # DEVIATION 1873 wrote `xt.unsafe_ptr()` twice here and the file did
+        # not compile under IDENTICAL from the day it landed (6e384b2,
+        # 2026-08-25) until 2026-08-28. `pinned_gemm_nt_kernel` declares
+        # `MutPointer[Float32, MutAnyOrigin]` for all three operands, which
+        # RESUME.md records as a requirement of the kernel ABI rather than a
+        # choice; `xt` is a read-only parameter, so `xt.unsafe_ptr()` is an
+        # immutable pointer, and the enqueue failed the constraint:
+        #
+        #   argument #2 of type 'Pointer[..., mut=False]' does not match the
+        #   declared function argument type 'Pointer[..., mut=True]'
+        #
+        # NEITHER OBVIOUS REPAIR WORKS. Declaring the parameter `mut xt`
+        # satisfies the constraint and then trips the aliasing rule at this
+        # very call -- "aliasing values passed mutably to 'args' argument" --
+        # AND at the FAST arm's two TileTensor views below, which is the
+        # exact rule the docstring above says this entry point exists to
+        # dodge. Widening the kernel's operands to immutable pointers is not
+        # available for the same reason the ABI note gives.
+        #
+        # So the pointer is materialised ONCE into a local and that local is
+        # handed to both arguments. `xt` is borrowed a single time; what the
+        # enqueue sees twice is a value, and a pointer is not a borrow --
+        # which is what the docstring claimed all along and what this line
+        # finally spells. `unsafe_origin_cast[MutUntrackedOrigin]` is the
+        # repo's existing spelling for the same coercion (see
+        # ensemble/mojo_only/sampled_cols_check.mojo).
+        #
+        # BITS: the kernel, its launch geometry and its fold order are
+        # untouched, and the FAST arm below is not compiled in this branch.
+        var xtm = xt
+        ctx.enqueue_function[pinned_gemm_nt_gram_kernel](
             z.unsafe_ptr(),
-            xt.unsafe_ptr(),
-            xt.unsafe_ptr(),
+            xtm.unsafe_ptr(),
             Int32(m),
             Int32(n),
             Int32(k),
