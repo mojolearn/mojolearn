@@ -287,16 +287,42 @@ run_lane_arm() {  # <lane> <mode fast|identical> <cmd...>
     echo "  $lane [$mode]: NO CARD written ($(grep -m1 -E 'rror|FAIL' "$log" | cut -c1-120))"
   fi
 }
+# WHAT ENDED THE RUN, NOT THE FIRST LINE THAT LOOKS ALARMING. DEVIATION 1933.
+#
+# This used to be `grep -m1 -E 'Unhandled|rror:|FAIL'`, and the AMD leg of
+# 2026-08-28 shows what that costs. Its gemm lane came home as
+#
+#   PHASE8-FINDING: gemm [fast] check FAILED:  FAIL pca.transform.wide...
+#       16 of 16 cells differ from gemm_oracle
+#
+# and that line is NOT a failure at all. `gemm_device_check` prints it from
+# `check_device_matches_oracle`, which under FAST is a REPORT by design --
+# the file says so at the seam: "under FAST both sides are the unpinned
+# spelling ... this is a measurement and not an assertion." The run actually
+# ended on a DIFFERENT gate, `check_device_is_batch_invariant`, which IS
+# asserted in both modes because batch invariance is a property of the
+# kernel's shape rather than of the arithmetic pins.
+#
+# So the finding named an expected measurement as the cause and hid a real
+# defect behind it. Read the exception first, then a hard error, and only
+# fall back to a FAIL line when neither exists.
+_lane_cause() {
+  local _log="$1"
+  grep -m1 -E 'Unhandled exception' "$_log" 2>/dev/null | cut -c1-200 && return 0
+  grep -m1 -E 'error:' "$_log" 2>/dev/null | cut -c1-200 && return 0
+  grep -m1 -E 'FAIL' "$_log" 2>/dev/null | cut -c1-200
+}
+
 run_lane_check() {  # <lane> <mode> <cmd...>
   local lane="$1" mode="$2"; shift 2
   lane_enabled "$lane" || return 0
   local log="$OUT/lanes/$lane.$mode.check.log"
   if [ "$mode" = identical ]; then
     "$IDENT" "$@" > "$log" 2>&1 && echo "  $lane [$mode] check OK ($(grep -c ' OK' "$log") OK lines)" \
-      || echo "PHASE8-FINDING: $lane [$mode] check FAILED: $(grep -m1 -E 'Unhandled|rror:|FAIL' "$log" | cut -c1-160)"
+      || echo "PHASE8-FINDING: $lane [$mode] check FAILED: $(_lane_cause "$log")"
   else
     MOJOLEARN_MOJO_DEFINES= MOJOLEARN_NUMERIC_MODE=fast "$@" > "$log" 2>&1 && echo "  $lane [$mode] check OK ($(grep -c ' OK' "$log") OK lines)" \
-      || echo "PHASE8-FINDING: $lane [$mode] check FAILED: $(grep -m1 -E 'Unhandled|rror:|FAIL' "$log" | cut -c1-160)"
+      || echo "PHASE8-FINDING: $lane [$mode] check FAILED: $(_lane_cause "$log")"
   fi
 }
 # THE IDENTICAL PASS RUNS FIRST, AND THE ORDER IS LOAD-BEARING ON A RENTAL.
