@@ -39,6 +39,7 @@ from mojo_only.kernel_matrix import (
     requires_uniform_iteration_for,
 )
 from mojo_only.numerics import (
+    PIN_DETERMINISM,
     GLOBAL_NUMERIC_MODE,
     NUMERIC_FAST,
     NUMERIC_IDENTICAL,
@@ -479,7 +480,7 @@ def binary_hist_kernel(
                 # flushes are different code and not a configured value,
                 # which is the distinction numerics.mojo draws.
                 comptime det = deterministic_flush_for[
-                    TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
+                    TARGET_COLUMN, PIN_DETERMINISM
                 ]()
 
                 @parameter
@@ -990,7 +991,7 @@ def binary_hist_gather_kernel[ridx_stats: Bool = False](
                 # flushes are different code and not a configured value,
                 # which is the distinction numerics.mojo draws.
                 comptime det = deterministic_flush_for[
-                    TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
+                    TARGET_COLUMN, PIN_DETERMINISM
                 ]()
 
                 @parameter

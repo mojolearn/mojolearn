@@ -155,6 +155,7 @@ from mojo_only.kernel_matrix import (
     greedy_sub_byte_excluded_for,
     partition_chunks_sm_for,
 )
+from mojo_only.numerics import PIN_DETERMINISM
 from mojo_only.numerics import NUMERIC_IDENTICAL
 from gbdt.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     BUILD_MODE as HIST_BUILD_MODE,
@@ -900,7 +901,7 @@ def run_tree(
     # block drivers below add the `HIST_SMEM_SHARED2_I32` term
     # (`acc_i32_is_live`). The fixed-point arm is byte-for-byte unchanged.
     comptime _ACC_LIVE = deterministic_flush_for[
-        TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
+        TARGET_COLUMN, PIN_DETERMINISM
     ]()
     var acc_cells = hist_cells
     comptime if not _ACC_LIVE:
@@ -2164,7 +2165,7 @@ def launch_histograms_for_blocks[
         # and the cells past `block_cells` are ones no kernel writes and the
         # bridge never reads.
         comptime _flush_is_fixed_point = deterministic_flush_for[
-            TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
+            TARGET_COLUMN, PIN_DETERMINISM
         ]()
         # DEVIATION 1906: a 64-lane column's one-byte blocks run the fused
         # 8-bit fixed-point kernel even under FAST (`greedy_one_byte_fixed_for`),
@@ -2642,7 +2643,7 @@ def acc_i32_is_live[hist2_smem_mode: Int]() -> Bool:
     """
     return (
         deterministic_flush_for[
-            TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
+            TARGET_COLUMN, PIN_DETERMINISM
         ]()
         or hist2_smem_mode == HIST_SMEM_SHARED2_I32
         or greedy_one_byte_fixed_for[

@@ -101,6 +101,7 @@ from mojo_only.kernel_matrix import (
     lane_width_for,
     requires_uniform_iteration_for,
 )
+from mojo_only.numerics import PIN_DETERMINISM
 from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 
 from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
@@ -506,7 +507,7 @@ def hist2_add_to_global_memory[
                     var val = rebind[Scalar[DType.float32]](cell)
                     if abs(val) > Float32(1e-20):
                         comptime det = deterministic_flush_for[
-                            TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
+                            TARGET_COLUMN, PIN_DETERMINISM
                         ]()
 
                         @parameter

@@ -53,6 +53,7 @@ from mojo_only.kernel_matrix import (
     deterministic_flush_for,
     requires_uniform_iteration_for,
 )
+from mojo_only.numerics import PIN_DETERMINISM
 from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
@@ -794,7 +795,7 @@ def one_byte_hist_kernel[bits: Int, smem_mode: Int](
                     # is what fills the machine, makes every block hold a
                     # PARTIAL histogram, and partials must be summed.
                     comptime det = deterministic_flush_for[
-                        TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
+                        TARGET_COLUMN, PIN_DETERMINISM
                     ]()
 
                     @parameter
@@ -1284,7 +1285,7 @@ def one_byte_hist_gather_kernel[
                     # is what fills the machine, makes every block hold a
                     # PARTIAL histogram, and partials must be summed.
                     comptime det = deterministic_flush_for[
-                        TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
+                        TARGET_COLUMN, PIN_DETERMINISM
                     ]()
 
                     @parameter

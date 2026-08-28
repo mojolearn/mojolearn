@@ -195,6 +195,7 @@ from mojo_only.kernel_matrix import (
     greedy_one_byte_fixed_for,
 )
 from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
+from mojo_only.numerics import PIN_DETERMINISM
 from mojo_only.numerics import NUMERIC_IDENTICAL
 from gbdt.gpu_util.kernel.fill import launch_make_sequence
 from gbdt.gpu_util.kernel.bootstrap import (
@@ -1213,7 +1214,7 @@ def fit_with_test(
     # DEVIATION 1906), so it needs the bound exactly as the Apple column
     # does -- an unbounded scale here is the WHY THIS EXISTS failure below.
     comptime _flush_fixed = deterministic_flush_for[
-        TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
+        TARGET_COLUMN, PIN_DETERMINISM
     ]()
     comptime _one_byte_fixed = greedy_one_byte_fixed_for[
         TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL

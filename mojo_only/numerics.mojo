@@ -212,8 +212,24 @@ struct NumericMode(Copyable, Movable):
         and no ordering guarantee is available to make it so. This is the row
         that cannot be a toggle over one implementation: the two modes run
         different code.
+
+        **THIS IS THE DETERMINISM PIN, AND IT IS THE ONLY ONE IN THIS FILE'S
+        REACH.** DEVIATION 1941, 2026-08-28. It used to return
+        `self.mode == NUMERIC_IDENTICAL`, which was correct while there were
+        two tiers and silently wrong the moment there were three: under
+        `MOJOLEARN_NUMERIC_DETERMINISTIC` that comparison is FALSE, so the
+        middle tier would have taken the float-atomic flush and been
+        NON-REPRODUCIBLE while calling itself deterministic. That is the worst
+        failure this tier can have, and it was live for the length of one
+        commit.
+
+        Every other mode-gated helper in this file is CROSS-VENDOR class: they
+        are pure functions of their argument bits, with no atomic, no barrier
+        and no cross-thread read anywhere among them, so none of them can make
+        one box disagree with itself. This one is different because integer
+        addition is associative and float atomicAdd is not.
         """
-        return self.mode == NUMERIC_IDENTICAL
+        return PIN_DETERMINISM
 
     def fixed_replication(self) -> Bool:
         """NUMERIC ROW, and it LOOKS like a scheduling row, which is the whole
