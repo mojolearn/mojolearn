@@ -549,22 +549,67 @@ struct DeviceArgs[F: Copyable & Deinitable](Movable):
     """
 
     var host: HostBuffer[DType.uint8]
+    # DEVIATION 1917 -- the candidate's staging. `upload` writes the new
+    # value HERE first and byte-compares it against `host` (the bytes the
+    # last enqueued copy sent); identical bytes skip the device copy
+    # entirely, because the in-order queue already delivered them. Both
+    # pinned buffers are zero-filled once at construction so the padding
+    # bytes a fieldwise store never touches are STABLE ZEROS on both
+    # sides -- a spurious padding mismatch can only cost an extra copy
+    # (fail-safe), never skip a real change.
+    var cmp: HostBuffer[DType.uint8]
+    var staged: Bool
     var dev: DeviceBuffer[DType.uint8]
 
     def __init__(out self, ctx: DeviceContext) raises:
-        self.host = ctx.enqueue_create_host_buffer[DType.uint8](
-            size_of[Self.F]()
-        )
-        self.dev = ctx.enqueue_create_buffer[DType.uint8](size_of[Self.F]())
+        var nbytes = size_of[Self.F]()
+        self.host = ctx.enqueue_create_host_buffer[DType.uint8](nbytes)
+        self.cmp = ctx.enqueue_create_host_buffer[DType.uint8](nbytes)
+        self.staged = False
+        self.dev = ctx.enqueue_create_buffer[DType.uint8](nbytes)
+        # Pinned host memory arrives with arbitrary contents; the compare
+        # below must never read an uninitialized byte. Host-side stores;
+        # nothing on the device reads either buffer.
+        var hp = self.host.unsafe_ptr()
+        var cp = self.cmp.unsafe_ptr()
+        for i in range(nbytes):
+            hp.unsafe_store(i, UInt8(0))
+            cp.unsafe_store(i, UInt8(0))
 
     def upload(
         mut self, ctx: DeviceContext, args: Self.F
     ) raises -> MutPointer[Self.F, MutUntrackedOrigin]:
-        self.host.unsafe_ptr().unsafe_bitcast[Self.F]()[
+        """DEVIATION 1917: the copy is enqueued ONLY when the bytes moved.
+        If the candidate's bytes equal the last-sent bytes, the device
+        already holds this value (the queue is in-order and every kernel
+        reading the pointer is enqueued after the copy that staged it),
+        so re-sending is pure transfer waste. In `fit_forest` this turns
+        the per-tree restaging that `_invalidate_args_cache` forces into
+        a per-fit cost: each pipeline slot's dataset bytes (pointers,
+        counts, strides) are identical for every tree it builds, so tree
+        2..N's uploads compare equal and enqueue nothing. A caller whose
+        bytes DID change pays exactly the pre-1917 path."""
+        var nbytes = size_of[Self.F]()
+        self.cmp.unsafe_ptr().unsafe_bitcast[Self.F]()[
             unsafe_offset=0
         ] = args.copy()
+        var hp = self.host.unsafe_ptr()
+        var cp = self.cmp.unsafe_ptr()
+        if self.staged:
+            var same = True
+            for i in range(nbytes):
+                if hp.unsafe_load(i) != cp.unsafe_load(i):
+                    same = False
+                    break
+            if same:
+                return self.device_ptr()
+        # Byte copy rather than a second fieldwise store, so `host`'s
+        # padding stays the stable bytes `cmp` carries.
+        for i in range(nbytes):
+            hp.unsafe_store(i, cp.unsafe_load(i))
         log_launch("xfer_args_upload")
         ctx.enqueue_copy(dst_buf=self.dev, src_ptr=self.host.unsafe_ptr())
+        self.staged = True
         return self.device_ptr()
 
     def device_ptr(mut self) -> MutPointer[Self.F, MutUntrackedOrigin]:
@@ -1058,6 +1103,17 @@ struct NodeSplitScratch[dtype: DType, TPB: Int](Movable):
     var block_agg: DeviceBuffer[DType.uint8]
     var block_head: DeviceBuffer[DType.uint8]
     var ops_host: HostBuffer[DType.uint8]
+    # DEVIATION 1917 -- `DeviceArgs`'s compare-then-skip, applied to the
+    # per-batch ops functor. The blob's only per-batch byte is the
+    # workload pointer (it moves with the packed span's `cur_wl_rel`,
+    # DEVIATION 1908, quantized to 512-byte steps); every batch whose
+    # live work-item count lands in the same 512-byte bucket produces
+    # byte-identical ops and the copy is skipped. `ops_cmp` stages the
+    # candidate; both pinned buffers are zero-filled once so padding is
+    # stable on both sides (a spurious mismatch costs a copy, never
+    # skips a change).
+    var ops_cmp: HostBuffer[DType.uint8]
+    var ops_staged: Bool
     var ops_dev: DeviceBuffer[DType.uint8]
 
     def __init__(
@@ -1080,9 +1136,18 @@ struct NodeSplitScratch[dtype: DType, TPB: Int](Movable):
         self.ops_host = ctx.enqueue_create_host_buffer[DType.uint8](
             size_of[Self.Ops]()
         )
+        self.ops_cmp = ctx.enqueue_create_host_buffer[DType.uint8](
+            size_of[Self.Ops]()
+        )
+        self.ops_staged = False
         self.ops_dev = ctx.enqueue_create_buffer[DType.uint8](
             size_of[Self.Ops]()
         )
+        var hp = self.ops_host.unsafe_ptr()
+        var cp = self.ops_cmp.unsafe_ptr()
+        for i in range(size_of[Self.Ops]()):
+            hp.unsafe_store(i, UInt8(0))
+            cp.unsafe_store(i, UInt8(0))
 
 
 def launch_node_split_kernel[
@@ -1167,13 +1232,29 @@ def launch_node_split_kernel[
     var ops = OpsT(
         dataset, work_items, splits, workload_info, partition_row_ids
     )
-    scratch.ops_host.unsafe_ptr().unsafe_bitcast[OpsT]()[
+    # DEVIATION 1917: stage the candidate, compare against the bytes the
+    # last enqueued copy sent, and skip the copy when they are equal --
+    # the in-order queue already delivered them, and this batch's kernels
+    # are enqueued after that copy. See `NodeSplitScratch.ops_cmp`.
+    scratch.ops_cmp.unsafe_ptr().unsafe_bitcast[OpsT]()[
         unsafe_offset=0
     ] = ops
-    log_launch("xfer_nodesplit_ops")
-    ctx.enqueue_copy(
-        dst_buf=scratch.ops_dev, src_ptr=scratch.ops_host.unsafe_ptr()
-    )
+    var ops_hp = scratch.ops_host.unsafe_ptr()
+    var ops_cp = scratch.ops_cmp.unsafe_ptr()
+    var ops_same = scratch.ops_staged
+    if ops_same:
+        for i in range(size_of[OpsT]()):
+            if ops_hp.unsafe_load(i) != ops_cp.unsafe_load(i):
+                ops_same = False
+                break
+    if not ops_same:
+        for i in range(size_of[OpsT]()):
+            ops_hp.unsafe_store(i, ops_cp.unsafe_load(i))
+        log_launch("xfer_nodesplit_ops")
+        ctx.enqueue_copy(
+            dst_buf=scratch.ops_dev, src_ptr=scratch.ops_host.unsafe_ptr()
+        )
+        scratch.ops_staged = True
     var ops_ptr = (
         scratch.ops_dev.unsafe_ptr()
         .unsafe_origin_cast[MutUntrackedOrigin]()
