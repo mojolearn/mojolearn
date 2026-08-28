@@ -1,0 +1,30 @@
+== leg lane=linkage mode=FAST round=1 16:34:34 ==
+== bench/lanes_price_main.mojo [FAST] lane=linkage rounds=1 smoke=False ==
+LPRICE linkage FAST warmup blobs_dups.102x5 0.019714 5d3155fc940e61d2
+LPRICE linkage FAST 1 blobs_dups.102x5 0.015171 5d3155fc940e61d2
+HASH-STABLE linkage FAST 2 rounds all 5d3155fc940e61d2
+== done [FAST] lane=linkage ==
+== leg lane=linkage mode=FAST round=2 16:34:34 ==
+== bench/lanes_price_main.mojo [FAST] lane=linkage rounds=1 smoke=False ==
+LPRICE linkage FAST warmup blobs_dups.102x5 0.01456 5d3155fc940e61d2
+LPRICE linkage FAST 1 blobs_dups.102x5 0.01132 5d3155fc940e61d2
+HASH-STABLE linkage FAST 2 rounds all 5d3155fc940e61d2
+== done [FAST] lane=linkage ==
+== leg lane=linkage mode=FAST round=3 16:34:34 ==
+== bench/lanes_price_main.mojo [FAST] lane=linkage rounds=1 smoke=False ==
+LPRICE linkage FAST warmup blobs_dups.102x5 0.01392 5d3155fc940e61d2
+LPRICE linkage FAST 1 blobs_dups.102x5 0.011419 5d3155fc940e61d2
+HASH-STABLE linkage FAST 2 rounds all 5d3155fc940e61d2
+== done [FAST] lane=linkage ==
+== leg lane=linkage mode=FAST round=4 16:34:34 ==
+== bench/lanes_price_main.mojo [FAST] lane=linkage rounds=1 smoke=False ==
+LPRICE linkage FAST warmup blobs_dups.102x5 0.013759 5d3155fc940e61d2
+LPRICE linkage FAST 1 blobs_dups.102x5 0.011133 5d3155fc940e61d2
+HASH-STABLE linkage FAST 2 rounds all 5d3155fc940e61d2
+== done [FAST] lane=linkage ==
+== leg lane=linkage mode=FAST round=5 16:34:34 ==
+== bench/lanes_price_main.mojo [FAST] lane=linkage rounds=1 smoke=False ==
+LPRICE linkage FAST warmup blobs_dups.102x5 0.012541 5d3155fc940e61d2
+LPRICE linkage FAST 1 blobs_dups.102x5 0.010353 5d3155fc940e61d2
+HASH-STABLE linkage FAST 2 rounds all 5d3155fc940e61d2
+== done [FAST] lane=linkage ==

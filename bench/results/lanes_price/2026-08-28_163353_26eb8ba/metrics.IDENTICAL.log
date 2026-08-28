@@ -1,0 +1,30 @@
+== leg lane=metrics mode=IDENTICAL round=1 16:34:36 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=metrics rounds=1 smoke=False ==
+LPRICE metrics IDENTICAL warmup lab2053.flt2053.sil521x4.tru301x6 0.019034 2321a95d3439fc2b
+LPRICE metrics IDENTICAL 1 lab2053.flt2053.sil521x4.tru301x6 0.010382 2321a95d3439fc2b
+HASH-STABLE metrics IDENTICAL 2 rounds all 2321a95d3439fc2b
+== done [IDENTICAL] lane=metrics ==
+== leg lane=metrics mode=IDENTICAL round=2 16:34:36 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=metrics rounds=1 smoke=False ==
+LPRICE metrics IDENTICAL warmup lab2053.flt2053.sil521x4.tru301x6 0.018217 2321a95d3439fc2b
+LPRICE metrics IDENTICAL 1 lab2053.flt2053.sil521x4.tru301x6 0.011196 2321a95d3439fc2b
+HASH-STABLE metrics IDENTICAL 2 rounds all 2321a95d3439fc2b
+== done [IDENTICAL] lane=metrics ==
+== leg lane=metrics mode=IDENTICAL round=3 16:34:36 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=metrics rounds=1 smoke=False ==
+LPRICE metrics IDENTICAL warmup lab2053.flt2053.sil521x4.tru301x6 0.018377 2321a95d3439fc2b
+LPRICE metrics IDENTICAL 1 lab2053.flt2053.sil521x4.tru301x6 0.012213 2321a95d3439fc2b
+HASH-STABLE metrics IDENTICAL 2 rounds all 2321a95d3439fc2b
+== done [IDENTICAL] lane=metrics ==
+== leg lane=metrics mode=IDENTICAL round=4 16:34:36 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=metrics rounds=1 smoke=False ==
+LPRICE metrics IDENTICAL warmup lab2053.flt2053.sil521x4.tru301x6 0.019398 2321a95d3439fc2b
+LPRICE metrics IDENTICAL 1 lab2053.flt2053.sil521x4.tru301x6 0.012843 2321a95d3439fc2b
+HASH-STABLE metrics IDENTICAL 2 rounds all 2321a95d3439fc2b
+== done [IDENTICAL] lane=metrics ==
+== leg lane=metrics mode=IDENTICAL round=5 16:34:36 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=metrics rounds=1 smoke=False ==
+LPRICE metrics IDENTICAL warmup lab2053.flt2053.sil521x4.tru301x6 0.017692 2321a95d3439fc2b
+LPRICE metrics IDENTICAL 1 lab2053.flt2053.sil521x4.tru301x6 0.009226 2321a95d3439fc2b
+HASH-STABLE metrics IDENTICAL 2 rounds all 2321a95d3439fc2b
+== done [IDENTICAL] lane=metrics ==
