@@ -1458,6 +1458,60 @@ def reorder_single_pass_for[column: Int, identical: Bool]() -> Bool:
     return column == COLUMN_NVIDIA or column == COLUMN_AMD
 
 
+def ridx_only_splits_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row (DEVIATION 1902): whether the NON-SYMMETRIC driver's
+    split moves only the row index, leaving the stat planes stationary for
+    the life of the fit, with every stat reader gathering
+    `stats[row_index[pos]]` instead of reading a permuted plane.
+
+    XGBoost's `RowPartitioner` (`row_partitioner.cuh:112-201`, gather at
+    `histogram.cu:186,212`) and LightGBM's CUDA partition
+    (`cuda_data_partition.cu:288-334`, gather at
+    `cuda_histogram_constructor.cu:53-55`) are both this design; CatBoost
+    moves the stat columns (`split_points.cpp:64-136`), which is why this
+    is a numbered deviation. The routed launcher is
+    `launch_reorder_index_only`
+    (`gbdt/methods/greedy_subsets_searcher/kernel/split_points_ridx.mojo`),
+    the gathered readers are the hist gather kernels' `ridx_stats` arm and
+    `compute_partition_stats_gather`
+    (`gbdt/gpu_util/kernel/partition_stats_gather.mojo`).
+
+    A SCHEDULING row, not a numeric one: the readers gather THE SAME BITS
+    the old permuted plane held at the same loop position (the invariant on
+    `split_points_ridx.mojo`'s banner -- a permutation of floats moves
+    bytes and never re-rounds, and the two schedules permute with the same
+    `gather_map`), in the same accumulation order under the same
+    position-keyed dither. Same histograms, same partition stats, same
+    model, byte for byte; what moves is `2 * ceil(stat_count / 8)` launches
+    and `stat_count * 8` bytes/row of traffic per over-1024-row split,
+    times the `max_leaves - 1` sequential splits a lossguide tree runs.
+
+    EVERY GPU COLUMN TAKES IT UNDER FAST: the mechanism is plain global
+    loads through an index the kernels ALREADY load for the compressed-
+    index gather -- no spin, no lane-width assumption, no forward-progress
+    term -- so unlike DEVIATION 1907's row there is no vendor guarantee to
+    decline. What is NOT yet priced is the coalescing of the hist kernels'
+    stat read turning indirect; the orchestrator's A/B (byte-compare of the
+    FAST model pre/post routing, plus the 1M/2M lossguide rungs) is where
+    the default dies if the gather costs more than the reorder saved.
+
+    `IDENTICAL` returns False on every column: the identical route keeps
+    the stat-moving path BYTE FOR BYTE, exactly as DEVIATIONS 1901/1903
+    hold it, so the merge gate's compare against main passes by
+    construction. The unnamed columns (qualcomm, intel, spec-baseline)
+    return False only because nobody has run the A/B there; flipping them
+    is one line here once a number exists.
+    """
+    comptime if identical:
+        return False
+    return (
+        column == COLUMN_APPLE
+        or column == COLUMN_NVIDIA
+        or column == COLUMN_AMD
+        or column == COLUMN_AMD_RDNA
+    )
+
+
 def hist_smem_mode_for[column: Int, identical: Bool]() -> Int:
     """NUMERIC row: HOW the hist_2 family accumulates in shared memory.
 

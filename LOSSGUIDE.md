@@ -639,10 +639,11 @@ Two source recons (LightGBM CUDA, XGBoost GPU hist) converge on the same
 verdict about the 1M-2M H100 gap (lossguide 2.42x/2.83x, depthwise 1.91x):
 the loss is the cost of ONE SPLIT, multiplied by `max_leaves - 1` sequential
 splits per lossguide tree. Three deviations answer it. All of them are
-FAST-arm only, behind `SPLIT_COST_IDENTICAL` in
-`greedy_search_helper_depthwise.mojo`: the IDENTICAL column executes the
-pre-round path unchanged, so the merge gate's byte-compare against main
-passes by construction.
+FAST-arm only: 1901 and 1903 behind `SPLIT_COST_IDENTICAL` in
+`greedy_search_helper_depthwise.mojo`, 1902 behind its own kernel-matrix
+row `ridx_only_splits_for` (False under IDENTICAL on every column). Either
+way the IDENTICAL column executes the pre-round path unchanged, so the
+merge gate's byte-compare against main passes by construction.
 
 ### DEVIATION 1901 -- partition stats propagate from the split record. LANDED
 
@@ -701,69 +702,124 @@ passes by construction.
   `CreateInitialSubsets` runs once per fit call. Both hold today in this
   driver; a future slot-reuse scheme must revisit the elision.
 
-### DEVIATION 1902 -- move only the row index at a split. DESIGN NOTE, NOT IMPLEMENTED
+### DEVIATION 1902 -- move only the row index at a split. BUILT 2026-08-28, WIRING OWED
 
-**Why this is a note and not code: every load-bearing edit lands in the
-other lane's files.** The number is reserved and this section is the
-hand-off; nothing of 1902 is half-implemented in the tree.
+**Status: every kernel-side and launcher-side edit is in the tree, on
+`integrate/dev1902-ridx-only-splits`; the three call-site binds in the
+non-symmetric driver are OWED** -- `greedy_search_helper_depthwise.mojo`
+is another agent's this round, so the binds are spelled below for the
+orchestrator, the same hand-off shape as the traced-select swap. Until
+they land, every built arm is instantiable and dead and NOTHING in any
+build changes: all new comptime parameters default to the old body.
 
-* **The bill today.** On any splitting leaf over 1024 rows,
-  `launch_reorder_in_leaves` (`kernel/split_points.mojo:751-931` before this
-  round's insertions) runs the slow arm: `2 * ceil(stat_count / 8) + 2`
-  launches that move every stat column PLUS the row index out to scratch and
-  gather them back -- `(stat_count + 1) * 4` bytes per row, twice. At 1M-5M
-  rows the early, expensive splits are ALL over 1024 rows, and lossguide
-  pays the arm ~63 sequential times per tree. Both recons converge on the
-  alternative: LightGBM moves 4 bytes/row of the split leaf in ~4 lean
-  kernels and NEVER moves a gradient (`cuda_data_partition.cu:288-334,
-  679-783, 907-944`; its hist kernel gathers through `data_indices_in_leaf`,
-  `cuda_histogram_constructor.cu:53-55`); XGBoost's `RowPartitioner`
-  is the same design (`row_partitioner.cuh:112-201`, gather at
-  `histogram.cu:186,212`).
-* **The mechanism, on this port's planes.** Stop permuting `stats` at a
-  split; keep permuting `row_index` (4 B/row, the existing partition +
-  index copy/gather pair, or the inplace arm). Every consumer that today
-  reads `stats` CONTIGUOUSLY over a partition range `[offset, offset+size)`
-  instead gathers `stats[row_index[offset + i] + stat * line_size]` -- the
-  same indirection those kernels ALREADY perform for the compressed index
-  through `load_indices`. `stats` then holds document order for the life of
-  the fit, exactly as the compressed index does, and the split's payload
-  drops from `(stat_count + 1)` columns twice to one column twice (or once,
-  on the inplace arm).
-* **The edits, by file and owner.**
-  1. `kernel/hist_2_one_byte_base.mojo` + the `hist_2_one_byte_{5,6,7,8}bit`
-     twins and `hist_binary` / `hist_half_byte`: the stat loads become
-     gathers through the already-loaded row index (they load
-     `indices[p_offset + pe]` for the cindex TODAY -- the same register
-     feeds the stat address). OTHER LANE (hist_2_* is named out of bounds
-     for this round).
-  2. `greedy_search_helper.mojo` (`launch_histograms_for_blocks`, the
-     symmetric driver's reorder call sites, `compute_target_std_dev` if it
-     reads per-partition): plumb the flag/remove the stat reorder launches.
-     OTHER LANE.
-  3. `gpu_util/partitions_reduce.mojo` (`compute_partition_stats`): gather
-     instead of contiguous read. Under 1901's FAST arm this runs twice per
-     tree (root seed + leaf values), so its marginal cost is small. OTHER
-     LANE'S FILE by this round's boundary.
-  4. `kernel/split_points.mojo` + the non-symmetric driver (THIS lane):
-     delete the stat copy/gather launches from `launch_reorder_in_leaves`'s
-     slow arm and the stat blocks from `gather_inplace_kernel`'s grid
-     (`grid.x` drops from `1 + statCount` to 1); `new_stats` scratch dies.
-  5. The estimation/bootstrap writers (`doc_parallel_boosting` and the
-     objective): they must WRITE the stat planes in the order the readers
-     now assume (document order), not the permuted order. This is the one
-     place the design can silently break: today the planes are re-permuted
-     every split so writer and reader agree by construction.
-* **Staging plan (why this is LAST).** Behind the same
-  `SPLIT_COST_IDENTICAL` gate, one consumer at a time, each staged against
-  the uniform-data trap ([[uniform-test-data-hides-permutation]]): plant
-  HASHED per-row stat values and compare per cell, because a uniform plane
-  makes a dropped permutation invisible. The hist gather is the risky read
-  (coalescing changes from contiguous to indirect on exactly the hot
-  kernel); the recons' answer is that both competitors eat that gather and
-  win anyway, but it must be MEASURED, not assumed -- if the gather costs
-  more than the reorder saves at 255 bins x 2 stats, the deviation dies on
-  the bench, not in review.
-* **Interaction with 1901/1903.** Independent of both: 1901 removes the
-  per-level stats sweep (fewer contiguous readers to convert), 1903 does
-  not touch the stat planes at all. Land order 1901 -> 1903 -> 1902 stands.
+* **The mechanism, as built.** The stat planes stay in the order the
+  objective writes them for the life of the fit -- exactly as the
+  compressed index always has -- and only `row_index` (4 B/row) is
+  permuted at a split. Every stat reader on the non-symmetric path
+  gathers `stats[stat * line + row_index[pos]]` through the SAME index
+  register those kernels already load for the compressed-index gather.
+  LightGBM (`cuda_data_partition.cu:288-334, 679-783, 907-944`, hist
+  gather `cuda_histogram_constructor.cu:53-55`) and XGBoost
+  (`row_partitioner.cuh:112-201`, gather `histogram.cu:186,212`) are both
+  this design; CatBoost moves the stat columns, which is why this is a
+  numbered deviation and not a port.
+* **What was built, by file.**
+  1. `kernel/split_points_ridx.mojo` (NEW): `launch_reorder_index_only`
+     -- the index half of `TSplitPointsKernel::Run`, their `> 1024`
+     dispatch kept. Fast arm: `gather_inplace_kernel` at `grid.x = 1`
+     (was `1 + statCount`), ONE launch. Slow arm: the index copy/gather
+     pair alone, TWO launches (was `2 * ceil(statCount / 8) + 2`);
+     `new_stats` scratch is dead on this route. Kernels imported from
+     `split_points.mojo` UNCHANGED.
+  2. The five hist GATHER kernels (`hist_one_byte`, `hist_2_one_byte_base`,
+     `hist_2_one_byte_8bit`, `hist_binary`, `hist_half_byte`): defaulted
+     comptime `ridx_stats: Bool = False`. True redirects ONLY the stat
+     loads -- peel reads `stats_p + hrow`, the main loop trades the
+     4-wide contiguous stat load for per-element gathers through the
+     `vi[e]` the bin gather already holds. Dither keys stay
+     position-based. Direct (depth-0) kernels untouched: the root is
+     pre-split and identity-indexed.
+  3. `greedy_search_helper.mojo` launchers (`launch_histograms_for_blocks`,
+     `launch_hist2_8bit`, `launch_one_byte`, `launch_hist2_one_byte`):
+     the same defaulted `ridx_stats`, bound onto every gather enqueue.
+  4. `gpu_util/kernel/partition_stats_gather.mojo` (NEW):
+     `compute_partition_stats_gather` -- phase 1 transcribed with the one
+     gathered load (cross-referenced both ways with its twin), phase 2
+     and the pinned chunk formula IMPORTED from `partitions_reduce.mojo`.
+  5. `mojo_only/kernel_matrix.mojo`: `ridx_only_splits_for[column,
+     identical]` -- the named row. True on apple/nvidia/amd/amd-rdna
+     under FAST; False under IDENTICAL on EVERY column, so the identical
+     route keeps the stat-moving path byte for byte and the merge gate's
+     byte-compare passes by construction. Unlike 1907's row there is no
+     vendor guarantee to decline (plain loads, no spin), so Apple is in.
+  6. Design point 5 (the writers) needed NO edit: the objective writes
+     the planes fresh in document order at tree start and `row_index` is
+     re-seeded to the identity -- the depth-0 DIRECT kernels already
+     depend on exactly that invariant, so it is enforced, not assumed.
+* **THE OWED WIRING, three binds in `greedy_search_helper_depthwise.mojo`**
+  (plus one comptime at its head:
+  `comptime RIDX_ONLY_SPLITS = ridx_only_splits_for[TARGET_COLUMN,
+  GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]()`):
+  1. Hist build (`launch_histograms_for_blocks[hist2_smem_mode](` at
+     ~:1371) becomes
+     `launch_histograms_for_blocks[hist2_smem_mode, RIDX_ONLY_SPLITS](`.
+  2. Split apply (~:2154): under `comptime if RIDX_ONLY_SPLITS:` call
+     `launch_reorder_index_only(ctx, n_split, max_split_rows, d_left,
+     p_off, p_sz, row_index, new_index, gmap, sm_count=sm_count)` in
+     place of `launch_reorder_in_leaves(...)` (else-arm unchanged); the
+     returned launch count feeds the same `mgr.stream_kernel()` loop.
+  3. End-of-tree leaf-value sweep (~:2302): under the same guard call
+     `compute_partition_stats_gather(ctx, len(leaves), n_rows,
+     stat_count, n_rows, d_ids, p_off, p_sz, stats, row_index,
+     stat_partials, part_stats, sm_count=sm_count)`.
+  The iteration-1 root seed sweep (~:1530) needs NO bind: it runs before
+  any split, over the identity index, and the contiguous read is already
+  exact. `compute_target_std_dev` (~:1122) likewise: pre-split, full
+  plane. The symmetric driver is NOT converted -- 1902 is the
+  non-symmetric policies' deviation and the defaults keep it byte for
+  byte.
+* **Bit-exactness, argued once (`split_points_ridx.mojo` banner) and
+  relied on everywhere:** the old schedule's permuted plane satisfies
+  `P[stat][pos] == D[stat][ridx[pos]]` at every point of the fit (true at
+  tree start; preserved because splits permute `P` and `ridx` with the
+  same `gather_map`, and a permutation of floats moves bytes, never
+  re-rounds). Converted readers load the SAME BITS at the same loop
+  iteration on the same thread, in the same accumulation order, under the
+  same position-keyed dither. So the FAST model pre/post wiring must be
+  BYTE-IDENTICAL -- 1902 is bit-inert like 1903, not re-associating like
+  1901 -- and that claim is itself the cheapest gate (below). Guarded
+  FAST-only by the row anyway, per the round's orders: the argument
+  becomes a measurement only when the A/B byte-compare runs. One trace
+  row legitimately moves: `dN.stats` now hashes a STATIONARY plane, so a
+  pre/post trace diff must show every other row identical and only
+  `dN.stats` differing -- a differing `rowindex`, `hist.*`, `partstats`
+  or `model.*` row falsifies the invariant and names the stage.
+* **What the orchestrator must gate, in order.**
+  1. IDENTICAL byte-compare against main (passes by construction; run it
+     anyway -- it is the claim the guards exist for).
+  2. FAST model byte-compare, wired vs unwired, same commit, same device,
+     lossguide AND depthwise fixtures -- the transcription-exactness
+     claim. Include a fixture with one-hot/binary winners (sub-byte
+     kernels' arms) and one over 1024 rows per leaf at some level (slow
+     arm) and one under (inplace arm), or an arm ships ungated.
+  3. The uniform-data trap ([[uniform-test-data-hides-permutation]]):
+     the byte-compare fixtures must carry HASHED per-row stat values --
+     a uniform plane makes a dropped permutation invisible, and 1902 is
+     EXACTLY a permutation-accounting change.
+  4. The price: 1M/2M lossguide rungs intra-leg (FAST, routed vs not, one
+     thermal window per [[the-M4-drifts]] on the Mac leg). The hist
+     gather's lost coalescing on the stat stream is the risk; both
+     competitors eat it and win, but if it costs more than the reorder
+     saves at 255 bins x 2 stats, the row flips to False on that column
+     and the deviation dies on the bench, not in review.
+* **Interaction with the round's other deviations.** 1901: its
+  `update_partition_stats_from_split_kernel` reads histograms and
+  `part_stats`, never row stats -- untouched; it also already cut the
+  per-level sweeps to two per tree, which is why the gathered sweep's
+  marginal cost is small. 1903: histogram aliasing, no stat-plane
+  contact -- orthogonal. 1904 (`leaf_winner_fold_kernel`): reads the
+  scanned histogram and the split record -- untouched. 1907: produces
+  the `gather_map`; under 1902 the SAME map permutes one column instead
+  of `stat_count + 1`, so 1907's single-pass partition and 1902 compose
+  multiplicatively on the over-500k levels. Land order 1901 -> 1903 ->
+  1902 held.

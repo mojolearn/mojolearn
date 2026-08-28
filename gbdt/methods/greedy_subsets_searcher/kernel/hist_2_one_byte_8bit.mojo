@@ -352,7 +352,7 @@ def hist2_8bit_kernel(
     )
 
 
-def hist2_8bit_gather_kernel(
+def hist2_8bit_gather_kernel[ridx_stats: Bool = False](
     feature_folds: MutPointer[UInt32, MutAnyOrigin],
     feature_fold_offset: MutPointer[UInt32, MutAnyOrigin],
     feature_group_offset: MutPointer[UInt32, MutAnyOrigin],
@@ -374,7 +374,8 @@ def hist2_8bit_gather_kernel(
     stat_count_in: Int32,
 ):
     """Indexed loads (below the root): bins through `indices`, stats
-    contiguous, dither keyed on the storage position -- the same
+    contiguous (or gathered through the same index under `ridx_stats`,
+    DEVIATION 1902), dither keyed on the storage position -- the same
     conventions as every gather kernel in this package."""
     var fixed_scale = fixed_scale_ptr.unsafe_load(0)
     var f_count_in = Int(f_count_in32)
@@ -435,25 +436,40 @@ def hist2_8bit_gather_kernel(
             var hrow = Int(ldg(indices + (p_offset + pe)))
             var hb = ldg(cindex_p + hrow)
             var u = hist2_dither(p_offset + pe)
-            var hq1 = hist2_quantize(
-                ldg(stats + (p_offset + pe)), fixed_scale, u
-            )
-            var hq2 = hist2_quantize(
-                ldg(stats + (stat_line_size + p_offset + pe)),
-                fixed_scale, u,
-            )
+            # DEVIATION 1902 (`ridx_stats`): stationary planes, both stats
+            # ride the same gathered row id as the bin. The dither key
+            # stays the storage POSITION in both arms -- same bits, same
+            # quantize (`split_points_ridx.mojo`'s invariant).
+            var hs1: Float32
+            var hs2: Float32
+
+            @parameter
+            if ridx_stats:
+                hs1 = ldg(stats + hrow)
+                hs2 = ldg(stats + (stat_line_size + hrow))
+            else:
+                hs1 = ldg(stats + (p_offset + pe))
+                hs2 = ldg(stats + (stat_line_size + p_offset + pe))
+            var hq1 = hist2_quantize(hs1, fixed_scale, u)
+            var hq2 = hist2_quantize(hs2, fixed_scale, u)
             h8_add_point(hb, hq1, hq2, tid, slice_base, smem)
         if local_block_idx == 0 and pe < tail_len:
             var trow = Int(ldg(indices + (tail_start + pe)))
             var tb = ldg(cindex_p + trow)
             var u = hist2_dither(tail_start + pe)
-            var tq1 = hist2_quantize(
-                ldg(stats + (tail_start + pe)), fixed_scale, u
-            )
-            var tq2 = hist2_quantize(
-                ldg(stats + (stat_line_size + tail_start + pe)),
-                fixed_scale, u,
-            )
+            var ts1: Float32
+            var ts2: Float32
+
+            @parameter
+            if ridx_stats:
+                # DEVIATION 1902, as on the head peel above.
+                ts1 = ldg(stats + trow)
+                ts2 = ldg(stats + (stat_line_size + trow))
+            else:
+                ts1 = ldg(stats + (tail_start + pe))
+                ts2 = ldg(stats + (stat_line_size + tail_start + pe))
+            var tq1 = hist2_quantize(ts1, fixed_scale, u)
+            var tq2 = hist2_quantize(ts2, fixed_scale, u)
             h8_add_point(tb, tq1, tq2, tid, slice_base, smem)
         pe += H8_BLOCK
 
@@ -490,12 +506,17 @@ def hist2_8bit_gather_kernel(
                 var vi = ldg[width=H8_LOAD, alignment=4](
                     i_ptr + H8_LANE * H8_LOAD * k
                 )
-                var v1 = ldg[width=H8_LOAD, alignment=4](
-                    s1_ptr + H8_LANE * H8_LOAD * k
-                )
-                var v2 = ldg[width=H8_LOAD, alignment=4](
-                    s2_ptr + H8_LANE * H8_LOAD * k
-                )
+                var v1 = SIMD[DType.float32, H8_LOAD](0.0)
+                var v2 = SIMD[DType.float32, H8_LOAD](0.0)
+
+                @parameter
+                if not ridx_stats:
+                    v1 = ldg[width=H8_LOAD, alignment=4](
+                        s1_ptr + H8_LANE * H8_LOAD * k
+                    )
+                    v2 = ldg[width=H8_LOAD, alignment=4](
+                        s2_ptr + H8_LANE * H8_LOAD * k
+                    )
 
                 @parameter
                 for e in range(H8_LOAD):
@@ -503,6 +524,16 @@ def hist2_8bit_gather_kernel(
                         pos_base + H8_LANE * H8_LOAD * k + e
                     )
                     lb[k * H8_LOAD + e] = ldg(cindex_p + Int(vi[e]))
+
+                    @parameter
+                    if ridx_stats:
+                        # DEVIATION 1902: both stats join the bins' scalar
+                        # gather through the same loaded row id; the wide
+                        # loads above are traded for it.
+                        v1[e] = ldg(stats + Int(vi[e]))
+                        v2[e] = ldg(
+                            stats + (stat_line_size + Int(vi[e]))
+                        )
                     lq1[k * H8_LOAD + e] = hist2_quantize(
                         v1[e], fixed_scale, u
                     )

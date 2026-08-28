@@ -1562,7 +1562,7 @@ def upload_blocks(
     return out^
 
 
-def launch_hist2_8bit(
+def launch_hist2_8bit[ridx_stats: Bool = False](
     ctx: DeviceContext,
     mut blk: DeviceBlock,
     depth: Int,
@@ -1609,7 +1609,9 @@ def launch_hist2_8bit(
             block_dim=(H8_BLOCK, 1, 1),
         )
     else:
-        ctx.enqueue_function[hist2_8bit_gather_kernel](
+        # `ridx_stats` (DEVIATION 1902): the gather arm's stat loads go
+        # through the row index when the ridx-only split route is on.
+        ctx.enqueue_function[hist2_8bit_gather_kernel[ridx_stats]](
             blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
             blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
             Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
@@ -1623,7 +1625,9 @@ def launch_hist2_8bit(
         )
 
 
-def launch_one_byte[bits: Int, smem_mode: Int = HIST2_SMEM_MODE](
+def launch_one_byte[
+    bits: Int, smem_mode: Int = HIST2_SMEM_MODE, ridx_stats: Bool = False
+](
     ctx: DeviceContext,
     mut blk: DeviceBlock,
     depth: Int,
@@ -1737,7 +1741,11 @@ def launch_one_byte[bits: Int, smem_mode: Int = HIST2_SMEM_MODE](
             block_dim=(one_byte_block_size[smem_mode](), 1, 1),
         )
     else:
-        ctx.enqueue_function[one_byte_hist_gather_kernel[bits, smem_mode]](
+        # `ridx_stats` (DEVIATION 1902): stat loads through the row index
+        # on the ridx-only split route.
+        ctx.enqueue_function[
+            one_byte_hist_gather_kernel[bits, smem_mode, ridx_stats]
+        ](
             blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
             blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
             Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
@@ -1777,7 +1785,9 @@ def launch_one_byte[bits: Int, smem_mode: Int = HIST2_SMEM_MODE](
 
 
 
-def launch_hist2_one_byte[bits: Int, smem_mode: Int = HIST2_SMEM_MODE](
+def launch_hist2_one_byte[
+    bits: Int, smem_mode: Int = HIST2_SMEM_MODE, ridx_stats: Bool = False
+](
     ctx: DeviceContext,
     mut blk: DeviceBlock,
     depth: Int,
@@ -1832,7 +1842,7 @@ def launch_hist2_one_byte[bits: Int, smem_mode: Int = HIST2_SMEM_MODE](
     var is_odd = stat_count % 2
     if is_odd == 1:
         # `PASS(Bits, 1)`: the one-stat PASS-family kernel covers stat 0.
-        launch_one_byte[bits, smem_mode](
+        launch_one_byte[bits, smem_mode, ridx_stats](
             ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
             sm_count, line, base, cindex, row_index, stats, p_off,
             p_sz, ids, block_hist, acc_i32, fixed_scale, grid_z_stats=1,
@@ -1872,7 +1882,10 @@ def launch_hist2_one_byte[bits: Int, smem_mode: Int = HIST2_SMEM_MODE](
             )
     else:
         if is_odd == 1:
-            ctx.enqueue_function[hist2_one_byte_gather_kernel[bits, True, smem_mode]](
+            # `ridx_stats` (DEVIATION 1902) on both gather arms below.
+            ctx.enqueue_function[
+                hist2_one_byte_gather_kernel[bits, True, smem_mode, ridx_stats]
+            ](
                 blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
                 blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
                 Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
@@ -1885,7 +1898,9 @@ def launch_hist2_one_byte[bits: Int, smem_mode: Int = HIST2_SMEM_MODE](
                 block_dim=(BLOCK, 1, 1),
             )
         else:
-            ctx.enqueue_function[hist2_one_byte_gather_kernel[bits, False, smem_mode]](
+            ctx.enqueue_function[
+                hist2_one_byte_gather_kernel[bits, False, smem_mode, ridx_stats]
+            ](
                 blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
                 blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
                 Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
@@ -2014,7 +2029,7 @@ def replication_for(
 
 
 def launch_histograms_for_blocks[
-    hist2_smem_mode: Int = HIST2_SMEM_MODE
+    hist2_smem_mode: Int = HIST2_SMEM_MODE, ridx_stats: Bool = False
 ](
     ctx: DeviceContext,
     mut blocks: List[DeviceBlock],
@@ -2069,6 +2084,15 @@ def launch_histograms_for_blocks[
     old indexed zero; the scratch now takes a whole-buffer zero, which needs
     no ids at all. The argument stays because the callers of this function
     live in `mojo_only/` and their signatures are not this file's to change.
+
+    `ridx_stats` (DEVIATION 1902): True routes every GATHER kernel's stat
+    loads through `row_index` -- the ridx-only split schedule, where the
+    stat planes stay stationary and only the row index is permuted
+    (`kernel/split_points_ridx.mojo`). The depth-0 DIRECT kernels are
+    untouched in both arms: the root is pre-split, the index is the
+    identity and the contiguous doc-order read is already exact. Callers
+    bind it to `ridx_only_splits_for[TARGET_COLUMN, identical]()`; the
+    default keeps every existing call site byte for byte.
     """
     # Where each block's slice begins in the flat histogram: the running
     # total of earlier blocks' bin counts.
@@ -2218,7 +2242,10 @@ def launch_histograms_for_blocks[
                         block_dim=(BLOCK_SIZE, 1, 1),
                     )
                 else:
-                    ctx.enqueue_function[binary_hist_gather_kernel](
+                    # `ridx_stats` (DEVIATION 1902) on the gather arm.
+                    ctx.enqueue_function[
+                        binary_hist_gather_kernel[ridx_stats]
+                    ](
                         blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
                         blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
                         Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line), Int32(base),
@@ -2308,7 +2335,10 @@ def launch_histograms_for_blocks[
                         block_dim=(BLOCK_SIZE, 1, 1),
                     )
                 else:
-                    ctx.enqueue_function[half_byte_hist_gather_kernel](
+                    # `ridx_stats` (DEVIATION 1902) on the gather arm.
+                    ctx.enqueue_function[
+                        half_byte_hist_gather_kernel[ridx_stats]
+                    ](
                         blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
                         blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
                         Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line), Int32(base),
@@ -2367,7 +2397,7 @@ def launch_histograms_for_blocks[
             @parameter
             if _one_byte_fixed:
                 if stat_count == 2:
-                    launch_hist2_8bit(
+                    launch_hist2_8bit[ridx_stats](
                         ctx, blk, depth, n_live, n_rows, stat_count,
                         max_leaves, sm_count, line, base, cindex,
                         row_index, stats, p_off, p_sz, ids,
@@ -2382,19 +2412,19 @@ def launch_histograms_for_blocks[
                     )
             else:
                 if blk.max_folds <= 32:
-                    launch_hist2_one_byte[5, hist2_smem_mode](
+                    launch_hist2_one_byte[5, hist2_smem_mode, ridx_stats](
                         ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
                         sm_count, line, base, cindex, row_index, stats, p_off,
                         p_sz, ids, block_hist, acc_i32, fixed_scale,
                     )
                 elif blk.max_folds <= 64:
-                    launch_hist2_one_byte[6, hist2_smem_mode](
+                    launch_hist2_one_byte[6, hist2_smem_mode, ridx_stats](
                         ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
                         sm_count, line, base, cindex, row_index, stats, p_off,
                         p_sz, ids, block_hist, acc_i32, fixed_scale,
                     )
                 elif blk.max_folds <= 128:
-                    launch_hist2_one_byte[7, hist2_smem_mode](
+                    launch_hist2_one_byte[7, hist2_smem_mode, ridx_stats](
                         ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
                         sm_count, line, base, cindex, row_index, stats, p_off,
                         p_sz, ids, block_hist, acc_i32, fixed_scale,
@@ -2409,7 +2439,7 @@ def launch_histograms_for_blocks[
                             # (its DEVIATION BLOCK carries the shared-memory
                             # arithmetic their ladder's fallback exists to
                             # avoid)
-                            launch_hist2_8bit(
+                            launch_hist2_8bit[ridx_stats](
                                 ctx, blk, depth, n_live, n_rows, stat_count,
                                 max_leaves, sm_count, line, base, cindex,
                                 row_index, stats, p_off, p_sz, ids,
@@ -2425,14 +2455,14 @@ def launch_histograms_for_blocks[
                             # shapes take the PASS route, whose shared-Int32
                             # arm walks stat pairs on the z axis exactly as
                             # their ladder does.
-                            launch_one_byte[8, hist2_smem_mode](
+                            launch_one_byte[8, hist2_smem_mode, ridx_stats](
                                 ctx, blk, depth, n_live, n_rows, stat_count,
                                 max_leaves, sm_count, line, base, cindex,
                                 row_index, stats, p_off, p_sz, ids,
                                 block_hist, acc_i32, fixed_scale,
                             )
                     else:
-                        launch_one_byte[8, hist2_smem_mode](
+                        launch_one_byte[8, hist2_smem_mode, ridx_stats](
                             ctx, blk, depth, n_live, n_rows, stat_count,
                             max_leaves, sm_count, line, base, cindex,
                             row_index, stats, p_off, p_sz, ids, block_hist,
