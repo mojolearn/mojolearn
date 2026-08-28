@@ -1304,7 +1304,11 @@ struct LeafArgs[O: ObjectiveLike](Copyable, Movable):
 
 
 def leaf_kernel[
-    O: ObjectiveLike, TPB: Int, LEAF_SMEM_BIN_SLOTS: Int, sabotage: Int = 0
+    O: ObjectiveLike,
+    TPB: Int,
+    LEAF_SMEM_BIN_SLOTS: Int,
+    sabotage: Int = 0,
+    zero_fill: Bool = False,
 ](
     argsp: MutPointer[LeafArgs[O], MutAnyOrigin],
     tree: MutPointer[SparseTreeNode[O.DataT], MutAnyOrigin],
@@ -1349,6 +1353,23 @@ def leaf_kernel[
     var node_id = Int(block_idx.x)
     ref node = tree[unsafe_offset=node_id]
     ref range = instance_ranges[unsafe_offset=node_id]
+    # DEVIATION 1918 -- the zero fill their `builder.cuh:659-660` memset
+    # performs, fused: each block zeroes ITS OWN node's slot before the
+    # `IsLeaf` early return, so an internal node's slot ends 0 exactly as
+    # the memset left it, and a leaf's zeros are overwritten by
+    # `SetLeafVector` below -- ordered by the two `barrier()`s every
+    # thread of a leaf block already passes before tid 0 writes. One
+    # block owns one slot, so no cross-block order exists to depend on.
+    # OFF by default; only `builder.mojo`'s `set_leaf_predictions` (which
+    # drops its memset with this flag) turns it on, so every check's
+    # direct launch keeps the pre-1918 contract.
+    comptime if zero_fill:
+        var z = Int(thread_idx.x)
+        while z < Int(dataset.num_outputs):
+            leaves[
+                unsafe_offset = Int(dataset.num_outputs) * node_id + z
+            ] = Scalar[O.DataT](0)
+            z += Int(block_dim.x)
     # `:227`
     comptime if sabotage != 2:
         if not node.IsLeaf():
@@ -1401,6 +1422,7 @@ def launch_leaf_kernel[
     TPB: Int = TPB_DEFAULT,
     LEAF_SMEM_BIN_SLOTS: Int = LEAF_SMEM_MAX_OUTPUTS,
     sabotage: Int = 0,
+    zero_fill: Bool = False,
 ](
     ctx: DeviceContext,
     tree: MutPointer[SparseTreeNode[O.DataT], MutUntrackedOrigin],
@@ -1429,7 +1451,7 @@ def launch_leaf_kernel[
             + String(LEAF_SMEM_BIN_SLOTS * size_of[O.BinT]())
             + " (DEVIATION 103c/1894)"
         )
-    comptime k = leaf_kernel[O, TPB, LEAF_SMEM_BIN_SLOTS, sabotage]
+    comptime k = leaf_kernel[O, TPB, LEAF_SMEM_BIN_SLOTS, sabotage, zero_fill]
     log_launch("leaf")
     ctx.enqueue_function[k](
         argsp.unsafe_origin_cast[MutAnyOrigin](),

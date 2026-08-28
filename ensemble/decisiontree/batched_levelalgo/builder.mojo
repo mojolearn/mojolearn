@@ -2467,12 +2467,14 @@ struct Builder[O: ObjectiveLike](Movable):
                     begin * size_of[InstanceRange]()
                 ),
             )
-            var dl = self.leaf_d_leaves.create_sub_buffer[Self.O.DataT](
-                0, size * n_out
-            )
-            ctx.enqueue_memset(dl, Scalar[Self.O.DataT](0))
-
-            launch_leaf_kernel[Self.O](
+            # DEVIATION 1918 -- their zero fill at `:659-660` (this used
+            # to be an `enqueue_memset` over the batch's slots) is fused
+            # into the leaf kernel: each block zeroes its OWN node's slot
+            # before the IsLeaf early-return, so internal nodes' slots
+            # end 0 exactly as the memset left them and a leaf's zeros
+            # are overwritten under the block's own barriers. One block
+            # owns one slot; no cross-block order exists.
+            launch_leaf_kernel[Self.O, zero_fill=True](
                 ctx,
                 self.leaf_d_tree.unsafe_ptr()
                 .unsafe_origin_cast[MutUntrackedOrigin]()
@@ -2500,7 +2502,6 @@ struct Builder[O: ObjectiveLike](Movable):
             ctx.enqueue_copy(dst_buf=hl, src_buf=dls)
             d_views.append(dt^)
             d_views.append(dr^)
-            l_views.append(dl^)
             l_views.append(dls^)
             h_views.append(hl^)
             begin = end
