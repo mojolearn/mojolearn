@@ -173,6 +173,26 @@ from training.mojo_only.train_loop import (
 comptime M_ROWS = TRAIN_B * TRAIN_L
 comptime DEFAULT_TRACE = "/tmp/mojolearn_train_step.trace"
 
+def card_path() -> String:
+    """`MOJOLEARN_IDENTITY_TRACE` when the caller set it, else this check's
+    own scratch path.
+
+    DEVIATION 1939, 2026-08-28. Same precedence as
+    `isolation_forest/mojo_only/if_check.mojo::card_path`. This lane built a
+    complete card and wrote it to a hardcoded path no harness collects, so it
+    reported `NO CARD written` in every round while its own gate went green.
+
+    ONLY THE PRIMARY CARD MOVES. The second path in this check is the
+    run-to-run CONTROL, and pointing it at the harness too would overwrite
+    the card with it.
+    """
+    var p = String(getenv("MOJOLEARN_IDENTITY_TRACE"))
+    if p.byte_length() > 0:
+        return p^
+    return String(DEFAULT_TRACE)
+
+
+
 
 # ===========================================================================
 # BITWISE COMPARISON
@@ -1167,7 +1187,7 @@ def clause_e(ctx: DeviceContext, seed: UInt64, steps: Int) raises -> Int:
     _ = b2
 
     # ---- the record count -------------------------------------------------
-    var path = String(DEFAULT_TRACE)
+    var path = card_path()
     var trace = IdentityTrace.to_path(path)
     var off2 = IdentityTrace.disabled()
     var run = run_training(

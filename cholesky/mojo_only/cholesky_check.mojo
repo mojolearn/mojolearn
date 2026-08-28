@@ -76,6 +76,7 @@ to differ.
 """
 
 from std.memory import bitcast
+from std.os import getenv
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -155,6 +156,26 @@ comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: Where the per-check cards go. `/tmp` so the check runs on any box.
 comptime SCRATCH = "/tmp"
+
+def card_path() -> String:
+    """`MOJOLEARN_IDENTITY_TRACE` when the caller set it, else this check's
+    own scratch path.
+
+    DEVIATION 1939, 2026-08-28. Same precedence as
+    `isolation_forest/mojo_only/if_check.mojo::card_path`. This lane built a
+    complete card and wrote it to a hardcoded path no harness collects, so it
+    reported `NO CARD written` in every round while its own gate went green.
+
+    ONLY THE PRIMARY CARD MOVES. The second path in this check is the
+    run-to-run CONTROL, and pointing it at the harness too would overwrite
+    the card with it.
+    """
+    var p = String(getenv("MOJOLEARN_IDENTITY_TRACE"))
+    if p.byte_length() > 0:
+        return p^
+    return String(SCRATCH) + "/mojolearn_chol_card_1.card"
+
+
 
 
 def _mode_name() -> String:
@@ -1297,7 +1318,7 @@ def check_card_is_emitted() raises:
     var n = chol_fixture_n(FIX_RBF)
     var a = chol_fixture(FIX_RBF, 0)
     var jitter = chol_jitter_pinned()
-    var p1 = SCRATCH + "/mojolearn_chol_card_1.card"
+    var p1 = card_path()
     var p2 = SCRATCH + "/mojolearn_chol_card_2.card"
     var t1 = IdentityTrace.to_path(p1)
     t1.header("cholesky card 1")

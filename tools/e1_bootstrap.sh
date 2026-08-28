@@ -459,10 +459,21 @@ for mode in identical fast; do
   # their card to a fixed scratch path and got the same `card_path()` repair
   # isolation forest got this morning and mamba got under DEVIATION 970.
   #
-  # tsa IS DELIBERATELY ABSENT: `stationarity_check.mojo` builds no identity
-  # card at all, so listing it would add a lane that can only ever report
-  # "NO CARD written". It needs a card first; that is a lane's worth of work
-  # and not a line in a loop.
+  # tsa POINTS AT tsa_main.mojo, NOT AT stationarity_check.mojo, and the
+  # sentence that stood here was wrong. It read "tsa IS DELIBERATELY ABSENT:
+  # stationarity_check.mojo builds no identity card at all ... it needs a
+  # card first; that is a lane's worth of work and not a line in a loop."
+  # True of the CHECK driver, false about the LANE. `tsa/tsa_main.mojo` has
+  # built a complete eleven-stage card since it was written and honours
+  # MOJOLEARN_IDENTITY_TRACE through the bare `IdentityTrace()` constructor,
+  # exactly as metrics, linkage, cd, spectral and arima do here. It was one
+  # line away the whole time, and the comment claiming otherwise is what kept
+  # it out of every round.
+  #
+  # ONE DRIVER PER LANE NAME, and for tsa that matters more than usual: the
+  # env constructor does NOT truncate, so listing both tsa_main.mojo and a
+  # carded stationarity_check.mojo under the name `tsa` would have the second
+  # run APPEND into the first's card and produce duplicate tags.
   run_lane_arm arima "$mode" pixi run mojo run -I . arima/mojo_only/arima_check.mojo
   run_lane_arm cholesky "$mode" pixi run mojo run -I . cholesky/mojo_only/cholesky_check.mojo
   run_lane_arm embedding "$mode" pixi run mojo run -I . embedding/mojo_only/embedding_check.mojo
@@ -477,6 +488,7 @@ for mode in identical fast; do
   run_lane_arm training-loss "$mode" pixi run mojo run -I . training/mojo_only/loss_check.mojo
   run_lane_arm training-optimizer "$mode" pixi run mojo run -I . training/mojo_only/optimizer_check.mojo
   run_lane_arm training-step "$mode" pixi run mojo run -I . training/mojo_only/train_step_check.mojo
+  run_lane_arm tsa "$mode" pixi run mojo run -I . tsa/tsa_main.mojo
   run_lane_arm metrics "$mode" pixi run mojo run -I . metrics/metrics_main.mojo
   for t in check-metrics-labels check-metrics-regression check-metrics-silhouette check-metrics-trust; do
     run_lane_check "metrics-${t#check-metrics-}" "$mode" pixi run "$t"

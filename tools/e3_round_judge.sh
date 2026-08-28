@@ -285,7 +285,7 @@ echo "########## 7. the lanes' cards (phase 8): IDENTICAL judged, FAST recorded"
 for lane in gemm cd kde linkage svm metrics mamba iforest transformer \
            arima cholesky embedding gp hdbscan holtwinters ivf \
            kernelmethods gmm resample spectral \
-           training-loss training-optimizer training-step; do
+           training-loss training-optimizer training-step tsa; do
   for d in "${DIRS[@]:1}"; do
     a="$REF/lanes/$lane.identical.card"; b="$d/lanes/$lane.identical.card"
     if [ ! -f "$a" ] || [ ! -f "$b" ]; then echo "  $lane IDENTICAL APPLE vs $(label_of "$d"): card MISSING ($([ -f "$a" ] || echo ref)$([ -f "$b" ] || echo ' other'))"; RC=1; continue; fi

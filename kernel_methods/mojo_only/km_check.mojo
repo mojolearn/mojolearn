@@ -89,6 +89,27 @@ and the host replay is entitled to differ.
 """
 
 from std.memory import bitcast
+from std.os import getenv
+
+def card_path() -> String:
+    """`MOJOLEARN_IDENTITY_TRACE` when the caller set it, else this check's
+    own scratch path.
+
+    DEVIATION 1939, 2026-08-28. Same precedence as
+    `isolation_forest/mojo_only/if_check.mojo::card_path`. This lane built a
+    complete card and wrote it to a hardcoded path no harness collects, so it
+    reported `NO CARD written` in every round while its own gate went green.
+
+    ONLY THE PRIMARY CARD MOVES. The second path in this check is the
+    run-to-run CONTROL, and pointing it at the harness too would overwrite
+    the card with it.
+    """
+    var p = String(getenv("MOJOLEARN_IDENTITY_TRACE"))
+    if p.byte_length() > 0:
+        return p^
+    return String("/tmp/mojolearn.km.card.a")
+
+
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -2451,7 +2472,7 @@ def check_card_is_emitted() raises:
     means when it moves; this check establishes that they are all emitted, in
     order, and that one machine produces the same card twice.
     """
-    var a = String("/tmp/mojolearn.km.card.a")
+    var a = card_path()
     var b = String("/tmp/mojolearn.km.card.b")
     _emit_card(a)
     _emit_card(b)
