@@ -81,27 +81,27 @@ they are pinned but **where the pinned card has been diffed**: bit-identity
 is a claim about two machines agreeing, and checking it requires the lane to
 have run on a second and third machine.
 
-At E3 round 11 (commit `144aa5b`, 2026-08-23) the six classical lanes had
-their cards emitted on an NVIDIA H100 (CUDA) and an AMD MI325X (HIP) and
-diffed against the Apple M4's (Metal), stage for stage, bit-identical on all
-three: gemm 60 card stages, cd 20, kde 7, linkage 8, svm 32, metrics 34. So
-`mojolearn.linalg`, `Lasso`, `ElasticNet`, `KernelDensity`,
-`AgglomerativeClustering`, `SVC` and `mojolearn.metrics` stand on measured
-three-vendor cards.
+On 2026-08-28 all three boxes ran at ONE commit, `a0a0eee` (Apple M4 leg
+`bench/results/e1/2026-08-28_130918-MacBook-Air-1-terrabyte`, NVIDIA H100
+leg `2026-08-28_131651-runpod-nvidia`, AMD MI325X leg
+`2026-08-28_173933-mojolearn-e2-amd`). Every IDENTICAL card is byte-identical
+Apple-to-NVIDIA and Apple-to-AMD: cd 23 stages, gemm 61, iforest 124, kde 9,
+linkage 10, metrics 64, svm 35, and the `ridge_*` and `logreg_*` E2U cells.
+So `mojolearn.linalg`, `Lasso`, `ElasticNet`, `KernelDensity`,
+`AgglomerativeClustering`, `SVC`, `mojolearn.metrics`, `IsolationForest`,
+`Ridge` and `LogisticRegression` all stand on measured three-vendor cards.
+This also closes two items that were open at E3 round 11: `metrics`'s grown
+card (34 stages then, 64 now) has had its three-vendor leg, and
+`isolation_forest` joined phase 8 and ran on both boxes.
 
-`IsolationForest`, `SpectralClustering`, `ExponentialSmoothing`,
-`kpss_test`, `select_d`, `Ridge` and `LogisticRegression` have run on one
-Apple M4 and nowhere else. Their gates are green there and their pins come
-from the same source as the six above, so they are expected to match, but
-the leg is OWED and until it runs that is an expectation and not a
-measurement. Each class says so rather than inheriting a neighbour's
-certificate. Round 11 is why the distinction is kept: running the second and
-third box is what surfaced the OLS launch-invariance failure and the
-subnormal KL operand in Known issues below, neither of which is visible on
-one machine.
-
-`metrics/`'s card has since grown from 34 stages to 61, and the
-three-vendor leg on the grown card is OWED.
+`SpectralClustering`, `ExponentialSmoothing`, `kpss_test` and `select_d` do
+not stand on a three-vendor card. The `spectral`, `holtwinters` and `tsa`
+lanes have never run anywhere but one Apple M4 -- no leg directory in
+`bench/results/` holds a card for any of them. Their gates are green there
+and their pins come from the same source as the lanes above, so they are
+expected to match, but the leg is OWED and until it runs that is an
+expectation and not a measurement. Each class says so rather than inheriting
+a neighbour's certificate.
 
 **The FAST arm, which is the default, makes no cross-vendor claim at all.**
 Unchanged from 0.1.0, and the FAST cards do differ between vendors for
@@ -162,11 +162,15 @@ wheel at all.
   the high word, by name, and that choice has never been checked against a
   cuML binary. Until it is, agreement with cuML there is a belief and not a
   measurement.
-- `check_ols_is_launch_invariant` fails on both the H100 and the MI325X in
-  both numeric modes: two identical OLS fits in one process disagree at
-  coefficient 0. Open since E3 leg 10 and NOT seen on Apple, which is the
-  only platform this wheel targets. Localization is still owed
-  (`E3_RESULTS.md`, round 11 verdict).
+- `check_ols_is_launch_invariant` still fails on both the H100 and the
+  MI325X in both numeric modes, most recently in the 2026-08-28 legs at
+  `a0a0eee`: two identical OLS fits in one process disagree at coefficient 0
+  (`0xbbb60202` vs `0xbbb87825` on the H100 under FAST). The gate's own text
+  is the right reading of it -- nothing on that path uses a float atomic, so
+  this is not an ordering hazard but an uninitialized read or a race, and it
+  is a defect in BOTH modes. It has NOT been reproduced on Apple, which is
+  the only platform this wheel targets, and the card fixture's two fits agree
+  so there is no traced repro yet. Open since E3 leg 10; localization owed.
 
 ### Packaging
 

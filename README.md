@@ -69,12 +69,20 @@ IDENTICAL means.
 
 The `identity diffed on` column is not about whether a lane is pinned. It is
 about **where the pinned card has actually been compared**, and bit-identity
-is a claim about two machines agreeing, so checking it takes two machines. Six
-lanes have had their card emitted on an H100 and an MI325X and diffed against
-the M4's, stage for stage, at E3 round 11. The rest have run on one Apple M4
-and nowhere else: their pins are the same source and they are expected to
-match, but the leg is owed and until it runs that is an expectation rather
-than a measurement. No lane inherits a neighbour's certificate.
+is a claim about two machines agreeing, so checking it takes two machines.
+
+Most of this surface has been compared. On 2026-08-28, at one commit
+(`a0a0eee`) on all three boxes, the phase-8 lane cards and the E2U cell cards
+were emitted on an NVIDIA H100 (CUDA) and an AMD MI325X (HIP) and diffed
+against the Apple M4's (Metal): cd 23 stages, gemm 61, iforest 124, kde 9,
+linkage 10, metrics 64 and svm 35, plus the `ridge_*` and `logreg_*` cells,
+byte-identical Apple-to-NVIDIA and Apple-to-AMD in every case.
+
+Three lanes have not been compared, because they have never run anywhere but
+one Apple M4: `spectral`, `holtwinters` and `tsa`. Their pins come from the
+same source and they are expected to match, but the leg is owed and until it
+runs that is an expectation rather than a measurement. No lane inherits a
+neighbour's certificate.
 
 FAST, the default, is a different path with those pins compiled away. It
 promises speed and makes no cross-vendor claim anywhere, by design.
@@ -90,18 +98,18 @@ promises speed and makes no cross-vendor claim anywhere, by design.
 | `DBSCAN` | cuML, RAFT | epsilon neighborhoods, label propagation, border and noise points | yes | yes | Apple + NVIDIA + AMD |
 | `PCA`, `TruncatedSVD` | cuML, RAFT | eigen and SVD decompositions, transform and inverse transform | yes | yes | Apple + NVIDIA + AMD |
 | `LinearRegression` | RAFT | ordinary least squares (`lstsqEig`) | yes | yes | Apple + NVIDIA + AMD |
-| `Ridge` | cuML | ridge regression, the `eig` arm (`svdEig` + `ridgeSolve`) | yes | yes | Apple only, leg owed |
-| `LogisticRegression` | cuML | binary L-BFGS with the Armijo line search (`qnFit`); l1, multiclass, sample and class weights refused by name | yes | yes | Apple only, leg owed |
-| `SVC` | cuML | binary C-SVC. There is no `SVR`, and `svmType != C_SVC` raises by name | yes | yes | Apple + NVIDIA + AMD, 32 card stages |
-| `Lasso`, `ElasticNet` | cuML | coordinate descent (`cd.cuh::cdFit`), cyclic and random selection | yes | yes | Apple + NVIDIA + AMD, 20 stages |
-| `KernelDensity` | cuML | kernel density estimation; `bandwidth='scott'` and `'silverman'` refused by name | yes | yes | Apple + NVIDIA + AMD, 7 stages |
-| `AgglomerativeClustering` | cuML, cuVS, RAFT | single linkage over RAFT's Boruvka MST | yes | yes | Apple + NVIDIA + AMD, 8 stages |
-| `IsolationForest` | cuML | isolation forest, anomaly scores | yes | yes | Apple only, leg owed |
+| `Ridge` | cuML | ridge regression, the `eig` arm (`svdEig` + `ridgeSolve`) | yes | yes | Apple + NVIDIA + AMD |
+| `LogisticRegression` | cuML | binary L-BFGS with the Armijo line search (`qnFit`); l1, multiclass, sample and class weights refused by name | yes | yes | Apple + NVIDIA + AMD |
+| `SVC` | cuML | binary C-SVC. There is no `SVR`, and `svmType != C_SVC` raises by name | yes | yes | Apple + NVIDIA + AMD, 35 card stages |
+| `Lasso`, `ElasticNet` | cuML | coordinate descent (`cd.cuh::cdFit`), cyclic and random selection | yes | yes | Apple + NVIDIA + AMD, 23 stages |
+| `KernelDensity` | cuML | kernel density estimation; `bandwidth='scott'` and `'silverman'` refused by name | yes | yes | Apple + NVIDIA + AMD, 9 stages |
+| `AgglomerativeClustering` | cuML, cuVS, RAFT | single linkage over RAFT's Boruvka MST | yes | yes | Apple + NVIDIA + AMD, 10 stages |
+| `IsolationForest` | cuML | isolation forest, anomaly scores | yes | yes | Apple + NVIDIA + AMD, 124 card stages |
 | `SpectralClustering` | cuML, cuVS, RAFT | kNN connectivity graph, normalized Laplacian, thick-restart Lanczos | yes | yes | Apple only, leg owed |
 | `ExponentialSmoothing` | cuML `tsa` | Holt-Winters, additive and multiplicative | yes | yes | Apple only, leg owed |
 | `kpss_test`, `select_d` | cuML `tsa` | stationarity test and auto_arima's choice of d | yes | yes | Apple only, leg owed |
-| `mojolearn.metrics` | cuML, RAFT | fourteen scoring functions, scikit-learn's names with cuML's defaults and semantics | yes | yes | Apple + NVIDIA + AMD, 34 stages; the card has since grown to 61 and that leg is owed |
-| `mojolearn.linalg.matmul` | -- | FP32 matrix product, profile `mojolearn.identical.gemm.fp32.v1` | yes | yes | Apple + NVIDIA + AMD, 60 stages |
+| `mojolearn.metrics` | cuML, RAFT | fourteen scoring functions, scikit-learn's names with cuML's defaults and semantics | yes | yes | Apple + NVIDIA + AMD, 64 stages |
+| `mojolearn.linalg.matmul` | -- | FP32 matrix product, profile `mojolearn.identical.gemm.fp32.v1` | yes | yes | Apple + NVIDIA + AMD, 61 stages |
 
 Estimators save to and load from `.npz` files, and a model fitted on a Mac
 loads and predicts identically on an NVIDIA or AMD box (95 of 95 models,
