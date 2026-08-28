@@ -423,6 +423,8 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels import (
     NodeWorkItem,
     SharedMemoryConfig,
     WorkloadInfo,
+    recombine_seed_halves,
+    sampled_column_at,
 )
 from ensemble.flatnode import SparseTreeNode
 
@@ -576,6 +578,135 @@ struct DeviceArgs[F: Copyable & Deinitable](Movable):
             .unsafe_origin_cast[MutUntrackedOrigin]()
             .unsafe_bitcast[Self.F]()
         )
+
+
+# ===========================================================================
+# DEVIATION 1916 -- ONE setup launch per sampling round.
+# ===========================================================================
+
+# The fused kernel's block width. 256 was `sample_features`'s width; the
+# other two writes ran at 128 (initSplit) and as a memset. Every write
+# below is a pure function of its flat index, so the width moves no value.
+comptime PHASE_SETUP_TPB = 256
+
+
+def phase_setup_kernel[
+    dtype: DType
+](
+    splits: MutPointer[Split[dtype], MutAnyOrigin],
+    n_splits: Int32,
+    mutex: MutPointer[Int32, MutAnyOrigin],
+    n_mutex: Int32,
+    column_samples: MutPointer[Int32, MutAnyOrigin],
+    work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    n_column_samples: Int32,
+    treeid: Int32,
+    seed_lo: Int32,
+    seed_hi: Int32,
+    sample_offset: Int32,
+    n_cols: Int32,
+    k: Int32,
+):
+    """DEVIATION 1916: `computeBestSplits`'s three independent setup writes
+    -- `initSplit` (`builder.cuh:489` / `split.cuh:284-289`), the mutex
+    re-zero (`:490`) and `sampleFeatures` (`:505-520`) -- as ONE launch.
+
+    cuML enqueues them as three cheap CUDA ops on the stream; here every
+    enqueue is host-priced, and a covtype fit pays the trio ~9.5k times
+    (once per sampling round). Fusing is pure orchestration: the three
+    write DISJOINT buffers (`splits`, `mutex`, `column_samples`), none
+    reads what another writes, and every element is a pure function of
+    its flat index and the arguments -- `splits[i] = Split()` (their
+    default-construct lambda), `mutex[i] = 0` (their memset, over the
+    full `max_batch_size` extent), and `column_samples[i] =
+    sampled_column_at(...)` (the SAME `@always_inline` body
+    `sample_features_kernel` runs, imported, not transcribed). No
+    accumulation exists in any of the three, so no accumulation order can
+    move; the thread/block shape is free to differ from the originals'.
+
+    ORDER AGAINST THE PHASE UPLOAD: the feature sample reads
+    `work_items[...]` from the device arena, so this launch must be
+    enqueued AFTER `_enqueue_phase_upload` -- which also covers the two
+    writes that used to be enqueued before it (nothing between their old
+    position and the first reader, `find_best_splits`, reads `splits` or
+    `mutex`; the in-order queue makes the two positions equivalent to
+    every reader).
+    """
+    var seed = recombine_seed_halves(seed_lo, seed_hi)
+    var extent = Int(n_splits)
+    if Int(n_mutex) > extent:
+        extent = Int(n_mutex)
+    if Int(n_column_samples) > extent:
+        extent = Int(n_column_samples)
+    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while idx < extent:
+        if idx < Int(n_splits):
+            # `split.cuh:284-289` -- a default-constructed Split.
+            splits[unsafe_offset=idx] = Split[dtype]()
+        if idx < Int(n_mutex):
+            # `builder.cuh:490` -- zeroed over max_batch_size entries,
+            # not just the live ones.
+            mutex[unsafe_offset=idx] = Int32(0)
+        if idx < Int(n_column_samples):
+            column_samples[unsafe_offset=idx] = sampled_column_at(
+                work_items, idx, seed, treeid, sample_offset, n_cols, k
+            )
+        idx += stride
+
+
+def launch_phase_setup_kernel[
+    dtype: DType
+](
+    ctx: DeviceContext,
+    splits: MutPointer[Split[dtype], MutUntrackedOrigin],
+    n_work_items: Int,
+    mutex: MutPointer[Int32, MutUntrackedOrigin],
+    n_mutex: Int,
+    column_samples: MutPointer[Int32, MutUntrackedOrigin],
+    work_items: MutPointer[NodeWorkItem, MutUntrackedOrigin],
+    n_column_samples: Int,
+    treeid: Int32,
+    seed: UInt64,
+    sample_offset: Int,
+    n_cols: Int,
+    n_sampled_cols: Int,
+) raises:
+    """DEVIATION 1916's launcher. The seed splits into two Int32 halves BY
+    BIT PATTERN with every intermediate bound to a `var` -- the same
+    load-bearing spelling `Builder._sample_features` carried (chaining
+    the conversions folds to one sign-extending cast); the kernel
+    recombines through `recombine_seed_halves`, the single-sourced
+    masks."""
+    var extent = n_work_items
+    if n_mutex > extent:
+        extent = n_mutex
+    if n_column_samples > extent:
+        extent = n_column_samples
+    if extent == 0:
+        return
+    var hi_u = (seed >> 32).cast[DType.uint32]()
+    var lo_u = (seed & 0xFFFFFFFF).cast[DType.uint32]()
+    var hi_arg = hi_u.cast[DType.int32]()
+    var lo_arg = lo_u.cast[DType.int32]()
+    log_launch("phase_setup")
+    ctx.enqueue_function[phase_setup_kernel[dtype]](
+        splits.unsafe_origin_cast[MutAnyOrigin](),
+        Int32(n_work_items),
+        mutex.unsafe_origin_cast[MutAnyOrigin](),
+        Int32(n_mutex),
+        column_samples.unsafe_origin_cast[MutAnyOrigin](),
+        work_items.unsafe_origin_cast[MutAnyOrigin](),
+        Int32(n_column_samples),
+        treeid,
+        lo_arg,
+        hi_arg,
+        Int32(sample_offset),
+        Int32(n_cols),
+        Int32(n_sampled_cols),
+        grid_dim=ceildiv(extent, PHASE_SETUP_TPB),
+        block_dim=PHASE_SETUP_TPB,
+    )
 
 
 # ===========================================================================

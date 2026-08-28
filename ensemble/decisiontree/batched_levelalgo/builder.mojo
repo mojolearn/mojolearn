@@ -146,14 +146,12 @@ from ensemble.decisiontree.batched_levelalgo.objectives import (
 from ensemble.decisiontree.batched_levelalgo.quantiles import Quantiles
 from ensemble.decisiontree.batched_levelalgo.split import (
     Split,
-    init_split_kernel,
 )
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels import (
     InstanceRange,
     NodeWorkItem,
     SharedMemoryConfig,
     WorkloadInfo,
-    sample_features_kernel,
 )
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import (
     DeviceArgs,
@@ -167,6 +165,7 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import
     launch_find_best_splits_kernel,
     launch_leaf_kernel,
     launch_node_split_kernel,
+    launch_phase_setup_kernel,
 )
 from ensemble.decisiontree.decisiontree import (
     CRITERION_END,
@@ -1716,42 +1715,15 @@ struct Builder[O: ObjectiveLike](Movable):
         ctx.synchronize()
         return self._read_splits(n)
 
-    def _sample_features(
-        mut self,
-        ctx: DeviceContext,
-        n_work_items: Int,
-        sample_offset: Int,
-        n_sampled_cols: Int,
-    ) raises:
-        """`Builder::sampleFeatures`, `:505-520`, calling `sample_features`
-        (`kernels/builder_kernels.cuh:66-94`).
-
-        The seed is split into two Int32 halves BY BIT PATTERN with every
-        intermediate bound to a `var`; chaining the conversions inline folds
-        to one sign-extending cast and silently delivers the wrong word.
-        """
-        var n_column_samples = n_work_items * n_sampled_cols
-        if n_column_samples == 0:
-            return
-        var hi_u = (self.seed >> 32).cast[DType.uint32]()
-        var lo_u = (self.seed & 0xFFFFFFFF).cast[DType.uint32]()
-        var hi_arg = hi_u.cast[DType.int32]()
-        var lo_arg = lo_u.cast[DType.int32]()
-        var blocks = ceildiv(n_column_samples, 256)
-        log_launch("sample_features")
-        ctx.enqueue_function[sample_features_kernel](
-            self.column_samples.unsafe_ptr(),
-            self._work_items_ptr(),
-            Int32(n_column_samples),
-            self.treeid,
-            lo_arg,
-            hi_arg,
-            Int32(sample_offset),
-            Int32(self.n_cols),
-            Int32(n_sampled_cols),
-            grid_dim=blocks,
-            block_dim=256,
-        )
+    # `Builder::sampleFeatures` (`:505-520`) no longer has a method of its
+    # own: DEVIATION 1916 fused it with `:489`'s initSplit and `:490`'s
+    # mutex re-zero into `launch_phase_setup_kernel`'s one launch (see
+    # `enqueue_best_splits`). The seed-split incident its docstring
+    # carried -- two Int32 halves BY BIT PATTERN, `var`-bound, because the
+    # chained conversion folds to one sign-extending cast -- lives on in
+    # `launch_phase_setup_kernel` and `recombine_seed_halves`, and the
+    # kernel `sample_features_kernel` itself stands (shuffle_check drives
+    # it directly), sharing the same `sampled_column_at` body.
 
     def _compute_split(
         mut self,
@@ -1876,14 +1848,12 @@ struct Builder[O: ObjectiveLike](Movable):
         across every in-flight tree. `_compute_best_splits` below is the
         serial composition."""
         var n = len(work_items)
-        # `:489` -- initSplit
-        log_launch("init_split")
-        ctx.enqueue_function[init_split_kernel[Self.O.DataT]](
-            self._splits_ptr(), Int32(n), grid_dim=ceildiv(n, 128), block_dim=128
-        )
-        # `:490` -- the mutex is re-zeroed EVERY batch, over max_batch_size
-        # entries and not just the live ones.
-        ctx.enqueue_memset(self.mutex, Int32(0))
+        # DEVIATION 1916: `:489`'s initSplit, `:490`'s mutex re-zero and
+        # `:505-520`'s sampleFeatures now ride ONE fused launch, enqueued
+        # below AFTER the phase upload (the feature sample reads the
+        # uploaded work items; the other two writes have no reader before
+        # `find_best_splits`, so the later position is equivalent to the
+        # old one for every reader on the in-order queue).
         # DEVIATION 1908: stage both, then ONE packed upload.
         self._stage_work_items(work_items)
         # `:393-407` -- straight into the pinned array, as theirs.
@@ -1946,7 +1916,27 @@ struct Builder[O: ObjectiveLike](Movable):
                     ),
                 )
 
-        self._sample_features(ctx, n, sample_offset, n_sampled_cols)
+        # DEVIATION 1916 -- the fused setup launch: initSplit over the
+        # live `n`, the mutex over max_batch_size, the feature sample
+        # over `n * n_sampled_cols`. One op where the port paid three
+        # (two kernels + one memset) per sampling round.
+        launch_phase_setup_kernel[Self.O.DataT](
+            ctx,
+            self._splits_ptr(),
+            n,
+            self.mutex.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin](),
+            Int(self.params.max_batch_size),
+            self.column_samples.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin](),
+            self._work_items_ptr(),
+            n * n_sampled_cols,
+            self.treeid,
+            self.seed,
+            sample_offset,
+            self.n_cols,
+            n_sampled_cols,
+        )
         # DEVIATION 401 (added with the 2026-08-22 identity audit) -- the
         # round's sampled COLUMNS, the per-node feature-sample RNG's
         # (`fnv1a32_hash(seed, treeid, nodeid)` -> minstd_rand ->
