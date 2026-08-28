@@ -59,25 +59,49 @@ MOJOLEARN_NUMERIC_MODE=identical python train.py
 `mojolearn.numeric_mode()` reports the mode that actually loaded, read back
 from the binary, so a run cannot be mislabeled by accident.
 
-## What is in 0.1
+## What is in 0.2
 
-| estimator | mirrors | what it does | FAST | IDENTICAL |
-|---|---|---|---|---|
-| `GradientBoosting` | CatBoost GPU | oblivious (symmetric) trees, 12 losses plus MultiClass, depthwise and lossguide growth, CTRs, eval sets, overfitting detector, save and load | yes | yes |
-| `RandomForestClassifier`, `RandomForestRegressor` | cuML | quantile-split forest, with-replacement bootstrap, gini, entropy, poisson, gamma, inverse gaussian | yes | yes |
-| `ExtraTreesClassifier`, `ExtraTreesRegressor` | cuML | extremely randomized trees, gini, entropy, mse | yes | yes |
-| `KMeans` | cuVS | k-means with k-means++ init; `n_init` defaults to cuVS's 1, not scikit-learn's 10 | yes | yes |
-| `NearestNeighbors` | cuVS, RAFT, FAISS | brute-force k-NN, fused L2, ball cover, top-k selection | yes | yes |
-| `DBSCAN` | cuML, RAFT | epsilon neighborhoods, label propagation, border and noise points | yes | yes |
-| `PCA`, `TruncatedSVD` | cuML, RAFT | eigen and SVD decompositions, transform and inverse transform | yes | yes |
-| `LinearRegression` | RAFT | ordinary least squares (`lstsqEig`) | yes | yes |
+The `3 vendors` column is the one to read. It says whether that lane's
+IDENTICAL card has been measured bit-identical on Apple M4, NVIDIA H100 and
+AMD MI325X, or whether it has only ever run on one Apple M4. **The standing
+is not uniform, and no lane inherits a neighbour's certificate.** FAST, the
+default, makes no cross-vendor claim anywhere.
+
+| estimator | mirrors | what it does | FAST | IDENTICAL | 3 vendors |
+|---|---|---|---|---|---|
+| `GradientBoosting` | CatBoost GPU | oblivious (symmetric) trees, 12 losses plus MultiClass, depthwise and lossguide growth, CTRs, eval sets, overfitting detector, save and load | yes | yes | yes |
+| `RandomForestClassifier`, `RandomForestRegressor` | cuML | quantile-split forest, with-replacement bootstrap, gini, entropy, poisson, gamma, inverse gaussian | yes | yes | yes |
+| `ExtraTreesClassifier`, `ExtraTreesRegressor` | cuML | extremely randomized trees, gini, entropy, mse | yes | yes | yes |
+| `KMeans` | cuVS | k-means with k-means++ init; `n_init` defaults to cuVS's 1, not scikit-learn's 10 | yes | yes | yes |
+| `NearestNeighbors` | cuVS, RAFT, FAISS | brute-force k-NN, fused L2, ball cover, top-k selection | yes | yes | yes |
+| `KNeighborsClassifier`, `KNeighborsRegressor` | cuVS, RAFT, FAISS | the vote and the mean on that k-NN path | yes | yes | the k-NN path is |
+| `DBSCAN` | cuML, RAFT | epsilon neighborhoods, label propagation, border and noise points | yes | yes | yes |
+| `PCA`, `TruncatedSVD` | cuML, RAFT | eigen and SVD decompositions, transform and inverse transform | yes | yes | yes |
+| `LinearRegression` | RAFT | ordinary least squares (`lstsqEig`) | yes | yes | yes |
+| `Ridge` | cuML | ridge regression, the `eig` arm (`svdEig` + `ridgeSolve`) | yes | yes | Apple M4 only |
+| `LogisticRegression` | cuML | binary L-BFGS with the Armijo line search (`qnFit`); l1, multiclass, sample and class weights refused by name | yes | yes | Apple M4 only |
+| `SVC` | cuML | binary C-SVC. There is no `SVR`, and `svmType != C_SVC` raises by name | yes | yes | yes, 32 card stages |
+| `Lasso`, `ElasticNet` | cuML | coordinate descent (`cd.cuh::cdFit`), cyclic and random selection | yes | yes | yes, 20 stages |
+| `KernelDensity` | cuML | kernel density estimation; `bandwidth='scott'` and `'silverman'` refused by name | yes | yes | yes, 7 stages |
+| `AgglomerativeClustering` | cuML, cuVS, RAFT | single linkage over RAFT's Boruvka MST | yes | yes | yes, 8 stages |
+| `IsolationForest` | cuML | isolation forest, anomaly scores | yes | yes | Apple M4 only |
+| `SpectralClustering` | cuML, cuVS, RAFT | kNN connectivity graph, normalized Laplacian, thick-restart Lanczos | yes | yes | Apple M4 only |
+| `ExponentialSmoothing` | cuML `tsa` | Holt-Winters, additive and multiplicative | yes | yes | Apple M4 only |
+| `kpss_test`, `select_d` | cuML `tsa` | stationarity test and auto_arima's choice of d | yes | yes | Apple M4 only |
+| `mojolearn.metrics` | cuML, RAFT | fourteen scoring functions, scikit-learn's names with cuML's defaults and semantics | yes | yes | yes, 34 stages; the card has since grown to 61 and that leg is owed |
+| `mojolearn.linalg.matmul` | -- | FP32 matrix product, profile `mojolearn.identical.gemm.fp32.v1` | yes | yes | yes, 60 stages |
 
 Estimators save to and load from `.npz` files, and a model fitted on a Mac
 loads and predicts identically on an NVIDIA or AMD box (95 of 95 models,
 probabilities included, in the E2 certificate below).
 
-Not on the surface in 0.1, named rather than omitted: `MultiClassOneVsAll`
-from Python, Intel and Qualcomm GPU columns, and a CPU fallback of any kind.
+Named rather than omitted, because "why is this missing" is a short and
+interesting question: `ARIMA` (the batched Kalman filter, its gradient and
+predict all exist; `estimate_x0` and the batched L-BFGS driver do not, so
+there is no `fit`), `SVR`, `RadiusNeighbors`, `MultiClassOneVsAll` from
+Python, Intel and Qualcomm GPU columns, and a CPU fallback of any kind.
+Importing one of the first three raises with the line where the thing that
+exists stops, rather than an `AttributeError`.
 
 ## The two numeric modes
 

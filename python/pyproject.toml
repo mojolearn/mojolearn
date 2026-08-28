@@ -14,8 +14,8 @@ build-backend = "setuptools.build_meta"
 name = "mojolearn"
 # Must agree with python/mojolearn/_version.py. Not made dynamic, so that a
 # version bump is a visible edit in both places rather than one.
-version = "0.1.0"
-description = "GPU machine learning in Mojo. Gradient boosting, random forests, extra trees, k-means, k-NN, DBSCAN, PCA and OLS on Apple silicon, bit-identical across GPU vendors on request"
+version = "0.2.0"
+description = "GPU machine learning in Mojo. Gradient boosting, random forests, extra trees, SVM, k-means, k-NN, DBSCAN, PCA, hierarchical and spectral clustering, GLMs, scoring metrics and a bit-identical FP32 matmul on Apple silicon, bit-identical across GPU vendors on request"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
@@ -36,6 +36,13 @@ keywords = [
     "nearest neighbors",
     "dbscan",
     "pca",
+    "svm",
+    "kernel density",
+    "hierarchical clustering",
+    "spectral clustering",
+    "isolation forest",
+    "time series",
+    "metrics",
     "bitwise reproducibility",
 ]
 
@@ -61,9 +68,12 @@ keywords = [
 # dylibs and libSystem), so it resolves CPython by name at runtime and one
 # artifact can serve several interpreters. That is the mechanism; the floor is
 # where it was actually tested. `packaging/macos/verify_wheel.sh` imports the
-# built wheel under every python3.N on the build machine and runs a fit; 3.12
-# and 3.13 and 3.14 are what this machine has. 3.10 and 3.11 are NOT claimed
-# because they were not run, and a floor is a promise.
+# built wheel under every python3.N on the build machine and runs a fit. All
+# five of 3.10 through 3.14 are on this machine and in that loop as of
+# 2026-08-24, which is what the floor above rests on. The sentence that stood
+# here said 3.10 and 3.11 were NOT claimed because they had not been run; the
+# block forty lines up had already corrected and dated that, so it is deleted
+# rather than softened. A floor is a promise and it is only as good as the run.
 
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -134,11 +144,16 @@ include-package-data = false
 # It does not ship what is missing -- it ships whatever .so happens to be
 # sitting in the working tree, however old. `_mojolearn.so` shipped that way
 # once, predating eval_x/eval_y, and every user's fit raised "takes 6
-# positional arguments but 8 were given". As of 2026-08-23 the extensions are
-# `_mojolearn.so` (k-means, k-NN), `_mojolearn_gbdt.so` (gradient boosting),
-# `_mojolearn_estimators.so` (DBSCAN, PCA, tSVD, OLS), `_mojolearn_rf.so`
-# (random forest) and `_mojolearn_trees.so` (extra trees), each built TWICE:
-# the FAST set here and the IDENTICAL set under identical/, which
-# _backend.py loads when MOJOLEARN_NUMERIC_MODE=identical. All ten are built
-# by build_release_wheel.sh, which refuses a stale file by mtime.
+# positional arguments but 8 were given". As of 2026-08-24 the extensions are
+# TEN, not the five this comment used to name: `_mojolearn.so` (k-means,
+# k-NN), `_mojolearn_gbdt.so` (gradient boosting), `_mojolearn_estimators.so`
+# (DBSCAN, PCA, tSVD, OLS), `_mojolearn_rf.so` (random forest),
+# `_mojolearn_trees.so` (extra trees), `_mojolearn_svm.so` (SVC),
+# `_mojolearn_solver.so` (Lasso, ElasticNet, AgglomerativeClustering),
+# `_mojolearn_metrics.so` (metrics, SpectralClustering), `_mojolearn_tsa.so`
+# (Holt-Winters, KPSS) and `_mojolearn_linalg.so` (the identical GEMM). Each
+# is built TWICE: the FAST set here and the IDENTICAL set under identical/,
+# which _backend.py loads when MOJOLEARN_NUMERIC_MODE=identical. All twenty
+# files are built by build_release_wheel.sh (EXT_NAMES is THE list), which
+# refuses a stale file by mtime.
 mojolearn = ["*.so", "identical/*.so", ".dylibs/*.dylib"]
