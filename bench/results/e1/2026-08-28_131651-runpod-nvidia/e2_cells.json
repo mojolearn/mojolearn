@@ -1,0 +1,2017 @@
+{
+  "cells": {
+    "et_clf": {
+      "card": "et_clf.card",
+      "kind": "et_clf",
+      "model": "efe6a6eabfe2dea05da3e6149ef43f400d9a630f467048a41128a53b33389106",
+      "predictions": "64d0de9b5222d4118e00e41ae1096639e7a79697ae8365af0d09ba02e3d26651",
+      "proba": "9d2d0fcd4b37aa36d234c13bdf07c4940ec724ed3798d90fcd50baeaecedadea",
+      "seconds": 0.96,
+      "spec": {
+        "max_depth": 8,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "et_clf_200k": {
+      "card": "et_clf_200k.card",
+      "kind": "et_clf",
+      "model": "86a8788de71bb62097b5b4a5e91b1fcf7c247ea2a8c410e3d850169e4dbf7583",
+      "predictions": "cc80fe670b8dc2fbf9f09c1758bc00df24e5d57e537ceddbb6cdfa75d90f3be6",
+      "seconds": 1.23,
+      "spec": {
+        "max_depth": 8,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "et_clf_3class": {
+      "card": "et_clf_3class.card",
+      "kind": "et_clf",
+      "model": "59a184c27fea9abc3ffd85f66d95d8e51de7f30944f1a153b0e89c337f58131c",
+      "predictions": "c24947756985609f3e42be19abb13a8ab69b7e326db6662e75948fd968b6d02e",
+      "proba": "7f2a79a6ba3d8680fee0828a826138260c90c1d93621366e443d5200526e6496",
+      "seconds": 0.94,
+      "spec": {
+        "max_depth": 8,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "et_clf_allfeat": {
+      "card": "et_clf_allfeat.card",
+      "kind": "et_clf",
+      "model": "77b7b2994fc7a206c4079bf199e2c4a0999a0639be523d4cd69edb83e1b83510",
+      "predictions": "e5c3eefa2e7b63aac9c604c96eaad2ad76f7ca67f0fbea2a055eb5397bc925c2",
+      "seconds": 0.98,
+      "spec": {
+        "max_depth": 8,
+        "max_features": 1.0,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "et_clf_bootstrap": {
+      "card": "et_clf_bootstrap.card",
+      "kind": "et_clf",
+      "model": "2ab81918033b1a756f4648e671d5c00c6f82545c8b180f6e4b7216257cfdbee9",
+      "predictions": "a9cae2a42c98a21a90ddf84e651b08bb04b86808aaa642e2ac3619137dc86d7e",
+      "seconds": 1.17,
+      "spec": {
+        "bootstrap": true,
+        "max_depth": 8,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "et_clf_bootstrap_maxsamples": {
+      "card": "et_clf_bootstrap_maxsamples.card",
+      "kind": "et_clf",
+      "model": "444c8eaaa559409f2e174500ba84fa197ac7916eacb6b0e7d19885b70c876d03",
+      "predictions": "1d1f20dcc263e7f443044bb8f147f4668995cc07c77cce7b15733af2911bf08f",
+      "seconds": 1.03,
+      "spec": {
+        "bootstrap": true,
+        "max_depth": 8,
+        "max_samples": 0.5,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "et_clf_cpu": {
+      "card": null,
+      "kind": "et_clf",
+      "model": "ab3d3b93ca0320452b938ee185ffac449ea077db90063b497dcda699eb9f72d8",
+      "predictions": "64d0de9b5222d4118e00e41ae1096639e7a79697ae8365af0d09ba02e3d26651",
+      "proba": "9d2d0fcd4b37aa36d234c13bdf07c4940ec724ed3798d90fcd50baeaecedadea",
+      "seconds": 0.12,
+      "spec": {
+        "device": "cpu",
+        "max_depth": 8,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "et_clf_deep": {
+      "card": "et_clf_deep.card",
+      "kind": "et_clf",
+      "model": "1cf6c3d8e46b1efbe7fb5f982eac34779130f8b476aba23418a65761ebf0ce3a",
+      "predictions": "3d78c1ea6e3ba776dd102193f112c835bfd8a8fc48993afba187536f4a5ec75d",
+      "seconds": 1.33,
+      "spec": {
+        "max_depth": null,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "et_clf_entropy": {
+      "card": "et_clf_entropy.card",
+      "kind": "et_clf",
+      "model": "20e3034180ee9fe21a4dac931c7e1a46c080438d62dea3861ea707d1b1319a87",
+      "predictions": "1430e7292e52903f2b90b525e4c4efd954d99c784a322004e58797cd6919dcb8",
+      "seconds": 1.11,
+      "spec": {
+        "criterion": "entropy",
+        "max_depth": 8,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "et_clf_logloss_alias": {
+      "card": "et_clf_logloss_alias.card",
+      "kind": "et_clf",
+      "model": "20e3034180ee9fe21a4dac931c7e1a46c080438d62dea3861ea707d1b1319a87",
+      "predictions": "1430e7292e52903f2b90b525e4c4efd954d99c784a322004e58797cd6919dcb8",
+      "seconds": 0.98,
+      "spec": {
+        "criterion": "log_loss",
+        "max_depth": 8,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "et_clf_maxleaf": {
+      "kind": "et_clf",
+      "refused": "Exception: max_leaf_nodes is not ported under sklearn's semantics. sklearn's is a BEST-FIRST growth limit that changes the ORDER nodes are expanded in; cuML's max_leaves is a soft cap on a breadth-first frontier (builder.cuh:86-88) and stops pushing work once the counter is reached. They are different algorithms, so accepting the name would be accepting a different model. Use cuML's max_leaves through DecisionTreeParams if that is what you want.",
+      "seconds": 0.45,
+      "spec": {
+        "max_depth": 8,
+        "max_leaf_nodes": 64,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "et_clf_minleaf5": {
+      "card": "et_clf_minleaf5.card",
+      "kind": "et_clf",
+      "model": "7930f70b089d736f882ee84214bc1a15d52c771d0347f4a97b4b1221cb633262",
+      "predictions": "fa99bcb1e8ca3232802e7cef01d2252e108229c3dc9a6e485ad10dfe1d3c86e2",
+      "seconds": 1.03,
+      "spec": {
+        "max_depth": 8,
+        "min_samples_leaf": 5,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "et_reg": {
+      "card": "et_reg.card",
+      "kind": "et_reg",
+      "model": "cc9692b5199ea81fb0a7f0130f0c34569dc6c1978c576644c3ed08e4cbd0fce5",
+      "predictions": "b134b896eedc66ca45b5e6f40f5dca22e5180fd722bfc052811e373b044de0ef",
+      "seconds": 0.98,
+      "spec": {
+        "max_depth": 8,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "et_reg_200k": {
+      "card": "et_reg_200k.card",
+      "kind": "et_reg",
+      "model": "f061ea8c0e0a03864693098c2aba0180bdb79e5bd81c4c31824a1d909ae8d3bb",
+      "predictions": "92c1213a355a18872f1922ef5550ed8d2174049c004d3e2249c32487284d9b2f",
+      "seconds": 1.28,
+      "spec": {
+        "max_depth": 8,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "et_reg_bootstrap": {
+      "card": "et_reg_bootstrap.card",
+      "kind": "et_reg",
+      "model": "4405040f4aa5e94c4296b0cf5834a6c7b792351dd9602624ebbb7326b28a1248",
+      "predictions": "aa14d2b2080b014defcbf1ea436c4510cb887ae582e668a2143bf7e4aec7e91c",
+      "seconds": 1.0,
+      "spec": {
+        "bootstrap": true,
+        "max_depth": 8,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "et_reg_cpu": {
+      "card": null,
+      "kind": "et_reg",
+      "model": "7b771d16a439534751e990b9f0f87fd2e85a403af7db295f9aaead6bf2eb562c",
+      "predictions": "bf99520750a09323b8e826c6191fc99ef729e1b3fa80a16efa3cca1cc7daef99",
+      "seconds": 0.36,
+      "spec": {
+        "device": "cpu",
+        "max_depth": 8,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "et_reg_halffeat": {
+      "card": "et_reg_halffeat.card",
+      "kind": "et_reg",
+      "model": "76b7780bac61cc4a70af0141836057c118ad6f4a6a26ff7dba8f629198bfd1e1",
+      "predictions": "59b02309b71be71d0b921b6f0c0f0bbddf1a253b2cbe72aa17b3a1793a069d36",
+      "seconds": 1.03,
+      "spec": {
+        "max_depth": 8,
+        "max_features": 0.5,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "et_reg_mid": {
+      "card": "et_reg_mid.card",
+      "kind": "et_reg",
+      "model": "cc9692b5199ea81fb0a7f0130f0c34569dc6c1978c576644c3ed08e4cbd0fce5",
+      "predictions": "b134b896eedc66ca45b5e6f40f5dca22e5180fd722bfc052811e373b044de0ef",
+      "seconds": 0.95,
+      "spec": {
+        "max_depth": 8,
+        "min_impurity_decrease": 0.001,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "et_reg_minsplit20": {
+      "card": "et_reg_minsplit20.card",
+      "kind": "et_reg",
+      "model": "246cd2daeb44a77c073da1361c9aaa07251c791a7f424065677b129ab4237aee",
+      "predictions": "9b53c32ce9913f236c9fe2090875c9e2c6971bce97cbbdefc6c431e82782fbc1",
+      "seconds": 0.97,
+      "spec": {
+        "max_depth": 8,
+        "min_samples_split": 20,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "gbdt_crossentropy": {
+      "best_iteration": 0,
+      "card": "gbdt_crossentropy.card",
+      "kind": "gbdt",
+      "loss_curve": "417268597fbc1cdefa69539bdf5ca2c32aca28c2f83e794632fcd5e3c43f5fed",
+      "model": "c26c839105f7fb36718c0c2e1ec83b036d86ece92dbfcd9a9a94c956ac09ee00",
+      "predictions": "31ddaae492cba65036fe9b5c3349b8c2eeeec0e1df60f6a8e17472c2e2da0490",
+      "proba": "0a0fdfee64bc35bd62d6c2cf14779e25d28e9e4d7e3669942c2abe34cd35ffce",
+      "seconds": 1.12,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "CrossEntropy",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_expectile": {
+      "best_iteration": 0,
+      "card": "gbdt_expectile.card",
+      "kind": "gbdt",
+      "loss_curve": "7cc14bcfc969e36a212df163cb965afe2c5274a061b91240bc390da276e85ab3",
+      "model": "8971cf75c6e932d0f5b62eb8d1d983603d2e75fb8bf1c7364392d51e73556d99",
+      "predictions": "386c1b78427bafa363ee437b8f9c40db0aa38a58963fb56920e36e3cf456b4dc",
+      "seconds": 1.04,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "Expectile",
+        "loss_alpha": 0.3,
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_huber": {
+      "best_iteration": 0,
+      "card": "gbdt_huber.card",
+      "kind": "gbdt",
+      "loss_curve": "95346ee2c80836ca1349cc00d3b0a25f24f78d5c6b3c51f9d4977d2ca348196c",
+      "model": "cf9177d20381346920f3cd0d2d8d03a3cef069edcfeb6ecbc1db1e09a3dc9a85",
+      "predictions": "548088e56029cc91e1ac282322e16836ad4b9000e88a3233f3bde3023f3d7db6",
+      "seconds": 1.03,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "Huber",
+        "loss_delta": 6.0,
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_huber_d1_saturated": {
+      "best_iteration": 0,
+      "card": "gbdt_huber_d1_saturated.card",
+      "kind": "gbdt",
+      "loss_curve": "60d807481b965cb4d78b8c0bbdde8e941a044b213e4bd2907266248e1801b1ce",
+      "model": "c47989d2f3da43ad683a4f6eae38d699c2d707bb2da5862e724c5c76b9234515",
+      "predictions": "66adb9a97127bab9166b56aec5e679e27dc9b2309b6b724af074405ad983d088",
+      "seconds": 1.06,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "Huber",
+        "loss_delta": 1.0,
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_loglinquantile": {
+      "best_iteration": 0,
+      "card": "gbdt_loglinquantile.card",
+      "kind": "gbdt",
+      "loss_curve": "26626aae7366534cd46c0dd35dacef363a428ea648ec10a41b5ccd85db6e9aa4",
+      "model": "a5886c08d74ea505bc4408fe5252e471f993b17b7c8b522a3b16b3863bc5881a",
+      "predictions": "04358a2dc6291f9076d8955d1b0054f6e23e156ee735ddb99c74b1ca914fb408",
+      "seconds": 1.06,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "LogLinQuantile",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_logloss": {
+      "best_iteration": 0,
+      "card": "gbdt_logloss.card",
+      "kind": "gbdt",
+      "loss_curve": "11893f8f48c4a92620cc5baf9967ac7dbb8e12ff3416982db010549a3ea45c2a",
+      "model": "e1102519fb3a120276a1a1273607af3f3a59eac1fafb243ae15533097e42d41b",
+      "predictions": "97ab8164294392c55e74e80294a35b299e9c8677f5e01357af582e371850e59e",
+      "proba": "cb202a7526f6986835592f19b037e2ea9a569c3bfe52b1bfae212f98e76512bb",
+      "seconds": 1.1,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "Logloss",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_logloss_200k": {
+      "best_iteration": 0,
+      "card": "gbdt_logloss_200k.card",
+      "kind": "gbdt",
+      "loss_curve": "321e403bff1e1dfd94f9d0fa009269a567aeecb10f54d09dc7dfb42b0f10bd30",
+      "model": "4e901a553806a1cd003975e5dd5e34dd21bdfcc0b5d01527d97faf3691eaaacc",
+      "predictions": "7119b483f68faf1d6c32fef6c72d42f68e673eaa07eafbea17b36db0622c3041",
+      "seconds": 1.17,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "Logloss",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_logloss_bayesian": {
+      "best_iteration": 0,
+      "card": "gbdt_logloss_bayesian.card",
+      "kind": "gbdt",
+      "loss_curve": "d866bd9e3de21acdff5e5263b5f20341c6dc077492d0dd21b1181715a58ec799",
+      "model": "4620bb0ef6bc89d71fe4959bc0e70b73b1336693e75d2ce812d0d03d1933dcff",
+      "predictions": "80b7b4aa26bcf7a80f0b389d5bbae580f00e50863f9a912fb1a8a8295e62151a",
+      "seconds": 1.19,
+      "spec": {
+        "bootstrap_type": "Bayesian",
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "Logloss",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_logloss_border": {
+      "best_iteration": 0,
+      "card": "gbdt_logloss_border.card",
+      "kind": "gbdt",
+      "loss_curve": "0746bdeba27cb9140db90d0f7f16b9b66cc4701149f0ee3ea165a549555732dd",
+      "model": "bb9bd3e043bf7fc474f21d5429b71d72284bf79f4d51a0d069c2accc9549fed1",
+      "predictions": "63d2b8fdabe5c7c289e2b069458acef12de022c1d3ff2b6b24cfdc028b4b580e",
+      "seconds": 1.06,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "Logloss",
+        "loss_border": 0.3,
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_logloss_cat": {
+      "best_iteration": 0,
+      "card": "gbdt_logloss_cat.card",
+      "kind": "gbdt",
+      "loss_curve": "264e8c6187609ef60be572cae205c248b3962b0b225ba46bffcb167e0aa32ac0",
+      "model": "86b3eb4a617a2e20b3575151ad6cf008c17f2736bfa229cae7c6aa32f9e12197",
+      "predictions": "0806cf25327b2c63b7375e2a6bee7aade782831f2294ee6408acf4d8daf95414",
+      "proba": "b81e3e679f869eb7436a75c593f42925edfd43d2bd768db0b5862528dab40022",
+      "seconds": 1.25,
+      "spec": {
+        "border_count": 128,
+        "cat_features": [
+          0,
+          1
+        ],
+        "learning_rate": 0.3,
+        "loss": "Logloss",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_logloss_class_weights": {
+      "best_iteration": 0,
+      "card": "gbdt_logloss_class_weights.card",
+      "kind": "gbdt",
+      "loss_curve": "50001d2e1b0a10a2954fdacb9ba10bfba4dd5e519906bda571b4f4cd2209dee9",
+      "model": "aa9a6888489340eba450a600b3efc24e9e5b11941eec6ce3d7b3d67973a86fc9",
+      "predictions": "8757a3f3ff60487022d73b5e2491993a6eaa0e607459a88f923680c7d15ae07e",
+      "seconds": 1.04,
+      "spec": {
+        "border_count": 128,
+        "class_weights": [
+          1.0,
+          2.0
+        ],
+        "learning_rate": 0.3,
+        "loss": "Logloss",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_logloss_depthwise": {
+      "best_iteration": 0,
+      "card": "gbdt_logloss_depthwise.card",
+      "kind": "gbdt",
+      "loss_curve": "df15a4c61a7a9a653d4ece603e7700a5f91276dd6a30253512f78f3b788019de",
+      "model": "cc8a9955c57ee1cd653a34140eface7c36fb0e9b700c6c97577b68e2a3d71231",
+      "predictions": "2a664f92b57c56afbb65875d52d285d2e1c03441153def5dc98661d17fcf6b76",
+      "proba": "b47915935924e7cc100243f2057ca8dd253f9ad56a0091283d5fcdc1218717db",
+      "seconds": 1.47,
+      "spec": {
+        "border_count": 128,
+        "grow_policy": "Depthwise",
+        "learning_rate": 0.3,
+        "loss": "Logloss",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_logloss_exact": {
+      "best_iteration": 0,
+      "card": "gbdt_logloss_exact.card",
+      "kind": "gbdt",
+      "loss_curve": "f7659256364c81b9b7b8335d987035b7c4660a2f986aa86aadae75b1e8e4ff4d",
+      "model": "b4079ffa7a8232c68fc0d6072ce0960cfc9989746ecab8ec63a665fe510ab788",
+      "predictions": "61fea0c2e56e386f2b613dc94b3296cca5e6935ce6c793d0e08ad93bf519548e",
+      "seconds": 1.07,
+      "spec": {
+        "border_count": 128,
+        "leaf_estimation_method": "Exact",
+        "learning_rate": 0.3,
+        "loss": "Logloss",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_logloss_gradient": {
+      "best_iteration": 0,
+      "card": "gbdt_logloss_gradient.card",
+      "kind": "gbdt",
+      "loss_curve": "c485771beff71456104077d4ddd9de307748ad00f0a15dcaa700ae60047cb551",
+      "model": "4f0f6122f1681442149398c6d5b0e217a83892aabbab2bc06f6706da25a675b9",
+      "predictions": "b945c93092f183ec348a188321be12d25cc4ae2b9adbc772813bc6eed153268a",
+      "seconds": 1.09,
+      "spec": {
+        "border_count": 128,
+        "leaf_estimation_method": "Gradient",
+        "learning_rate": 0.3,
+        "loss": "Logloss",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_logloss_newton3": {
+      "best_iteration": 0,
+      "card": "gbdt_logloss_newton3.card",
+      "kind": "gbdt",
+      "loss_curve": "4cfa28f674dd76833f50e3480ae259bab08e51321de5999751d204940c8cc6ec",
+      "model": "e360d2d101826e8468952bb70db5ee7e393d6893bae905a06ccf54aaec031d57",
+      "predictions": "7ddc970748a71066ce16e0654899f3c5a8ed1ae3c29d123d3b8521a800246077",
+      "seconds": 1.14,
+      "spec": {
+        "border_count": 128,
+        "leaf_estimation_iterations": 3,
+        "learning_rate": 0.3,
+        "loss": "Logloss",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_logloss_newtoncosine": {
+      "best_iteration": 0,
+      "card": "gbdt_logloss_newtoncosine.card",
+      "kind": "gbdt",
+      "loss_curve": "708458e31c025e594ecf1b7006c29de5daf69e996edf93970170fd5f24b8a09c",
+      "model": "cd7ba13b6c94046b1382d48e404c4b142940568db944b38faa3e734b621363c8",
+      "predictions": "ebc6401c934530edc6e27acced2759690b4cd3f81687aee40eae39e346c7d1cf",
+      "seconds": 1.05,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "Logloss",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7,
+        "score_function": "NewtonCosine"
+      },
+      "stopped_early": 0
+    },
+    "gbdt_logloss_newtonl2": {
+      "best_iteration": 0,
+      "card": "gbdt_logloss_newtonl2.card",
+      "kind": "gbdt",
+      "loss_curve": "a0dffdf226cb6000625f9698534b75d4ea51b23c0fb061a6d88af747244b3509",
+      "model": "3cd825b4a4b1ca5ba02450063b9a0f6cef73b405da3cdb5ee006a1c885ce62b5",
+      "predictions": "91acd158ce4f42a203e748864dc6b961312e10e6fb318c207f67a885be4f6c66",
+      "seconds": 1.09,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "Logloss",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7,
+        "score_function": "NewtonL2"
+      },
+      "stopped_early": 0
+    },
+    "gbdt_logloss_pointwise": {
+      "best_iteration": 0,
+      "card": "gbdt_logloss_pointwise.card",
+      "kind": "gbdt",
+      "loss_curve": "44024d98dd91df1cc150a4fc7e62e57193684679aa052e8f84f74a81b7e4fe1e",
+      "model": "e5dd7003d7c4bac6da997a4d334ffecd98b50cba7bbb8a5c7ecb6aa0157497f1",
+      "predictions": "df2b4e1d59ae8f6b10fb4d64e40a27897e87352a5e9ab9db2482fb5fa9ce0c28",
+      "seconds": 1.01,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "Logloss",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7,
+        "use_pointwise_searcher": true
+      },
+      "stopped_early": 0
+    },
+    "gbdt_logloss_simple": {
+      "best_iteration": 0,
+      "card": "gbdt_logloss_simple.card",
+      "kind": "gbdt",
+      "loss_curve": "4e5ad4a194be8a9bdcc7e19b2b4acedd5139a48b537ca916be3472aa79150523",
+      "model": "4040febc5033563c832526263e33d2ede03bf6ef41acff070ccf573131022129",
+      "predictions": "56c9db3c35f870477ad14647a195395495f12d0279e451e7e4169d0967fac6db",
+      "proba": "836cf12c9d2ff9fed6010ffc8d9dcb1f0717af72ab89f561ff2ee6c46751cf2f",
+      "seconds": 1.13,
+      "spec": {
+        "border_count": 128,
+        "leaf_estimation_method": "Simple",
+        "learning_rate": 0.3,
+        "loss": "Logloss",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_lq": {
+      "best_iteration": 0,
+      "card": "gbdt_lq.card",
+      "kind": "gbdt",
+      "loss_curve": "52dc51de010f41831ff0e2113fc9ce6ef614f99a5a39bde660c2e4874ab608ad",
+      "model": "1f463584f5804d111703831575b6fe80efafaff9ef27a306b76cf87db8fd9a9f",
+      "predictions": "86f6b3897034b372484642631d07ca4a32fb51b500fb5a8af0927eb33dcc7ee6",
+      "seconds": 1.05,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "Lq",
+        "loss_q": 1.5,
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_mae": {
+      "best_iteration": 0,
+      "card": "gbdt_mae.card",
+      "kind": "gbdt",
+      "loss_curve": "abe00a6c092ac740f96e2fa6e5fa8e056d9d4d35a303202528e7dd41cc339b08",
+      "model": "0567bea06fb54b43d912222c8a2ba25fcecaec94fa98f7db1f4b8d9d394b5ee2",
+      "predictions": "5de10fd9c688a6f2b5148d152552d0194e67c52263505afa1ef83fb130c74d1a",
+      "seconds": 1.17,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "MAE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_mae_gradient": {
+      "best_iteration": 0,
+      "card": "gbdt_mae_gradient.card",
+      "kind": "gbdt",
+      "loss_curve": "4e0db0708116affe41da40a562a50dcdc091a7bc95be263afe552cc75635f933",
+      "model": "a1f6836aa00d3121c225685e1c07ea82fad138d28791bf3a680a98619463c0ec",
+      "predictions": "08539f2b52d0b7069de9a10b9bae5e0b4a01a2c646d20cccf2d884f8b2044326",
+      "seconds": 1.0,
+      "spec": {
+        "border_count": 128,
+        "leaf_estimation_method": "Gradient",
+        "learning_rate": 0.3,
+        "loss": "MAE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_mape": {
+      "best_iteration": 0,
+      "card": "gbdt_mape.card",
+      "kind": "gbdt",
+      "loss_curve": "e3c71f1095f6927b045bb75bacd5aa63d3298d63ba165a629ba663e5818cdff0",
+      "model": "ab6d93c12d9255619ee08bd016239af979a444ad72c0ad43795d937e9b60e56d",
+      "predictions": "72dc409c1a5712cf49a7788906dab2ab7d942b42f59913c3b8d286c5676694cc",
+      "seconds": 1.19,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "MAPE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_multiclass": {
+      "best_iteration": 0,
+      "card": "gbdt_multiclass.card",
+      "kind": "gbdt",
+      "loss_curve": "da5ba1aec4b747e593772b4a327bad0fbba24fc9c52752ca671e1ade23eaaa7f",
+      "model": "1db62bb14e0ef6d8f2e9e40994172981056cbd4569f169a9f3f60a43b91b072a",
+      "predictions": "8bbafb4b8eac0b0b00d8d524600f0adbb667bc420ba248de1d00628a7c209a85",
+      "proba": "714d74b550b42ff6c01790a3c8966fcae5ee9f175e248e3dd6200c8088ba1cd4",
+      "seconds": 1.07,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "MultiClass",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_multiclass_cat": {
+      "best_iteration": 0,
+      "card": "gbdt_multiclass_cat.card",
+      "kind": "gbdt",
+      "loss_curve": "95006353f5dbc43bb96937cb3e7ff9d4bdfaed6ca0d178bda01da1061f800d08",
+      "model": "ea70eaad7de2cbd9e1c7c4f9ef9166bc326cc8e77b0ca4823ccbaab26f93fb33",
+      "predictions": "b421ca51b1e096c01293e426dcb50ae810defb07f26c5ba5be058a6d661d20b2",
+      "proba": "746fcb2ac501446debd000f317279331854ddc55d32537f587e28e349293ca60",
+      "seconds": 1.16,
+      "spec": {
+        "border_count": 128,
+        "cat_features": [
+          0,
+          1
+        ],
+        "learning_rate": 0.3,
+        "loss": "MultiClass",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_multiclass_lossguide": {
+      "kind": "gbdt",
+      "refused": "NotImplementedError: mojolearn: Error: optimization scheme is not supported for GPU learning Loss=MultiClass;OptimizationScheme=Lossguide -- CatBoost's GPU registers a non-symmetric trainer for exactly eleven losses (pointwise_non_symmetric.cpp:7-29; train.cpp:279 is the refusal): ['CrossEntropy', 'Expectile', 'Huber', 'LogLinQuantile', 'Logloss', 'MAE', 'MAPE', 'Poisson', 'Quantile', 'RMSE', 'Tweedie']",
+      "seconds": 0.0,
+      "spec": {
+        "border_count": 128,
+        "grow_policy": "Lossguide",
+        "learning_rate": 0.3,
+        "loss": "MultiClass",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      }
+    },
+    "gbdt_multiclass_pointwise": {
+      "best_iteration": 0,
+      "card": "gbdt_multiclass_pointwise.card",
+      "kind": "gbdt",
+      "loss_curve": "0ffb6fcbb2ebba113e1598ee6e8e0b990da4df9100614abaa783235660f4eb6c",
+      "model": "112187136dc343e298c98ec38a9977d43a87ac838d5375024b4f604f92180d9f",
+      "predictions": "9bc67e4583ede2c7cce25bc42c14a4e86aa242db9bf3ffc9534fd7734a31c28b",
+      "proba": "e62ed6f8f3bae6eea69256f11d7b5c7898c030156cac9d6ee7db78ae57c4ebf6",
+      "seconds": 1.16,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "MultiClass",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7,
+        "use_pointwise_searcher": true
+      },
+      "stopped_early": 0
+    },
+    "gbdt_poisson": {
+      "best_iteration": 0,
+      "card": "gbdt_poisson.card",
+      "kind": "gbdt",
+      "loss_curve": "ab403d04653961c90691ccd7c4ab79796f6bcb66ebdaf02f2add1fca2aee0c95",
+      "model": "403a7bf7c4946288e66264dca6f8f066335eec810a25fd6627bcc15b55542210",
+      "predictions": "6085d71ba4c1c7a94d669a24a5a0a6e0688e1600985bdfde52dd80e8732cb9bc",
+      "seconds": 1.1,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "Poisson",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_quantile": {
+      "best_iteration": 0,
+      "card": "gbdt_quantile.card",
+      "kind": "gbdt",
+      "loss_curve": "abe00a6c092ac740f96e2fa6e5fa8e056d9d4d35a303202528e7dd41cc339b08",
+      "model": "85d0acc60e4b7c2f7f91c24055c26daee3c1f0b204662daf0f4b3e6ee0b148b6",
+      "predictions": "5de10fd9c688a6f2b5148d152552d0194e67c52263505afa1ef83fb130c74d1a",
+      "seconds": 1.26,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "Quantile",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_quantile_a03": {
+      "best_iteration": 0,
+      "card": "gbdt_quantile_a03.card",
+      "kind": "gbdt",
+      "loss_curve": "46045af9ad871906d956782cbd8b0cc33a662f809b15c75d69f25741c63b4aff",
+      "model": "f55cf278c7ba3213b06625196689190350e0285260016f577dc2f1eeb9fdc042",
+      "predictions": "c114803e21f71507197dd03edebe42f03c185a2a4586c9401de889cde76aa5e2",
+      "seconds": 1.13,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "Quantile",
+        "loss_alpha": 0.3,
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_quantile_newton": {
+      "kind": "gbdt",
+      "refused": "Exception: Newton leaves estimation method is not supported for Quantile loss function",
+      "seconds": 0.96,
+      "spec": {
+        "border_count": 128,
+        "leaf_estimation_method": "Newton",
+        "learning_rate": 0.3,
+        "loss": "Quantile",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      }
+    },
+    "gbdt_quantile_simple": {
+      "best_iteration": 0,
+      "card": "gbdt_quantile_simple.card",
+      "kind": "gbdt",
+      "loss_curve": "4e0db0708116affe41da40a562a50dcdc091a7bc95be263afe552cc75635f933",
+      "model": "a3b0d87dc61b3932c5c51aeb3cbf74b774faf7517308210fad31fbe36ff0b31b",
+      "predictions": "08539f2b52d0b7069de9a10b9bae5e0b4a01a2c646d20cccf2d884f8b2044326",
+      "seconds": 1.04,
+      "spec": {
+        "border_count": 128,
+        "leaf_estimation_method": "Simple",
+        "learning_rate": 0.3,
+        "loss": "Quantile",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse.card",
+      "kind": "gbdt",
+      "loss_curve": "ef41018d020a6f9f570acff290ccbcc533bb98b6ad53885da094559280ca1b6a",
+      "model": "f7184998deed64a29f78f9c8958361a28647e625d87cc045b9d10e57afc9c7e8",
+      "predictions": "da34f396f968e546a83efc3bd014be0593e6b2873961c49566f6536967864960",
+      "seconds": 1.04,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_200k": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_200k.card",
+      "kind": "gbdt",
+      "loss_curve": "7914a197bbf44453f0f4630ea880401fb2d9d4f15e053b2d6ed9430cc92dd077",
+      "model": "c48c4ad3a652bfc3cc2cbe51020f82529a86452f564946e6d0e44232a4cedec5",
+      "predictions": "cd445536d2168aa651ea1847170fa0e1c878ffabd8727abf60b1d6844670ab83",
+      "seconds": 1.16,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_bayesian": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_bayesian.card",
+      "kind": "gbdt",
+      "loss_curve": "4c9cacec7cd5e3167b7f41f1d7df2cb06cf1d8ccc2edd8fe304834de606ab209",
+      "model": "cb3f4431acaf8cecc7fa45adc3cb161e8772d1b790811297e7df4b4a6eb1660e",
+      "predictions": "f3ec759fbaf208d10b5c2d8de152b4d89d0f7c6e4d22e23560e971a4c1742ef1",
+      "seconds": 1.09,
+      "spec": {
+        "bootstrap_type": "Bayesian",
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_bayesian_temp0": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_bayesian_temp0.card",
+      "kind": "gbdt",
+      "loss_curve": "ef41018d020a6f9f570acff290ccbcc533bb98b6ad53885da094559280ca1b6a",
+      "model": "f7184998deed64a29f78f9c8958361a28647e625d87cc045b9d10e57afc9c7e8",
+      "predictions": "da34f396f968e546a83efc3bd014be0593e6b2873961c49566f6536967864960",
+      "seconds": 1.08,
+      "spec": {
+        "bagging_temperature": 0.0,
+        "bootstrap_type": "Bayesian",
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_bayesian_temp3": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_bayesian_temp3.card",
+      "kind": "gbdt",
+      "loss_curve": "08cdb58113c898df9f4bb155fd8c0d01bbe368d4508df360f3da7ef32004445e",
+      "model": "65e0c598cfeeeeeadeee16b3adac769bb1edbdbf453fd3bce6a84db133261cdf",
+      "predictions": "e56000a9a3458016fc05a625a68f10c9de8bd4babb6d312a60dd6822126693ff",
+      "seconds": 1.03,
+      "spec": {
+        "bagging_temperature": 3.0,
+        "bootstrap_type": "Bayesian",
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_bernoulli": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_bernoulli.card",
+      "kind": "gbdt",
+      "loss_curve": "4b953a03d5676f71720bd278da6dcf05fdab603e64f63c505c256d62a050b643",
+      "model": "d449abd6a38d9f4e1806c2f9e7ccd7b9e0f59c1d7d0b5fd3cfee62e364717e61",
+      "predictions": "e9ef4b56b6281d3c7340d024f77660c0af958901334bb25252834ad0042200e0",
+      "seconds": 1.05,
+      "spec": {
+        "bootstrap_type": "Bernoulli",
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7,
+        "subsample": 0.66
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_bins1": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_bins1.card",
+      "kind": "gbdt",
+      "loss_curve": "8d3828788fb60877ac95f877d3a194072f2b064e8d7b4fd13d70cf37008f70fc",
+      "model": "178bce3b14b5d498b903211e8c3f1714ea063d50e793f528218238b3894e146d",
+      "predictions": "93596d929b7323fa893282f422530911dae3fe9b698679c001e50fdaf292c6fc",
+      "seconds": 1.04,
+      "spec": {
+        "border_count": 1,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_bins15": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_bins15.card",
+      "kind": "gbdt",
+      "loss_curve": "e22684534c4719f00e10a232f737139d6a021592688c5d8c1696bc2838a48bb7",
+      "model": "c575378fd9b015519ed22f3082847d7292d4fae00744cda76c3544241ec51121",
+      "predictions": "2fc206f824e81e18f21578278643d5fdc38a1aaa581ac36c01c76a238db42c51",
+      "seconds": 0.99,
+      "spec": {
+        "border_count": 15,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_bins254": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_bins254.card",
+      "kind": "gbdt",
+      "loss_curve": "8cc4f10a746d7ed272b7acf729697643ebccfdae56044742ec8920c8098bbd41",
+      "model": "0e994a87c56d54ba31027634079759bbee9104c4b0bd1d37eb5f1ff4eb5068cc",
+      "predictions": "dc423445fae7e8a81eacbaba1a69b199cabe2c59541404a18673f2600a909b66",
+      "seconds": 1.05,
+      "spec": {
+        "border_count": 254,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_bins64": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_bins64.card",
+      "kind": "gbdt",
+      "loss_curve": "9ce15df6cd52b8941023f31b980e98bd4818b80fcf90d1c714f2c895d2434059",
+      "model": "ae4d1652112d5c4178ddcb73eddfc95497d91c07b799330ff1b36a492e82baa5",
+      "predictions": "eec7c47a0206d07e6eb06cce01bf5e738b5936b4ccde3fc4cfd7e2074f01e966",
+      "seconds": 1.02,
+      "spec": {
+        "border_count": 64,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_borders_sub5k": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_borders_sub5k.card",
+      "kind": "gbdt",
+      "loss_curve": "6000dba27c105ad4353492619c0d5f21933d50005aa7a96f49d777b624a4f595",
+      "model": "7dc7b17f3bf1be1eb43567aa51ba186b09329c030e196f90dc2bece78016f21d",
+      "predictions": "cbf6459b2947671cde6b5069ee138b2a1e81fa0d48e857e5b0f68053fc964da0",
+      "seconds": 1.01,
+      "spec": {
+        "border_build_max_samples": 5000,
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_cat": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_cat.card",
+      "kind": "gbdt",
+      "loss_curve": "2907cfd7c2ad0c345130dabc8a8466193ae7d6e2bbe350cf26396d3c5333afb4",
+      "model": "e111e4ad613939b2f20f064068c48e6f4f5b667c32bbe408d138288b30690d5f",
+      "predictions": "41efbdc3fe0db9feeab3b1dc61ac5e603cc62e484156748568a55751e45e26eb",
+      "seconds": 1.19,
+      "spec": {
+        "border_count": 128,
+        "cat_features": [
+          0,
+          1
+        ],
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_cat_estperm0": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_cat_estperm0.card",
+      "kind": "gbdt",
+      "loss_curve": "b496e3e53d48c2651d62948d57c1b73058b3c1a0bc237aeff583c2ec499ac07d",
+      "model": "8afe3f6fbb4fe52da9d93855d08890ebd237671a5682d9f6babfbe32eb668611",
+      "predictions": "5219a09bfcbd1ee4da9cc5446f549528ff7163a2a878bebd9d46f6e0d30fa070",
+      "seconds": 1.08,
+      "spec": {
+        "border_count": 128,
+        "cat_features": [
+          0,
+          1
+        ],
+        "ctr_estimation_permutation_id": 0,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "permutation_count": 2,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_cat_numeric_control": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_cat_numeric_control.card",
+      "kind": "gbdt",
+      "loss_curve": "768e866b937804350175a5ed17194983a90082cac44c1223c0a1c107f262971b",
+      "model": "7920bd093d476aa96ed2dc91b00ae1295a595a54902b0f814ba82d8b1a250b24",
+      "predictions": "0ac7abea38b23c67263b411eaebf424b567b015b7b5644b69837d593ba7ce1ce",
+      "seconds": 1.28,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_cat_onehot": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_cat_onehot.card",
+      "kind": "gbdt",
+      "loss_curve": "52ea1cb32edd25e84dfdd7816d7118f812af2b4abed65a65c6c089eb725be171",
+      "model": "063e02833346c9aa8f801319b8a0bee2d874a1ba2713a99dc96dc44d36884e4d",
+      "predictions": "15a234c8ed9b98b5a402929e81d07f003980186d9936a148a1d2225754dc4285",
+      "seconds": 1.07,
+      "spec": {
+        "border_count": 128,
+        "cat_features": [
+          1
+        ],
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "one_hot_features": [
+          0
+        ],
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_cat_perm1": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_cat_perm1.card",
+      "kind": "gbdt",
+      "loss_curve": "b496e3e53d48c2651d62948d57c1b73058b3c1a0bc237aeff583c2ec499ac07d",
+      "model": "8afe3f6fbb4fe52da9d93855d08890ebd237671a5682d9f6babfbe32eb668611",
+      "predictions": "5219a09bfcbd1ee4da9cc5446f549528ff7163a2a878bebd9d46f6e0d30fa070",
+      "seconds": 1.07,
+      "spec": {
+        "border_count": 128,
+        "cat_features": [
+          0,
+          1
+        ],
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "permutation_count": 1,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_cat_perm2": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_cat_perm2.card",
+      "kind": "gbdt",
+      "loss_curve": "9769e4168f646df8ee00ed594fba39d0744f8b4ef2b985c9988f9291af363416",
+      "model": "093faac38a6dce07c8559a7b263886d7505d4011cfe21f520cd6f215c27324cc",
+      "predictions": "e08555e0b62097914129ce78d1efd60745e5c9636e7cb689530988f099e5df8b",
+      "seconds": 1.09,
+      "spec": {
+        "border_count": 128,
+        "cat_features": [
+          0,
+          1
+        ],
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "permutation_count": 2,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_cat_pointwise": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_cat_pointwise.card",
+      "kind": "gbdt",
+      "loss_curve": "ec1fac84ce9993dc7b3a1b717b6f5ed8f9a96d80fbecbb4613c92de4109f9812",
+      "model": "8189ecdb77eddedd0e6947e0ef81647735241e1103a390fa6e169390224f8724",
+      "predictions": "8c6cd9b978524a1223f131325365e53cb31cc87a5d754e6031b52d33b206c32d",
+      "seconds": 1.08,
+      "spec": {
+        "border_count": 128,
+        "cat_features": [
+          0,
+          1
+        ],
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7,
+        "use_pointwise_searcher": true
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_depth10": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_depth10.card",
+      "kind": "gbdt",
+      "loss_curve": "5dc5ed6eef1e23df08717da0e3e702bf68a75ca13e3f2ee485077673c735069f",
+      "model": "62d8693790d9e6b6df2fea2d8ee7fba762f7e602c5ee7a45a4118a1b2b9f9635",
+      "predictions": "f6a3c654b36fa48a17764d66bc415fb849fe2fcab3dedd3c7b2a03b216eed079",
+      "seconds": 1.87,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 10,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_depth2": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_depth2.card",
+      "kind": "gbdt",
+      "loss_curve": "a817516a90a1d5a7b44c28cf5469606b4fb61cc5225db0d77afb4f1290be8679",
+      "model": "34cb48ff001145156aa2bebcc22689e2fb066b94a8b55d90850720cd4900ece7",
+      "predictions": "bd2780773202aa62e64601fecacf44882fa7f2d0350535fd102a2c95b5470127",
+      "seconds": 0.95,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 2,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_depthwise": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_depthwise.card",
+      "kind": "gbdt",
+      "loss_curve": "5af18286426bc9f130548ad9c51ddbaedc807c16886a6be02b9cbb2cfa399d82",
+      "model": "46143ac446c5f66cf1b88bbd3091687b226ee30e7e14ade615f345571a66d007",
+      "predictions": "056041b329bb707215ab600c97f9ac13d14d6341c11c8dcf9ac2577d02faea74",
+      "seconds": 1.31,
+      "spec": {
+        "border_count": 128,
+        "grow_policy": "Depthwise",
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_depthwise_minleaf200": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_depthwise_minleaf200.card",
+      "kind": "gbdt",
+      "loss_curve": "56bdfcb5fd77e3099a2db0bc90538346b8ac53fc76d62e76e8d4b49153c2723b",
+      "model": "057fb2ce9967912755fe28851487e45878dbb0e6897748e15ec3f894a45d243e",
+      "predictions": "f3d54eaca4ef14876b2a3032c9ee8eb799f28862a2eec9b0ab31ef600d7d38d3",
+      "seconds": 1.21,
+      "spec": {
+        "border_count": 128,
+        "grow_policy": "Depthwise",
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "min_data_in_leaf": 200,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_depthwise_pointwise": {
+      "kind": "gbdt",
+      "refused": "ValueError: mojolearn: use_pointwise_searcher=True is TDocParallelObliviousTreeSearcher, an OBLIVIOUS searcher; grow_policy='Depthwise' is grown by TGreedySubsetsSearcher<TNonSymmetricTree> only (pointwise_non_symmetric.cpp:5-29)",
+      "seconds": 0.0,
+      "spec": {
+        "border_count": 128,
+        "grow_policy": "Depthwise",
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7,
+        "use_pointwise_searcher": true
+      }
+    },
+    "gbdt_rmse_gradient": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_gradient.card",
+      "kind": "gbdt",
+      "loss_curve": "ef41018d020a6f9f570acff290ccbcc533bb98b6ad53885da094559280ca1b6a",
+      "model": "f7184998deed64a29f78f9c8958361a28647e625d87cc045b9d10e57afc9c7e8",
+      "predictions": "da34f396f968e546a83efc3bd014be0593e6b2873961c49566f6536967864960",
+      "seconds": 1.01,
+      "spec": {
+        "border_count": 128,
+        "leaf_estimation_method": "Gradient",
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_l2": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_l2.card",
+      "kind": "gbdt",
+      "loss_curve": "8272135d40d04648b91eb863452e6833510de8415520a4f09f05c3d2250424c0",
+      "model": "d4f40612beac3c04802ded6d5158a6c53feea1bb11af02c6a1da9c99e8f9a3e7",
+      "predictions": "585f9c23c47f33273375797b2a72176b8eb74c4aa03890cd9480ce98a7dad933",
+      "seconds": 1.01,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7,
+        "score_function": "L2"
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_l2reg0": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_l2reg0.card",
+      "kind": "gbdt",
+      "loss_curve": "7f3834a8155c037e95e208d9a60a5b992740a0404f5a8f852540986666b1ff81",
+      "model": "c6027a55e1437910cf64fde1de64b222fe50a934437427b68eceb0833107cf39",
+      "predictions": "b7e85bc6f63f03493e8a521a408dbfc0adf1e87d711d7bf2a484d92a8c02e53e",
+      "seconds": 1.04,
+      "spec": {
+        "border_count": 128,
+        "l2_leaf_reg": 0.0,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_lossguide": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_lossguide.card",
+      "kind": "gbdt",
+      "loss_curve": "af2222b2129b56acd8f7086c1c49062fc92488e7b97a98efa67d37b526dd00ca",
+      "model": "6516f0b87ad8e9039cbb79cba4fc403d788690b00c67ae557d3b7de270964bc8",
+      "predictions": "74476c4d92a00b46ef1d8310144006e9550e8156cfd30e218dd5bf003eb4cd01",
+      "seconds": 5.54,
+      "spec": {
+        "border_count": 128,
+        "grow_policy": "Lossguide",
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_lossguide_cosine": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_lossguide_cosine.card",
+      "kind": "gbdt",
+      "loss_curve": "9ee676dfca9c4bc1185f53c3543ff95433e0544f9e7a25afc7f42e1b53aa2ffd",
+      "model": "48526ef49c9f7381c6e56c272d61c09af459bcd83833f603fe17851f83f86aed",
+      "predictions": "655d16e12a9ce686298469e43f5bddb7b6f23c0f92b2f8e0fd32258d311e1865",
+      "seconds": 5.02,
+      "spec": {
+        "border_count": 128,
+        "grow_policy": "Lossguide",
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7,
+        "score_function": "Cosine"
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_lossguide_leaves8": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_lossguide_leaves8.card",
+      "kind": "gbdt",
+      "loss_curve": "644ab2ca18fdcf57f15555e671fec6665f74487ce60f79a901ab6e6b9501afdf",
+      "model": "c3921381dd5cb307bb1a0adde0e8cd327a2b2587c689d9bac5d13d5ee709e6e2",
+      "predictions": "ec1563cdbddcde3647f20e2b7777682c1aa8000bcf19d2c4356528d08f5f858f",
+      "seconds": 1.33,
+      "spec": {
+        "border_count": 128,
+        "grow_policy": "Lossguide",
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "max_leaves": 8,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_nan_forbidden_clean": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_nan_forbidden_clean.card",
+      "kind": "gbdt",
+      "loss_curve": "ef41018d020a6f9f570acff290ccbcc533bb98b6ad53885da094559280ca1b6a",
+      "model": "f7184998deed64a29f78f9c8958361a28647e625d87cc045b9d10e57afc9c7e8",
+      "predictions": "da34f396f968e546a83efc3bd014be0593e6b2873961c49566f6536967864960",
+      "seconds": 1.1,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "nan_mode": "Forbidden",
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_nan_forbidden_refused": {
+      "kind": "gbdt",
+      "refused": "ValueError: mojolearn: nan_mode='Forbidden' but X contains NaN. CatBoost refuses this pair; this port would otherwise bin the NaNs silently with no NaN bin. Use nan_mode='Min' or 'Max', or clean the column.",
+      "seconds": 0.0,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "nan_mode": "Forbidden",
+        "random_state": 7
+      }
+    },
+    "gbdt_rmse_nan_max": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_nan_max.card",
+      "kind": "gbdt",
+      "loss_curve": "2320ba1821525b4bb36b35c026422fae31a633644cbc34aa0c9e54d43b2bdc6e",
+      "model": "a2717d4ae2ed82d0baee61a13a73fc951e951738c5fc0aafc90ca769d6d4c677",
+      "predictions": "00ca4d2e8a8ca424719827d28850783613090faafee3ddc871c705c63d9269f7",
+      "seconds": 1.11,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "nan_mode": "Max",
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_nan_min": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_nan_min.card",
+      "kind": "gbdt",
+      "loss_curve": "256c13cea87b9d841447dd20d72ee9da2d897ad9487d8d5a5afeb76934178388",
+      "model": "1ab5c028bf0146f9078df16a7e40f358be7952df60f07e57db6f4bcae2e8b402",
+      "predictions": "9063e3a426e761f327f9c29a9410a85dbeb6a13c2377f8d2a37ffd6476289834",
+      "seconds": 1.22,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "nan_mode": "Min",
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_newtoncosine": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_newtoncosine.card",
+      "kind": "gbdt",
+      "loss_curve": "ef41018d020a6f9f570acff290ccbcc533bb98b6ad53885da094559280ca1b6a",
+      "model": "f7184998deed64a29f78f9c8958361a28647e625d87cc045b9d10e57afc9c7e8",
+      "predictions": "da34f396f968e546a83efc3bd014be0593e6b2873961c49566f6536967864960",
+      "seconds": 1.03,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7,
+        "score_function": "NewtonCosine"
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_newtonl2": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_newtonl2.card",
+      "kind": "gbdt",
+      "loss_curve": "8272135d40d04648b91eb863452e6833510de8415520a4f09f05c3d2250424c0",
+      "model": "d4f40612beac3c04802ded6d5158a6c53feea1bb11af02c6a1da9c99e8f9a3e7",
+      "predictions": "585f9c23c47f33273375797b2a72176b8eb74c4aa03890cd9480ce98a7dad933",
+      "seconds": 1.09,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7,
+        "score_function": "NewtonL2"
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_no_boost_from_avg": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_no_boost_from_avg.card",
+      "kind": "gbdt",
+      "loss_curve": "d8af59b7d46880460678f7a463de78dccf8e950aa3fcd76b3db5680e14fb7e1c",
+      "model": "38ac64e1992e10832e77004d91e8a12945f03eb835fc90291edadeb1a5500637",
+      "predictions": "fa77c4941b388973c019ef7c639643ec5de38e885f9cfb4ab3640cf2e95bbbeb",
+      "seconds": 1.07,
+      "spec": {
+        "boost_from_average": false,
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_noboot": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_noboot.card",
+      "kind": "gbdt",
+      "loss_curve": "ef41018d020a6f9f570acff290ccbcc533bb98b6ad53885da094559280ca1b6a",
+      "model": "f7184998deed64a29f78f9c8958361a28647e625d87cc045b9d10e57afc9c7e8",
+      "predictions": "da34f396f968e546a83efc3bd014be0593e6b2873961c49566f6536967864960",
+      "seconds": 1.1,
+      "spec": {
+        "bootstrap_type": "No",
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_od_inctodec": {
+      "best_iteration": 19,
+      "card": "gbdt_rmse_od_inctodec.card",
+      "kind": "gbdt",
+      "loss_curve": "ef41018d020a6f9f570acff290ccbcc533bb98b6ad53885da094559280ca1b6a",
+      "model": "8bfdeec4772121c518cbede93c994148bcd365b7207ff9c26c7e237da85d982a",
+      "predictions": "da34f396f968e546a83efc3bd014be0593e6b2873961c49566f6536967864960",
+      "seconds": 1.02,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "od_pvalue": 0.5,
+        "od_type": "IncToDec",
+        "random_state": 7
+      },
+      "stopped_early": 0,
+      "test_loss_curve": "0dd8e8676a769740dff3e610801372e6cfd11aea9d2c5f2a4b415ed5d730872e"
+    },
+    "gbdt_rmse_od_iter": {
+      "best_iteration": 19,
+      "card": "gbdt_rmse_od_iter.card",
+      "kind": "gbdt",
+      "loss_curve": "ef41018d020a6f9f570acff290ccbcc533bb98b6ad53885da094559280ca1b6a",
+      "model": "8bfdeec4772121c518cbede93c994148bcd365b7207ff9c26c7e237da85d982a",
+      "predictions": "da34f396f968e546a83efc3bd014be0593e6b2873961c49566f6536967864960",
+      "seconds": 1.02,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "od_type": "Iter",
+        "od_wait": 3,
+        "random_state": 7,
+        "use_best_model": true
+      },
+      "stopped_early": 0,
+      "test_loss_curve": "0dd8e8676a769740dff3e610801372e6cfd11aea9d2c5f2a4b415ed5d730872e"
+    },
+    "gbdt_rmse_pointwise": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_pointwise.card",
+      "kind": "gbdt",
+      "loss_curve": "ef41018d020a6f9f570acff290ccbcc533bb98b6ad53885da094559280ca1b6a",
+      "model": "f7184998deed64a29f78f9c8958361a28647e625d87cc045b9d10e57afc9c7e8",
+      "predictions": "da34f396f968e546a83efc3bd014be0593e6b2873961c49566f6536967864960",
+      "seconds": 1.03,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7,
+        "use_pointwise_searcher": true
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_pointwise_200k": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_pointwise_200k.card",
+      "kind": "gbdt",
+      "loss_curve": "7914a197bbf44453f0f4630ea880401fb2d9d4f15e053b2d6ed9430cc92dd077",
+      "model": "c48c4ad3a652bfc3cc2cbe51020f82529a86452f564946e6d0e44232a4cedec5",
+      "predictions": "cd445536d2168aa651ea1847170fa0e1c878ffabd8727abf60b1d6844670ab83",
+      "seconds": 1.33,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7,
+        "use_pointwise_searcher": true
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_pointwise_bayesian": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_pointwise_bayesian.card",
+      "kind": "gbdt",
+      "loss_curve": "0ceb2a05bac66d87ad973d55accd40e871d79215d9791a8ca037f54906deb198",
+      "model": "3a3c76b0c149adc3c8f31188652096ba4e22027aa02bba86d294c9bd5337a6ac",
+      "predictions": "7cd93390dc1956df1406f148568e4073ea865bb93edc95987012244376f5d15c",
+      "seconds": 1.27,
+      "spec": {
+        "bootstrap_type": "Bayesian",
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7,
+        "use_pointwise_searcher": true
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_pointwise_rs1": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_pointwise_rs1.card",
+      "kind": "gbdt",
+      "loss_curve": "d1fa45416de127feb48b8d051404acff08f97452f5b80207a1a890e71b413d66",
+      "model": "2e5c9ccc6a0691f7bbe3fcb8b31a0cfb77a3d9f05f4944ca2bb8fe32c47e5f1b",
+      "predictions": "ffcf669a0d421a1f711318243ebb99b98c7c89faea7c8f1cc115fa56d8d2cc57",
+      "seconds": 1.3,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7,
+        "random_strength": 1.0,
+        "use_pointwise_searcher": true
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_poissonboot": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_poissonboot.card",
+      "kind": "gbdt",
+      "loss_curve": "eb6ceea53a8568cfa5afaee9b252da51637114b5af0ff3db0f678e951ffd8d52",
+      "model": "b4e78d6e0cee591defee090150d9d4149ff6e617f5457720e6dde8514dc15576",
+      "predictions": "69b24c3f87f6debbc5c566b54a4681e0cc252c18ec86ef1ec4867f4a0e9246a7",
+      "seconds": 1.03,
+      "spec": {
+        "bootstrap_type": "Poisson",
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7,
+        "subsample": 0.66
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_rs1": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_rs1.card",
+      "kind": "gbdt",
+      "loss_curve": "ef41018d020a6f9f570acff290ccbcc533bb98b6ad53885da094559280ca1b6a",
+      "model": "f7184998deed64a29f78f9c8958361a28647e625d87cc045b9d10e57afc9c7e8",
+      "predictions": "da34f396f968e546a83efc3bd014be0593e6b2873961c49566f6536967864960",
+      "seconds": 1.05,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7,
+        "random_strength": 1.0
+      },
+      "stopped_early": 0
+    },
+    "gbdt_rmse_sample_weight": {
+      "best_iteration": 0,
+      "card": "gbdt_rmse_sample_weight.card",
+      "kind": "gbdt",
+      "loss_curve": "c2878ea2aa44faba03bb0091e4ad3d8b33976597e745773a2249333faad67798",
+      "model": "abc36f6653e20d5f94a426f51e87815ae9b34d7a3293e1e78f407e97d0c291b6",
+      "predictions": "2897e8fbe01b752686b9a7aafae04bcef833b91e97d16f9114ec43cbafe8d3dc",
+      "seconds": 1.13,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "RMSE",
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "gbdt_tweedie": {
+      "best_iteration": 0,
+      "card": "gbdt_tweedie.card",
+      "kind": "gbdt",
+      "loss_curve": "b1cc1739bee4e7d7b0968657db617cc864e5d8defe9c388f5533457df83d21c5",
+      "model": "48222fe1bf790ea9f01d031477b596580a52c14fea27d72f154e1afafc46beca",
+      "predictions": "20359b7b817b0b21492ab86247a891068c1ab9e793d6ca2282981c413ab20d2a",
+      "seconds": 1.18,
+      "spec": {
+        "border_count": 128,
+        "learning_rate": 0.3,
+        "loss": "Tweedie",
+        "loss_variance_power": 1.5,
+        "max_depth": 6,
+        "n_estimators": 20,
+        "random_state": 7
+      },
+      "stopped_early": 0
+    },
+    "rf_clf": {
+      "card": "rf_clf.card",
+      "kind": "rf_clf",
+      "model": "00fa141590eacac3e958bb08f2c75ef9ddad54567cec49bbd0712defd6ff9326",
+      "predictions": "3c29f7f1414adf20d70566924cf39774818752e0baa8a589ddc505cb0b28bb08",
+      "proba": "d75dc04cb748109f1c729d8f3ec82b3902a76c2d51928112a68c27158a2e9e42",
+      "seconds": 1.15,
+      "spec": {
+        "max_depth": 8,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "rf_clf_200k": {
+      "card": "rf_clf_200k.card",
+      "kind": "rf_clf",
+      "model": "880adafa12a3cfffc7e04e2b597f288d7fa28a45fd70d556bbec471447b35677",
+      "predictions": "b2de17e270535489feed010fc6cbdef2f6f40cbe6d12bc8b72eaaf95e96ad5cb",
+      "seconds": 1.31,
+      "spec": {
+        "max_depth": 8,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "rf_clf_3class": {
+      "card": "rf_clf_3class.card",
+      "kind": "rf_clf",
+      "model": "6ca3bcbf1c87665cb372f7d89d0cceb3c699147cbd58ff02f2ecd2af014a33d9",
+      "predictions": "08a679eb2aa90b1f025ddba35380d78003bab5542ff3078d4bd40363100250b8",
+      "proba": "5abd5ad0f20c3d8e31efae0a0600d47d9caa50131e55e3901e068627b9072ee3",
+      "seconds": 1.01,
+      "spec": {
+        "max_depth": 8,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "rf_clf_allfeat": {
+      "card": "rf_clf_allfeat.card",
+      "kind": "rf_clf",
+      "model": "7073da4dc04e42fe7fd6df13d6b22ab3b2896d69cb302416b46500b10f4643ba",
+      "predictions": "3ac5c2a0302355b0526015f761d9b7d582c1dc4eeb4334a3d0d5ddba90862598",
+      "seconds": 1.1,
+      "spec": {
+        "max_depth": 8,
+        "max_features": 1.0,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "rf_clf_deep": {
+      "card": "rf_clf_deep.card",
+      "kind": "rf_clf",
+      "model": "15ae0ac50ce6cf4a44c10b410b59b3432302821c663a562566eab997488a8ec1",
+      "predictions": "d47387c87051971355bc031aa6607efbb1099abd9a8a2879980ef22b09a03f04",
+      "seconds": 2.03,
+      "spec": {
+        "max_depth": null,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "rf_clf_entropy": {
+      "card": "rf_clf_entropy.card",
+      "kind": "rf_clf",
+      "model": "01ad2d6fccee9885f1112ade25588ee70a9f7a481153002b166dc3f6b025ba3c",
+      "predictions": "cbcc008cdf18cf8810c2253c163e24b20f8f1d0561d1e58c1c78c846b1b67d9f",
+      "seconds": 1.06,
+      "spec": {
+        "criterion": "entropy",
+        "max_depth": 8,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "rf_clf_maxleaf": {
+      "card": "rf_clf_maxleaf.card",
+      "kind": "rf_clf",
+      "model": "9897291fb016312127c3e733e3b0eee1b07427ab0a1254f1a734e982a29baf43",
+      "predictions": "aebdb9c5198b57dfe28391edbefb27b1968c5f02d753d2c2ab130751b8b58ea4",
+      "seconds": 0.96,
+      "spec": {
+        "max_depth": 8,
+        "max_leaf_nodes": 64,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "rf_clf_nobootstrap": {
+      "card": "rf_clf_nobootstrap.card",
+      "kind": "rf_clf",
+      "model": "b4501b8f7e8ae20afa92294d0d4a157af414b2ff9e2ada826c829ae1af4bcab2",
+      "predictions": "8085a1614aabd113c1ef4f63d91cca1ac43d13430a412427285bd7bd3fe67c5b",
+      "seconds": 1.05,
+      "spec": {
+        "bootstrap": false,
+        "max_depth": 8,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "rf_clf_streams1": {
+      "card": "rf_clf_streams1.card",
+      "kind": "rf_clf",
+      "model": "00fa141590eacac3e958bb08f2c75ef9ddad54567cec49bbd0712defd6ff9326",
+      "predictions": "3c29f7f1414adf20d70566924cf39774818752e0baa8a589ddc505cb0b28bb08",
+      "seconds": 1.07,
+      "spec": {
+        "max_depth": 8,
+        "n_estimators": 10,
+        "n_streams": 1,
+        "random_state": 7
+      }
+    },
+    "rf_reg": {
+      "card": "rf_reg.card",
+      "kind": "rf_reg",
+      "model": "e9e14b6f08683e9130cc83530e8d56706c8590181d2de8d4b14f79470f641658",
+      "predictions": "99ba0e31c9548deb874eb31cdce0e19378b32f40f2f2a253ac267f4094fa5ebd",
+      "seconds": 1.12,
+      "spec": {
+        "max_depth": 8,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "rf_reg_200k": {
+      "card": "rf_reg_200k.card",
+      "kind": "rf_reg",
+      "model": "bad4b39ae6334deb729f733cdeef515e2a5937e6962a4cb9de8e20ce2d554034",
+      "predictions": "671c35e5617ced2a34e7693db782ec2885520692a454b5c26390440957139583",
+      "seconds": 1.42,
+      "spec": {
+        "max_depth": 8,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "rf_reg_bins32": {
+      "card": "rf_reg_bins32.card",
+      "kind": "rf_reg",
+      "model": "4ac867a1154a7bdcac7af42e18687e6bc395f87a9d8c2a2f811e7b37903c1913",
+      "predictions": "2cd0c04425b9ef2f0ed5b66ed71443f790f232829c4e03ca0584d3aa2adc4f2f",
+      "seconds": 1.05,
+      "spec": {
+        "max_depth": 8,
+        "n_bins": 32,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "rf_reg_gamma": {
+      "card": "rf_reg_gamma.card",
+      "kind": "rf_reg",
+      "model": "394ff7710e9aba435b24186aa8273c6c4b5bdcc1a2fcda178e05f84c2b3ec723",
+      "predictions": "d46f70b508bacc06c69d99940f769ee67ef9548f98ab4ce1157ddde54a6acab2",
+      "seconds": 1.08,
+      "spec": {
+        "criterion": "gamma",
+        "max_depth": 8,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "rf_reg_invgauss": {
+      "card": "rf_reg_invgauss.card",
+      "kind": "rf_reg",
+      "model": "5618f362faeab6f2e74681c31c2ed03364e6e3f1c38ea23e8ae849de940f85a4",
+      "predictions": "001c6c4952de538f99058e9d7517652298b2412ad6e0acd7fe182853704f8e48",
+      "seconds": 1.08,
+      "spec": {
+        "criterion": "inverse_gaussian",
+        "max_depth": 8,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "rf_reg_maxsamples": {
+      "card": "rf_reg_maxsamples.card",
+      "kind": "rf_reg",
+      "model": "fbd977272e089cca176c441eb8a0e9b63909ee079edcb087db9351fb8eacdff6",
+      "predictions": "3df01bb6fdc0709615a38e6cfcb9020ae7f7f7a08cc38aac2882b22ec6e048b3",
+      "seconds": 1.15,
+      "spec": {
+        "max_depth": 8,
+        "max_samples": 0.5,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "rf_reg_mid": {
+      "card": "rf_reg_mid.card",
+      "kind": "rf_reg",
+      "model": "e9e14b6f08683e9130cc83530e8d56706c8590181d2de8d4b14f79470f641658",
+      "predictions": "99ba0e31c9548deb874eb31cdce0e19378b32f40f2f2a253ac267f4094fa5ebd",
+      "seconds": 1.08,
+      "spec": {
+        "max_depth": 8,
+        "min_impurity_decrease": 0.001,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "rf_reg_minleaf5": {
+      "card": "rf_reg_minleaf5.card",
+      "kind": "rf_reg",
+      "model": "7ba10a9663fd773727f4295fabe077114d54e6ba6045349fc02cfbdefd258593",
+      "predictions": "ed9426192559c886d8d7053b634f7d2a4ed56e381a9b402a14baca4fce4b7b4b",
+      "seconds": 1.07,
+      "spec": {
+        "max_depth": 8,
+        "min_samples_leaf": 5,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    },
+    "rf_reg_poisson": {
+      "card": "rf_reg_poisson.card",
+      "kind": "rf_reg",
+      "model": "0721ad9a85a0ab4aee46c82e498de806d0a6f7f9c5001bf8e0ecc58999da4b33",
+      "predictions": "5a759bb6051a722a299f9e4ecb75322388b30e531a3645acd7341de7c0949feb",
+      "seconds": 1.1,
+      "spec": {
+        "criterion": "poisson",
+        "max_depth": 8,
+        "n_estimators": 10,
+        "random_state": 7
+      }
+    }
+  },
+  "commit": "a0a0eeee9a5b774ef62d91fc003a245e0c90af6f",
+  "inputs": {
+    "X": "5cbddce1deb73cde4aeb6a4be43a3cdb3efd2150cdbfd6e1887eb5ec73b1be8a",
+    "X_cat": "cb09790b7d2a7e7e73aa833b3b4b33ab90e6d94effab3e0edd3e8b99e3d5b0ca",
+    "X_nan": "aef061729e0f0d4448b5f68084928f99d643fcc2e636507fc47208564209d1ea",
+    "Xb": "5b8910183663a8e12d1178d333f20da0f59b52b62782f77b3c393f21f79300b2",
+    "Xe": "d9fa393bd5d42aaffc373183b1763581c4ba3bdfefbf697f219b1566671bbd6d",
+    "sw": "dc70834feb7e9806b2e8e9c17df83290fd7a09bf37d7d119a06e3409503b84f3",
+    "y_clf": "3d78c1ea6e3ba776dd102193f112c835bfd8a8fc48993afba187536f4a5ec75d",
+    "y_clfcat": "338d815ed5e660781f63276c67c5093967ca8070495ebbb55fdf04419db41e1d",
+    "y_mc": "9fadb2de90e18c668e012df42bb7dd02886197016e43da73f3ef2519f234844f",
+    "y_prob": "1bb5872724800fda11d8de430c8fe754f9a687572b22d66304136587e1c53092",
+    "y_reg": "58be14758af89c51c76e3dae88bb1986391d5e6afd234a43bcc1e5e9bea1240b",
+    "y_regcat": "4c4f51833cf8148829ff8bcb79ff6ec065543a383797c5586b9f1666fbb46919",
+    "yb_clf": "dbf315ee557b8978efc98a52f7f07df0cfb9a84b1bd2a4050c5fe47539713922",
+    "yb_reg": "380c97bb8c08fb17f4e2cc3021b1d642da1cc64a3a734ae9b9da3e3764fd0e43",
+    "ye_reg": "a5d17c7365f948d7ee7e76b06f81c1ffacd2c9d5589555436d527effd1143488"
+  },
+  "machine": "9152d73309bc",
+  "numeric_mode": "identical",
+  "platform": "Linux-6.8.0-106-generic-x86_64-with-glibc2.35"
+}

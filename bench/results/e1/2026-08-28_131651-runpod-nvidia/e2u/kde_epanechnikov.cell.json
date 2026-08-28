@@ -1,0 +1,13 @@
+{
+  "card": "kde_epanechnikov.card",
+  "kind": "kde",
+  "log_density": "b03c22b85d0eca3bf7cd651051dfb11421799f0b6604d420a0eda48b511417fa",
+  "n_sentinel": 0,
+  "score": -82311.14917755127,
+  "seconds": 1.37,
+  "spec": {
+    "bandwidth": 8.0,
+    "kernel": "epanechnikov"
+  },
+  "stages": 7
+}

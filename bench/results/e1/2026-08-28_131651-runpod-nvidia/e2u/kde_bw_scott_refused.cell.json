@@ -1,0 +1,9 @@
+{
+  "kind": "kde",
+  "refused": "NotImplementedError: mojolearn KernelDensity: bandwidth='scott' is refused; compute the rule on the host and pass the float (sklearn's scott is n ** (-1/(d+4)), silverman is (n (d+2) / 4) ** (-1/(d+4)))",
+  "seconds": 0.0,
+  "spec": {
+    "bandwidth": "scott",
+    "kernel": "gaussian"
+  }
+}

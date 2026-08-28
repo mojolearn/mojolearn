@@ -1,0 +1,87 @@
+41819 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x192e40000000, nodemask=2)
+Imported from /root/mojolearn/solver/mojo_only/cd_check.mojo:132:
+/root/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/solver/mojo_only/cd_check.mojo:161:
+Imported from /root/mojolearn/solver/ported/solver/cd.mojo:119:
+Imported from /root/mojolearn/solver/ported/functions/linear_reg.mojo:31:
+/root/mojolearn/core/column_stats.mojo:434:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            tile[ty * (TRANSPOSE_TILE + 1) + tx] = src.unsafe_load(
+            ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/solver/mojo_only/cd_check.mojo:161:
+Imported from /root/mojolearn/solver/ported/solver/cd.mojo:119:
+Imported from /root/mojolearn/solver/ported/functions/linear_reg.mojo:31:
+/root/mojolearn/core/column_stats.mojo:443:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                r2 * n_rows + c2, tile[tx * (TRANSPOSE_TILE + 1) + ty]
+                                  ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/solver/mojo_only/cd_check.mojo:132:
+/root/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/solver/mojo_only/cd_check.mojo:132:
+/root/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/solver/mojo_only/cd_check.mojo:132:
+/root/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/solver/mojo_only/cd_check.mojo:132:
+/root/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+41819 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x313e00000000, nodemask=1)
+== solver/mojo_only/cd_check.mojo [IDENTICAL] gemm-sabotage=none oracle-sabotage=none zero-fold-sabotage=none canon-sabotage=none ==
+  [IDENTICAL] refused shuffle=true: Parameter shuffle: REFUSED BY NAME (cuML selection='random'). std::shuffle's algorithm is unspecified by the C++ standard, so cuML's permutation is not a pure function of its seed; only the cyclic order (shuffle=false, selection='cyclic') is ported. See solver/ported/solver/shuffle.mojo
+  [IDENTICAL] refused sample_weight: Parameter sample_weight: REFUSED BY NAME. cd.cuh:136-163 and :240-251 (the weighted preprocess, the sqrt-weight scaling of input and labels, and their undo) are not ported
+  [IDENTICAL] refused loss=HINGE: Parameter loss: Only SQRT_LOSS function is supported for now (got HINGE)
+  [IDENTICAL] refused n_cols=0: Parameter n_cols: number of columns cannot be less than one
+  [IDENTICAL] refused n_rows=1: Parameter n_rows: number of rows cannot be less than two
+  [IDENTICAL] refused alpha<0: Expected alpha >= 0, got -0.1
+  [IDENTICAL] refused l1_ratio=1.5: Expected 0.0 <= l1_ratio <= 1.0, got 1.5
+  [IDENTICAL] refused predict loss=HINGE: Parameter loss: Only SQRT_LOSS function is supported for now (got HINGE)
+  [IDENTICAL] refused alpha=NaN: Parameter alpha: must be a finite number, got nan
+  [IDENTICAL] refused alpha=inf: Parameter alpha: must be a finite number, got inf
+  [IDENTICAL] refused l1_ratio=NaN: Parameter l1_ratio: must not be NaN
+  [IDENTICAL] refused tol=NaN: Parameter tol: must not be NaN
+check_cd_refuses_by_name OK [IDENTICAL]: 12 parameter values refused by name (DEVIATION 613: the four NaN/inf ones)
+  [IDENTICAL] n_iter device 3 oracle 3 float64 3; final diffMax 0.00012207031 coefMax 2.6655917 (ratio 4.5794826e-05 < tol 0.001)
+check_cd_recovers_the_planted_support OK [IDENTICAL]: 4 of 16 planted nonzeros recovered exactly; worst |device - float64| 2.808473491544561e-07 (tol 2e-3)
+  [IDENTICAL] n_rows=2048 (P=16): profile vs serial oracle differ at 8 of 8 colnorms, 2 of 8 coefficients, 2044 of 2048 residual cells; n_iter 3 vs 3; first cell 1 device 0x400bd882 oracle 0x400bd886
+check_cd_serial_fold_is_a_different_answer OK [IDENTICAL]
+  [IDENTICAL] gemm sabotage: none; oracle sabotage: none
+  [IDENTICAL] planted: n_iter device 3 oracle 3; differing cells coef 0/16 resid 0/2048 x_after 0 y_after 0 intercept 0
+  [IDENTICAL] planted: cards agree on every stage (20 records)
+  [IDENTICAL] denormal: n_iter device 1 oracle 1; differing cells coef 0/4 resid 0/1024 x_after 0 y_after 0 intercept 0
+  [IDENTICAL] denormal: cards agree on every stage (12 records)
+  [IDENTICAL] large: n_iter device 2 oracle 2; differing cells coef 0/4 resid 0/20000 x_after 0 y_after 0 intercept 0
+  [IDENTICAL] large: cards agree on every stage (17 records)
+check_cd_device_equals_oracle OK [IDENTICAL]: every stage and every cell bit for bit on three fixtures
+  [IDENTICAL] cells moved: A vs B 0, A vs C 0, A vs D 0, A vs A' 0 of 2066 (coef + residual + intercept + n_iter)
+check_cd_is_launch_invariant OK [IDENTICAL]: bytes identical across axpy 256/64, 1-D/2-D grid, AUTO/FLAT/SPLITK_STAGED/SPLITK plans, 0/37/5 floats of padding, four poisons
+  [IDENTICAL] ||w||_1 lasso 4.141319155693054 enet(0.5) 3.9062224626541138 alpha=0 4.650002958253026 float64 alpha=0 4.650002956962151; no-intercept intercept 0.0; cells moved vs lasso: enet 2 ols 8 no-intercept 2
+check_cd_elasticnet_arms_reach OK [IDENTICAL]: the l2 arm, the alpha=0 arm and the no-intercept arm each move the bits as the objective says
+  [IDENTICAL] predict: 0 of 1000 rows differ from the host; worst relative 0.0
+check_cd_predict_matches_host OK [IDENTICAL]
+check_cd_card_is_emitted OK [IDENTICAL]: 20 records (3 epochs), run-to-run control identical
+check_cd_soft_threshold_operand_order [IDENTICAL]: not a SOFT_SWAP build; baseline device-vs-oracle coef 0 resid 0 (build with -D MOJOLEARN_CD_SABOTAGE_SOFT_SWAP=1 for the report)
+  [IDENTICAL] signed_zero_pos: device coef[0] 0x80000000 oracle 0x80000000; -0.0 coefficients 4 +0.0 4 of 8; n_iter 2/2; differing cells coef 0 resid 0; oracle coefMax/diffMax bits 0x00000000/0x00000000; cards agree on every stage
+  [IDENTICAL] signed_zero_neg: device coef[0] 0x00000000 oracle 0x00000000; -0.0 coefficients 4 +0.0 4 of 8; n_iter 2/2; differing cells coef 0 resid 0; oracle coefMax/diffMax bits 0x00000000/0x00000000; cards agree on every stage
+check_cd_signed_zero_coefficients OK [IDENTICAL]: -0.0 and +0.0 coefficients in both orders, cards and cells bit for bit, coefMax/diffMax +0.0 (zero-fold sabotage none)
+  [IDENTICAL] nan_computed: NaN residual cells device 256 oracle 256 of 256; raw payload device 0x7fffffff host 0xffc00000; coef[0] device 0x00000000 oracle 0x00000000; n_iter 2/2; differing cells (NaN-canonical) coef 0 resid 0; cards agree on every stage
+  [IDENTICAL] nan_propagated: NaN residual cells device 1 oracle 1 of 256; raw payload device 0x7fffffff host 0x7fc0beef; coef[0] device 0x00000000 oracle 0x00000000; n_iter 1/1; differing cells (NaN-canonical) coef 0 resid 0; cards agree on every stage
+check_cd_nan_payload_is_canonical OK [IDENTICAL]: computed and propagated NaN stages hash to one payload on the device card and the oracle card (canon sabotage none)
+== solver/mojo_only/cd_check.mojo [IDENTICAL] ALL PASSED ==

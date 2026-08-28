@@ -1,0 +1,18 @@
+# format: mojolearn-identity-trace v1
+0	tiny.input.x	f32	32	c3608ce049825101
+1	tiny.norm.sumsq	f32	4	a73afd24333b93bc
+2	tiny.norm.out	f32	32	d12dfbf55aabd885
+3	tiny.in_proj.out	f32	128	9be5049c4af6f3aa
+4	tiny.A.out	f32	256	18875f29ebef4a33
+5	tiny.conv.out	f32	64	85d9b20a7a7c7cee
+6	tiny.silu.out	f32	64	f5737514c43b7a7d
+7	tiny.conv.window	f32	64	7b37654fc5879abd
+8	tiny.x_proj.out	f32	132	b71f12d72b9befd7
+9	tiny.dt_proj.out	f32	64	e2ed7f17787770ea
+10	tiny.softplus.out	f32	64	988d5a836a5e1c4d
+11	tiny.scan.y	f32	64	8e91e6a2447cfcc9
+12	tiny.scan.h	f32	256	0ddb478d4f3f41d2
+13	tiny.skip.out	f32	64	5e8e1d5398ad20d1
+14	tiny.gate.out	f32	64	c1a4fabd6514b588
+15	tiny.out_proj.out	f32	32	51b0969499831d74
+16	tiny.residual.out	f32	32	27f2d5701149e285

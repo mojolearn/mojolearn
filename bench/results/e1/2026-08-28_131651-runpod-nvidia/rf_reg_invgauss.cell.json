@@ -1,0 +1,13 @@
+{
+  "card": "rf_reg_invgauss.card",
+  "kind": "rf_reg",
+  "model": "5618f362faeab6f2e74681c31c2ed03364e6e3f1c38ea23e8ae849de940f85a4",
+  "predictions": "001c6c4952de538f99058e9d7517652298b2412ad6e0acd7fe182853704f8e48",
+  "seconds": 1.08,
+  "spec": {
+    "criterion": "inverse_gaussian",
+    "max_depth": 8,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

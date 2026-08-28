@@ -1,0 +1,13 @@
+{
+  "card": "rf_reg_bins32.card",
+  "kind": "rf_reg",
+  "model": "4ac867a1154a7bdcac7af42e18687e6bc395f87a9d8c2a2f811e7b37903c1913",
+  "predictions": "2cd0c04425b9ef2f0ed5b66ed71443f790f232829c4e03ca0584d3aa2adc4f2f",
+  "seconds": 1.05,
+  "spec": {
+    "max_depth": 8,
+    "n_bins": 32,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

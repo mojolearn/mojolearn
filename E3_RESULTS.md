@@ -334,6 +334,59 @@ misleading cause line is fixed under DEVIATION 1933.
 them. Both lanes already had cards; neither was listed in the loop. They are
 owed a leg of their own.
 
+## Round 13, commit `a0a0eee` (2026-08-28): three columns, nine lanes, and an honest NOT-CLOSED
+
+**All three columns record the SAME commit** -- Apple M4, NVIDIA H100 and
+AMD MI325X at `a0a0eee`, each with `identical set: 10 of 10 binaries`.
+
+| family | cells / stages | Apple vs NVIDIA | Apple vs AMD |
+|---|---|---|---|
+| decision trees (E2) | 116 cells | **109 IDENTICAL, 2 no-card, 5 refused alike** | **same** |
+| unsupervised + linear (E2U) | 93 cells | **71 IDENTICAL, 22 refused alike** | **same** |
+| E1U cards | 86 stages | **IDENTICAL** | **IDENTICAL** |
+| phase-8 lanes | **358 stages** | **IDENTICAL** | **IDENTICAL** |
+
+Phase 8 is nine lanes now, not seven: gemm 60, iforest 123, metrics 61, svm
+32, transformer 30, cd 20, mamba 17, linkage 8, kde 7. **NVIDIA<->AMD was
+also diffed directly**, which no previous round had done -- the judge always
+takes Apple as the reference -- and it is IDENTICAL on all 358 phase-8 stages
+and all 86 E1U stages. Transitivity over exact hashes made that predictable;
+it had never been checked.
+
+**iforest and transformer are in a round for the first time and both passed
+on all three columns at the first attempt.** Neither needed identity work.
+Isolation forest had been building its 123-stage card and writing it to a
+scratch path nobody collects; transformer's own SCOPE line said "nothing
+cross-vendor until a leg runs" while no leg could run, because the phase-8
+loop did not name it. Of the six tree learners on the speed board, five were
+in this matrix yesterday and all six are now.
+
+**THE VERDICT IS NOT-CLOSED AND THAT IS CORRECT.** Every identity comparison
+in the table above is IDENTICAL. What fails the round is one unexpected
+phase-8 finding, on NVIDIA and on AMD and not on Apple:
+
+    gemm [fast] check FAILED: gemm_device_check [FAST]: 1 of 6 gates FAILED
+
+That is `check_device_is_batch_invariant` -- a cell whose BITS depend on how
+many other cells shared the launch. It is asserted in BOTH modes on purpose,
+and `gemm/mojo_only/gemm_device_check.mojo`'s own header says why: launch and
+batch invariance "are properties of the kernel's SHAPE -- no float crosses a
+thread boundary, and the leaf partition comes from `k` alone -- not of the
+arithmetic pins, so FAST has no excuse for failing them and a FAST failure is
+a real defect."
+
+So this is NOT the "FAST is allowed to move in the last bits" case. It is a
+shape property that holds on Apple under FAST and fails on both other
+vendors, and it is open. It was invisible until this round because the
+finding line named `check_device_matches_oracle`'s per-shape output -- a
+REPORT under FAST by design -- as the cause; DEVIATION 1933 fixed the
+reporting and the real gate surfaced immediately.
+
+**Not in this round:** train-here-infer-there (`no cross_infer file` on both
+boxes; the leg did not carry the Mac's models). Phase 6's linalg IDENTICAL
+pass is still a finding on all three columns, and phase 1 `ieee-arith` on
+NVIDIA is the known approximate-PTX `sqrt` (row 10).
+
 ## Owed
 
 1. The linalg gate's IDENTICAL pass on both boxes (one leg; the scripts

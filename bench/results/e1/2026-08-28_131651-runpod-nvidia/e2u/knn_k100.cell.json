@@ -1,0 +1,12 @@
+{
+  "card": "knn_k100.card",
+  "distances": "e98f9670e01efcfa9a05363e86557ce9f1a83a9ce9016b1a53b0c557b1a47b17",
+  "indices": "1c0f428b9b47f980f05a5c074cc988eb0c82566e7c7ed34a6662212fa328e93e",
+  "kind": "knn",
+  "seconds": 0.97,
+  "spec": {
+    "n_neighbors": 100
+  },
+  "stages": 6,
+  "used_query_tile": 256
+}

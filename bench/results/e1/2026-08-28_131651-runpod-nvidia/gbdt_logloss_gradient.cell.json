@@ -1,0 +1,19 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_logloss_gradient.card",
+  "kind": "gbdt",
+  "loss_curve": "c485771beff71456104077d4ddd9de307748ad00f0a15dcaa700ae60047cb551",
+  "model": "4f0f6122f1681442149398c6d5b0e217a83892aabbab2bc06f6706da25a675b9",
+  "predictions": "b945c93092f183ec348a188321be12d25cc4ae2b9adbc772813bc6eed153268a",
+  "seconds": 1.09,
+  "spec": {
+    "border_count": 128,
+    "leaf_estimation_method": "Gradient",
+    "learning_rate": 0.3,
+    "loss": "Logloss",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7
+  },
+  "stopped_early": 0
+}

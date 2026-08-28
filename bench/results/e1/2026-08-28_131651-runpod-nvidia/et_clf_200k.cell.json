@@ -1,0 +1,12 @@
+{
+  "card": "et_clf_200k.card",
+  "kind": "et_clf",
+  "model": "86a8788de71bb62097b5b4a5e91b1fcf7c247ea2a8c410e3d850169e4dbf7583",
+  "predictions": "cc80fe670b8dc2fbf9f09c1758bc00df24e5d57e537ceddbb6cdfa75d90f3be6",
+  "seconds": 1.23,
+  "spec": {
+    "max_depth": 8,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

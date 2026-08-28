@@ -1,0 +1,10 @@
+{
+  "kind": "kde",
+  "refused": "Exception: kde: metric='cosine' is in cuML's pairwise_distances table but is NOT PORTED (kde/UNPORTED.tsv); ported: euclidean, l2, sqeuclidean, l1, cityblock, manhattan, chebyshev",
+  "seconds": 0.0,
+  "spec": {
+    "bandwidth": 8.0,
+    "kernel": "gaussian",
+    "metric": "cosine"
+  }
+}

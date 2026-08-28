@@ -1,0 +1,124 @@
+✨ Pixi task (check-metrics-regression in default): mojo run -I . metrics/mojo_only/regression_metrics_check.mojo
+44625 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x595d00000000, nodemask=2)
+Imported from /root/mojolearn/metrics/mojo_only/regression_metrics_check.mojo:82:
+/root/mojolearn/core/pinned_reduce.mojo:97:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = value
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/metrics/mojo_only/regression_metrics_check.mojo:82:
+/root/mojolearn/core/pinned_reduce.mojo:102:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/metrics/mojo_only/regression_metrics_check.mojo:82:
+/root/mojolearn/core/pinned_reduce.mojo:102:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/metrics/mojo_only/regression_metrics_check.mojo:82:
+/root/mojolearn/core/pinned_reduce.mojo:102:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                                      ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/metrics/mojo_only/regression_metrics_check.mojo:82:
+/root/mojolearn/core/pinned_reduce.mojo:105:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var total = red[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/metrics/mojo_only/regression_metrics_check.mojo:101:
+Imported from /root/mojolearn/metrics/ported/stats/detail/kl_divergence.mojo:65:
+/root/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/metrics/mojo_only/regression_metrics_check.mojo:101:
+Imported from /root/mojolearn/metrics/ported/stats/detail/kl_divergence.mojo:65:
+/root/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/metrics/mojo_only/regression_metrics_check.mojo:101:
+Imported from /root/mojolearn/metrics/ported/stats/detail/kl_divergence.mojo:65:
+/root/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/metrics/mojo_only/regression_metrics_check.mojo:101:
+Imported from /root/mojolearn/metrics/ported/stats/detail/kl_divergence.mojo:65:
+/root/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/metrics/mojo_only/regression_metrics_check.mojo:101:
+Imported from /root/mojolearn/metrics/ported/stats/detail/kl_divergence.mojo:65:
+/root/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+== metrics/mojo_only/regression_metrics_check.mojo [FAST] ==
+check_virtual_sum_equals_pinned_block_sum [FAST]
+    virtual 0xc68a95a7 pinned_block_sum 0xc68a95a7 host model 0xc68a95a8
+    (FAST: block.sum vs block.sum; the model is the tree and differs, as it should)
+  OK
+check_sum_order_is_visible [FAST]
+    tree 0x45c552fb shift1 0x45c552ff shift7 0x45c55301 shift64 0x45c552ff serial 0x45c55331
+    3 of 3 shifts and the serial fold differ
+  OK
+check_r2_matches_oracle [FAST]
+    planted subnormal squares: 7
+    bitwise REPORT (FAST, not asserted) y_bar device -0.071544625 (0xbd9285fd) oracle -0.07154441 (0xbd9285e0)
+    bitwise OK  sse device 1139885.9 (0x498b256f) oracle 1139885.9 (0x498b256f)
+    bitwise OK  ssto device 4113270.5 (0x4a7b0dda) oracle 4113270.5 (0x4a7b0dda)
+    bitwise OK  r2_score device 0.722876 (0x3f390e67) oracle 0.722876 (0x3f390e67)
+    vs Float64 sklearn r2 0.7228760486098991: rel 5.019479103437653e-08
+  OK
+check_r2_ftz_seam_is_visible [FAST]
+    sse device 0x000098bb oracle 0x000098bb (unflushed host sum of the squares would be 0x000098bb)
+    bitwise OK  sse(all-subnormal) device 5.479e-41 (0x000098bb) oracle 5.479e-41 (0x000098bb)
+    bitwise OK  r2(all-subnormal sse) device 1.0 (0x3f800000) oracle 1.0 (0x3f800000)
+  OK
+check_r2_launch_invariant [FAST]
+    b256 g1d pad0 0x3f390e67
+    b64  g1d pad0 0x3f390e67
+    b256 g2d pad0 0x3f390e67
+    b64  g2d pad0 0x3f390e67
+    b256 g1d pad37 0x3f390e67
+    b64  g1d pad37 0x3f390e67
+    b256 g2d pad37 0x3f390e67
+    b64  g2d pad37 0x3f390e67
+    FAST: 0 of 8 differ from the first (block.sum is a function of the block; a REPORT)
+  OK
+check_r2_undefined_cases [FAST]
+    constant y, y_hat == y: y_bar 0x40000000 sse 0x00000000 ssto 0x00000000 r2 0x3f800000 (oracle 0x3f800000)
+    constant y, y_hat != y: sse 0x44000000 ssto 0x00000000 r2 0x00000000 (oracle 0x00000000)
+    overflow y: sse 0x7f800000 ssto 0x7f800000 r2 0x7fc00000 (oracle 0x7fc00000)
+    1.0 / 0.0 / 0x7fc00000: the three undefined cases are defined, both modes
+  OK
+check_kl_matches_oracle [FAST]
+    planted p == 0 terms: 42
+    bitwise REPORT (FAST, not asserted) kl_divergence device 0.9819252 (0x3f7b5f73) oracle 0.98192525 (0x3f7b5f74)
+    vs Float64 scipy spelling 0.981925161924112: rel 2.8078487963685092e-08
+    q[5] = 0: inf (0x7f800000)
+  OK
+check_kl_subnormal_p_and_nan [FAST]
+    subnormal p[3]: device 0xff800000 oracle 0x3f7b6548
+    RECORDED [FAST]: kl(subnormal p) device 0xff800000 (vendor log of a kept subnormal; not judged)
+    q[7] = -1: device 0x7fc00000 oracle 0x7fc00000
+  OK
+check_kl_launch_invariant [FAST]
+    b256 g1d pad0 0x3f7b5f73
+    b64  g1d pad0 0x3f7b5f73
+    b256 g2d pad0 0x3f7b5f73
+    b64  g2d pad0 0x3f7b5f73
+    b256 g1d pad37 0x3f7b5f73
+    b64  g1d pad37 0x3f7b5f73
+    b256 g2d pad37 0x3f7b5f73
+    b64  g2d pad37 0x3f7b5f73
+    FAST: 0 of 8 differ from the first (a REPORT)
+  OK
+ALL GROUP B CHECKS PASSED [FAST]

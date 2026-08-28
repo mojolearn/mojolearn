@@ -1,0 +1,14 @@
+{
+  "kind": "gbdt",
+  "refused": "Exception: Newton leaves estimation method is not supported for Quantile loss function",
+  "seconds": 0.96,
+  "spec": {
+    "border_count": 128,
+    "leaf_estimation_method": "Newton",
+    "learning_rate": 0.3,
+    "loss": "Quantile",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7
+  }
+}

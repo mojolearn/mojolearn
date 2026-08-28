@@ -1,0 +1,9 @@
+{
+  "kind": "knn",
+  "refused": "ValueError: mojolearn NearestNeighbors: metric='cosine' is refused; only Euclidean ('euclidean', 'l2', 'minkowski' with p=2) is ported. The brute-force kernels carry the expanded-L2 arm only (neighbors/ported/neighbors/detail/knn_brute_force.mojo): another metric is a port, not a flag",
+  "seconds": 0.0,
+  "spec": {
+    "metric": "cosine",
+    "n_neighbors": 10
+  }
+}
