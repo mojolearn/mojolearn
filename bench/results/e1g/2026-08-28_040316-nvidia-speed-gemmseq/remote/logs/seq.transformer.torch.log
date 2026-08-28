@@ -1,0 +1,273 @@
+/root/mojolearn/tools/speed_torch_seq.py:539: UserWarning: Memory efficient kernel not used because: (Triggered internally at ../aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:723.)
+  o = self.t.nn.functional.scaled_dot_product_attention(
+/root/mojolearn/tools/speed_torch_seq.py:539: UserWarning: Memory Efficient attention has been runtime disabled. (Triggered internally at ../aten/src/ATen/native/transformers/sdp_utils_cpp.h:495.)
+  o = self.t.nn.functional.scaled_dot_product_attention(
+/root/mojolearn/tools/speed_torch_seq.py:539: UserWarning: Flash attention kernel not used because: (Triggered internally at ../aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:725.)
+  o = self.t.nn.functional.scaled_dot_product_attention(
+/root/mojolearn/tools/speed_torch_seq.py:539: UserWarning: Flash Attention does not support non-null attn_mask. (Triggered internally at ../aten/src/ATen/native/transformers/sdp_utils_cpp.h:269.)
+  o = self.t.nn.functional.scaled_dot_product_attention(
+/root/mojolearn/tools/speed_torch_seq.py:539: UserWarning: CuDNN attention kernel not used because: (Triggered internally at ../aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:727.)
+  o = self.t.nn.functional.scaled_dot_product_attention(
+/root/mojolearn/tools/speed_torch_seq.py:539: UserWarning: The CuDNN backend needs to be enabled by setting the enviornment variable`TORCH_CUDNN_SDPA_ENABLED=1` (Triggered internally at ../aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:496.)
+  o = self.t.nn.functional.scaled_dot_product_attention(
+FSPEED-HEADER family=seq lane=transformer arm=torch mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-NOTE lane=transformer arm=torch build=CUDA 12.4 torch=2.4.1+cu124 tf32_switches=cuda.matmul.allow_tf32,cudnn.allow_tf32 deterministic=off
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=norm1.weight n=32 hash=e4ae9bac1e4f2eb0
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=norm2.weight n=32 hash=fe0abe179e07e573
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=q_proj.weight n=1024 hash=0d2da18fc0b40d8b
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=k_proj.weight n=1024 hash=8d6df99dbcd279fb
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=v_proj.weight n=1024 hash=566369012d3485a1
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=o_proj.weight n=1024 hash=d879230290d22ae1
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=gate_proj.weight n=2048 hash=5cd27648cfa7a924
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=up_proj.weight n=2048 hash=86fa1f885662c17f
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=down_proj.weight n=2048 hash=62887e5f6fb89109
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=x n=256 hash=cb5073d347fd2aae
+FSPEED-NOTE lane=transformer arm=torch crosscheck LlamaEager vs transformer/corpus block_forward at lane.b2_l4_d32_kv2: max_abs_diff=1.5878e-08
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=norm1.weight n=32 hash=e4ae9bac1e4f2eb0
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=norm2.weight n=32 hash=fe0abe179e07e573
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=q_proj.weight n=1024 hash=0d2da18fc0b40d8b
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=k_proj.weight n=1024 hash=8d6df99dbcd279fb
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=v_proj.weight n=1024 hash=566369012d3485a1
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=o_proj.weight n=1024 hash=d879230290d22ae1
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=gate_proj.weight n=2048 hash=5cd27648cfa7a924
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=up_proj.weight n=2048 hash=86fa1f885662c17f
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=down_proj.weight n=2048 hash=62887e5f6fb89109
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=x n=256 hash=cb5073d347fd2aae
+FSPEED-WARMUP lane=transformer arm=torch-gpu-fp32 shape=lane.b2_l4_d32_kv2 ms=0.557408
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=lane.b2_l4_d32_kv2 round=1 ms=0.540212 hash=d609221d7268e4c3
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=lane.b2_l4_d32_kv2 round=2 ms=0.592988 hash=d609221d7268e4c3
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=lane.b2_l4_d32_kv2 round=3 ms=0.549987 hash=d609221d7268e4c3
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=lane.b2_l4_d32_kv2 round=4 ms=0.534069 hash=d609221d7268e4c3
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=lane.b2_l4_d32_kv2 round=5 ms=0.521854 hash=d609221d7268e4c3
+FSPEED-NOTE lane=transformer arm=torch-gpu-fp32 output witness shape=lane.b2_l4_d32_kv2 n=256 hash=d609221d7268e4c3
+FSPEED-WARMUP lane=transformer arm=torch-gpu-tf32 shape=lane.b2_l4_d32_kv2 ms=0.513200
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=lane.b2_l4_d32_kv2 round=1 ms=0.494916 hash=29818408b2158e13
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=lane.b2_l4_d32_kv2 round=2 ms=0.513770 hash=29818408b2158e13
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=lane.b2_l4_d32_kv2 round=3 ms=0.513334 hash=29818408b2158e13
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=lane.b2_l4_d32_kv2 round=4 ms=0.503283 hash=29818408b2158e13
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=lane.b2_l4_d32_kv2 round=5 ms=0.503957 hash=29818408b2158e13
+FSPEED-NOTE lane=transformer arm=torch-gpu-tf32 output witness shape=lane.b2_l4_d32_kv2 n=256 hash=29818408b2158e13
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=lane.b2_l4_d32_kv2 ms=0.448588
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=lane.b2_l4_d32_kv2 round=1 ms=0.452243 hash=2e29daa0f9ab306a
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=lane.b2_l4_d32_kv2 round=2 ms=0.462119 hash=2e29daa0f9ab306a
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=lane.b2_l4_d32_kv2 round=3 ms=0.452906 hash=2e29daa0f9ab306a
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=lane.b2_l4_d32_kv2 round=4 ms=0.450600 hash=2e29daa0f9ab306a
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=lane.b2_l4_d32_kv2 round=5 ms=0.462528 hash=2e29daa0f9ab306a
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-math-fp32 output witness shape=lane.b2_l4_d32_kv2 n=256 hash=2e29daa0f9ab306a
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=lane.b2_l4_d32_kv2 ms=0.389021
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=lane.b2_l4_d32_kv2 round=1 ms=0.383921 hash=ffbca2badcffcd66
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=lane.b2_l4_d32_kv2 round=2 ms=0.395011 hash=ffbca2badcffcd66
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=lane.b2_l4_d32_kv2 round=3 ms=0.377588 hash=ffbca2badcffcd66
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=lane.b2_l4_d32_kv2 round=4 ms=0.388678 hash=ffbca2badcffcd66
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=lane.b2_l4_d32_kv2 round=5 ms=0.388622 hash=ffbca2badcffcd66
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-efficient-fp32 output witness shape=lane.b2_l4_d32_kv2 n=256 hash=ffbca2badcffcd66
+FSPEED-REFUSED lane=transformer arm=torch-gpu-flash-fp32 reason=RuntimeError at shape lane.b2_l4_d32_kv2: No available kernel. Aborting execution.
+FSPEED-REFUSED lane=transformer arm=torch-gpu-flash-bf16 reason=RuntimeError at shape lane.b2_l4_d32_kv2: No available kernel. Aborting execution.
+FSPEED-AGREE lane=transformer max_abs_diff=0.000887722 max_rel_diff=0.0249994 n=256
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=norm1.weight n=4096 hash=30dc9291bcd74c4d
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=norm2.weight n=4096 hash=90de83fb74424482
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=q_proj.weight n=16777216 hash=458f23ff554c3cc3
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=k_proj.weight n=4194304 hash=76706639c3aa7d56
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=v_proj.weight n=4194304 hash=81c62305b8e723d5
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=o_proj.weight n=16777216 hash=cffb8b77180868b3
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=gate_proj.weight n=58720256 hash=4616212f0e15d8ca
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=up_proj.weight n=58720256 hash=3d72973cf9e50898
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=down_proj.weight n=58720256 hash=63d7be8563af230a
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=x n=4096 hash=3d93aac664c66028
+FSPEED-WARMUP lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t1 ms=0.788081
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t1 round=1 ms=0.726040 hash=bd44c6cd02b6e51c
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t1 round=2 ms=0.722870 hash=bd44c6cd02b6e51c
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t1 round=3 ms=0.724688 hash=bd44c6cd02b6e51c
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t1 round=4 ms=0.668190 hash=bd44c6cd02b6e51c
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t1 round=5 ms=0.673696 hash=bd44c6cd02b6e51c
+FSPEED-NOTE lane=transformer arm=torch-gpu-fp32 output witness shape=llama8b.prefill.t1 n=4096 hash=bd44c6cd02b6e51c
+FSPEED-WARMUP lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t1 ms=0.632904
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t1 round=1 ms=0.634499 hash=bd44c6cd02b6e51c
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t1 round=2 ms=0.724137 hash=bd44c6cd02b6e51c
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t1 round=3 ms=0.665687 hash=bd44c6cd02b6e51c
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t1 round=4 ms=0.674315 hash=bd44c6cd02b6e51c
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t1 round=5 ms=0.649497 hash=bd44c6cd02b6e51c
+FSPEED-NOTE lane=transformer arm=torch-gpu-tf32 output witness shape=llama8b.prefill.t1 n=4096 hash=bd44c6cd02b6e51c
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t1 ms=0.601884
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t1 round=1 ms=0.586513 hash=bd44c6cd02b6e51c
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t1 round=2 ms=0.615004 hash=bd44c6cd02b6e51c
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t1 round=3 ms=0.597868 hash=bd44c6cd02b6e51c
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t1 round=4 ms=0.607207 hash=bd44c6cd02b6e51c
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t1 round=5 ms=0.605427 hash=bd44c6cd02b6e51c
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-math-fp32 output witness shape=llama8b.prefill.t1 n=4096 hash=bd44c6cd02b6e51c
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t1 ms=0.570577
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t1 round=1 ms=0.569984 hash=39aeb70c2dd56230
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t1 round=2 ms=0.592243 hash=39aeb70c2dd56230
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t1 round=3 ms=0.590310 hash=39aeb70c2dd56230
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t1 round=4 ms=0.588227 hash=39aeb70c2dd56230
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t1 round=5 ms=0.581313 hash=39aeb70c2dd56230
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-efficient-fp32 output witness shape=llama8b.prefill.t1 n=4096 hash=39aeb70c2dd56230
+FSPEED-REFUSED lane=transformer arm=torch-gpu-flash-fp32 reason=RuntimeError at shape llama8b.prefill.t1: No available kernel. Aborting execution.
+FSPEED-REFUSED lane=transformer arm=torch-gpu-flash-bf16 reason=RuntimeError at shape llama8b.prefill.t1: No available kernel. Aborting execution.
+FSPEED-AGREE lane=transformer max_abs_diff=5.14984e-05 max_rel_diff=0.00300162 n=4096
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=norm1.weight n=4096 hash=19770838eb156233
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=norm2.weight n=4096 hash=661f9b4826837778
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=q_proj.weight n=16777216 hash=9ba40b617f6701c6
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=k_proj.weight n=4194304 hash=3fc887e58a86aae5
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=v_proj.weight n=4194304 hash=64cb8d74bed4b578
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=o_proj.weight n=16777216 hash=5abb6368b7c381b7
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=gate_proj.weight n=58720256 hash=40827a19ef224a29
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=up_proj.weight n=58720256 hash=b8d683c2de2a8d40
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=down_proj.weight n=58720256 hash=be5808bd1301911b
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=x n=32768 hash=b393ca1e2e252bc2
+FSPEED-WARMUP lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t8 ms=0.987787
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t8 round=1 ms=0.976253 hash=8187b0382ae2f891
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t8 round=2 ms=1.025319 hash=8187b0382ae2f891
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t8 round=3 ms=1.004085 hash=8187b0382ae2f891
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t8 round=4 ms=1.010664 hash=8187b0382ae2f891
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t8 round=5 ms=0.981923 hash=8187b0382ae2f891
+FSPEED-NOTE lane=transformer arm=torch-gpu-fp32 output witness shape=llama8b.prefill.t8 n=32768 hash=264834725c1d0333
+FSPEED-WARMUP lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t8 ms=0.754230
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t8 round=1 ms=0.753868 hash=6b633a44dbf90a85
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t8 round=2 ms=0.817459 hash=6b633a44dbf90a85
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t8 round=3 ms=0.824947 hash=6b633a44dbf90a85
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t8 round=4 ms=0.802618 hash=6b633a44dbf90a85
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t8 round=5 ms=0.777341 hash=6b633a44dbf90a85
+FSPEED-NOTE lane=transformer arm=torch-gpu-tf32 output witness shape=llama8b.prefill.t8 n=32768 hash=d6b8ee1c6138f26c
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t8 ms=0.880130
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t8 round=1 ms=0.892818 hash=81a4eb2ae5d6bc88
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t8 round=2 ms=0.948250 hash=81a4eb2ae5d6bc88
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t8 round=3 ms=0.926696 hash=81a4eb2ae5d6bc88
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t8 round=4 ms=0.947122 hash=81a4eb2ae5d6bc88
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t8 round=5 ms=0.950716 hash=81a4eb2ae5d6bc88
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-math-fp32 output witness shape=llama8b.prefill.t8 n=32768 hash=c454cab7efffdd60
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t8 ms=0.824027
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t8 round=1 ms=0.824984 hash=b737e94f42d65b66
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t8 round=2 ms=0.855081 hash=b737e94f42d65b66
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t8 round=3 ms=0.859320 hash=b737e94f42d65b66
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t8 round=4 ms=0.854000 hash=b737e94f42d65b66
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t8 round=5 ms=0.842985 hash=b737e94f42d65b66
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-efficient-fp32 output witness shape=llama8b.prefill.t8 n=32768 hash=096bf1274161501e
+FSPEED-REFUSED lane=transformer arm=torch-gpu-flash-fp32 reason=RuntimeError at shape llama8b.prefill.t8: No available kernel. Aborting execution.
+FSPEED-REFUSED lane=transformer arm=torch-gpu-flash-bf16 reason=RuntimeError at shape llama8b.prefill.t8: No available kernel. Aborting execution.
+FSPEED-AGREE lane=transformer max_abs_diff=0.635278 max_rel_diff=9.46577 n=32768
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=norm1.weight n=4096 hash=2d073c4bf3be4215
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=norm2.weight n=4096 hash=8d13de87ae1db05d
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=q_proj.weight n=16777216 hash=19976a410e812f3d
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=k_proj.weight n=4194304 hash=6eb9a28e49ec40ae
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=v_proj.weight n=4194304 hash=91936c2a28335c93
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=o_proj.weight n=16777216 hash=33f47dd4c2896a57
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=gate_proj.weight n=58720256 hash=00ad980c0db80b74
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=up_proj.weight n=58720256 hash=c2002fe051fc2a67
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=down_proj.weight n=58720256 hash=fe37d1e5eadac30a
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=x n=524288 hash=60e833df1e7657f3
+FSPEED-WARMUP lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t128 ms=1.619730
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t128 round=1 ms=1.640312 hash=-
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t128 round=2 ms=1.756005 hash=-
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t128 round=3 ms=1.713865 hash=-
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t128 round=4 ms=1.700565 hash=-
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t128 round=5 ms=1.685426 hash=-
+FSPEED-NOTE lane=transformer arm=torch-gpu-fp32 output witness shape=llama8b.prefill.t128 n=524288 hash=d38a35a21e9b39da
+FSPEED-WARMUP lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t128 ms=0.799019
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t128 round=1 ms=0.823569 hash=-
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t128 round=2 ms=0.907157 hash=-
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t128 round=3 ms=0.896852 hash=-
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t128 round=4 ms=0.892274 hash=-
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t128 round=5 ms=0.912532 hash=-
+FSPEED-NOTE lane=transformer arm=torch-gpu-tf32 output witness shape=llama8b.prefill.t128 n=524288 hash=d382e30f3c8f8ec6
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t128 ms=1.518134
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t128 round=1 ms=1.528237 hash=-
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t128 round=2 ms=1.607411 hash=-
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t128 round=3 ms=1.602080 hash=-
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t128 round=4 ms=1.604438 hash=-
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t128 round=5 ms=1.601446 hash=-
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-math-fp32 output witness shape=llama8b.prefill.t128 n=524288 hash=ffd67056365b9cfc
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t128 ms=1.503885
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t128 round=1 ms=1.503274 hash=-
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t128 round=2 ms=1.564022 hash=-
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t128 round=3 ms=1.542602 hash=-
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t128 round=4 ms=1.555443 hash=-
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t128 round=5 ms=1.539040 hash=-
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-efficient-fp32 output witness shape=llama8b.prefill.t128 n=524288 hash=9c5143d1e9f63dbb
+FSPEED-REFUSED lane=transformer arm=torch-gpu-flash-fp32 reason=RuntimeError at shape llama8b.prefill.t128: No available kernel. Aborting execution.
+FSPEED-REFUSED lane=transformer arm=torch-gpu-flash-bf16 reason=RuntimeError at shape llama8b.prefill.t128: No available kernel. Aborting execution.
+FSPEED-AGREE lane=transformer max_abs_diff=3.95881 max_rel_diff=949.929 n=524288
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=norm1.weight n=4096 hash=f4a0f716372b58ce
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=norm2.weight n=4096 hash=93b3f2cddfd23c01
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=q_proj.weight n=16777216 hash=fe1b3ad1dfd94d86
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=k_proj.weight n=4194304 hash=9f658c4d5c9859c0
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=v_proj.weight n=4194304 hash=286524a647dfa937
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=o_proj.weight n=16777216 hash=7721f27f6a6c4ce8
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=gate_proj.weight n=58720256 hash=630b3a509bc6f674
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=up_proj.weight n=58720256 hash=4cf23bd89c42c8b3
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=down_proj.weight n=58720256 hash=5c6bd78157391281
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=x n=2097152 hash=9ffa2521076bc8c7
+FSPEED-WARMUP lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t512 ms=5.458694
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t512 round=1 ms=5.453855 hash=-
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t512 round=2 ms=5.552322 hash=-
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t512 round=3 ms=5.550325 hash=-
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t512 round=4 ms=5.541686 hash=-
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t512 round=5 ms=5.542338 hash=-
+FSPEED-NOTE lane=transformer arm=torch-gpu-fp32 output witness shape=llama8b.prefill.t512 n=2097152 hash=b66f01529b3be4c9
+FSPEED-WARMUP lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t512 ms=1.328751
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t512 round=1 ms=1.331594 hash=-
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t512 round=2 ms=1.419246 hash=-
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t512 round=3 ms=1.397602 hash=-
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t512 round=4 ms=1.379553 hash=-
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t512 round=5 ms=1.377009 hash=-
+FSPEED-NOTE lane=transformer arm=torch-gpu-tf32 output witness shape=llama8b.prefill.t512 n=2097152 hash=e9e65e78d26a5bfc
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t512 ms=5.331468
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t512 round=1 ms=5.322218 hash=-
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t512 round=2 ms=5.373161 hash=-
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t512 round=3 ms=5.383130 hash=-
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t512 round=4 ms=5.366150 hash=-
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t512 round=5 ms=5.370717 hash=-
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-math-fp32 output witness shape=llama8b.prefill.t512 n=2097152 hash=9248658d19e75e10
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t512 ms=5.249832
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t512 round=1 ms=5.242847 hash=-
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t512 round=2 ms=5.293272 hash=-
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t512 round=3 ms=5.376909 hash=-
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t512 round=4 ms=5.817894 hash=-
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t512 round=5 ms=5.330279 hash=-
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-efficient-fp32 output witness shape=llama8b.prefill.t512 n=2097152 hash=66a31bf32885c80f
+FSPEED-REFUSED lane=transformer arm=torch-gpu-flash-fp32 reason=RuntimeError at shape llama8b.prefill.t512: No available kernel. Aborting execution.
+FSPEED-REFUSED lane=transformer arm=torch-gpu-flash-bf16 reason=RuntimeError at shape llama8b.prefill.t512: No available kernel. Aborting execution.
+FSPEED-AGREE lane=transformer max_abs_diff=4.33359 max_rel_diff=14973.6 n=2097152
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=norm1.weight n=4096 hash=939d6972265aa725
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=norm2.weight n=4096 hash=31804b90e76959c3
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=q_proj.weight n=16777216 hash=b1b0a1ba4873ca77
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=k_proj.weight n=4194304 hash=1c16ca3348db5f0d
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=v_proj.weight n=4194304 hash=237925dc612d1c22
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=o_proj.weight n=16777216 hash=0ec594792330189f
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=gate_proj.weight n=58720256 hash=c5c194484347d30a
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=up_proj.weight n=58720256 hash=9374a3fc8f279dd9
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=down_proj.weight n=58720256 hash=6e1a2f6cfa111b57
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=x n=4096 hash=b91b5914caac5a30
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=ctx.x n=2097152 hash=c54a8d22a1bde29a
+FSPEED-WARMUP lane=transformer arm=torch-gpu-fp32 shape=llama8b.decode.t1.ctx512 ms=0.676781
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.decode.t1.ctx512 round=1 ms=0.689752 hash=f62a023115027e31
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.decode.t1.ctx512 round=2 ms=0.690874 hash=f62a023115027e31
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.decode.t1.ctx512 round=3 ms=0.683956 hash=f62a023115027e31
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.decode.t1.ctx512 round=4 ms=0.689600 hash=f62a023115027e31
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.decode.t1.ctx512 round=5 ms=0.675526 hash=f62a023115027e31
+FSPEED-NOTE lane=transformer arm=torch-gpu-fp32 output witness shape=llama8b.decode.t1.ctx512 n=4096 hash=f62a023115027e31
+FSPEED-WARMUP lane=transformer arm=torch-gpu-tf32 shape=llama8b.decode.t1.ctx512 ms=0.676092
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.decode.t1.ctx512 round=1 ms=0.666618 hash=1f71bd5f486361ec
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.decode.t1.ctx512 round=2 ms=0.679594 hash=1f71bd5f486361ec
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.decode.t1.ctx512 round=3 ms=0.684790 hash=1f71bd5f486361ec
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.decode.t1.ctx512 round=4 ms=0.679884 hash=1f71bd5f486361ec
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.decode.t1.ctx512 round=5 ms=0.680607 hash=1f71bd5f486361ec
+FSPEED-NOTE lane=transformer arm=torch-gpu-tf32 output witness shape=llama8b.decode.t1.ctx512 n=4096 hash=1f71bd5f486361ec
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.decode.t1.ctx512 ms=0.650994
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.decode.t1.ctx512 round=1 ms=0.613775 hash=848e21d1df64d87c
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.decode.t1.ctx512 round=2 ms=0.633888 hash=848e21d1df64d87c
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.decode.t1.ctx512 round=3 ms=0.619054 hash=848e21d1df64d87c
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.decode.t1.ctx512 round=4 ms=0.631355 hash=848e21d1df64d87c
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.decode.t1.ctx512 round=5 ms=0.623435 hash=848e21d1df64d87c
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-math-fp32 output witness shape=llama8b.decode.t1.ctx512 n=4096 hash=848e21d1df64d87c
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.decode.t1.ctx512 ms=0.647988
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.decode.t1.ctx512 round=1 ms=0.630207 hash=d8fbb0fbeec0b7dd
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.decode.t1.ctx512 round=2 ms=0.790026 hash=d8fbb0fbeec0b7dd
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.decode.t1.ctx512 round=3 ms=0.718117 hash=d8fbb0fbeec0b7dd
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.decode.t1.ctx512 round=4 ms=0.694968 hash=d8fbb0fbeec0b7dd
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.decode.t1.ctx512 round=5 ms=0.670880 hash=d8fbb0fbeec0b7dd
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-efficient-fp32 output witness shape=llama8b.decode.t1.ctx512 n=4096 hash=d8fbb0fbeec0b7dd
+FSPEED-REFUSED lane=transformer arm=torch-gpu-flash-fp32 reason=RuntimeError at shape llama8b.decode.t1.ctx512: No available kernel. Aborting execution.
+FSPEED-REFUSED lane=transformer arm=torch-gpu-flash-bf16 reason=RuntimeError at shape llama8b.decode.t1.ctx512: No available kernel. Aborting execution.
+FSPEED-AGREE lane=transformer max_abs_diff=0.0267668 max_rel_diff=8.63169 n=4096
+FSPEED-DONE lane=transformer arm=torch

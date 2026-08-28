@@ -1,0 +1,13 @@
+{
+  "name": "mojolearn-gemm-nvidia-2026-08-28_040316",
+  "imageName": "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04",
+  "gpuTypeIds": ["NVIDIA H100 80GB HBM3"],
+  "gpuCount": 1,
+  "allowedCudaVersions": ["13.0","12.9","12.8","12.7","12.6","12.5","12.4"],
+  "cloudType": "SECURE",
+  "containerDiskInGb": 60,
+  "volumeInGb": 0,
+  "ports": ["22/tcp"],
+  "supportPublicIp": true,
+  "interruptible": false
+}

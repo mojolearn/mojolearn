@@ -1,0 +1,6 @@
+pod=uml6wfmoorwck6
+armed=1
+terminated=1
+deadman_pid=40092
+exit=0
+at=2026-08-28T08:16:55Z

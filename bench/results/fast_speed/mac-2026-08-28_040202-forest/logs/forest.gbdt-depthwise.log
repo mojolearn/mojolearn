@@ -1,0 +1,15 @@
+FSPEED-NOTE lane=gbdt-depthwise arms=ours metric=devices delta=1.000000 reason=devices=cpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-cpu reason=ModuleNotFoundError: No module named 'xgboost'
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-gpu reason=ModuleNotFoundError: No module named 'xgboost'
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=ours mode=FAST device=Darwin_arm64 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=catboost-cpu mode=FAST device=Darwin_arm64 rounds=3 size=shipped
+FSPEED-WARMUP lane=gbdt-depthwise arm=ours shape=year-463715x90 ms=5632.738
+FSPEED-WARMUP lane=gbdt-depthwise arm=catboost-cpu shape=year-463715x90 ms=4812.655
+FSPEED lane=gbdt-depthwise arm=ours shape=year-463715x90 round=1 ms=4962.074 hash=255260b3b9d45b32
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=year-463715x90 round=1 ms=4181.316 hash=6aa4425d40e37a74
+FSPEED lane=gbdt-depthwise arm=ours shape=year-463715x90 round=2 ms=4447.952 hash=255260b3b9d45b32
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=year-463715x90 round=2 ms=4407.742 hash=6aa4425d40e37a74
+FSPEED lane=gbdt-depthwise arm=ours shape=year-463715x90 round=3 ms=4543.493 hash=255260b3b9d45b32
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=year-463715x90 round=3 ms=4189.724 hash=6aa4425d40e37a74
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=rmse value=9.086366
+FSPEED-ACC lane=gbdt-depthwise arm=catboost-cpu metric=rmse value=9.104583

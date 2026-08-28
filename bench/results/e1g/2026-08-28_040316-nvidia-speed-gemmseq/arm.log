@@ -1,0 +1,4 @@
+arming a 60-minute self-kill on pod uml6wfmoorwck6 ...
+ARMED. Pod uml6wfmoorwck6 is TERMINATED through the API in 60 minutes.
+  lease: bench/results/runpod_leases_D/uml6wfmoorwck6.lease
+  extend with: tools/runpod_guard.sh extend uml6wfmoorwck6 '-p 15585 root@216.243.220.221' <minutes>

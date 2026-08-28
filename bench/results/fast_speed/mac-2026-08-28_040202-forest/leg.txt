@@ -1,0 +1,13 @@
+family=forest
+commit=a8d838e parent 62e864a
+rounds=3
+size=shipped
+device=Apple_M4
+started=2026-08-28T08:02:02Z
+forest_py=/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/gbmbench/bin/python
+arm_exit forest.gbdt-symmetric.log=0
+arm_exit forest.gbdt-depthwise.log=0
+arm_exit forest.gbdt-lossguide.log=0
+arm_exit forest.rf.log=0
+arm_exit forest.et.log=0
+arm_exit forest.iforest.log=0

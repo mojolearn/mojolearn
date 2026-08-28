@@ -1,0 +1,20 @@
+FSPEED-NOTE lane=et arms=ours metric=devices delta=1.000000 reason=devices=cpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+FSPEED-REFUSED lane=et arm=cuml-et-gpu reason=ModuleNotFoundError: No module named 'cuml'
+FSPEED-HEADER family=forest lane=et arm=ours mode=FAST device=Darwin_arm64 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=et arm=sklearn-et-cpu mode=FAST device=Darwin_arm64 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=et arm=lightgbm-cpu mode=FAST device=Darwin_arm64 rounds=3 size=shipped
+FSPEED-WARMUP lane=et arm=ours shape=covtype-522911x54 ms=9222.908
+FSPEED-WARMUP lane=et arm=sklearn-et-cpu shape=covtype-522911x54 ms=11308.375
+FSPEED-WARMUP lane=et arm=lightgbm-cpu shape=covtype-522911x54 ms=6636.495
+FSPEED lane=et arm=ours shape=covtype-522911x54 round=1 ms=9915.576 hash=9516ac844dc1228e
+FSPEED lane=et arm=sklearn-et-cpu shape=covtype-522911x54 round=1 ms=10896.473 hash=a660a67fe34b09c9
+FSPEED lane=et arm=lightgbm-cpu shape=covtype-522911x54 round=1 ms=6625.966 hash=fd371fb58677b768
+FSPEED lane=et arm=ours shape=covtype-522911x54 round=2 ms=9302.075 hash=9516ac844dc1228e
+FSPEED lane=et arm=sklearn-et-cpu shape=covtype-522911x54 round=2 ms=11006.799 hash=a660a67fe34b09c9
+FSPEED lane=et arm=lightgbm-cpu shape=covtype-522911x54 round=2 ms=6398.072 hash=fd371fb58677b768
+FSPEED lane=et arm=ours shape=covtype-522911x54 round=3 ms=9826.842 hash=9516ac844dc1228e
+FSPEED lane=et arm=sklearn-et-cpu shape=covtype-522911x54 round=3 ms=11513.837 hash=a660a67fe34b09c9
+FSPEED lane=et arm=lightgbm-cpu shape=covtype-522911x54 round=3 ms=8229.048 hash=fd371fb58677b768
+FSPEED-ACC lane=et arm=ours metric=accuracy value=0.679592
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=accuracy value=0.676804
+FSPEED-ACC lane=et arm=lightgbm-cpu metric=accuracy value=0.541712

@@ -1,0 +1,13 @@
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=cpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=FAST device=Darwin_arm64 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-cpu mode=FAST device=Darwin_arm64 rounds=3 size=shipped
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=year-463715x90 ms=2376.059
+FSPEED-WARMUP lane=gbdt-symmetric arm=catboost-cpu shape=year-463715x90 ms=2111.800
+FSPEED lane=gbdt-symmetric arm=ours shape=year-463715x90 round=1 ms=1901.922 hash=2868341a9401e697
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=year-463715x90 round=1 ms=1999.346 hash=6ecb58fe0b522afa
+FSPEED lane=gbdt-symmetric arm=ours shape=year-463715x90 round=2 ms=1931.296 hash=2868341a9401e697
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=year-463715x90 round=2 ms=2197.476 hash=6ecb58fe0b522afa
+FSPEED lane=gbdt-symmetric arm=ours shape=year-463715x90 round=3 ms=2031.870 hash=2868341a9401e697
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=year-463715x90 round=3 ms=2729.256 hash=6ecb58fe0b522afa
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=rmse value=9.215942
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-cpu metric=rmse value=9.230145

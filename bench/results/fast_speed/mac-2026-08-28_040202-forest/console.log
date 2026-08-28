@@ -1,0 +1,30 @@
+
+=== forest.gbdt-symmetric.log :: /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/gbmbench/bin/python bench/speed/forest_speed_arm.py --lane gbdt-symmetric ===
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=year-463715x90 round=3 ms=2729.256 hash=6ecb58fe0b522afa
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=rmse value=9.215942
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-cpu metric=rmse value=9.230145
+
+=== forest.gbdt-depthwise.log :: /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/gbmbench/bin/python bench/speed/forest_speed_arm.py --lane gbdt-depthwise ===
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=year-463715x90 round=3 ms=4189.724 hash=6aa4425d40e37a74
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=rmse value=9.086366
+FSPEED-ACC lane=gbdt-depthwise arm=catboost-cpu metric=rmse value=9.104583
+
+=== forest.gbdt-lossguide.log :: /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/gbmbench/bin/python bench/speed/forest_speed_arm.py --lane gbdt-lossguide ===
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=rmse value=9.091499
+FSPEED-ACC lane=gbdt-lossguide arm=catboost-cpu metric=rmse value=9.126961
+FSPEED-ACC lane=gbdt-lossguide arm=lightgbm-cpu metric=rmse value=9.085702
+
+=== forest.rf.log :: /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/gbmbench/bin/python bench/speed/forest_speed_arm.py --lane rf ===
+FSPEED-ACC lane=rf arm=ours metric=accuracy value=0.707750
+FSPEED-ACC lane=rf arm=sklearn-rf-cpu metric=accuracy value=0.709506
+FSPEED-ACC lane=rf arm=lightgbm-cpu metric=accuracy value=0.601831
+
+=== forest.et.log :: /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/gbmbench/bin/python bench/speed/forest_speed_arm.py --lane et ===
+FSPEED-ACC lane=et arm=ours metric=accuracy value=0.679592
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=accuracy value=0.676804
+FSPEED-ACC lane=et arm=lightgbm-cpu metric=accuracy value=0.541712
+
+=== forest.iforest.log :: /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/gbmbench/bin/python bench/speed/forest_speed_arm.py --lane iforest ===
+FSPEED lane=iforest arm=sklearn-iforest-cpu shape=anomaly-500000x32 round=3 ms=145.245 hash=e73871a3ebb1aae1
+FSPEED-ACC lane=iforest arm=ours metric=auc value=1.000000
+FSPEED-ACC lane=iforest arm=sklearn-iforest-cpu metric=auc value=1.000000

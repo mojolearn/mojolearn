@@ -1,0 +1,14 @@
+FSPEED-NOTE lane=iforest arms=ours metric=devices delta=1.000000 reason=devices=cpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+FSPEED-REFUSED lane=iforest arm=cuml-iforest-gpu reason=ModuleNotFoundError: No module named 'cuml'
+FSPEED-HEADER family=forest lane=iforest arm=ours mode=FAST device=Darwin_arm64 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=iforest arm=sklearn-iforest-cpu mode=FAST device=Darwin_arm64 rounds=3 size=shipped
+FSPEED-WARMUP lane=iforest arm=ours shape=anomaly-500000x32 ms=772.255
+FSPEED-WARMUP lane=iforest arm=sklearn-iforest-cpu shape=anomaly-500000x32 ms=162.816
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=1 ms=230.444 hash=d62cbc1f23e3cbee
+FSPEED lane=iforest arm=sklearn-iforest-cpu shape=anomaly-500000x32 round=1 ms=147.265 hash=e73871a3ebb1aae1
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=2 ms=216.375 hash=d62cbc1f23e3cbee
+FSPEED lane=iforest arm=sklearn-iforest-cpu shape=anomaly-500000x32 round=2 ms=154.044 hash=e73871a3ebb1aae1
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=3 ms=219.910 hash=d62cbc1f23e3cbee
+FSPEED lane=iforest arm=sklearn-iforest-cpu shape=anomaly-500000x32 round=3 ms=145.245 hash=e73871a3ebb1aae1
+FSPEED-ACC lane=iforest arm=ours metric=auc value=1.000000
+FSPEED-ACC lane=iforest arm=sklearn-iforest-cpu metric=auc value=1.000000

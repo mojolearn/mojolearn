@@ -1,0 +1,21 @@
+FSPEED-NOTE lane=gbdt-lossguide arms=ours metric=devices delta=1.000000 reason=devices=cpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+FSPEED-REFUSED lane=gbdt-lossguide arm=xgboost-cpu reason=ModuleNotFoundError: No module named 'xgboost'
+FSPEED-REFUSED lane=gbdt-lossguide arm=xgboost-gpu reason=ModuleNotFoundError: No module named 'xgboost'
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours mode=FAST device=Darwin_arm64 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=catboost-cpu mode=FAST device=Darwin_arm64 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=lightgbm-cpu mode=FAST device=Darwin_arm64 rounds=3 size=shipped
+FSPEED-WARMUP lane=gbdt-lossguide arm=ours shape=year-463715x90 ms=8337.984
+FSPEED-WARMUP lane=gbdt-lossguide arm=catboost-cpu shape=year-463715x90 ms=5392.276
+FSPEED-WARMUP lane=gbdt-lossguide arm=lightgbm-cpu shape=year-463715x90 ms=3510.354
+FSPEED lane=gbdt-lossguide arm=ours shape=year-463715x90 round=1 ms=8660.290 hash=cddaf3167ed7d5a8
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=year-463715x90 round=1 ms=5306.061 hash=068100038b41b984
+FSPEED lane=gbdt-lossguide arm=lightgbm-cpu shape=year-463715x90 round=1 ms=3528.623 hash=284ae9f4c4099ffe
+FSPEED lane=gbdt-lossguide arm=ours shape=year-463715x90 round=2 ms=8324.922 hash=cddaf3167ed7d5a8
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=year-463715x90 round=2 ms=5894.057 hash=068100038b41b984
+FSPEED lane=gbdt-lossguide arm=lightgbm-cpu shape=year-463715x90 round=2 ms=3886.938 hash=284ae9f4c4099ffe
+FSPEED lane=gbdt-lossguide arm=ours shape=year-463715x90 round=3 ms=9373.657 hash=cddaf3167ed7d5a8
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=year-463715x90 round=3 ms=6581.007 hash=068100038b41b984
+FSPEED lane=gbdt-lossguide arm=lightgbm-cpu shape=year-463715x90 round=3 ms=4320.358 hash=284ae9f4c4099ffe
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=rmse value=9.091499
+FSPEED-ACC lane=gbdt-lossguide arm=catboost-cpu metric=rmse value=9.126961
+FSPEED-ACC lane=gbdt-lossguide arm=lightgbm-cpu metric=rmse value=9.085702
