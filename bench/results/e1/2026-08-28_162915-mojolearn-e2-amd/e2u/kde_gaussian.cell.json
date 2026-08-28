@@ -1,0 +1,13 @@
+{
+  "card": "kde_gaussian.card",
+  "kind": "kde",
+  "log_density": "5f2cdde3d6fdf0d724086828a58540e5e917546d807cde2e3dd215e8bd792b3a",
+  "n_sentinel": 0,
+  "score": -143984.52980041504,
+  "seconds": 0.6,
+  "spec": {
+    "bandwidth": 8.0,
+    "kernel": "gaussian"
+  },
+  "stages": 7
+}

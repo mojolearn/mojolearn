@@ -1,0 +1,13 @@
+{
+  "card": "et_clf_minleaf5.card",
+  "kind": "et_clf",
+  "model": "7930f70b089d736f882ee84214bc1a15d52c771d0347f4a97b4b1221cb633262",
+  "predictions": "fa99bcb1e8ca3232802e7cef01d2252e108229c3dc9a6e485ad10dfe1d3c86e2",
+  "seconds": 0.11,
+  "spec": {
+    "max_depth": 8,
+    "min_samples_leaf": 5,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

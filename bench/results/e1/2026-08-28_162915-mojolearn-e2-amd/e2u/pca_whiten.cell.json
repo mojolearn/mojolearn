@@ -1,0 +1,9 @@
+{
+  "kind": "pca",
+  "refused": "NotImplementedError: mojolearn PCA: whiten=True is refused; the whitening rescale of the components (and its inverse on inverse_transform) is not ported, and an unwhitened transform returned for whiten=True would be a wrong answer",
+  "seconds": 0.0,
+  "spec": {
+    "n_components": 2,
+    "whiten": true
+  }
+}

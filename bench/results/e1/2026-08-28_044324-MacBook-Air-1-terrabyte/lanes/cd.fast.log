@@ -1,0 +1,67 @@
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/solver/cd_main.mojo:35:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/solver/cd_main.mojo:38:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/solver/ported/solver/cd.mojo:119:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/solver/ported/functions/linear_reg.mojo:31:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:434:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            tile[ty * (TRANSPOSE_TILE + 1) + tx] = src.unsafe_load(
+            ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/solver/cd_main.mojo:38:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/solver/ported/solver/cd.mojo:119:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/solver/ported/functions/linear_reg.mojo:31:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:443:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                r2 * n_rows + c2, tile[tx * (TRANSPOSE_TILE + 1) + ty]
+                                  ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/solver/cd_main.mojo:35:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/solver/cd_main.mojo:35:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/solver/cd_main.mojo:35:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/solver/cd_main.mojo:35:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+== solver/cd_main.mojo [FAST] ==
+[FAST] n_rows=2048 n_cols=16 alpha=0.01 l1_ratio=1.0 fit_intercept=True epochs=1000 tol=0.001 shuffle=false
+[FAST] n_iter=3 intercept=0.0016416628 0x3ad72d10
+[FAST]   coef[0] device 0.0 0x00000000  oracle 0x00000000  planted 0.0
+[FAST]   coef[1] device 2.6655917 0x402a990e  oracle 0x402a990e  planted 2.7928357
+[FAST]   coef[2] device 0.0 0x00000000  oracle 0x00000000  planted 0.0
+[FAST]   coef[3] device 0.0 0x00000000  oracle 0x00000000  planted 0.0
+[FAST]   coef[4] device 0.0 0x00000000  oracle 0x00000000  planted 0.0
+[FAST]   coef[5] device -2.6481361 0xc0297b10  oracle 0xc0297b10  planted -2.7747676
+[FAST]   coef[6] device 0.0 0x00000000  oracle 0x00000000  planted 0.0
+[FAST]   coef[7] device 0.0 0x00000000  oracle 0x00000000  planted 0.0
+[FAST]   coef[8] device 0.0 0x00000000  oracle 0x00000000  planted 0.0
+[FAST]   coef[9] device -1.8202679 0xbfe8fe8a  oracle 0xbfe8fe88  DIFFERS  planted -1.9448184
+[FAST]   coef[10] device 0.0 0x00000000  oracle 0x00000000  planted 0.0
+[FAST]   coef[11] device 0.0 0x00000000  oracle 0x00000000  planted 0.0
+[FAST]   coef[12] device 0.0 0x00000000  oracle 0x00000000  planted 0.0
+[FAST]   coef[13] device -1.5964557 0xbfcc58a9  oracle 0xbfcc58a7  DIFFERS  planted -1.7165444
+[FAST]   coef[14] device 0.0 0x00000000  oracle 0x00000000  planted 0.0
+[FAST]   coef[15] device 0.0 0x00000000  oracle 0x00000000  planted 0.0
+[FAST] oracle: n_iter=3 intercept 0x3ad72d10; coefficients differing from the device: 2 of 16  (FAST: a report)
+[FAST] planted support recovered: True
+[FAST] predict: training MSE 0.005803874023853638 (noise variance 0.1^2/12 = 0.000833)
+[FAST] card written to /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e1/2026-08-28_044324-MacBook-Air-1-terrabyte/lanes/cd.fast.card

@@ -1,0 +1,10 @@
+{
+  "kind": "dbscan",
+  "refused": "Exception: weak_cc_batched: label propagation did not converge in 1 passes. Under NUMERIC_IDENTICAL a truncated propagation is refused rather than returned: its labels are a snapshot of the atomic order on THIS machine, not a function of the graph. Raise max_iterations.",
+  "seconds": 0.33,
+  "spec": {
+    "eps": 0.3,
+    "max_iterations": 1,
+    "min_samples": 5
+  }
+}

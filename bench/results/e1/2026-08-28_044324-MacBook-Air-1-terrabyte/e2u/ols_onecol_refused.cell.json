@@ -1,0 +1,6 @@
+{
+  "kind": "ols",
+  "refused": "Exception: olsFit: n_cols == 1 selects lstsqSvdJacobi (ols.cuh:113), which is NOT PORTED. cuML forces the same switch and says the eig solver does not support a single column (linear_regression.pyx:390). See glm/UNPORTED.tsv",
+  "seconds": 0.02,
+  "spec": {}
+}

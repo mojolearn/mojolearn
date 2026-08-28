@@ -1,0 +1,13 @@
+{
+  "card": "rf_reg_poisson.card",
+  "kind": "rf_reg",
+  "model": "0721ad9a85a0ab4aee46c82e498de806d0a6f7f9c5001bf8e0ecc58999da4b33",
+  "predictions": "5a759bb6051a722a299f9e4ecb75322388b30e531a3645acd7341de7c0949feb",
+  "seconds": 0.43,
+  "spec": {
+    "criterion": "poisson",
+    "max_depth": 8,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

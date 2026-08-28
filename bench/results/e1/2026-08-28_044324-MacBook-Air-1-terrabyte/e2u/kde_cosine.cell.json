@@ -1,0 +1,13 @@
+{
+  "card": "kde_cosine.card",
+  "kind": "kde",
+  "log_density": "6b8cacc86b5b0e0104bf18b2dbc1ba79f076bc2655d4df636ad4213f78962f61",
+  "n_sentinel": 0,
+  "score": -81928.53331375122,
+  "seconds": 1.74,
+  "spec": {
+    "bandwidth": 8.0,
+    "kernel": "cosine"
+  },
+  "stages": 7
+}

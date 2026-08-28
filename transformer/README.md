@@ -10,12 +10,38 @@ is a Llama-shaped decoder layer, EAGER attention path only, pinned to
 huggingface/transformers `d56c55b`. Changing any seam decision, any frozen
 constant or the stage list creates a v2; it does not amend v1.
 
-**Status: NOT STARTED beyond this document.** Two files exist,
-`IDENTICAL_TRANSFORMER_CONTRACT.md` and this one, plus three empty
-`__init__.mojo`. There is no oracle, no fixture, no device kernel, no gate,
-no card, no sabotage and no number. Nothing in this lane has been compiled or
-run on any device, on any vendor. Every line number in the contract came
-from reading source on 2026-08-24.
+**Status, 2026-08-28: BUILT, GATED, AND IN PHASE 8 ON THREE COLUMNS.**
+`mojo_only/` holds `transformer_check.mojo`, `transformer_oracle.mojo`,
+`transformer_fixture.mojo` and the backward triple; the lane has thirteen
+sabotage arms and a 30-stage identity card in contract section 9's order.
+
+Measured on the M4:
+
+- clause (a) PASS -- 13 fixture cases, 30/30 stages bit-identical to the host
+  oracle on all 262,634 cells, 30/30 card tags.
+- clause (d) PASS under IDENTICAL -- 4 decode steps bit-identical to the
+  prefill on all 11,632 compared cells, with a control showing 57 misaligned
+  stage comparisons that DO differ. **It FAILS under FAST** (91 stage-tokens,
+  first at token 0 `q_proj.out` on 26 of 32 cells), which is not a defect:
+  contract section 7.2 makes decode == prefill true by construction for the
+  IDENTICAL profile and FAST promises none of it. `tools/e1_bootstrap.sh`
+  therefore runs clause (d) on the identical arm only.
+- clauses (b) and (c) are opt-in and not yet run in a round.
+- clause (e), the section 8 planted audit, is OFF and it is a defect in the
+  clause: it aborts the driver on its first plant because
+  `LlamaDeviceWeights` refuses at UPLOAD while the clause's `try` wraps only
+  the later forward call. Fix the `try`, then turn it on.
+
+**The paragraph that stood here until 2026-08-28 said "NOT STARTED beyond
+this document ... no oracle, no fixture, no device kernel, no gate, no card,
+no sabotage and no number", and it was false for days.** It is deleted rather
+than annotated. What it cost is worth one line: the lane was reported as
+uncovered in a cross-vendor status review while its check driver had honoured
+`MOJOLEARN_IDENTITY_TRACE` since DEVIATION 1101 and its own docstring said
+`tools/e1_bootstrap.sh` phase 8 sets it. A lane built to be in the round, and
+left out of the round, because the file describing it was never re-read.
+
+Every line number in the contract came from reading source on 2026-08-24.
 
 ## What this lane is NOT rebuilding
 

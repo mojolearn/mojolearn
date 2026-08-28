@@ -1,0 +1,204 @@
+
+=== phase 0: which column did this build resolve to ===
+arm kmeans
+mode IDENTICAL
+column 1 lane_width 32
+
+=== phase 1: vendor characterization (row 10's precondition) ===
+/Users/andrewhendel/CascadeProjects/mojolearn/mojo_only/ieee_arith_check.mojo:119:8: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    a: UnsafePointer[Float32, MutAnyOrigin],
+       ^~~~~~~~~~~~~
+       Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn/mojo_only/ieee_arith_check.mojo:120:8: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    b: UnsafePointer[Float32, MutAnyOrigin],
+       ^~~~~~~~~~~~~
+       Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn/mojo_only/ieee_arith_check.mojo:121:8: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    c: UnsafePointer[Float32, MutAnyOrigin],
+       ^~~~~~~~~~~~~
+       Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn/mojo_only/ieee_arith_check.mojo:122:11: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    outp: UnsafePointer[Float32, MutAnyOrigin],
+          ^~~~~~~~~~~~~
+          Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn/mojo_only/ieee_arith_check.mojo:136:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var o = outp + i * SZ_OUTS
+            ~~~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+  div mismatch: a= 0x349f331c  b= 0xff7b2147  device= 0x80000000  ref= 0x80000001
+  div mismatch: a= 0x2485f666  b= 0x67cb9788  device= 0x0  ref= 0x5439
+  div mismatch: a= 0x29c22b  b= 0x211bd185  device= 0x0  ref= 0x1e093690
+  sqrt mismatch: a= 0x29c22b  device= 0x0  ref= 0x1f92385d
+  div mismatch: a= 0x96055769  b= 0x56393be5  device= 0x80000000  ref= 0x8017090c
+  div mismatch: a= 0x3394cb38  b= 0xf35aee1b  device= 0x80000000  ref= 0x802b7f3c
+  div mismatch: a= 0x58aa2e  b= 0x8b08c845  device= 0x80000000  ref= 0xb4a5f19f
+  sqrt mismatch: a= 0x58aa2e  device= 0x0  ref= 0x1fd51070
+  a*b+c neither: a= 0x8ffd42c7  b= 0xa9a01896  c= 0x5480ef  device= 0x0  unfused= 0x5485e2  fused= 0x5485e2
+  sqrt mismatch: a= 0x704f31  device= 0x0  ref= 0x1fefcbea
+  a*b+c neither: a= 0x591b48  b= 0xe9a4a26f  c= 0x26ececff  device= 0x26ececff  unfused= 0xaa635e36  fused= 0xaa635e36
+  a*b+c neither: a= 0x6a33dd18  b= 0x8075067a  c= 0xba7be32  device= 0xba7be32  unfused= 0xab247132  fused= 0xab247132
+ieee arith, 1048576 hashed patterns:
+  div 48904 wrong;  sqrt 4137 wrong;  L2 score shape 49501 wrong;  cosine shape 46008 wrong
+  a*b+c: unfused 1046394  fused 0  neither 2182  (ties where both references agree count as unfused)
+  a*b+c SEPARATING patterns (the two references differ): 0  of which device fused 0  unfused 0  neither 0
+  a*b+c BUILT-TO-SEPARATE patterns: 1629  device fused 1629  unfused 0  neither 0
+  ftz model: reproduces 53041 of 53041 div/sqrt divergences bit-for-bit
+  denormal-involved:  div 48904 of 48904   sqrt 4137 of 4137   neither 2182 of 2182
+  signed-zero table (ARM 7), device bits per case,
+    cols: a+b b+a a-b a*b a/b sqrt(a) 0-a -a |a| a*0 a+0 max min fma == <
+    case 0: 0x0 0x0 0x0 0x80000000 0x7fc00000 0x0 0x0 0x80000000 0x0 0x0 0x0 0x80000000 0x80000000 0x0 0x3f800000 0x0
+    case 1: 0x0 0x0 0x80000000 0x80000000 0x7fc00000 0x80000000 0x0 0x0 0x0 0x80000000 0x0 0x0 0x0 0x0 0x3f800000 0x0
+    case 2: 0x80000000 0x80000000 0x0 0x0 0x7fc00000 0x80000000 0x0 0x0 0x0 0x80000000 0x0 0x80000000 0x80000000 0x0 0x3f800000 0x0
+    case 3: 0x0 0x0 0x0 0x0 0x7fc00000 0x0 0x0 0x80000000 0x0 0x0 0x0 0x0 0x0 0x0 0x3f800000 0x0
+    case 4: 0x3f800000 0x3f800000 0x3f800000 0x80000000 0xff800000 0x3f800000 0xbf800000 0xbf800000 0x3f800000 0x0 0x3f800000 0x3f800000 0x80000000 0x0 0x0 0x0
+    case 5: 0x3f800000 0x3f800000 0xbf800000 0x80000000 0x80000000 0x80000000 0x0 0x0 0x0 0x80000000 0x0 0x3f800000 0x80000000 0x80000000 0x0 0x3f800000
+    case 6: 0xc0400000 0xc0400000 0xc0400000 0x80000000 0xff800000 0x7fc00000 0x40400000 0x40400000 0x40400000 0x80000000 0xc0400000 0x0 0xc0400000 0x80000000 0x0 0x3f800000
+    case 7: 0xc0400000 0xc0400000 0x40400000 0x80000000 0x80000000 0x0 0x0 0x80000000 0x0 0x0 0x0 0x0 0xc0400000 0x0 0x0 0x0
+    case 8: 0x80000000 0x80000000 0x1200000 0x80000000 0xbf2aaaab 0x20000000 0x80800000 0x80800000 0x800000 0x0 0x800000 0x800000 0x80c00000 0x80000000 0x0 0x0
+    case 9: 0x80800000 0x80800000 0x80800000 0x80000000 0xff800000 0x7fc00000 0x800000 0x800000 0x800000 0x80000000 0x80800000 0x600000 0x80800000 0x80000000 0x0 0x3f800000
+    case 10: 0xbf800000 0xbf800000 0xbf800000 0x80000000 0xff800000 0x7fc00000 0x3f800000 0x3f800000 0x3f800000 0x80000000 0xbf800000 0x0 0xbf800000 0x80000000 0x0 0x3f800000
+    case 11: 0x3f800000 0x3f800000 0x3f800000 0x80000000 0xff800000 0x3f800000 0xbf800000 0xbf800000 0x3f800000 0x0 0x3f800000 0x3f800000 0x80000000 0x0 0x0 0x0
+    case 12: 0x3f800000 0x3f800000 0xbf800000 0x80000000 0x80000000 0x80000000 0x0 0x0 0x0 0x80000000 0x0 0x3f800000 0x80000000 0x0 0x0 0x3f800000
+    case 13: 0x0 0x0 0x81000000 0x80000000 0xbf800000 0x7fc00000 0x800000 0x800000 0x800000 0x80000000 0x80800000 0x800000 0x80800000 0x80000000 0x0 0x3f800000
+    case 14: 0x0 0x0 0x1a800000 0x80000000 0xbf800000 0x2cb504f3 0x9a000000 0x9a000000 0x1a000000 0x0 0x1a000000 0x1a000000 0x9a000000 0x80000000 0x0 0x0
+    case 15: 0x80000000 0x80000000 0x0 0x0 0x7fc00000 0x80000000 0x0 0x0 0x0 0x80000000 0x0 0x80000000 0x80000000 0x0 0x3f800000 0x0
+  signed-zero arm: IEEE-specified mismatches 0  subnormal results kept 0  flushed (signed) 6  NaN results 9 with payload 0x7fc00000  max/min(+0,-0) recorded: max(+0,-0) = 0x80000000 min(+0,-0) = 0x80000000 max(-0,+0) = 0x0 min(-0,+0) = 0x0
+  signed-zero arm hash: 12832708934203007326
+ieee arith check OK: correctly rounded ON NORMALS, with FLUSH-TO-ZERO on denormal operands, intermediates and results -- record this backend's column as IEEE+FTZ
+  contraction: a*b+c is FUSED -- read off the 1629 patterns that SEPARATE the two spellings, never the tie-dominated totals above on this backend
+
+=== phase 1b: the portable transcendental certificate ===
+portable_expf max ulp vs float64 ref: 1
+portable_logf max ulp vs float64 ref: 1
+translog device hash = 8705486125800438413
+device == host on every lane; both arms OK
+portable_sqrtf mismatches vs correctly-rounded float64 ref: 0 of 1048576
+portable_cosf max ulp vs float64 ref: |x|<2pi 2  |x|<8192 8
+portable_powf max ulp vs float64 exp(p*log x): 26
+sqrtcos device hash = 12295913102197186379
+device == host on every lane; all arms OK
+
+=== phase 2: the local gates, IDENTICAL ===
+--- cluster/mojo_only/kmeans_identity_check.mojo
+check_float_fold_rows_are_pinned OK (IDENTICAL): the three float-fold rows resolve to 128 in every column, and the three integer rows are left free
+check_pinned_fold_shape OK (IDENTICAL): device == host halving tree exactly, and the fixture separates it from a sequential fold ( 584535.1 vs 584535.25 )
+check_fused_contraction_pin OK (IDENTICAL): 256 rows match the one-rounding oracle bit for bit. This backend CONTRACTS the naive spelling too (0 of 256 rows separate the arms), so the pin is bit-inert here and buys its property on a backend that does not.
+check_assignment_geometry_invariance OK (IDENTICAL): 512 assignments bit-identical at grid_y 1/2/5/8, with 16 of them decided by the (value, key) tie-break
+check_kmeans_trace_localizes OK (IDENTICAL): two runs agree on every stage hash; 1024 ULPs on one cell of X first show at fit.x_norm
+--- neighbors/mojo_only/knn_identity_check.mojo
+check_knn_tie_set_is_lowest_index OK (IDENTICAL): four equidistant candidates, two slots, and the composite key returns the two LOWEST indices 5 and 100 -- arithmetic, not arrival order
+check_knn_tiled_is_query_tile_invariant OK (IDENTICAL): 12 slots bit-identical at query_tile 1, 2 and 3
+check_knn_fused_tie_set_is_geometry_invariant OK (IDENTICAL): the fused arm returned the same tie set 5 / 900 at 1, 40 and 2,000 identical queries, every row agreeing with row 0
+check_knn_auto_arm_is_pinned OK (IDENTICAL): AUTO == TILED at 53 and 2,000 queries, so the arm no longer depends on the query count
+--- dbscan/mojo_only/dbscan_identity_check.mojo
+check_dbscan_batch_count_invariance OK (IDENTICAL): 1020 labels bit-identical at 1/6/3/1 BATCHES (read from the runner's own trace header; 2/12/6/2 propagation passes), with 6 border points and 14 noise points in the bridge
+check_dbscan_arms_agree_on_the_border OK (IDENTICAL): 1020 labels identical through the ball-cover index and through brute force
+check_dbscan_refuses_truncated_propagation OK (IDENTICAL): a propagation cut off at one pass is refused, not returned
+--- cluster/kmeans_main.mojo
+check_reach_by_sabotage OK: centroid_norm moved 384/512 labels; x_norm moved 512 distances and 0 labels, which is the predicted shape
+check_kmeans_fit OK: 4/4 centroids matched as a permutation, 0/512 rows misassigned, inertia 168.9921875 vs expected 171.19361649473004 (rel 0.012859293703850253), 2 iterations
+check_device_inclusive_scan OK: 20000 entries, worst relative error 0.0, past one block's worth
+check_kmeans_plus_plus_init OK: 4/4 centroids recovered as a permutation through the k-means++ path, inertia 168.9921875, 2 iterations
+check_scalable_sampling_selection OK: 6/4000 drawn exactly as the host replay predicts (order, flags, count); zeroing 1/3 of the costs moved the selection to exactly baseline-minus-zeroed (4), 2 rows vanished as predicted
+check_scalable_kmeans_plus_plus_init OK: DEFAULT config (oversampling_factor=2.0) ran end to end, 4/4 centroids as a permutation, 0/512 rows misassigned, inertia 168.9921875 vs expected 171.19361649473004 (rel 0.012859293703850253), run-twice bitwise equal, 2 iterations
+check_scalable_supplement_branch OK: oversampling_factor=1e-9 starves every round, the < k supplement arm ran and landed in a worse basin as predicted (inertia 1280091.5 vs default-arm 168.0390625), run-twice bitwise equal, labels in range
+check_fused_reduction_across_lanes OK: 512 rows x 40 clusters match a host argmin, winners spread over 16 owner lanes
+check_assignment_arm_dispatch OK: fused arm proved (0/32768 tile cells written; unfused sabotage overwrote 32768); no output poison survived either arm; arms agree on all labels; min_dist vs the Float64 oracle, magnitude-relative: fused worst 1.086621511174374e-07 (budget 1e-05, fp32), unfused worst 1.086621511174374e-07 (budget 1e-05, fp32); 512/512 rows bit-equal across arms
+check_assignment_arms_match_oracle OK: 512 rows x 64 clusters x 32 features hashed in [-1, 1), both arms vs a Float64 oracle (argmin and value), no poison survived; fused worst 1.2952859800503224e-07 of the operand magnitude (budget 1e-05, fp32), 0 near-tie labels excused; unfused worst 1.2952859800503224e-07 (budget 1e-05, fp32), 0 near-tie labels excused. SABOTAGE: the fused arm on operands rounded to 10 mantissa bits (16380 of 16384 moved) lands worst 0.00014118053544158967 with 0 labels re-decided -- REJECTED by the fp32 budget, ADMITTED by the TF32 bound 0.00101, so the two budgets separate a TF32-class arm from an fp32 one on this box (column apple, compute capability 4)
+check_fused_policy_dispatch OK: selection pinned (4/2/1 by k and alignment, skinny at k<32), bench alignment k=32 takes veclen 4 on real buffers, scalar and 2-wide arms correct through the launcher with the m grid-stride exercised
+check_privatized_accumulate OK: 2048 sum cells + 64 weight cells bit-identical direct vs privatized, run-twice bitwise equal, dropped flush moved 352 cells, veclen=4 read arm pinned
+check_accumulate_veclen_dispatch OK: scalar read arm reached-and-correct at d=33, 2-wide arm at d=34, 4-wide arm pinned in check_privatized_accumulate
+check_plan_sum_scale: OK (worst column, row count reaches choose_scale, scale is 4.0 x finer than blanket)
+check_kmeans_fit_recovers_planted: OK (4 clusters, 512 rows, all labels consistent, centroids within 1.0; n_iter 2 sum_scale 8192.0 )
+check_kmeans_fit_weight_arms_agree: OK (unit and all-ones-supplied arms bit-identical in centroids, labels, n_iter and weight_scale)
+check_kmeans_fit_rejects_bad_shapes: OK (3 of 3 refusals fired)
+--- neighbors/knn_main.mojo
+check_hardware_matrix OK: apple column = the old constants bit-for-bit (10 cores, 3072 threads/core, 32 KB wall, occupancy 12); nvidia resolves 108/2048/48KB wall/164K partition -> 8 blocks; amd resolves 110/2048/64K partition -> 3 blocks (LDS term binding); readers (TARGET_GPU_CORES, max_active_blocks_per_core, gram chunk count = 128, gram dispatch, fused_l2_knn_grid) all agree with the table; build column apple; identity floor frozen at profile 1 (32 KB / 32 lanes / block 512): all 6 vendor columns meet it, the portable baseline is REFUSED, apple/nvidia/amd smem modes unchanged by the budget rewrite
+check_knn OK: 64 queries x k=8 over 4096 index points, every returned neighbor is in the exact true set
+check_knn_reach_by_sabotage OK: index_norm moved 512/512 neighbors; query_norm offset moved 0 sets, which is the predicted shape
+check_vendor_topk_matches_ported OK: nn.topk.top_k and the ported RAFT radix select agree on all 512 neighbours
+check_fused_l2_knn OK: k = 1, 8, 32, 64 over 53 queries x 4093 index x 20 features, every slot matches the host Float64 oracle in order, and is_sqrt is exactly one square root away
+check_fused_edge_shapes OK: k = 1, 32, 33, 64 over 17 queries x 1013 index x 13 features -- a partial tile on Mblk, Nblk and Kblk at once, and both WarpSelect instantiations
+check_fused_reach_by_sabotage OK: index_norm ramp moved 424/424 neighbours and 424 distances; query_norm offset moved 0, which is the predicted shape
+check_fused_queue_reach_by_sabotage OK: a co-located point planted at index column 3971 for query 0 came back at rank 0 at exactly 0.0, shifted that row's tail by exactly one, and moved no other row
+check_fused_k_ceiling OK: k = 64 accepted, k = 65 refused with their ASSERT message
+check_dispatch_takes_fused OK: with KNN_METHOD_FUSED, k=8 wrote out_idx and left out_idx32 at its sentinel and k=65 did the opposite, so the `k <= 64` branch at knn_brute_force.cuh:443 is wired both ways; with the argument omitted, the AUTO default took TILED on BOTH shapes, which is DEVIATION 509's pin (the arm may not depend on the query count when the two arms break ties differently, and the FUSED arm 502 used to pin to refuses outright on a 64-lane column)
+check_launch_config_values OK: bench shape (2,000 q) computes grid (1, 120); 1,904 q is the smallest-split boundary (2, 119); 53 q gives (16, 4) with the x-chunk cap binding; 640 q gives (3, 40) with the occupancy term binding; 32 KB wall raises
+check_fused_griddimx_merge OK: computed grid (16, 4) matches the oracle per slot at k=10; poisoning the last producer moved 150 slots; forced grid_x=5 with a partial last x-tile is exact; grid_x=1 ignores the sabotage entirely
+check_fused_griddimx_one_capped_y OK: 2,000 queries x 1,013 index ran at computed grid (1, 120) -- 125 row tiles over 120 blocks, so the new outer grid-stride loop carried five blocks to a second tile -- and every slot matches the host oracle in order
+check_plan_query_tile: OK (bench shape untouched, cap fires, floor holds, query clamp holds, clamp beats floor)
+check_knn_search_matches_host: OK (320 neighbours exact, worst distance error 1.3195489588224696e-06, query_tile=64)
+check_knn_search_arms_agree: OK (TILED, FUSED and AUTO all exact and identically ordered)
+check_getuniquelabels: OK (negative label, gap, repeats -> sorted set of 4; monotonic ranks as computed by hand)
+check_knn_classify_matches_host_transcription: OK (64 labels and 192 proba cells bit-identical to the host fold; labels {-1,0,1}, -1 predicted 25x, +1 14x)
+check_knn_classify_ties_go_to_lowest_class: OK (23 of 64 rows tied 2-2 at k=4; every one returned -1 and [0.5, 0.5])
+check_knn_classify_reach_by_sabotage: OK (row 2 moved 0 -> -1 on one flipped label; k=0 refused by name)
+check_knn_classify_multi_output_layout: OK (2 outputs x 64 rows equal the single-output answers; wrong class count refused)
+check_knn_classify_run_twice_identical: OK (labels and proba bit-identical across two predicts)
+check_knn_regress_matches_host_transcription: OK (64 predictions bit-identical to the host fold at k=5 and k=50)
+check_knn_regress_reach_by_sabotage: OK (row 0 moved by 200.00000113248825 on +1000 to its nearest target; 0 other rows hold that index, the rest did not move; k=0 refused)
+check_knn_regress_multi_output_layout: OK (2 outputs x 64 rows; column 0 equals the single-output answer, column 1 is its exact negation)
+check_knn_regress_run_twice_identical: OK (k=50, 64 predictions bit-identical across two predicts)
+--- dbscan/dbscan_main.mojo
+check_fused_eps_agrees_with_materialized OK: 31950 cells identical to the materialized path AND to a float64 host oracle (15298 of them neighbours, so the pattern is irregular), 150 degrees identical, vd[m] = 15298
+check_dbscan OK: 3/3 blobs each one whole cluster with ids exactly {0, 1, 2}, 0 merges, 12/12 isolated points labelled -1 as scikit-learn does, converged in 2 propagation passes
+check_dbscan_eps_sensitivity OK: eps=2 gives 3 clusters and eps=12 gives 1, which is impossible without the neighbourhood kernel running on real distances
+check_exclusive_scan_beyond_the_old_cap OK: 2000000 entries exact across 977 blocks, total 12000001
+check_dbscan_batching_agrees OK: 5 batches with 4 merge_labels folds give labels identical to one batch, in an adj buffer 4x smaller than the unbatched run needs
+check_dbscan_rbc_matches_brute OK: 612 points labelled identically by the ball-cover index and by brute force, 3 clusters
+check_dbscan_rbc_two_loop_arms OK: the one-pass arm (3 clusters) and the two-pass fallback (2 clusters) both label identically to unbatched brute force, and algo.cuh:119's guard provably selects each upstream arm
+check_dbscan_max_mbytes_moves_the_batch OK: 1 MB -> 19 batches and 1000 MB -> 1 batch at n = 1932; at n = 50000 the dbscan.cuh:71 gate keeps rbc at 50000 rows where brute clamps to 42949, and both agree at 309 rows when the clamp cannot bind
+check_dbscan_tiny_budget_agrees OK (rbc): max_mbytes_per_batch = 1 forced 19 batches (56 passes vs 2 for one batch) and all 1932 labels match one batch: 6 blobs whole with ids 0..5, 12 noise points at -1
+check_dbscan_tiny_budget_agrees OK (brute): max_mbytes_per_batch = 1 forced 19 batches (38 passes vs 2 for one batch) and all 1932 labels match one batch: 6 blobs whole with ids 0..5, 12 noise points at -1
+
+=== phase 3u: the cards ===
+--- kmeans
+arm kmeans
+mode IDENTICAL
+column 1 lane_width 32
+input.x 14006717752511810141
+input.centroids 2727533609010192784
+output.centroids 1636775608130736985
+output.labels 9543594618727214305
+done kmeans
+    77 stages
+--- knn
+arm knn
+mode IDENTICAL
+column 1 lane_width 32
+input.index 7900684798707350708
+input.queries 17351274754253287356
+query_tile 256
+output.distances 9794987834769335813
+output.indices 16793617586120664034
+done knn
+    6 stages
+--- dbscan
+arm dbscan
+mode IDENTICAL
+column 1 lane_width 32
+input.x 8706409177216062216
+batches 8 (device-dependent, NOT part of the claim)
+output.labels 14389807861238588709
+done dbscan
+    3 stages
+
+=== done ===
+artifacts in /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e1/2026-08-28_044324-MacBook-Air-1-terrabyte/e1u
+
+NEXT, on the machine that has BOTH directories:
+  for a in kmeans knn dbscan; do
+    diff <(grep '^input\.' A/$a.hashes) <(grep '^input\.' B/$a.hashes) \
+      || echo "$a: INPUTS DIFFER -- stop, the fixtures are not the same bytes"
+    python3 tools/identity_trace_diff.py A/$a.card B/$a.card
+  done
+
+Read the k-NN card knowing knn.out_dist/out_idx are PRE-SORT (an arm's
+internal order, which the two arms genuinely disagree about) and
+knn.sorted_dist/sorted_idx are what the caller gets. Sorted distances
+agreeing over sorted indices differing = the selector chose different
+members of an equidistant class, and nothing else diverged.

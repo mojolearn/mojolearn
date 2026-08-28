@@ -281,6 +281,59 @@ destroyed and verified gone by API). Judge: `tools/e3_round_judge.sh
 - AMD FAST gbdt build still the designed 32-lane refusal (recorded, as in
   rounds 9-10).
 
+## Round 12, commit `cc499f7` (2026-08-28): the round that recovered four dark phases
+
+**The AMD half is in; the NVIDIA half was still on the box when this was
+written and gets its own paragraph below rather than a blank in the table.**
+
+| family | cells / stages | Apple M4 vs AMD MI325X |
+|---|---|---|
+| decision trees (E2) | 116 cells | **109 IDENTICAL, 2 identical-no-card, 5 refused alike, 0 divergent** |
+| unsupervised + linear (E2U) | 93 cells | **71 IDENTICAL, 22 refused alike, 0 divergent** |
+| E1U cards (k-means 77, k-NN 6, DBSCAN 3) | 86 stages | **IDENTICAL** |
+| phase-8 lanes (gemm 60, metrics 61, svm 32, cd 20, mamba 17, linkage 8, kde 7) | 205 stages | **IDENTICAL** |
+
+**WHY THIS ROUND EXISTS, AND IT IS NOT A ROUTINE RE-CERTIFICATION.** Rounds
+taken between 2026-08-25 and 2026-08-28 were GREEN WITH FOUR PHASES MISSING
+on every column, and nothing said so. Two defects, both fixed in this round's
+commits:
+
+1. `68545b8` -- `gemm_nt_gram`'s IDENTICAL arm has not compiled since
+   DEVIATION 1873 landed on 2026-08-25 (`6e384b2`): it handed an immutable
+   `xt.unsafe_ptr()` to a kernel declaring `MutPointer`. A failed binding
+   build is a PHASE3-FINDING and a finding is not an abort, so phase 3's
+   traced fits, phase 4's E2 matrix, phase 7's E2U matrix and phase 6's
+   IDENTICAL pass all silently stopped running. Measured on BOTH columns:
+   the MI325X and the M4 produced the identical error at the identical site,
+   which is what says it is a type error and not a vendor one.
+2. `cc499f7` -- phase 3 built FIVE identical bindings while
+   `_backend._MODULES` lists TEN, and `_solver_impl.py` carried an
+   import-time guard that a `_MissingIdentical` stub cannot pass. So a
+   missing solver binary took down `import mojolearn` entirely rather than
+   degrading to one broken estimator. The guard's message blamed `_MODULES`
+   for not listing a module it had listed since DEVIATION 869, and its own
+   docstring said to delete it once the tuple was fixed.
+
+Phase 3 now builds all ten and COUNTS what landed. Both columns report
+`identical set: 10 of 10 binaries`.
+
+**Findings on the AMD column, and what each one is.** `mamba [fast]` is the
+documented, allowlisted absence (that arm has never been built anywhere).
+`PHASE6-FINDING: linalg identity` is open and owed. `gemm [fast] check
+FAILED` is the one worth reading carefully: the message named
+`check_device_matches_oracle`'s per-shape line as the cause, and that line is
+a REPORT under FAST by design -- the run actually ended on
+`check_device_is_batch_invariant`, which IS asserted in both modes because it
+is a property of the kernel's SHAPE rather than of the arithmetic pins. That
+gate FAILS on the MI325X under FAST (8 arms) and PASSES on the M4 under FAST.
+It is a real open defect, it is NOT a FAST arithmetic wobble, and the
+misleading cause line is fixed under DEVIATION 1933.
+
+**Not in this round, added immediately after it in `4a02ec9`:** `iforest`
+(123 stages) and `transformer` (30 stages) join phase 8, and the judge scores
+them. Both lanes already had cards; neither was listed in the loop. They are
+owed a leg of their own.
+
 ## Owed
 
 1. The linalg gate's IDENTICAL pass on both boxes (one leg; the scripts
