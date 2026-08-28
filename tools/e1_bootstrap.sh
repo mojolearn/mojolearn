@@ -445,6 +445,38 @@ for mode in identical fast; do
   run_lane_arm iforest "$mode" pixi run mojo run -I . isolation_forest/mojo_only/if_check.mojo
   MOJOLEARN_TRANSFORMER_CHECK_CLAUSE_D="$_tfx_clause_d" \
     run_lane_arm transformer "$mode" pixi run mojo run -I . transformer/mojo_only/transformer_check.mojo
+  # THE THIRTEEN LANES THAT WERE BUILT FOR THIS AND NEVER LISTED.
+  # DEVIATION 1937, 2026-08-28. Andrew asked the obvious question -- is
+  # EVERYTHING identical -- and the honest answer was that sixteen of the
+  # tree's twenty-nine algorithm directories had ever been in a round. The
+  # other thirteen were not unbuilt: every one carries `ftz`,
+  # `identical_mul_add`, a `GLOBAL_NUMERIC_MODE` gate and a check driver, and
+  # most already emitted a full identity card. `training/` alone has 242
+  # `ftz` calls and three card-emitting drivers.
+  #
+  # Five (arima, embedding, hdbscan, ivf, training) already honoured
+  # MOJOLEARN_IDENTITY_TRACE and needed nothing but this line. Seven wrote
+  # their card to a fixed scratch path and got the same `card_path()` repair
+  # isolation forest got this morning and mamba got under DEVIATION 970.
+  #
+  # tsa IS DELIBERATELY ABSENT: `stationarity_check.mojo` builds no identity
+  # card at all, so listing it would add a lane that can only ever report
+  # "NO CARD written". It needs a card first; that is a lane's worth of work
+  # and not a line in a loop.
+  run_lane_arm arima "$mode" pixi run mojo run -I . arima/mojo_only/arima_check.mojo
+  run_lane_arm cholesky "$mode" pixi run mojo run -I . cholesky/mojo_only/cholesky_check.mojo
+  run_lane_arm embedding "$mode" pixi run mojo run -I . embedding/mojo_only/embedding_check.mojo
+  run_lane_arm gp "$mode" pixi run mojo run -I . gaussian_process/mojo_only/gp_check.mojo
+  run_lane_arm hdbscan "$mode" pixi run mojo run -I . hdbscan/mojo_only/hdbscan_check.mojo
+  run_lane_arm holtwinters "$mode" pixi run mojo run -I . holtwinters/mojo_only/hw_check.mojo
+  run_lane_arm ivf "$mode" pixi run mojo run -I . ivf/mojo_only/ivf_check.mojo
+  run_lane_arm kernelmethods "$mode" pixi run mojo run -I . kernel_methods/mojo_only/km_check.mojo
+  run_lane_arm gmm "$mode" pixi run mojo run -I . mixture/mojo_only/gmm_check.mojo
+  run_lane_arm resample "$mode" pixi run mojo run -I . resample/mojo_only/resample_check.mojo
+  run_lane_arm spectral "$mode" pixi run mojo run -I . spectral/mojo_only/spectral_check.mojo
+  run_lane_arm training-loss "$mode" pixi run mojo run -I . training/mojo_only/loss_check.mojo
+  run_lane_arm training-optimizer "$mode" pixi run mojo run -I . training/mojo_only/optimizer_check.mojo
+  run_lane_arm training-step "$mode" pixi run mojo run -I . training/mojo_only/train_step_check.mojo
   run_lane_arm metrics "$mode" pixi run mojo run -I . metrics/metrics_main.mojo
   for t in check-metrics-labels check-metrics-regression check-metrics-silhouette check-metrics-trust; do
     run_lane_check "metrics-${t#check-metrics-}" "$mode" pixi run "$t"
