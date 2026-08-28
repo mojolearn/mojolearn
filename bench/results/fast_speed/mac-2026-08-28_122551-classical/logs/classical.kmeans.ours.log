@@ -1,0 +1,5 @@
+FSPEED-HEADER family=classical lane=kmeans arm=ours mode=FAST device=Apple_M4 rounds=3 size=shipped scale=throughput
+FSPEED-WARMUP lane=kmeans arm=ours shape=4000000x32k64i20 ms=796.93
+FSPEED lane=kmeans arm=ours shape=4000000x32k64i20 round=1 ms=767.884 hash=c5f012ba7bff508e
+FSPEED lane=kmeans arm=ours shape=4000000x32k64i20 round=2 ms=748.774 hash=c5f012ba7bff508e
+FSPEED lane=kmeans arm=ours shape=4000000x32k64i20 round=3 ms=744.228 hash=c5f012ba7bff508e

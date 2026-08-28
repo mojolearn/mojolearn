@@ -1,0 +1,6 @@
+wrote fixture dump /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/dump/svm.fixture
+FSPEED-HEADER family=classical lane=svm arm=ours mode=FAST device=Apple_M4 rounds=3 size=shipped scale=fixed
+FSPEED-WARMUP lane=svm arm=ours shape=F2.xor.240x2 ms=22.769
+FSPEED lane=svm arm=ours shape=F2.xor.240x2 round=1 ms=18.319 hash=8621097bdb3daded
+FSPEED lane=svm arm=ours shape=F2.xor.240x2 round=2 ms=12.044 hash=8621097bdb3daded
+FSPEED lane=svm arm=ours shape=F2.xor.240x2 round=3 ms=11.535 hash=8621097bdb3daded

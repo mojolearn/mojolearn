@@ -1,0 +1,220 @@
+
+=== classical.kmeans.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/bin_classicalspeed ===
+FSPEED lane=kmeans arm=ours shape=4000000x32k64i20 round=1 ms=767.884 hash=c5f012ba7bff508e
+FSPEED lane=kmeans arm=ours shape=4000000x32k64i20 round=2 ms=748.774 hash=c5f012ba7bff508e
+FSPEED lane=kmeans arm=ours shape=4000000x32k64i20 round=3 ms=744.228 hash=c5f012ba7bff508e
+
+=== classical.kmeans.vendor.log :: pixi run -e bench python3 tools/speed_cuml_arm.py ===
+/Users/andrewhendel/CascadeProjects/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=kmeans arm=cuml-gpu reason=import failed: ModuleNotFoundError("No module named 'cuml'")
+
+=== classical.dbscan.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/bin_classicalspeed ===
+FSPEED lane=dbscan arm=ours shape=4000x16 round=1 ms=24.249 hash=4869c285f078c0a5
+FSPEED lane=dbscan arm=ours shape=4000x16 round=2 ms=22.431 hash=4869c285f078c0a5
+FSPEED lane=dbscan arm=ours shape=4000x16 round=3 ms=21.806 hash=4869c285f078c0a5
+
+=== classical.dbscan.vendor.log :: pixi run -e bench python3 tools/speed_cuml_arm.py ===
+/Users/andrewhendel/CascadeProjects/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=dbscan arm=cuml-gpu reason=import failed: ModuleNotFoundError("No module named 'cuml'")
+
+=== classical.pca.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/bin_classicalspeed ===
+FSPEED lane=pca arm=ours shape=4000000x32c8 round=1 ms=36.2 hash=38e551d5c5b3f0dc
+FSPEED lane=pca arm=ours shape=4000000x32c8 round=2 ms=36.315 hash=38e551d5c5b3f0dc
+FSPEED lane=pca arm=ours shape=4000000x32c8 round=3 ms=36.845 hash=38e551d5c5b3f0dc
+
+=== classical.pca.vendor.log :: pixi run -e bench python3 tools/speed_cuml_arm.py ===
+/Users/andrewhendel/CascadeProjects/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=pca arm=cuml-gpu reason=import failed: ModuleNotFoundError("No module named 'cuml'")
+
+=== classical.ols.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/bin_classicalspeed ===
+FSPEED lane=ols arm=ours shape=4000000x32 round=1 ms=33.5 hash=c16cc39e6e050b8c
+FSPEED lane=ols arm=ours shape=4000000x32 round=2 ms=33.362 hash=c16cc39e6e050b8c
+FSPEED lane=ols arm=ours shape=4000000x32 round=3 ms=33.677 hash=c16cc39e6e050b8c
+
+=== classical.ols.vendor.log :: pixi run -e bench python3 tools/speed_cuml_arm.py ===
+/Users/andrewhendel/CascadeProjects/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=ols arm=cuml-gpu reason=import failed: ModuleNotFoundError("No module named 'cuml'")
+
+=== classical.knn.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/bin_classicalspeed ===
+FSPEED lane=knn arm=ours-tiled shape=400000x32q4000k10 round=2 ms=615.361 hash=df3b2b6a8cffd1a5
+FSPEED lane=knn arm=ours-tiled shape=400000x32q4000k10 round=3 ms=635.15 hash=1258b8834ebb6b65
+FSPEED-NOTE lane=knn arm=ours-tiled hash moved across rounds: cd95ccfa10c243d9 df3b2b6a8cffd1a5
+
+=== classical.knn.vendor.log :: pixi run -e bench python3 tools/speed_cuml_arm.py ===
+/Users/andrewhendel/CascadeProjects/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=knn arm=cuml-gpu reason=import failed: ModuleNotFoundError("No module named 'cuml'")
+
+=== classical.cd.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/bin_classicalspeed ===
+FSPEED lane=cd arm=ours shape=2048x16 round=1 ms=7.63 hash=3bc909a47ebc9bda
+FSPEED lane=cd arm=ours shape=2048x16 round=2 ms=7.719 hash=3bc909a47ebc9bda
+FSPEED lane=cd arm=ours shape=2048x16 round=3 ms=7.088 hash=3bc909a47ebc9bda
+
+=== classical.cd.vendor.log :: pixi run -e bench python3 tools/speed_cuml_arm.py ===
+/Users/andrewhendel/CascadeProjects/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=cd arm=cuml-gpu reason=ModuleNotFoundError("No module named 'cuml'")
+
+=== classical.kde.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/bin_classicalspeed ===
+FSPEED lane=kde arm=ours shape=1024x256x8 round=1 ms=2.76 hash=110eb573543dcc0f
+FSPEED lane=kde arm=ours shape=1024x256x8 round=2 ms=2.474 hash=110eb573543dcc0f
+FSPEED lane=kde arm=ours shape=1024x256x8 round=3 ms=2.691 hash=110eb573543dcc0f
+
+=== classical.kde.vendor.log :: pixi run -e bench python3 tools/speed_cuml_arm.py ===
+/Users/andrewhendel/CascadeProjects/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=kde arm=cuml-gpu reason=ModuleNotFoundError("No module named 'cuml'")
+
+=== classical.linkage.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/bin_classicalspeed ===
+FSPEED lane=linkage arm=ours shape=blobs_dups.102x5 round=1 ms=14.751 hash=5d3155fc940e61d2
+FSPEED lane=linkage arm=ours shape=blobs_dups.102x5 round=2 ms=14.035 hash=5d3155fc940e61d2
+FSPEED lane=linkage arm=ours shape=blobs_dups.102x5 round=3 ms=9.714 hash=5d3155fc940e61d2
+
+=== classical.linkage.vendor.log :: pixi run -e bench python3 tools/speed_cuml_arm.py ===
+/Users/andrewhendel/CascadeProjects/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=linkage arm=cuml-gpu reason=ModuleNotFoundError("No module named 'cuml'")
+
+=== classical.svm.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/bin_classicalspeed ===
+FSPEED lane=svm arm=ours shape=F2.xor.240x2 round=1 ms=18.319 hash=8621097bdb3daded
+FSPEED lane=svm arm=ours shape=F2.xor.240x2 round=2 ms=12.044 hash=8621097bdb3daded
+FSPEED lane=svm arm=ours shape=F2.xor.240x2 round=3 ms=11.535 hash=8621097bdb3daded
+
+=== classical.svm.vendor.log :: pixi run -e bench python3 tools/speed_cuml_arm.py ===
+/Users/andrewhendel/CascadeProjects/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=svm arm=cuml-gpu reason=ModuleNotFoundError("No module named 'cuml'")
+
+=== classical.metrics.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/bin_classicalspeed ===
+FSPEED lane=metrics arm=ours shape=lab2053.flt2053.sil521x4.tru301x6 round=1 ms=9.079 hash=9581966d0ec159e6
+FSPEED lane=metrics arm=ours shape=lab2053.flt2053.sil521x4.tru301x6 round=2 ms=10.6 hash=9581966d0ec159e6
+FSPEED lane=metrics arm=ours shape=lab2053.flt2053.sil521x4.tru301x6 round=3 ms=9.491 hash=9581966d0ec159e6
+
+=== classical.metrics.vendor.log :: pixi run -e bench python3 tools/speed_cuml_arm.py ===
+/Users/andrewhendel/CascadeProjects/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=metrics arm=cuml-gpu reason=import failed (one of the eleven cuml metrics is missing on this build): ModuleNotFoundError("No module named 'cuml'")
+
+=== classical.ivf.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/bin_classicalspeed ===
+FSPEED lane=ivf arm=ours shape=512x8q64L8p3k8 round=1 ms=80.209 hash=0908d00a25ccbed4
+FSPEED lane=ivf arm=ours shape=512x8q64L8p3k8 round=2 ms=86.763 hash=0908d00a25ccbed4
+FSPEED lane=ivf arm=ours shape=512x8q64L8p3k8 round=3 ms=98.823 hash=0908d00a25ccbed4
+
+=== classical.ivf.vendor.log :: pixi run -e bench python3 tools/speed_cuml_arm.py ===
+/Users/andrewhendel/CascadeProjects/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=ivf arm=cuvs-gpu reason=import failed: ModuleNotFoundError("No module named 'cupy'")
+
+=== classical.hdbscan.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/bin_classicalspeed ===
+FSPEED lane=hdbscan arm=ours shape=blobs96.96x4 round=1 ms=21.551 hash=8e1998063cb24ce6
+FSPEED lane=hdbscan arm=ours shape=blobs96.96x4 round=2 ms=21.61 hash=8e1998063cb24ce6
+FSPEED lane=hdbscan arm=ours shape=blobs96.96x4 round=3 ms=21.361 hash=8e1998063cb24ce6
+
+=== classical.hdbscan.vendor.log :: pixi run -e bench python3 tools/speed_cuml_arm.py ===
+/Users/andrewhendel/CascadeProjects/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=hdbscan arm=cuml-gpu reason=ModuleNotFoundError("No module named 'cuml'")
+
+=== classical.cholesky.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/bin_classicalspeed ===
+FSPEED lane=cholesky arm=ours shape=RBF.64x64r4 round=1 ms=4.737 hash=48c6594203c35bb4
+FSPEED lane=cholesky arm=ours shape=RBF.64x64r4 round=2 ms=4.724 hash=48c6594203c35bb4
+FSPEED lane=cholesky arm=ours shape=RBF.64x64r4 round=3 ms=5.665 hash=48c6594203c35bb4
+
+=== classical.cholesky.vendor.log :: pixi run -e bench python3 tools/speed_cuml_arm.py ===
+/Users/andrewhendel/CascadeProjects/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=cholesky arm=torch-gpu reason=ModuleNotFoundError("No module named 'torch'")
+
+=== classical.gmm.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/bin_classicalspeed ===
+FSPEED lane=gmm arm=ours shape=SEPARATED.24x2K3 round=1 ms=31.892 hash=b934e26ee2bc5277
+FSPEED lane=gmm arm=ours shape=SEPARATED.24x2K3 round=2 ms=32.283 hash=b934e26ee2bc5277
+FSPEED lane=gmm arm=ours shape=SEPARATED.24x2K3 round=3 ms=32.818 hash=b934e26ee2bc5277
+
+=== classical.gmm.vendor.log :: pixi run -e bench python3 tools/speed_cuml_arm.py ===
+FSPEED lane=gmm arm=sklearn-cpu shape=SEPARATED.24x2K3 round=1 ms=1.345708 hash=6536aef537e0af7e
+FSPEED lane=gmm arm=sklearn-cpu shape=SEPARATED.24x2K3 round=2 ms=1.114959 hash=6536aef537e0af7e
+FSPEED lane=gmm arm=sklearn-cpu shape=SEPARATED.24x2K3 round=3 ms=1.003042 hash=6536aef537e0af7e
+
+=== classical.gp.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/bin_classicalspeed ===
+FSPEED lane=gp arm=ours shape=ard.12x3s6 round=1 ms=6.834 hash=13c0ba0b989d05ff
+FSPEED lane=gp arm=ours shape=ard.12x3s6 round=2 ms=6.055 hash=13c0ba0b989d05ff
+FSPEED lane=gp arm=ours shape=ard.12x3s6 round=3 ms=6.125 hash=13c0ba0b989d05ff
+
+=== classical.gp.vendor.log :: pixi run -e bench python3 tools/speed_cuml_arm.py ===
+FSPEED lane=gp arm=sklearn-cpu shape=ard.12x3s6 round=1 ms=0.353792 hash=27fa3ce9b8f7824f
+FSPEED lane=gp arm=sklearn-cpu shape=ard.12x3s6 round=2 ms=0.289708 hash=27fa3ce9b8f7824f
+FSPEED lane=gp arm=sklearn-cpu shape=ard.12x3s6 round=3 ms=0.262125 hash=27fa3ce9b8f7824f
+
+=== classical.krr.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/bin_classicalspeed ===
+FSPEED lane=krr arm=ours shape=RBF.16x5 round=1 ms=4.915 hash=b464758a7777e093
+FSPEED lane=krr arm=ours shape=RBF.16x5 round=2 ms=6.907 hash=b464758a7777e093
+FSPEED lane=krr arm=ours shape=RBF.16x5 round=3 ms=4.962 hash=b464758a7777e093
+
+=== classical.krr.vendor.log :: pixi run -e bench python3 tools/speed_cuml_arm.py ===
+/Users/andrewhendel/CascadeProjects/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=krr arm=cuml-gpu reason=import failed: ModuleNotFoundError("No module named 'cuml'")
+
+=== classical.nystroem.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/bin_classicalspeed ===
+FSPEED lane=nystroem arm=ours shape=RBF.16x5q8 round=1 ms=5.816 hash=41209b855b2d0248
+FSPEED lane=nystroem arm=ours shape=RBF.16x5q8 round=2 ms=7.278 hash=41209b855b2d0248
+FSPEED lane=nystroem arm=ours shape=RBF.16x5q8 round=3 ms=5.291 hash=41209b855b2d0248
+
+=== classical.nystroem.vendor.log :: pixi run -e bench python3 tools/speed_cuml_arm.py ===
+FSPEED lane=nystroem arm=sklearn-cpu shape=RBF.16x5q8 round=1 ms=0.572959 hash=-
+FSPEED lane=nystroem arm=sklearn-cpu shape=RBF.16x5q8 round=2 ms=0.483333 hash=-
+FSPEED lane=nystroem arm=sklearn-cpu shape=RBF.16x5q8 round=3 ms=0.471666 hash=-
+
+=== classical.rbfsampler.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/bin_classicalspeed ===
+FSPEED lane=rbfsampler arm=ours shape=3x5q8 round=1 ms=2.58 hash=dabf82a3ba80c8ab
+FSPEED lane=rbfsampler arm=ours shape=3x5q8 round=2 ms=2.558 hash=dabf82a3ba80c8ab
+FSPEED lane=rbfsampler arm=ours shape=3x5q8 round=3 ms=3.3 hash=dabf82a3ba80c8ab
+
+=== classical.rbfsampler.vendor.log :: pixi run -e bench python3 tools/speed_cuml_arm.py ===
+FSPEED lane=rbfsampler arm=sklearn-cpu shape=3x5q8 round=1 ms=0.194417 hash=-
+FSPEED lane=rbfsampler arm=sklearn-cpu shape=3x5q8 round=2 ms=0.167458 hash=-
+FSPEED lane=rbfsampler arm=sklearn-cpu shape=3x5q8 round=3 ms=0.151291 hash=-
+
+=== classical.resample.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/bin_classicalspeed ===
+FSPEED lane=resample arm=ours shape=200x2r10000 round=1 ms=7.768 hash=38bb5e267f2ef221
+FSPEED lane=resample arm=ours shape=200x2r10000 round=2 ms=6.9 hash=38bb5e267f2ef221
+FSPEED lane=resample arm=ours shape=200x2r10000 round=3 ms=7.673 hash=38bb5e267f2ef221
+
+=== classical.resample.vendor.log :: pixi run -e bench python3 tools/speed_cuml_arm.py ===
+FSPEED lane=resample arm=scipy-cpu shape=200x2r10000 round=1 ms=35.180625 hash=f8eacc6a5e8d8b8b
+FSPEED lane=resample arm=scipy-cpu shape=200x2r10000 round=2 ms=35.149333 hash=f8eacc6a5e8d8b8b
+FSPEED lane=resample arm=scipy-cpu shape=200x2r10000 round=3 ms=34.057208 hash=f8eacc6a5e8d8b8b
+
+=== classical.spectral.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/bin_classicalspeed ===
+FSPEED lane=spectral arm=ours shape=48x4c3 round=1 ms=75.866 hash=46aa77c9e4ba34c0
+FSPEED lane=spectral arm=ours shape=48x4c3 round=2 ms=77.981 hash=46aa77c9e4ba34c0
+FSPEED lane=spectral arm=ours shape=48x4c3 round=3 ms=75.21 hash=46aa77c9e4ba34c0
+
+=== classical.spectral.vendor.log :: pixi run -e bench python3 tools/speed_cuml_arm.py ===
+/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/bench/lib/python3.14/site-packages/sklearn/manifold/_spectral_embedding.py:325: UserWarning: Graph is not fully connected, spectral embedding may not work as expected.
+  warnings.warn(
+FSPEED lane=spectral arm=sklearn-cpu shape=48x4c3 round=3 ms=3.647541 hash=-
+
+=== classical.holtwinters.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/bin_classicalspeed ===
+FSPEED lane=holtwinters arm=ours shape=7x72f12 round=1 ms=17.679 hash=c6f5e5b9d9daf52c
+FSPEED lane=holtwinters arm=ours shape=7x72f12 round=2 ms=17.855 hash=c6f5e5b9d9daf52c
+FSPEED lane=holtwinters arm=ours shape=7x72f12 round=3 ms=17.816 hash=c6f5e5b9d9daf52c
+
+=== classical.holtwinters.vendor.log :: pixi run -e bench python3 tools/speed_cuml_arm.py ===
+/Users/andrewhendel/CascadeProjects/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=holtwinters arm=cuml-gpu reason=import failed: ModuleNotFoundError("No module named 'cuml'")
+
+=== classical.kpss.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/bin_classicalspeed ===
+FSPEED lane=kpss arm=ours shape=8x520 round=1 ms=1.104 hash=c5237dfab4ee6cac
+FSPEED lane=kpss arm=ours shape=8x520 round=2 ms=0.68 hash=c5237dfab4ee6cac
+FSPEED lane=kpss arm=ours shape=8x520 round=3 ms=0.681 hash=c5237dfab4ee6cac
+
+=== classical.kpss.vendor.log :: pixi run -e bench python3 tools/speed_cuml_arm.py ===
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=kpss arm=cuml-gpu reason=this RAPIDS build exposes no cuml.tsa.stationarity.kpss_test; falling back to statsmodels on the CPU, labeled statsmodels-cpu
+FSPEED-REFUSED lane=kpss arm=statsmodels-cpu reason=import failed: ModuleNotFoundError("No module named 'statsmodels'")

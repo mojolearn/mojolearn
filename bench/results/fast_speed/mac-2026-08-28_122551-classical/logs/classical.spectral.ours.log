@@ -1,0 +1,6 @@
+wrote fixture dump /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/dump/spectral.fixture
+FSPEED-HEADER family=classical lane=spectral arm=ours mode=FAST device=Apple_M4 rounds=3 size=shipped scale=fixed
+FSPEED-WARMUP lane=spectral arm=ours shape=48x4c3 ms=98.785
+FSPEED lane=spectral arm=ours shape=48x4c3 round=1 ms=75.866 hash=46aa77c9e4ba34c0
+FSPEED lane=spectral arm=ours shape=48x4c3 round=2 ms=77.981 hash=46aa77c9e4ba34c0
+FSPEED lane=spectral arm=ours shape=48x4c3 round=3 ms=75.21 hash=46aa77c9e4ba34c0

@@ -1,0 +1,89 @@
+FSPEED-HEADER family=seq lane=selective_scan arm=ours mode=FAST device=Apple_M4 rounds=3 size=shipped
+FSPEED-NOTE lane=selective_scan arm=ours entry costs the port pays and the opponent does not: llama_refuse_bad_inputs / mamba_refuse_bad_inputs download every weight per call, and eager_attention_forward synchronizes per (batch, head). See bench/speed/SEQ_SPEED.md.
+FSPEED-NOTE lane=selective_scan arm=ours PRECISION: FAST routes every GEMM through MAX matmul, which on NVIDIA is a TENSOR-CORE (TF32-class, 10 mantissa bits) path -- measured 200 TFLOP/s against cublas-fp32 44.4 and cublas-tf32 207.5 on an H100. The fair vendor opponent for a lane that routes a GEMM is therefore a TF32 arm (torch-gpu-tf32), NOT an fp32 one, and an FSPEED-AGREE line computed against an fp32 reference is measuring THIS CUT and not a defect. Lanes routing no GEMM (rmsnorm) are unaffected and are the control. DEVIATION 1885.
+FSPEED-WEIGHTS lane=selective_scan shape=lane.b2_l4_d8 tensor=norm.weight n=8 hash=50c65afc06287cd7
+FSPEED-WEIGHTS lane=selective_scan shape=lane.b2_l4_d8 tensor=in_proj.weight n=256 hash=e08dc872b261976f
+FSPEED-WEIGHTS lane=selective_scan shape=lane.b2_l4_d8 tensor=conv1d.weight n=64 hash=87567a7cd21ae244
+FSPEED-WEIGHTS lane=selective_scan shape=lane.b2_l4_d8 tensor=conv1d.bias n=16 hash=fffb5b6163f3b167
+FSPEED-WEIGHTS lane=selective_scan shape=lane.b2_l4_d8 tensor=x_proj.weight n=528 hash=e6f1d28bec911569
+FSPEED-WEIGHTS lane=selective_scan shape=lane.b2_l4_d8 tensor=dt_proj.weight n=16 hash=ff1a20b85cbe6334
+FSPEED-WEIGHTS lane=selective_scan shape=lane.b2_l4_d8 tensor=dt_proj.bias n=16 hash=f9fd9e3769ba990f
+FSPEED-WEIGHTS lane=selective_scan shape=lane.b2_l4_d8 tensor=A_log n=256 hash=fd875e94f94076a3
+FSPEED-WEIGHTS lane=selective_scan shape=lane.b2_l4_d8 tensor=D n=16 hash=427cb25db82f4bd0
+FSPEED-WEIGHTS lane=selective_scan shape=lane.b2_l4_d8 tensor=out_proj.weight n=128 hash=9fce64d8212a8eec
+FSPEED-WEIGHTS lane=selective_scan shape=lane.b2_l4_d8 tensor=x n=64 hash=622c7d6b00d2329d
+FSPEED-NOTE lane=selective_scan arm=ours mamba_refuse_bad_inputs alone shape=lane.b2_l4_d8 ms=1.775 (inside the mamba lane's round, not inside selective_scan)
+FSPEED-WARMUP lane=selective_scan arm=ours shape=lane.b2_l4_d8 ms=2.155
+FSPEED lane=selective_scan arm=ours shape=lane.b2_l4_d8 round=1 ms=0.278 hash=51404fb94f6ca943
+FSPEED lane=selective_scan arm=ours shape=lane.b2_l4_d8 round=2 ms=0.267 hash=51404fb94f6ca943
+FSPEED lane=selective_scan arm=ours shape=lane.b2_l4_d8 round=3 ms=0.263 hash=51404fb94f6ca943
+FSPEED-NOTE lane=selective_scan arm=ours dump shape=lane.b2_l4_d8 n=128 path=/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/dump/seq.selective_scan.lane.b2_l4_d8.f32.bin
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t1 tensor=norm.weight n=768 hash=80ffb6eceac983c1
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t1 tensor=in_proj.weight n=2359296 hash=9a4025f0cad505d9
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t1 tensor=conv1d.weight n=6144 hash=4f37ca5c86596e26
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t1 tensor=conv1d.bias n=1536 hash=3730d3d1a4bd30d5
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t1 tensor=x_proj.weight n=122880 hash=d8becf46fdf2b30f
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t1 tensor=dt_proj.weight n=73728 hash=3333a7a393aaf4c1
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t1 tensor=dt_proj.bias n=1536 hash=670910bd72deb317
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t1 tensor=A_log n=24576 hash=30d9abc8d0f88426
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t1 tensor=D n=1536 hash=4af9cecf78461e69
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t1 tensor=out_proj.weight n=1179648 hash=03bc8590d6d08f9f
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t1 tensor=x n=768 hash=5832c6c66c7945eb
+FSPEED-NOTE lane=selective_scan arm=ours mamba_refuse_bad_inputs alone shape=mamba130m.prefill.t1 ms=0.741 (inside the mamba lane's round, not inside selective_scan)
+FSPEED-WARMUP lane=selective_scan arm=ours shape=mamba130m.prefill.t1 ms=0.261
+FSPEED lane=selective_scan arm=ours shape=mamba130m.prefill.t1 round=1 ms=0.261 hash=fbfb6be4b35b48bf
+FSPEED lane=selective_scan arm=ours shape=mamba130m.prefill.t1 round=2 ms=0.27 hash=fbfb6be4b35b48bf
+FSPEED lane=selective_scan arm=ours shape=mamba130m.prefill.t1 round=3 ms=0.271 hash=fbfb6be4b35b48bf
+FSPEED-NOTE lane=selective_scan arm=ours dump shape=mamba130m.prefill.t1 n=1536 path=/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/dump/seq.selective_scan.mamba130m.prefill.t1.f32.bin
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t8 tensor=norm.weight n=768 hash=8ca9a62b03bb0b69
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t8 tensor=in_proj.weight n=2359296 hash=e5e828782fc4c377
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t8 tensor=conv1d.weight n=6144 hash=1fe9d376751939c2
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t8 tensor=conv1d.bias n=1536 hash=284b95c47159d2e2
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t8 tensor=x_proj.weight n=122880 hash=58fc41a3c66083f9
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t8 tensor=dt_proj.weight n=73728 hash=354e3487a0f90c0b
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t8 tensor=dt_proj.bias n=1536 hash=1729f7678a315600
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t8 tensor=A_log n=24576 hash=71d966732193f1fb
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t8 tensor=D n=1536 hash=146d24138daf5ed0
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t8 tensor=out_proj.weight n=1179648 hash=5f7e08294f2017f1
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t8 tensor=x n=6144 hash=aea97b3003677e03
+FSPEED-NOTE lane=selective_scan arm=ours mamba_refuse_bad_inputs alone shape=mamba130m.prefill.t8 ms=0.699 (inside the mamba lane's round, not inside selective_scan)
+FSPEED-WARMUP lane=selective_scan arm=ours shape=mamba130m.prefill.t8 ms=0.201
+FSPEED lane=selective_scan arm=ours shape=mamba130m.prefill.t8 round=1 ms=0.189 hash=322d35bd8918d2b8
+FSPEED lane=selective_scan arm=ours shape=mamba130m.prefill.t8 round=2 ms=0.195 hash=322d35bd8918d2b8
+FSPEED lane=selective_scan arm=ours shape=mamba130m.prefill.t8 round=3 ms=0.199 hash=322d35bd8918d2b8
+FSPEED-NOTE lane=selective_scan arm=ours dump shape=mamba130m.prefill.t8 n=12288 path=/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/dump/seq.selective_scan.mamba130m.prefill.t8.f32.bin
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t128 tensor=norm.weight n=768 hash=9d0c85053f9dbe1b
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t128 tensor=in_proj.weight n=2359296 hash=1a8a102874a8f357
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t128 tensor=conv1d.weight n=6144 hash=0e615d0b95e74f90
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t128 tensor=conv1d.bias n=1536 hash=87a4bee5bec76720
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t128 tensor=x_proj.weight n=122880 hash=24305c34fd48b3a6
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t128 tensor=dt_proj.weight n=73728 hash=6b5d720462192045
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t128 tensor=dt_proj.bias n=1536 hash=68b70160bd63976c
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t128 tensor=A_log n=24576 hash=4d659006cfa457de
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t128 tensor=D n=1536 hash=1f5fdef06a2e6f1e
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t128 tensor=out_proj.weight n=1179648 hash=be795e26211acaff
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t128 tensor=x n=98304 hash=25fed7518eb79bb2
+FSPEED-NOTE lane=selective_scan arm=ours mamba_refuse_bad_inputs alone shape=mamba130m.prefill.t128 ms=1.144 (inside the mamba lane's round, not inside selective_scan)
+FSPEED-WARMUP lane=selective_scan arm=ours shape=mamba130m.prefill.t128 ms=0.544
+FSPEED lane=selective_scan arm=ours shape=mamba130m.prefill.t128 round=1 ms=0.545 hash=a41875537158170d
+FSPEED lane=selective_scan arm=ours shape=mamba130m.prefill.t128 round=2 ms=0.877 hash=a41875537158170d
+FSPEED lane=selective_scan arm=ours shape=mamba130m.prefill.t128 round=3 ms=0.885 hash=a41875537158170d
+FSPEED-NOTE lane=selective_scan arm=ours dump shape=mamba130m.prefill.t128 n=196608 path=/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/dump/seq.selective_scan.mamba130m.prefill.t128.f32.bin
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t512 tensor=norm.weight n=768 hash=8a1f60d0ecc7f985
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t512 tensor=in_proj.weight n=2359296 hash=93cf34e9b609c366
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t512 tensor=conv1d.weight n=6144 hash=f2f7fd124b119079
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t512 tensor=conv1d.bias n=1536 hash=13b6f9e0acc0cdc3
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t512 tensor=x_proj.weight n=122880 hash=858ca82562b215ab
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t512 tensor=dt_proj.weight n=73728 hash=099f48c5ccdb6f44
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t512 tensor=dt_proj.bias n=1536 hash=8bc414b2e6db2757
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t512 tensor=A_log n=24576 hash=0895a62212804fc5
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t512 tensor=D n=1536 hash=d5239bfe63a8472c
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t512 tensor=out_proj.weight n=1179648 hash=b41416f53f8b72c7
+FSPEED-WEIGHTS lane=selective_scan shape=mamba130m.prefill.t512 tensor=x n=393216 hash=baa7b8e45c791eef
+FSPEED-NOTE lane=selective_scan arm=ours mamba_refuse_bad_inputs alone shape=mamba130m.prefill.t512 ms=2.427 (inside the mamba lane's round, not inside selective_scan)
+FSPEED-WARMUP lane=selective_scan arm=ours shape=mamba130m.prefill.t512 ms=0.768
+FSPEED lane=selective_scan arm=ours shape=mamba130m.prefill.t512 round=1 ms=0.524 hash=73ade061baf1002c
+FSPEED lane=selective_scan arm=ours shape=mamba130m.prefill.t512 round=2 ms=1.166 hash=73ade061baf1002c
+FSPEED lane=selective_scan arm=ours shape=mamba130m.prefill.t512 round=3 ms=1.248 hash=73ade061baf1002c
+FSPEED-NOTE lane=selective_scan arm=ours dump shape=mamba130m.prefill.t512 n=786432 path=/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/dump/seq.selective_scan.mamba130m.prefill.t512.f32.bin
+FSPEED-DONE lane=selective_scan mode=FAST

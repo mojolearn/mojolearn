@@ -1,0 +1,6 @@
+wrote fixture dump /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/dump/kpss.fixture
+FSPEED-HEADER family=classical lane=kpss arm=ours mode=FAST device=Apple_M4 rounds=3 size=shipped scale=fixed
+FSPEED-WARMUP lane=kpss arm=ours shape=8x520 ms=69.855
+FSPEED lane=kpss arm=ours shape=8x520 round=1 ms=1.104 hash=c5237dfab4ee6cac
+FSPEED lane=kpss arm=ours shape=8x520 round=2 ms=0.68 hash=c5237dfab4ee6cac
+FSPEED lane=kpss arm=ours shape=8x520 round=3 ms=0.681 hash=c5237dfab4ee6cac

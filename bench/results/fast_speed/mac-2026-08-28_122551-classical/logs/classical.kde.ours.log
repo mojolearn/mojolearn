@@ -1,0 +1,6 @@
+wrote fixture dump /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/dump/kde.fixture
+FSPEED-HEADER family=classical lane=kde arm=ours mode=FAST device=Apple_M4 rounds=3 size=shipped scale=fixed
+FSPEED-WARMUP lane=kde arm=ours shape=1024x256x8 ms=6.43
+FSPEED lane=kde arm=ours shape=1024x256x8 round=1 ms=2.76 hash=110eb573543dcc0f
+FSPEED lane=kde arm=ours shape=1024x256x8 round=2 ms=2.474 hash=110eb573543dcc0f
+FSPEED lane=kde arm=ours shape=1024x256x8 round=3 ms=2.691 hash=110eb573543dcc0f

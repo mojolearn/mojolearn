@@ -1,0 +1,5 @@
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/bench_sklearn.py:139: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=kmeans arm=cuml-gpu reason=import failed: ModuleNotFoundError("No module named 'cuml'")

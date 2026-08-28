@@ -1,0 +1,6 @@
+wrote fixture dump /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/dump/linkage.fixture
+FSPEED-HEADER family=classical lane=linkage arm=ours mode=FAST device=Apple_M4 rounds=3 size=shipped scale=fixed
+FSPEED-WARMUP lane=linkage arm=ours shape=blobs_dups.102x5 ms=17.408
+FSPEED lane=linkage arm=ours shape=blobs_dups.102x5 round=1 ms=14.751 hash=5d3155fc940e61d2
+FSPEED lane=linkage arm=ours shape=blobs_dups.102x5 round=2 ms=14.035 hash=5d3155fc940e61d2
+FSPEED lane=linkage arm=ours shape=blobs_dups.102x5 round=3 ms=9.714 hash=5d3155fc940e61d2

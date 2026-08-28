@@ -1,0 +1,10 @@
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/bench_sklearn.py:139: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=gmm arm=cuml-gpu reason=RAPIDS ships no GaussianMixture; the arm below is scikit-learn on the CPU and is labeled sklearn-cpu
+FSPEED-HEADER family=classical lane=gmm arm=sklearn-cpu mode=FAST device=arm64-10cores rounds=3 size=shipped
+FSPEED-WARMUP lane=gmm arm=sklearn-cpu shape=SEPARATED.24x2K3 ms=33.754625
+FSPEED lane=gmm arm=sklearn-cpu shape=SEPARATED.24x2K3 round=1 ms=1.345708 hash=6536aef537e0af7e
+FSPEED lane=gmm arm=sklearn-cpu shape=SEPARATED.24x2K3 round=2 ms=1.114959 hash=6536aef537e0af7e
+FSPEED lane=gmm arm=sklearn-cpu shape=SEPARATED.24x2K3 round=3 ms=1.003042 hash=6536aef537e0af7e

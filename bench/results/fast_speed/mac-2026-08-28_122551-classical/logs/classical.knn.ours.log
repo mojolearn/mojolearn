@@ -1,0 +1,16 @@
+FSPEED-HEADER family=classical lane=knn arm=ours mode=FAST device=Apple_M4 rounds=3 size=shipped scale=throughput
+FSPEED-WARMUP lane=knn arm=ours shape=400000x32q4000k10 ms=715.372
+FSPEED lane=knn arm=ours shape=400000x32q4000k10 round=1 ms=688.458 hash=c07ab69619951ff1
+FSPEED lane=knn arm=ours shape=400000x32q4000k10 round=2 ms=696.668 hash=c07ab69619951ff1
+FSPEED lane=knn arm=ours shape=400000x32q4000k10 round=3 ms=692.947 hash=c07ab69619951ff1
+FSPEED-HEADER family=classical lane=knn arm=ours-fused mode=FAST device=Apple_M4 rounds=3 size=shipped scale=throughput
+FSPEED-WARMUP lane=knn arm=ours-fused shape=400000x32q4000k10 ms=705.101
+FSPEED lane=knn arm=ours-fused shape=400000x32q4000k10 round=1 ms=703.564 hash=c07ab69619951ff1
+FSPEED lane=knn arm=ours-fused shape=400000x32q4000k10 round=2 ms=699.921 hash=c07ab69619951ff1
+FSPEED lane=knn arm=ours-fused shape=400000x32q4000k10 round=3 ms=688.035 hash=c07ab69619951ff1
+FSPEED-HEADER family=classical lane=knn arm=ours-tiled mode=FAST device=Apple_M4 rounds=3 size=shipped scale=throughput
+FSPEED-WARMUP lane=knn arm=ours-tiled shape=400000x32q4000k10 ms=612.737
+FSPEED lane=knn arm=ours-tiled shape=400000x32q4000k10 round=1 ms=616.57 hash=cd95ccfa10c243d9
+FSPEED lane=knn arm=ours-tiled shape=400000x32q4000k10 round=2 ms=615.361 hash=df3b2b6a8cffd1a5
+FSPEED lane=knn arm=ours-tiled shape=400000x32q4000k10 round=3 ms=635.15 hash=1258b8834ebb6b65
+FSPEED-NOTE lane=knn arm=ours-tiled hash moved across rounds: cd95ccfa10c243d9 df3b2b6a8cffd1a5

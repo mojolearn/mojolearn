@@ -1,0 +1,11 @@
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/bench_sklearn.py:139: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=nystroem arm=cuml-gpu reason=RAPIDS ships no Nystroem; the arm below is scikit-learn on the CPU and is labeled sklearn-cpu
+FSPEED-NOTE lane=nystroem arm=sklearn-cpu hash=- : the BASIS SAMPLE differs. Ours permutes with a pinned Philox stream and theirs with numpy RandomState, so the two fit different rows. The WORK is the same (sample q rows, form q x q, eigendecompose, scale, cross kernel, matmul) and that is what is being timed
+FSPEED-HEADER family=classical lane=nystroem arm=sklearn-cpu mode=FAST device=arm64-10cores rounds=3 size=shipped
+FSPEED-WARMUP lane=nystroem arm=sklearn-cpu shape=RBF.16x5q8 ms=5.169000
+FSPEED lane=nystroem arm=sklearn-cpu shape=RBF.16x5q8 round=1 ms=0.572959 hash=-
+FSPEED lane=nystroem arm=sklearn-cpu shape=RBF.16x5q8 round=2 ms=0.483333 hash=-
+FSPEED lane=nystroem arm=sklearn-cpu shape=RBF.16x5q8 round=3 ms=0.471666 hash=-

@@ -1,0 +1,6 @@
+wrote fixture dump /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/dump/holtwinters.fixture
+FSPEED-HEADER family=classical lane=holtwinters arm=ours mode=FAST device=Apple_M4 rounds=3 size=shipped scale=fixed
+FSPEED-WARMUP lane=holtwinters arm=ours shape=7x72f12 ms=295.645
+FSPEED lane=holtwinters arm=ours shape=7x72f12 round=1 ms=17.679 hash=c6f5e5b9d9daf52c
+FSPEED lane=holtwinters arm=ours shape=7x72f12 round=2 ms=17.855 hash=c6f5e5b9d9daf52c
+FSPEED lane=holtwinters arm=ours shape=7x72f12 round=3 ms=17.816 hash=c6f5e5b9d9daf52c

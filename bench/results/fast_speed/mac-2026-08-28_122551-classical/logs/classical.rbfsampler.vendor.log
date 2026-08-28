@@ -1,0 +1,11 @@
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/bench_sklearn.py:139: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=rbfsampler arm=cuml-gpu reason=RAPIDS ships no RBFSampler / random Fourier features; the arm below is scikit-learn on the CPU and is labeled sklearn-cpu
+FSPEED-NOTE lane=rbfsampler arm=sklearn-cpu hash=- : the random draws differ (a pinned Philox stream against numpy RandomState.normal). Both arms draw a d x q weight matrix and a q offset, then one matmul and one cosine over 3 rows
+FSPEED-HEADER family=classical lane=rbfsampler arm=sklearn-cpu mode=FAST device=arm64-10cores rounds=3 size=shipped
+FSPEED-WARMUP lane=rbfsampler arm=sklearn-cpu shape=3x5q8 ms=1.941333
+FSPEED lane=rbfsampler arm=sklearn-cpu shape=3x5q8 round=1 ms=0.194417 hash=-
+FSPEED lane=rbfsampler arm=sklearn-cpu shape=3x5q8 round=2 ms=0.167458 hash=-
+FSPEED lane=rbfsampler arm=sklearn-cpu shape=3x5q8 round=3 ms=0.151291 hash=-

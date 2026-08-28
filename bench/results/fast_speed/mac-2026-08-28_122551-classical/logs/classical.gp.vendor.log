@@ -1,0 +1,12 @@
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/bench_sklearn.py:139: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=gp arm=cuml-gpu reason=RAPIDS ships no Gaussian process regressor; the arm below is scikit-learn on the CPU and is labeled sklearn-cpu
+FSPEED-NOTE lane=gp arm=sklearn-cpu optimizer=None and normalize_y=False on both sides: our gpr_fit_host implements no hyperparameter optimizer (DEVIATION 1761), so an arm that optimized would be doing different work
+FSPEED-NOTE lane=gp arm=sklearn-cpu scikit-learn works in float64 and we work in float32; that is a real difference in the amount of arithmetic and it cannot be turned off on their side
+FSPEED-HEADER family=classical lane=gp arm=sklearn-cpu mode=FAST device=arm64-10cores rounds=3 size=shipped
+FSPEED-WARMUP lane=gp arm=sklearn-cpu shape=ard.12x3s6 ms=3.580791
+FSPEED lane=gp arm=sklearn-cpu shape=ard.12x3s6 round=1 ms=0.353792 hash=27fa3ce9b8f7824f
+FSPEED lane=gp arm=sklearn-cpu shape=ard.12x3s6 round=2 ms=0.289708 hash=27fa3ce9b8f7824f
+FSPEED lane=gp arm=sklearn-cpu shape=ard.12x3s6 round=3 ms=0.262125 hash=27fa3ce9b8f7824f

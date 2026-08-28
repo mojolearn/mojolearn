@@ -1,0 +1,6 @@
+wrote fixture dump /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122551-classical/dump/rbfsampler.fixture
+FSPEED-HEADER family=classical lane=rbfsampler arm=ours mode=FAST device=Apple_M4 rounds=3 size=shipped scale=fixed
+FSPEED-WARMUP lane=rbfsampler arm=ours shape=3x5q8 ms=5.706
+FSPEED lane=rbfsampler arm=ours shape=3x5q8 round=1 ms=2.58 hash=dabf82a3ba80c8ab
+FSPEED lane=rbfsampler arm=ours shape=3x5q8 round=2 ms=2.558 hash=dabf82a3ba80c8ab
+FSPEED lane=rbfsampler arm=ours shape=3x5q8 round=3 ms=3.3 hash=dabf82a3ba80c8ab

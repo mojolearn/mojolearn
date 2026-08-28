@@ -1,0 +1,5 @@
+FSPEED-HEADER family=classical lane=pca arm=ours mode=FAST device=Apple_M4 rounds=3 size=shipped scale=throughput
+FSPEED-WARMUP lane=pca arm=ours shape=4000000x32c8 ms=282.365
+FSPEED lane=pca arm=ours shape=4000000x32c8 round=1 ms=36.2 hash=38e551d5c5b3f0dc
+FSPEED lane=pca arm=ours shape=4000000x32c8 round=2 ms=36.315 hash=38e551d5c5b3f0dc
+FSPEED lane=pca arm=ours shape=4000000x32c8 round=3 ms=36.845 hash=38e551d5c5b3f0dc

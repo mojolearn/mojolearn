@@ -1,0 +1,261 @@
+FSPEED-HEADER family=seq lane=transformer arm=torch mode=FAST device=Apple_MPS rounds=3 size=shipped
+FSPEED-NOTE lane=transformer arm=torch build=MPS 2.13.0 torch=2.13.0 tf32_switches=cuda.matmul.allow_tf32,cudnn.allow_tf32,cuda.matmul.fp32_precision deterministic=off
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=norm1.weight n=32 hash=e4ae9bac1e4f2eb0
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=norm2.weight n=32 hash=fe0abe179e07e573
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=q_proj.weight n=1024 hash=0d2da18fc0b40d8b
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=k_proj.weight n=1024 hash=8d6df99dbcd279fb
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=v_proj.weight n=1024 hash=566369012d3485a1
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=o_proj.weight n=1024 hash=d879230290d22ae1
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=gate_proj.weight n=2048 hash=5cd27648cfa7a924
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=up_proj.weight n=2048 hash=86fa1f885662c17f
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=down_proj.weight n=2048 hash=62887e5f6fb89109
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=x n=256 hash=cb5073d347fd2aae
+FSPEED-NOTE lane=transformer arm=torch crosscheck LlamaEager vs transformer/corpus block_forward at lane.b2_l4_d32_kv2: max_abs_diff=1.5878e-08
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=norm1.weight n=32 hash=e4ae9bac1e4f2eb0
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=norm2.weight n=32 hash=fe0abe179e07e573
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=q_proj.weight n=1024 hash=0d2da18fc0b40d8b
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=k_proj.weight n=1024 hash=8d6df99dbcd279fb
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=v_proj.weight n=1024 hash=566369012d3485a1
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=o_proj.weight n=1024 hash=d879230290d22ae1
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=gate_proj.weight n=2048 hash=5cd27648cfa7a924
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=up_proj.weight n=2048 hash=86fa1f885662c17f
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=down_proj.weight n=2048 hash=62887e5f6fb89109
+FSPEED-WEIGHTS lane=transformer shape=lane.b2_l4_d32_kv2 tensor=x n=256 hash=cb5073d347fd2aae
+FSPEED-WARMUP lane=transformer arm=torch-gpu-fp32 shape=lane.b2_l4_d32_kv2 ms=2.042042
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=lane.b2_l4_d32_kv2 round=1 ms=2.294792 hash=014d7d70948e1158
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=lane.b2_l4_d32_kv2 round=2 ms=2.294959 hash=014d7d70948e1158
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=lane.b2_l4_d32_kv2 round=3 ms=2.257459 hash=014d7d70948e1158
+FSPEED-NOTE lane=transformer arm=torch-gpu-fp32 output witness shape=lane.b2_l4_d32_kv2 n=256 hash=014d7d70948e1158
+FSPEED-WARMUP lane=transformer arm=torch-gpu-tf32 shape=lane.b2_l4_d32_kv2 ms=4.260625
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=lane.b2_l4_d32_kv2 round=1 ms=2.373417 hash=014d7d70948e1158
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=lane.b2_l4_d32_kv2 round=2 ms=2.373459 hash=014d7d70948e1158
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=lane.b2_l4_d32_kv2 round=3 ms=2.039083 hash=014d7d70948e1158
+FSPEED-NOTE lane=transformer arm=torch-gpu-tf32 output witness shape=lane.b2_l4_d32_kv2 n=256 hash=014d7d70948e1158
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=lane.b2_l4_d32_kv2 ms=1.479041
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=lane.b2_l4_d32_kv2 round=1 ms=1.477291 hash=d3262edc343c168f
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=lane.b2_l4_d32_kv2 round=2 ms=1.354041 hash=d3262edc343c168f
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=lane.b2_l4_d32_kv2 round=3 ms=1.275041 hash=d3262edc343c168f
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-math-fp32 output witness shape=lane.b2_l4_d32_kv2 n=256 hash=d3262edc343c168f
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=lane.b2_l4_d32_kv2 ms=0.980125
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=lane.b2_l4_d32_kv2 round=1 ms=1.253250 hash=d3262edc343c168f
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=lane.b2_l4_d32_kv2 round=2 ms=1.487167 hash=d3262edc343c168f
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=lane.b2_l4_d32_kv2 round=3 ms=1.252167 hash=d3262edc343c168f
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-efficient-fp32 output witness shape=lane.b2_l4_d32_kv2 n=256 hash=d3262edc343c168f
+FSPEED-WARMUP lane=transformer arm=torch-gpu-flash-fp32 shape=lane.b2_l4_d32_kv2 ms=1.112000
+FSPEED lane=transformer arm=torch-gpu-flash-fp32 shape=lane.b2_l4_d32_kv2 round=1 ms=1.244584 hash=d3262edc343c168f
+FSPEED lane=transformer arm=torch-gpu-flash-fp32 shape=lane.b2_l4_d32_kv2 round=2 ms=1.085709 hash=d3262edc343c168f
+FSPEED lane=transformer arm=torch-gpu-flash-fp32 shape=lane.b2_l4_d32_kv2 round=3 ms=0.902875 hash=d3262edc343c168f
+FSPEED-NOTE lane=transformer arm=torch-gpu-flash-fp32 output witness shape=lane.b2_l4_d32_kv2 n=256 hash=d3262edc343c168f
+FSPEED-WARMUP lane=transformer arm=torch-gpu-flash-bf16 shape=lane.b2_l4_d32_kv2 ms=1.151833
+FSPEED lane=transformer arm=torch-gpu-flash-bf16 shape=lane.b2_l4_d32_kv2 round=1 ms=1.389417 hash=33a8ffb39891403a
+FSPEED lane=transformer arm=torch-gpu-flash-bf16 shape=lane.b2_l4_d32_kv2 round=2 ms=1.227459 hash=33a8ffb39891403a
+FSPEED lane=transformer arm=torch-gpu-flash-bf16 shape=lane.b2_l4_d32_kv2 round=3 ms=1.162084 hash=33a8ffb39891403a
+FSPEED-NOTE lane=transformer arm=torch-gpu-flash-bf16 output witness shape=lane.b2_l4_d32_kv2 n=256 hash=33a8ffb39891403a
+FSPEED-AGREE lane=transformer max_abs_diff=3.57628e-07 max_rel_diff=6.73257e-06 n=256
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=norm1.weight n=4096 hash=30dc9291bcd74c4d
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=norm2.weight n=4096 hash=90de83fb74424482
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=q_proj.weight n=16777216 hash=458f23ff554c3cc3
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=k_proj.weight n=4194304 hash=76706639c3aa7d56
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=v_proj.weight n=4194304 hash=81c62305b8e723d5
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=o_proj.weight n=16777216 hash=cffb8b77180868b3
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=gate_proj.weight n=58720256 hash=4616212f0e15d8ca
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=up_proj.weight n=58720256 hash=3d72973cf9e50898
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=down_proj.weight n=58720256 hash=63d7be8563af230a
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t1 tensor=x n=4096 hash=3d93aac664c66028
+FSPEED-WARMUP lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t1 ms=11.264292
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t1 round=1 ms=10.955291 hash=64fcadaa649bc195
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t1 round=2 ms=11.111500 hash=64fcadaa649bc195
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t1 round=3 ms=10.558083 hash=64fcadaa649bc195
+FSPEED-NOTE lane=transformer arm=torch-gpu-fp32 output witness shape=llama8b.prefill.t1 n=4096 hash=64fcadaa649bc195
+FSPEED-WARMUP lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t1 ms=9.577375
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t1 round=1 ms=9.717208 hash=64fcadaa649bc195
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t1 round=2 ms=10.909334 hash=64fcadaa649bc195
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t1 round=3 ms=9.563833 hash=64fcadaa649bc195
+FSPEED-NOTE lane=transformer arm=torch-gpu-tf32 output witness shape=llama8b.prefill.t1 n=4096 hash=64fcadaa649bc195
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t1 ms=9.378500
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t1 round=1 ms=9.090459 hash=64fcadaa649bc195
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t1 round=2 ms=10.609041 hash=64fcadaa649bc195
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t1 round=3 ms=10.000667 hash=64fcadaa649bc195
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-math-fp32 output witness shape=llama8b.prefill.t1 n=4096 hash=64fcadaa649bc195
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t1 ms=9.393291
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t1 round=1 ms=9.225459 hash=64fcadaa649bc195
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t1 round=2 ms=9.247750 hash=64fcadaa649bc195
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t1 round=3 ms=9.166209 hash=64fcadaa649bc195
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-efficient-fp32 output witness shape=llama8b.prefill.t1 n=4096 hash=64fcadaa649bc195
+FSPEED-WARMUP lane=transformer arm=torch-gpu-flash-fp32 shape=llama8b.prefill.t1 ms=10.839250
+FSPEED lane=transformer arm=torch-gpu-flash-fp32 shape=llama8b.prefill.t1 round=1 ms=10.881000 hash=64fcadaa649bc195
+FSPEED lane=transformer arm=torch-gpu-flash-fp32 shape=llama8b.prefill.t1 round=2 ms=10.746291 hash=64fcadaa649bc195
+FSPEED lane=transformer arm=torch-gpu-flash-fp32 shape=llama8b.prefill.t1 round=3 ms=11.714667 hash=64fcadaa649bc195
+FSPEED-NOTE lane=transformer arm=torch-gpu-flash-fp32 output witness shape=llama8b.prefill.t1 n=4096 hash=64fcadaa649bc195
+FSPEED-WARMUP lane=transformer arm=torch-gpu-flash-bf16 shape=llama8b.prefill.t1 ms=5.708542
+FSPEED lane=transformer arm=torch-gpu-flash-bf16 shape=llama8b.prefill.t1 round=1 ms=5.756875 hash=f992e21881c9d23e
+FSPEED lane=transformer arm=torch-gpu-flash-bf16 shape=llama8b.prefill.t1 round=2 ms=6.289959 hash=f992e21881c9d23e
+FSPEED lane=transformer arm=torch-gpu-flash-bf16 shape=llama8b.prefill.t1 round=3 ms=5.315458 hash=f992e21881c9d23e
+FSPEED-NOTE lane=transformer arm=torch-gpu-flash-bf16 output witness shape=llama8b.prefill.t1 n=4096 hash=f992e21881c9d23e
+FSPEED-AGREE lane=transformer max_abs_diff=5.34058e-05 max_rel_diff=0.00266389 n=4096
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=norm1.weight n=4096 hash=19770838eb156233
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=norm2.weight n=4096 hash=661f9b4826837778
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=q_proj.weight n=16777216 hash=9ba40b617f6701c6
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=k_proj.weight n=4194304 hash=3fc887e58a86aae5
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=v_proj.weight n=4194304 hash=64cb8d74bed4b578
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=o_proj.weight n=16777216 hash=5abb6368b7c381b7
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=gate_proj.weight n=58720256 hash=40827a19ef224a29
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=up_proj.weight n=58720256 hash=b8d683c2de2a8d40
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=down_proj.weight n=58720256 hash=be5808bd1301911b
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=x n=32768 hash=b393ca1e2e252bc2
+FSPEED-WARMUP lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t8 ms=12.557292
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t8 round=1 ms=12.754458 hash=809e8075f0a9ad74
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t8 round=2 ms=12.648916 hash=809e8075f0a9ad74
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t8 round=3 ms=12.723584 hash=809e8075f0a9ad74
+FSPEED-NOTE lane=transformer arm=torch-gpu-fp32 output witness shape=llama8b.prefill.t8 n=32768 hash=4c85341d2984a2af
+FSPEED-WARMUP lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t8 ms=12.033667
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t8 round=1 ms=12.519917 hash=809e8075f0a9ad74
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t8 round=2 ms=12.502375 hash=809e8075f0a9ad74
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t8 round=3 ms=12.415458 hash=809e8075f0a9ad74
+FSPEED-NOTE lane=transformer arm=torch-gpu-tf32 output witness shape=llama8b.prefill.t8 n=32768 hash=4c85341d2984a2af
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t8 ms=11.699833
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t8 round=1 ms=12.167166 hash=c07cfefa1e45697b
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t8 round=2 ms=12.061584 hash=c07cfefa1e45697b
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t8 round=3 ms=12.123500 hash=c07cfefa1e45697b
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-math-fp32 output witness shape=llama8b.prefill.t8 n=32768 hash=763482c061917ec0
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t8 ms=11.618208
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t8 round=1 ms=11.459250 hash=c07cfefa1e45697b
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t8 round=2 ms=11.940000 hash=c07cfefa1e45697b
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t8 round=3 ms=12.678958 hash=c07cfefa1e45697b
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-efficient-fp32 output witness shape=llama8b.prefill.t8 n=32768 hash=763482c061917ec0
+FSPEED-WARMUP lane=transformer arm=torch-gpu-flash-fp32 shape=llama8b.prefill.t8 ms=11.609041
+FSPEED lane=transformer arm=torch-gpu-flash-fp32 shape=llama8b.prefill.t8 round=1 ms=11.572291 hash=c07cfefa1e45697b
+FSPEED lane=transformer arm=torch-gpu-flash-fp32 shape=llama8b.prefill.t8 round=2 ms=11.974083 hash=c07cfefa1e45697b
+FSPEED lane=transformer arm=torch-gpu-flash-fp32 shape=llama8b.prefill.t8 round=3 ms=12.598208 hash=c07cfefa1e45697b
+FSPEED-NOTE lane=transformer arm=torch-gpu-flash-fp32 output witness shape=llama8b.prefill.t8 n=32768 hash=763482c061917ec0
+FSPEED-WARMUP lane=transformer arm=torch-gpu-flash-bf16 shape=llama8b.prefill.t8 ms=5.683208
+FSPEED lane=transformer arm=torch-gpu-flash-bf16 shape=llama8b.prefill.t8 round=1 ms=5.079208 hash=3fcf9a3fc451735a
+FSPEED lane=transformer arm=torch-gpu-flash-bf16 shape=llama8b.prefill.t8 round=2 ms=6.617334 hash=3fcf9a3fc451735a
+FSPEED lane=transformer arm=torch-gpu-flash-bf16 shape=llama8b.prefill.t8 round=3 ms=5.639792 hash=3fcf9a3fc451735a
+FSPEED-NOTE lane=transformer arm=torch-gpu-flash-bf16 output witness shape=llama8b.prefill.t8 n=32768 hash=b4617bdcafa4fa21
+FSPEED-AGREE lane=transformer max_abs_diff=0.00491047 max_rel_diff=0.0709332 n=32768
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=norm1.weight n=4096 hash=2d073c4bf3be4215
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=norm2.weight n=4096 hash=8d13de87ae1db05d
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=q_proj.weight n=16777216 hash=19976a410e812f3d
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=k_proj.weight n=4194304 hash=6eb9a28e49ec40ae
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=v_proj.weight n=4194304 hash=91936c2a28335c93
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=o_proj.weight n=16777216 hash=33f47dd4c2896a57
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=gate_proj.weight n=58720256 hash=00ad980c0db80b74
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=up_proj.weight n=58720256 hash=c2002fe051fc2a67
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=down_proj.weight n=58720256 hash=fe37d1e5eadac30a
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t128 tensor=x n=524288 hash=60e833df1e7657f3
+FSPEED-WARMUP lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t128 ms=25.046208
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t128 round=1 ms=25.109334 hash=-
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t128 round=2 ms=24.852042 hash=-
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t128 round=3 ms=24.168042 hash=-
+FSPEED-NOTE lane=transformer arm=torch-gpu-fp32 output witness shape=llama8b.prefill.t128 n=524288 hash=670a5025170ed0d6
+FSPEED-WARMUP lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t128 ms=25.256500
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t128 round=1 ms=24.888375 hash=-
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t128 round=2 ms=24.356125 hash=-
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t128 round=3 ms=24.869916 hash=-
+FSPEED-NOTE lane=transformer arm=torch-gpu-tf32 output witness shape=llama8b.prefill.t128 n=524288 hash=670a5025170ed0d6
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t128 ms=24.147083
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t128 round=1 ms=23.547167 hash=-
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t128 round=2 ms=24.510666 hash=-
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t128 round=3 ms=24.385459 hash=-
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-math-fp32 output witness shape=llama8b.prefill.t128 n=524288 hash=3d63317a2ac95666
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t128 ms=24.489875
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t128 round=1 ms=24.630917 hash=-
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t128 round=2 ms=24.481625 hash=-
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t128 round=3 ms=23.764166 hash=-
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-efficient-fp32 output witness shape=llama8b.prefill.t128 n=524288 hash=3d63317a2ac95666
+FSPEED-WARMUP lane=transformer arm=torch-gpu-flash-fp32 shape=llama8b.prefill.t128 ms=24.270375
+FSPEED lane=transformer arm=torch-gpu-flash-fp32 shape=llama8b.prefill.t128 round=1 ms=23.784792 hash=-
+FSPEED lane=transformer arm=torch-gpu-flash-fp32 shape=llama8b.prefill.t128 round=2 ms=24.384458 hash=-
+FSPEED lane=transformer arm=torch-gpu-flash-fp32 shape=llama8b.prefill.t128 round=3 ms=24.487417 hash=-
+FSPEED-NOTE lane=transformer arm=torch-gpu-flash-fp32 output witness shape=llama8b.prefill.t128 n=524288 hash=3d63317a2ac95666
+FSPEED-WARMUP lane=transformer arm=torch-gpu-flash-bf16 shape=llama8b.prefill.t128 ms=19.506500
+FSPEED lane=transformer arm=torch-gpu-flash-bf16 shape=llama8b.prefill.t128 round=1 ms=20.418333 hash=-
+FSPEED lane=transformer arm=torch-gpu-flash-bf16 shape=llama8b.prefill.t128 round=2 ms=20.300000 hash=-
+FSPEED lane=transformer arm=torch-gpu-flash-bf16 shape=llama8b.prefill.t128 round=3 ms=20.148250 hash=-
+FSPEED-NOTE lane=transformer arm=torch-gpu-flash-bf16 output witness shape=llama8b.prefill.t128 n=524288 hash=8875256d31f6702d
+FSPEED-AGREE lane=transformer max_abs_diff=0.0120764 max_rel_diff=1.89928 n=524288
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=norm1.weight n=4096 hash=f4a0f716372b58ce
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=norm2.weight n=4096 hash=93b3f2cddfd23c01
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=q_proj.weight n=16777216 hash=fe1b3ad1dfd94d86
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=k_proj.weight n=4194304 hash=9f658c4d5c9859c0
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=v_proj.weight n=4194304 hash=286524a647dfa937
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=o_proj.weight n=16777216 hash=7721f27f6a6c4ce8
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=gate_proj.weight n=58720256 hash=630b3a509bc6f674
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=up_proj.weight n=58720256 hash=4cf23bd89c42c8b3
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=down_proj.weight n=58720256 hash=5c6bd78157391281
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t512 tensor=x n=2097152 hash=9ffa2521076bc8c7
+FSPEED-WARMUP lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t512 ms=102.028834
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t512 round=1 ms=101.312833 hash=-
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t512 round=2 ms=101.787000 hash=-
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t512 round=3 ms=102.703459 hash=-
+FSPEED-NOTE lane=transformer arm=torch-gpu-fp32 output witness shape=llama8b.prefill.t512 n=2097152 hash=a7b6679953f06d33
+FSPEED-WARMUP lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t512 ms=101.185459
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t512 round=1 ms=101.399583 hash=-
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t512 round=2 ms=101.237833 hash=-
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t512 round=3 ms=102.319042 hash=-
+FSPEED-NOTE lane=transformer arm=torch-gpu-tf32 output witness shape=llama8b.prefill.t512 n=2097152 hash=a7b6679953f06d33
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t512 ms=97.570667
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t512 round=1 ms=97.602250 hash=-
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t512 round=2 ms=97.387042 hash=-
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t512 round=3 ms=97.549417 hash=-
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-math-fp32 output witness shape=llama8b.prefill.t512 n=2097152 hash=4aedcc4a0675ec81
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t512 ms=95.890042
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t512 round=1 ms=96.100292 hash=-
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t512 round=2 ms=96.518333 hash=-
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t512 round=3 ms=97.550542 hash=-
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-efficient-fp32 output witness shape=llama8b.prefill.t512 n=2097152 hash=4aedcc4a0675ec81
+FSPEED-WARMUP lane=transformer arm=torch-gpu-flash-fp32 shape=llama8b.prefill.t512 ms=101.000000
+FSPEED lane=transformer arm=torch-gpu-flash-fp32 shape=llama8b.prefill.t512 round=1 ms=100.436583 hash=-
+FSPEED lane=transformer arm=torch-gpu-flash-fp32 shape=llama8b.prefill.t512 round=2 ms=99.370625 hash=-
+FSPEED lane=transformer arm=torch-gpu-flash-fp32 shape=llama8b.prefill.t512 round=3 ms=100.280000 hash=-
+FSPEED-NOTE lane=transformer arm=torch-gpu-flash-fp32 output witness shape=llama8b.prefill.t512 n=2097152 hash=4aedcc4a0675ec81
+FSPEED-WARMUP lane=transformer arm=torch-gpu-flash-bf16 shape=llama8b.prefill.t512 ms=80.206709
+FSPEED lane=transformer arm=torch-gpu-flash-bf16 shape=llama8b.prefill.t512 round=1 ms=80.125541 hash=-
+FSPEED lane=transformer arm=torch-gpu-flash-bf16 shape=llama8b.prefill.t512 round=2 ms=79.768000 hash=-
+FSPEED lane=transformer arm=torch-gpu-flash-bf16 shape=llama8b.prefill.t512 round=3 ms=80.615000 hash=-
+FSPEED-NOTE lane=transformer arm=torch-gpu-flash-bf16 output witness shape=llama8b.prefill.t512 n=2097152 hash=5c048da1d9966438
+FSPEED-AGREE lane=transformer max_abs_diff=0.0370274 max_rel_diff=84 n=2097152
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=norm1.weight n=4096 hash=939d6972265aa725
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=norm2.weight n=4096 hash=31804b90e76959c3
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=q_proj.weight n=16777216 hash=b1b0a1ba4873ca77
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=k_proj.weight n=4194304 hash=1c16ca3348db5f0d
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=v_proj.weight n=4194304 hash=237925dc612d1c22
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=o_proj.weight n=16777216 hash=0ec594792330189f
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=gate_proj.weight n=58720256 hash=c5c194484347d30a
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=up_proj.weight n=58720256 hash=9374a3fc8f279dd9
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=down_proj.weight n=58720256 hash=6e1a2f6cfa111b57
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=x n=4096 hash=b91b5914caac5a30
+FSPEED-WEIGHTS lane=transformer shape=llama8b.decode.t1.ctx512 tensor=ctx.x n=2097152 hash=c54a8d22a1bde29a
+FSPEED-WARMUP lane=transformer arm=torch-gpu-fp32 shape=llama8b.decode.t1.ctx512 ms=12.113208
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.decode.t1.ctx512 round=1 ms=11.508291 hash=25d620f56e175aa1
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.decode.t1.ctx512 round=2 ms=10.518959 hash=25d620f56e175aa1
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.decode.t1.ctx512 round=3 ms=12.166625 hash=25d620f56e175aa1
+FSPEED-NOTE lane=transformer arm=torch-gpu-fp32 output witness shape=llama8b.decode.t1.ctx512 n=4096 hash=25d620f56e175aa1
+FSPEED-WARMUP lane=transformer arm=torch-gpu-tf32 shape=llama8b.decode.t1.ctx512 ms=10.127459
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.decode.t1.ctx512 round=1 ms=10.286000 hash=25d620f56e175aa1
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.decode.t1.ctx512 round=2 ms=11.169583 hash=25d620f56e175aa1
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.decode.t1.ctx512 round=3 ms=10.293625 hash=25d620f56e175aa1
+FSPEED-NOTE lane=transformer arm=torch-gpu-tf32 output witness shape=llama8b.decode.t1.ctx512 n=4096 hash=25d620f56e175aa1
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.decode.t1.ctx512 ms=10.141125
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.decode.t1.ctx512 round=1 ms=9.905875 hash=ec9bd0d9e8bc6284
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.decode.t1.ctx512 round=2 ms=9.770750 hash=ec9bd0d9e8bc6284
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.decode.t1.ctx512 round=3 ms=9.534084 hash=ec9bd0d9e8bc6284
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-math-fp32 output witness shape=llama8b.decode.t1.ctx512 n=4096 hash=ec9bd0d9e8bc6284
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.decode.t1.ctx512 ms=9.728834
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.decode.t1.ctx512 round=1 ms=10.610875 hash=ec9bd0d9e8bc6284
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.decode.t1.ctx512 round=2 ms=9.433708 hash=ec9bd0d9e8bc6284
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.decode.t1.ctx512 round=3 ms=9.463958 hash=ec9bd0d9e8bc6284
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-efficient-fp32 output witness shape=llama8b.decode.t1.ctx512 n=4096 hash=ec9bd0d9e8bc6284
+FSPEED-WARMUP lane=transformer arm=torch-gpu-flash-fp32 shape=llama8b.decode.t1.ctx512 ms=9.472541
+FSPEED lane=transformer arm=torch-gpu-flash-fp32 shape=llama8b.decode.t1.ctx512 round=1 ms=10.381417 hash=ec9bd0d9e8bc6284
+FSPEED lane=transformer arm=torch-gpu-flash-fp32 shape=llama8b.decode.t1.ctx512 round=2 ms=9.444500 hash=ec9bd0d9e8bc6284
+FSPEED lane=transformer arm=torch-gpu-flash-fp32 shape=llama8b.decode.t1.ctx512 round=3 ms=9.556500 hash=ec9bd0d9e8bc6284
+FSPEED-NOTE lane=transformer arm=torch-gpu-flash-fp32 output witness shape=llama8b.decode.t1.ctx512 n=4096 hash=ec9bd0d9e8bc6284
+FSPEED-WARMUP lane=transformer arm=torch-gpu-flash-bf16 shape=llama8b.decode.t1.ctx512 ms=5.155750
+FSPEED lane=transformer arm=torch-gpu-flash-bf16 shape=llama8b.decode.t1.ctx512 round=1 ms=5.257500 hash=b393e512937ba972
+FSPEED lane=transformer arm=torch-gpu-flash-bf16 shape=llama8b.decode.t1.ctx512 round=2 ms=6.430750 hash=b393e512937ba972
+FSPEED lane=transformer arm=torch-gpu-flash-bf16 shape=llama8b.decode.t1.ctx512 round=3 ms=5.663916 hash=b393e512937ba972
+FSPEED-NOTE lane=transformer arm=torch-gpu-flash-bf16 output witness shape=llama8b.decode.t1.ctx512 n=4096 hash=b393e512937ba972
+FSPEED-AGREE lane=transformer max_abs_diff=8.01086e-05 max_rel_diff=0.00722394 n=4096
+FSPEED-DONE lane=transformer arm=torch

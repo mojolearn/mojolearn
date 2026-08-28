@@ -1,0 +1,6 @@
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/bench_sklearn.py:139: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=kpss arm=cuml-gpu reason=this RAPIDS build exposes no cuml.tsa.stationarity.kpss_test; falling back to statsmodels on the CPU, labeled statsmodels-cpu
+FSPEED-REFUSED lane=kpss arm=statsmodels-cpu reason=import failed: ModuleNotFoundError("No module named 'statsmodels'")

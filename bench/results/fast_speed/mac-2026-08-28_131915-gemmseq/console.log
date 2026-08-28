@@ -1,0 +1,90 @@
+
+=== gemm.gemm.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/bin_gemmspeed ===
+FSPEED lane=gemm arm=ours shape=llama8b.lm_head.t512 round=1 ms=255.487 hash=5910de8ba5512131
+FSPEED lane=gemm arm=ours shape=llama8b.lm_head.t512 round=2 ms=251.424 hash=5910de8ba5512131
+FSPEED lane=gemm arm=ours shape=llama8b.lm_head.t512 round=3 ms=246.162 hash=5910de8ba5512131
+
+=== seq.transformer.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/bin_seqspeed ===
+FSPEED lane=transformer arm=ours shape=llama8b.decode.t1.ctx512 round=3 ms=33.544 hash=2104cd166a4c517c
+FSPEED-NOTE lane=transformer arm=ours dump shape=llama8b.decode.t1.ctx512 n=4096 path=/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/dump/seq.transformer.llama8b.decode.t1.ctx512.f32.bin
+FSPEED-DONE lane=transformer mode=FAST
+
+=== seq.attention.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/bin_seqspeed ===
+FSPEED lane=attention arm=ours shape=llama8b.decode.t1.ctx512 round=3 ms=17.198 hash=33abfdd6c1472371
+FSPEED-NOTE lane=attention arm=ours dump shape=llama8b.decode.t1.ctx512 n=4096 path=/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/dump/seq.attention.llama8b.decode.t1.ctx512.f32.bin
+FSPEED-DONE lane=attention mode=FAST
+
+=== seq.mlp.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/bin_seqspeed ===
+FSPEED lane=mlp arm=ours shape=llama8b.decode.t1.ctx512 round=3 ms=7.744 hash=f63262c18aa54a1a
+FSPEED-NOTE lane=mlp arm=ours dump shape=llama8b.decode.t1.ctx512 n=4096 path=/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/dump/seq.mlp.llama8b.decode.t1.ctx512.f32.bin
+FSPEED-DONE lane=mlp mode=FAST
+
+=== seq.rmsnorm.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/bin_seqspeed ===
+FSPEED lane=rmsnorm arm=ours shape=llama8b.decode.t1.ctx512 round=3 ms=3.519 hash=7fe822dc61475447
+FSPEED-NOTE lane=rmsnorm arm=ours dump shape=llama8b.decode.t1.ctx512 n=4096 path=/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/dump/seq.rmsnorm.llama8b.decode.t1.ctx512.f32.bin
+FSPEED-DONE lane=rmsnorm mode=FAST
+
+=== seq.mamba.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/bin_seqspeed ===
+FSPEED lane=mamba arm=ours shape=mamba130m.prefill.t512 round=3 ms=8.769 hash=024a1f81a8f44125
+FSPEED-NOTE lane=mamba arm=ours dump shape=mamba130m.prefill.t512 n=393216 path=/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/dump/seq.mamba.mamba130m.prefill.t512.f32.bin
+FSPEED-DONE lane=mamba mode=FAST
+
+=== seq.selective_scan.ours.log :: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/bin_seqspeed ===
+FSPEED lane=selective_scan arm=ours shape=mamba130m.prefill.t512 round=3 ms=1.248 hash=73ade061baf1002c
+FSPEED-NOTE lane=selective_scan arm=ours dump shape=mamba130m.prefill.t512 n=786432 path=/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/dump/seq.selective_scan.mamba130m.prefill.t512.f32.bin
+FSPEED-DONE lane=selective_scan mode=FAST
+
+=== verify.transformer_block.fast.log :: pixi run mojo run -I . transformer/mojo_only/transformer_check.mojo ===
+clause (d): SKIPPED (set MOJOLEARN_TRANSFORMER_CHECK_CLAUSE_D=1). NOTE: two sabotage arms (S07_ROPE_RELATIVE_POSITION and S19_VALUE_SUM_VIA_GEMM) are falsifiable ONLY here, so a lane that never runs clause (d) has eleven arms and not thirteen.
+clause (e): SKIPPED (set MOJOLEARN_TRANSFORMER_CHECK_CLAUSE_E=1)
+SCOPE: this build, this column, FAST only. What is NOT closed by anything printed above: an INDEPENDENT reference (transformer/corpus/ does not exist, so every clause here is our device against our oracle and both are ours); FAST mode; every column that is not this one; and the twelve sabotage builds this binary is not. Contract section 11: nothing cross-vendor until a leg runs, and two backends agreeing closes nothing -- Apple and AMD agreed bit for bit through 302 GEMM stages while NVIDIA diverged at tree001.winners.scores.
+
+=== verify.mamba_block.fast.log :: pixi run mojo run -I . mamba/mojo_only/mamba_check.mojo ===
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: mamba_check: CLAUSE (a) FAILED, 10 stages differ from the oracle, first at A.out on 102 of 256 cells
+/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+
+=== verify.transformer_block.identical.log :: sh tools/with_identical_mode.sh pixi run mojo run -I . transformer/mojo_only/transformer_check.mojo ===
+clause (d): SKIPPED (set MOJOLEARN_TRANSFORMER_CHECK_CLAUSE_D=1). NOTE: two sabotage arms (S07_ROPE_RELATIVE_POSITION and S19_VALUE_SUM_VIA_GEMM) are falsifiable ONLY here, so a lane that never runs clause (d) has eleven arms and not thirteen.
+clause (e): SKIPPED (set MOJOLEARN_TRANSFORMER_CHECK_CLAUSE_E=1)
+SCOPE: this build, this column, IDENTICAL only. What is NOT closed by anything printed above: an INDEPENDENT reference (transformer/corpus/ does not exist, so every clause here is our device against our oracle and both are ours); FAST mode; every column that is not this one; and the twelve sabotage builds this binary is not. Contract section 11: nothing cross-vendor until a leg runs, and two backends agreeing closes nothing -- Apple and AMD agreed bit for bit through 302 GEMM stages while NVIDIA diverged at tree001.winners.scores.
+
+=== verify.mamba_block.identical.log :: sh tools/with_identical_mode.sh pixi run mojo run -I . mamba/mojo_only/mamba_check.mojo ===
+clause (d): SKIPPED (set MOJOLEARN_MAMBA_CHECK_CLAUSE_D=1)
+clause (e): SKIPPED (set MOJOLEARN_MAMBA_CHECK_CLAUSE_E=1)
+SCOPE: this shape only, IDENTICAL only. Clauses (a), (b), (c), (d), (e) and (f) are gated HERE, and the INDEPENDENT corpus cross-check passed on cases 0 and 1 at rtol=1e-7 (run it with MOJOLEARN_MAMBA_CORPUS_CASE + tools/mamba_corpus_check.py). OWED: the other 14 corpus cases, L=16/64/257, FAST mode, every non-Apple column.
+
+=== gemm.gemm.cublas.log :: pixi run -e skgpu python3 tools/speed_gemm_arm.py --rounds 3 ===
+FSPEED lane=gemm arm=mps-default shape=llama8b.lm_head.t512 round=1 ms=238.894916 hash=-
+FSPEED lane=gemm arm=mps-default shape=llama8b.lm_head.t512 round=2 ms=238.973083 hash=-
+FSPEED lane=gemm arm=mps-default shape=llama8b.lm_head.t512 round=3 ms=239.213208 hash=-
+
+=== seq.transformer.torch.log :: pixi run -e skgpu python3 tools/speed_torch_seq.py --lane transformer --rounds 3 --dump-dir /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/dump ===
+FSPEED-NOTE lane=transformer arm=torch-gpu-flash-bf16 output witness shape=llama8b.decode.t1.ctx512 n=4096 hash=b393e512937ba972
+FSPEED-AGREE lane=transformer max_abs_diff=8.01086e-05 max_rel_diff=0.00722394 n=4096
+FSPEED-DONE lane=transformer arm=torch
+
+=== seq.attention.torch.log :: pixi run -e skgpu python3 tools/speed_torch_seq.py --lane attention --rounds 3 --dump-dir /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/dump ===
+FSPEED-NOTE lane=attention arm=torch-gpu-flash-bf16 output witness shape=llama8b.decode.t1.ctx512 n=4096 hash=07bd27566b6f7b64
+FSPEED-AGREE lane=attention max_abs_diff=1.85966e-05 max_rel_diff=0.00130415 n=4096
+FSPEED-DONE lane=attention arm=torch
+
+=== seq.mlp.torch.log :: pixi run -e skgpu python3 tools/speed_torch_seq.py --lane mlp --rounds 3 --dump-dir /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/dump ===
+FSPEED-NOTE lane=mlp arm=torch-gpu-tf32 output witness shape=llama8b.decode.t1.ctx512 n=4096 hash=3808aa8e354d41f7
+FSPEED-AGREE lane=mlp max_abs_diff=7.62939e-05 max_rel_diff=0.0175585 n=4096
+FSPEED-DONE lane=mlp arm=torch
+
+=== seq.rmsnorm.torch.log :: pixi run -e skgpu python3 tools/speed_torch_seq.py --lane rmsnorm --rounds 3 --dump-dir /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/dump ===
+FSPEED-NOTE lane=rmsnorm arm=torch-gpu-tf32 output witness shape=llama8b.decode.t1.ctx512 n=4096 hash=409660f2f0359908
+FSPEED-AGREE lane=rmsnorm max_abs_diff=7.15256e-07 max_rel_diff=3.66111e-07 n=4096
+FSPEED-DONE lane=rmsnorm arm=torch
+
+=== seq.mamba.torch.log :: pixi run -e skgpu python3 tools/speed_torch_seq.py --lane mamba --rounds 3 --dump-dir /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/dump ===
+FSPEED-REFUSED lane=mamba arm=torch-ref-scan-gpu-tf32 reason=ModuleNotFoundError at shape mamba130m.prefill.t512: No module named 'einops'
+FSPEED-REFUSED lane=mamba arm=agree reason=the reference arm did not produce an output at shape mamba130m.prefill.t512
+FSPEED-DONE lane=mamba arm=torch
+
+=== seq.selective_scan.torch.log :: pixi run -e skgpu python3 tools/speed_torch_seq.py --lane selective_scan --rounds 3 --dump-dir /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/dump ===
+FSPEED-REFUSED lane=selective_scan arm=torch-ref-scan-gpu-tf32 reason=ModuleNotFoundError at shape mamba130m.prefill.t512: No module named 'einops'
+FSPEED-REFUSED lane=selective_scan arm=agree reason=the reference arm did not produce an output at shape mamba130m.prefill.t512
+FSPEED-DONE lane=selective_scan arm=torch

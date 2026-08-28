@@ -1,0 +1,12 @@
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/bench_sklearn.py:139: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=resample arm=cuml-gpu reason=RAPIDS ships no bootstrap; the arm below is SciPy on the CPU and is labeled scipy-cpu
+FSPEED-NOTE lane=resample arm=scipy-cpu statistic=mean of column 0, method=percentile, n_resamples=10000, confidence_level passed explicitly. Our bootstrap_host resamples ROWS of the two-column sample (SciPy's paired=True shape) and computes the mean of column 0, which is what this arm does
+FSPEED-NOTE lane=resample arm=scipy-cpu with_bca_diagnostics is False on our side, so neither arm computes a jackknife
+FSPEED-HEADER family=classical lane=resample arm=scipy-cpu mode=FAST device=arm64-10cores rounds=3 size=shipped
+FSPEED-WARMUP lane=resample arm=scipy-cpu shape=200x2r10000 ms=37.910459
+FSPEED lane=resample arm=scipy-cpu shape=200x2r10000 round=1 ms=35.180625 hash=f8eacc6a5e8d8b8b
+FSPEED lane=resample arm=scipy-cpu shape=200x2r10000 round=2 ms=35.149333 hash=f8eacc6a5e8d8b8b
+FSPEED lane=resample arm=scipy-cpu shape=200x2r10000 round=3 ms=34.057208 hash=f8eacc6a5e8d8b8b

@@ -1,0 +1,5 @@
+FSPEED-HEADER family=classical lane=dbscan arm=ours mode=FAST device=Apple_M4 rounds=3 size=shipped scale=fixed
+FSPEED-WARMUP lane=dbscan arm=ours shape=4000x16 ms=27.73
+FSPEED lane=dbscan arm=ours shape=4000x16 round=1 ms=24.249 hash=4869c285f078c0a5
+FSPEED lane=dbscan arm=ours shape=4000x16 round=2 ms=22.431 hash=4869c285f078c0a5
+FSPEED lane=dbscan arm=ours shape=4000x16 round=3 ms=21.806 hash=4869c285f078c0a5

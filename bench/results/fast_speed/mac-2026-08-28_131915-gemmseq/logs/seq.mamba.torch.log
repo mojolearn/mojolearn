@@ -1,0 +1,78 @@
+FSPEED-HEADER family=seq lane=mamba arm=torch mode=FAST device=Apple_MPS rounds=3 size=shipped
+FSPEED-NOTE lane=mamba arm=torch build=MPS 2.13.0 torch=2.13.0 tf32_switches=cuda.matmul.allow_tf32,cudnn.allow_tf32,cuda.matmul.fp32_precision deterministic=off
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=norm.weight n=8 hash=82d54a938d591baf
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=in_proj.weight n=256 hash=f22fc6a25b5a0910
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=conv1d.weight n=64 hash=90cc6f6dd561f6e4
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=conv1d.bias n=16 hash=edb3d28d0d124257
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=x_proj.weight n=528 hash=7e44686404574eaf
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=dt_proj.weight n=16 hash=6c1b908f90a2f0e4
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=dt_proj.bias n=16 hash=b95295e1de8ff21f
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=A_log n=256 hash=3075ef7a49146f3c
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=D n=16 hash=0b155ba1ec3dd1e0
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=out_proj.weight n=128 hash=bbf7e7dac9bfaacc
+FSPEED-WEIGHTS lane=mamba shape=lane.b2_l4_d8 tensor=x n=64 hash=8ee57faefcc7733d
+FSPEED-REFUSED lane=mamba arm=mamba-ssm-cuda reason=mamba_ssm is not importable (No module named 'mamba_ssm'). The only opponent left is the PURE-PYTORCH sequential reference scan, which is NOT what anyone deploys.
+FSPEED-REFUSED lane=mamba arm=torch-ref-scan-gpu reason=ModuleNotFoundError at shape lane.b2_l4_d8: No module named 'einops'
+FSPEED-REFUSED lane=mamba arm=torch-ref-scan-gpu-tf32 reason=ModuleNotFoundError at shape lane.b2_l4_d8: No module named 'einops'
+FSPEED-REFUSED lane=mamba arm=agree reason=the reference arm did not produce an output at shape lane.b2_l4_d8
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=norm.weight n=768 hash=935bef95533ae1ec
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=in_proj.weight n=2359296 hash=3b23ea144a46a005
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=conv1d.weight n=6144 hash=35f623af5f3ba70e
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=conv1d.bias n=1536 hash=90da985da6eb43d3
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=x_proj.weight n=122880 hash=5f14325f2227fe36
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=dt_proj.weight n=73728 hash=dd4c6a116a702514
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=dt_proj.bias n=1536 hash=d9646bbf3578e7e5
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=A_log n=24576 hash=60f6da4a1075bf66
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=D n=1536 hash=98eff32333cba8fb
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=out_proj.weight n=1179648 hash=056439617b9552d1
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t1 tensor=x n=768 hash=9628d92b7a03fefa
+FSPEED-REFUSED lane=mamba arm=mamba-ssm-cuda reason=mamba_ssm is not importable (No module named 'mamba_ssm'). The only opponent left is the PURE-PYTORCH sequential reference scan, which is NOT what anyone deploys.
+FSPEED-REFUSED lane=mamba arm=torch-ref-scan-gpu reason=ModuleNotFoundError at shape mamba130m.prefill.t1: No module named 'einops'
+FSPEED-REFUSED lane=mamba arm=torch-ref-scan-gpu-tf32 reason=ModuleNotFoundError at shape mamba130m.prefill.t1: No module named 'einops'
+FSPEED-REFUSED lane=mamba arm=agree reason=the reference arm did not produce an output at shape mamba130m.prefill.t1
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=norm.weight n=768 hash=29ffa76f7d830538
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=in_proj.weight n=2359296 hash=3cf6cd86f1f4630b
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=conv1d.weight n=6144 hash=ebc04a57b11317ca
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=conv1d.bias n=1536 hash=addcdfea6820daa4
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=x_proj.weight n=122880 hash=e768eba837f92e18
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=dt_proj.weight n=73728 hash=78915298f8d9d5ee
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=dt_proj.bias n=1536 hash=868ca7bfad1eb09a
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=A_log n=24576 hash=713bed8bffae603b
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=D n=1536 hash=451274e066ddc12a
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=out_proj.weight n=1179648 hash=0d6694627e9ed6f7
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=x n=6144 hash=e7528e4ba876320b
+FSPEED-REFUSED lane=mamba arm=mamba-ssm-cuda reason=mamba_ssm is not importable (No module named 'mamba_ssm'). The only opponent left is the PURE-PYTORCH sequential reference scan, which is NOT what anyone deploys.
+FSPEED-REFUSED lane=mamba arm=torch-ref-scan-gpu reason=ModuleNotFoundError at shape mamba130m.prefill.t8: No module named 'einops'
+FSPEED-REFUSED lane=mamba arm=torch-ref-scan-gpu-tf32 reason=ModuleNotFoundError at shape mamba130m.prefill.t8: No module named 'einops'
+FSPEED-REFUSED lane=mamba arm=agree reason=the reference arm did not produce an output at shape mamba130m.prefill.t8
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=norm.weight n=768 hash=4aa921f523b6ac42
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=in_proj.weight n=2359296 hash=eac9458ce9da8173
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=conv1d.weight n=6144 hash=59dfbb854fae9768
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=conv1d.bias n=1536 hash=ee97dbf487ffd3ea
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=x_proj.weight n=122880 hash=1110dc85a856bfa3
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=dt_proj.weight n=73728 hash=55e52d9433c01e4c
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=dt_proj.bias n=1536 hash=8d6ed90034b79bb2
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=A_log n=24576 hash=2c09f76fe78d151e
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=D n=1536 hash=7289bf2a82fc7f6c
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=out_proj.weight n=1179648 hash=5241f52ed48743dd
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t128 tensor=x n=98304 hash=da5b40b810dc107b
+FSPEED-REFUSED lane=mamba arm=mamba-ssm-cuda reason=mamba_ssm is not importable (No module named 'mamba_ssm'). The only opponent left is the PURE-PYTORCH sequential reference scan, which is NOT what anyone deploys.
+FSPEED-REFUSED lane=mamba arm=torch-ref-scan-gpu reason=ModuleNotFoundError at shape mamba130m.prefill.t128: No module named 'einops'
+FSPEED-REFUSED lane=mamba arm=torch-ref-scan-gpu-tf32 reason=ModuleNotFoundError at shape mamba130m.prefill.t128: No module named 'einops'
+FSPEED-REFUSED lane=mamba arm=agree reason=the reference arm did not produce an output at shape mamba130m.prefill.t128
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=norm.weight n=768 hash=f1d1236e08c89e88
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=in_proj.weight n=2359296 hash=bb05213b637f1a4a
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=conv1d.weight n=6144 hash=e9c9a84f1a766ce1
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=conv1d.bias n=1536 hash=651606aae79d5f9d
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=x_proj.weight n=122880 hash=c195cf9bcc2f6792
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=dt_proj.weight n=73728 hash=cd355825a97db4bd
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=dt_proj.bias n=1536 hash=1fa1588a6c1c718d
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=A_log n=24576 hash=6e4e811ed61a3e05
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=D n=1536 hash=db420a6dc68a0c5a
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=out_proj.weight n=1179648 hash=f531e2ff03764cb1
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t512 tensor=x n=393216 hash=c83b7a7b649e48d5
+FSPEED-REFUSED lane=mamba arm=mamba-ssm-cuda reason=mamba_ssm is not importable (No module named 'mamba_ssm'). The only opponent left is the PURE-PYTORCH sequential reference scan, which is NOT what anyone deploys.
+FSPEED-REFUSED lane=mamba arm=torch-ref-scan-gpu reason=ModuleNotFoundError at shape mamba130m.prefill.t512: No module named 'einops'
+FSPEED-REFUSED lane=mamba arm=torch-ref-scan-gpu-tf32 reason=ModuleNotFoundError at shape mamba130m.prefill.t512: No module named 'einops'
+FSPEED-REFUSED lane=mamba arm=agree reason=the reference arm did not produce an output at shape mamba130m.prefill.t512
+FSPEED-DONE lane=mamba arm=torch
