@@ -69,7 +69,13 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.expand_distances import expand_distances_kernel
 from core.gemm import gemm_nt
 from core.row_norms import NORM_TPB, row_norm_kernel
-from mojo_only.kernel_matrix import TARGET_COLUMN, lib_lane_width_for
+from mojo_only.kernel_matrix import (
+    K_LIB_SELECT_WARPSORT,
+    TARGET_COLUMN,
+    knn_warpsort_select_for,
+    lib_block_size_for,
+    lib_lane_width_for,
+)
 from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from neighbors.mojo_only.pinned_distance_tile import (
     PINNED_TILE_TPB,
@@ -85,6 +91,10 @@ from nn.topk import top_k
 from neighbors.ported.matrix.detail.select_radix import (
     SELECT_BLOCK,
     radix_topk_one_block_kernel,
+)
+from neighbors.ported.matrix.detail.select_warpsort import (
+    MAX_CAPACITY,
+    warpsort_topk_block_kernel,
 )
 from neighbors.ported.neighbors.detail.fused_l2_knn import (
     FKNN_MAX_NN,
@@ -113,6 +123,99 @@ def compute_norms(
         Int32(1 if take_sqrt else 0),
         grid_dim=(n_rows, 1, 1),
         block_dim=(NORM_TPB, 1, 1),
+    )
+
+
+def _warpsort_select_tile[
+    capacity: Int
+](
+    ctx: DeviceContext,
+    mut dist_tile: DeviceBuffer[DType.float32],
+    mut dummy_idx: DeviceBuffer[DType.uint32],
+    mut out_dist: DeviceBuffer[DType.float32],
+    mut out_idx: DeviceBuffer[DType.uint32],
+    out_offset: Int,
+    rows: Int,
+    n_index: Int,
+    k: Int,
+) raises:
+    """One query tile's top-k through the ported RAFT warpsort
+    (DEVIATION 1922; `select_warpsort.mojo::warpsort_topk_block_kernel`).
+
+    LAUNCH GEOMETRY per that file's module docstring: the SINGLE-PASS form,
+    `num_blocks == 1` and `grid = (1, rows, 1)`, which writes the FINAL
+    answer with no second merging launch. Each block grid-strides one whole
+    row of the materialized tile, exactly the shape `_run_warpsort` in
+    `neighbors/mojo_only/warpsort_check.mojo` gates against radix and the
+    host oracle. RAFT's `calc_launch_parameter` (`select_k-inl.cuh:1058`)
+    would additionally split long rows over several blocks and merge with a
+    second launch (`select_k_:1106-1120`); that caller loop is NOT ported
+    (declared in the module docstring) and is the open item if one block
+    per row underfills a device.
+
+    `capacity` is their `bound_by_power_of_two(k)` clamped to a floor of
+    32: below 32 RAFT shrinks `warp_width` to the capacity and rescales
+    `block_warps`, a subwarp form nothing here instantiates; capacity 32 is
+    correct for every `k <= 32` and keeps `warp_width == 32 == WARP_LANES`,
+    which is the geometry the whole file's uniformity argument is written
+    against.
+
+    `dummy_idx` is the `has_in_idx == 0` contract: a valid, DISTINCT buffer
+    that is never read; the payload is the column index, which is the
+    neighbor id this caller wants.
+    """
+    comptime assert capacity >= 32 and capacity <= MAX_CAPACITY, (
+        "warpsort selection: capacity must be in [32, kMaxCapacity]"
+    )
+    #: `block_warps * warp_width`, keyed off the kernel matrix so the ONE
+    #: place that must widen on AMD (`lib_block_size_for`'s own note) is
+    #: also the one this launch reads. On every column this row admits
+    #: (32-lane), this is 256 = 8 warps, their `__launch_bounds__(256)`.
+    comptime BDX = lib_block_size_for[K_LIB_SELECT_WARPSORT, TARGET_COLUMN]()
+    comptime BW = BDX // 32
+    ctx.enqueue_function[warpsort_topk_block_kernel[capacity, True, BW]](
+        dist_tile.unsafe_ptr(),
+        dummy_idx.unsafe_ptr(),
+        out_dist.unsafe_ptr().unsafe_offset(out_offset),
+        out_idx.unsafe_ptr().unsafe_offset(out_offset),
+        Int32(n_index),
+        Int32(k),
+        Int32(0),
+        grid_dim=(1, rows, 1),
+        block_dim=(BDX, 1, 1),
+    )
+
+
+def _radix_select_tile(
+    ctx: DeviceContext,
+    mut dist_tile: DeviceBuffer[DType.float32],
+    mut buf_val: DeviceBuffer[DType.float32],
+    mut buf_idx: DeviceBuffer[DType.uint32],
+    mut out_dist: DeviceBuffer[DType.float32],
+    mut out_idx: DeviceBuffer[DType.uint32],
+    out_offset: Int,
+    rows: Int,
+    n_index: Int,
+    k: Int,
+    buf_len: Int,
+) raises:
+    """One query tile's top-k through the ported RAFT radix selector --
+    the FAST launch that sat inline in `tiled_brute_force_knn` before
+    DEVIATION 1922 gave the selection two call sites. Byte-for-byte the
+    same enqueue; hoisted, not changed.
+    """
+    ctx.enqueue_function[radix_topk_one_block_kernel](
+        dist_tile.unsafe_ptr(),
+        out_dist.unsafe_ptr().unsafe_offset(out_offset),
+        out_idx.unsafe_ptr().unsafe_offset(out_offset),
+        buf_val.unsafe_ptr(),
+        buf_idx.unsafe_ptr(),
+        Int32(n_index),
+        Int32(k),
+        Int32(buf_len),
+        Int32(1),
+        grid_dim=(rows, 1, 1),
+        block_dim=(SELECT_BLOCK, 1, 1),
     )
 
 
@@ -201,10 +304,13 @@ def tiled_brute_force_knn(
                 block_dim=(256, 1, 1),
             )
 
-        # THE SELECTION. Two implementations, and which one runs is a
-        # parameter rather than a preference.
+        # THE SELECTION. Three implementations, and which one runs is a
+        # parameter or a kernel-matrix row, never a preference.
         #
-        # The ported RAFT radix select is the default. `nn.topk.top_k` is a
+        # The ported RAFT radix select is the base default; on the columns
+        # `knn_warpsort_select_for` admits (DEVIATION 1922), the FAST
+        # selector for `2 < k <= 256` is the ported RAFT warpsort, which is
+        # RAFT's own `select_k` choice for that band. `nn.topk.top_k` is a
         # device-wide call that consumes a materialized matrix, which is
         # exactly what this path already has, so it is a legitimate second
         # opinion HERE - and it is the reason it can never be the fused
@@ -254,19 +360,57 @@ def tiled_brute_force_knn(
                     block_dim=(SELECT_BLOCK, 1, 1),
                 )
             else:
-                ctx.enqueue_function[radix_topk_one_block_kernel](
-                    dist_tile.unsafe_ptr(),
-                    out_dist.unsafe_ptr().unsafe_offset(q * k),
-                    out_idx.unsafe_ptr().unsafe_offset(q * k),
-                    buf_val.unsafe_ptr(),
-                    buf_idx.unsafe_ptr(),
-                    Int32(n_index),
-                    Int32(k),
-                    Int32(buf_len),
-                    Int32(1),
-                    grid_dim=(rows, 1, 1),
-                    block_dim=(SELECT_BLOCK, 1, 1),
-                )
+                # DEVIATION 1922 (kernel-matrix row `knn_warpsort_select_for`):
+                # RAFT's OWN `select_k` dispatch sends `2 < k <= 256` to the
+                # WARPSORT family and only `k > 256` to radix
+                # (`select_k-inl.cuh:38`), and this tree ran radix alone
+                # across that whole band. On the columns the row admits
+                # (32-lane FAST), the band takes the ported warpsort in the
+                # single-pass block form; everything else -- k outside the
+                # band, excluded columns, and IDENTICAL, whose selector is
+                # pinned above -- keeps radix byte for byte.
+                # The `comptime if` is load-bearing, not style: this
+                # function is non-generic, so any kernel named under a
+                # RUNTIME `if` here instantiates whenever the module
+                # builds, reachable or not -- the exact shape that killed
+                # the first MI300X gbdt build (DEVIATION 1910's lesson).
+                # The 32-lane warpsort kernel must not be INSTANTIATED on
+                # a column the row excludes, so the exclusion is comptime.
+                comptime if knn_warpsort_select_for[TARGET_COLUMN, False]():
+                    if k > 2 and k <= MAX_CAPACITY:
+                        # `bound_by_power_of_two(k)` with a floor of 32;
+                        # the four instantiations mirror RAFT's template
+                        # dispatch over capacities.
+                        if k <= 32:
+                            _warpsort_select_tile[32](
+                                ctx, dist_tile, buf_idx, out_dist, out_idx,
+                                q * k, rows, n_index, k,
+                            )
+                        elif k <= 64:
+                            _warpsort_select_tile[64](
+                                ctx, dist_tile, buf_idx, out_dist, out_idx,
+                                q * k, rows, n_index, k,
+                            )
+                        elif k <= 128:
+                            _warpsort_select_tile[128](
+                                ctx, dist_tile, buf_idx, out_dist, out_idx,
+                                q * k, rows, n_index, k,
+                            )
+                        else:
+                            _warpsort_select_tile[256](
+                                ctx, dist_tile, buf_idx, out_dist, out_idx,
+                                q * k, rows, n_index, k,
+                            )
+                    else:
+                        _radix_select_tile(
+                            ctx, dist_tile, buf_val, buf_idx, out_dist,
+                            out_idx, q * k, rows, n_index, k, buf_len,
+                        )
+                else:
+                    _radix_select_tile(
+                        ctx, dist_tile, buf_val, buf_idx, out_dist,
+                        out_idx, q * k, rows, n_index, k, buf_len,
+                    )
         q += rows
     ctx.synchronize()
 

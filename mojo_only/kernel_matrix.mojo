@@ -2143,6 +2143,60 @@ def lib_smem_pages_for[column: Int, page_bytes: Int]() -> Int:
     return 2 if 2 * page_bytes <= limit else 1
 
 
+def knn_warpsort_select_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row (DEVIATION 1922): whether the k-NN TILED path's
+    selector is the ported RAFT WARPSORT (`select_warpsort.mojo`,
+    `warpsort_topk_block_kernel`) instead of the ported RAFT radix
+    (`select_radix.mojo`) for `2 < k <= 256`.
+
+    THEIR OWN DISPATCH IS THE ARGUMENT, NOT A PREFERENCE OF OURS. RAFT's
+    `select_k` (`raft/matrix/detail/select_k-inl.cuh:38`) sends
+    `2 < k <= 256` to the warpsort family and only `k > 256` to radix, so
+    every k a user actually asks for takes warpsort on their stack.
+    `neighbors/README.md` recorded that our tree ran radix ALONE across
+    that whole range with the two never measured against each other; the
+    2026-08-25/26 H100 legs put the knn lane 21.6-23.9x behind `cuml-gpu`
+    at k = 10, which is squarely inside their warpsort band.
+
+    WHY A ROW AND NOT A DEFAULT FLIP: `select_warpsort.mojo` pins
+    `WARP_LANES = 32` because RAFT pins `WarpSize = 32` -- its subwarp
+    sizes, array lengths (`Capacity / min(Capacity, 32)`) and shuffles are
+    32-lane by construction, so on a 64-wide wavefront the bitonic
+    subwarps would be mis-sized and the shuffles would cross them (the
+    file's own docstring, item 9; the same geometry that makes
+    `fused_l2_knn` refuse there). So:
+
+      - NVIDIA under FAST: True. The column the deficit is measured on,
+        the lane width RAFT wrote the kernel for, and their dispatch's
+        own choice for this k band.
+      - APPLE under FAST: False FOR NOW -- radix vs warpsort has never
+        been measured on Metal (`neighbors/README.md`), the Mac board's
+        knn rows were all taken on radix, and leaving the column
+        byte-for-byte untouched keeps those numbers meaningful. This row
+        is where Apple flips if a Mac window says warpsort wins there.
+      - AMD (CDNA, 64-lane): False, EXCLUDED like DEVIATION 1910's
+        sub-byte families: the kernel's geometry does not exist at
+        64 lanes until a width-parameterized port is written. Radix has
+        no warp primitive at all and stays correct there.
+      - IDENTICAL: False on every column. The identical selector is
+        `select_radix_identical` with the composite `(distance, index)`
+        key (DEVIATIONS 500/501) and MUST NOT move; the FAISS queue
+        compares distance only and has no tie class.
+
+    A SCHEDULING row by the one question with a stated seam: both
+    selectors return the k smallest DISTANCES of the same materialized
+    tile, so the selected value multiset is the same; which EQUIDISTANT
+    index survives and in which slot ties land may differ (radix's
+    arrival-order atomics vs the bitonic network's positional merge).
+    FAST already declares the tie set unpinned on this path (row 11), so
+    the seam is inside FAST's existing declaration, exactly like a
+    GEMM-order change.
+    """
+    comptime if identical:
+        return False
+    return column == COLUMN_NVIDIA
+
+
 # ---------------------------------------------------------------------------
 # THE MODEL-EVALUATOR QUANTIZE SEARCH (Apple's ALU budget, priced)
 # ---------------------------------------------------------------------------
