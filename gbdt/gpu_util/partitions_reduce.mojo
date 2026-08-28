@@ -133,6 +133,12 @@ def partition_stats_partial_kernel(
     stated. It is now what it is in their code: a grid-sizing hint. Passing
     one that is too small costs launches, not rows, and
     `check_partitions_reduce_narrow_grid` runs exactly that case.
+
+    TWIN (DEVIATION 1902): `partition_stats_partial_gather_kernel`
+    (`gpu_util/kernel/partition_stats_gather.mojo`) is this body with the
+    stat load gathered through `row_index`, for the ridx-only split route.
+    An edit to this loop must visit that one; the reason the body is
+    doubled rather than parameterized is on that file's banner.
     """
     var line_size = Int(line_size_in)
     var max_chunks = Int(max_chunks_in)

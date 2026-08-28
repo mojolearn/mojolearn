@@ -423,6 +423,8 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels import (
     NodeWorkItem,
     SharedMemoryConfig,
     WorkloadInfo,
+    recombine_seed_halves,
+    sampled_column_at,
 )
 from ensemble.flatnode import SparseTreeNode
 
@@ -547,22 +549,67 @@ struct DeviceArgs[F: Copyable & Deinitable](Movable):
     """
 
     var host: HostBuffer[DType.uint8]
+    # DEVIATION 1917 -- the candidate's staging. `upload` writes the new
+    # value HERE first and byte-compares it against `host` (the bytes the
+    # last enqueued copy sent); identical bytes skip the device copy
+    # entirely, because the in-order queue already delivered them. Both
+    # pinned buffers are zero-filled once at construction so the padding
+    # bytes a fieldwise store never touches are STABLE ZEROS on both
+    # sides -- a spurious padding mismatch can only cost an extra copy
+    # (fail-safe), never skip a real change.
+    var cmp: HostBuffer[DType.uint8]
+    var staged: Bool
     var dev: DeviceBuffer[DType.uint8]
 
     def __init__(out self, ctx: DeviceContext) raises:
-        self.host = ctx.enqueue_create_host_buffer[DType.uint8](
-            size_of[Self.F]()
-        )
-        self.dev = ctx.enqueue_create_buffer[DType.uint8](size_of[Self.F]())
+        var nbytes = size_of[Self.F]()
+        self.host = ctx.enqueue_create_host_buffer[DType.uint8](nbytes)
+        self.cmp = ctx.enqueue_create_host_buffer[DType.uint8](nbytes)
+        self.staged = False
+        self.dev = ctx.enqueue_create_buffer[DType.uint8](nbytes)
+        # Pinned host memory arrives with arbitrary contents; the compare
+        # below must never read an uninitialized byte. Host-side stores;
+        # nothing on the device reads either buffer.
+        var hp = self.host.unsafe_ptr()
+        var cp = self.cmp.unsafe_ptr()
+        for i in range(nbytes):
+            hp.unsafe_store(i, UInt8(0))
+            cp.unsafe_store(i, UInt8(0))
 
     def upload(
         mut self, ctx: DeviceContext, args: Self.F
     ) raises -> MutPointer[Self.F, MutUntrackedOrigin]:
-        self.host.unsafe_ptr().unsafe_bitcast[Self.F]()[
+        """DEVIATION 1917: the copy is enqueued ONLY when the bytes moved.
+        If the candidate's bytes equal the last-sent bytes, the device
+        already holds this value (the queue is in-order and every kernel
+        reading the pointer is enqueued after the copy that staged it),
+        so re-sending is pure transfer waste. In `fit_forest` this turns
+        the per-tree restaging that `_invalidate_args_cache` forces into
+        a per-fit cost: each pipeline slot's dataset bytes (pointers,
+        counts, strides) are identical for every tree it builds, so tree
+        2..N's uploads compare equal and enqueue nothing. A caller whose
+        bytes DID change pays exactly the pre-1917 path."""
+        var nbytes = size_of[Self.F]()
+        self.cmp.unsafe_ptr().unsafe_bitcast[Self.F]()[
             unsafe_offset=0
         ] = args.copy()
+        var hp = self.host.unsafe_ptr()
+        var cp = self.cmp.unsafe_ptr()
+        if self.staged:
+            var same = True
+            for i in range(nbytes):
+                if hp.unsafe_load(i) != cp.unsafe_load(i):
+                    same = False
+                    break
+            if same:
+                return self.device_ptr()
+        # Byte copy rather than a second fieldwise store, so `host`'s
+        # padding stays the stable bytes `cmp` carries.
+        for i in range(nbytes):
+            hp.unsafe_store(i, cp.unsafe_load(i))
         log_launch("xfer_args_upload")
         ctx.enqueue_copy(dst_buf=self.dev, src_ptr=self.host.unsafe_ptr())
+        self.staged = True
         return self.device_ptr()
 
     def device_ptr(mut self) -> MutPointer[Self.F, MutUntrackedOrigin]:
@@ -576,6 +623,135 @@ struct DeviceArgs[F: Copyable & Deinitable](Movable):
             .unsafe_origin_cast[MutUntrackedOrigin]()
             .unsafe_bitcast[Self.F]()
         )
+
+
+# ===========================================================================
+# DEVIATION 1916 -- ONE setup launch per sampling round.
+# ===========================================================================
+
+# The fused kernel's block width. 256 was `sample_features`'s width; the
+# other two writes ran at 128 (initSplit) and as a memset. Every write
+# below is a pure function of its flat index, so the width moves no value.
+comptime PHASE_SETUP_TPB = 256
+
+
+def phase_setup_kernel[
+    dtype: DType
+](
+    splits: MutPointer[Split[dtype], MutAnyOrigin],
+    n_splits: Int32,
+    mutex: MutPointer[Int32, MutAnyOrigin],
+    n_mutex: Int32,
+    column_samples: MutPointer[Int32, MutAnyOrigin],
+    work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    n_column_samples: Int32,
+    treeid: Int32,
+    seed_lo: Int32,
+    seed_hi: Int32,
+    sample_offset: Int32,
+    n_cols: Int32,
+    k: Int32,
+):
+    """DEVIATION 1916: `computeBestSplits`'s three independent setup writes
+    -- `initSplit` (`builder.cuh:489` / `split.cuh:284-289`), the mutex
+    re-zero (`:490`) and `sampleFeatures` (`:505-520`) -- as ONE launch.
+
+    cuML enqueues them as three cheap CUDA ops on the stream; here every
+    enqueue is host-priced, and a covtype fit pays the trio ~9.5k times
+    (once per sampling round). Fusing is pure orchestration: the three
+    write DISJOINT buffers (`splits`, `mutex`, `column_samples`), none
+    reads what another writes, and every element is a pure function of
+    its flat index and the arguments -- `splits[i] = Split()` (their
+    default-construct lambda), `mutex[i] = 0` (their memset, over the
+    full `max_batch_size` extent), and `column_samples[i] =
+    sampled_column_at(...)` (the SAME `@always_inline` body
+    `sample_features_kernel` runs, imported, not transcribed). No
+    accumulation exists in any of the three, so no accumulation order can
+    move; the thread/block shape is free to differ from the originals'.
+
+    ORDER AGAINST THE PHASE UPLOAD: the feature sample reads
+    `work_items[...]` from the device arena, so this launch must be
+    enqueued AFTER `_enqueue_phase_upload` -- which also covers the two
+    writes that used to be enqueued before it (nothing between their old
+    position and the first reader, `find_best_splits`, reads `splits` or
+    `mutex`; the in-order queue makes the two positions equivalent to
+    every reader).
+    """
+    var seed = recombine_seed_halves(seed_lo, seed_hi)
+    var extent = Int(n_splits)
+    if Int(n_mutex) > extent:
+        extent = Int(n_mutex)
+    if Int(n_column_samples) > extent:
+        extent = Int(n_column_samples)
+    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while idx < extent:
+        if idx < Int(n_splits):
+            # `split.cuh:284-289` -- a default-constructed Split.
+            splits[unsafe_offset=idx] = Split[dtype]()
+        if idx < Int(n_mutex):
+            # `builder.cuh:490` -- zeroed over max_batch_size entries,
+            # not just the live ones.
+            mutex[unsafe_offset=idx] = Int32(0)
+        if idx < Int(n_column_samples):
+            column_samples[unsafe_offset=idx] = sampled_column_at(
+                work_items, idx, seed, treeid, sample_offset, n_cols, k
+            )
+        idx += stride
+
+
+def launch_phase_setup_kernel[
+    dtype: DType
+](
+    ctx: DeviceContext,
+    splits: MutPointer[Split[dtype], MutUntrackedOrigin],
+    n_work_items: Int,
+    mutex: MutPointer[Int32, MutUntrackedOrigin],
+    n_mutex: Int,
+    column_samples: MutPointer[Int32, MutUntrackedOrigin],
+    work_items: MutPointer[NodeWorkItem, MutUntrackedOrigin],
+    n_column_samples: Int,
+    treeid: Int32,
+    seed: UInt64,
+    sample_offset: Int,
+    n_cols: Int,
+    n_sampled_cols: Int,
+) raises:
+    """DEVIATION 1916's launcher. The seed splits into two Int32 halves BY
+    BIT PATTERN with every intermediate bound to a `var` -- the same
+    load-bearing spelling `Builder._sample_features` carried (chaining
+    the conversions folds to one sign-extending cast); the kernel
+    recombines through `recombine_seed_halves`, the single-sourced
+    masks."""
+    var extent = n_work_items
+    if n_mutex > extent:
+        extent = n_mutex
+    if n_column_samples > extent:
+        extent = n_column_samples
+    if extent == 0:
+        return
+    var hi_u = (seed >> 32).cast[DType.uint32]()
+    var lo_u = (seed & 0xFFFFFFFF).cast[DType.uint32]()
+    var hi_arg = hi_u.cast[DType.int32]()
+    var lo_arg = lo_u.cast[DType.int32]()
+    log_launch("phase_setup")
+    ctx.enqueue_function[phase_setup_kernel[dtype]](
+        splits.unsafe_origin_cast[MutAnyOrigin](),
+        Int32(n_work_items),
+        mutex.unsafe_origin_cast[MutAnyOrigin](),
+        Int32(n_mutex),
+        column_samples.unsafe_origin_cast[MutAnyOrigin](),
+        work_items.unsafe_origin_cast[MutAnyOrigin](),
+        Int32(n_column_samples),
+        treeid,
+        lo_arg,
+        hi_arg,
+        Int32(sample_offset),
+        Int32(n_cols),
+        Int32(n_sampled_cols),
+        grid_dim=ceildiv(extent, PHASE_SETUP_TPB),
+        block_dim=PHASE_SETUP_TPB,
+    )
 
 
 # ===========================================================================
@@ -927,6 +1103,17 @@ struct NodeSplitScratch[dtype: DType, TPB: Int](Movable):
     var block_agg: DeviceBuffer[DType.uint8]
     var block_head: DeviceBuffer[DType.uint8]
     var ops_host: HostBuffer[DType.uint8]
+    # DEVIATION 1917 -- `DeviceArgs`'s compare-then-skip, applied to the
+    # per-batch ops functor. The blob's only per-batch byte is the
+    # workload pointer (it moves with the packed span's `cur_wl_rel`,
+    # DEVIATION 1908, quantized to 512-byte steps); every batch whose
+    # live work-item count lands in the same 512-byte bucket produces
+    # byte-identical ops and the copy is skipped. `ops_cmp` stages the
+    # candidate; both pinned buffers are zero-filled once so padding is
+    # stable on both sides (a spurious mismatch costs a copy, never
+    # skips a change).
+    var ops_cmp: HostBuffer[DType.uint8]
+    var ops_staged: Bool
     var ops_dev: DeviceBuffer[DType.uint8]
 
     def __init__(
@@ -949,9 +1136,18 @@ struct NodeSplitScratch[dtype: DType, TPB: Int](Movable):
         self.ops_host = ctx.enqueue_create_host_buffer[DType.uint8](
             size_of[Self.Ops]()
         )
+        self.ops_cmp = ctx.enqueue_create_host_buffer[DType.uint8](
+            size_of[Self.Ops]()
+        )
+        self.ops_staged = False
         self.ops_dev = ctx.enqueue_create_buffer[DType.uint8](
             size_of[Self.Ops]()
         )
+        var hp = self.ops_host.unsafe_ptr()
+        var cp = self.ops_cmp.unsafe_ptr()
+        for i in range(size_of[Self.Ops]()):
+            hp.unsafe_store(i, UInt8(0))
+            cp.unsafe_store(i, UInt8(0))
 
 
 def launch_node_split_kernel[
@@ -1036,13 +1232,29 @@ def launch_node_split_kernel[
     var ops = OpsT(
         dataset, work_items, splits, workload_info, partition_row_ids
     )
-    scratch.ops_host.unsafe_ptr().unsafe_bitcast[OpsT]()[
+    # DEVIATION 1917: stage the candidate, compare against the bytes the
+    # last enqueued copy sent, and skip the copy when they are equal --
+    # the in-order queue already delivered them, and this batch's kernels
+    # are enqueued after that copy. See `NodeSplitScratch.ops_cmp`.
+    scratch.ops_cmp.unsafe_ptr().unsafe_bitcast[OpsT]()[
         unsafe_offset=0
     ] = ops
-    log_launch("xfer_nodesplit_ops")
-    ctx.enqueue_copy(
-        dst_buf=scratch.ops_dev, src_ptr=scratch.ops_host.unsafe_ptr()
-    )
+    var ops_hp = scratch.ops_host.unsafe_ptr()
+    var ops_cp = scratch.ops_cmp.unsafe_ptr()
+    var ops_same = scratch.ops_staged
+    if ops_same:
+        for i in range(size_of[OpsT]()):
+            if ops_hp.unsafe_load(i) != ops_cp.unsafe_load(i):
+                ops_same = False
+                break
+    if not ops_same:
+        for i in range(size_of[OpsT]()):
+            ops_hp.unsafe_store(i, ops_cp.unsafe_load(i))
+        log_launch("xfer_nodesplit_ops")
+        ctx.enqueue_copy(
+            dst_buf=scratch.ops_dev, src_ptr=scratch.ops_host.unsafe_ptr()
+        )
+        scratch.ops_staged = True
     var ops_ptr = (
         scratch.ops_dev.unsafe_ptr()
         .unsafe_origin_cast[MutUntrackedOrigin]()
@@ -1092,7 +1304,11 @@ struct LeafArgs[O: ObjectiveLike](Copyable, Movable):
 
 
 def leaf_kernel[
-    O: ObjectiveLike, TPB: Int, LEAF_SMEM_BIN_SLOTS: Int, sabotage: Int = 0
+    O: ObjectiveLike,
+    TPB: Int,
+    LEAF_SMEM_BIN_SLOTS: Int,
+    sabotage: Int = 0,
+    zero_fill: Bool = False,
 ](
     argsp: MutPointer[LeafArgs[O], MutAnyOrigin],
     tree: MutPointer[SparseTreeNode[O.DataT], MutAnyOrigin],
@@ -1137,6 +1353,23 @@ def leaf_kernel[
     var node_id = Int(block_idx.x)
     ref node = tree[unsafe_offset=node_id]
     ref range = instance_ranges[unsafe_offset=node_id]
+    # DEVIATION 1918 -- the zero fill their `builder.cuh:659-660` memset
+    # performs, fused: each block zeroes ITS OWN node's slot before the
+    # `IsLeaf` early return, so an internal node's slot ends 0 exactly as
+    # the memset left it, and a leaf's zeros are overwritten by
+    # `SetLeafVector` below -- ordered by the two `barrier()`s every
+    # thread of a leaf block already passes before tid 0 writes. One
+    # block owns one slot, so no cross-block order exists to depend on.
+    # OFF by default; only `builder.mojo`'s `set_leaf_predictions` (which
+    # drops its memset with this flag) turns it on, so every check's
+    # direct launch keeps the pre-1918 contract.
+    comptime if zero_fill:
+        var z = Int(thread_idx.x)
+        while z < Int(dataset.num_outputs):
+            leaves[
+                unsafe_offset = Int(dataset.num_outputs) * node_id + z
+            ] = Scalar[O.DataT](0)
+            z += Int(block_dim.x)
     # `:227`
     comptime if sabotage != 2:
         if not node.IsLeaf():
@@ -1189,6 +1422,7 @@ def launch_leaf_kernel[
     TPB: Int = TPB_DEFAULT,
     LEAF_SMEM_BIN_SLOTS: Int = LEAF_SMEM_MAX_OUTPUTS,
     sabotage: Int = 0,
+    zero_fill: Bool = False,
 ](
     ctx: DeviceContext,
     tree: MutPointer[SparseTreeNode[O.DataT], MutUntrackedOrigin],
@@ -1217,7 +1451,7 @@ def launch_leaf_kernel[
             + String(LEAF_SMEM_BIN_SLOTS * size_of[O.BinT]())
             + " (DEVIATION 103c/1894)"
         )
-    comptime k = leaf_kernel[O, TPB, LEAF_SMEM_BIN_SLOTS, sabotage]
+    comptime k = leaf_kernel[O, TPB, LEAF_SMEM_BIN_SLOTS, sabotage, zero_fill]
     log_launch("leaf")
     ctx.enqueue_function[k](
         argsp.unsafe_origin_cast[MutAnyOrigin](),

@@ -842,7 +842,7 @@ def hist2_one_byte_kernel[bits: Int, skip_first: Bool, smem_mode: Int](
 
 
 def hist2_one_byte_gather_kernel[
-    bits: Int, skip_first: Bool, smem_mode: Int
+    bits: Int, skip_first: Bool, smem_mode: Int, ridx_stats: Bool = False
 ](
     feature_folds: MutPointer[UInt32, MutAnyOrigin],
     feature_fold_offset: MutPointer[UInt32, MutAnyOrigin],
@@ -947,8 +947,17 @@ def hist2_one_byte_gather_kernel[
             # (`compute_hist_loop_two_stats.cuh:134-137`).
             var hrow = Int(ldg(indices + (p_offset + pe)))
             hb[0] = ldg(cindex_p + hrow)
-            hs1[0] = ldg(stats_p + (p_offset + pe))
-            hs2[0] = ldg(stats_p + (p_offset + pe + stat_line_size))
+
+            @parameter
+            if ridx_stats:
+                # DEVIATION 1902: stationary planes, both stats ride the
+                # same gathered row id as the bin -- same bits as the
+                # permuted plane held here (`split_points_ridx.mojo`).
+                hs1[0] = ldg(stats_p + hrow)
+                hs2[0] = ldg(stats_p + (hrow + stat_line_size))
+            else:
+                hs1[0] = ldg(stats_p + (p_offset + pe))
+                hs2[0] = ldg(stats_p + (p_offset + pe + stat_line_size))
 
             @parameter
             if DT == DType.int32:
@@ -968,8 +977,15 @@ def hist2_one_byte_gather_kernel[
             # (`compute_hist_loop_two_stats.cuh:154-157`)
             var trow = Int(ldg(indices + (tail_start + pe)))
             tb[0] = ldg(cindex_p + trow)
-            ts1[0] = ldg(stats_p + (tail_start + pe))
-            ts2[0] = ldg(stats_p + (tail_start + pe + stat_line_size))
+
+            @parameter
+            if ridx_stats:
+                # DEVIATION 1902, as on the head peel above.
+                ts1[0] = ldg(stats_p + trow)
+                ts2[0] = ldg(stats_p + (trow + stat_line_size))
+            else:
+                ts1[0] = ldg(stats_p + (tail_start + pe))
+                ts2[0] = ldg(stats_p + (tail_start + pe + stat_line_size))
 
             @parameter
             if DT == DType.int32:
@@ -1035,18 +1051,35 @@ def hist2_one_byte_gather_kernel[
                 var vi = ldg[width=HIST2_LOAD_SIZE, alignment=4](
                     i_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
                 )
-                var vs1 = ldg[width=HIST2_LOAD_SIZE, alignment=4](
-                    s_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                )
-                var vs2 = ldg[width=HIST2_LOAD_SIZE, alignment=4](
-                    s_ptr + stat_line_size + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                )
+                var vs1 = SIMD[DType.float32, HIST2_LOAD_SIZE](0.0)
+                var vs2 = SIMD[DType.float32, HIST2_LOAD_SIZE](0.0)
+
+                @parameter
+                if not ridx_stats:
+                    vs1 = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                        s_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
+                    )
+                    vs2 = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                        s_ptr
+                        + stat_line_size
+                        + LANE_WIDTH * HIST2_LOAD_SIZE * k
+                    )
 
                 @parameter
                 for e in range(HIST2_LOAD_SIZE):
                     local_bins[k * HIST2_LOAD_SIZE + e] = ldg(
                         cindex_p + Int(vi[e])
                     )
+
+                    @parameter
+                    if ridx_stats:
+                        # DEVIATION 1902: both stats join the bins' scalar
+                        # gather through the same loaded row id; the wide
+                        # loads above are traded for it.
+                        vs1[e] = ldg(stats_p + Int(vi[e]))
+                        vs2[e] = ldg(
+                            stats_p + (Int(vi[e]) + stat_line_size)
+                        )
                     local_stats1[k * HIST2_LOAD_SIZE + e] = vs1[e]
                     local_stats2[k * HIST2_LOAD_SIZE + e] = vs2[e]
 

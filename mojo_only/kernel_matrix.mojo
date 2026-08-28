@@ -1411,6 +1411,104 @@ def greedy_sub_byte_excluded_for[column: Int, identical: Bool]() -> Bool:
     return column_lane_width(column) == 64
 
 
+def greedy_quantized_hist_for[column: Int, identical: Bool]() -> Bool:
+    """NUMERIC row (DEVIATIONS 1911/1912): whether the NON-SYMMETRIC
+    drivers' one-byte histogram build routes through the QUANTIZED
+    SHARED-HISTOGRAM family (`kernel/hist_quantized_shared.mojo`) --
+    per-round fixed-point gradient pairs packed one 64-bit word per row,
+    ONE shared-memory Int32 histogram per thread block accumulated with
+    threadgroup integer atomics, one global flush per block, dequantize
+    at the flat-histogram bridge.
+
+    THE DESIGN IS THE RECONS' BORROW 2/5, NOT OURS: XGBoost quantizes
+    every (grad, hess) to fixed point once per round and keeps ONE
+    histogram copy per block in shared memory with integer atomics
+    (`quantiser.cuh`, `histogram.cu:70-233` -- recon_xgboost_gpu.md a);
+    LightGBM's quantized path packs the discretized pair into one word
+    per row and lands it with one block atomic
+    (`cuda_histogram_constructor.cu:291-294` -- recon_lightgbm_cuda.md
+    b2). CatBoost's warp-private float slices cost 128 B of shared
+    memory PER THREAD regardless of bin count; the shared-copy design
+    costs bytes PER BIN, amortized over the block.
+
+    WHY THIS IS PORTABLE WHERE THE FLOAT DESIGN IS NOT: Metal has no
+    threadgroup FLOAT atomics but full threadgroup INTEGER atomics
+    (`column_has_threadgroup_int_atomics` -- true in every column,
+    portable baseline included), which is exactly why the quantized
+    integer histogram is the one shared-memory design every vendor can
+    run from one source. The kernels carry no lane-width assumption --
+    Int32 atomics, block barriers, uniform trip counts -- so 32-lane and
+    64-lane columns compile the same file (the DEVIATION 1906/1910
+    refusals do not apply to this family).
+
+    A NUMERIC row: on the NVIDIA/AMD FAST columns the histogram
+    arithmetic changes from CatBoost's order-nondeterministic float
+    atomics to the SAME dithered fixed-point Int32 accumulation the
+    Apple FAST arm (`HIST_SMEM_SHARED2_I32`) and the IDENTICAL column
+    already run (`hist2_quantize` under `choose_scale`'s bound) -- which
+    also makes the FAST histogram deterministic run to run, deleting
+    the leaf-choice-cascade variance candidate recon_lightgbm_cuda.md
+    names first. `IDENTICAL` returns False: the identical route must not
+    move (DEVIATION 1906's precedent), and its byte-compare against main
+    passes by construction. The variable-width columns (qualcomm, intel,
+    spec-baseline) are NOT claimed.
+
+    THE PRICE: a second one-byte code path, alive only under FAST on the
+    named columns, and a per-level quantize pass over the rows being
+    built (the stat planes are re-permuted every level, so the
+    once-per-round quantize XGBoost enjoys is per-LEVEL here until
+    DEVIATION 1902 stops permuting them). The A/B against the standing
+    arms is the orchestrator's gate, and this row is where the routing
+    flips if the number disagrees.
+    """
+    comptime if identical:
+        return False
+    return (
+        column == COLUMN_APPLE
+        or column == COLUMN_NVIDIA
+        or column == COLUMN_AMD
+        or column == COLUMN_AMD_RDNA
+    )
+
+
+def quantized_hist_group_features_for[column: Int]() -> Int:
+    """SCHEDULING row (DEVIATION 1913): how many one-byte features one
+    thread block's shared histogram covers in the quantized family.
+
+    XGBoost packs features into groups whose total bins FILL the
+    per-block shared-memory budget (`feature_groups.cu:29-45`,
+    `histogram.cu:344-451` -- ~227 KB opt-in on H100, ~55 features per
+    group at 255 bins); LightGBM does the same at
+    `shared_hist_size_ / 2` (`cuda_row_data.cpp:179-291`). The point of
+    the group is that every block covering G features reads the stat
+    plane once for G features, so the number of full passes over the
+    gradients is `ceil(F / G)` instead of `ceil(F / 4)`.
+
+    THE BUDGET IS THE COLUMN'S, NOT NVIDIA'S: `column_shared_limit` --
+    Apple/Adreno 32 KB, NVIDIA 48 KB (the opt-in carveout above it is
+    deliberately not modeled, same stance as that row), AMD 64 KB. A
+    group of G one-byte features costs `G * 256 bins * 2 stats * 4 B =
+    G * 2 KB`, so:
+
+        apple 32 KB -> 16 features    nvidia 48 KB -> 24
+        amd / amd-rdna 64 KB -> 32    spec-baseline 16 KB -> 8
+
+    Rounded DOWN to a multiple of 4 because the compressed index packs
+    four one-byte features per UInt32 word and a group must own whole
+    words; capped at 32 (the largest any declared column affords);
+    floored at 4 (one word). Comptime, because what it sizes is a
+    threadgroup allocation.
+    """
+    comptime limit = column_shared_limit(column)
+    var g = limit // (256 * 2 * 4)
+    g = (g // 4) * 4
+    if g < 4:
+        g = 4
+    if g > 32:
+        g = 32
+    return g
+
+
 def reorder_single_pass_for[column: Int, identical: Bool]() -> Bool:
     """SCHEDULING row (DEVIATION 1907): whether the leaf reorder's stable
     one-bit partition may take the SINGLE-PASS decoupled-lookback path
@@ -1456,6 +1554,60 @@ def reorder_single_pass_for[column: Int, identical: Bool]() -> Bool:
     comptime if identical:
         return False
     return column == COLUMN_NVIDIA or column == COLUMN_AMD
+
+
+def ridx_only_splits_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row (DEVIATION 1902): whether the NON-SYMMETRIC driver's
+    split moves only the row index, leaving the stat planes stationary for
+    the life of the fit, with every stat reader gathering
+    `stats[row_index[pos]]` instead of reading a permuted plane.
+
+    XGBoost's `RowPartitioner` (`row_partitioner.cuh:112-201`, gather at
+    `histogram.cu:186,212`) and LightGBM's CUDA partition
+    (`cuda_data_partition.cu:288-334`, gather at
+    `cuda_histogram_constructor.cu:53-55`) are both this design; CatBoost
+    moves the stat columns (`split_points.cpp:64-136`), which is why this
+    is a numbered deviation. The routed launcher is
+    `launch_reorder_index_only`
+    (`gbdt/methods/greedy_subsets_searcher/kernel/split_points_ridx.mojo`),
+    the gathered readers are the hist gather kernels' `ridx_stats` arm and
+    `compute_partition_stats_gather`
+    (`gbdt/gpu_util/kernel/partition_stats_gather.mojo`).
+
+    A SCHEDULING row, not a numeric one: the readers gather THE SAME BITS
+    the old permuted plane held at the same loop position (the invariant on
+    `split_points_ridx.mojo`'s banner -- a permutation of floats moves
+    bytes and never re-rounds, and the two schedules permute with the same
+    `gather_map`), in the same accumulation order under the same
+    position-keyed dither. Same histograms, same partition stats, same
+    model, byte for byte; what moves is `2 * ceil(stat_count / 8)` launches
+    and `stat_count * 8` bytes/row of traffic per over-1024-row split,
+    times the `max_leaves - 1` sequential splits a lossguide tree runs.
+
+    EVERY GPU COLUMN TAKES IT UNDER FAST: the mechanism is plain global
+    loads through an index the kernels ALREADY load for the compressed-
+    index gather -- no spin, no lane-width assumption, no forward-progress
+    term -- so unlike DEVIATION 1907's row there is no vendor guarantee to
+    decline. What is NOT yet priced is the coalescing of the hist kernels'
+    stat read turning indirect; the orchestrator's A/B (byte-compare of the
+    FAST model pre/post routing, plus the 1M/2M lossguide rungs) is where
+    the default dies if the gather costs more than the reorder saved.
+
+    `IDENTICAL` returns False on every column: the identical route keeps
+    the stat-moving path BYTE FOR BYTE, exactly as DEVIATIONS 1901/1903
+    hold it, so the merge gate's compare against main passes by
+    construction. The unnamed columns (qualcomm, intel, spec-baseline)
+    return False only because nobody has run the A/B there; flipping them
+    is one line here once a number exists.
+    """
+    comptime if identical:
+        return False
+    return (
+        column == COLUMN_APPLE
+        or column == COLUMN_NVIDIA
+        or column == COLUMN_AMD
+        or column == COLUMN_AMD_RDNA
+    )
 
 
 def hist_smem_mode_for[column: Int, identical: Bool]() -> Int:
@@ -2141,6 +2293,103 @@ def lib_smem_pages_for[column: Int, page_bytes: Int]() -> Int:
     """
     comptime limit = column_shared_limit(column)
     return 2 if 2 * page_bytes <= limit else 1
+
+
+def knn_warpsort_select_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row (DEVIATION 1922): whether the k-NN TILED path's
+    selector is the ported RAFT WARPSORT (`select_warpsort.mojo`,
+    `warpsort_topk_block_kernel`) instead of the ported RAFT radix
+    (`select_radix.mojo`) for `2 < k <= 256`.
+
+    THEIR OWN DISPATCH IS THE ARGUMENT, NOT A PREFERENCE OF OURS. RAFT's
+    `select_k` (`raft/matrix/detail/select_k-inl.cuh:38`) sends
+    `2 < k <= 256` to the warpsort family and only `k > 256` to radix, so
+    every k a user actually asks for takes warpsort on their stack.
+    `neighbors/README.md` recorded that our tree ran radix ALONE across
+    that whole range with the two never measured against each other; the
+    2026-08-25/26 H100 legs put the knn lane 21.6-23.9x behind `cuml-gpu`
+    at k = 10, which is squarely inside their warpsort band.
+
+    WHY A ROW AND NOT A DEFAULT FLIP: `select_warpsort.mojo` pins
+    `WARP_LANES = 32` because RAFT pins `WarpSize = 32` -- its subwarp
+    sizes, array lengths (`Capacity / min(Capacity, 32)`) and shuffles are
+    32-lane by construction, so on a 64-wide wavefront the bitonic
+    subwarps would be mis-sized and the shuffles would cross them (the
+    file's own docstring, item 9; the same geometry that makes
+    `fused_l2_knn` refuse there). So:
+
+      - NVIDIA under FAST: True. The column the deficit is measured on,
+        the lane width RAFT wrote the kernel for, and their dispatch's
+        own choice for this k band.
+      - APPLE under FAST: False FOR NOW -- radix vs warpsort has never
+        been measured on Metal (`neighbors/README.md`), the Mac board's
+        knn rows were all taken on radix, and leaving the column
+        byte-for-byte untouched keeps those numbers meaningful. This row
+        is where Apple flips if a Mac window says warpsort wins there.
+      - AMD (CDNA, 64-lane): False, EXCLUDED like DEVIATION 1910's
+        sub-byte families: the kernel's geometry does not exist at
+        64 lanes until a width-parameterized port is written. Radix has
+        no warp primitive at all and stays correct there.
+      - IDENTICAL: False on every column. The identical selector is
+        `select_radix_identical` with the composite `(distance, index)`
+        key (DEVIATIONS 500/501) and MUST NOT move; the FAISS queue
+        compares distance only and has no tie class.
+
+    A SCHEDULING row by the one question with a stated seam: both
+    selectors return the k smallest DISTANCES of the same materialized
+    tile, so the selected value multiset is the same; which EQUIDISTANT
+    index survives and in which slot ties land may differ (radix's
+    arrival-order atomics vs the bitonic network's positional merge).
+    FAST already declares the tie set unpinned on this path (row 11), so
+    the seam is inside FAST's existing declaration, exactly like a
+    GEMM-order change.
+    """
+    comptime if identical:
+        return False
+    return column == COLUMN_NVIDIA
+
+
+def knn_auto_follows_their_dispatch_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row (DEVIATION 1923): whether the k-NN AUTO arm follows
+    cuVS's dispatch UNCONDITIONALLY -- `k <= 64` + row-major + L2 goes to
+    `fusedL2Knn`, x-split included (`knn_brute_force.cuh:443`) -- instead
+    of DEVIATION 36's shape test (fused only when `launchConfigGenerator`
+    picks `grid_x == 1`, tiled when it would engage the x-split).
+
+    DEVIATION 36's rule is sound ON THE COLUMN THAT MEASURED IT. Every
+    number behind it is an Apple millisecond: the x-split's mutex merge
+    was CATASTROPHIC on Metal (0.19x at 500-1,000 queries) because the
+    acquire-load spin serializes against Metal's scheduler, and the
+    grid_x == 1 gate is what keeps AUTO off that cliff. Nothing about
+    that measurement transfers to CUDA: the mutex handoff is cuVS's OWN
+    protocol on their OWN scheduler with the forward-progress guarantee
+    they wrote it against, and cuVS ships it as the unconditional default
+    for exactly this shape band. Meanwhile the 2026-08-25/26 H100 legs
+    measured our knn lane 21.6-23.9x behind `cuml-gpu` at
+    400,000 x 32, 4,000 queries, k = 10 -- a shape where the NVIDIA
+    column's occupancy inputs make `launchConfigGenerator` return
+    `grid_x > 1` (y_chunks = ceildiv(4000, Mblk) < numSMs *
+    blocksPerSM), so AUTO was taking the TILED arm (materialize + radix)
+    on the one vendor whose own library never takes it there.
+
+      - NVIDIA under FAST: True -- their dispatch, restored exactly,
+        x-split and mutex merge included. `run_knn`'s `ours-fused` /
+        `ours-tiled` arms are the A/B that confirms or flips this row.
+      - APPLE under FAST: False -- DEVIATION 36's measured rule stands
+        byte for byte; the Metal x-split cliff is real and measured.
+      - AMD: False and moot -- the fused arm refuses at 64 lanes
+        (DEVIATION 512) and AUTO already pins tiled there.
+      - IDENTICAL: False on every column -- DEVIATION 509 pins AUTO to
+        the tiled arm everywhere, and this row must not reach it.
+
+    SCHEDULING, not numeric, in the same sense as DEVIATION 36 itself:
+    both arms match the host Float64 oracle slot for slot on the gated
+    fixtures; what moves is which kernel runs and FAST's unpinned tie
+    set (row 11), never a gated bit.
+    """
+    comptime if identical:
+        return False
+    return column == COLUMN_NVIDIA
 
 
 # ---------------------------------------------------------------------------

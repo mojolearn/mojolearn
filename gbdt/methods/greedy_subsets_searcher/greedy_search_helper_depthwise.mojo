@@ -96,6 +96,9 @@ from gbdt.gpu_data.compressed_index_builder import (
 from gbdt.gpu_data.feature_blocks import blocks_for
 from gbdt.gpu_data.gpu_structures import CFeature
 from gbdt.gpu_util.partitions_reduce import compute_partition_stats
+from gbdt.gpu_util.kernel.partition_stats_gather import (
+    compute_partition_stats_gather,
+)
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     CFEATURE_BYTES,
     TTreeWorkspace,
@@ -108,6 +111,11 @@ from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import (
     LEAFWISE_SCORE_BLOCK_SIZE,
     compute_optimal_split_kernel,
     compute_optimal_splits_region_kernel,
+)
+from gbdt.methods.greedy_subsets_searcher.quantized_hist_launcher import (
+    QUANTIZED_HIST_LIVE,
+    launch_quantized_histograms,
+    quantized_hist_shape_ok,
 )
 from gbdt.methods.greedy_subsets_searcher.kernel.split_resolve import (
     WINNER_FOLD_BLOCK_SIZE,
@@ -137,6 +145,10 @@ from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
 from gbdt.gpu_util.kernel.reorder_single_pass import (
     launch_stable_partition_routed,
 )
+from gbdt.methods.greedy_subsets_searcher.kernel.split_points_ridx import (
+    launch_reorder_index_only,
+)
+from mojo_only.kernel_matrix import TARGET_COLUMN, ridx_only_splits_for
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
     StageTimes,
 )
@@ -197,6 +209,15 @@ from gbdt.options.catboost_options import (
 # but it keys on the same constant because IDENTICAL's contract is the code
 # path, not just the bits.)
 comptime SPLIT_COST_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# DEVIATION 1902: whether the non-symmetric drivers move ONLY the row
+# index at a split, leaving the stat planes stationary in document order
+# for the life of the fit. The row is False under IDENTICAL on every
+# column; the readers' gather arms are bound where this constant is
+# spelled (hist build, split apply, end-of-tree sweep) and default to the
+# old body everywhere else.
+comptime RIDX_ONLY_SPLITS = ridx_only_splits_for[
+    TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+]()
 # ========================================================================
 
 
@@ -383,6 +404,33 @@ struct TDepthwiseWorkspace(Movable):
     # modes, written and copied only on the FAST arm (DEVIATION 1901's
     # precedent).
     var hist_cells_key: Int
+    # ============================ DEVIATION 1911/1912 ============================
+    # THE QUANTIZED FAMILY'S TWO PLANES, pool-owned like every other large
+    # buffer (`kernel/hist_quantized_shared.mojo` carries the design):
+    #
+    #   * `d_qstats` -- the packed fixed-point gradient pairs, one UInt64
+    #     per ROW (DEV 1911), rewritten per level by `quantize_pair_kernel`
+    #     over exactly the partitions being built. Sized by `n_rows`, which
+    #     therefore JOINS THE POOL KEY (`n_rows_key`): the old key could not
+    #     see a row-count change at equal (leaves, stats, blocks, cells).
+    #   * `d_qacc` -- the per-leaf Int32 accumulator the shared-histogram
+    #     blocks flush into, dense-leaf-major
+    #     (`max_leaves * stat_count * hist_cells`). Memset ONCE here at
+    #     allocation; the bridge (`qh_write_hist_kernel`) zeroes every cell
+    #     it reads, so the accumulator is self-cleaning thereafter -- the
+    #     same once-per-arena discipline as DEVIATION 1903's memset proof.
+    #
+    # Allocated at ONE cell when the family is dead (`qh_live` False:
+    # IDENTICAL builds, unclaimed columns, or a shape the family refuses),
+    # the `acc_i32_is_live` precedent exactly. `qh_key` keeps a pool built
+    # for one answer from being reused under the other (the shape answer is
+    # layout-derived and the other key fields cannot see a policy-mix
+    # change at equal hist_cells).
+    # =======================================================================
+    var n_rows_key: Int
+    var qh_key: Bool
+    var d_qstats: DeviceBuffer[DType.uint64]
+    var d_qacc: DeviceBuffer[DType.int32]
     var d_bf_feature: DeviceBuffer[DType.int32]
     var h_bf_feature: HostBuffer[DType.int32]
     var d_bf_bin: DeviceBuffer[DType.int32]
@@ -401,11 +449,28 @@ struct TDepthwiseWorkspace(Movable):
         stat_count: Int,
         argmax_blocks: Int,
         hist_cells: Int,
+        n_rows: Int,
+        qh_live: Bool,
     ) raises:
         self.max_leaves_key = max_leaves
         self.stat_count_key = stat_count
         self.argmax_blocks_key = argmax_blocks
         self.hist_cells_key = hist_cells
+        self.n_rows_key = n_rows
+        self.qh_key = qh_live
+        # DEVIATION 1911/1912: real planes only when the quantized family
+        # can run this fit; one-cell placeholders otherwise (the
+        # `acc_i32_is_live` shape). The accumulator's memset here is its
+        # ONLY blanket zero -- the bridge self-cleans from then on.
+        if qh_live:
+            self.d_qstats = ctx.enqueue_create_buffer[DType.uint64](n_rows)
+            self.d_qacc = ctx.enqueue_create_buffer[DType.int32](
+                max_leaves * stat_count * hist_cells
+            )
+            ctx.enqueue_memset(self.d_qacc, Int32(0))
+        else:
+            self.d_qstats = ctx.enqueue_create_buffer[DType.uint64](1)
+            self.d_qacc = ctx.enqueue_create_buffer[DType.int32](1)
         var records = argmax_blocks * max_leaves
         self.region_score = ctx.enqueue_create_buffer[DType.float32](records)
         self.region_bin = ctx.enqueue_create_buffer[DType.uint32](records)
@@ -853,6 +918,18 @@ def fit_non_symmetric_tree[
                 _ACC_LIVE,
             )
         )
+    # ============ DEVIATION 1911/1912: is the quantized family running? ====
+    # The vendor/mode half is COMPTIME (`QUANTIZED_HIST_LIVE`, the
+    # `greedy_quantized_hist_for` row -- False under IDENTICAL, so that
+    # build folds every consumer away and keeps its schedule byte for
+    # byte). The shape half is a per-fit SHAPE test off the layout: every
+    # policy block one-byte, exactly two stat planes; anything else runs
+    # the standing arms unchanged. Decided ONCE here, before the pool, so
+    # buffers and dispatch cannot disagree.
+    var qh_ok = False
+    comptime if QUANTIZED_HIST_LIVE:
+        qh_ok = quantized_hist_shape_ok(blocks, stat_count)
+    # ======================================================================
     if (
         len(dws) == 0
         or dws[0].max_leaves_key != max_leaves
@@ -862,12 +939,17 @@ def fit_non_symmetric_tree[
         # and filled from the layout, which the three keys above cannot
         # see at equal argmax_blocks
         or dws[0].hist_cells_key != hist_cells_per_leaf
+        # DEVIATION 1911: the packed-pair plane is row-sized and the
+        # accumulator's liveness is fit-derived; neither is visible to
+        # the keys above
+        or dws[0].n_rows_key != n_rows
+        or dws[0].qh_key != qh_ok
     ):
         dws.clear()
         dws.append(
             TDepthwiseWorkspace(
                 ctx, max_leaves, stat_count, argmax_blocks,
-                hist_cells_per_leaf,
+                hist_cells_per_leaf, n_rows, qh_ok,
             )
         )
 
@@ -937,6 +1019,9 @@ def fit_non_symmetric_tree[
     ref h_bf_folds = dws[0].h_bf_folds
     ref d_winner = dws[0].d_winner
     ref h_winner = dws[0].h_winner
+    # DEVIATION 1911/1912: the quantized family's planes
+    ref d_qstats = dws[0].d_qstats
+    ref d_qacc = dws[0].d_qacc
 
     var table = TBinFeatureTable(layout)
 
@@ -1368,12 +1453,38 @@ def fit_non_symmetric_tree[
             for i in range(len(non_zero)):
                 h_ids.unsafe_ptr().unsafe_store(i, non_zero[i])
             ctx.enqueue_copy(dst_buf=d_ids, src_ptr=h_ids.unsafe_ptr())
-            launch_histograms_for_blocks[hist2_smem_mode](
-                ctx, dblocks, iteration - 1, len(non_zero), n_rows,
-                stat_count, max_leaves, sm_count, fixed_scale,
-                cindex, row_index, stats, p_off, p_sz, d_ids, dense_ids,
-                hist, acc_i32, block_hist, hist_cells_per_leaf,
-            )
+            # ============================ DEVIATION 1911/1912 ============================
+            # THE QUANTIZED SHARED-HISTOGRAM ROUTE (the recons' borrow:
+            # XGBoost's one-shared-copy-per-block integer histogram +
+            # LightGBM's packed pair -- `kernel/hist_quantized_shared.mojo`
+            # carries the whole design). Reachable only when the comptime
+            # row admits this build (`QUANTIZED_HIST_LIVE`: FAST on a
+            # claimed column; IDENTICAL folds the branch away and runs the
+            # standing launcher byte for byte) AND the fit's shape fits
+            # (`qh_ok`: all-one-byte, two stats). The fallback is the
+            # standing launcher UNCHANGED -- refusal of shape to the old
+            # path, never a guess. The bridge inside
+            # `launch_quantized_histograms` leaves the flat histogram in
+            # exactly the layout the scan below expects, so nothing after
+            # this branch knows which arm built it.
+            # =======================================================================
+            var quantized_built = False
+            comptime if QUANTIZED_HIST_LIVE:
+                if qh_ok:
+                    launch_quantized_histograms[RIDX_ONLY_SPLITS](
+                        ctx, dblocks, iteration - 1, len(non_zero), n_rows,
+                        stat_count, sm_count, fixed_scale,
+                        cindex, row_index, stats, p_off, p_sz, d_ids,
+                        d_qstats, d_qacc, hist, hist_cells_per_leaf,
+                    )
+                    quantized_built = True
+            if not quantized_built:
+                launch_histograms_for_blocks[hist2_smem_mode, RIDX_ONLY_SPLITS](
+                    ctx, dblocks, iteration - 1, len(non_zero), n_rows,
+                    stat_count, max_leaves, sm_count, fixed_scale,
+                    cindex, row_index, stats, p_off, p_sz, d_ids, dense_ids,
+                    hist, acc_i32, block_hist, hist_cells_per_leaf,
+                )
             mgr.stream_kernel()
             stage_times.end(ctx, "hist.build")
 
@@ -2151,11 +2262,21 @@ def fit_non_symmetric_tree[
             )
             mgr.stream_kernel()
 
-            var reorder_launches = launch_reorder_in_leaves(
-                ctx, n_split, wide, max_split_rows, stat_count, n_rows,
-                d_left, p_off, p_sz, stats, new_stats, row_index,
-                new_index, gmap, sm_count=sm_count,
-            )
+            var reorder_launches = 0
+
+            comptime if RIDX_ONLY_SPLITS:
+                # DEVIATION 1902: the stat planes are stationary; the
+                # split's gather_map permutes the 4 B/row index alone.
+                reorder_launches = launch_reorder_index_only(
+                    ctx, n_split, max_split_rows, d_left, p_off, p_sz,
+                    row_index, new_index, gmap, sm_count=sm_count,
+                )
+            else:
+                reorder_launches = launch_reorder_in_leaves(
+                    ctx, n_split, wide, max_split_rows, stat_count, n_rows,
+                    d_left, p_off, p_sz, stats, new_stats, row_index,
+                    new_index, gmap, sm_count=sm_count,
+                )
             for _ in range(reorder_launches):
                 mgr.stream_kernel()
 
@@ -2299,11 +2420,21 @@ def fit_non_symmetric_tree[
             for i in range(len(leaves)):
                 h_ids.unsafe_ptr().unsafe_store(i, UInt32(i))
             ctx.enqueue_copy(dst_buf=d_ids, src_ptr=h_ids.unsafe_ptr())
-            compute_partition_stats(
-                ctx, len(leaves), n_rows, stat_count, n_rows,
-                d_ids, p_off, p_sz, stats, stat_partials, part_stats,
-                sm_count=sm_count,
-            )
+            comptime if RIDX_ONLY_SPLITS:
+                # DEVIATION 1902: phase 1 gathers the stationary plane
+                # through the row index; phase 2 and the chunk formula are
+                # the shared kernels unchanged.
+                compute_partition_stats_gather(
+                    ctx, len(leaves), n_rows, stat_count, n_rows,
+                    d_ids, p_off, p_sz, stats, row_index,
+                    stat_partials, part_stats, sm_count=sm_count,
+                )
+            else:
+                compute_partition_stats(
+                    ctx, len(leaves), n_rows, stat_count, n_rows,
+                    d_ids, p_off, p_sz, stats, stat_partials, part_stats,
+                    sm_count=sm_count,
+                )
             mgr.stream_kernel()
             ctx.enqueue_copy(
                 dst_ptr=h_part_stats.unsafe_ptr(), src_buf=part_stats
