@@ -160,7 +160,20 @@ BUNDLE="/tmp/mojolearn-e2-$COMMIT.bundle"
 git -C "$REPO" branch -f "e2-run" "$COMMIT" >/dev/null 2>&1
 log "bundle $COMMIT (branch e2-run)"
 git -C "$REPO" bundle create "$BUNDLE" e2-run >/dev/null 2>&1 || { log "bundle failed"; exit 6; }
-scp -q -o StrictHostKeyChecking=accept-new "$BUNDLE" "root@$IP:/root/e2.bundle" || { log "scp failed"; exit 6; }
+# THE BUNDLE COPY RETRIES. A box answers `echo SSH-OK` before its sshd is
+# settled, and the very next scp can still come back "Connection closed" --
+# which is how the 2026-08-28 13:21 AMD identity leg died thirty seconds
+# after a healthy `rocm-smi`, at a cost of one droplet, one lease and the
+# whole column. The readiness probe above is necessary and it is not
+# sufficient; a transient here is worth five tries, not a leg.
+_scp_ok=0
+for _try in 1 2 3 4 5; do
+  if scp -q -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 \
+        "$BUNDLE" "root@$IP:/root/e2.bundle"; then _scp_ok=1; break; fi
+  log "scp attempt $_try failed; retrying in 15s"
+  sleep 15
+done
+[ "$_scp_ok" = 1 ] || { log "scp failed after 5 attempts"; exit 6; }
 $SSH "rm -rf /root/mojolearn && git clone -q -b e2-run /root/e2.bundle /root/mojolearn && cd /root/mojolearn && git rev-parse HEAD && git status --short | head -3 && grep -c 'is_defined\\[\"MOJOLEARN_NUMERIC_IDENTICAL\"\\]' mojo_only/numerics.mojo" \
   || { log "remote clone/checkout failed"; exit 6; }
 
