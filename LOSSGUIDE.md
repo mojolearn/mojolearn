@@ -767,3 +767,153 @@ hand-off; nothing of 1902 is half-implemented in the tree.
 * **Interaction with 1901/1903.** Independent of both: 1901 removes the
   per-level stats sweep (fewer contiguous readers to convert), 1903 does
   not touch the stat planes at all. Land order 1901 -> 1903 -> 1902 stands.
+
+## The quantized-histogram round, 2026-08-28: DEVIATIONS 1911-1914
+
+The recons' remaining histogram borrow, landed as ONE new kernel family
+plus its launcher: XGBoost's integer-quantized gradients with ONE
+shared-memory histogram per block (recon_xgboost_gpu.md a / borrows 2, 3,
+5) and LightGBM's packed pair + grid floor (recon_lightgbm_cuda.md b2 and
+the `min_grid_dim_y` note). All FAST-only: the routing row
+(`greedy_quantized_hist_for`, `mojo_only/kernel_matrix.mojo`) is comptime
+False under IDENTICAL, so the IDENTICAL column never elaborates the branch
+and its schedule -- and the merge gate's byte-compare -- are untouched by
+construction. DEV 1915 was reserved for this round and is UNUSED.
+
+**Files:** `kernel/hist_quantized_shared.mojo` (new: the kernels),
+`quantized_hist_launcher.mojo` (new: shape test, grid math, launch chain),
+`greedy_search_helper_depthwise.mojo` (workspace planes + dispatch),
+`mojo_only/kernel_matrix.mojo` (two rows). NOTE FOR BOTH LANES: the
+non-symmetric driver serves Depthwise AND Lossguide, so this round moves
+the Lossguide FAST histogram arm too -- deliberately; the leaf-choice
+variance candidate below is a Lossguide finding.
+
+### DEVIATION 1911 -- fixed-point gradient pairs, packed one word per row. LANDED
+
+* **Scheme, precisely.** Per level, `quantize_pair_kernel` converts both
+  stat planes of every row in the partitions being built to fixed point:
+  `q = hist2_quantize(stat, fixed_scale, hist2_dither(position))` -- the
+  package's standing dithered-floor quantizer (this port's measured
+  stand-in for XGBoost's rounding constant; truncation and
+  round-to-nearest both failed measurably, its docstring has the numbers)
+  at the standing per-tree scale (`choose_scale` of the plane magnitudes
+  -- XGBoost derives its scale per round from clipped magnitude sums,
+  same role, `quantiser.cuh` / `histogram.cu:90-115`). The two Int32 land
+  in one UInt64 via SIMD bitcast (lane 0 = plane 0/weight-hess, lane 1 =
+  plane 1/gradient -- their grad-high/hess-low), no shifts anywhere, so
+  the sign-extension pack trap cannot occur. The pack is a LOAD format
+  only: accumulation stays per-stat Int32, so there is no cross-half
+  carry and none of LightGBM's width-ladder overflow machinery.
+* **Why per level, not per round.** XGBoost quantizes once per round and
+  never moves gradients; this port re-permutes the stat planes at every
+  split, so the packed plane is rebuilt per level over exactly the rows
+  being built (one 8 B/row write+read per level). DEVIATION 1902 is what
+  makes it per-round; until then this cost is stated, not hidden.
+* **Bit relationship to the standing arms.** The addends are bit-for-bit
+  the values the shared-Int32 / fused-8-bit arms compute inline (same
+  positions, same dither draws, same scale), and integer addition is
+  associative -- so per-cell integer totals equal that arm's exactly.
+
+### DEVIATION 1912 -- ONE shared histogram per block, integer atomics, one flush. LANDED
+
+* **Mechanism.** `qh_hist[_gather]_kernel`: one Int32 histogram copy per
+  thread block in threadgroup memory (layout `[feature][bin][stat]`,
+  interleaved pair -- LightGBM's), every thread accumulating with
+  threadgroup integer `Atomic.fetch_add` (relaxed, DEVIATION 1898's
+  standing note), one global flush per block into a per-leaf Int32
+  accumulator (`d_qacc`, dense-leaf-major), `qh_write_hist_kernel`
+  dequantizing accumulator -> flat float histogram with the bridge's
+  exact expression (`Float32(Int(q)) / fixed_scale`, ftz'd) and zeroing
+  what it reads (self-cleaning; the one blanket memset is at pool
+  allocation). Dequantize-on-flush: scan/subtract/score/split read the
+  flat histogram unchanged and cannot tell which arm built it.
+* **Why this is THE portable shared-memory design.** CatBoost's
+  warp-private float slices cost 128 B of shared memory PER THREAD;
+  the shared-copy design costs bytes PER BIN -- but a float shared copy
+  needs threadgroup FLOAT atomics, which Metal does not have. Metal DOES
+  have threadgroup INTEGER atomics (every column does,
+  `column_has_threadgroup_int_atomics`), which is exactly why the
+  quantized integer histogram is the one shared-copy design that ships
+  from one source on every vendor. Lane-agnostic by construction (no
+  lane-indexed slices, block barriers only): 32-lane and 64-lane columns
+  compile the same file -- the DEVIATION 1906/1910 refusals do not apply.
+* **Expected FAST numeric effect, and why accuracy holds.** On the
+  NVIDIA/AMD FAST columns the histogram arithmetic changes from
+  CatBoost's order-nondeterministic float atomics to dithered fixed-point
+  Int32 -- the SAME arithmetic the Apple FAST arm
+  (`HIST_SMEM_SHARED2_I32`) and the IDENTICAL column already run, whose
+  accuracy is already gated (254-border oracle reproduces CatBoost mse to
+  7 decimals under the row-count-aware scale; XGBoost ships quantized
+  histograms as its ONLY GPU mode). Zero-mean dithered cell error grows
+  as sqrt(rows); overflow is impossible under `choose_scale`'s bound
+  (every cell is a partial over a subset of all rows; stated once in the
+  kernel file's banner). Side effect worth gating FOR: the FAST histogram
+  becomes deterministic run to run, which deletes candidate 1 of the
+  recon's 2.6x lossguide round-to-round variance list (float-atomic ULP
+  wiggle flipping the argmin's leaf choice).
+
+### DEVIATION 1913 -- feature groups sized to the COLUMN's threadgroup memory. LANDED
+
+* **Mechanism.** `quantized_hist_group_features_for` (kernel-matrix row):
+  group = `column_shared_limit // 2 KB-per-feature`, floored to whole
+  cindex words -- Apple/32 KB -> 16 features per block, NVIDIA/48 KB ->
+  24, AMD/64 KB -> 32, never NVIDIA's 227 KB opt-in and never a
+  hardcoded vendor number. Grid x = feature groups x row-replicas
+  (XGBoost's 2D grid, `histogram.cu:420`); each group's blocks read the
+  packed-pair plane once for the whole group, so full passes over the
+  gradients drop from `ceil(F/4)` (one cindex word per block today) to
+  `ceil(F/G)`.
+* **Shape refusals, at the launcher.** `quantized_hist_shape_ok`: ONE-BYTE
+  policy blocks only (the packed decode is 4 one-byte features per word;
+  half-byte/binary words would read garbage bins -- DEVIATION 1910's own
+  semantics argument) and exactly TWO stat planes (the packed word holds
+  two; multiclass keeps the PASS route). Refused shapes and unclaimed
+  columns run `launch_histograms_for_blocks` byte for byte.
+
+### DEVIATION 1914 -- grid floors. LANDED
+
+* **Mechanism.** Two cited constants in `qh_replicas` /
+  `active_block_count`: XGBoost's `kMinItemsPerBlock = 8192`
+  (`histogram.cu:405-419`) caps replicas at what the rows can feed --
+  host-side by the mean partition, in-kernel exactly per partition (idle
+  replicas return before touching shared memory) -- and LightGBM's
+  `min_grid_dim_y_ = 160` (`cuda_histogram_constructor.hpp:152`) floors
+  the total launch so late small-leaf levels stay device-filling instead
+  of launch-bound. The occupancy target between them is CatBoost's own
+  `2 * SMCount` (gather arm doubled), restated because this family's grid
+  has no stat axis. FAST-only by reachability, so the device's own
+  `sm_count` is correct (no IDENTICAL pin needed).
+
+### What the orchestrator must gate (this round)
+
+1. **IDENTICAL byte-compare against main** -- must pass by construction
+   (comptime row False; verified locally: the IDENTICAL build compiles
+   with the branch folded away).
+2. **FAST cell-for-cell histogram check**: quantized arm vs the
+   shared-Int32/fused-8-bit arm on the same fixture must be BIT-identical
+   per cell (same addends, associative adds) -- the check that catches an
+   addressing error in the new group/flush arithmetic. A hashed-value
+   fixture, per [[uniform-test-data-hides-permutation]].
+3. **FAST accuracy vs the float-atomic arm** on NVIDIA/AMD (mse parity
+   class, the 254-border oracle shape) -- quantization legally moves FAST
+   numerics; expected magnitude is the Apple arm's precedent (ULP-class
+   split ties, mse parity to several decimals).
+4. **Speed A/B** depthwise + lossguide on H100/MI325X at 1M/2M, and the
+   Mac row -- the routing row is where this flips back per column if the
+   number disagrees.
+5. **Determinism probe**: two same-process FAST lossguide runs should now
+   produce identical trees on NVIDIA (they could not under float
+   atomics); if the 6.0-15.8 s spread survives, candidate 1 is dead and
+   candidates 2/3 take over.
+
+### Unfinished, precisely
+
+* No register-blocked ILP in the row loop (XGBoost stages 8 items/thread
+  in registers before the atomics, `histogram.cu:197-233`); the first
+  profile decides whether it is needed.
+* The quantize pass is per-level (see 1911); per-round arrives with 1902.
+* One-cell placeholder planes still allocate when the family is dead;
+  `d_qstats`/`d_qacc` cost `8 B/row + 4 B/cell` when live (~8 MB + ~3 MB
+  at 1M rows x 100 features x 254 folds x 2 stats).
+* Multi-stat (multiclass) and sub-byte shapes stay on the standing arms
+  by refusal; a packed multi-stat design was not attempted.
