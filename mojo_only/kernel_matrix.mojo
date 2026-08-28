@@ -1411,6 +1411,104 @@ def greedy_sub_byte_excluded_for[column: Int, identical: Bool]() -> Bool:
     return column_lane_width(column) == 64
 
 
+def greedy_quantized_hist_for[column: Int, identical: Bool]() -> Bool:
+    """NUMERIC row (DEVIATIONS 1911/1912): whether the NON-SYMMETRIC
+    drivers' one-byte histogram build routes through the QUANTIZED
+    SHARED-HISTOGRAM family (`kernel/hist_quantized_shared.mojo`) --
+    per-round fixed-point gradient pairs packed one 64-bit word per row,
+    ONE shared-memory Int32 histogram per thread block accumulated with
+    threadgroup integer atomics, one global flush per block, dequantize
+    at the flat-histogram bridge.
+
+    THE DESIGN IS THE RECONS' BORROW 2/5, NOT OURS: XGBoost quantizes
+    every (grad, hess) to fixed point once per round and keeps ONE
+    histogram copy per block in shared memory with integer atomics
+    (`quantiser.cuh`, `histogram.cu:70-233` -- recon_xgboost_gpu.md a);
+    LightGBM's quantized path packs the discretized pair into one word
+    per row and lands it with one block atomic
+    (`cuda_histogram_constructor.cu:291-294` -- recon_lightgbm_cuda.md
+    b2). CatBoost's warp-private float slices cost 128 B of shared
+    memory PER THREAD regardless of bin count; the shared-copy design
+    costs bytes PER BIN, amortized over the block.
+
+    WHY THIS IS PORTABLE WHERE THE FLOAT DESIGN IS NOT: Metal has no
+    threadgroup FLOAT atomics but full threadgroup INTEGER atomics
+    (`column_has_threadgroup_int_atomics` -- true in every column,
+    portable baseline included), which is exactly why the quantized
+    integer histogram is the one shared-memory design every vendor can
+    run from one source. The kernels carry no lane-width assumption --
+    Int32 atomics, block barriers, uniform trip counts -- so 32-lane and
+    64-lane columns compile the same file (the DEVIATION 1906/1910
+    refusals do not apply to this family).
+
+    A NUMERIC row: on the NVIDIA/AMD FAST columns the histogram
+    arithmetic changes from CatBoost's order-nondeterministic float
+    atomics to the SAME dithered fixed-point Int32 accumulation the
+    Apple FAST arm (`HIST_SMEM_SHARED2_I32`) and the IDENTICAL column
+    already run (`hist2_quantize` under `choose_scale`'s bound) -- which
+    also makes the FAST histogram deterministic run to run, deleting
+    the leaf-choice-cascade variance candidate recon_lightgbm_cuda.md
+    names first. `IDENTICAL` returns False: the identical route must not
+    move (DEVIATION 1906's precedent), and its byte-compare against main
+    passes by construction. The variable-width columns (qualcomm, intel,
+    spec-baseline) are NOT claimed.
+
+    THE PRICE: a second one-byte code path, alive only under FAST on the
+    named columns, and a per-level quantize pass over the rows being
+    built (the stat planes are re-permuted every level, so the
+    once-per-round quantize XGBoost enjoys is per-LEVEL here until
+    DEVIATION 1902 stops permuting them). The A/B against the standing
+    arms is the orchestrator's gate, and this row is where the routing
+    flips if the number disagrees.
+    """
+    comptime if identical:
+        return False
+    return (
+        column == COLUMN_APPLE
+        or column == COLUMN_NVIDIA
+        or column == COLUMN_AMD
+        or column == COLUMN_AMD_RDNA
+    )
+
+
+def quantized_hist_group_features_for[column: Int]() -> Int:
+    """SCHEDULING row (DEVIATION 1913): how many one-byte features one
+    thread block's shared histogram covers in the quantized family.
+
+    XGBoost packs features into groups whose total bins FILL the
+    per-block shared-memory budget (`feature_groups.cu:29-45`,
+    `histogram.cu:344-451` -- ~227 KB opt-in on H100, ~55 features per
+    group at 255 bins); LightGBM does the same at
+    `shared_hist_size_ / 2` (`cuda_row_data.cpp:179-291`). The point of
+    the group is that every block covering G features reads the stat
+    plane once for G features, so the number of full passes over the
+    gradients is `ceil(F / G)` instead of `ceil(F / 4)`.
+
+    THE BUDGET IS THE COLUMN'S, NOT NVIDIA'S: `column_shared_limit` --
+    Apple/Adreno 32 KB, NVIDIA 48 KB (the opt-in carveout above it is
+    deliberately not modeled, same stance as that row), AMD 64 KB. A
+    group of G one-byte features costs `G * 256 bins * 2 stats * 4 B =
+    G * 2 KB`, so:
+
+        apple 32 KB -> 16 features    nvidia 48 KB -> 24
+        amd / amd-rdna 64 KB -> 32    spec-baseline 16 KB -> 8
+
+    Rounded DOWN to a multiple of 4 because the compressed index packs
+    four one-byte features per UInt32 word and a group must own whole
+    words; capped at 32 (the largest any declared column affords);
+    floored at 4 (one word). Comptime, because what it sizes is a
+    threadgroup allocation.
+    """
+    comptime limit = column_shared_limit(column)
+    var g = limit // (256 * 2 * 4)
+    g = (g // 4) * 4
+    if g < 4:
+        g = 4
+    if g > 32:
+        g = 32
+    return g
+
+
 def reorder_single_pass_for[column: Int, identical: Bool]() -> Bool:
     """SCHEDULING row (DEVIATION 1907): whether the leaf reorder's stable
     one-bit partition may take the SINGLE-PASS decoupled-lookback path
