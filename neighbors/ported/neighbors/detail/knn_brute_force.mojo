@@ -72,6 +72,7 @@ from core.row_norms import NORM_TPB, row_norm_kernel
 from mojo_only.kernel_matrix import (
     K_LIB_SELECT_WARPSORT,
     TARGET_COLUMN,
+    knn_auto_follows_their_dispatch_for,
     knn_warpsort_select_for,
     lib_block_size_for,
     lib_lane_width_for,
@@ -544,12 +545,17 @@ def brute_force_knn_impl(
     `out_idx32` are only read on the fallback path. The fused path needs none
     of them, which is the whole point of it.
 
-    **BUT THE FUSED PATH IS NOT WHAT THIS RUNS BY DEFAULT.** `knn_method`
-    defaults to `KNN_METHOD_TILED`, which is their `else` at `:447`, because
-    the fused arm measured slower at every size on this hardware. The four
-    conditions above are still evaluated and still decide the arm whenever
+    **THE DEFAULT ARM IS AUTO, AND WHAT AUTO MEANS IS PER COLUMN.** This
+    paragraph used to say `knn_method` defaults to `KNN_METHOD_TILED`; that
+    was stale the moment the signature below said `KNN_METHOD_AUTO`, and is
+    deleted rather than annotated. Under FAST, AUTO picks by DEVIATION 36's
+    shape test (fused iff the launch computation says `grid_x == 1`) except
+    on columns where `knn_auto_follows_their_dispatch_for` (DEVIATION 1923)
+    restores cuVS's unconditional dispatch; under IDENTICAL, DEVIATION 509
+    pins AUTO to the tiled arm on every column. The four conditions above
+    are still evaluated and still decide the arm whenever
     `knn_method == KNN_METHOD_FUSED`. Read DEVIATION 36 above the constants
-    before changing either.
+    before changing any of it.
     """
     # THEIR `n < k` CASE IS NOT PORTED ON EITHER ARM, SO REFUSE IT.
     #
@@ -634,8 +640,25 @@ def brute_force_knn_impl(
             # whose lane width is not 32.
             want_fused = False
         else:
-            var g = fused_l2_knn_grid(n_queries, n_index)
-            want_fused = g[0] == 1
+            comptime if knn_auto_follows_their_dispatch_for[
+                TARGET_COLUMN, False
+            ]():
+                # DEVIATION 1923 (kernel-matrix row): on this column AUTO
+                # restores cuVS's dispatch UNCONDITIONALLY -- fused for the
+                # whole `k <= 64` row-major L2 band, x-split and mutex merge
+                # included. DEVIATION 36's `grid_x == 1` gate was measured
+                # entirely on Apple milliseconds (the Metal x-split cliff,
+                # 0.19x at 500-1,000 queries); on the vendor whose own
+                # scheduler the mutex protocol was written for, the gate was
+                # sending the H100's 4,000-query benchmark shape to the
+                # TILED arm cuVS never takes there. The row's docstring in
+                # `mojo_only/kernel_matrix.mojo` carries the argument;
+                # `run_knn`'s `ours-fused` / `ours-tiled` arms are the A/B
+                # that confirms or flips it.
+                want_fused = True
+            else:
+                var g = fused_l2_knn_grid(n_queries, n_index)
+                want_fused = g[0] == 1
 
     # DEVIATION 512: THE ARM MUST EXIST ON THIS COLUMN BEFORE AUTO PICKS IT.
     #

@@ -2197,6 +2197,49 @@ def knn_warpsort_select_for[column: Int, identical: Bool]() -> Bool:
     return column == COLUMN_NVIDIA
 
 
+def knn_auto_follows_their_dispatch_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row (DEVIATION 1923): whether the k-NN AUTO arm follows
+    cuVS's dispatch UNCONDITIONALLY -- `k <= 64` + row-major + L2 goes to
+    `fusedL2Knn`, x-split included (`knn_brute_force.cuh:443`) -- instead
+    of DEVIATION 36's shape test (fused only when `launchConfigGenerator`
+    picks `grid_x == 1`, tiled when it would engage the x-split).
+
+    DEVIATION 36's rule is sound ON THE COLUMN THAT MEASURED IT. Every
+    number behind it is an Apple millisecond: the x-split's mutex merge
+    was CATASTROPHIC on Metal (0.19x at 500-1,000 queries) because the
+    acquire-load spin serializes against Metal's scheduler, and the
+    grid_x == 1 gate is what keeps AUTO off that cliff. Nothing about
+    that measurement transfers to CUDA: the mutex handoff is cuVS's OWN
+    protocol on their OWN scheduler with the forward-progress guarantee
+    they wrote it against, and cuVS ships it as the unconditional default
+    for exactly this shape band. Meanwhile the 2026-08-25/26 H100 legs
+    measured our knn lane 21.6-23.9x behind `cuml-gpu` at
+    400,000 x 32, 4,000 queries, k = 10 -- a shape where the NVIDIA
+    column's occupancy inputs make `launchConfigGenerator` return
+    `grid_x > 1` (y_chunks = ceildiv(4000, Mblk) < numSMs *
+    blocksPerSM), so AUTO was taking the TILED arm (materialize + radix)
+    on the one vendor whose own library never takes it there.
+
+      - NVIDIA under FAST: True -- their dispatch, restored exactly,
+        x-split and mutex merge included. `run_knn`'s `ours-fused` /
+        `ours-tiled` arms are the A/B that confirms or flips this row.
+      - APPLE under FAST: False -- DEVIATION 36's measured rule stands
+        byte for byte; the Metal x-split cliff is real and measured.
+      - AMD: False and moot -- the fused arm refuses at 64 lanes
+        (DEVIATION 512) and AUTO already pins tiled there.
+      - IDENTICAL: False on every column -- DEVIATION 509 pins AUTO to
+        the tiled arm everywhere, and this row must not reach it.
+
+    SCHEDULING, not numeric, in the same sense as DEVIATION 36 itself:
+    both arms match the host Float64 oracle slot for slot on the gated
+    fixtures; what moves is which kernel runs and FAST's unpinned tie
+    set (row 11), never a gated bit.
+    """
+    comptime if identical:
+        return False
+    return column == COLUMN_NVIDIA
+
+
 # ---------------------------------------------------------------------------
 # THE MODEL-EVALUATOR QUANTIZE SEARCH (Apple's ALU budget, priced)
 # ---------------------------------------------------------------------------
