@@ -1,0 +1,14 @@
+{
+  "card": "et_clf_bootstrap_maxsamples.card",
+  "kind": "et_clf",
+  "model": "444c8eaaa559409f2e174500ba84fa197ac7916eacb6b0e7d19885b70c876d03",
+  "predictions": "1d1f20dcc263e7f443044bb8f147f4668995cc07c77cce7b15733af2911bf08f",
+  "seconds": 0.35,
+  "spec": {
+    "bootstrap": true,
+    "max_depth": 8,
+    "max_samples": 0.5,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

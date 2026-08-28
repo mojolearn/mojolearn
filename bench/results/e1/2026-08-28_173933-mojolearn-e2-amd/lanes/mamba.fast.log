@@ -1,0 +1,47 @@
+Imported from /root/mojolearn/mamba/mojo_only/mamba_check.mojo:436:
+/root/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/mojo_only/mamba_check.mojo:436:
+/root/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/mamba/mojo_only/mamba_check.mojo:436:
+/root/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/root/mojolearn/mamba/mojo_only/mamba_check.mojo:1589:30: warning: assignment to 'xr' was never used; assign to '_' instead?
+    var xr = dims.x_proj_rows()
+                             ^
+=== mamba block identity gate, profile mojolearn.identical.mamba1.fp32.v1
+mode FAST   block sabotage: none
+shape B=1 L=4 d_model=8 d_inner=16 dt_rank=1
+reach: S14's input lands in (10, 20] on 13 of 64 cells  (fixture F7's band; 0 would make S14_THRESHOLD_10 vacuous)
+clause (a): stages, device vs host oracle, BITWISE:
+  OK    norm.sumsq  (4 cells)
+  OK    norm.out  (32 cells)
+  MOVED in_proj.out  68 of 128 cells, first cell 0  a 0xbc38a0a9  b 0xbc38a0aa
+  MOVED A.out  83 of 256 cells, first cell 2  a 0xc0b5ab72  b 0xc0b5ab73
+  MOVED conv.out  25 of 64 cells, first cell 1  a 0xbc568355  b 0xbc56835d
+  MOVED silu.out  25 of 64 cells, first cell 1  a 0xbbd51bd7  b 0xbbd51bdf
+  MOVED conv.window  31 of 64 cells, first cell 0  a 0xbc38a0a9  b 0xbc38a0aa
+  MOVED x_proj.out  85 of 132 cells, first cell 0  a 0x3c245ab0  b 0x3c245ab1
+  MOVED dt_proj.out  48 of 64 cells, first cell 0  a 0xbc0afacf  b 0xbc0afad0
+  MOVED softplus.out  7 of 64 cells, first cell 11  a 0x411ff7c4  b 0x411ff7c3
+  MOVED scan.y  47 of 64 cells, first cell 1  a 0x33b777c4  b 0x33b777cb
+  MOVED scan.h  193 of 256 cells, first cell 0  a 0xb81dcb38  b 0xb81dcb58
+  MOVED skip.out  24 of 64 cells, first cell 1  a 0xbb8ff55c  b 0xbb8ff561
+  MOVED gate.out  41 of 64 cells, first cell 1  a 0x39359d23  b 0x39359d28
+  MOVED out_proj.out  22 of 32 cells, first cell 0  a 0x3a0b0c72  b 0x3a0b0c73
+  MOVED residual.out  1 of 32 cells, first cell 6  a 0xbc66f8ee  b 0xbc66f8ed
+card: 17 records, contract section 7 wants 17
+card: 17/17 tags in contract section 7's order, all unique
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: mamba_check: CLAUSE (a) FAILED, 14 stages differ from the oracle, first at in_proj.out on 68 of 128 cells
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1

@@ -1,0 +1,17 @@
+{
+  "card": "kmeans_k8_200k.card",
+  "centroids": "4c00fd9afb3066eb989c73101124e08ff80d84782290ba4dc54279598af7cb77",
+  "inertia": "34def85f07a5f4851d1514f4cda369c9db74fe62a1bd827d0ccc7bc3ce30d9b9",
+  "inertia_value": 359019.40625,
+  "kind": "kmeans",
+  "labels": "227c4326d54a43218583f919fb22524c450de5d8feaf67edb47866cec9764006",
+  "n_iter": 79,
+  "seconds": 0.62,
+  "spec": {
+    "n_clusters": 8,
+    "random_state": 7
+  },
+  "stages": 602,
+  "sum_scale": 8192.0,
+  "weight_scale": 4096.0
+}

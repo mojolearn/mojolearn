@@ -1,0 +1,13 @@
+{
+  "card": "et_reg_bootstrap.card",
+  "kind": "et_reg",
+  "model": "4405040f4aa5e94c4296b0cf5834a6c7b792351dd9602624ebbb7326b28a1248",
+  "predictions": "aa14d2b2080b014defcbf1ea436c4510cb887ae582e668a2143bf7e4aec7e91c",
+  "seconds": 0.4,
+  "spec": {
+    "bootstrap": true,
+    "max_depth": 8,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

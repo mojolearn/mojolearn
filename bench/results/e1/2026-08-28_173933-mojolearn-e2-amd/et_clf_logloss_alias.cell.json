@@ -1,0 +1,13 @@
+{
+  "card": "et_clf_logloss_alias.card",
+  "kind": "et_clf",
+  "model": "20e3034180ee9fe21a4dac931c7e1a46c080438d62dea3861ea707d1b1319a87",
+  "predictions": "1430e7292e52903f2b90b525e4c4efd954d99c784a322004e58797cd6919dcb8",
+  "seconds": 0.37,
+  "spec": {
+    "criterion": "log_loss",
+    "max_depth": 8,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

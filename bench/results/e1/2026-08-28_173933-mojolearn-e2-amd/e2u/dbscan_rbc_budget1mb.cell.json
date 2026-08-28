@@ -1,0 +1,16 @@
+{
+  "batches": 67,
+  "card": "dbscan_rbc_budget1mb.card",
+  "kind": "dbscan",
+  "labels": "ece90482443a2d2888696f40bb30099075ba71b1864e937196653b630b7f5bb2",
+  "n_clusters": 8,
+  "n_iter": 202,
+  "n_noise": 399,
+  "seconds": 0.54,
+  "spec": {
+    "eps": 0.3,
+    "max_mbytes_per_batch": 1,
+    "min_samples": 5
+  },
+  "stages": 3
+}

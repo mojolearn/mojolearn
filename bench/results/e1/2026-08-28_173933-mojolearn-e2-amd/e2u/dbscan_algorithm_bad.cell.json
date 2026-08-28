@@ -1,0 +1,10 @@
+{
+  "kind": "dbscan",
+  "refused": "ValueError: mojolearn DBSCAN: algorithm='kd_tree' is refused; it must be one of ['brute', 'rbc'] ('rbc' is the ball-cover eps search, DEVIATION 35's default; 'brute' is cuML's default arm)",
+  "seconds": 0.0,
+  "spec": {
+    "algorithm": "kd_tree",
+    "eps": 0.3,
+    "min_samples": 5
+  }
+}

@@ -1,0 +1,153 @@
+== gemm/mojo_only/gemm_device_check.mojo [FAST]  sabotage: none ==
+   profile: mojolearn.identical.gemm.fp32.v1   contract: gemm/IDENTICAL_FP32_CONTRACT.md
+   kernel: gemm/mojo_only/gemm_identical.mojo   oracle: gemm/mojo_only/gemm_oracle.mojo::gemm_oracle
+check_fold_stack_depth_covers_the_profile OK: 12 levels in 16 slots covers P <= 1024 which needs 11
+check_strides_match_the_contract_addressing OK: NN, NT and TN address every A_eff and B_eff entry the way contract section 3 spells it (m=5, n=7, k=11, all different)
+check_stack_fold_is_the_contract_tree OK: register stack == the contract's balanced tree, bit for bit, at every P in 1..2049
+check_device_matches_oracle [FAST]: per-cell bits against gemm_oracle
+  -- the shape table, at reduced m and n (see docstring) --
+    OK   gram.32x32x1M  TN 4x4x1000000  L=977 P=1024  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   gram.32x32x64K  TN 4x4x65536  L=128 P=512  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   gram.128sq.x100003  TN 4x4x100003  L=128 P=782  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   ols.step1.16x16x64K  TN 4x4x65536  L=128 P=512  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   pca.transform.8192x4x4  NT 4x4x4  L=4 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    FAIL pca.transform.wide.8192x64x128  NT 4x4x128  L=128 P=1: 16 of 16 cells differ from gemm_oracle. First at (0, 0): device = 15.789463/0x417ca1a4   oracle = 15.789505/0x417ca1d0
+    FAIL kmeans.dist.4096x64x64  NT 4x4x64  L=64 P=1: 11 of 16 cells differ from gemm_oracle. First at (0, 0): device = 35.85353/0x420f6a04   oracle = 35.853546/0x420f6a08
+    FAIL ols.predict.gemv.64Kx16  NT 4x1x16  L=16 P=1: 3 of 4 cells differ from gemm_oracle. First at (0, 0): device = 21.72151/0x41adc5a7   oracle = 21.721514/0x41adc5a9
+    FAIL llama8b.qkv.t1  NT 1x4x4096  L=128 P=32: 4 of 4 cells differ from gemm_oracle. First at (0, 0): device = 1386.5297/0x44ad50f3   oracle = 1386.5292/0x44ad50ef
+    FAIL llama8b.qkv.t8  NT 4x4x4096  L=128 P=32: 15 of 16 cells differ from gemm_oracle. First at (0, 0): device = 1386.5295/0x44ad50f2   oracle = 1386.5292/0x44ad50ef
+    FAIL llama8b.qkv.t512  NT 4x4x4096  L=128 P=32: 15 of 16 cells differ from gemm_oracle. First at (0, 0): device = 1386.5295/0x44ad50f2   oracle = 1386.5292/0x44ad50ef
+    FAIL llama8b.mlp_up.t1  NT 1x4x4096  L=128 P=32: 4 of 4 cells differ from gemm_oracle. First at (0, 0): device = 1386.5297/0x44ad50f3   oracle = 1386.5292/0x44ad50ef
+    FAIL llama8b.mlp_up.t8  NT 4x4x4096  L=128 P=32: 15 of 16 cells differ from gemm_oracle. First at (0, 0): device = 1386.5295/0x44ad50f2   oracle = 1386.5292/0x44ad50ef
+    FAIL llama8b.mlp_up.t512  NT 4x4x4096  L=128 P=32: 15 of 16 cells differ from gemm_oracle. First at (0, 0): device = 1386.5295/0x44ad50f2   oracle = 1386.5292/0x44ad50ef
+    FAIL llama8b.mlp_down.t1  NT 1x4x14336  L=128 P=112: 4 of 4 cells differ from gemm_oracle. First at (0, 0): device = -2970.5774/0xc539a93d   oracle = -2970.5771/0xc539a93c
+    FAIL llama8b.mlp_down.t8  NT 4x4x14336  L=128 P=112: 15 of 16 cells differ from gemm_oracle. First at (0, 0): device = -2970.575/0xc539a933   oracle = -2970.5771/0xc539a93c
+    FAIL llama8b.mlp_down.t512  NT 4x4x14336  L=128 P=112: 15 of 16 cells differ from gemm_oracle. First at (0, 0): device = -2970.575/0xc539a933   oracle = -2970.5771/0xc539a93c
+    FAIL llama8b.lm_head.t1  NT 1x4x4096  L=128 P=32: 4 of 4 cells differ from gemm_oracle. First at (0, 0): device = 1386.5297/0x44ad50f3   oracle = 1386.5292/0x44ad50ef
+    FAIL llama8b.lm_head.t8  NT 4x4x4096  L=128 P=32: 15 of 16 cells differ from gemm_oracle. First at (0, 0): device = 1386.5295/0x44ad50f2   oracle = 1386.5292/0x44ad50ef
+    FAIL llama8b.lm_head.t512  NT 4x4x4096  L=128 P=32: 15 of 16 cells differ from gemm_oracle. First at (0, 0): device = 1386.5295/0x44ad50f2   oracle = 1386.5292/0x44ad50ef
+  -- one real row at its SHIPPED m and n --
+    OK   kmeans.dist.full  NT 4096x64x64  L=64 P=1  plan=TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+  -- synthetic: the partition cases the table cannot reach --
+    OK   k0.P0  NT 3x3x0  L=1 P=0  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   k1.P1  NT 1x1x1  L=1 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   k64.P1  NN 4x4x64  L=64 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   k128.P1  TN 4x4x128  L=128 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    FAIL k129.P2.ragged  NT 4x4x129  L=128 P=2: 15 of 16 cells differ from gemm_oracle. First at (0, 0): device = 15.472263/0x41778e64   oracle = 15.472305/0x41778e90
+    FAIL k256.P2.exact  NT 4x4x256  L=128 P=2: 13 of 16 cells differ from gemm_oracle. First at (0, 0): device = 430.4603/0x43d73aeb   oracle = 430.46008/0x43d73ae4
+    FAIL k300.P3.odd.ragged  NN 4x4x300  L=128 P=3: 15 of 16 cells differ from gemm_oracle. First at (0, 0): device = -210.43318/0xc3526ee5   oracle = -210.4332/0xc3526ee6
+    OK   k517.P5.odd.2carries  TN 4x4x517  L=128 P=5  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    FAIL k800.P7.odd  NT 4x4x800  L=128 P=7: 14 of 16 cells differ from gemm_oracle. First at (0, 0): device = 163.66919/0x4323ab50   oracle = 163.66894/0x4323ab40
+    FAIL k1024.P8.even  NT 4x4x1024  L=128 P=8: 15 of 16 cells differ from gemm_oracle. First at (0, 0): device = 613.5695/0x44196473   oracle = 613.5691/0x4419646c
+    FAIL k4097.P33.odd.tail1  NT 3x3x4097  L=128 P=33: 9 of 9 cells differ from gemm_oracle. First at (0, 0): device = 1386.4161/0x44ad4d51   oracle = 1386.4158/0x44ad4d4e
+    FAIL k130900.P1023.odd  NT 2x2x130900  L=128 P=1023: 4 of 4 cells differ from gemm_oracle. First at (0, 0): device = -13261.581/0xc64f3653   oracle = -13261.586/0xc64f3658
+    FAIL k131073.P1017.past.crossover  NT 2x2x131073  L=129 P=1017: 4 of 4 cells differ from gemm_oracle. First at (0, 0): device = -13108.153/0xc64cd09d   oracle = -13108.158/0xc64cd0a2
+    FAIL k4M.P1024.cap  NT 1x1x4000000  L=3907 P=1024: 1 of 1 cells differ from gemm_oracle. First at (0, 0): device = -34171.79/0xc7057bca   oracle = -34171.656/0xc7057ba8
+  -- synthetic: ragged m and n that no tile divides --
+    FAIL 5x7.P3  NT 5x7x300  L=128 P=3: 28 of 35 cells differ from gemm_oracle. First at (0, 0): device = 430.17487/0x43d71662   oracle = 430.1746/0x43d71659
+    FAIL 17x33.P3  NT 17x33x300  L=128 P=3: 491 of 561 cells differ from gemm_oracle. First at (0, 0): device = 430.17487/0x43d71662   oracle = 430.1746/0x43d71659
+    FAIL 33x17.P5  NN 33x17x517  L=128 P=5: 503 of 561 cells differ from gemm_oracle. First at (0, 0): device = -434.02026/0xc3d90298   oracle = -434.02023/0xc3d90297
+    OK   17x33.P33  TN 17x33x4097  L=128 P=33  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   64x64.P1.manyblocks  NT 64x64x64  L=64 P=1  plan=TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+  -- EVERY named plan against the oracle, not only the dispatcher's --
+    OK   allplans.17x33x517.P5.odd [FLAT(1 thread/cell, tpb=256, 1-D grid)]
+    OK   allplans.17x33x517.P5.odd [TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)]
+    OK   allplans.17x33x517.P5.odd [TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)]
+    OK   allplans.17x33x517.P5.odd [TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)]
+    OK   allplans.17x33x517.P5.odd [TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)]
+    OK   allplans.17x33x517.P5.odd [TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)]
+    OK   allplans.17x33x517.P5.odd [SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)]
+    OK   allplans.17x33x517.P5.odd [SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)]
+    OK   allplans.5x7x4200.P33.odd [FLAT(1 thread/cell, tpb=256, 1-D grid)]
+    OK   allplans.5x7x4200.P33.odd [TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)]
+    OK   allplans.5x7x4200.P33.odd [TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)]
+    OK   allplans.5x7x4200.P33.odd [TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)]
+    OK   allplans.5x7x4200.P33.odd [TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)]
+    OK   allplans.5x7x4200.P33.odd [TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)]
+    OK   allplans.5x7x4200.P33.odd [SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)]
+    OK   allplans.5x7x4200.P33.odd [SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)]
+  -- synthetic: EVERY LEAF PARTIAL IS -0.0 (contract 9.2, F7) -- the ONLY input that separates a CARRY from +0.0 PADDING --
+    OK   minuszero.k300.P3.carry  NT 5x7x300  L=128 P=3  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   minuszero.k517.P5.2carries  NT 5x7x517  L=128 P=5  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   minuszero.k128.P1.nofold  NT 5x7x128  L=128 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   minuszero.k4200.P33.odd  NT 3x3x4200  L=128 P=33  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+  -- synthetic: SUBNORMAL products, contract seam 5c --
+    FAIL subnormal.k300  NT 4x4x300  L=128 P=3: 11 of 16 cells differ from gemm_oracle. First at (0, 0): device = 1.2641703e-36/0x3d71662   oracle = 1.2641695e-36/0x3d71659
+    FAIL subnormal.k4096  NT 4x4x4096  L=128 P=32: 15 of 16 cells differ from gemm_oracle. First at (0, 0): device = 4.074644e-36/0x4ad50f2   oracle = 4.074643e-36/0x4ad50ef
+check_device_matches_oracle [FAST] REPORT: 29 of 62 shapes differ from the host oracle. Under FAST both sides are the unpinned spelling and the host CPU and the device backend are free to contract and to flush differently, so this is a measurement and not an assertion. Under IDENTICAL it is an assertion and any difference raises.
+check_device_is_launch_invariant [FAST]: 8 execution plans, one numerical plan
+  64x64x64   P=1  (the fold has no node)  op=NT
+      OK   TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+      OK   TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+      OK   TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+      OK   TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)
+      OK   TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)
+      OK   SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+      OK   SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+  17x33x300  P=3  odd, ragged, no tile divides  op=NN
+      OK   TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+      OK   TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+      OK   TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+      OK   TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)
+      OK   TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)
+      OK   SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+      OK   SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+  33x17x517  P=5  two carries  op=TN
+      OK   TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+      OK   TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+      OK   TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+      OK   TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)
+      OK   TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)
+      OK   SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+      OK   SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+  130x70x4096 P=32 even  op=NT
+      OK   TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+      OK   TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+      OK   TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+      OK   TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)
+      OK   TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)
+      OK   SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+      OK   SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+  12x9x130900 P=1023 odd, ten levels  op=NT
+      OK   TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+      OK   TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+      OK   TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+      OK   TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)
+      OK   TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)
+      OK   SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+      OK   SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+  5x7x0      P=0  every cell a stored +0.0  op=NT
+      OK   TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+      OK   TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+      OK   TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+      OK   TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)
+      OK   TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)
+      OK   SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+      OK   SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+check_device_is_launch_invariant [FAST] OK: 6 shapes x 8 execution plans, all bit-identical
+check_device_is_batch_invariant [FAST]: a cell's bits against the launch width
+  k = 4096  L = 128  P = 32
+      FAIL n: 4 vs 64: 248 of 256 overlapping cells CHANGED BITS with the launch width. First at cell (0, 0): 64x4 gave 1659.3478/0x44cf6b21   64x64 gave 1659.3475/0x44cf6b1f
+      FAIL n: 4 vs 256: 248 of 256 overlapping cells CHANGED BITS with the launch width. First at cell (0, 0): 64x4 gave 1659.3478/0x44cf6b21   64x256 gave 1659.3475/0x44cf6b1f
+      OK   n: 64 vs 256: 4096 overlapping cells identical  [64x64 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)  |  64x256 -> TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)]
+      OK   m: 64 vs 130: 4096 overlapping cells identical  [64x64 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)  |  130x64 -> TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)]
+      FAIL n: 4 vs 4096: 248 of 256 overlapping cells CHANGED BITS with the launch width. First at cell (0, 0): 64x4 gave 1659.3478/0x44cf6b21   64x4096 gave 1659.3475/0x44cf6b1f
+      OK   loop[0] 64x4 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold), shared ws of 131072 floats: 256 overlapping cells identical to the solo launch
+      FAIL loop[1] 64x64 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold), shared ws of 131072 floats: 248 of 256 overlapping cells CHANGED BITS against the solo launch. First at cell (0, 0): solo 1659.3478/0x44cf6b21   in-loop 1659.3475/0x44cf6b1f
+      FAIL loop[2] 130x64 -> TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle), shared ws of 131072 floats: 248 of 256 overlapping cells CHANGED BITS against the solo launch. First at cell (0, 0): solo 1659.3478/0x44cf6b21   in-loop 1659.3475/0x44cf6b1f
+      OK   loop[3] 64x4 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold), shared ws of 131072 floats: 256 overlapping cells identical to the solo launch
+  k = 4097  L = 128  P = 33
+      FAIL n: 4 vs 64: 249 of 256 overlapping cells CHANGED BITS with the launch width. First at cell (0, 0): 64x4 gave 1659.6449/0x44cf74a3   64x64 gave 1659.6447/0x44cf74a1
+      FAIL n: 4 vs 256: 249 of 256 overlapping cells CHANGED BITS with the launch width. First at cell (0, 0): 64x4 gave 1659.6449/0x44cf74a3   64x256 gave 1659.6447/0x44cf74a1
+      OK   n: 64 vs 256: 4096 overlapping cells identical  [64x64 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)  |  64x256 -> TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)]
+      OK   m: 64 vs 130: 4096 overlapping cells identical  [64x64 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)  |  130x64 -> TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)]
+      FAIL n: 4 vs 4096: 249 of 256 overlapping cells CHANGED BITS with the launch width. First at cell (0, 0): 64x4 gave 1659.6449/0x44cf74a3   64x4096 gave 1659.6447/0x44cf74a1
+      OK   loop[0] 64x4 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold), shared ws of 135168 floats: 256 overlapping cells identical to the solo launch
+      FAIL loop[1] 64x64 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold), shared ws of 135168 floats: 249 of 256 overlapping cells CHANGED BITS against the solo launch. First at cell (0, 0): solo 1659.6449/0x44cf74a3   in-loop 1659.6447/0x44cf74a1
+      FAIL loop[2] 130x64 -> TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle), shared ws of 135168 floats: 249 of 256 overlapping cells CHANGED BITS against the solo launch. First at cell (0, 0): solo 1659.6449/0x44cf74a3   in-loop 1659.6447/0x44cf74a1
+      OK   loop[3] 64x4 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold), shared ws of 135168 floats: 256 overlapping cells identical to the solo launch
+!! GATE FAILED: check_device_is_batch_invariant
+   check_device_is_batch_invariant [FAST]: 8 arms found a cell whose BITS depend on how many other cells shared the launch (lines above). That is the defect the serving world calls batch non-invariance and IDENTITY_PATHS rows 3 and 7 call 'a block count is a summation order'.
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: gemm_device_check [FAST]: 1 of 6 gates FAILED (sabotage: none)
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1

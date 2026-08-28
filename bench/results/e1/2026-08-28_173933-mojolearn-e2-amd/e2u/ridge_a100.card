@@ -1,0 +1,16 @@
+# ridge n=20000 d=24 algo=1
+# format: mojolearn-identity-trace v1
+0	ridge.input.A	f32	480000	21f213809736c023
+1	ridge.input.b	f32	20000	cc6538801db37e64
+2	ridge.input.alpha	f32	1	4a7d847f9b8c2bc7
+3	ridge.svd.covA	f32	576	2106384c5647e9eb
+4	ridge.svd.eigvals	f32	24	795e5fe5bfba818e
+5	ridge.svd.info	f32	3	9bc7f144d64f88ac
+6	ridge.svd.order	i32	24	c4cd6e1e4233df95
+7	ridge.svd.S	f32	24	37d130c1bb0a5db7
+8	ridge.svd.V	f32	576	ace2cc42b5734690
+9	ridge.svd.U	f32	480000	5ae9cf3e294d6358
+10	ridge.solve.S_over	f32	24	ff231777f9c3e1cd
+11	ridge.solve.nnz	i32	1	4ca59747b2d7c18d
+12	ridge.solve.Utb	f32	24	56c1d85605bda56d
+13	ridge.coef	f32	24	ae111db748e267e0

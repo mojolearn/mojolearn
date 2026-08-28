@@ -1,0 +1,9 @@
+{
+  "kind": "tsvd",
+  "refused": "ValueError: mojolearn TruncatedSVD: algorithm='randomized' is refused; only 'covariance_eigh' (the Gram + device Jacobi arm cuML's tsvdFit takes) is ported; 'arpack' and 'randomized' are different algorithms",
+  "seconds": 0.0,
+  "spec": {
+    "algorithm": "randomized",
+    "n_components": 2
+  }
+}
