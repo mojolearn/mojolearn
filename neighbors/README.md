@@ -42,10 +42,15 @@ that file's docstring and in `UNPORTED.tsv`.
 **Their own dispatch prefers warpsort.** `select_k-inl.cuh:38` sends
 `2 < k <= 256` to it and only `k > 256` to radix, which is every k a user
 actually asks for. Radix was RAFT's second choice across the whole practical
-range and this tree ran it alone. Nothing here has yet MEASURED the two
-against each other; until it has, radix stays the default and warpsort sits
-beside it so the two can be diffed. The bar is not WarpSelect on an NVIDIA
-card, because that card cannot run here; the bar is `argpartition` on a CPU.
+range and this tree ran it alone until DEV 1922 (2026-08-28,
+`bench/results/LANE_knn-speed-campaign_2026-08-28.md`): the kernel-matrix
+row `knn_warpsort_select_for` now hands the tiled path's `2 < k <= 256`
+band to warpsort on the NVIDIA column under FAST, pending the
+orchestrator's H100 A/B. On Apple nothing has yet MEASURED the two against
+each other, so radix stays that column's default and warpsort sits beside
+it so the two can be diffed; the row is where Apple flips if a Mac window
+says otherwise. AMD (64-lane) is excluded by the same row — `WARP_LANES`
+is a pinned 32 — and IDENTICAL keeps the composite-key radix everywhere.
 
 ## `core/` now exists, and it was earned rather than planned
 

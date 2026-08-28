@@ -2295,6 +2295,103 @@ def lib_smem_pages_for[column: Int, page_bytes: Int]() -> Int:
     return 2 if 2 * page_bytes <= limit else 1
 
 
+def knn_warpsort_select_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row (DEVIATION 1922): whether the k-NN TILED path's
+    selector is the ported RAFT WARPSORT (`select_warpsort.mojo`,
+    `warpsort_topk_block_kernel`) instead of the ported RAFT radix
+    (`select_radix.mojo`) for `2 < k <= 256`.
+
+    THEIR OWN DISPATCH IS THE ARGUMENT, NOT A PREFERENCE OF OURS. RAFT's
+    `select_k` (`raft/matrix/detail/select_k-inl.cuh:38`) sends
+    `2 < k <= 256` to the warpsort family and only `k > 256` to radix, so
+    every k a user actually asks for takes warpsort on their stack.
+    `neighbors/README.md` recorded that our tree ran radix ALONE across
+    that whole range with the two never measured against each other; the
+    2026-08-25/26 H100 legs put the knn lane 21.6-23.9x behind `cuml-gpu`
+    at k = 10, which is squarely inside their warpsort band.
+
+    WHY A ROW AND NOT A DEFAULT FLIP: `select_warpsort.mojo` pins
+    `WARP_LANES = 32` because RAFT pins `WarpSize = 32` -- its subwarp
+    sizes, array lengths (`Capacity / min(Capacity, 32)`) and shuffles are
+    32-lane by construction, so on a 64-wide wavefront the bitonic
+    subwarps would be mis-sized and the shuffles would cross them (the
+    file's own docstring, item 9; the same geometry that makes
+    `fused_l2_knn` refuse there). So:
+
+      - NVIDIA under FAST: True. The column the deficit is measured on,
+        the lane width RAFT wrote the kernel for, and their dispatch's
+        own choice for this k band.
+      - APPLE under FAST: False FOR NOW -- radix vs warpsort has never
+        been measured on Metal (`neighbors/README.md`), the Mac board's
+        knn rows were all taken on radix, and leaving the column
+        byte-for-byte untouched keeps those numbers meaningful. This row
+        is where Apple flips if a Mac window says warpsort wins there.
+      - AMD (CDNA, 64-lane): False, EXCLUDED like DEVIATION 1910's
+        sub-byte families: the kernel's geometry does not exist at
+        64 lanes until a width-parameterized port is written. Radix has
+        no warp primitive at all and stays correct there.
+      - IDENTICAL: False on every column. The identical selector is
+        `select_radix_identical` with the composite `(distance, index)`
+        key (DEVIATIONS 500/501) and MUST NOT move; the FAISS queue
+        compares distance only and has no tie class.
+
+    A SCHEDULING row by the one question with a stated seam: both
+    selectors return the k smallest DISTANCES of the same materialized
+    tile, so the selected value multiset is the same; which EQUIDISTANT
+    index survives and in which slot ties land may differ (radix's
+    arrival-order atomics vs the bitonic network's positional merge).
+    FAST already declares the tie set unpinned on this path (row 11), so
+    the seam is inside FAST's existing declaration, exactly like a
+    GEMM-order change.
+    """
+    comptime if identical:
+        return False
+    return column == COLUMN_NVIDIA
+
+
+def knn_auto_follows_their_dispatch_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row (DEVIATION 1923): whether the k-NN AUTO arm follows
+    cuVS's dispatch UNCONDITIONALLY -- `k <= 64` + row-major + L2 goes to
+    `fusedL2Knn`, x-split included (`knn_brute_force.cuh:443`) -- instead
+    of DEVIATION 36's shape test (fused only when `launchConfigGenerator`
+    picks `grid_x == 1`, tiled when it would engage the x-split).
+
+    DEVIATION 36's rule is sound ON THE COLUMN THAT MEASURED IT. Every
+    number behind it is an Apple millisecond: the x-split's mutex merge
+    was CATASTROPHIC on Metal (0.19x at 500-1,000 queries) because the
+    acquire-load spin serializes against Metal's scheduler, and the
+    grid_x == 1 gate is what keeps AUTO off that cliff. Nothing about
+    that measurement transfers to CUDA: the mutex handoff is cuVS's OWN
+    protocol on their OWN scheduler with the forward-progress guarantee
+    they wrote it against, and cuVS ships it as the unconditional default
+    for exactly this shape band. Meanwhile the 2026-08-25/26 H100 legs
+    measured our knn lane 21.6-23.9x behind `cuml-gpu` at
+    400,000 x 32, 4,000 queries, k = 10 -- a shape where the NVIDIA
+    column's occupancy inputs make `launchConfigGenerator` return
+    `grid_x > 1` (y_chunks = ceildiv(4000, Mblk) < numSMs *
+    blocksPerSM), so AUTO was taking the TILED arm (materialize + radix)
+    on the one vendor whose own library never takes it there.
+
+      - NVIDIA under FAST: True -- their dispatch, restored exactly,
+        x-split and mutex merge included. `run_knn`'s `ours-fused` /
+        `ours-tiled` arms are the A/B that confirms or flips this row.
+      - APPLE under FAST: False -- DEVIATION 36's measured rule stands
+        byte for byte; the Metal x-split cliff is real and measured.
+      - AMD: False and moot -- the fused arm refuses at 64 lanes
+        (DEVIATION 512) and AUTO already pins tiled there.
+      - IDENTICAL: False on every column -- DEVIATION 509 pins AUTO to
+        the tiled arm everywhere, and this row must not reach it.
+
+    SCHEDULING, not numeric, in the same sense as DEVIATION 36 itself:
+    both arms match the host Float64 oracle slot for slot on the gated
+    fixtures; what moves is which kernel runs and FAST's unpinned tie
+    set (row 11), never a gated bit.
+    """
+    comptime if identical:
+        return False
+    return column == COLUMN_NVIDIA
+
+
 # ---------------------------------------------------------------------------
 # THE MODEL-EVALUATOR QUANTIZE SEARCH (Apple's ALU budget, priced)
 # ---------------------------------------------------------------------------
