@@ -176,6 +176,9 @@ struct NumericMode(Copyable, Movable):
 # backend. Both are comptime no-ops under FAST.
 
 
+from std.memory import bitcast
+
+
 def ftz(x: Float32) -> Float32:
     """IDENTITY_PATHS row 10's construction: the denormal policy.
 
@@ -199,12 +202,51 @@ def ftz(x: Float32) -> Float32:
     pinned expressions be written with their intermediates stored
     through `ftz` (one extra local per step), which is exactly how the
     check's model computes.
+
+    THE GUARD IS ON BITS AND IT HAS TO BE. DEVIATION 1938, 2026-08-28.
+
+    This function used to test `abs(x) < Float32(1.1754943508222875e-38) and
+    x != Float32(0.0)` -- two FLOAT comparisons -- and on a flush-to-zero
+    backend those are evaluated with the operand ALREADY FLUSHED. `x != 0.0`
+    is therefore FALSE for every subnormal, the branch never fires, and `ftz`
+    RETURNS THE SUBNORMAL UNTOUCHED. Row 10's whole construction was a no-op
+    on the device.
+
+    MEASURED, on the M4, under IDENTICAL, one gather kernel and its host
+    twin:
+
+        in 0x00000001   host ftz -> 0x00000000   device ftz -> 0x00000001
+        in 0x80000001   host ftz -> 0x80000000   device ftz -> 0x80000001
+        in 0x007fffff   host ftz -> 0x00000000   device ftz -> 0x007fffff
+        in 0x3f800000   host ftz -> 0x3f800000   device ftz -> 0x3f800000
+
+    Three of four patterns disagreed; only the normal control matched.
+
+    WHY IT HID FOR SO LONG. Everywhere a denormal ALSO passes through
+    arithmetic, the FTZ hardware flushes it regardless and the helper looks
+    correct. It is visible only where the value reaches a seam BY COPY -- a
+    gather is a load and a store and does no arithmetic at all -- and the
+    only fixture in the tree that plants a subnormal on such a path is
+    `embedding`'s `f_subw`, a lane that had never been in a round until
+    today. The failure it reported (`emb.fwd`, host `0x00000000` against
+    device `0x00000001`) is this bug and not an embedding bug.
+
+    AND IT WAS A CROSS-VENDOR HOLE, NOT ONLY AN APPLE ONE. The guard's own
+    behaviour depended on the backend it was compiled for: on a
+    denormal-honouring backend `x != 0.0` is TRUE and the flush fired, on an
+    FTZ backend it did not. So on a copy path NVIDIA and AMD would flush
+    where Apple did not, which is precisely the divergence `ftz` exists to
+    remove.
+
+    Testing the exponent and mantissa fields directly cannot be defeated that
+    way: there is no float arithmetic in the guard for a backend to flush.
     """
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        if abs(x) < Float32(1.1754943508222875e-38) and x != Float32(0.0):
-            if x < Float32(0.0):
-                return Float32(-0.0)
-            return Float32(0.0)
+        var b = bitcast[DType.uint32](x)
+        if (b & UInt32(0x7F800000)) == UInt32(0) and (
+            b & UInt32(0x007FFFFF)
+        ) != UInt32(0):
+            return bitcast[DType.float32](b & UInt32(0x80000000))
     return x
 
 
