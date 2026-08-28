@@ -1033,3 +1033,44 @@ variance candidate below is a Lossguide finding.
   at 1M rows x 100 features x 254 folds x 2 stats).
 * Multi-stat (multiclass) and sub-byte shapes stay on the standing arms
   by refusal; a packed multi-stat design was not attempted.
+
+### THE AUG 28 ROUND'S GATE RECORD (DEV 1902 wiring + 1911-1914 + 1921-1923, orchestrator, one consolidated pass)
+
+* Parse compile of `mojo_only/depthwise_check.mojo`: 0 errors on Apple
+  FAST, Apple IDENTICAL, NVIDIA FAST, AMD 64-lane FAST.
+* Seeded A/B byte-compare vs main `3d65d70`, same device, same window
+  (200k x 24 rng(11), 20 trees depth 6 seed 7): SymmetricTree, Depthwise,
+  Lossguide all BYTE-IDENTICAL -- 1902's transcription-exactness and
+  1911's addend-equality claims hold on the shipped binding, quantized
+  route live.
+* Extended fixture per the 1902 gate spec (120k x 20: 8 continuous + 6
+  binary + 6 twelve-value columns, so qh REFUSES the shape and the
+  STANDING launchers run the five inline `ridx_stats` gather arms; depth 4
+  = over-1024 slow reorder arm, depth 10 = inplace arm): Depthwise d4/d10,
+  Lossguide d10 all BYTE-IDENTICAL vs a main-built binding.
+* Reach, per branch. Sabotage A (`qh_write_hist_kernel` dequantize
+  `Int(q) + 1`): Depthwise DIFFERS (max 2.87e-1, all rows), Symmetric
+  BYTE-IDENTICAL (correct -- its driver is not converted). Lossguide
+  stayed byte-identical UNDER SABOTAGE while a host print probe showed
+  `quantized_built=True` on EVERY lossguide iteration -- the route is
+  reached; the poison (+1/fixed_scale on nonzero cells only, the `if q !=
+  0` self-cleaning branch) sat below every argmax flip threshold on the
+  fixture. SABOTAGE-DESIGN NOTE for the next round: an additive
+  1-quantum poison is too weak for well-separated lossguide gains; use a
+  multiplicative poison. Sabotage B (`launch_reorder_index_only` guard
+  `<= 0` -> `<= 1`, skipping single-split reorders -- code only the NEW
+  route executes): Depthwise DIFFERS (max 8.5e-1), Lossguide DIFFERS
+  (max 1.44), Symmetric BYTE-IDENTICAL. 1902 live on both non-symmetric
+  policies.
+* `check-depthwise`: all 7 claims OK on FAST and on
+  `-D MOJOLEARN_NUMERIC_IDENTICAL=1`.
+* The 1902 x 1911 composition seam (found and closed at integration):
+  `qh_hist_gather_kernel` loads the packed pair POSITIONALLY, correct only
+  while the stat plane is permuted alongside. Under RIDX_ONLY_SPLITS the
+  quantize pass gathers instead -- value through `indices[pos]`, dither
+  still keyed on the storage position -- so `q_stats[pos]` holds
+  bit-for-bit the pair the permuted plane would have held and the gather
+  kernel stays untouched.
+* NOT measured here: speed. The 1M/2M/5M price rungs on all three vendors
+  are the measuring lane's, per the round's division of labor; every row
+  above names its flip-back point.

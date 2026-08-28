@@ -998,3 +998,15 @@ does not have. In value order:
 Not proposed: touching `find_best_splits` (8.0% at 500k) or the host
 control plane (78.6% GPU-busy at bench shape says the box is not
 host-bound there) before the histogram items above are certified.
+
+DEV 1916-1919 GATE RECORD (Aug 28, orchestrator): rf A/B (150k x 20
+rng(23), 30 trees depth 12 seed 7) clf proba + reg predict BYTE-IDENTICAL
+vs main 3d65d70. Census on that fixture (RF_LAUNCH_LOG, round build):
+`phase_setup` 1,476 with `init_split` and `sample_features` both 0 (1916
+reached, fusion complete); `xfer_args_upload` 32 for two 30-tree fits
+against the per-tree restaging it replaces (1917 reached); `leaf` 60 with
+the slot memset gone from the leaf pass, `zero_fill=True` at the one call
+site (1918); `xfer_phase_upload` 1,665 against 1,476 rounds + 720
+partition batches = 2,196 unskipped, so 531 no-retry batches took the
+1919 span reuse (reach by count arithmetic). Speed unmeasured here -- the
+measuring lane owns the covtype/higgs rows.
