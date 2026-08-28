@@ -1,0 +1,60 @@
+
+=== forest.gbdt-symmetric.r1000000.log :: /root/mojolearn/.pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane gbdt-symmetric --dataset higgs --rows 1000000 ===
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-cpu reason=ModuleNotFoundError: No module named 'catboost'
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-gpu reason=ModuleNotFoundError: No module named 'catboost'
+FSPEED-REFUSED lane=gbdt-symmetric arm=all reason=nothing could be constructed on this box; see the refusals above
+
+=== forest.gbdt-symmetric.r2000000.log :: /root/mojolearn/.pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane gbdt-symmetric --dataset higgs --rows 2000000 ===
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-cpu reason=ModuleNotFoundError: No module named 'catboost'
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-gpu reason=ModuleNotFoundError: No module named 'catboost'
+FSPEED-REFUSED lane=gbdt-symmetric arm=all reason=nothing could be constructed on this box; see the refusals above
+
+=== forest.gbdt-depthwise.r1000000.log :: /root/mojolearn/.pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane gbdt-depthwise --dataset higgs --rows 1000000 ===
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-cpu reason=ModuleNotFoundError: No module named 'xgboost'
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-gpu reason=ModuleNotFoundError: No module named 'xgboost'
+FSPEED-REFUSED lane=gbdt-depthwise arm=all reason=nothing could be constructed on this box; see the refusals above
+
+=== forest.gbdt-depthwise.r2000000.log :: /root/mojolearn/.pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane gbdt-depthwise --dataset higgs --rows 2000000 ===
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-cpu reason=ModuleNotFoundError: No module named 'xgboost'
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-gpu reason=ModuleNotFoundError: No module named 'xgboost'
+FSPEED-REFUSED lane=gbdt-depthwise arm=all reason=nothing could be constructed on this box; see the refusals above
+
+=== forest.gbdt-lossguide.r1000000.log :: /root/mojolearn/.pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane gbdt-lossguide --dataset higgs --rows 1000000 ===
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cpu reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cuda reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-REFUSED lane=gbdt-lossguide arm=all reason=nothing could be constructed on this box; see the refusals above
+
+=== forest.gbdt-lossguide.r2000000.log :: /root/mojolearn/.pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane gbdt-lossguide --dataset higgs --rows 2000000 ===
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cpu reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cuda reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-REFUSED lane=gbdt-lossguide arm=all reason=nothing could be constructed on this box; see the refusals above
+
+=== forest.rf.r1000000.log :: /root/mojolearn/.pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane rf --dataset higgs --rows 1000000 ===
+FSPEED-REFUSED lane=rf arm=lightgbm-cpu reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-REFUSED lane=rf arm=lightgbm-cuda reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-REFUSED lane=rf arm=all reason=nothing could be constructed on this box; see the refusals above
+
+=== forest.rf.r2000000.log :: /root/mojolearn/.pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane rf --dataset higgs --rows 2000000 ===
+FSPEED-REFUSED lane=rf arm=lightgbm-cpu reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-REFUSED lane=rf arm=lightgbm-cuda reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-REFUSED lane=rf arm=all reason=nothing could be constructed on this box; see the refusals above
+
+=== forest.et.r1000000.log :: /root/mojolearn/.pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane et --dataset higgs --rows 1000000 ===
+FSPEED-REFUSED lane=et arm=lightgbm-cpu reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-REFUSED lane=et arm=lightgbm-cuda reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-REFUSED lane=et arm=all reason=nothing could be constructed on this box; see the refusals above
+
+=== forest.et.r2000000.log :: /root/mojolearn/.pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane et --dataset higgs --rows 2000000 ===
+FSPEED-REFUSED lane=et arm=lightgbm-cpu reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-REFUSED lane=et arm=lightgbm-cuda reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-REFUSED lane=et arm=all reason=nothing could be constructed on this box; see the refusals above
+
+=== forest.iforest.r1000000.log :: /root/mojolearn/.pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane iforest --rows 1000000 ===
+FSPEED-REFUSED lane=iforest arm=cuml-iforest-gpu reason=ModuleNotFoundError: No module named 'cuml'
+FSPEED-REFUSED lane=iforest arm=sklearn-iforest-cpu reason=GPU-PATH-ONLY: sklearn-iforest-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=iforest arm=all reason=nothing could be constructed on this box; see the refusals above
+
+=== forest.iforest.r2000000.log :: /root/mojolearn/.pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane iforest --rows 2000000 ===
+FSPEED-REFUSED lane=iforest arm=cuml-iforest-gpu reason=ModuleNotFoundError: No module named 'cuml'
+FSPEED-REFUSED lane=iforest arm=sklearn-iforest-cpu reason=GPU-PATH-ONLY: sklearn-iforest-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=iforest arm=all reason=nothing could be constructed on this box; see the refusals above

@@ -177,15 +177,50 @@ log "work bound ${WORK_SECONDS}s"
 # so each of these is a first-ever HIP build of that extension. None is
 # fatal: a family that comes home with four lanes and one refusal says
 # something true, and a family that dies on a build says nothing at all.
+#
+# THREE THINGS THIS GETS RIGHT THAT THE FIRST VERSION DID NOT, ALL OF THEM
+# ALREADY SOLVED IN tools/gemm_remote_leg.sh AND ALL OF THEM RE-BROKEN HERE
+# ON THE 2026-08-28_125022 LEG, WHICH CAME HOME WITH 84 REFUSALS AND ZERO
+# TIMED ROUNDS. Ported across rather than rediscovered a third time.
+#
+#  1. EVERY BINDING, DERIVED FROM THE FILESYSTEM. `mojolearn/__init__.py`
+#     imports the whole package surface, so `import mojolearn` needs every
+#     extension present regardless of which lane is timed. A hand-written
+#     list omitted `bindings/build.sh` -- the one script not named
+#     `build_<name>.sh` -- and every arm then refused with "cannot import
+#     name '_mojolearn' from partially initialized module".
+#  2. TWO PASSES. Pass 1 sets MOJOLEARN_SKIP_BUILD_GATE because each script's
+#     smoke gate imports siblings that do not exist yet; pass 2 re-runs them
+#     with the gate LIVE against a complete package, and pass 2's exit codes
+#     are the ones that count. Ordering cannot fix this: base's smoke needs
+#     estimators and estimators' needs base.
+#  3. PIXI'S INTERPRETER ON PATH FOR THE BUILDS ONLY, ON AMD. The gates run
+#     `python3 - <<PY` with numpy; the ROCm image's python3 has none, so the
+#     rf/gbdt/trees MOJO BUILDS SUCCEEDED and were then reported as failures
+#     because their gate died on `import numpy`. Scoped to the build loop.
 BUILDS=""
-[ "$FAMILY" = "forest" ] && BUILDS="estimators gbdt rf trees svm"
+[ "$FAMILY" = "forest" ] && BUILDS="all"
 
 $SSH "cd /root/mojolearn && \
   export PATH=/root/.pixi/bin:\$PATH && \
   (command -v pixi >/dev/null || curl -fsSL https://pixi.sh/install.sh | bash) && \
   export PATH=/root/.pixi/bin:\$PATH && \
   timeout -k 30 1500 pixi install > /root/pixi_install.log 2>&1; echo PIXI_INSTALL_EXIT=\$?; \
-  for b in $BUILDS; do timeout -k 30 900 bash bindings/build_\$b.sh > /root/build_\$b.log 2>&1; echo BUILD_\${b}_EXIT=\$?; done" \
+  if [ '$BUILDS' = all ]; then \
+    BSCRIPTS=\"bindings/build.sh \$(ls bindings/build_*.sh 2>/dev/null | tr '\n' ' ')\"; \
+    BPATH=\"\$PATH\"; \
+    [ '$VENDOR' = amd ] && BPATH=\"\$PWD/.pixi/envs/default/bin:\$PATH\"; \
+    for pass in 1 2; do \
+      for bs in \$BSCRIPTS; do \
+        b=\$(basename \$bs .sh | sed 's/^build_//; s/^build\$/base/'); \
+        skip=1; [ \$pass = 2 ] && skip=; \
+        PATH=\"\$BPATH\" MOJOLEARN_SKIP_BUILD_GATE=\"\$skip\" timeout -k 30 900 \
+          bash \$bs > /root/build_\$b.pass\$pass.log 2>&1; \
+        echo BUILD_\${b}_PASS\${pass}_EXIT=\$?; \
+      done; \
+    done; \
+  fi; \
+  ( cd python && python3 -c 'import mojolearn; print(\"mojolearn imports OK\")' ) 2>&1 | tail -2" \
   2>&1 | tee -a "$OUT/console.log"
 
 # OURS ONLY, AND THE INTERPRETERS ARE POINTED AT NOTHING ON PURPOSE. Every
@@ -208,7 +243,7 @@ rsync -az "root@$IP:/root/speedrun/" "$OUT/run/" && log "fetched run/" || log "F
 for f in speed_run.log pixi_install.log; do
   rsync -az "root@$IP:/root/$f" "$OUT/$f" 2>/dev/null || true
 done
-for b in $BUILDS; do rsync -az "root@$IP:/root/build_$b.log" "$OUT/build_$b.log" 2>/dev/null || true; done
+rsync -az --include 'build_*.log' --exclude '*' "root@$IP:/root/" "$OUT/builds/" 2>/dev/null || true
 
 {
   echo "finished=$(date -u +%FT%TZ)"

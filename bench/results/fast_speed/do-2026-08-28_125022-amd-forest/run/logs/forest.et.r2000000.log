@@ -1,0 +1,9 @@
+speed_gbdt_arm: dataset 'higgs' unavailable (higgs is not downloaded: /root/datasets/gbm-bench/higgs/HIGGS.csv.gz is missing. Run `python tools/speed_gbdt_arm.py --download higgs` first (2.6 GB), OUTSIDE the timed run.); falling back to the synthetic fixture. Every line will say so in shape=.
+FSPEED-NOTE lane=et arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+FSPEED-REFUSED lane=et arm=ours reason=ImportError: cannot import name '_mojolearn' from partially initialized module 'mojolearn' (most likely due to a circular import) (/root/mojolearn/python/mojolearn/__init__.py)
+FSPEED-REFUSED lane=et arm=cuml-et-gpu reason=ModuleNotFoundError: No module named 'cuml'
+FSPEED-REFUSED lane=et arm=sklearn-et-cpu reason=GPU-PATH-ONLY: sklearn-et-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=et arm=lightgbm-cpu reason=GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=et arm=lightgbm-cpu reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-REFUSED lane=et arm=lightgbm-cuda reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-REFUSED lane=et arm=all reason=nothing could be constructed on this box; see the refusals above

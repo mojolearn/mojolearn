@@ -46,7 +46,22 @@ from fractions import Fraction
 import numpy as np
 import torch
 import torch.nn.functional as F
-from einops import rearrange, repeat
+
+# `einops` IS IMPORTED INSIDE `selective_scan_ref`, NOT HERE. DEVIATION 1934,
+# 2026-08-28. It is used at five lines, all of them inside that one function
+# (the reference SSM scan), and nothing else in this file touches it --
+# splitmix64, the dyadic range helpers, shapes_for, default_ranges, rmsnorm
+# and TENSOR_IDS are all pure numpy/torch.
+#
+# At module scope it took five unrelated lanes down with it. `speed_torch_seq.py`
+# imports this file for those generic helpers and then dies at import when
+# einops is absent, so on the Apple box the attention, mlp, rmsnorm,
+# transformer and gemm torch arms ALL refused with "No module named 'einops'"
+# and the whole Apple gemmseq board came home with NO OPPONENT ON THIS BOX on
+# every row. The mamba reference path still needs einops and still refuses by
+# name without it, which is correct; the other five lanes never needed it.
+#
+# Moving an import cannot move a bit: no corpus value changes.
 
 torch.set_num_threads(1)
 torch.use_deterministic_algorithms(True)
@@ -265,6 +280,7 @@ def selective_scan_ref(u, delta, A, B, C, D=None, z=None, delta_bias=None, delta
     out: r(B D L)
     last_state (optional): r(B D dstate) or c(B D dstate)
     """
+    from einops import rearrange, repeat  # DEVIATION 1934: lazy, see the note at the imports
     dtype_in = u.dtype
     u = u.float()
     delta = delta.float()

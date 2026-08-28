@@ -127,7 +127,7 @@ gemmseq)
     runarm "verify.mamba_block.identical.log" \
         sh tools/with_identical_mode.sh pixi run mojo run -I . mamba/mojo_only/mamba_check.mojo
     # the vendor arms: cuBLAS refuses here by name, torch runs on MPS
-    runarm "gemm.gemm.cublas.log" $VENDOR_PY tools/speed_gemm_arm.py --rounds "$ROUNDS"
+    runarm "gemm.gemm.cublas.log" $TORCH_PY tools/speed_gemm_arm.py --rounds "$ROUNDS"
     for L in $LANES; do
         [ "$L" = "gemm" ] && continue
         runarm "seq.$L.torch.log" $TORCH_PY tools/speed_torch_seq.py \

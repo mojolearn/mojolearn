@@ -1,0 +1,25 @@
+This script will automatically download and install Pixi (latest) for you.
+Getting it from this url: https://github.com/prefix-dev/pixi/releases/latest/download/pixi-x86_64-unknown-linux-musl.tar.gz
+The 'pixi' binary is installed into '/root/.pixi/bin'
+Updating '/root/.bashrc'
+Please restart or source your shell.
+PIXI_INSTALL_EXIT=0
+BUILD_estimators_EXIT=0
+BUILD_gbdt_EXIT=1
+BUILD_rf_EXIT=1
+BUILD_trees_EXIT=1
+BUILD_svm_EXIT=0
+SPEED_RUN_EXIT=0
+[16:54:38 forest] arm forest.gbdt-symmetric.r1000000.log
+[16:54:39 forest] arm forest.gbdt-symmetric.r2000000.log
+[16:54:40 forest] arm forest.gbdt-depthwise.r1000000.log
+[16:54:41 forest] arm forest.gbdt-depthwise.r2000000.log
+[16:54:42 forest] arm forest.gbdt-lossguide.r1000000.log
+[16:54:42 forest] arm forest.gbdt-lossguide.r2000000.log
+[16:54:43 forest] arm forest.rf.r1000000.log
+[16:54:44 forest] arm forest.rf.r2000000.log
+[16:54:45 forest] arm forest.et.r1000000.log
+[16:54:45 forest] arm forest.et.r2000000.log
+[16:54:46 forest] arm forest.iforest.r1000000.log
+[16:54:46 forest] arm forest.iforest.r2000000.log
+[16:54:47 forest] done -- /root/speedrun

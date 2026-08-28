@@ -1,0 +1,5 @@
+FSPEED-NOTE lane=iforest arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+FSPEED-REFUSED lane=iforest arm=ours reason=ImportError: cannot import name '_mojolearn' from partially initialized module 'mojolearn' (most likely due to a circular import) (/root/mojolearn/python/mojolearn/__init__.py)
+FSPEED-REFUSED lane=iforest arm=cuml-iforest-gpu reason=ModuleNotFoundError: No module named 'cuml'
+FSPEED-REFUSED lane=iforest arm=sklearn-iforest-cpu reason=GPU-PATH-ONLY: sklearn-iforest-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=iforest arm=all reason=nothing could be constructed on this box; see the refusals above
