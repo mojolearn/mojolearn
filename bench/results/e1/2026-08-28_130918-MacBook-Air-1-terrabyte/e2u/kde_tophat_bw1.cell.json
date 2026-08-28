@@ -1,0 +1,13 @@
+{
+  "card": "kde_tophat_bw1.card",
+  "kind": "kde",
+  "log_density": "cd0aaf2cc0cf0298e7e5537c1ebdac62b1116f4aa1e9db4b270a576c0d57ae1f",
+  "n_sentinel": 1335,
+  "score": -2238.696261882782,
+  "seconds": 1.65,
+  "spec": {
+    "bandwidth": 1.0,
+    "kernel": "tophat"
+  },
+  "stages": 7
+}

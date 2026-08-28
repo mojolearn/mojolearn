@@ -1,0 +1,22 @@
+{
+  "best_iteration": 19,
+  "card": "gbdt_rmse_od_iter.card",
+  "kind": "gbdt",
+  "loss_curve": "ef41018d020a6f9f570acff290ccbcc533bb98b6ad53885da094559280ca1b6a",
+  "model": "8bfdeec4772121c518cbede93c994148bcd365b7207ff9c26c7e237da85d982a",
+  "predictions": "da34f396f968e546a83efc3bd014be0593e6b2873961c49566f6536967864960",
+  "seconds": 0.46,
+  "spec": {
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "RMSE",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "od_type": "Iter",
+    "od_wait": 3,
+    "random_state": 7,
+    "use_best_model": true
+  },
+  "stopped_early": 0,
+  "test_loss_curve": "0dd8e8676a769740dff3e610801372e6cfd11aea9d2c5f2a4b415ed5d730872e"
+}

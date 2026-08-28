@@ -1,0 +1,14 @@
+{
+  "card": null,
+  "kind": "et_clf",
+  "model": "ab3d3b93ca0320452b938ee185ffac449ea077db90063b497dcda699eb9f72d8",
+  "predictions": "64d0de9b5222d4118e00e41ae1096639e7a79697ae8365af0d09ba02e3d26651",
+  "proba": "9d2d0fcd4b37aa36d234c13bdf07c4940ec724ed3798d90fcd50baeaecedadea",
+  "seconds": 0.08,
+  "spec": {
+    "device": "cpu",
+    "max_depth": 8,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

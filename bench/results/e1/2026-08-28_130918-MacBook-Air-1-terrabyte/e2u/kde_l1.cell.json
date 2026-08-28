@@ -1,0 +1,14 @@
+{
+  "card": "kde_l1.card",
+  "kind": "kde",
+  "log_density": "1ee79c0e9de2ffecbb32375071e8a4bf922c2aff1d3cf8e79e405bf59bd56f93",
+  "n_sentinel": 0,
+  "score": -144921.75161743164,
+  "seconds": 1.65,
+  "spec": {
+    "bandwidth": 8.0,
+    "kernel": "gaussian",
+    "metric": "l1"
+  },
+  "stages": 7
+}

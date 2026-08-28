@@ -1,0 +1,8 @@
+{
+  "kind": "tsvd",
+  "refused": "Exception: gemm_tn: NUMERIC_IDENTICAL refuses the Gram shape 200 x 200 x 4096. The split-K kernel (core/gram_splitk.mojo) is the only arm with a pinned summation order, and this shape is outside its capacity (needs m == n <= 128 and m*n <= 16384 register cells). The other arm is linalg.matmul, whose k-split is a per-vendor summation order, so running it would return a NON-identical model under a mode that promises one. IDENTITY_PATHS row 27. To close this refusal, widen the split-K kernel's staging tile; to work around it today, reduce the feature count or run NUMERIC_FAST and drop the cross-vendor claim.",
+  "seconds": 0.03,
+  "spec": {
+    "n_components": 8
+  }
+}

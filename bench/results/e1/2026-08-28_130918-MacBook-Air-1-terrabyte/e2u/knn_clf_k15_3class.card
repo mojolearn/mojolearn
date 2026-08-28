@@ -1,0 +1,11 @@
+# knn n_index=20000 n_queries=2000 d=24 k=15 method=2 sqrt=False
+# format: mojolearn-identity-trace v1
+0	knn.index_norm	f32	20000	74a472e4925ec44e
+1	knn.query_norm	f32	2000	18da124518cd0e52
+2	knn.out_dist	f32	30000	7fff9034679653bf
+3	knn.out_idx	u32	30000	a256b0c445bc1d9a
+4	knn.sorted_dist	f32	30000	7fff9034679653bf
+5	knn.sorted_idx	u32	30000	a256b0c445bc1d9a
+6	knn_clf.uniq_labels	i32	3	1193857e8e6c10e0
+7	knn_clf.votes	f32	6000	38cf4fbb28a7eac2
+8	knn_clf.labels	i32	2000	4c1d5b4be8d80fc9

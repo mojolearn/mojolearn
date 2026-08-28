@@ -1,0 +1,15 @@
+{
+  "batches": 1,
+  "card": "dbscan_min2.card",
+  "kind": "dbscan",
+  "labels": "e8d0d8c5b84b84090fe5427dad6b390c9ea5cceac19cdbbe66ce51b212ce113e",
+  "n_clusters": 9,
+  "n_iter": 2,
+  "n_noise": 397,
+  "seconds": 0.06,
+  "spec": {
+    "eps": 0.3,
+    "min_samples": 2
+  },
+  "stages": 3
+}

@@ -1,0 +1,402 @@
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:20:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:20:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:20:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:278:29: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var p = tmp.unsafe_ptr().bitcast[UInt8]()
+            ~~~~~~~~~~~~~~~~^~~~~~~~
+                             unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:20:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:157:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        Kd[tid] = kernel.unsafe_load(tid + tid * n_ws)
+        ~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:161:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sh_tmp[0] = Float32(0.0)
+        ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:162:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sh_tmp[1] = Float32(0.0)
+        ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:182:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            sh_tmp[0] = Float32(tid)
+            ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:184:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var u = Int(sh_tmp[0])
+                    ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:218:36: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var eta_ui = ftz(ftz(Kd[tid] + Kd[u]) - ftz(Float32(2.0) * Kui))
+                                 ~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:218:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var eta_ui = ftz(ftz(Kd[tid] + Kd[u]) - ftz(Float32(2.0) * Kui))
+                                           ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:229:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            sh_tmp[0] = Float32(tid)
+            ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:231:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var l = Int(sh_tmp[0])
+                    ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:239:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            sh_tmp[0] = C - a if y > Float32(0.0) else a
+            ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:243:36: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var eta_ul = ftz(ftz(Kd[u] + Kd[l]) - ftz(Float32(2.0) * Kui))
+                                 ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:243:44: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var eta_ul = ftz(ftz(Kd[u] + Kd[l]) - ftz(Float32(2.0) * Kui))
+                                         ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:247:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            sh_tmp[1] = tmp_l if tmp_l < q_l else q_l
+            ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:249:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var tmp_u = sh_tmp[0]
+                    ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:250:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var tmp_l2 = sh_tmp[1]
+                     ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:20:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:82:9: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    vals[tid] = value
+    ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:83:9: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    keys[tid] = key
+    ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:88:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ov = vals[tid + step]
+                     ~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:89:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ok = keys[tid + step]
+                     ~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:90:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mv = vals[tid]
+                     ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:91:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mk = keys[tid]
+                     ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:98:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                vals[tid] = ov
+                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:99:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                keys[tid] = ok
+                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:102:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var rv = vals[0]
+             ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:103:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var rk = keys[0]
+             ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:124:9: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    vals[tid] = value
+    ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:125:9: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    keys[tid] = key
+    ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:130:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ov = vals[tid + step]
+                     ~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:131:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ok = keys[tid + step]
+                     ~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:132:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mv = vals[tid]
+                     ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:133:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mk = keys[tid]
+                     ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:140:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                vals[tid] = ov
+                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:141:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                keys[tid] = ok
+                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:144:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var rv = vals[0]
+             ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:145:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var rk = keys[0]
+             ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:170:9: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    vals[tid] = value
+    ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:175:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ov = vals[tid + step]
+                     ~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:176:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if ov > vals[tid]:
+                    ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:177:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                vals[tid] = ov
+                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:180:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var rv = vals[0]
+             ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:201:9: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    vals[tid] = value
+    ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:206:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ov = vals[tid + step]
+                     ~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:207:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mv = vals[tid]
+                     ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:209:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                vals[tid] = max(ov, mv)
+                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:211:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                vals[tid] = max(mv, ov)
+                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:63:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smosolver.mojo:84:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/svm/ported/svm/smoblocksolve.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/pinned_argreduce.mojo:214:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var rv = vals[0]
+             ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/smo_oracle.mojo:262:31: warning: assignment to 'idx_of' was never used; assign to '_' instead?
+        var idx_of = List[Int]()
+                              ^
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/svm/svc_main.mojo:22:
+/Users/andrewhendel/CascadeProjects/mojolearn/svm/mojo_only/svc_check.mojo:201:13: warning: ref 'rep' was never used, remove it?
+        for rep in range(2):
+            ^
+== svm/svc_main.mojo [FAST] card ==
+CONSTRUCTION plus one Apple device's gates; no second vendor has run this.
+card written to /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e1/2026-08-28_130918-MacBook-Air-1-terrabyte/lanes/svm.fast.card [FAST] n_support=16

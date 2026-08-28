@@ -1,0 +1,20 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_rmse_poissonboot.card",
+  "kind": "gbdt",
+  "loss_curve": "eb6ceea53a8568cfa5afaee9b252da51637114b5af0ff3db0f678e951ffd8d52",
+  "model": "b4e78d6e0cee591defee090150d9d4149ff6e617f5457720e6dde8514dc15576",
+  "predictions": "69b24c3f87f6debbc5c566b54a4681e0cc252c18ec86ef1ec4867f4a0e9246a7",
+  "seconds": 0.44,
+  "spec": {
+    "bootstrap_type": "Poisson",
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "RMSE",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7,
+    "subsample": 0.66
+  },
+  "stopped_early": 0
+}

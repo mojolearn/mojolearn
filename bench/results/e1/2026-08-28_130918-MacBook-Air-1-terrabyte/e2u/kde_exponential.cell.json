@@ -1,0 +1,13 @@
+{
+  "card": "kde_exponential.card",
+  "kind": "kde",
+  "log_density": "50e2ae8a51d2acd0ad3206b4e98fafc2c0f90fc73db55e338cfc31e96c4c55a0",
+  "n_sentinel": 0,
+  "score": -197376.57096099854,
+  "seconds": 1.66,
+  "spec": {
+    "bandwidth": 8.0,
+    "kernel": "exponential"
+  },
+  "stages": 7
+}
