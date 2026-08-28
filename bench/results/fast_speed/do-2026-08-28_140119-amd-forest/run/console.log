@@ -1,0 +1,60 @@
+
+=== forest.gbdt-symmetric.r1000000.log :: /root/mojolearn/.pixi/envs/gbmbench/bin/python bench/speed/forest_speed_arm.py --lane gbdt-symmetric --dataset higgs --rows 1000000 ===
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-gpu mode=FAST device=Linux_x86_64 rounds=5 size=shipped
+FSPEED-REFUSED lane=gbdt-symmetric arm=ours reason=Exception during warm-up: half-byte histograms on a 64-lane column: the binary/half-byte accumulator template is 32-lane by construction (DEVIATION 1910); this build excludes the sub-byte families -- write the wide-wavefront layout or promo
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-gpu reason=CatBoostError during warm-up: catboost/cuda/cuda_lib/cuda_base.h:265: CUDA error 35: CUDA driver version is insufficient for CUDA runtime version
+
+=== forest.gbdt-symmetric.r2000000.log :: /root/mojolearn/.pixi/envs/gbmbench/bin/python bench/speed/forest_speed_arm.py --lane gbdt-symmetric --dataset higgs --rows 2000000 ===
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-gpu mode=FAST device=Linux_x86_64 rounds=5 size=shipped
+FSPEED-REFUSED lane=gbdt-symmetric arm=ours reason=Exception during warm-up: half-byte histograms on a 64-lane column: the binary/half-byte accumulator template is 32-lane by construction (DEVIATION 1910); this build excludes the sub-byte families -- write the wide-wavefront layout or promo
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-gpu reason=CatBoostError during warm-up: catboost/cuda/cuda_lib/cuda_base.h:265: CUDA error 35: CUDA driver version is insufficient for CUDA runtime version
+
+=== forest.gbdt-depthwise.r1000000.log :: /root/mojolearn/.pixi/envs/gbmbench/bin/python bench/speed/forest_speed_arm.py --lane gbdt-depthwise --dataset higgs --rows 1000000 ===
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=catboost-gpu mode=FAST device=Linux_x86_64 rounds=5 size=shipped
+FSPEED-REFUSED lane=gbdt-depthwise arm=ours reason=Exception during warm-up: half-byte histograms on a 64-lane column: the binary/half-byte accumulator template is 32-lane by construction (DEVIATION 1910); this build excludes the sub-byte families -- write the wide-wavefront layout or promo
+FSPEED-REFUSED lane=gbdt-depthwise arm=catboost-gpu reason=CatBoostError during warm-up: catboost/cuda/cuda_lib/cuda_base.h:265: CUDA error 35: CUDA driver version is insufficient for CUDA runtime version
+
+=== forest.gbdt-depthwise.r2000000.log :: /root/mojolearn/.pixi/envs/gbmbench/bin/python bench/speed/forest_speed_arm.py --lane gbdt-depthwise --dataset higgs --rows 2000000 ===
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=catboost-gpu mode=FAST device=Linux_x86_64 rounds=5 size=shipped
+FSPEED-REFUSED lane=gbdt-depthwise arm=ours reason=Exception during warm-up: half-byte histograms on a 64-lane column: the binary/half-byte accumulator template is 32-lane by construction (DEVIATION 1910); this build excludes the sub-byte families -- write the wide-wavefront layout or promo
+FSPEED-REFUSED lane=gbdt-depthwise arm=catboost-gpu reason=CatBoostError during warm-up: catboost/cuda/cuda_lib/cuda_base.h:265: CUDA error 35: CUDA driver version is insufficient for CUDA runtime version
+
+=== forest.gbdt-lossguide.r1000000.log :: /root/mojolearn/.pixi/envs/gbmbench/bin/python bench/speed/forest_speed_arm.py --lane gbdt-lossguide --dataset higgs --rows 1000000 ===
+[LightGBM] [Fatal] CUDA Tree Learner was not enabled in this build.
+Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cuda reason=LightGBMError during warm-up: CUDA Tree Learner was not enabled in this build. Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+
+=== forest.gbdt-lossguide.r2000000.log :: /root/mojolearn/.pixi/envs/gbmbench/bin/python bench/speed/forest_speed_arm.py --lane gbdt-lossguide --dataset higgs --rows 2000000 ===
+[LightGBM] [Fatal] CUDA Tree Learner was not enabled in this build.
+Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cuda reason=LightGBMError during warm-up: CUDA Tree Learner was not enabled in this build. Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+
+=== forest.rf.r1000000.log :: /root/mojolearn/.pixi/envs/gbmbench/bin/python bench/speed/forest_speed_arm.py --lane rf --dataset higgs --rows 1000000 ===
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=5 ms=4492.729 hash=cf0e938bee35499e
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.538715
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.810021
+
+=== forest.rf.r2000000.log :: /root/mojolearn/.pixi/envs/gbmbench/bin/python bench/speed/forest_speed_arm.py --lane rf --dataset higgs --rows 2000000 ===
+FSPEED lane=rf arm=ours shape=higgs-2000000x28 round=5 ms=6269.500 hash=273ada48b6515f6b
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.536984
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.811575
+
+=== forest.et.r1000000.log :: /root/mojolearn/.pixi/envs/gbmbench/bin/python bench/speed/forest_speed_arm.py --lane et --dataset higgs --rows 1000000 ===
+FSPEED lane=et arm=ours shape=higgs-1000000x28 round=5 ms=18294.084 hash=2c192f6b12dbb6c5
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.622379
+FSPEED-ACC lane=et arm=ours metric=auc value=0.762400
+
+=== forest.et.r2000000.log :: /root/mojolearn/.pixi/envs/gbmbench/bin/python bench/speed/forest_speed_arm.py --lane et --dataset higgs --rows 2000000 ===
+FSPEED lane=et arm=ours shape=higgs-2000000x28 round=5 ms=35465.419 hash=a9a9ff528583d3bd
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.624325
+FSPEED-ACC lane=et arm=ours metric=auc value=0.758920
+
+=== forest.iforest.r1000000.log :: /root/mojolearn/.pixi/envs/gbmbench/bin/python bench/speed/forest_speed_arm.py --lane iforest --rows 1000000 ===
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=4 ms=152.974 hash=33d86f1901c5acce
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=5 ms=153.321 hash=33d86f1901c5acce
+FSPEED-ACC lane=iforest arm=ours metric=auc value=1.000000
+
+=== forest.iforest.r2000000.log :: /root/mojolearn/.pixi/envs/gbmbench/bin/python bench/speed/forest_speed_arm.py --lane iforest --rows 2000000 ===
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=4 ms=154.835 hash=33d86f1901c5acce
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=5 ms=154.281 hash=33d86f1901c5acce
+FSPEED-ACC lane=iforest arm=ours metric=auc value=1.000000

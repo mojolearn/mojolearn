@@ -1,0 +1,16 @@
+vendor=amd
+family=forest
+size=gpu-mi325x1-256gb
+region=tor1
+commit=4f6a17a56daa22819d111306db244722c8b90c95
+deadman_seconds=3600
+started=2026-08-28T18:01:19Z
+droplet=595950675
+ip=143.198.39.33
+finished=2026-08-28T18:22:21Z
+fspeed_lines=136
+fspeed_rounds=30
+fspeed_refused=54
+ours_headers_fast=12
+ours_headers_identical=0
+destroyed 2026-08-28T18:22:27Z status=active

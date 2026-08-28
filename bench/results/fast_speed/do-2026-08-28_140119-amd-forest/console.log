@@ -1,0 +1,46 @@
+This script will automatically download and install Pixi (latest) for you.
+Getting it from this url: https://github.com/prefix-dev/pixi/releases/latest/download/pixi-x86_64-unknown-linux-musl.tar.gz
+The 'pixi' binary is installed into '/root/.pixi/bin'
+Updating '/root/.bashrc'
+Please restart or source your shell.
+PIXI_INSTALL_EXIT=0
+PIXI_GBMBENCH_EXIT=0
+BUILD_base_PASS1_EXIT=0
+BUILD_estimators_PASS1_EXIT=0
+BUILD_gbdt_PASS1_EXIT=0
+BUILD_linalg_PASS1_EXIT=0
+BUILD_metrics_PASS1_EXIT=0
+BUILD_rf_PASS1_EXIT=0
+BUILD_solver_PASS1_EXIT=0
+BUILD_svm_PASS1_EXIT=0
+BUILD_trees_PASS1_EXIT=0
+BUILD_tsa_PASS1_EXIT=0
+BUILD_base_PASS2_EXIT=0
+BUILD_estimators_PASS2_EXIT=0
+BUILD_gbdt_PASS2_EXIT=1
+BUILD_linalg_PASS2_EXIT=0
+BUILD_metrics_PASS2_EXIT=0
+BUILD_rf_PASS2_EXIT=0
+BUILD_solver_PASS2_EXIT=0
+BUILD_svm_PASS2_EXIT=0
+BUILD_trees_PASS2_EXIT=0
+BUILD_tsa_PASS2_EXIT=0
+    import numpy as np
+ModuleNotFoundError: No module named 'numpy'
+DOWNLOAD_higgs_EXIT=0
+higgs: 2816.4 MB
+higgs decoded to /root/datasets/gbm-bench/higgs/higgs_speed.npz (train 10500000 x 28, test 500000)
+SPEED_RUN_EXIT=0
+[18:09:31 forest] arm forest.gbdt-symmetric.r1000000.log
+[18:09:33 forest] arm forest.gbdt-symmetric.r2000000.log
+[18:09:34 forest] arm forest.gbdt-depthwise.r1000000.log
+[18:09:35 forest] arm forest.gbdt-depthwise.r2000000.log
+[18:09:37 forest] arm forest.gbdt-lossguide.r1000000.log
+[18:09:39 forest] arm forest.gbdt-lossguide.r2000000.log
+[18:09:41 forest] arm forest.rf.r1000000.log
+[18:12:05 forest] arm forest.rf.r2000000.log
+[18:14:49 forest] arm forest.et.r1000000.log
+[18:17:33 forest] arm forest.et.r2000000.log
+[18:22:03 forest] arm forest.iforest.r1000000.log
+[18:22:07 forest] arm forest.iforest.r2000000.log
+[18:22:11 forest] done -- /root/speedrun

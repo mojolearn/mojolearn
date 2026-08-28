@@ -1,0 +1,9 @@
+FSPEED-NOTE lane=gbdt-depthwise arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+FSPEED-REFUSED lane=gbdt-depthwise arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-cpu reason=GPU-PATH-ONLY: xgboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-cpu reason=ModuleNotFoundError: No module named 'xgboost'
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-gpu reason=ModuleNotFoundError: No module named 'xgboost'
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=ours mode=FAST device=Linux_x86_64 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=catboost-gpu mode=FAST device=Linux_x86_64 rounds=5 size=shipped
+FSPEED-REFUSED lane=gbdt-depthwise arm=ours reason=Exception during warm-up: half-byte histograms on a 64-lane column: the binary/half-byte accumulator template is 32-lane by construction (DEVIATION 1910); this build excludes the sub-byte families -- write the wide-wavefront layout or promo
+FSPEED-REFUSED lane=gbdt-depthwise arm=catboost-gpu reason=CatBoostError during warm-up: catboost/cuda/cuda_lib/cuda_base.h:265: CUDA error 35: CUDA driver version is insufficient for CUDA runtime version

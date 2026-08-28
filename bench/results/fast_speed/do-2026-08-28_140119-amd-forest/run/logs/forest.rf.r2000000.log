@@ -1,0 +1,17 @@
+FSPEED-NOTE lane=rf arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+FSPEED-REFUSED lane=rf arm=cuml-rf-gpu reason=ModuleNotFoundError: No module named 'cuml'
+FSPEED-REFUSED lane=rf arm=sklearn-rf-cpu reason=GPU-PATH-ONLY: sklearn-rf-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=rf arm=lightgbm-cpu reason=GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-HEADER family=forest lane=rf arm=ours mode=FAST device=Linux_x86_64 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=lightgbm-cuda mode=FAST device=Linux_x86_64 rounds=5 size=shipped
+FSPEED-WARMUP lane=rf arm=ours shape=higgs-2000000x28 ms=6573.895
+[LightGBM] [Fatal] CUDA Tree Learner was not enabled in this build.
+Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+FSPEED-REFUSED lane=rf arm=lightgbm-cuda reason=LightGBMError during warm-up: CUDA Tree Learner was not enabled in this build. Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+FSPEED lane=rf arm=ours shape=higgs-2000000x28 round=1 ms=6268.397 hash=273ada48b6515f6b
+FSPEED lane=rf arm=ours shape=higgs-2000000x28 round=2 ms=6297.358 hash=273ada48b6515f6b
+FSPEED lane=rf arm=ours shape=higgs-2000000x28 round=3 ms=6233.318 hash=273ada48b6515f6b
+FSPEED lane=rf arm=ours shape=higgs-2000000x28 round=4 ms=6196.748 hash=273ada48b6515f6b
+FSPEED lane=rf arm=ours shape=higgs-2000000x28 round=5 ms=6269.500 hash=273ada48b6515f6b
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.536984
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.811575
