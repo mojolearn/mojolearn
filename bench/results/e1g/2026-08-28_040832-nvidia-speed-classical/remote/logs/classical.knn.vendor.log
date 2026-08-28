@@ -1,0 +1,20 @@
+/root/mojolearn/bench/bench_sklearn.py:139: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/bench/bench_sklearn.py:139: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=knn arm=cuml-gpu cuML returns EUCLIDEAN distances and our arm returns SQUARED ones (is_sqrt=False); sqrt is monotone so the neighbor sets and their order agree, and the extra root is one elementwise pass on their side
+FSPEED-HEADER family=classical lane=knn arm=cuml-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-NOTE lane=knn arm=cuml-gpu output is 480000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED-WARMUP lane=knn arm=cuml-gpu shape=400000x32q4000k10 ms=44.406161
+FSPEED-NOTE lane=knn arm=cuml-gpu output is 480000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=knn arm=cuml-gpu shape=400000x32q4000k10 round=1 ms=9.719156 hash=-
+FSPEED-NOTE lane=knn arm=cuml-gpu output is 480000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=knn arm=cuml-gpu shape=400000x32q4000k10 round=2 ms=9.611532 hash=-
+FSPEED-NOTE lane=knn arm=cuml-gpu output is 480000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=knn arm=cuml-gpu shape=400000x32q4000k10 round=3 ms=9.554658 hash=-
+FSPEED-NOTE lane=knn arm=cuml-gpu output is 480000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=knn arm=cuml-gpu shape=400000x32q4000k10 round=4 ms=9.535987 hash=-
+FSPEED-NOTE lane=knn arm=cuml-gpu output is 480000 bytes, above MOJOLEARN_SPEED_HASH_MAX (262144): hash omitted, not computed and discarded
+FSPEED lane=knn arm=cuml-gpu shape=400000x32q4000k10 round=5 ms=9.542450 hash=-

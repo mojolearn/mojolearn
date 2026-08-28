@@ -1,0 +1,12 @@
+/root/mojolearn/bench/bench_sklearn.py:139: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=ivf arm=cuvs-gpu ONE build plus ONE search inside the clock, matching ivf_flat_build_and_search_host. metric=sqeuclidean, kmeans_trainset_fraction=1.0, n_probes and n_lists passed explicitly (cuVS defaults n_probes to 20)
+FSPEED-HEADER family=classical lane=ivf arm=cuvs-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-WARMUP lane=ivf arm=cuvs-gpu shape=512x8q64L8p3k8 ms=383.699097
+FSPEED lane=ivf arm=cuvs-gpu shape=512x8q64L8p3k8 round=1 ms=19.114334 hash=cb8f1cef2816d70f
+FSPEED lane=ivf arm=cuvs-gpu shape=512x8q64L8p3k8 round=2 ms=14.584485 hash=cb8f1cef2816d70f
+FSPEED lane=ivf arm=cuvs-gpu shape=512x8q64L8p3k8 round=3 ms=10.173853 hash=cb8f1cef2816d70f
+FSPEED lane=ivf arm=cuvs-gpu shape=512x8q64L8p3k8 round=4 ms=54.461103 hash=cb8f1cef2816d70f
+FSPEED lane=ivf arm=cuvs-gpu shape=512x8q64L8p3k8 round=5 ms=11.872772 hash=cb8f1cef2816d70f
