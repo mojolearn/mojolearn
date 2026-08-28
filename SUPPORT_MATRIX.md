@@ -25,8 +25,8 @@ certificate; a released result card is.
 | Gradient boosting | Available | Three-vendor matrix with named refusals and residuals recorded in E1/E2 | Supported beta |
 | Random forests | Available | Three-vendor E1/E2 cards for the recorded configurations | Supported beta |
 | Extra Trees | Available | Three-vendor E1/E2 cards for the recorded configurations | Supported beta |
-| k-means, k-NN, DBSCAN | Available | Apple/AMD cards recorded; consult the unsupervised ledger for the NVIDIA status | Experimental cross-vendor certificate |
-| PCA, truncated SVD, OLS | Available | Identity paths remain tied to the linalg/GEMM certificate status | Experimental identity surface |
+| k-means, k-NN, DBSCAN | Available | Apple, NVIDIA and AMD cards recorded and IDENTICAL: E1U cards 3/3 on both vendor columns and 80/80 E2U cells at `fe00e8a` (E3 round 8), re-verified card-by-card at `144aa5b` on 2026-08-28 -- kmeans 77 stages, knn 6, dbscan 3, identical Apple<->H100 and Apple<->MI325X | Measured cross-vendor on three columns |
+| PCA, truncated SVD, OLS | Available | In the same 80/80 E2U result as the clustering row: `E3_RESULTS.md` round 8 at `fe00e8a` certifies k-means, k-NN, DBSCAN, PCA, tSVD, OLS, Ridge and logistic together, 80 cells identical on Apple<->H100 AND Apple<->MI325X (60 identical plus 20 refused with the same message on every column) | Measured cross-vendor on three columns |
 | General FP32 GEMM | Available through existing specialized routes | Profile `mojolearn.identical.gemm.fp32.v1`, frozen; the identity card is bit-identical on Apple M4, NVIDIA H100 and AMD MI325X, 60 stages each, at leg 11 commit `144aa5b` (E3 round 11, judge section 7). Shapes and plans outside the card's 62-shape, eight-plan sweep have run on Apple only | Measured cross-vendor for the card's sweep; no Python surface for it is built into the released wheel |
 | Neural-network operators | Not released | Not released | Out of scope for the current release |
 
