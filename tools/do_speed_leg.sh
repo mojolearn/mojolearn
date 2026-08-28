@@ -206,6 +206,7 @@ $SSH "cd /root/mojolearn && \
   (command -v pixi >/dev/null || curl -fsSL https://pixi.sh/install.sh | bash) && \
   export PATH=/root/.pixi/bin:\$PATH && \
   timeout -k 30 1500 pixi install > /root/pixi_install.log 2>&1; echo PIXI_INSTALL_EXIT=\$?; \
+  timeout -k 30 1500 pixi install -e gbmbench > /root/pixi_install_gbmbench.log 2>&1; echo PIXI_GBMBENCH_EXIT=\$?; \
   if [ '$BUILDS' = all ]; then \
     BSCRIPTS=\"bindings/build.sh \$(ls bindings/build_*.sh 2>/dev/null | tr '\n' ' ')\"; \
     BPATH=\"\$PATH\"; \
@@ -237,6 +238,16 @@ $SSH "cd /root/mojolearn && \
 # from it would have compared AMD on synthclf-720000x100 against NVIDIA on
 # higgs-1000000x28 and shown a ratio.
 #
+# IT RUNS ON THE gbmbench ENVIRONMENT, NOT THE DEFAULT ONE. The first
+# attempt used `.pixi/envs/default/bin/python` and died on
+# `ModuleNotFoundError: No module named 'pandas'` -- the default env carries
+# numpy and the gbm-bench fetchers need pandas, which lives in the gbmbench
+# feature (pixi.toml). `pixi install` alone builds only the default
+# environment, so the leg now installs gbmbench explicitly as its own step
+# with its own exit code. That environment is also what
+# tools/local_speed_run.sh prefers for the forest driver, so one install
+# serves both.
+#
 # Bounded generously because this is a network fetch and not a measurement:
 # HIGGS is 2.6 GB plus a gzip csv parse of 11M x 29 that runs several
 # minutes, and paying it once here is the difference between one download and
@@ -244,7 +255,7 @@ $SSH "cd /root/mojolearn && \
 # the higgs rows says WHY.
 if [ -n "${SPEED_DATASET:-}" ]; then
     $SSH "cd /root/mojolearn && export PATH=/root/.pixi/bin:\$PATH && \
-      timeout -k 30 2400 .pixi/envs/default/bin/python tools/speed_gbdt_arm.py \
+      timeout -k 30 2400 .pixi/envs/gbmbench/bin/python tools/speed_gbdt_arm.py \
         --download '${SPEED_DATASET}' > /root/download.log 2>&1; \
       echo DOWNLOAD_${SPEED_DATASET}_EXIT=\$?; tail -2 /root/download.log" \
       2>&1 | tee -a "$OUT/console.log"
