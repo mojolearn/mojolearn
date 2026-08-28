@@ -548,7 +548,7 @@ def half_byte_hist_kernel(
                         dst.unsafe_store(fold, val)
 
 
-def half_byte_hist_gather_kernel(
+def half_byte_hist_gather_kernel[ridx_stats: Bool = False](
     # `TFeatureInBlock*`, flattened to four parallel arrays so the kernel
     # takes plain pointers.
     feature_folds: MutPointer[UInt32, MutAnyOrigin],
@@ -694,7 +694,15 @@ def half_byte_hist_gather_kernel(
             # declares.
             var hrow = Int(ldg(indices + (p_offset + pe)))
             hb = ldg(cindex_p + hrow)
-            hs = ldg(stats_p + (p_offset + pe))
+
+            @parameter
+            if ridx_stats:
+                # DEVIATION 1902: the stat plane is stationary and the
+                # stat rides the SAME gathered row id as the bin
+                # (`split_points_ridx.mojo`'s invariant).
+                hs = ldg(stats_p + hrow)
+            else:
+                hs = ldg(stats_p + (p_offset + pe))
         add_half_byte_point(hb, hs, tid, slice_base, smem)
 
         var tb = UInt32(0)
@@ -705,7 +713,13 @@ def half_byte_hist_gather_kernel(
             # (`compute_hist_loop_one_stat.cuh:149-151`).
             var trow = Int(ldg(indices + (tail_start + pe)))
             tb = ldg(cindex_p + trow)
-            ts = ldg(stats_p + (tail_start + pe))
+
+            @parameter
+            if ridx_stats:
+                # DEVIATION 1902, as on the head peel above.
+                ts = ldg(stats_p + trow)
+            else:
+                ts = ldg(stats_p + (tail_start + pe))
         add_half_byte_point(tb, ts, tid, slice_base, smem)
         pe += BLOCK_SIZE
 
@@ -793,9 +807,13 @@ def half_byte_hist_gather_kernel(
                 var vi = ldg[width=LOAD_SIZE, alignment=4](
                     i_ptr + LANE_WIDTH * LOAD_SIZE * k
                 )
-                var vs = ldg[width=LOAD_SIZE, alignment=4](
-                    s_ptr + LANE_WIDTH * LOAD_SIZE * k
-                )
+                var vs = SIMD[DType.float32, LOAD_SIZE](0.0)
+
+                @parameter
+                if not ridx_stats:
+                    vs = ldg[width=LOAD_SIZE, alignment=4](
+                        s_ptr + LANE_WIDTH * LOAD_SIZE * k
+                    )
 
                 @parameter
                 for e in range(LOAD_SIZE):
@@ -809,6 +827,13 @@ def half_byte_hist_gather_kernel(
                     local_bins[k * LOAD_SIZE + e] = ldg(
                         cindex_p + Int(vi[e])
                     )
+
+                    @parameter
+                    if ridx_stats:
+                        # DEVIATION 1902: the stat joins the bins' scalar
+                        # gather through the same loaded row id; the wide
+                        # load above is traded for it.
+                        vs[e] = ldg(stats_p + Int(vi[e]))
                     local_stats[k * LOAD_SIZE + e] = vs[e]
             else:
                 # No row: contribute zero. The slot it lands in is harmless
