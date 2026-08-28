@@ -101,7 +101,7 @@ lanes have never run anywhere but one Apple M4 -- no leg directory in
 and their pins come from the same source as the lanes above, so they are
 expected to match, but the leg is OWED and until it runs that is an
 expectation and not a measurement. Each class says so rather than inheriting
-a neighbour's certificate.
+a neighbor's certificate.
 
 **The FAST arm, which is the default, makes no cross-vendor claim at all.**
 Unchanged from 0.1.0, and the FAST cards do differ between vendors for

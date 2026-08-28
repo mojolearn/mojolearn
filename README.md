@@ -82,7 +82,7 @@ Three lanes have not been compared, because they have never run anywhere but
 one Apple M4: `spectral`, `holtwinters` and `tsa`. Their pins come from the
 same source and they are expected to match, but the leg is owed and until it
 runs that is an expectation rather than a measurement. No lane inherits a
-neighbour's certificate.
+neighbor's certificate.
 
 FAST, the default, is a different path with those pins compiled away. It
 promises speed and makes no cross-vendor claim anywhere, by design.
