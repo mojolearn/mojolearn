@@ -399,16 +399,58 @@ def emit_witness(lane, tag, name, arr, samples):
 # ---------------------------------------------------------------------------
 # The device, named out loud, or nothing
 # ---------------------------------------------------------------------------
-def require_cuda(torch):
-    if not torch.cuda.is_available():
-        raise SystemExit(
-            "speed_torch_seq: REFUSED. No CUDA device visible to torch. A CPU\n"
-            "forward timed here would be a perfectly good number for the wrong\n"
-            "device and nothing downstream could tell. torch %s" % torch.__version__)
-    hip = getattr(torch.version, "hip", None)
-    name = torch.cuda.get_device_name(0)
-    build = ("ROCm " + str(hip)) if hip else ("CUDA " + str(getattr(torch.version, "cuda", "?")))
-    return name, build, bool(hip)
+def require_accelerator(torch):
+    """The GPU torch can actually see, or a refusal. Never the CPU.
+
+    DEVIATION 1936, 2026-08-28. This was `require_cuda` and it refused
+    everything that was not CUDA or ROCm, so on Apple silicon the attention,
+    mlp, rmsnorm, transformer, mamba and selective_scan lanes had NO OPPONENT
+    AT ALL -- while `tools/speed_gemm_arm.py`, the sibling arm in the same
+    family, has always driven `torch.mps` and produced an `mps-default` row
+    on the same box in the same run. One of the two was simply never taught.
+
+    THE REFUSAL ITSELF WAS ALWAYS RIGHT AND IS KEPT WORD FOR WORD for the
+    case it was written for: a CPU forward timed here "would be a perfectly
+    good number for the wrong device and nothing downstream could tell". MPS
+    is not that case. It is the GPU on the box, it is the only GPU backend
+    any of these opponents ship for Apple silicon, and on this project's own
+    thesis it is the processor the comparison is about.
+
+    Returns (name, build, is_hip, devstr). `devstr` is what the caller must
+    build its `torch.device` from -- it is no longer safe to assume "cuda".
+    """
+    if torch.cuda.is_available():
+        hip = getattr(torch.version, "hip", None)
+        name = torch.cuda.get_device_name(0)
+        build = ("ROCm " + str(hip)) if hip else ("CUDA " + str(getattr(torch.version, "cuda", "?")))
+        return name, build, bool(hip), "cuda"
+    mps = getattr(torch.backends, "mps", None)
+    if mps is not None and mps.is_available():
+        return "Apple MPS", "MPS " + str(torch.__version__), False, "mps"
+    raise SystemExit(
+        "speed_torch_seq: REFUSED. No CUDA and no MPS device visible to torch.\n"
+        "A CPU forward timed here would be a perfectly good number for the wrong\n"
+        "device and nothing downstream could tell. torch %s" % torch.__version__)
+
+
+#: The device string the arms are running on, set once by `main` from
+#: `require_accelerator`. A module global rather than a parameter because the
+#: timing helper below is called from a dozen lanes and threading it through
+#: every one of them would be a wider edit than the defect deserves; it is
+#: written exactly once, before any arm runs.
+_DEVSTR = "cuda"
+
+
+def sync(torch, devstr):
+    """Drain the device the arm is actually on.
+
+    An unsynchronized timing measures the enqueue, not the work, and
+    `torch.cuda.synchronize()` is a silent no-op when the tensors are on MPS.
+    """
+    if devstr == "cuda":
+        torch.cuda.synchronize()
+    elif devstr == "mps":
+        torch.mps.synchronize()
 
 
 def set_tf32(torch, on):
@@ -600,10 +642,10 @@ def time_arm(torch, lane, arm, tag, call, rounds, warmups, out_of):
     """
     for _ in range(warmups):
         r = call()
-    torch.cuda.synchronize()
+    sync(torch, _DEVSTR)
     t0 = time.perf_counter()
     r = call()
-    torch.cuda.synchronize()
+    sync(torch, _DEVSTR)
     print("FSPEED-WARMUP lane=%s arm=%s shape=%s ms=%.6f"
           % (lane, arm, tag, (time.perf_counter() - t0) * 1000.0))
     last = None
@@ -611,7 +653,7 @@ def time_arm(torch, lane, arm, tag, call, rounds, warmups, out_of):
     for i in range(1, rounds + 1):
         t0 = time.perf_counter()
         r = call()
-        torch.cuda.synchronize()
+        sync(torch, _DEVSTR)
         ms = (time.perf_counter() - t0) * 1000.0
         last = out_of(r)
         a = last.detach().to(torch.float32).contiguous().cpu().numpy()
@@ -1004,11 +1046,13 @@ def main():
         raise SystemExit("speed_torch_seq: REFUSED. torch is not importable.")
 
     undeterminize(torch)   # DEVIATION 1856; see the function's docstring
-    name, build, is_hip = require_cuda(torch)
+    name, build, is_hip, devstr = require_accelerator(torch)
+    global _DEVSTR
+    _DEVSTR = devstr
     rows, consts = load_shapes()
     lane = args.lane
     fam = FAM_MAMBA if lane in ("mamba", "selective_scan") else FAM_LLAMA
-    dev = torch.device("cuda")
+    dev = torch.device(devstr)
 
     print("FSPEED-HEADER family=seq lane=%s arm=torch mode=FAST device=%s "
           "rounds=%d size=%s" % (lane, name.replace(" ", "_"), args.rounds, args.size))
