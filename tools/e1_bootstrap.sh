@@ -36,7 +36,28 @@ exec > >(tee "$LOG") 2>&1
 step() { echo; echo "=== $* === $(date +%T)"; }
 
 step "provenance"
-git rev-parse HEAD | tee "$OUT/commit.txt"
+# THE COMMIT MUST NOT BE ABLE TO END A RUN. DEVIATION 1935, 2026-08-28.
+#
+# This was `git rev-parse HEAD | tee "$OUT/commit.txt"`, and on a box that
+# received the tree as a `git archive` there is no `.git` at all -- which is
+# exactly what tools/gemm_remote_leg.sh ships, because the repo is private
+# and the box has no credentials. The bootstrap survived that (the pipe just
+# wrote an empty file) but tools/e2_matrix_fit.py, tools/e1_traced_fit.py and
+# tools/e2u_matrix_fit.py did not: each opened with a bare `git rev-parse
+# HEAD` for a provenance STRING and died on CalledProcessError 128.
+#
+# Measured cost, the NVIDIA column of the 2026-08-28 round at cc499f7: ten of
+# ten identical bindings built, and then phase 3's traced fits, phase 4's E2
+# tree matrix and phase 7's E2U matrix were all lost to that line. The round
+# had an Apple column, an AMD column, and an NVIDIA column with no matrix in
+# it. The DigitalOcean leg never showed this because it ships a `git bundle`
+# and clones it, so its boxes do have a `.git`.
+#
+# MOJOLEARN_COMMIT is exported so every child driver inherits the answer
+# rather than each one re-deriving it from a repository that is not there.
+MOJOLEARN_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo "${MOJOLEARN_COMMIT:-unknown}")"
+export MOJOLEARN_COMMIT
+printf '%s\n' "$MOJOLEARN_COMMIT" | tee "$OUT/commit.txt"
 uname -a | tee "$OUT/uname.txt"
 bash bench/external/record_environment.sh > "$OUT/environment.txt" 2>&1 || true
 

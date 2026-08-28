@@ -1,0 +1,151 @@
+9025 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5ab6c0000000, nodemask=2)
+== gemm/mojo_only/gemm_device_check.mojo [IDENTICAL]  sabotage: none ==
+   profile: mojolearn.identical.gemm.fp32.v1   contract: gemm/IDENTICAL_FP32_CONTRACT.md
+   kernel: gemm/mojo_only/gemm_identical.mojo   oracle: gemm/mojo_only/gemm_oracle.mojo::gemm_oracle
+check_fold_stack_depth_covers_the_profile OK: 12 levels in 16 slots covers P <= 1024 which needs 11
+check_strides_match_the_contract_addressing OK: NN, NT and TN address every A_eff and B_eff entry the way contract section 3 spells it (m=5, n=7, k=11, all different)
+check_stack_fold_is_the_contract_tree OK: register stack == the contract's balanced tree, bit for bit, at every P in 1..2049
+check_device_matches_oracle [IDENTICAL]: per-cell bits against gemm_oracle
+  -- the shape table, at reduced m and n (see docstring) --
+    OK   gram.32x32x1M  TN 4x4x1000000  L=977 P=1024  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   gram.32x32x64K  TN 4x4x65536  L=128 P=512  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   gram.128sq.x100003  TN 4x4x100003  L=128 P=782  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   ols.step1.16x16x64K  TN 4x4x65536  L=128 P=512  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   pca.transform.8192x4x4  NT 4x4x4  L=4 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   pca.transform.wide.8192x64x128  NT 4x4x128  L=128 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   kmeans.dist.4096x64x64  NT 4x4x64  L=64 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   ols.predict.gemv.64Kx16  NT 4x1x16  L=16 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   llama8b.qkv.t1  NT 1x4x4096  L=128 P=32  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   llama8b.qkv.t8  NT 4x4x4096  L=128 P=32  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   llama8b.qkv.t512  NT 4x4x4096  L=128 P=32  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   llama8b.mlp_up.t1  NT 1x4x4096  L=128 P=32  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   llama8b.mlp_up.t8  NT 4x4x4096  L=128 P=32  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   llama8b.mlp_up.t512  NT 4x4x4096  L=128 P=32  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   llama8b.mlp_down.t1  NT 1x4x14336  L=128 P=112  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   llama8b.mlp_down.t8  NT 4x4x14336  L=128 P=112  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   llama8b.mlp_down.t512  NT 4x4x14336  L=128 P=112  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   llama8b.lm_head.t1  NT 1x4x4096  L=128 P=32  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   llama8b.lm_head.t8  NT 4x4x4096  L=128 P=32  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   llama8b.lm_head.t512  NT 4x4x4096  L=128 P=32  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+  -- one real row at its SHIPPED m and n --
+    OK   kmeans.dist.full  NT 4096x64x64  L=64 P=1  plan=TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+  -- synthetic: the partition cases the table cannot reach --
+    OK   k0.P0  NT 3x3x0  L=1 P=0  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   k1.P1  NT 1x1x1  L=1 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   k64.P1  NN 4x4x64  L=64 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   k128.P1  TN 4x4x128  L=128 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   k129.P2.ragged  NT 4x4x129  L=128 P=2  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   k256.P2.exact  NT 4x4x256  L=128 P=2  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   k300.P3.odd.ragged  NN 4x4x300  L=128 P=3  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   k517.P5.odd.2carries  TN 4x4x517  L=128 P=5  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   k800.P7.odd  NT 4x4x800  L=128 P=7  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   k1024.P8.even  NT 4x4x1024  L=128 P=8  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   k4097.P33.odd.tail1  NT 3x3x4097  L=128 P=33  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   k130900.P1023.odd  NT 2x2x130900  L=128 P=1023  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   k131073.P1017.past.crossover  NT 2x2x131073  L=129 P=1017  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   k4M.P1024.cap  NT 1x1x4000000  L=3907 P=1024  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+  -- synthetic: ragged m and n that no tile divides --
+    OK   5x7.P3  NT 5x7x300  L=128 P=3  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   17x33.P3  NT 17x33x300  L=128 P=3  plan=TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+    OK   33x17.P5  NN 33x17x517  L=128 P=5  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   17x33.P33  TN 17x33x4097  L=128 P=33  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   64x64.P1.manyblocks  NT 64x64x64  L=64 P=1  plan=TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+  -- EVERY named plan against the oracle, not only the dispatcher's --
+    OK   allplans.17x33x517.P5.odd [FLAT(1 thread/cell, tpb=256, 1-D grid)]
+    OK   allplans.17x33x517.P5.odd [TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)]
+    OK   allplans.17x33x517.P5.odd [TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)]
+    OK   allplans.17x33x517.P5.odd [TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)]
+    OK   allplans.17x33x517.P5.odd [TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)]
+    OK   allplans.17x33x517.P5.odd [TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)]
+    OK   allplans.17x33x517.P5.odd [SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)]
+    OK   allplans.17x33x517.P5.odd [SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)]
+    OK   allplans.5x7x4200.P33.odd [FLAT(1 thread/cell, tpb=256, 1-D grid)]
+    OK   allplans.5x7x4200.P33.odd [TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)]
+    OK   allplans.5x7x4200.P33.odd [TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)]
+    OK   allplans.5x7x4200.P33.odd [TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)]
+    OK   allplans.5x7x4200.P33.odd [TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)]
+    OK   allplans.5x7x4200.P33.odd [TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)]
+    OK   allplans.5x7x4200.P33.odd [SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)]
+    OK   allplans.5x7x4200.P33.odd [SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)]
+  -- synthetic: EVERY LEAF PARTIAL IS -0.0 (contract 9.2, F7) -- the ONLY input that separates a CARRY from +0.0 PADDING --
+    OK   minuszero.k300.P3.carry  NT 5x7x300  L=128 P=3  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   minuszero.k517.P5.2carries  NT 5x7x517  L=128 P=5  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   minuszero.k128.P1.nofold  NT 5x7x128  L=128 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   minuszero.k4200.P33.odd  NT 3x3x4200  L=128 P=33  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+  -- synthetic: SUBNORMAL products, contract seam 5c --
+    OK   subnormal.k300  NT 4x4x300  L=128 P=3  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   subnormal.k4096  NT 4x4x4096  L=128 P=32  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+check_device_matches_oracle [IDENTICAL] OK: 62 shapes, every cell bit-identical to gemm_oracle
+check_device_is_launch_invariant [IDENTICAL]: 8 execution plans, one numerical plan
+  64x64x64   P=1  (the fold has no node)  op=NT
+      OK   TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+      OK   TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+      OK   TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+      OK   TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)
+      OK   TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)
+      OK   SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+      OK   SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+  17x33x300  P=3  odd, ragged, no tile divides  op=NN
+      OK   TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+      OK   TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+      OK   TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+      OK   TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)
+      OK   TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)
+      OK   SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+      OK   SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+  33x17x517  P=5  two carries  op=TN
+      OK   TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+      OK   TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+      OK   TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+      OK   TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)
+      OK   TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)
+      OK   SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+      OK   SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+  130x70x4096 P=32 even  op=NT
+      OK   TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+      OK   TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+      OK   TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+      OK   TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)
+      OK   TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)
+      OK   SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+      OK   SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+  12x9x130900 P=1023 odd, ten levels  op=NT
+      OK   TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+      OK   TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+      OK   TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+      OK   TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)
+      OK   TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)
+      OK   SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+      OK   SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+  5x7x0      P=0  every cell a stored +0.0  op=NT
+      OK   TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+      OK   TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+      OK   TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+      OK   TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)
+      OK   TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)
+      OK   SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+      OK   SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+check_device_is_launch_invariant [IDENTICAL] OK: 6 shapes x 8 execution plans, all bit-identical
+check_device_is_batch_invariant [IDENTICAL]: a cell's bits against the launch width
+  k = 4096  L = 128  P = 32
+      OK   n: 4 vs 64: 256 overlapping cells identical  [64x4 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)  |  64x64 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)]
+      OK   n: 4 vs 256: 256 overlapping cells identical  [64x4 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)  |  64x256 -> TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)]
+      OK   n: 64 vs 256: 4096 overlapping cells identical  [64x64 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)  |  64x256 -> TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)]
+      OK   m: 64 vs 130: 4096 overlapping cells identical  [64x64 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)  |  130x64 -> TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)]
+      OK   n: 4 vs 4096: 256 overlapping cells identical  [64x4 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)  |  64x4096 -> TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)]
+      OK   loop[0] 64x4 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold), shared ws of 131072 floats: 256 overlapping cells identical to the solo launch
+      OK   loop[1] 64x64 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold), shared ws of 131072 floats: 256 overlapping cells identical to the solo launch
+      OK   loop[2] 130x64 -> TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle), shared ws of 131072 floats: 256 overlapping cells identical to the solo launch
+      OK   loop[3] 64x4 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold), shared ws of 131072 floats: 256 overlapping cells identical to the solo launch
+  k = 4097  L = 128  P = 33
+      OK   n: 4 vs 64: 256 overlapping cells identical  [64x4 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)  |  64x64 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)]
+      OK   n: 4 vs 256: 256 overlapping cells identical  [64x4 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)  |  64x256 -> TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)]
+      OK   n: 64 vs 256: 4096 overlapping cells identical  [64x64 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)  |  64x256 -> TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)]
+      OK   m: 64 vs 130: 4096 overlapping cells identical  [64x64 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)  |  130x64 -> TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)]
+      OK   n: 4 vs 4096: 256 overlapping cells identical  [64x4 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)  |  64x4096 -> TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)]
+      OK   loop[0] 64x4 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold), shared ws of 135168 floats: 256 overlapping cells identical to the solo launch
+      OK   loop[1] 64x64 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold), shared ws of 135168 floats: 256 overlapping cells identical to the solo launch
+      OK   loop[2] 130x64 -> TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle), shared ws of 135168 floats: 256 overlapping cells identical to the solo launch
+      OK   loop[3] 64x4 -> SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold), shared ws of 135168 floats: 256 overlapping cells identical to the solo launch
+check_device_is_batch_invariant [IDENTICAL] OK: every overlapping cell identical across launch widths and across a dispatch boundary
+gemm device kernel + gates: all green [IDENTICAL]  (6 gates, sabotage: none)

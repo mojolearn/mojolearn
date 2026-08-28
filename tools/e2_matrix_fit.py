@@ -540,6 +540,46 @@ def _numeric_mode():
     return mojolearn.numeric_mode()
 
 
+
+def _commit(repo):
+    """The commit, or the archive's own identity when there is no `.git`.
+
+    DEVIATION 1935, 2026-08-28. This was a bare
+    `subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo)`, and on
+    a box that received the tree as a `git archive` -- which is exactly what
+    `tools/gemm_remote_leg.sh` ships, because the repo is private and the box
+    has no credentials -- it raises CalledProcessError 128 and takes the whole
+    driver down with it.
+
+    That is not a hypothetical. The NVIDIA column of the 2026-08-28 round
+    (`cc499f7`) built all ten identical bindings and then lost phase 3's
+    traced fits, phase 4's E2 tree matrix and phase 7's E2U matrix to this
+    line, so the round had an Apple column, an AMD column, and an NVIDIA
+    column with no matrix in it -- for a provenance string, not for anything
+    numeric. The DigitalOcean leg never hit it because it ships a `git
+    bundle` and clones it, so its boxes do have a `.git`.
+
+    The fallbacks are the same evidence the leg already writes, in the order
+    they are trustworthy: the bootstrap's own `commit.txt`, then
+    MOJOLEARN_COMMIT from the environment, then the honest string "unknown".
+    A provenance field must never be able to end a measurement.
+    """
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=repo,
+            stderr=subprocess.DEVNULL).decode().strip()
+    except Exception:
+        pass
+    for cand in (os.path.join(repo, "commit.txt"),):
+        try:
+            with open(cand) as fh:
+                v = fh.read().strip()
+            if v:
+                return v
+        except Exception:
+            pass
+    return os.environ.get("MOJOLEARN_COMMIT", "unknown")
+
 def main():
     argv = sys.argv[1:]
     if argv and argv[0] == "--cell":
@@ -557,8 +597,7 @@ def main():
     repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     data = make_inputs()
     record = {
-        "commit": subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=repo).decode().strip(),
+        "commit": _commit(repo),
         "numeric_mode": _numeric_mode(),
         "platform": platform.platform(),
         "machine": platform.node(),

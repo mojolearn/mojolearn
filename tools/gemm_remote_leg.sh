@@ -2206,13 +2206,13 @@ command -v bash > "$OUT/bash_which.txt" 2>&1 || \
 # has not run yet. @WORKTIMEOUT@ seconds leaves the lease its reserve, so a
 # leg that runs out of hour comes home with the lanes that finished.
 if command -v timeout > /dev/null 2>&1; then
-    MOJOLEARN_E1_PHASES="@E1PHASES@" MOJOLEARN_E1_LANES="@E1LANES@" timeout -k 30 @WORKTIMEOUT@ bash tools/e1_bootstrap.sh > "$OUT/bootstrap_console.log" 2>&1
+    MOJOLEARN_COMMIT="@COMMIT@" MOJOLEARN_E1_PHASES="@E1PHASES@" MOJOLEARN_E1_LANES="@E1LANES@" timeout -k 30 @WORKTIMEOUT@ bash tools/e1_bootstrap.sh > "$OUT/bootstrap_console.log" 2>&1
     echo "bootstrap_exit=$?" >> "$OUT/leg.txt"
     echo "note: a bootstrap_exit of 124 is the work timeout firing" >> "$OUT/leg.txt"
 else
     echo "no timeout(1) on this image: THE BOOTSTRAP RAN UNBOUNDED and the" >> "$OUT/leg.txt"
     echo "  lease watchdog is the only thing between it and the hour" >> "$OUT/leg.txt"
-    MOJOLEARN_E1_PHASES="@E1PHASES@" MOJOLEARN_E1_LANES="@E1LANES@" bash tools/e1_bootstrap.sh > "$OUT/bootstrap_console.log" 2>&1
+    MOJOLEARN_COMMIT="@COMMIT@" MOJOLEARN_E1_PHASES="@E1PHASES@" MOJOLEARN_E1_LANES="@E1LANES@" bash tools/e1_bootstrap.sh > "$OUT/bootstrap_console.log" 2>&1
     echo "bootstrap_exit=$?" >> "$OUT/leg.txt"
 fi
 tail -40 "$OUT/bootstrap_console.log"

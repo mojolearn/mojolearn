@@ -1,0 +1,48 @@
+10307 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a3d40000000, nodemask=2)
+== metrics/mojo_only/silhouette_check.mojo [IDENTICAL] ==
+check_silhouette_matches_oracle [IDENTICAL]
+    cluster counts: 483 251 155 67 41 34
+    samples: 1031 per-sample scores bitwise
+    bitwise OK  mean device 0.5662108 (0x3f10f331) oracle 0.5662108 (0x3f10f331)
+    vs Float64 sklearn: mean 0.5662108161883609 rel 1.7340854524943722e-08; worst per-sample abs 1.424173319275468e-07
+    negative-zero scores: 0 (row 39: must be 0)
+  OK
+check_silhouette_singleton_and_empty [IDENTICAL]
+    samples(singleton+empty): 1031 per-sample scores bitwise
+    singleton row 41 score 0x00000000
+    vs Float64 sklearn mean rel 8.141886928295157e-09
+  OK
+check_silhouette_planted_ties [IDENTICAL]
+    samples(3-point tie): 3 per-sample scores bitwise
+    row0 (a == b == 1, tie) 0x00000000 row1 0x3e95f619 row2 (singleton) 0x00000000
+    samples(min tie): 4 per-sample scores bitwise
+    row0 with b_1 == b_2 == sqrt2: 0xbe95f61a (a = 2 > b: (b-a)/a)
+    samples(all identical, labels 0|1): 6 per-sample scores bitwise
+    samples(all identical, labels 1|0): 6 per-sample scores bitwise
+    all-identical points (a == b == 0) both orders: 0x00000000 / 0x00000000, mean 0x00000000 / 0x00000000
+  OK
+check_silhouette_inf_distances [IDENTICAL]
+    samples(inf distances): 9 per-sample scores bitwise
+    scores: 0x00000000 0x00000000 0x3f582a0f 0x3f5a5572 0x3f5aa020 0x3f800000 0x3f800000 0x3f73998b 0x3f72f878  mean 0x3f378584
+    d(0,1) 0x7f800000 d(5,0) 0x7f800000 d(5,2) 0x7f800000 d(5,6) 0x5dde0b6b
+    NaN arm rows 0 (b finite), 1 (b = FLT_MAX) -> +0.0; rows 5,6 (b = FLT_MAX) = 1.0; rows 2-4, 7-8 ordinary
+  OK
+check_silhouette_refusals [IDENTICAL]
+    n_labels=1: silhouette_score: silhouette Score not defined for the given number of labels (n_labels=1, n_rows=64)
+    n_labels=64=n_rows: silhouette_score: silhouette Score not defined for the given number of labels (n_labels=64, n_rows=64)
+    metric=1 (L2SqrtExpanded): silhouette_score: metric 1 is refused; only DistanceType::L2SqrtUnexpanded (5, cuML 'euclidean'/'l2') is ported (UNPORTED.tsv)
+    chunk=0: silhouette_score: chunk (cuML chunksize) must be >= 1, got 0
+    chunk 1 / 40000 / 7: one byte pattern, mean 0x3f28a853
+  OK
+check_silhouette_launch_invariant [IDENTICAL]
+    b256 g1d pad0 mean 0x3f10f331 cells moved 0
+    b64  g1d pad0 mean 0x3f10f331 cells moved 0
+    b256 g2d pad0 mean 0x3f10f331 cells moved 0
+    b64  g2d pad0 mean 0x3f10f331 cells moved 0
+    b256 g1d pad37 mean 0x3f10f331 cells moved 0
+    b64  g1d pad37 mean 0x3f10f331 cells moved 0
+    b256 g2d pad37 mean 0x3f10f331 cells moved 0
+    b64  g2d pad37 mean 0x3f10f331 cells moved 0
+    8 launches, 1031 cells + mean, one byte pattern
+  OK
+ALL GROUP C CHECKS PASSED [IDENTICAL]
