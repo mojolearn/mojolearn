@@ -617,6 +617,21 @@ def update_workload_info[
     return n_blocks_dimx
 
 
+def workload_blocks_for(work_items: List[NodeWorkItem]) -> Int:
+    """`updateWorkloadInfo`'s running total WITHOUT its writes -- the same
+    `max(ceildiv(count, TPB_DEFAULT), 1)` sum, so a caller that can prove
+    the staged map is already on the device (DEVIATION 1919) can size the
+    grid without restaging. Any edit to `update_workload_info`'s block
+    arithmetic must land here in the same commit; the two must agree or
+    the partition grid is short."""
+    var n_blocks_dimx = 0
+    for i in range(len(work_items)):
+        n_blocks_dimx += max(
+            ceildiv(work_items[i].instances.count, TPB_DEFAULT), 1
+        )
+    return n_blocks_dimx
+
+
 def max_blocks_dimx_for(max_batch_size: Int32, n_sampled_rows: Int) -> Int:
     """`builder.cuh:250`, the upper bound on the histogram grid's x extent.
 
@@ -2194,7 +2209,16 @@ struct Builder[O: ObjectiveLike](Movable):
                 ctx, dataset, quantiles, smem_config, st, instr
             )
             return False
-        self.enqueue_node_split(ctx, dataset, st.work_items, st.final_splits)
+        # DEVIATION 1919 -- at round 0 the device span already holds this
+        # batch's items and block map (round zero staged `active_items`,
+        # a copy of `work_items`, and no retry restaged a subset).
+        self.enqueue_node_split(
+            ctx,
+            dataset,
+            st.work_items,
+            st.final_splits,
+            reuse_phase_span=(st.round == 0),
+        )
         st.phase = 1
         return False
 
@@ -2239,10 +2263,27 @@ struct Builder[O: ObjectiveLike](Movable):
         dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
         work_items: List[NodeWorkItem],
         final_splits: List[SplitSummary[Self.O.DataT]],
+        reuse_phase_span: Bool = False,
     ) raises:
         """The partition half of `doSplit`, `:458-501`, MINUS the trailing
         sync -- the caller's, per the pipelined forest loop (DEVIATION
-        117)."""
+        117).
+
+        DEVIATION 1919: `reuse_phase_span=True` asserts the device's
+        packed [items | workload] span ALREADY holds exactly this
+        `work_items` list's staging, so the restage and its
+        `xfer_phase_upload` are skipped. The ONE caller that may pass
+        True is `advance_batch`, and only when `st.round == 0`: round
+        zero staged `st.active_items`, which `begin_batch` made a copy
+        of this very `st.work_items`, and no retry round restaged a
+        subset in between -- so the span's bytes, `cur_wl_rel`, and the
+        block map are byte-for-byte what restaging would produce (and
+        nothing else writes the `d_work_items`/`workload_info` stretch:
+        the splits upload and 1916's fused setup write other regions).
+        Any retry (`st.round > 0`) restages, because the last staging
+        was the shrunken active set. The grid size is recomputed by
+        `workload_blocks_for`, the same arithmetic `update_workload_info`
+        runs, sans writes."""
         var n = len(work_items)
         # `:458` -- `dataset.n_sampled_cols = original_n_sampled_cols;`
         var ds = dataset.copy()
@@ -2275,13 +2316,19 @@ struct Builder[O: ObjectiveLike](Movable):
                 dst_buf=self.splits_d_view.view,
                 src_ptr=self.h_splits.unsafe_ptr(),
             )
-        # DEVIATION 1908: stage both, then ONE packed upload.
-        self._stage_work_items(work_items)
-        # `:393-407` -- straight into the pinned array, as theirs.
-        var n_partition_blocks = update_workload_info(
-            work_items, self._h_workload_ptr()
-        )
-        self._enqueue_phase_upload(ctx, n_partition_blocks)
+        # DEVIATION 1908: stage both, then ONE packed upload -- unless
+        # DEVIATION 1919 proved the span is already there (see the
+        # docstring).
+        var n_partition_blocks: Int
+        if reuse_phase_span:
+            n_partition_blocks = workload_blocks_for(work_items)
+        else:
+            self._stage_work_items(work_items)
+            # `:393-407` -- straight into the pinned array, as theirs.
+            n_partition_blocks = update_workload_info(
+                work_items, self._h_workload_ptr()
+            )
+            self._enqueue_phase_upload(ctx, n_partition_blocks)
 
         # DEVIATION 1893/1909: the partition's args blob (dataset only,
         # `n_sampled_cols` restored to `original_n_sampled_cols` above)
