@@ -75,18 +75,30 @@ existing entry point requires as input.
 
 ### Cross-vendor standing
 
-Under `MOJOLEARN_NUMERIC_MODE=identical`, at E3 round 11 (commit
-`144aa5b`, 2026-08-23), Apple M4 (Metal) against NVIDIA H100 (CUDA) and
-Apple M4 against AMD MI325X (HIP), the six classical lanes are
-bit-identical on all three: gemm 60 card stages, cd 20, kde 7, linkage 8,
-svm 32, metrics 34. So `mojolearn.linalg`, `Lasso`, `ElasticNet`,
-`KernelDensity`, `AgglomerativeClustering`, `SVC` and `mojolearn.metrics`
-stand on three-vendor cards.
+Every lane in this release runs the same pinned path under
+`MOJOLEARN_NUMERIC_MODE=identical`. What differs between them is not whether
+they are pinned but **where the pinned card has been diffed**: bit-identity
+is a claim about two machines agreeing, and checking it requires the lane to
+have run on a second and third machine.
+
+At E3 round 11 (commit `144aa5b`, 2026-08-23) the six classical lanes had
+their cards emitted on an NVIDIA H100 (CUDA) and an AMD MI325X (HIP) and
+diffed against the Apple M4's (Metal), stage for stage, bit-identical on all
+three: gemm 60 card stages, cd 20, kde 7, linkage 8, svm 32, metrics 34. So
+`mojolearn.linalg`, `Lasso`, `ElasticNet`, `KernelDensity`,
+`AgglomerativeClustering`, `SVC` and `mojolearn.metrics` stand on measured
+three-vendor cards.
 
 `IsolationForest`, `SpectralClustering`, `ExponentialSmoothing`,
-`kpss_test`, `select_d`, `Ridge` and `LogisticRegression` DO NOT. They have
-run on one Apple M4 and nowhere else, their gates are green there, and each
-class says so rather than inheriting a neighbour's certificate.
+`kpss_test`, `select_d`, `Ridge` and `LogisticRegression` have run on one
+Apple M4 and nowhere else. Their gates are green there and their pins come
+from the same source as the six above, so they are expected to match, but
+the leg is OWED and until it runs that is an expectation and not a
+measurement. Each class says so rather than inheriting a neighbour's
+certificate. Round 11 is why the distinction is kept: running the second and
+third box is what surfaced the OLS launch-invariance failure and the
+subnormal KL operand in Known issues below, neither of which is visible on
+one machine.
 
 `metrics/`'s card has since grown from 34 stages to 61, and the
 three-vendor leg on the grown card is OWED.

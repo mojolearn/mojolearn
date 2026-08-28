@@ -61,35 +61,47 @@ from the binary, so a run cannot be mislabeled by accident.
 
 ## What is in 0.2
 
-The `3 vendors` column is the one to read. It says whether that lane's
-IDENTICAL card has been measured bit-identical on Apple M4, NVIDIA H100 and
-AMD MI325X, or whether it has only ever run on one Apple M4. **The standing
-is not uniform, and no lane inherits a neighbour's certificate.** FAST, the
-default, makes no cross-vendor claim anywhere.
+**Every lane below runs the same pinned path under
+`MOJOLEARN_NUMERIC_MODE=identical`**: fused multiply-add pinned, flush-to-zero
+pinned, every reduction a fixed-order fold where the CUDA upstream uses float
+atomics. That is true on Apple, on NVIDIA and on AMD alike, and it is what
+IDENTICAL means.
 
-| estimator | mirrors | what it does | FAST | IDENTICAL | 3 vendors |
+The `identity diffed on` column is not about whether a lane is pinned. It is
+about **where the pinned card has actually been compared**, and bit-identity
+is a claim about two machines agreeing, so checking it takes two machines. Six
+lanes have had their card emitted on an H100 and an MI325X and diffed against
+the M4's, stage for stage, at E3 round 11. The rest have run on one Apple M4
+and nowhere else: their pins are the same source and they are expected to
+match, but the leg is owed and until it runs that is an expectation rather
+than a measurement. No lane inherits a neighbour's certificate.
+
+FAST, the default, is a different path with those pins compiled away. It
+promises speed and makes no cross-vendor claim anywhere, by design.
+
+| estimator | mirrors | what it does | FAST | IDENTICAL | identity diffed on |
 |---|---|---|---|---|---|
-| `GradientBoosting` | CatBoost GPU | oblivious (symmetric) trees, 12 losses plus MultiClass, depthwise and lossguide growth, CTRs, eval sets, overfitting detector, save and load | yes | yes | yes |
-| `RandomForestClassifier`, `RandomForestRegressor` | cuML | quantile-split forest, with-replacement bootstrap, gini, entropy, poisson, gamma, inverse gaussian | yes | yes | yes |
-| `ExtraTreesClassifier`, `ExtraTreesRegressor` | cuML | extremely randomized trees, gini, entropy, mse | yes | yes | yes |
-| `KMeans` | cuVS | k-means with k-means++ init; `n_init` defaults to cuVS's 1, not scikit-learn's 10 | yes | yes | yes |
-| `NearestNeighbors` | cuVS, RAFT, FAISS | brute-force k-NN, fused L2, ball cover, top-k selection | yes | yes | yes |
-| `KNeighborsClassifier`, `KNeighborsRegressor` | cuVS, RAFT, FAISS | the vote and the mean on that k-NN path | yes | yes | the k-NN path is |
-| `DBSCAN` | cuML, RAFT | epsilon neighborhoods, label propagation, border and noise points | yes | yes | yes |
-| `PCA`, `TruncatedSVD` | cuML, RAFT | eigen and SVD decompositions, transform and inverse transform | yes | yes | yes |
-| `LinearRegression` | RAFT | ordinary least squares (`lstsqEig`) | yes | yes | yes |
-| `Ridge` | cuML | ridge regression, the `eig` arm (`svdEig` + `ridgeSolve`) | yes | yes | Apple M4 only |
-| `LogisticRegression` | cuML | binary L-BFGS with the Armijo line search (`qnFit`); l1, multiclass, sample and class weights refused by name | yes | yes | Apple M4 only |
-| `SVC` | cuML | binary C-SVC. There is no `SVR`, and `svmType != C_SVC` raises by name | yes | yes | yes, 32 card stages |
-| `Lasso`, `ElasticNet` | cuML | coordinate descent (`cd.cuh::cdFit`), cyclic and random selection | yes | yes | yes, 20 stages |
-| `KernelDensity` | cuML | kernel density estimation; `bandwidth='scott'` and `'silverman'` refused by name | yes | yes | yes, 7 stages |
-| `AgglomerativeClustering` | cuML, cuVS, RAFT | single linkage over RAFT's Boruvka MST | yes | yes | yes, 8 stages |
-| `IsolationForest` | cuML | isolation forest, anomaly scores | yes | yes | Apple M4 only |
-| `SpectralClustering` | cuML, cuVS, RAFT | kNN connectivity graph, normalized Laplacian, thick-restart Lanczos | yes | yes | Apple M4 only |
-| `ExponentialSmoothing` | cuML `tsa` | Holt-Winters, additive and multiplicative | yes | yes | Apple M4 only |
-| `kpss_test`, `select_d` | cuML `tsa` | stationarity test and auto_arima's choice of d | yes | yes | Apple M4 only |
-| `mojolearn.metrics` | cuML, RAFT | fourteen scoring functions, scikit-learn's names with cuML's defaults and semantics | yes | yes | yes, 34 stages; the card has since grown to 61 and that leg is owed |
-| `mojolearn.linalg.matmul` | -- | FP32 matrix product, profile `mojolearn.identical.gemm.fp32.v1` | yes | yes | yes, 60 stages |
+| `GradientBoosting` | CatBoost GPU | oblivious (symmetric) trees, 12 losses plus MultiClass, depthwise and lossguide growth, CTRs, eval sets, overfitting detector, save and load | yes | yes | Apple + NVIDIA + AMD |
+| `RandomForestClassifier`, `RandomForestRegressor` | cuML | quantile-split forest, with-replacement bootstrap, gini, entropy, poisson, gamma, inverse gaussian | yes | yes | Apple + NVIDIA + AMD |
+| `ExtraTreesClassifier`, `ExtraTreesRegressor` | cuML | extremely randomized trees, gini, entropy, mse | yes | yes | Apple + NVIDIA + AMD |
+| `KMeans` | cuVS | k-means with k-means++ init; `n_init` defaults to cuVS's 1, not scikit-learn's 10 | yes | yes | Apple + NVIDIA + AMD |
+| `NearestNeighbors` | cuVS, RAFT, FAISS | brute-force k-NN, fused L2, ball cover, top-k selection | yes | yes | Apple + NVIDIA + AMD |
+| `KNeighborsClassifier`, `KNeighborsRegressor` | cuVS, RAFT, FAISS | the vote and the mean on that k-NN path | yes | yes | Apple + NVIDIA + AMD, on the k-NN path |
+| `DBSCAN` | cuML, RAFT | epsilon neighborhoods, label propagation, border and noise points | yes | yes | Apple + NVIDIA + AMD |
+| `PCA`, `TruncatedSVD` | cuML, RAFT | eigen and SVD decompositions, transform and inverse transform | yes | yes | Apple + NVIDIA + AMD |
+| `LinearRegression` | RAFT | ordinary least squares (`lstsqEig`) | yes | yes | Apple + NVIDIA + AMD |
+| `Ridge` | cuML | ridge regression, the `eig` arm (`svdEig` + `ridgeSolve`) | yes | yes | Apple only, leg owed |
+| `LogisticRegression` | cuML | binary L-BFGS with the Armijo line search (`qnFit`); l1, multiclass, sample and class weights refused by name | yes | yes | Apple only, leg owed |
+| `SVC` | cuML | binary C-SVC. There is no `SVR`, and `svmType != C_SVC` raises by name | yes | yes | Apple + NVIDIA + AMD, 32 card stages |
+| `Lasso`, `ElasticNet` | cuML | coordinate descent (`cd.cuh::cdFit`), cyclic and random selection | yes | yes | Apple + NVIDIA + AMD, 20 stages |
+| `KernelDensity` | cuML | kernel density estimation; `bandwidth='scott'` and `'silverman'` refused by name | yes | yes | Apple + NVIDIA + AMD, 7 stages |
+| `AgglomerativeClustering` | cuML, cuVS, RAFT | single linkage over RAFT's Boruvka MST | yes | yes | Apple + NVIDIA + AMD, 8 stages |
+| `IsolationForest` | cuML | isolation forest, anomaly scores | yes | yes | Apple only, leg owed |
+| `SpectralClustering` | cuML, cuVS, RAFT | kNN connectivity graph, normalized Laplacian, thick-restart Lanczos | yes | yes | Apple only, leg owed |
+| `ExponentialSmoothing` | cuML `tsa` | Holt-Winters, additive and multiplicative | yes | yes | Apple only, leg owed |
+| `kpss_test`, `select_d` | cuML `tsa` | stationarity test and auto_arima's choice of d | yes | yes | Apple only, leg owed |
+| `mojolearn.metrics` | cuML, RAFT | fourteen scoring functions, scikit-learn's names with cuML's defaults and semantics | yes | yes | Apple + NVIDIA + AMD, 34 stages; the card has since grown to 61 and that leg is owed |
+| `mojolearn.linalg.matmul` | -- | FP32 matrix product, profile `mojolearn.identical.gemm.fp32.v1` | yes | yes | Apple + NVIDIA + AMD, 60 stages |
 
 Estimators save to and load from `.npz` files, and a model fitted on a Mac
 loads and predicts identically on an NVIDIA or AMD box (95 of 95 models,
