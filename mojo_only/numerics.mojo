@@ -81,8 +81,47 @@ from std.sys.compile import is_defined
 #: `MOJOLEARN_NUMERIC_MODE=identical` is set at import. Default is FAST, in
 #: every spelling. The source line below never changes again.
 comptime GLOBAL_NUMERIC_MODE = (
-    NUMERIC_IDENTICAL if is_defined["MOJOLEARN_NUMERIC_IDENTICAL"]() else NUMERIC_FAST
+    NUMERIC_IDENTICAL if is_defined["MOJOLEARN_NUMERIC_IDENTICAL"]()
+    else (
+        NUMERIC_DETERMINISTIC
+        if is_defined["MOJOLEARN_NUMERIC_DETERMINISTIC"]()
+        else NUMERIC_FAST
+    )
 )
+
+
+#: True when this build must remove non-determinism WITHIN one device.
+#: Deliberately true under IDENTICAL as well, because DETERMINISM is a subset
+#: of it and a pin marked this way is needed by both upper tiers.
+comptime PIN_DETERMINISM = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_DETERMINISTIC
+    or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+)
+
+#: True only when this build must make two DIFFERENT backends agree. Every
+#: `GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL` site in the tree means exactly
+#: this today, which is why the existing sites were left alone when the middle
+#: tier landed: renaming them is a reclassification and must be done ONE CLASS
+#: AT A TIME, with the evidence for each, never by a sweep.
+comptime PIN_CROSS_VENDOR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+
+
+def numeric_mode_name() -> String:
+    """The build's tier, for every banner that prints one.
+
+    THE 63 LOCAL `_mode_name` HELPERS IN THIS TREE PREDATE THE MIDDLE TIER AND
+    RETURN "FAST" FOR IT. That is a mislabelled measurement, which is the
+    failure this repository was bitten by three times on 2026-08-23, so a
+    driver that can be run under DETERMINISTIC must be moved onto this
+    function before it is. They are not swept here: 31 of the 63 share one
+    shape and 32 do not, and a blanket rewrite of a mode label is exactly the
+    kind of edit that produces a green run of the wrong arm.
+    """
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return String("IDENTICAL")
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_DETERMINISTIC:
+        return String("DETERMINISTIC")
+    return String("FAST")
 
 
 #: **THE DEFAULT.** Every row is read from the device's own column. Full
@@ -110,6 +149,40 @@ comptime NUMERIC_FAST = 0
 #: The cost is a measurement, not an argument: the two modes differ by a
 #: named set of rows, so run them interleaved and report the ratio.
 comptime NUMERIC_IDENTICAL = 1
+
+
+#: **THE MIDDLE TIER, added 2026-08-28 (DEVIATION 1940).** Reproducible RUN
+#: TO RUN ON ONE DEVICE, and NOT claimed to agree with any other vendor.
+#:
+#: WHY IT EXISTS. `NUMERIC_FAST`'s own documentation above states that float
+#: atomics have no ordering guarantee, so "the last bits move between two runs
+#: of the SAME fit on the SAME device, not only between vendors" -- measured,
+#: not argued: three consecutive FAST runs of one binary, one fixture, one M4
+#: returned THREE DIFFERENT sorted k-NN index sets. So the reproducibility a
+#: user needs for a regression test, a byte-comparable model file or a fit
+#: that is reproducible from its seed was, until now, only purchasable by
+#: taking `NUMERIC_IDENTICAL` whole. That is an expensive way to buy it: the
+#: 2026-08-28 price run measured IDENTICAL at 4.64x FAST on the gemm lane
+#: while producing THE SAME BITS as FAST on that box, because what the extra
+#: cost buys there is the OTHER vendors and nothing else.
+#:
+#: THE LINE BETWEEN THE TIERS. A pin belongs to DETERMINISM when, without it,
+#: the same binary on the same GPU with the same input can give different bits
+#: on two runs -- always some form of ARRIVAL ORDER: float atomics, a
+#: mutex-ordered merge, an output slot assigned by atomicAdd arrival, an
+#: unsynchronized rewrite, a tie broken by whichever thread got there first. A
+#: pin belongs to CROSS-VENDOR when the unpinned code is already stable run to
+#: run on one box and the pin exists to make two BACKENDS agree: denormal
+#: policy, FMA contraction, transcendentals, sqrt accuracy, and geometry
+#: derived from a machine constant (a block count from the core count is fixed
+#: for a given box, so it varies across machines and not across runs).
+#:
+#: DETERMINISM IS A SUBSET OF IDENTICAL, never a sibling: every deterministic
+#: pin is also required for cross-vendor agreement, so `PIN_DETERMINISM` is
+#: true under BOTH of the upper tiers. Use the two predicates below at pin
+#: sites rather than comparing to a mode value, so that a site's CLASS is
+#: readable where it is written.
+comptime NUMERIC_DETERMINISTIC = 2
 
 
 @fieldwise_init
