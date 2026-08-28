@@ -141,12 +141,13 @@ comptime QH_MIN_ITEMS_PER_BLOCK = 8192
 comptime QH_MIN_TOTAL_BLOCKS = 160
 
 
-def quantize_pair_kernel(
+def quantize_pair_kernel[ridx_stats: Bool = False](
     stats: MutPointer[Float32, MutAnyOrigin],
     stat_line_size_in: Int32,
     part_offset: MutPointer[UInt32, MutAnyOrigin],
     part_size: MutPointer[UInt32, MutAnyOrigin],
     part_ids: MutPointer[UInt32, MutAnyOrigin],
+    indices: MutPointer[UInt32, MutAnyOrigin],
     q_stats: MutPointer[UInt64, MutAnyOrigin],
     fixed_scale_ptr: MutPointer[Float32, MutAnyOrigin],
 ):
@@ -171,9 +172,22 @@ def quantize_pair_kernel(
     while i < p_size:
         var pos = p_offset + i
         var u = hist2_dither(pos)
-        var q1 = hist2_quantize(ldg(stats + pos), fixed_scale, u)
+        var src = pos
+
+        @parameter
+        if ridx_stats:
+            # DEVIATION 1902 x 1911: the stat plane is stationary, so the
+            # VALUE is gathered through the row id at this position while
+            # the dither stays keyed on the storage position -- the same
+            # (value(ridx[pos]), dither(pos)) pairing the inline ridx_stats
+            # hist arms produce, so `q_stats[pos]` holds bit-for-bit the
+            # pair the permuted plane would have held here and the
+            # positional load in `qh_hist_gather_kernel` stays correct
+            # unchanged.
+            src = Int(ldg(indices + pos))
+        var q1 = hist2_quantize(ldg(stats + src), fixed_scale, u)
         var q2 = hist2_quantize(
-            ldg(stats + (stat_line_size + pos)), fixed_scale, u
+            ldg(stats + (stat_line_size + src)), fixed_scale, u
         )
         var pair = SIMD[DType.int32, 2](q1, q2)
         q_stats.unsafe_store(pos, bitcast[DType.uint64, 1](pair)[0])

@@ -129,7 +129,7 @@ def qh_replicas(
     return rep
 
 
-def launch_quantized_histograms(
+def launch_quantized_histograms[ridx_stats: Bool = False](
     ctx: DeviceContext,
     mut blocks: List[DeviceBlock],
     depth: Int,
@@ -182,12 +182,13 @@ def launch_quantized_histograms(
         qx = 4 * sm_count
     if qx < 1:
         qx = 1
-    ctx.enqueue_function[quantize_pair_kernel](
+    ctx.enqueue_function[quantize_pair_kernel[ridx_stats]](
         stats.unsafe_ptr(),
         Int32(n_rows),
         p_off.unsafe_ptr(),
         p_sz.unsafe_ptr(),
         ids.unsafe_ptr(),
+        row_index.unsafe_ptr(),
         q_stats.unsafe_ptr(),
         fixed_scale,
         grid_dim=(qx, n_live, 1),

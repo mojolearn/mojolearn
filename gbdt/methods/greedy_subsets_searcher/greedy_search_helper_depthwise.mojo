@@ -96,6 +96,9 @@ from gbdt.gpu_data.compressed_index_builder import (
 from gbdt.gpu_data.feature_blocks import blocks_for
 from gbdt.gpu_data.gpu_structures import CFeature
 from gbdt.gpu_util.partitions_reduce import compute_partition_stats
+from gbdt.gpu_util.kernel.partition_stats_gather import (
+    compute_partition_stats_gather,
+)
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     CFEATURE_BYTES,
     TTreeWorkspace,
@@ -142,6 +145,10 @@ from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
 from gbdt.gpu_util.kernel.reorder_single_pass import (
     launch_stable_partition_routed,
 )
+from gbdt.methods.greedy_subsets_searcher.kernel.split_points_ridx import (
+    launch_reorder_index_only,
+)
+from mojo_only.kernel_matrix import TARGET_COLUMN, ridx_only_splits_for
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
     StageTimes,
 )
@@ -202,6 +209,15 @@ from gbdt.options.catboost_options import (
 # but it keys on the same constant because IDENTICAL's contract is the code
 # path, not just the bits.)
 comptime SPLIT_COST_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# DEVIATION 1902: whether the non-symmetric drivers move ONLY the row
+# index at a split, leaving the stat planes stationary in document order
+# for the life of the fit. The row is False under IDENTICAL on every
+# column; the readers' gather arms are bound where this constant is
+# spelled (hist build, split apply, end-of-tree sweep) and default to the
+# old body everywhere else.
+comptime RIDX_ONLY_SPLITS = ridx_only_splits_for[
+    TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+]()
 # ========================================================================
 
 
@@ -1455,7 +1471,7 @@ def fit_non_symmetric_tree[
             var quantized_built = False
             comptime if QUANTIZED_HIST_LIVE:
                 if qh_ok:
-                    launch_quantized_histograms(
+                    launch_quantized_histograms[RIDX_ONLY_SPLITS](
                         ctx, dblocks, iteration - 1, len(non_zero), n_rows,
                         stat_count, sm_count, fixed_scale,
                         cindex, row_index, stats, p_off, p_sz, d_ids,
@@ -1463,7 +1479,7 @@ def fit_non_symmetric_tree[
                     )
                     quantized_built = True
             if not quantized_built:
-                launch_histograms_for_blocks[hist2_smem_mode](
+                launch_histograms_for_blocks[hist2_smem_mode, RIDX_ONLY_SPLITS](
                     ctx, dblocks, iteration - 1, len(non_zero), n_rows,
                     stat_count, max_leaves, sm_count, fixed_scale,
                     cindex, row_index, stats, p_off, p_sz, d_ids, dense_ids,
@@ -2246,11 +2262,21 @@ def fit_non_symmetric_tree[
             )
             mgr.stream_kernel()
 
-            var reorder_launches = launch_reorder_in_leaves(
-                ctx, n_split, wide, max_split_rows, stat_count, n_rows,
-                d_left, p_off, p_sz, stats, new_stats, row_index,
-                new_index, gmap, sm_count=sm_count,
-            )
+            var reorder_launches = 0
+
+            comptime if RIDX_ONLY_SPLITS:
+                # DEVIATION 1902: the stat planes are stationary; the
+                # split's gather_map permutes the 4 B/row index alone.
+                reorder_launches = launch_reorder_index_only(
+                    ctx, n_split, max_split_rows, d_left, p_off, p_sz,
+                    row_index, new_index, gmap, sm_count=sm_count,
+                )
+            else:
+                reorder_launches = launch_reorder_in_leaves(
+                    ctx, n_split, wide, max_split_rows, stat_count, n_rows,
+                    d_left, p_off, p_sz, stats, new_stats, row_index,
+                    new_index, gmap, sm_count=sm_count,
+                )
             for _ in range(reorder_launches):
                 mgr.stream_kernel()
 
@@ -2394,11 +2420,21 @@ def fit_non_symmetric_tree[
             for i in range(len(leaves)):
                 h_ids.unsafe_ptr().unsafe_store(i, UInt32(i))
             ctx.enqueue_copy(dst_buf=d_ids, src_ptr=h_ids.unsafe_ptr())
-            compute_partition_stats(
-                ctx, len(leaves), n_rows, stat_count, n_rows,
-                d_ids, p_off, p_sz, stats, stat_partials, part_stats,
-                sm_count=sm_count,
-            )
+            comptime if RIDX_ONLY_SPLITS:
+                # DEVIATION 1902: phase 1 gathers the stationary plane
+                # through the row index; phase 2 and the chunk formula are
+                # the shared kernels unchanged.
+                compute_partition_stats_gather(
+                    ctx, len(leaves), n_rows, stat_count, n_rows,
+                    d_ids, p_off, p_sz, stats, row_index,
+                    stat_partials, part_stats, sm_count=sm_count,
+                )
+            else:
+                compute_partition_stats(
+                    ctx, len(leaves), n_rows, stat_count, n_rows,
+                    d_ids, p_off, p_sz, stats, stat_partials, part_stats,
+                    sm_count=sm_count,
+                )
             mgr.stream_kernel()
             ctx.enqueue_copy(
                 dst_ptr=h_part_stats.unsafe_ptr(), src_buf=part_stats
