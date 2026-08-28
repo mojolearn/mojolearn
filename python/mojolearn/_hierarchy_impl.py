@@ -18,7 +18,6 @@ import numpy as np
 
 from . import _mojolearn_solver
 from ._arrays import _addr, _addr_ro, as_f32_c
-from ._solver_impl import _require_matching_mode
 
 # `cuml/common/distance_type.hpp`, the codes cuML's Python layer passes
 # (`agglomerative.pyx:36-43`).
@@ -42,7 +41,10 @@ _CONNECTIVITIES = {"pairwise": 0, "knn": 1}
 # past this (`hierarchy/ported/cluster/detail/connectivities.mojo`).
 PAIRWISE_MAX_ROWS = 46340
 
-_require_matching_mode(_mojolearn_solver, "_mojolearn_solver")
+# The import-time mode guard that stood here is deleted with the one it came
+# from; see the note at the top of `_solver_impl.py`. `_backend.select()` is
+# what refuses a FAST binary under the identical label, and it degrades one
+# unbuilt binding to one broken estimator instead of an unimportable package.
 
 
 class AgglomerativeClustering:

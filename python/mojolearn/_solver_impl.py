@@ -10,46 +10,42 @@ These classes are not re-exported from `mojolearn/__init__.py` by this file;
 whoever owns that file decides the public namespace.
 """
 
-import os
-
 import numpy as np
 
-from . import _backend, _mojolearn_solver
+from . import _mojolearn_solver
 from ._arrays import _addr, _addr_ro, as_f32_c
 
 # cuML's `loss_funct` / DistanceType style codes this surface uses.
 _SELECTION_SHUFFLE = {"cyclic": 0, "random": 1}
 
 
-def _require_matching_mode(module, name):
-    """Refuse a FAST binary loaded under MOJOLEARN_NUMERIC_MODE=identical.
+# THE IMPORT-TIME MODE GUARD THAT STOOD HERE IS DELETED. DEVIATION 1931,
+# 2026-08-28, and it is deleted rather than corrected because both halves of
+# it were wrong by the time it fired.
+#
+# It read: "`_mojolearn_solver` is not in `_backend._MODULES` yet, so under
+# `identical` the FAST binary would be imported here under the identical
+# label", and it ended "Delete it when `_backend._MODULES` lists this
+# module." `_MODULES` HAS LISTED IT since DEVIATION 869 (2026-08-24), so the
+# reason the message gave a reader was false, and its own instruction said to
+# remove it.
+#
+# What it actually did after that was worse than nothing. `_backend.select()`
+# hands out a `_MissingIdentical` stub for any binding whose identical binary
+# was not built -- import succeeds, touching it raises BY NAME with the build
+# command -- so one unbuilt binding degrades to one broken estimator. A stub
+# has no `__file__`, so this guard's `os.path.basename(os.path.dirname(...))`
+# check could never pass for it, and a missing solver binary became an
+# ImportError at `from . import _mojolearn_solver`: the whole package failed
+# to import, and with it tools/e1_traced_fit.py and the entire E2 matrix.
+# That is how phases 3 and 4 went dark on every vendor while the bootstrap
+# reported two unrelated-looking driver findings.
+#
+# The protection is not lost. `select()` is the thing that redirects these
+# modules and it refuses to fall back to a FAST binary under the identical
+# name -- that refusal is the mechanism, and it is the one this guard was
+# written to duplicate before the tuple was fixed.
 
-    `_backend.select()` redirects the extension modules it knows about to
-    `python/mojolearn/identical/` when the identical set is asked for, and
-    its whole reason for existing is that a wrong-mode module which imports
-    cleanly is a MISLABELED MEASUREMENT. `_mojolearn_solver` is not in that
-    module's `_MODULES` tuple yet, so under `identical` the FAST binary would
-    be imported here under the identical label. This check turns that into a
-    refusal by name. Delete it when `_backend._MODULES` lists this module.
-    """
-    if _backend.requested_mode() != "identical":
-        return
-    path = getattr(module, "__file__", "") or ""
-    if os.path.basename(os.path.dirname(path)) != "identical":
-        raise ImportError(
-            "mojolearn: MOJOLEARN_NUMERIC_MODE=identical, but "
-            f"{name} was loaded from {path or '<unknown>'}, which is not the "
-            "identical set. python/mojolearn/_backend.py's `_MODULES` tuple "
-            "does not list '_mojolearn_solver', so the FAST binary is being "
-            "imported under the identical label and every number this "
-            "process produces would carry the wrong arm's name. Build the "
-            "identical binary with\n    MOJOLEARN_NUMERIC_MODE=identical "
-            "bash bindings/build_solver.sh\nand add '_mojolearn_solver' to "
-            "_backend.py's `_MODULES` and `_build_script`."
-        )
-
-
-_require_matching_mode(_mojolearn_solver, "_mojolearn_solver")
 
 
 class ElasticNet:

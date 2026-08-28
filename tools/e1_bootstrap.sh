@@ -120,7 +120,24 @@ fi
 
 if run_phase 3; then
 step "phase 3: build IDENTICAL .so + traced fits"
-# ALL FIVE bindings: the python package's __init__ imports cluster ->
+# ALL TEN bindings, not five. DEVIATION 1930, 2026-08-28.
+#
+# This loop built five, and `python/mojolearn/_backend.py`'s `_MODULES`
+# lists ten. The other five therefore came out of `select()` as
+# `_MissingIdentical` stubs -- which is the DESIGNED behaviour for a binding
+# that did not build (import succeeds, touching it raises by name), and it
+# worked until `_solver_impl.py` added an IMPORT-TIME guard whose basename
+# check a stub cannot pass. From then on the traced driver and the whole E2
+# matrix died at `from . import _mojolearn_solver` with a message blaming
+# `_MODULES` for not listing a module it does list. Measured today: the M4
+# and the MI325X both reported it, and both reported it as PHASE3-FINDING
+# plus PHASE4-FINDING rather than as a build failure, so it read as two
+# unrelated driver problems.
+#
+# Building all ten costs minutes on a rented box and the fifty-minute budget
+# has to absorb them; a stub in the identical set costs the matrix.
+#
+# the python package's __init__ imports cluster ->
 # _mojolearn.so and friends, so an rsync'd foreign-platform .so anywhere
 # in the package breaks every import ("invalid ELF header", run 2's
 # finding). Remove the foreign binaries LOUDLY first, and skip each
@@ -132,11 +149,17 @@ step "phase 3: build IDENTICAL .so + traced fits"
 # is exported above and the build scripts read it); a foreign-platform .so
 # left there from an rsync would break every import, so clear it first
 rm -f python/mojolearn/identical/_mojolearn*.so
-for b in build.sh build_estimators.sh build_gbdt.sh build_rf.sh build_trees.sh; do
+E1_IDENT_BINDINGS="build.sh build_estimators.sh build_gbdt.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_tsa.sh build_linalg.sh"
+for b in $E1_IDENT_BINDINGS; do
   echo "--- bindings/$b (identical)"
   pixi run -e gbmbench bash "bindings/$b" \
     || echo "PHASE3-FINDING: bindings/$b failed (see log)"
 done
+# WHAT THE IDENTICAL SET ACTUALLY CONTAINS, COUNTED, because "ten builds ran"
+# and "ten binaries exist" are different sentences and only the second one is
+# what `select()` reads.
+echo "identical set: $(ls python/mojolearn/identical/_mojolearn*.so 2>/dev/null | wc -l | tr -d ' ') of 10 binaries"
+ls python/mojolearn/identical/_mojolearn*.so 2>/dev/null | sed 's|.*/|  |'
 # the FAST set must exist too: the package imports every binding and the
 # selector only swaps the five it loads; on a fresh box build FAST as well
 # (it cannot build on AMD -- the wavefront asserts -- so a missing FAST set
