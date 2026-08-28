@@ -284,24 +284,53 @@ def sample_features_kernel(
     with a measurement attached, and no measurement is being taken this
     round.
     """
-    # Recombine BY BIT PATTERN, never by value, and note the `var`s: they
-    # are load-bearing, not style. See the deviation block.
-    var hi64 = seed_hi.cast[DType.uint64]() & 0xFFFFFFFF
-    var lo64 = seed_lo.cast[DType.uint64]() & 0xFFFFFFFF
-    var seed = (hi64 << 32) | lo64
+    # Recombine BY BIT PATTERN, never by value. See the deviation block.
+    var seed = recombine_seed_halves(seed_lo, seed_hi)
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
     while idx < Int(n_column_samples):
-        var node_idx = idx // Int(k)
-        var column_index = idx % Int(k)
-        var nodeid = UInt32(work_items[unsafe_offset=node_idx].idx)
-        var rng_seed = fnv1a32_hash_seed_tree_node(seed, treeid, nodeid)
-        column_samples[unsafe_offset=idx] = Int32(
-            shuffled_feature(
-                Int(n), rng_seed, Int(sample_offset), column_index
-            )
+        column_samples[unsafe_offset=idx] = sampled_column_at(
+            work_items, idx, seed, treeid, sample_offset, n, k
         )
         idx += stride
+
+
+@always_inline
+def recombine_seed_halves(seed_lo: Int32, seed_hi: Int32) -> UInt64:
+    """The two-halves-to-uint64 recombination, single-sourced (DEVIATION
+    1916) so `sample_features_kernel` and the fused `phase_setup_kernel`
+    (`builder_kernels_impl.mojo`) cannot drift. The `var`s and the masks
+    are load-bearing, not style -- widening an Int32 through an unsigned
+    intermediate SIGN-EXTENDS and a `var` does not reliably stop it; only
+    the explicit `& 0xFFFFFFFF` is arithmetic the folder cannot discard.
+    See `sample_features_kernel`'s docstring for the measured incident."""
+    var hi64 = seed_hi.cast[DType.uint64]() & 0xFFFFFFFF
+    var lo64 = seed_lo.cast[DType.uint64]() & 0xFFFFFFFF
+    return (hi64 << 32) | lo64
+
+
+@always_inline
+def sampled_column_at(
+    work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    idx: Int,
+    seed: UInt64,
+    treeid: Int32,
+    sample_offset: Int32,
+    n: Int32,
+    k: Int32,
+) -> Int32:
+    """One flat sample index's drawn column -- the exact per-index body of
+    `sample_features_kernel` (their lambda at `builder_kernels.cuh:82-93`),
+    factored out (DEVIATION 1916) so the fused per-round setup launch runs
+    THIS code and not a transcription of it. A pure function of the index
+    and the arguments; no thread or block shape can move it."""
+    var node_idx = idx // Int(k)
+    var column_index = idx % Int(k)
+    var nodeid = UInt32(work_items[unsafe_offset=node_idx].idx)
+    var rng_seed = fnv1a32_hash_seed_tree_node(seed, treeid, nodeid)
+    return Int32(
+        shuffled_feature(Int(n), rng_seed, Int(sample_offset), column_index)
+    )
 
 
 @always_inline

@@ -146,14 +146,12 @@ from ensemble.decisiontree.batched_levelalgo.objectives import (
 from ensemble.decisiontree.batched_levelalgo.quantiles import Quantiles
 from ensemble.decisiontree.batched_levelalgo.split import (
     Split,
-    init_split_kernel,
 )
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels import (
     InstanceRange,
     NodeWorkItem,
     SharedMemoryConfig,
     WorkloadInfo,
-    sample_features_kernel,
 )
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import (
     DeviceArgs,
@@ -167,6 +165,7 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import
     launch_find_best_splits_kernel,
     launch_leaf_kernel,
     launch_node_split_kernel,
+    launch_phase_setup_kernel,
 )
 from ensemble.decisiontree.decisiontree import (
     CRITERION_END,
@@ -615,6 +614,21 @@ def update_workload_info[
                 WorkloadInfo(Int32(i), Int32(b), Int32(n_blocks_per_node))
             )
         n_blocks_dimx += n_blocks_per_node
+    return n_blocks_dimx
+
+
+def workload_blocks_for(work_items: List[NodeWorkItem]) -> Int:
+    """`updateWorkloadInfo`'s running total WITHOUT its writes -- the same
+    `max(ceildiv(count, TPB_DEFAULT), 1)` sum, so a caller that can prove
+    the staged map is already on the device (DEVIATION 1919) can size the
+    grid without restaging. Any edit to `update_workload_info`'s block
+    arithmetic must land here in the same commit; the two must agree or
+    the partition grid is short."""
+    var n_blocks_dimx = 0
+    for i in range(len(work_items)):
+        n_blocks_dimx += max(
+            ceildiv(work_items[i].instances.count, TPB_DEFAULT), 1
+        )
     return n_blocks_dimx
 
 
@@ -1716,42 +1730,15 @@ struct Builder[O: ObjectiveLike](Movable):
         ctx.synchronize()
         return self._read_splits(n)
 
-    def _sample_features(
-        mut self,
-        ctx: DeviceContext,
-        n_work_items: Int,
-        sample_offset: Int,
-        n_sampled_cols: Int,
-    ) raises:
-        """`Builder::sampleFeatures`, `:505-520`, calling `sample_features`
-        (`kernels/builder_kernels.cuh:66-94`).
-
-        The seed is split into two Int32 halves BY BIT PATTERN with every
-        intermediate bound to a `var`; chaining the conversions inline folds
-        to one sign-extending cast and silently delivers the wrong word.
-        """
-        var n_column_samples = n_work_items * n_sampled_cols
-        if n_column_samples == 0:
-            return
-        var hi_u = (self.seed >> 32).cast[DType.uint32]()
-        var lo_u = (self.seed & 0xFFFFFFFF).cast[DType.uint32]()
-        var hi_arg = hi_u.cast[DType.int32]()
-        var lo_arg = lo_u.cast[DType.int32]()
-        var blocks = ceildiv(n_column_samples, 256)
-        log_launch("sample_features")
-        ctx.enqueue_function[sample_features_kernel](
-            self.column_samples.unsafe_ptr(),
-            self._work_items_ptr(),
-            Int32(n_column_samples),
-            self.treeid,
-            lo_arg,
-            hi_arg,
-            Int32(sample_offset),
-            Int32(self.n_cols),
-            Int32(n_sampled_cols),
-            grid_dim=blocks,
-            block_dim=256,
-        )
+    # `Builder::sampleFeatures` (`:505-520`) no longer has a method of its
+    # own: DEVIATION 1916 fused it with `:489`'s initSplit and `:490`'s
+    # mutex re-zero into `launch_phase_setup_kernel`'s one launch (see
+    # `enqueue_best_splits`). The seed-split incident its docstring
+    # carried -- two Int32 halves BY BIT PATTERN, `var`-bound, because the
+    # chained conversion folds to one sign-extending cast -- lives on in
+    # `launch_phase_setup_kernel` and `recombine_seed_halves`, and the
+    # kernel `sample_features_kernel` itself stands (shuffle_check drives
+    # it directly), sharing the same `sampled_column_at` body.
 
     def _compute_split(
         mut self,
@@ -1876,14 +1863,12 @@ struct Builder[O: ObjectiveLike](Movable):
         across every in-flight tree. `_compute_best_splits` below is the
         serial composition."""
         var n = len(work_items)
-        # `:489` -- initSplit
-        log_launch("init_split")
-        ctx.enqueue_function[init_split_kernel[Self.O.DataT]](
-            self._splits_ptr(), Int32(n), grid_dim=ceildiv(n, 128), block_dim=128
-        )
-        # `:490` -- the mutex is re-zeroed EVERY batch, over max_batch_size
-        # entries and not just the live ones.
-        ctx.enqueue_memset(self.mutex, Int32(0))
+        # DEVIATION 1916: `:489`'s initSplit, `:490`'s mutex re-zero and
+        # `:505-520`'s sampleFeatures now ride ONE fused launch, enqueued
+        # below AFTER the phase upload (the feature sample reads the
+        # uploaded work items; the other two writes have no reader before
+        # `find_best_splits`, so the later position is equivalent to the
+        # old one for every reader on the in-order queue).
         # DEVIATION 1908: stage both, then ONE packed upload.
         self._stage_work_items(work_items)
         # `:393-407` -- straight into the pinned array, as theirs.
@@ -1946,7 +1931,27 @@ struct Builder[O: ObjectiveLike](Movable):
                     ),
                 )
 
-        self._sample_features(ctx, n, sample_offset, n_sampled_cols)
+        # DEVIATION 1916 -- the fused setup launch: initSplit over the
+        # live `n`, the mutex over max_batch_size, the feature sample
+        # over `n * n_sampled_cols`. One op where the port paid three
+        # (two kernels + one memset) per sampling round.
+        launch_phase_setup_kernel[Self.O.DataT](
+            ctx,
+            self._splits_ptr(),
+            n,
+            self.mutex.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin](),
+            Int(self.params.max_batch_size),
+            self.column_samples.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin](),
+            self._work_items_ptr(),
+            n * n_sampled_cols,
+            self.treeid,
+            self.seed,
+            sample_offset,
+            self.n_cols,
+            n_sampled_cols,
+        )
         # DEVIATION 401 (added with the 2026-08-22 identity audit) -- the
         # round's sampled COLUMNS, the per-node feature-sample RNG's
         # (`fnv1a32_hash(seed, treeid, nodeid)` -> minstd_rand ->
@@ -2204,7 +2209,16 @@ struct Builder[O: ObjectiveLike](Movable):
                 ctx, dataset, quantiles, smem_config, st, instr
             )
             return False
-        self.enqueue_node_split(ctx, dataset, st.work_items, st.final_splits)
+        # DEVIATION 1919 -- at round 0 the device span already holds this
+        # batch's items and block map (round zero staged `active_items`,
+        # a copy of `work_items`, and no retry restaged a subset).
+        self.enqueue_node_split(
+            ctx,
+            dataset,
+            st.work_items,
+            st.final_splits,
+            reuse_phase_span=(st.round == 0),
+        )
         st.phase = 1
         return False
 
@@ -2249,10 +2263,27 @@ struct Builder[O: ObjectiveLike](Movable):
         dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
         work_items: List[NodeWorkItem],
         final_splits: List[SplitSummary[Self.O.DataT]],
+        reuse_phase_span: Bool = False,
     ) raises:
         """The partition half of `doSplit`, `:458-501`, MINUS the trailing
         sync -- the caller's, per the pipelined forest loop (DEVIATION
-        117)."""
+        117).
+
+        DEVIATION 1919: `reuse_phase_span=True` asserts the device's
+        packed [items | workload] span ALREADY holds exactly this
+        `work_items` list's staging, so the restage and its
+        `xfer_phase_upload` are skipped. The ONE caller that may pass
+        True is `advance_batch`, and only when `st.round == 0`: round
+        zero staged `st.active_items`, which `begin_batch` made a copy
+        of this very `st.work_items`, and no retry round restaged a
+        subset in between -- so the span's bytes, `cur_wl_rel`, and the
+        block map are byte-for-byte what restaging would produce (and
+        nothing else writes the `d_work_items`/`workload_info` stretch:
+        the splits upload and 1916's fused setup write other regions).
+        Any retry (`st.round > 0`) restages, because the last staging
+        was the shrunken active set. The grid size is recomputed by
+        `workload_blocks_for`, the same arithmetic `update_workload_info`
+        runs, sans writes."""
         var n = len(work_items)
         # `:458` -- `dataset.n_sampled_cols = original_n_sampled_cols;`
         var ds = dataset.copy()
@@ -2285,13 +2316,19 @@ struct Builder[O: ObjectiveLike](Movable):
                 dst_buf=self.splits_d_view.view,
                 src_ptr=self.h_splits.unsafe_ptr(),
             )
-        # DEVIATION 1908: stage both, then ONE packed upload.
-        self._stage_work_items(work_items)
-        # `:393-407` -- straight into the pinned array, as theirs.
-        var n_partition_blocks = update_workload_info(
-            work_items, self._h_workload_ptr()
-        )
-        self._enqueue_phase_upload(ctx, n_partition_blocks)
+        # DEVIATION 1908: stage both, then ONE packed upload -- unless
+        # DEVIATION 1919 proved the span is already there (see the
+        # docstring).
+        var n_partition_blocks: Int
+        if reuse_phase_span:
+            n_partition_blocks = workload_blocks_for(work_items)
+        else:
+            self._stage_work_items(work_items)
+            # `:393-407` -- straight into the pinned array, as theirs.
+            n_partition_blocks = update_workload_info(
+                work_items, self._h_workload_ptr()
+            )
+            self._enqueue_phase_upload(ctx, n_partition_blocks)
 
         # DEVIATION 1893/1909: the partition's args blob (dataset only,
         # `n_sampled_cols` restored to `original_n_sampled_cols` above)
@@ -2477,12 +2514,14 @@ struct Builder[O: ObjectiveLike](Movable):
                     begin * size_of[InstanceRange]()
                 ),
             )
-            var dl = self.leaf_d_leaves.create_sub_buffer[Self.O.DataT](
-                0, size * n_out
-            )
-            ctx.enqueue_memset(dl, Scalar[Self.O.DataT](0))
-
-            launch_leaf_kernel[Self.O](
+            # DEVIATION 1918 -- their zero fill at `:659-660` (this used
+            # to be an `enqueue_memset` over the batch's slots) is fused
+            # into the leaf kernel: each block zeroes its OWN node's slot
+            # before the IsLeaf early-return, so internal nodes' slots
+            # end 0 exactly as the memset left them and a leaf's zeros
+            # are overwritten under the block's own barriers. One block
+            # owns one slot; no cross-block order exists.
+            launch_leaf_kernel[Self.O, zero_fill=True](
                 ctx,
                 self.leaf_d_tree.unsafe_ptr()
                 .unsafe_origin_cast[MutUntrackedOrigin]()
@@ -2510,7 +2549,6 @@ struct Builder[O: ObjectiveLike](Movable):
             ctx.enqueue_copy(dst_buf=hl, src_buf=dls)
             d_views.append(dt^)
             d_views.append(dr^)
-            l_views.append(dl^)
             l_views.append(dls^)
             h_views.append(hl^)
             begin = end
