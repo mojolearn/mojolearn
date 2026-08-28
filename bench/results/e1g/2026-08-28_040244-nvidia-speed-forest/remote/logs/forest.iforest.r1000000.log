@@ -1,0 +1,20 @@
+FSPEED-NOTE lane=iforest arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+4836 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a4a40000000, nodemask=2)
+FSPEED-REFUSED lane=iforest arm=sklearn-iforest-cpu reason=GPU-PATH-ONLY: sklearn-iforest-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-HEADER family=forest lane=iforest arm=ours mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=iforest arm=cuml-iforest-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+4836 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x720a80000000, nodemask=1)
+FSPEED-WARMUP lane=iforest arm=ours shape=anomaly-500000x32 ms=931.978
+FSPEED-WARMUP lane=iforest arm=cuml-iforest-gpu shape=anomaly-500000x32 ms=2533.445
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=1 ms=278.655 hash=29d540e571cd7eec
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=anomaly-500000x32 round=1 ms=83.645 hash=30e11bef8c3eaef8
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=2 ms=233.353 hash=29d540e571cd7eec
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=anomaly-500000x32 round=2 ms=82.782 hash=30e11bef8c3eaef8
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=3 ms=232.693 hash=29d540e571cd7eec
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=anomaly-500000x32 round=3 ms=84.221 hash=30e11bef8c3eaef8
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=4 ms=232.150 hash=29d540e571cd7eec
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=anomaly-500000x32 round=4 ms=83.224 hash=30e11bef8c3eaef8
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=5 ms=229.280 hash=29d540e571cd7eec
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=anomaly-500000x32 round=5 ms=84.426 hash=30e11bef8c3eaef8
+FSPEED-ACC lane=iforest arm=ours metric=auc value=1.000000
+FSPEED-ACC lane=iforest arm=cuml-iforest-gpu metric=auc value=1.000000

@@ -1,0 +1,19 @@
+FSPEED-NOTE lane=iforest arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+5110 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5ac180000000, nodemask=2)
+FSPEED-REFUSED lane=iforest arm=sklearn-iforest-cpu reason=GPU-PATH-ONLY: sklearn-iforest-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-HEADER family=forest lane=iforest arm=ours mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=iforest arm=cuml-iforest-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-WARMUP lane=iforest arm=ours shape=anomaly-500000x32 ms=900.491
+FSPEED-WARMUP lane=iforest arm=cuml-iforest-gpu shape=anomaly-500000x32 ms=156.849
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=1 ms=253.243 hash=29d540e571cd7eec
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=anomaly-500000x32 round=1 ms=85.891 hash=30e11bef8c3eaef8
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=2 ms=233.865 hash=29d540e571cd7eec
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=anomaly-500000x32 round=2 ms=90.768 hash=30e11bef8c3eaef8
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=3 ms=204.761 hash=29d540e571cd7eec
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=anomaly-500000x32 round=3 ms=88.569 hash=30e11bef8c3eaef8
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=4 ms=217.610 hash=29d540e571cd7eec
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=anomaly-500000x32 round=4 ms=88.441 hash=30e11bef8c3eaef8
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=5 ms=205.066 hash=29d540e571cd7eec
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=anomaly-500000x32 round=5 ms=88.114 hash=30e11bef8c3eaef8
+FSPEED-ACC lane=iforest arm=ours metric=auc value=1.000000
+FSPEED-ACC lane=iforest arm=cuml-iforest-gpu metric=auc value=1.000000
