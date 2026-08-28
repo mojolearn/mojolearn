@@ -1,0 +1,14 @@
+speed_gbdt_arm: dataset 'higgs' unavailable (higgs is not downloaded: /root/datasets/gbm-bench/higgs/HIGGS.csv.gz is missing. Run `python tools/speed_gbdt_arm.py --download higgs` first (2.6 GB), OUTSIDE the timed run.); falling back to the synthetic fixture. Every line will say so in shape=.
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-cpu reason=ModuleNotFoundError: No module named 'catboost'
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-gpu reason=ModuleNotFoundError: No module named 'catboost'
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=FAST device=Linux_x86_64 rounds=5 size=shipped
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=synthclf-720000x100 ms=1470.800
+FSPEED lane=gbdt-symmetric arm=ours shape=synthclf-720000x100 round=1 ms=1111.942 hash=190ff3121b206445
+FSPEED lane=gbdt-symmetric arm=ours shape=synthclf-720000x100 round=2 ms=1049.567 hash=190ff3121b206445
+FSPEED lane=gbdt-symmetric arm=ours shape=synthclf-720000x100 round=3 ms=1040.932 hash=190ff3121b206445
+FSPEED lane=gbdt-symmetric arm=ours shape=synthclf-720000x100 round=4 ms=1042.512 hash=190ff3121b206445
+FSPEED lane=gbdt-symmetric arm=ours shape=synthclf-720000x100 round=5 ms=1028.042 hash=190ff3121b206445
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.051836
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.999468

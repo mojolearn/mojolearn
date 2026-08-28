@@ -1,0 +1,20 @@
+speed_gbdt_arm: dataset 'higgs' unavailable (higgs is not downloaded: /root/datasets/gbm-bench/higgs/HIGGS.csv.gz is missing. Run `python tools/speed_gbdt_arm.py --download higgs` first (2.6 GB), OUTSIDE the timed run.); falling back to the synthetic fixture. Every line will say so in shape=.
+FSPEED-NOTE lane=gbdt-lossguide arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+FSPEED-REFUSED lane=gbdt-lossguide arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-lossguide arm=catboost-cpu reason=ModuleNotFoundError: No module named 'catboost'
+FSPEED-REFUSED lane=gbdt-lossguide arm=catboost-gpu reason=ModuleNotFoundError: No module named 'catboost'
+FSPEED-REFUSED lane=gbdt-lossguide arm=xgboost-cpu reason=GPU-PATH-ONLY: xgboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-lossguide arm=xgboost-cpu reason=ModuleNotFoundError: No module named 'xgboost'
+FSPEED-REFUSED lane=gbdt-lossguide arm=xgboost-gpu reason=ModuleNotFoundError: No module named 'xgboost'
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cpu reason=GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cpu reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cuda reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours mode=FAST device=Linux_x86_64 rounds=5 size=shipped
+FSPEED-WARMUP lane=gbdt-lossguide arm=ours shape=synthclf-720000x100 ms=2882.131
+FSPEED lane=gbdt-lossguide arm=ours shape=synthclf-720000x100 round=1 ms=2512.326 hash=b9b7c3175c36bb4d
+FSPEED lane=gbdt-lossguide arm=ours shape=synthclf-720000x100 round=2 ms=2431.854 hash=b9b7c3175c36bb4d
+FSPEED lane=gbdt-lossguide arm=ours shape=synthclf-720000x100 round=3 ms=2445.336 hash=b9b7c3175c36bb4d
+FSPEED lane=gbdt-lossguide arm=ours shape=synthclf-720000x100 round=4 ms=2420.247 hash=b9b7c3175c36bb4d
+FSPEED lane=gbdt-lossguide arm=ours shape=synthclf-720000x100 round=5 ms=2432.337 hash=b9b7c3175c36bb4d
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=logloss value=0.029903
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=auc value=0.999642

@@ -1,0 +1,13 @@
+[17:13:22 forest] arm forest.gbdt-symmetric.r1000000.log
+[17:13:30 forest] arm forest.gbdt-symmetric.r2000000.log
+[17:13:38 forest] arm forest.gbdt-depthwise.r1000000.log
+[17:13:48 forest] arm forest.gbdt-depthwise.r2000000.log
+[17:13:59 forest] arm forest.gbdt-lossguide.r1000000.log
+[17:14:15 forest] arm forest.gbdt-lossguide.r2000000.log
+[17:14:31 forest] arm forest.rf.r1000000.log
+[17:15:01 forest] arm forest.rf.r2000000.log
+[17:15:31 forest] arm forest.et.r1000000.log
+[17:18:02 forest] arm forest.et.r2000000.log
+[17:20:34 forest] arm forest.iforest.r1000000.log
+[17:20:38 forest] arm forest.iforest.r2000000.log
+[17:20:42 forest] done -- /root/speedrun

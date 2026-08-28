@@ -1,0 +1,16 @@
+speed_gbdt_arm: dataset 'higgs' unavailable (higgs is not downloaded: /root/datasets/gbm-bench/higgs/HIGGS.csv.gz is missing. Run `python tools/speed_gbdt_arm.py --download higgs` first (2.6 GB), OUTSIDE the timed run.); falling back to the synthetic fixture. Every line will say so in shape=.
+FSPEED-NOTE lane=et arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+FSPEED-REFUSED lane=et arm=cuml-et-gpu reason=ModuleNotFoundError: No module named 'cuml'
+FSPEED-REFUSED lane=et arm=sklearn-et-cpu reason=GPU-PATH-ONLY: sklearn-et-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=et arm=lightgbm-cpu reason=GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=et arm=lightgbm-cpu reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-REFUSED lane=et arm=lightgbm-cuda reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-HEADER family=forest lane=et arm=ours mode=FAST device=Linux_x86_64 rounds=5 size=shipped
+FSPEED-WARMUP lane=et arm=ours shape=synthclf-720000x100 ms=24609.746
+FSPEED lane=et arm=ours shape=synthclf-720000x100 round=1 ms=24311.228 hash=5071ee6045f6636a
+FSPEED lane=et arm=ours shape=synthclf-720000x100 round=2 ms=24161.531 hash=5071ee6045f6636a
+FSPEED lane=et arm=ours shape=synthclf-720000x100 round=3 ms=24280.879 hash=5071ee6045f6636a
+FSPEED lane=et arm=ours shape=synthclf-720000x100 round=4 ms=24117.986 hash=5071ee6045f6636a
+FSPEED lane=et arm=ours shape=synthclf-720000x100 round=5 ms=24210.914 hash=5071ee6045f6636a
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.549266
+FSPEED-ACC lane=et arm=ours metric=auc value=0.977263

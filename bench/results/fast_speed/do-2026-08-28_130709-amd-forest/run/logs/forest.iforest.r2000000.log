@@ -1,0 +1,11 @@
+FSPEED-NOTE lane=iforest arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+FSPEED-REFUSED lane=iforest arm=cuml-iforest-gpu reason=ModuleNotFoundError: No module named 'cuml'
+FSPEED-REFUSED lane=iforest arm=sklearn-iforest-cpu reason=GPU-PATH-ONLY: sklearn-iforest-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-HEADER family=forest lane=iforest arm=ours mode=FAST device=Linux_x86_64 rounds=5 size=shipped
+FSPEED-WARMUP lane=iforest arm=ours shape=anomaly-500000x32 ms=503.657
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=1 ms=178.334 hash=33d86f1901c5acce
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=2 ms=164.783 hash=33d86f1901c5acce
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=3 ms=153.435 hash=33d86f1901c5acce
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=4 ms=152.863 hash=33d86f1901c5acce
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=5 ms=152.858 hash=33d86f1901c5acce
+FSPEED-ACC lane=iforest arm=ours metric=auc value=1.000000

@@ -1,0 +1,60 @@
+
+=== forest.gbdt-symmetric.r1000000.log :: /root/mojolearn/.pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane gbdt-symmetric --dataset higgs --rows 1000000 ===
+FSPEED lane=gbdt-symmetric arm=ours shape=synthclf-720000x100 round=5 ms=1031.962 hash=190ff3121b206445
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.051836
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.999468
+
+=== forest.gbdt-symmetric.r2000000.log :: /root/mojolearn/.pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane gbdt-symmetric --dataset higgs --rows 2000000 ===
+FSPEED lane=gbdt-symmetric arm=ours shape=synthclf-720000x100 round=5 ms=1028.042 hash=190ff3121b206445
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.051836
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.999468
+
+=== forest.gbdt-depthwise.r1000000.log :: /root/mojolearn/.pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane gbdt-depthwise --dataset higgs --rows 1000000 ===
+FSPEED lane=gbdt-depthwise arm=ours shape=synthclf-720000x100 round=5 ms=1439.432 hash=b80ce535c1b3adfd
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=logloss value=0.033278
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=auc value=0.999634
+
+=== forest.gbdt-depthwise.r2000000.log :: /root/mojolearn/.pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane gbdt-depthwise --dataset higgs --rows 2000000 ===
+FSPEED lane=gbdt-depthwise arm=ours shape=synthclf-720000x100 round=5 ms=1438.039 hash=b80ce535c1b3adfd
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=logloss value=0.033278
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=auc value=0.999634
+
+=== forest.gbdt-lossguide.r1000000.log :: /root/mojolearn/.pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane gbdt-lossguide --dataset higgs --rows 1000000 ===
+FSPEED lane=gbdt-lossguide arm=ours shape=synthclf-720000x100 round=5 ms=2432.337 hash=b9b7c3175c36bb4d
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=logloss value=0.029903
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=auc value=0.999642
+
+=== forest.gbdt-lossguide.r2000000.log :: /root/mojolearn/.pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane gbdt-lossguide --dataset higgs --rows 2000000 ===
+FSPEED lane=gbdt-lossguide arm=ours shape=synthclf-720000x100 round=5 ms=2443.655 hash=b9b7c3175c36bb4d
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=logloss value=0.029903
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=auc value=0.999642
+
+=== forest.rf.r1000000.log :: /root/mojolearn/.pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane rf --dataset higgs --rows 1000000 ===
+FSPEED lane=rf arm=ours shape=synthclf-720000x100 round=5 ms=3037.275 hash=aab715f0679dd6ee
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.260290
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.994939
+
+=== forest.rf.r2000000.log :: /root/mojolearn/.pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane rf --dataset higgs --rows 2000000 ===
+FSPEED lane=rf arm=ours shape=synthclf-720000x100 round=5 ms=3050.692 hash=aab715f0679dd6ee
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.260290
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.994939
+
+=== forest.et.r1000000.log :: /root/mojolearn/.pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane et --dataset higgs --rows 1000000 ===
+FSPEED lane=et arm=ours shape=synthclf-720000x100 round=5 ms=24210.914 hash=5071ee6045f6636a
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.549266
+FSPEED-ACC lane=et arm=ours metric=auc value=0.977263
+
+=== forest.et.r2000000.log :: /root/mojolearn/.pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane et --dataset higgs --rows 2000000 ===
+FSPEED lane=et arm=ours shape=synthclf-720000x100 round=5 ms=24182.749 hash=5071ee6045f6636a
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.549266
+FSPEED-ACC lane=et arm=ours metric=auc value=0.977263
+
+=== forest.iforest.r1000000.log :: /root/mojolearn/.pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane iforest --rows 1000000 ===
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=4 ms=151.556 hash=33d86f1901c5acce
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=5 ms=151.693 hash=33d86f1901c5acce
+FSPEED-ACC lane=iforest arm=ours metric=auc value=1.000000
+
+=== forest.iforest.r2000000.log :: /root/mojolearn/.pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane iforest --rows 2000000 ===
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=4 ms=152.863 hash=33d86f1901c5acce
+FSPEED lane=iforest arm=ours shape=anomaly-500000x32 round=5 ms=152.858 hash=33d86f1901c5acce
+FSPEED-ACC lane=iforest arm=ours metric=auc value=1.000000

@@ -1,0 +1,17 @@
+speed_gbdt_arm: dataset 'higgs' unavailable (higgs is not downloaded: /root/datasets/gbm-bench/higgs/HIGGS.csv.gz is missing. Run `python tools/speed_gbdt_arm.py --download higgs` first (2.6 GB), OUTSIDE the timed run.); falling back to the synthetic fixture. Every line will say so in shape=.
+FSPEED-NOTE lane=gbdt-depthwise arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+FSPEED-REFUSED lane=gbdt-depthwise arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-depthwise arm=catboost-cpu reason=ModuleNotFoundError: No module named 'catboost'
+FSPEED-REFUSED lane=gbdt-depthwise arm=catboost-gpu reason=ModuleNotFoundError: No module named 'catboost'
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-cpu reason=GPU-PATH-ONLY: xgboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-cpu reason=ModuleNotFoundError: No module named 'xgboost'
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-gpu reason=ModuleNotFoundError: No module named 'xgboost'
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=ours mode=FAST device=Linux_x86_64 rounds=5 size=shipped
+FSPEED-WARMUP lane=gbdt-depthwise arm=ours shape=synthclf-720000x100 ms=1864.350
+FSPEED lane=gbdt-depthwise arm=ours shape=synthclf-720000x100 round=1 ms=1499.972 hash=b80ce535c1b3adfd
+FSPEED lane=gbdt-depthwise arm=ours shape=synthclf-720000x100 round=2 ms=1435.672 hash=b80ce535c1b3adfd
+FSPEED lane=gbdt-depthwise arm=ours shape=synthclf-720000x100 round=3 ms=1444.889 hash=b80ce535c1b3adfd
+FSPEED lane=gbdt-depthwise arm=ours shape=synthclf-720000x100 round=4 ms=1442.720 hash=b80ce535c1b3adfd
+FSPEED lane=gbdt-depthwise arm=ours shape=synthclf-720000x100 round=5 ms=1438.039 hash=b80ce535c1b3adfd
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=logloss value=0.033278
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=auc value=0.999634

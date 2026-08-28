@@ -223,6 +223,33 @@ $SSH "cd /root/mojolearn && \
   ( cd python && python3 -c 'import mojolearn; print(\"mojolearn imports OK\")' ) 2>&1 | tail -2" \
   2>&1 | tee -a "$OUT/console.log"
 
+# THE DATASETS ARE FETCHED AS THEIR OWN NAMED STEP, ONCE, BEFORE ANY ARM.
+# Ported from tools/gemm_remote_leg.sh, which has always done this, after the
+# 2026-08-28_130709 leg came home with every higgs rung refused --
+#
+#   speed_gbdt_arm: dataset 'higgs' unavailable (higgs is not downloaded:
+#   /root/datasets/gbm-bench/higgs/HIGGS.csv.gz is missing)
+#
+# -- and every lane silently falling back to its shipped synthetic fixture.
+# That is the worst shape of failure this harness has: the leg came home with
+# sixty timed rounds and twelve `ours` headers, all of them REAL, and none of
+# them on the dataset the other two columns were measured on. A board built
+# from it would have compared AMD on synthclf-720000x100 against NVIDIA on
+# higgs-1000000x28 and shown a ratio.
+#
+# Bounded generously because this is a network fetch and not a measurement:
+# HIGGS is 2.6 GB plus a gzip csv parse of 11M x 29 that runs several
+# minutes, and paying it once here is the difference between one download and
+# six inside a per-arm budget. The exit code is recorded so a table missing
+# the higgs rows says WHY.
+if [ -n "${SPEED_DATASET:-}" ]; then
+    $SSH "cd /root/mojolearn && export PATH=/root/.pixi/bin:\$PATH && \
+      timeout -k 30 2400 .pixi/envs/default/bin/python tools/speed_gbdt_arm.py \
+        --download '${SPEED_DATASET}' > /root/download.log 2>&1; \
+      echo DOWNLOAD_${SPEED_DATASET}_EXIT=\$?; tail -2 /root/download.log" \
+      2>&1 | tee -a "$OUT/console.log"
+fi
+
 # OURS ONLY, AND THE INTERPRETERS ARE POINTED AT NOTHING ON PURPOSE. Every
 # opponent arm then prints FSPEED-REFUSED with its own reason, which is the
 # record this column needs: the absence is IN THE LOGS rather than in a
