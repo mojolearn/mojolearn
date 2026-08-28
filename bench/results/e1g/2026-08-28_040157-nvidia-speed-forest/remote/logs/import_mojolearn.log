@@ -1,0 +1,3 @@
+3031 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x190a00000000, nodemask=2)
+3031 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x507300000000, nodemask=1)
+mojolearn imports OK /root/mojolearn/python/mojolearn/__init__.py
