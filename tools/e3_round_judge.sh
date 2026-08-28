@@ -282,7 +282,7 @@ echo "########## 7. the lanes' cards (phase 8): IDENTICAL judged, FAST recorded"
 # NOTHING EXCUSES A MISSING **IDENTICAL** CARD, mamba included. That card is
 # what the round is made of, so its absence is RC=1 for every lane in the
 # list below, exactly as it was before the allowlist existed.
-for lane in gemm cd kde linkage svm metrics mamba; do
+for lane in gemm cd kde linkage svm metrics mamba iforest transformer; do
   for d in "${DIRS[@]:1}"; do
     a="$REF/lanes/$lane.identical.card"; b="$d/lanes/$lane.identical.card"
     if [ ! -f "$a" ] || [ ! -f "$b" ]; then echo "  $lane IDENTICAL APPLE vs $(label_of "$d"): card MISSING ($([ -f "$a" ] || echo ref)$([ -f "$b" ] || echo ' other'))"; RC=1; continue; fi

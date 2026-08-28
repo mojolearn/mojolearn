@@ -338,6 +338,66 @@ for mode in identical fast; do
   # for. Shape defaults to the tiny one; do not widen it on a rented box.
   run_lane_arm mamba "$mode" pixi run mojo run -I . mamba/mojo_only/mamba_check.mojo
   run_lane_check mamba "$mode" pixi run check-mamba-block
+  # iforest and transformer, added 2026-08-28 (DEVIATION 1932). BOTH LANES
+  # ALREADY HAD EVERYTHING EXCEPT A LINE HERE, and that is the finding:
+  #
+  #   * isolation_forest/mojo_only/if_check.mojo BUILT a 123-stage card and
+  #     wrote it to a scratch path nobody collects, so iforest had ZERO cells
+  #     in every cross-vendor round while its own gate went green. It now
+  #     honours MOJOLEARN_IDENTITY_TRACE like mamba does (mamba needed the
+  #     same repair under DEVIATION 970).
+  #   * transformer/mojo_only/transformer_check.mojo has honoured
+  #     MOJOLEARN_IDENTITY_TRACE since DEVIATION 1101 and its own docstring
+  #     says "tools/e1_bootstrap.sh phase 8 sets it" -- a lane built to be
+  #     here that was never listed. Its SCOPE line said "nothing cross-vendor
+  #     until a leg runs" and no leg could run, because the loop did not
+  #     name it.
+  #
+  # CLAUSE (d) IS TURNED ON FOR THE TRANSFORMER ARM, AND IT IS THE ONE THAT
+  # CHANGES THE LEDGER. It is opt-in in that file and defaults off, and the
+  # gate says why that matters: two of its thirteen sabotage arms
+  # (S07_ROPE_RELATIVE_POSITION and S19_VALUE_SUM_VIA_GEMM) are falsifiable
+  # ONLY under clause (d), so a run without it has ELEVEN arms and not
+  # thirteen. Measured on the M4 2026-08-28: clause (d) PASSES, 4 decode
+  # steps bit-identical to the prefill on all 11,632 compared cells, with its
+  # own control showing 57 misaligned stage comparisons that DO differ.
+  #
+  # CLAUSE (e) IS LEFT OFF AND THIS IS THE REASON, RECORDED RATHER THAN
+  # QUIETLY OMITTED. It is the section 8 planted audit: a NaN or infinity in
+  # any of thirteen named inputs must be REFUSED BY NAME before any stage is
+  # recorded. Run today it aborts the whole driver on its FIRST plant --
+  # "llama: NaN in input_layernorm.weight at flat index 16 REFUSED" escapes
+  # as an unhandled exception. The refusal itself is CORRECT and arguably
+  # early in the good direction: `LlamaDeviceWeights.__init__` refuses at
+  # UPLOAD, and the clause's `try` wraps only the later
+  # `llama_decoder_layer_forward_planted` call, so the expected raise happens
+  # outside the block that was written to catch it. That is a defect in the
+  # clause, not in the block, and turning it on would abort every lane after
+  # transformer in this loop. It is not on the judge's allowlist and it must
+  # not be added to one: fix the try, then turn it on.
+  #
+  # CLAUSE (d) RUNS ON THE IDENTICAL ARM ONLY, AND THE REASON IS A
+  # MEASUREMENT. Run under FAST on the M4 on 2026-08-28 it FAILS: 91
+  # stage-tokens differ, first at token 0 `q_proj.out` on 26 of 32 cells.
+  # That is not a defect and it is not a gate problem -- contract section 7.2
+  # makes decode == prefill true BY CONSTRUCTION for the IDENTICAL profile
+  # (one spelling serves both paths, RoPE reads the absolute position, S11
+  # contracts over a head_dim of equal length in both, S17 and S19 are serial
+  # ascending chains seeded +0.0 over a tail that is exactly +0.0). FAST
+  # promises none of that. Asking the FAST arm a question only the identical
+  # profile answers would put a red line in every round for a property FAST
+  # was never claimed to have, and the allowlist is not the place to hide it:
+  # the fix is to not ask.
+  #
+  # KEEP THE NUMBER THOUGH. "decode == prefill holds under IDENTICAL and
+  # breaks at q_proj.out under FAST, same box, same commit, same fixture" is
+  # one of the cleanest statements of what the flag buys anywhere in this
+  # tree, and it belongs in the paper beside the GEMM oracle counts.
+  _tfx_clause_d=""
+  [ "$mode" = identical ] && _tfx_clause_d=1
+  run_lane_arm iforest "$mode" pixi run mojo run -I . isolation_forest/mojo_only/if_check.mojo
+  MOJOLEARN_TRANSFORMER_CHECK_CLAUSE_D="$_tfx_clause_d" \
+    run_lane_arm transformer "$mode" pixi run mojo run -I . transformer/mojo_only/transformer_check.mojo
   run_lane_arm metrics "$mode" pixi run mojo run -I . metrics/metrics_main.mojo
   for t in check-metrics-labels check-metrics-regression check-metrics-silhouette check-metrics-trust; do
     run_lane_check "metrics-${t#check-metrics-}" "$mode" pixi run "$t"

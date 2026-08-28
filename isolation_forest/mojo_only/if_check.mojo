@@ -91,7 +91,7 @@ Run both arms:
 """
 
 from std.math import ceil, log2
-from std.os import makedirs, path
+from std.os import getenv, makedirs, path
 from std.memory import bitcast
 
 from std.gpu import block_dim, block_idx, thread_idx
@@ -158,6 +158,23 @@ path under /private/tmp, not a session scratchpad: this file used to name
 directory, so the gate was green only on the box where that directory
 still happened to exist. `IdentityTrace.to_path` creates the file; the
 directory is created by `_ensure_scratch()` below."""
+
+
+def card_path() -> String:
+    """`MOJOLEARN_IDENTITY_TRACE` when the caller set it, else SCRATCH.
+
+    DEVIATION 1932, 2026-08-28. Same precedence as
+    `mamba/mojo_only/mamba_check.mojo::card_path` and
+    `bench/gemm_card_main.mojo:553`, and here for the same reason mamba
+    needed it (DEVIATION 970): this lane BUILT a full card and then wrote it
+    to a scratch path nobody collects, so isolation forest had zero cells in
+    every cross-vendor round while its own gate went green. Read at RUN time,
+    never at compile time, because the harness chooses the directory.
+    """
+    var p = String(getenv("MOJOLEARN_IDENTITY_TRACE"))
+    if p.byte_length() > 0:
+        return p^
+    return String(SCRATCH) + "/if_check_card_a.trace"
 
 
 def _ensure_scratch() raises:
@@ -1383,7 +1400,11 @@ def check_if_card_is_emitted() raises:
     var fx = Pointer(to=fxs[2])  # max_features, so the .features stage exists
     var q = _query_rows(fx[], 32)
     _ensure_scratch()
-    var p1 = String(SCRATCH) + "/if_check_card_a.trace"
+    # THE PRIMARY CARD GOES WHERE THE HARNESS ASKED. `p2` stays in scratch
+    # because it is the CONTROL: a second fit at a different launch geometry
+    # whose only job is to be compared against `p1` below. Emitting both to
+    # the harness path would overwrite the card with the control.
+    var p1 = card_path()
     var p2 = String(SCRATCH) + "/if_check_card_b.trace"
     _ = _device_fit(ctx, fx[], q, 32, IFLaunchKnobs.default(), p1)
     _ = _device_fit(ctx, fx[], q, 32, IFLaunchKnobs(32, 64, 37, Float32(-1.0)), p2)
