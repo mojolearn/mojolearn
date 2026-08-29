@@ -1,0 +1,39 @@
+[diag +0s] D0 env recorded
+[diag +243s] d1a_rf_steps: FAIL(rc=1) in 243s
+[diag +246s] d1b_break_rf_base: PASS in 3s
+[diag +249s] d1c_break_rf_hashed: PASS in 3s
+[diag +250s] d1d_break_et_nine: PASS in 1s
+[diag +272s] D2 snapshot taken (pid 2911)
+[diag +272s] D2 iforest still running after 20 s: HUNG as reported
+tools/diag/rtx4090_hang.sh: line 125:  2888 Killed                  $PY "$D/if_bg.py" > "$D/d2_if_bg.log" 2>&1
+[diag +278s] d2b_gpu_answers_after_kill: FAIL(rc=1) in 1s
+[diag +289s] d3_trace_build: PASS in 11s
+[diag +291s] d3_trace_run: PASS in 2s
+[diag +293s] d3_trace_run_syncmode: PASS in 2s
+[diag +303s] d3_entry_return_build: PASS in 10s
+[diag +306s] d3_entry_return_run: PASS in 3s
+[diag +316s] d3_gather_only_build: PASS in 10s
+[diag +319s] d3_gather_only_run: PASS in 3s
+[diag +329s] d3_no_reject_build: PASS in 10s
+[diag +332s] d3_no_reject_run: PASS in 3s
+[diag +343s] d3_no_record_build: PASS in 11s
+[diag +345s] d3_no_record_run: PASS in 2s
+[diag +345s] DONE
+=== verdicts
+d1a_rf_steps FAIL(rc=1) 243
+d1b_break_rf_base PASS 3
+d1c_break_rf_hashed PASS 3
+d1d_break_et_nine PASS 1
+d2_iforest HUNG 20
+d2b_gpu_answers_after_kill FAIL(rc=1) 1
+d3_trace_build PASS 11
+d3_trace_run PASS 2
+d3_trace_run_syncmode PASS 2
+d3_entry_return_build PASS 10
+d3_entry_return_run PASS 3
+d3_gather_only_build PASS 10
+d3_gather_only_run PASS 3
+d3_no_reject_build PASS 10
+d3_no_reject_run PASS 3
+d3_no_record_build PASS 11
+d3_no_record_run PASS 2

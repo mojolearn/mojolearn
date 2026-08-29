@@ -1,0 +1,17 @@
+vendor=nvidia
+payload=phase8
+commit=4444211ae24e01352ad0a5fe55a6f991c9743902
+work_timeout=3000
+e1_phases=9
+e1_lanes=
+p9_bindings=build_rf.sh build_svm.sh
+p9_lanes=rf-clf
+started=2026-08-29T20:32:58Z
+bootstrap_exit=0
+note: a bootstrap_exit of 124 is the work timeout firing
+e1dir_source=the bootstrap's own 'artifacts in' line
+e1dir=/root/mojolearn/bench/results/e1/2026-08-29_203300-6aeb46113263
+identical_cards=0
+fast_cards=0
+phase8_findings=0
+finished=2026-08-29T20:50:04Z

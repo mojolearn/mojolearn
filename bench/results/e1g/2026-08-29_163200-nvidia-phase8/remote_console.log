@@ -1,0 +1,59 @@
+host driver major: 580 (escape needed below 580)
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 20:33:05
+phase 9 builds: build_rf.sh build_svm.sh
+phase 9 tiers:  identical
+identical set: 2 of 10 binaries
+PHASE9-FINDING: stability arm identical returned non-zero (see stability/identical.txt)
+--- stability identical
+    # 2026-08-29 20:34:19
+    
+    | lane             | verdict  | same answer every time? | hashes |
+    |------------------|----------|-------------------------|--------|
+concurrent probe SKIPPED: needs all three tiers, P9_TIERS=identical
+
+=== phase 9 diag: tools/diag/rtx4090_hang.sh === 20:44:19
+    [diag +345s] d3_no_record_run: PASS in 2s
+    [diag +345s] DONE
+    === verdicts
+    d1a_rf_steps FAIL(rc=1) 243
+    d1b_break_rf_base PASS 3
+    d1c_break_rf_hashed PASS 3
+    d1d_break_et_nine PASS 1
+    d2_iforest HUNG 20
+    d2b_gpu_answers_after_kill FAIL(rc=1) 1
+    d3_trace_build PASS 11
+    d3_trace_run PASS 2
+    d3_trace_run_syncmode PASS 2
+    d3_entry_return_build PASS 10
+    d3_entry_return_run PASS 3
+    d3_gather_only_build PASS 10
+    d3_gather_only_run PASS 3
+    d3_no_reject_build PASS 10
+    d3_no_reject_run PASS 3
+    d3_no_record_build PASS 11
+    d3_no_record_run PASS 2
+
+=== done === 20:50:04
+artifacts in /root/mojolearn/bench/results/e1/2026-08-29_203300-6aeb46113263
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card
+vendor=nvidia
+payload=phase8
+commit=4444211ae24e01352ad0a5fe55a6f991c9743902
+work_timeout=3000
+e1_phases=9
+e1_lanes=
+p9_bindings=build_rf.sh build_svm.sh
+p9_lanes=rf-clf
+started=2026-08-29T20:32:58Z
+bootstrap_exit=0
+note: a bootstrap_exit of 124 is the work timeout firing
+e1dir_source=the bootstrap's own 'artifacts in' line
+e1dir=/root/mojolearn/bench/results/e1/2026-08-29_203300-6aeb46113263
+identical_cards=0
+fast_cards=0
+phase8_findings=0
+finished=2026-08-29T20:50:04Z
+REMOTE_BODY_DONE

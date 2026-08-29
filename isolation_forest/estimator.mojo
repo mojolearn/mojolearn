@@ -103,7 +103,19 @@ struct IsolationForestEstimator(Movable):
     var fitted: Bool
     var knobs: IFLaunchKnobs
 
-    def __init__(out self) raises:
+    def __init__(out self, ctx: DeviceContext) raises:
+        """DEVIATION 1943: the empty model is built on the CALLER'S context.
+        Until 2026-08-29 this read `IsolationForestModel(DeviceContext())`,
+        a second DeviceContext created while `iforest_run_host`'s own was
+        alive, and `fit` then replaced that model's eight buffers with ones
+        on the caller's context, so the second context's buffers were freed
+        while the first was mid-fit. On an RTX 4090 (driver 580, CUDA 13)
+        that never returned: GPU idle, every host thread in futex wait, in
+        every numeric tier, on four hosts, while the same fit through ONE
+        context (`mojo_only/if_hang_probe.mojo`) returned the M4's bits.
+        H100, M4 and MI325X never minded. One context per call is the rule
+        `bindings/_mojolearn_estimators.mojo` already states; this is the
+        estimator obeying it."""
         self.n_estimators = 100
         self.max_samples_mode = 0
         self.max_samples_int = 256
@@ -120,7 +132,7 @@ struct IsolationForestEstimator(Movable):
         self.offset_ = -0.5
         self.max_samples_ = 0
         self.n_features_in_ = 0
-        self.model = IsolationForestModel(DeviceContext())
+        self.model = IsolationForestModel(ctx)
         self.fitted = False
         self.knobs = IFLaunchKnobs.default()
 
@@ -363,7 +375,7 @@ def iforest_run_host(
         )
 
     var ctx = DeviceContext()
-    var est = IsolationForestEstimator()
+    var est = IsolationForestEstimator(ctx)
     est.n_estimators = n_estimators
     est.max_samples_mode = max_samples_mode
     est.max_samples_int = max_samples_int

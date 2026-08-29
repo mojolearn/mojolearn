@@ -954,7 +954,7 @@ def check_if_refusals() raises:
     _expect_raise("n_rows=0", raised, msg, "n_rows")
     n_refused += 1
     # Estimator-level refusals (the Python layer's, estimator.mojo).
-    var est = IsolationForestEstimator()
+    var est = IsolationForestEstimator(ctx)
     est.max_samples_frac = 0.0
     est.max_samples_mode = 2
     raised = False
@@ -965,7 +965,7 @@ def check_if_refusals() raises:
         msg = String(e)
     _expect_raise("float max_samples=0.0", raised, msg, "max_samples")
     n_refused += 1
-    est = IsolationForestEstimator()
+    est = IsolationForestEstimator(ctx)
     est.contamination = 0.7
     est.contamination_auto = False
     raised = False
@@ -976,7 +976,7 @@ def check_if_refusals() raises:
         msg = String(e)
     _expect_raise("contamination=0.7", raised, msg, "contamination")
     n_refused += 1
-    est = IsolationForestEstimator()
+    est = IsolationForestEstimator(ctx)
     est.max_features_int = 9
     est.max_features_mode = 1
     raised = False
@@ -987,7 +987,7 @@ def check_if_refusals() raises:
         msg = String(e)
     _expect_raise("max_features=9 of 4", raised, msg, "max_features")
     n_refused += 1
-    est = IsolationForestEstimator()
+    est = IsolationForestEstimator(ctx)
     est.warm_start = True
     raised = False
     try:
@@ -1362,7 +1362,7 @@ def check_if_predict_thresholds() raises:
             n_anom += 1
     # contamination: the estimator's percentile offset flags exactly the
     # top share (ties aside).
-    var est = IsolationForestEstimator()
+    var est = IsolationForestEstimator(ctx)
     est.n_estimators = 16
     est.random_state = 42
     est.contamination = 0.05

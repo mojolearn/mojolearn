@@ -13,6 +13,9 @@
 #       right after a stability arm whose iforest lane had been killed.
 #
 #   D0  what is on the GPU before anything runs (a leftover process?)
+#   ORDER on leg 2: D0, D2 (Python lifetime probes), D4 (the fix through the
+#   probe and the stability harness), D3 (Mojo lifetime probes), D1 (leg 1's
+#   reproduction, last, budget permitting).
 #   D1  rf-clf step by step (fit, predict, predict_proba, second fit), then
 #       identity_break on rf-clf base / hashed and on et-clf x nine fixtures
 #   D2  iforest in the background: after 20 s, nvidia-smi PIDS/utilization,
@@ -55,6 +58,78 @@ run() {
 } > "$D/d0_env.log" 2>&1
 say "D0 env recorded"
 
+# ---------------------------------------------------------------- D2 (leg 2)
+# Leg 1 (bench/results/e1/2026-08-29_163200-runpod-nvidia/diag) said: rf fit,
+# predict and predict_proba pass and the SECOND fit in the process hangs; the
+# Python iforest fit hangs with the GPU idle and every host thread in futex;
+# the one-context Mojo probe passes with the M4's checksums for every bisect
+# guard. So the kernel is innocent and the suspect is DeviceContext lifetime.
+cat > "$D/py_probes.py" <<'PY'
+import faulthandler, gc, sys, time
+import numpy as np
+faulthandler.dump_traceback_later(110, exit=True)
+import mojolearn as ml
+which = sys.argv[1]
+rng = np.random.default_rng(0)
+X = rng.standard_normal((20000, 16)).astype(np.float32)
+y = (X[:, 3] + 0.5 * X[:, 4] > 0).astype(np.int32)
+def step(name, fn):
+    faulthandler.cancel_dump_traceback_later(); faulthandler.dump_traceback_later(110, exit=True)
+    t = time.time(); r = fn(); print(f"STEP {name}: ok {time.time()-t:.2f}s", flush=True); return r
+if which == "if_small":      # the probe's shape through the BINDING
+    step("if_small_fit", lambda: ml.IsolationForest(n_estimators=4, max_samples=32, random_state=5).fit(X[:64, :4]))
+elif which == "if_default":  # the estimator defaults through the binding (the fixed build)
+    m = step("if_default_fit", lambda: ml.IsolationForest(n_estimators=16, random_state=5).fit(X))
+    step("if_default_score", lambda: m.score_samples(X))
+    step("if_default_fit_again", lambda: ml.IsolationForest(n_estimators=16, random_state=5).fit(X))
+elif which == "rf_gc":       # second fit after the first model is gone
+    m = step("rf_fit1", lambda: ml.RandomForestClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, y))
+    del m; gc.collect()
+    step("rf_fit2_after_gc", lambda: ml.RandomForestClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, y))
+elif which == "rf_reg":      # the regressor twice
+    step("rfreg_fit1", lambda: ml.RandomForestRegressor(n_estimators=16, max_depth=8, random_state=7).fit(X, X[:, 0]))
+    step("rfreg_fit2", lambda: ml.RandomForestRegressor(n_estimators=16, max_depth=8, random_state=7).fit(X, X[:, 0]))
+elif which == "rf_small":    # tiny second fit
+    step("rf_fit1", lambda: ml.RandomForestClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, y))
+    step("rf_fit2_small", lambda: ml.RandomForestClassifier(n_estimators=2, max_depth=3, random_state=7).fit(X[:500], y[:500]))
+elif which == "rf_then_et":  # a different binding's context after rf
+    step("rf_fit1", lambda: ml.RandomForestClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, y))
+    step("et_fit_after_rf", lambda: ml.ExtraTreesClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, y))
+elif which == "et_twice":    # sequential contexts in a lane that passes
+    step("et_fit1", lambda: ml.ExtraTreesClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, y))
+    step("et_fit2", lambda: ml.ExtraTreesClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, y))
+    step("rf_fit_after_et", lambda: ml.RandomForestClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, y))
+print("PY_PROBE DONE", flush=True)
+PY
+for w in if_small if_default rf_gc rf_small rf_reg rf_then_et et_twice; do
+  run "d2_py_$w" 130 $PY "$D/py_probes.py" $w
+done
+
+# ---------------------------------------------------------------- D4 (leg 2)
+# The fixed svm binding (DEVIATION 1943) through the probe's own lanes, each
+# under its own timeout, then the stability shape.
+run d4_break_iforest_rfclf 600 $PY tools/identity_break.py --lanes iforest,rf-clf --json "$D/identity_break.iforest_rfclf.json"
+run d4_stability_iforest 400 $PY tools/repeat_run_stability.py --repeats 6 --lanes iforest --json "$D/stability.iforest.json"
+run d4_stability_rfclf 400 $PY tools/repeat_run_stability.py --repeats 6 --lanes rf-clf --json "$D/stability.rfclf.json"
+
+# ---------------------------------------------------------------- D3 (leg 2)
+# Mojo-level lifetimes. Builds are ~10 s on a box whose cache is warm from
+# phase 9; each run is bounded so a hang costs 90 s, not the lease.
+mprobe() {  # mprobe NAME SRC defines...
+  local name=$1 src=$2; shift 2
+  [ "$(elapsed)" -gt 2100 ] && { say "d3_$name SKIPPED (budget)"; echo "d3_${name} SKIPPED" >> "$D/verdicts.txt"; return; }
+  run "d3_${name}_build" 480 pixi run mojo build -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 "$@" "$src" -o "$D/probe_$name" || return
+  run "d3_${name}_run" 90 "$D/probe_$name"
+}
+IFP=isolation_forest/mojo_only/if_ctx_probe.mojo
+mprobe if_T4_model_on_second_ctx "$IFP" -D MOJOLEARN_IF_DIAG_TRACE=1 -D T4=1
+mprobe if_T1_two_alive_fit_second "$IFP" -D MOJOLEARN_IF_DIAG_TRACE=1 -D T1=1
+mprobe if_T3_two_alive_fit_first "$IFP" -D MOJOLEARN_IF_DIAG_TRACE=1 -D T3=1
+mprobe if_T2_sequential "$IFP" -D MOJOLEARN_IF_DIAG_TRACE=1 -D T2=1
+RFP=ensemble/mojo_only/rf_ctx_probe.mojo
+mprobe rf_two_ctx "$RFP" -D RF_TWO_CTX=1
+mprobe rf_same_ctx "$RFP" -D RF_SAME_CTX=1
+
 # ---------------------------------------------------------------- D1
 cat > "$D/rf_steps.py" <<'PY'
 import faulthandler, sys, time
@@ -77,81 +152,11 @@ pp2 = step("rf_predict_proba_again", lambda: m2.predict_proba(X))
 print("proba equal across fits:", np.array_equal(pp, pp2), flush=True)
 print("RF_STEPS DONE", flush=True)
 PY
-run d1a_rf_steps 420 $PY "$D/rf_steps.py"
-run d1b_break_rf_base 400 $PY tools/identity_break.py --lanes rf-clf --fixtures base --repeats 1
-run d1c_break_rf_hashed 400 $PY tools/identity_break.py --lanes rf-clf --fixtures hashed --repeats 1
-run d1d_break_et_nine 500 $PY tools/identity_break.py --lanes et-clf --repeats 1
-
-# ---------------------------------------------------------------- D2
-cat > "$D/if_bg.py" <<'PY'
-import faulthandler, time
-import numpy as np
-faulthandler.dump_traceback_later(600, exit=True)
-import mojolearn as ml
-X = np.random.default_rng(0).standard_normal((2000, 8)).astype(np.float32)
-t = time.time()
-print("IF fit begin", flush=True)
-ml.IsolationForest(n_estimators=4, random_state=5).fit(X)
-print(f"IF fit returned {time.time()-t:.2f}s", flush=True)
-PY
-$PY "$D/if_bg.py" > "$D/d2_if_bg.log" 2>&1 &
-BG=$!
-sleep 20
-PID=$(pgrep -f "if_bg.py" | grep -v "^$BG$" | head -1); [ -z "$PID" ] && PID=$BG
-# the python process is the one holding the CUDA context: prefer a pid whose cmdline is python3
-for p in $(pgrep -f "if_bg.py"); do if tr '\0' ' ' < /proc/$p/cmdline 2>/dev/null | grep -q "^python3\|/python3"; then PID=$p; fi; done
-{
-  echo "bg pid=$BG python pid=$PID"; cat "$D/d2_if_bg.log"
-  echo "--- nvidia-smi -q -d PIDS"; nvidia-smi -q -d PIDS
-  echo "--- utilization"; nvidia-smi --query-gpu=utilization.gpu,clocks.sm --format=csv
-  echo "--- dmon"; timeout 6 nvidia-smi dmon -c 2 -s u
-  echo "--- ptxas/nvdisasm children"; ps -ef | grep -E "ptxas|nvdisasm|nvlink" | grep -v grep
-  echo "--- process state"; ps -o pid,stat,etime,time,wchan:24,cmd -p "$PID"
-  echo "--- thread wchan histogram"; cat /proc/$PID/task/*/wchan 2>/dev/null | sort | uniq -c | sort -rn
-  echo "--- thread states"; cat /proc/$PID/task/*/stat 2>/dev/null | awk '{print $3}' | sort | uniq -c
-  echo "--- non-futex threads"; for t in /proc/$PID/task/*; do w=$(cat $t/wchan 2>/dev/null); case "$w" in *futex*) ;; *) echo "tid=$(basename $t) wchan=$w stat=$(awk '{print $3}' $t/stat 2>/dev/null) name=$(cat $t/comm)"; cat $t/stack 2>&1 | head -12;; esac; done
-  if command -v gdb >/dev/null; then echo "--- gdb"; timeout -s KILL 120 gdb -p "$PID" -batch -ex "thread apply all bt 6" 2>&1 | grep -v "^\[New\|^Reading\|^Loaded" | head -400; fi
-} > "$D/d2_snapshot.log" 2>&1
-say "D2 snapshot taken (pid $PID)"
-if kill -0 "$PID" 2>/dev/null; then
-  say "D2 iforest still running after 20 s: HUNG as reported"; echo "d2_iforest HUNG 20" >> "$D/verdicts.txt"
-  kill -9 "$PID" 2>/dev/null; kill -9 "$BG" 2>/dev/null; pkill -9 -f if_bg.py 2>/dev/null
-  sleep 5
-  { echo "--- after kill: survivors"; ps -eo pid,stat,etime,wchan:20,cmd | grep -E "if_bg|python3" | grep -v grep
-    echo "--- compute apps"; nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv
-    nvidia-smi --query-gpu=utilization.gpu --format=csv; } > "$D/d2_after_kill.log" 2>&1
-else
-  say "D2 iforest FINISHED within 20 s (not hung here)"; echo "d2_iforest PASS 20" >> "$D/verdicts.txt"
-fi
-# H2's hypothesis: after a killed iforest, does the GPU still answer?
-cat > "$D/et_quick.py" <<'PY'
-import faulthandler, time
-import numpy as np
-faulthandler.dump_traceback_later(100, exit=True)
-import mojolearn as ml
-X = np.random.default_rng(0).standard_normal((20000, 16)).astype(np.float32)
-y = (X[:, 3] > 0).astype(np.int32)
-t = time.time(); ml.ExtraTreesClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, y); print(f"ET fit ok {time.time()-t:.2f}s", flush=True)
-PY
-run d2b_gpu_answers_after_kill 130 $PY "$D/et_quick.py"
-
-# ---------------------------------------------------------------- D3
-probe() {  # probe NAME defines...
-  local name=$1; shift
-  [ "$(elapsed)" -gt 2050 ] && { say "d3_$name SKIPPED (budget)"; echo "d3_${name}_build SKIPPED" >> "$D/verdicts.txt"; return; }
-  run "d3_${name}_build" 480 pixi run mojo build -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 "$@" \
-      isolation_forest/mojo_only/if_hang_probe.mojo -o "$D/probe_$name" || return
-  run "d3_${name}_run" 150 "$D/probe_$name"
-}
-probe trace -D MOJOLEARN_IF_DIAG_TRACE=1
-if [ -x "$D/probe_trace" ]; then
-  MODULAR_DEBUG=device-sync-mode run d3_trace_run_syncmode 150 "$D/probe_trace"
-fi
-probe entry_return -D MOJOLEARN_IF_DIAG_TRACE=1 -D MOJOLEARN_IF_DIAG_ENTRY_RETURN=1
-probe gather_only -D MOJOLEARN_IF_DIAG_TRACE=1 -D MOJOLEARN_IF_DIAG_GATHER_ONLY=1
-probe no_reject -D MOJOLEARN_IF_DIAG_TRACE=1 -D MOJOLEARN_IF_DIAG_NO_REJECT=1
-probe no_record -D MOJOLEARN_IF_DIAG_TRACE=1 -D MOJOLEARN_IF_DIAG_NO_RECORD=1
+[ "$(elapsed)" -gt 2000 ] || run d1a_rf_steps 300 $PY "$D/rf_steps.py"
+[ "$(elapsed)" -gt 2100 ] || run d1b_break_rf_base 300 $PY tools/identity_break.py --lanes rf-clf --fixtures base --repeats 1
+[ "$(elapsed)" -gt 2100 ] || run d1c_break_rf_hashed 300 $PY tools/identity_break.py --lanes rf-clf --fixtures hashed --repeats 1
+[ "$(elapsed)" -gt 2100 ] || run d1d_break_et_nine 300 $PY tools/identity_break.py --lanes et-clf --repeats 1
 
 say "DONE"; echo "=== verdicts"; cat "$D/verdicts.txt"
-pkill -9 -f if_bg.py 2>/dev/null; pkill -9 -f probe_ 2>/dev/null
+pkill -9 -f py_probes.py 2>/dev/null; pkill -9 -f probe_ 2>/dev/null
 exit 0

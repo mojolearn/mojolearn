@@ -1,0 +1,5 @@
+# repeat-run stability, mode=identical, repeats=6, interleave=False
+# 2026-08-29 20:34:19
+
+| lane             | verdict  | same answer every time? | hashes |
+|------------------|----------|-------------------------|--------|

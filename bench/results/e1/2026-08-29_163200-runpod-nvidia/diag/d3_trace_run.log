@@ -1,0 +1,15 @@
+probe +0ms: start [IDENTICAL]
+probe +0ms: data built, creating DeviceContext
+probe +246ms: DeviceContext created, fit begin
+if_diag: build kernel enqueue begin
+if_diag: build kernel enqueue returned, synchronize begin
+if_diag: build kernel synchronize returned
+probe +1528ms: fit returned
+probe n_nodes per tree: 27 35 29 39 
+probe feat checksum: 485639484
+probe +1528ms: score_samples begin
+if_diag: path kernel enqueue begin
+if_diag: path kernel enqueue returned, synchronize begin
+if_diag: path kernel synchronize returned
+probe +1528ms: score_samples returned, checksum 1382303637
+probe DONE

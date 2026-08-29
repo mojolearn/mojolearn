@@ -1,0 +1,22 @@
+Traceback (most recent call last):
+  File "/root/mojolearn/bench/results/e1/2026-08-29_203300-6aeb46113263/diag/et_quick.py", line 7, in <module>
+    t = time.time(); ml.ExtraTreesClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, y); print(f"ET fit ok {time.time()-t:.2f}s", flush=True)
+                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/root/mojolearn/python/mojolearn/extratrees.py", line 396, in fit
+    self._bind("_mojolearn_trees").et_classifier_fit,
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 87, in _bind
+    return _backend.binding(
+           ~~~~~~~~~~~~~~~~^
+        name or self._BINDING, getattr(self, "numeric_mode", None)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 324, in binding
+    return getattr(load_set(mode or default_mode()), name)
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 230, in __getattr__
+    raise ImportError(
+    ...<5 lines>...
+    )
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_trees.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_trees.sh

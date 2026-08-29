@@ -1,0 +1,17 @@
+d1a_rf_steps FAIL(rc=1) 243
+d1b_break_rf_base PASS 3
+d1c_break_rf_hashed PASS 3
+d1d_break_et_nine PASS 1
+d2_iforest HUNG 20
+d2b_gpu_answers_after_kill FAIL(rc=1) 1
+d3_trace_build PASS 11
+d3_trace_run PASS 2
+d3_trace_run_syncmode PASS 2
+d3_entry_return_build PASS 10
+d3_entry_return_run PASS 3
+d3_gather_only_build PASS 10
+d3_gather_only_run PASS 3
+d3_no_reject_build PASS 10
+d3_no_reject_run PASS 3
+d3_no_record_build PASS 11
+d3_no_record_run PASS 2

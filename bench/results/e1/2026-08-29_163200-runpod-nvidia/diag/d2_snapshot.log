@@ -1,0 +1,137 @@
+bg pid=2888 python pid=2911
+IF fit begin
+--- nvidia-smi -q -d PIDS
+
+==============NVSMI LOG==============
+
+Timestamp                                              : Sat Aug 29 20:48:49 2026
+Driver Version                                         : 580.159.04
+CUDA Version                                           : 13.0
+
+Attached GPUs                                          : 1
+GPU 00000000:C4:00.0
+    Processes
+        GPU instance ID                   : N/A
+        Compute instance ID               : N/A
+        Process ID                        : 2911
+            Type                          : C
+            Name                          : /root/mojolearn/.pixi/envs/gbmbench/bin/python3
+            Used GPU Memory               : 388 MiB
+
+--- utilization
+utilization.gpu [%], clocks.current.sm [MHz]
+0 %, 270 MHz
+--- dmon
+# gpu     sm    mem    enc    dec    jpg    ofa 
+# Idx      %      %      %      %      %      % 
+    0      0      0      0      0      0      0 
+    0      0      0      0      0      0      0 
+--- ptxas/nvdisasm children
+--- process state
+    PID STAT     ELAPSED     TIME WCHAN                    CMD
+   2911 Sl         00:21 00:00:02 futex_wait_queue         /root/mojolearn/.pixi/envs/gbmbench/bin/python3 -u -X faulthandler /root/mojolearn/bench/results/e1/2026-08-29_203300-6aeb46113263/diag/if_bg.py
+--- thread wchan histogram
+      1 futex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuefutex_wait_queuedo_poll.constprop.0futex_wait_queuedo_poll.constprop.0
+--- thread states
+    100 S
+      1 Thread0)
+      1 Thread1)
+      1 Thread10)
+      1 Thread11)
+      1 Thread12)
+      1 Thread13)
+      1 Thread14)
+      1 Thread15)
+      1 Thread16)
+      1 Thread17)
+      1 Thread18)
+      1 Thread19)
+      1 Thread2)
+      1 Thread20)
+      1 Thread21)
+      1 Thread22)
+      1 Thread23)
+      1 Thread24)
+      1 Thread25)
+      1 Thread26)
+      1 Thread27)
+      1 Thread28)
+      1 Thread29)
+      1 Thread3)
+      1 Thread30)
+      1 Thread31)
+      1 Thread32)
+      1 Thread33)
+      1 Thread34)
+      1 Thread35)
+      1 Thread36)
+      1 Thread37)
+      1 Thread38)
+      1 Thread39)
+      1 Thread4)
+      1 Thread40)
+      1 Thread41)
+      1 Thread42)
+      1 Thread43)
+      1 Thread44)
+      1 Thread45)
+      1 Thread46)
+      1 Thread47)
+      1 Thread48)
+      1 Thread49)
+      1 Thread5)
+      1 Thread50)
+      1 Thread51)
+      1 Thread52)
+      1 Thread53)
+      1 Thread54)
+      1 Thread55)
+      1 Thread56)
+      1 Thread57)
+      1 Thread58)
+      1 Thread59)
+      1 Thread6)
+      1 Thread60)
+      1 Thread61)
+      1 Thread62)
+      1 Thread63)
+      1 Thread64)
+      1 Thread65)
+      1 Thread66)
+      1 Thread67)
+      1 Thread68)
+      1 Thread69)
+      1 Thread7)
+      1 Thread70)
+      1 Thread71)
+      1 Thread72)
+      1 Thread73)
+      1 Thread74)
+      1 Thread75)
+      1 Thread76)
+      1 Thread77)
+      1 Thread78)
+      1 Thread79)
+      1 Thread8)
+      1 Thread80)
+      1 Thread81)
+      1 Thread82)
+      1 Thread83)
+      1 Thread84)
+      1 Thread85)
+      1 Thread86)
+      1 Thread87)
+      1 Thread88)
+      1 Thread89)
+      1 Thread9)
+      1 Thread90)
+      1 Thread91)
+      1 Thread92)
+      1 Thread93)
+      1 Thread94)
+      1 Thread95)
+--- non-futex threads
+tid=3106 wchan=do_poll.constprop.0 stat=S name=cuda00001800007
+cat: /proc/2911/task/3106/stack: Permission denied
+tid=3108 wchan=do_poll.constprop.0 stat=S name=cuda-EvtHandlr
+cat: /proc/2911/task/3108/stack: Permission denied

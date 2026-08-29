@@ -1,0 +1,10 @@
+probe +0ms: start [IDENTICAL]
+probe +0ms: data built, creating DeviceContext
+probe +250ms: DeviceContext created, fit begin
+if_diag: build kernel enqueue begin
+if_diag: build kernel enqueue returned, synchronize begin
+if_diag: build kernel synchronize returned
+probe +1516ms: fit returned
+probe n_nodes per tree: 0 0 0 0 
+probe FOREST NOT BUILT (n_nodes poison): scoring skipped
+probe DONE

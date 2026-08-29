@@ -1,0 +1,29 @@
+Sat Aug 29 20:44:19 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.159.04             Driver Version: 580.159.04     CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GeForce RTX 4090        On  |   00000000:C4:00.0 Off |                  Off |
+|  0%   38C    P8             13W /  450W |       1MiB /  24564MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+name, driver_version, utilization.gpu [%], clocks.current.sm [MHz]
+NVIDIA GeForce RTX 4090, 580.159.04, 0 %, 210 MHz
+--- compute apps
+pid, process_name, used_gpu_memory [MiB]
+--- python/mojo processes
+    156 S          11:56 do_wait              /bin/sh /tmp/mojolearn-lease.sh
+    316 S          11:19 pipe_read            tee /root/mojolearn/bench/results/e1/2026-08-29_203300-6aeb46113263/bootstrap.log
+--- gdb: none  py-spy: none
+--- MODULAR_NVPTX_COMPILER_PATH=<unset>

@@ -1,0 +1,5 @@
+--- after kill: survivors
+--- compute apps
+pid, process_name, used_gpu_memory [MiB]
+utilization.gpu [%]
+0 %

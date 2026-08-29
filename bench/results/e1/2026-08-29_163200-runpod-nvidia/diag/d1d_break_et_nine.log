@@ -1,0 +1,24 @@
+# identity_break  mode=identical  2026-08-29 20:48:29  Linux-6.8.0-117-generic-x86_64-with-glibc2.35
+| lane             | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| et-clf           | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+
+cells=9 stable=0 moved=0 refused=9
+REFUSED et-clf/base: ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_trees.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_trees.sh
+REFUSED et-clf/ties: ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_trees.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_trees.sh
+REFUSED et-clf/hashed: ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_trees.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_trees.sh
+REFUSED et-clf/wide: ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_trees.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_trees.sh
+REFUSED et-clf/denormal: ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_trees.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_trees.sh
+REFUSED et-clf/denormal_ftz: ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_trees.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_trees.sh
+REFUSED et-clf/dupes: ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_trees.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_trees.sh
+REFUSED et-clf/odd: ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_trees.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_trees.sh
+REFUSED et-clf/negative: ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_trees.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_trees.sh
