@@ -121,6 +121,7 @@ should and nowhere else.
 | 680 | non-finite inputs refused by name on the host (theirs accept NaN and split on it) |
 | 681 | the score's `pow(2, y)` is `identical_pow`; `c(n)` uses `identical_log64` |
 | 682 | the builder's and scorer's float seams: `identical_log`, `identical_mul_add`, `ftz` at every stored float |
+| **1942** | **the feature matrix is flushed at `_upload_f32` under the pin (2026-08-29). Until then 682's seams covered every float the builder STORED and none it READ, and the AMD MI325X leg scored subnormal features raw where Apple's hardware flushed them, and `score_samples` diverged on `identity_break`'s `denormal` fixture. Bit-inert on Apple; the AMD and NVIDIA re-measurements are owed** |
 | 683 | the two precalc tables are rebuilt from the step matrix, not embedded, and live in global memory |
 | 684 | `max_depth` auto is an integer `ceil(log2(n))`, not a libm `log2` |
 | 685 | node storage is four arrays, not an array of `IFNode` |

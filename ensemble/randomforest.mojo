@@ -307,6 +307,7 @@ three.
 from std.gpu import global_idx
 from std.math import ceildiv as _ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 
 from ensemble.decisiontree.batched_levelalgo.bins import Bin
 from ensemble.decisiontree.batched_levelalgo.builder import (
@@ -1513,6 +1514,24 @@ struct RandomForest[dtype: DType, label_dtype: DType](
 # twice must stay `true` and a row never drawn must end `false`.
 
 
+def ftz_features_kernel(
+    x: MutPointer[Float32, MutAnyOrigin],
+    n: Int64,
+):
+    """NOT THEIRS. IDENTITY_PATHS row 10 for the feature matrix, DEVIATION
+    1942 (2026-08-29): under NUMERIC_IDENTICAL the device copy of X is
+    flushed IN PLACE, once, before any kernel reads it, so every value a
+    quantile sort, a `lower_bound` bin lookup, a split partition or the
+    host predict walk ever sees is the same value on a flush-to-zero
+    backend (Apple) and on a denormal-honoring one (CUDA, HIP). The
+    quantiles are COPIES of X values, so flushing X here also flushes
+    every `quesval` a tree stores. Launched only under the pin; under
+    FAST the kernel is never enqueued."""
+    var i = Int(global_idx.x)
+    if Int64(i) < n:
+        x[unsafe_offset=i] = ftz(x[unsafe_offset=i])
+
+
 def bootstrap_mask_fill_kernel(
     masks: MutPointer[UInt8, MutAnyOrigin],
     offset: Int64,
@@ -2492,6 +2511,18 @@ def fit_forest[
             + " rounds to "
             + String(n_sampled)
             + " sampled rows; a tree needs at least one"
+        )
+
+    # DEVIATION 1942, row 10: the feature matrix is flushed on the device
+    # BEFORE the quantile pass, which is the first kernel that reads it.
+    # See `ftz_features_kernel`. FAST never enqueues this.
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        log_launch("ftz_features")
+        ctx.enqueue_function[ftz_features_kernel](
+            x.unsafe_ptr(),
+            Int64(n_rows * n_cols),
+            grid_dim=_ceildiv(n_rows * n_cols, 256),
+            block_dim=256,
         )
 
     # `:317-325` -- ONCE, for the whole forest, with their literal 4.

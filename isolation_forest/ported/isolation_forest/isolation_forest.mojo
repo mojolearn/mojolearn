@@ -285,8 +285,15 @@ def _upload_f32(
     var host = ctx.enqueue_create_host_buffer[DType.float32](n + pad)
     for i in range(n + pad):
         host.unsafe_ptr().unsafe_store(i, poison)
+    # DEVIATION 1942, row 10: `_upload_f32` is the ONE seam every feature
+    # value crosses onto the device (the fit input, the query input for
+    # path lengths and predict). Flushed here, under the pin, so the
+    # per-node min/max, the `val < threshold` partition, the
+    # `threshold = max_val` fallback and the traversal all read the same
+    # value on a flush-to-zero backend and on a denormal-honoring one.
+    # `ftz` is a comptime no-op under FAST.
     for i in range(n):
-        host.unsafe_ptr().unsafe_store(i, values[i])
+        host.unsafe_ptr().unsafe_store(i, ftz(values[i]))
     ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
     ctx.synchronize()
     _ = host^

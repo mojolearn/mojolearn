@@ -118,7 +118,13 @@ def fixture(kind, n=N, d=D, seed=0):
     else:
         raise ValueError(kind)
     # targets: a signed rule on two columns, and a linear regression target
-    y_clf = (X[:, 0] + 0.5 * X[:, 1] > np.median(X[:, 0] + 0.5 * X[:, 1])).astype(np.int32)
+    # Labels come from columns 3 and 4, which NO fixture perturbs (denormal
+    # rewrites columns 0-2), so `denormal` and `denormal_ftz` hand every lane
+    # the same labels and their twin comparison is about the features alone.
+    # Until 2026-08-29 this read columns 0 and 1 and the twins carried 2493
+    # different labels, which made the classifier twins uncomparable.
+    s01 = X[:, 3] + 0.5 * X[:, 4]
+    y_clf = (s01 > np.median(s01)).astype(np.int32)
     w = np.random.default_rng(seed + 1).standard_normal(X.shape[1]).astype(np.float32)
     # FIXED-ORDER, ELEMENTWISE, NO BLAS. `X @ w` in float32 goes through the
     # host BLAS (Accelerate on the Mac, OpenBLAS on a Linux box) and the

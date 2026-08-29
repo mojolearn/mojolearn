@@ -144,6 +144,19 @@ downstream (see `randomforest.mojo`, `compute_max_features`).
 """
 
 from ensemble.flatnode import SparseTreeNode
+from mojo_only.numerics import ftz
+
+
+def _ftz_feature[dt: DType, //](x: Scalar[dt]) -> Scalar[dt]:
+    """DEVIATION 1942, row 10: the host predict walk reads X on the CPU,
+    which honors denormals on every vendor, while training read the
+    device copy that `fit_forest` flushed. Flushing the feature here
+    makes `row[col] <= quesval` compare the same value the tree was
+    grown on. `ftz` is a comptime no-op under FAST."""
+    comptime if dt == DType.float32:
+        return ftz(x.cast[DType.float32]()).cast[dt]()
+    else:
+        return x
 
 
 # ---------------------------------------------------------------------------
@@ -633,8 +646,9 @@ struct DecisionTree:
         var n = tree.sparsetree[idx]
         while not n.IsLeaf():
             if (
-                rows[row_offset + Int(n.ColumnId())] <= n.QueryValue()
-            ):  # `decisiontree.cuh:379`
+                _ftz_feature(rows[row_offset + Int(n.ColumnId())])
+                <= n.QueryValue()
+            ):  # `decisiontree.cuh:379`, DEVIATION 1942 flush
                 idx = Int(n.LeftChildId())
             else:
                 idx = Int(n.RightChildId())
