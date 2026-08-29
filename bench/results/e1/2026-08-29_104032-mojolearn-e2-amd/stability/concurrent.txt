@@ -1,0 +1,30 @@
+# concurrent-context probe: one process, one GPU, one fit,
+# every available tier live at the same time
+
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/repeat_run_stability.py", line 470, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/root/mojolearn/tools/repeat_run_stability.py", line 380, in main
+    return concurrent_probe(args.repeats if explicit else 12)
+  File "/root/mojolearn/tools/repeat_run_stability.py", line 331, in concurrent_probe
+    _, i = ests[m].kneighbors(q)
+           ~~~~~~~~~~~~~~~~~~^^^
+  File "/root/mojolearn/python/mojolearn/neighbors.py", line 169, in kneighbors
+    self.used_query_tile_ = self._bind("_mojolearn").knn_search(
+                            ~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 87, in _bind
+    return _backend.binding(
+           ~~~~~~~~~~~~~~~~^
+        name or self._BINDING, getattr(self, "numeric_mode", None)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 324, in binding
+    return getattr(load_set(mode or default_mode()), name)
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 230, in __getattr__
+    raise ImportError(
+    ...<5 lines>...
+    )
+ImportError: mojolearn: numeric_mode='fast' needs python/mojolearn/_mojolearn.so, which is not built. Build it with
+    bash bindings/build.sh

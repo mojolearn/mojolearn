@@ -390,7 +390,13 @@ def _mode_report():
 
     pkg_name = __name__.rsplit(".", 1)[0]
     gb = sys.modules.get(pkg_name + "._mojolearn_gbdt")
-    if gb is not None and hasattr(gb, "gbdt_numeric_mode"):
+    try:
+        _readable = gb is not None and hasattr(gb, "gbdt_numeric_mode")
+    except ImportError:
+        # A stub raises ImportError from __getattr__, and `hasattr` only
+        # swallows AttributeError. See `_backend.numeric_mode`.
+        _readable = False
+    if _readable:
         try:
             # Three tiers, so a NAME lookup rather than a boolean:
             # DETERMINISTIC reports 2 and the old spelling called it

@@ -382,7 +382,24 @@ def numeric_mode():
     loaded = _SELECTED or "fast"
     pkg = sys.modules[__name__.rsplit(".", 1)[0]]
     gb = getattr(pkg, "_mojolearn_gbdt", None)
-    if gb is not None and hasattr(gb, "gbdt_numeric_mode"):
+    # `hasattr` ON A STUB RAISES, IT DOES NOT RETURN FALSE. A missing binding
+    # is represented by `_MissingUpperTier`, whose `__getattr__` raises
+    # ImportError BY NAME -- and `hasattr` only swallows AttributeError, so
+    # probing a stub propagates. Before this guard, asking a package with any
+    # unbuilt binding for its own mode raised, which took down every caller
+    # including `repeat_run_stability.py` on a leg that had deliberately built
+    # a subset (2026-08-29, AMD MI325X: "MOJOLEARN_NUMERIC_MODE=identical but
+    # ..._mojolearn_gbdt.so is not built" out of a function whose entire job is
+    # to REPORT the mode).
+    #
+    # The stub is right to raise on use; the read-back is wrong to treat a
+    # probe as use. An absent gbdt binary means the cross-check cannot run,
+    # which is not the same as the cross-check failing.
+    try:
+        readable = gb is not None and hasattr(gb, "gbdt_numeric_mode")
+    except ImportError:
+        readable = False
+    if readable:
         compiled = _CODE_MODE.get(gb.gbdt_numeric_mode(), "unknown")
         if compiled != loaded:
             raise RuntimeError(

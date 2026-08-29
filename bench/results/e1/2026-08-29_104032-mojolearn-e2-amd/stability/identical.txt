@@ -1,0 +1,15 @@
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/repeat_run_stability.py", line 470, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/root/mojolearn/tools/repeat_run_stability.py", line 384, in main
+    mode = ml.numeric_mode()
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 385, in numeric_mode
+    if gb is not None and hasattr(gb, "gbdt_numeric_mode"):
+                          ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 346, in __getattr__
+    raise ImportError(
+    ...<4 lines>...
+    )
+ImportError: mojolearn: MOJOLEARN_NUMERIC_MODE=identical but /root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so is not built; build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_gbdt.sh
