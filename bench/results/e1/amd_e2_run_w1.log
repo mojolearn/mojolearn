@@ -1,9 +1,9 @@
 
-=== provenance === 10:46:28
-aaf61bbd9df5df3a642206dd102df5fca2e9b8ea
+=== provenance === 16:46:03
+dccab6110a75d95070dc358e0031aba636cc24b8
 Linux mojolearn-e2-amd 6.8.0-59-generic #61-Ubuntu SMP PREEMPT_DYNAMIC Fri Apr 11 23:16:11 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
 
-=== pixi === 10:46:28
+=== pixi === 16:46:03
 This script will automatically download and install Pixi (latest) for you.
 Getting it from this url: https://github.com/prefix-dev/pixi/releases/latest/download/pixi-x86_64-unknown-linux-musl.tar.gz
 The 'pixi' binary is installed into '/root/.pixi/bin'
@@ -11,7 +11,7 @@ Updating '/root/.bashrc'
 Please restart or source your shell.
 ✔ The default environment has been installed.
 
-=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 10:46:31
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 16:46:06
 
 === phase 0 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
 
@@ -31,36 +31,37 @@ Please restart or source your shell.
 
 === phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
 
-=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 10:46:31
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 16:46:06
 phase 9 builds: build.sh build_estimators.sh build_gbdt.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_tsa.sh build_linalg.sh
+phase 9 tiers:  fast deterministic identical
 fast set: 10 of 10 binaries
 deterministic set: 10 of 10 binaries
 identical set: 10 of 10 binaries
 --- stability fast
-    | rf-clf           | STABLE   | YES  6/6 calls agreed   | 1178f0463159b897 |
-    
-    mode=fast  stable=3  moved=0  refused=0
-    wrote /root/mojolearn/bench/results/e1/2026-08-29_104628-mojolearn-e2-amd/stability/fast.json
+      Set MOJOLEARN_NUMERIC_MODE=identical in the environment BEFORE importing mojolearn, having built the identical binary with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_linalg.sh
+      Or pass identical=False to say in the source that you want the fast product and are making no identity claim about it.
+    wrote /root/mojolearn/bench/results/e1/2026-08-29_164603-mojolearn-e2-amd/stability/fast.json
 --- stability deterministic
-    | rf-clf           | STABLE   | YES  6/6 calls agreed   | 1178f0463159b897 |
-    
-    mode=deterministic  stable=3  moved=0  refused=0
-    wrote /root/mojolearn/bench/results/e1/2026-08-29_104628-mojolearn-e2-amd/stability/deterministic.json
+      Set MOJOLEARN_NUMERIC_MODE=identical in the environment BEFORE importing mojolearn, having built the identical binary with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_linalg.sh
+      Or pass identical=False to say in the source that you want the fast product and are making no identity claim about it.
+    wrote /root/mojolearn/bench/results/e1/2026-08-29_164603-mojolearn-e2-amd/stability/deterministic.json
 --- stability identical
-    | rf-clf           | STABLE   | YES  6/6 calls agreed   | eacd6bff8b4088b8 |
+    | tsvd             | STABLE   | YES  6/6 calls agreed   | eb98ef49f9c747f0 |
     
-    mode=identical  stable=3  moved=0  refused=0
-    wrote /root/mojolearn/bench/results/e1/2026-08-29_104628-mojolearn-e2-amd/stability/identical.json
+    mode=identical  stable=29  moved=0  refused=0
+    wrote /root/mojolearn/bench/results/e1/2026-08-29_164603-mojolearn-e2-amd/stability/identical.json
 --- stability concurrent
     
-      fast           MOVED   24 calls returned 5 DIFFERENT answers
+      fast           MOVED   24 calls returned 4 DIFFERENT answers
       deterministic  STABLE  all 12 calls returned THE SAME answer
       identical      STABLE  all 12 calls returned THE SAME answer
     
     fast MOVED, which is fast working as specified: it promises speed and makes no bitwise claim.
 
-=== done === 10:54:38
-artifacts in /root/mojolearn/bench/results/e1/2026-08-29_104628-mojolearn-e2-amd
+=== done === 16:54:33
+artifacts in /root/mojolearn/bench/results/e1/2026-08-29_164603-mojolearn-e2-amd
 next: fetch this directory beside the other machine's and run
   python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
   python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card
