@@ -289,12 +289,6 @@ def _(ml, X, yc, yr):
     return dict(scores=_h(m.score_samples(X[4096:4352, :4])))
 
 
-@lane("iforest")
-def _(ml, X, yc, yr):
-    m = ml.IsolationForest(n_estimators=16, random_state=5).fit(X)
-    return dict(scores=_h(m.score_samples(X)), predict=_h(m.predict(X[:512])))
-
-
 @lane("agglomerative")
 def _(ml, X, yc, yr):
     m = ml.AgglomerativeClustering(n_clusters=4).fit(X[:2000, :4])
@@ -341,6 +335,17 @@ def _(ml, X, yc, yr):
     )
 
 
+# LAST ON PURPOSE (2026-08-29): the isolation forest binding HANGS on a RunPod
+# RTX 4090 (driver 570 + the CUDA 12.4 ptxas escape) in every tier, fit never
+# returns, GPU at 0%. A hang cannot be caught from inside this process, so the
+# lane runs last, the JSON is written after every lane, and the caller wraps
+# the run in `timeout`; a killed run still leaves every earlier lane on disk.
+@lane("iforest")
+def _(ml, X, yc, yr):
+    m = ml.IsolationForest(n_estimators=16, random_state=5).fit(X)
+    return dict(scores=_h(m.score_samples(X)), predict=_h(m.predict(X[:512])))
+
+
 # ---------------------------------------------------------------- run / diff
 
 def run(args):
@@ -354,6 +359,10 @@ def run(args):
                          "bitwise promise; use MOJOLEARN_NUMERIC_MODE=identical")
 
     lanes = [n for n in LANES if not args.lanes or n in args.lanes.split(",")]
+    skip = set(x for x in args.skip.split(",") if x)
+    lanes = [n for n in lanes if n not in skip]
+    if skip:
+        print(f"# SKIPPED on request: {sorted(skip)}")
     fixtures = [f for f in FIXTURES if not args.fixtures or f in args.fixtures.split(",")]
     data = {f: fixture(f) for f in fixtures}
     # THE FIXTURE IS PART OF THE RESULT. Every vendor must be handed the same
@@ -393,6 +402,14 @@ def run(args):
             cells[f"{name}/{f}"] = cell
             row.append(f"{shown:<16}")
         print(f"| {name:<16} | " + " | ".join(row) + " |", flush=True)
+        if args.json:
+            # written after EVERY lane so a hang that gets killed by the
+            # caller's timeout still leaves the finished lanes on disk
+            with open(args.json, "w") as fh:
+                json.dump(dict(mode=mode, repeats=args.repeats, platform=platform.platform(),
+                               vendor=args.vendor, commit=os.environ.get("MOJOLEARN_COMMIT", ""),
+                               fixtures=fixture_hashes, cells=cells, complete=False,
+                               skipped=sorted(skip)), fh, indent=1)
 
     refused = {k: v["error"] for k, v in cells.items() if v["verdict"] == "REFUSED"}
     moved = [k for k, v in cells.items() if v["verdict"] == "MOVED"]
@@ -407,7 +424,8 @@ def run(args):
         with open(args.json, "w") as fh:
             json.dump(dict(mode=mode, repeats=args.repeats, platform=platform.platform(),
                            vendor=args.vendor, commit=os.environ.get("MOJOLEARN_COMMIT", ""),
-                           fixtures=fixture_hashes, cells=cells), fh, indent=1)
+                           fixtures=fixture_hashes, cells=cells, complete=True,
+                           skipped=sorted(skip)), fh, indent=1)
         print(f"wrote {args.json}")
     return 1 if moved else 0
 
@@ -420,6 +438,11 @@ def diff(paths):
         cols.append((j.get("vendor") or os.path.basename(p), j))
     keys = sorted(set(k for _, j in cols for k in j["cells"]))
     names = [c for c, _ in cols]
+    for n, (_, j) in zip(names, cols):
+        if not j.get("complete", True):
+            print(f"NOTE: column {n} is INCOMPLETE (the run was killed); lanes after the last one written are absent, not clean")
+        if j.get("skipped"):
+            print(f"NOTE: column {n} SKIPPED {j['skipped']} on request")
     # Refuse to blame the library for a fixture the vendors did not share.
     fx = [j.get("fixtures") for _, j in cols]
     if all(fx):
@@ -480,6 +503,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--json", default="")
     ap.add_argument("--lanes", default="")
+    ap.add_argument("--skip", default="", help="lanes to leave out, comma separated; each is reported as SKIPPED")
     ap.add_argument("--fixtures", default="")
     ap.add_argument("--repeats", type=int, default=2)
     ap.add_argument("--vendor", default=platform.machine())

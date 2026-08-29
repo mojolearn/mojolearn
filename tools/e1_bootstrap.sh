@@ -614,9 +614,13 @@ fi
 # Opt-in because it needs the full identical set built (all ten bindings).
 if [ "${MOJOLEARN_P9_BREAK:-0}" = "1" ]; then
   echo "--- identity_break (identical, every estimator, eight fixtures)"
+  # `timeout`: the iforest binding hung a whole NVIDIA lease on 2026-08-29;
+  # the probe writes its JSON after every lane, so a kill keeps the rest.
   MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$REPO/python" \
+    timeout -k 30 "${MOJOLEARN_P9_BREAK_TIMEOUT:-1500}" \
     pixi run -e gbmbench python3 tools/identity_break.py \
       --vendor "${MOJOLEARN_P9_VENDOR:-$(hostname)}" \
+      ${MOJOLEARN_P9_BREAK_SKIP:+--skip "$MOJOLEARN_P9_BREAK_SKIP"} \
       --json "$OUT/stability/identity_break.identical.json" \
       > "$OUT/stability/identity_break.identical.txt" 2>&1 \
     || echo "PHASE9-FINDING: identity_break returned non-zero (a MOVED cell; see stability/identity_break.identical.txt)"
