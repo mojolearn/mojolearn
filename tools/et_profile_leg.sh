@@ -14,7 +14,9 @@
 # whole-fit wall time. This runs `extratrees/bench/fit_once.mojo` -- ONE
 # `train_forest_classification_device` call, the shipping merged path -- with
 # its `PhaseClock` (range / score / reduce / partition / leaf / host), at
-# `DEVICE_TPB` 128 (shipped) beside 256 and 512 (`-D MOJOLEARN_ET_TPB_*`),
+# `DEVICE_TPB` as shipped (128 on a 32-lane warp, 512 on a 64-lane
+# wavefront, DEVIATION 1943) beside the forced 128 / 256 / 512 arms
+# (`-D MOJOLEARN_ET_TPB_*`),
 # and wraps the shipped arm in `rocprofv3 --kernel-trace --stats` when the
 # image carries it. Everything lands under the latest
 # bench/results/e1/<stamp>/lanes/et_profile/ so the leg's fetch brings it home.
@@ -35,7 +37,7 @@ ROWS="${ET_PROFILE_ROWS:-1000000}"          # first rung
 ROWS2="${ET_PROFILE_ROWS2:-2000000}"        # second rung (0 = skip)
 TREES="${ET_PROFILE_TREES:-100}"            # lane_config: n_estimators 100
 DEPTH="${ET_PROFILE_DEPTH:-16}"             # lane_config: max_depth 16
-ARMS="${ET_PROFILE_ARMS:-128 256 512}"      # DEVICE_TPB arms
+ARMS="${ET_PROFILE_ARMS:-shipped 128 256 512}"   # DEVICE_TPB arms; `shipped` = no define
 NFEAT=28
 NCLASS=2
 TOTAL_ROWS=$(( ROWS2 > ROWS ? ROWS2 : ROWS ))
@@ -114,7 +116,7 @@ echo "et_profile: dataset=$NAME total_rows=$TOTAL_ROWS"
 # ---- the arms -------------------------------------------------------------
 for tpb in $ARMS; do
   DEF=""
-  [ "$tpb" != 128 ] && DEF="-D MOJOLEARN_ET_TPB_$tpb=1"
+  [ "$tpb" != shipped ] && DEF="-D MOJOLEARN_ET_TPB_$tpb=1"
   echo "et_profile: build tpb=$tpb $(date +%T)"
   if ! ${NICE:-} pixi run mojo build -I . $DEF extratrees/bench/fit_once.mojo \
         -o "build/et_fit_once_tpb$tpb" > "$OUT/build_tpb$tpb.log" 2>&1; then
@@ -140,9 +142,9 @@ if [ "$ROWS2" -gt 0 ]; then
   done
 fi
 
-# ---- per-kernel device time, shipped arm and the widest arm ---------------
+# ---- per-kernel device time, the first two arms (shipped and the A/B) -----
 if [ -n "$ROCPROF" ]; then
-  for tpb in $(echo "$ARMS" | awk '{print $1; if (NF>1) print $NF}'); do
+  for tpb in $(echo "$ARMS" | awk '{print $1; if (NF>1) print $2}'); do
     bin="build/et_fit_once_tpb$tpb"
     [ -x "$bin" ] || continue
     echo "--- rocprofv3 tpb=$tpb rows=$ROWS $(date +%T)"
@@ -170,6 +172,30 @@ PY
     fi
     # the trace itself is large; keep only the stats
     find "$OUT/rocprof_tpb$tpb" -name '*kernel_trace.csv' -size +20M -delete 2>/dev/null
+  done
+fi
+
+# ---- THE SHIPPING SURFACE: mojolearn.ExtraTreesClassifier, FAST, with the
+# same PhaseClock through MOJOLEARN_STAGE_TIMES=1, when phase 9 (or a build
+# script) has left the FAST trees binding on the box. This is the program the
+# speed arm timed; fit_once is its inner call.
+if ls python/mojolearn/_mojolearn_trees*.so >/dev/null 2>&1; then
+  for rows in $ROWS $ROWS2; do
+    [ "$rows" -gt 0 ] || continue
+    echo "--- ET-PROFILE-BINDING dataset=$NAME rows=$rows trees=$TREES depth=$DEPTH (MOJOLEARN_STAGE_TIMES=1) $(date +%T)"
+    MOJOLEARN_STAGE_TIMES=1 PYTHONPATH="$REPO/python" TO "${ET_PROFILE_ARM_TIMEOUT:-600}" \
+      "$PY" - "$DATA" "$NAME" "$rows" "$NFEAT" "$TOTAL_ROWS" "$TREES" "$DEPTH" <<'PY' 2>&1 | tee "$OUT/binding_${NAME}_${rows}.txt"
+import sys, time, numpy as np
+d, name, rows, nfeat, total, trees, depth = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5]), int(sys.argv[6]), int(sys.argv[7])
+xc = np.fromfile(d + "/" + name + "_Xcol.f32", dtype=np.float32).reshape(nfeat, total)
+x = np.ascontiguousarray(xc[:, :rows].T)
+y = np.fromfile(d + "/" + name + "_y.f32", dtype=np.float32)[:rows]
+import mojolearn
+for i in range(2):
+    m = mojolearn.ExtraTreesClassifier(n_estimators=trees, max_depth=depth, max_features="sqrt", device="gpu", random_state=7)
+    t0 = time.perf_counter(); m.fit(x, y); t1 = time.perf_counter()
+    print("[binding] fit %d: %.1f ms" % (i, (t1 - t0) * 1e3))
+PY
   done
 fi
 

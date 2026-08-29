@@ -276,7 +276,7 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
       # DEVICE_TPB 128/256/512, under rocprofv3 where the image has it.
       # WRAP=0: it is a FAST-tier measurement, and the script builds its own
       # arms.
-      et-profile)    CMD='bash tools/et_profile_leg.sh'; WRAP=0 ;;
+      et-profile)    CMD="env ET_PROFILE_ARMS='${ET_PROFILE_ARMS:-shipped 128}' bash tools/et_profile_leg.sh"; WRAP=0 ;;
       column)        CMD='pixi run mojo run -I . matrix_main.mojo' ;;
       gpu-probe)     CMD='pixi run mojo run -I . probe_main.mojo' ;;
       # (no `transformer` case: the device spelling in transformer/ported/ has

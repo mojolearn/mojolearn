@@ -1,0 +1,11 @@
+[fit_once] 100 trees, 1829804 nodes, 69920.503564 ms
+[phases] clocked total 69912.855883 ms vs unclocked 69920.503564 ms -- serialization distortion 0.9998906231990592 x; phase sum 69813.951323 ms
+   setup (buffers, row fill, workspace) :  3.734118 ms ( 0.005348670185882754 % )
+   stage + feature sampler :  258.808371 ms ( 0.37071153558205255 % )
+   range pass (init+range+decode+nonconst) :  8106.600162 ms ( 11.611719446295407 % )
+   score pass (init+score+finalize) :  8799.359724 ms ( 12.604013320044066 % )
+   candidate+reduce+splits readback :  42.956432 ms ( 0.061529867864459534 % )
+   host: split records :  3.683162 ms ( 0.00527568190913525 % )
+   partition (4 kernels) :  220.652283 ms ( 0.31605757705810694 % )
+   host: batch assembly + queue push :  52343.667514 ms ( 74.97594180255993 % )
+   leaf pass :  34.489557 ms ( 0.04940209850095896 % )

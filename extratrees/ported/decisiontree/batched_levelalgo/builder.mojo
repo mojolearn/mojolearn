@@ -123,7 +123,7 @@ from extratrees.ported.decisiontree.batched_levelalgo.split import (
     split_tie_salt_for,
 )
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv, fma
 from std.sys.compile import is_defined
 from std.sys.info import size_of
@@ -1601,17 +1601,48 @@ side by side with the default on a rented box).
 def _device_tpb() -> Int:
     """The block width of every frontier pass, chosen at compile time.
 
-    `build_workload_info` gives each block exactly TPB rows, so the block
-    count of the range, score and partition passes is `n_rows / TPB` per
-    node per feature. A measurement arm can widen the block through the
-    two defines below so the same fit runs at 256 or 512 without any other
-    source change; the shipped default is cuML's 128.
+    ==================================================================
+    DEVIATION 1943 -- the frontier block is 512 wide on a 64-lane
+    wavefront, 128 (cuML's `TPB_DEFAULT`) on a 32-lane warp.
+
+    `build_workload_info` gives each block exactly TPB rows, one row per
+    thread, so the range, score and partition passes launch
+    `n_rows / TPB` blocks per node per feature and each block does one
+    compare per thread, six block reductions and a handful of atomics.
+    At 128 that is a two-wavefront workgroup on CDNA, and the MI325X is
+    bound by the workgroup dispatch rate rather than by the work:
+    measured on higgs 1M x 28, 100 trees, depth 16 (leg
+    2026-08-29_202227-mojolearn-e2-amd, `lanes/et_profile/`), the range
+    pass took 8107 ms at TPB 128, 4614 ms at 256 and 2819 ms at 512; the
+    score pass 8799 / 5186 / 3288 ms. The partition, reduce and leaf
+    passes did not move. The same 128 is what the H100 and the M4 run at
+    and neither shows the signature (the H100's whole fit is 4160 ms), so
+    the row is keyed on the one compile-time fact that separates the
+    vendors, `WARP_SIZE`, and is a no-op by construction where it is 32.
+
+    THE BITS DO NOT DEPEND ON TPB. The range fold is in key space under
+    IDENTICAL (DEVIATION 452) and an integer min/max across blocks
+    (DEVIATION 204); the score pass sums integers through atomics
+    (DEVIATION 135/171); the partition is stable by row index whatever
+    the tiling (DEVIATION 203); the reduce runs one block per node at
+    every `k <= TPB`. `partition_multiblock_check` already asserts the
+    multi-block partition against the one-block oracle cell by cell, and
+    phase 9's et-clf/et-reg stability lanes on the AMD leg are the gate
+    that the identical hashes did not move.
+
+    The three defines are the measurement arms: `-D MOJOLEARN_ET_TPB_128`
+    forces cuML's width on a 64-lane device for the A/B,
+    `MOJOLEARN_ET_TPB_256` / `_512` widen a 32-lane device. None of them
+    is set by any build script.
+    ==================================================================
     """
     if is_defined["MOJOLEARN_ET_TPB_512"]():
         return 512
     if is_defined["MOJOLEARN_ET_TPB_256"]():
         return 256
-    return 128
+    if is_defined["MOJOLEARN_ET_TPB_128"]():
+        return 128
+    return 128 if WARP_SIZE <= 32 else 512
 
 comptime DEVICE_MAX_ACC = 32
 """Widest per-cell class accumulator the score kernel's shared memory admits
@@ -1636,7 +1667,8 @@ comptime PHASE_HOST_SPLITS = 5
 comptime PHASE_PARTITION = 6
 comptime PHASE_HOST_QUEUE = 7
 comptime PHASE_LEAF = 8
-comptime N_PHASES = 9
+comptime PHASE_HOST_PUSH = 9
+comptime N_PHASES = 10
 
 
 struct PhaseClock(Movable):
@@ -1702,7 +1734,9 @@ struct PhaseClock(Movable):
         if phase == PHASE_PARTITION:
             return "partition (4 kernels)"
         if phase == PHASE_HOST_QUEUE:
-            return "host: batch assembly + queue push"
+            return "host: pop + batch assembly"
+        if phase == PHASE_HOST_PUSH:
+            return "host: queue push (children of the batch)"
         if phase == PHASE_LEAF:
             return "leaf pass"
         return "?"
@@ -2821,6 +2855,7 @@ def train_forest_classification_device_timed(
                     items_s.append(work_items[seg_start[t] + j])
                     splits_s.append(splits[seg_start[t] + j])
                 queues[seg_queue[t]].push(items_s, splits_s)
+            clock.tick(ctx, PHASE_HOST_PUSH)
 
         # --- the LEAF VALUES, ONE launch for the whole group --------------
         # `SetLeafPredictions` (`builder.cuh:556-599`). DEVIATION 214: the
@@ -3816,6 +3851,7 @@ def train_forest_regression_device_timed(
                     items_s.append(work_items[seg_start[t] + j])
                     splits_s.append(splits[seg_start[t] + j])
                 queues[seg_queue[t]].push(items_s, splits_s)
+            clock.tick(ctx, PHASE_HOST_PUSH)
 
         # --- the LEAF VALUES, ONE launch for the whole group --------------
         # `SetLeafPredictions` (`builder.cuh:556-599`). DEVIATION 214: the

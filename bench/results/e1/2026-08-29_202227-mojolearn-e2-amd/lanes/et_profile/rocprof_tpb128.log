@@ -1,0 +1,6 @@
+E20260829 20:39:39.143082 127923538237184 output_stream.cpp:105] Opened result file: bench/results/e1/2026-08-29_202227-mojolearn-e2-amd/lanes/et_profile/rocprof_tpb128/et_tpb128_agent_info.csv
+[fit_once] 100 trees, 1829804 nodes, 70029.5061 ms
+E20260829 20:40:49.468899 132378109429888 output_stream.cpp:105] Opened result file: bench/results/e1/2026-08-29_202227-mojolearn-e2-amd/lanes/et_profile/rocprof_tpb128/et_tpb128_kernel_stats.csv
+E20260829 20:40:49.469014 132378109429888 output_stream.cpp:105] Opened result file: bench/results/e1/2026-08-29_202227-mojolearn-e2-amd/lanes/et_profile/rocprof_tpb128/et_tpb128_kernel_trace.csv
+E20260829 20:40:49.480726 132378109429888 output_stream.cpp:105] Opened result file: bench/results/e1/2026-08-29_202227-mojolearn-e2-amd/lanes/et_profile/rocprof_tpb128/et_tpb128_agent_info.csv
+E20260829 20:40:49.480850 132378109429888 output_stream.cpp:105] Opened result file: bench/results/e1/2026-08-29_202227-mojolearn-e2-amd/lanes/et_profile/rocprof_tpb128/et_tpb128_domain_stats.csv

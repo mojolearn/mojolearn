@@ -1,0 +1,57 @@
+[16:19:25 amd] dead-man timer pid 41600 (3600 s, keyed by tag e2 + name mojolearn-e2-amd)
+[16:19:25 amd] creating mojolearn-e2-amd (gpu-mi325x1-256gb, tor1)
+[16:19:27 amd] droplet id 596200630
+[16:20:11 amd] active at 159.203.44.227
+[amd gpu] GPU[0]		: Card Series: 		AMD Instinct Mi325X VF
+[16:20:37 amd] bundle 0288eb67f8e7854da30dbab7bfce304c3f542799 (branch e2-run)
+0288eb67f8e7854da30dbab7bfce304c3f542799
+1
+[16:22:26 amd] wave 1: phases=none lanes=all, bound 2999s
+WAVE-1-EXIT=0  (124 = hit the work bound)
+Please restart or source your shell.
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 20:22:30
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=none) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=none) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=none) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=none) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=none) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=none) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=none) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=none) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=none) ===
+
+=== phase 9 SKIPPED (MOJOLEARN_E1_PHASES=none) ===
+
+=== done === 20:22:30
+artifacts in /root/mojolearn/bench/results/e1/2026-08-29_202227-mojolearn-e2-amd
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card
+[16:22:30 amd] extra check: et-profile (bound 2995s)
+EXTRA-et-profile-EXIT=0
+     0.2%       12.4 ms  calls      286  extratrees_ported_decisiontree6A6A6A6A_329a4e6d705a998a
+     0.1%        5.2 ms  calls      286  extratrees_ported_decisiontree6A6A6A6A_4b84414a8196bbac
+     0.1%        5.1 ms  calls     1054  __amd_rocclr_fillBufferAligned
+     0.1%        4.4 ms  calls        2  extratrees_ported_decisiontree6A6A6A6A_6ef0df01aa52f40b
+     0.1%        3.7 ms  calls      474  extratrees_ported_decisiontree6A6A6A6A_b885a1ff67cfa1f5
+     0.0%        2.4 ms  calls      286  extratrees_ported_decisiontree6A6A6A6A_f0c11205cb798cf0
+  total device kernel time 6206.7 ms over 19 kernels
+et_profile: done 20:41:49
+[16:41:49 amd] fetch artifacts
+[16:42:06 amd] fetched: amd_et_profile_leg1.log
+[16:42:10 amd] leg done; destroying
+[16:42:10 amd] teardown (rc=0)
+[16:42:11 amd] DELETE droplet 596200630 -> HTTP 204
+[16:42:17 amd] post-destroy status: active
+[16:42:17 amd] dead-man timer cancelled
