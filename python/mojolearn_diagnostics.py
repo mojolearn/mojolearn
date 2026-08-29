@@ -28,9 +28,24 @@ from typing import Any, Sequence
 SCHEMA_VERSION = 1
 SAFE_ENVIRONMENT_KEYS = (
     "MOJOLEARN_NUMERIC_MODE",
-    "MOJOLEARN_IDENTITY_TRACE",
     "PYTHONHASHSEED",
 )
+# SET-OR-NOT, NEVER THE VALUE. Each of these is a FILESYSTEM PATH the caller
+# chose, so its value routinely contains a username or a home directory --
+# exactly the two facts the `privacy` block at the bottom of this file
+# promises are omitted. `MOJOLEARN_IDENTITY_TRACE` was in the list above
+# until 2026-08-29 and shipped its own value into every bundle, which made
+# that promise false. Whether identity tracing is on is the diagnostic fact;
+# where the card was written is not.
+PRESENCE_ONLY_ENVIRONMENT_KEYS = (
+    "MOJOLEARN_IDENTITY_TRACE",
+    "MOJOLEARN_IDENTITY_TRACE_DUMP",
+    "MOJOLEARN_IDENTITY_TRACE_DIFF",
+)
+# The numeric tiers, in the order the ladder runs. `fast` is the package
+# directory itself and every other tier is a subdirectory of the same name;
+# see python/mojolearn/_backend.py, which is what actually loads them.
+NUMERIC_TIERS = ("fast", "deterministic", "identical")
 RELEVANT_DISTRIBUTIONS = (
     "mojolearn",
     "numpy",
@@ -103,6 +118,43 @@ def _native_files() -> list[dict[str, Any]]:
     return records
 
 
+def _installed_tiers(native_files: list[dict[str, Any]]) -> dict[str, Any]:
+    """Which numeric tiers this install actually carries.
+
+    A wheel that shipped fewer tiers than the caller expects is the single
+    most confusing failure this library has: `numeric_mode="deterministic"`
+    raises from a missing-binary stub BY NAME, which is the correct
+    behaviour, but the answer to "why" lives in the wheel's contents rather
+    than in the traceback. This puts it in the report.
+
+    Read off the installed file list rather than by importing, so it still
+    answers when the extensions do not load at all -- the same reason this
+    module lives outside the package.
+    """
+    counts: dict[str, int] = {tier: 0 for tier in NUMERIC_TIERS}
+    for record in native_files:
+        relative = record["relative_path"]
+        if not relative.endswith(".so") or not record.get("exists"):
+            continue
+        parts = Path(relative).parts
+        # mojolearn/_mojolearn_rf.so -> fast; mojolearn/identical/... -> identical
+        parent = parts[-2] if len(parts) >= 2 else ""
+        tier = parent if parent in counts else "fast"
+        counts[tier] += 1
+    return {
+        "expected_extensions_per_tier": 10,
+        "present": [tier for tier in NUMERIC_TIERS if counts[tier] > 0],
+        "absent": [tier for tier in NUMERIC_TIERS if counts[tier] == 0],
+        "extensions_by_tier": counts,
+        # A tier with SOME of its extensions is worse than one with none: the
+        # package imports and only the estimators needing the missing binding
+        # raise, so it is worth naming as its own state rather than as present.
+        "incomplete": [
+            tier for tier in NUMERIC_TIERS if 0 < counts[tier] < 10
+        ],
+    }
+
+
 def _gpu_facts() -> dict[str, Any]:
     facts: dict[str, Any] = {}
     system = platform.system()
@@ -163,10 +215,22 @@ def _import_probe() -> dict[str, Any]:
         except BaseException as exc:
             print(json.dumps({"ok": False, "type": type(exc).__name__, "message": str(exc)}))
             raise SystemExit(1)
+        # CALLED, not read. `mojolearn.numeric_mode` is a FUNCTION, and
+        # putting the function object in this dict made json.dumps raise
+        # "Object of type function is not JSON serializable" -- inside the
+        # probe, so a healthy install reported `import probe: failed` and
+        # `mojolearn doctor` exited 1. Fixed 2026-08-29; found by running it.
+        # The call also reads the mode back OUT OF THE LOADED BINARY, which
+        # is the fact worth having: it catches a wheel that answered with a
+        # tier other than the one that was asked for.
+        try:
+            mode = mojolearn.numeric_mode()
+        except BaseException as exc:
+            mode = "unreadable: " + type(exc).__name__
         print(json.dumps({
             "ok": True,
             "version": getattr(mojolearn, "__version__", None),
-            "numeric_mode": getattr(mojolearn, "numeric_mode", None),
+            "numeric_mode": mode,
         }))
         """
     )
@@ -197,6 +261,7 @@ def _import_probe() -> dict[str, Any]:
 
 def collect_diagnostics() -> dict[str, Any]:
     gpu = _gpu_facts()
+    native_files = _native_files()
     return {
         "schema_version": SCHEMA_VERSION,
         "recorded_at_utc": _datetime.datetime.now(_datetime.timezone.utc)
@@ -209,13 +274,21 @@ def collect_diagnostics() -> dict[str, Any]:
             "python_implementation": platform.python_implementation(),
             "python_version": platform.python_version(),
         },
-        "environment": {
-            key: os.environ[key]
-            for key in SAFE_ENVIRONMENT_KEYS
-            if key in os.environ
-        },
+        "environment": dict(
+            {
+                key: os.environ[key]
+                for key in SAFE_ENVIRONMENT_KEYS
+                if key in os.environ
+            },
+            **{
+                key + "_set": True
+                for key in PRESENCE_ONLY_ENVIRONMENT_KEYS
+                if os.environ.get(key, "").strip()
+            },
+        ),
         "distributions": _distribution_versions(),
-        "native_files": _native_files(),
+        "native_files": native_files,
+        "numeric_tiers": _installed_tiers(native_files),
         "gpu": gpu,
         "support": _support_classification(gpu),
         "mojo_version": _run(["mojo", "--version"]),
@@ -245,11 +318,31 @@ def _summary(report: dict[str, Any]) -> str:
         f"python: {report['platform']['python_version']}",
         f"mojolearn: {versions.get('mojolearn') or 'not installed'}",
         f"numeric mode requested: {report['environment'].get('MOJOLEARN_NUMERIC_MODE', 'fast (default)')}",
+        f"numeric mode loaded: {report['import_probe'].get('result', {}).get('numeric_mode') or 'unknown (import probe did not report one)'}",
+        "numeric tiers installed: {}".format(
+            ", ".join(report["numeric_tiers"]["present"]) or "none"
+        ),
         f"support classification: {support['level']}",
         f"support note: {support['reason']}",
         f"import probe: {'passed' if probe.get('returncode') == 0 else 'failed'}",
         "privacy: allowlisted facts only; review every bundle before uploading",
     ]
+    tiers = report["numeric_tiers"]
+    # Named, not merely omitted from the "installed" line. `numeric_mode=` on
+    # an absent tier raises from a missing-binary stub, and this is where the
+    # reader finds out that is the wheel's doing rather than their own.
+    if tiers["absent"]:
+        lines.append(
+            "numeric tiers NOT installed: {} (asking for one raises by name)".format(
+                ", ".join(tiers["absent"])
+            )
+        )
+    if tiers["incomplete"]:
+        lines.append(
+            "numeric tiers INCOMPLETE: {} (some estimators will raise)".format(
+                ", ".join(tiers["incomplete"])
+            )
+        )
     probe_result = probe.get("result", {})
     if not probe_result.get("ok") and probe_result.get("type"):
         lines.append(f"import error type: {probe_result['type']}")

@@ -69,8 +69,13 @@ bit-identical on three vendors. None of it is importable.
 
 ## What this does NOT need
 
-- No change to the wheel's structure: it already carries both numeric modes
-  and selects on `MOJOLEARN_NUMERIC_MODE` at import.
+- No change to the wheel's structure: it already carries every numeric mode
+  as its own compiled binary set. (This read "both numeric modes ... selects
+  on `MOJOLEARN_NUMERIC_MODE` at import" while there were two and the
+  environment was the only selector. Since 2026-08-29 there are THREE --
+  `fast`, `deterministic`, `identical` -- and the mode is a runtime parameter:
+  `mojolearn.set_numeric_mode()` or `numeric_mode=` on an estimator, with the
+  environment variable still setting the starting default.)
 - No change to the identity machinery: each family above already has its
   ledger rows and, for six of them, three-vendor cards.
 - No new claim in the paper. **The paper's certificate is per training stage

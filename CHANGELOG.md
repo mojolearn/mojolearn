@@ -115,7 +115,7 @@ inheriting a neighbor's certificate.
 Unchanged from 0.1.0, and the FAST cards do differ between vendors for
 every lane but gemm; that is recorded, not a defect.
 
-### A third numeric tier exists, and does not ship in this wheel
+### A third numeric tier, `deterministic`, and it ships
 
 `MOJOLEARN_NUMERIC_MODE` became a three-rung ladder on 2026-08-29
 (DEVIATIONS 1940 and 1941). `fast` promises nothing but speed, `deterministic`
@@ -131,15 +131,41 @@ returned three different sorted k-NN index sets, and across every FAST board
 taken on 2026-08-28 our own arm's per-round output hash moved between rounds
 on 4 of 179 rows.
 
-**0.2.0 carries `fast` and `identical` only.** The deterministic pin lane is
-not finished, and `ce2e843` is the reason to be careful here: for the length
-of one commit the tier was defined, empty, and would have taken the float
-atomic flush while calling itself deterministic, which is the worst failure a
-tier named that way can have. `MOJOLEARN_NUMERIC_MODE=deterministic` raises
-from the missing-binary stub by name in this release. The release path is
-already wired for it, so shipping the tier is one environment variable
-(`MOJOLEARN_RELEASE_MODES` in `packaging/macos/build_release_wheel.sh`) once
-the lane closes.
+**0.2.0 carries all three tiers.** This entry said "`fast` and `identical`
+only ... once the lane closes", and the lane closed the same day; the old
+text is replaced rather than appended to, because a changelog that describes
+a wheel it does not describe is worse than one that says nothing.
+
+What closed it is a MEASUREMENT of the promise, not a pin count.
+`tools/repeat_run_stability.py` refits one lane repeatedly in a single
+process and compares raw output bytes with no tolerance. At one commit on
+three rented columns on 2026-08-29:
+
+| column | `fast` | `deterministic` | `identical` |
+|---|---|---|---|
+| Apple M4, Metal | MOVED in 8 of 10 attempts | STABLE 10/10 | STABLE 10/10 |
+| NVIDIA RTX 4090, CUDA | MOVED, 24 calls 24 answers | STABLE | STABLE |
+| AMD MI325X, HIP | MOVED, 6 answers in 24 | STABLE | STABLE |
+
+The pin side is 15 files keyed to `PIN_DETERMINISM`. The class is small
+because this tree uses no float `atomicAdd` anywhere -- three of the four
+classification scopes came back empty, which is the right answer for a tree
+built that way rather than a gap. And the tier is not the top one in
+disguise: under `deterministic` the output hashes DIFFER between vendors on
+10 of 12 comparable lanes, `gemm-vendor` among them, so it keeps MAX
+`matmul`, cuBLAS and rocBLAS at full speed. All three of those were measured
+run-to-run stable at 256x4096 @ 4096x128, a wide k chosen to provoke a
+split-K epilogue, which is what earns them that exemption.
+
+`ce2e843` is still the reason to be careful with this tier: for the length of
+one commit it was defined, empty, and would have taken the float atomic flush
+while calling itself deterministic, which is the worst failure a tier named
+that way can have. That is what `verify_wheel.sh` now guards -- it installs
+the finished wheel into a clean venv under every claimed interpreter and fits
+every estimator family in EVERY shipped mode, and a tier that did not build
+raises from a missing-binary stub BY NAME rather than serving fast arithmetic
+under another label. Which tiers a wheel carries is one variable,
+`MOJOLEARN_RELEASE_MODES`, read by both scripts.
 
 ### Tooling
 

@@ -15,7 +15,7 @@ name = "mojolearn"
 # Must agree with python/mojolearn/_version.py. Not made dynamic, so that a
 # version bump is a visible edit in both places rather than one.
 version = "0.2.0"
-description = "GPU machine learning in Mojo. Gradient boosting, random forests, extra trees, SVM, k-means, k-NN, DBSCAN, PCA, hierarchical and spectral clustering, GLMs, scoring metrics and a bit-identical FP32 matmul on Apple silicon, bit-identical across GPU vendors on request"
+description = "GPU machine learning in Mojo. Gradient boosting, random forests, extra trees, SVM, k-means, k-NN, DBSCAN, PCA, hierarchical and spectral clustering, GLMs, scoring metrics and an FP32 matmul, on Apple silicon through Metal and from the same source on NVIDIA and AMD. Three numeric modes per estimator: fast, deterministic (same bits every run) and identical (same bits on every GPU vendor)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
@@ -44,6 +44,11 @@ keywords = [
     "time series",
     "metrics",
     "bitwise reproducibility",
+    "determinism",
+    "reproducibility",
+    "cuda",
+    "rocm",
+    "hip",
 ]
 
 # THE FLOOR IS 3.10 AND IT IS THE VERIFY LOOP THAT BACKS IT.
@@ -153,17 +158,23 @@ include-package-data = false
 # `_mojolearn_metrics.so` (metrics, SpectralClustering), `_mojolearn_tsa.so`
 # (Holt-Winters, KPSS) and `_mojolearn_linalg.so` (the identical GEMM).
 #
-# THE GLOB NOW ADMITS THREE TIERS, NOT TWO (2026-08-29): the FAST set here,
+# THE GLOB CARRIES THREE TIERS, NOT TWO (2026-08-29): the FAST set here,
 # the IDENTICAL set under identical/, and the DETERMINISTIC set under
 # deterministic/. `_backend.py` loads whichever tier is asked for -- by
 # `MOJOLEARN_NUMERIC_MODE` at import, by `mojolearn.set_numeric_mode()` at
-# runtime, or per estimator by `numeric_mode=`.
+# runtime, or per estimator by `numeric_mode=` -- and more than one of them
+# can be live in one process.
 #
 # ADMITTING A TIER IS NOT SHIPPING IT. This is a glob: it packages whatever
 # is on disk and packages nothing when a directory is empty. Which tiers a
-# given release actually carries is build_release_wheel.sh's decision (
-# EXT_NAMES is THE list, and it refuses a stale file by mtime), not this
-# line's. That is deliberate -- the deterministic tier's pin coverage is not
-# finished, so a release may legitimately ship two tiers while the packaging
-# is already able to carry three.
+# given release actually carries is build_release_wheel.sh's decision
+# (EXT_NAMES is THE list, and it refuses a stale file by mtime), not this
+# line's. The sentence that stood here said a release may ship two tiers
+# because "the deterministic tier's pin coverage is not finished"; that
+# reason expired on 2026-08-29, when the tier was measured STABLE on Apple,
+# NVIDIA and AMD against a FAST arm that moved on all three
+# (bench/results/stability/RESULTS.md), and MODES in build_release_wheel.sh
+# now defaults to all three. The distinction is kept anyway, because a
+# hotfix wheel cut with MOJOLEARN_RELEASE_MODES set to fewer tiers must
+# still produce a valid artifact.
 mojolearn = ["*.so", "identical/*.so", "deterministic/*.so", ".dylibs/*.dylib"]

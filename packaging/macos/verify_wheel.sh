@@ -47,16 +47,18 @@ for py in python3.10 python3.11 python3.12 python3.13 python3.14; do
     # cd to /tmp so the repository's ./python/mojolearn cannot shadow the
     # installed package. Without this the test can pass on source that is not
     # in the wheel at all.
-    # BOTH NUMERIC MODES, from the same installed wheel. The identical set
-    # is selected by the env var at import (python/mojolearn/_backend.py);
-    # smoke.py asserts that the mode it reads back from the binary is the
-    # one that was asked for, so a wheel that silently shipped only the fast
-    # set fails here rather than on a user's machine.
+    # EVERY SHIPPED NUMERIC MODE, from the same installed wheel. This said
+    # BOTH NUMERIC MODES while there were two; there are three as of
+    # 2026-08-29 and the word is wrong rather than merely dated. Each upper
+    # tier is selected by the env var at import (python/mojolearn/_backend.py)
+    # and smoke.py asserts that the mode it reads BACK OUT OF THE BINARY is
+    # the one that was asked for, so a wheel that silently shipped only the
+    # fast set fails here rather than on a user's machine.
     okmode=1
-    # The same tier list the wheel was built with, so a two-tier wheel is not
-    # failed for lacking a third. MOJOLEARN_RELEASE_MODES is what
+    # The same tier list the wheel was built with, so a deliberately two-tier
+    # wheel is not failed for lacking a third. MOJOLEARN_RELEASE_MODES is what
     # build_release_wheel.sh reads; keep them set the same for one release.
-    for mode in ${MOJOLEARN_RELEASE_MODES:-fast identical}; do
+    for mode in ${MOJOLEARN_RELEASE_MODES:-fast deterministic identical}; do
         if out=$(cd "$tmp" && MOJOLEARN_NUMERIC_MODE=$mode "$tmp/venv/bin/python" "$here/packaging/macos/smoke.py" $SMOKE_ARGS 2>&1); then
             echo "PASS $py [$mode]  $out"
         else

@@ -94,11 +94,22 @@ makes no bitwise claim.
    clean at N-1, so a PASS here means "not caught at this sample size", never
    "stable".
 
-### The deterministic tier is REAL BUT ONLY PARTLY POPULATED
+### The deterministic tier is REAL, MEASURED ON THREE VENDORS, AND SHIPS
 
-Recorded here rather than in a summary, because the gap is the thing a reader
-needs. As of 2026-08-29 the tier compiles, is selectable, lands its own
-binary set under `python/mojolearn/deterministic/`, and carries these pins:
+This heading read "REAL BUT ONLY PARTLY POPULATED" earlier on 2026-08-29 and
+the table below listed three pin groups. Both are superseded by the same
+day's work and are corrected rather than annotated. The tier compiles, is
+selectable, lands its own binary set under `python/mojolearn/deterministic/`,
+is carried by the release wheel (`MODES` in
+`packaging/macos/build_release_wheel.sh`), and **15 files are keyed to
+`PIN_DETERMINISM`**, not the three named below.
+
+**The promise is what was measured, and a pin count is not the promise.**
+`tools/repeat_run_stability.py` refits one lane repeatedly in one process and
+compares raw output bytes: `deterministic` was STABLE on Apple M4, NVIDIA RTX
+4090 and AMD MI325X, against a `fast` arm that MOVED on all three. The
+determinism class is small because this tree uses no float `atomicAdd`
+anywhere, which is why the tier costs so little. The pins it carries:
 
 | lane | pin moved to `PIN_DETERMINISM` | evidence |
 |---|---|---|
@@ -106,13 +117,19 @@ binary set under `python/mojolearn/deterministic/`, and carries these pins:
 | k-NN | the fused-arm GRID PIN (ledger row 23, DEVIATION 502) | its own comment: the mutex merge order varies "run to run on one device, and by the core count across two" -- one guard, two promises, and it was keyed to the upper one |
 | k-NN | the tiled-arm selector (ledger row 11, DEVIATIONS 500/501) | RAFT's tie handling is "atomic-ordered by construction", which is a run-to-run property |
 
-**Every other pin in the tree is still keyed to `== NUMERIC_IDENTICAL`.** Of
-201 mode-gated sites outside `numerics.mojo`, 109 are drivers, gates and
-banners that only LABEL arithmetic, and 92 are real kernel pins. A pin that
-belongs to the determinism class and is still keyed to the top tier means a
-`deterministic` build of that lane silently behaves like `fast`. Do not read
-this table as coverage; read it as the list of what has been reclassified so
-far, with the rest owed.
+**The rest of the tree stays keyed to `== NUMERIC_IDENTICAL`, and that is
+the correct classification, not an omission.** Of 201 mode-gated sites
+outside `numerics.mojo`, 109 are drivers, gates and banners that only LABEL
+arithmetic and 92 are real kernel pins. Three of the four classification
+scopes came back EMPTY of determinism-class sites, which is the expected
+result for a tree with no float atomic accumulation: machine constants, FMA
+contraction, flush-to-zero policy, transcendentals, shape dispatch and the
+vendor libraries are all fixed for a given build and differ only BETWEEN
+vendors. They cannot move between two runs on one box, so pinning them under
+`deterministic` would buy nothing and cost up to 4.7x.
+
+That the middle tier is not quietly paying for them is measured, not argued:
+its output hashes DIFFER across vendors on 10 of 12 comparable lanes.
 
 ### A tier is a PROMISE; a pin is only what you add when the code breaks it
 
@@ -144,18 +161,27 @@ with an atomic epilogue is a documented source of run-to-run variation. So:
 | NVIDIA cuBLAS | **measured stable**, 6 repeats, same wide-k shape, RTX 4090 (2026-08-29, `bench/results/e1/2026-08-29_044510-runpod-nvidia`) | no determinism pin needed |
 | AMD rocBLAS | **measured stable**, 6 repeats, same wide-k shape, MI325X (2026-08-29, `bench/results/e1/2026-08-29_093711-mojolearn-e2-amd`) | no determinism pin needed |
 
-If either upper column moves at a shipped shape, rows 24/27/28/40/41 become
-determinism-class ON THAT COLUMN and GEMM needs a pin there. The right pin is
-then probably cheap -- selecting the library's deterministic algorithm, or
-pinning the split count -- and NOT the full 4.7x identical kernel, which buys
-cross-vendor identity the middle tier is not selling. Closing this needs one
-run of `tools/repeat_run_stability.py` per rented column; it is owed.
+**All three columns are now measured and none of them moved**, so rows
+24/27/28/40/41 are cross-vendor class ON EVIDENCE and the middle tier keeps
+the vendor product's speed. The sentence that closed this paragraph said the
+run was "owed"; it was performed on 2026-08-29 on all three and is deleted
+rather than left standing. If any column later moves at a shipped shape, that
+row becomes determinism-class ON THAT COLUMN and GEMM needs a pin there. The
+right pin would then be cheap -- selecting the library's deterministic
+algorithm, or pinning the split count -- and NOT the full 4.7x identical
+kernel, which buys cross-vendor identity the middle tier is not selling.
 
-**That gap is now closed for the lanes phase 9 covers.** The harness ran on
-all three columns on 2026-08-29 and the verdicts agree. What remains unrun is
-narrower and named: `et-clf`, `rf-clf` and `iforest` have never had their
-bindings built on a non-Apple box, so those three lanes are measured on Apple
-only.
+**That gap is now closed for every lane phase 9 covers.** The harness ran on
+all three columns on 2026-08-29 and the verdicts agree. The sentence that
+stood here said `et-clf`, `rf-clf` and `iforest` were "measured on Apple
+only"; that expired the same day, when a DigitalOcean MI325X built all ten
+bindings in all three tiers and returned all three lanes STABLE in each, and
+bit-identical to Apple under `identical`
+(`bench/results/e1/2026-08-29_104628-mojolearn-e2-amd`). What remains unrun is
+narrower and named: those three bindings have never been built on an NVIDIA
+leg, so their column there is OWED. No lane is uncompared -- all 16 are
+compared on at least two vendors, 13 on all three, and none diverges
+anywhere.
 
 ## Public capability levels
 

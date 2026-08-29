@@ -74,24 +74,43 @@ EXT_NAMES="_mojolearn _mojolearn_gbdt _mojolearn_estimators _mojolearn_rf _mojol
 # 2026-08-23 on the first clean-tree build. So this script builds all ten
 # binaries gate-off and then runs THE release gate, verify_wheel.sh, which
 # installs the finished wheel into a clean venv under every claimed
-# interpreter and fits every estimator family in BOTH numeric modes. That
+# interpreter and fits every estimator family in EVERY SHIPPED numeric mode
+# (three since 2026-08-29; this line said BOTH when there were two). That
 # is strictly more than the per-script gates check, and it runs on the
 # artifact that ships rather than on a copy of the tree.
 # THE TIERS THIS WHEEL CARRIES. `fast` lives at python/mojolearn/*.so and
 # every other tier one directory down under its own name, which is the layout
 # python/mojolearn/_backend.py loads from.
 #
-# THE DEFAULT IS TWO TIERS AND NOT THREE, 2026-08-29. NUMERIC_DETERMINISTIC
-# exists in the compiler (bindings/build.sh) and in the selector
-# (_backend.py's _MODE_CODE), and its pin lane is not finished. Naming it here
-# would make every release build gate on binaries that lane has not produced
-# yet, and the gate below is an existence-and-freshness check that cannot be
-# softened without losing the thing it catches. When the lane lands, ship it
-# with
-#     MOJOLEARN_RELEASE_MODES="fast deterministic identical"
-# and nothing else in this file changes. pyproject.toml's package-data glob
-# already carries deterministic/*.so, so the tier ships the moment it builds.
-MODES="${MOJOLEARN_RELEASE_MODES:-fast identical}"
+# THE DEFAULT IS THREE TIERS, 2026-08-29. It read "TWO TIERS AND NOT THREE"
+# until the determinism lane closed the same day; that sentence is deleted
+# rather than softened, because a stale default here silently ships a wheel
+# whose deterministic tier raises from a missing-binary stub.
+#
+# WHAT CLOSED THE LANE, and it is not a pin count. A tier is a PROMISE, and
+# the promise is measured by tools/repeat_run_stability.py, which runs one
+# fit repeatedly in one process and compares RAW OUTPUT BYTES. Taken at one
+# commit on all three vendors on 2026-08-29:
+#
+#     column                 fast                     deterministic
+#     Apple M4 (Metal)       MOVED in 8 of 10 tries   STABLE 10/10
+#     NVIDIA RTX 4090 (CUDA) MOVED, 24 answers in 24  STABLE, 1 in 12
+#     AMD MI325X (HIP)       MOVED, 6 answers in 24   STABLE, 1 in 12
+#
+# bench/results/stability/RESULTS.md is the record. The pin side is 15 files
+# keyed to PIN_DETERMINISM; the determinism class is small because this tree
+# uses no float atomicAdd anywhere, which is why the middle tier is cheap.
+#
+# THE MIDDLE TIER IS NOT THE TOP ONE WEARING A HAT. Its hashes DIFFER across
+# vendors on 10 of 12 comparable lanes, gemm-vendor among them -- it keeps
+# the vendor matmul and its speed and buys no cross-vendor identity.
+#
+# To cut a two-tier wheel anyway (a hotfix, a bisect), name the tiers:
+#     MOJOLEARN_RELEASE_MODES="fast identical" ./packaging/macos/build_release_wheel.sh
+# and keep verify_wheel.sh's copy of the variable set the same for one release
+# or the verifier fails the wheel for lacking a tier it was never asked to
+# build. pyproject.toml's package-data glob carries all three directories.
+MODES="${MOJOLEARN_RELEASE_MODES:-fast deterministic identical}"
 echo "== numeric tiers in this wheel: $MODES"
 
 for mode in $MODES; do

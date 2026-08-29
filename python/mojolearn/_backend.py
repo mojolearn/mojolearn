@@ -378,10 +378,33 @@ def numeric_mode():
     The cross-check read `== 1 else "fast"` until 2026-08-29. A deterministic
     binary reports 2, so that spelling called it "fast" and AGREED with a
     selector that had loaded fast, reporting no conflict while the caller
-    held the wrong arm."""
-    loaded = _SELECTED or "fast"
+    held the wrong arm.
+
+    IT REPORTS THE CURRENT DEFAULT, NOT THE IMPORT-TIME ONE. It returned
+    `_SELECTED` -- what `select()` loaded before the first estimator existed
+    -- until 2026-08-29, which meant that after
+
+        mojolearn.set_numeric_mode("deterministic")
+
+    this function still answered "fast" while every estimator built after
+    that line ran deterministic. A function whose whole purpose is that "a
+    run cannot be mislabeled by accident" was the one thing mislabeling it.
+    `numeric_mode_used()` on an estimator instance was already right, so the
+    two disagreed. Found by running the pair, not by reading them."""
+    loaded = default_mode()
     pkg = sys.modules[__name__.rsplit(".", 1)[0]]
-    gb = getattr(pkg, "_mojolearn_gbdt", None)
+    # The cross-check has to read the binary of the tier being REPORTED. The
+    # package attributes hold whatever `select()` bound at import, so once the
+    # default has moved they belong to a different tier and comparing against
+    # them would raise the "binary is in the wrong directory" error below on a
+    # perfectly healthy install.
+    if loaded == (_SELECTED or "fast"):
+        gb = getattr(pkg, "_mojolearn_gbdt", None)
+    else:
+        try:
+            gb = getattr(load_set(loaded), "_mojolearn_gbdt", None)
+        except Exception:
+            gb = None
     # `hasattr` ON A STUB RAISES, IT DOES NOT RETURN FALSE. A missing binding
     # is represented by `_MissingUpperTier`, whose `__getattr__` raises
     # ImportError BY NAME -- and `hasattr` only swallows AttributeError, so

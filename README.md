@@ -8,10 +8,11 @@
 mojolearn ports the GPU implementations that established today's tree and
 classical algorithms, CatBoost, cuVS, cuML and RAFT, into one Mojo source
 that runs on Apple silicon through Metal and, from the same source, on NVIDIA
-through CUDA and AMD through HIP. Every estimator has two numeric modes.
-`FAST` is the upstream's shipped behavior. `IDENTICAL` produces bit-identical
-models on every supported GPU vendor, with a per-stage certificate that
-proves it rather than a hash that hopes so.
+through CUDA and AMD through HIP. Every estimator accepts a numeric mode, and
+the wheel carries all three. `FAST` is the upstream's shipped behavior, and it
+promises speed and nothing else. `DETERMINISTIC` gives the same bits on every
+run of one box. `IDENTICAL` gives the same bits on every supported GPU vendor,
+with a per-stage certificate that proves it rather than a hash that hopes so.
 
 The scikit-learn shapes are kept. The defaults follow the upstream each
 algorithm mirrors, and every place that differs from scikit-learn is named
@@ -49,10 +50,31 @@ km = mojolearn.KMeans(n_clusters=8).fit(X)
 print(km.cluster_centers_.shape, mojolearn.numeric_mode())
 ```
 
-### Three numeric modes, and each keeps the one below it
+### Numeric modes
 
-Set one environment variable before the import. Nothing is rebuilt; the wheel
-carries the binary sets.
+ONE install carries all three. The mode is a PARAMETER in your code, not an
+install option and not something you have to set from the shell: nothing is
+rebuilt and nothing is reinstalled to change it, because each mode is a
+separately compiled binary set inside the same wheel and `_backend.py` loads
+whichever one is asked for.
+
+```python
+import mojolearn
+
+mojolearn.set_numeric_mode("deterministic")     # process default, in code
+rf = mojolearn.RandomForestClassifier(numeric_mode="identical")   # one estimator
+km = mojolearn.KMeans(n_clusters=8)             # takes the process default
+
+print(mojolearn.numeric_mode())                 # 'deterministic'
+print(rf.numeric_mode_used())                   # 'identical'
+```
+
+More than one tier can be live in the same process, and that is measured
+rather than assumed: all three were loaded together and called INTERLEAVED on
+one product, and each returned its own arithmetic every time.
+
+The environment variable still works and sets the STARTING default, so
+anything written against the older spelling keeps running:
 
 ```sh
 python train.py                                        # fast (the default)
@@ -67,23 +89,33 @@ MOJOLEARN_NUMERIC_MODE=identical     python train.py
 | `identical` | All of the above, AND **the same bits on Apple Metal, NVIDIA CUDA and AMD HIP.** |
 
 `fast` is not a broken `identical`. It promises speed and nothing else, so
-asking a `fast` run a bitwise question is a category error. Where it happens
-to be stable that is a measurement, not a guarantee: across every board taken
-on 2026-08-28, our own arm's output hash held on 175 of 179 rows and moved on
-4, all of them histogram lanes.
+asking a `fast` run a bitwise question is a category error.
 
-**`deterministic` is new (2026-08-29) and only partly populated.** The tier
-compiles, is selectable, and carries the gbdt histogram flush and both k-NN
-tie pathways. Every other pin in the tree is still keyed to `identical`,
-which means a `deterministic` build of a lane that has not been reclassified
-yet behaves like `fast` for that lane. `SUPPORT_MATRIX.md` lists exactly what
-has moved and what is owed; do not read the tier as finished.
+**And `fast` really does move, on every vendor including Apple.** This is the
+common wrong assumption -- that Metal has no float atomics, so Apple gets
+determinism for free. It does not. Measured at one commit on 2026-08-29 by
+`tools/repeat_run_stability.py`, which runs one fit repeatedly in one process
+and compares RAW OUTPUT BYTES with no tolerance:
+
+| column | `fast` | `deterministic` | `identical` |
+|---|---|---|---|
+| Apple M4, Metal | **MOVED in 8 of 10 attempts** | STABLE 10/10 | STABLE 10/10 |
+| NVIDIA RTX 4090, CUDA | **MOVED -- 24 calls, 24 different answers** | STABLE | STABLE |
+| AMD MI325X, HIP | **MOVED -- 6 different answers in 24 calls** | STABLE | STABLE |
+
+So if you need a fit to reproduce, ask for `deterministic`. Do not assume you
+already have it because you are on one machine, and do not assume Apple is a
+special case. Full record, including what each leg cost to get:
+[bench/results/stability/RESULTS.md](bench/results/stability/RESULTS.md).
+
+**The middle tier is not the top one wearing a hat.** Under `deterministic`
+the output hashes DIFFER between vendors on 10 of 12 comparable lanes, the
+vendor matmul among them -- it keeps MAX `matmul`, cuBLAS and rocBLAS and
+their speed, and buys none of the cross-vendor pinning that costs `identical`
+up to 4.64x on the gemm lane.
 
 `mojolearn.numeric_mode()` reports the mode that actually loaded, read back
-from the binary, so a run cannot be mislabeled by accident.
-
-`tools/repeat_run_stability.py` is the measurement behind the middle tier: it
-runs the same fit repeatedly in one process and compares raw output bytes.
+out of the binary, so a run cannot be mislabeled by accident.
 
 ## What is in 0.2
 
@@ -113,29 +145,38 @@ neighbor's certificate.
 FAST, the default, is a different path with those pins compiled away. It
 promises speed and makes no cross-vendor claim anywhere, by design.
 
-| estimator | mirrors | what it does | FAST | IDENTICAL | identity diffed on |
-|---|---|---|---|---|---|
-| `GradientBoosting` | CatBoost GPU | oblivious (symmetric) trees, 12 losses plus MultiClass, depthwise and lossguide growth, CTRs, eval sets, overfitting detector, save and load | yes | yes | Apple + NVIDIA + AMD |
-| `RandomForestClassifier`, `RandomForestRegressor` | cuML | quantile-split forest, with-replacement bootstrap, gini, entropy, poisson, gamma, inverse gaussian | yes | yes | Apple + NVIDIA + AMD |
-| `ExtraTreesClassifier`, `ExtraTreesRegressor` | cuML | extremely randomized trees, gini, entropy, mse | yes | yes | Apple + NVIDIA + AMD |
-| `KMeans` | cuVS | k-means with k-means++ init; `n_init` defaults to cuVS's 1, not scikit-learn's 10 | yes | yes | Apple + NVIDIA + AMD |
-| `NearestNeighbors` | cuVS, RAFT, FAISS | brute-force k-NN, fused L2, ball cover, top-k selection | yes | yes | Apple + NVIDIA + AMD |
-| `KNeighborsClassifier`, `KNeighborsRegressor` | cuVS, RAFT, FAISS | the vote and the mean on that k-NN path | yes | yes | Apple + NVIDIA + AMD, on the k-NN path |
-| `DBSCAN` | cuML, RAFT | epsilon neighborhoods, label propagation, border and noise points | yes | yes | Apple + NVIDIA + AMD |
-| `PCA`, `TruncatedSVD` | cuML, RAFT | eigen and SVD decompositions, transform and inverse transform | yes | yes | Apple + NVIDIA + AMD |
-| `LinearRegression` | RAFT | ordinary least squares (`lstsqEig`) | yes | yes | Apple + NVIDIA + AMD |
-| `Ridge` | cuML | ridge regression, the `eig` arm (`svdEig` + `ridgeSolve`) | yes | yes | Apple + NVIDIA + AMD |
-| `LogisticRegression` | cuML | binary L-BFGS with the Armijo line search (`qnFit`); l1, multiclass, sample and class weights refused by name | yes | yes | Apple + NVIDIA + AMD |
-| `SVC` | cuML | binary C-SVC. There is no `SVR`, and `svmType != C_SVC` raises by name | yes | yes | Apple + NVIDIA + AMD, 35 card stages |
-| `Lasso`, `ElasticNet` | cuML | coordinate descent (`cd.cuh::cdFit`), cyclic and random selection | yes | yes | Apple + NVIDIA + AMD, 23 stages |
-| `KernelDensity` | cuML | kernel density estimation; `bandwidth='scott'` and `'silverman'` refused by name | yes | yes | Apple + NVIDIA + AMD, 9 stages |
-| `AgglomerativeClustering` | cuML, cuVS, RAFT | single linkage over RAFT's Boruvka MST | yes | yes | Apple + NVIDIA + AMD, 10 stages |
-| `IsolationForest` | cuML | isolation forest, anomaly scores | yes | yes | Apple + NVIDIA + AMD, 124 card stages |
-| `SpectralClustering` | cuML, cuVS, RAFT | kNN connectivity graph, normalized Laplacian, thick-restart Lanczos | yes | yes | Apple only, leg owed |
-| `ExponentialSmoothing` | cuML `tsa` | Holt-Winters, additive and multiplicative | yes | yes | Apple only, leg owed |
-| `kpss_test`, `select_d` | cuML `tsa` | stationarity test and auto_arima's choice of d | yes | yes | Apple only, leg owed |
-| `mojolearn.metrics` | cuML, RAFT | fourteen scoring functions, scikit-learn's names with cuML's defaults and semantics | yes | yes | Apple + NVIDIA + AMD, 64 stages |
-| `mojolearn.linalg.matmul` | -- | FP32 matrix product, profile `mojolearn.identical.gemm.fp32.v1` | yes | yes | Apple + NVIDIA + AMD, 61 stages |
+**Reading the `DETERMINISTIC` column.** Every estimator accepts every mode --
+that is a property of the library, not of any one algorithm -- so the
+interesting question is not whether the tier is offered but where its promise
+has been RUN. `tools/repeat_run_stability.py` refits sixteen lanes repeatedly
+in one process and compares raw output bytes, and the parenthesis names the
+vendors it has done that on. A row with no parenthesis ships the tier and
+takes its pins from the same source, but has not been through that harness;
+that is an untested promise and is marked as one rather than assumed.
+
+| estimator | mirrors | what it does | FAST | DETERMINISTIC | IDENTICAL | identity diffed on |
+|---|---|---|---|---|---|---|
+| `GradientBoosting` | CatBoost GPU | oblivious (symmetric) trees, 12 losses plus MultiClass, depthwise and lossguide growth, CTRs, eval sets, overfitting detector, save and load | yes | yes (Apple + NVIDIA + AMD) | yes | Apple + NVIDIA + AMD |
+| `RandomForestClassifier`, `RandomForestRegressor` | cuML | quantile-split forest, with-replacement bootstrap, gini, entropy, poisson, gamma, inverse gaussian | yes | yes (Apple + AMD) | yes | Apple + NVIDIA + AMD |
+| `ExtraTreesClassifier`, `ExtraTreesRegressor` | cuML | extremely randomized trees, gini, entropy, mse | yes | yes (Apple + AMD) | yes | Apple + NVIDIA + AMD |
+| `KMeans` | cuVS | k-means with k-means++ init; `n_init` defaults to cuVS's 1, not scikit-learn's 10 | yes | yes (Apple + NVIDIA + AMD) | yes | Apple + NVIDIA + AMD |
+| `NearestNeighbors` | cuVS, RAFT, FAISS | brute-force k-NN, fused L2, ball cover, top-k selection | yes | yes (Apple + NVIDIA + AMD) | yes | Apple + NVIDIA + AMD |
+| `KNeighborsClassifier`, `KNeighborsRegressor` | cuVS, RAFT, FAISS | the vote and the mean on that k-NN path | yes | yes (Apple + NVIDIA + AMD) | yes | Apple + NVIDIA + AMD, on the k-NN path |
+| `DBSCAN` | cuML, RAFT | epsilon neighborhoods, label propagation, border and noise points | yes | yes (Apple + NVIDIA + AMD) | yes | Apple + NVIDIA + AMD |
+| `PCA`, `TruncatedSVD` | cuML, RAFT | eigen and SVD decompositions, transform and inverse transform | yes | yes (Apple + NVIDIA + AMD) | yes | Apple + NVIDIA + AMD |
+| `LinearRegression` | RAFT | ordinary least squares (`lstsqEig`) | yes | yes (Apple + NVIDIA + AMD) | yes | Apple + NVIDIA + AMD |
+| `Ridge` | cuML | ridge regression, the `eig` arm (`svdEig` + `ridgeSolve`) | yes | yes (Apple + NVIDIA + AMD) | yes | Apple + NVIDIA + AMD |
+| `LogisticRegression` | cuML | binary L-BFGS with the Armijo line search (`qnFit`); l1, multiclass, sample and class weights refused by name | yes | yes (Apple + NVIDIA + AMD) | yes | Apple + NVIDIA + AMD |
+| `SVC` | cuML | binary C-SVC. There is no `SVR`, and `svmType != C_SVC` raises by name | yes | yes | yes | Apple + NVIDIA + AMD, 35 card stages |
+| `Lasso`, `ElasticNet` | cuML | coordinate descent (`cd.cuh::cdFit`), cyclic and random selection | yes | yes | yes | Apple + NVIDIA + AMD, 23 stages |
+| `KernelDensity` | cuML | kernel density estimation; `bandwidth='scott'` and `'silverman'` refused by name | yes | yes | yes | Apple + NVIDIA + AMD, 9 stages |
+| `AgglomerativeClustering` | cuML, cuVS, RAFT | single linkage over RAFT's Boruvka MST | yes | yes | yes | Apple + NVIDIA + AMD, 10 stages |
+| `IsolationForest` | cuML | isolation forest, anomaly scores | yes | yes (Apple + AMD) | yes | Apple + NVIDIA + AMD, 124 card stages |
+| `SpectralClustering` | cuML, cuVS, RAFT | kNN connectivity graph, normalized Laplacian, thick-restart Lanczos | yes | yes | yes | Apple only, leg owed |
+| `ExponentialSmoothing` | cuML `tsa` | Holt-Winters, additive and multiplicative | yes | yes | yes | Apple only, leg owed |
+| `kpss_test`, `select_d` | cuML `tsa` | stationarity test and auto_arima's choice of d | yes | yes | yes | Apple only, leg owed |
+| `mojolearn.metrics` | cuML, RAFT | fourteen scoring functions, scikit-learn's names with cuML's defaults and semantics | yes | yes | yes | Apple + NVIDIA + AMD, 64 stages |
+| `mojolearn.linalg.matmul` | -- | FP32 matrix product, profile `mojolearn.identical.gemm.fp32.v1` | yes | yes (Apple + NVIDIA + AMD) | yes | Apple + NVIDIA + AMD, 61 stages |
 
 Estimators save to and load from `.npz` files, and a model fitted on a Mac
 loads and predicts identically on an NVIDIA or AMD box (95 of 95 models,
@@ -151,11 +192,28 @@ exists stops, rather than an `AttributeError`.
 
 ## The numeric tiers
 
-Three tiers, and each rung keeps the rung below it. The tier is chosen by
-`MOJOLEARN_NUMERIC_MODE` in the environment AT IMPORT TIME, which selects
-which of the compiled binary sets in the wheel gets loaded, and
-`mojolearn.numeric_mode()` reads the answer back out of the binary so a run
-cannot be mislabeled by accident.
+Three tiers, and each rung keeps the rung below it. Every one of them is in
+the wheel you installed. The complete surface for choosing between them:
+
+| | |
+|---|---|
+| `mojolearn.set_numeric_mode("deterministic")` | sets the PROCESS DEFAULT, in code, at any point. Estimators constructed before and after both honour it, because the mode is read off the instance at every call rather than frozen in `__init__`. |
+| `Estimator(..., numeric_mode="identical")` | sets the mode for ONE estimator. Accepted by every estimator; it is injected by `__init_subclass__` rather than written into eleven constructor signatures, so it cannot drift between them. |
+| `est.numeric_mode = "fast"` | the same thing after construction, including on an estimator unpickled from an older version, which falls back to the process default rather than raising. |
+| `est.numeric_mode_used()` | the tier THIS instance will actually call into. |
+| `mojolearn.numeric_mode()` | the process default, read back out of the loaded binary rather than out of the variable that asked for it. |
+| `MOJOLEARN_NUMERIC_MODE=deterministic` | sets the STARTING default at import. The oldest spelling, still supported; everything above overrides it. |
+| `mojolearn` (the console script) | prints which tiers are installed, which loaded, and every `MOJOLEARN_*` variable that is set. Run it before filing a reproducibility bug. |
+
+`MOJOLEARN_IDENTITY_TRACE=<path>` is a separate feature and is OFF by default.
+It writes a per-stage IDENTITY CARD -- a fingerprint of the PATH the
+arithmetic took, which is why a `deterministic` card and a `fast` card are
+expected to differ -- and it is not what any of the tables here hash. Those
+hash the ANSWER.
+
+Nothing above rebuilds or reinstalls anything, and more than one tier can be
+live at once: they are separate compiled binary sets in one wheel, each with
+its own runtime and device context.
 
 | tier | what it promises |
 |---|---|
@@ -170,12 +228,21 @@ by taking `identical` whole, and `identical` is not free: measured on one M4
 on 2026-08-28, it costs 4.64x on the gemm lane, 1.35x on coordinate descent,
 1.19x on kernel density, and nothing at all on linkage, metrics and SVM.
 
-**The 0.2.0 wheel carries `fast` and `identical` only.** The deterministic
-pin lane is not finished, and a tier that shipped without its pins would be
-non-reproducible while calling itself deterministic. `MOJOLEARN_NUMERIC_MODE
-=deterministic` therefore raises from the missing-binary stub in this
-release, by name, rather than quietly serving fast arithmetic under a
-deterministic label.
+**The wheel carries all three tiers.** It carried two until 2026-08-29, on
+the stated grounds that the deterministic pin lane was unfinished and that a
+tier shipping without its pins would be non-reproducible while calling itself
+deterministic. That reason is retired, and by measurement rather than by pin
+count: the tier is STABLE on Apple, NVIDIA and AMD against a `fast` arm that
+moved on all three. The pin side is 15 files keyed to `PIN_DETERMINISM`, and
+the class is small because this tree uses no float `atomicAdd` anywhere,
+which is exactly why the middle tier is cheap.
+
+Which tiers a given wheel carries is one variable,
+`MOJOLEARN_RELEASE_MODES` in `packaging/macos/build_release_wheel.sh`, and
+`packaging/macos/verify_wheel.sh` installs the finished wheel into a clean
+venv under every claimed interpreter and fits every estimator family in each
+of them. A tier that did not build raises from a missing-binary stub BY NAME
+on use, rather than quietly serving fast arithmetic under another label.
 
 `FAST` is the default. Histograms flush through float atomics, library
 reductions follow the hardware warp width, and the last bits of a model can
@@ -189,6 +256,19 @@ carry TF32 accuracy, roughly four significant digits on each operand
 ([VENDOR_LIBRARIES.md](VENDOR_LIBRARIES.md), "FAST products on NVIDIA are
 TF32"). On Apple M1-M4 and AMD CDNA the same products are fp32. `IDENTICAL`
 never calls the vendor product, on any vendor.
+
+`DETERMINISTIC` adds exactly one class of pin to that: the places where the
+ORDER of a reduction is decided at runtime by the thread scheduler rather
+than by the build. Float atomics, mutex merges, CAS retries. It leaves alone
+everything that is fixed for a given build and merely differs BETWEEN
+vendors -- machine constants, FMA contraction, flush-to-zero policy,
+transcendentals, shape dispatch, and the vendor matmul -- because none of
+those can move between two runs on one box. That division is why it is cheap,
+and it is visible in the numbers: under `deterministic` the output hashes
+differ across vendors on 10 of 12 comparable lanes, and `gemm-vendor` still
+calls MAX `matmul`, cuBLAS or rocBLAS at full speed. All three of those were
+measured run-to-run stable at 256x4096 @ 4096x128, a wide k chosen to provoke
+a split-K epilogue, which is what earns them their exemption.
 
 `IDENTICAL` pins every pathway that can move a bit. The enumeration of those
 pathways is [IDENTITY_PATHS.md](IDENTITY_PATHS.md), 32 rows, each with what
