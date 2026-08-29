@@ -1,0 +1,29 @@
+FSPEED-NOTE lane=rf arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+6896 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5aafc0000000, nodemask=2)
+FSPEED-REFUSED lane=rf arm=sklearn-rf-cpu reason=GPU-PATH-ONLY: sklearn-rf-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=rf arm=lightgbm-cpu reason=GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-HEADER family=forest lane=rf arm=ours mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=cuml-rf-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=lightgbm-cuda mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+6896 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5ab000000000, nodemask=2)
+FSPEED-WARMUP lane=rf arm=ours shape=higgs-1000000x28 ms=6854.653
+FSPEED-WARMUP lane=rf arm=cuml-rf-gpu shape=higgs-1000000x28 ms=7177.598
+[LightGBM] [Fatal] CUDA Tree Learner was not enabled in this build.
+Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+FSPEED-REFUSED lane=rf arm=lightgbm-cuda reason=LightGBMError during warm-up: CUDA Tree Learner was not enabled in this build. Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+6896 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x70ab00000000, nodemask=1)
+6896 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x70ab40000000, nodemask=1)
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=1 ms=5272.982 hash=3ffa2951595422d4
+FSPEED lane=rf arm=cuml-rf-gpu shape=higgs-1000000x28 round=1 ms=2916.780 hash=a372de7ab27df595
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=2 ms=5225.175 hash=3ffa2951595422d4
+FSPEED lane=rf arm=cuml-rf-gpu shape=higgs-1000000x28 round=2 ms=3424.749 hash=a372de7ab27df595
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=3 ms=5744.412 hash=3ffa2951595422d4
+FSPEED lane=rf arm=cuml-rf-gpu shape=higgs-1000000x28 round=3 ms=3271.115 hash=a372de7ab27df595
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=4 ms=5394.642 hash=3ffa2951595422d4
+FSPEED lane=rf arm=cuml-rf-gpu shape=higgs-1000000x28 round=4 ms=3231.501 hash=a372de7ab27df595
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=5 ms=5648.104 hash=3ffa2951595422d4
+FSPEED lane=rf arm=cuml-rf-gpu shape=higgs-1000000x28 round=5 ms=3191.058 hash=a372de7ab27df595
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.538850
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.809906
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=logloss value=0.538814
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=auc value=0.809834

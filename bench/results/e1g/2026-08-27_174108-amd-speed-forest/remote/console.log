@@ -1,0 +1,149 @@
+
+=== pass 1: bindings/build.sh ===
+./neighbors/estimator.mojo:698:9: warning: ref 'i' was never used, remove it?
+    for i in range(n_outputs):
+        ^
+built python/mojolearn/_mojolearn.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_estimators.sh ===
+./glm/ported/glm/qn/qn_solvers.mojo:177:17: warning: assignment to 'lsret' was never used; assign to '_' instead?
+    var lsret = LS_SUCCESS
+                ^
+built python/mojolearn/_mojolearn_estimators.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_gbdt.sh ===
+./gbdt/methods/greedy_subsets_searcher/kernel/point_hist_half_byte_template.mojo:163:5: note: constraint failed: the half-byte accumulator's slice layout is 32-lane by construction (`point_hist_half_byte_template.cuh:48-52` plus the `<< 5` bin spacing); write the wide-wavefront layout before letting LANE_WIDTH be 64
+    comptime assert LANE_WIDTH == 32, (
+    ^
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: failed to run the pass manager
+
+=== pass 1: bindings/build_linalg.sh ===
+3672 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1293c0000000, nodemask=1)
+built python/mojolearn/_mojolearn_linalg.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_metrics.sh ===
+/root/mojolearn/./cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:196:50: warning: assignment to 'centroid_batch' was never used; assign to '_' instead?
+    var centroid_batch = get_centroids_batch_size(batch_centroids, n_clusters)
+                                                 ^
+built python/mojolearn/_mojolearn_metrics.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_rf.sh ===
+/root/mojolearn/bindings/_mojolearn_rf.mojo:566:17: warning: assignment to 'wrote' was never used; assign to '_' instead?
+    var wrote = 0
+                ^
+built python/mojolearn/_mojolearn_rf.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_solver.sh ===
+/root/mojolearn/bindings/_mojolearn_solver.mojo:200:18: warning: assignment to 'rounds' was never used; assign to '_' instead?
+    var rounds = 0
+                 ^
+built python/mojolearn/_mojolearn_solver.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_svm.sh ===
+/root/mojolearn/bindings/_mojolearn_svm.mojo:322:27: warning: assignment to 'res' was never used; assign to '_' instead?
+    var res = IFRunOutputs()
+                          ^
+built python/mojolearn/_mojolearn_svm.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_trees.sh ===
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+built python/mojolearn/_mojolearn_trees.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 1: bindings/build_tsa.sh ===
+/root/mojolearn/bindings/_mojolearn_tsa.mojo:265:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+built python/mojolearn/_mojolearn_tsa.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build.sh ===
+The cache is regenerable; a poisoned one is not detectable any other
+way, because the build succeeds and the artifact merely does not work.
+
+See the comment at the top of this script and PORTING.md 70.
+
+=== pass 2: bindings/build_estimators.sh ===
+./glm/ported/glm/qn/qn_solvers.mojo:177:17: warning: assignment to 'lsret' was never used; assign to '_' instead?
+    var lsret = LS_SUCCESS
+                ^
+built python/mojolearn/_mojolearn_estimators.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_gbdt.sh ===
+./gbdt/methods/greedy_subsets_searcher/kernel/point_hist_half_byte_template.mojo:163:5: note: constraint failed: the half-byte accumulator's slice layout is 32-lane by construction (`point_hist_half_byte_template.cuh:48-52` plus the `<< 5` bin spacing); write the wide-wavefront layout before letting LANE_WIDTH be 64
+    comptime assert LANE_WIDTH == 32, (
+    ^
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: failed to run the pass manager
+
+=== pass 2: bindings/build_linalg.sh ===
+10746 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x512580000000, nodemask=1)
+built python/mojolearn/_mojolearn_linalg.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_metrics.sh ===
+/root/mojolearn/./cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:196:50: warning: assignment to 'centroid_batch' was never used; assign to '_' instead?
+    var centroid_batch = get_centroids_batch_size(batch_centroids, n_clusters)
+                                                 ^
+built python/mojolearn/_mojolearn_metrics.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_rf.sh ===
+THE FIRST THING TO SUSPECT IS THE COMPILER CACHE, not this source:
+$MODULAR_HOME/cache/.mojo_cache keys ignore the deployment target,
+so one build made with MACOSX_DEPLOYMENT_TARGET set poisons it with
+empty 134-byte metallibs. See bindings/build_gbdt.sh's header.
+
+=== pass 2: bindings/build_solver.sh ===
+/root/mojolearn/bindings/_mojolearn_solver.mojo:200:18: warning: assignment to 'rounds' was never used; assign to '_' instead?
+    var rounds = 0
+                 ^
+built python/mojolearn/_mojolearn_solver.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_svm.sh ===
+/root/mojolearn/bindings/_mojolearn_svm.mojo:322:27: warning: assignment to 'res' was never used; assign to '_' instead?
+    var res = IFRunOutputs()
+                          ^
+built python/mojolearn/_mojolearn_svm.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+
+=== pass 2: bindings/build_trees.sh ===
+$MODULAR_HOME/cache/.mojo_cache keys ignore the deployment target,
+so one build made with MACOSX_DEPLOYMENT_TARGET set poisons it with
+empty 134-byte metallibs. See bindings/build_gbdt.sh's header for
+the find command and the full write-up.
+
+=== pass 2: bindings/build_tsa.sh ===
+/root/mojolearn/bindings/_mojolearn_tsa.mojo:265:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+built python/mojolearn/_mojolearn_tsa.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+  File "/root/mojolearn/python/mojolearn/cluster.py", line 3, in <module>
+    import numpy as np
+ModuleNotFoundError: No module named 'numpy'
+
+=== forest.gbdt-symmetric.r1000000.log :: .pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane gbdt-symmetric --dataset higgs --rows 1000000 ===
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-cpu reason=ModuleNotFoundError: No module named 'catboost'
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-gpu reason=ModuleNotFoundError: No module named 'catboost'
+FSPEED-REFUSED lane=gbdt-symmetric arm=all reason=nothing could be constructed on this box; see the refusals above
+
+=== forest.gbdt-symmetric.r2000000.log :: .pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane gbdt-symmetric --dataset higgs --rows 2000000 ===
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-cpu reason=ModuleNotFoundError: No module named 'catboost'
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-gpu reason=ModuleNotFoundError: No module named 'catboost'
+FSPEED-REFUSED lane=gbdt-symmetric arm=all reason=nothing could be constructed on this box; see the refusals above
+
+=== forest.gbdt-depthwise.r1000000.log :: .pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane gbdt-depthwise --dataset higgs --rows 1000000 ===
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-cpu reason=ModuleNotFoundError: No module named 'xgboost'
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-gpu reason=ModuleNotFoundError: No module named 'xgboost'
+FSPEED-REFUSED lane=gbdt-depthwise arm=all reason=nothing could be constructed on this box; see the refusals above
+
+=== forest.gbdt-depthwise.r2000000.log :: .pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane gbdt-depthwise --dataset higgs --rows 2000000 ===
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-cpu reason=ModuleNotFoundError: No module named 'xgboost'
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-gpu reason=ModuleNotFoundError: No module named 'xgboost'
+FSPEED-REFUSED lane=gbdt-depthwise arm=all reason=nothing could be constructed on this box; see the refusals above
+
+=== forest.gbdt-lossguide.r1000000.log :: .pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane gbdt-lossguide --dataset higgs --rows 1000000 ===
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cpu reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cuda reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-REFUSED lane=gbdt-lossguide arm=all reason=nothing could be constructed on this box; see the refusals above
+
+=== forest.gbdt-lossguide.r2000000.log :: .pixi/envs/default/bin/python bench/speed/forest_speed_arm.py --lane gbdt-lossguide --dataset higgs --rows 2000000 ===
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cpu reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cuda reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-REFUSED lane=gbdt-lossguide arm=all reason=nothing could be constructed on this box; see the refusals above

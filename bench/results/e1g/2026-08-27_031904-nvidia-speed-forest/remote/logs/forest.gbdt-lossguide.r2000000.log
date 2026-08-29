@@ -1,0 +1,31 @@
+FSPEED-NOTE lane=gbdt-lossguide arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+4478 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x183580000000, nodemask=2)
+FSPEED-REFUSED lane=gbdt-lossguide arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-lossguide arm=xgboost-cpu reason=GPU-PATH-ONLY: xgboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cpu reason=GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=catboost-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=xgboost-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=lightgbm-cuda mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+4478 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7292c0000000, nodemask=1)
+FSPEED-WARMUP lane=gbdt-lossguide arm=ours shape=higgs-2000000x28 ms=5917.468
+FSPEED-WARMUP lane=gbdt-lossguide arm=catboost-gpu shape=higgs-2000000x28 ms=2163.222
+FSPEED-WARMUP lane=gbdt-lossguide arm=xgboost-gpu shape=higgs-2000000x28 ms=2105.722
+[LightGBM] [Fatal] CUDA Tree Learner was not enabled in this build.
+Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cuda reason=LightGBMError during warm-up: CUDA Tree Learner was not enabled in this build. Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-2000000x28 round=1 ms=13031.539 hash=b69e6792907184b1
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=higgs-2000000x28 round=1 ms=2240.079 hash=33ebcc0ddc6c9eca
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=higgs-2000000x28 round=1 ms=1422.354 hash=335671ec1071de24
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-2000000x28 round=2 ms=3147.719 hash=b69e6792907184b1
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=higgs-2000000x28 round=2 ms=2215.423 hash=fb81c01ab41e2fec
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=higgs-2000000x28 round=2 ms=1445.308 hash=335671ec1071de24
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-2000000x28 round=3 ms=4024.481 hash=b69e6792907184b1
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=higgs-2000000x28 round=3 ms=2241.104 hash=f7e582dae9530d2f
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=higgs-2000000x28 round=3 ms=1350.779 hash=335671ec1071de24
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=logloss value=0.525067
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=auc value=0.813511
+FSPEED-ACC lane=gbdt-lossguide arm=catboost-gpu metric=logloss value=0.525080
+FSPEED-ACC lane=gbdt-lossguide arm=catboost-gpu metric=auc value=0.813501
+FSPEED-ACC lane=gbdt-lossguide arm=xgboost-gpu metric=logloss value=0.526273
+FSPEED-ACC lane=gbdt-lossguide arm=xgboost-gpu metric=auc value=0.812587

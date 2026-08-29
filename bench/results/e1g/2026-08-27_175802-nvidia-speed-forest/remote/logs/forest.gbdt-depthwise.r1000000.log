@@ -1,0 +1,26 @@
+FSPEED-NOTE lane=gbdt-depthwise arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+3632 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b85c0000000, nodemask=2)
+FSPEED-REFUSED lane=gbdt-depthwise arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-cpu reason=GPU-PATH-ONLY: xgboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=ours mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=catboost-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=xgboost-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+3711 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x121980000000, nodemask=1)
+FSPEED-WARMUP lane=gbdt-depthwise arm=ours shape=higgs-1000000x28 ms=2055.322
+FSPEED-WARMUP lane=gbdt-depthwise arm=catboost-gpu shape=higgs-1000000x28 ms=1208.624
+FSPEED-WARMUP lane=gbdt-depthwise arm=xgboost-gpu shape=higgs-1000000x28 ms=783.254
+FSPEED lane=gbdt-depthwise arm=ours shape=higgs-1000000x28 round=1 ms=1220.669 hash=5c8a3b9152929448
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=higgs-1000000x28 round=1 ms=1122.909 hash=25e9732ea0df2591
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=higgs-1000000x28 round=1 ms=627.150 hash=13505f62978a068d
+FSPEED lane=gbdt-depthwise arm=ours shape=higgs-1000000x28 round=2 ms=1188.222 hash=5c8a3b9152929448
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=higgs-1000000x28 round=2 ms=1153.603 hash=e888195ee4bd23ce
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=higgs-1000000x28 round=2 ms=656.908 hash=13505f62978a068d
+FSPEED lane=gbdt-depthwise arm=ours shape=higgs-1000000x28 round=3 ms=1195.953 hash=5c8a3b9152929448
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=higgs-1000000x28 round=3 ms=1151.041 hash=2e566c4f88f34588
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=higgs-1000000x28 round=3 ms=645.644 hash=13505f62978a068d
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=logloss value=0.525307
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=auc value=0.813564
+FSPEED-ACC lane=gbdt-depthwise arm=catboost-gpu metric=logloss value=0.525054
+FSPEED-ACC lane=gbdt-depthwise arm=catboost-gpu metric=auc value=0.813754
+FSPEED-ACC lane=gbdt-depthwise arm=xgboost-gpu metric=logloss value=0.526563
+FSPEED-ACC lane=gbdt-depthwise arm=xgboost-gpu metric=auc value=0.812395

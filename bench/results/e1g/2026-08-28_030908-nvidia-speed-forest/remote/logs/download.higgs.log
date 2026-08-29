@@ -1,0 +1,3 @@
+downloading https://archive.ics.uci.edu/ml/machine-learning-databases/00280/HIGGS.csv.gz -> /root/datasets/gbm-bench/higgs/HIGGS.csv.gz (about 2.6 GB)
+higgs: 2816.4 MB
+higgs decoded to /root/datasets/gbm-bench/higgs/higgs_speed.npz (train 10500000 x 28, test 500000)

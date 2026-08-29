@@ -1,0 +1,9 @@
+commit=5b728e2 parent 374875a
+vendor=amd
+gpu_requested=AMD Instinct MI300X OAM
+image=rocm/dev-ubuntu-22.04:6.4.1-complete
+minutes=60
+mode=rent
+card_full=<unset>
+trace_dump=<unset>
+started=2026-08-26T20:29:13Z

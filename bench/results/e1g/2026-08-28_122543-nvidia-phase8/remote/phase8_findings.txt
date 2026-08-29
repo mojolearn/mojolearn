@@ -1,0 +1,3 @@
+PHASE8-FINDING: gemm [fast] check FAILED:     FAIL pca.transform.8192x4x4  NT 4x4x4  L=4 P=1: 16 of 16 cells differ from gemm_oracle. First at (0, 0): device = 6.822138/0x40da4ef4   oracle = 6.823977/0x
+PHASE8-FINDING: mamba [fast] failed (see /root/mojolearn/bench/results/e1/2026-08-28_162946-a5937291b0f8/lanes/mamba.fast.log)
+PHASE8-FINDING: mamba [fast] check FAILED: Unhandled exception caught during execution: mamba_check: CLAUSE (a) FAILED, 15 stages differ from the oracle, first at norm.out on 10 of 32 cells

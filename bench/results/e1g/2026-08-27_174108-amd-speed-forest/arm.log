@@ -1,0 +1,4 @@
+arming a 60-minute self-kill on pod g14k0bruyzlw25 ...
+ARMED. Pod g14k0bruyzlw25 is TERMINATED through the API in 60 minutes.
+  lease: bench/results/runpod_leases_amd/g14k0bruyzlw25.lease
+  extend with: tools/runpod_guard.sh extend g14k0bruyzlw25 '-p 11052 root@213.173.96.53' <minutes>

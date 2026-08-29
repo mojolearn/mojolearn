@@ -1,0 +1,42 @@
+FSPEED-NOTE lane=gbdt-lossguide arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+5538 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x79f880000000, nodemask=2)
+FSPEED-REFUSED lane=gbdt-lossguide arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-lossguide arm=xgboost-cpu reason=GPU-PATH-ONLY: xgboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cpu reason=GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=catboost-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=xgboost-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=lightgbm-cuda mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+5619 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1166c0000000, nodemask=1)
+FSPEED-WARMUP lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 ms=2632.538
+FSPEED-WARMUP lane=gbdt-lossguide arm=catboost-gpu shape=higgs-1000000x28 ms=1584.085
+FSPEED-WARMUP lane=gbdt-lossguide arm=xgboost-gpu shape=higgs-1000000x28 ms=1023.644
+FSPEED-WARMUP lane=gbdt-lossguide arm=lightgbm-cuda shape=higgs-1000000x28 ms=1390.438
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 round=1 ms=1902.986 hash=86d67b336ddc265d
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=higgs-1000000x28 round=1 ms=1569.067 hash=67259692c82458c2
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=higgs-1000000x28 round=1 ms=839.069 hash=13505f62978a068d
+FSPEED lane=gbdt-lossguide arm=lightgbm-cuda shape=higgs-1000000x28 round=1 ms=1322.826 hash=8a7e9e9789e3715b
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 round=2 ms=1906.192 hash=f2d8e883a91fef2b
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=higgs-1000000x28 round=2 ms=1580.941 hash=eca6e817fd64e658
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=higgs-1000000x28 round=2 ms=863.704 hash=13505f62978a068d
+FSPEED lane=gbdt-lossguide arm=lightgbm-cuda shape=higgs-1000000x28 round=2 ms=1316.004 hash=90331e26f02d2a3b
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 round=3 ms=1888.277 hash=adf9b040738c8f4d
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=higgs-1000000x28 round=3 ms=1734.459 hash=be63266672eeb411
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=higgs-1000000x28 round=3 ms=841.683 hash=13505f62978a068d
+FSPEED lane=gbdt-lossguide arm=lightgbm-cuda shape=higgs-1000000x28 round=3 ms=1313.705 hash=4c571304caf8c157
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 round=4 ms=1937.680 hash=86d67b336ddc265d
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=higgs-1000000x28 round=4 ms=1650.339 hash=120e73ccf3ca8469
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=higgs-1000000x28 round=4 ms=894.904 hash=13505f62978a068d
+FSPEED lane=gbdt-lossguide arm=lightgbm-cuda shape=higgs-1000000x28 round=4 ms=1301.506 hash=b6004f427e162d29
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 round=5 ms=1908.551 hash=f2d8e883a91fef2b
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=higgs-1000000x28 round=5 ms=1586.165 hash=e0cbdea795edfa2c
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=higgs-1000000x28 round=5 ms=814.302 hash=13505f62978a068d
+FSPEED lane=gbdt-lossguide arm=lightgbm-cuda shape=higgs-1000000x28 round=5 ms=1302.662 hash=ef97161bc60537e1
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=logloss value=0.524971
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=auc value=0.813691
+FSPEED-ACC lane=gbdt-lossguide arm=catboost-gpu metric=logloss value=0.525707
+FSPEED-ACC lane=gbdt-lossguide arm=catboost-gpu metric=auc value=0.812992
+FSPEED-ACC lane=gbdt-lossguide arm=xgboost-gpu metric=logloss value=0.526563
+FSPEED-ACC lane=gbdt-lossguide arm=xgboost-gpu metric=auc value=0.812395
+FSPEED-ACC lane=gbdt-lossguide arm=lightgbm-cuda metric=logloss value=0.517877
+FSPEED-ACC lane=gbdt-lossguide arm=lightgbm-cuda metric=auc value=0.819118

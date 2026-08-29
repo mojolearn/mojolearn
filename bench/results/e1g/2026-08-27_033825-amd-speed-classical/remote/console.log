@@ -1,0 +1,143 @@
+
+=== build classicalspeed ===
+  BUILD FAILED for classicalspeed (exit 139); its lanes will have no arm of ours
+ #2 0x00006202f3bd0e50 (/root/mojolearn/.pixi/envs/default/bin/mojo+0x8229e50)
+ #3 0x000070c69375a520 (/lib/x86_64-linux-gnu/libc.so.6+0x42520)
+ #4 0x00006202f2330093 (/root/mojolearn/.pixi/envs/default/bin/mojo+0x6989093)
+ #5 0x00006202f265d6ab (/root/mojolearn/.pixi/envs/default/bin/mojo+0x6cb66ab)
+ #6 0x00006202f265d934 (/root/mojolearn/.pixi/envs/default/bin/mojo+0x6cb6934)
+ #7 0x00006202f265febf (/root/mojolearn/.pixi/envs/default/bin/mojo+0x6cb8ebf)
+ #8 0x00006202f2657b40 (/root/mojolearn/.pixi/envs/default/bin/mojo+0x6cb0b40)
+ #9 0x00006202f2656ba2 (/root/mojolearn/.pixi/envs/default/bin/mojo+0x6cafba2)
+#10 0x00006202f263ceb9 (/root/mojolearn/.pixi/envs/default/bin/mojo+0x6c95eb9)
+#11 0x00006202f263c554 (/root/mojolearn/.pixi/envs/default/bin/mojo+0x6c95554)
+#12 0x00006202f263a395 (/root/mojolearn/.pixi/envs/default/bin/mojo+0x6c93395)
+#13 0x00006202f11b0427 (/root/mojolearn/.pixi/envs/default/bin/mojo+0x5809427)
+#14 0x00006202f2638640 (/root/mojolearn/.pixi/envs/default/bin/mojo+0x6c91640)
+#15 0x00006202f22b5e36 (/root/mojolearn/.pixi/envs/default/bin/mojo+0x690ee36)
+#16 0x00006202f3a67e5f (/root/mojolearn/.pixi/envs/default/bin/mojo+0x80c0e5f)
+#17 0x00006202f335ab94 (/root/mojolearn/.pixi/envs/default/bin/mojo+0x79b3b94)
+#18 0x00006202f3a689c1 (/root/mojolearn/.pixi/envs/default/bin/mojo+0x80c19c1)
+#19 0x00006202ef9df612 (/root/mojolearn/.pixi/envs/default/bin/mojo+0x4038612)
+#20 0x00006202ef9e683a (/root/mojolearn/.pixi/envs/default/bin/mojo+0x403f83a)
+#21 0x00006202efa09f2f (/root/mojolearn/.pixi/envs/default/bin/mojo+0x4062f2f)
+#22 0x00006202ef9e6353 (/root/mojolearn/.pixi/envs/default/bin/mojo+0x403f353)
+#23 0x00006202f0081847 (/root/mojolearn/.pixi/envs/default/bin/mojo+0x46da847)
+#24 0x00006202f007ebcf (/root/mojolearn/.pixi/envs/default/bin/mojo+0x46d7bcf)
+#25 0x00006202ef9e2884 (/root/mojolearn/.pixi/envs/default/bin/mojo+0x403b884)
+#26 0x00006202f007f44b (/root/mojolearn/.pixi/envs/default/bin/mojo+0x46d844b)
+#27 0x00006202f007ef95 (/root/mojolearn/.pixi/envs/default/bin/mojo+0x46d7f95)
+#28 0x000070c6937acac3 start_thread ./nptl/pthread_create.c:442:8
+#29 0x000070c69383da04 __clone ./misc/../sysdeps/unix/sysv/linux/x86_64/clone.S:102:0
+timeout: the monitored command dumped core
+Segmentation fault
+
+=== classical.kmeans.vendor.log :: python3 tools/speed_cuml_arm.py ===
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=kmeans arm=unknown reason=raised at run time: CUDARuntimeError('cudaErrorInsufficientDriver: CUDA driver version is insufficient for CUDA runtime version')
+
+=== classical.dbscan.vendor.log :: python3 tools/speed_cuml_arm.py ===
+FSPEED-NOTE lane=dbscan arm=cuml-gpu calc_core_sample_indices=False: our dbscan_fit_impl returns labels only, and computing their core-sample index array would be work our arm does not do
+FSPEED-HEADER family=classical lane=dbscan arm=cuml-gpu mode=FAST device=unknown-gpu rounds=3 size=shipped
+FSPEED-REFUSED lane=dbscan arm=unknown reason=raised at run time: CUDARuntimeError('cudaErrorInsufficientDriver: CUDA driver version is insufficient for CUDA runtime version')
+
+=== classical.pca.vendor.log :: python3 tools/speed_cuml_arm.py ===
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=pca arm=cuml-gpu reason=cuml.PCA accepted none of covariance_eigh/full/jacobi
+
+=== classical.ols.vendor.log :: python3 tools/speed_cuml_arm.py ===
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-NOTE lane=ols arm=cuml-gpu algorithm=eig fit_intercept=False, algorithm-matched with lstsq_eig (normal equations, eigen route)
+FSPEED-REFUSED lane=ols arm=unknown reason=raised at run time: CUDARuntimeError('cudaErrorInsufficientDriver: CUDA driver version is insufficient for CUDA runtime version')
+
+=== classical.knn.vendor.log :: python3 tools/speed_cuml_arm.py ===
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=knn arm=unknown reason=raised at run time: CUDARuntimeError('cudaErrorInsufficientDriver: CUDA driver version is insufficient for CUDA runtime version')
+
+=== classical.cd.vendor.log :: python3 tools/speed_cuml_arm.py ===
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=cd arm=cuml-gpu reason=RuntimeError('no fixture dump at /root/gemm_leg_out/dump/cd.fixture. Run: MOJOLEARN_SPEED_DUMP=/root/gemm_leg_out/dump MOJOLEARN_SPEED_LANE=cd pixi run mojo run -I . bench/speed/classical_speed_main.mojo')
+
+=== classical.kde.vendor.log :: python3 tools/speed_cuml_arm.py ===
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=kde arm=cuml-gpu reason=RuntimeError('no fixture dump at /root/gemm_leg_out/dump/kde.fixture. Run: MOJOLEARN_SPEED_DUMP=/root/gemm_leg_out/dump MOJOLEARN_SPEED_LANE=kde pixi run mojo run -I . bench/speed/classical_speed_main.mojo')
+
+=== classical.linkage.vendor.log :: python3 tools/speed_cuml_arm.py ===
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=linkage arm=cuml-gpu reason=RuntimeError('no fixture dump at /root/gemm_leg_out/dump/linkage.fixture. Run: MOJOLEARN_SPEED_DUMP=/root/gemm_leg_out/dump MOJOLEARN_SPEED_LANE=linkage pixi run mojo run -I . bench/speed/classical_speed_main.mojo')
+
+=== classical.svm.vendor.log :: python3 tools/speed_cuml_arm.py ===
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=svm arm=cuml-gpu reason=RuntimeError('no fixture dump at /root/gemm_leg_out/dump/svm.fixture. Run: MOJOLEARN_SPEED_DUMP=/root/gemm_leg_out/dump MOJOLEARN_SPEED_LANE=svm pixi run mojo run -I . bench/speed/classical_speed_main.mojo')
+
+=== classical.metrics.vendor.log :: python3 tools/speed_cuml_arm.py ===
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=metrics arm=cuml-gpu reason=import failed (one of the eleven cuml metrics is missing on this build): RuntimeError('no fixture dump at /root/gemm_leg_out/dump/metrics.fixture. Run: MOJOLEARN_SPEED_DUMP=/root/gemm_leg_out/dump MOJOLEARN_SPEED_LANE=metrics pixi run mojo run -I . bench/speed/classical_speed_main.mojo')
+
+=== classical.ivf.vendor.log :: python3 tools/speed_cuml_arm.py ===
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=ivf arm=cuvs-gpu reason=import failed: RuntimeError('no fixture dump at /root/gemm_leg_out/dump/ivf.fixture. Run: MOJOLEARN_SPEED_DUMP=/root/gemm_leg_out/dump MOJOLEARN_SPEED_LANE=ivf pixi run mojo run -I . bench/speed/classical_speed_main.mojo')
+
+=== classical.hdbscan.vendor.log :: python3 tools/speed_cuml_arm.py ===
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=hdbscan arm=cuml-gpu reason=RuntimeError('no fixture dump at /root/gemm_leg_out/dump/hdbscan.fixture. Run: MOJOLEARN_SPEED_DUMP=/root/gemm_leg_out/dump MOJOLEARN_SPEED_LANE=hdbscan pixi run mojo run -I . bench/speed/classical_speed_main.mojo')
+
+=== classical.cholesky.vendor.log :: python3 tools/speed_cuml_arm.py ===
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=cholesky arm=torch-gpu reason=ModuleNotFoundError("No module named 'torch'")
+
+=== classical.gmm.vendor.log :: python3 tools/speed_cuml_arm.py ===
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=gmm arm=sklearn-cpu reason=RuntimeError('no fixture dump at /root/gemm_leg_out/dump/gmm.fixture. Run: MOJOLEARN_SPEED_DUMP=/root/gemm_leg_out/dump MOJOLEARN_SPEED_LANE=gmm pixi run mojo run -I . bench/speed/classical_speed_main.mojo')
+
+=== classical.gp.vendor.log :: python3 tools/speed_cuml_arm.py ===
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=gp arm=sklearn-cpu reason=RuntimeError('no fixture dump at /root/gemm_leg_out/dump/gp.fixture. Run: MOJOLEARN_SPEED_DUMP=/root/gemm_leg_out/dump MOJOLEARN_SPEED_LANE=gp pixi run mojo run -I . bench/speed/classical_speed_main.mojo')
+
+=== classical.krr.vendor.log :: python3 tools/speed_cuml_arm.py ===
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=krr arm=cuml-gpu reason=import failed: RuntimeError('no fixture dump at /root/gemm_leg_out/dump/krr.fixture. Run: MOJOLEARN_SPEED_DUMP=/root/gemm_leg_out/dump MOJOLEARN_SPEED_LANE=krr pixi run mojo run -I . bench/speed/classical_speed_main.mojo')
+
+=== classical.nystroem.vendor.log :: python3 tools/speed_cuml_arm.py ===
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=nystroem arm=sklearn-cpu reason=RuntimeError('no fixture dump at /root/gemm_leg_out/dump/nystroem.fixture. Run: MOJOLEARN_SPEED_DUMP=/root/gemm_leg_out/dump MOJOLEARN_SPEED_LANE=nystroem pixi run mojo run -I . bench/speed/classical_speed_main.mojo')
+
+=== classical.rbfsampler.vendor.log :: python3 tools/speed_cuml_arm.py ===
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=rbfsampler arm=sklearn-cpu reason=RuntimeError('no fixture dump at /root/gemm_leg_out/dump/rbfsampler.fixture. Run: MOJOLEARN_SPEED_DUMP=/root/gemm_leg_out/dump MOJOLEARN_SPEED_LANE=rbfsampler pixi run mojo run -I . bench/speed/classical_speed_main.mojo')
+
+=== classical.resample.vendor.log :: python3 tools/speed_cuml_arm.py ===
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=resample arm=scipy-cpu reason=RuntimeError('no fixture dump at /root/gemm_leg_out/dump/resample.fixture. Run: MOJOLEARN_SPEED_DUMP=/root/gemm_leg_out/dump MOJOLEARN_SPEED_LANE=resample pixi run mojo run -I . bench/speed/classical_speed_main.mojo')
+
+=== classical.spectral.vendor.log :: python3 tools/speed_cuml_arm.py ===
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=spectral arm=sklearn-cpu reason=RuntimeError('no fixture dump at /root/gemm_leg_out/dump/spectral.fixture. Run: MOJOLEARN_SPEED_DUMP=/root/gemm_leg_out/dump MOJOLEARN_SPEED_LANE=spectral pixi run mojo run -I . bench/speed/classical_speed_main.mojo')
+
+=== classical.holtwinters.vendor.log :: python3 tools/speed_cuml_arm.py ===
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=holtwinters arm=cuml-gpu reason=import failed: RuntimeError('no fixture dump at /root/gemm_leg_out/dump/holtwinters.fixture. Run: MOJOLEARN_SPEED_DUMP=/root/gemm_leg_out/dump MOJOLEARN_SPEED_LANE=holtwinters pixi run mojo run -I . bench/speed/classical_speed_main.mojo')
+
+=== classical.kpss.vendor.log :: python3 tools/speed_cuml_arm.py ===
+/root/mojolearn/tools/speed_cuml_arm.py:159: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FSPEED-REFUSED lane=kpss arm=cuml-gpu reason=RuntimeError('no fixture dump at /root/gemm_leg_out/dump/kpss.fixture. Run: MOJOLEARN_SPEED_DUMP=/root/gemm_leg_out/dump MOJOLEARN_SPEED_LANE=kpss pixi run mojo run -I . bench/speed/classical_speed_main.mojo')

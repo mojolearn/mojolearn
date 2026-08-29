@@ -1,0 +1,13 @@
+{
+  "name": "mojolearn-gemm-amd-2026-08-27_174108",
+  "imageName": "runpod/pytorch:2.4.0-py3.10-rocm6.1.0-ubuntu22.04",
+  "gpuTypeIds": ["AMD Instinct MI300X OAM"],
+  "gpuCount": 1,
+  
+  "cloudType": "SECURE",
+  "containerDiskInGb": 60,
+  "volumeInGb": 0,
+  "ports": ["22/tcp"],
+  "supportPublicIp": true,
+  "interruptible": false
+}

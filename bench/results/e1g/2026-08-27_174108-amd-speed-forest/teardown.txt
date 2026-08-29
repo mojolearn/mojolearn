@@ -1,0 +1,6 @@
+pod=g14k0bruyzlw25
+armed=1
+terminated=1
+deadman_pid=4631
+exit=1
+at=2026-08-27T21:56:15Z

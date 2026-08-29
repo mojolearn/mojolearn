@@ -1,0 +1,6 @@
+pod=uh0vixcm95j38m
+armed=1
+terminated=1
+deadman_pid=44865
+exit=143
+at=2026-08-27T07:03:13Z

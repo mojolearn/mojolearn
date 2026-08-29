@@ -1,0 +1,18 @@
+FSPEED-NOTE lane=et arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+7231 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1acb00000000, nodemask=2)
+7231 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x721280000000, nodemask=1)
+FSPEED-REFUSED lane=et arm=cuml-et-gpu reason=RuntimeError: cuML has no ExtraTrees estimator: its RandomForest searches quantile splits, not the uniform-random thresholds that define ExtraTrees. The like-for-like comparator for `et` is sklearn.
+FSPEED-REFUSED lane=et arm=sklearn-et-cpu reason=GPU-PATH-ONLY: sklearn-et-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=et arm=lightgbm-cpu reason=GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-HEADER family=forest lane=et arm=ours mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=et arm=lightgbm-cuda mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-WARMUP lane=et arm=ours shape=higgs-2000000x28 ms=8131.492
+FSPEED-WARMUP lane=et arm=lightgbm-cuda shape=higgs-2000000x28 ms=222206.667
+FSPEED lane=et arm=ours shape=higgs-2000000x28 round=1 ms=7432.472 hash=a9a9ff528583d3bd
+FSPEED lane=et arm=lightgbm-cuda shape=higgs-2000000x28 round=1 ms=227402.966 hash=8c2e1f4b65d92bd9
+FSPEED lane=et arm=ours shape=higgs-2000000x28 round=2 ms=7631.013 hash=a9a9ff528583d3bd
+FSPEED-REFUSED lane=et arm=lightgbm-cuda reason=per-arm budget 300s exceeded after 449.6s; remaining rounds skipped
+FSPEED lane=et arm=ours shape=higgs-2000000x28 round=3 ms=7449.510 hash=a9a9ff528583d3bd
+FSPEED lane=et arm=ours shape=higgs-2000000x28 round=4 ms=7446.186 hash=a9a9ff528583d3bd
+FSPEED lane=et arm=ours shape=higgs-2000000x28 round=5 ms=7493.423 hash=a9a9ff528583d3bd
+FSPEED-NOTE lane=forest.et.r2000000.log arm=- KILLED BY THE PER-ARM BUDGET (600s)

@@ -1,0 +1,13 @@
+{
+  "name": "mojolearn-gemm-amd-2026-08-26_165935",
+  "imageName": "rocm/dev-ubuntu-22.04:6.4.1-complete",
+  "gpuTypeIds": ["AMD Instinct MI300X OAM"],
+  "gpuCount": 1,
+  
+  "cloudType": "SECURE",
+  "containerDiskInGb": 60,
+  "volumeInGb": 0,
+  "ports": ["22/tcp"],
+  "supportPublicIp": true,
+  "interruptible": false
+}

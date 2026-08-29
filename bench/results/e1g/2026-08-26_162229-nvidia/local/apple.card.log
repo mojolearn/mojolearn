@@ -1,0 +1,67 @@
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/gemm_card_main.mojo:201:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/gemm_card_main.mojo:201:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/gemm_card_main.mojo:201:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/gemm_card_main.mojo:201:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/gemm_card_main.mojo:201:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+== bench/gemm_card_main.mojo [IDENTICAL] ==
+profile mojolearn.identical.gemm.fp32.v1
+arm device
+column apple
+kernel gemm/mojo_only/gemm_identical.mojo  sabotage none
+cap device: DEVICE_FLOAT_BUDGET = 67108864 float32 across A, B, C and the workspace
+   gram.32x32x1M m=32 n=32 k=1000000 plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold) P=1024
+   gram.32x32x64K m=32 n=32 k=65536 plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold) P=512
+   gram.128sq.x100003 m=128 n=128 k=100003 plan=TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle) P=782
+   ols.step1.16x16x64K m=16 n=16 k=65536 plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold) P=512
+   pca.transform.8192x4x4 m=8192 n=4 k=4 plan=TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles) P=1
+   pca.transform.wide.8192x64x128 m=8192 n=64 k=128 plan=TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle) P=1
+   kmeans.dist.4096x64x64 m=4096 n=64 k=64 plan=TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle) P=1
+   ols.predict.gemv.64Kx16 m=65536 n=1 k=16 plan=TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles) P=1
+   llama8b.qkv.t1 m=1 n=4096 k=4096 plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold) P=32
+   llama8b.qkv.t8 m=8 n=4096 k=4096 plan=TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle) P=32
+   llama8b.qkv.t512 m=512 n=4096 k=4096 plan=TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle) P=32
+   llama8b.mlp_up.t1 m=1 n=14336 k=4096 plan=TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle) P=32
+   llama8b.mlp_up.t8 m=8 n=14336 k=4096 plan=TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle) P=32
+   llama8b.mlp_up.t512 m=512 n=7168 (capped from 14336) k=4096 plan=TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle) P=32
+   llama8b.mlp_down.t1 m=1 n=4096 k=14336 plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold) P=112
+   llama8b.mlp_down.t8 m=8 n=4096 k=14336 plan=TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle) P=112
+   llama8b.mlp_down.t512 m=512 n=2048 (capped from 4096) k=14336 plan=TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle) P=112
+   llama8b.lm_head.t1 m=1 n=16032 (capped from 128256) k=4096 plan=TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle) P=32
+   llama8b.lm_head.t8 m=8 n=16032 (capped from 128256) k=4096 plan=TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle) P=32
+   llama8b.lm_head.t512 m=512 n=8016 (capped from 128256) k=4096 plan=TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle) P=32
+
+card: bench/results/e1g/2026-08-26_162229-nvidia/local/apple.card
+stages: 60 over 20 shapes; 0 skipped
+Diff two arms to see the fold topology matter:
+  MOJOLEARN_GEMM_CARD_ARM=oracle MOJOLEARN_IDENTITY_TRACE=/tmp/o.card ...
+  MOJOLEARN_GEMM_CARD_ARM=serial MOJOLEARN_IDENTITY_TRACE=/tmp/s.card ...
+  python3 tools/identity_trace_diff.py /tmp/o.card /tmp/s.card
+They agree only where P == 1.
+Diff the DEVICE arm against the oracle -- these MUST be identical:
+  MOJOLEARN_GEMM_CARD_HOST_CAP=1 MOJOLEARN_GEMM_CARD_ARM=device MOJOLEARN_IDENTITY_TRACE=/tmp/d.card ...
+  python3 tools/identity_trace_diff.py /tmp/o.card /tmp/d.card

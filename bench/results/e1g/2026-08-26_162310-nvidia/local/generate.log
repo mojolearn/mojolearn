@@ -1,0 +1,2 @@
+== gemm.fp32.v1 card: arm device, IDENTICAL ==
+  arm device: [IDENTICAL] 60 stages, 0 shapes skipped -> bench/results/e1g/2026-08-26_162310-nvidia/local/apple.card

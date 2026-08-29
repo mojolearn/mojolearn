@@ -1,0 +1,56 @@
+  cd [identical]: card 20 records -- [IDENTICAL]
+  cd [identical] check OK (10 OK lines)
+  kde [identical]: card 7 records -- [IDENTICAL]
+  kde [identical] check OK (11 OK lines)
+  linkage [identical]: card 8 records -- 
+  linkage [identical] check OK (44 OK lines)
+  svm [identical]: card 32 records -- [IDENTICAL]
+  svm [identical] check OK (4 OK lines)
+  mamba [identical]: card 17 records -- mode IDENTICAL
+  mamba [identical] check OK (16 OK lines)
+  metrics [identical]: card 61 records -- mode IDENTICAL
+  metrics-labels [identical] check OK (17 OK lines)
+  metrics-regression [identical] check OK (17 OK lines)
+  metrics-silhouette [identical] check OK (7 OK lines)
+  metrics-trust [identical] check OK (5 OK lines)
+-- lanes, fast --
+  gemm [fast]: card 60 records -- [FAST]
+PHASE8-FINDING: gemm [fast] check FAILED:     FAIL pca.transform.8192x4x4  NT 4x4x4  L=4 P=1: 16 of 16 cells differ from gemm_oracle. First at (0, 0): device = 6.822138/0x40da4ef4   oracle = 6.823977/0x
+  cd [fast]: card 20 records -- [FAST]
+  cd [fast] check OK (6 OK lines)
+  kde [fast]: card 7 records -- [FAST]
+  kde [fast] check OK (10 OK lines)
+  linkage [fast]: card 8 records -- 
+  linkage [fast] check OK (33 OK lines)
+  svm [fast]: card 32 records -- [FAST]
+  svm [fast] check OK (4 OK lines)
+PHASE8-FINDING: mamba [fast] failed (see /root/mojolearn/bench/results/e1/2026-08-28_162946-a5937291b0f8/lanes/mamba.fast.log)
+  mamba [fast]: card 17 records -- mode FAST
+PHASE8-FINDING: mamba [fast] check FAILED: Unhandled exception caught during execution: mamba_check: CLAUSE (a) FAILED, 15 stages differ from the oracle, first at norm.out on 10 of 32 cells
+  metrics [fast]: card 61 records -- mode FAST
+  metrics-labels [fast] check OK (11 OK lines)
+  metrics-regression [fast] check OK (14 OK lines)
+  metrics-silhouette [fast] check OK (6 OK lines)
+  metrics-trust [fast] check OK (5 OK lines)
+
+=== done === 17:03:23
+artifacts in /root/mojolearn/bench/results/e1/2026-08-28_162946-a5937291b0f8
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card
+vendor=nvidia
+payload=phase8
+commit=cc499f76aad102de7bded594484f99c4a2dc6910
+work_timeout=3000
+e1_phases=
+e1_lanes=
+started=2026-08-28T16:29:44Z
+bootstrap_exit=0
+note: a bootstrap_exit of 124 is the work timeout firing
+e1dir_source=the bootstrap's own 'artifacts in' line
+e1dir=/root/mojolearn/bench/results/e1/2026-08-28_162946-a5937291b0f8
+identical_cards=7
+fast_cards=7
+phase8_findings=3
+finished=2026-08-28T17:03:23Z
+REMOTE_BODY_DONE

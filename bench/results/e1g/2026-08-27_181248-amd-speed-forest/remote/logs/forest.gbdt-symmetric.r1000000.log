@@ -1,0 +1,8 @@
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+16980 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x71ed80000000, nodemask=1)
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-cpu reason=ModuleNotFoundError: No module named 'catboost'
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-gpu reason=ModuleNotFoundError: No module named 'catboost'
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=FAST device=Linux_x86_64 rounds=3 size=shipped
+16980 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7bf8c0000000, nodemask=2)
+FSPEED-REFUSED lane=gbdt-symmetric arm=ours reason=Exception during warm-up: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current AMD GPU driver version is not supported.A minimum driver version of 6.3.30000 is required. The driver version detected is: 6.1.40091. For informati

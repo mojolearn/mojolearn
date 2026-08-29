@@ -1,0 +1,6 @@
+pod=tpv1zpu85m48ee
+armed=1
+terminated=1
+deadman_pid=32734
+exit=1
+at=2026-08-27T23:26:10Z

@@ -1,0 +1,4 @@
+arming a 60-minute self-kill on pod gdgbscil9ofqno ...
+ARMED. Pod gdgbscil9ofqno is TERMINATED through the API in 60 minutes.
+  lease: bench/results/runpod_leases_C/gdgbscil9ofqno.lease
+  extend with: tools/runpod_guard.sh extend gdgbscil9ofqno '-p 18117 root@103.207.149.106' <minutes>

@@ -1,0 +1,4 @@
+arming a 60-minute self-kill on pod tpv1zpu85m48ee ...
+ARMED. Pod tpv1zpu85m48ee is TERMINATED through the API in 60 minutes.
+  lease: bench/results/runpod_leases_amd/tpv1zpu85m48ee.lease
+  extend with: tools/runpod_guard.sh extend tpv1zpu85m48ee '-p 10841 root@213.173.96.53' <minutes>

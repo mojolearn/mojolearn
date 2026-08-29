@@ -1,0 +1,6 @@
+pod=4y47m8a5ypqfvm
+armed=1
+terminated=0
+deadman_pid=73643
+exit=255
+at=2026-08-27T09:15:23Z

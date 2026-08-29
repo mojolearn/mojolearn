@@ -1,0 +1,22 @@
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+3278 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a82c0000000, nodemask=2)
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-gpu mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 ms=2125.632
+FSPEED-WARMUP lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 ms=1000.741
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=1 ms=2622.429 hash=c3b1ab8c7f136526
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=1 ms=838.127 hash=4cf44ec2b86a3489
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=2 ms=3666.967 hash=c3b1ab8c7f136526
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=2 ms=886.514 hash=20c37d7d139f98b4
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=3 ms=3706.054 hash=c3b1ab8c7f136526
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=3 ms=887.338 hash=c61cf6970ee35812
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=4 ms=3042.769 hash=c3b1ab8c7f136526
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=4 ms=846.102 hash=fa28a91fb6b6cc5e
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=5 ms=3885.306 hash=c3b1ab8c7f136526
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=higgs-1000000x28 round=5 ms=843.944 hash=bd7d4f54c377e4e6
+3278 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x33e640000000, nodemask=1)
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.542247
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.800447
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=logloss value=0.542398
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=auc value=0.800529

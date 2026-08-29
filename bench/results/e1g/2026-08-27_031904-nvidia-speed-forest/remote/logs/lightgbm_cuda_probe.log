@@ -1,0 +1,18 @@
+[LightGBM] [Fatal] CUDA Tree Learner was not enabled in this build.
+Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+Traceback (most recent call last):
+  File "<stdin>", line 6, in <module>
+  File "/usr/local/lib/python3.11/dist-packages/lightgbm/sklearn.py", line 1536, in fit
+    super().fit(
+  File "/usr/local/lib/python3.11/dist-packages/lightgbm/sklearn.py", line 1171, in fit
+    self._Booster = train(
+                    ^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/lightgbm/engine.py", line 296, in train
+    booster = Booster(params=params, train_set=train_set)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/lightgbm/basic.py", line 3762, in __init__
+    _safe_call(
+  File "/usr/local/lib/python3.11/dist-packages/lightgbm/basic.py", line 297, in _safe_call
+    raise LightGBMError(_LIB.LGBM_GetLastError().decode("utf-8"))
+lightgbm.basic.LightGBMError: CUDA Tree Learner was not enabled in this build.
+Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
