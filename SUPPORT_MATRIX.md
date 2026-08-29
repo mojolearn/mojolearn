@@ -47,13 +47,18 @@ histogram-flush lanes.
 `tools/repeat_run_stability.py --concurrent` holds all three tiers live in
 one process and calls them round-robin -- three estimators, three binaries,
 three device contexts, one GPU, one fit, one input. On an Apple M4 on
-2026-08-29, three separate attempts at 12 rounds, all three agreeing:
+2026-08-29, 12 rounds, **ten attempts**:
 
-| tier | verdict | distinct answers |
-|---|---|---|
-| `fast` | **MOVED** | **3** in 24 calls |
-| `deterministic` | STABLE | 1 in 12 calls |
-| `identical` | STABLE | 1 in 12 calls |
+| tier | result over 10 attempts |
+|---|---|
+| `fast` | **MOVED in 8 of 10** -- 2 or 3 different answers out of 24 calls; STABLE in the other 2 |
+| `deterministic` | STABLE in 10 of 10 -- one answer in 12 calls, every time |
+| `identical` | STABLE in 10 of 10 -- one answer in 12 calls, every time |
+
+**The 8-in-10, not a single reading.** A race fires when the schedule happens
+to interleave the right way, so one STABLE reading of the `fast` arm is a
+sample, not a result. The first version of this table quoted three attempts
+that all agreed and read as 100%; it is 80%.
 
 That is ledger row 23's mutex merge: which of several equidistant neighbours
 survives is decided by the order the blocks won the mutex, and `fast` pins

@@ -1074,7 +1074,7 @@ LEG_SOURCE_PATHS="gemm/mojo_only bench/gemm_card_main.mojo bench/gemm_shapes.moj
 # the injector and the build lock, and each lane's source. Four sessions
 # share this checkout, so it WILL block sometimes. That is the check working:
 # commit or stash, then rent.
-LEG_SOURCE_PATHS_PHASE8="tools/e1_bootstrap.sh tools/with_identical_mode.sh tools/with_build_lock.sh tools/gemm_card.sh bench/gemm_card_main.mojo bench/gemm_shapes.mojo gemm/mojo_only solver kde hierarchy svm metrics mamba mojo_only bindings python/mojolearn pixi.toml pixi.lock"
+LEG_SOURCE_PATHS_PHASE8="tools/e1_bootstrap.sh tools/repeat_run_stability.py tools/with_identical_mode.sh tools/with_deterministic_mode.sh tools/with_build_lock.sh tools/gemm_card.sh bench/gemm_card_main.mojo bench/gemm_shapes.mojo gemm/mojo_only solver kde hierarchy svm metrics mamba mojo_only bindings python/mojolearn pixi.toml pixi.lock"
 
 # THE SPEED PAYLOAD'S SOURCE FOOTPRINT. Wider than either of the others,
 # because it compiles a driver per family and every lane those drivers call.
@@ -1472,7 +1472,12 @@ leg_archive_required() {
         # archive, so a lane whose driver is not committed at this sha is
         # caught HERE, for nothing, instead of surfacing as a PHASE8-FINDING
         # forty minutes into a rental with no card to show for it.
-        echo "tools/e1_bootstrap.sh bench/gemm_card_main.mojo gemm/mojo_only/gemm_identical.mojo solver/cd_main.mojo kde/kde_main.mojo hierarchy/linkage_main.mojo svm/svc_main.mojo metrics/metrics_main.mojo mamba/mojo_only/mamba_check.mojo"
+        # `repeat_run_stability.py` is in this list for the same reason every
+        # lane driver is: phase 9 is the ONLY measurement of the middle tier's
+        # promise, and a leg that reaches the box without it spends the lease
+        # and comes home unable to say whether `deterministic` is deterministic
+        # on this vendor.
+        echo "tools/e1_bootstrap.sh tools/repeat_run_stability.py bench/gemm_card_main.mojo gemm/mojo_only/gemm_identical.mojo solver/cd_main.mojo kde/kde_main.mojo hierarchy/linkage_main.mojo svm/svc_main.mojo metrics/metrics_main.mojo mamba/mojo_only/mamba_check.mojo"
     else
         echo "gemm/mojo_only/gemm_identical.mojo"
     fi

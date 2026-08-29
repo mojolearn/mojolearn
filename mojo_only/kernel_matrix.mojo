@@ -984,7 +984,17 @@ def spec_for(kernel: Int, device: Int, mode: NumericMode) raises -> KernelSpec:
     # answer. The override is kept because it is the honest shape of the
     # row, and a column that genuinely lacked the instruction would need it.
     var vendor_forces_flush = not column_has_float_atomics(device)
-    var flush = identical or vendor_forces_flush
+    # DELEGATE, do not restate. This line read `identical or
+    # vendor_forces_flush` until 2026-08-29 -- a SECOND expression of the rule
+    # `NumericMode.deterministic_flush()` already owns, and this file's own
+    # `deterministic_flush_for` docstring says why that is a defect: "Two
+    # expressions of one rule is how a rule drifts". It duly drifted. When the
+    # middle tier landed, `deterministic_flush()` was re-keyed to
+    # `PIN_DETERMINISM` and this copy was not, so `spec_for` REPORTED a float
+    # atomic for a DETERMINISTIC build whose kernels were compiling the
+    # fixed-point flush -- the report and the kernel disagreeing, which is
+    # exactly the shape of the Adreno bug recorded in `deterministic_flush_for`.
+    var flush = mode.deterministic_flush() or vendor_forces_flush
 
     return KernelSpec(
         block,

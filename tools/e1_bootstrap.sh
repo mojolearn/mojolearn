@@ -112,6 +112,13 @@ run_phase() {
   esac
 }
 
+# THE TEN BINDINGS, hoisted above the phases 2026-08-29. It lived inside
+# phase 3's block, so `MOJOLEARN_E1_PHASES=9` -- phase 9 builds the
+# DETERMINISTIC set from the same list -- died on an unbound variable
+# before it launched a single kernel. A phase subset is a supported way to
+# run this file, so no phase may depend on another having run.
+E1_IDENT_BINDINGS="build.sh build_estimators.sh build_gbdt.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_tsa.sh build_linalg.sh"
+
 if run_phase 0; then
 step "phase 0: smoke (hardware matrix, column detection)"
 "$IDENT" pixi run check-hardware-matrix || echo "PHASE0-FINDING: hardware matrix (see log)"
@@ -170,7 +177,6 @@ step "phase 3: build IDENTICAL .so + traced fits"
 # is exported above and the build scripts read it); a foreign-platform .so
 # left there from an rsync would break every import, so clear it first
 rm -f python/mojolearn/identical/_mojolearn*.so
-E1_IDENT_BINDINGS="build.sh build_estimators.sh build_gbdt.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_tsa.sh build_linalg.sh"
 for b in $E1_IDENT_BINDINGS; do
   echo "--- bindings/$b (identical)"
   pixi run -e gbmbench bash "bindings/$b" \
@@ -494,6 +500,66 @@ for mode in identical fast; do
     run_lane_check "metrics-${t#check-metrics-}" "$mode" pixi run "$t"
   done
 done
+
+fi
+
+if run_phase 9; then
+step "phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon"
+# THE QUESTION NO OTHER PHASE ASKS. Phases 3-8 all ask a CROSS-VENDOR
+# question: they write cards here so a second machine's cards can be diffed
+# against them. That inference only exists where a card exists, it needs two
+# machines, and it says nothing at all about FAST -- which is exactly the arm
+# whose instability we want to price.
+#
+# This phase asks the one-box question directly: same fit, same input, same
+# GPU, twice -- same bits? It is the whole evidence for `deterministic`, the
+# middle tier, and until 2026-08-29 it had been asked on ONE column (an Apple
+# M4) and written down as if it covered three. That is the standing error this
+# phase exists to stop repeating.
+#
+# THE DETERMINISTIC SET IS BUILT HERE and nowhere else in this file: phase 3
+# builds FAST and IDENTICAL, because those are what the cards need. The middle
+# tier needs its own ten binaries and they land under
+# python/mojolearn/deterministic/.
+rm -f python/mojolearn/deterministic/_mojolearn*.so
+for b in $E1_IDENT_BINDINGS; do
+  if ! MOJOLEARN_NUMERIC_MODE=deterministic MOJOLEARN_SKIP_BUILD_GATE=1 \
+       pixi run -e gbmbench bash "bindings/$b" > "$OUT/det_build_${b%.sh}.log" 2>&1; then
+    echo "PHASE9-FINDING: deterministic bindings/$b did not build; first error:"
+    grep -m2 -E 'error:|constraint failed' "$OUT/det_build_${b%.sh}.log" | cut -c1-200 | sed 's/^/      /'
+  fi
+done
+echo "deterministic set: $(ls python/mojolearn/deterministic/_mojolearn*.so 2>/dev/null | wc -l | tr -d ' ') of 10 binaries"
+
+mkdir -p "$OUT/stability"
+# EVERY TIER, INCLUDING FAST. A tier that is not measured cannot be compared,
+# and FAST is the baseline the other two are worth something against. A tier
+# whose binaries did not build reports its import error into its own file
+# rather than being skipped: "not measured" and "measured clean" must not look
+# the same in the fetched directory.
+for m in fast deterministic identical; do
+  MOJOLEARN_NUMERIC_MODE=$m PYTHONPATH="$REPO/python" \
+    pixi run -e gbmbench python3 tools/repeat_run_stability.py \
+      --repeats 6 --json "$OUT/stability/$m.json" \
+      > "$OUT/stability/$m.txt" 2>&1 \
+    || echo "PHASE9-FINDING: stability arm $m returned non-zero (see stability/$m.txt)"
+  echo "--- stability $m"
+  tail -4 "$OUT/stability/$m.txt" 2>/dev/null | sed 's/^/    /'
+done
+
+# THE PROBE THAT ACTUALLY CATCHES IT. Sequential repeats above UNDER-REPORT:
+# one process with one device context leaves the queue empty between launches
+# and an arrival-order defect reproduces its own last answer. What moves it is
+# contention BETWEEN CONTEXTS -- all three tiers live at once, called
+# round-robin, which is what a serving process holding two models looks like.
+# On the M4 the sequential arm called the k-NN lane STABLE under FAST and this
+# probe found three different answers in 24 calls.
+PYTHONPATH="$REPO/python" pixi run -e gbmbench python3 \
+    tools/repeat_run_stability.py --concurrent \
+    > "$OUT/stability/concurrent.txt" 2>&1 \
+  || echo "PHASE9-FINDING: concurrent probe returned non-zero (see stability/concurrent.txt)"
+echo "--- stability concurrent"
+tail -6 "$OUT/stability/concurrent.txt" 2>/dev/null | sed 's/^/    /'
 
 fi
 step "done"

@@ -271,12 +271,19 @@ def concurrent_probe(repeats=12):
     condition rather than a contrived one: it is what a serving process with
     two models loaded looks like.
 
-    Measured on an Apple M4, 2026-08-29, at 12 rounds -- three separate
-    attempts, all three agreeing:
+    Measured on an Apple M4, 2026-08-29, 12 rounds, TEN attempts:
 
-        fast           MOVED   3 distinct answers in 24 calls
-        deterministic  STABLE  1 answer         in 12 calls
-        identical      STABLE  1 answer         in 12 calls
+        fast           MOVED in 8 of 10 attempts (2 or 3 different answers
+                       out of 24 calls); STABLE in the other 2
+        deterministic  STABLE in 10 of 10 (one answer in 12 calls)
+        identical      STABLE in 10 of 10 (one answer in 12 calls)
+
+    **THE 8-IN-10 IS THE HONEST NUMBER AND THE 2 MATTER.** A race does not
+    fire on demand; it fires when the schedule happens to interleave the
+    right way, and how busy the box is changes that. So a single STABLE
+    reading of the fast arm is not evidence that fast is stable -- it is one
+    sample from a distribution that is 80% MOVED here. Any report of this
+    probe that quotes one attempt is quoting noise.
 
     Same fit, same input, same GPU. This is ledger row 23's mutex merge:
     which of several equidistant neighbours survives is decided by the order
@@ -329,8 +336,11 @@ def concurrent_probe(repeats=12):
     bad = []
     for m in ests:
         d = len(set(seen[m]))
-        verdict = "STABLE" if d == 1 else "MOVED"
-        print(f"  {m:14} {verdict:6} {d} distinct answer(s) in {len(seen[m])} calls")
+        n = len(seen[m])
+        if d == 1:
+            print(f"  {m:14} STABLE  all {n} calls returned THE SAME answer")
+        else:
+            print(f"  {m:14} MOVED   {n} calls returned {d} DIFFERENT answers")
         if d > 1 and m != "fast":
             bad.append(m)
     print()
@@ -386,8 +396,12 @@ def main():
           f", interleave={args.interleave}")
     print(f"# {time.strftime('%Y-%m-%d %H:%M:%S')}")
     print()
-    print(f"| {'lane':<16} | {'verdict':<8} | distinct | hashes |")
-    print(f"|{'-'*18}|{'-'*10}|----------|--------|")
+    # THE COLUMN IS "SAME ANSWER EVERY TIME", NOT A SCORE. An earlier version
+    # printed a bare "distinct" count and it was read as a pass rate -- "1 in
+    # 12" looks like 1 success out of 12 when it means the opposite: twelve
+    # calls, ONE answer between them, which is a perfect result. Spell it.
+    print(f"| {'lane':<16} | {'verdict':<8} | same answer every time? | hashes |")
+    print(f"|{'-'*18}|{'-'*10}|-------------------------|--------|")
 
     rows = []
     for name in sorted(names):
@@ -415,7 +429,13 @@ def main():
             distinct = len(uniq)
             verdict = "STABLE" if distinct == 1 else "MOVED"
             shown = " ".join(uniq[:3]) + (" ..." if distinct > 3 else "")
-        print(f"| {name:<16} | {verdict:<8} | {distinct:^8} | {shown} |")
+        if verdict == "REFUSED":
+            same = "n/a (refused)"
+        elif distinct == 1:
+            same = f"YES  {args.repeats}/{args.repeats} calls agreed"
+        else:
+            same = f"NO   {distinct} different answers in {args.repeats} calls"
+        print(f"| {name:<16} | {verdict:<8} | {same:<23} | {shown} |")
         rows.append(
             dict(lane=name, verdict=verdict, distinct=distinct,
                  hashes=hashes, error=err)

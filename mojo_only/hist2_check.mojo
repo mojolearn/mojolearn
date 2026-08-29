@@ -98,7 +98,7 @@ from mojo_only.kernel_matrix import (
     TARGET_COLUMN,
     deterministic_flush_for,
 )
-from mojo_only.numerics import NUMERIC_IDENTICAL
+from mojo_only.numerics import NUMERIC_IDENTICAL, PIN_DETERMINISM
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     upload_scale,
     DeviceBlock,
@@ -170,8 +170,14 @@ comptime POISON_SCALE = Float32(1073741824.0)
 #: Whether the FLOAT-accumulation arm reads `fixed_scale` anywhere: only in
 #: its writeback, and only under the integer flush. The scale-fingerprint
 #: expectations follow the build through this and `HIST2_SMEM_MODE`.
+#: `PIN_DETERMINISM`, not `== NUMERIC_IDENTICAL`, since 2026-08-29. This
+#: predicate must name the SAME expression the kernel branches on, and the
+#: kernel side moved to `PIN_DETERMINISM` when the middle tier landed. Left
+#: as it was, a DETERMINISTIC build would compile the fixed-point flush and
+#: this check would predict the float atomic -- so arm 3 would aim its
+#: sabotage at the flush that is not there and pass by missing.
 comptime FLUSH_IS_FIXED = deterministic_flush_for[
-    TARGET_COLUMN, HIST2_BUILD_MODE == NUMERIC_IDENTICAL
+    TARGET_COLUMN, PIN_DETERMINISM
 ]()
 
 
