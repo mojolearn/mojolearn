@@ -1,0 +1,2 @@
+MODULAR_NVPTX_COMPILER_PATH=/usr/local/cuda/bin/ptxas
+550.127.05

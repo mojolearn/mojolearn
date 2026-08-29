@@ -530,6 +530,15 @@ WORK_TIMEOUT="${MOJOLEARN_GEMM_LEG_WORK_TIMEOUT:-0}"
 # correctly. Only section 7 is answerable. tools/e1_bootstrap.sh says the same
 # thing at more length and it is the file that enforces it.
 E1_PHASES="${MOJOLEARN_GEMM_LEG_E1_PHASES:-}"
+
+# PHASE 9'S BUILD SET. Thirty builds (ten bindings x three tiers) took FIFTY
+# MINUTES on a rented RTX 4090 and the work bound then killed the first
+# measurement arm: a whole lease spent building, no answer brought home. The
+# default here is the four bindings whose lanes carry the order-dependence
+# phase 9 is about -- k-means/k-NN, the gbdt histogram flush, DBSCAN and the
+# linear surfaces, and the GEMM whose cuBLAS run-to-run status is the open
+# question. Set MOJOLEARN_GEMM_LEG_P9_BINDINGS to widen it on a box with time.
+P9_BINDINGS="${MOJOLEARN_GEMM_LEG_P9_BINDINGS:-build.sh build_gbdt.sh build_estimators.sh build_linalg.sh}"
 # DEVIATION 973: which phase-8 lanes the box runs. Empty means all of them.
 # Leg 12 proved the need: the lane order puts mamba LAST behind gemm's device
 # check, the largest compile in the set, so on a cold box mamba was never
@@ -2234,6 +2243,9 @@ if [ -z "${MODULAR_NVPTX_COMPILER_PATH:-}" ]; then
         fi
     done
 fi
+MOJOLEARN_P9_BINDINGS="@P9BINDINGS@"
+export MOJOLEARN_P9_BINDINGS
+
 {
     echo "MODULAR_NVPTX_COMPILER_PATH=${MODULAR_NVPTX_COMPILER_PATH:-<none found>}"
     command -v nvidia-smi > /dev/null 2>&1 && \
@@ -3035,6 +3047,7 @@ leg_check_remote_body() {
         -e "s|@WORKTIMEOUT@|$WORK_TIMEOUT|g" \
         -e "s|@E1PHASES@|$E1_PHASES|g" \
         -e "s|@E1LANES@|$E1_LANES|g" \
+        -e "s|@P9BINDINGS@|$P9_BINDINGS|g" \
         -e "s|@SMI@|$SMI_CMD|g" \
         "$_body" > "$_body.subst"
     mv "$_body.subst" "$_body"

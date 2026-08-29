@@ -1,0 +1,15 @@
+vendor=nvidia
+payload=phase8
+commit=c195ae286b20179afdaa35236f7960c3f71d5ad7
+work_timeout=3000
+e1_phases=9
+e1_lanes=
+started=2026-08-29T07:52:36Z
+bootstrap_exit=124
+note: a bootstrap_exit of 124 is the work timeout firing
+e1dir_source=newest directory under bench/results/e1 (the bootstrap never printed 'artifacts in')
+e1dir=/root/mojolearn/bench/results/e1/2026-08-29_075238-ae60cff4343b
+identical_cards=0
+fast_cards=0
+phase8_findings=0
+finished=2026-08-29T08:42:38Z

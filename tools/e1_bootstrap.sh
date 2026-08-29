@@ -529,13 +529,33 @@ step "phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silic
 # depend on another phase having run. Sets that already exist are rebuilt: the
 # whole comparison is void if the three came from different source states, and
 # a stale binary already produced one wrong verdict today.
+# WHICH BINDINGS, AND WHY THIS IS A KNOB. Thirty builds (ten bindings x three
+# tiers) took FIFTY MINUTES on a rented RTX 4090 and the 54-minute work bound
+# then killed the first measurement arm mid-run: the leg spent a whole lease
+# building and brought home no answer. Locally the same thirty take about
+# three minutes, which is exactly how a budget like this goes unnoticed.
+#
+# So the set is settable. The default stays all ten -- on a machine with time,
+# measure everything -- and a rented leg narrows it to the bindings whose
+# lanes carry the order-dependence this phase is about:
+#
+#   _mojolearn             k-means, k-NN   <- row 23/11, the lane that MOVES
+#   _mojolearn_gbdt        the histogram flush, the one true determinism pin
+#   _mojolearn_estimators  DBSCAN (row 25), PCA, tSVD, OLS, ridge, logistic
+#   _mojolearn_linalg      the GEMM whose cuBLAS run-to-run status is OPEN
+#
+# A lane whose binding is not built reports REFUSED with the import error,
+# which is a result and not a silence -- "not measured" and "measured clean"
+# must never look the same in the fetched directory.
+P9_BINDINGS="${MOJOLEARN_P9_BINDINGS:-$E1_IDENT_BINDINGS}"
+echo "phase 9 builds: $P9_BINDINGS"
 for tier in fast deterministic identical; do
   case "$tier" in
     fast) _dir="python/mojolearn" ;;
     *)    _dir="python/mojolearn/$tier" ;;
   esac
   [ "$tier" = "fast" ] || rm -f "$_dir"/_mojolearn*.so
-  for b in $E1_IDENT_BINDINGS; do
+  for b in $P9_BINDINGS; do
     if ! MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 \
          pixi run -e gbmbench bash "bindings/$b" > "$OUT/p9_${tier}_${b%.sh}.log" 2>&1; then
       echo "PHASE9-FINDING: $tier bindings/$b did not build; first error:"
@@ -554,7 +574,8 @@ mkdir -p "$OUT/stability"
 for m in fast deterministic identical; do
   MOJOLEARN_NUMERIC_MODE=$m PYTHONPATH="$REPO/python" \
     pixi run -e gbmbench python3 tools/repeat_run_stability.py \
-      --repeats 6 --json "$OUT/stability/$m.json" \
+      --repeats 6 ${MOJOLEARN_P9_LANES:+--lanes "$MOJOLEARN_P9_LANES"} \
+      --json "$OUT/stability/$m.json" \
       > "$OUT/stability/$m.txt" 2>&1 \
     || echo "PHASE9-FINDING: stability arm $m returned non-zero (see stability/$m.txt)"
   echo "--- stability $m"
