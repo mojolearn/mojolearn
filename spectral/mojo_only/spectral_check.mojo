@@ -106,7 +106,7 @@ from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace, first_divergence, read_trace_lines
 from gemm.mojo_only.gemm_oracle import OP_NT, gemm_oracle
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 from decomposition.mojo_only.jacobi_eigh import jacobi_eigh
 from spectral.mojo_only.device_io import download_f32, upload_f32, upload_i32
 from spectral.mojo_only.spectral_fixture import (
@@ -153,9 +153,14 @@ comptime SCRATCH = "/tmp"
 
 
 def _mode_name() -> String:
-    comptime if IDENTICAL:
-        return String("IDENTICAL")
-    return String("FAST")
+    """The build's tier, from the ONE definition of it.
+
+    Delegates to `numeric_mode_name()` since 2026-08-29; see the note
+    on that function. A local two-way IDENTICAL-or-FAST answers "FAST"
+    for a DETERMINISTIC build, which mislabels every line the driver
+    prints.
+    """
+    return numeric_mode_name()
 
 
 def _hex32(v: Float32) -> String:

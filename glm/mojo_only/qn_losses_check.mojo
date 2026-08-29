@@ -109,6 +109,7 @@ from mojo_only.numerics import (
     NUMERIC_IDENTICAL,
     ftz,
     identical_mul_add,
+    numeric_mode_name,
 )
 
 
@@ -129,9 +130,14 @@ def _losses() -> List[Int]:
 
 
 def _mode_name() -> String:
-    comptime if IDENTICAL:
-        return String("IDENTICAL")
-    return String("FAST")
+    """The build's tier, from the ONE definition of it.
+
+    Delegates to `numeric_mode_name()` since 2026-08-29; see the note
+    on that function. A local two-way IDENTICAL-or-FAST answers "FAST"
+    for a DETERMINISTIC build, which mislabels every line the driver
+    prints.
+    """
+    return numeric_mode_name()
 
 
 def _loss_name(loss: Int) -> String:

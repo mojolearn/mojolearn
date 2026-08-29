@@ -68,7 +68,7 @@ from metrics.ported.stats.detail.mutual_info_score import (
     contingency_matrix_host,
 )
 from metrics.ported.stats.detail.rand_index import rand_index_counts
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
 comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -86,9 +86,14 @@ comptime K_TRUST = 5
 
 
 def _mode_name() -> String:
-    comptime if IDENTICAL:
-        return String("IDENTICAL")
-    return String("FAST")
+    """The build's tier, from the ONE definition of it.
+
+    Delegates to `numeric_mode_name()` since 2026-08-29; see the note
+    on that function. A local two-way IDENTICAL-or-FAST answers "FAST"
+    for a DETERMINISTIC build, which mislabels every line the driver
+    prints.
+    """
+    return numeric_mode_name()
 
 
 def _rec64(mut trace: IdentityTrace, tag: String, v: Float64) raises:

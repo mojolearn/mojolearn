@@ -149,7 +149,7 @@ from ivf.ported.neighbors.ivf_flat.ivf_flat_search import (
     ivf_flat_search_traced,
     sort_slots_by_distance_then_index,
 )
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 from neighbors.estimator import knn_search
 from neighbors.mojo_only.pinned_distance_tile import PINNED_TILE_TPB
 from neighbors.ported.matrix.detail.select_radix import SELECT_BLOCK
@@ -175,9 +175,14 @@ comptime SCRATCH = "/tmp"
 
 
 def _mode_name() -> String:
-    comptime if IDENTICAL:
-        return String("IDENTICAL")
-    return String("FAST")
+    """The build's tier, from the ONE definition of it.
+
+    Delegates to `numeric_mode_name()` since 2026-08-29; see the note
+    on that function. A local two-way IDENTICAL-or-FAST answers "FAST"
+    for a DETERMINISTIC build, which mislabels every line the driver
+    prints.
+    """
+    return numeric_mode_name()
 
 
 def _hex32(v: Float32) -> String:

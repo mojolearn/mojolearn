@@ -223,7 +223,7 @@ from holtwinters.ported.tsa.holtwinters_params import (
     SEASONAL_MULTIPLICATIVE,
     criterion_name,
 )
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 from solver.mojo_only.record_canon import canon_nan_f32, canon_nan_list
 
 comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -263,9 +263,14 @@ comptime PACK_POISON_I = Int32(-424242)
 
 
 def _mode_name() -> String:
-    comptime if IDENTICAL:
-        return String("IDENTICAL")
-    return String("FAST")
+    """The build's tier, from the ONE definition of it.
+
+    Delegates to `numeric_mode_name()` since 2026-08-29; see the note
+    on that function. A local two-way IDENTICAL-or-FAST answers "FAST"
+    for a DETERMINISTIC build, which mislabels every line the driver
+    prints.
+    """
+    return numeric_mode_name()
 
 
 def _f32_list[dt: DType](v: List[Scalar[dt]]) -> List[Float32]:

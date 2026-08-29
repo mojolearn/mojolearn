@@ -362,7 +362,7 @@ from glm.mojo_only.ols_trace import (
     emit_ols_card,
 )
 from glm.ported.linalg.detail.lstsq import OLS_ELEM_TPB, OLS_NONZERO_THRESH
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 from mojo_only.kernel_matrix import (
     COLUMN_BIT_IDENTICAL,
     TARGET_COLUMN,
@@ -376,19 +376,14 @@ comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def _mode_name() -> String:
-    """The mode THIS BINARY WAS COMPILED IN, printed by every check below.
+    """The build's tier, from the ONE definition of it.
 
-    Not decoration. Four sessions share this checkout and the mode line is
-    one line in a file all of them read, so a run that compiled inside
-    another session's flip window prints one mode's label over the other
-    mode's numbers. It has happened. `tools/with_identical_mode.sh` takes
-    the build lock (DEVIATION 514); this is the second, independent
-    witness, and it is read from the comptime constant the kernels were
-    actually compiled against.
+    Delegates to `numeric_mode_name()` since 2026-08-29; see the note
+    on that function. A local two-way IDENTICAL-or-FAST answers "FAST"
+    for a DETERMINISTIC build, which mislabels every line the driver
+    prints.
     """
-    comptime if IDENTICAL:
-        return String("IDENTICAL")
-    return String("FAST")
+    return numeric_mode_name()
 
 
 # ===========================================================================

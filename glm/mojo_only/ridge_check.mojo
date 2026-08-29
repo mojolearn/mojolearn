@@ -78,6 +78,7 @@ from mojo_only.numerics import (
     ftz,
     identical_mul_add,
     identical_sqrt,
+    numeric_mode_name,
 )
 
 
@@ -87,9 +88,14 @@ comptime RIDGE_COLS = 8
 
 
 def _mode_name() -> String:
-    comptime if IDENTICAL:
-        return String("IDENTICAL")
-    return String("FAST")
+    """The build's tier, from the ONE definition of it.
+
+    Delegates to `numeric_mode_name()` since 2026-08-29; see the note
+    on that function. A local two-way IDENTICAL-or-FAST answers "FAST"
+    for a DETERMINISTIC build, which mislabels every line the driver
+    prints.
+    """
+    return numeric_mode_name()
 
 
 def _u01(row: Int, k: Int, salt: Int) -> Float64:

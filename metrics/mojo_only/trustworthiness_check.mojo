@@ -61,7 +61,7 @@ from metrics.ported.stats.detail.trustworthiness_score import (
     TRUST_MAX_K,
     trustworthiness_rank_sum,
 )
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
 comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -72,9 +72,14 @@ comptime K = 5
 
 
 def _mode_name() -> String:
-    comptime if IDENTICAL:
-        return String("IDENTICAL")
-    return String("FAST")
+    """The build's tier, from the ONE definition of it.
+
+    Delegates to `numeric_mode_name()` since 2026-08-29; see the note
+    on that function. A local two-way IDENTICAL-or-FAST answers "FAST"
+    for a DETERMINISTIC build, which mislabels every line the driver
+    prints.
+    """
+    return numeric_mode_name()
 
 
 def _fixture(salt: Int) -> Tuple[List[Float32], List[Float32]]:

@@ -147,7 +147,7 @@ from isolation_forest.ported.isolation_forest.isolation_forest import (
 from isolation_forest.ported.isolation_forest.isolation_tree_builder import (
     EULER_MASCHERONI_F32,
 )
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
 comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -185,9 +185,14 @@ def _ensure_scratch() raises:
 
 
 def _mode_name() -> String:
-    comptime if IDENTICAL:
-        return String("IDENTICAL")
-    return String("FAST")
+    """The build's tier, from the ONE definition of it.
+
+    Delegates to `numeric_mode_name()` since 2026-08-29; see the note
+    on that function. A local two-way IDENTICAL-or-FAST answers "FAST"
+    for a DETERMINISTIC build, which mislabels every line the driver
+    prints.
+    """
+    return numeric_mode_name()
 
 
 def _tag() -> String:
