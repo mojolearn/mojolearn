@@ -3210,7 +3210,12 @@ leg_check_remote_body() {
 
 leg_ship_and_run() {
     leg_say "shipping the COMMIT ($COMMIT), not the working tree"
-    git archive --format=tar "$COMMIT" | gzip > "$TMPD/src.tgz"
+    # NOT the result directories. On 2026-08-29 the archive was 337 MB gzipped
+    # and one upload took 34 of a 60-minute lease; bench/results/e1, e1g and
+    # fast_speed are 840 MB of OTHER legs' output the box never reads (every
+    # diff and table runs on the Mac after the fetch). Without them: 115 MB
+    # before fast_speed, less after. The commit is still exact for the source.
+    git archive --format=tar "$COMMIT" -- . ':!bench/results/e1' ':!bench/results/e1g' ':!bench/results/fast_speed' | gzip > "$TMPD/src.tgz"
     # The Mac's half of the two-sided source hash, computed from the ARCHIVE
     # so that what is compared is what was SHIPPED.
     mkdir -p "$TMPD/archive"
