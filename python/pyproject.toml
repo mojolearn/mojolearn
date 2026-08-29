@@ -156,4 +156,4 @@ include-package-data = false
 # which _backend.py loads when MOJOLEARN_NUMERIC_MODE=identical. All twenty
 # files are built by build_release_wheel.sh (EXT_NAMES is THE list), which
 # refuses a stale file by mtime.
-mojolearn = ["*.so", "identical/*.so", ".dylibs/*.dylib"]
+mojolearn = ["*.so", "identical/*.so", "deterministic/*.so", ".dylibs/*.dylib"]

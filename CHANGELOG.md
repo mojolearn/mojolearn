@@ -95,17 +95,51 @@ card (34 stages then, 64 now) has had its three-vendor leg, and
 `isolation_forest` joined phase 8 and ran on both boxes.
 
 `SpectralClustering`, `ExponentialSmoothing`, `kpss_test` and `select_d` do
-not stand on a three-vendor card. The `spectral`, `holtwinters` and `tsa`
-lanes have never run anywhere but one Apple M4 -- no leg directory in
-`bench/results/` holds a card for any of them. Their gates are green there
-and their pins come from the same source as the lanes above, so they are
-expected to match, but the leg is OWED and until it runs that is an
-expectation and not a measurement. Each class says so rather than inheriting
-a neighbor's certificate.
+not stand on a three-vendor card, and the reason changed on 2026-08-28. All
+three lanes now emit identity cards and are listed in the round: `spectral`
+and `holtwinters` joined phase 8 in `241aed6`, and `tsa` in `f081b7f`, whose
+message records that `tsa/tsa_main.mojo` had built a complete eleven-stage
+card since it was written and that the comment claiming otherwise was the
+only thing keeping it out. `spectral` and `holtwinters` have an Apple card
+and an AMD card; `tsa` has an Apple card.
+
+What is missing is a SHARED COMMIT. The Apple cards for `spectral` and
+`holtwinters` were taken at `5fd95b3` and `241aed6`, the AMD cards at
+`26eb8ba`, and `tsa`'s Apple card at `869d416`, so no two of them are
+comparable and no NVIDIA leg has run any of the three. Their pins come from
+the same source as the lanes above, so they are expected to match, but the
+comparison has not been performed and each class says so rather than
+inheriting a neighbor's certificate.
 
 **The FAST arm, which is the default, makes no cross-vendor claim at all.**
 Unchanged from 0.1.0, and the FAST cards do differ between vendors for
 every lane but gemm; that is recorded, not a defect.
+
+### A third numeric tier exists, and does not ship in this wheel
+
+`MOJOLEARN_NUMERIC_MODE` became a three-rung ladder on 2026-08-29
+(DEVIATIONS 1940 and 1941). `fast` promises nothing but speed, `deterministic`
+promises the same bits run to run on one box and says nothing about a second,
+and `identical` promises both plus the same bits on Metal, CUDA and HIP.
+Determinism is a strict subset of identity, never a sibling, so
+`PIN_DETERMINISM` is true under both upper tiers.
+
+The tier is worth having because the reproducibility most callers actually
+want was only purchasable by taking `identical` whole, and identity is not
+free. Three consecutive FAST runs of one binary on one fixture on one M4
+returned three different sorted k-NN index sets, and across every FAST board
+taken on 2026-08-28 our own arm's per-round output hash moved between rounds
+on 4 of 179 rows.
+
+**0.2.0 carries `fast` and `identical` only.** The deterministic pin lane is
+not finished, and `ce2e843` is the reason to be careful here: for the length
+of one commit the tier was defined, empty, and would have taken the float
+atomic flush while calling itself deterministic, which is the worst failure a
+tier named that way can have. `MOJOLEARN_NUMERIC_MODE=deterministic` raises
+from the missing-binary stub by name in this release. The release path is
+already wired for it, so shipping the tier is one environment variable
+(`MOJOLEARN_RELEASE_MODES` in `packaging/macos/build_release_wheel.sh`) once
+the lane closes.
 
 ### Tooling
 
@@ -154,6 +188,20 @@ NVIDIA and AMD FAST columns by the kernel matrix and do not touch this
 wheel at all.
 
 ### Known issues
+
+- `ftz`, the denormal-policy helper that IDENTITY_PATHS row 10 is built on,
+  DID NOTHING ON THE GPU until 2026-08-28 (DEVIATION 1938). Its guard was two
+  float comparisons, and a flush-to-zero backend evaluates those with the
+  operand already flushed, so `x != 0.0` was false for every subnormal, the
+  branch never fired, and the helper returned subnormals untouched. Measured
+  on the M4 under IDENTICAL against a host twin, three of four patterns
+  disagreed. It hid because everywhere a denormal also passes through
+  arithmetic the hardware flushes it anyway; it is visible only where a value
+  reaches a seam BY COPY. **This was a cross-vendor hole, not an Apple one**,
+  since on a denormal-honoring backend the guard fired and on an FTZ backend
+  it did not. The guard now tests the exponent and mantissa fields, which no
+  backend's FTZ can defeat. **Every binary published before this release,
+  including the 0.1.0 wheel on PyPI, carries the inert helper.**
 
 - `IsolationForest` carries OPEN DEVIATION 750. cuML's `curand_u64` builds
   a 64-bit draw out of two unsequenced `curand()` calls and C++ does not

@@ -53,7 +53,10 @@ for py in python3.10 python3.11 python3.12 python3.13 python3.14; do
     # one that was asked for, so a wheel that silently shipped only the fast
     # set fails here rather than on a user's machine.
     okmode=1
-    for mode in fast identical; do
+    # The same tier list the wheel was built with, so a two-tier wheel is not
+    # failed for lacking a third. MOJOLEARN_RELEASE_MODES is what
+    # build_release_wheel.sh reads; keep them set the same for one release.
+    for mode in ${MOJOLEARN_RELEASE_MODES:-fast identical}; do
         if out=$(cd "$tmp" && MOJOLEARN_NUMERIC_MODE=$mode "$tmp/venv/bin/python" "$here/packaging/macos/smoke.py" $SMOKE_ARGS 2>&1); then
             echo "PASS $py [$mode]  $out"
         else

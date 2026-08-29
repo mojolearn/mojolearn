@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build the macOS arm64 wheel: five extensions in two numeric modes, staged MAX
+# Build the macOS arm64 wheel: ten extensions per numeric tier, staged MAX
 # runtime, re-signed, packed.
 #
 # WHY STAGING IS NOT OPTIONAL. `otool -L` on the freshly built extension shows
@@ -77,23 +77,47 @@ EXT_NAMES="_mojolearn _mojolearn_gbdt _mojolearn_estimators _mojolearn_rf _mojol
 # interpreter and fits every estimator family in BOTH numeric modes. That
 # is strictly more than the per-script gates check, and it runs on the
 # artifact that ships rather than on a copy of the tree.
-for mode in fast identical; do
+# THE TIERS THIS WHEEL CARRIES. `fast` lives at python/mojolearn/*.so and
+# every other tier one directory down under its own name, which is the layout
+# python/mojolearn/_backend.py loads from.
+#
+# THE DEFAULT IS TWO TIERS AND NOT THREE, 2026-08-29. NUMERIC_DETERMINISTIC
+# exists in the compiler (bindings/build.sh) and in the selector
+# (_backend.py's _MODE_CODE), and its pin lane is not finished. Naming it here
+# would make every release build gate on binaries that lane has not produced
+# yet, and the gate below is an existence-and-freshness check that cannot be
+# softened without losing the thing it catches. When the lane lands, ship it
+# with
+#     MOJOLEARN_RELEASE_MODES="fast deterministic identical"
+# and nothing else in this file changes. pyproject.toml's package-data glob
+# already carries deterministic/*.so, so the tier ships the moment it builds.
+MODES="${MOJOLEARN_RELEASE_MODES:-fast identical}"
+echo "== numeric tiers in this wheel: $MODES"
+
+for mode in $MODES; do
     for script in $BUILD_SCRIPTS; do
         echo "== $script ($mode)"
         MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_SKIP_BUILD_GATE=1 ./bindings/$script
     done
 done
 
-# THE TEN FILES THE REST OF THIS SCRIPT GATES. Built above or absent, never
+# THE FILES THE REST OF THIS SCRIPT GATES, ten per tier. Built above or absent, never
 # stale: every one is checked for existence and for being newer than this
 # script's start, so a build script that silently left the old file in place
 # fails here instead of shipping.
-FAST_SOS=""; IDENT_SOS=""
+# One entry per extension per tier. `fast` is the package directory itself and
+# every other tier is a subdirectory of the same name, so this loop does not
+# need to know which tiers exist, only what MODES says.
+ALL_SOS=""
 for n in $EXT_NAMES; do
-    FAST_SOS="$FAST_SOS $PKG/$n.so"
-    IDENT_SOS="$IDENT_SOS $PKG/identical/$n.so"
+    for mode in $MODES; do
+        if [ "$mode" = "fast" ]; then
+            ALL_SOS="$ALL_SOS $PKG/$n.so"
+        else
+            ALL_SOS="$ALL_SOS $PKG/$mode/$n.so"
+        fi
+    done
 done
-ALL_SOS="$FAST_SOS $IDENT_SOS"
 for so in $ALL_SOS; do
     [ -f "$so" ] || { echo "ERROR: $so was not produced" >&2; exit 1; }
     [ "$so" -nt "$STAMP" ] || { echo "ERROR: $so predates this build (stale)" >&2; exit 1; }
@@ -106,7 +130,8 @@ done
 # @rpath/libMSupportGlobals.dylib, referenced from .dylibs/libAsyncRT...".
 # It also verifies statically that nothing is left unresolved, which is the
 # only form of this check that means anything on the build machine.
-# ALL TEN EXTENSIONS IN ONE CALL, because there is one `.dylibs` and the
+# EVERY EXTENSION OF EVERY TIER IN ONE CALL, because there is one `.dylibs`
+# and the
 # script wipes it before staging. Separate calls would leave earlier closures
 # deleted -- invisibly, because on THIS machine the original rpath still
 # resolves into the pixi environment. The identical/ set sits one directory

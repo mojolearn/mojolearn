@@ -49,15 +49,41 @@ km = mojolearn.KMeans(n_clusters=8).fit(X)
 print(km.cluster_centers_.shape, mojolearn.numeric_mode())
 ```
 
-To train the bit-identical way, set one environment variable before the
-import. Nothing is rebuilt; the wheel carries both binary sets.
+### Three numeric modes, and each keeps the one below it
+
+Set one environment variable before the import. Nothing is rebuilt; the wheel
+carries the binary sets.
 
 ```sh
-MOJOLEARN_NUMERIC_MODE=identical python train.py
+python train.py                                        # fast (the default)
+MOJOLEARN_NUMERIC_MODE=deterministic python train.py
+MOJOLEARN_NUMERIC_MODE=identical     python train.py
 ```
+
+| mode | what it promises |
+|---|---|
+| `fast` | **Nothing but speed.** The same fit on the same box may return different bits on two runs. |
+| `deterministic` | **Same box, same build, same input gives the same bits, every run.** Says nothing about a second box. |
+| `identical` | All of the above, AND **the same bits on Apple Metal, NVIDIA CUDA and AMD HIP.** |
+
+`fast` is not a broken `identical`. It promises speed and nothing else, so
+asking a `fast` run a bitwise question is a category error. Where it happens
+to be stable that is a measurement, not a guarantee: across every board taken
+on 2026-08-28, our own arm's output hash held on 175 of 179 rows and moved on
+4, all of them histogram lanes.
+
+**`deterministic` is new (2026-08-29) and only partly populated.** The tier
+compiles, is selectable, and carries the gbdt histogram flush and both k-NN
+tie pathways. Every other pin in the tree is still keyed to `identical`,
+which means a `deterministic` build of a lane that has not been reclassified
+yet behaves like `fast` for that lane. `SUPPORT_MATRIX.md` lists exactly what
+has moved and what is owed; do not read the tier as finished.
 
 `mojolearn.numeric_mode()` reports the mode that actually loaded, read back
 from the binary, so a run cannot be mislabeled by accident.
+
+`tools/repeat_run_stability.py` is the measurement behind the middle tier: it
+runs the same fit repeatedly in one process and compares raw output bytes.
 
 ## What is in 0.2
 
@@ -123,7 +149,33 @@ Python, Intel and Qualcomm GPU columns, and a CPU fallback of any kind.
 Importing one of the first three raises with the line where the thing that
 exists stops, rather than an `AttributeError`.
 
-## The two numeric modes
+## The numeric tiers
+
+Three tiers, and each rung keeps the rung below it. The tier is chosen by
+`MOJOLEARN_NUMERIC_MODE` in the environment AT IMPORT TIME, which selects
+which of the compiled binary sets in the wheel gets loaded, and
+`mojolearn.numeric_mode()` reads the answer back out of the binary so a run
+cannot be mislabeled by accident.
+
+| tier | what it promises |
+|---|---|
+| `fast` | Nothing. Speed only. The same fit on the same box may return different bits on two runs, and on the histogram lanes it measurably does. This is the default. |
+| `deterministic` | Same box, same build, same input gives the same bits, every run. Says NOTHING about a second box. |
+| `identical` | All of the above, and the same bits on Metal, CUDA and HIP. |
+
+`deterministic` is the tier for a regression test, a byte-comparable model
+file, or a fit reproducible from its seed, none of which need another vendor
+to agree. It exists because that reproducibility used to be purchasable only
+by taking `identical` whole, and `identical` is not free: measured on one M4
+on 2026-08-28, it costs 4.64x on the gemm lane, 1.35x on coordinate descent,
+1.19x on kernel density, and nothing at all on linkage, metrics and SVM.
+
+**The 0.2.0 wheel carries `fast` and `identical` only.** The deterministic
+pin lane is not finished, and a tier that shipped without its pins would be
+non-reproducible while calling itself deterministic. `MOJOLEARN_NUMERIC_MODE
+=deterministic` therefore raises from the missing-binary stub in this
+release, by name, rather than quietly serving fast arithmetic under a
+deterministic label.
 
 `FAST` is the default. Histograms flush through float atomics, library
 reductions follow the hardware warp width, and the last bits of a model can
