@@ -1,0 +1,5 @@
+6296 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x188c00000000, nodemask=170)
+ctxprobe +0ms: T4: ctx A
+ctxprobe +214ms: T4: model on a fresh DeviceContext B (the estimator's old __init__)
+ctxprobe +214ms: T4: fit on ctx A, B's eight buffers replaced during fit
+ctxprobe +214ms: fit begin

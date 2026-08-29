@@ -1,0 +1,49 @@
+[diag +0s] D0 env recorded
+[diag +2s] d2_py_if_small: PASS in 2s
+[diag +114s] d2_py_if_default: FAIL(rc=1) in 112s
+[diag +226s] d2_py_rf_gc: FAIL(rc=1) in 112s
+[diag +338s] d2_py_rf_small: FAIL(rc=1) in 112s
+[diag +449s] d2_py_rf_reg: FAIL(rc=1) in 111s
+[diag +561s] d2_py_rf_then_et: FAIL(rc=1) in 112s
+[diag +563s] d2_py_et_twice: PASS in 2s
+tools/diag/rtx4090_hang.sh: line 39:  4157 Killed                  timeout -s KILL "$to" "$@" > "$D/$name.log" 2>&1
+[diag +1163s] d4_break_iforest_rfclf: HUNG(killed at 600s) in 600s
+tools/diag/rtx4090_hang.sh: line 39:  4900 Killed                  timeout -s KILL "$to" "$@" > "$D/$name.log" 2>&1
+[diag +1563s] d4_stability_iforest: HUNG(killed at 400s) in 400s
+tools/diag/rtx4090_hang.sh: line 39:  5509 Killed                  timeout -s KILL "$to" "$@" > "$D/$name.log" 2>&1
+[diag +1963s] d4_stability_rfclf: HUNG(killed at 400s) in 400s
+[diag +1972s] d3_if_T4_model_on_second_ctx_build: PASS in 9s
+tools/diag/rtx4090_hang.sh: line 39:  6295 Killed                  timeout -s KILL "$to" "$@" > "$D/$name.log" 2>&1
+[diag +2062s] d3_if_T4_model_on_second_ctx_run: HUNG(killed at 90s) in 90s
+[diag +2071s] d3_if_T1_two_alive_fit_second_build: PASS in 9s
+[diag +2073s] d3_if_T1_two_alive_fit_second_run: PASS in 2s
+[diag +2081s] d3_if_T3_two_alive_fit_first_build: PASS in 8s
+[diag +2083s] d3_if_T3_two_alive_fit_first_run: PASS in 2s
+[diag +2092s] d3_if_T2_sequential_build: PASS in 9s
+[diag +2094s] d3_if_T2_sequential_run: PASS in 2s
+[diag +2111s] d3_rf_two_ctx_build: PASS in 17s
+[diag +2113s] d3_rf_two_ctx_run: PASS in 2s
+[diag +2113s] d3_rf_same_ctx SKIPPED (budget)
+[diag +2113s] DONE
+=== verdicts
+d2_py_if_small PASS 2
+d2_py_if_default FAIL(rc=1) 112
+d2_py_rf_gc FAIL(rc=1) 112
+d2_py_rf_small FAIL(rc=1) 112
+d2_py_rf_reg FAIL(rc=1) 111
+d2_py_rf_then_et FAIL(rc=1) 112
+d2_py_et_twice PASS 2
+d4_break_iforest_rfclf HUNG(killed at 600s) 600
+d4_stability_iforest HUNG(killed at 400s) 400
+d4_stability_rfclf HUNG(killed at 400s) 400
+d3_if_T4_model_on_second_ctx_build PASS 9
+d3_if_T4_model_on_second_ctx_run HUNG(killed at 90s) 90
+d3_if_T1_two_alive_fit_second_build PASS 9
+d3_if_T1_two_alive_fit_second_run PASS 2
+d3_if_T3_two_alive_fit_first_build PASS 8
+d3_if_T3_two_alive_fit_first_run PASS 2
+d3_if_T2_sequential_build PASS 9
+d3_if_T2_sequential_run PASS 2
+d3_rf_two_ctx_build PASS 17
+d3_rf_two_ctx_run PASS 2
+d3_rf_same_ctx SKIPPED

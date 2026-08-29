@@ -87,13 +87,23 @@ caller's, and on sm_89 the two contexts deadlocked at teardown.
 caller's context; the fixed binding fits clean on the 4090 in one process.
 
 What the 4090 legs then found is a second, separate defect that is still
-OPEN: after one `RandomForest.fit` in a process, the NEXT GPU call in that
-process hangs on the 4090 (any lane, any tier). It does not reproduce on
-the H100 or on Apple or AMD. The probe fits every cell twice, so on a 4090
-the `rf-clf` cell cannot complete and the lanes after it are ABSENT, not
-clean. The diag probes for it live in `tools/diag/rtx4090_hang.sh`,
+OPEN, and leg 2 (`bench/results/e1/2026-08-29_165644-runpod-nvidia/diag/`)
+localized it to the PYTHON BINDING LAYER: in pure Mojo, two isolation
+forest fits on two contexts, on one context, and sequentially all PASS
+(`d3_if_T1..T3`), two RandomForest fits on two contexts PASS
+(`d3_rf_two_ctx`), and only the pre-1944 shape (a model built on a second
+context) hangs (`d3_if_T4`). Through the Python bindings on the same box,
+`IsolationForest.fit` returns in 1 s and the next call, `score_samples`,
+never returns; `RandomForest.fit` hangs inside the binding on its first
+default-size fit; ExtraTrees twice in one process passes. The strongest
+common factor is the `GILReleased` block every binding wraps around its
+`DeviceContext` (`bindings/_mojolearn_svm.mojo:325` and twins). It does
+not reproduce on the H100 or on Apple or AMD. The probe fits every cell
+twice, so on a 4090 the `rf-clf` cell cannot complete and the lanes after
+it are ABSENT, not clean. The probes are `tools/diag/rtx4090_hang.sh`,
 `ensemble/mojo_only/rf_ctx_probe.mojo` and
-`isolation_forest/mojo_only/if_ctx_probe.mojo`.
+`isolation_forest/mojo_only/if_ctx_probe.mojo`; the verdict file is
+`diag/verdicts.txt` in that leg.
 
 The NVIDIA silicon ledger, per column, is therefore: H100 (driver
 580.126.09, `E3` round 13, `bench/results/e1/2026-08-28_131651-runpod-nvidia`)

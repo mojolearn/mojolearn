@@ -1,0 +1,10 @@
+7630 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x386540000000, nodemask=170)
+rfprobe +0ms: TWO_CTX: ctx1
+rfprobe +968ms: fit1: fit_forest begin
+rfprobe +996ms: fit1: fit_forest returned, tree0 nodes 207
+rfprobe +996ms: TWO_CTX: ctx1 released, creating ctx2
+rfprobe +996ms: TWO_CTX: ctx2 created
+rfprobe +997ms: fit2: fit_forest begin
+rfprobe +1022ms: fit2: fit_forest returned, tree0 nodes 207
+rfprobe +1022ms: TWO_CTX: tree0 nodes equal True
+rfprobe DONE

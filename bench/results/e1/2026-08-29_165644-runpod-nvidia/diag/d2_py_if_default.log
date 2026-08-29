@@ -1,0 +1,9 @@
+1987 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x39b540000000, nodemask=170)
+STEP if_default_fit: ok 1.01s
+Timeout (0:01:50)!
+Thread 0x00007c823169a440 [python3] (most recent call first):
+  File "/root/mojolearn/python/mojolearn/_iforest_impl.py", line 340 in _run
+  File "/root/mojolearn/python/mojolearn/_iforest_impl.py", line 370 in score_samples
+  File "/root/mojolearn/bench/results/e1/2026-08-29_205744-263e4ca72bea/diag/py_probes.py", line 16 in <lambda>
+  File "/root/mojolearn/bench/results/e1/2026-08-29_205744-263e4ca72bea/diag/py_probes.py", line 11 in step
+  File "/root/mojolearn/bench/results/e1/2026-08-29_205744-263e4ca72bea/diag/py_probes.py", line 16 in <module>
