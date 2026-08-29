@@ -1,0 +1,884 @@
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:131:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_build.mojo:73:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:97:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = value
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:131:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_build.mojo:73:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:102:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:131:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_build.mojo:73:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:102:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:131:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_build.mojo:73:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:102:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                                      ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:131:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_build.mojo:73:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:105:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var total = red[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:155:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:220:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_K] = Int32(k)
+        ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:155:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:221:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_LEN] = Int32(length)
+        ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:155:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:222:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_PREVIOUS_LEN] = Int32(length)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:155:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:223:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:155:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:224:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_BACK_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:155:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:225:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        kth_bits[0] = UInt32(0)
+        ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:155:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:251:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_len = Int(ctr[CTR_LEN])
+                              ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:155:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:252:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_k = Int(ctr[CTR_K])
+                            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:155:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:253:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var previous_len = Int(ctr[CTR_PREVIOUS_LEN])
+                               ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:155:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:265:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = Int32(0)
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:155:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:267:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_FILTER_CNT] = Int32(0)
+            ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:155:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:272:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var kth = kth_bits[0]
+                  ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:155:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:330:69: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var scanned = block_prefix_sum[block_size=SELECT_BLOCK](hist[tid])
+                                                                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:155:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:331:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = scanned
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:155:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:337:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            prev_count = hist[tid - 1]
+                         ~~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:155:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:338:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var cur_count = hist[tid]
+                        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:155:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:342:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_K] = Int32(current_k - Int(prev_count))
+            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:155:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:343:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_LEN] = Int32(Int(cur_count) - Int(prev_count))
+            ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:155:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:344:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (UInt32(tid) << UInt32(start_bit))
+            ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:155:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:344:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (UInt32(tid) << UInt32(start_bit))
+                          ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:155:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:347:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_PREVIOUS_LEN] = Int32(current_len)
+            ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:155:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:351:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES - 1:
+               ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:155:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:351:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES - 1:
+                                    ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:155:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:353:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var lf_kth = kth_bits[0]
+                         ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:155:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:355:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var needed = Int(ctr[CTR_K])
+                             ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:85:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:435:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    sx[r * FKNN_SMEM_STRIDE + c] = v
+                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:444:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    sy[r2 * FKNN_SMEM_STRIDE + c2] = v2
+                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:458:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:460:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        regy[j] = sy[
+                                  ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:474:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                    sx[(tr + 0) * FKNN_SMEM_STRIDE + kk]
+                                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:485:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                    sx[
+                                    ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:507:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:517:17: warning: '@parameter for' is deprecated; use 'comptime for'
+                @parameter
+                ^~~~~~~~~~
+                comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:531:17: warning: '@parameter for' is deprecated; use 'comptime for'
+                @parameter
+                ^~~~~~~~~~
+                comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:632:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:663:25: warning: '@parameter for' is deprecated; use 'comptime for'
+                        @parameter
+                        ^~~~~~~~~~
+                        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:668:25: warning: '@parameter for' is deprecated; use 'comptime for'
+                        @parameter
+                        ^~~~~~~~~~
+                        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:738:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:78:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:37:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:71:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/distance/fused_distance_nn/simt_kernel.mojo:476:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    s_xnorm[i] = nv
+                    ~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:78:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:37:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:71:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/distance/fused_distance_nn/simt_kernel.mojo:484:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                s_ynorm[i2] = nv2
+                ~~~~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:78:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:37:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:71:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/distance/fused_distance_nn/simt_kernel.mojo:492:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                rxn[i] = s_xnorm[i * tr + accrowid]
+                         ~~~~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:78:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:37:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:71:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/distance/fused_distance_nn/simt_kernel.mojo:495:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                ryn[j] = s_ynorm[j * tc + acccolid]
+                         ~~~~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:197:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_K] = Int32(k)
+        ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:198:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_LEN] = Int32(length)
+        ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:199:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_PREVIOUS_LEN] = Int32(length)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:200:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:201:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        kth_bits[0] = UInt64(0)
+        ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:225:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_len = Int(ctr[CTR_LEN])
+                              ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:226:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_k = Int(ctr[CTR_K])
+                            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:227:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var previous_len = Int(ctr[CTR_PREVIOUS_LEN])
+                               ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:237:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = Int32(0)
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:239:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_FILTER_CNT] = Int32(0)
+            ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:244:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var kth = kth_bits[0]
+                  ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:288:69: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var scanned = block_prefix_sum[block_size=SELECT_BLOCK](hist[tid])
+                                                                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:289:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = scanned
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:294:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            prev_count = hist[tid - 1]
+                         ~~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:295:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var cur_count = hist[tid]
+                        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:297:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_K] = Int32(current_k - Int(prev_count))
+            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:298:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_LEN] = Int32(Int(cur_count) - Int(prev_count))
+            ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:299:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (
+            ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:299:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (
+                          ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:304:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_PREVIOUS_LEN] = Int32(current_len)
+            ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:307:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES_64 - 1:
+               ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:307:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES_64 - 1:
+                                    ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:313:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var lf_kth = kth_bits[0]
+                         ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:354:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        s_val[tid] = o_val.unsafe_load(tid)
+        ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:355:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        s_idx[tid] = o_idx.unsafe_load(tid)
+        ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:358:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var key_t = composite_key(s_val[tid], s_idx[tid], select_min)
+                                  ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:358:52: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var key_t = composite_key(s_val[tid], s_idx[tid], select_min)
+                                              ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:361:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if composite_key(s_val[j], s_idx[j], select_min) < key_t:
+                             ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:361:45: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if composite_key(s_val[j], s_idx[j], select_min) < key_t:
+                                       ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:363:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        o_val.unsafe_store(rank, s_val[tid])
+                                 ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:147:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_search.mojo:115:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:364:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        o_idx.unsafe_store(rank, s_idx[tid])
+                                 ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:97:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:682:15: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    val_smem: UnsafePointer[
+              ^~~~~~~~~~~~~
+              Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:97:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:687:15: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    idx_smem: UnsafePointer[
+              ^~~~~~~~~~~~~
+              Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:131:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_build.mojo:65:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/kmeans.mojo:62:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/mojo_only/plus_plus.mojo:245:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        carry[0] = Float32(0.0)
+        ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:131:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_build.mojo:65:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/kmeans.mojo:62:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/mojo_only/plus_plus.mojo:256:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            csum.unsafe_store(i, base + carry[0] + inc)
+                                        ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:131:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_build.mojo:65:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/kmeans.mojo:62:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/mojo_only/plus_plus.mojo:259:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            carry[0] = carry[0] + inc
+            ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:131:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/ported/neighbors/ivf_flat/ivf_flat_build.mojo:65:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/kmeans.mojo:62:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/mojo_only/plus_plus.mojo:259:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            carry[0] = carry[0] + inc
+                       ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:233:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:280:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:97:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:535:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:97:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:548:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:97:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:299:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:97:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:430:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:97:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:622:18: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        out_val: UnsafePointer[
+                 ^~~~~~~~~~~~~
+                 Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:97:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:627:18: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        out_idx: UnsafePointer[
+                 ^~~~~~~~~~~~~
+                 Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:97:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:569:17: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        in_val: UnsafePointer[
+                ^~~~~~~~~~~~~
+                Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:97:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:574:17: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        in_idx: UnsafePointer[
+                ^~~~~~~~~~~~~
+                Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:233:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:185:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:233:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:192:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:233:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:224:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:233:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:339:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:233:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:350:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:233:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:363:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:233:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:372:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:233:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:376:13: warning: '@parameter if' is deprecated; use 'comptime if'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:233:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:387:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:97:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:516:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:97:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:599:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:97:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:645:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:97:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:664:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:97:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:281:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:97:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:365:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:97:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:373:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:233:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:277:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:233:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:287:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:233:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:293:13: warning: '@parameter if' is deprecated; use 'comptime if'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:233:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:444:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:233:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:194:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:233:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:203:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:233:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:226:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:233:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:230:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:233:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:237:13: warning: '@parameter if' is deprecated; use 'comptime if'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:233:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:414:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:153:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:103:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:233:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:431:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:78:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:37:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:195:41: warning: assignment to 'data_batch' was never used; assign to '_' instead?
+    var data_batch = get_data_batch_size(batch_samples, n_samples)
+                                        ^
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/ivf/mojo_only/ivf_check.mojo:78:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:37:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:196:50: warning: assignment to 'centroid_batch' was never used; assign to '_' instead?
+    var centroid_batch = get_centroids_batch_size(batch_centroids, n_clusters)
+                                                 ^
+ivf_check mode=IDENTICAL
+check_nprobe_equals_nlists_is_brute_force OK [IDENTICAL]: 120 slots, distances AND indices bit for bit against neighbors/ knn_search's TILED arm; every query scored all 320 candidates
+  refused  algorithm=ivf_pq: ivf_pq: NOT PORTED. cuvs/src/neighbors/ivf_pq/ is a different algorithm (product quantization, a codebook per subspace and a LUT scan), out of this lane's scope by its brief. See ivf/UNPORTED.tsv.
+  refused  algorithm=hnsw: hnsw: REFUSED PERMANENTLY in this repository. cuVS's cpp/include/cuvs/neighbors/hnsw.hpp dispatches to the hnswlib CPU graph; it is not a GPU algorithm and PORTING_RULES.md 0b-ii says there is no CPU path here. This is a refusal, not an unported item, and it does not become one later.
+  refused  algorithm=cagra: cagra: NOT PORTED. cuvs/src/neighbors/cagra.cuh is a graph index, out of this lane's scope by its brief. See ivf/UNPORTED.tsv.
+  refused  algorithm=ivf_sq: ivf_sq: NOT PORTED (cuvs/src/neighbors/ivf_sq/, scalar quantization over an IVF index). See ivf/UNPORTED.tsv.
+  refused  algorithm=ivf_rabitq: ivf_rabitq: NOT PORTED (cuvs/src/neighbors/ivf_rabitq/). See ivf/UNPORTED.tsv.
+  refused  algorithm=scann: scann: NOT PORTED. See ivf/UNPORTED.tsv.
+  refused  algorithm=vamana: vamana: NOT PORTED. See ivf/UNPORTED.tsv.
+  refused  algorithm=nn_descent: nn_descent: NOT PORTED. See ivf/UNPORTED.tsv.
+  refused  metric=cosine: ivf_flat: metric 'cosine' is CosineExpanded, which is ivf_flat_search.cuh:130-141's own arm (a per-cell divide by the norm product) and is NOT PORTED. See ivf/UNPORTED.tsv.
+  refused  metric=inner_product: ivf_flat: metric 'inner_product' takes ivf_flat_search.cuh:142-145's default arm (alpha=1, beta=0, select_max) and is NOT PORTED. See ivf/UNPORTED.tsv.
+  refused  metric=hamming: ivf_flat: unknown metric 'hamming'. This port carries l2_expanded and l2_sqrt_expanded.
+  refused  metric=CosineExpanded: ivf_flat build: metric CosineExpanded is not ported; this port carries L2Expanded and L2SqrtExpanded (ivf_flat_search.cuh:110-129's arm).
+  refused  kmeans_trainset_fraction=0.5 (DEVIATION 1781): ivf_flat build: kmeans_trainset_fraction = 0.5 is REFUSED (DEVIATION 1781). Their trainset row count (ivf_flat_build.cuh:416-418) is a truncated float product, so near an integer boundary two hosts train the quantizer on DIFFERENT ROWS and the whole index differs. Only 1.0 (the whole dataset, no truncation) is accepted. Closure: port their stride as exact integer arithmetic, the way IDENTITY_PATHS row 18 closed compute_max_features.
+  refused  adaptive_centers=True: ivf_flat build: adaptive_centers=True is NOT PORTED (DEVIATION 1793). Their own header says it makes the centroids depend on the ORDER new data is added in (ivf_flat.hpp:41-46); that is an order dependence in the index itself, and extend() is not ported either.
+  refused  conservative_memory_allocation=True: ivf_flat build: conservative_memory_allocation is NOT PORTED (DEVIATION 1782). It selects `align_max` for their per-list allocation (ivf_flat.hpp:96-100); this port lays the lists out CSR and has no per-list allocation to align.
+  refused  add_data_on_build=False: ivf_flat build: add_data_on_build=False is NOT PORTED (DEVIATION 1793). It leaves the index trained and empty for a later extend(), and extend() is not ported. See ivf/UNPORTED.tsv.
+  refused  n_lists > n_rows (their :404): ivf_flat build: number of rows (320) can't be less than n_lists (321), their RAFT_EXPECTS at ivf_flat_build.cuh:404
+  refused  n_probes=0: ivf_flat search: n_probes (number of clusters to probe) must be positive, their RAFT_EXPECTS at ivf_flat_search.cuh:329
+  refused  n_probes=7: ivf_flat search: n_probes (7) exceeds n_lists (6). Theirs clamps at ivf_flat_search.cuh:331; this port REFUSES, because n_probes is a numeric parameter (DEVIATION 1787) and a clamped one is a card that does not say which computation ran.
+  refused  NaN in the dataset: ivf_flat: dataset value at flat position 3 (row 1, column 1) is not finite. Every stage here is a card stage and a computed NaN carries the vendor's payload (IDENTITY_PATHS row 39).
+  refused  +inf in the dataset: ivf_flat: dataset value at flat position 1 (row 0, column 1) is not finite. Every stage here is a card stage and a computed NaN carries the vendor's payload (IDENTITY_PATHS row 39).
+  refused  k = SELECT_BLOCK + 1 = 257: ivf_flat: a selection of k = 257 exceeds SELECT_BLOCK (256). The identical selector's rank pass gives one thread to each output slot; a larger k needs a loop, which is UNSUPERVISED_IDENTITY.md's owed item 5 and is not written until something asks for it.
+  refused  probed lists hold fewer than k: ivf_flat search: query 0 probes 1 lists holding 1 vectors between them, fewer than k = 5. Their kOutOfBoundsRecord short-fill (ivf_common.cuh:106-108) is not ported. Raise n_probes, or lower k, or rebuild with fewer lists.
+check_ivf_refusals OK [IDENTICAL]: 23 refusals by name; ivf_flat, both ported metrics and the default parameter set all resolve
+check_list_layout_and_index_carry OK [IDENTICAL]: offsets partition 320 rows, the carry is a permutation and ascends within every list, list_data matches x[carry] bit for bit, and IVF_SAB_CARRY_POSITION moves 4 of 5 returned identities
+check_empty_list OK [IDENTICAL]: list 2 empty, all 6 probed, answer bit-identical to brute force; IVF_SAB_EMPTY_COUNTS_ONE overcounts to 321
+check_assignment_ties OK [IDENTICAL]: 8 exactly equidistant points to list 0 in both centroid orders; the probe tie goes to the lower id and IVF_SAB_PROBE_TIE_HIGH flips it
+check_quantizer_is_reproducible OK [IDENTICAL]: two builds, same 36 centroid bytes, same 6 norms, same 320 labels and layout slots. ONE DEVICE, ONE PROCESS: rows 9, 10 and 12 cannot fail this and E1 is not shortened by it.
+check_search_vs_oracle OK [IDENTICAL]: 360 slots over hashed / duplicate / signed-zero fixtures, every distance AND index bit for bit against the serial oracle
+  REPORT recall@k=5 n_probes=1 of 6 = 0.8166666666666667  (1286 candidate cells scored of 7680 a brute force would score).  THIS LINE IS A REPORT, not an assertion, and the cell count is not a speedup.
+  REPORT recall@k=5 n_probes=2 of 6 = 0.9833333333333333  (2607 candidate cells scored of 7680 a brute force would score).  THIS LINE IS A REPORT, not an assertion, and the cell count is not a speedup.
+  REPORT recall@k=5 n_probes=3 of 6 = 1.0  (3911 candidate cells scored of 7680 a brute force would score).  THIS LINE IS A REPORT, not an assertion, and the cell count is not a speedup.
+  REPORT recall@k=5 n_probes=4 of 6 = 1.0  (5187 candidate cells scored of 7680 a brute force would score).  THIS LINE IS A REPORT, not an assertion, and the cell count is not a speedup.
+  REPORT recall@k=5 n_probes=6 of 6 = 1.0  (7680 candidate cells scored of 7680 a brute force would score).  THIS LINE IS A REPORT, not an assertion, and the cell count is not a speedup.
+check_recall_is_reported OK [IDENTICAL]: 5 n_probes values REPORTED; the only assertion is recall == 1.0 at n_probes == n_lists
+check_launch_invariance OK [IDENTICAL]: 120 slots unmoved across tile_tpb 256/64, expand_tpb 256/64, a workspace padded by 157 cells, and query 5 alone versus inside 24
+check_card_is_emitted OK [IDENTICAL]: 78 records, 15 ivf.* stages plus 63 ivf.quantizer.* stages, two runs record-identical
+check_ivf_sabotages OK [IDENTICAL]: the production merge ascends over 128 candidates; IVF_SAB_LIST_ARRIVAL_ORDER breaks it at 12 positions and IVF_SAB_MERGE_PROBE_ORDER at 1
+ivf_check mode=IDENTICAL ALL OK

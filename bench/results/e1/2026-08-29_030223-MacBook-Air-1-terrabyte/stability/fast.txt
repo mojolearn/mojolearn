@@ -1,0 +1,30 @@
+# repeat-run stability, mode=fast, repeats=6, interleave=False
+# 2026-08-29 03:04:55
+
+| lane             | verdict  | same answer every time? | hashes |
+|------------------|----------|-------------------------|--------|
+| dbscan           | STABLE   | YES  6/6 calls agreed   | a4608e954c7420b7 |
+| et-clf           | STABLE   | YES  6/6 calls agreed   | 707d2c92e92f6a40 |
+| gbdt-depthwise   | STABLE   | YES  6/6 calls agreed   | 757bd55c27047cb0 |
+| gbdt-lossguide   | STABLE   | YES  6/6 calls agreed   | 82628fff246a204e |
+| gbdt-symmetric   | STABLE   | YES  6/6 calls agreed   | e3a9df9a11c6f5cf |
+| gemm-pinned      | REFUSED  | n/a (refused)           | RuntimeError: mojolearn.linalg: this process loaded the FAST build, which makes NO identit |
+| gemm-vendor      | STABLE   | YES  6/6 calls agreed   | 47390974b94e233d |
+| iforest          | STABLE   | YES  6/6 calls agreed   | f6923b22b145211a |
+| kmeans           | STABLE   | YES  6/6 calls agreed   | da3cb10e46c91256 |
+| knn-tied         | MOVED    | NO   3 different answers in 6 calls | 2c7fb43e7f162fe5 73b59262d429ee22 b6add453a43beb71 |
+| logistic         | STABLE   | YES  6/6 calls agreed   | ee5411140bc26cbe |
+| ols              | STABLE   | YES  6/6 calls agreed   | 8bda051c2e15fb51 |
+| pca              | STABLE   | YES  6/6 calls agreed   | b509e01813e2ce8d |
+| rf-clf           | STABLE   | YES  6/6 calls agreed   | eacd6bff8b4088b8 |
+| ridge            | STABLE   | YES  6/6 calls agreed   | 7288d1af08a3025f |
+| tsvd             | STABLE   | YES  6/6 calls agreed   | d9953cdd48933270 |
+
+mode=fast  stable=14  moved=1  refused=1
+MOVED: knn-tied
+REFUSED: gemm-pinned
+  gemm-pinned: RuntimeError: mojolearn.linalg: this process loaded the FAST build, which makes NO identity claim; mojolearn.identical.gemm.fp32.v1 is what the IDENTICAL build computes.
+  Set MOJOLEARN_NUMERIC_MODE=identical in the environment BEFORE importing mojolearn, having built the identical binary with
+      MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_linalg.sh
+  Or pass identical=False to say in the source that you want the fast product and are making no identity claim about it.
+wrote /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e1/2026-08-29_030223-MacBook-Air-1-terrabyte/stability/fast.json

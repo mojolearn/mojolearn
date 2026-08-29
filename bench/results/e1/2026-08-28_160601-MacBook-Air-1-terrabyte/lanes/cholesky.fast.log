@@ -1,0 +1,101 @@
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/cholesky_check.mojo:84:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/cholesky_check.mojo:84:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/cholesky_check.mojo:84:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/cholesky_check.mojo:84:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/cholesky_check.mojo:89:
+/Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/chol_sabotage.mojo:207:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        flag[0] = Int32(0)
+        ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/cholesky_check.mojo:89:
+/Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/chol_sabotage.mojo:230:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                flag[0] = Int32(1)
+                ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/cholesky_check.mojo:89:
+/Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/chol_sabotage.mojo:237:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if flag[0] != Int32(0):
+           ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/cholesky_check.mojo:133:
+/Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/potrf.mojo:662:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        flag[0] = Int32(0)
+        ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/cholesky_check.mojo:133:
+/Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/potrf.mojo:678:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                flag[0] = Int32(1)
+                ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/cholesky_check.mojo:133:
+/Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/potrf.mojo:682:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if flag[0] != Int32(0):
+           ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/cholesky_check.mojo:84:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/cholesky_check.mojo:149:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/cholesky/ported/linalg/cholesky_r1_update.mojo:62:
+/Users/andrewhendel/CascadeProjects/mojolearn/cholesky/ported/linalg/detail/cholesky_r1_update.mojo:363:26: warning: assignment to 'newdiag' was never used; assign to '_' instead?
+    var newdiag = Float32(0.0)
+                         ^
+== cholesky/mojo_only/cholesky_check.mojo [FAST] profile=mojolearn.identical.cholesky.fp32.v1 nb=32 ==
+  refused  NaN on the diagonal: cholesky: the matrix contains NaN at [3, 3]; refused by name before any launch, because a NaN carries the VENDOR's payload and every stage here is a certified card stage (IDENTITY_PATHS row 39)
+  refused  +inf off the diagonal: cholesky: the matrix contains infinity at [2, 5]; refused by name
+  refused  asymmetric cell: cholesky: the matrix is not symmetric at [7, 2]: lower 0x3e800000 upper 0xbf400000, relative difference exceeds CHOL_SYM_REL_TOL (2^-20). Refused by name rather than silently reading only the lower triangle, which is what LAPACK and cuSOLVER do and which answers a question the caller did not ask. DEVIATION 1638
+  refused  wrong dimension: cholesky: the matrix holds 2304 floats, an 49 x 49 row-major matrix needs 2401
+  refused  negative jitter: add_jitter: jitter must be non-negative, got a negative value with bits 0xbf800000; a negative ridge subtracts from the diagonal and turns a positive-definite matrix indefinite
+  refused  NaN jitter: add_jitter: jitter is NaN; refused by name
+  refused  singular fixture at info=38 (LAPACK contract, not an exception)
+check_cholesky_refusals OK [FAST]: 7 refusals by name (non-finite x2, asymmetric, bad dimension, jitter x2, singular pivot); symmetric input, both pinned jitters and the pinned NB all accepted
+  report SIGNED_ZERO: cell [3, 1] device 0x00000000 oracle 0x00000200; first stage: 1	chol.panel000.factored	f32	256	42633536bb640dfb   VS   1	chol.panel000.factored	f32	256	4c1b7b2df38825d6 (FAST: the vendor sqrt/div/fma spellings are free to differ from the host replay)
+  report DENORMAL_PIVOT: device info=36 oracle info=0 (FAST: ftz is compiled away, so a subnormal pivot is the hardware's question and not this lane's)
+check_potrf_vs_oracle REPORT [FAST]: 4 of 6 fixtures bit-equal to the host oracle at every cell, 2 reported; the 48x48 planted factor equals its PLANT bit for bit; worst |device - float64 reference| 2.257333892030644e-07
+  skip ILL: info=30, there is no factor to reconstruct
+check_potrf_reconstructs OK [FAST]: the planted 48x48 reconstructs its input BIT FOR BIT; 3 fixtures reconstruct to a worst relative cell error of 2.384183517281039e-07 at RBF [27, 27]
+check_cho_solve_residual OK [FAST]: the planted 48 x 4 solution comes back BIT FOR BIT (device and oracle agree); RBF worst |device - float64 solve| 2.0138073377196086e-06
+check_logdet OK [FAST]: 18 of 48 planted diagonals are 2.0, so log|A| = 36 log 2; device 0x41c7a05e = 24.953304, float64 reference 24.95329850015803
+check_pivot_failure_is_identical OK [FAST]: the singular fixture stops at info=38 on device and oracle, with the partial factor equal at all 2304 cells and every card stage equal
+check_launch_invariance OK [FAST]: 6 fixtures byte-identical across panel_tpb 128/32, elem_tpb 256/64, pad 0/37, two poisons, run twice, and alone vs the leading block of a block-diagonal matrix of twice the size
+check_block_size_is_pinned OK [FAST]: NB is free and is LOAD-BEARING -- 2 of 2 swept fixtures give different bits at nb=32 vs nb=16; witness ILL [16, 16] nb=32 0x40a77343 nb=16 0x40a77345
+check_card_is_emitted OK [FAST]: 9 stages in order (chol.jittered ... chol.logdet) over 2 panels, run-to-run control identical
+  report SIGNED_ZERO cell [3, 1]: device 0x00000000 oracle 0x00000200 (FAST: ftz is compiled away, so the host keeps a subnormal Metal flushes; first stage: 1	chol.panel000.factored	f32	256	42633536bb640dfb   VS   1	chol.panel000.factored	f32	256	4c1b7b2df38825d6)
+  RECORDED [FAST]: the subnormal-pivot fixture reported info=36 (IDENTICAL requires 36; under FAST this is the column's own denormal policy and no claim is made)
+check_signed_zero_and_denormal OK [FAST]: 2 negative zeros and 38 positive zeros in the factor, every one bit-equal to the oracle; the subnormal pivot 0x00000200 is handled at info=36 where the float64 reference reports info=0 (it has no flush, which is exactly the divergence the flush prevents)
+check_r1_update_equals_potrf OK [FAST]: 32 ranks up to the panel width 32 agree with the blocked factorization BIT FOR BIT; 0 ranks beyond it differ, which they are entitled to (DEVIATION 1630); the host oracle of the ported file agrees with the host blocked oracle to rank 16
+  MUST FAIL  PANEL_DESCENDING on PLANTED: bits moved (0 earlier fixtures INERT to it)
+  MUST FAIL  TRSM_RECIPROCAL on PLANTED: bits moved (0 earlier fixtures INERT to it)
+  MUST FAIL  JITTER_RELATIVE on PLANTED: bits moved (0 earlier fixtures INERT to it)
+  MUST FAIL  LOGDET_PAIRWISE on PLANTED: bits moved (0 earlier fixtures INERT to it)
+  MUST FAIL  NB_FROM_LAUNCH: the run reports nb=64 against the pinned 32, so the read-back sees it
+  MUST FAIL  PANEL_ROTATE: bits moved (the panel factor kernel is ONE block so its rotation is inert; the panel SOLVE is many blocks and is where this shows)
+  REPORT     VENDOR_MATMUL [FAST]: no bit moved
+  MUST FAIL  PIVOT_GE: info 38 -> 0 on the exactly-singular fixture
+  APPLE-INERT NO_FTZ_PIVOT: info 36 -> 36 on the subnormal-pivot fixture. EXPECTED EQUAL on Apple (Metal flushes in hardware, so the helper is bitwise inert there) and EXPECTED TO DIFFER on NVIDIA and AMD, whose columns keep subnormals: there the unflushed pivot 2^-140 is positive, the factorization SUCCEEDS, and the two vendors disagree about whether the input is positive definite. RECORDED, not claimed
+  REPORT      STD_SQRT: no bit moved. Apple's and AMD's sqrt are correctly rounded so this is expected INERT there; NVIDIA's PTX sqrt is off by one ulp on 180,714 of 2^20 patterns (DEVIATION 258), and every one of the 64 diagonal entries of this factor goes through it
+check_cholesky_sabotages OK [FAST]: 10 arms driven at run time through the `sabotage` argument, no source edited; profile mojolearn.identical.cholesky.fp32.v1
+== cholesky/mojo_only/cholesky_check.mojo [FAST] ALL PASSED ==

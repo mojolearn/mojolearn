@@ -1,0 +1,81 @@
+
+=== provenance === 16:12:51
+5fd95b398e100f62dae180f7a8adff9ae81a1d92
+Darwin MacBook-Air-1-terrabyte.local 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:26:22 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T8132 arm64
+
+=== pixi === 16:12:51
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 16:12:52
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 8: the classical lanes (gemm, cd, kde, linkage, svm, metrics) -- both modes, cards + checks === 16:12:52
+-- lanes, identical --
+  gemm [identical]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  cd [identical]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  kde [identical]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  linkage [identical]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  svm [identical]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  mamba [identical]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  iforest [identical]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  transformer [identical]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  arima [identical]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  cholesky [identical]: NO CARD written (check_potrf_reconstructs OK [IDENTICAL]: the planted 48x48 reconstructs its input BIT FOR BIT; 3 fixtures reconstruct to)
+  embedding [identical]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  gp [identical]: card 2622 records -- [IDENTICAL]
+  hdbscan [identical]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  holtwinters [identical]: card 169 records -- [IDENTICAL]
+  ivf [identical]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  kernelmethods [identical]: NO CARD written (check_rbf_sampler_approximates_kernel OK [IDENTICAL]: REPORT -- the Monte Carlo error is printed and NOT asserted, becau)
+  gmm [identical]: card 9382 records -- [IDENTICAL]
+  resample [identical]: card 424 records -- [IDENTICAL]
+  spectral [identical]: card 155 records -- [IDENTICAL]
+  training-loss [identical]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  training-optimizer [identical]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  training-step [identical]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  metrics [identical]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+-- lanes, fast --
+  gemm [fast]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  cd [fast]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  kde [fast]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  linkage [fast]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  svm [fast]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  mamba [fast]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  iforest [fast]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  transformer [fast]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  arima [fast]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  cholesky [fast]: NO CARD written (check_potrf_reconstructs OK [FAST]: the planted 48x48 reconstructs its input BIT FOR BIT; 3 fixtures reconstruct to a wo)
+  embedding [fast]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  gp [fast]: card 2910 records -- [FAST]
+  hdbscan [fast]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  holtwinters [fast]: card 168 records -- [FAST]
+  ivf [fast]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  kernelmethods [fast]: NO CARD written (check_rbf_sampler_approximates_kernel OK [FAST]: REPORT -- the Monte Carlo error is printed and NOT asserted, because it)
+  gmm [fast]: card 9382 records -- [FAST]
+  resample [fast]: card 424 records -- [FAST]
+  spectral [fast]: card 155 records -- [FAST]
+  training-loss [fast]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  training-optimizer [fast]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  training-step [fast]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+  metrics [fast]: SKIPPED (MOJOLEARN_E1_LANES=cholesky gp holtwinters kernelmethods gmm resample spectral)
+
+=== done === 16:16:10
+artifacts in /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e1/2026-08-28_161251-MacBook-Air-1-terrabyte
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

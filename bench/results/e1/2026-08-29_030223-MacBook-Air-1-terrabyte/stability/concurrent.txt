@@ -1,0 +1,56 @@
+# concurrent-context probe: one process, one GPU, one fit,
+# every available tier live at the same time
+
+  round 0  fast           -> fast           e2ec82cf4868f58d
+  round 0  deterministic  -> deterministic  7fbeefec8014f640
+  round 0  identical      -> identical      7fbeefec8014f640
+  round 0  fast           -> fast           e2ec82cf4868f58d
+  round 1  fast           -> fast           e2ec82cf4868f58d
+  round 1  deterministic  -> deterministic  7fbeefec8014f640
+  round 1  identical      -> identical      7fbeefec8014f640
+  round 1  fast           -> fast           e2ec82cf4868f58d
+  round 2  fast           -> fast           e2ec82cf4868f58d
+  round 2  deterministic  -> deterministic  7fbeefec8014f640
+  round 2  identical      -> identical      7fbeefec8014f640
+  round 2  fast           -> fast           e2ec82cf4868f58d
+  round 3  fast           -> fast           e2ec82cf4868f58d
+  round 3  deterministic  -> deterministic  7fbeefec8014f640
+  round 3  identical      -> identical      7fbeefec8014f640
+  round 3  fast           -> fast           e2ec82cf4868f58d
+  round 4  fast           -> fast           e2ec82cf4868f58d
+  round 4  deterministic  -> deterministic  7fbeefec8014f640
+  round 4  identical      -> identical      7fbeefec8014f640
+  round 4  fast           -> fast           e2ec82cf4868f58d
+  round 5  fast           -> fast           e2ec82cf4868f58d
+  round 5  deterministic  -> deterministic  7fbeefec8014f640
+  round 5  identical      -> identical      7fbeefec8014f640
+  round 5  fast           -> fast           e2ec82cf4868f58d
+  round 6  fast           -> fast           e2ec82cf4868f58d
+  round 6  deterministic  -> deterministic  7fbeefec8014f640
+  round 6  identical      -> identical      7fbeefec8014f640
+  round 6  fast           -> fast           e2ec82cf4868f58d
+  round 7  fast           -> fast           e2ec82cf4868f58d
+  round 7  deterministic  -> deterministic  7fbeefec8014f640
+  round 7  identical      -> identical      7fbeefec8014f640
+  round 7  fast           -> fast           e2ec82cf4868f58d
+  round 8  fast           -> fast           e2ec82cf4868f58d
+  round 8  deterministic  -> deterministic  7fbeefec8014f640
+  round 8  identical      -> identical      7fbeefec8014f640
+  round 8  fast           -> fast           e2ec82cf4868f58d
+  round 9  fast           -> fast           e2ec82cf4868f58d
+  round 9  deterministic  -> deterministic  7fbeefec8014f640
+  round 9  identical      -> identical      7fbeefec8014f640
+  round 9  fast           -> fast           e2ec82cf4868f58d
+  round 10  fast           -> fast           e2ec82cf4868f58d
+  round 10  deterministic  -> deterministic  7fbeefec8014f640
+  round 10  identical      -> identical      7fbeefec8014f640
+  round 10  fast           -> fast           e2ec82cf4868f58d
+  round 11  fast           -> fast           e2ec82cf4868f58d
+  round 11  deterministic  -> deterministic  7fbeefec8014f640
+  round 11  identical      -> identical      7fbeefec8014f640
+  round 11  fast           -> fast           e2ec82cf4868f58d
+
+  fast           STABLE  all 24 calls returned THE SAME answer
+  deterministic  STABLE  all 12 calls returned THE SAME answer
+  identical      STABLE  all 12 calls returned THE SAME answer
+

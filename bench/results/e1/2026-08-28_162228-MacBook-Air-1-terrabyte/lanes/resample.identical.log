@@ -1,0 +1,50 @@
+/Users/andrewhendel/CascadeProjects/mojolearn/resample/mojo_only/resample_check.mojo:1239:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with ':'
+    """FIX_ANALYTIC, whose every replicate is derivable on paper. Three
+       ^
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/resample/mojo_only/resample_check.mojo:88:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/resample/mojo_only/resample_check.mojo:88:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/resample/mojo_only/resample_check.mojo:88:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/resample/mojo_only/resample_check.mojo:88:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/resample/mojo_only/resample_check.mojo:88:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+resample_check mode=IDENTICAL
+check_resample_refusals OK [IDENTICAL]: 16 refusals by name (n_resamples 0 and negative, unknown method/statistic/alternative, inf and NaN in the sample, BCa in BOTH modes, a column the sample lacks, confidence_level at 1, the sort ceiling, a trim that cuts everything, a pooled length above PERM_MAX_POOLED, pearson under the independent null, an inverted box, tpb=33); seed is UInt64 so every bit pattern is a legal seed and there is nothing to refuse there
+check_index_map_is_positional OK [IDENTICAL]: replicate 7 x 32 positions identical three ways (alone, inside a 16-replicate window, host mirror); 31 of 31 positions draw a different row than position 0
+check_batch_invariance OK [IDENTICAL]: replicate 7's 32 drawn indices and its mean are bit-identical in a window of 2 at offset 7, in a batch of 1000 and in a batch of 100000, on both a full-chunk fixture (n=200) and a partly-filled one (n=8); 0 of 2 fixtures moved
+check_prefix_stability OK [IDENTICAL]: 10000 of 10000 replicates bit-identical between an n_resamples = 10000 run and an n_resamples = 100000 run from one seed; the two intervals differ, correctly, because the order-statistic position moves with n_resamples (249 vs 2499)
+check_bootstrap_vs_oracle OK [IDENTICAL]: 6144 replicates bit-equal to the serial host replay across 4 fixtures x 3 statistics, 0 differ
+check_bootstrap_known_answer OK [IDENTICAL]: point estimate exactly 4.5; 20000 means all exact multiples of 0.125 in [1, 8]; 20000 pearson replicates exactly 0xbf800000 and 0 canonical NaN (a resample drawing one row eight times; the probability is 8 * 8^-8 = 4.8e-7 per replicate, so 0 or 1 is the expectation at this R and both are legal); 20000 diff_means all exact multiples of 0.25. REPORT: distribution mean 4.4966936 against the analytic 4.5, standard error 0.8120601 against the analytic sqrt(0.65625) = 0.8100925
+check_statistic_arms OK [IDENTICAL]: 6 arms x 256 replicates bit-equal to the host replay (the two order arms through materialize + segmented_sort + order_stat_kernel, the four fold arms in place); worst |device - float64 reference| 1.2510204383531232e-07
+check_percentile_interval OK [IDENTICAL]: identity array m=41 (h=1.0, ON the integer) and m=100 (h=2.475, off it) both return exactly h through the real device sort; the basic interval is the reflection with the ends swapped; the planted -0.0 sorts at position 25 and +0.0 at 27. NOT ASSERTED (not observable): the replicate-index half of the total order -- two bitwise-equal statistics are the same bits in either order
+check_permutation_separable OK [IDENTICAL]: greater p = 1/(R+1) = 0x3a83126f (count_greater 0), two-sided p = 2/(R+1), less p = 1.0, R = 999; 64 replicates' ranks are bijections of 32 positions and match the host mirror exactly
+check_permutation_null_is_uniform REPORT [IDENTICAL]: 16 same-distribution fixtures, R = 999; 7 of 16 p-values below 0.5 (about half is what a true null looks like); first eight: 0.354 0.292 0.68 0.664 0.222 0.756 0.486 0.936 -- this is a REPORT and asserts nothing; the gate on the permutation itself is check_permutation_separable's bijection assertion
+check_monte_carlo_vs_closed_form OK [IDENTICAL]: n_samples = 65536; box0(V=1.0 const exact, sum 0.99969673 vs 1.0, product 0.24944016 vs 0.25, replay same) box1(V=8.0 const exact, sum 11.987521 vs 12.0, product -0.049027577 vs 0.0, replay same) 
+check_jackknife_and_bca OK [IDENTICAL]: bias percentile 0.49829102 in [0,1]; the 8 leave-one-out means of 1..8 are strictly decreasing from 5.0 to 4.0; the acceleration of a symmetric sample is 0x00000000 (analytically 0). BCa's INTERVAL stays refused -- ndtri (DEVIATION 1699)
+check_launch_invariance OK [IDENTICAL]: 1024 replicates identical across fold tpb 256/128/64, map tpb 256/128/64/32, 37 padded rows and 37 poisoned rows; the Monte Carlo integral is identical across two grid shapes
+check_card_is_emitted OK [IDENTICAL]: 6 records, two launch shapes, identical; written to /tmp/resample_card_a.trace and /tmp/resample_card_b.trace
+check_resample_sabotages RECORDED [IDENTICAL]: RSAB_BATCH_DEPENDENT moved 32/32 indices (check_batch_invariance and check_prefix_stability both FAIL as required); RSAB_MAP_IGNORES_POSITION collapsed all 32 positions to one index (check_index_map_is_positional's separation clause FAILS as required); RSAB_LOW_HALF_SUBSEQUENCE moved 256/256 on n=200; RSAB_REVERSED_POSITIONS RECORDED at 0/256 under IDENTICAL, EXPECTED: the pinned halving fold is reversal-invariant because reversal maps its pair set to itself and float addition is commutative. The arm IS reached -- under FAST the same call moves 179/256. RSAB_REVERSED_POSITIONS moved 0/256 on n=200; RSAB_FOLD_DESCENDING moved 0/256 on n=200; RSAB_FOLD_DESCENDING on n=600 (3 chunks) moved 56/256 -- at n=200 it is one chunk and EXPECTED INERT; RSAB_SKIP_REJECTION RECORDED, not asserted: moved 0/256 at n=200 and 0/256 at n=8. BOTH ZEROS ARE EXPECTED. n=8 is a power of two so 2^32 mod n == 0 and Lemire never rejects; n=200 gives 2^32 mod n == 96, a rejection rate of 2.2e-08, and this driver takes 51200 draws for 0.0011 expected rejections. One expected rejection needs 44.7 million draws, and since 2^32 mod n < n the rate is under n/2^32 for EVERY n, so no sample size reaches this branch by sampling. A direct probe of the rejection zone is owed; RSAB_STD_SQRT moved 0/256 (Apple: 0 expected, its sqrt is correctly rounded; NVIDIA: expected to bite, 176,577 of 2^20 normals are 1 ulp off, IDENTITY_PATHS row 10); RSAB_NO_CANON_NAN: the uncanonicalised degenerate pearson is none reached (Apple 0x7fc00000, NVIDIA 0x7fffffff, AMD 0xffc00000 -- three payloads for one IEEE answer, DEVIATION 1696); RSAB_PERM_KEY_ONLY broke the bijection in 64/64 replicates (check_permutation_separable FAILS as required)
+resample_check mode=IDENTICAL ALL OK

@@ -1,0 +1,120 @@
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/optimizer_check.mojo:220:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/optimizer_check.mojo:220:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/optimizer_check.mojo:220:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/optimizer_check.mojo:220:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/optimizer_check.mojo:2444:18: warning: unreachable code after return statement
+        + String(leaked)
+                 ^
+/Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/optimizer_check.mojo:1277:16: warning: assignment to 'n' was never used; assign to '_' instead?
+    var n = off[len(off) - 1]
+               ^
+/Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/optimizer_check.mojo:1430:16: warning: assignment to 'n' was never used; assign to '_' instead?
+    var n = off[len(off) - 1]
+               ^
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/optimizer_check.mojo:229:
+/Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/optimizer.mojo:547:20: warning: assignment to 'm' was never used; assign to '_' instead?
+    var m = Float32(0.0)
+                   ^
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/optimizer_check.mojo:229:
+/Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/optimizer.mojo:557:20: warning: assignment to 'v' was never used; assign to '_' instead?
+    var v = Float32(0.0)
+                   ^
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/optimizer_check.mojo:229:
+/Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/optimizer.mojo:577:21: warning: assignment to 'dn' was never used; assign to '_' instead?
+    var dn = Float32(0.0)
+                    ^
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/optimizer_check.mojo:229:
+/Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/optimizer.mojo:578:20: warning: assignment to 'q' was never used; assign to '_' instead?
+    var q = Float32(0.0)
+                   ^
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/optimizer_check.mojo:229:
+/Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/optimizer.mojo:625:24: warning: assignment to 'p_out' was never used; assign to '_' instead?
+    var p_out = Float32(0.0)
+                       ^
+=== optimizer-step identity gate, profile mojolearn.identical.optimizer.fp32.v1
+=== NOTHING IN THIS FILE, IN optimizer.mojo, IN optimizer_oracle.mojo OR IN optimizer_fixture.mojo HAD EVER BEEN COMPILED OR RUN BEFORE THIS PROCESS. Read the header.
+mode IDENTICAL   optimizer sabotage: none   gemm: none   gemm_backward: none   gate arm: 
+NOTE: contract section 12 lists 22 arms. `optimizer.mojo` implements 20; OPT_SAB_RESUME_REINIT and OPT_SAB_MICROBATCH_SERIAL have NO comptime switch and are modelled in this gate (DEVIATION 1473). Contract section 10 also lists `adam.gwd` and `adamw.pdec` and **NOTHING PRODUCES EITHER** (DEVIATION 1477).
+ledger: this binary is CLEAN -- no arm is compiled in and no gate arm is named. Set MOJOLEARN_OPT_EXPECT_SABOTAGE to have the binary check its own -D.
+preflight: the assertions the contract and the fixture asked for
+  contract section 1 constants OK: lr 0x3a800000 beta1 0x3f666666 beta2 0x3f7fbe77 eps 0x322bcc77
+  contract 5.3 [PREDICTED, now PRINTED, still not asserted]: c1 = ftz(1 - beta1) = 0x3dccccd0 (contract predicts 0x3dcccd0, PyTorch's float64 route 0x3dcccccd);  c2 = ftz(1 - beta2) = 0x3a831200 (contract predicts 0x3a831200, PyTorch's 0x3a83126f)
+  contract 5.1 [PREDICTED t = 7, now COMPUTED]: the binary exponentiation and a running product for beta1 first differ at t = 7. OPT_SAB_POW_RUNNING's witness is adam_t7 and its inert half is adam_t6, and BOTH are wrong if this number is not 7.
+  splitmix64: all FOUR copies (optimizer, loss, transformer, mamba corpus) agree on 5 seeds
+  **MOJOLEARN_OPT_RECORD IS NOT DEFINED** (DEVIATION 1476). adam.denom, adam.q and sgd.dir are NOT WRITTEN by the kernels, so this build gates 20 stages and not 23 -- and TWO ARMS lose their first-stage address entirely (OPT_SAB_EPS_INSIDE_SQRT and OPT_SAB_MHAT_FORM both write adam.denom first). Clause (g) REFUSES to evaluate those two rather than reporting them at param.out.
+  fixture: 36148 gradient and parameter cells carry no signed zero, no subnormal and nothing non-finite outside the cases that PLANT them
+  clip_spread_j3: per-tensor gradient norms span 9 binades (contract 3.1 wants SEVERAL, and at a narrow spread the two-level clip norm and a flat one agree)
+  clip_j5: per-tensor gradient norms span 19 binades (contract 3.1 wants SEVERAL, and at a narrow spread the two-level clip norm and a flat one agree)
+  gemm v1 partition at this lane's tensor lengths: N=7->P=1; N=8->P=1; N=64->P=1; N=128->P=1; N=130->P=2; N=200->P=2; N=300->P=3; N=1025->P=9; N=4096->P=32;
+  (at P == 1 the balanced tree performs NO ADDITION -- gemm contract 7.3 -- which is why clip_small_j3, whose tensors are all <= 128, is OPT_SAB_CLIP_SERIAL_FOLD's INERT half)
+clause (a): 26 Adam-family cases and 7 SGD cases, every stage, EVERY STEP, device vs host oracle, BITWISE
+  adam_j5_t8  ADAM J=5 N=1526 steps=8 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 clip=0x3f800000: 18 stages bit-identical across 8 steps (73400 cells)
+  adam_j5_t8_noclip  ADAM J=5 N=1526 steps=8 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 clip=OFF: 12 stages bit-identical across 8 steps (61088 cells)
+  adam_t1  ADAM J=3 N=372 steps=1 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 clip=OFF: 12 stages bit-identical across 1 steps (1866 cells)
+  adam_t6  ADAM J=3 N=372 steps=6 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 clip=OFF: 12 stages bit-identical across 6 steps (11196 cells)
+  adam_t7  ADAM J=3 N=372 steps=7 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 clip=OFF: 12 stages bit-identical across 7 steps (13062 cells)
+  adam_t8  ADAM J=3 N=372 steps=8 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 clip=OFF: 12 stages bit-identical across 8 steps (14928 cells)
+  adamw_wd_t8  ADAMW J=3 N=372 steps=8 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x3dcccccd clip=OFF: 13 stages bit-identical across 8 steps (14936 cells)
+  adamw_wd0_t8  ADAMW J=3 N=372 steps=8 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 clip=OFF: 13 stages bit-identical across 8 steps (14936 cells)
+  adamw_decay_sep  ADAMW J=3 N=372 steps=8 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x3dcccccd clip=OFF: 13 stages bit-identical across 8 steps (14936 cells)
+  adamw_decay_pow2  ADAMW J=3 N=372 steps=8 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x41000000 clip=OFF: 13 stages bit-identical across 8 steps (14936 cells)
+  adam_coupled_wd  ADAM J=3 N=372 steps=8 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x3dcccccd clip=OFF: 12 stages bit-identical across 8 steps (14928 cells)
+  clip_j5  ADAM J=5 N=1526 steps=2 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 clip=0x3f800000: 18 stages bit-identical across 2 steps (18350 cells)
+  clip_j2  ADAM J=2 N=430 steps=2 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 clip=0x3f800000: 18 stages bit-identical across 2 steps (5186 cells)
+  clip_spread_j3  ADAM J=3 N=630 steps=2 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 clip=0x3f800000: 18 stages bit-identical across 2 steps (7590 cells)
+  clip_j1  ADAM J=1 N=300 steps=2 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 clip=0x3f800000: 18 stages bit-identical across 2 steps (3622 cells)
+  clip_ragged_j3  ADAM J=3 N=372 steps=2 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 clip=0x3f800000: 18 stages bit-identical across 2 steps (4494 cells)
+  clip_small_j3  ADAM J=3 N=200 steps=2 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 clip=0x3f800000: 18 stages bit-identical across 2 steps (2430 cells)
+  clip_subnormal  ADAM J=3 N=372 steps=1 plant=subnormal_grad lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 clip=0x7149f2ca: 18 stages bit-identical across 1 steps (2247 cells)
+  clip_normal  ADAM J=3 N=372 steps=1 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 clip=0x7149f2ca: 18 stages bit-identical across 1 steps (2247 cells)
+  adam_tiny_grad  ADAM J=3 N=372 steps=3 plant=tiny_grad lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 clip=OFF: 12 stages bit-identical across 3 steps (5598 cells)
+  adam_dead_v  ADAM J=3 N=372 steps=2 plant=dead_v lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 clip=OFF: 12 stages bit-identical across 2 steps (3732 cells)
+  adam_ordinary_v  ADAM J=3 N=372 steps=2 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 clip=OFF: 12 stages bit-identical across 2 steps (3732 cells)
+  adam_fused_sep  ADAM J=3 N=200 steps=1 plant=fused_separator lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 clip=OFF: 12 stages bit-identical across 1 steps (1006 cells)
+  adam_fused_inert  ADAM J=3 N=200 steps=1 plant=fused_inert lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 clip=OFF: 12 stages bit-identical across 1 steps (1006 cells)
+  adam_unit_grad  ADAM J=3 N=200 steps=2 plant=unit_grad lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 clip=OFF: 12 stages bit-identical across 2 steps (2012 cells)
+  adam_hashed_4096  ADAM J=1 N=4096 steps=2 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 clip=OFF: 12 stages bit-identical across 2 steps (40972 cells)
+  sgd_damp_t1  SGD J=3 N=372 steps=1 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 mom=0x3f666666 damp=0x3e800000 clip=OFF: 11 stages bit-identical across 1 steps (1494 cells)
+  sgd_damp_t3  SGD J=3 N=372 steps=3 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 mom=0x3f666666 damp=0x3e800000 clip=OFF: 11 stages bit-identical across 3 steps (4482 cells)
+  sgd_nodamp_t1  SGD J=3 N=372 steps=1 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 mom=0x3f666666 damp=0x00000000 clip=OFF: 11 stages bit-identical across 1 steps (1494 cells)
+  sgd_nesterov_t2  SGD J=3 N=372 steps=2 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 mom=0x3f666666 damp=0x00000000 nesterov clip=OFF: 11 stages bit-identical across 2 steps (2988 cells)
+  sgd_nesterov_t1  SGD J=3 N=372 steps=1 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 mom=0x3f666666 damp=0x00000000 nesterov clip=OFF: 11 stages bit-identical across 1 steps (1494 cells)
+  sgd_mom0_t3  SGD J=3 N=372 steps=3 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 mom=0x00000000 damp=0x00000000 clip=OFF: 11 stages bit-identical across 3 steps (4482 cells)
+  sgd_damp_t8  SGD J=3 N=372 steps=8 plant=none lr=0x3a800000 b1=0x3f666666 b2=0x3f7fbe77 eps=0x322bcc77 wd=0x00000000 mom=0x3f666666 damp=0x3e800000 clip=OFF: 11 stages bit-identical across 8 steps (11952 cells)
+card: 18 records at /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e1/2026-08-28_160601-MacBook-Air-1-terrabyte/lanes/training-optimizer.identical.card, this configuration wants 18 of contract section 10's 23 (and section 10 also lists adam.gwd and adamw.pdec, which have NO PRODUCER -- DEVIATION 1477)
+card: 18/18 tags in contract section 10's order, all unique
+clause (a): PASS, 33 cases bit-identical to the oracle across every step, on all 382822 compared cells
+clause (e): microbatch alignment (contract 9.2 and 9.3), host only, always on
+  T=512: A=1=aligned A=2=aligned A=3=NO A=4=aligned A=8=NO
+  T=384: A=1=aligned A=2=NO A=3=NO A=4=NO A=8=NO
+  T=300: A=1=NO A=2=NO A=3=NO A=4=NO A=8=NO
+  T=256: A=1=aligned A=2=aligned A=3=NO A=4=NO A=8=NO
+  [REPORTED, NOT ASSERTED] the ONE-BINADE hashed pair at A = 4: tree and serial agree = True, which is why DEVIATION 1493 replaced it as the falsifier.
+  T=512 A=2 (ALIGNED): unsplit 0x4b800001   tree 0x4b800001 (MATCH)   serial 0x4b800001 (MATCH)
+  T=512 A=4 (ALIGNED): unsplit 0x4b800001   tree 0x4b800001 (MATCH)   serial 0x4b800000 (MOVED)
+  T=512 A=3: 3 does not divide 512, so the split does not exist and there is nothing to report
+clause (b): SKIPPED (set MOJOLEARN_OPT_CHECK_CLAUSE_B=1)
+clause (c): SKIPPED (set MOJOLEARN_OPT_CHECK_CLAUSE_C=1). Its default case is adam_j5_t8_NOCLIP and not the plain one, because contract 3.5 says parameter-count invariance is FALSE with a global norm clip on -- and this clause REFUSES a clipping-on case by name rather than quietly measuring something else.
+clause (d): SKIPPED (set MOJOLEARN_OPT_CHECK_CLAUSE_D=1). NOTE: its control 2 IS the GATE_RESUME_REINIT arm (DEVIATION 1473), so a leg that skips clause (d) has one fewer arm and not merely one fewer clause.
+clause (f): SKIPPED (set MOJOLEARN_OPT_CHECK_CLAUSE_F=1). NOTE: it carries the MEASURED finding that the DEVICE path refuses only `clip.total_norm` and does not refuse at all when clipping is off (DEVIATION 1478), so a leg that skips it has not looked at the device-side refusal even once.
+SCOPE: this build, this column, IDENTICAL only. What is NOT closed by anything printed above: an INDEPENDENT reference (contract 16.10's corpus does not exist, so every clause here is our device against our oracle -- and seven of the twenty-three stages are the SAME HOST CODE on both sides, because `device_step_scalars` calls the oracle's own `step_scalars` on the clean path); **PyTorch parity, which contract 5.2 and 5.3 make IMPOSSIBLE by construction and which nothing here should be read as claiming**; the GEOMETRY half of clause (b) (OPT_TPB is a comptime literal -- DEVIATION 1479); the thousand-step case unless MOJOLEARN_OPT_CHECK_T1000 was set; FAST mode; every column that is not this one; and every arm this run is not. Contract 14.3: nothing cross-vendor until a leg runs. The v1 GEMM this contract DELEGATES its reductions to HAS run on three vendors at leg 11 (144aa5b) -- **that measurement is the GEMM's, not this lane's**.

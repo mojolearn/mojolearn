@@ -1,0 +1,44 @@
+# gaussian_process fit: profile=mojolearn.identical.gp.fp32.v1 n_train=12 d=3 kernel=RBF(ls3) alpha_bits=0x35800000
+# format: mojolearn-identity-trace v1
+0	gp.x_train	f32	36	ce18df4b2a632e64
+1	gp.y_train	f32	12	b4bcc52e0f3e8992
+2	gp.kernel	f32	144	717ad14579afe28d
+3	gp.ridged	f32	144	6d2d8e92f74305bd
+# cholesky: n=12 nb=32 jitter_bits=see CHOL_JITTER_BITS
+# format: mojolearn-identity-trace v1
+0	chol.jittered	f32	144	6d2d8e92f74305bd
+1	chol.panel000.factored	f32	144	38b6e78e4cfb2efc
+2	chol.factor	f32	144	08382bb8e115e7ab
+3	chol.nb	i32	3	8cfc75c5b85a0454
+4	chol.diag	f32	12	5e1c417f622224af
+5	chol.logdet	f32	1	c22ed9237f0f106e
+4	gp.factor	f32	144	08382bb8e115e7ab
+# cholesky solve: n=12 nrhs=1
+# format: mojolearn-identity-trace v1
+0	chol.solve.forward	f32	12	0294a83bcd0bb654
+1	chol.solve.back	f32	12	dcef03e7540453f6
+5	gp.dual_coef	f32	12	dcef03e7540453f6
+6	gp.logdet	f32	1	c22ed9237f0f106e
+7	gp.ydotalpha	f32	1	333bffb85f184251
+8	gp.lml	f32	1	99dbcaeb322c64a9
+# gaussian_process predict: profile=mojolearn.identical.gp.fp32.v1 n_train=12 n_star=6 d=3 return_std=True
+# format: mojolearn-identity-trace v1
+0	gp.kss	f32	1	4b72477f9c5c2f98
+1	gp.kcross	f32	72	4d419681f12c4e63
+2	gp.mean	f32	6	c61ed433cfc1c51c
+3	gp.v	f32	72	9a48040464c75e38
+4	gp.var	f32	6	ade57e4e59e151b4
+5	gp.clamped	i32	6	81d23fd7003c2305
+6	gp.std	f32	6	911a2acf29f81785
+# cholesky: n=12 nb=32 jitter_bits=see CHOL_JITTER_BITS
+# format: mojolearn-identity-trace v1
+0	chol.jittered	f32	144	6d2d8e92f74305bd
+1	chol.panel000.factored	f32	144	38b6e78e4cfb2efc
+2	chol.factor	f32	144	08382bb8e115e7ab
+3	chol.nb	i32	3	8cfc75c5b85a0454
+4	chol.diag	f32	12	5e1c417f622224af
+5	chol.logdet	f32	1	c22ed9237f0f106e
+# cholesky solve: n=12 nrhs=1
+# format: mojolearn-identity-trace v1
+0	chol.solve.forward	f32	12	0294a83bcd0bb654
+1	chol.solve.back	f32	12	dcef03e7540453f6

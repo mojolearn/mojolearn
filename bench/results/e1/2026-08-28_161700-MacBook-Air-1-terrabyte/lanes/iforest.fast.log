@@ -1,0 +1,52 @@
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/isolation_forest/mojo_only/if_check.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/isolation_forest/mojo_only/if_check.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/isolation_forest/mojo_only/if_check.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/isolation_forest/mojo_only/if_check.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/isolation_forest/mojo_only/if_check.mojo:100:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/isolation_forest/mojo_only/if_check.mojo:116:
+/Users/andrewhendel/CascadeProjects/mojolearn/isolation_forest/mojo_only/if_oracle.mojo:332:12: warning: unreachable code after infinite loop
+    return node
+           ^
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/isolation_forest/mojo_only/if_check.mojo:148:
+/Users/andrewhendel/CascadeProjects/mojolearn/isolation_forest/ported/isolation_forest/isolation_tree_builder.mojo:769:20: warning: unreachable code after infinite loop
+    return Float32(0.0)
+                   ^
+/Users/andrewhendel/CascadeProjects/mojolearn/isolation_forest/mojo_only/if_check.mojo:232:17: warning: assignment to 'd' was never used; assign to '_' instead?
+        var d = -1
+                ^
+== isolation_forest/mojo_only/if_check.mojo [FAST] ==
+check_if_xorwow_matches_curand OK [FAST]: 6 (seed, tree) pairs x 1024 draws and uniform bits equal the curand_kernel.h reference; 2^-32f = 0x2f800000, gamma = 0x3f13c468; tree 0 != tree 1
+check_if_xorwow_on_device OK [FAST]: 27648 device cells equal the curand_precalc.h-derived reference (6 x 1024 sequence draws at tpb 32 and 4, 6 x 256 offset draws); tree 1 != tree 0, offset 1 == tree 0 advanced by exactly one draw
+check_if_refusals OK [FAST]: 13 refusals by name (NaN/inf in X and X_query with row/column, unfitted score, feature mismatch, n_estimators/max_samples/n_rows, float max_samples, contamination, max_features, warm_start); ceil_log2_int == ceil(log2(n)) for n = 1..4097; node capacity bounds 511/15/19
+check_if_oracle_semantics OK [FAST]: 16 planted outliers all score above the blob median (0.66387546 > 0.43119183), 0 of 1008 blob rows have a path as short as the longest outlier path; 6 duplicates bit-identical; float32 vs float64 worst |diff| 1.0314366122310403e-07; n=100<256 samples every row once
+check_if_device_equals_oracle REPORT [FAST]: 0 of 6 fixtures bit-equal; FAST differences: | main(blob+outliers+dups+const+zeros) score[6] 0x3ecd32ad vs 0x3ecd32ac | bootstrap score[4] 0x3eece4f5 vs 0x3eece4f4 | max_features=5/8 score[4] 0x3eda5c3a vs 0x3eda5c39 | n_rows=100<max_samples score[1] 0x3edb75f8 vs 0x3edb75f7 | pure blob, 24 trees score[11] 0x3ef9813b vs 0x3ef9813a | max_depth=3, max_samples=512 score[8] 0x3eddcf3d vs 0x3eddcf3c
+check_if_launch_invariance OK [FAST]: 3 fixtures x 4 arms (build_tpb 32/64/128/256, path_tpb 64/128/256, pad 0/37, poisons 0xffc0dead/-123456/NaN, run twice) byte-identical in every structure/pathlen/score cell; 3 probe rows scored alone == in a batch of 37 == at 3 positions of 4096 (9 cells)
+  RECORDED [FAST] zeros fixtures device vs oracle: zeros A score[1] 0x3ee73b05 vs 0x3ee73b04zeros B score[1] 0x3ee73b05 vs 0x3ee73b04zeros-only score[3] 0x3ef21a21 vs 0x3ef21a20
+check_if_row39_signed_zero OK [FAST]: 128 x -0.0 and 128 x +0.0 planted in column 3; 337 nodes split on it (0 with a zero threshold); device == oracle bit for bit on both zero orders; swapping the zeros' positions moves NO stored bit (the positional strict-compare fold is sign-inert here); a {-0,+0}-only column is never split
+check_if_predict_thresholds OK [FAST]: 1024 labels == (score > 0.5 ? 1 : -1), 46 anomalies at 0.5; contamination=0.05 flags 52 (expected ~51) including all 16 planted outliers; percentile_linear hand case
+check_if_card_is_emitted OK [FAST]: 123 stages (if.rng.probe, 12 x {rows, features, meta, structure.feat/thr/left/right, split.bounds, split.choice, rng.final}, if.pathlen, if.scores), run-to-run control identical across build_tpb 128/32, pad 0/37, two poisons

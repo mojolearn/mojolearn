@@ -1,0 +1,63 @@
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/hierarchy/linkage_main.mojo:32:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/hierarchy/linkage_main.mojo:32:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/hierarchy/linkage_main.mojo:32:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/hierarchy/linkage_main.mojo:33:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:97:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = value
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/hierarchy/linkage_main.mojo:33:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:102:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/hierarchy/linkage_main.mojo:33:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:102:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/hierarchy/linkage_main.mojo:33:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:102:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                                      ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/hierarchy/linkage_main.mojo:33:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:105:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var total = red[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/hierarchy/linkage_main.mojo:32:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/hierarchy/linkage_main.mojo:32:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+linkage_main mode=FAST fixture=blobs_dups n_rows=102 n_cols=5 n_clusters=3 boruvka_rounds=5 n_connected_components=1
+cluster sizes: 34 35 33
+identity card written to /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e1/2026-08-28_161700-MacBook-Air-1-terrabyte/lanes/linkage.fast.card

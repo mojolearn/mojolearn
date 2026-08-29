@@ -1,0 +1,58 @@
+
+=== provenance === 03:02:23
+035922c86d9b9213035364280e622b12c0dd53fa
+Darwin MacBook-Air-1-terrabyte.local 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:26:22 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T8132 arm64
+
+=== pixi === 03:02:23
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 03:02:23
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 03:02:23
+deterministic set: 10 of 10 binaries
+--- stability fast
+      Set MOJOLEARN_NUMERIC_MODE=identical in the environment BEFORE importing mojolearn, having built the identical binary with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_linalg.sh
+      Or pass identical=False to say in the source that you want the fast product and are making no identity claim about it.
+    wrote /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e1/2026-08-29_030223-MacBook-Air-1-terrabyte/stability/fast.json
+--- stability deterministic
+      Set MOJOLEARN_NUMERIC_MODE=identical in the environment BEFORE importing mojolearn, having built the identical binary with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_linalg.sh
+      Or pass identical=False to say in the source that you want the fast product and are making no identity claim about it.
+    wrote /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e1/2026-08-29_030223-MacBook-Air-1-terrabyte/stability/deterministic.json
+--- stability identical
+    | tsvd             | STABLE   | YES  6/6 calls agreed   | eb98ef49f9c747f0 |
+    
+    mode=identical  stable=16  moved=0  refused=0
+    wrote /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e1/2026-08-29_030223-MacBook-Air-1-terrabyte/stability/identical.json
+--- stability concurrent
+      round 11  fast           -> fast           e2ec82cf4868f58d
+    
+      fast           STABLE  all 24 calls returned THE SAME answer
+      deterministic  STABLE  all 12 calls returned THE SAME answer
+      identical      STABLE  all 12 calls returned THE SAME answer
+    
+
+=== done === 03:05:37
+artifacts in /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e1/2026-08-29_030223-MacBook-Air-1-terrabyte
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

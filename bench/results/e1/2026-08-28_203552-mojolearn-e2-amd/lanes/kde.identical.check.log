@@ -1,0 +1,110 @@
+Imported from /root/mojolearn/kde/mojo_only/kde_check.mojo:99:
+/root/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/root/mojolearn/kde/mojo_only/kde_check.mojo:554:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'g'
+    """gaussian, h = 0.25, a query 10 away from every training point: each
+       ^
+Imported from /root/mojolearn/kde/mojo_only/kde_check.mojo:99:
+/root/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/kde/mojo_only/kde_check.mojo:99:
+/root/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/kde/mojo_only/kde_check.mojo:99:
+/root/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/kde/mojo_only/kde_check.mojo:106:
+Imported from /root/mojolearn/kde/ported/kde/kde.mojo:23:
+Imported from /root/mojolearn/kde/ported/neighbors/kernel_density.mojo:103:
+Imported from /root/mojolearn/kde/ported/distance/distance.mojo:35:
+Imported from /root/mojolearn/core/row_norms.mojo:58:
+/root/mojolearn/core/pinned_reduce.mojo:97:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = value
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kde/mojo_only/kde_check.mojo:106:
+Imported from /root/mojolearn/kde/ported/kde/kde.mojo:23:
+Imported from /root/mojolearn/kde/ported/neighbors/kernel_density.mojo:103:
+Imported from /root/mojolearn/kde/ported/distance/distance.mojo:35:
+Imported from /root/mojolearn/core/row_norms.mojo:58:
+/root/mojolearn/core/pinned_reduce.mojo:102:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kde/mojo_only/kde_check.mojo:106:
+Imported from /root/mojolearn/kde/ported/kde/kde.mojo:23:
+Imported from /root/mojolearn/kde/ported/neighbors/kernel_density.mojo:103:
+Imported from /root/mojolearn/kde/ported/distance/distance.mojo:35:
+Imported from /root/mojolearn/core/row_norms.mojo:58:
+/root/mojolearn/core/pinned_reduce.mojo:102:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kde/mojo_only/kde_check.mojo:106:
+Imported from /root/mojolearn/kde/ported/kde/kde.mojo:23:
+Imported from /root/mojolearn/kde/ported/neighbors/kernel_density.mojo:103:
+Imported from /root/mojolearn/kde/ported/distance/distance.mojo:35:
+Imported from /root/mojolearn/core/row_norms.mojo:58:
+/root/mojolearn/core/pinned_reduce.mojo:102:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                                      ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kde/mojo_only/kde_check.mojo:106:
+Imported from /root/mojolearn/kde/ported/kde/kde.mojo:23:
+Imported from /root/mojolearn/kde/ported/neighbors/kernel_density.mojo:103:
+Imported from /root/mojolearn/kde/ported/distance/distance.mojo:35:
+Imported from /root/mojolearn/core/row_norms.mojo:58:
+/root/mojolearn/core/pinned_reduce.mojo:105:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var total = red[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kde/mojo_only/kde_check.mojo:99:
+/root/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/root/mojolearn/kde/mojo_only/kde_check.mojo:646:9: warning: ref 'i' was never used, remove it?
+    for i in range(N_TRAIN):
+        ^
+== kde/mojo_only/kde_check.mojo [IDENTICAL] ==
+  refused  kernel='triangular': invalid kernel: 'triangular'
+  refused  metric='cosine' (in their table, unported): kde: metric='cosine' is in cuML's pairwise_distances table but is NOT PORTED (kde/UNPORTED.tsv); ported: euclidean, l2, sqeuclidean, l1, cityblock, manhattan, chebyshev
+  refused  metric='minkowski' (in their table, unported): kde: metric='minkowski' is in cuML's pairwise_distances table but is NOT PORTED (kde/UNPORTED.tsv); ported: euclidean, l2, sqeuclidean, l1, cityblock, manhattan, chebyshev
+  refused  metric='nan_euclidean' (in their table, unported): kde: metric='nan_euclidean' is in cuML's pairwise_distances table but is NOT PORTED (kde/UNPORTED.tsv); ported: euclidean, l2, sqeuclidean, l1, cityblock, manhattan, chebyshev
+  refused  metric='haversine' (unknown): Unknown metric: haversine
+  refused  bandwidth=0: bandwidth must be positive
+  refused  bandwidth=-1: bandwidth must be positive
+  refused  sample_weight with a zero: sample_weight must have positive values
+  refused  sample_weight of the wrong length: sample_weight: expected 200 values, got 199
+  refused  bandwidth=1e-20 (below 2^-63, h*h underflows): bandwidth=1e-20 is below 2^-63: h*h underflows float32 (DEVIATION 604)
+  refused  sample_weight with a subnormal (1e-40): sample_weight[5]=1e-40 is subnormal or infinite: log(w) is not finite in float32 (DEVIATION 604)
+  refused  sample_weight with +inf: sample_weight[6]=inf is subnormal or infinite: log(w) is not finite in float32 (DEVIATION 604)
+  refused  metric_arg=3.0: kde: metric_arg=3.0 is read only by metric='minkowski', which is NOT PORTED; pass 2.0 (the default)
+check_kde_refusals OK [IDENTICAL]: 13 refusals by name, 13 names resolve, h=2^-63 and w=2^-126 accepted
+check_kde_zero_sign_cannot_leak OK [IDENTICAL]: log(1)=+0.0, exp(+/-0)=1, exp(FLOAT_MIN-0)=0, tophat row max -0.0 (1 inside) scores 0xbf766064 either way
+check_kde_log_norm_closed_form OK [IDENTICAL]: 39 closed-form cases within 2e-5 (worst 3.879448993160395e-07); 6 kernels x d=1..12 vs float64 within 5e-5 (worst 1.422092104519379e-06)
+check_kde_oracle_vs_float64 OK [IDENTICAL]: 6 kernels x 4 metrics, 808 finite cells within 2e-4 (worst |diff| 5.301025096215994e-06), 80 -inf cells at <= -1e38
+check_kde_logsumexp_beats_naive OK [IDENTICAL]: naive log-sum -inf (underflowed), logsumexp -1708.7214 vs float64 -1708.7213588720942 (row max -1706.8835)
+check_kde_device_equals_oracle OK [IDENTICAL]: 6 kernels x 4 metrics, 888 score cells bit-equal to the oracle, 0 differ; six kernels pairwise distinct on every query
+check_kde_weights OK [IDENTICAL]: 6 kernels; all-ones weights == unweighted bit for bit; hashed weights moved 222 of 222 scores; weighted device == oracle bit for bit
+check_kde_launch_invariance OK [IDENTICAL]: 12 kernel/metric pairs byte-identical across elem_tpb 256/64, lse_tpb 128/32, pad 0/37, two poisons, run twice, and query in batch 3 == batch 37 == batch 3000
+check_kde_card_is_emitted OK [IDENTICAL]: 7 stages (kde.dists ... kde.scores), run-to-run control identical
+check_kde_row39_signed_zero_rowmax OK [IDENTICAL]: 8 planted rows x lse_tpb 128/32/1: device AND oracle rowmax are the lower-index zero's bits (both orders, both ends); 2 real coincident rows (tophat max -0.0, epanechnikov max +0.0) card-identical device vs oracle
+  refused  X with NaN at row 1, column 2: kde: X contains NaN at row 1, column 2 (DEVIATION 604)
+  refused  X with +inf at row 0, column 0: kde: X contains infinity at row 0, column 0 (DEVIATION 604)
+  refused  X with -inf at row 3, column 6: kde: X contains infinity at row 3, column 6 (DEVIATION 604)
+  refused  X with 2^62 under sqeuclidean (norm overflows): kde: metric='sqeuclidean' needs |X| < 2^63/sqrt(7) so the expanded identity cannot form inf - inf; row 2, column 1 is 4.611686e+18 (DEVIATION 604)
+check_kde_nan_cannot_reach_a_stage OK [IDENTICAL]: 4 non-finite/overflow inputs refused by name (DEVIATION 604), 2^62 under euclidean saturates without NaN; gaussian+exponential all--inf rows at h=2^-62 are 0xff800000 at rowmax/logsumexp/scores on device and oracle (DEVIATION 603), mixed row finite; 2 cards identical device vs oracle

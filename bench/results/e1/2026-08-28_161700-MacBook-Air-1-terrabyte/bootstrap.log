@@ -1,0 +1,106 @@
+
+=== provenance === 16:17:00
+241aed689be0e950fde4eb143ab096915cbc1ae5
+Darwin MacBook-Air-1-terrabyte.local 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:26:22 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T8132 arm64
+
+=== pixi === 16:17:00
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 16:17:00
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 8: the classical lanes (gemm, cd, kde, linkage, svm, metrics) -- both modes, cards + checks === 16:17:00
+-- lanes, identical --
+  gemm [identical]: card 60 records -- [IDENTICAL]
+  gemm [identical] check OK (128 OK lines)
+  cd [identical]: card 20 records -- [IDENTICAL]
+  cd [identical] check OK (10 OK lines)
+  kde [identical]: card 7 records -- [IDENTICAL]
+  kde [identical] check OK (11 OK lines)
+  linkage [identical]: card 8 records -- 
+  linkage [identical] check OK (44 OK lines)
+  svm [identical]: card 32 records -- [IDENTICAL]
+  svm [identical] check OK (4 OK lines)
+  mamba [identical]: card 17 records -- mode IDENTICAL
+  mamba [identical] check OK (16 OK lines)
+  iforest [identical]: card 123 records -- [IDENTICAL]
+  transformer [identical]: card 30 records -- mode IDENTICAL
+  arima [identical]: card 137 records -- [IDENTICAL]
+  cholesky [identical]: NO CARD written (check_potrf_reconstructs OK [IDENTICAL]: the planted 48x48 reconstructs its input BIT FOR BIT; 3 fixtures reconstruct to)
+PHASE8-FINDING: embedding [identical] failed (see /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e1/2026-08-28_161700-MacBook-Air-1-terrabyte/lanes/embedding.identical.log)
+  embedding [identical]: card 9 records -- mode IDENTICAL
+  gp [identical]: card 2622 records -- [IDENTICAL]
+PHASE8-FINDING: hdbscan [identical] failed (see /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e1/2026-08-28_161700-MacBook-Air-1-terrabyte/lanes/hdbscan.identical.log)
+  hdbscan [identical]: NO CARD written (stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-err)
+  holtwinters [identical]: card 169 records -- [IDENTICAL]
+  ivf [identical]: card 12 records -- [IDENTICAL]
+  kernelmethods [identical]: NO CARD written (check_rbf_sampler_approximates_kernel OK [IDENTICAL]: REPORT -- the Monte Carlo error is printed and NOT asserted, becau)
+  gmm [identical]: card 9382 records -- [IDENTICAL]
+  resample [identical]: card 424 records -- [IDENTICAL]
+  spectral [identical]: card 155 records -- [IDENTICAL]
+  training-loss [identical]: card 17 records -- mode IDENTICAL
+  training-optimizer [identical]: card 18 records -- mode IDENTICAL
+  training-step [identical]: NO CARD written ()
+  metrics [identical]: card 61 records -- mode IDENTICAL
+  metrics-labels [identical] check OK (17 OK lines)
+  metrics-regression [identical] check OK (17 OK lines)
+  metrics-silhouette [identical] check OK (7 OK lines)
+  metrics-trust [identical] check OK (5 OK lines)
+-- lanes, fast --
+  gemm [fast]: card 60 records -- [FAST]
+  gemm [fast] check OK (96 OK lines)
+  cd [fast]: card 20 records -- [FAST]
+  cd [fast] check OK (6 OK lines)
+  kde [fast]: card 7 records -- [FAST]
+  kde [fast] check OK (10 OK lines)
+  linkage [fast]: card 8 records -- 
+  linkage [fast] check OK (36 OK lines)
+  svm [fast]: card 32 records -- [FAST]
+  svm [fast] check OK (4 OK lines)
+PHASE8-FINDING: mamba [fast] failed (see /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e1/2026-08-28_161700-MacBook-Air-1-terrabyte/lanes/mamba.fast.log)
+  mamba [fast]: card 17 records -- mode FAST
+PHASE8-FINDING: mamba [fast] check FAILED: Unhandled exception caught during execution: mamba_check: CLAUSE (a) FAILED, 10 stages differ from the oracle, first at A.out on 102 of 256 cells
+  iforest [fast]: card 123 records -- [FAST]
+  transformer [fast]: card 30 records -- mode FAST
+  arima [fast]: card 137 records -- [FAST]
+  cholesky [fast]: NO CARD written (check_potrf_reconstructs OK [FAST]: the planted 48x48 reconstructs its input BIT FOR BIT; 3 fixtures reconstruct to a wo)
+  embedding [fast]: card 9 records -- mode FAST
+  gp [fast]: card 2910 records -- [FAST]
+PHASE8-FINDING: hdbscan [fast] failed (see /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e1/2026-08-28_161700-MacBook-Air-1-terrabyte/lanes/hdbscan.fast.log)
+  hdbscan [fast]: NO CARD written (stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-err)
+  holtwinters [fast]: card 168 records -- [FAST]
+  ivf [fast]: card 12 records -- [FAST]
+  kernelmethods [fast]: NO CARD written (check_rbf_sampler_approximates_kernel OK [FAST]: REPORT -- the Monte Carlo error is printed and NOT asserted, because it)
+  gmm [fast]: card 9382 records -- [FAST]
+  resample [fast]: card 424 records -- [FAST]
+  spectral [fast]: card 155 records -- [FAST]
+  training-loss [fast]: card 17 records -- mode FAST
+  training-optimizer [fast]: card 18 records -- mode FAST
+PHASE8-FINDING: training-step [fast] failed (see /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e1/2026-08-28_161700-MacBook-Air-1-terrabyte/lanes/training-step.fast.log)
+  training-step [fast]: NO CARD written (  clause (a) **FAILED**: 11 stages moved. The FIRST one in the list above is the address; everything after it is downstr)
+  metrics [fast]: card 61 records -- mode FAST
+  metrics-labels [fast] check OK (11 OK lines)
+  metrics-regression [fast] check OK (13 OK lines)
+  metrics-silhouette [fast] check OK (6 OK lines)
+  metrics-trust [fast] check OK (5 OK lines)
+
+=== done === 16:20:35
+artifacts in /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e1/2026-08-28_161700-MacBook-Air-1-terrabyte
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

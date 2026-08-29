@@ -1,0 +1,104 @@
+/Users/andrewhendel/CascadeProjects/mojolearn/embedding/mojo_only/embedding_check.mojo:1125:26: warning: 'if' condition always evaluates to 'False'; 'if' branch is unreachable
+    if EMB_MAX_POSITIONS != 1073741823:
+                         ^
+/Users/andrewhendel/CascadeProjects/mojolearn/embedding/mojo_only/embedding_check.mojo:1132:27: warning: 'if' condition always evaluates to 'False'; 'if' branch is unreachable
+    if EMB_NO_PADDING_IDX >= 0:
+                          ^
+/Users/andrewhendel/CascadeProjects/mojolearn/embedding/mojo_only/embedding_check.mojo:1932:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with '*'
+    """Contract 11(e) and contract 7.4, DEVIATION 1309. **The contract's own
+       ^
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/embedding/mojo_only/embedding_check.mojo:254:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/embedding/mojo_only/embedding_check.mojo:254:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/embedding/mojo_only/embedding_check.mojo:254:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/embedding/mojo_only/embedding_check.mojo:254:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn/embedding/mojo_only/embedding_check.mojo:1877:21: warning: assignment to 'lo' was never used; assign to '_' instead?
+        var lo = Int(begin2[v])
+                    ^
+=== embedding identity gate, profile mojolearn.identical.embedding.fp32.v1
+=== NOTHING IN THIS FILE HAS EVER BEEN COMPILED OR RUN BEFORE THIS PROCESS. Read the header.
+mode IDENTICAL   sabotage: none   EMB_TPB: 256
+ledger: this binary is CLEAN -- no sabotage arm is compiled in. Set MOJOLEARN_EMB_EXPECT_SABOTAGE to have the binary check its own -D.
+preflight: the assertions the fixture and the oracle asked for
+  EMB_MAX_POSITIONS = 1073741823 (2^30 - 1, a REFUSAL bound that reaches no arithmetic), EMB_NO_PADDING_IDX = -1
+  pack_emb_key: (3,7) < (3,8) < (4,0), and pack_emb_key(-1, 0) = 0xffffffff00000000 exactly, so the sign-extension mask is present
+  splitmix64: the embedding copy and the transformer copy agree on 5 seeds (the THIRD copy's stated cost, checked)
+  emb.dw_seed: emb_backward_seed and the T=0 backward differ on 2 cells, ALL of them in row padding_idx under accumulate. The stage is DEFINED as the T=0 backward, which is what both sides can produce
+preflight: DEMONSTRATING that each fixture can separate
+  case table: 19 cases, R_max up to 300, T up to 600, 3 padding_idx positions, 1 subnormal weight cells, 2 straddling rows at the split boundaries
+  F-NODUP: R_max = 1, ascending == descending on every one of the 24 cells. BLIND BY CONSTRUCTION, and that is what it is for
+  F-DUPSAME: R_max = 2, 4 runs of bitwise-EQUAL contributors, ascending == descending on every one. BLIND, and it is the second control contract 11.2 requires
+  F-ORDER3 R=3: ascending 0x3f800000 vs descending 0x3f800001 (SEPARATES), tree 0x3f800000 (INERT, contract 5.4)
+  F-TREE4 R=4: chain 0x3f800000 vs balanced tree 0x3f800001 (SEPARATES, exactly one ULP, contract 5.4's smallest R)
+  F-NEGZERO1 R=1: pinned 0x00000000 vs bypass/seedless 0x80000000 (SEPARATES), and the two agree on 3/3 ordinary single contributors (the arm is a REACH PROOF)
+  F-SUBACC: a0 0x80c00000 + a1 0x00800000 = 0x80400000 (wants 0x80400000, a negative SUBNORMAL); run {a0,a1} -> 0x80000000; run {a0,a1,+0.0} -> 0x00000000   (contract 7.1's hole, MEASURED)
+  hashed dY: 3 of 3 runs separate ascending from descending; exponent field spans 113..141 (a span of 28 binades, so the partials are NOT all in one)
+  EMB_FOLD_READS_LAUNCH at block 256: rotation on R=3 is 1 and it MOVES (0x3f800000 -> 0x3f800001); on R=2 inert=True, on R=4 inert=True. **The device file's 'never inert on a run of length >= 2' is FALSE and DEVIATION 1502 records it.**
+  EMB_RANK_BY_ARRIVAL at block 256: 3 of 3 runs of f_multiblock (T=600) come out in a NON-ascending order under the arm's own phase split, so the witness separates
+preflight: ftz(0x00000001) -> 0x00000000; raw 0x00000001 + 0x00000001 -> 0x00000002  (mode IDENTICAL)
+  EMB_NO_FLUSH_ACC: the backend did NOT flush the raw add, so the arm CAN fire here and its verdict is a real one
+  resolved block size EMB_TPB = 256  (DEVIATION 1502 turns on this being a power of two)
+clause (a): 17 fixture cases, all 9 stages, device vs host oracle, BITWISE
+  case 0 f_nodup  V=8 d=3 T=8 pad=-1 acc=False R_max=1 empty_rows=0  153 cells: 9/9 stages bit-identical
+        NEGATIVE CONTROL: all ids distinct, R_max <= 1. Blind to EVERY order and sort clause -- FOLD_DESCENDING, FOLD_BALANCED_TREE, SORT_TIE_REVERSED, SORT_KEY_ID_ONLY_UNSTABLE and RANK_BY_ARRIVAL are ALL inert, and the gate asserts that mask
+  case 1 f_dupsame  V=4 d=3 T=8 pad=-1 acc=False R_max=2 empty_rows=0  109 cells: 9/9 stages bit-identical
+        NEGATIVE CONTROL: duplicates carrying BITWISE EQUAL dY rows. Blind to the ORDER, still, because a permutation of a constant sequence is the same sequence
+  case 2 f_order3  V=2 d=1 T=3 pad=-1 acc=False R_max=3 empty_rows=1  23 cells: 9/9 stages bit-identical
+        R=3: ascending 0x3f800000 vs descending 0x3f800001; the tree is INERT here (contract 5.4); the ONLY FOLD_READS_LAUNCH witness
+  case 3 f_tree4  V=2 d=1 T=4 pad=-1 acc=False R_max=4 empty_rows=1  27 cells: 9/9 stages bit-identical
+        R=4: chain 0x3f800000 vs balanced tree 0x3f800001, the smallest R at which they differ
+  case 4 f_negzero1  V=3 d=1 T=1 pad=-1 acc=False R_max=1 empty_rows=2  20 cells: 9/9 stages bit-identical
+        R=1 with a sole -0.0 contributor: the ONE input at which the +0.0 seed is visible. SINGLE_RUN_BYPASS and SEED_SEEDLESS both need it and NOTHING ELSE separates them
+  case 5 f_subacc  V=2 d=1 T=5 pad=-1 acc=False R_max=3 empty_rows=0  31 cells: 9/9 stages bit-identical
+        contract 7.1's HOLE: row 0 ends -0.0 through ftz of a negative subnormal partial sum, row 1 is the same run plus a +0.0 and ends +0.0. Asserted as a KNOWN EXCEPTION, IDENTICAL only
+  case 6 f_subw  V=4 d=2 T=4 pad=-1 acc=False R_max=2 empty_rows=1  57 cells: 9/9 stages bit-identical
+        a subnormal WEIGHT: GATHER_NO_FLUSH's only witness, and the one flush arm in this lane that is NOT inert on Apple
+  case 7 f_empty  V=16 d=2 T=3 pad=-1 acc=False R_max=1 empty_rows=13  147 cells: 9/9 stages bit-identical
+        13 of 16 rows empty: the +0.0 STORE, gated only if the buffer is POISONED first
+  case 8 f_pad  V=6 d=2 T=6 pad=2 acc=False R_max=1 empty_rows=3  82 cells: 9/9 stages bit-identical
+        padding_idx present AND not the only id: PAD_ROW_CONTRIBUTES must move emb.counts and must NOT move emb.dw
+  case 9 f_hot  V=4 d=2 T=300 pad=-1 acc=False R_max=300 empty_rows=3  1833 cells: 9/9 stages bit-identical
+        R == T == 300: the degenerate depth, and T >= 129. Blind to nothing in particular and expensive
+  case 10 f_split  V=4 d=2 T=6 pad=-1 acc=False R_max=3 empty_rows=1  69 cells: 9/9 stages bit-identical
+        one row straddles t0=3 and one row does not: clause (e)'s witness and its own inert control in one case
+  case 13 f_multiblock  V=3 d=1 T=600 pad=-1 acc=False R_max=205 empty_rows=0  2416 cells: 9/9 stages bit-identical
+        shape sweep; no plant
+  case 14 f_accum  V=4 d=2 T=6 pad=-1 acc=True R_max=3 empty_rows=1  69 cells: 9/9 stages bit-identical
+        one row straddles t0=3 and one row does not: clause (e)'s witness and its own inert control in one case
+  case 15 f_wide_v300  V=300 d=1 T=64 pad=-1 acc=False R_max=2 empty_rows=241  1757 cells: 9/9 stages bit-identical
+        shape sweep; no plant
+  case 16 f_d1  V=5 d=1 T=5 pad=-1 acc=False R_max=2 empty_rows=2  46 cells: 9/9 stages bit-identical
+        shape sweep; no plant
+  case 17 f_t0  V=4 d=2 T=0 pad=-1 acc=False R_max=0 empty_rows=4  33 cells: 9/9 stages bit-identical
+        shape sweep; no plant
+  case 18 f_d0  V=4 d=0 T=3 pad=-1 acc=False R_max=2 empty_rows=2  15 cells: 9/9 stages bit-identical
+        shape sweep; no plant
+card: 9 records at /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e1/2026-08-28_162228-MacBook-Air-1-terrabyte/lanes/embedding.identical.card, contract section 10 wants 9
+card: 9/9 tags in contract section 10's order, all unique, three of them INTEGER (contract section 6: emb.perm is where a divergent sort becomes visible before it reaches a float)
+clause (a): PASS, 17 cases, 9/9 stages bit-identical to the oracle on all 6887 cells, 9/9 card tags
+clause (a) NOTE, DEVIATION 1517: at d == 0 and at T == 0 the device backward returns BEFORE R1, R2 and R3, so emb.counts, emb.run_begin and emb.perm are never written -- while emb_backward_stages computes and records all three. Those three stages are SKIPPED on f_t0 and f_d0 and the skip is reported here rather than passed over. Contract section 8 declares both shapes LEGAL, so the two cards disagree at three of nine stages on two legal shapes.
+clause (b): SKIPPED (set MOJOLEARN_EMB_CHECK_CLAUSE_B=1)
+clause (c): SKIPPED (set MOJOLEARN_EMB_CHECK_CLAUSE_C=1). BOTH HALVES ARE SKIPPED TOGETHER and that is deliberate: padding and sequence length are two different fixtures and a lane that ran one would have half a clause with a whole clause's name.
+clause (d): SKIPPED (set MOJOLEARN_EMB_CHECK_CLAUSE_D=1). NOTE: even when it runs it is a HOST SHADOW -- PLAN_SORT is not written, so plan invariance, which the contract calls the strongest evidence that the arithmetic does not read the plan, has never been run and cannot be.
+clause (e): SKIPPED (set MOJOLEARN_EMB_CHECK_CLAUSE_E=1). NOTE: EMB_ACCUM_BY_ADD is falsifiable ONLY here, because no kernel reads its switch, so a lane that never runs clause (e) has fifteen arms and not sixteen.
+SCOPE: this build, this column, IDENTICAL only. What is NOT closed by anything printed above: **plan invariance** (PLAN_SORT is not written, contract clause (d) has never run); **the shipped shape** V=128256 d=4096 T=4096, which contract 11.2 calls mandatory and which is 2.10 GB of dW and belongs on a rented GPU rather than this laptop; **the device-side refusal**, DEVIATION 1506, which is a real defect in a file this gate may not edit; **EMB_FOLD_VIA_GEMM_ONEHOT** and **EMB_SORT_KEY_ID_ONLY_UNSTABLE**, two of contract 11.1's eighteen arms that have no switch anywhere (DEVIATION 1505); **EMB_NO_FLUSH_ACC on any FTZ column**, where it is inert by construction; **EMB_GATHER_CLAMP_OOR**, whose clean half is an out-of-bounds read; **an INDEPENDENT reference** -- there is no embedding table in cuML, cuVS or RAFT and no PyTorch checkout, so every clause here is our device against our oracle and both are ours; **FAST mode**; **the fifteen sabotage builds this binary is not**; and **every column that is not this one** -- Apple and AMD agreed bit for bit through 302 GEMM stages while NVIDIA diverged at tree001.winners.scores, so two backends agreeing closes nothing.
+clause (f): SKIPPED (set MOJOLEARN_EMB_CHECK_CLAUSE_F=1). NOTE: it runs LAST when it runs, because DEVIATION 1506 makes it RAISE on a defect in a file this gate may not edit -- the device entry points perform NO refusal at all -- and a raise there must not cost the other clauses their measurements.

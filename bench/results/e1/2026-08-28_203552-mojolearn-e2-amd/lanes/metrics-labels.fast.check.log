@@ -1,0 +1,77 @@
+✨ Pixi task (check-metrics-labels in default): mojo run -I . metrics/mojo_only/label_metrics_check.mojo
+Imported from /root/mojolearn/metrics/mojo_only/label_metrics_check.mojo:72:
+Imported from /root/mojolearn/metrics/ported/metrics/adjusted_rand_index.mojo:7:
+Imported from /root/mojolearn/metrics/ported/stats/detail/adjusted_rand_index.mojo:40:
+/root/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/metrics/mojo_only/label_metrics_check.mojo:72:
+Imported from /root/mojolearn/metrics/ported/metrics/adjusted_rand_index.mojo:7:
+Imported from /root/mojolearn/metrics/ported/stats/detail/adjusted_rand_index.mojo:40:
+/root/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/metrics/mojo_only/label_metrics_check.mojo:72:
+Imported from /root/mojolearn/metrics/ported/metrics/adjusted_rand_index.mojo:7:
+Imported from /root/mojolearn/metrics/ported/stats/detail/adjusted_rand_index.mojo:40:
+/root/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/metrics/mojo_only/label_metrics_check.mojo:72:
+Imported from /root/mojolearn/metrics/ported/metrics/adjusted_rand_index.mojo:7:
+Imported from /root/mojolearn/metrics/ported/stats/detail/adjusted_rand_index.mojo:40:
+/root/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+== metrics/mojo_only/label_metrics_check.mojo [FAST] ==
+check_contingency_matrix_exact [FAST]
+    k=7 SMEM arm, minLabel=3: 49 cells EXACT, sum 4099
+    k=31 SMEM arm, minLabel=3: 961 cells EXACT, sum 4099
+    k=40 GLOBAL arm, minLabel=3: 1600 cells EXACT, sum 4099
+  OK
+check_accuracy_exact [FAST]
+    n=0: accuracy_score: n must be positive, got 0 (0 / 0 is refused by name)
+    count 3315 of 4099 EXACT; value 0.8087338 0x3f4f092e bitwise
+  OK
+check_rand_index_exact [FAST]
+    bitwise OK  rand_index got 0.7756771729847333 (0x3fe8d258ef472429) oracle 0.7756771729847333 (0x3fe8d258ef472429)
+    a=1942300 b=4572497 EXACT (two host tallies agree); size<2 -> 1.0
+  OK
+check_adjusted_rand_index [FAST]
+    bitwise OK  adjusted_rand_index got 0.5034975459487259 (0x3fe01ca6e2aee9c2) oracle 0.5034975459487259 (0x3fe01ca6e2aee9c2)
+    bitwise OK  adjusted_rand_index(singleton) got 0.5030740847594559 (0x3fe0192ed2b0394e) oracle 0.5030740847594559 (0x3fe0192ed2b0394e)
+    size<2, both-constant, perfect -> 1.0; pred constant -> 0.0
+  OK
+check_entropy_epilogue [FAST]
+    bitwise REPORT (FAST, not asserted) entropy got 1.4953451095527233 (0x3ff7eceefe5c3322) oracle 1.495345115661621 (0x3ff7ecef00000000)
+    vs Float64 sklearn spelling: rel 3.7107786300476273e-13
+    constant -> 0.0; size 0 -> 1.0
+  OK
+check_mutual_info_epilogue [FAST]
+    bitwise REPORT (FAST, not asserted) mutual_info_score got 0.41966134677103606 (0x3fdadbbb43f1b8fa) oracle 0.4196615219116211 (0x3fdadbbc00000000)
+    vs Float64 sklearn spelling: rel 1.0831769431567004e-10
+    product-structured 4096: MI == 0.0 exactly
+    size=0: mutual_info_score: size must be positive, got 0 (0 / 0 is refused by name)
+  OK
+check_homogeneity_completeness_v [FAST]
+    bitwise REPORT (FAST, not asserted) homogeneity got 0.36577822899827567 (0x3fd768e916c8baa9) oracle 0.36577812897589657 (0x3fd768e8ab62c974)
+    bitwise REPORT (FAST, not asserted) completeness got 0.3895223380648261 (0x3fd8edef19c3314d) oracle 0.389522234131822 (0x3fd8edeeaa2a4e53)
+    bitwise REPORT (FAST, not asserted) v_measure got 0.37727706607352857 (0x3fd8254eb51443c5) oracle 0.3772769641179931 (0x3fd8254e479af0c7)
+    vs Float64 sklearn spelling: h rel 6.375830631116433e-11 c rel 6.39215221254452e-11 v rel 6.38374375382972e-11
+    perfect: h 0.9999999999919665 (0x3feffffffffee559) v 0.9999999999919665
+    MI(truth, pred) 0x3fe0589f00000000 MI(pred, truth) 0x3fe0589ee0000000 (transposed fold differs)
+    bitwise REPORT (FAST, not asserted) v_measure(singleton) got 0.3770284368034618 (0x3fd8213be16ee75d) oracle 0.37702847847440457 (0x3fd8213c0e2d5346)
+    constant truth (1,0,0), constant pred (0,1,0), both constant (1,1,1), independent (0,0,0), singleton: all as sklearn defines
+  OK
+check_label_epilogue_order_is_visible [FAST]
+    MI ascending 0x3ed6dde0 descending 0x3ed6dde1 float64 0x3fdadbbb43e53a3e
+  OK
+ALL GROUP A CHECKS PASSED [FAST]

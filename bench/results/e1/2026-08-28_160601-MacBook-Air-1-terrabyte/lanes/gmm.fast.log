@@ -1,0 +1,210 @@
+/Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:1524:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with '*'
+    """**THE HEADLINE, AND IT RUNS BEFORE ANY PARAMETER IS COMPARED.**
+       ^
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:60:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:60:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:60:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:65:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:97:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = value
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:65:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:102:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:65:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:102:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:65:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:102:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                                      ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:65:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:105:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var total = red[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:60:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:60:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:57:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/potrf.mojo:307:
+/Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/chol_sabotage.mojo:207:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        flag[0] = Int32(0)
+        ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:57:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/potrf.mojo:307:
+/Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/chol_sabotage.mojo:230:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                flag[0] = Int32(1)
+                ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:57:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/potrf.mojo:307:
+/Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/chol_sabotage.mojo:237:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if flag[0] != Int32(0):
+           ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:57:
+/Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/potrf.mojo:662:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        flag[0] = Int32(0)
+        ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:57:
+/Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/potrf.mojo:678:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                flag[0] = Int32(1)
+                ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:57:
+/Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/potrf.mojo:682:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if flag[0] != Int32(0):
+           ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:65:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:33:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/kmeans.mojo:62:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/mojo_only/plus_plus.mojo:245:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        carry[0] = Float32(0.0)
+        ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:65:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:33:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/kmeans.mojo:62:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/mojo_only/plus_plus.mojo:256:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            csum.unsafe_store(i, base + carry[0] + inc)
+                                        ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:65:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:33:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/kmeans.mojo:62:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/mojo_only/plus_plus.mojo:259:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            carry[0] = carry[0] + inc
+            ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:65:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:33:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/kmeans.mojo:62:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/mojo_only/plus_plus.mojo:259:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            carry[0] = carry[0] + inc
+                       ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:65:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:37:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:71:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/distance/fused_distance_nn/simt_kernel.mojo:476:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    s_xnorm[i] = nv
+                    ~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:65:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:37:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:71:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/distance/fused_distance_nn/simt_kernel.mojo:484:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                s_ynorm[i2] = nv2
+                ~~~~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:65:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:37:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:71:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/distance/fused_distance_nn/simt_kernel.mojo:492:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                rxn[i] = s_xnorm[i * tr + accrowid]
+                         ~~~~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:65:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:37:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:71:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/distance/fused_distance_nn/simt_kernel.mojo:495:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                ryn[j] = s_ynorm[j * tc + acccolid]
+                         ~~~~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:1707:30: warning: assignment to 'resp0' was never used; assign to '_' instead?
+    var resp0 = List[Float32]()
+                             ^
+/Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:2137:29: warning: assignment to 'why' was never used; assign to '_' instead?
+            var why = String(
+                            ^
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:65:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:108:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:37:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:195:41: warning: assignment to 'data_batch' was never used; assign to '_' instead?
+    var data_batch = get_data_batch_size(batch_samples, n_samples)
+                                        ^
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:65:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:108:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:37:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:196:50: warning: assignment to 'centroid_batch' was never used; assign to '_' instead?
+    var centroid_batch = get_centroids_batch_size(batch_centroids, n_clusters)
+                                                 ^
+== mixture/mojo_only/gmm_check.mojo [FAST] profile=mojolearn.identical.gmm.full.fp32.v1 max_iter=40 ==
+check_gmm_refusals OK [FAST]: 15 refusals by name (3 covariance types, 3 init_params, 3 non-finite, 2 n_components, tol, reg_covar, a collapsed component citing DEVIATION 1723 with its component and info); 'full', 'kmeans', 'random' and the same collapse fixture at reg_covar=1e-6 all ACCEPTED, so the refusals are not always firing
+check_collapse_is_identical OK [FAST]: COLLAPSE at reg_covar=+0.0 refuses on the device and on the float32 oracle, at the same component (2) with the same LAPACK info (1), at iteration 0 (0 = initialization); two runs' messages are identical and their partial cards are identical at all 11 records
+check_iteration_count_is_identical OK [FAST]: 5 fixtures, two fits each from one seed, agreeing on the ITERATION COUNT, the convergence flag, the lower bound's BITS and every parameter cell; SEPARATED=2c OVERLAP=2c DUPLICATES=2c ONE_D=2c SIGNED_ZERO=2c (c = converged, x = ran out). The count is emitted as gmm.niter = [n_iter, converged, max_iter]
+check_estep_vs_oracle OK [FAST]: the per-cell bit comparison is a REPORT under FAST and is not asserted (ftz and the fma pin both compile away, so the oracle and the device are entitled to differ); the shift, the -inf guard and the row-39 planted rows are asserted in BOTH modes because none of them depends on the mode
+check_mstep_vs_oracle OK [FAST]: 12 fixture-divisor pairs ran; the per-cell bit comparison is a REPORT under FAST and is not asserted
+check_log_likelihood_by_hand OK [FAST]: 3 one-dimensional configurations equal their hand-derived closed forms BIT FOR BIT (x at the mean, x one away, and the same distance reached through the MEAN rather than the point -- exercising the subtraction and the point separately and requiring them to agree); configuration 4 (weights 0.25/0.75, so the row max is component 1 and the shift is not zero) is within 4.442207357513439e-08 of the float64 reference
+check_recovers_planted_parameters OK [FAST]: SEPARATED converged in 2 iterations; components matched by the IEEE totalOrder of their mean vector (never by slot); worst |mean - plant| 0x36000000, worst |cov - plant| 0x34000000, worst |weight - 1/3| 0x33000000; predict gives one label per planted cluster and predict_proba is exactly one-hot; score=0xc06daf75 bic=0x43684a7c aic=0x43544398
+check_launch_invariance OK [FAST]: 16 arms -- whole fits at elem/row/comp/solve/panel tpb 256/128/32/256/128 against 64/32/8/8/32, E-steps at 0 vs 37 floats of poisoned padding, every row scored ALONE equal to the same row inside its batch, and the logsumexp equal at one block and three
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: check_card_is_emitted FAILED: the first record is not gmm.input, it is: 0	fit.x_norm	f32	16	301b2bdc855192d5
+/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1

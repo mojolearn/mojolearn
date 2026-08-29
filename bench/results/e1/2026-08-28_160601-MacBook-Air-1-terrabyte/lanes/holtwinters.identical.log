@@ -1,0 +1,74 @@
+/Users/andrewhendel/CascadeProjects/mojolearn/holtwinters/mojo_only/hw_check.mojo:1579:24: warning: 'if' condition always evaluates to 'False'; 'if' branch is unreachable
+    if HW_RHO_PIN_SALT < 0:
+                       ^
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/holtwinters/mojo_only/hw_check.mojo:172:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/holtwinters/mojo_only/hw_check.mojo:172:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/holtwinters/mojo_only/hw_check.mojo:172:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/holtwinters/mojo_only/hw_check.mojo:172:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/holtwinters/mojo_only/hw_check.mojo:172:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/holtwinters/mojo_only/hw_check.mojo:200:
+/Users/andrewhendel/CascadeProjects/mojolearn/holtwinters/mojo_only/hw_oracle.mojo:230:28: warning: assignment to 'clevel' was never used; assign to '_' instead?
+    var clevel = Scalar[dt](0)
+                           ^
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/holtwinters/mojo_only/hw_check.mojo:200:
+/Users/andrewhendel/CascadeProjects/mojolearn/holtwinters/mojo_only/hw_oracle.mojo:231:28: warning: assignment to 'ctrend' was never used; assign to '_' instead?
+    var ctrend = Scalar[dt](0)
+                           ^
+== holtwinters/mojo_only/hw_check.mojo [IDENTICAL] sabotage=none pack_sabotage=none ==
+check_hw_refusals OK [IDENTICAL]: 13 refusals by name (cuML's wrapper rules + DEVIATION 664); a zero under additive accepted
+check_hw_decompose_vs_reference OK [IDENTICAL]: R1Qt == float64 pinv at 172 weights (6 trend_len) with the four pinv identities; planted slope/intercept/season recovered (worst season err 0.0001125335693359375); float32 vs float64 start values worst rel err 3.201789708778331e-05
+  additive series 0: start SSE 111.197044 -> fitted 83.86659 (float64 83.84452940352035), params 0.22879592/0.0/0.63337076, niter 23, OPTIM_MIN_PARAM_DIFF
+  multiplicative series 0: start SSE 272.98178 -> fitted 151.57564 (float64 151.58859694291093), params 0.9983359/0.0/0.2598621, niter 19, OPTIM_MIN_ERROR_DIFF
+check_hw_optimizer_reduces_sse OK [IDENTICAL]: 14 series, fitted SSE <= start SSE everywhere, parameters in [0,1], 0 hit the 1000-iteration limit; float32 vs float64 SSE worst rel diff 0.00379656045208355 (report)
+  additive: worst |forecast - planted| 0.01910400390625 (rel 1.8811253769462736e-05) over h=24, 3 series; params s0 0.9969003/0.00043305117/0.76311433
+  multiplicative: worst |forecast - planted| 1.569091796875 (rel 0.0005049758596906099) over h=24, 3 series; params s0 0.9999065/0.0/0.08499094
+check_hw_forecast_continues_pattern OK [IDENTICAL]: noiseless planted additive and multiplicative series continued within 0.5% over 2 seasons (worst rel 0.0005049758596906099)
+check_hw_signed_zero_clamp OK [IDENTICAL]: host bound(-0.0)=0x00000000, bound(NaN)=+0.0, bound(inf)=1; device eval at alpha=beta=gamma=-0.0 == eval at +0.0 bit for bit (724 cells), == oracle; RECORDED clamp: start (-0.0, NaN, -0.0) on the zero series -> 0x00000000/0x00000000/0x00000000
+check_hw_zero_series_keeps_start OK [IDENTICAL]: all-zero additive series keeps (0.4, 0.3, 0.3), OPTIM_MIN_GRAD_NORM, niter 0, SSE 0 on device and oracle; iter000 slots 0x00000000/0x00000000/0x00000000 (unwritten fill)
+  additive: series 0 params 0.22879592/0.0/0.63337076 niter 23 OPTIM_MIN_PARAM_DIFF sse 83.86659 0x42a7bbb2 == oracle
+  multiplicative: series 0 params 0.9983359/0.0/0.2598621 niter 19 OPTIM_MIN_ERROR_DIFF sse 151.57564 0x4317935d == oracle
+  constant: series 0 params 0.4/0.3/0.3 niter 0 OPTIM_MIN_GRAD_NORM sse 4.656613e-10 0x30000000 == oracle
+  zero: series 0 params 0.4/0.3/0.3 niter 0 OPTIM_MIN_GRAD_NORM sse 0.0 0x00000000 == oracle
+  short: series 0 params 0.33876327/0.08420322/0.3 niter 12 OPTIM_MIN_ERROR_DIFF sse 16.931477 0x418773aa == oracle
+  mixed: series 0 params 0.15382734/0.20669222/0.28982672 niter 7 OPTIM_MIN_PARAM_DIFF sse 60.021297 0x427015cf == oracle
+check_hw_device_equals_oracle OK [IDENTICAL]: 6 of 6 fixtures bit-identical at every stage and cell (cards through first_divergence); REACH: additive vs multiplicative params differ on 7/7 series, season cells on all; stmp_eps branch planted (sse s0 0x4d458e1e)
+check_hw_launch_invariance OK [IDENTICAL]: 2 seasonal types byte-identical across tpb_decomp 32/256, tpb_optim 128/64, pad 0/37, two poisons, run twice, and series in batch 1 == batch 7 == batch 512 (every stage incl. per-iteration params)
+check_hw_card_is_emitted OK [IDENTICAL]: 38 stages (hw.input ... 23 iteration stages ... hw.forecast), run-to-run control identical
+  census additive s0: HESSIAN_RESET BOTH_CRIT BETA_LO halvings=145
+  census multiplicative s0: BETA_LO halvings=112
+  census constant s0: ZERO_DIR halvings=0
+  census zero s0: ZERO_DIR halvings=0
+  census mixed s0: BOTH_CRIT halvings=68
+  census reach over 35 standard series: ZERO_DIR=13 HESSIAN_RESET=7 LS_LIMIT=0 RHO_ZERO=0 H_NAN=0 BOTH_CRIT=11 ITER_LIMIT=0 ALPHA_LO=0 ALPHA_HI=1 BETA_LO=16 BETA_HI=0 GAMMA_LO=0 GAMMA_HI=3
+  census THIN (one series only, a bit away from vacuous): ALPHA_HI 
+  reach search 128 fits (64 hashed salts, seed = salt, x additive and multiplicative): LS_LIMIT NOT REACHED in 128 fits; RHO_ZERO REACHED, first at salt 102 multiplicative, 12/128 fits, 13 series
+  RHO_ZERO pin: CONFIRMED at salt 102 multiplicative
+  RHO_ZERO fixture: device 1/7 series, oracle 1/7, H_NAN co-reached on 1 of those 1; mask == oracle
+check_hw_decision_branches OK [IDENTICAL]: decisions device == oracle on 5 fixtures; union of bits seen on the standard fixtures = [ZERO_DIR HESSIAN_RESET BOTH_CRIT ALPHA_HI BETA_LO GAMMA_HI halvings=0] max halvings 184; RHO_ZERO reached on a natural series at salt 102 multiplicative (12/128 fits in the search, 1/7 series on the re-fit, oracle agrees), decisions == oracle; bfgs_iter_limit=2 reached ITER_LIMIT on 7/7 series and linesearch_iter_limit=1 reached LS_LIMIT on 7/7 series, criterion OPTIM_BFGS_ITER_LIMIT
+check_hw_pack_round_trip OK [IDENTICAL]: fit_ptr's 135-cell comps, 12-cell stats and 6-cell flags packs are bitwise equal to fit_host's structured lists (n 20, batch_size 3, frequency 5, components_len 45, rows 15, all extents distinct); guards past all four buffers untouched; 3 batch-of-1 fits pin every block TIME-MAJOR at [s + i*batch_size]; forecast_ptr == forecast_host over 21 cells (3 refusals by name); SEPARATION SWAP_TREND_SEASON 90/135 SWAP_LEVEL_TREND 90/135 SERIES_MAJOR 122/135 STRIDE_BATCH 89/135 SWAP_SSE_ALPHA 6/12 SWAP_BETA_GAMMA 6/12 SWAP_FLAGS 6/6; swapped-read forecast moves 21/21
+== hw_check: ALL OK [IDENTICAL] ==

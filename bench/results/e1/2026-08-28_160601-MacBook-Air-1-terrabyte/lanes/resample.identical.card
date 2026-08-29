@@ -1,0 +1,34 @@
+# resample_check card 0 mode=IDENTICAL tpb=256
+# resample bootstrap: n=200 d=2 statistic=mean n_resamples=1024 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	128	235d67cab377f13d
+2	resample.theta	f32	1024	37c03a1253253319
+3	resample.sorted	f32	1024	0c8f518e795594a9
+4	resample.point	f32	1	ef8171e00b39327a
+5	resample.order_pos	i32	2	7c0cdd9da33bb228
+6	resample.se	f32	1	44fc5519d06c77c6
+7	resample.interval	f32	2	571c5c108355effb
+8	resample.bca.z0p	f32	1	4a47487f9b5e3663
+9	resample.jackknife	f32	200	d0a3c31df82846aa
+10	resample.bca.ahat	f32	1	446eb4d5fbddcc55
+# format: mojolearn-identity-trace v1
+0	resample.theta	f32	1024	37c03a1253253319
+1	resample.sorted	f32	1024	0c8f518e795594a9
+2	resample.point	f32	1	ef8171e00b39327a
+3	resample.se	f32	1	44fc5519d06c77c6
+4	resample.interval	f32	2	571c5c108355effb
+5	resample.order_pos	i32	2	7c0cdd9da33bb228
+# resample bootstrap: n=200 d=2 statistic=mean n_resamples=1024 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	128	235d67cab377f13d
+2	resample.theta	f32	1024	37c03a1253253319
+3	resample.sorted	f32	1024	0c8f518e795594a9
+4	resample.point	f32	1	ef8171e00b39327a
+5	resample.order_pos	i32	2	7c0cdd9da33bb228
+6	resample.se	f32	1	44fc5519d06c77c6
+7	resample.interval	f32	2	571c5c108355effb
+8	resample.bca.z0p	f32	1	4a47487f9b5e3663
+9	resample.jackknife	f32	200	d0a3c31df82846aa
+10	resample.bca.ahat	f32	1	446eb4d5fbddcc55

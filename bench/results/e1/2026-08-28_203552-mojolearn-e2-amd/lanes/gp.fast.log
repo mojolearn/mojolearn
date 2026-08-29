@@ -1,0 +1,100 @@
+/root/mojolearn/gaussian_process/mojo_only/gp_check.mojo:1949:8: warning: 'if' condition always evaluates to 'False'; 'if' branch is unreachable
+    if False:
+       ^
+/root/mojolearn/gaussian_process/mojo_only/gp_check.mojo:1997:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with '*'
+    """Without the ridge the factorization refuses at a pivot; with it, it
+       ^
+Imported from /root/mojolearn/gaussian_process/mojo_only/gp_check.mojo:57:
+/root/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/gaussian_process/mojo_only/gp_check.mojo:57:
+/root/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/gaussian_process/mojo_only/gp_check.mojo:57:
+/root/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/gaussian_process/mojo_only/gp_check.mojo:56:
+Imported from /root/mojolearn/cholesky/mojo_only/trsm.mojo:71:
+/root/mojolearn/cholesky/mojo_only/chol_sabotage.mojo:207:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        flag[0] = Int32(0)
+        ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/gaussian_process/mojo_only/gp_check.mojo:56:
+Imported from /root/mojolearn/cholesky/mojo_only/trsm.mojo:71:
+/root/mojolearn/cholesky/mojo_only/chol_sabotage.mojo:230:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                flag[0] = Int32(1)
+                ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/gaussian_process/mojo_only/gp_check.mojo:56:
+Imported from /root/mojolearn/cholesky/mojo_only/trsm.mojo:71:
+/root/mojolearn/cholesky/mojo_only/chol_sabotage.mojo:237:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if flag[0] != Int32(0):
+           ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/gaussian_process/mojo_only/gp_check.mojo:57:
+/root/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/gaussian_process/mojo_only/gp_check.mojo:57:
+/root/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/gaussian_process/mojo_only/gp_check.mojo:59:
+Imported from /root/mojolearn/gaussian_process/estimator.mojo:98:
+Imported from /root/mojolearn/cholesky/estimator.mojo:46:
+/root/mojolearn/cholesky/mojo_only/potrf.mojo:662:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        flag[0] = Int32(0)
+        ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/gaussian_process/mojo_only/gp_check.mojo:59:
+Imported from /root/mojolearn/gaussian_process/estimator.mojo:98:
+Imported from /root/mojolearn/cholesky/estimator.mojo:46:
+/root/mojolearn/cholesky/mojo_only/potrf.mojo:678:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                flag[0] = Int32(1)
+                ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/gaussian_process/mojo_only/gp_check.mojo:59:
+Imported from /root/mojolearn/gaussian_process/estimator.mojo:98:
+Imported from /root/mojolearn/cholesky/estimator.mojo:46:
+/root/mojolearn/cholesky/mojo_only/potrf.mojo:682:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if flag[0] != Int32(0):
+           ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+== gaussian_process/mojo_only/gp_check.mojo [FAST] profile=mojolearn.identical.gp.fp32.v1 ==
+check_gp_constants OK [FAST]: sqrt(3)=0x3fddb3d7 sqrt(5)=0x400f1bbd log(2 pi)=0x3feb3f8e, each the correctly rounded float32 of its float64 value
+check_gp_refusals OK [FAST]: 31 refusals fired BY NAME (general Matern and nu=inf, classification, six unported kernel names, four optimizers, restarts, normalize_y, four bad alphas, non-finite X and y, multi-output y, a zero length scale, a mis-sized ARD vector, sample_y, and a failed fit's lml and predict), and the three accepted nu values, four accepted kernel names and both pinned ridges were accepted on the same code paths
+check_kernels_vs_oracle OK [FAST]: 55 kernel-case-by-fixture combinations, 5324 cells, 43 of 55 cases REPORT a divergence (FAST makes no bit claim: the vendor exp, sqrt and div are free to differ from the host replay); worst |device - float64| 1.3033083967606274e-07 on ard/Matern([1.0, 2.0], nu=2.5); unit diagonal, exact two-argument symmetry, exact ARD irrelevance and row-39 zero-sign blindness all hold by bits
+check_kernel_algebra OK [FAST]: sum, product, a nested (Const * RBF) + White and the diagonal all equal the hand-composed values at 1936 cells across 5 point sets; ConstantKernel(1.0) * RBF equals the bare RBF bit for bit
+check_posterior_recovers_training OK [FAST]: 16 planted observations recovered by the posterior mean, worst |mean - y| 5.9604645e-08 at point 2 against the 2^-14 bound; worst |dual_coef - float64 reference| 8.525628258926332e-08
+  logdet-to-lml RECORDED [FAST] on planted: log|K| moved by 1.5916157281026244e-12, which enters the lml as half of that (7.958078640513122e-13) and is BELOW one ulp of the lml (1.9073486328125e-06), so the lml is entitled to be unchanged. Not asserted, and the lml's own gate is the hand-worked value above.
+  logdet arm MUST FAIL [FAST] on planted: bits moved (1 fixtures INERT to it), and the marginal likelihood moved with it
+check_log_marginal_likelihood OK [FAST]: the hand-worked fixture gives dual_coef (0.5, -0.5) and y^T alpha 5.0 BIT FOR BIT, log|K| within 6.776018235399306e-08 of log(400) and lml within 2.410303165945038e-07 of -7.333609339963336 (float64 reassembly -7.333609340216816); 5 fixtures agree with the float64 reference to 0.010628033734974451 (worst on duplicate); and recomputing log|K| a different way MOVED it from 0x40bfba14 to 0x40bfba14, which is what makes DEVIATION 1757 a gated claim
+  clamp RECORDED [FAST]: the clamp fired on NONE of the 32 test points across 5 fixtures; closest to zero was 0.0 at planted[0]. The counting path is therefore UNVERIFIED and GP_SAB_CLAMP_UNCOUNTED proves nothing on this fixture set. A fixture whose true predictive variance is small but not exactly zero is owed.
+check_variance_is_nonnegative_and_clamps_are_counted OK [FAST]: 0 of 32 test points CLAMPED, per fixture planted=0/16 duplicate=0/4 handworked=0/2 ard=0/6 signed_zero=0/4; no reported variance is negative and none is -0.0; the clamp FLAGS match the oracle cell by cell; closest-to-zero variance 0.0 at planted[0]
+check_duplicate_inputs_need_the_ridge OK [FAST]: rows 0 and 1 are bit-identical, so with NO ridge the factorization refuses at info=2 (hand-derived: the pivot at column 1 is exactly 1 - 1 = 0), and with the pinned ridge 0x35800000 it succeeds and predicts 4 points (0 clamped). scikit-learn's default alpha=1e-10 is confirmed a NO-OP in float32: 1.0f + 1e-10f is exactly 1.0f
+check_launch_invariance OK [FAST]: 5 fixtures byte-identical across elem_tpb 256/64/32, solve_tpb 256/8, three padding-and-poison combinations, the same run twice, and every test point predicted ALONE against the same point inside its batch
+check_card_is_emitted OK [FAST]: 16 stages in order (gp.x_train ... gp.std), and two runs of the ARD fixture wrote identical cards
+  MUST FAIL  DIST_DESCENDING on ard: kernel[2] moved (3 earlier fixtures INERT to it)
+  REPORT  STD_EXP: INERT on all 5 fixtures that fit. RECORDED, not claimed
+  MUST FAIL  EXPANDED_RBF on duplicate: kernel[3] moved (1 earlier fixtures INERT to it)
+  APPLE-INERT  NO_FTZ_KERNEL: INERT on all 5 fixtures that fit. RECORDED, not claimed
+  REPORT  ALGEBRA_REASSOCIATE: INERT on all 5 fixtures that fit. RECORDED, not claimed
+  MUST FAIL  VDOTV_PAIRWISE on ard: variance[5] moved (3 earlier fixtures INERT to it)
+  MUST FAIL  MEAN_DESCENDING on duplicate: mean[0] moved (1 earlier fixtures INERT to it)
+  MUST FAIL  LOGDET_RECOMPUTED on planted: logdet moved (0 earlier fixtures INERT to it)
+  MUST FAIL  YALPHA_DESCENDING on duplicate: ydotalpha moved (1 earlier fixtures INERT to it)
+check_gp_sabotages OK [FAST]: 9 arms driven at run time with no source edited, 6 moved bits and 3 were inert everywhere and RECORDED
+== gaussian_process/mojo_only/gp_check.mojo [FAST] ALL PASSED ==

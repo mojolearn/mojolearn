@@ -1,0 +1,121 @@
+Imported from /root/mojolearn/metrics/mojo_only/regression_metrics_check.mojo:82:
+/root/mojolearn/core/pinned_reduce.mojo:97:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = value
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/metrics/mojo_only/regression_metrics_check.mojo:82:
+/root/mojolearn/core/pinned_reduce.mojo:102:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/metrics/mojo_only/regression_metrics_check.mojo:82:
+/root/mojolearn/core/pinned_reduce.mojo:102:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/metrics/mojo_only/regression_metrics_check.mojo:82:
+/root/mojolearn/core/pinned_reduce.mojo:102:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                                      ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/metrics/mojo_only/regression_metrics_check.mojo:82:
+/root/mojolearn/core/pinned_reduce.mojo:105:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var total = red[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/metrics/mojo_only/regression_metrics_check.mojo:101:
+Imported from /root/mojolearn/metrics/ported/stats/detail/kl_divergence.mojo:65:
+/root/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/metrics/mojo_only/regression_metrics_check.mojo:101:
+Imported from /root/mojolearn/metrics/ported/stats/detail/kl_divergence.mojo:65:
+/root/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/metrics/mojo_only/regression_metrics_check.mojo:101:
+Imported from /root/mojolearn/metrics/ported/stats/detail/kl_divergence.mojo:65:
+/root/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/metrics/mojo_only/regression_metrics_check.mojo:101:
+Imported from /root/mojolearn/metrics/ported/stats/detail/kl_divergence.mojo:65:
+/root/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/metrics/mojo_only/regression_metrics_check.mojo:101:
+Imported from /root/mojolearn/metrics/ported/stats/detail/kl_divergence.mojo:65:
+/root/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+== metrics/mojo_only/regression_metrics_check.mojo [IDENTICAL] ==
+check_virtual_sum_equals_pinned_block_sum [IDENTICAL]
+    virtual 0xc68a95a8 pinned_block_sum 0xc68a95a8 host model 0xc68a95a8
+  OK
+check_sum_order_is_visible [IDENTICAL]
+    tree 0x45c552fb shift1 0x45c552ff shift7 0x45c55301 shift64 0x45c552ff serial 0x45c55331
+    3 of 3 shifts and the serial fold differ
+  OK
+check_r2_matches_oracle [IDENTICAL]
+    planted subnormal squares: 7
+    bitwise OK  y_bar device -0.07154441 (0xbd9285e0) oracle -0.07154441 (0xbd9285e0)
+    bitwise OK  sse device 1139885.9 (0x498b256f) oracle 1139885.9 (0x498b256f)
+    bitwise OK  ssto device 4113270.5 (0x4a7b0dda) oracle 4113270.5 (0x4a7b0dda)
+    bitwise OK  r2_score device 0.722876 (0x3f390e67) oracle 0.722876 (0x3f390e67)
+    vs Float64 sklearn r2 0.7228760486098991: rel 5.019479103437653e-08
+  OK
+check_r2_ftz_seam_is_visible [IDENTICAL]
+    sse device 0x00000000 oracle 0x00000000 (unflushed host sum of the squares would be 0x000098bb)
+    bitwise OK  sse(all-subnormal) device 0.0 (0x00000000) oracle 0.0 (0x00000000)
+    bitwise OK  r2(all-subnormal sse) device 1.0 (0x3f800000) oracle 1.0 (0x3f800000)
+  OK
+check_r2_launch_invariant [IDENTICAL]
+    b256 g1d pad0 0x3f390e67
+    b64  g1d pad0 0x3f390e67
+    b256 g2d pad0 0x3f390e67
+    b64  g2d pad0 0x3f390e67
+    b256 g1d pad37 0x3f390e67
+    b64  g1d pad37 0x3f390e67
+    b256 g2d pad37 0x3f390e67
+    b64  g2d pad37 0x3f390e67
+    8 launches, one byte pattern
+  OK
+check_r2_undefined_cases [IDENTICAL]
+    constant y, y_hat == y: y_bar 0x40000000 sse 0x00000000 ssto 0x00000000 r2 0x3f800000 (oracle 0x3f800000)
+    constant y, y_hat != y: sse 0x44000000 ssto 0x00000000 r2 0x00000000 (oracle 0x00000000)
+    overflow y: sse 0x7f800000 ssto 0x7f800000 r2 0x7fc00000 (oracle 0x7fc00000)
+    1.0 / 0.0 / 0x7fc00000: the three undefined cases are defined, both modes
+  OK
+check_kl_matches_oracle [IDENTICAL]
+    planted p == 0 terms: 42
+    bitwise OK  kl_divergence device 0.98192525 (0x3f7b5f74) oracle 0.98192525 (0x3f7b5f74)
+    vs Float64 scipy spelling 0.981925161924112: rel 8.878030121925649e-08
+    q[5] = 0: inf (0x7f800000)
+  OK
+check_kl_subnormal_p_and_nan [IDENTICAL]
+    subnormal p[3]: device 0x3f7b6548 oracle 0x3f7b6548
+    bitwise OK  kl(subnormal p) device 0.9820142 (0x3f7b6548) oracle 0.9820142 (0x3f7b6548)
+    q[7] = -1: device 0x7fc00000 oracle 0x7fc00000
+  OK
+check_kl_launch_invariant [IDENTICAL]
+    b256 g1d pad0 0x3f7b5f74
+    b64  g1d pad0 0x3f7b5f74
+    b256 g2d pad0 0x3f7b5f74
+    b64  g2d pad0 0x3f7b5f74
+    b256 g1d pad37 0x3f7b5f74
+    b64  g1d pad37 0x3f7b5f74
+    b256 g2d pad37 0x3f7b5f74
+    b64  g2d pad37 0x3f7b5f74
+    8 launches, one byte pattern
+  OK
+ALL GROUP B CHECKS PASSED [IDENTICAL]

@@ -1,0 +1,225 @@
+/Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:1500:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with '*'
+    """**THE HEADLINE, AND IT RUNS BEFORE ANY PARAMETER IS COMPARED.**
+       ^
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:59:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:59:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:59:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:64:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:97:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = value
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:64:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:102:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:64:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:102:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:64:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:102:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                                      ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:64:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:105:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var total = red[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:59:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:59:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:56:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/potrf.mojo:307:
+/Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/chol_sabotage.mojo:207:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        flag[0] = Int32(0)
+        ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:56:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/potrf.mojo:307:
+/Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/chol_sabotage.mojo:230:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                flag[0] = Int32(1)
+                ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:56:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/potrf.mojo:307:
+/Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/chol_sabotage.mojo:237:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if flag[0] != Int32(0):
+           ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:56:
+/Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/potrf.mojo:662:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        flag[0] = Int32(0)
+        ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:56:
+/Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/potrf.mojo:678:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                flag[0] = Int32(1)
+                ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:56:
+/Users/andrewhendel/CascadeProjects/mojolearn/cholesky/mojo_only/potrf.mojo:682:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if flag[0] != Int32(0):
+           ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:64:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:33:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/kmeans.mojo:62:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/mojo_only/plus_plus.mojo:245:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        carry[0] = Float32(0.0)
+        ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:64:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:33:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/kmeans.mojo:62:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/mojo_only/plus_plus.mojo:256:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            csum.unsafe_store(i, base + carry[0] + inc)
+                                        ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:64:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:33:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/kmeans.mojo:62:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/mojo_only/plus_plus.mojo:259:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            carry[0] = carry[0] + inc
+            ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:64:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:33:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/kmeans.mojo:62:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/mojo_only/plus_plus.mojo:259:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            carry[0] = carry[0] + inc
+                       ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:64:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:37:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:71:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/distance/fused_distance_nn/simt_kernel.mojo:476:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    s_xnorm[i] = nv
+                    ~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:64:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:37:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:71:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/distance/fused_distance_nn/simt_kernel.mojo:484:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                s_ynorm[i2] = nv2
+                ~~~~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:64:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:37:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:71:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/distance/fused_distance_nn/simt_kernel.mojo:492:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                rxn[i] = s_xnorm[i * tr + accrowid]
+                         ~~~~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:64:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:37:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:71:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/distance/fused_distance_nn/simt_kernel.mojo:495:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                ryn[j] = s_ynorm[j * tc + acccolid]
+                         ~~~~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:1683:30: warning: assignment to 'resp0' was never used; assign to '_' instead?
+    var resp0 = List[Float32]()
+                             ^
+/Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:2113:29: warning: assignment to 'why' was never used; assign to '_' instead?
+            var why = String(
+                            ^
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:64:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:108:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:37:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:195:41: warning: assignment to 'data_batch' was never used; assign to '_' instead?
+    var data_batch = get_data_batch_size(batch_samples, n_samples)
+                                        ^
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/mojo_only/gmm_check.mojo:64:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/mixture/estimator.mojo:61:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/estimator.mojo:108:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:37:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:196:50: warning: assignment to 'centroid_batch' was never used; assign to '_' instead?
+    var centroid_batch = get_centroids_batch_size(batch_centroids, n_clusters)
+                                                 ^
+== mixture/mojo_only/gmm_check.mojo [FAST] profile=mojolearn.identical.gmm.full.fp32.v1 max_iter=40 ==
+check_gmm_refusals OK [FAST]: 15 refusals by name (3 covariance types, 3 init_params, 3 non-finite, 2 n_components, tol, reg_covar, a collapsed component citing DEVIATION 1723 with its component and info); 'full', 'kmeans', 'random' and the same collapse fixture at reg_covar=1e-6 all ACCEPTED, so the refusals are not always firing
+check_collapse_is_identical OK [FAST]: COLLAPSE at reg_covar=+0.0 refuses on the device and on the float32 oracle, at the same component (2) with the same LAPACK info (1), at iteration 0 (0 = initialization); two runs' messages are identical and their partial cards are identical at all 11 records
+check_iteration_count_is_identical OK [FAST]: 5 fixtures, two fits each from one seed, agreeing on the ITERATION COUNT, the convergence flag, the lower bound's BITS and every parameter cell; SEPARATED=2c OVERLAP=2c DUPLICATES=2c ONE_D=2c SIGNED_ZERO=2c (c = converged, x = ran out). The count is emitted as gmm.niter = [n_iter, converged, max_iter]
+check_estep_vs_oracle OK [FAST]: the per-cell bit comparison is a REPORT under FAST and is not asserted (ftz and the fma pin both compile away, so the oracle and the device are entitled to differ); the shift, the -inf guard and the row-39 planted rows are asserted in BOTH modes because none of them depends on the mode
+check_mstep_vs_oracle OK [FAST]: 12 fixture-divisor pairs ran; the per-cell bit comparison is a REPORT under FAST and is not asserted
+check_log_likelihood_by_hand OK [FAST]: 3 one-dimensional configurations equal their hand-derived closed forms BIT FOR BIT (x at the mean, x one away, and the same distance reached through the MEAN rather than the point -- exercising the subtraction and the point separately and requiring them to agree); configuration 4 (weights 0.25/0.75, so the row max is component 1 and the shift is not zero) is within 4.442207357513439e-08 of the float64 reference
+check_recovers_planted_parameters OK [FAST]: SEPARATED converged in 2 iterations; components matched by the IEEE totalOrder of their mean vector (never by slot); worst |mean - plant| 0x36000000, worst |cov - plant| 0x34000000, worst |weight - 1/3| 0x33000000; predict gives one label per planted cluster and predict_proba is exactly one-hot; score=0xc06daf75 bic=0x43684a7c aic=0x43544398
+check_launch_invariance OK [FAST]: 16 arms -- whole fits at elem/row/comp/solve/panel tpb 256/128/32/256/128 against 64/32/8/8/32, E-steps at 0 vs 37 floats of poisoned padding, every row scored ALONE equal to the same row inside its batch, and the logsumexp equal at one block and three
+check_card_is_emitted OK [FAST]: 47 records, first gmm.input, last gmm.niter, layout matching the documented 1 + 1 + 5 + 2K + 1 + n_iter (13 + 2K) + 1 at K=2 n_iter=2; two runs byte-identical
+  RECORDED  LSE_DESCENDING: 0 bits moved on all 5 fixtures that fit. EXPECTED, four fixtures run K = 2, where a reversed fold is `b + a` against `a + b` and float addition is commutative to the bit; the K = 3 one is separated enough that the non-maximal shifted terms underflow to exactly zero. A K >= 3 OVERLAPPING fixture is owed.
+  RECORDED  MAHAL_DESCENDING: 0 bits moved on all 5 fixtures that fit. EXPECTED, every fixture here is d = 1 or d = 2, so the feature axis it reverses has at most two terms and float addition is commutative to the bit. A d >= 3 fixture is owed.
+  MUST FAIL  NK_DESCENDING on OVERLAP: the fit moved (1 earlier fixtures INERT to it)
+  MUST FAIL  COV_PRESCALE on SEPARATED: the fit moved (0 earlier fixtures INERT to it)
+  RECORDED  LOGDET_FROM_DIAG: 0 bits moved on all 5 fixtures that fit. EXPECTED, it swaps `sum_j log(P[j][j])` for `-0.5 * chol_logdet(L)`, and at d = 1 those are `log(1/L00)` against `-log(L00)`, which land on the same bits here; at d = 2 the sum is two terms. Both spellings are DEVIATION 1726's quantity and this fixture set does not separate them numerically. A d >= 3 fixture with a wide spread of diagonal magnitudes is owed.
+  RECORDED  TOL_ULP: changed NOTHING on any of 5 fixtures. The arm is REACHED and the BOUNDARY is NOT: every fixture converges in two iterations, so the likelihood change is nowhere near tol and a one-ulp move cannot flip a comparison that is not close. check_iteration_count_is_identical still holds but does NOT establish that the convergence test is load bearing. OWED: a fixture whose tol equals an observed mean-log-likelihood delta.
+Context leak detected, CoreAnalytics returned false
+  UNRESOLVED  MEANLL_PAIRWISE: changed NOTHING on any of 5 fixtures, and unlike the K = 2 and d = 2 arms there is NO commutativity argument that makes it inert at these row counts. _models_agree does compare lower_bound in bits, so the corrupted quantity is being looked at. Either the arm is not wired into the reported lower_bound or the two folds coincide here, and NEITHER has been established. DEVIATION 1725's fold is NOT gated by this arm. OWED: a direct probe of the two folds on one planted row set.
+  INERT      NO_FTZ_RESP: no bit moved on any of 5 fixtures. RECORDED, NOT CLAIMED -- Metal flushes subnormals in hardware, so an exp that underflows is already zero here; on NVIDIA and AMD, both of which KEEP subnormals (IDENTITY_PATHS row 39, measured), the unflushed responsibilities survive into nk and into the covariance
+  INERT      VENDOR_MATMUL: no bit moved on any of 5 fixtures. RECORDED, NOT CLAIMED -- the vendor happened to pick this profile's summation order at these shapes on this device. **THAT IS NOT EVIDENCE THE SWAP IS SAFE**: no vendor guarantees it, and the same swap at another shape or another driver version is entitled to differ
+  MUST FAIL  ROWMAX_GE on the PLANTED mixed-zero rows: rowmax became 0x00000000 / 0x80000000 against the positional 0x80000000 / 0x00000000
+  REPORT     ROWMAX_HARDWARE on the PLANTED mixed-zero rows: rowmax 0x00000000 / 0x80000000 against the positional 0x80000000 / 0x00000000. **THIS IS THE VENDOR-SPLIT ARM.** max(+0, -0) is -0 on Apple (the second operand) and +0 on NVIDIA and AMD (IEEE-2019 maximum), all three MEASURED (IDENTITY_PATHS row 39), so this line is EXPECTED TO READ DIFFERENTLY ON THE THREE VENDORS and that is the finding rather than a failure
+  RECORDED  LSE_ROTATE: no bit moved at row_tpb=8 with three blocks. EXPECTED for the same reason as LSE_DESCENDING -- this fixture runs K = 2, so any rotation of the fold is a reordering of two commutative terms. The launch DOES reach the rotation; the fold is too short to show it. A K >= 3 OVERLAPPING fixture is owed.
+  MUST FAIL  LSE_ROTATE at row_tpb=8 (three blocks): bits moved. At row_tpb=128 (one block) it is INERT, which is the point -- a launch-dependent summation order is invisible to an oracle gate that never varies the launch
+  OUTCOME    COLLAPSE_RESET on COLLAPSE: the fit went from REFUSED to SUCCEEDED. That is the divergent-outcome failure DEVIATION 1723 forbids, and it is invisible to every bitwise gate -- the two runs do not have the same stages to compare
+check_gmm_sabotages OK [FAST]: all 13 arms driven at RUN TIME through the sabotage argument, no source edited and no rebuild
+== mixture/mojo_only/gmm_check.mojo [FAST] ALL PASSED ==

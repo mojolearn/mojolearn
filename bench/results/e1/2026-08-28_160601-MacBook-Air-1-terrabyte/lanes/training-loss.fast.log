@@ -1,0 +1,530 @@
+/Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/loss_check.mojo:2804:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with '*'
+    """Contract 12.4's guard 4. **A DEMONSTRATION, NOT AN ASSERTION.**
+       ^
+/Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/loss_check.mojo:2892:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with '*'
+    """Contract 12.3's arm A3. **REPORTED, NEVER ASSERTED.**
+       ^
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/loss_check.mojo:256:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/loss_check.mojo:256:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/loss_check.mojo:256:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/loss_check.mojo:279:
+/Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/loss.mojo:487:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/loss_check.mojo:279:
+/Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/loss.mojo:492:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var other = red[tid + step]
+                        ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/loss_check.mojo:279:
+/Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/loss.mojo:496:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if other > red[tid]:
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/loss_check.mojo:279:
+/Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/loss.mojo:497:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    red[tid] = other
+                    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/loss_check.mojo:279:
+/Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/loss.mojo:499:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = identical_fmax(red[tid], other)
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/loss_check.mojo:279:
+/Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/loss.mojo:499:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = identical_fmax(red[tid], other)
+                                          ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/loss_check.mojo:279:
+/Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/loss.mojo:502:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var total = red[0]
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/loss_check.mojo:256:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn/training/mojo_only/loss_check.mojo:3046:35: warning: assignment to 'pat_names' was never used; assign to '_' instead?
+    var pat_names: List[String] = [String("NaN"), String("infinity")]
+                                  ^
+=== cross-entropy identity gate, profile mojolearn.identical.loss.ce.fp32.v1
+=== NOTHING IN THIS FILE, IN loss.mojo, IN loss_oracle.mojo OR IN loss_fixture.mojo HAD EVER BEEN COMPILED OR RUN BEFORE THIS PROCESS. Read the header.
+mode FAST   loss sabotage: none   gemm: none   gemm_backward: none
+NOTE: contract 10.1 lists 25 arms. `loss.mojo` implements 21, three more are reached through gemm_identical.mojo's own switches, and **L_NLL_VIA_MAX_LOGSOFTMAX (contract 4.2(c)) HAS NO SWITCH ANYWHERE** (DEVIATION 1457), so contract 4.2(c) is a pinned decision with no falsifier in the tree. Adding the switch is an edit to loss.mojo, which this lane may not make.
+ledger: this binary is CLEAN -- no sabotage arm is compiled in. Set MOJOLEARN_LOSS_EXPECT_SABOTAGE to have the binary check its own -D.
+preflight: the assertions the contract and the fixture asked for
+  fixture constants OK: eps_smooth 0x3dcccccd (and it is NOT one tenth -- every smoothing clause is about rounding)
+  splitmix64: all THREE copies (loss, transformer, mamba corpus) agree on 5 seeds
+  stages: this file uses 20 and contract section 9 LISTS 20 while its prose says NINETEEN (DEVIATION 1463 -- the prose is off by one; the SEVENTEEN it also quotes is right, being twenty minus the three smoothing-only stages)
+  the leaf rule: loss_fixture's restatement agrees with gemm_oracle.contract_leaf_size on 16 lengths including 128, 129, 300 and the shipped 128256
+  contract 8.2: identical_exp(+0.0) = 0x3f800000, identical_exp(-200) = 0x00000000, identical_log(1.0) = 0x00000000
+  fixture: 11134 logits carry no signed zero and no subnormal outside the two cases that plant them, every row of every other case has a positive logit, and the fixture's row maximum IS the oracle's
+  L_MAX_PLAIN_COMPARE: adv_signed_zeros carries both zero signs, base_n4_v8 carries neither (row 39 measured max(+0.0, -0.0) as -0.0 on Apple and +0.0 on NVIDIA and AMD)
+  L_NEG_VIA_ZERO_SUB / L_SMOOTH_ALWAYS_SPELLED: base_n1_v1's nll IS exactly -0.0 and base_n4_v8's is not
+  L_NLL_VIA_LOG_W: adv_underflow_y's e[y] IS exactly +0.0 and base_n4_v8's is normal
+  L_MAX_SEED_ZERO [SIMULATED on the host, legitimate because the fold is exactly associative]: a +0.0 seed moves 2 of 2 rows of adv_all_negative and 0 rows of base_n4_v8
+  L_MAX_TOPK_PREFIX [SIMULATED]: a 32-class prefix moves 2 of 2 rows of adv_argmax_tail and 0 rows of adv_argmax_head, which differ ONLY in where the maximum was planted
+  L_*_RECIPROCAL_MUL: base_n4_v8's divisor 0x40800000 IS a power of two (inert) and base_n3_v3's 0x40400000 is not (witness)
+  L_GRAD_DIVISOR_IS_N: ign_n6_v8_c3 has count 3 against N 6 (witness); base_n4_v8 has count == N == 4 (inert)
+  G_PAD_PLUS_ZERO: V=300 (P=3) CARRIES an odd level; V=256 (P=2) and V=1024 (P=8) have every level width even
+  exact case exact_uniform_v8: V=8 N=3 divisor=0x3f800000 -- V != N, V != divisor, both powers of two (contract 12.4 guards 1 and 2)
+  exact case exact_uniform_ign: V=4 N=3 divisor=0x3f800000 -- V != N, V != divisor, both powers of two (contract 12.4 guards 1 and 2)
+  exact case exact_sat_high: V=16 N=3 divisor=0x3f800000 -- V != N, V != divisor, both powers of two (contract 12.4 guards 1 and 2)
+  exact case exact_sat_low: V=16 N=3 divisor=0x3f800000 -- V != N, V != divisor, both powers of two (contract 12.4 guards 1 and 2)
+clause (a): 24 fixture cases, every stage, device vs host oracle, BITWISE
+  case 0 base_n4_v8  N=4 V=8 MEAN eps=0 count=4 plant=none  Pv=1 Pn=1  divisor=0x40800000: 10 stages MOVED, first at ce.exp on 24 of 32 cells
+  OK    input.logits  (32 cells)
+  OK    ce.max  (4 cells)
+  OK    ce.shift  (32 cells)
+  MOVED ce.exp  24 of 32 cells, first cell 0  a 0x3ba2a4be  b 0x3ba2a4bf
+  MOVED ce.denom  1 of 4 cells, first cell 3  a 0x4033b099  b 0x4033b09a
+  MOVED ce.logdenom  1 of 4 cells, first cell 3  a 0x3f842404  b 0x3f842405
+  MOVED ce.logp_target  1 of 4 cells, first cell 3  a 0xc14a0c7c  b 0xc14a0c7d
+  MOVED ce.nll  1 of 4 cells, first cell 3  a 0x414a0c7c  b 0x414a0c7d
+  OK    ce.logp  (0 cells)
+  OK    ce.logp_sum  (0 cells)
+  OK    ce.smooth  (0 cells)
+  MOVED ce.row  1 of 4 cells, first cell 3  a 0x414a0c7c  b 0x414a0c7d
+  OK    ce.divisor  (1 cells)
+  MOVED ce.total  1 of 1 cells, first cell 0  a 0x425fcdd3  b 0x425fcdd2
+  MOVED ce.loss  1 of 1 cells, first cell 0  a 0x415fcdd3  b 0x415fcdd2
+  OK    ce.target_vec  (2 cells)
+  MOVED ce.weights  25 of 32 cells, first cell 0  a 0x3b2d5155  b 0x3b2d5156
+  MOVED ce.dlogits  22 of 32 cells, first cell 0  a 0x3a2d5155  b 0x3a2d5156
+  case 1 base_n1_v1  N=1 V=1 MEAN eps=0 count=1 plant=none  Pv=1 Pn=1  divisor=0x3f800000: 17/17 stages bit-identical (16 cells)
+  case 2 base_n3_v3  N=3 V=3 MEAN eps=0 count=3 plant=none  Pv=1 Pn=1  divisor=0x40400000: 3 stages MOVED, first at ce.exp on 3 of 9 cells
+  OK    input.logits  (9 cells)
+  OK    ce.max  (3 cells)
+  OK    ce.shift  (9 cells)
+  MOVED ce.exp  3 of 9 cells, first cell 3  a 0x3ee04091  b 0x3ee04092
+  OK    ce.denom  (3 cells)
+  OK    ce.logdenom  (3 cells)
+  OK    ce.logp_target  (3 cells)
+  OK    ce.nll  (3 cells)
+  OK    ce.logp  (0 cells)
+  OK    ce.logp_sum  (0 cells)
+  OK    ce.smooth  (0 cells)
+  OK    ce.row  (3 cells)
+  OK    ce.divisor  (1 cells)
+  OK    ce.total  (1 cells)
+  OK    ce.loss  (1 cells)
+  OK    ce.target_vec  (2 cells)
+  MOVED ce.weights  2 of 9 cells, first cell 7  a 0x3ceab300  b 0x3ceab302
+  MOVED ce.dlogits  1 of 9 cells, first cell 7  a 0x3c1c7755  b 0x3c1c7757
+  case 3 wide_v300  N=2 V=300 MEAN eps=0 count=2 plant=none  Pv=3(carry) Pn=1  divisor=0x40000000: 5 stages MOVED, first at ce.exp on 575 of 600 cells
+  OK    input.logits  (600 cells)
+  OK    ce.max  (2 cells)
+  OK    ce.shift  (600 cells)
+  MOVED ce.exp  575 of 600 cells, first cell 0  a 0x283fe484  b 0x283fe488
+  MOVED ce.denom  1 of 2 cells, first cell 0  a 0x401a7712  b 0x401a7713
+  MOVED ce.logdenom  1 of 2 cells, first cell 0  a 0x3f618ecd  b 0x3f618ecf
+  OK    ce.logp_target  (2 cells)
+  OK    ce.nll  (2 cells)
+  OK    ce.logp  (0 cells)
+  OK    ce.logp_sum  (0 cells)
+  OK    ce.smooth  (0 cells)
+  OK    ce.row  (2 cells)
+  OK    ce.divisor  (1 cells)
+  OK    ce.total  (1 cells)
+  OK    ce.loss  (1 cells)
+  OK    ce.target_vec  (2 cells)
+  MOVED ce.weights  563 of 600 cells, first cell 0  a 0x279f03d2  b 0x279f03d4
+  MOVED ce.dlogits  561 of 600 cells, first cell 0  a 0x271f03d2  b 0x271f03d4
+  case 4 wide_v256  N=2 V=256 MEAN eps=0 count=2 plant=none  Pv=2 Pn=1  divisor=0x40000000: 5 stages MOVED, first at ce.exp on 490 of 512 cells
+  OK    input.logits  (512 cells)
+  OK    ce.max  (2 cells)
+  OK    ce.shift  (512 cells)
+  MOVED ce.exp  490 of 512 cells, first cell 0  a 0x2837fb2c  b 0x2837fb31
+  MOVED ce.denom  1 of 2 cells, first cell 1  a 0x3fcdd9ab  b 0x3fcdd9ac
+  MOVED ce.logdenom  1 of 2 cells, first cell 1  a 0x3ef342c4  b 0x3ef342c7
+  OK    ce.logp_target  (2 cells)
+  OK    ce.nll  (2 cells)
+  OK    ce.logp  (0 cells)
+  OK    ce.logp_sum  (0 cells)
+  OK    ce.smooth  (0 cells)
+  OK    ce.row  (2 cells)
+  OK    ce.divisor  (1 cells)
+  OK    ce.total  (1 cells)
+  OK    ce.loss  (1 cells)
+  OK    ce.target_vec  (2 cells)
+  MOVED ce.weights  490 of 512 cells, first cell 0  a 0x2813aa15  b 0x2813aa19
+  MOVED ce.dlogits  488 of 512 cells, first cell 0  a 0x2793aa15  b 0x2793aa19
+  case 5 wide_v1024  N=2 V=1024 MEAN eps=0 count=2 plant=none  Pv=8 Pn=1  divisor=0x40000000: 5 stages MOVED, first at ce.exp on 1958 of 2048 cells
+  OK    input.logits  (2048 cells)
+  OK    ce.max  (2 cells)
+  OK    ce.shift  (2048 cells)
+  MOVED ce.exp  1958 of 2048 cells, first cell 0  a 0x29339e76  b 0x29339e78
+  MOVED ce.denom  1 of 2 cells, first cell 0  a 0x408120bb  b 0x408120bc
+  MOVED ce.logdenom  1 of 2 cells, first cell 0  a 0x3fb2918f  b 0x3fb29190
+  OK    ce.logp_target  (2 cells)
+  OK    ce.nll  (2 cells)
+  OK    ce.logp  (0 cells)
+  OK    ce.logp_sum  (0 cells)
+  OK    ce.smooth  (0 cells)
+  OK    ce.row  (2 cells)
+  OK    ce.divisor  (1 cells)
+  OK    ce.total  (1 cells)
+  OK    ce.loss  (1 cells)
+  OK    ce.target_vec  (2 cells)
+  MOVED ce.weights  1956 of 2048 cells, first cell 0  a 0x28320cd5  b 0x28320cd6
+  MOVED ce.dlogits  1954 of 2048 cells, first cell 0  a 0x27b20cd5  b 0x27b20cd6
+  case 6 wide_v129  N=2 V=129 MEAN eps=0 count=2 plant=none  Pv=2 Pn=1  divisor=0x40000000: 5 stages MOVED, first at ce.exp on 247 of 258 cells
+  OK    input.logits  (258 cells)
+  OK    ce.max  (2 cells)
+  OK    ce.shift  (258 cells)
+  MOVED ce.exp  247 of 258 cells, first cell 0  a 0x2a7d969d  b 0x2a7d9690
+  MOVED ce.denom  2 of 2 cells, first cell 0  a 0x3f81e6f3  b 0x3f81e6f1
+  MOVED ce.logdenom  2 of 2 cells, first cell 0  a 0x3c71aeea  b 0x3c71adee
+  OK    ce.logp_target  (2 cells)
+  OK    ce.nll  (2 cells)
+  OK    ce.logp  (0 cells)
+  OK    ce.logp_sum  (0 cells)
+  OK    ce.smooth  (0 cells)
+  OK    ce.row  (2 cells)
+  OK    ce.divisor  (1 cells)
+  OK    ce.total  (1 cells)
+  OK    ce.loss  (1 cells)
+  OK    ce.target_vec  (2 cells)
+  MOVED ce.weights  253 of 258 cells, first cell 0  a 0x2a79e004  b 0x2a79dffb
+  MOVED ce.dlogits  251 of 258 cells, first cell 0  a 0x29f9e004  b 0x29f9dffb
+  case 7 long_n300_v8  N=300 V=8 MEAN eps=0 count=300 plant=none  Pv=1 Pn=3(carry)  divisor=0x43960000: 10 stages MOVED, first at ce.exp on 1834 of 2400 cells
+  OK    input.logits  (2400 cells)
+  OK    ce.max  (300 cells)
+  OK    ce.shift  (2400 cells)
+  MOVED ce.exp  1834 of 2400 cells, first cell 0  a 0x360c67d4  b 0x360c67d9
+  MOVED ce.denom  78 of 300 cells, first cell 4  a 0x3f805372  b 0x3f805371
+  MOVED ce.logdenom  76 of 300 cells, first cell 4  a 0x3b26adb1  b 0x3b26abb3
+  MOVED ce.logp_target  21 of 300 cells, first cell 4  a 0xbb26adb1  b 0xbb26abb3
+  MOVED ce.nll  21 of 300 cells, first cell 4  a 0x3b26adb1  b 0x3b26abb3
+  OK    ce.logp  (0 cells)
+  OK    ce.logp_sum  (0 cells)
+  OK    ce.smooth  (0 cells)
+  MOVED ce.row  21 of 300 cells, first cell 4  a 0x3b26adb1  b 0x3b26abb3
+  OK    ce.divisor  (1 cells)
+  MOVED ce.total  1 of 1 cells, first cell 0  a 0x458342a1  b 0x458342a0
+  MOVED ce.loss  1 of 1 cells, first cell 0  a 0x4160047d  b 0x4160047b
+  OK    ce.target_vec  (2 cells)
+  MOVED ce.weights  1913 of 2400 cells, first cell 0  a 0x360c67b7  b 0x360c67bc
+  MOVED ce.dlogits  1659 of 2400 cells, first cell 0  a 0x31ef9ff1  b 0x31ef9ff9
+  case 8 long_n512_sum  N=512 V=8 SUM eps=0 count=512 plant=none  Pv=1 Pn=4  divisor=0x3f800000: 8 stages MOVED, first at ce.exp on 3144 of 4096 cells
+  OK    input.logits  (4096 cells)
+  OK    ce.max  (512 cells)
+  OK    ce.shift  (4096 cells)
+  MOVED ce.exp  3144 of 4096 cells, first cell 0  a 0x3a2a2ba4  b 0x3a2a2ba6
+  MOVED ce.denom  149 of 512 cells, first cell 0  a 0x40063676  b 0x40063677
+  MOVED ce.logdenom  144 of 512 cells, first cell 0  a 0x3f3d943b  b 0x3f3d943d
+  MOVED ce.logp_target  43 of 512 cells, first cell 18  a 0xc0fd962c  b 0xc0fd962b
+  MOVED ce.nll  43 of 512 cells, first cell 18  a 0x40fd962c  b 0x40fd962b
+  OK    ce.logp  (0 cells)
+  OK    ce.logp_sum  (0 cells)
+  OK    ce.smooth  (0 cells)
+  MOVED ce.row  43 of 512 cells, first cell 18  a 0x40fd962c  b 0x40fd962b
+  OK    ce.divisor  (1 cells)
+  OK    ce.total  (1 cells)
+  OK    ce.loss  (1 cells)
+  OK    ce.target_vec  (2 cells)
+  MOVED ce.weights  3292 of 4096 cells, first cell 0  a 0x39a24b12  b 0x39a24b13
+  MOVED ce.dlogits  2909 of 4096 cells, first cell 0  a 0x39a24b12  b 0x39a24b13
+  case 9 sum_num_items7  N=5 V=8 SUM eps=0 count=5 plant=none  Pv=1 Pn=1  divisor=0x40e00000: 8 stages MOVED, first at ce.exp on 29 of 40 cells
+  OK    input.logits  (40 cells)
+  OK    ce.max  (5 cells)
+  OK    ce.shift  (40 cells)
+  MOVED ce.exp  29 of 40 cells, first cell 0  a 0x346a22df  b 0x346a22e0
+  MOVED ce.denom  2 of 5 cells, first cell 1  a 0x3f8272dd  b 0x3f8272dc
+  MOVED ce.logdenom  2 of 5 cells, first cell 1  a 0x3c9b3c54  b 0x3c9b3c15
+  MOVED ce.logp_target  1 of 5 cells, first cell 3  a 0xbfc9d642  b 0xbfc9d640
+  MOVED ce.nll  1 of 5 cells, first cell 3  a 0x3fc9d642  b 0x3fc9d640
+  OK    ce.logp  (0 cells)
+  OK    ce.logp_sum  (0 cells)
+  OK    ce.smooth  (0 cells)
+  MOVED ce.row  1 of 5 cells, first cell 3  a 0x3fc9d642  b 0x3fc9d640
+  OK    ce.divisor  (1 cells)
+  OK    ce.total  (1 cells)
+  OK    ce.loss  (1 cells)
+  OK    ce.target_vec  (2 cells)
+  MOVED ce.weights  32 of 40 cells, first cell 0  a 0x346a220d  b 0x346a220e
+  MOVED ce.dlogits  23 of 40 cells, first cell 1  a 0x328c4dbb  b 0x328c4dba
+  case 10 ign_n6_v8_c3  N=6 V=8 MEAN eps=0 count=3 plant=none  Pv=1 Pn=1  divisor=0x40400000: 8 stages MOVED, first at ce.exp on 35 of 48 cells
+  OK    input.logits  (48 cells)
+  OK    ce.max  (6 cells)
+  OK    ce.shift  (48 cells)
+  MOVED ce.exp  35 of 48 cells, first cell 1  a 0x3db77d64  b 0x3db77d66
+  MOVED ce.denom  2 of 6 cells, first cell 3  a 0x3f9ea480  b 0x3f9ea481
+  MOVED ce.logdenom  2 of 6 cells, first cell 3  a 0x3e5bc641  b 0x3e5bc648
+  MOVED ce.logp_target  2 of 6 cells, first cell 3  a 0xc063c043  b 0xc063c044
+  MOVED ce.nll  2 of 6 cells, first cell 3  a 0x4063c043  b 0x4063c044
+  OK    ce.logp  (0 cells)
+  OK    ce.logp_sum  (0 cells)
+  OK    ce.smooth  (0 cells)
+  MOVED ce.row  1 of 6 cells, first cell 3  a 0x4063c043  b 0x4063c044
+  OK    ce.divisor  (1 cells)
+  OK    ce.total  (1 cells)
+  OK    ce.loss  (1 cells)
+  OK    ce.target_vec  (2 cells)
+  MOVED ce.weights  32 of 48 cells, first cell 1  a 0x3d0040c4  b 0x3d0040c6
+  MOVED ce.dlogits  15 of 48 cells, first cell 9  a 0x2e6d1991  b 0x2e6d19a7
+  case 11 ign_n5_v8_c2  N=5 V=8 MEAN eps=0 count=2 plant=none  Pv=1 Pn=1  divisor=0x40000000: 5 stages MOVED, first at ce.exp on 25 of 40 cells
+  OK    input.logits  (40 cells)
+  OK    ce.max  (5 cells)
+  OK    ce.shift  (40 cells)
+  MOVED ce.exp  25 of 40 cells, first cell 0  a 0x32866ff2  b 0x32866ff1
+  MOVED ce.denom  1 of 5 cells, first cell 2  a 0x3f8b4a29  b 0x3f8b4a28
+  MOVED ce.logdenom  1 of 5 cells, first cell 2  a 0x3dad1bc0  b 0x3dad1bb2
+  OK    ce.logp_target  (5 cells)
+  OK    ce.nll  (5 cells)
+  OK    ce.logp  (0 cells)
+  OK    ce.logp_sum  (0 cells)
+  OK    ce.smooth  (0 cells)
+  OK    ce.row  (5 cells)
+  OK    ce.divisor  (1 cells)
+  OK    ce.total  (1 cells)
+  OK    ce.loss  (1 cells)
+  OK    ce.target_vec  (2 cells)
+  MOVED ce.weights  23 of 40 cells, first cell 0  a 0x32866bf5  b 0x32866bf4
+  MOVED ce.dlogits  8 of 40 cells, first cell 8  a 0x16f3e3f8  b 0x16f3e410
+  case 12 smooth_n4_v8  N=4 V=8 MEAN eps=0.1 count=4 plant=none  Pv=1 Pn=1  divisor=0x40800000: 10 stages MOVED, first at ce.exp on 23 of 32 cells
+  OK    input.logits  (32 cells)
+  OK    ce.max  (4 cells)
+  OK    ce.shift  (32 cells)
+  MOVED ce.exp  23 of 32 cells, first cell 0  a 0x3267f71a  b 0x3267f71e
+  MOVED ce.denom  2 of 4 cells, first cell 0  a 0x3f8002fe  b 0x3f8002ff
+  MOVED ce.logdenom  2 of 4 cells, first cell 0  a 0x38bf7dc3  b 0x38bfbdc2
+  MOVED ce.logp_target  1 of 4 cells, first cell 2  a 0xbffb9dfb  b 0xbffb9dfc
+  MOVED ce.nll  1 of 4 cells, first cell 2  a 0x3ffb9dfb  b 0x3ffb9dfc
+  MOVED ce.logp  4 of 32 cells, first cell 3  a 0xb8bf7dc3  b 0xb8bfbdc2
+  OK    ce.logp_sum  (4 cells)
+  OK    ce.smooth  (4 cells)
+  OK    ce.row  (4 cells)
+  OK    ce.divisor  (1 cells)
+  MOVED ce.total  1 of 1 cells, first cell 0  a 0x422e900d  b 0x422e900e
+  MOVED ce.loss  1 of 1 cells, first cell 0  a 0x412e900d  b 0x412e900e
+  OK    ce.target_vec  (2 cells)
+  MOVED ce.weights  26 of 32 cells, first cell 0  a 0x3267f1ae  b 0x3267f1b0
+  MOVED ce.dlogits  8 of 32 cells, first cell 3  a 0x3e7cc6d1  b 0x3e7cc6cf
+  case 13 smooth_v1_eps  N=2 V=1 MEAN eps=0.1 count=2 plant=none  Pv=1 Pn=1  divisor=0x40000000: 20/20 stages bit-identical (33 cells)
+  case 14 smooth_v300  N=2 V=300 MEAN eps=0.1 count=2 plant=none  Pv=3(carry) Pn=1  divisor=0x40000000: 8 stages MOVED, first at ce.exp on 575 of 600 cells
+  OK    input.logits  (600 cells)
+  OK    ce.max  (2 cells)
+  OK    ce.shift  (600 cells)
+  MOVED ce.exp  575 of 600 cells, first cell 0  a 0x2c373372  b 0x2c37337c
+  MOVED ce.denom  1 of 2 cells, first cell 1  a 0x3fa3e5ad  b 0x3fa3e5af
+  MOVED ce.logdenom  1 of 2 cells, first cell 1  a 0x3e7d2458  b 0x3e7d2465
+  OK    ce.logp_target  (2 cells)
+  OK    ce.nll  (2 cells)
+  MOVED ce.logp  9 of 600 cells, first cell 309  a 0xc13a7441  b 0xc13a7442
+  MOVED ce.logp_sum  2 of 2 cells, first cell 0  a 0xc60d7ee4  b 0xc60d7ee3
+  MOVED ce.smooth  2 of 2 cells, first cell 0  a 0x41f17c66  b 0x41f17c65
+  OK    ce.row  (2 cells)
+  OK    ce.divisor  (1 cells)
+  OK    ce.total  (1 cells)
+  OK    ce.loss  (1 cells)
+  OK    ce.target_vec  (2 cells)
+  MOVED ce.weights  578 of 600 cells, first cell 0  a 0x2b9a4517  b 0x2b9a451f
+  MOVED ce.dlogits  18 of 600 cells, first cell 57  a 0x3ca41fc0  b 0x3ca41fc1
+  case 15 none_reduction  N=4 V=8 NONE eps=0 count=4 plant=none  Pv=1 Pn=1: 1 stages MOVED, first at ce.exp on 25 of 32 cells
+  OK    input.logits  (32 cells)
+  OK    ce.max  (4 cells)
+  OK    ce.shift  (32 cells)
+  MOVED ce.exp  25 of 32 cells, first cell 0  a 0x35334356  b 0x3533435f
+  OK    ce.denom  (4 cells)
+  OK    ce.logdenom  (4 cells)
+  OK    ce.logp_target  (4 cells)
+  OK    ce.nll  (4 cells)
+  OK    ce.logp  (0 cells)
+  OK    ce.logp_sum  (0 cells)
+  OK    ce.smooth  (0 cells)
+  OK    ce.row  (4 cells)
+  OK    ce.divisor  (0 cells)
+  OK    ce.total  (0 cells)
+  OK    ce.loss  (0 cells)
+  OK    ce.target_vec  (2 cells)
+  OK    ce.weights  (0 cells)
+  OK    ce.dlogits  (0 cells)
+  case 16 adv_signed_zeros  N=2 V=16 MEAN eps=0 count=2 plant=signed_zeros  Pv=1 Pn=1  divisor=0x40000000: 5 stages MOVED, first at ce.exp on 28 of 32 cells
+  OK    input.logits  (32 cells)
+  OK    ce.max  (2 cells)
+  OK    ce.shift  (32 cells)
+  MOVED ce.exp  28 of 32 cells, first cell 0  a 0x34d0cf65  b 0x34d0cf6f
+  MOVED ce.denom  1 of 2 cells, first cell 1  a 0x3f802fda  b 0x3f802fdb
+  MOVED ce.logdenom  1 of 2 cells, first cell 1  a 0x3abf4442  b 0x3abf4840
+  OK    ce.logp_target  (2 cells)
+  OK    ce.nll  (2 cells)
+  OK    ce.logp  (0 cells)
+  OK    ce.logp_sum  (0 cells)
+  OK    ce.smooth  (0 cells)
+  OK    ce.row  (2 cells)
+  OK    ce.divisor  (1 cells)
+  OK    ce.total  (1 cells)
+  OK    ce.loss  (1 cells)
+  OK    ce.target_vec  (2 cells)
+  MOVED ce.weights  30 of 32 cells, first cell 0  a 0x34d0ce67  b 0x34d0ce71
+  MOVED ce.dlogits  28 of 32 cells, first cell 0  a 0x3450ce67  b 0x3450ce71
+  case 17 adv_all_negative  N=2 V=16 MEAN eps=0 count=2 plant=all_negative  Pv=1 Pn=1  divisor=0x40000000: 5 stages MOVED, first at ce.exp on 24 of 32 cells
+  OK    input.logits  (32 cells)
+  OK    ce.max  (2 cells)
+  OK    ce.shift  (32 cells)
+  MOVED ce.exp  24 of 32 cells, first cell 0  a 0x3f188d78  b 0x3f188d79
+  MOVED ce.denom  1 of 2 cells, first cell 0  a 0x40aa3672  b 0x40aa3671
+  MOVED ce.logdenom  1 of 2 cells, first cell 0  a 0x3fd5ed94  b 0x3fd5ed93
+  OK    ce.logp_target  (2 cells)
+  OK    ce.nll  (2 cells)
+  OK    ce.logp  (0 cells)
+  OK    ce.logp_sum  (0 cells)
+  OK    ce.smooth  (0 cells)
+  OK    ce.row  (2 cells)
+  OK    ce.divisor  (1 cells)
+  OK    ce.total  (1 cells)
+  OK    ce.loss  (1 cells)
+  OK    ce.target_vec  (2 cells)
+  MOVED ce.weights  24 of 32 cells, first cell 0  a 0x3de57073  b 0x3de57075
+  MOVED ce.dlogits  24 of 32 cells, first cell 0  a 0xbee351f2  b 0xbee351f1
+  case 18 adv_argmax_tail  N=2 V=64 MEAN eps=0 count=2 plant=argmax_tail  Pv=1 Pn=1  divisor=0x40000000: 3 stages MOVED, first at ce.exp on 121 of 128 cells
+  OK    input.logits  (128 cells)
+  OK    ce.max  (2 cells)
+  OK    ce.shift  (128 cells)
+  MOVED ce.exp  121 of 128 cells, first cell 0  a 0x158a8750  b 0x158a876d
+  OK    ce.denom  (2 cells)
+  OK    ce.logdenom  (2 cells)
+  OK    ce.logp_target  (2 cells)
+  OK    ce.nll  (2 cells)
+  OK    ce.logp  (0 cells)
+  OK    ce.logp_sum  (0 cells)
+  OK    ce.smooth  (0 cells)
+  OK    ce.row  (2 cells)
+  OK    ce.divisor  (1 cells)
+  OK    ce.total  (1 cells)
+  OK    ce.loss  (1 cells)
+  OK    ce.target_vec  (2 cells)
+  MOVED ce.weights  121 of 128 cells, first cell 0  a 0x158a8750  b 0x158a876d
+  MOVED ce.dlogits  119 of 128 cells, first cell 0  a 0x150a8750  b 0x150a876d
+  case 19 adv_argmax_head  N=2 V=64 MEAN eps=0 count=2 plant=argmax_head  Pv=1 Pn=1  divisor=0x40000000: 3 stages MOVED, first at ce.exp on 118 of 128 cells
+  OK    input.logits  (128 cells)
+  OK    ce.max  (2 cells)
+  OK    ce.shift  (128 cells)
+  MOVED ce.exp  118 of 128 cells, first cell 1  a 0x1180bad8  b 0x1180bad1
+  OK    ce.denom  (2 cells)
+  OK    ce.logdenom  (2 cells)
+  OK    ce.logp_target  (2 cells)
+  OK    ce.nll  (2 cells)
+  OK    ce.logp  (0 cells)
+  OK    ce.logp_sum  (0 cells)
+  OK    ce.smooth  (0 cells)
+  OK    ce.row  (2 cells)
+  OK    ce.divisor  (1 cells)
+  OK    ce.total  (1 cells)
+  OK    ce.loss  (1 cells)
+  OK    ce.target_vec  (2 cells)
+  MOVED ce.weights  118 of 128 cells, first cell 1  a 0x1180bad8  b 0x1180bad1
+  MOVED ce.dlogits  116 of 128 cells, first cell 1  a 0x1100bad8  b 0x1100bad1
+  case 20 adv_big_offset  N=2 V=16 MEAN eps=0 count=2 plant=big_offset  Pv=1 Pn=1  divisor=0x40000000: 5 stages MOVED, first at ce.exp on 26 of 32 cells
+  OK    input.logits  (32 cells)
+  OK    ce.max  (2 cells)
+  OK    ce.shift  (32 cells)
+  MOVED ce.exp  26 of 32 cells, first cell 0  a 0x2ccbb1e4  b 0x2ccbb1dd
+  MOVED ce.denom  1 of 2 cells, first cell 1  a 0x3f9672c8  b 0x3f9672c7
+  MOVED ce.logdenom  1 of 2 cells, first cell 1  a 0x3e2577c3  b 0x3e2577bc
+  OK    ce.logp_target  (2 cells)
+  OK    ce.nll  (2 cells)
+  OK    ce.logp  (0 cells)
+  OK    ce.logp_sum  (0 cells)
+  OK    ce.smooth  (0 cells)
+  OK    ce.row  (2 cells)
+  OK    ce.divisor  (1 cells)
+  OK    ce.total  (1 cells)
+  OK    ce.loss  (1 cells)
+  OK    ce.target_vec  (2 cells)
+  MOVED ce.weights  29 of 32 cells, first cell 0  a 0x2cc9f7a8  b 0x2cc9f7a1
+  MOVED ce.dlogits  27 of 32 cells, first cell 0  a 0x2c49f7a8  b 0x2c49f7a1
+  case 21 adv_centered  N=2 V=16 MEAN eps=0 count=2 plant=centered  Pv=1 Pn=1  divisor=0x40000000: 8 stages MOVED, first at ce.exp on 14 of 32 cells
+  OK    input.logits  (32 cells)
+  OK    ce.max  (2 cells)
+  OK    ce.shift  (32 cells)
+  MOVED ce.exp  14 of 32 cells, first cell 0  a 0x3ec632b6  b 0x3ec632b7
+  MOVED ce.denom  1 of 2 cells, first cell 0  a 0x40e2b8df  b 0x40e2b8e0
+  MOVED ce.logdenom  1 of 2 cells, first cell 0  a 0x3ffa9f65  b 0x3ffa9f66
+  MOVED ce.logp_target  1 of 2 cells, first cell 0  a 0xc02cc039  b 0xc02cc03a
+  MOVED ce.nll  1 of 2 cells, first cell 0  a 0x402cc039  b 0x402cc03a
+  OK    ce.logp  (0 cells)
+  OK    ce.logp_sum  (0 cells)
+  OK    ce.smooth  (0 cells)
+  MOVED ce.row  1 of 2 cells, first cell 0  a 0x402cc039  b 0x402cc03a
+  OK    ce.divisor  (1 cells)
+  OK    ce.total  (1 cells)
+  OK    ce.loss  (1 cells)
+  OK    ce.target_vec  (2 cells)
+  MOVED ce.weights  13 of 32 cells, first cell 0  a 0x3d5fcadf  b 0x3d5fcae0
+  MOVED ce.dlogits  12 of 32 cells, first cell 0  a 0x3cdfcadf  b 0x3cdfcae0
+  case 22 adv_underflow_y  N=2 V=16 MEAN eps=0 count=2 plant=underflow_target  Pv=1 Pn=1  divisor=0x40000000: 5 stages MOVED, first at ce.exp on 26 of 32 cells
+  OK    input.logits  (32 cells)
+  OK    ce.max  (2 cells)
+  OK    ce.shift  (32 cells)
+  MOVED ce.exp  26 of 32 cells, first cell 0  a 0x3e29d793  b 0x3e29d794
+  MOVED ce.denom  1 of 2 cells, first cell 0  a 0x400859c3  b 0x400859c4
+  MOVED ce.logdenom  1 of 2 cells, first cell 0  a 0x3f419fef  b 0x3f419ff1
+  OK    ce.logp_target  (2 cells)
+  OK    ce.nll  (2 cells)
+  OK    ce.logp  (0 cells)
+  OK    ce.logp_sum  (0 cells)
+  OK    ce.smooth  (0 cells)
+  OK    ce.row  (2 cells)
+  OK    ce.divisor  (1 cells)
+  OK    ce.total  (1 cells)
+  OK    ce.loss  (1 cells)
+  OK    ce.target_vec  (2 cells)
+  MOVED ce.weights  24 of 32 cells, first cell 3  a 0x3bb6fc9f  b 0x3bb6fc9e
+  MOVED ce.dlogits  24 of 32 cells, first cell 3  a 0x3b36fc9f  b 0x3b36fc9e
+  case 23 adv_subnormal  N=2 V=16 MEAN eps=0 count=2 plant=subnormal  Pv=1 Pn=1  divisor=0x40000000: 8 stages MOVED, first at ce.exp on 27 of 32 cells
+  OK    input.logits  (32 cells)
+  OK    ce.max  (2 cells)
+  OK    ce.shift  (32 cells)
+  MOVED ce.exp  27 of 32 cells, first cell 0  a 0x39b33567  b 0x39b3356b
+  MOVED ce.denom  2 of 2 cells, first cell 0  a 0x3f95770c  b 0x3f95770d
+  MOVED ce.logdenom  2 of 2 cells, first cell 0  a 0x3e1ec0c1  b 0x3e1ec0c8
+  MOVED ce.logp_target  1 of 2 cells, first cell 1  a 0xc051bee9  b 0xc051bee8
+  MOVED ce.nll  1 of 2 cells, first cell 1  a 0x4051bee9  b 0x4051bee8
+  OK    ce.logp  (0 cells)
+  OK    ce.logp_sum  (0 cells)
+  OK    ce.smooth  (0 cells)
+  MOVED ce.row  1 of 2 cells, first cell 1  a 0x4051bee9  b 0x4051bee8
+  OK    ce.divisor  (1 cells)
+  OK    ce.total  (1 cells)
+  OK    ce.loss  (1 cells)
+  OK    ce.target_vec  (2 cells)
+  MOVED ce.weights  30 of 32 cells, first cell 0  a 0x399978d7  b 0x399978d9
+  MOVED ce.dlogits  28 of 32 cells, first cell 0  a 0x391978d7  b 0x391978d9
+card: 17 records at /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e1/2026-08-28_160601-MacBook-Air-1-terrabyte/lanes/training-loss.fast.card, case base_n4_v8 wants 17 of contract section 9's 20
+card: 17/17 tags in contract section 9's order, all unique
+clause (a) [FAST]: RECORDED, NOT ASSERTED. 22 of 24 cases differ from the oracle, first at base_n4_v8 at ce.exp. FAST is unversioned and makes no identity claim (contract section 0).
+clause (e): the EXACT-ANALYTIC gradient, 4 cases, BY BITS, no epsilon anywhere, asserted in FAST
+  exact_uniform_v8: N=3 V=8 count=3 divisor=0x3f800000 -- oracle AND device equal the closed form on every cell
+  exact_uniform_ign: N=3 V=4 count=1 divisor=0x3f800000 -- oracle AND device equal the closed form on every cell
+  exact_sat_high: N=3 V=16 count=3 divisor=0x3f800000 -- oracle AND device equal the closed form on every cell
+  exact_sat_low: N=3 V=16 count=3 divisor=0x3f800000 -- oracle AND device equal the closed form on every cell
+clause (e) A1: PASS, 264 cell comparisons against a hand-written closed form, on both halves, with no epsilon anywhere
+clause (e) guard 4: DEMONSTRATING that the exact fixture separates no spelling
+clause (e) guard 4: the reciprocal-multiply agrees with the true divide on 7/7 exact-family values at a power-of-two divisor, and DISAGREES on 1/7 at divisor 3.0. **The exact family therefore gates CORRECTNESS and separates NO spelling**, exactly as contract 12.1 says, and clause (a) is what covers the spelling.
+clause (e) A3 [REPORTED, NOT ASSERTED]: base_n4_v8 -- the FP32 per-row loss differs from the Float64 reference by at most 7.07445340905206e-08 (row 3). This asserts NOTHING. It exists so a systematic error the closed form and the oracle SHARE would be visible, and it cannot see one that this repository's Float64 code shares too.
+clause (b): SKIPPED (set MOJOLEARN_LOSS_CHECK_CLAUSE_B=1)
+clause (c): SKIPPED (set MOJOLEARN_LOSS_CHECK_CLAUSE_C=1). Its default case is ign_n6_v8_c3 rather than a plain one, because an IGNORED ROW is what makes the 'carry the whole batch's count into every chunk' half of contract 7.1's escape hatch mean anything.
+clause (d): SKIPPED (set MOJOLEARN_LOSS_CHECK_CLAUSE_D=1). NOTE: without it, the four fold arms reached through gemm_identical.mojo are gated only by clause (a), which sees ONE execution plan -- whichever `choose_gemm_plan` picked.
+clause (f): SKIPPED (set MOJOLEARN_LOSS_CHECK_CLAUSE_F=1). NOTE: it carries the MEASURED finding that `loss.mojo` never calls `ce_refuse_inputs` at all (DEVIATION 1460), so a leg that skips it has not looked at the refusal on the DEVICE side even once.
+SCOPE: this build, this column, FAST only. What is NOT closed by anything printed above: an INDEPENDENT reference (training/corpus/ does not exist, so every clause here is our device against our oracle, and three of the twenty stages are literally the SAME HOST CODE on both sides -- see `stage_is_host_constant`); the SHIPPED vocabulary V=128256 unless MOJOLEARN_LOSS_CHECK_SHIPPED_V was set; FAST mode; every column that is not this one; contract 4.2(c), which has no switch at all; and the 24-case set's every arm this binary is not. Contract section 11: nothing cross-vendor until a leg runs, and two backends agreeing closes nothing -- Apple and AMD agreed bit for bit through 302 GEMM stages while NVIDIA diverged at tree001.winners.scores.

@@ -1,0 +1,91 @@
+Imported from /root/mojolearn/kde/kde_main.mojo:33:
+Imported from /root/mojolearn/kde/estimator.mojo:26:
+/root/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/kde/kde_main.mojo:33:
+Imported from /root/mojolearn/kde/estimator.mojo:26:
+/root/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/kde/kde_main.mojo:33:
+Imported from /root/mojolearn/kde/estimator.mojo:26:
+/root/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/kde/kde_main.mojo:33:
+Imported from /root/mojolearn/kde/estimator.mojo:26:
+/root/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/kde/kde_main.mojo:33:
+Imported from /root/mojolearn/kde/estimator.mojo:26:
+/root/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/kde/kde_main.mojo:33:
+Imported from /root/mojolearn/kde/estimator.mojo:29:
+Imported from /root/mojolearn/kde/ported/neighbors/kernel_density.mojo:103:
+Imported from /root/mojolearn/kde/ported/distance/distance.mojo:35:
+Imported from /root/mojolearn/core/row_norms.mojo:58:
+/root/mojolearn/core/pinned_reduce.mojo:97:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = value
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kde/kde_main.mojo:33:
+Imported from /root/mojolearn/kde/estimator.mojo:29:
+Imported from /root/mojolearn/kde/ported/neighbors/kernel_density.mojo:103:
+Imported from /root/mojolearn/kde/ported/distance/distance.mojo:35:
+Imported from /root/mojolearn/core/row_norms.mojo:58:
+/root/mojolearn/core/pinned_reduce.mojo:102:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kde/kde_main.mojo:33:
+Imported from /root/mojolearn/kde/estimator.mojo:29:
+Imported from /root/mojolearn/kde/ported/neighbors/kernel_density.mojo:103:
+Imported from /root/mojolearn/kde/ported/distance/distance.mojo:35:
+Imported from /root/mojolearn/core/row_norms.mojo:58:
+/root/mojolearn/core/pinned_reduce.mojo:102:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kde/kde_main.mojo:33:
+Imported from /root/mojolearn/kde/estimator.mojo:29:
+Imported from /root/mojolearn/kde/ported/neighbors/kernel_density.mojo:103:
+Imported from /root/mojolearn/kde/ported/distance/distance.mojo:35:
+Imported from /root/mojolearn/core/row_norms.mojo:58:
+/root/mojolearn/core/pinned_reduce.mojo:102:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                                      ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kde/kde_main.mojo:33:
+Imported from /root/mojolearn/kde/estimator.mojo:29:
+Imported from /root/mojolearn/kde/ported/neighbors/kernel_density.mojo:103:
+Imported from /root/mojolearn/kde/ported/distance/distance.mojo:35:
+Imported from /root/mojolearn/core/row_norms.mojo:58:
+/root/mojolearn/core/pinned_reduce.mojo:105:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var total = red[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+== kde/kde_main.mojo [FAST] kernel=gaussian metric=euclidean weighted=True n_train=1024 n_query=256 d=8 h=2.75 ==
+card written to /root/mojolearn/bench/results/e1/2026-08-28_080111-mojolearn-e2-amd/lanes/kde.fast.card (7 stages)
+  score[0] = -16.927786  0xc1876c1b
+  score[1] = -16.864616  0xc186eabc
+  score[2] = -16.968525  0xc187bf8a
+  score[3] = -16.664616  0xc1855122
+  score[4] = -16.812235  0xc1867f75
+  score[5] = -16.746805  0xc185f975
+  score[6] = -16.908627  0xc18744de
+  score[7] = -16.880735  0xc1870bbf
+  256 finite scores, 0 at the FLOAT_MIN sentinel (outside every training point's support)

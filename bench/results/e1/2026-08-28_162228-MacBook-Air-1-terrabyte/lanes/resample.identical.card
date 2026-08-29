@@ -1,0 +1,556 @@
+# resample permutation_test: n_x=8 n_y=8 statistic=pearson n_resamples=8 r_first=0
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	fa655aa17ea3cdbf
+# resample bootstrap: n=200 d=2 statistic=mean n_resamples=16 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	128	235d67cab377f13d
+# resample bootstrap: n=200 d=2 statistic=mean n_resamples=2 r_first=7 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	64	9e3e294b06eb20f4
+2	resample.theta	f32	2	0780a576c0d4a460
+3	resample.sorted	f32	2	e078af6a054fac54
+4	resample.point	f32	1	ef8171e00b39327a
+5	resample.order_pos	i32	2	a8c7f832281a39c5
+6	resample.se	f32	1	d3dbfc13f8fad8f2
+7	resample.interval	f32	2	ab3d973b265fdee3
+# resample bootstrap: n=200 d=2 statistic=mean n_resamples=1000 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	128	235d67cab377f13d
+2	resample.theta	f32	1000	b50ed8412be18815
+3	resample.sorted	f32	1000	e83abe887b75fef5
+4	resample.point	f32	1	ef8171e00b39327a
+5	resample.order_pos	i32	2	5a7e61a247e8a99e
+6	resample.se	f32	1	7cf86f1461a6c5f1
+7	resample.interval	f32	2	5eedcc76d39cbccb
+# resample bootstrap: n=200 d=2 statistic=mean n_resamples=100000 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	128	235d67cab377f13d
+2	resample.theta	f32	100000	4116d25efce1a80e
+3	resample.sorted	f32	100000	c0bdba98628f6c7a
+4	resample.point	f32	1	ef8171e00b39327a
+5	resample.order_pos	i32	2	69d92e427868bef7
+6	resample.se	f32	1	f75bc7c97fc13aae
+7	resample.interval	f32	2	18da1d8c013ba461
+# resample bootstrap: n=8 d=2 statistic=mean n_resamples=2 r_first=7 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	16	c2017611e6323d73
+2	resample.theta	f32	2	0221e94fb1f8fe31
+3	resample.sorted	f32	2	0221e94fb1f8fe31
+4	resample.point	f32	1	4ba8967f9c8a4545
+5	resample.order_pos	i32	2	a8c7f832281a39c5
+6	resample.se	f32	1	92a4a810fe4e23ac
+7	resample.interval	f32	2	4640fc908e9f3dd4
+# resample bootstrap: n=8 d=2 statistic=mean n_resamples=1000 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	32	60c54829458fa803
+2	resample.theta	f32	1000	a4e90b8d4aa5c9ed
+3	resample.sorted	f32	1000	6df3371baa94036d
+4	resample.point	f32	1	4ba8967f9c8a4545
+5	resample.order_pos	i32	2	5a7e61a247e8a99e
+6	resample.se	f32	1	be32e9e0a11a3304
+7	resample.interval	f32	2	59f548d759ed51a1
+# resample bootstrap: n=8 d=2 statistic=mean n_resamples=100000 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	32	60c54829458fa803
+2	resample.theta	f32	100000	755acb467b3cdad0
+3	resample.sorted	f32	100000	f4ccb0aa299fe820
+4	resample.point	f32	1	4ba8967f9c8a4545
+5	resample.order_pos	i32	2	69d92e427868bef7
+6	resample.se	f32	1	2316a1afe53059f2
+7	resample.interval	f32	2	cc5bf0cc835f8d09
+# resample bootstrap: n=200 d=2 statistic=mean n_resamples=10000 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	128	235d67cab377f13d
+2	resample.theta	f32	10000	3a96eed63c420ae2
+3	resample.sorted	f32	10000	ed4d107fd078bb0e
+4	resample.point	f32	1	ef8171e00b39327a
+5	resample.order_pos	i32	2	14f3d10b39fb0b4f
+6	resample.se	f32	1	6824c52c6a41110b
+7	resample.interval	f32	2	b31b8fcfb33615b2
+# resample bootstrap: n=200 d=2 statistic=mean n_resamples=100000 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	128	235d67cab377f13d
+2	resample.theta	f32	100000	4116d25efce1a80e
+3	resample.sorted	f32	100000	c0bdba98628f6c7a
+4	resample.point	f32	1	ef8171e00b39327a
+5	resample.order_pos	i32	2	69d92e427868bef7
+6	resample.se	f32	1	f75bc7c97fc13aae
+7	resample.interval	f32	2	18da1d8c013ba461
+# resample bootstrap: n=200 d=2 statistic=mean n_resamples=512 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	128	235d67cab377f13d
+2	resample.theta	f32	512	b3b6998a3946f8dd
+3	resample.sorted	f32	512	5910f3ecf77328d5
+4	resample.point	f32	1	ef8171e00b39327a
+5	resample.order_pos	i32	2	58ffb6177994ee50
+6	resample.se	f32	1	dc3fca3241c66d59
+7	resample.interval	f32	2	9d5aecccac88116e
+# resample bootstrap: n=200 d=2 statistic=std n_resamples=512 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	128	235d67cab377f13d
+2	resample.theta	f32	512	af0af9a4d55869bb
+3	resample.sorted	f32	512	592ca9181b6e8ac3
+4	resample.point	f32	1	7af60ac9a99f5f07
+5	resample.order_pos	i32	2	58ffb6177994ee50
+6	resample.se	f32	1	dab044c982ddd46f
+7	resample.interval	f32	2	9be35a8662ae4a8c
+# resample bootstrap: n=200 d=2 statistic=diff_means n_resamples=512 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	128	235d67cab377f13d
+2	resample.theta	f32	512	0f9d2c9e5dd9da03
+3	resample.sorted	f32	512	917d3b240a2da2f3
+4	resample.point	f32	1	304e8891035fda6d
+5	resample.order_pos	i32	2	58ffb6177994ee50
+6	resample.se	f32	1	42354d3eecd10773
+7	resample.interval	f32	2	8dffdf49edac105b
+# resample bootstrap: n=12 d=2 statistic=mean n_resamples=512 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	48	e2cdcee579f34607
+2	resample.theta	f32	512	0e0740127cf46481
+3	resample.sorted	f32	512	aef9c55b0a800851
+4	resample.point	f32	1	fdf913edd987b15a
+5	resample.order_pos	i32	2	58ffb6177994ee50
+6	resample.se	f32	1	87f3e1e6e82bfe55
+7	resample.interval	f32	2	2fb8725f86d1ff40
+# resample bootstrap: n=12 d=2 statistic=std n_resamples=512 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	48	e2cdcee579f34607
+2	resample.theta	f32	512	990ec0cf757f2d6b
+3	resample.sorted	f32	512	b3946eaeacbebef7
+4	resample.point	f32	1	3bf2cdd629ea6e6d
+5	resample.order_pos	i32	2	58ffb6177994ee50
+6	resample.se	f32	1	cd264e05537532c7
+7	resample.interval	f32	2	da04b2905b626c01
+# resample bootstrap: n=12 d=2 statistic=diff_means n_resamples=512 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	48	e2cdcee579f34607
+2	resample.theta	f32	512	28c31cf8df2ec325
+3	resample.sorted	f32	512	28c31cf8df2ec325
+4	resample.point	f32	1	4d25767f9dce13f5
+5	resample.order_pos	i32	2	58ffb6177994ee50
+6	resample.se	f32	1	4d25767f9dce13f5
+7	resample.interval	f32	2	a8c7f832281a39c5
+# resample bootstrap: n=8 d=2 statistic=mean n_resamples=512 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	32	60c54829458fa803
+2	resample.theta	f32	512	cfa4c02e5a3c6109
+3	resample.sorted	f32	512	67cb2c6135c62ea9
+4	resample.point	f32	1	4ba8967f9c8a4545
+5	resample.order_pos	i32	2	58ffb6177994ee50
+6	resample.se	f32	1	26e72b11f6953fe8
+7	resample.interval	f32	2	59f548d759ed51a1
+# resample bootstrap: n=8 d=2 statistic=std n_resamples=512 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	32	60c54829458fa803
+2	resample.theta	f32	512	82def45711b94edd
+3	resample.sorted	f32	512	e331afd79b6ad945
+4	resample.point	f32	1	5f4f6806242f1fd4
+5	resample.order_pos	i32	2	58ffb6177994ee50
+6	resample.se	f32	1	821ee6558e6cae05
+7	resample.interval	f32	2	94fa022fada5ada2
+# resample bootstrap: n=8 d=2 statistic=diff_means n_resamples=512 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	32	60c54829458fa803
+2	resample.theta	f32	512	3122b644016efeb2
+3	resample.sorted	f32	512	c6759372ae2c8092
+4	resample.point	f32	1	4d25767f9dce13f5
+5	resample.order_pos	i32	2	58ffb6177994ee50
+6	resample.se	f32	1	289a2b11f806d468
+7	resample.interval	f32	2	00a7eb98b0a3e5b5
+# resample bootstrap: n=8 d=2 statistic=mean n_resamples=512 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	32	60c54829458fa803
+2	resample.theta	f32	512	e38c1d43a881c572
+3	resample.sorted	f32	512	d50b3a08c50d9ee2
+4	resample.point	f32	1	4d25767f9dce13f5
+5	resample.order_pos	i32	2	58ffb6177994ee50
+6	resample.se	f32	1	1669bbee652f3ad7
+7	resample.interval	f32	2	716754ac98b970d5
+# resample bootstrap: n=8 d=2 statistic=std n_resamples=512 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	32	60c54829458fa803
+2	resample.theta	f32	512	b891c30545c646a6
+3	resample.sorted	f32	512	bfe2a5ff70692b7a
+4	resample.point	f32	1	3a0c8493fec8e6bf
+5	resample.order_pos	i32	2	58ffb6177994ee50
+6	resample.se	f32	1	256f806526ce8fda
+7	resample.interval	f32	2	7e32c58b130c993a
+# resample bootstrap: n=8 d=2 statistic=diff_means n_resamples=512 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	32	60c54829458fa803
+2	resample.theta	f32	512	28c31cf8df2ec325
+3	resample.sorted	f32	512	28c31cf8df2ec325
+4	resample.point	f32	1	4d25767f9dce13f5
+5	resample.order_pos	i32	2	58ffb6177994ee50
+6	resample.se	f32	1	4d25767f9dce13f5
+7	resample.interval	f32	2	a8c7f832281a39c5
+# resample bootstrap: n=8 d=2 statistic=mean n_resamples=20000 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	32	60c54829458fa803
+2	resample.theta	f32	20000	804e8aee5113a5c8
+3	resample.sorted	f32	20000	ffd8a71ce99be698
+4	resample.point	f32	1	4ba8967f9c8a4545
+5	resample.order_pos	i32	2	3c65983e49ac1726
+6	resample.se	f32	1	f26f4397f77901be
+7	resample.interval	f32	2	cc5bf0cc835f8d09
+# resample bootstrap: n=8 d=2 statistic=pearson n_resamples=20000 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	32	60c54829458fa803
+2	resample.theta	f32	20000	fccf5ff1101df825
+3	resample.sorted	f32	20000	fccf5ff1101df825
+4	resample.point	f32	1	4b72c77f9c5d0918
+5	resample.order_pos	i32	2	3c65983e49ac1726
+6	resample.se	f32	1	4d25767f9dce13f5
+7	resample.interval	f32	2	5f386e2cd3e5a875
+# resample bootstrap: n=8 d=2 statistic=diff_means n_resamples=20000 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	32	60c54829458fa803
+2	resample.theta	f32	20000	8f82103f91349113
+3	resample.sorted	f32	20000	ea3b67edf5b6f913
+4	resample.point	f32	1	4d25767f9dce13f5
+5	resample.order_pos	i32	2	3c65983e49ac1726
+6	resample.se	f32	1	f4224397f8ea963e
+7	resample.interval	f32	2	cf1c2e8385c9d4e5
+# resample bootstrap: n=200 d=2 statistic=mean n_resamples=256 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	128	235d67cab377f13d
+2	resample.theta	f32	256	b72f38e1b91a2a1b
+3	resample.sorted	f32	256	6938ee23babe7497
+4	resample.point	f32	1	ef8171e00b39327a
+5	resample.order_pos	i32	2	6e5184a77ef7e65b
+6	resample.se	f32	1	b8bbd1f33f7eaef7
+7	resample.interval	f32	2	8deb3e4e5c42a66d
+# resample bootstrap: n=200 d=2 statistic=std n_resamples=256 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	128	235d67cab377f13d
+2	resample.theta	f32	256	8af78071a1a671ae
+3	resample.sorted	f32	256	9fd95d0c70e57c86
+4	resample.point	f32	1	7af60ac9a99f5f07
+5	resample.order_pos	i32	2	6e5184a77ef7e65b
+6	resample.se	f32	1	bd2734233af143f3
+7	resample.interval	f32	2	47384bd4dd9b6273
+# resample bootstrap: n=200 d=2 statistic=quantile n_resamples=256 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	128	235d67cab377f13d
+2	resample.theta	f32	256	113fb3e41162408b
+3	resample.sorted	f32	256	502c0511765b1c33
+4	resample.point	f32	1	152daf76c76aac60
+5	resample.order_pos	i32	2	6e5184a77ef7e65b
+6	resample.se	f32	1	5df9d1765f4847e6
+7	resample.interval	f32	2	ed19451a4f32fcda
+# resample bootstrap: n=200 d=2 statistic=pearson n_resamples=256 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	128	235d67cab377f13d
+2	resample.theta	f32	256	fb9b181d6d8ed442
+3	resample.sorted	f32	256	49160ba0bc743d3e
+4	resample.point	f32	1	d28ae63f68f19dbb
+5	resample.order_pos	i32	2	6e5184a77ef7e65b
+6	resample.se	f32	1	c2926e579815b85d
+7	resample.interval	f32	2	7ff9245c191c2b9e
+# resample bootstrap: n=200 d=2 statistic=diff_means n_resamples=256 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	128	235d67cab377f13d
+2	resample.theta	f32	256	f66818610f64167e
+3	resample.sorted	f32	256	13d8f0d9002a336a
+4	resample.point	f32	1	304e8891035fda6d
+5	resample.order_pos	i32	2	6e5184a77ef7e65b
+6	resample.se	f32	1	b07cdc1806a61574
+7	resample.interval	f32	2	f37282fe5c58578d
+# resample bootstrap: n=200 d=2 statistic=trimmed_mean n_resamples=256 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	128	235d67cab377f13d
+2	resample.theta	f32	256	fb12ee423e2227b7
+3	resample.sorted	f32	256	824329a83f8cb6df
+4	resample.point	f32	1	282dc0e87b0c1c00
+5	resample.order_pos	i32	2	6e5184a77ef7e65b
+6	resample.se	f32	1	ed505d5f1aac4483
+7	resample.interval	f32	2	20696c19625ebfbc
+# resample permutation_test: n_x=16 n_y=16 statistic=diff_means n_resamples=999 r_first=0
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	fa655aa17ea3cdbf
+1	resample.null	f32	999	226334a28fdd24c7
+2	resample.observed	f32	1	4c78637f9d3b3dd7
+3	resample.pvalue	f32	1	d232d9b3bcbca0ad
+# resample permutation_test: n_x=16 n_y=16 statistic=diff_means n_resamples=999 r_first=0
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	fa655aa17ea3cdbf
+1	resample.null	f32	999	226334a28fdd24c7
+2	resample.observed	f32	1	4c78637f9d3b3dd7
+3	resample.pvalue	f32	1	d07fd8b3bb4b0a7a
+# resample permutation_test: n_x=16 n_y=16 statistic=diff_means n_resamples=999 r_first=0
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	fa655aa17ea3cdbf
+1	resample.null	f32	999	226334a28fdd24c7
+2	resample.observed	f32	1	4c78637f9d3b3dd7
+3	resample.pvalue	f32	1	4b72477f9c5c2f98
+# resample permutation_test: n_x=16 n_y=16 statistic=diff_means n_resamples=999 r_first=0
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	fa655aa17ea3cdbf
+1	resample.null	f32	999	f312fc294c028cec
+2	resample.observed	f32	1	2dabac43806e247c
+3	resample.pvalue	f32	1	c0cc7129af10339a
+# resample permutation_test: n_x=16 n_y=16 statistic=diff_means n_resamples=999 r_first=0
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	4b42cf14ea2af6f6
+1	resample.null	f32	999	d98f9ba009041b24
+2	resample.observed	f32	1	5889cf0830286ac9
+3	resample.pvalue	f32	1	5b3e7371622810bb
+# resample permutation_test: n_x=16 n_y=16 statistic=diff_means n_resamples=999 r_first=0
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	49c0037668d4b36e
+1	resample.null	f32	999	767f4856525ee14f
+2	resample.observed	f32	1	f583e26b66bddda4
+3	resample.pvalue	f32	1	8383035a9477aa69
+# resample permutation_test: n_x=16 n_y=16 statistic=diff_means n_resamples=999 r_first=0
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	3f402e424dfca1eb
+1	resample.null	f32	999	fbd22dbbb491ab23
+2	resample.observed	f32	1	ef99aeffeff0469a
+3	resample.pvalue	f32	1	f211599b170b91af
+# resample permutation_test: n_x=16 n_y=16 statistic=diff_means n_resamples=999 r_first=0
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	56099ed0c3ecddfa
+1	resample.null	f32	999	3eddd8f56d9e7576
+2	resample.observed	f32	1	7e0ae89b66b881a4
+3	resample.pvalue	f32	1	e4c1f37f0e9a1809
+# resample permutation_test: n_x=16 n_y=16 statistic=diff_means n_resamples=999 r_first=0
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a3b15d9d7941d3e1
+1	resample.null	f32	999	61e590e051d07f8a
+2	resample.observed	f32	1	54e90fa34a7c8bae
+3	resample.pvalue	f32	1	6798d5def0aff841
+# resample permutation_test: n_x=16 n_y=16 statistic=diff_means n_resamples=999 r_first=0
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	37a2fa82ce976eae
+1	resample.null	f32	999	7e583391d0da7f05
+2	resample.observed	f32	1	ad7379ad22327b53
+3	resample.pvalue	f32	1	3716e670f94d09f1
+# resample permutation_test: n_x=16 n_y=16 statistic=diff_means n_resamples=999 r_first=0
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	d7df5c8082256b74
+1	resample.null	f32	999	0b0404322cd05d68
+2	resample.observed	f32	1	324ac1cf20c8290f
+3	resample.pvalue	f32	1	c6b002334f06cb7e
+# resample permutation_test: n_x=16 n_y=16 statistic=diff_means n_resamples=999 r_first=0
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	fd2ec49cf5ff8236
+1	resample.null	f32	999	25fbb96d936f66b6
+2	resample.observed	f32	1	e1176692239ebb7a
+3	resample.pvalue	f32	1	3902944c261310e4
+# resample permutation_test: n_x=16 n_y=16 statistic=diff_means n_resamples=999 r_first=0
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	f35055419ffd5d79
+1	resample.null	f32	999	2192edd160ce3b8c
+2	resample.observed	f32	1	058db309be695884
+3	resample.pvalue	f32	1	d232d2b3bcbc94c8
+# resample permutation_test: n_x=16 n_y=16 statistic=diff_means n_resamples=999 r_first=0
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	9d258d926c6a3eb0
+1	resample.null	f32	999	5d5c8bab6a9bde4c
+2	resample.observed	f32	1	afdf769421da6b5e
+3	resample.pvalue	f32	1	cad654a7ae3d9650
+# resample permutation_test: n_x=16 n_y=16 statistic=diff_means n_resamples=999 r_first=0
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	82a4f98b0abed7cf
+1	resample.null	f32	999	5a069b4f5a6f1b56
+2	resample.observed	f32	1	707dea3f97c83b33
+3	resample.pvalue	f32	1	ee96869111f81efe
+# resample permutation_test: n_x=16 n_y=16 statistic=diff_means n_resamples=999 r_first=0
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	f3585727be829a58
+1	resample.null	f32	999	8933abbdde0fd71d
+2	resample.observed	f32	1	b28ec55d7a8eb206
+3	resample.pvalue	f32	1	16a8e852c22274f8
+# resample permutation_test: n_x=16 n_y=16 statistic=diff_means n_resamples=999 r_first=0
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	09b3059493978713
+1	resample.null	f32	999	a446bab25cab9784
+2	resample.observed	f32	1	395dd0f4cb660303
+3	resample.pvalue	f32	1	4648a6d1bb49ff3d
+# resample permutation_test: n_x=16 n_y=16 statistic=diff_means n_resamples=999 r_first=0
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	1bf158ab78131ba9
+1	resample.null	f32	999	59e146055ff94d24
+2	resample.observed	f32	1	ccaf677c3eba6606
+3	resample.pvalue	f32	1	66dc1679c11f002d
+# resample permutation_test: n_x=16 n_y=16 statistic=diff_means n_resamples=999 r_first=0
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	35c89650f048375f
+1	resample.null	f32	999	fa6cbd5049621de5
+2	resample.observed	f32	1	6b8b239f69b4a38f
+3	resample.pvalue	f32	1	6137c5fcbcbe5e45
+# resample monte_carlo_integrate: n_samples=65536 i_first=0 dims=2
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	535d897ecba3b906
+1	resample.mc.points	f32	64	b01244e77f1c021f
+2	resample.mc.partials	f32	256	e9b751b409abeb25
+3	resample.mc.mean	f32	1	4b72477f9c5c2f98
+4	resample.mc.integral	f32	1	4b72477f9c5c2f98
+# resample monte_carlo_integrate: n_samples=65536 i_first=0 dims=2
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	535d897ecba3b906
+1	resample.mc.points	f32	64	b01244e77f1c021f
+2	resample.mc.partials	f32	256	c4171b6459dc326e
+3	resample.mc.mean	f32	1	facd3a7538ffef67
+4	resample.mc.integral	f32	1	facd3a7538ffef67
+# resample monte_carlo_integrate: n_samples=65536 i_first=0 dims=2
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	535d897ecba3b906
+1	resample.mc.points	f32	64	b01244e77f1c021f
+2	resample.mc.partials	f32	256	f671c6bfe737c421
+3	resample.mc.mean	f32	1	2c1ccf2a9dda5d6d
+4	resample.mc.integral	f32	1	2c1ccf2a9dda5d6d
+# resample monte_carlo_integrate: n_samples=65536 i_first=0 dims=2
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	535d897ecba3b906
+1	resample.mc.points	f32	64	4ccf3d9ad69bfe81
+2	resample.mc.partials	f32	256	e9b751b409abeb25
+3	resample.mc.mean	f32	1	4b72477f9c5c2f98
+4	resample.mc.integral	f32	1	4d25b57f9dce7f02
+# resample monte_carlo_integrate: n_samples=65536 i_first=0 dims=2
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	535d897ecba3b906
+1	resample.mc.points	f32	64	4ccf3d9ad69bfe81
+2	resample.mc.partials	f32	256	f870bcb12248fbea
+3	resample.mc.mean	f32	1	7a8e8ebf492775e0
+4	resample.mc.integral	f32	1	7c41ccbf4a9973ba
+# resample monte_carlo_integrate: n_samples=65536 i_first=0 dims=2
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	535d897ecba3b906
+1	resample.mc.points	f32	64	4ccf3d9ad69bfe81
+2	resample.mc.partials	f32	256	bc8d2dadafd4723a
+3	resample.mc.mean	f32	1	0f86b151f035b343
+4	resample.mc.integral	f32	1	113ab751f1a904f5
+# resample bootstrap: n=8 d=2 statistic=mean n_resamples=4096 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	32	60c54829458fa803
+2	resample.theta	f32	4096	b7bf3d00542b42e4
+3	resample.sorted	f32	4096	0116dd6d7dce0dc4
+4	resample.point	f32	1	4ba8967f9c8a4545
+5	resample.order_pos	i32	2	bd9b25d3e360ab4a
+6	resample.se	f32	1	4212ca922fd4b06d
+7	resample.interval	f32	2	5a0260d759f804c5
+8	resample.bca.z0p	f32	1	63abe6803bf13a58
+9	resample.jackknife	f32	8	d4fcc8ad260cf037
+10	resample.bca.ahat	f32	1	4d25767f9dce13f5
+# resample bootstrap: n=200 d=2 statistic=mean n_resamples=1024 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	128	235d67cab377f13d
+2	resample.theta	f32	1024	37c03a1253253319
+3	resample.sorted	f32	1024	0c8f518e795594a9
+4	resample.point	f32	1	ef8171e00b39327a
+5	resample.order_pos	i32	2	7c0cdd9da33bb228
+6	resample.se	f32	1	44fc5519d06c77c6
+7	resample.interval	f32	2	571c5c108355effb
+# resample bootstrap: n=200 d=2 statistic=mean n_resamples=1024 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	128	235d67cab377f13d
+2	resample.theta	f32	1024	37c03a1253253319
+3	resample.sorted	f32	1024	0c8f518e795594a9
+4	resample.point	f32	1	ef8171e00b39327a
+5	resample.order_pos	i32	2	7c0cdd9da33bb228
+6	resample.se	f32	1	44fc5519d06c77c6
+7	resample.interval	f32	2	571c5c108355effb
+# resample bootstrap: n=200 d=2 statistic=mean n_resamples=1024 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	128	235d67cab377f13d
+2	resample.theta	f32	1024	37c03a1253253319
+3	resample.sorted	f32	1024	0c8f518e795594a9
+4	resample.point	f32	1	ef8171e00b39327a
+5	resample.order_pos	i32	2	7c0cdd9da33bb228
+6	resample.se	f32	1	44fc5519d06c77c6
+7	resample.interval	f32	2	571c5c108355effb
+# resample bootstrap: n=200 d=2 statistic=mean n_resamples=1024 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	128	235d67cab377f13d
+2	resample.theta	f32	1024	37c03a1253253319
+3	resample.sorted	f32	1024	0c8f518e795594a9
+4	resample.point	f32	1	ef8171e00b39327a
+5	resample.order_pos	i32	2	7c0cdd9da33bb228
+6	resample.se	f32	1	44fc5519d06c77c6
+7	resample.interval	f32	2	571c5c108355effb
+# resample bootstrap: n=200 d=2 statistic=mean n_resamples=1024 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	128	235d67cab377f13d
+2	resample.theta	f32	1024	37c03a1253253319
+3	resample.sorted	f32	1024	0c8f518e795594a9
+4	resample.point	f32	1	ef8171e00b39327a
+5	resample.order_pos	i32	2	7c0cdd9da33bb228
+6	resample.se	f32	1	44fc5519d06c77c6
+7	resample.interval	f32	2	571c5c108355effb
+# resample monte_carlo_integrate: n_samples=65536 i_first=0 dims=2
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	535d897ecba3b906
+1	resample.mc.points	f32	64	b01244e77f1c021f
+2	resample.mc.partials	f32	256	f671c6bfe737c421
+3	resample.mc.mean	f32	1	2c1ccf2a9dda5d6d
+4	resample.mc.integral	f32	1	2c1ccf2a9dda5d6d
+# resample monte_carlo_integrate: n_samples=65536 i_first=0 dims=2
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	535d897ecba3b906
+1	resample.mc.points	f32	64	b01244e77f1c021f
+2	resample.mc.partials	f32	256	f671c6bfe737c421
+3	resample.mc.mean	f32	1	2c1ccf2a9dda5d6d
+4	resample.mc.integral	f32	1	2c1ccf2a9dda5d6d
+# resample bootstrap: n=200 d=2 statistic=mean n_resamples=1024 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	128	235d67cab377f13d
+2	resample.theta	f32	1024	37c03a1253253319
+3	resample.sorted	f32	1024	0c8f518e795594a9
+4	resample.point	f32	1	ef8171e00b39327a
+5	resample.order_pos	i32	2	7c0cdd9da33bb228
+6	resample.se	f32	1	44fc5519d06c77c6
+7	resample.interval	f32	2	571c5c108355effb
+8	resample.bca.z0p	f32	1	4a47487f9b5e3663
+9	resample.jackknife	f32	200	d0a3c31df82846aa
+10	resample.bca.ahat	f32	1	446eb4d5fbddcc55
+# resample bootstrap: n=200 d=2 statistic=mean n_resamples=1024 r_first=0 method=0 confidence_level=0.95
+# format: mojolearn-identity-trace v1
+0	resample.key	i32	2	a0eec1da96fa5b67
+1	resample.index_map	i32	128	235d67cab377f13d
+2	resample.theta	f32	1024	37c03a1253253319
+3	resample.sorted	f32	1024	0c8f518e795594a9
+4	resample.point	f32	1	ef8171e00b39327a
+5	resample.order_pos	i32	2	7c0cdd9da33bb228
+6	resample.se	f32	1	44fc5519d06c77c6
+7	resample.interval	f32	2	571c5c108355effb
+8	resample.bca.z0p	f32	1	4a47487f9b5e3663
+9	resample.jackknife	f32	200	d0a3c31df82846aa
+10	resample.bca.ahat	f32	1	446eb4d5fbddcc55

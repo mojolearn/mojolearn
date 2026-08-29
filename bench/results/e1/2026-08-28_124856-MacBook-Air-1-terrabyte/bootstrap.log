@@ -1,0 +1,53 @@
+
+=== provenance === 12:48:56
+3597c2d0f944cefb07b3212955bdd8b22be8a89a
+Darwin MacBook-Air-1-terrabyte.local 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:26:22 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T8132 arm64
+
+=== pixi === 12:48:57
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 12:48:57
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 8: the classical lanes (gemm, cd, kde, linkage, svm, metrics) -- both modes, cards + checks === 12:48:57
+-- lanes, identical --
+  gemm [identical]: SKIPPED (MOJOLEARN_E1_LANES=iforest)
+  cd [identical]: SKIPPED (MOJOLEARN_E1_LANES=iforest)
+  kde [identical]: SKIPPED (MOJOLEARN_E1_LANES=iforest)
+  linkage [identical]: SKIPPED (MOJOLEARN_E1_LANES=iforest)
+  svm [identical]: SKIPPED (MOJOLEARN_E1_LANES=iforest)
+  mamba [identical]: SKIPPED (MOJOLEARN_E1_LANES=iforest)
+  iforest [identical]: card 123 records -- [IDENTICAL]
+  transformer [identical]: SKIPPED (MOJOLEARN_E1_LANES=iforest)
+  metrics [identical]: SKIPPED (MOJOLEARN_E1_LANES=iforest)
+-- lanes, fast --
+  gemm [fast]: SKIPPED (MOJOLEARN_E1_LANES=iforest)
+  cd [fast]: SKIPPED (MOJOLEARN_E1_LANES=iforest)
+  kde [fast]: SKIPPED (MOJOLEARN_E1_LANES=iforest)
+  linkage [fast]: SKIPPED (MOJOLEARN_E1_LANES=iforest)
+  svm [fast]: SKIPPED (MOJOLEARN_E1_LANES=iforest)
+  mamba [fast]: SKIPPED (MOJOLEARN_E1_LANES=iforest)
+  iforest [fast]: card 123 records -- [FAST]
+  transformer [fast]: SKIPPED (MOJOLEARN_E1_LANES=iforest)
+  metrics [fast]: SKIPPED (MOJOLEARN_E1_LANES=iforest)
+
+=== done === 12:49:05
+artifacts in /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e1/2026-08-28_124856-MacBook-Air-1-terrabyte
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

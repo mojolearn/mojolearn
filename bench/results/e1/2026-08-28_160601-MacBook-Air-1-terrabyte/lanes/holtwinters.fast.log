@@ -1,0 +1,90 @@
+/Users/andrewhendel/CascadeProjects/mojolearn/holtwinters/mojo_only/hw_check.mojo:1579:24: warning: 'if' condition always evaluates to 'False'; 'if' branch is unreachable
+    if HW_RHO_PIN_SALT < 0:
+                       ^
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/holtwinters/mojo_only/hw_check.mojo:172:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/holtwinters/mojo_only/hw_check.mojo:172:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/holtwinters/mojo_only/hw_check.mojo:172:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/holtwinters/mojo_only/hw_check.mojo:172:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/holtwinters/mojo_only/hw_check.mojo:172:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/holtwinters/mojo_only/hw_check.mojo:200:
+/Users/andrewhendel/CascadeProjects/mojolearn/holtwinters/mojo_only/hw_oracle.mojo:230:28: warning: assignment to 'clevel' was never used; assign to '_' instead?
+    var clevel = Scalar[dt](0)
+                           ^
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/holtwinters/mojo_only/hw_check.mojo:200:
+/Users/andrewhendel/CascadeProjects/mojolearn/holtwinters/mojo_only/hw_oracle.mojo:231:28: warning: assignment to 'ctrend' was never used; assign to '_' instead?
+    var ctrend = Scalar[dt](0)
+                           ^
+== holtwinters/mojo_only/hw_check.mojo [FAST] sabotage=none pack_sabotage=none ==
+check_hw_refusals OK [FAST]: 13 refusals by name (cuML's wrapper rules + DEVIATION 664); a zero under additive accepted
+check_hw_decompose_vs_reference OK [FAST]: R1Qt == float64 pinv at 172 weights (6 trend_len) with the four pinv identities; planted slope/intercept/season recovered (worst season err 0.0001125335693359375); float32 vs float64 start values worst rel err 3.201789708778331e-05
+  additive series 0: start SSE 111.19721 -> fitted 83.84334 (float64 83.84452940352035), params 0.23355237/0.0/0.6126699, niter 21, OPTIM_MIN_PARAM_DIFF
+  multiplicative series 0: start SSE 272.97974 -> fitted 151.57352 (float64 151.58859694291093), params 1.0/0.0/0.45510843, niter 23, OPTIM_MIN_ERROR_DIFF
+check_hw_optimizer_reduces_sse OK [FAST]: 14 series, fitted SSE <= start SSE everywhere, parameters in [0,1], 0 hit the 1000-iteration limit; float32 vs float64 SSE worst rel diff 0.34632716684403664 (report)
+  additive: worst |forecast - planted| 0.00714111328125 (rel 7.098963187325256e-06) over h=24, 3 series; params s0 0.9975761/0.0/0.35345528
+  multiplicative: worst |forecast - planted| 1.56884765625 (rel 0.0005042465941679502) over h=24, 3 series; params s0 0.9951/0.0/0.2923507
+check_hw_forecast_continues_pattern OK [FAST]: noiseless planted additive and multiplicative series continued within 0.5% over 2 seasons (worst rel 0.0005042465941679502)
+check_hw_signed_zero_clamp OK [FAST]: host bound(-0.0)=0x00000000, bound(NaN)=+0.0, bound(inf)=1; device eval at alpha=beta=gamma=-0.0 == eval at +0.0 bit for bit (724 cells), == oracle; RECORDED clamp: start (-0.0, NaN, -0.0) on the zero series -> 0x00000000/0x00000000/0x00000000
+check_hw_zero_series_keeps_start OK [FAST]: all-zero additive series keeps (0.4, 0.3, 0.3), OPTIM_MIN_GRAD_NORM, niter 0, SSE 0 on device and oracle; iter000 slots 0x00000000/0x00000000/0x00000000 (unwritten fill)
+  DELTA additive: stages STRUCTURAL (42 vs 36 records: the two runs did not take the same stages); cells 1471/2800 [sse=7 alpha=7 beta=1 gamma=7 iter=387 level=417 trend=60 season=420 fcast=165]
+  RECORDED [FAST] additive card: <record counts differ: 42 vs 36 -- STRUCTURAL divergence, the two runs did not take the same stages. Run tools/identity_trace_diff.py, which aligns on tag sequences instead of by position.>
+  additive: series 0 params 0.23714636/0.0/0.64269555 niter 15 OPTIM_MIN_ERROR_DIFF sse 83.883255 0x42a7c43a
+  DELTA multiplicative: stages STRUCTURAL (46 vs 44 records: the two runs did not take the same stages); cells 1124/2800 [sse=6 alpha=5 beta=2 gamma=4 iter=453 level=226 trend=120 season=204 fcast=104]
+  RECORDED [FAST] multiplicative card: <record counts differ: 46 vs 44 -- STRUCTURAL divergence, the two runs did not take the same stages. Run tools/identity_trace_diff.py, which aligns on tag sequences instead of by position.>
+  multiplicative: series 0 params 1.0/0.0/0.14490607 niter 25 OPTIM_MIN_ERROR_DIFF sse 151.57393 0x431792ed
+  DELTA constant: stages 10/16 (first hw.opt.iter000.params); cells 215/2800 [sse=1 alpha=3 iter=10 level=59 trend=59 season=59 fcast=24]
+  RECORDED [FAST] constant card: 6	hw.opt.iter000.params	f32	21	c9593fe4354e57b9   VS   6	hw.opt.iter000.params	f32	21	4bff73b71d9b2da6
+  constant: series 0 params 0.4/0.3/0.3 niter 0 OPTIM_MIN_GRAD_NORM sse 1.4551915e-09 0x30c80000
+  zero: series 0 params 0.4/0.3/0.3 niter 0 OPTIM_MIN_GRAD_NORM sse 0.0 0x00000000 == oracle
+  DELTA short: stages STRUCTURAL (28 vs 30 records: the two runs did not take the same stages); cells 565/1792 [sse=7 alpha=7 beta=4 iter=165 level=84 trend=48 season=84 fcast=166]
+  RECORDED [FAST] short card: <record counts differ: 28 vs 30 -- STRUCTURAL divergence, the two runs did not take the same stages. Run tools/identity_trace_diff.py, which aligns on tag sequences instead of by position.>
+  short: series 0 params 0.3428935/0.08323822/0.3 niter 13 OPTIM_MIN_PARAM_DIFF sse 16.934902 0x41877aae
+  DELTA mixed: stages 32/38 (first hw.opt.iter000.params); cells 905/2800 [sse=5 alpha=4 beta=2 gamma=4 iter=237 level=166 trend=156 season=255 fcast=76]
+  RECORDED [FAST] mixed card: 6	hw.opt.iter000.params	f32	21	d0ddc84180f05122   VS   6	hw.opt.iter000.params	f32	21	9ef2bdfe160e8317
+  mixed: series 0 params 0.14077297/0.21217321/0.2951893 niter 11 OPTIM_MIN_ERROR_DIFF sse 59.89426 0x426f93b9
+  RECORDED [FAST] stmp_eps eval sse series 2: device 0x4d590f06 oracle 0x4d590f08
+check_hw_device_equals_oracle REPORT [FAST]: 1 of 6 fixtures bit-identical at every stage and cell (cards through first_divergence); REACH: additive vs multiplicative params differ on 7/7 series, season cells on all; stmp_eps branch planted (sse s0 0x4d458e1d); 6 RECORDED [FAST]
+check_hw_launch_invariance OK [FAST]: 2 seasonal types byte-identical across tpb_decomp 32/256, tpb_optim 128/64, pad 0/37, two poisons, run twice, and series in batch 1 == batch 7 == batch 512 (every stage incl. per-iteration params)
+check_hw_card_is_emitted OK [FAST]: 42 stages (hw.input ... 27 iteration stages ... hw.forecast), run-to-run control identical
+  RECORDED [FAST] additive hw.opt.decisions[0]: 5767682 vs 10093090
+  census additive s0: HESSIAN_RESET BETA_LO halvings=88
+  RECORDED [FAST] multiplicative hw.opt.decisions[0]: 11666176 vs 9110274
+  census multiplicative s0: ALPHA_HI BETA_LO halvings=178
+  RECORDED [FAST] constant hw.opt.decisions[2]: 393216 vs 1
+  census constant s0: ZERO_DIR halvings=0
+  census zero s0: ZERO_DIR halvings=0
+  RECORDED [FAST] mixed hw.opt.decisions[0]: 6356992 vs 4390944
+  census mixed s0: (none) halvings=97
+  census reach over 35 standard series: ZERO_DIR=14 HESSIAN_RESET=11 LS_LIMIT=0 RHO_ZERO=0 H_NAN=0 BOTH_CRIT=6 ITER_LIMIT=0 ALPHA_LO=0 ALPHA_HI=2 BETA_LO=14 BETA_HI=0 GAMMA_LO=2 GAMMA_HI=2
+  reach search 128 fits (64 hashed salts, seed = salt, x additive and multiplicative): LS_LIMIT NOT REACHED in 128 fits; RHO_ZERO REACHED, first at salt 119 multiplicative, 2/128 fits, 2 series
+  RHO_ZERO pin: DRIFTED. The recorded witness is salt 102 kind 1, the census now selects salt 119 multiplicative. The branch is still covered, by a DIFFERENT series, and WHICH series reaches a NaN route is a fact about the port -- read it before recording it
+  RECORDED [FAST] check_hw_decision_branches: RHO_ZERO is set by the device on 1 series and by the HOST ORACLE on 0 at salt 119 multiplicative (sabotage none). The oracle shares no code with the kernel, so the branch is only really reached when both take it.
+  RECORDED [FAST] rho_zero hw.opt.decisions[0]: 12126242 vs 11993890
+  RHO_ZERO fixture: device 1/7 series, oracle 0/7, H_NAN co-reached on 1 of those 1; mask vs oracle RECORDED, not asserted [FAST]
+check_hw_decision_branches REPORT [FAST]: decisions device == oracle on 5 fixtures; union of bits seen on the standard fixtures = [ZERO_DIR HESSIAN_RESET BOTH_CRIT ALPHA_HI BETA_LO GAMMA_LO GAMMA_HI halvings=0] max halvings 214; RHO_ZERO reached on a natural series at salt 119 multiplicative (2/128 fits in the search, 1/7 series on the re-fit, oracle agrees), decisions == oracle; bfgs_iter_limit=2 reached ITER_LIMIT on 7/7 series and linesearch_iter_limit=1 reached LS_LIMIT on 7/7 series, criterion OPTIM_BFGS_ITER_LIMIT
+check_hw_pack_round_trip OK [FAST]: fit_ptr's 135-cell comps, 12-cell stats and 6-cell flags packs are bitwise equal to fit_host's structured lists (n 20, batch_size 3, frequency 5, components_len 45, rows 15, all extents distinct); guards past all four buffers untouched; 3 batch-of-1 fits pin every block TIME-MAJOR at [s + i*batch_size]; forecast_ptr == forecast_host over 21 cells (3 refusals by name); SEPARATION SWAP_TREND_SEASON 90/135 SWAP_LEVEL_TREND 90/135 SERIES_MAJOR 122/135 STRIDE_BATCH 89/135 SWAP_SSE_ALPHA 6/12 SWAP_BETA_GAMMA 6/12 SWAP_FLAGS 6/6; swapped-read forecast moves 21/21
+== hw_check: ALL OK [FAST] ==

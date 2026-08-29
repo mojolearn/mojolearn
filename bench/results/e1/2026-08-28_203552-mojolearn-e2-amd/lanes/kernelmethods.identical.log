@@ -1,0 +1,321 @@
+/root/mojolearn/kernel_methods/mojo_only/km_check.mojo:1:4: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'k'
+"""kernel_methods: refusals, exact answers, oracle identity, reach, sabotages.
+   ^
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:96:
+Imported from /root/mojolearn/cholesky/mojo_only/cholesky_oracle.mojo:62:
+/root/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:96:
+Imported from /root/mojolearn/cholesky/mojo_only/cholesky_oracle.mojo:62:
+/root/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:96:
+Imported from /root/mojolearn/cholesky/mojo_only/cholesky_oracle.mojo:62:
+/root/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:96:
+Imported from /root/mojolearn/cholesky/mojo_only/cholesky_oracle.mojo:62:
+/root/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:58:
+/root/mojolearn/decomposition/mojo_only/jacobi_eigh_device.mojo:457:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        rot[0] = Float32(1.0)
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:58:
+/root/mojolearn/decomposition/mojo_only/jacobi_eigh_device.mojo:458:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        rot[1] = Float32(0.0)
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:58:
+/root/mojolearn/decomposition/mojo_only/jacobi_eigh_device.mojo:485:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        rot[0] = c
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:58:
+/root/mojolearn/decomposition/mojo_only/jacobi_eigh_device.mojo:486:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        rot[1] = ftz(t * c)
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:58:
+/root/mojolearn/decomposition/mojo_only/jacobi_eigh_device.mojo:489:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var c = rot[0]
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:58:
+/root/mojolearn/decomposition/mojo_only/jacobi_eigh_device.mojo:490:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var s = rot[1]
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:62:
+/root/mojolearn/decomposition/ported/linalg/detail/pca.mojo:508:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sh[0] = reduced_max
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:62:
+/root/mojolearn/decomposition/ported/linalg/detail/pca.mojo:510:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var biggest = sh[0]
+                  ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:62:
+/root/mojolearn/decomposition/ported/linalg/detail/pca.mojo:538:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sh[1] = reduced_first
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:62:
+/root/mojolearn/decomposition/ported/linalg/detail/pca.mojo:539:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sh[2] = Float32(1.0)
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:62:
+/root/mojolearn/decomposition/ported/linalg/detail/pca.mojo:541:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var first = sh[1]
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:62:
+/root/mojolearn/decomposition/ported/linalg/detail/pca.mojo:561:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                sh[2] = Float32(-1.0)
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:62:
+/root/mojolearn/decomposition/ported/linalg/detail/pca.mojo:563:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                sh[2] = Float32(1.0)
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:62:
+/root/mojolearn/decomposition/ported/linalg/detail/pca.mojo:568:10: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    if sh[2] < Float32(0.0):
+       ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:62:
+Imported from /root/mojolearn/decomposition/ported/linalg/detail/pca.mojo:236:
+/root/mojolearn/core/pinned_reduce.mojo:177:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:62:
+Imported from /root/mojolearn/decomposition/ported/linalg/detail/pca.mojo:236:
+/root/mojolearn/core/pinned_reduce.mojo:182:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var other = red[tid + step]
+                        ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:62:
+Imported from /root/mojolearn/decomposition/ported/linalg/detail/pca.mojo:236:
+/root/mojolearn/core/pinned_reduce.mojo:183:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if other > red[tid]:
+                       ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:62:
+Imported from /root/mojolearn/decomposition/ported/linalg/detail/pca.mojo:236:
+/root/mojolearn/core/pinned_reduce.mojo:184:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = other
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:62:
+Imported from /root/mojolearn/decomposition/ported/linalg/detail/pca.mojo:236:
+/root/mojolearn/core/pinned_reduce.mojo:187:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var total = red[0]
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:62:
+Imported from /root/mojolearn/decomposition/ported/linalg/detail/pca.mojo:236:
+/root/mojolearn/core/pinned_reduce.mojo:206:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:62:
+Imported from /root/mojolearn/decomposition/ported/linalg/detail/pca.mojo:236:
+/root/mojolearn/core/pinned_reduce.mojo:211:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var other = red[tid + step]
+                        ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:62:
+Imported from /root/mojolearn/decomposition/ported/linalg/detail/pca.mojo:236:
+/root/mojolearn/core/pinned_reduce.mojo:212:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if other < red[tid]:
+                       ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:62:
+Imported from /root/mojolearn/decomposition/ported/linalg/detail/pca.mojo:236:
+/root/mojolearn/core/pinned_reduce.mojo:213:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = other
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:62:
+Imported from /root/mojolearn/decomposition/ported/linalg/detail/pca.mojo:236:
+/root/mojolearn/core/pinned_reduce.mojo:216:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var total = red[0]
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:96:
+Imported from /root/mojolearn/cholesky/mojo_only/cholesky_oracle.mojo:62:
+/root/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:100:
+Imported from /root/mojolearn/cholesky/mojo_only/potrf.mojo:307:
+/root/mojolearn/cholesky/mojo_only/chol_sabotage.mojo:207:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        flag[0] = Int32(0)
+        ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:100:
+Imported from /root/mojolearn/cholesky/mojo_only/potrf.mojo:307:
+/root/mojolearn/cholesky/mojo_only/chol_sabotage.mojo:230:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                flag[0] = Int32(1)
+                ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:100:
+Imported from /root/mojolearn/cholesky/mojo_only/potrf.mojo:307:
+/root/mojolearn/cholesky/mojo_only/chol_sabotage.mojo:237:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if flag[0] != Int32(0):
+           ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:62:
+Imported from /root/mojolearn/decomposition/ported/linalg/detail/pca.mojo:236:
+/root/mojolearn/core/pinned_reduce.mojo:97:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = value
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:62:
+Imported from /root/mojolearn/decomposition/ported/linalg/detail/pca.mojo:236:
+/root/mojolearn/core/pinned_reduce.mojo:102:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:62:
+Imported from /root/mojolearn/decomposition/ported/linalg/detail/pca.mojo:236:
+/root/mojolearn/core/pinned_reduce.mojo:102:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:62:
+Imported from /root/mojolearn/decomposition/ported/linalg/detail/pca.mojo:236:
+/root/mojolearn/core/pinned_reduce.mojo:102:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                                      ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Imported from /root/mojolearn/kernel_methods/estimator.mojo:62:
+Imported from /root/mojolearn/decomposition/ported/linalg/detail/pca.mojo:236:
+/root/mojolearn/core/pinned_reduce.mojo:105:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var total = red[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:100:
+/root/mojolearn/cholesky/mojo_only/potrf.mojo:662:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        flag[0] = Int32(0)
+        ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:100:
+/root/mojolearn/cholesky/mojo_only/potrf.mojo:678:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                flag[0] = Int32(1)
+                ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:100:
+/root/mojolearn/cholesky/mojo_only/potrf.mojo:682:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if flag[0] != Int32(0):
+           ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Included from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:143:
+Included from /root/mojolearn/kernel_methods/mojo_only/km_oracle.mojo:50:
+/root/mojolearn/decomposition/mojo_only/jacobi_eigh.mojo:85:25: warning: assignment to 't' was never used; assign to '_' instead?
+                var t = 0.0
+                        ^
+Included from /root/mojolearn/kernel_methods/mojo_only/km_check.mojo:112:
+Included from /root/mojolearn/kernel_methods/estimator.mojo:58:
+/root/mojolearn/decomposition/mojo_only/jacobi_eigh_device.mojo:474:40: warning: assignment to 't' was never used; assign to '_' instead?
+                        var t = Float32(0.0)
+                                       ^
+== kernel_methods/mojo_only/km_check.mojo [IDENTICAL] 5 fixtures, 5 kernels, 13 sabotage arms ==
+check_km_kind_bytes_are_disjoint OK [IDENTICAL]: this lane's 3 Philox kind bytes (17, 18, 19) are pairwise distinct and disjoint from resample/'s 3 (1, 2, 3), so the shared FNV-derived key namespace carries no correlated streams
+check_km_refusals OK [IDENTICAL]: 17 refusals fired BY NAME (unsupported kernel, precomputed, gamma <= 0, degree out of range, NaN and infinity in X, a negative alpha, n_components <= 0 and > n_samples, the basis pool bound, RBFSampler's n_components and gamma, primal weights on a non-linear kernel) and 8 legal cases were ACCEPTED, so the validator is not simply always raising
+check_ortho_fixture_is_exact OK [IDENTICAL]: 8 rows with disjoint 4-wide supports, a diagonal linear Gram with entries 4^(a+1) in {4, 16} (four-way ties in each), and y = X w reproduced bit for bit by an independent host product
+check_ortho_fixture_is_exact OK [IDENTICAL]: 8 rows with disjoint 4-wide supports, a diagonal linear Gram with entries 4^(a+1) in {4, 16} (four-way ties in each), and y = X w reproduced bit for bit by an independent host product
+check_ortho_fixture_is_exact OK [IDENTICAL]: 8 rows with disjoint 4-wide supports, a diagonal linear Gram with entries 4^(a+1) in {4, 16} (four-way ties in each), and y = X w reproduced bit for bit by an independent host product
+check_ortho_fixture_is_exact OK [IDENTICAL]: 8 rows with disjoint 4-wide supports, a diagonal linear Gram with entries 4^(a+1) in {4, 16} (four-way ties in each), and y = X w reproduced bit for bit by an independent host product
+check_ortho_fixture_is_exact OK [IDENTICAL]: 8 rows with disjoint 4-wide supports, a diagonal linear Gram with entries 4^(a+1) in {4, 16} (four-way ties in each), and y = X w reproduced bit for bit by an independent host product
+check_ortho_fixture_is_exact OK [IDENTICAL]: 8 rows with disjoint 4-wide supports, a diagonal linear Gram with entries 4^(a+1) in {4, 16} (four-way ties in each), and y = X w reproduced bit for bit by an independent host product
+check_ortho_fixture_is_exact OK [IDENTICAL]: 8 rows with disjoint 4-wide supports, a diagonal linear Gram with entries 4^(a+1) in {4, 16} (four-way ties in each), and y = X w reproduced bit for bit by an independent host product
+check_ortho_fixture_is_exact OK [IDENTICAL]: 8 rows with disjoint 4-wide supports, a diagonal linear Gram with entries 4^(a+1) in {4, 16} (four-way ties in each), and y = X w reproduced bit for bit by an independent host product
+check_nystroem_full_equals_exact_kernel OK [IDENTICAL]: at q = n the embedding's Gram equals the exact kernel matrix BIT FOR BIT on FIX_KM_ORTHO (64 cells, both modes), and the whole pipeline is bit-identical across two launch geometries on all 5 fixtures
+    REPORT RBF rbf q=n=16: worst |Phi Phi^T - K| = 2.5033950805664063e-06, worst |eigenvalue - float64| = 3.951377507860343e-06, worst |normalization - float64| = 9.355205170453273, worst |embedding - float64| = 0.7617672776850078, jacobi sweeps 6
+    REPORT DUP rbf q=n=12: worst |Phi Phi^T - K| = 0.06634867191314697, worst |eigenvalue - float64| = 1.910316538289436e-06, worst |normalization - float64| = 500000.3261656386, worst |embedding - float64| = 1.022455501813191, jacobi sweeps 6
+    REPORT SIGNED rbf q=n=8: worst |Phi Phi^T - K| = 4.172325134277344e-07, worst |eigenvalue - float64| = 2.6822090154476896e-07, worst |normalization - float64| = 2.2089673223923967e-07, worst |embedding - float64| = 0.6272715355176541, jacobi sweeps 1
+    REPORT MIXED rbf q=n=16: worst |Phi Phi^T - K| = 2.2649765014648438e-06, worst |eigenvalue - float64| = 4.875984153995816e-06, worst |normalization - float64| = 0.4369053005893105, worst |embedding - float64| = 0.9988696999674573, jacobi sweeps 6
+check_kernel_ridge_planted_linear OK [IDENTICAL]: on FIX_KM_ORTHO at alpha = 0 the 8 dual coefficients, the 8 training predictions and all 32 PRIMAL weights equal their hand-derived values BIT FOR BIT, and target 0 of a 3-target fit is bit-identical to the 1-target fit
+check_kernel_matrix_vs_oracle OK [IDENTICAL]: 50 matrices (square and rectangular, 5 kernels, 5 fixtures) equal the float32 second spelling at every cell
+    REPORT worst |device - float64 unexpanded kernel| = 2.9563078328465053e-05 across 5 kernels x 5 fixtures (DEVIATION 1666: the device RBF is cuVS's EXPANDED form and the reference is the unexpanded one, so this number is the expansion's cancellation and not a defect)
+    REPORT worst |K_ii - 1| on the correlation kernels (rbf, laplacian) = 0.0 -- mathematically exactly 0; anything above it is the expansion, and it is why DEVIATION 1660's unit-diagonal argument is about the MATHEMATICAL diagonal
+check_kernel_ridge_vs_oracle OK [IDENTICAL]: 20 fits (5 kernels x 5 fixtures, 2 targets) equal the float32 host replay at every dual coefficient
+    REPORT worst |float32 dual - float64 dual| = 4.975297477560758e-06 over the SAME float32 ridged kernel matrix, so it is the SOLVER's float32 cost alone and not the kernel's (DEVIATION 1661: cuML widens to float64 before posv and this column cannot)
+check_eigen_sign_is_pinned OK [IDENTICAL]: the convention holds on all 30 eigenvector columns of 5 fixtures; negating X moves no bit; KMSAB_NO_SIGN_FLIP flips 2 columns on ORTHO; and DEVIATION 1668's asymmetry HOLDS -- the normalization and the embedding are bit-identical with and without the flip, because (-a)(-b) == ab exactly
+check_nystroem_basis_prefix_stability OK [IDENTICAL]: 42 basis entries agree across q = 2, 4, 12 and 24, and the q == n sample is a bijection (every row exactly once)
+check_random_features_prefix_stability OK [IDENTICAL]: 1040 weight cells and their offsets agree across n_components 1, 64, 65 and 256 (the ODD width included, because one Box-Muller pair serves two components) and across n_features 8 and 16; and the device weights equal the host map bit for bit
+check_boxmuller_guard OK [IDENTICAL]: the UNGUARDED RAFT transform at u1 = +0.0 is non-finite (0xff800000), the guard substitutes 2^-24 for BOTH zeros, the guarded transform is finite (0xc0b89456), and the guard is inert on all 4096 other draws tested. DEVIATION 1676
+check_rbf_sampler_vs_oracle OK [IDENTICAL]: 1920 feature-map cells across 5 fixtures equal the float32 host replay at every bit
+check_rbf_sampler_approximates_kernel OK [IDENTICAL]: REPORT -- the Monte Carlo error is printed and NOT asserted, because it is a random variable with an O(1/sqrt(D)) scale; the only assertion is that every estimate is finite
+    REPORT D = 64: worst |z(x_i).z(x_j) - exp(-gamma |x_i - x_j|^2)| = 0.24627822776583447
+    REPORT D = 256: worst |z(x_i).z(x_j) - exp(-gamma |x_i - x_j|^2)| = 0.15074530283525844
+    REPORT D = 1024: worst |z(x_i).z(x_j) - exp(-gamma |x_i - x_j|^2)| = 0.08562681641289976
+check_launch_invariance OK [IDENTICAL]: on all 5 fixtures the dual coefficients, the Nystroem embedding, the random weights and the feature map are byte-identical across two threads-per-block choices at every kernel, and one query row transformed ALONE equals the same row inside a batch for all three estimators
+  signed-zero RECORDED [IDENTICAL]: the planted -0.0 at row 5 target 2 does NOT survive into the dual coefficients, and cannot: each dual cell is a sum over every row, and -0.0 + a == a annihilates the sign at the first nonzero addend. The reachable signed-zero gates are the ones upstream of the solve, and they are asserted.
+check_signed_zero_reach OK [IDENTICAL]: 7 negative zeros planted in X are ERASED by the kernel matrix (0 survive, which is what the +0.0-seeded fold requires), and 0 negative zeros DO reach the dual coefficients, where the device and the float32 replay agree by SIGN BIT. IDENTITY_PATHS row 39
+check_km_sabotage_copies_agree OK [IDENTICAL]: 25 kernel matrices computed through km_sabotage.mojo's COPIES with no arm engaged are bit-identical to the production kernels, including the copy of svm/'s RBF epilogue that this lane cannot edit and cannot otherwise notice drifting
+check_card_is_emitted OK [IDENTICAL]: 27 stages emitted in order across one kernel-ridge fit and predict, one Nystroem fit and transform, and one RBFSampler fit and transform; two runs produce an IDENTICAL card
+  MUST FAIL  STD_TRANSCENDENTAL (rbf) on ORTHO: bits moved (0 earlier fixtures INERT to it)
+  MUST FAIL  POLY_VIA_POW (polynomial) on ORTHO: bits moved (0 earlier fixtures INERT to it)
+  MUST FAIL  RIDGE_RELATIVE (linear) on ORTHO: bits moved (0 earlier fixtures INERT to it)
+  MUST FAIL  RIDGE_PLUS_JITTER (rbf) on ORTHO: bits moved (0 earlier fixtures INERT to it)
+  MUST FAIL  EIGEN_ORDER_ASCENDING (rbf) on ORTHO: bits moved (0 earlier fixtures INERT to it)
+  MUST FAIL  EIGEN_TIE_UNSTABLE (linear) on ORTHO: bits moved (0 earlier fixtures INERT to it)
+  MUST FAIL  BASIS_FROM_LAUNCH (rbf) on ORTHO: bits moved (0 earlier fixtures INERT to it)
+  MUST FAIL  EMBED_OP_NN (rbf) on ORTHO: bits moved (0 earlier fixtures INERT to it)
+  MUST FAIL  NO_SIGN_FLIP: driven by check_eigen_sign_is_pinned, which asserts BOTH that it flips an eigenvector sign AND that it moves no bit of the normalization or the embedding (DEVIATION 1668)
+  MUST FAIL  NO_EIGEN_CLIP on RBF: bits moved (1 earlier fixtures INERT to it)
+  MUST FAIL  RF_STREAM_DRAW: the first 48 components DIFFER between n_components 48 and 96, which is exactly the prefix instability check_random_features_prefix_stability forbids
+  REPORT     NO_BOXMULLER_GUARD: EXPECTED INERT on every fixture, because the guard touches exactly one input out of 2^24 and no fixture will draw it. Driven DIRECTLY at a planted u1 = +0.0 by check_boxmuller_guard, which is where its evidence lives
+  REPORT     RF_SCALE_IN_KERNEL: INERT on every fixture, which is the PREDICTION -- under IDENTICAL the device's identical_div and identical_sqrt are the host's by construction, so recomputing sqrt(2/D) per thread lands on the same bits. DEVIATION 1678 is still worth keeping: an inert arm proves the constant is not a fold and not launch shaped, and an arm that ever MOVES here is a finding about that column's division
+check_km_sabotages OK [IDENTICAL]: 13 arms driven at RUN TIME through the sabotage argument, no source edited and no rebuild; 11 classified MUST FAIL and shown to move, the rest REPORTED with the reason they are not assertions
+kernel_methods: 18 checks OK [IDENTICAL]
