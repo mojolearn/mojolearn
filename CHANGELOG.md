@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 (2026-08-28)
+## 0.2.0 (2026-08-29)
 
 Fourteen new public names and two new submodules, over lanes that were
 finished and gated at the kernel level before 0.1.0 shipped and were simply
@@ -166,6 +166,54 @@ every estimator family in EVERY shipped mode, and a tier that did not build
 raises from a missing-binary stub BY NAME rather than serving fast arithmetic
 under another label. Which tiers a wheel carries is one variable,
 `MOJOLEARN_RELEASE_MODES`, read by both scripts.
+
+### The mode is a PARAMETER now, and there is still ONE install
+
+Until `035922c` the numeric mode was reachable only as
+`MOJOLEARN_NUMERIC_MODE`, an environment variable read ONCE by
+`_backend.select()` before the first estimator was imported. That was always
+one install -- the wheel has carried every tier's binaries since 0.1.0 -- but
+it was a choice you had to make from the shell, could not change after import,
+and could not make differently for two estimators in one script.
+
+    mojolearn.set_numeric_mode("deterministic")            # process default, in code
+    rf = mojolearn.RandomForestClassifier(numeric_mode="identical")   # one estimator
+    est.numeric_mode = "fast"                              # after construction
+    est.numeric_mode_used()                                # what THIS instance will call
+    mojolearn.numeric_mode()                               # the process default
+
+`MOJOLEARN_NUMERIC_MODE` still works and still sets the STARTING default, so
+nothing written against the old spelling breaks. There is no extra to install,
+nothing to rebuild and nothing to reinstall: `pip install mojolearn` is the
+whole surface and it always was.
+
+WHY IT IS A BINDING LOOKUP AND NOT A FLAG. `PIN_DETERMINISM` and
+`PIN_CROSS_VENDOR` are comptime, which is what lets the fast build carry none
+of the pinning code rather than branch past it. So a parameter cannot flip
+something inside one binary; it selects WHICH BINARY answers, which is why
+every call site resolves through `self._bind()` at call time instead of
+binding a module-level name at import. The keyword is injected by
+`__init_subclass__` rather than written into eleven constructor signatures,
+because eleven copies is eleven chances for one to drift silently -- an
+estimator that ignored the keyword would run the process default while
+reporting the tier it was asked for.
+
+THAT THE TIERS COEXIST IS MEASURED, not assumed. Each `.so` carries its own
+Mojo runtime and opens its own device context, so "two of them in one process
+will fight" was the real risk. All three were loaded together and called
+INTERLEAVED -- fast, deterministic, identical, fast -- twice, on one
+256x4096 @ 4096x128 product on an M4, and each returned its own arithmetic
+every time; a call made after the identical set did not inherit its answer.
+17 estimators x 3 tiers pass.
+
+TWO BUGS THIS FOUND, both in the reporting rather than the arithmetic, and
+both shipped in 0.1.0. `mojolearn doctor` reported "import probe: failed" on a
+healthy install, because it `json.dumps`'d the `numeric_mode` FUNCTION object.
+And `numeric_mode()` reported the IMPORT-TIME tier, so after
+`set_numeric_mode("deterministic")` it still answered `fast` -- the one
+function whose entire job is that a run cannot be mislabeled was mislabeling
+it. Both are fixed in `42abc57`. Neither was caught by a green test, and what
+caught them was running what the documentation claimed.
 
 ### Tooling
 

@@ -9,20 +9,33 @@ pasted as written, with `X.Y.Z` replaced.
 * One wheel, project name `mojolearn`, macOS arm64 only, tagged `py3` and
   `macosx_11_0_arm64`. One artifact serves python 3.10 through 3.14 because
   the extensions link no libpython (see `python/setup.py`).
-* The wheel carries five extensions in TWO numeric modes. The FAST set lives
-  at `python/mojolearn/*.so` and the IDENTICAL set at
-  `python/mojolearn/identical/*.so`; `MOJOLEARN_NUMERIC_MODE=identical` in
-  the environment at import time selects the identical set
-  (`python/mojolearn/_backend.py`). Both sets ship in the one wheel.
+* The wheel carries TEN extensions in THREE numeric tiers. This bullet said
+  "five extensions in TWO numeric modes"; both halves were false by 2026-08-29
+  and are replaced, not softened. The FAST set lives at
+  `python/mojolearn/*.so`, the other two at
+  `python/mojolearn/deterministic/*.so` and `python/mojolearn/identical/*.so`.
+  All three ship in the one wheel, and which tiers a wheel carries is ONE
+  variable, `MOJOLEARN_RELEASE_MODES`, read by `build_release_wheel.sh` and
+  `verify_wheel.sh` alike; set them the same for one release or the verifier
+  fails a wheel for lacking a tier nobody asked it to build.
+* The tier is a PARAMETER, not an install option, and never was an extra.
+  `mojolearn.set_numeric_mode(...)` sets the process default in code and
+  `Estimator(..., numeric_mode=...)` sets one instance's;
+  `MOJOLEARN_NUMERIC_MODE` still sets the STARTING default at import and is
+  the oldest spelling, not the only one (`python/mojolearn/_mode.py`,
+  `python/mojolearn/_backend.py`). There is one distribution,
+  `pip install mojolearn`, with no extras.
 * The source targets Metal, CUDA and HIP from one tree, but only the macOS
   wheel is published. No Linux wheel, no sdist (section 8).
-* The version is written in TWO places and both must be bumped together,
-  in one commit. `python/pyproject.toml` (`version = "X.Y.Z"`) and
-  `python/mojolearn/_version.py` (`__version__ = "X.Y.Z"`). The workflow's
-  "Version agreement" step refuses a build where they differ.
-* `CITATION.cff` has no `version` or `date-released` field as of
-  2026-08-23. Add both with the first tagged release and bump them with every
-  release after that, in the same commit as the two files above.
+* The version is written in THREE places and all three must be bumped
+  together, in one commit: `python/pyproject.toml` (`version = "X.Y.Z"`),
+  `python/mojolearn/_version.py` (`__version__ = "X.Y.Z"`) and `CITATION.cff`
+  (`version`, `date-released`). The workflow's "Version agreement" step
+  refuses a build where the first two differ; it does NOT read `CITATION.cff`,
+  so that one is on you, and a wrong `date-released` is minted permanently
+  into a DOI. The CHANGELOG heading date is a fourth place and it is the one
+  most easily left on the day the entry was drafted rather than the day the
+  wheel shipped.
 * The runner is your M4. GitHub's hosted macOS runner has no usable Apple
   GPU and produces a wheel with no Metal kernels; TestPyPI 0.1.0a2 was that
   wheel. The repo has no permanently registered runners; `tools/release_runner.sh`
@@ -91,11 +104,11 @@ pixi run -e pkg twine check python/dist/*.whl
 
 `verify_wheel.sh` installs the wheel into a fresh venv under every
 `python3.10` .. `python3.14` it can find and runs `packaging/macos/smoke.py`
-TWICE per interpreter, once per numeric mode, and the smoke does real fits
+ONCE PER SHIPPED TIER per interpreter, and the smoke does real fits
 on every estimator family (k-means, k-NN, gradient boosting, random forest,
 extra trees, DBSCAN, PCA, truncated SVD, OLS) and asserts that
 `mojolearn.numeric_mode()` reads back the mode that was asked for. All five
-interpreters must print `PASS` for both modes; a `SKIP` means an interpreter
+interpreters must print `PASS` for EVERY shipped tier; a `SKIP` means an interpreter
 is missing from the machine and the release workflow will fail on it. Never
 use `--no-gpu` for a release.
 
@@ -122,8 +135,11 @@ exit, not a warning.
   without a usable Apple GPU silently produces.
 
 Expected local output shows `wheel:` and one
-`python/dist/mojolearn-X.Y.Z-py3-none-macosx_11_0_arm64.whl`, then ten
-`PASS` lines and `all interpreters passed` from the verify script.
+`python/dist/mojolearn-X.Y.Z-py3-none-macosx_11_0_arm64.whl`, then FIFTEEN
+`PASS` lines -- five interpreters times three tiers -- and `all interpreters
+passed` from the verify script. It read "ten" while there were two tiers.
+Count them: a wheel that silently shipped one tier short prints ten PASS lines
+too, and the difference between those two tens is the whole point of the loop.
 
 ## 4. Publish path A (the normal one)
 
