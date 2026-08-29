@@ -1,0 +1,43 @@
+# identity_break  mode=identical  2026-08-29 10:29:09  macOS-26.5.2-arm64-arm-64bit-Mach-O
+| lane             | base             | ties             | hashed           | wide             | denormal         | dupes            | odd              | negative         |
+|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| rf-clf           | bd26b19ce6a0a01e | 7401be53fa50534d | 89eb07752d9c92f6 | 32aadbc42766e8fe | d0d770f6bd6f3b27 | 0c7abe08e8120840 | 03c62346ae605c78 | d72756311b443743 |
+| rf-reg           | e2cc691bb2dffd71 | 646191af9e5ad042 | f3d488256bf931e1 | 8ed363cdc517bd0e | 80172bf8b895cbbc | 2ee762ec92b3c47c | 2d9eadc8e703b1e9 | ed50f1874ddcda20 |
+| et-clf           | f068e7f753ff5569 | 06e911c04f04e05d | 2770a4e6a1d3d9fb | da9f3ad3261a779a | f4de4f39dffb02ee | 20b8cce93efefa67 | d93f14fa1888e8cc | ea4dbaf5fa951ec9 |
+| et-reg           | d0478e3974f1a60c | fc577cd5a224c8c2 | 042041065ed9ef88 | c2222c71694e79f1 | da1dee8e6dfdfae8 | 05f14c8a4432a53e | 45676ec906f85898 | e5a49e569abf73f5 |
+| gbdt-symmetric   | c30473f512eda88a | dc30260ad6cddb9d | 099e6ea8b17a0fe9 | a0bba3feb829cabe | 9f69da538435aa50 | c6e2aa0b358a5e93 | 9487069db4246594 | 272c592ff5c80cf0 |
+| gbdt-depthwise   | b0c04741df68410a | 691e15d19c5381bb | 7080c37c3f462ca3 | 6644d2b9d3759ac7 | 5963d55bed47b73a | 4d614d6c2a507157 | 9013035e93bb0ebb | a4d71c1552e4cf1c |
+| gbdt-lossguide   | 99942e643cba62c8 | 470cf17ba3b7fe73 | f16e8be74428b39c | d0f4001f90ad25d8 | ec6f25eb9c2e8d6b | cf37f9614e2ae44c | 70dafe31fcfda667 | d7b67c3b35bea9cc |
+| gbdt-rmse        | 15181d1994c459a8 | dd7bb2e504464dbe | 2becab1f22b261a3 | 31187101efd892ad | d8a84a8c6813c249 | fee42d55e084c978 | dc0b66fbd96164a1 | d6e2c5d59bdd87eb |
+| kmeans           | da3cb10e46c91256 | 4c0fb31306aeeb54 | 73e7d9d776c61685 | 3ad7888f16263188 | 370f9cb6dc7bf3b1 | d84665aaa8e83246 | df8a4981a26257ae | 3d5a5053f2fd6614 |
+| knn              | 4e01b71cc8dac4ec | f8ae31f959e98f78 | bc120048d140fb9b | 433e83a6353fa5cc | 171dcdb3a56a6d12 | c4f2214faa32ddea | 3e9840359c6f7469 | 261c16032164accd |
+Context leak detected, CoreAnalytics returned false
+| knn-clf          | f359ee4876deb908 | f7e2ff9169428e99 | 6db81871be280f38 | be1135e6471ddc68 | 3a5e34121524fc83 | 1fa4144445ae616a | ca73a62b1af2f3d5 | daf34fcb3bda8897 |
+| knn-reg          | b062c3e9dd9bfd1e | f664837b53128265 | 1f67d1bf7f1d60a7 | 45bb884f7140b771 | fa852d7b7f146c78 | b3de1345959f578e | e670c2f3a97a13a6 | ae3199d0503a28b7 |
+| dbscan           | 632036728f6accfe | 3db49f494a12bc96 | 1f6fbd85ac2efbda | 1f6fbd85ac2efbda | 093efe02f069ce64 | 632036728f6accfe | de115f464b11504b | b3a4860bfd8d6647 |
+Context leak detected, CoreAnalytics returned false
+| pca              | adfe4468b31f0a6a | 2a2fa71d7e128653 | 72a871586d7b0144 | ba1b6b64f1c4b787 | 6d28b4fb49d062cd | df359e48f86fbbf2 | f8b1e17f92a440a3 | c815a8a54242a3fe |
+| tsvd             | 576fb81292a14bd6 | fdcd3fcf9fdb7b0c | e94f81b3a8d58af1 | e400abddace2f482 | b799c8e7238a78e2 | 067a0abafd653ed0 | 6c56ebc86358a4e5 | ba3d382c8a6e69d8 |
+Context leak detected, CoreAnalytics returned false
+| ols              | 3973dcd552c10d74 | 341310788294db2c | 46baa8fd08507294 | 6f269bc757a1880e | a29082846881e846 | 1c9a3ee1a2a2a4af | 4c44136822a7aa92 | 83631ee3dc42f5e6 |
+| ridge            | ee00d5a5c419eeaf | bd28843db89923dc | 273a0bebe8e0e318 | 60e751234b7cf949 | a720ee5a29432709 | 6accdbed3b7b23c5 | 786866a2579dc805 | db1398fabfe527e6 |
+Context leak detected, CoreAnalytics returned false
+| logistic         | f4cf3d48c36cc632 | 133f7859fb6354e6 | 243755d624ae6e0e | b5ad7d0efbe17615 | b16180c269639b3e | 734a80fe0e0c68bf | ad5a8d4a056bcd9a | 53592d92846648ea |
+| lasso            | b1b4978f00c5ea58 | b7b44a8303ee934f | a3512f1653297817 | 710b0503086569a9 | a86b2ad22e75535d | 35bf583704d3b599 | 2f5f0c27635edee5 | 03932ab6adbe5f8a |
+Context leak detected, CoreAnalytics returned false
+| elasticnet       | 3143855d915056ea | ef7b8d13de0e34df | 71a5d41fab6719ac | c7e10ab14ca7c6a5 | 6f670e13e18fe669 | a6e9d5d18cc81356 | 2ac8c28e1a91a0a6 | ad1983e13c4542e5 |
+Context leak detected, CoreAnalytics returned false
+| svc              | 7aa0f6efdd61d3b9 | fe9b3bded1abde79 | 72fee9eda0ca47f8 | 3950bac0a8f03873 | 0e1a0674130793c6 | 9e16361a87580b36 | 5f258e42b672394e | ae6b8ad876ed5e8b |
+| kde              | 9a2d41d8dd246e5d | d07febb0d8159934 | 1ed80e3700ffbfb5 | c2fa2a9a9dccdc86 | 7a533523375fda18 | 9a2d41d8dd246e5d | 82b21664855a4dad | 64d0fd7e0a75ee21 |
+| iforest          | 4191eb2f753d111b | 136c41f3395577f8 | df613e40bf26b884 | 4191eb2f753d111b | 0e2a8c5b8a93c7b1 | 8bdfa2669b879a72 | 71a6805ab19bd9da | bb9931c410c02f3d |
+| agglomerative    | 02ca572ae936a2fa | 8033ec9dd0710431 | aaece24b8cbb8e59 | a8045fdbd2a5e09e | 04ec0c85878ee8d2 | 02ca572ae936a2fa | 76a7293606971988 | e11ebe209aaca7a0 |
+Context leak detected, CoreAnalytics returned false
+| spectral         | 7c5f4e5c32dc0ca1 | edd2dab67355012e | df492a6ce04a3948 | f3c2d12227f2002e | 0aad71476dc3f05d | 7c5f4e5c32dc0ca1 | e869ccbff0c7cea4 | 34ec5bbc382a5501 |
+| holtwinters      | cff24aef76c6431d | a8bab51e34d9b9f1 | cf5c74dc7ac1f882 | 3e6f449cedbd9d76 | 310564fa3a120e17 | cff24aef76c6431d | abe1f4dddcd2bc5b | a74b7e0907b07042 |
+| gemm-pinned      | e8510b9ac516e32c | 1612e610d2292e48 | 06f5a384e8e5ddc7 | fcaa786866ff1464 | 21f6dd7383bfb748 | 501b4be777b37a3a | 635707e4b3103a7d | 3f7d06ec4c83cb23 |
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+| metrics          | a447d43d12da41e0 | 739db1c897e076b3 | ce39d9ffe60d679b | ba86035833be6cec | 658224184a28c5d3 | d0694da6677039eb | 4d321e807f822155 | d4f6de4a743b7203 |
+
+cells=224 stable=224 moved=0 refused=0
+wrote bench/results/identity_break/apple-m4.identical.json
