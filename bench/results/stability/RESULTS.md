@@ -16,7 +16,13 @@ the arm whose instability the middle tier is sold against.
 |---|---|---|---|
 | Apple M4 (Metal) | **MOVED in 8 of 10 attempts** -- 2 or 3 different answers in 24 calls | STABLE 10/10 | STABLE 10/10 |
 | NVIDIA RTX 4090 (CUDA 12.8) | **MOVED -- 24 calls returned 24 DIFFERENT answers** | STABLE, 1 answer in 12 calls | STABLE, 1 answer in 12 calls |
-| AMD | not yet run | not yet run | not yet run |
+| AMD MI325X (ROCm 6.4.1, DigitalOcean) | **MOVED -- 6 different answers in 24 calls**, and the SEQUENTIAL arm moved too: `knn-tied` gave 6 different answers in 6 calls | STABLE, 1 answer in 12 calls | STABLE, 1 answer in 12 calls |
+
+**All three vendors, same verdict: `fast` moves, both upper tiers do not.**
+AMD is the only column where the plain SEQUENTIAL arm caught a mover without
+the concurrent probe -- `knn-tied`, 6 answers in 6 calls -- where on Apple
+that same arm reported STABLE and needed contention between contexts to
+expose it. A harness tuned on one vendor under-reports on another.
 
 `fast` moving is `fast` working as specified: it sells speed and makes no
 bitwise claim. The point of the table is the other two columns, and the
@@ -44,18 +50,33 @@ RTX 4090, `identical` tier, through the PYTHON surface:
 
 | | |
 |---|---|
-| lanes bit-identical on both | **13** |
+| lanes bit-identical on **all three** vendors | **13** |
 | divergent | **0** |
-| not compared | 3 (`et-clf`, `rf-clf`, `iforest` -- their bindings were not built on the leg) |
+| not compared | 3 (`et-clf`, `rf-clf`, `iforest` -- their bindings were not built on either leg) |
+
+Apple M4 (Metal), NVIDIA RTX 4090 (CUDA) and AMD MI325X (HIP), same commit,
+through the Python estimator surface.
 
 dbscan, gbdt-depthwise, gbdt-lossguide, gbdt-symmetric, gemm-pinned,
 gemm-vendor, kmeans, knn-tied, logistic, ols, pca, ridge, tsvd.
 
-**The deterministic tier's hashes DIFFER between the two columns and that is
-correct** -- `deterministic` promises one box agrees with itself and promises
-nothing about a second. NVIDIA `gbdt-depthwise` is `5af5e69c7a51e998` where
-Apple is `757bd55c27047cb0`. A middle tier whose hashes matched across vendors
-would mean it was quietly paying for cross-vendor pins it does not sell.
+**And the deterministic tier's hashes DIFFER between the columns, which is
+the result that shows the tier is not overpaying.** It promises one box
+agrees with itself and promises nothing about a second, so 10 of the 12
+comparable lanes differ across the three vendors:
+
+| lane | Apple | NVIDIA | AMD |
+|---|---|---|---|
+| gbdt-depthwise | 757bd55c27047cb0 | 5af5e69c7a51e998 | 55b5854f757cd739 |
+| gbdt-lossguide | 82628fff246a204e | d824f0e1683d12b9 | c38591dd2ad30b7f |
+| gemm-vendor | 47390974b94e233d | 8e9744e2536e8e2c | e25840533b2ba0cd |
+| ols | 8bda051c2e15fb51 | e7456f8e994341c0 | 9a3d2aabdcce9dc2 |
+| (10 of 12 comparable lanes differ) | | | |
+
+`gemm-vendor` differing on all three is the specific confirmation that a
+deterministic build keeps the vendor matmul, and therefore its speed, rather
+than pinning it. Two lanes (`dbscan`, `kmeans`) coincide on all three
+columns: that is bit-inertness, not a promise, and must not be read as one.
 
 ## THE FAST IMPORT ASYMMETRY (found here, fixed here)
 
@@ -98,7 +119,13 @@ against the API (HTTP 404), never assumed.
 
 ## Owed
 
-* **AMD.** The whole reason the tier's promise is still a one-and-a-half
+* ~~**AMD**~~ **DONE** -- see the table above. Recorded here because the
+  route matters: RunPod's MI300X was created TWICE and never produced an
+  ssh endpoint, at 600s and again at 1200s. That is not slow provisioning.
+  Both boxes were terminated by the readiness guard and verified gone, and
+  the column was taken on a DigitalOcean MI325X through
+  `tools/e2_remote_leg.sh` instead. Superseded note:
+* ~~The whole reason the tier's promise is still a one-and-a-half
   column result. First attempt 2026-08-29: an MI300X was created and never
   produced an ssh endpoint inside the 600s readiness window, so the leg
   terminated it and exited -- the box billed for ten minutes unarmed, which
@@ -108,6 +135,11 @@ against the API (HTTP 404), never assumed.
 * **The GEMM question.** `gemm-vendor` is STABLE on Apple and on NVIDIA at
   256x4096 @ 4096x128, a wide k chosen to provoke a split-K epilogue. That is
   two columns of evidence that rows 24/27/28/40/41 are cross-vendor class and
-  the middle tier keeps their speed. rocBLAS is unmeasured.
+  the middle tier keeps their speed. **rocBLAS is now measured too: STABLE at the same shape.** So MAX `matmul`,
+  cuBLAS and rocBLAS are each run-to-run reproducible there, ledger rows
+  24/27/28/40/41 are cross-vendor class ON EVIDENCE rather than on the
+  ledger's say-so, and `linkage_check.mojo:583`'s speculation that "a
+  split-K or atomic epilogue may land differently" is answered: not at
+  this shape, on any of the three.
 * `et-clf`, `rf-clf`, `iforest` on any non-Apple column: their bindings have
   not been built on a leg yet.

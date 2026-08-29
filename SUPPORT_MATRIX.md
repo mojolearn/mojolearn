@@ -49,11 +49,17 @@ one process and calls them round-robin -- three estimators, three binaries,
 three device contexts, one GPU, one fit, one input. On an Apple M4 on
 2026-08-29, 12 rounds, **ten attempts**:
 
-| tier | Apple M4, 10 attempts | NVIDIA RTX 4090, 2026-08-29 |
-|---|---|---|
-| `fast` | **MOVED in 8 of 10** -- 2 or 3 different answers out of 24 calls; STABLE in the other 2 | **MOVED -- 24 calls returned 24 DIFFERENT answers** |
-| `deterministic` | STABLE in 10 of 10 -- one answer in 12 calls | STABLE -- one answer in 12 calls |
-| `identical` | STABLE in 10 of 10 -- one answer in 12 calls | STABLE -- one answer in 12 calls |
+| tier | Apple M4, 10 attempts | NVIDIA RTX 4090 | AMD MI325X |
+|---|---|---|---|
+| `fast` | **MOVED in 8 of 10** -- 2 or 3 answers out of 24 calls | **MOVED -- 24 calls, 24 DIFFERENT answers** | **MOVED -- 6 different answers in 24 calls** |
+| `deterministic` | STABLE 10/10 -- one answer in 12 calls | STABLE -- one answer in 12 calls | STABLE -- one answer in 12 calls |
+| `identical` | STABLE 10/10 -- one answer in 12 calls | STABLE -- one answer in 12 calls | STABLE -- one answer in 12 calls |
+
+**Three vendors, one verdict: `fast` moves, both upper tiers hold.** And the
+same runs give a three-way cross-vendor result for free -- 13 lanes
+bit-identical on Metal, CUDA and HIP under `identical`, 0 divergent -- while
+the `deterministic` hashes DIFFER on 10 of 12 comparable lanes, which is what
+it means for the middle tier not to be paying for cross-vendor pins.
 
 **The NVIDIA column is the starker one and it is the one that matters.** No two
 of twenty-four `fast` calls agreed, on the same fit, the same input and the
@@ -136,7 +142,7 @@ with an atomic epilogue is a documented source of run-to-run variation. So:
 |---|---|---|
 | Apple Metal / MAX `matmul` | measured stable, 6 repeats, one wide-k shape | no determinism pin needed |
 | NVIDIA cuBLAS | **measured stable**, 6 repeats, same wide-k shape, RTX 4090 (2026-08-29, `bench/results/e1/2026-08-29_044510-runpod-nvidia`) | no determinism pin needed |
-| AMD rocBLAS | **UNVERIFIED** | open |
+| AMD rocBLAS | **measured stable**, 6 repeats, same wide-k shape, MI325X (2026-08-29, `bench/results/e1/2026-08-29_093711-mojolearn-e2-amd`) | no determinism pin needed |
 
 If either upper column moves at a shipped shape, rows 24/27/28/40/41 become
 determinism-class ON THAT COLUMN and GEMM needs a pin there. The right pin is
@@ -145,10 +151,11 @@ pinning the split count -- and NOT the full 4.7x identical kernel, which buys
 cross-vendor identity the middle tier is not selling. Closing this needs one
 run of `tools/repeat_run_stability.py` per rented column; it is owed.
 
-**The general form of that gap:** nothing yet PROVES a lane's deterministic
-promise per vendor. `tools/repeat_run_stability.py` is the check that can,
-and it has so far run on one box. A tier that is offered everywhere and
-verified on one column is a promise, not a result.
+**That gap is now closed for the lanes phase 9 covers.** The harness ran on
+all three columns on 2026-08-29 and the verdicts agree. What remains unrun is
+narrower and named: `et-clf`, `rf-clf` and `iforest` have never had their
+bindings built on a non-Apple box, so those three lanes are measured on Apple
+only.
 
 ## Public capability levels
 
