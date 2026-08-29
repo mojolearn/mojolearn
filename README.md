@@ -26,6 +26,12 @@ through 3.14, numpy 1.24 or later. The wheel and every runtime library in
 it are built for macOS 11 and the M1 instruction set, and the build refuses
 anything newer. There is no CPU path; every estimator runs on the GPU.
 
+A Linux x86_64 wheel under the same name is designed and tooled
+(`docs/LINUX_WHEEL.md`) and not yet published: one wheel carrying both a
+CUDA and a HIP binary set in all three tiers, the vendor picked at import
+and read back from the binary (`mojolearn.vendor()`). Until it is on PyPI,
+NVIDIA and AMD are source builds.
+
 ```sh
 python3 -m venv .venv && source .venv/bin/activate
 pip install mojolearn
@@ -311,8 +317,8 @@ and the comparison against a card from another box is
 | GPU | wheel | source build | certificates |
 |---|---|---|---|
 | Apple silicon (Metal) | yes, macOS arm64, `pip install mojolearn` | yes | E1, E2 |
-| NVIDIA (CUDA) | no wheel yet | yes, `tools/e2_remote_leg.sh` | E1, E2, E2U, E3 (H100); run-to-run stability (RTX 4090) |
-| AMD CDNA (HIP) | no wheel yet | yes, same script | E1, E2, E2U, E3, stability (MI325X); E1U (MI300X) |
+| NVIDIA (CUDA) | not yet published; the Linux wheel is designed and tooled, `docs/LINUX_WHEEL.md` | yes, `tools/e2_remote_leg.sh` | E1, E2, E2U, E3 (H100); run-to-run stability (RTX 4090) |
+| AMD CDNA (HIP) | not yet published; same wheel as CUDA, vendor picked at import | yes, same script | E1, E2, E2U, E3, stability (MI325X); E1U (MI300X) |
 
 Support is one source; validation is what the certificates say and nothing
 more. The benchmark table below is from one machine, an M4 laptop with 10
@@ -356,7 +362,9 @@ The higgs GBDT accuracy gap is stated because it is there.
 ## Limitations and refusals
 
 - GPU only. No CPU fallback exists and none is planned for this release.
-- The wheel is macOS arm64. CUDA and HIP are source builds.
+- The published wheel is macOS arm64. CUDA and HIP are source builds until
+  the Linux wheel of `docs/LINUX_WHEEL.md` ships; its tooling is in the tree
+  and unrun.
 - The benchmark table is from one M4; FAST timings on an H100 and an MI325X
   are in `bench/results/BOARD_2026-08-28_three-vendor.md`. Correctness and
   identity are validated on the M4, an H100, an MI325X and an MI300X through

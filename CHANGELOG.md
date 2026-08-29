@@ -1,5 +1,37 @@
 # Changelog
 
+## Unreleased
+
+Ships after 0.2.0, which is macOS only. Nothing below has run yet; every
+script named is committed unrun under the no-run order of 2026-08-29 and
+`docs/LINUX_WHEEL.md` section 9 lists what a run must confirm.
+
+### The Linux wheel, designed and tooled
+
+- ONE PyPI name, `mojolearn`, two wheels per release, the macOS arm64 wheel
+  and a Linux x86_64 wheel carrying BOTH a CUDA and a HIP binary set in all
+  three numeric tiers (six sets, sixty extensions), the vendor picked at
+  import. Layout `mojolearn/{cuda,hip}/{,deterministic,identical}/*.so`,
+  MAX runtime under `.libs/`. `docs/LINUX_WHEEL.md` is the design note.
+- `mojolearn.vendor()` and `estimator.vendor_used()` report the accelerator
+  API the loaded binary was COMPILED for, read back out of the binary through a new
+  `<binding>_vendor()` export on every binding (`mojo_only/vendor.mojo`, a
+  compile-time constant from `std.sys.info.has_*_gpu_accelerator()`). The
+  selector refuses at import when a binary's answer disagrees with the
+  directory it was loaded from, the same refusal as the tier read-back.
+  `python -m mojolearn verify` and `mojolearn doctor` print it.
+- `MOJOLEARN_VENDOR=cuda|hip` picks the directory on Linux; otherwise a box
+  probe (device nodes and driver libraries) picks it, and a box with neither
+  refuses at import with a message naming every path and library it looked
+  for. There is no CPU path.
+- `packaging/linux/`: `build_sets.sh` (on a box), `stage_libs.py` (ELF
+  closure), `pack_wheel.py` (pure Python, on the Mac), `audit.sh`
+  (auditwheel and twine in docker), `smoke.py`, `sabotage.py`, `nogpu.py`,
+  and `leg.sh` (one command per vendor over the existing RunPod and
+  DigitalOcean legs). `tools/e1_bootstrap.sh` phase 9 gained
+  `MOJOLEARN_P9_ONLY_DIAG` and both legs pass the diag knobs through.
+- `packaging/macos/smoke.py` asserts the vendor read-back (`metal`).
+
 ## 0.2.0 (2026-08-29)
 
 Fourteen new public names and two new submodules, over lanes that were

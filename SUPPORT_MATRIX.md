@@ -9,8 +9,8 @@ recorded cards establish.
 | Platform | Distribution | Current evidence |
 |---|---|---|
 | Apple silicon, macOS arm64 | Published wheel path | Built at the Apple M1 ISA floor; release smoke fits run on real Apple GPU hardware |
-| NVIDIA CUDA, Linux | Source build | E1/E2 result cards on H100; no released Linux wheel yet |
-| AMD HIP, Linux | Source build | E1/E2 result cards on MI325X and additional unsupervised measurements on MI300X; no released Linux wheel yet |
+| NVIDIA CUDA, Linux | Source build today; one Linux wheel with CUDA and HIP sets designed and tooled, unrun (`docs/LINUX_WHEEL.md`) | E1/E2 result cards on H100; no released Linux wheel yet |
+| AMD HIP, Linux | Source build today; same wheel, vendor picked at import and read back from the binary | E1/E2 result cards on MI325X and additional unsupervised measurements on MI300X; no released Linux wheel yet |
 | Other GPUs and CPUs | Compatibility report | No CPU implementation; new GPU measurements are welcome |
 
 Exact versions, commits and result status are recorded in

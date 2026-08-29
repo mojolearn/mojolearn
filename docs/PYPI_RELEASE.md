@@ -26,7 +26,10 @@ pasted as written, with `X.Y.Z` replaced.
   `python/mojolearn/_backend.py`). There is one distribution,
   `pip install mojolearn`, with no extras.
 * The source targets Metal, CUDA and HIP from one tree, but only the macOS
-  wheel is published. No Linux wheel, no sdist (section 8).
+  wheel is published so far. The Linux wheel (one wheel, CUDA and HIP sets,
+  vendor picked at import) is designed and tooled in `docs/LINUX_WHEEL.md`
+  and section 9 below is its flow; until it has run, no Linux wheel, and no
+  sdist ever (section 8).
 * The version is written in THREE places and all three must be bumped
   together, in one commit: `python/pyproject.toml` (`version = "X.Y.Z"`),
   `python/mojolearn/_version.py` (`__version__ = "X.Y.Z"`) and `CITATION.cff`
@@ -256,8 +259,91 @@ picked up; or cancel with `gh run cancel <id>`.
   so a release is always a decision somebody made at a terminal.
 * No sdist. There is no source build without the Mojo toolchain and no way
   to make one that works; `python/setup.py` says so at the top.
-* No Linux wheel yet. The source builds for Linux from the same tree, but no
-  Linux wheel has ever been produced, so no Linux classifier is claimed in
-  `python/pyproject.toml`.
+* No Linux wheel yet. The source builds for Linux from the same tree, and the
+  wheel's build, pack, audit and gate scripts exist under `packaging/linux/`
+  (section 9), but none has run and no Linux wheel has ever been produced, so
+  no Linux classifier is claimed in `python/pyproject.toml`. The classifier is
+  added in the release commit that first ships one.
 * No permanently registered runner. The self-hosted runner exists for one
   job and is removed.
+
+## 9. The Linux wheel (unrun, docs/LINUX_WHEEL.md)
+
+Every command below runs from the repository root on the M4, and every
+command that touches a GPU rents a box. Nothing here runs Mojo, pixi, pytest
+or a wheel build on the Mac; the only local work is a pure-Python zip and two
+`docker run --cpus 2` containers on a finished wheel. Check
+`bench/results/runpod_leases/` and the RunPod pod list before the NVIDIA leg
+and the DigitalOcean droplet list before the AMD leg; another session may
+own a box, and each provider holds one at a time.
+
+1. Build the CUDA sets and run the on-box gates, on RunPod. Launch from a
+   session that will outlive it.
+
+   ```sh
+   nohup bash packaging/linux/leg.sh nvidia > bench/results/wheels/nvidia.log 2>&1 &
+   disown
+   ```
+
+   Lands in `bench/results/wheels/<stamp>-nvidia/`, with `wheels/sets/cuda/`
+   (thirty `.so`, `.libs/`, `manifest.json`, `readback.txt`), `wheels/SIZES.txt`,
+   `gates/smoke_{fast,deterministic,identical}.json`, `gates/sabotage.json`,
+   `gates/nogpu.json` and `SUMMARY.txt`. The raw leg output is under
+   `bench/results/e1/<stamp>-runpod-nvidia/` and `bench/results/e1g/`.
+
+2. The same on the MI325X, on DigitalOcean.
+
+   ```sh
+   nohup bash packaging/linux/leg.sh amd > bench/results/wheels/amd.log 2>&1 &
+   disown
+   ```
+
+   Lands in `bench/results/wheels/<stamp>-amd/` with the same files under
+   `wheels/sets/hip/`.
+
+3. Pack, on the Mac, pure Python.
+
+   ```sh
+   python3 packaging/linux/pack_wheel.py \
+     --set bench/results/wheels/<stamp>-nvidia/wheels/sets/cuda \
+     --set bench/results/wheels/<stamp>-amd/wheels/sets/hip \
+     --check-against python/dist/mojolearn-X.Y.Z-py3-none-macosx_11_0_arm64.whl
+   ```
+
+   Writes `python/dist/mojolearn-X.Y.Z-py3-none-linux_x86_64.whl` and
+   `python/dist/SIZES-X.Y.Z-linux.json`, and STOPS over 100 MB with the
+   numbers printed.
+
+4. Audit and check, in docker, one container at a time.
+
+   ```sh
+   bash packaging/linux/audit.sh python/dist/mojolearn-X.Y.Z-py3-none-linux_x86_64.whl \
+     bench/results/wheels/<stamp>-nvidia/wheels/sets/cuda/manifest.json \
+     bench/results/wheels/<stamp>-amd/wheels/sets/hip/manifest.json
+   ```
+
+   Writes `python/dist/audit/show.txt` (the artifact, and the measured tag),
+   `repair.txt`, `repaired/mojolearn-X.Y.Z-py3-none-manylinux_<measured>_x86_64.whl`
+   and `twine.txt`. The repaired wheel is the one that is uploaded.
+
+5. Upload the repaired wheel to TestPyPI beside the macOS wheel (section 4's
+   workflow uploads what `python/dist/` holds; put the repaired wheel there
+   or upload it with twine from the `pkg` environment on the runner, never
+   with a token in the tree).
+
+6. Install-smoke on each vendor, from TestPyPI, in a clean venv on the box.
+
+   ```sh
+   MOJOLEARN_WHEEL_VERSION=X.Y.Z nohup bash packaging/linux/leg.sh nvidia install > bench/results/wheels/nvidia-install.log 2>&1 &
+   disown
+   MOJOLEARN_WHEEL_VERSION=X.Y.Z nohup bash packaging/linux/leg.sh amd install > bench/results/wheels/amd-install.log 2>&1 &
+   disown
+   ```
+
+   Lands in `bench/results/wheels/<stamp>-<vendor>/` with `install.log`,
+   `pip_show.txt`, `gates/smoke_<tier>.json` and `SUMMARY.txt`. Rent the
+   NVIDIA install leg on a DIFFERENT GPU model than the build leg
+   (`MOJOLEARN_GEMM_LEG_GPU_NVIDIA`); it is the only evidence that a set built
+   on one architecture runs on another.
+
+7. Then PyPI, by section 4, with both wheels in `python/dist/`.
