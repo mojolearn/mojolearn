@@ -539,6 +539,17 @@ E1_PHASES="${MOJOLEARN_GEMM_LEG_E1_PHASES:-}"
 # linear surfaces, and the GEMM whose cuBLAS run-to-run status is the open
 # question. Set MOJOLEARN_GEMM_LEG_P9_BINDINGS to widen it on a box with time.
 P9_BINDINGS="${MOJOLEARN_GEMM_LEG_P9_BINDINGS:-build.sh build_gbdt.sh build_estimators.sh build_linalg.sh}"
+# PHASE 9'S LANE SET, for the same reason the build set is settable and with a
+# sharper edge: phase 9 measures the lanes it is GIVEN, and a lane whose
+# binding was not in P9_BINDINGS reports REFUSED with its import error. Running
+# all sixteen against a three-binding build set therefore spends the lease
+# producing thirteen refusals. Empty means all of them.
+#
+# The pairing is the point and it is not checked by anything: P9_LANES names
+# lanes, P9_BINDINGS names the .so those lanes call into, and getting them out
+# of step is how a leg comes home REFUSED rather than measured. Recorded in
+# leg.txt beside e1_phases so a narrowed lane set can never read as a full one.
+P9_LANES="${MOJOLEARN_GEMM_LEG_P9_LANES:-}"
 # DEVIATION 973: which phase-8 lanes the box runs. Empty means all of them.
 # Leg 12 proved the need: the lane order puts mamba LAST behind gemm's device
 # check, the largest compile in the set, so on a cold box mamba was never
@@ -1464,6 +1475,69 @@ leg_phase8_artifacts() {
     return $_rc
 }
 
+leg_phase9_artifacts() {
+    # WHAT A PHASE-9 LEG OWES, and it is not a lane card. Phase 8 asks a
+    # CROSS-VENDOR question and pays for it with a card this Mac diffs later.
+    # Phase 9 asks a ONE-BOX question -- same fit, same input, same GPU,
+    # twice, same bits? -- which is answered on the box and needs no second
+    # column. Running leg_phase8_artifacts over a phase-9 leg therefore went
+    # red for a missing lanes/ directory that was never going to exist, and
+    # buried the arms that DID come home under a failure that meant nothing.
+    #
+    # THE ONE THING THIS CHECKS IS THAT AN ARM WAS MEASURED AT ALL. A tier
+    # whose binaries did not build reports REFUSED per lane, which is a
+    # RESULT and is printed, not failed: "not measured" and "measured clean"
+    # must not look the same, and both are legible here. What goes red is an
+    # arm with no file whatsoever, and a MOVED lane under either upper tier.
+    _rc=0
+    if [ ! -d "$E1_DEST/stability" ]; then
+        echo "  NO stability/ DIRECTORY CAME HOME. Phase 9 measured nothing on"
+        echo "  this box. Read $E1_DEST/bootstrap.log, or"
+        echo "  $OUT/remote/bootstrap_console.log if even that is missing."
+        return 1
+    fi
+    echo "  phase-9 build set: $P9_BINDINGS"
+    echo "  phase-9 lane set:  ${P9_LANES:-<all lanes>}"
+    grep -h 'set: .* of 10 binaries' "$E1_DEST/bootstrap.log" 2>/dev/null \
+        | sed 's/^/    /'
+    for _m in fast deterministic identical; do
+        _t="$E1_DEST/stability/$_m.txt"
+        if [ ! -s "$_t" ]; then
+            echo "    $_m: NO ARM. This tier was not measured on this box."
+            _rc=1
+            continue
+        fi
+        echo "    $_m: $(sed -n 's/^mode=.*  stable=/stable=/p' "$_t" | tail -1)"
+        sed -n '/^MOVED: /p;/^REFUSED: /p' "$_t" | sed 's/^/      /'
+        # A MOVED LANE IS THE FINDING UNDER FAST AND THE FAILURE ABOVE IT.
+        # repeat_run_stability.py already returns non-zero for exactly this
+        # case; it is restated here because the bootstrap swallows that
+        # status into a PHASE9-FINDING line and this leg's verdict must not
+        # be greener than the run it fetched.
+        if [ "$_m" != "fast" ] && grep -q '^MOVED: ' "$_t"; then
+            echo "      A LANE MOVED UNDER $_m. That tier's whole promise is"
+            echo "      that it does not, so this leg is RED for it."
+            _rc=1
+        fi
+    done
+    if [ -s "$E1_DEST/stability/concurrent.txt" ]; then
+        echo "    concurrent probe (all tiers live at once, called round-robin):"
+        tail -6 "$E1_DEST/stability/concurrent.txt" | sed 's/^/      /'
+    else
+        echo "    concurrent probe: ABSENT. Sequential repeats UNDER-REPORT --"
+        echo "    one device context leaves the queue empty and an"
+        echo "    arrival-order defect reproduces its own last answer -- so a"
+        echo "    clean sequential arm without this probe is a weaker result"
+        echo "    than it looks."
+    fi
+    if [ -f "$E1_DEST/bootstrap.log" ]; then
+        _nf=$(grep -c 'PHASE9-FINDING' "$E1_DEST/bootstrap.log" 2>/dev/null || true)
+        echo "  phase-9 findings: ${_nf:-0}"
+        grep 'PHASE9-FINDING' "$E1_DEST/bootstrap.log" 2>/dev/null | sed 's/^/      /' || true
+    fi
+    return $_rc
+}
+
 leg_archive_required() {
     # What must be inside the archive for THIS payload to be worth shipping.
     # A word list on purpose, so the caller can iterate it.
@@ -2185,6 +2259,8 @@ cd "$ROOT" || exit 9
   echo "work_timeout=@WORKTIMEOUT@"
   echo "e1_phases=@E1PHASES@"
   echo "e1_lanes=@E1LANES@"
+  echo "p9_bindings=@P9BINDINGS@"
+  echo "p9_lanes=@P9LANES@"
   echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$OUT/leg.txt"
 
@@ -2245,6 +2321,8 @@ if [ -z "${MODULAR_NVPTX_COMPILER_PATH:-}" ]; then
 fi
 MOJOLEARN_P9_BINDINGS="@P9BINDINGS@"
 export MOJOLEARN_P9_BINDINGS
+MOJOLEARN_P9_LANES="@P9LANES@"
+export MOJOLEARN_P9_LANES
 
 {
     echo "MODULAR_NVPTX_COMPILER_PATH=${MODULAR_NVPTX_COMPILER_PATH:-<none found>}"
@@ -3048,6 +3126,7 @@ leg_check_remote_body() {
         -e "s|@E1PHASES@|$E1_PHASES|g" \
         -e "s|@E1LANES@|$E1_LANES|g" \
         -e "s|@P9BINDINGS@|$P9_BINDINGS|g" \
+        -e "s|@P9LANES@|$P9_LANES|g" \
         -e "s|@SMI@|$SMI_CMD|g" \
         "$_body" > "$_body.subst"
     mv "$_body.subst" "$_body"
@@ -4279,7 +4358,31 @@ if [ "$MODE" = "dry" ]; then
     echo "      refusal -> TERMINATE, no work, no card"
     echo "   5. key to the pod on stdin (0600), then read the pod's ps back"
     echo "   6. git archive $COMMIT -> the box; compare source sha both ways"
-    if [ "$PAYLOAD" = "phase8" ]; then
+    if [ "$PAYLOAD" = "phase8" ] && [ "$_wants_phase8" = "0" ]; then
+    echo "   7. bash tools/e1_bootstrap.sh, DETACHED and polled, bounded at"
+    echo "      ${WORK_TIMEOUT}s so the fetch keeps its reserve. PHASE 8 IS NOT"
+    echo "      IN MOJOLEARN_E1_PHASES=$E1_PHASES, so NO lanes/*.card is written"
+    echo "      and nothing here is a cross-vendor claim."
+    echo "      READ THIS BEFORE RENTING: phase 9 builds EVERY tier it compares"
+    echo "      -- fast, deterministic and identical -- because a phase subset"
+    echo "      skips phase 3 and a baseline-less middle tier answers nothing."
+    echo "      That is $(echo "$P9_BINDINGS" | wc -w | tr -d ' ') bindings x 3 tiers of builds. Thirty builds"
+    echo "      took FIFTY MINUTES on a rented RTX 4090 and about three on the"
+    echo "      M4: build time on a pod is not build time on the Mac, and the"
+    echo "      ${WORK_TIMEOUT}s bound is what stands between that and a lease"
+    echo "      spent entirely compiling. bootstrap_exit=124 in remote/leg.txt"
+    echo "      says so if it fires."
+    echo "      bindings: $P9_BINDINGS"
+    echo "      lanes:    ${P9_LANES:-<all of them>}"
+    echo "      A LANE WHOSE BINDING IS NOT IN THAT SET REPORTS REFUSED, which"
+    echo "      is a result and not a silence -- but it is not a measurement,"
+    echo "      so the two lists have to name the same thing."
+    echo "   8. fetch the bootstrap directory to"
+    echo "      $E1_DEST; rewrite its commit.txt"
+    echo "      from the pinned sha; read stability/*.txt back"
+    echo "   9. NO SECOND COLUMN NEEDED. The question is whether ONE box agrees"
+    echo "      with itself, and the box answered it."
+    elif [ "$PAYLOAD" = "phase8" ]; then
     echo "   7. bash tools/e1_bootstrap.sh, DETACHED and polled, bounded at"
     echo "      ${WORK_TIMEOUT}s so the fetch keeps its reserve; phase 8 writes"
     echo "      lanes/*.card"
@@ -4390,8 +4493,14 @@ echo "== step 8: what came home =="
 RED=$FETCH_RED
 if [ "$PAYLOAD" = "speed" ]; then
     leg_speed_artifacts || RED=1
-elif [ "$PAYLOAD" = "phase8" ]; then
+elif [ "$PAYLOAD" = "phase8" ] && [ "$_wants_phase8" = "1" ]; then
     leg_phase8_artifacts || RED=1
+elif [ "$PAYLOAD" = "phase8" ]; then
+    # The payload is named for phase 8 but the phase list excluded it, so
+    # there are no lane cards to check and demanding them would fail a leg
+    # for not producing what it was told not to produce. Step 1 above already
+    # skipped the Apple-column guard on the same test.
+    leg_phase9_artifacts || RED=1
 else
     REMOTE_CARD="$OUT/remote/$VENDOR.card"
     leg_require_file "$REMOTE_CARD" "the remote never produced a card; read $OUT/remote/card_driver.log" || RED=1
