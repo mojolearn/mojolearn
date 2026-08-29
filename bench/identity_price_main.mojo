@@ -49,7 +49,7 @@ from cluster.ported.cluster.detail.kmeans import kmeans_fit_main
 from cluster.ported.cluster.kmeans_params import INIT_ARRAY, KMeansParams
 from dbscan.ported.dbscan.dbscan import dbscan_fit_impl
 from dbscan.ported.dbscan.runner import EPS_NN_BRUTE_FORCE
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 from neighbors.ported.neighbors.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
     KNN_METHOD_TILED,
@@ -62,9 +62,13 @@ comptime REPEATS = 3
 
 
 def _mode() -> String:
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        return String("IDENTICAL")
-    return String("FAST")
+    """The build's tier, from the ONE definition of it.
+
+    Delegates to `numeric_mode_name()` since 2026-08-29. A local
+    two-way IDENTICAL-or-FAST answers "FAST" for a DETERMINISTIC
+    build, mislabelling every line the driver prints.
+    """
+    return numeric_mode_name()
 
 
 def _u01(row: Int, k: Int, salt: Int) -> Float32:

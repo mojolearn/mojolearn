@@ -76,7 +76,7 @@ from std.memory import bitcast
 from core.identity_trace import IdentityTrace
 from glm.ported.glm.ols import OLS_ALGO_EIG, ols_fit_traced
 from glm.ported.linalg.detail.lstsq import OLS_ELEM_TPB
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
 comptime OLS_CARD_ROWS = 65536
@@ -89,18 +89,13 @@ has somewhere to show up."""
 
 
 def ols_card_mode_name() -> String:
-    """The mode THIS BINARY WAS COMPILED IN.
+    """The build's tier, from the ONE definition of it.
 
-    `GLOBAL_NUMERIC_MODE` is comptime and the flip is an edit to a file four
-    sessions share, so a run that compiled inside another session's flip
-    window would otherwise write one mode's label over the other mode's
-    numbers. Copied from `core/gemm_identity_check.mojo::_mode_name`, which
-    is the pattern this repository settled on after that race cost it two
-    measurements in one day.
+    Delegates to `numeric_mode_name()` since 2026-08-29. A local
+    two-way IDENTICAL-or-FAST answers "FAST" for a DETERMINISTIC
+    build, mislabelling every line the driver prints.
     """
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        return String("IDENTICAL")
-    return String("FAST")
+    return numeric_mode_name()
 
 
 def _mix(i: Int, salt: Int) -> UInt64:

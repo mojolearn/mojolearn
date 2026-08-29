@@ -94,7 +94,7 @@ from mixture.mojo_only.mstep import (
     gmm_mstep_scratch_floats,
     gmm_precision_cholesky,
 )
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, numeric_mode_name
 
 
 # ===========================================================================
@@ -1314,8 +1314,10 @@ def gaussian_mixture_aic(
 
 
 def gmm_mode_name() -> String:
-    """`IDENTICAL` or `FAST`, for a banner. The mode is a BUILD DEFINE
-    (`-D MOJOLEARN_NUMERIC_IDENTICAL=1`), never an edited line."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        return String("IDENTICAL")
-    return String("FAST")
+    """The build's tier, from the ONE definition of it.
+
+    Delegates to `numeric_mode_name()` since 2026-08-29. A local
+    two-way IDENTICAL-or-FAST answers "FAST" for a DETERMINISTIC
+    build, mislabelling every line the driver prints.
+    """
+    return numeric_mode_name()

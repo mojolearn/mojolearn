@@ -45,16 +45,20 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.time import perf_counter_ns
 
 from core.gemm import gemm_nt, gemm_tn, gemv_n
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
 comptime REPEATS = 3
 
 
 def _mode() -> String:
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        return String("IDENTICAL")
-    return String("FAST")
+    """The build's tier, from the ONE definition of it.
+
+    Delegates to `numeric_mode_name()` since 2026-08-29. A local
+    two-way IDENTICAL-or-FAST answers "FAST" for a DETERMINISTIC
+    build, mislabelling every line the driver prints.
+    """
+    return numeric_mode_name()
 
 
 def _mix(i: Int, salt: Int) -> UInt64:

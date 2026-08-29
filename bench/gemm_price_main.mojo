@@ -179,19 +179,18 @@ from mojo_only.numerics import (
     NUMERIC_IDENTICAL,
     ftz,
     identical_mul_add,
+    numeric_mode_name,
 )
 
 
 def _mode() -> String:
-    """The mode this binary COMPILED in, read from the comptime constant.
+    """The build's tier, from the ONE definition of it.
 
-    Not the environment, not the flag that was passed. With the flip replaced
-    by a `-D` define this is the only witness between a mis-plumbed build and
-    a correctly-labelled measurement of the wrong arm.
+    Delegates to `numeric_mode_name()` since 2026-08-29. A local
+    two-way IDENTICAL-or-FAST answers "FAST" for a DETERMINISTIC
+    build, mislabelling every line the driver prints.
     """
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        return String("IDENTICAL")
-    return String("FAST")
+    return numeric_mode_name()
 
 
 def _report(name: String, ms: Float64):
