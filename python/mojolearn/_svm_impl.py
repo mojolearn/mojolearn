@@ -117,15 +117,10 @@ def _extension(mode=None):
     full = f"{_PKG}._sets.{mode}.{_EXT_NAME}" if mode != "fast" else f"{_PKG}.{_EXT_NAME}"
     mod = sys.modules.get(full)
     if mod is None:
-        here = os.path.dirname(os.path.abspath(__file__))
-        # The directory IS the mode name for every tier above fast, the
-        # same rule `_backend.select()` uses. It was `if mode ==
-        # "identical"` until 2026-08-29, which silently loaded the FAST
-        # binary for a deterministic request; the cross-check below caught
-        # it, but with a message blaming a misplaced file.
-        path = os.path.join(here, _EXT_NAME + ".so")
-        if mode != "fast":
-            path = os.path.join(here, mode, _EXT_NAME + ".so")
+        # The directory comes from `_backend.tier_dir`, the one place the
+        # tier and vendor axes become a path (python/mojolearn/<vendor>/
+        # <tier>/ on the Linux wheel, the package directory otherwise).
+        path = os.path.join(_backend.tier_dir(mode), _EXT_NAME + ".so")
         if not os.path.exists(path):
             raise ImportError(
                 f"mojolearn: {path} is not built; build it with\n    "

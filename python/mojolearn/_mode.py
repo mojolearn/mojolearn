@@ -92,3 +92,11 @@ class NumericModeMixin:
         """The tier THIS estimator will run on, resolved and read back from
         the binary it actually holds -- not the string that was passed in."""
         return self._bind().__name__.split(".")[-2]
+
+    def vendor_used(self):
+        """'metal', 'cuda' or 'hip': the accelerator API of the binary THIS
+        estimator will call, read back from that binary's own compile-time
+        constant (`<prefix>_vendor()`, `mojo_only/vendor.mojo`), not from
+        the directory it was loaded from and not from the platform. None
+        for a binary built before the read-back existed."""
+        return _backend.read_vendor(self._bind())

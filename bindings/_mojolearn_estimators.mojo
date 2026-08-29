@@ -10,6 +10,8 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
+from mojo_only.vendor import COMPILED_VENDOR
+
 from max.gpu.host import DeviceContext
 
 from dbscan.estimator import dbscan_fit
@@ -422,10 +424,22 @@ def kde_score_samples_binding(
     return PythonObject(n_query)
 
 
+def estimators_vendor_binding() raises -> PythonObject:
+    """THE ACCELERATOR API THIS BINARY WAS COMPILED FOR: 'metal', 'cuda',
+    'hip' or 'none'. A compile-time constant folded in from
+    `mojo_only/vendor.mojo`, the same shape as the tier read-back
+    (`gbdt_numeric_mode`): the answer comes from the binary that actually
+    loaded, never from the directory it sat in or from the environment.
+    `python/mojolearn/_backend.py` refuses at import when this disagrees
+    with the vendor directory the set was loaded from."""
+    return PythonObject(String(COMPILED_VENDOR))
+
+
 @export
 def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_estimators")
+        m.def_function[estimators_vendor_binding]("estimators_vendor")
         m.def_function[dbscan_fit_binding]("dbscan_fit")
         m.def_function[kde_score_samples_binding]("kde_score_samples")
         m.def_function[pca_fit_binding]("pca_fit")

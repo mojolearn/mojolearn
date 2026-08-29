@@ -548,7 +548,25 @@ def environment(mode=None):
         "device": describe_device(),
         "commit": _git_commit(here) or "unknown (no checkout beside this package)",
         "mode": mode,
+        "vendor": _vendor_text(),
     }
+
+
+def _vendor_text():
+    """'cuda (the box probe ...)' and so on: what `_backend.vendor()` read
+    back from the loaded binaries, and how the directory was chosen. Printed
+    beside the numeric mode on every verdict since 2026-08-29, because on
+    Linux the wheel carries two vendors' sets and a card must say which one
+    produced it. A failure to establish it is reported, never hidden."""
+    try:
+        from . import _backend
+        v = _backend.vendor()
+        how = _backend.vendor_how()
+    except Exception as exc:
+        return "unknown (%s: %s)" % (type(exc).__name__, exc)
+    if v is None:
+        return "unknown (binaries predate the vendor read-back; %s)" % how
+    return "%s (%s)" % (v, how)
 
 
 # --------------------------------------------------------------------------
@@ -784,6 +802,7 @@ def _env_lines(env, ref=None, comparator=None):
         _kv("package", "mojolearn %s (numpy %s)" % (env["mojolearn_version"],
                                                     env["numpy_version"])),
         _kv("numeric mode", mode_text),
+        _kv("vendor", env.get("vendor", "not established")),
         _kv("fixture binary", mode.binary or "not established"),
         _kv("python", env["python"]),
         _kv("host", env["platform"]),

@@ -42,6 +42,8 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
+from mojo_only.vendor import COMPILED_VENDOR
+
 from metrics.estimator import (
     accuracy_score_host,
     adjusted_rand_score_host,
@@ -583,10 +585,22 @@ def spectral_fit_predict_graph_binding(
     return PythonObject(n_out)
 
 
+def metrics_vendor_binding() raises -> PythonObject:
+    """THE ACCELERATOR API THIS BINARY WAS COMPILED FOR: 'metal', 'cuda',
+    'hip' or 'none'. A compile-time constant folded in from
+    `mojo_only/vendor.mojo`, the same shape as the tier read-back
+    (`gbdt_numeric_mode`): the answer comes from the binary that actually
+    loaded, never from the directory it sat in or from the environment.
+    `python/mojolearn/_backend.py` refuses at import when this disagrees
+    with the vendor directory the set was loaded from."""
+    return PythonObject(String(COMPILED_VENDOR))
+
+
 @export
 def PyInit__mojolearn_metrics() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_metrics")
+        m.def_function[metrics_vendor_binding]("metrics_vendor")
         m.def_function[accuracy_score_binding]("accuracy_score")
         m.def_function[rand_score_binding]("rand_score")
         m.def_function[adjusted_rand_score_binding]("adjusted_rand_score")

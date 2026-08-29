@@ -28,6 +28,7 @@ from typing import Any, Sequence
 SCHEMA_VERSION = 1
 SAFE_ENVIRONMENT_KEYS = (
     "MOJOLEARN_NUMERIC_MODE",
+    "MOJOLEARN_VENDOR",
     "PYTHONHASHSEED",
 )
 # SET-OR-NOT, NEVER THE VALUE. Each of these is a FILESYSTEM PATH the caller
@@ -132,25 +133,41 @@ def _installed_tiers(native_files: list[dict[str, Any]]) -> dict[str, Any]:
     module lives outside the package.
     """
     counts: dict[str, int] = {tier: 0 for tier in NUMERIC_TIERS}
+    # THE VENDOR AXIS (2026-08-29). The Linux wheel lays the same three tiers
+    # out once per vendor, mojolearn/cuda/... and mojolearn/hip/..., and
+    # stages the MAX runtime under a `.libs/` directory. Runtime libraries
+    # are not extensions and are not counted; extensions are counted per
+    # vendor as well as per tier, so "20 fast" reads as two vendors' sets
+    # and not as a doubled macOS wheel.
+    by_vendor: dict[str, dict[str, int]] = {}
     for record in native_files:
         relative = record["relative_path"]
         if not relative.endswith(".so") or not record.get("exists"):
             continue
         parts = Path(relative).parts
+        if not parts[-1].startswith("_mojolearn"):
+            continue  # a staged runtime library, not an extension
         # mojolearn/_mojolearn_rf.so -> fast; mojolearn/identical/... -> identical
         parent = parts[-2] if len(parts) >= 2 else ""
         tier = parent if parent in counts else "fast"
         counts[tier] += 1
+        vendor = "flat"
+        for part in parts:
+            if part in ("cuda", "hip"):
+                vendor = part
+        by_vendor.setdefault(vendor, {t: 0 for t in NUMERIC_TIERS})[tier] += 1
     return {
         "expected_extensions_per_tier": 10,
         "present": [tier for tier in NUMERIC_TIERS if counts[tier] > 0],
         "absent": [tier for tier in NUMERIC_TIERS if counts[tier] == 0],
         "extensions_by_tier": counts,
+        "extensions_by_vendor_and_tier": by_vendor,
         # A tier with SOME of its extensions is worse than one with none: the
         # package imports and only the estimators needing the missing binding
         # raise, so it is worth naming as its own state rather than as present.
         "incomplete": [
-            tier for tier in NUMERIC_TIERS if 0 < counts[tier] < 10
+            tier for tier in NUMERIC_TIERS
+            if any(0 < v[tier] < 10 for v in by_vendor.values())
         ],
     }
 
@@ -227,10 +244,18 @@ def _import_probe() -> dict[str, Any]:
             mode = mojolearn.numeric_mode()
         except BaseException as exc:
             mode = "unreadable: " + type(exc).__name__
+        # THE VENDOR, read back the same way (2026-08-29): on Linux one
+        # wheel carries CUDA and HIP sets and the one that loaded is a
+        # fact about this install worth having in every doctor bundle.
+        try:
+            vendor = mojolearn.vendor()
+        except BaseException as exc:
+            vendor = "unreadable: " + type(exc).__name__
         print(json.dumps({
             "ok": True,
             "version": getattr(mojolearn, "__version__", None),
             "numeric_mode": mode,
+            "vendor": vendor,
         }))
         """
     )
@@ -251,7 +276,7 @@ def _import_probe() -> dict[str, Any]:
         else:
             result["result"] = {
                 key: payload[key]
-                for key in ("ok", "type", "version", "numeric_mode")
+                for key in ("ok", "type", "version", "numeric_mode", "vendor")
                 if key in payload
             }
     elif raw.get("error"):
@@ -319,6 +344,7 @@ def _summary(report: dict[str, Any]) -> str:
         f"mojolearn: {versions.get('mojolearn') or 'not installed'}",
         f"numeric mode requested: {report['environment'].get('MOJOLEARN_NUMERIC_MODE', 'fast (default)')}",
         f"numeric mode loaded: {report['import_probe'].get('result', {}).get('numeric_mode') or 'unknown (import probe did not report one)'}",
+        f"vendor loaded: {report['import_probe'].get('result', {}).get('vendor') or 'unknown (import probe did not report one)'}",
         "numeric tiers installed: {}".format(
             ", ".join(report["numeric_tiers"]["present"]) or "none"
         ),

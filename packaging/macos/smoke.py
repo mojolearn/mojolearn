@@ -135,8 +135,18 @@ np.testing.assert_allclose(ols.coef_, coef, rtol=3e-3, atol=3e-3)
 mode = mojolearn.numeric_mode()
 assert mode == os.environ.get("MOJOLEARN_NUMERIC_MODE", "fast"), mode
 
+# THE VENDOR THAT ACTUALLY LOADED, read back from the binary (2026-08-29,
+# docs/LINUX_WHEEL.md). On the macOS wheel it is 'metal'; the Linux smoke
+# (packaging/linux/smoke.py) asserts 'cuda' or 'hip' the same way.
+# MOJOLEARN_SMOKE_VENDOR overrides the expectation for a Linux run of THIS
+# file. A None here is a binary built without mojo_only/vendor.mojo, which a
+# release build cannot be.
+vendor = mojolearn.vendor()
+assert vendor == os.environ.get("MOJOLEARN_SMOKE_VENDOR", "metal"), vendor
+assert rf.vendor_used() == vendor, rf.vendor_used()
+
 print(
     f"v{mojolearn.__version__} py{sys.version_info.major}.{sys.version_info.minor}"
-    f" mode={mode} kmeans n_iter={km.n_iter_} knn tile={nn.used_query_tile_}"
+    f" mode={mode} vendor={vendor} kmeans n_iter={km.n_iter_} knn tile={nn.used_query_tile_}"
     f" gbdt rf et dbscan pca svd ols ok"
 )

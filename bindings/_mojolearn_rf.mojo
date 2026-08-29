@@ -28,6 +28,8 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
+from mojo_only.vendor import COMPILED_VENDOR
+
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from ensemble.decisiontree.batched_levelalgo.bins import (
@@ -588,10 +590,22 @@ def rf_predict_reg_binding(
     return PythonObject(wrote)
 
 
+def rf_vendor_binding() raises -> PythonObject:
+    """THE ACCELERATOR API THIS BINARY WAS COMPILED FOR: 'metal', 'cuda',
+    'hip' or 'none'. A compile-time constant folded in from
+    `mojo_only/vendor.mojo`, the same shape as the tier read-back
+    (`gbdt_numeric_mode`): the answer comes from the binary that actually
+    loaded, never from the directory it sat in or from the environment.
+    `python/mojolearn/_backend.py` refuses at import when this disagrees
+    with the vendor directory the set was loaded from."""
+    return PythonObject(String(COMPILED_VENDOR))
+
+
 @export
 def PyInit__mojolearn_rf() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_rf")
+        m.def_function[rf_vendor_binding]("rf_vendor")
         m.def_function[rf_classifier_fit_binding]("rf_classifier_fit")
         m.def_function[rf_regressor_fit_binding]("rf_regressor_fit")
         m.def_function[rf_predict_proba_binding]("rf_predict_proba")

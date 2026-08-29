@@ -33,6 +33,8 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
+from mojo_only.vendor import COMPILED_VENDOR
+
 from max.gpu.host import DeviceContext
 
 from hierarchy.estimator import linkage_fit_host
@@ -206,10 +208,22 @@ def linkage_fit_binding(
     return PythonObject(rounds)
 
 
+def solver_vendor_binding() raises -> PythonObject:
+    """THE ACCELERATOR API THIS BINARY WAS COMPILED FOR: 'metal', 'cuda',
+    'hip' or 'none'. A compile-time constant folded in from
+    `mojo_only/vendor.mojo`, the same shape as the tier read-back
+    (`gbdt_numeric_mode`): the answer comes from the binary that actually
+    loaded, never from the directory it sat in or from the environment.
+    `python/mojolearn/_backend.py` refuses at import when this disagrees
+    with the vendor directory the set was loaded from."""
+    return PythonObject(String(COMPILED_VENDOR))
+
+
 @export
 def PyInit__mojolearn_solver() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_solver")
+        m.def_function[solver_vendor_binding]("solver_vendor")
         m.def_function[cd_fit_binding]("cd_fit")
         m.def_function[cd_predict_binding]("cd_predict")
         m.def_function[linkage_fit_binding]("linkage_fit")

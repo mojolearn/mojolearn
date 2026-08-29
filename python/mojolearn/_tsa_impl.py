@@ -91,15 +91,10 @@ def _load_binding():
     from . import _backend
 
     mode = _backend.requested_mode()
-    pkg_dir = os.path.dirname(os.path.abspath(__file__))
-    # The directory IS the mode name for every tier above fast, the same
-    # rule `_backend.select()` uses. Spelled `== "identical"` until
-    # 2026-08-29, which loaded the FAST binary for a deterministic
-    # request.
-    if mode != "fast":
-        path = os.path.join(pkg_dir, mode, "_mojolearn_tsa.so")
-    else:
-        path = os.path.join(pkg_dir, "_mojolearn_tsa.so")
+    # The directory comes from `_backend.tier_dir`, the one place the tier
+    # and vendor axes become a path (python/mojolearn/<vendor>/<tier>/ on
+    # the Linux wheel, the package directory on macOS and flat checkouts).
+    path = os.path.join(_backend.tier_dir(mode), "_mojolearn_tsa.so")
     if not os.path.exists(path):
         raise ImportError(
             f"mojolearn: {path} is not built; build it with\n    "

@@ -34,6 +34,51 @@ sharing one checkout: an edit made during a flip window was lost on
 2026-08-23). `numeric_mode()` reports what was actually loaded, read back
 from the binary where it can be (`gbdt_numeric_mode`), so a wrong-arm
 measurement is impossible to label correctly by accident.
+
+THE VENDOR AXIS (2026-08-29, docs/LINUX_WHEEL.md)
+-------------------------------------------------
+The tier ladder above is one axis. The Linux wheel adds a second: ONE PyPI
+name carries a CUDA set and a HIP set, each in all three tiers, and the
+vendor is picked AT IMPORT. The layout is one directory per accelerator API,
+and the tier layout above repeats INSIDE it unchanged:
+
+    macOS (unchanged)          python/mojolearn/{,deterministic,identical}/*.so
+    Linux                      python/mojolearn/cuda/{,deterministic,identical}/*.so
+                               python/mojolearn/hip/{,deterministic,identical}/*.so
+    a source checkout on a     python/mojolearn/{,deterministic,identical}/*.so
+    Linux box (every E1 leg)   ("flat": whatever bindings/build_*.sh wrote)
+
+`_layout()` decides which of the three this install is by LOOKING AT THE
+DISK, not at the platform: a vendor directory with binaries in it means the
+wheel layout, otherwise the flat one. The flat case is what every rented leg
+has ever built and it keeps working exactly as before.
+
+THE ORDER OF TRUST, most to least:
+
+  1. WHAT THE BINARY SAYS. Every binding exports `<prefix>_vendor()`, a
+     compile-time constant (`mojo_only/vendor.mojo`): 'metal', 'cuda',
+     'hip' or 'none'. After a set is loaded, EVERY module in it is asked,
+     and one that disagrees with the directory it was loaded from is
+     refused at import, the same refusal as a tier mismatch. A CUDA `.so`
+     filed under `hip/` imports cleanly on an NVIDIA box and does not
+     touch the device until the first fit; this is the only place that
+     catches it.
+  2. `MOJOLEARN_VENDOR` in the environment, which picks the DIRECTORY and
+     nothing else. It cannot make a `hip/` binary say 'cuda'; it can only
+     make the selector open `hip/` on a box that has no AMD device, and
+     that fails at the first device call with the runtime's own error.
+  3. WHAT THE BOX APPEARS TO HAVE (`_probe_box`): the device nodes and the
+     driver libraries each API needs, checked with `os.path.exists` and
+     `ctypes.CDLL`. This picks the directory when the environment did not.
+     It is evidence about the box, and it is deliberately the LAST word,
+     not the first: a probe can be fooled by a container that mounts a
+     driver it cannot use, and the binary cannot be.
+
+THERE IS NO CPU PATH, so when the wheel layout is present and no vendor can
+be picked the import RAISES, naming every path and library it looked for
+and what it found, rather than importing a package whose every fit would
+fail. `vendor()` reports what was picked, cross-checked against the loaded
+binaries; `NumericModeMixin.vendor_used()` reports it per estimator.
 """
 
 import importlib.machinery
@@ -83,6 +128,234 @@ _MODE_CODE = {"fast": 0, "identical": 1, "deterministic": 2}
 _CODE_MODE = {v: k for k, v in _MODE_CODE.items()}
 
 
+# ===================================================================
+# THE VENDOR AXIS. See the module docstring, "THE VENDOR AXIS".
+# ===================================================================
+
+#: The accelerator APIs a set can be compiled for, in the order the box
+#: probe consults them. These are the DIRECTORY names under the package on
+#: Linux and the strings `<prefix>_vendor()` returns.
+_VENDORS = ("cuda", "hip", "metal")
+#: The two that can share one Linux wheel. `metal` is never a directory: the
+#: macOS wheel keeps the flat layout.
+_LINUX_VENDORS = ("cuda", "hip")
+
+#: What `_probe_box` looks for, per API. Every entry is checked and every
+#: result is reported, so the no-GPU refusal can say exactly what was looked
+#: for and what was found. Paths are the device nodes the driver creates;
+#: libraries are the ones the MAX runtime dlopens to reach the device
+#: (the CUDA driver API and the HIP runtime). Versioned sonames first, then
+#: the bare name, because a driver install ships the former and a dev
+#: install adds the latter.
+_PROBE = {
+    "cuda": {
+        "paths": ("/dev/nvidiactl", "/dev/nvidia0"),
+        "libs": ("libcuda.so.1", "libcuda.so"),
+    },
+    "hip": {
+        "paths": ("/dev/kfd", "/dev/dri/renderD128"),
+        "libs": ("libamdhip64.so.7", "libamdhip64.so.6", "libamdhip64.so"),
+    },
+}
+
+
+def _vendor_fn(name):
+    """The read-back function each binding exports: `mojolearn_vendor` on
+    `_mojolearn`, `<suffix>_vendor` on every `_mojolearn_<suffix>`."""
+    if name == "_mojolearn":
+        return "mojolearn_vendor"
+    return name[len("_mojolearn_"):] + "_vendor"
+
+
+def read_vendor(module):
+    """What `module` says it was compiled for, or None when it predates the
+    read-back (a binary built before 2026-08-29). A stub raises by name on
+    any attribute, and `hasattr` does not swallow ImportError, so the probe
+    is guarded the way `numeric_mode()` guards its own."""
+    fn = _vendor_fn(module.__name__.rsplit(".", 1)[-1])
+    try:
+        f = getattr(module, fn, None)
+    except ImportError:
+        return None
+    if f is None:
+        return None
+    return str(f())
+
+
+_VENDOR_SELECTED = None
+_VENDOR_HOW = None
+_LAYOUT = None
+
+
+def _pkg_dir():
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def _has_binaries(d):
+    try:
+        return any(n.endswith(".so") for n in os.listdir(d))
+    except OSError:
+        return False
+
+
+def _probe_box():
+    """Evidence, per Linux vendor, that this box can reach its device.
+
+    Returns {vendor: {"paths": {path: bool}, "libs": {lib: bool},
+    "found": bool}}. `found` is True when ANY device node or ANY library
+    resolved. Every lookup is recorded so the refusal below can print the
+    whole table rather than a verdict."""
+    import ctypes
+    out = {}
+    for v, spec in _PROBE.items():
+        paths = {p: os.path.exists(p) for p in spec["paths"]}
+        libs = {}
+        for lib in spec["libs"]:
+            try:
+                ctypes.CDLL(lib)
+                libs[lib] = True
+            except OSError:
+                libs[lib] = False
+        out[v] = {
+            "paths": paths, "libs": libs,
+            "found": any(paths.values()) or any(libs.values()),
+        }
+    return out
+
+
+def _probe_lines(probe):
+    lines = []
+    for v in _LINUX_VENDORS:
+        r = probe[v]
+        lines.append(f"  {v}:")
+        for p, ok in r["paths"].items():
+            lines.append(f"    {p:<28} {'FOUND' if ok else 'absent'}")
+        for lib, ok in r["libs"].items():
+            lines.append(f"    {lib:<28} {'loads' if ok else 'not loadable'}")
+    return lines
+
+
+def _layout():
+    """('flat', <pkg dir>) or ('vendor', <pkg dir>/<vendor>), decided ONCE.
+
+    The wheel layout is recognised by a vendor directory WITH BINARIES IN
+    IT. A bare directory does not count: the macOS wheel never has one, a
+    source checkout never has one, and an empty one left by a failed build
+    must not turn a working flat install into a vendor lookup."""
+    global _LAYOUT, _VENDOR_SELECTED, _VENDOR_HOW
+    if _LAYOUT is not None:
+        return _LAYOUT
+    pkg = _pkg_dir()
+    present = [v for v in _LINUX_VENDORS
+               if _has_binaries(os.path.join(pkg, v))]
+    if not present:
+        # macOS, or a Linux source checkout. The vendor is whatever the
+        # binaries say; `vendor()` reads it after `select()` has loaded them.
+        _LAYOUT = ("flat", pkg)
+        _VENDOR_HOW = "flat layout; read from the loaded binaries"
+        return _LAYOUT
+    forced = os.environ.get("MOJOLEARN_VENDOR", "").strip().lower()
+    if forced:
+        if forced not in _LINUX_VENDORS:
+            raise ImportError(
+                f"mojolearn: MOJOLEARN_VENDOR={forced!r}; it must be "
+                f"'cuda' or 'hip' (this install carries {present})"
+            )
+        if forced not in present:
+            raise ImportError(
+                f"mojolearn: MOJOLEARN_VENDOR={forced} but this install "
+                f"carries no {forced} set under {os.path.join(pkg, forced)}; "
+                f"it carries {present}"
+            )
+        _VENDOR_SELECTED = forced
+        _VENDOR_HOW = "MOJOLEARN_VENDOR in the environment"
+        _LAYOUT = ("vendor", os.path.join(pkg, forced))
+        return _LAYOUT
+    probe = _probe_box()
+    hits = [v for v in present if probe[v]["found"]]
+    if len(hits) == 1:
+        _VENDOR_SELECTED = hits[0]
+        _VENDOR_HOW = "the box probe (device nodes and driver libraries)"
+        _LAYOUT = ("vendor", os.path.join(pkg, hits[0]))
+        return _LAYOUT
+    if len(hits) > 1:
+        raise ImportError(
+            "mojolearn: this box shows evidence of MORE THAN ONE supported "
+            f"GPU API ({hits}) and this install carries a set for each. "
+            "Choose one with MOJOLEARN_VENDOR=cuda or MOJOLEARN_VENDOR=hip "
+            "before import. What was looked for and found:\n"
+            + "\n".join(_probe_lines(probe))
+        )
+    raise ImportError(
+        "mojolearn: NO SUPPORTED GPU FOUND ON THIS BOX, and there is no CPU "
+        "path in this package. This install carries binary sets for "
+        f"{present} under {pkg}. What was looked for and what was found:\n"
+        + "\n".join(_probe_lines(probe))
+        + "\n  MOJOLEARN_VENDOR is not set."
+        "\n\nA device node or a driver library for one of the sets above must "
+        "be visible to this process. In a container that means the GPU is "
+        "passed through (`--gpus all` for NVIDIA, `--device /dev/kfd "
+        "--device /dev/dri` for AMD). If the device is present and this "
+        "probe is wrong, MOJOLEARN_VENDOR=cuda or MOJOLEARN_VENDOR=hip picks "
+        "the directory directly and the first fit reports the runtime's own "
+        "error."
+    )
+
+
+def tier_dir(mode):
+    """The directory one tier's binaries live in, on this install and this
+    vendor. `fast` is the vendor directory itself (the package directory on
+    the flat layout); every other tier is one directory down under its own
+    name. THE ONE PLACE THIS IS COMPUTED: the four bindings with private
+    loaders (`_linalg_impl`, `_metrics_impl`, `_tsa_impl`, `_svm_impl`) call
+    this rather than joining paths themselves."""
+    _, base = _layout()
+    if mode == "fast":
+        return base
+    return os.path.join(base, mode)
+
+
+def _check_vendor(module, name, path):
+    """Refuse a binary whose compiled vendor disagrees with the directory it
+    was loaded from. Binaries that predate the read-back are let through
+    with None, which `vendor()` reports as such rather than inventing an
+    answer."""
+    global _VENDOR_SELECTED
+    kind, base = _layout()
+    said = read_vendor(module)
+    if said is None:
+        return None
+    if said == "none":
+        raise ImportError(
+            f"mojolearn: {path} was compiled with NO accelerator target "
+            "(its vendor read-back says 'none'); it cannot run a kernel "
+            "anywhere. Rebuild it on a box with the GPU present."
+        )
+    if kind == "vendor":
+        expected = os.path.basename(base)
+        if said != expected:
+            raise ImportError(
+                f"mojolearn: {path} was compiled for {said} but sits in the "
+                f"{expected} set ({base}); a binary is in the wrong vendor "
+                "directory. The set is refused rather than loaded under a "
+                "label it does not answer to. Rebuild the sets with "
+                "packaging/linux/build_sets.sh on the right box and repack."
+            )
+    else:
+        # Flat layout: the first binary to answer decides, and every later
+        # one must agree with it. Two vendors' binaries in one flat
+        # directory is a build that went wrong, not a choice.
+        if _VENDOR_SELECTED is None:
+            _VENDOR_SELECTED = said
+        elif said != _VENDOR_SELECTED:
+            raise ImportError(
+                f"mojolearn: {path} was compiled for {said} but the other "
+                f"binaries in {base} were compiled for {_VENDOR_SELECTED}; "
+                "a flat layout holds one vendor. Rebuild."
+            )
+    return said
+
+
 def requested_mode():
     mode = os.environ.get("MOJOLEARN_NUMERIC_MODE", "fast").strip().lower()
     if mode not in _MODE_CODE:
@@ -101,8 +374,15 @@ def select():
     if _SELECTED is not None:
         return _SELECTED
     mode = requested_mode()
-    pkg_dir = os.path.dirname(os.path.abspath(__file__))
-    if mode == "fast":
+    pkg_dir = _pkg_dir()
+    pkg = sys.modules[__name__.rsplit(".", 1)[0]]
+    # THE DIRECTORY COMES FROM tier_dir(), which folds in the vendor axis:
+    # the package directory on macOS and on a flat Linux checkout, and
+    # python/mojolearn/<vendor>/ on the Linux wheel. `_layout()` raises here,
+    # at import, when the wheel layout is present and no vendor can be
+    # picked; that is the no-GPU refusal and it is deliberate.
+    ident_dir = tier_dir(mode)
+    if mode == "fast" and ident_dir == pkg_dir:
         # FAST USED TO RETURN HERE, INSTALLING NOTHING, and that made it the
         # ONLY tier that cannot survive a partial build. An upper tier gets a
         # `_MissingUpperTier` stub for each binding that did not build, so the
@@ -121,11 +401,13 @@ def select():
         # decided by which tier was asked for.
         #
         # Present bindings are left to normal import: this installs a stub for
-        # a MISSING one and touches nothing else.
+        # a MISSING one and touches nothing else. The vendor of the present
+        # ones is read back lazily by `vendor()`, because on this layout the
+        # binaries are imported by the estimator modules, not here.
         for name in _MODULES:
             if os.path.exists(os.path.join(pkg_dir, name + ".so")):
                 continue
-            full = f"{sys.modules[__name__.rsplit('.', 1)[0]].__name__}.{name}"
+            full = f"{pkg.__name__}.{name}"
             if full in sys.modules:
                 continue
             module = _MissingUpperTier(
@@ -133,24 +415,25 @@ def select():
                 _build_script(name), "fast",
             )
             sys.modules[full] = module
-            setattr(sys.modules[__name__.rsplit(".", 1)[0]], name, module)
+            setattr(pkg, name, module)
             _MISSING.append(name)
         _SELECTED = "fast"
         return _SELECTED
-    # The directory IS the mode name, for every tier above fast. Derived
-    # rather than branched, so adding a fourth tier is one dict entry.
-    ident_dir = os.path.join(pkg_dir, mode)
-    pkg = sys.modules[__name__.rsplit(".", 1)[0]]
+    # Every tier above fast, AND fast on the Linux wheel layout, where the
+    # binaries sit under python/mojolearn/<vendor>/ and a plain
+    # `from . import _mojolearn_x` would not find them. Explicit load,
+    # installed under the canonical names.
     missing = []
     for name in _MODULES:
         full = f"{pkg.__name__}.{name}"
         path = os.path.join(ident_dir, name + ".so")
         if not os.path.exists(path):
-            # NEVER fall back to the FAST binary under an upper-tier name:
-            # a wrong-mode module that imports is a mislabelled
-            # measurement. Install a stub that raises BY NAME on use, so
-            # the estimators that need this binding fail loudly and the
-            # rest of the package (the tree families on an AMD box whose
+            # NEVER fall back to the FAST binary under an upper-tier name,
+            # and NEVER fall back to the OTHER VENDOR'S binary under this
+            # one's: a wrong-mode or wrong-vendor module that imports is a
+            # mislabelled measurement. Install a stub that raises BY NAME on
+            # use, so the estimators that need this binding fail loudly and
+            # the rest of the package (the tree families on an AMD box whose
             # linalg binding did not build, E2 round 2) keeps working.
             missing.append(name)
             module = _MissingUpperTier(full, path, _build_script(name), mode)
@@ -159,6 +442,9 @@ def select():
             spec = importlib.util.spec_from_loader(full, loader, origin=path)
             module = importlib.util.module_from_spec(spec)
             loader.exec_module(module)
+            # WHAT THE BINARY SAYS BEATS THE DIRECTORY IT SAT IN. Raises on
+            # a vendor mismatch; see the module docstring.
+            _check_vendor(module, name, path)
         sys.modules[full] = module
         setattr(pkg, name, module)
     if len(missing) == len(_MODULES):
@@ -251,11 +537,13 @@ def load_set(mode):
         )
     if mode in _SETS:
         return _SETS[mode]
-    pkg_dir = os.path.dirname(os.path.abspath(__file__))
-    tier_dir = pkg_dir if mode == "fast" else os.path.join(pkg_dir, mode)
+    # The vendor axis is folded in by tier_dir(): the same `<vendor>/` root
+    # `select()` used, so a per-call `numeric_mode=` can never reach across
+    # to the other vendor's set.
+    tier_dir_ = tier_dir(mode)
     modules, missing = {}, []
     for name in _MODULES:
-        path = os.path.join(tier_dir, name + ".so")
+        path = os.path.join(tier_dir_, name + ".so")
         if not os.path.exists(path):
             missing.append(name)
             continue
@@ -268,12 +556,14 @@ def load_set(mode):
         spec = importlib.util.spec_from_loader(full, loader, origin=path)
         module = importlib.util.module_from_spec(spec)
         loader.exec_module(module)
+        # WHAT THE BINARY SAYS BEATS THE DIRECTORY IT SAT IN.
+        _check_vendor(module, name, path)
         sys.modules[full] = module
         modules[name] = module
     if not modules:
         raise ImportError(
             f"mojolearn: numeric_mode={mode!r} but no binary for that tier "
-            f"exists under {tier_dir}. Build them with\n    "
+            f"exists under {tier_dir_}. Build them with\n    "
             f"{'' if mode == 'fast' else 'MOJOLEARN_NUMERIC_MODE=' + mode + ' '}"
             "bash bindings/build*.sh"
         )
@@ -285,7 +575,7 @@ def load_set(mode):
         compiled = _CODE_MODE.get(gb.gbdt_numeric_mode(), "unknown")
         if compiled != mode:
             raise RuntimeError(
-                f"mojolearn: {tier_dir}/_mojolearn_gbdt.so was compiled "
+                f"mojolearn: {tier_dir_}/_mojolearn_gbdt.so was compiled "
                 f"{compiled} but sits in the {mode} directory; rebuild it"
             )
     _SETS[mode] = _ModeSet(mode, modules, missing)
@@ -431,3 +721,59 @@ def numeric_mode():
                 "the wrong directory; rebuild both sets"
             )
     return loaded
+
+
+def vendor():
+    """'metal', 'cuda' or 'hip': the accelerator API of the binaries this
+    process runs, READ BACK FROM THE BINARIES of the current default tier.
+
+    Same shape as `numeric_mode()`: the selector's choice is only reported
+    after the loaded set has been asked and agrees. On the flat layout
+    (macOS, or a Linux source checkout) the selector made no choice and the
+    binaries are the only source; on the Linux wheel layout the directory
+    was chosen by `_layout()` and every binary in it was checked against
+    that directory when it loaded, so this cannot disagree with the
+    directory without having already raised.
+
+    Returns None only for binaries built before the read-back existed
+    (before 2026-08-29), and says so in `vendor_how()` rather than
+    inventing a name from the platform."""
+    global _VENDOR_SELECTED
+    kind, base = _layout()
+    loaded = default_mode()
+    try:
+        s = load_set(loaded)
+    except Exception:
+        s = None
+    said = None
+    if s is not None:
+        for name in _MODULES:
+            if name in s.missing:
+                continue
+            try:
+                said = read_vendor(getattr(s, name))
+            except ImportError:
+                continue
+            if said is not None:
+                break
+    if kind == "vendor":
+        expected = os.path.basename(base)
+        if said is not None and said != expected:
+            raise RuntimeError(
+                f"mojolearn: the loaded {loaded} binaries were compiled for "
+                f"{said} but the selector opened the {expected} set -- a "
+                "binary is in the wrong vendor directory; rebuild both sets"
+            )
+        return expected
+    if said is not None:
+        _VENDOR_SELECTED = said
+    return _VENDOR_SELECTED
+
+
+def vendor_how():
+    """How the vendor was decided, for `python -m mojolearn verify` and
+    `mojolearn doctor`: 'flat layout; read from the loaded binaries',
+    'MOJOLEARN_VENDOR in the environment', or 'the box probe (device nodes
+    and driver libraries)'."""
+    _layout()
+    return _VENDOR_HOW

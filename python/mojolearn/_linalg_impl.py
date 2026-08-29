@@ -148,15 +148,12 @@ def _load():
     if _binding_cache is not None:
         return _binding_cache
     mode = _backend.numeric_mode()
-    pkg_dir = os.path.dirname(os.path.abspath(__file__))
-    # The directory IS the mode name for every tier above fast, the same
-    # rule `_backend.select()` uses. Spelled `== "identical"` until
-    # 2026-08-29, which loaded the FAST binary for a deterministic
-    # request.
-    if mode != "fast":
-        path = os.path.join(pkg_dir, mode, _MODULE_NAME + ".so")
-    else:
-        path = os.path.join(pkg_dir, _MODULE_NAME + ".so")
+    # The directory comes from `_backend.tier_dir`, the ONE place the tier
+    # and vendor axes are folded into a path (python/mojolearn/<vendor>/
+    # on the Linux wheel, the package directory otherwise). This joined
+    # `pkg_dir, mode` itself until 2026-08-29 and would have missed the
+    # vendor directory entirely.
+    path = os.path.join(_backend.tier_dir(mode), _MODULE_NAME + ".so")
     full = __name__.rsplit(".", 1)[0] + "." + _MODULE_NAME
     existing = sys.modules.get(full)
     if existing is not None and getattr(existing, "__file__", None) == path:

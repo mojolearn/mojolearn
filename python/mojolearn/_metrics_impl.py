@@ -112,9 +112,9 @@ def _get_binding():
     if mode == "fast":
         from . import _mojolearn_metrics as mod
     else:
-        pkg_dir = os.path.dirname(os.path.abspath(__file__))
-        # The directory IS the mode name for every tier above fast.
-        path = os.path.join(pkg_dir, mode, "_mojolearn_metrics.so")
+        # The directory comes from `_backend.tier_dir`, which folds in the
+        # vendor axis (python/mojolearn/<vendor>/<tier>/ on the Linux wheel).
+        path = os.path.join(_backend.tier_dir(mode), "_mojolearn_metrics.so")
         if not os.path.exists(path):
             raise ImportError(
                 f"mojolearn: MOJOLEARN_NUMERIC_MODE={mode} but "
