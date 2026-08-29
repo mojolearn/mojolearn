@@ -1,0 +1,33 @@
+This script will automatically download and install Pixi (latest) for you.
+Getting it from this url: https://github.com/prefix-dev/pixi/releases/latest/download/pixi-x86_64-unknown-linux-musl.tar.gz
+The 'pixi' binary is installed into '/root/.pixi/bin'
+Updating '/root/.bashrc'
+Please restart or source your shell.
+PIXI_INSTALL_EXIT=0
+BUILD_base_PASS1_EXIT=0
+BUILD_estimators_PASS1_EXIT=0
+BUILD_gbdt_PASS1_EXIT=0
+BUILD_linalg_PASS1_EXIT=0
+BUILD_metrics_PASS1_EXIT=0
+BUILD_rf_PASS1_EXIT=0
+BUILD_solver_PASS1_EXIT=0
+BUILD_svm_PASS1_EXIT=0
+BUILD_trees_PASS1_EXIT=0
+BUILD_tsa_PASS1_EXIT=0
+BUILD_base_PASS2_EXIT=0
+BUILD_estimators_PASS2_EXIT=0
+BUILD_gbdt_PASS2_EXIT=1
+BUILD_linalg_PASS2_EXIT=0
+BUILD_metrics_PASS2_EXIT=0
+BUILD_rf_PASS2_EXIT=0
+BUILD_solver_PASS2_EXIT=0
+BUILD_svm_PASS2_EXIT=0
+BUILD_trees_PASS2_EXIT=0
+BUILD_tsa_PASS2_EXIT=0
+    import numpy as np
+ModuleNotFoundError: No module named 'numpy'
+DOWNLOAD_higgs_EXIT=1
+    import pandas as pd
+ModuleNotFoundError: No module named 'pandas'
+Read from remote host 138.197.151.233: Operation timed out
+client_loop: send disconnect: Broken pipe

@@ -1,0 +1,101 @@
+FSPEED-HEADER family=seq lane=attention arm=ours mode=FAST device=Apple_M4 rounds=3 size=shipped
+FSPEED-NOTE lane=attention arm=ours entry costs the port pays and the opponent does not: llama_refuse_bad_inputs / mamba_refuse_bad_inputs download every weight per call, and eager_attention_forward synchronizes per (batch, head). See bench/speed/SEQ_SPEED.md.
+FSPEED-NOTE lane=attention arm=ours PRECISION: FAST routes every GEMM through MAX matmul, which on NVIDIA is a TENSOR-CORE (TF32-class, 10 mantissa bits) path -- measured 200 TFLOP/s against cublas-fp32 44.4 and cublas-tf32 207.5 on an H100. The fair vendor opponent for a lane that routes a GEMM is therefore a TF32 arm (torch-gpu-tf32), NOT an fp32 one, and an FSPEED-AGREE line computed against an fp32 reference is measuring THIS CUT and not a defect. Lanes routing no GEMM (rmsnorm) are unaffected and are the control. DEVIATION 1885.
+FSPEED-WEIGHTS lane=attention shape=lane.b2_l4_d32_kv2 tensor=norm1.weight n=32 hash=10553ebe1cacb130
+FSPEED-WEIGHTS lane=attention shape=lane.b2_l4_d32_kv2 tensor=norm2.weight n=32 hash=43392443a35b61f3
+FSPEED-WEIGHTS lane=attention shape=lane.b2_l4_d32_kv2 tensor=q_proj.weight n=1024 hash=b73a1a48e0c0d9f7
+FSPEED-WEIGHTS lane=attention shape=lane.b2_l4_d32_kv2 tensor=k_proj.weight n=1024 hash=de208e4e2a16ff1f
+FSPEED-WEIGHTS lane=attention shape=lane.b2_l4_d32_kv2 tensor=v_proj.weight n=1024 hash=427375797d9ef375
+FSPEED-WEIGHTS lane=attention shape=lane.b2_l4_d32_kv2 tensor=o_proj.weight n=1024 hash=1947e064f026cb25
+FSPEED-WEIGHTS lane=attention shape=lane.b2_l4_d32_kv2 tensor=gate_proj.weight n=2048 hash=284aeae6d05c4f7c
+FSPEED-WEIGHTS lane=attention shape=lane.b2_l4_d32_kv2 tensor=up_proj.weight n=2048 hash=b2fdf8deeea86017
+FSPEED-WEIGHTS lane=attention shape=lane.b2_l4_d32_kv2 tensor=down_proj.weight n=2048 hash=d1d0e3eb84d5f951
+FSPEED-WEIGHTS lane=attention shape=lane.b2_l4_d32_kv2 tensor=x n=256 hash=a55d417a40e61d75
+FSPEED-NOTE lane=attention arm=ours llama_refuse_bad_inputs alone shape=lane.b2_l4_d32_kv2 ms=3.284 (inside the transformer lane's round, not inside attention/mlp/rmsnorm)
+FSPEED-WARMUP lane=attention arm=ours shape=lane.b2_l4_d32_kv2 ms=3.684
+FSPEED lane=attention arm=ours shape=lane.b2_l4_d32_kv2 round=1 ms=3.365 hash=ffea5f20a005c245
+FSPEED lane=attention arm=ours shape=lane.b2_l4_d32_kv2 round=2 ms=3.386 hash=ffea5f20a005c245
+FSPEED lane=attention arm=ours shape=lane.b2_l4_d32_kv2 round=3 ms=3.294 hash=ffea5f20a005c245
+FSPEED-NOTE lane=attention arm=ours dump shape=lane.b2_l4_d32_kv2 n=256 path=/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122711-gemmseq/dump/seq.attention.lane.b2_l4_d32_kv2.f32.bin
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t1 tensor=norm1.weight n=4096 hash=2633ac9556859b7d
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t1 tensor=norm2.weight n=4096 hash=03b0bbae422c35f2
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t1 tensor=q_proj.weight n=16777216 hash=65536eef389758f8
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t1 tensor=k_proj.weight n=4194304 hash=2d21f4a6f190e936
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t1 tensor=v_proj.weight n=4194304 hash=2032c9fee9598af5
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t1 tensor=o_proj.weight n=16777216 hash=54a671c58956b474
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t1 tensor=gate_proj.weight n=58720256 hash=22d060eb830e8fa7
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t1 tensor=up_proj.weight n=58720256 hash=6adb4a35fc897af1
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t1 tensor=down_proj.weight n=58720256 hash=623f9a160be08bbb
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t1 tensor=x n=4096 hash=50601e14d24b1558
+FSPEED-NOTE lane=attention arm=ours llama_refuse_bad_inputs alone shape=llama8b.prefill.t1 ms=1262.231 (inside the transformer lane's round, not inside attention/mlp/rmsnorm)
+FSPEED-WARMUP lane=attention arm=ours shape=llama8b.prefill.t1 ms=33.5
+FSPEED lane=attention arm=ours shape=llama8b.prefill.t1 round=1 ms=23.214 hash=e547a9bc7ba84b6a
+FSPEED lane=attention arm=ours shape=llama8b.prefill.t1 round=2 ms=17.085 hash=e547a9bc7ba84b6a
+FSPEED lane=attention arm=ours shape=llama8b.prefill.t1 round=3 ms=16.982 hash=e547a9bc7ba84b6a
+FSPEED-NOTE lane=attention arm=ours dump shape=llama8b.prefill.t1 n=4096 path=/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122711-gemmseq/dump/seq.attention.llama8b.prefill.t1.f32.bin
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t8 tensor=norm1.weight n=4096 hash=2554a09c79b9bec3
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t8 tensor=norm2.weight n=4096 hash=54e8bdb50be343e8
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t8 tensor=q_proj.weight n=16777216 hash=7f5e346f0f234ca1
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t8 tensor=k_proj.weight n=4194304 hash=628683891b4ef505
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t8 tensor=v_proj.weight n=4194304 hash=a6e71091674bf598
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t8 tensor=o_proj.weight n=16777216 hash=f322159c55f94428
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t8 tensor=gate_proj.weight n=58720256 hash=e4ae7d5f3c49e108
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t8 tensor=up_proj.weight n=58720256 hash=e1e76c5d8ad14599
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t8 tensor=down_proj.weight n=58720256 hash=cd680ef665764882
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t8 tensor=x n=32768 hash=5fae3cdceecdb9e2
+FSPEED-NOTE lane=attention arm=ours llama_refuse_bad_inputs alone shape=llama8b.prefill.t8 ms=1331.519 (inside the transformer lane's round, not inside attention/mlp/rmsnorm)
+FSPEED-WARMUP lane=attention arm=ours shape=llama8b.prefill.t8 ms=35.376
+FSPEED lane=attention arm=ours shape=llama8b.prefill.t8 round=1 ms=22.424 hash=dab24b18ece70e11
+FSPEED lane=attention arm=ours shape=llama8b.prefill.t8 round=2 ms=18.967 hash=dab24b18ece70e11
+FSPEED lane=attention arm=ours shape=llama8b.prefill.t8 round=3 ms=18.739 hash=dab24b18ece70e11
+FSPEED-NOTE lane=attention arm=ours dump shape=llama8b.prefill.t8 n=32768 path=/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122711-gemmseq/dump/seq.attention.llama8b.prefill.t8.f32.bin
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t128 tensor=norm1.weight n=4096 hash=8e82620235b4b085
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t128 tensor=norm2.weight n=4096 hash=c813f5e53899180d
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t128 tensor=q_proj.weight n=16777216 hash=c1de6ff4941afb8e
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t128 tensor=k_proj.weight n=4194304 hash=803e4f6ec477b10e
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t128 tensor=v_proj.weight n=4194304 hash=1d4fa08f9f620c73
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t128 tensor=o_proj.weight n=16777216 hash=27755bc1220fd650
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t128 tensor=gate_proj.weight n=58720256 hash=2cc46a3f987b2a35
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t128 tensor=up_proj.weight n=58720256 hash=8df6060ace203936
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t128 tensor=down_proj.weight n=58720256 hash=8005f6e866ca1053
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t128 tensor=x n=524288 hash=4cfda6cf929d166b
+FSPEED-NOTE lane=attention arm=ours llama_refuse_bad_inputs alone shape=llama8b.prefill.t128 ms=1495.539 (inside the transformer lane's round, not inside attention/mlp/rmsnorm)
+FSPEED-WARMUP lane=attention arm=ours shape=llama8b.prefill.t128 ms=49.064
+FSPEED lane=attention arm=ours shape=llama8b.prefill.t128 round=1 ms=27.041 hash=1517a52ca382b1fa
+FSPEED lane=attention arm=ours shape=llama8b.prefill.t128 round=2 ms=24.217 hash=1517a52ca382b1fa
+FSPEED lane=attention arm=ours shape=llama8b.prefill.t128 round=3 ms=24.821 hash=1517a52ca382b1fa
+FSPEED-NOTE lane=attention arm=ours dump shape=llama8b.prefill.t128 n=524288 path=/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122711-gemmseq/dump/seq.attention.llama8b.prefill.t128.f32.bin
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t512 tensor=norm1.weight n=4096 hash=267ae3b42cf4bd1e
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t512 tensor=norm2.weight n=4096 hash=fd8c830453040971
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t512 tensor=q_proj.weight n=16777216 hash=40d0cc6a048d905d
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t512 tensor=k_proj.weight n=4194304 hash=b5af8e64afe64f60
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t512 tensor=v_proj.weight n=4194304 hash=73e1eafa7abcd857
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t512 tensor=o_proj.weight n=16777216 hash=f8a091300d6898c7
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t512 tensor=gate_proj.weight n=58720256 hash=8b7b13c66c2b3235
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t512 tensor=up_proj.weight n=58720256 hash=f61e5f2f2b37b282
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t512 tensor=down_proj.weight n=58720256 hash=35adb0b4c5e445b4
+FSPEED-WEIGHTS lane=attention shape=llama8b.prefill.t512 tensor=x n=2097152 hash=4dea4dee43008247
+FSPEED-NOTE lane=attention arm=ours llama_refuse_bad_inputs alone shape=llama8b.prefill.t512 ms=1358.589 (inside the transformer lane's round, not inside attention/mlp/rmsnorm)
+FSPEED-WARMUP lane=attention arm=ours shape=llama8b.prefill.t512 ms=106.821
+FSPEED lane=attention arm=ours shape=llama8b.prefill.t512 round=1 ms=84.735 hash=e02620df4d0c41da
+FSPEED lane=attention arm=ours shape=llama8b.prefill.t512 round=2 ms=85.719 hash=e02620df4d0c41da
+FSPEED lane=attention arm=ours shape=llama8b.prefill.t512 round=3 ms=88.224 hash=e02620df4d0c41da
+FSPEED-NOTE lane=attention arm=ours dump shape=llama8b.prefill.t512 n=2097152 path=/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122711-gemmseq/dump/seq.attention.llama8b.prefill.t512.f32.bin
+FSPEED-WEIGHTS lane=attention shape=llama8b.decode.t1.ctx512 tensor=norm1.weight n=4096 hash=a16c25d484966855
+FSPEED-WEIGHTS lane=attention shape=llama8b.decode.t1.ctx512 tensor=norm2.weight n=4096 hash=fdf0b3b94538d853
+FSPEED-WEIGHTS lane=attention shape=llama8b.decode.t1.ctx512 tensor=q_proj.weight n=16777216 hash=dc126cf683d35c94
+FSPEED-WEIGHTS lane=attention shape=llama8b.decode.t1.ctx512 tensor=k_proj.weight n=4194304 hash=9bb615a45cfbb66d
+FSPEED-WEIGHTS lane=attention shape=llama8b.decode.t1.ctx512 tensor=v_proj.weight n=4194304 hash=b189eaa5691f2cc2
+FSPEED-WEIGHTS lane=attention shape=llama8b.decode.t1.ctx512 tensor=o_proj.weight n=16777216 hash=f460975b0ff8b858
+FSPEED-WEIGHTS lane=attention shape=llama8b.decode.t1.ctx512 tensor=gate_proj.weight n=58720256 hash=4b88f0c6df895117
+FSPEED-WEIGHTS lane=attention shape=llama8b.decode.t1.ctx512 tensor=up_proj.weight n=58720256 hash=0bcff2e323b1e524
+FSPEED-WEIGHTS lane=attention shape=llama8b.decode.t1.ctx512 tensor=down_proj.weight n=58720256 hash=513387fa68b57e5e
+FSPEED-WEIGHTS lane=attention shape=llama8b.decode.t1.ctx512 tensor=x n=4096 hash=a1509d4577b1d620
+FSPEED-WEIGHTS lane=attention shape=llama8b.decode.t1.ctx512 tensor=ctx.x n=2097152 hash=cf5b380dda81451a
+FSPEED-NOTE lane=attention arm=ours llama_refuse_bad_inputs alone shape=llama8b.decode.t1.ctx512 ms=1357.114 (inside the transformer lane's round, not inside attention/mlp/rmsnorm)
+FSPEED-WARMUP lane=attention arm=ours shape=llama8b.decode.t1.ctx512 ms=33.241
+FSPEED lane=attention arm=ours shape=llama8b.decode.t1.ctx512 round=1 ms=20.978 hash=33abfdd6c1472371
+FSPEED lane=attention arm=ours shape=llama8b.decode.t1.ctx512 round=2 ms=17.996 hash=33abfdd6c1472371
+FSPEED lane=attention arm=ours shape=llama8b.decode.t1.ctx512 round=3 ms=16.88 hash=33abfdd6c1472371
+FSPEED-NOTE lane=attention arm=ours dump shape=llama8b.decode.t1.ctx512 n=4096 path=/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/fast_speed/mac-2026-08-28_122711-gemmseq/dump/seq.attention.llama8b.decode.t1.ctx512.f32.bin
+FSPEED-DONE lane=attention mode=FAST
