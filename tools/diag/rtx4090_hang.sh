@@ -106,7 +106,7 @@ for w in if_small if_default rf_gc rf_small rf_reg rf_then_et et_twice; do
 done
 
 # ---------------------------------------------------------------- D4 (leg 2)
-# The fixed svm binding (DEVIATION 1943) through the probe's own lanes, each
+# The fixed svm binding (DEVIATION 1944) through the probe's own lanes, each
 # under its own timeout, then the stability shape.
 run d4_break_iforest_rfclf 600 $PY tools/identity_break.py --lanes iforest,rf-clf --json "$D/identity_break.iforest_rfclf.json"
 run d4_stability_iforest 400 $PY tools/repeat_run_stability.py --repeats 6 --lanes iforest --json "$D/stability.iforest.json"

@@ -104,7 +104,7 @@ struct IsolationForestEstimator(Movable):
     var knobs: IFLaunchKnobs
 
     def __init__(out self, ctx: DeviceContext) raises:
-        """DEVIATION 1943: the empty model is built on the CALLER'S context.
+        """DEVIATION 1944: the empty model is built on the CALLER'S context.
         Until 2026-08-29 this read `IsolationForestModel(DeviceContext())`,
         a second DeviceContext created while `iforest_run_host`'s own was
         alive, and `fit` then replaced that model's eight buffers with ones
