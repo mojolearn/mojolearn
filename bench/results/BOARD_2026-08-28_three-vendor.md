@@ -200,10 +200,11 @@ Random forest and isolation forest are FASTER on the MI325X than on the H100.
 Extra trees is 4.4-4.6x slower on AMD at both rungs, on the same source — an
 AMD-specific ET problem with a number on it for the first time.
 
-**The three gbdt lanes are absent and the reason is real, not harness:**
-`bindings/build_gbdt.sh` fails on the MI325X, the 64-lane histogram wall —
-CatBoost's 32-lane slice layout refusing a 64-wide wavefront at compile time.
-DEVIATIONS 1906 and 1910 unblocked part of it; the rest is still there.
+**The three gbdt lanes are absent from this board because the AMD FAST gbdt
+SPEED rows are unrun.** FAST gradient boosting builds and runs on the MI325X
+since DEVIATIONS 1906 and 1910 (commits `f853e8df` and `19b319c7`;
+`bench/results/e1/2026-08-29_093711-mojolearn-e2-amd/p9_fast_build_gbdt.log`
+and `stability/fast.txt`, gbdt lanes STABLE 6/6).
 
 ---
 

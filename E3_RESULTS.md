@@ -200,17 +200,18 @@ flush Apple-shaped assertions before a leg.
 
 **AMD FAST, measured:** `bindings/build_estimators.sh` now BUILDS on the
 MI325X under FAST (the Jacobi row at 64 worked), so FAST PCA/tSVD/OLS exist
-there for the first time. `bindings/build_gbdt.sh` under FAST does NOT,
-and never has: the FAST histogram accumulators
+there for the first time. At this round `bindings/build_gbdt.sh` under FAST
+did not build there, because the FAST histogram accumulators
 (`gbdt/.../hist_one_byte.mojo:202`, `hist_2_one_byte_base.mojo:240`,
-`point_hist_half_byte_template.mojo:163`) carry CatBoost's 32-lane slice
-layout and refuse a 64-wide wavefront at compile time, by design
-("write the wide-wavefront layout before letting LANE_WIDTH be 64").
-IDENTICAL builds and certifies on AMD because its column resolves to the
-32-lane identity floor. **FAST gradient boosting on AMD is therefore a
-port (a 64-lane histogram layout for three accumulators), not a gate
-fix**, and the bootstrap now keeps each FAST build's log with the first
-error line instead of a bare "did not build".
+`point_hist_half_byte_template.mojo:163`) carried CatBoost's 32-lane slice
+layout and refused a 64-wide wavefront at compile time. IDENTICAL builds and
+certifies on AMD because its column resolves to the 32-lane identity floor.
+FAST gradient boosting builds and runs on the MI325X since DEVIATIONS 1906
+and 1910 (commits `f853e8df` and `19b319c7`;
+`bench/results/e1/2026-08-29_093711-mojolearn-e2-amd/p9_fast_build_gbdt.log`
+and `stability/fast.txt` in that leg, gbdt lanes STABLE 6/6). The AMD FAST
+gbdt SPEED rows are still unrun. The bootstrap keeps each FAST build's log
+with the first error line instead of a bare "did not build".
 
 ## Round 10, commit `afb22dd` (2026-08-23): the gates' IDENTICAL passes on the boxes
 
@@ -391,8 +392,10 @@ NVIDIA is the known approximate-PTX `sqrt` (row 10).
 
 1. The linalg gate's IDENTICAL pass on both boxes (one leg; the scripts
    now run it regardless of the FAST pass).
-2. FAST gradient boosting on AMD: the 64-lane histogram layout (a port;
-   IDENTICAL is unaffected and certified).
+2. FAST gradient boosting on AMD builds and runs on the MI325X since
+   DEVIATIONS 1906/1910 (`f853e8df`, `19b319c7`; leg
+   `bench/results/e1/2026-08-29_093711-mojolearn-e2-amd`, gbdt lanes
+   STABLE 6/6). What is still owed is the AMD FAST gbdt SPEED rows.
 3. The gemm Phase 2b adoption decision (k-NN IDENTICAL price; the gemm
    lane's price harness is wired, no number published; no measuring
    today by Andrew's word).

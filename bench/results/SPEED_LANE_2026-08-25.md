@@ -80,7 +80,8 @@ was visible instead of reading as success.
 
 STILL OWED: a subnormal-bearing fixture. Nothing here is small enough to make
 `ftz` fire, so the denormal half of the seam cost is measured in TIME and
-never in bits. And this is ONE box; the H100 and MI325X columns are owed.
+never in bits. The H100 and MI325X columns have since been measured, sections
+1.2a and 1.2c.
 
 ### 1.2a AND IT IS NOT THE SAME PRICE ON EVERY VENDOR
 
@@ -163,9 +164,10 @@ DEVIATION 1092. Three arms exist and none of them is the experiment:
 The arm that would answer it is the identical kernel's OWN tiled plan with
 ONLY the fold-order pin removed, everything else held. It is now WRITTEN
 (`gemm/mojo_only/gemm_unpinned.mojo`, 945 lines; `gemm/UNPINNED_CONTROL.md`,
-439) and is NOT YET WIRED INTO THE PRICE HARNESS OR RUN. **Until it runs, the
-cost of the profile as distinct from the cost of writing our own GEMM is
-UNMEASURED.** Do not take the nearest available ratio.
+439), wired into the price harness and run on 2026-08-25, section 1.2
+(pinned/unpinned 1.522x). That ratio is the cost of the profile as distinct
+from the cost of writing our own GEMM. Do not take the nearest available
+ratio in its place.
 
 Its prediction is on record ahead of the measurement, which is this project's
 habit because a wrong prediction is the most useful thing a gate produces:

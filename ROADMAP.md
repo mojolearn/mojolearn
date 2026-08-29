@@ -1,5 +1,11 @@
 # What else the GPU is worth pointing at
 
+**Status 2026-08-29.** Shipped since this plan was written, and no longer
+governed by it, are `NearestNeighbors` (0.1.0); warp-select wired into k-NN
+(DEVIATION 1922); k-NN ties pinned (DEVIATIONS 500 and 501, identical on
+three vendors); `AgglomerativeClustering` and `SpectralClustering` (0.2.0).
+The plan body below is unchanged.
+
 **Nothing here is in scope until it is promoted out of this file.** The tree
 under `gbdt/` is still a transliteration of CatBoost's symmetric learner and
 "COPY, DO NOT IMPROVE" still governs every file in it. This document exists so

@@ -136,11 +136,13 @@ against the Apple M4's (Metal): cd 23 stages, gemm 61, iforest 124, kde 9,
 linkage 10, metrics 64 and svm 35, plus the `ridge_*` and `logreg_*` cells,
 byte-identical Apple-to-NVIDIA and Apple-to-AMD in every case.
 
-Three lanes have not been compared, because they have never run anywhere but
-one Apple M4: `spectral`, `holtwinters` and `tsa`. Their pins come from the
-same source and they are expected to match, but the leg is owed and until it
-runs that is an expectation rather than a measurement. No lane inherits a
-neighbor's certificate.
+Three lanes carry less than that. `spectral` and `holtwinters` have an
+Apple card (`241aed6`) and an AMD MI325X card (`26eb8ba`, leg
+`bench/results/e1/2026-08-28_203552-mojolearn-e2-amd`), and the two are
+byte-identical, but a `numerics.mojo` commit sits between them, so no
+same-commit certificate is claimed for either. `tsa` has run on the M4 only.
+No NVIDIA leg has run any of the three. No lane inherits a neighbor's
+certificate.
 
 FAST, the default, is a different path with those pins compiled away. It
 promises speed and makes no cross-vendor claim anywhere, by design.
@@ -172,8 +174,8 @@ that is an untested promise and is marked as one rather than assumed.
 | `KernelDensity` | cuML | kernel density estimation; `bandwidth='scott'` and `'silverman'` refused by name | yes | yes | yes | Apple + NVIDIA + AMD, 9 stages |
 | `AgglomerativeClustering` | cuML, cuVS, RAFT | single linkage over RAFT's Boruvka MST | yes | yes | yes | Apple + NVIDIA + AMD, 10 stages |
 | `IsolationForest` | cuML | isolation forest, anomaly scores | yes | yes (Apple + AMD) | yes | Apple + NVIDIA + AMD, 124 card stages |
-| `SpectralClustering` | cuML, cuVS, RAFT | kNN connectivity graph, normalized Laplacian, thick-restart Lanczos | yes | yes | yes | Apple only, leg owed |
-| `ExponentialSmoothing` | cuML `tsa` | Holt-Winters, additive and multiplicative | yes | yes | yes | Apple only, leg owed |
+| `SpectralClustering` | cuML, cuVS, RAFT | kNN connectivity graph, normalized Laplacian, thick-restart Lanczos | yes | yes | yes | Apple + AMD cards (not at one commit); NVIDIA owed |
+| `ExponentialSmoothing` | cuML `tsa` | Holt-Winters, additive and multiplicative | yes | yes | yes | Apple + AMD cards (not at one commit); NVIDIA owed |
 | `kpss_test`, `select_d` | cuML `tsa` | stationarity test and auto_arima's choice of d | yes | yes | yes | Apple only, leg owed |
 | `mojolearn.metrics` | cuML, RAFT | fourteen scoring functions, scikit-learn's names with cuML's defaults and semantics | yes | yes | yes | Apple + NVIDIA + AMD, 64 stages |
 | `mojolearn.linalg.matmul` | -- | FP32 matrix product, profile `mojolearn.identical.gemm.fp32.v1` | yes | yes (Apple + NVIDIA + AMD) | yes | Apple + NVIDIA + AMD, 61 stages |
@@ -309,12 +311,13 @@ and the comparison against a card from another box is
 | GPU | wheel | source build | certificates |
 |---|---|---|---|
 | Apple silicon (Metal) | yes, macOS arm64, `pip install mojolearn` | yes | E1, E2 |
-| NVIDIA (CUDA) | no wheel yet | yes, `tools/e2_remote_leg.sh` | E1, E2 on H100 |
-| AMD CDNA (HIP) | no wheel yet | yes, same script | E1, E2 on MI325X and MI300X |
+| NVIDIA (CUDA) | no wheel yet | yes, `tools/e2_remote_leg.sh` | E1, E2, E2U, E3 (H100); run-to-run stability (RTX 4090) |
+| AMD CDNA (HIP) | no wheel yet | yes, same script | E1, E2, E2U, E3, stability (MI325X); E1U (MI300X) |
 
 Support is one source; validation is what the certificates say and nothing
-more. Performance has been measured on exactly one machine, an M4 laptop
-with 10 cores and 16 GB, and the numbers below carry that.
+more. The benchmark table below is from one machine, an M4 laptop with 10
+cores and 16 GB. FAST timings on an NVIDIA H100 and an AMD MI325X are in
+`bench/results/BOARD_2026-08-28_three-vendor.md`.
 
 ## Benchmarks
 
@@ -354,8 +357,10 @@ The higgs GBDT accuracy gap is stated because it is there.
 
 - GPU only. No CPU fallback exists and none is planned for this release.
 - The wheel is macOS arm64. CUDA and HIP are source builds.
-- Validated on one M4 for performance; correctness and identity validated on
-  the M4, an H100, an MI325X and an MI300X through the certificates above.
+- The benchmark table is from one M4; FAST timings on an H100 and an MI325X
+  are in `bench/results/BOARD_2026-08-28_three-vendor.md`. Correctness and
+  identity are validated on the M4, an H100, an MI325X and an MI300X through
+  the certificates above.
 - `IDENTICAL` refuses rather than guessing. A GPU column that misses the
   frozen identity floor, a k-NN arm that needs a warp primitive a column does
   not have, or `k > 256` on the identical k-NN selector raise with a named

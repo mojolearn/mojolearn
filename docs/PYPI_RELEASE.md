@@ -47,7 +47,7 @@ Check each; do not start the build until all hold.
 
 * `git status` is clean for everything the wheel reads. `bindings/`,
   `packaging/`, `python/`, `pixi.toml`, `pixi.lock`, `README.md`, `LICENSE`,
-  `NOTICE`, and every Mojo source directory the five extensions compile.
+  `NOTICE`, and every Mojo source directory the ten extensions compile.
   Uncommitted edits build into the wheel and are unreproducible afterwards.
 * Version bumped in `python/pyproject.toml`, `python/mojolearn/_version.py`,
   and `CITATION.cff` (`version`, `date-released`). One commit, pushed to
@@ -180,12 +180,14 @@ python3.12 -m venv tp && tp/bin/pip install --no-cache-dir \
   --extra-index-url https://pypi.org/simple/ \
   "mojolearn==X.Y.Z"
 tp/bin/python /Users/andrewhendel/CascadeProjects/mojolearn/packaging/macos/smoke.py
+MOJOLEARN_NUMERIC_MODE=deterministic tp/bin/python \
+  /Users/andrewhendel/CascadeProjects/mojolearn/packaging/macos/smoke.py
 MOJOLEARN_NUMERIC_MODE=identical tp/bin/python \
   /Users/andrewhendel/CascadeProjects/mojolearn/packaging/macos/smoke.py
 ```
 
-Both invocations must succeed (FAST and IDENTICAL sets). Then repeat the
-whole dance for PyPI.
+All three invocations must succeed (fast, deterministic and identical sets).
+Then repeat the whole dance for PyPI.
 
 ```sh
 tools/release_runner.sh                                   # terminal 1

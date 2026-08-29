@@ -20,9 +20,10 @@ certificate; a released result card is.
 
 ## The three tiers, and what each one promises
 
-The mode is a build-time choice with a runtime selector
-(`MOJOLEARN_NUMERIC_MODE`, read at import by `python/mojolearn/_backend.py`).
-Each rung keeps the rung below it.
+The mode is a runtime parameter. `mojolearn.set_numeric_mode()` or
+`Estimator(numeric_mode=...)` selects one of three binary sets that ship in
+the same wheel; `MOJOLEARN_NUMERIC_MODE` only sets the starting default
+(`python/mojolearn/_mode.py`). Each rung keeps the rung below it.
 
 | tier | promise | what it pins |
 |---|---|---|
@@ -42,7 +43,7 @@ of 179 rows** and MOVED on 4 -- NVIDIA `gbdt-depthwise` at higgs 1M, NVIDIA
 `gbdt-lossguide` at 1M and 2M, and AMD `rf` at synthclf. All four are
 histogram-flush lanes.
 
-### The middle tier's value is MEASURED on Apple, not argued
+### The middle tier's value is MEASURED on three vendors, not argued
 
 `tools/repeat_run_stability.py --concurrent` holds all three tiers live in
 one process and calls them round-robin -- three estimators, three binaries,
@@ -151,10 +152,6 @@ challenge was answered by measurement on 2026-08-29:
 wide k chosen to provoke a split-K epilogue -- returned ONE hash over 6
 repeats.
 
-**THAT MEASUREMENT IS APPLE-ONLY, AND THE CLAIM IT IS USED FOR IS NOT.** On
-NVIDIA and AMD this path is cuBLAS and rocBLAS, where a split-K reduction
-with an atomic epilogue is a documented source of run-to-run variation. So:
-
 | column | GEMM run-to-run | status |
 |---|---|---|
 | Apple Metal / MAX `matmul` | measured stable, 6 repeats, one wide-k shape | no determinism pin needed |
@@ -192,9 +189,9 @@ anywhere.
 | Extra Trees | Available | Three-vendor E1/E2 cards for the recorded configurations | Supported beta |
 | k-means, k-NN, DBSCAN | Available | Apple, NVIDIA and AMD cards recorded and IDENTICAL: E1U cards 3/3 on both vendor columns and 80/80 E2U cells at `fe00e8a` (E3 round 8), re-verified card-by-card at `144aa5b` on 2026-08-28 -- kmeans 77 stages, knn 6, dbscan 3, identical Apple<->H100 and Apple<->MI325X | Measured cross-vendor on three columns |
 | PCA, truncated SVD, OLS | Available | In the same 80/80 E2U result as the clustering row: `E3_RESULTS.md` round 8 at `fe00e8a` certifies k-means, k-NN, DBSCAN, PCA, tSVD, OLS, Ridge and logistic together, 80 cells identical on Apple<->H100 AND Apple<->MI325X (60 identical plus 20 refused with the same message on every column) | Measured cross-vendor on three columns |
-| General FP32 GEMM | Available through existing specialized routes | Profile `mojolearn.identical.gemm.fp32.v1`, frozen; the identity card is bit-identical on Apple M4, NVIDIA H100 and AMD MI325X, 60 stages each, at leg 11 commit `144aa5b` (E3 round 11, judge section 7). Shapes and plans outside the card's 62-shape, eight-plan sweep have run on Apple only | Measured cross-vendor for the card's sweep; no Python surface for it is built into the released wheel |
-| Isolation forest | Available | **Apple<->AMD bit-identical, 123 card stages** at `a0a0eee` (2026-08-28, its first cross-vendor run; the lane had been writing this card to a scratch path since before it was in any round). NVIDIA column pending | Measured on two columns |
-| Neural-network operators (mamba, transformer) | Available, not released | **Apple<->AMD bit-identical: mamba 17 card stages, transformer 30**, at `a0a0eee`. Transformer's clause (a) passes on 262,634 cells and clause (d) -- decode == prefill -- passes under IDENTICAL and FAILS under FAST, which is the profile working as written. NVIDIA column pending; mamba's FAST arm has never been built on any vendor | Measured on two columns; NOT part of the released surface |
+| General FP32 GEMM | Available through existing specialized routes | Profile `mojolearn.identical.gemm.fp32.v1`, frozen; the identity card is bit-identical on Apple M4, NVIDIA H100 and AMD MI325X, 60 stages each, at leg 11 commit `144aa5b` (E3 round 11, judge section 7). Shapes and plans outside the card's 62-shape, eight-plan sweep have run on Apple only | Measured cross-vendor for the card's sweep; exposed as `mojolearn.linalg.matmul` in 0.2.0 |
+| Isolation forest | Available | **Apple<->NVIDIA<->AMD bit-identical, 123 card stages** at `a0a0eee` (E3 round 13, 2026-08-28, its first cross-vendor run; the lane had been writing this card to a scratch path since before it was in any round; NVIDIA card `bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/iforest.identical.card`) | Measured on three columns |
+| Neural-network operators (mamba, transformer) | Available, not released | **Apple<->NVIDIA<->AMD bit-identical: mamba 17 card stages, transformer 30**, at `a0a0eee` (the NVIDIA cards are in `bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/`). Transformer's clause (a) passes on 262,634 cells and clause (d) -- decode == prefill -- passes under IDENTICAL and FAILS under FAST, which is the profile working as written. Mamba's FAST arm has never been built on any vendor | Measured on three columns; NOT part of the released surface |
 
 ## Version rule
 

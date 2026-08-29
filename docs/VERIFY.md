@@ -69,11 +69,13 @@ every verdict, including a green one.
 
 ## The FAST build makes no identity claim, so `verify` refuses on it
 
-`python/mojolearn/_backend.py` selects one of two binary sets at import time.
+`python/mojolearn/_mode.py` selects one of three binary sets that ship in
+the same wheel.
 
 ```
-python/mojolearn/_mojolearn*.so            NUMERIC_FAST       the default
-python/mojolearn/identical/_mojolearn*.so  NUMERIC_IDENTICAL  the claim
+python/mojolearn/_mojolearn*.so                NUMERIC_FAST           the default
+python/mojolearn/deterministic/_mojolearn*.so  NUMERIC_DETERMINISTIC  run-to-run stable
+python/mojolearn/identical/_mojolearn*.so      NUMERIC_IDENTICAL      the claim
 ```
 
 The FAST arm is fast precisely because it keeps the order-dependent
@@ -89,9 +91,9 @@ already does with FAST cards, which it records and never judges
 (`tools/e3_round_judge.sh` section 7, "FAST cards recorded, never judged").
 DEVIATION 923.
 
-The mode is read at import time, so it has to be in the environment before
-the interpreter imports the package. Setting it inside a running session does
-nothing.
+The mode can also be set in code, `mojolearn.set_numeric_mode('identical')`
+before calling `verify`. The environment variable sets the starting default
+for the session and nothing more.
 
 ### How the mode is established, which is weaker than it should be
 

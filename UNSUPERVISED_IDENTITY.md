@@ -273,7 +273,7 @@ must be the same one.
 | | runs | columns | distinct answers |
 |---|---|---|---|
 | k-NN under **FAST** | 3 | APPLE only | **3** |
-| k-NN under **IDENTICAL** | 3 | APPLE + AMD | **1** |
+| k-NN under **IDENTICAL** | 3 | APPLE + NVIDIA + AMD | **1** |
 
 The FAST row is the measurement that makes the gate worth running. Three
 consecutive runs of one binary, one fixture, one device gave three
@@ -352,22 +352,12 @@ what `k > 64` costs.
    bit-identical cards for all three algorithms -- 86 matched stage pairs,
    zero divergences, 0 findings on either leg, commit parity proven by a
    source-tree hash rather than by a `commit.txt` the rented box could not
-   write. **NVIDIA is still owed**, and `E1_RESULTS.md`'s own honesty note
-   is why that matters: for the tree ensembles Apple<->AMD agreed through
-   every stage while an H100 diverged. See `E1U_RESULTS.md`. What remains
+   write. NVIDIA ran the same day (E3 round 8, 3/3 identical), which closed
+   the gap `E1_RESULTS.md`'s own honesty note had named, that for the tree
+   ensembles Apple<->AMD agreed through every stage while an H100 diverged.
+   See `E1U_RESULTS.md`. What remains
    of the original item: `check-column-invariance` pays the
    source-level half; the arithmetic half is E1's and is untouched by it.
-   Rows 19-26 have not been to a real MI300X. `bench/unsupervised_trace_
-   main.mojo` and E1_RUNBOOK's Phase 3u are the payload, ready to run; what
-   is missing is the box. The GBDT rows HAVE been -- Apple<->AMD agree and
-   an H100 diverges at `tree001.winners.scores` -- which is the measured
-   proof that two backends agreeing closes nothing, and by the same argument
-   three columns on one backend agreeing closes less.
-   **Run `check-ieee-arith` FIRST on the real AMD box.** The AMD leg of
-   2026-08-23 recorded "a*b+c is UNFUSED on this backend" from the counting
-   arm that was later shown to be an artifact (row 9's correction); AMD's
-   actual contraction behaviour is therefore UNMEASURED, and it is the
-   behaviour `identical_mul_add` exists for.
 2. **`core/column_stats.mojo`'s float `block.sum` pair** is row 20's defect
    in the same directory, reached by PCA and OLS. One import from the fix,
    left named rather than taken, because `decomposition/` is another lane.

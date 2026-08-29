@@ -1,5 +1,7 @@
 # E1 RESULTS — cross-vendor bit-identity, three GPU vendors
 
+Superseded by `E2_RESULTS.md` round 2 (`53d56ef`) and `E3_RESULTS.md`. Every divergence recorded below is closed, and cross-device portability is measured (95/95 in E2 round 2, 111/111 both directions in E3 round 9).
+
 **Claim demonstrated 2026-08-23**: training runs of tree-ensemble models on
 three different GPU vendors — Apple M4 (Metal), AMD MI325X (HIP/CDNA3),
 NVIDIA H100 (PTX/Hopper) — from ONE source tree at ONE commit, under

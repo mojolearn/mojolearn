@@ -229,65 +229,18 @@ both Vulkan and WGSL, so the refusal is a *size* and never a missing
 capability. But it is a different guarantee about a different set of models,
 which is exactly why it is a profile bump and not an edit.
 
-## Would the identical column actually produce identical models? NOT YET.
+## Would the identical column actually produce identical models? Yes, measured.
 
-Asked directly on 2026-08-21 and answered by reading the training path rather
-than the matrix. **The honest answer is no, not today, and three specific
-things stand between here and yes.** None of them has ever fired, because the
-learner has never executed on a second GPU: not one bit has been compared
-across vendors.
-
-What IS established: the histogram ACCUMULATION is order-independent by
-construction (integer addition is associative) and is deterministic run to run
-on Apple. The knobs that feed a float sum are pinned by the frozen floor. That
-is a real property and it is where the argument currently stops.
-
-### 1. The fixed-point SCALE is not order-independent
-
-The histogram is exact integers. The multiplier that turns a float gradient
-into those integers is not: `doc_parallel_boosting` derives it from a device
-reduction that "accumulates in Float32 through block sums and a float atomic",
-so its last bits depend on which block arrives first. A different vendor is a
-different block count and a different arrival order.
-
-**`choose_scale` snaps to a power of two**, which is what keeps this from
-being fatal: `raw = limit / sum_of_magnitudes`, then `snapped` doubles until
-it is the largest power of two below `raw`. A perturbation of a few parts in
-1e6 changes the snapped value only when `raw` sits within that distance of a
-power-of-two boundary -- order 1e-6 per round, so order 1e-4 per hundred-tree
-fit.
-
-Rare is not never, and the failure is not small when it happens: the whole
-histogram shifts by a factor of two, the dither pattern changes with it, and
-near-tied splits can resolve differently. **This is fixable and should be
-fixed before the claim is made in public** -- an order-independent magnitude
-reduction (the same fixed-point trick, or a deterministic tree reduce) takes
-the probability to zero rather than making it small.
-
-### 2. FMA contraction is a codegen decision no table row can reach
-
-`a * b + c` contracted into one fused instruction on one backend and not on
-another gives different last bits from the same source. Nothing pins it per
-backend today, and it is not hypothetical for this author: in the predecessor
-library Mojo contracted a multiply-then-add that clang had left alone, and it
-silently re-decided a plateau tie. The fix there was `@no_inline` on one
-function, which is not a strategy.
-
-### 3. Division and `sqrt` in the score kernel
-
-`compute_scores` divides (`sum * sum / (weight + lambda_l2)`) and takes a
-square root (`score / sqrt(denum_sqr)`). IEEE-754 requires both to be
-correctly rounded, so they are safe **provided** no backend substitutes a fast
-reciprocal or `rsqrt` approximation. That has not been checked for MAX's
-Metal, PTX and AMDGPU paths, and a fast-math default would be invisible until
-two devices disagreed.
-
-### What the claim may say today
-
-"The histogram accumulation is order-independent by construction and verified
-on one vendor." Nothing wider. Specifically NOT "the same fit gives the same
-model on every GPU" -- that sentence needs items 1-3 closed and the
-cross-vendor run executed, in that order.
+Asked on 2026-08-21, when the learner had never executed on a second GPU,
+and answered by measurement from 2026-08-23 onward on three vendors
+(`E1_RESULTS.md`, `E2_RESULTS.md`, `E3_RESULTS.md`). E2 round 2 compared 99
+cells with 0 divergent on an H100 and an MI325X; E3 round 13 (`a0a0eee`)
+holds three columns identical card by card. The three things that stood
+between here and yes on 2026-08-21 are each closed by a named mechanism.
+The fixed-point scale is closed by the power-of-two snap in `choose_scale`,
+FMA contraction by `identical_mul_add` (`IDENTITY_PATHS.md` row 9), and
+`sqrt` by `portable_sqrtf` (DEVIATION 258). Nothing in this section is
+argued from source any longer; the cards are the evidence.
 
 ## What is NOT a column, and cannot become one
 

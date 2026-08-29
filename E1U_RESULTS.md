@@ -69,11 +69,10 @@ for on 2026-08-23. **The 2026-08-22 AMD leg's "a\*b+c is UNFUSED on this
 backend" was that artifact**, now superseded by a measurement off the
 built-to-separate arm.
 
-Consequence: `identical_mul_add` is bit-inert on **Apple and AMD**. Its
-value now rests entirely on backends that do not contract by default — the
-NVIDIA column has not been re-measured with the separating arm. Row 9's
-remedy is unchanged and its justification is one vendor thinner than it was
-this morning.
+The consequence is that all three measured columns contract (1629/1629, `bootstrap.log`
+of `bench/results/e1/2026-08-28_131651-runpod-nvidia`), so `identical_mul_add`
+is bit-inert on **Apple, NVIDIA and AMD**. Row 9's remedy stands for a future
+column that does not contract.
 
 ### 2. AMD honors denormals; Metal flushes — and the pins absorb it
 
@@ -127,9 +126,12 @@ build report NOT ANSWERABLE.
 
 ## What is NOT claimed
 
-- **Two vendors, not three.** NVIDIA has not run this leg. `E1_RESULTS.md`'s
-  own honesty note is the reason that matters: for the tree ensembles,
-  Apple↔AMD agreed through every stage while an H100 diverged at
+- **Three vendors, measured.** The H100 ran this leg the same day
+  (`bench/results/e1/2026-08-28_131651-runpod-nvidia/e1u/`), and k-means,
+  k-NN and DBSCAN are identical on all three columns from E3 round 8
+  (`fe00e8a`) through round 13 (`a0a0eee`). `E1_RESULTS.md`'s own honesty
+  note is why the third column mattered. For the tree ensembles, Apple↔AMD
+  agreed through every stage while an H100 diverged at
   `tree001.winners.scores`. Two backends agreeing closes nothing.
 - **One configuration per algorithm**, not the config matrix. k-means runs
   `INIT_ARRAY` (k-means++'s float scan is not exercised); k-NN runs the
@@ -137,6 +139,8 @@ build report NOT ANSWERABLE.
   memory budget.
 - **Nothing is claimed for FAST**, which is deliberately per-vendor — and on
   this k-NN fixture is not even reproducible across runs on one device.
-- The MI300X leg ran ONCE. The Apple side was reproduced (three separate
-  runs, plus a detached-worktree rebuild that came out byte-identical);
-  the AMD side has no repeat.
+- The MI300X leg ran once. The Apple side was reproduced (three separate
+  runs, plus a detached-worktree rebuild that came out byte-identical); the
+  same cards have since reproduced on an MI325X in six E3 legs
+  (`2026-08-23_132856`, `141817`, `150003`, `163350`, `172650` and
+  `2026-08-28_173933` under `bench/results/e1/`).

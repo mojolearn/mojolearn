@@ -254,12 +254,16 @@ covtype's deep-narrow, launch-bound shape remains the CPU arms' best
 ground. depthwise and lossguide get their first Mac rows here and both are
 behind.
 
-Landed after that board and NOT yet measured on Apple: DEV 1902 (ridx-only
-splits), 1911-1914 (quantized shared-memory histograms), 1916-1919 (random
-forest launch batching) and 1921-1923 (k-NN warp-select and dispatch),
-merged and gated at `b90ab1c`. Several arms in that round are routed to the
-NVIDIA and AMD FAST columns by the kernel matrix and do not touch this
-wheel at all.
+Landed after that board were DEV 1902 (ridx-only splits), 1911-1914 (quantized
+shared-memory histograms), 1916-1919 (random forest launch batching) and
+1921-1923 (k-NN warp-select and dispatch), merged and gated at `b90ab1c`.
+Measured on Apple at `a8d838e` on 2026-08-28
+(`bench/results/fast_speed/2026-08-28-APPLE-forest.md`). There, rf on covtype is
+16.89x faster than lightgbm-cpu, gbdt-symmetric on year is 1.14x faster than
+catboost-cpu and et on covtype is 1.12x faster than sklearn; depthwise is
+1.08x, rf 1.23x and lossguide 1.47x behind their CPU arms. Several arms in
+that round are routed to the NVIDIA and AMD FAST columns by the kernel
+matrix and do not touch this wheel at all.
 
 ### Known issues
 
@@ -296,10 +300,10 @@ wheel at all.
 
 ### Packaging
 
-- The wheel now carries TEN extensions in two numeric modes rather than
+- The wheel now carries TEN extensions in THREE numeric tiers rather than
   five: the 0.1.0 set plus `_mojolearn_svm.so`, `_mojolearn_solver.so`,
   `_mojolearn_metrics.so`, `_mojolearn_tsa.so` and `_mojolearn_linalg.so`,
-  each built FAST and IDENTICAL by
+  each built fast, deterministic and identical by
   `packaging/macos/build_release_wheel.sh`, which refuses a stale file by
   mtime.
 - Requirements are unchanged: Apple silicon from the M1 up, macOS 11 or
