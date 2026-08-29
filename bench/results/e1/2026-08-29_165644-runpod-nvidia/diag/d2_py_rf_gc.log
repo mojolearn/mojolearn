@@ -1,0 +1,9 @@
+2371 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53a7c0000000, nodemask=85)
+STEP rf_fit1: ok 1.02s
+Timeout (0:01:50)!
+Thread 0x00007791160ca440 [python3] (most recent call first):
+  File "/root/mojolearn/python/mojolearn/randomforest.py", line 250 in _fit_arrays
+  File "/root/mojolearn/python/mojolearn/randomforest.py", line 398 in fit
+  File "/root/mojolearn/bench/results/e1/2026-08-29_205744-263e4ca72bea/diag/py_probes.py", line 21 in <lambda>
+  File "/root/mojolearn/bench/results/e1/2026-08-29_205744-263e4ca72bea/diag/py_probes.py", line 11 in step
+  File "/root/mojolearn/bench/results/e1/2026-08-29_205744-263e4ca72bea/diag/py_probes.py", line 21 in <module>

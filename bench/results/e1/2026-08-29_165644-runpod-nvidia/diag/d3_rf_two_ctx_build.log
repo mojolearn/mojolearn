@@ -1,0 +1,41 @@
+7468 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a9900000000, nodemask=170)
+Imported from /root/mojolearn/ensemble/mojo_only/rf_ctx_probe.mojo:30:
+Imported from /root/mojolearn/ensemble/randomforest.mojo:334:
+Imported from /root/mojolearn/ensemble/instruments.mojo:44:
+/root/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/ensemble/mojo_only/rf_ctx_probe.mojo:30:
+Imported from /root/mojolearn/ensemble/randomforest.mojo:334:
+Imported from /root/mojolearn/ensemble/instruments.mojo:44:
+/root/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/ensemble/mojo_only/rf_ctx_probe.mojo:30:
+Imported from /root/mojolearn/ensemble/randomforest.mojo:334:
+Imported from /root/mojolearn/ensemble/instruments.mojo:44:
+/root/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/ensemble/mojo_only/rf_ctx_probe.mojo:30:
+Imported from /root/mojolearn/ensemble/randomforest.mojo:334:
+Imported from /root/mojolearn/ensemble/instruments.mojo:44:
+/root/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/ensemble/mojo_only/rf_ctx_probe.mojo:30:
+Imported from /root/mojolearn/ensemble/randomforest.mojo:334:
+Imported from /root/mojolearn/ensemble/instruments.mojo:44:
+/root/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here

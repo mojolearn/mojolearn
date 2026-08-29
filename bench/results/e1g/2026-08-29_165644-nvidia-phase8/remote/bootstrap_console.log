@@ -1,0 +1,66 @@
+
+=== provenance === 20:57:44
+07ca87abed3d5e3f74b3f12f3791c6c685206475
+Linux 263e4ca72bea 6.8.0-134-generic #134~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Tue Jun 30 14:05:04 UTC  x86_64 x86_64 x86_64 GNU/Linux
+
+=== pixi === 20:57:44
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 20:57:47
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 20:57:47
+phase 9 builds: build_rf.sh build_svm.sh build_trees.sh
+phase 9 tiers:  identical
+identical set: 3 of 10 binaries
+--- stability identical
+    | et-clf           | STABLE   | YES  6/6 calls agreed   | 707d2c92e92f6a40 |
+    
+    mode=identical  stable=1  moved=0  refused=0
+    wrote /root/mojolearn/bench/results/e1/2026-08-29_205744-263e4ca72bea/stability/identical.json
+concurrent probe SKIPPED: needs all three tiers, P9_TIERS=identical
+
+=== phase 9 diag: tools/diag/rtx4090_hang.sh === 20:59:19
+    d2_py_if_default FAIL(rc=1) 112
+    d2_py_rf_gc FAIL(rc=1) 112
+    d2_py_rf_small FAIL(rc=1) 112
+    d2_py_rf_reg FAIL(rc=1) 111
+    d2_py_rf_then_et FAIL(rc=1) 112
+    d2_py_et_twice PASS 2
+    d4_break_iforest_rfclf HUNG(killed at 600s) 600
+    d4_stability_iforest HUNG(killed at 400s) 400
+    d4_stability_rfclf HUNG(killed at 400s) 400
+    d3_if_T4_model_on_second_ctx_build PASS 9
+    d3_if_T4_model_on_second_ctx_run HUNG(killed at 90s) 90
+    d3_if_T1_two_alive_fit_second_build PASS 9
+    d3_if_T1_two_alive_fit_second_run PASS 2
+    d3_if_T3_two_alive_fit_first_build PASS 8
+    d3_if_T3_two_alive_fit_first_run PASS 2
+    d3_if_T2_sequential_build PASS 9
+    d3_if_T2_sequential_run PASS 2
+    d3_rf_two_ctx_build PASS 17
+    d3_rf_two_ctx_run PASS 2
+    d3_rf_same_ctx SKIPPED
+
+=== done === 21:34:32
+artifacts in /root/mojolearn/bench/results/e1/2026-08-29_205744-263e4ca72bea
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

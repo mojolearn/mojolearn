@@ -1,0 +1,5 @@
+3877 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x18ed00000000, nodemask=170)
+STEP et_fit1: ok 0.98s
+STEP et_fit2: ok 0.04s
+STEP rf_fit_after_et: ok 0.03s
+PY_PROBE DONE

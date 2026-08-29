@@ -1,0 +1,14 @@
+6676 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a2680000000, nodemask=170)
+ctxprobe +0ms: T1: ctx1
+ctxprobe +214ms: T1: ctx2
+ctxprobe +215ms: T1: fit on ctx2 with ctx1 alive
+ctxprobe +215ms: fit begin
+if_diag: build kernel enqueue begin
+if_diag: build kernel enqueue returned, synchronize begin
+if_diag: build kernel synchronize returned
+ctxprobe +1027ms: fit returned, n_nodes0=27
+if_diag: path kernel enqueue begin
+if_diag: path kernel enqueue returned, synchronize begin
+if_diag: path kernel synchronize returned
+ctxprobe +1027ms: score returned, len 64
+ctxprobe DONE

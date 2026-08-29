@@ -1,0 +1,10 @@
+1372 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7ac140000000, nodemask=170)
+# repeat-run stability, mode=identical, repeats=6, interleave=False
+# 2026-08-29 20:59:17
+
+| lane             | verdict  | same answer every time? | hashes |
+|------------------|----------|-------------------------|--------|
+| et-clf           | STABLE   | YES  6/6 calls agreed   | 707d2c92e92f6a40 |
+
+mode=identical  stable=1  moved=0  refused=0
+wrote /root/mojolearn/bench/results/e1/2026-08-29_205744-263e4ca72bea/stability/identical.json

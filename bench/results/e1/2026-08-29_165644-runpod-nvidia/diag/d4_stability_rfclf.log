@@ -1,0 +1,7 @@
+5535 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x12dec0000000, nodemask=85)
+5535 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b5380000000, nodemask=170)
+# repeat-run stability, mode=identical, repeats=6, interleave=False
+# 2026-08-29 21:25:23
+
+| lane             | verdict  | same answer every time? | hashes |
+|------------------|----------|-------------------------|--------|
