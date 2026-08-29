@@ -49,11 +49,18 @@ one process and calls them round-robin -- three estimators, three binaries,
 three device contexts, one GPU, one fit, one input. On an Apple M4 on
 2026-08-29, 12 rounds, **ten attempts**:
 
-| tier | result over 10 attempts |
-|---|---|
-| `fast` | **MOVED in 8 of 10** -- 2 or 3 different answers out of 24 calls; STABLE in the other 2 |
-| `deterministic` | STABLE in 10 of 10 -- one answer in 12 calls, every time |
-| `identical` | STABLE in 10 of 10 -- one answer in 12 calls, every time |
+| tier | Apple M4, 10 attempts | NVIDIA RTX 4090, 2026-08-29 |
+|---|---|---|
+| `fast` | **MOVED in 8 of 10** -- 2 or 3 different answers out of 24 calls; STABLE in the other 2 | **MOVED -- 24 calls returned 24 DIFFERENT answers** |
+| `deterministic` | STABLE in 10 of 10 -- one answer in 12 calls | STABLE -- one answer in 12 calls |
+| `identical` | STABLE in 10 of 10 -- one answer in 12 calls | STABLE -- one answer in 12 calls |
+
+**The NVIDIA column is the starker one and it is the one that matters.** No two
+of twenty-four `fast` calls agreed, on the same fit, the same input and the
+same GPU, while the deterministic build returned one answer twelve times. The
+full tables, the cross-vendor by-product (13 lanes bit-identical Apple to
+NVIDIA, 0 divergent) and the three legs it took to get one NVIDIA column are
+in [bench/results/stability/RESULTS.md](bench/results/stability/RESULTS.md).
 
 **The 8-in-10, not a single reading.** A race fires when the schedule happens
 to interleave the right way, so one STABLE reading of the `fast` arm is a
@@ -128,7 +135,7 @@ with an atomic epilogue is a documented source of run-to-run variation. So:
 | column | GEMM run-to-run | status |
 |---|---|---|
 | Apple Metal / MAX `matmul` | measured stable, 6 repeats, one wide-k shape | no determinism pin needed |
-| NVIDIA cuBLAS | **UNVERIFIED** | open |
+| NVIDIA cuBLAS | **measured stable**, 6 repeats, same wide-k shape, RTX 4090 (2026-08-29, `bench/results/e1/2026-08-29_044510-runpod-nvidia`) | no determinism pin needed |
 | AMD rocBLAS | **UNVERIFIED** | open |
 
 If either upper column moves at a shipped shape, rows 24/27/28/40/41 become
