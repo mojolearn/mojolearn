@@ -1,8 +1,8 @@
 {
  "mode": "identical",
  "repeats": 2,
- "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
- "vendor": "apple-m4",
+ "platform": "Linux-6.8.0-59-generic-x86_64-with-glibc2.39",
+ "vendor": "amd-mi325x",
  "commit": "97f7507b9259dbdfe176393f203a2f6e64e1db1e",
  "fixtures": {
   "base": {
@@ -123,17 +123,17 @@
   "rf-clf/denormal": {
    "verdict": "STABLE",
    "hashes": [
-    "2363613ef6aefae5",
-    "2363613ef6aefae5"
+    "27ef29556c61c005",
+    "27ef29556c61c005"
    ],
    "parts": [
     {
-     "predict": "3d0aa791061c4a58",
-     "proba": "2772fd485d8cc837"
+     "predict": "c67ed635011d8072",
+     "proba": "f59c636c131c3b0d"
     },
     {
-     "predict": "3d0aa791061c4a58",
-     "proba": "2772fd485d8cc837"
+     "predict": "c67ed635011d8072",
+     "proba": "f59c636c131c3b0d"
     }
    ]
   },
@@ -268,15 +268,15 @@
   "rf-reg/denormal": {
    "verdict": "STABLE",
    "hashes": [
-    "ad12b54984871f40",
-    "ad12b54984871f40"
+    "0b44bed8c97a3a1b",
+    "0b44bed8c97a3a1b"
    ],
    "parts": [
     {
-     "predict": "760f74454cf7200b"
+     "predict": "2679b6e1e17cdf36"
     },
     {
-     "predict": "760f74454cf7200b"
+     "predict": "2679b6e1e17cdf36"
     }
    ]
   },
@@ -3352,16 +3352,16 @@
   "iforest/denormal": {
    "verdict": "STABLE",
    "hashes": [
-    "54ea9b5c8c3fc38b",
-    "54ea9b5c8c3fc38b"
+    "045af056aca03f84",
+    "045af056aca03f84"
    ],
    "parts": [
     {
-     "scores": "e2e670dd46c7bcc3",
+     "scores": "e02afe2b2c049221",
      "predict": "b4103763a390908e"
     },
     {
-     "scores": "e2e670dd46c7bcc3",
+     "scores": "e02afe2b2c049221",
      "predict": "b4103763a390908e"
     }
    ]
