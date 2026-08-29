@@ -133,9 +133,33 @@ run_arm() {  # tpb rows phases?
       "$TREES" "$DEPTH" sqrt $ph 2>&1 | tee "$OUT/fit_${NAME}_${rows}_tpb${tpb}${ph:+_phases}.txt"
 }
 
+# ---- DEVIATION 1945: the OLD tree as an arm. ET_PROFILE_OLD_COMMIT names a
+# commit (the 2026-08-28 speed arm's 4f6a17a) whose fit_once is built from a
+# git worktree on the box and run at the same shape, so "the push cost 52 s
+# today" can be set beside "what it cost then" on one machine in one hour.
+if [ -n "${ET_PROFILE_OLD_COMMIT:-}" ] && git rev-parse --verify "$ET_PROFILE_OLD_COMMIT^{commit}" >/dev/null 2>&1; then
+  rm -rf /root/mojolearn_old; git worktree prune
+  if git worktree add -f /root/mojolearn_old "$ET_PROFILE_OLD_COMMIT" > "$OUT/old_worktree.log" 2>&1; then
+    echo "et_profile: build OLD arm at $ET_PROFILE_OLD_COMMIT $(date +%T)"
+    ( cd /root/mojolearn_old && ${NICE:-} "$REPO/.pixi/envs/default/bin/mojo" build -I . extratrees/bench/fit_once.mojo         -o "$REPO/build/et_fit_once_tpbold" ) > "$OUT/build_tpbold.log" 2>&1       && ARMS="$ARMS old" || { echo "et_profile: OLD BUILD FAILED"; grep -m3 "error" "$OUT/build_tpbold.log"; }
+  else
+    echo "et_profile: OLD worktree failed (see old_worktree.log)"
+  fi
+fi
+
 for tpb in $ARMS; do
   run_arm "$tpb" "$ROWS" phases
 done
+
+# ---- host profile of the shipped arm: where the HOST time goes ------------
+if command -v perf >/dev/null 2>&1 && [ -x build/et_fit_once_tpbshipped ]; then
+  echo "--- perf record (host) shipped rows=$ROWS $(date +%T)"
+  TO 900 perf record -F 499 -g -o "$OUT/perf_shipped.data" -- build/et_fit_once_tpbshipped "$DATA" "$NAME" "$ROWS" "$NFEAT" "$NCLASS" "$TREES" "$DEPTH" sqrt > "$OUT/perf_shipped_run.txt" 2>&1 || echo "perf exit $?"
+  perf report -i "$OUT/perf_shipped.data" --stdio --no-children --percent-limit 1.5 2>/dev/null | grep -v "^#" | grep -v "^$" | head -60 > "$OUT/perf_shipped_report.txt"
+  head -25 "$OUT/perf_shipped_report.txt"; rm -f "$OUT/perf_shipped.data"
+else
+  echo "et_profile: perf not available on this image, host profile skipped"
+fi
 if [ "$ROWS2" -gt 0 ]; then
   for tpb in $ARMS; do
     run_arm "$tpb" "$ROWS2"
