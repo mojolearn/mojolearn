@@ -1,0 +1,31 @@
+# repeat-run stability, mode=identical, repeats=6, interleave=False
+# 2026-08-29 09:41:29
+
+| lane             | verdict  | same answer every time? | hashes |
+|------------------|----------|-------------------------|--------|
+| dbscan           | STABLE   | YES  6/6 calls agreed   | a4608e954c7420b7 |
+| et-clf           | REFUSED  | n/a (refused)           | ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolea |
+| gbdt-depthwise   | STABLE   | YES  6/6 calls agreed   | cd27a77258047c8e |
+| gbdt-lossguide   | STABLE   | YES  6/6 calls agreed   | e65c2a2686bf7341 |
+| gbdt-symmetric   | STABLE   | YES  6/6 calls agreed   | dc987497271f92b1 |
+| gemm-pinned      | STABLE   | YES  6/6 calls agreed   | 18ff2fd121056aee |
+| gemm-vendor      | STABLE   | YES  6/6 calls agreed   | 18ff2fd121056aee |
+| iforest          | REFUSED  | n/a (refused)           | ImportError: mojolearn: /root/mojolearn/python/mojolearn/identical/_mojolearn_svm.so is no |
+| kmeans           | STABLE   | YES  6/6 calls agreed   | da3cb10e46c91256 |
+| knn-tied         | STABLE   | YES  6/6 calls agreed   | eb5d50fc1d09b0e1 |
+| logistic         | STABLE   | YES  6/6 calls agreed   | 7037da78aa5950dd |
+| ols              | STABLE   | YES  6/6 calls agreed   | 24aff16838df704a |
+| pca              | STABLE   | YES  6/6 calls agreed   | abe2157474e81469 |
+| rf-clf           | REFUSED  | n/a (refused)           | ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolea |
+| ridge            | STABLE   | YES  6/6 calls agreed   | b72095bd450e4d05 |
+| tsvd             | STABLE   | YES  6/6 calls agreed   | eb98ef49f9c747f0 |
+
+mode=identical  stable=13  moved=0  refused=3
+REFUSED: et-clf, iforest, rf-clf
+  et-clf: ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_trees.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_trees.sh
+  iforest: ImportError: mojolearn: /root/mojolearn/python/mojolearn/identical/_mojolearn_svm.so is not built; build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_svm.sh
+  rf-clf: ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_rf.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_rf.sh
+wrote /root/mojolearn/bench/results/e1/2026-08-29_093711-mojolearn-e2-amd/stability/identical.json
