@@ -216,7 +216,7 @@ for WAVE in "${WAVE_ARR[@]}"; do
     continue
   fi
   log "wave $WAVE_N: phases=${MOJOLEARN_E1_PHASES:-all} lanes=${WAVE:-all}, bound ${WORK_SECONDS}s"
-  $SSH "export PATH=/root/.pixi/bin:\$PATH; cd /root/mojolearn && MOJOLEARN_E1_PHASES='${MOJOLEARN_E1_PHASES:-}' MOJOLEARN_E1_LANES='$WAVE' timeout -k 30 $WORK_SECONDS bash tools/e1_bootstrap.sh > /root/e2_run_w$WAVE_N.log 2>&1; echo \"WAVE-$WAVE_N-EXIT=\$?  (124 = hit the work bound)\"; tail -30 /root/e2_run_w$WAVE_N.log"
+  $SSH "export PATH=/root/.pixi/bin:\$PATH; cd /root/mojolearn && MOJOLEARN_E1_PHASES='${MOJOLEARN_E1_PHASES:-}' MOJOLEARN_E1_LANES='$WAVE' MOJOLEARN_P9_BINDINGS='${MOJOLEARN_P9_BINDINGS:-}' MOJOLEARN_P9_LANES='${MOJOLEARN_P9_LANES:-}' timeout -k 30 $WORK_SECONDS bash tools/e1_bootstrap.sh > /root/e2_run_w$WAVE_N.log 2>&1; echo \"WAVE-$WAVE_N-EXIT=\$?  (124 = hit the work bound)\"; tail -30 /root/e2_run_w$WAVE_N.log"
 done
 
 # EXTRA CHECKS: things phase 8 does not know about yet, run only when asked.
