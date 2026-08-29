@@ -56,6 +56,7 @@ Spelling only; gated by `check_if_refusals` over n = 1..4097.
 
 from std.math import log2
 from std.memory import bitcast
+from std.sys import is_defined
 
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -79,6 +80,12 @@ from isolation_forest.ported.isolation_forest.isolation_tree_builder import (
     build_isolation_trees_global_kernel,
     compute_path_lengths_global_kernel,
 )
+#: DIAGNOSTIC (2026-08-29, the RTX 4090 hang): flushed prints on either side
+#: of the two launches so a hang is placed at "enqueue" (MAX compiles the
+#: kernel there) or at "synchronize" (the kernel is resident). A no-op in
+#: every build that does not name it. See isolation_tree_builder.mojo.
+comptime DIAG_TRACE = is_defined["MOJOLEARN_IF_DIAG_TRACE"]()
+
 from mojo_only.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
@@ -577,6 +584,8 @@ struct IsolationForest(Movable):
                 probe.append(Int32(bitcast[DType.int32](curand(st))))
             trace.record_list_i32("if.rng.probe", probe)
 
+        comptime if DIAG_TRACE:
+            print("if_diag: build kernel enqueue begin", flush=True)
         ctx.enqueue_function[build_isolation_trees_global_kernel](
             data.unsafe_ptr(),
             Int64(n_rows),
@@ -606,7 +615,11 @@ struct IsolationForest(Movable):
             grid_dim=(n_trees, 1, 1),
             block_dim=(knobs.build_tpb, 1, 1),
         )
+        comptime if DIAG_TRACE:
+            print("if_diag: build kernel enqueue returned, synchronize begin", flush=True)
         ctx.synchronize()
+        comptime if DIAG_TRACE:
+            print("if_diag: build kernel synchronize returned", flush=True)
 
         model.tree_n_nodes_host = read_i32(ctx, model.global_tree_n_nodes, n_trees)
         model.tree_max_depth_host = read_i32(ctx, model.global_tree_max_depth, n_trees)
@@ -700,6 +713,8 @@ struct IsolationForest(Movable):
         256`, one thread per row-major sample."""
         var threads = path_tpb
         var blocks = (n_rows + threads - 1) // threads
+        comptime if DIAG_TRACE:
+            print("if_diag: path kernel enqueue begin", flush=True)
         ctx.enqueue_function[compute_path_lengths_global_kernel](
             _mp_f32(input_rowmajor),
             Int64(n_rows),
@@ -714,7 +729,11 @@ struct IsolationForest(Movable):
             grid_dim=(blocks, 1, 1),
             block_dim=(threads, 1, 1),
         )
+        comptime if DIAG_TRACE:
+            print("if_diag: path kernel enqueue returned, synchronize begin", flush=True)
         ctx.synchronize()
+        comptime if DIAG_TRACE:
+            print("if_diag: path kernel synchronize returned", flush=True)
 
     def compute_anomaly_scores(
         self,

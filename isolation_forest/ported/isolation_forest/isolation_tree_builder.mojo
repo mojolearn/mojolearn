@@ -195,6 +195,23 @@ def compute_c_n(n_samples: Int) -> Float32:
 #: length and score in the forest must move.
 comptime SAB_U64_SWAP = is_defined["MOJOLEARN_IF_SABOTAGE_U64_SWAP"]()
 
+#: DIAGNOSTIC BISECT GUARDS (2026-08-29, the RTX 4090 hang). Each is a
+#: build define, each is a no-op unless named, and NONE of them may appear
+#: in a shipped build: they truncate the kernel so a hang can be placed.
+#: `tools/diag/rtx4090_hang.sh` builds `mojo_only/if_hang_probe.mojo` once
+#: per guard on the rented box and records which truncations still hang.
+#:   MOJOLEARN_IF_DIAG_ENTRY_RETURN  the build kernel returns at entry
+#:   MOJOLEARN_IF_DIAG_GATHER_ONLY   returns after the subsample gather
+#:                                   barrier (sampling + gather, no walk)
+#:   MOJOLEARN_IF_DIAG_NO_REJECT     `sample_bounded` is `value % bound`,
+#:                                   no rejection loop (the one data-
+#:                                   dependent `while` in the walk)
+#:   MOJOLEARN_IF_DIAG_NO_RECORD     `_record_decision` writes nothing
+comptime DIAG_ENTRY_RETURN = is_defined["MOJOLEARN_IF_DIAG_ENTRY_RETURN"]()
+comptime DIAG_GATHER_ONLY = is_defined["MOJOLEARN_IF_DIAG_GATHER_ONLY"]()
+comptime DIAG_NO_REJECT = is_defined["MOJOLEARN_IF_DIAG_NO_REJECT"]()
+comptime DIAG_NO_RECORD = is_defined["MOJOLEARN_IF_DIAG_NO_RECORD"]()
+
 
 def curand_u64(mut rng_state: curandStateXORWOW) -> UInt64:
     """`curand_u64` (`:83-86`). DEVIATION 750: the FIRST draw is the HIGH
@@ -219,6 +236,8 @@ def sample_bounded(mut rng_state: curandStateXORWOW, bound: UInt64) -> UInt64:
     var max_uint64: UInt64 = 0xFFFFFFFFFFFFFFFF
     var limit: UInt64 = max_uint64 - (max_uint64 % bound)
     var value = curand_u64(rng_state)
+    comptime if DIAG_NO_REJECT:
+        return value % bound
     while value >= limit:
         value = curand_u64(rng_state)
     return value % bound
@@ -308,6 +327,8 @@ def _record_decision(
     `feature_start` is the per-node draw that decides WHICH column is
     tried first, and it is invisible in the tree whenever the first
     candidate happens to be splittable."""
+    comptime if DIAG_NO_RECORD:
+        return
     var base = IF_DECISION_WORDS * node_idx
     decisions.unsafe_store(base + 0, bitcast[DType.int32](min_val))
     decisions.unsafe_store(base + 1, bitcast[DType.int32](max_val))
@@ -607,6 +628,8 @@ def build_isolation_trees_global_kernel(
     subsample into `local_data` (`:319-326`, column-major source); then
     `build_tree_iterative_global`. `data` is column-major `n_rows x
     n_cols` exactly as theirs (`isolation_forest.hpp:118`)."""
+    comptime if DIAG_ENTRY_RETURN:
+        return
     var tree_id = Int(block_idx.x)
     var n_trees = Int(n_trees_in)
     if tree_id >= n_trees:
@@ -703,6 +726,8 @@ def build_isolation_trees_global_kernel(
             )
             f += n_threads
     barrier()
+    comptime if DIAG_GATHER_ONLY:
+        return
 
     build_tree_iterative_global(
         local_data,
