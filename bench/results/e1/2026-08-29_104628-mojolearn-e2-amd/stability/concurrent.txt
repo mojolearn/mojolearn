@@ -1,0 +1,57 @@
+# concurrent-context probe: one process, one GPU, one fit,
+# every available tier live at the same time
+
+  round 0  fast           -> fast           ff57e4662ddc2336
+  round 0  deterministic  -> deterministic  7fbeefec8014f640
+  round 0  identical      -> identical      7fbeefec8014f640
+  round 0  fast           -> fast           6254ac1841c47682
+  round 1  fast           -> fast           757c10323d14245c
+  round 1  deterministic  -> deterministic  7fbeefec8014f640
+  round 1  identical      -> identical      7fbeefec8014f640
+  round 1  fast           -> fast           1f123aa5bbdb16fb
+  round 2  fast           -> fast           ff57e4662ddc2336
+  round 2  deterministic  -> deterministic  7fbeefec8014f640
+  round 2  identical      -> identical      7fbeefec8014f640
+  round 2  fast           -> fast           1f123aa5bbdb16fb
+  round 3  fast           -> fast           ff57e4662ddc2336
+  round 3  deterministic  -> deterministic  7fbeefec8014f640
+  round 3  identical      -> identical      7fbeefec8014f640
+  round 3  fast           -> fast           757c10323d14245c
+  round 4  fast           -> fast           6254ac1841c47682
+  round 4  deterministic  -> deterministic  7fbeefec8014f640
+  round 4  identical      -> identical      7fbeefec8014f640
+  round 4  fast           -> fast           757c10323d14245c
+  round 5  fast           -> fast           6254ac1841c47682
+  round 5  deterministic  -> deterministic  7fbeefec8014f640
+  round 5  identical      -> identical      7fbeefec8014f640
+  round 5  fast           -> fast           6254ac1841c47682
+  round 6  fast           -> fast           1f123aa5bbdb16fb
+  round 6  deterministic  -> deterministic  7fbeefec8014f640
+  round 6  identical      -> identical      7fbeefec8014f640
+  round 6  fast           -> fast           ff57e4662ddc2336
+  round 7  fast           -> fast           1f123aa5bbdb16fb
+  round 7  deterministic  -> deterministic  7fbeefec8014f640
+  round 7  identical      -> identical      7fbeefec8014f640
+  round 7  fast           -> fast           6254ac1841c47682
+  round 8  fast           -> fast           757c10323d14245c
+  round 8  deterministic  -> deterministic  7fbeefec8014f640
+  round 8  identical      -> identical      7fbeefec8014f640
+  round 8  fast           -> fast           aaec0f223a4801bd
+  round 9  fast           -> fast           757c10323d14245c
+  round 9  deterministic  -> deterministic  7fbeefec8014f640
+  round 9  identical      -> identical      7fbeefec8014f640
+  round 9  fast           -> fast           6254ac1841c47682
+  round 10  fast           -> fast           1f123aa5bbdb16fb
+  round 10  deterministic  -> deterministic  7fbeefec8014f640
+  round 10  identical      -> identical      7fbeefec8014f640
+  round 10  fast           -> fast           ff57e4662ddc2336
+  round 11  fast           -> fast           1f123aa5bbdb16fb
+  round 11  deterministic  -> deterministic  7fbeefec8014f640
+  round 11  identical      -> identical      7fbeefec8014f640
+  round 11  fast           -> fast           6254ac1841c47682
+
+  fast           MOVED   24 calls returned 5 DIFFERENT answers
+  deterministic  STABLE  all 12 calls returned THE SAME answer
+  identical      STABLE  all 12 calls returned THE SAME answer
+
+fast MOVED, which is fast working as specified: it promises speed and makes no bitwise claim.

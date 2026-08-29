@@ -51,8 +51,9 @@ RTX 4090, `identical` tier, through the PYTHON surface:
 | | |
 |---|---|
 | lanes bit-identical on **all three** vendors | **13** |
-| divergent | **0** |
-| not compared | 3 (`et-clf`, `rf-clf`, `iforest` -- their bindings were not built on either leg) |
+| lanes bit-identical on Apple + AMD (NVIDIA binding not built) | **3** -- `et-clf`, `rf-clf`, `iforest` |
+| **divergent anywhere** | **0** |
+| not compared | none: all 16 lanes are now compared on at least two columns |
 
 Apple M4 (Metal), NVIDIA RTX 4090 (CUDA) and AMD MI325X (HIP), same commit,
 through the Python estimator surface.
@@ -141,5 +142,11 @@ against the API (HTTP 404), never assumed.
   ledger's say-so, and `linkage_check.mojo:583`'s speculation that "a
   split-K or atomic epilogue may land differently" is answered: not at
   this shape, on any of the three.
-* `et-clf`, `rf-clf`, `iforest` on any non-Apple column: their bindings have
-  not been built on a leg yet.
+* ~~`et-clf`, `rf-clf`, `iforest` on any non-Apple column~~ **DONE on AMD**
+  (2026-08-29, `bench/results/e1/2026-08-29_104628-mojolearn-e2-amd`): all
+  three STABLE in all three tiers, and all three bit-identical to Apple under
+  `identical`. `rf-clf` and `iforest` differ between the fast and identical
+  tiers on that column (`1178f046` vs `eacd6bff`, `4ebdf5bb` vs `334ba456`),
+  so the identical pins are doing work there rather than being inert;
+  `et-clf` gives `707d2c92` in all three tiers and is bit-inert. Still owed
+  on NVIDIA, where those three bindings have not been built on a leg.

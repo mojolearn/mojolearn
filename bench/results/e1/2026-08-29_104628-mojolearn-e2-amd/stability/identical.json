@@ -1,0 +1,48 @@
+{
+ "mode": "identical",
+ "repeats": 6,
+ "rows": [
+  {
+   "lane": "et-clf",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40"
+   ],
+   "error": null
+  },
+  {
+   "lane": "iforest",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "334ba456c6bb7644",
+    "334ba456c6bb7644",
+    "334ba456c6bb7644",
+    "334ba456c6bb7644",
+    "334ba456c6bb7644",
+    "334ba456c6bb7644"
+   ],
+   "error": null
+  },
+  {
+   "lane": "rf-clf",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "eacd6bff8b4088b8",
+    "eacd6bff8b4088b8",
+    "eacd6bff8b4088b8",
+    "eacd6bff8b4088b8",
+    "eacd6bff8b4088b8",
+    "eacd6bff8b4088b8"
+   ],
+   "error": null
+  }
+ ]
+}

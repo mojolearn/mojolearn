@@ -1,0 +1,11 @@
+# repeat-run stability, mode=fast, repeats=6, interleave=False
+# 2026-08-29 10:54:32
+
+| lane             | verdict  | same answer every time? | hashes |
+|------------------|----------|-------------------------|--------|
+| et-clf           | STABLE   | YES  6/6 calls agreed   | 707d2c92e92f6a40 |
+| iforest          | STABLE   | YES  6/6 calls agreed   | 4ebdf5bb59e30a54 |
+| rf-clf           | STABLE   | YES  6/6 calls agreed   | 1178f0463159b897 |
+
+mode=fast  stable=3  moved=0  refused=0
+wrote /root/mojolearn/bench/results/e1/2026-08-29_104628-mojolearn-e2-amd/stability/fast.json
