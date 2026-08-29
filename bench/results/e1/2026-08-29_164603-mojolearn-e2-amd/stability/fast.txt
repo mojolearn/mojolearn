@@ -1,0 +1,43 @@
+# repeat-run stability, mode=fast, repeats=6, interleave=False
+# 2026-08-29 16:54:13
+
+| lane             | verdict  | same answer every time? | hashes |
+|------------------|----------|-------------------------|--------|
+| agglomerative    | STABLE   | YES  6/6 calls agreed   | 02ca572ae936a2fa |
+| dbscan           | STABLE   | YES  6/6 calls agreed   | a4608e954c7420b7 |
+| elasticnet       | STABLE   | YES  6/6 calls agreed   | 4626a570a63dacf2 |
+| et-clf           | STABLE   | YES  6/6 calls agreed   | 707d2c92e92f6a40 |
+| et-reg           | STABLE   | YES  6/6 calls agreed   | a1d2eb9ddb149617 |
+| gbdt-depthwise   | STABLE   | YES  6/6 calls agreed   | 55b5854f757cd739 |
+| gbdt-lossguide   | STABLE   | YES  6/6 calls agreed   | c38591dd2ad30b7f |
+| gbdt-rmse        | STABLE   | YES  6/6 calls agreed   | df3de5e82469e55e |
+| gbdt-symmetric   | STABLE   | YES  6/6 calls agreed   | b2547e31cd460d13 |
+| gemm-pinned      | REFUSED  | n/a (refused)           | RuntimeError: mojolearn.linalg: this process loaded the FAST build, which makes NO identit |
+| gemm-vendor      | STABLE   | YES  6/6 calls agreed   | e25840533b2ba0cd |
+| holtwinters      | STABLE   | YES  6/6 calls agreed   | 3014ac512d1161ad |
+| iforest          | STABLE   | YES  6/6 calls agreed   | 4ebdf5bb59e30a54 |
+| kde              | STABLE   | YES  6/6 calls agreed   | 4f59c8547f8d18c0 |
+| kmeans           | STABLE   | YES  6/6 calls agreed   | da3cb10e46c91256 |
+| knn-clf          | STABLE   | YES  6/6 calls agreed   | f359ee4876deb908 |
+| knn-reg          | STABLE   | YES  6/6 calls agreed   | ff4a92b889616aea |
+| knn-tied         | MOVED    | NO   3 different answers in 6 calls | 6dc922ae997bd65c 79f92ba0bf5f8767 d2fdf5e80e46cb29 |
+| lasso            | STABLE   | YES  6/6 calls agreed   | 3d3afb54f6bc1a30 |
+| logistic         | STABLE   | YES  6/6 calls agreed   | 11f68df08d4ae1bb |
+| metrics          | STABLE   | YES  6/6 calls agreed   | 01a17b9ad7a6275c |
+| ols              | STABLE   | YES  6/6 calls agreed   | 9a3d2aabdcce9dc2 |
+| pca              | STABLE   | YES  6/6 calls agreed   | d4fd24d79e0a2b1c |
+| rf-clf           | STABLE   | YES  6/6 calls agreed   | 1178f0463159b897 |
+| rf-reg           | STABLE   | YES  6/6 calls agreed   | 91269c5ae3828665 |
+| ridge            | STABLE   | YES  6/6 calls agreed   | a430ab480f07d9b4 |
+| spectral         | STABLE   | YES  6/6 calls agreed   | 7c5f4e5c32dc0ca1 |
+| svc              | STABLE   | YES  6/6 calls agreed   | 61d0cf360072c4b8 |
+| tsvd             | STABLE   | YES  6/6 calls agreed   | a378f1007cb95451 |
+
+mode=fast  stable=27  moved=1  refused=1
+MOVED: knn-tied
+REFUSED: gemm-pinned
+  gemm-pinned: RuntimeError: mojolearn.linalg: this process loaded the FAST build, which makes NO identity claim; mojolearn.identical.gemm.fp32.v1 is what the IDENTICAL build computes.
+  Set MOJOLEARN_NUMERIC_MODE=identical in the environment BEFORE importing mojolearn, having built the identical binary with
+      MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_linalg.sh
+  Or pass identical=False to say in the source that you want the fast product and are making no identity claim about it.
+wrote /root/mojolearn/bench/results/e1/2026-08-29_164603-mojolearn-e2-amd/stability/fast.json
