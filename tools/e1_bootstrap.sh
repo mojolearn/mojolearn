@@ -548,8 +548,14 @@ step "phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silic
 # which is a result and not a silence -- "not measured" and "measured clean"
 # must never look the same in the fetched directory.
 P9_BINDINGS="${MOJOLEARN_P9_BINDINGS:-$E1_IDENT_BINDINGS}"
+# WHICH TIERS, for the same budget reason. A cross-vendor identity leg needs
+# ONLY the identical set (ten builds, not thirty); the run-to-run comparison
+# needs all three. Default all three. Recorded in the log so a one-tier leg
+# can never read as a three-tier one.
+P9_TIERS="${MOJOLEARN_P9_TIERS:-fast deterministic identical}"
 echo "phase 9 builds: $P9_BINDINGS"
-for tier in fast deterministic identical; do
+echo "phase 9 tiers:  $P9_TIERS"
+for tier in $P9_TIERS; do
   case "$tier" in
     fast) _dir="python/mojolearn" ;;
     *)    _dir="python/mojolearn/$tier" ;;
@@ -571,7 +577,7 @@ mkdir -p "$OUT/stability"
 # whose binaries did not build reports its import error into its own file
 # rather than being skipped: "not measured" and "measured clean" must not look
 # the same in the fetched directory.
-for m in fast deterministic identical; do
+for m in $P9_TIERS; do
   MOJOLEARN_NUMERIC_MODE=$m PYTHONPATH="$REPO/python" \
     pixi run -e gbmbench python3 tools/repeat_run_stability.py \
       --repeats 6 ${MOJOLEARN_P9_LANES:+--lanes "$MOJOLEARN_P9_LANES"} \
@@ -589,12 +595,33 @@ done
 # round-robin, which is what a serving process holding two models looks like.
 # On the M4 the sequential arm called the k-NN lane STABLE under FAST and this
 # probe found three different answers in 24 calls.
+if [ "$P9_TIERS" = "fast deterministic identical" ]; then
 PYTHONPATH="$REPO/python" pixi run -e gbmbench python3 \
     tools/repeat_run_stability.py --concurrent \
     > "$OUT/stability/concurrent.txt" 2>&1 \
   || echo "PHASE9-FINDING: concurrent probe returned non-zero (see stability/concurrent.txt)"
 echo "--- stability concurrent"
 tail -6 "$OUT/stability/concurrent.txt" 2>/dev/null | sed 's/^/    /'
+else
+  echo "concurrent probe SKIPPED: needs all three tiers, P9_TIERS=$P9_TIERS"
+fi
+
+# THE BREAK-IT PROBE (2026-08-29). tools/identity_break.py fits EVERY public
+# estimator under `identical` on eight hostile fixtures (ties, hashed values,
+# wide dynamic range, denormals, duplicate rows, odd shapes, all-negative,
+# and the control), twice each, and writes one fingerprint per cell. Diffed
+# against the Mac's column by `tools/identity_break.py --diff a.json b.json`.
+# Opt-in because it needs the full identical set built (all ten bindings).
+if [ "${MOJOLEARN_P9_BREAK:-0}" = "1" ]; then
+  echo "--- identity_break (identical, every estimator, eight fixtures)"
+  MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$REPO/python" \
+    pixi run -e gbmbench python3 tools/identity_break.py \
+      --vendor "${MOJOLEARN_P9_VENDOR:-$(hostname)}" \
+      --json "$OUT/stability/identity_break.identical.json" \
+      > "$OUT/stability/identity_break.identical.txt" 2>&1 \
+    || echo "PHASE9-FINDING: identity_break returned non-zero (a MOVED cell; see stability/identity_break.identical.txt)"
+  tail -8 "$OUT/stability/identity_break.identical.txt" 2>/dev/null | sed 's/^/    /'
+fi
 
 fi
 step "done"

@@ -550,6 +550,11 @@ P9_BINDINGS="${MOJOLEARN_GEMM_LEG_P9_BINDINGS:-build.sh build_gbdt.sh build_esti
 # of step is how a leg comes home REFUSED rather than measured. Recorded in
 # leg.txt beside e1_phases so a narrowed lane set can never read as a full one.
 P9_LANES="${MOJOLEARN_GEMM_LEG_P9_LANES:-}"
+# PHASE 9'S TIER SET and the BREAK-IT probe (2026-08-29). An identity leg
+# sets P9_TIERS=identical (ten builds, not thirty) and P9_BREAK=1 to run
+# tools/identity_break.py on every estimator; see e1_bootstrap.sh phase 9.
+P9_TIERS="${MOJOLEARN_GEMM_LEG_P9_TIERS:-}"
+P9_BREAK="${MOJOLEARN_GEMM_LEG_P9_BREAK:-0}"
 # DEVIATION 973: which phase-8 lanes the box runs. Empty means all of them.
 # Leg 12 proved the need: the lane order puts mamba LAST behind gemm's device
 # check, the largest compile in the set, so on a cold box mamba was never
@@ -2323,6 +2328,12 @@ MOJOLEARN_P9_BINDINGS="@P9BINDINGS@"
 export MOJOLEARN_P9_BINDINGS
 MOJOLEARN_P9_LANES="@P9LANES@"
 export MOJOLEARN_P9_LANES
+MOJOLEARN_P9_TIERS="@P9TIERS@"
+[ -n "$MOJOLEARN_P9_TIERS" ] && export MOJOLEARN_P9_TIERS || unset MOJOLEARN_P9_TIERS
+MOJOLEARN_P9_BREAK="@P9BREAK@"
+export MOJOLEARN_P9_BREAK
+MOJOLEARN_P9_VENDOR="nvidia-$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 | tr ' ' '-' | tr -d ',')"
+export MOJOLEARN_P9_VENDOR
 
 {
     echo "MODULAR_NVPTX_COMPILER_PATH=${MODULAR_NVPTX_COMPILER_PATH:-<none found>}"
@@ -3127,6 +3138,8 @@ leg_check_remote_body() {
         -e "s|@E1LANES@|$E1_LANES|g" \
         -e "s|@P9BINDINGS@|$P9_BINDINGS|g" \
         -e "s|@P9LANES@|$P9_LANES|g" \
+        -e "s|@P9TIERS@|$P9_TIERS|g" \
+        -e "s|@P9BREAK@|$P9_BREAK|g" \
         -e "s|@SMI@|$SMI_CMD|g" \
         "$_body" > "$_body.subst"
     mv "$_body.subst" "$_body"
