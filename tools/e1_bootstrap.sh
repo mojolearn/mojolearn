@@ -521,15 +521,29 @@ step "phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silic
 # builds FAST and IDENTICAL, because those are what the cards need. The middle
 # tier needs its own ten binaries and they land under
 # python/mojolearn/deterministic/.
-rm -f python/mojolearn/deterministic/_mojolearn*.so
-for b in $E1_IDENT_BINDINGS; do
-  if ! MOJOLEARN_NUMERIC_MODE=deterministic MOJOLEARN_SKIP_BUILD_GATE=1 \
-       pixi run -e gbmbench bash "bindings/$b" > "$OUT/det_build_${b%.sh}.log" 2>&1; then
-    echo "PHASE9-FINDING: deterministic bindings/$b did not build; first error:"
-    grep -m2 -E 'error:|constraint failed' "$OUT/det_build_${b%.sh}.log" | cut -c1-200 | sed 's/^/      /'
-  fi
+# ALL THREE SETS, BUILT HERE, because this phase COMPARES them. Phase 3 builds
+# fast and identical -- but a phase subset is a supported way to run this file
+# and `MOJOLEARN_E1_PHASES=9` skips phase 3, which would leave the box with the
+# deterministic set alone and two of the three arms reporting "no binary". A
+# baseline-less deterministic reading answers nothing, so this phase does not
+# depend on another phase having run. Sets that already exist are rebuilt: the
+# whole comparison is void if the three came from different source states, and
+# a stale binary already produced one wrong verdict today.
+for tier in fast deterministic identical; do
+  case "$tier" in
+    fast) _dir="python/mojolearn" ;;
+    *)    _dir="python/mojolearn/$tier" ;;
+  esac
+  [ "$tier" = "fast" ] || rm -f "$_dir"/_mojolearn*.so
+  for b in $E1_IDENT_BINDINGS; do
+    if ! MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 \
+         pixi run -e gbmbench bash "bindings/$b" > "$OUT/p9_${tier}_${b%.sh}.log" 2>&1; then
+      echo "PHASE9-FINDING: $tier bindings/$b did not build; first error:"
+      grep -m2 -E 'error:|constraint failed' "$OUT/p9_${tier}_${b%.sh}.log" | cut -c1-200 | sed 's/^/      /'
+    fi
+  done
+  echo "$tier set: $(ls "$_dir"/_mojolearn*.so 2>/dev/null | wc -l | tr -d ' ') of 10 binaries"
 done
-echo "deterministic set: $(ls python/mojolearn/deterministic/_mojolearn*.so 2>/dev/null | wc -l | tr -d ' ') of 10 binaries"
 
 mkdir -p "$OUT/stability"
 # EVERY TIER, INCLUDING FAST. A tier that is not measured cannot be compared,
