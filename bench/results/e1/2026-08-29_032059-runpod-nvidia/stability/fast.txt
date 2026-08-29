@@ -1,0 +1,121 @@
+7127 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x713740000000, nodemask=1)
+7127 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b6000000000, nodemask=2)
+# repeat-run stability, mode=fast, repeats=6, interleave=False
+# 2026-08-29 07:44:19
+
+| lane             | verdict  | same answer every time? | hashes |
+|------------------|----------|-------------------------|--------|
+| dbscan           | REFUSED  | n/a (refused)           | Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU d |
+| et-clf           | REFUSED  | n/a (refused)           | Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU d |
+| gbdt-depthwise   | REFUSED  | n/a (refused)           | Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU d |
+| gbdt-lossguide   | REFUSED  | n/a (refused)           | Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU d |
+| gbdt-symmetric   | REFUSED  | n/a (refused)           | Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU d |
+| gemm-pinned      | REFUSED  | n/a (refused)           | RuntimeError: mojolearn.linalg: this process loaded the FAST build, which makes NO identit |
+| gemm-vendor      | REFUSED  | n/a (refused)           | Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU d |
+| iforest          | REFUSED  | n/a (refused)           | Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU d |
+| kmeans           | REFUSED  | n/a (refused)           | Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU d |
+| knn-tied         | REFUSED  | n/a (refused)           | Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU d |
+| logistic         | REFUSED  | n/a (refused)           | Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU d |
+| ols              | REFUSED  | n/a (refused)           | Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU d |
+| pca              | REFUSED  | n/a (refused)           | Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU d |
+| rf-clf           | REFUSED  | n/a (refused)           | Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU d |
+| ridge            | REFUSED  | n/a (refused)           | Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU d |
+| tsvd             | REFUSED  | n/a (refused)           | Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU d |
+
+mode=fast  stable=0  moved=0  refused=16
+REFUSED: dbscan, et-clf, gbdt-depthwise, gbdt-lossguide, gbdt-symmetric, gemm-pinned, gemm-vendor, iforest, kmeans, knn-tied, logistic, ols, pca, rf-clf, ridge, tsvd
+  dbscan: Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU driver version is not supported.
+  Required: driver version >= 580 (CUDA >= 13.0)
+  Detected: 570.195.03 (CUDA 12.8)
+
+To run on an older driver, set the MODULAR_NVPTX_COMPILER_PATH environment variable to the path of a system `ptxas` binary. For more information, see https://modul.ar/gpu-requirements.
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+  et-clf: Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU driver version is not supported.
+  Required: driver version >= 580 (CUDA >= 13.0)
+  Detected: 570.195.03 (CUDA 12.8)
+
+To run on an older driver, set the MODULAR_NVPTX_COMPILER_PATH environment variable to the path of a system `ptxas` binary. For more information, see https://modul.ar/gpu-requirements.
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+  gbdt-depthwise: Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU driver version is not supported.
+  Required: driver version >= 580 (CUDA >= 13.0)
+  Detected: 570.195.03 (CUDA 12.8)
+
+To run on an older driver, set the MODULAR_NVPTX_COMPILER_PATH environment variable to the path of a system `ptxas` binary. For more information, see https://modul.ar/gpu-requirements.
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+  gbdt-lossguide: Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU driver version is not supported.
+  Required: driver version >= 580 (CUDA >= 13.0)
+  Detected: 570.195.03 (CUDA 12.8)
+
+To run on an older driver, set the MODULAR_NVPTX_COMPILER_PATH environment variable to the path of a system `ptxas` binary. For more information, see https://modul.ar/gpu-requirements.
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+  gbdt-symmetric: Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU driver version is not supported.
+  Required: driver version >= 580 (CUDA >= 13.0)
+  Detected: 570.195.03 (CUDA 12.8)
+
+To run on an older driver, set the MODULAR_NVPTX_COMPILER_PATH environment variable to the path of a system `ptxas` binary. For more information, see https://modul.ar/gpu-requirements.
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+  gemm-pinned: RuntimeError: mojolearn.linalg: this process loaded the FAST build, which makes NO identity claim; mojolearn.identical.gemm.fp32.v1 is what the IDENTICAL build computes.
+  Set MOJOLEARN_NUMERIC_MODE=identical in the environment BEFORE importing mojolearn, having built the identical binary with
+      MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_linalg.sh
+  Or pass identical=False to say in the source that you want the fast product and are making no identity claim about it.
+  gemm-vendor: Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU driver version is not supported.
+  Required: driver version >= 580 (CUDA >= 13.0)
+  Detected: 570.195.03 (CUDA 12.8)
+
+To run on an older driver, set the MODULAR_NVPTX_COMPILER_PATH environment variable to the path of a system `ptxas` binary. For more information, see https://modul.ar/gpu-requirements.
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+  iforest: Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU driver version is not supported.
+  Required: driver version >= 580 (CUDA >= 13.0)
+  Detected: 570.195.03 (CUDA 12.8)
+
+To run on an older driver, set the MODULAR_NVPTX_COMPILER_PATH environment variable to the path of a system `ptxas` binary. For more information, see https://modul.ar/gpu-requirements.
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+  kmeans: Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU driver version is not supported.
+  Required: driver version >= 580 (CUDA >= 13.0)
+  Detected: 570.195.03 (CUDA 12.8)
+
+To run on an older driver, set the MODULAR_NVPTX_COMPILER_PATH environment variable to the path of a system `ptxas` binary. For more information, see https://modul.ar/gpu-requirements.
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+  knn-tied: Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU driver version is not supported.
+  Required: driver version >= 580 (CUDA >= 13.0)
+  Detected: 570.195.03 (CUDA 12.8)
+
+To run on an older driver, set the MODULAR_NVPTX_COMPILER_PATH environment variable to the path of a system `ptxas` binary. For more information, see https://modul.ar/gpu-requirements.
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+  logistic: Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU driver version is not supported.
+  Required: driver version >= 580 (CUDA >= 13.0)
+  Detected: 570.195.03 (CUDA 12.8)
+
+To run on an older driver, set the MODULAR_NVPTX_COMPILER_PATH environment variable to the path of a system `ptxas` binary. For more information, see https://modul.ar/gpu-requirements.
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+  ols: Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU driver version is not supported.
+  Required: driver version >= 580 (CUDA >= 13.0)
+  Detected: 570.195.03 (CUDA 12.8)
+
+To run on an older driver, set the MODULAR_NVPTX_COMPILER_PATH environment variable to the path of a system `ptxas` binary. For more information, see https://modul.ar/gpu-requirements.
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+  pca: Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU driver version is not supported.
+  Required: driver version >= 580 (CUDA >= 13.0)
+  Detected: 570.195.03 (CUDA 12.8)
+
+To run on an older driver, set the MODULAR_NVPTX_COMPILER_PATH environment variable to the path of a system `ptxas` binary. For more information, see https://modul.ar/gpu-requirements.
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+  rf-clf: Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU driver version is not supported.
+  Required: driver version >= 580 (CUDA >= 13.0)
+  Detected: 570.195.03 (CUDA 12.8)
+
+To run on an older driver, set the MODULAR_NVPTX_COMPILER_PATH environment variable to the path of a system `ptxas` binary. For more information, see https://modul.ar/gpu-requirements.
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+  ridge: Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU driver version is not supported.
+  Required: driver version >= 580 (CUDA >= 13.0)
+  Detected: 570.195.03 (CUDA 12.8)
+
+To run on an older driver, set the MODULAR_NVPTX_COMPILER_PATH environment variable to the path of a system `ptxas` binary. For more information, see https://modul.ar/gpu-requirements.
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+  tsvd: Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU driver version is not supported.
+  Required: driver version >= 580 (CUDA >= 13.0)
+  Detected: 570.195.03 (CUDA 12.8)
+
+To run on an older driver, set the MODULAR_NVPTX_COMPILER_PATH environment variable to the path of a system `ptxas` binary. For more information, see https://modul.ar/gpu-requirements.
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+wrote /root/mojolearn/bench/results/e1/2026-08-29_072418-22e87d4b9854/stability/fast.json

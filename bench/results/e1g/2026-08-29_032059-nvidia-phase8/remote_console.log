@@ -1,0 +1,56 @@
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 07:24:21
+fast set: 10 of 10 binaries
+deterministic set: 10 of 10 binaries
+identical set: 10 of 10 binaries
+--- stability fast
+    
+    To run on an older driver, set the MODULAR_NVPTX_COMPILER_PATH environment variable to the path of a system `ptxas` binary. For more information, see https://modul.ar/gpu-requirements.
+    To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+    wrote /root/mojolearn/bench/results/e1/2026-08-29_072418-22e87d4b9854/stability/fast.json
+--- stability deterministic
+    
+    To run on an older driver, set the MODULAR_NVPTX_COMPILER_PATH environment variable to the path of a system `ptxas` binary. For more information, see https://modul.ar/gpu-requirements.
+    To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+    wrote /root/mojolearn/bench/results/e1/2026-08-29_072418-22e87d4b9854/stability/deterministic.json
+--- stability identical
+    
+    To run on an older driver, set the MODULAR_NVPTX_COMPILER_PATH environment variable to the path of a system `ptxas` binary. For more information, see https://modul.ar/gpu-requirements.
+    To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+    wrote /root/mojolearn/bench/results/e1/2026-08-29_072418-22e87d4b9854/stability/identical.json
+PHASE9-FINDING: concurrent probe returned non-zero (see stability/concurrent.txt)
+--- stability concurrent
+    Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU driver version is not supported.
+      Required: driver version >= 580 (CUDA >= 13.0)
+      Detected: 570.195.03 (CUDA 12.8)
+    
+    To run on an older driver, set the MODULAR_NVPTX_COMPILER_PATH environment variable to the path of a system `ptxas` binary. For more information, see https://modul.ar/gpu-requirements.
+    To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+
+=== done === 07:44:22
+artifacts in /root/mojolearn/bench/results/e1/2026-08-29_072418-22e87d4b9854
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card
+vendor=nvidia
+payload=phase8
+commit=8350cd092cb2b6c569332cc16dccee5e47edf6e3
+work_timeout=3000
+e1_phases=9
+e1_lanes=
+started=2026-08-29T07:24:17Z
+bootstrap_exit=0
+note: a bootstrap_exit of 124 is the work timeout firing
+e1dir_source=the bootstrap's own 'artifacts in' line
+e1dir=/root/mojolearn/bench/results/e1/2026-08-29_072418-22e87d4b9854
+identical_cards=0
+fast_cards=0
+phase8_findings=0
+finished=2026-08-29T07:44:22Z
+REMOTE_BODY_DONE

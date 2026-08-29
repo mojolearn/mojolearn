@@ -1,0 +1,29 @@
+7991 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x508ec0000000, nodemask=1)
+# concurrent-context probe: one process, one GPU, one fit,
+# every available tier live at the same time
+
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/repeat_run_stability.py", line 470, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/root/mojolearn/tools/repeat_run_stability.py", line 380, in main
+    return concurrent_probe(args.repeats if explicit else 12)
+  File "/root/mojolearn/tools/repeat_run_stability.py", line 331, in concurrent_probe
+    _, i = ests[m].kneighbors(q)
+           ~~~~~~~~~~~~~~~~~~^^^
+  File "/root/mojolearn/python/mojolearn/neighbors.py", line 169, in kneighbors
+    self.used_query_tile_ = self._bind("_mojolearn").knn_search(
+                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        _addr_ro(idx),
+        ^^^^^^^^^^^^^^
+    ...<5 lines>...
+        [idx.shape[0], nq, idx.shape[1], k, 1, self.query_tile],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+Exception: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Your current NVIDIA GPU driver version is not supported.
+  Required: driver version >= 580 (CUDA >= 13.0)
+  Detected: 570.195.03 (CUDA 12.8)
+
+To run on an older driver, set the MODULAR_NVPTX_COMPILER_PATH environment variable to the path of a system `ptxas` binary. For more information, see https://modul.ar/gpu-requirements.
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.

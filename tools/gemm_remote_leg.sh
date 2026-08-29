@@ -2208,6 +2208,38 @@ if [ ! -x "$HOME/.pixi/bin/pixi" ] && ! command -v pixi > /dev/null 2>&1; then
 fi
 PATH="$HOME/.pixi/bin:$PATH"
 export PATH
+
+# THE HOST DRIVER IS NOT THE IMAGE'S TO CHOOSE, AND IT COST A WHOLE LEG.
+# 2026-08-29: every lane and every tier on a rented RTX 4090 refused at the
+# FIRST kernel launch with
+#     Your current NVIDIA GPU driver version is not supported.
+#     Required: driver version >= 580 (CUDA >= 13.0)
+#     Detected: 570.195.03 (CUDA 12.8)
+# The image pins CUDA; the DRIVER belongs to whichever host RunPod scheduled,
+# so this can strike any NVIDIA leg at any time and is NOT fixed by pinning a
+# different image. Thirty binaries built and not one kernel ran.
+#
+# MAX names the escape itself: point MODULAR_NVPTX_COMPILER_PATH at a system
+# `ptxas` and it stops requiring the newer driver's embedded compiler. A CUDA
+# devel image ships one. Exported ONLY when a ptxas is actually found and the
+# variable is not already set, and LOGGED either way -- a silent fallback is
+# how "it ran" and "it ran the way I think it ran" come apart.
+if [ -z "${MODULAR_NVPTX_COMPILER_PATH:-}" ]; then
+    for _px in /usr/local/cuda/bin/ptxas /usr/bin/ptxas \
+               /usr/local/cuda-12.4/bin/ptxas /opt/cuda/bin/ptxas; do
+        if [ -x "$_px" ]; then
+            MODULAR_NVPTX_COMPILER_PATH="$_px"
+            export MODULAR_NVPTX_COMPILER_PATH
+            break
+        fi
+    done
+fi
+{
+    echo "MODULAR_NVPTX_COMPILER_PATH=${MODULAR_NVPTX_COMPILER_PATH:-<none found>}"
+    command -v nvidia-smi > /dev/null 2>&1 && \
+        nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>&1
+    command -v ptxas > /dev/null 2>&1 && ptxas --version 2>&1 | head -4
+} > "$OUT/driver.txt" 2>&1
 command -v pixi > "$OUT/pixi_which.txt" 2>&1 || echo "NO PIXI" >> "$OUT/pixi_which.txt"
 command -v bash > "$OUT/bash_which.txt" 2>&1 || \
     echo "NO BASH ON THIS IMAGE -- tools/e1_bootstrap.sh cannot run" >> "$OUT/bash_which.txt"
