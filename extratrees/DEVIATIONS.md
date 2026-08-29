@@ -3941,6 +3941,21 @@ to the tree size, not of a slow CPU (an EPYC 9575F on both legs). Nothing
 in the push body is written as O(tree) per item; where the time goes has
 not been found and is not guessed here.
 
+**Leg 3, `2026-08-29_211714-mojolearn-e2-amd`, MI325X, UNRESOLVED.** The
+push cost is the same again at both TPB arms (`fit_once` 1M: 52.23 s at
+the shipped 512, 52.35 s at 128; whole fit 58.9 s vs 69.9 s, the 11 s
+difference being the two GPU passes), so it is host-side and has nothing
+to do with DEVIATION 1943. The OLD-commit arm (4f6a17a) DID NOT RUN:
+`tools/e2_remote_leg.sh` forwarded only `ET_PROFILE_ARMS` over ssh, so
+`ET_PROFILE_OLD_COMMIT` never reached the box (fixed in the script, unrun).
+The host `perf record -g` of the shipped arm attributes 76% of samples to
+`core::identity_trace::IdentityTrace::_emit` with string bytes
+("partition") where return addresses should be; the trace was NOT enabled
+on that arm (`MOJOLEARN_IDENTITY_TRACE` unset), so that is perf resolving
+a stripped Mojo binary to its nearest exported symbol, not evidence.
+Nothing from leg 3 names the cause. The 4f6a17a-vs-HEAD arm on one box
+is still the next measurement.
+
 **What must happen next.** Time `NodeQueue.push` on the MI325X with the
 push loop's three appends and the `sparsetree[idx] =` store separated
 (the same `PhaseClock` can carry them), then re-run the forest speed arm

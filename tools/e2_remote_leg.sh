@@ -283,7 +283,9 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
       # DEVICE_TPB 128/256/512, under rocprofv3 where the image has it.
       # WRAP=0: it is a FAST-tier measurement, and the script builds its own
       # arms.
-      et-profile)    CMD="env ET_PROFILE_ARMS='${ET_PROFILE_ARMS:-shipped 128}' bash tools/et_profile_leg.sh"; WRAP=0 ;;
+      # Every ET_PROFILE_* knob crosses the ssh line; leg 3 on 2026-08-29
+      # forwarded only ARMS, so the OLD-commit arm (DEVIATION 1945) never ran.
+      et-profile)    CMD="env ET_PROFILE_ARMS='${ET_PROFILE_ARMS:-shipped 128}' ET_PROFILE_OLD_COMMIT='${ET_PROFILE_OLD_COMMIT:-}' ET_PROFILE_ROWS2='${ET_PROFILE_ROWS2:-}' ET_PROFILE_SKIP_BREAK='${ET_PROFILE_SKIP_BREAK:-}' ET_PROFILE_ROWS='${ET_PROFILE_ROWS:-}' ET_PROFILE_TREES='${ET_PROFILE_TREES:-}' bash tools/et_profile_leg.sh"; WRAP=0 ;;
       column)        CMD='pixi run mojo run -I . matrix_main.mojo' ;;
       gpu-probe)     CMD='pixi run mojo run -I . probe_main.mojo' ;;
       # (no `transformer` case: the device spelling in transformer/ported/ has
