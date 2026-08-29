@@ -1213,7 +1213,14 @@ leg_lanes() {
     # which is the whole failure mode this leg exists to prevent. The
     # fallback is announced on stderr so a silent extraction failure cannot
     # look like a lane list.
-    _l=$(sed -n 's/^for lane in \(.*\); do$/\1/p' tools/e3_round_judge.sh | head -1)
+    # CONTINUATION-AWARE since 2026-08-29, and the fallback it guards is not
+    # theoretical: the judge's loop wrapped onto four lines when the list grew
+    # from 7 lanes to 23, this extraction returned empty, and the leg announced
+    # a SEVEN-lane list on a tree that has 23. The note on stderr is the only
+    # reason that was visible at all -- which is the note earning its keep.
+    _l=$(awk '
+        /^for lane in/ { buf = $0; while (buf ~ /\\$/) { sub(/\\$/, "", buf); getline nxt; buf = buf nxt } print buf; exit }
+    ' tools/e3_round_judge.sh | sed -n 's/^for lane in \(.*\); do$/\1/p' | tr -s ' ')
     if [ -z "$_l" ]; then
         _l="gemm cd kde linkage svm metrics mamba"
         echo "  NOTE: the lane list could not be read out of" >&2
@@ -4144,7 +4151,23 @@ echo "   is made by tools/e3_round_judge.sh once the box's directory lands"
 echo "   beside it -- this leg does not diff phase-8 cards."
 LANES=$(leg_lanes)
 echo "   lanes (read out of tools/e3_round_judge.sh section 7): $LANES"
-if leg_apple_column; then
+# WHOSE GUARD THIS IS. The Apple column exists so phase 8's cards have
+# something to be diffed against. A leg whose phase list does not INCLUDE
+# phase 8 writes no cards, so demanding a reference for them refuses a run
+# that needs none -- which is what happened on 2026-08-29 to a phase-9-only
+# stability leg, whose whole question ("does one box agree with itself?") is
+# answered without a second column by construction.
+_wants_phase8=1
+case ",${E1_PHASES}," in
+    ,,) _wants_phase8=1 ;;          # empty means every phase, so phase 8 too
+    *,8,*) _wants_phase8=1 ;;
+    *) _wants_phase8=0 ;;
+esac
+if [ "$_wants_phase8" = "0" ]; then
+    echo "   phase 8 is NOT in MOJOLEARN_E1_PHASES=$E1_PHASES, so no lane cards"
+    echo "   are written and no Apple reference column is required."
+    APPLE_MISSING=0
+elif leg_apple_column; then
     :
 else
     APPLE_MISSING=1
