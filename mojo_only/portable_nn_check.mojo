@@ -51,6 +51,7 @@ from mojo_only.numerics import (
     portable_siluf,
     portable_softplusf,
     portable_sqrtf,
+    numeric_mode_name,
 )
 
 comptime N = 1 << 20
@@ -169,9 +170,17 @@ def _expf_ideal(x: Float64) -> Float64:
 
 
 def _mode_name() -> String:
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        return "IDENTICAL"
-    return "FAST"
+    """The build's tier, from the ONE definition of it.
+
+    Delegates to `numeric_mode_name()` since 2026-08-29. This used to
+    be a local two-way `IDENTICAL`-or-`FAST`, written when there were
+    two tiers, and it answered "FAST" for a DETERMINISTIC build -- so
+    a driver run under the middle tier printed the wrong arm onto
+    every line it produced. A correctly-labelled measurement of the
+    wrong arm is the failure this tree has been bitten by repeatedly,
+    and forty-four copies of a mode label is how it happens.
+    """
+    return numeric_mode_name()
 
 
 def _expect(name: String, got: Float32, want_bits: UInt32) raises:

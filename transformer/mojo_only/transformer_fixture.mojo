@@ -103,6 +103,7 @@ from mojo_only.numerics import (
     NUMERIC_IDENTICAL,
     ftz,
     identical_rsqrt,
+    numeric_mode_name,
 )
 
 
@@ -1153,12 +1154,14 @@ def f32_report(v: Float32) -> String:
 
 
 def mode_name() -> String:
-    """IDENTICAL or FAST, read at COMPILE time from
-    `mojo_only/numerics.mojo`'s `GLOBAL_NUMERIC_MODE`.
+    """The build's tier, from the ONE definition of it.
 
-    Printed by every driver in this lane, because
-    `[[the shared checkout's mode flip]]` is the scar: a run whose mode was
-    not read back gives correctly labelled measurements of the wrong arm."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        return String("IDENTICAL")
-    return String("FAST")
+    Delegates to `numeric_mode_name()` since 2026-08-29. This used to
+    be a local two-way `IDENTICAL`-or-`FAST`, written when there were
+    two tiers, and it answered "FAST" for a DETERMINISTIC build -- so
+    a driver run under the middle tier printed the wrong arm onto
+    every line it produced. A correctly-labelled measurement of the
+    wrong arm is the failure this tree has been bitten by repeatedly,
+    and forty-four copies of a mode label is how it happens.
+    """
+    return numeric_mode_name()

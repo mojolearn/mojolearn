@@ -148,7 +148,7 @@ from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.identity_trace import FNV_OFFSET, FNV_PRIME, IdentityTrace, _hex16
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 # ---- kmeans ----------------------------------------------------------------
 from cluster.ported.cluster.kmeans import fit as kmeans_fit_api
@@ -362,17 +362,17 @@ from tsa.ported.tsa.stationarity import kpss_test
 
 
 def _mode_name() -> String:
-    """The mode this binary COMPILED in, read from the comptime constant.
+    """The build's tier, from the ONE definition of it.
 
-    NOT from `MOJOLEARN_NUMERIC_IDENTICAL`, NOT from the wrapper script, NOT
-    from anything a shell could have got wrong. Copied from
-    `bench/lanes_price_main.mojo::_mode_name`, which is where the witness was
-    introduced after three measurements were labeled with the mode the
-    operator MEANT rather than the one that ran.
+    Delegates to `numeric_mode_name()` since 2026-08-29. This used to
+    be a local two-way `IDENTICAL`-or-`FAST`, written when there were
+    two tiers, and it answered "FAST" for a DETERMINISTIC build -- so
+    a driver run under the middle tier printed the wrong arm onto
+    every line it produced. A correctly-labelled measurement of the
+    wrong arm is the failure this tree has been bitten by repeatedly,
+    and forty-four copies of a mode label is how it happens.
     """
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        return String("IDENTICAL")
-    return String("FAST")
+    return numeric_mode_name()
 
 
 def _env_int(name: String, default: Int) raises -> Int:

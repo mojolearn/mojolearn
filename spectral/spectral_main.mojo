@@ -34,7 +34,7 @@ from std.os import getenv
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 from spectral.mojo_only.spectral_fixture import blobs_fixture, hashed_graph_fixture
 from spectral.ported.cuvs.cluster.detail.spectral import (
     SpectralClusteringParams,
@@ -48,9 +48,17 @@ from spectral.ported.sparse.solver.detail.lanczos import spectral_sabotage_name
 
 
 def _mode_name() -> String:
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        return String("IDENTICAL")
-    return String("FAST")
+    """The build's tier, from the ONE definition of it.
+
+    Delegates to `numeric_mode_name()` since 2026-08-29. This used to
+    be a local two-way `IDENTICAL`-or-`FAST`, written when there were
+    two tiers, and it answered "FAST" for a DETERMINISTIC build -- so
+    a driver run under the middle tier printed the wrong arm onto
+    every line it produced. A correctly-labelled measurement of the
+    wrong arm is the failure this tree has been bitten by repeatedly,
+    and forty-four copies of a mode label is how it happens.
+    """
+    return numeric_mode_name()
 
 
 def _hex32(v: Float32) -> String:

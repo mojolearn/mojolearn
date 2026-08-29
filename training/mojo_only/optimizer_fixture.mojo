@@ -115,6 +115,7 @@ from mojo_only.numerics import (
     NUMERIC_IDENTICAL,
     ftz,
     identical_mul,
+    numeric_mode_name,
 )
 from training.mojo_only.optimizer_oracle import (
     OPT_ADAM,
@@ -265,9 +266,17 @@ def is_exact_power_of_two(v: Float32) -> Bool:
 
 
 def mode_name() -> String:
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        return String("IDENTICAL")
-    return String("FAST")
+    """The build's tier, from the ONE definition of it.
+
+    Delegates to `numeric_mode_name()` since 2026-08-29. This used to
+    be a local two-way `IDENTICAL`-or-`FAST`, written when there were
+    two tiers, and it answered "FAST" for a DETERMINISTIC build -- so
+    a driver run under the middle tier printed the wrong arm onto
+    every line it produced. A correctly-labelled measurement of the
+    wrong arm is the failure this tree has been bitten by repeatedly,
+    and forty-four copies of a mode label is how it happens.
+    """
+    return numeric_mode_name()
 
 
 def mode_is_identical() -> Bool:

@@ -147,7 +147,7 @@ no compile error and has produced wrong hashes in this tree twice.
 
 from std.memory import bitcast
 
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, numeric_mode_name
 from embedding.mojo_only.embedding_oracle import (
     EMB_NO_PADDING_IDX,
     EmbConfig,
@@ -193,14 +193,17 @@ def f32_report(v: Float32) -> String:
 
 
 def mode_name() -> String:
-    """IDENTICAL or FAST, read at COMPILE time.
+    """The build's tier, from the ONE definition of it.
 
-    `[[the shared checkout's mode flip]]` is the scar: a run whose mode was
-    not read back gives correctly labelled measurements of the WRONG arm.
-    Every driver in this lane prints this."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        return String("IDENTICAL")
-    return String("FAST")
+    Delegates to `numeric_mode_name()` since 2026-08-29. This used to
+    be a local two-way `IDENTICAL`-or-`FAST`, written when there were
+    two tiers, and it answered "FAST" for a DETERMINISTIC build -- so
+    a driver run under the middle tier printed the wrong arm onto
+    every line it produced. A correctly-labelled measurement of the
+    wrong arm is the failure this tree has been bitten by repeatedly,
+    and forty-four copies of a mode label is how it happens.
+    """
+    return numeric_mode_name()
 
 
 def mode_is_identical() -> Bool:

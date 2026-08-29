@@ -67,7 +67,7 @@ from dbscan.estimator import dbscan_fit
 from dbscan.ported.dbscan.runner import EPS_NN_BRUTE_FORCE
 from neighbors.estimator import knn_search
 from mojo_only.kernel_matrix import TARGET_COLUMN, lib_lane_width_for
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
 comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -95,9 +95,17 @@ comptime DB_MIN_PTS = 8
 
 
 def _mode_name() -> String:
-    comptime if IDENTICAL_BUILD:
-        return String("IDENTICAL")
-    return String("FAST")
+    """The build's tier, from the ONE definition of it.
+
+    Delegates to `numeric_mode_name()` since 2026-08-29. This used to
+    be a local two-way `IDENTICAL`-or-`FAST`, written when there were
+    two tiers, and it answered "FAST" for a DETERMINISTIC build -- so
+    a driver run under the middle tier printed the wrong arm onto
+    every line it produced. A correctly-labelled measurement of the
+    wrong arm is the failure this tree has been bitten by repeatedly,
+    and forty-four copies of a mode label is how it happens.
+    """
+    return numeric_mode_name()
 
 
 def _mix(i: Int, f: Int, salt: Int) -> UInt64:

@@ -55,19 +55,21 @@ from core.gemm import gemm_nt, gemm_tn, gemv_n
 from core.gram_splitk import gram_splitk_applies, gram_splitk_chunk_count
 from core.identity_trace import IdentityTrace
 from mojo_only.kernel_matrix import TARGET_COLUMN, column_name
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
 def _mode_name() -> String:
-    """The mode THIS BINARY COMPILED IN, printed so the driver can read it
-    BACK rather than assume it from the flip. `mojo_only/numerics.mojo` is a
-    shared file in a checkout worked by parallel sessions, and a build that
-    lands inside another session's flip window compiles the other arm and
-    labels every line in itself consistently with that arm (DEVIATION 514).
+    """The build's tier, from the ONE definition of it.
+
+    Delegates to `numeric_mode_name()` since 2026-08-29. This used to
+    be a local two-way `IDENTICAL`-or-`FAST`, written when there were
+    two tiers, and it answered "FAST" for a DETERMINISTIC build -- so
+    a driver run under the middle tier printed the wrong arm onto
+    every line it produced. A correctly-labelled measurement of the
+    wrong arm is the failure this tree has been bitten by repeatedly,
+    and forty-four copies of a mode label is how it happens.
     """
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        return String("IDENTICAL")
-    return String("FAST")
+    return numeric_mode_name()
 
 
 def _exact(i: Int, salt: Int) -> Float32:

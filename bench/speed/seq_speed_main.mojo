@@ -160,7 +160,7 @@ from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import FNV_OFFSET, IdentityTrace, _hex16, fnv1a64_bytes
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 # ---- transformer -----------------------------------------------------------
 from transformer.mojo_only.transformer_fixture import RMS_EPS as LLAMA_RMS_EPS
@@ -212,15 +212,17 @@ from mamba.ported.transformers.models.mamba.modeling_mamba import (
 
 
 def _mode_name() -> String:
-    """The mode this binary COMPILED in, read from the comptime constant.
+    """The build's tier, from the ONE definition of it.
 
-    NEVER from the environment and never from the flag that was passed.
-    `bench/lanes_price_main.mojo` records that three mislabeled measurements
-    were caught by this witness on 2026-08-23; a driver that prints the mode
-    it was ASKED for prints a correct label on the wrong arm."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        return String("IDENTICAL")
-    return String("FAST")
+    Delegates to `numeric_mode_name()` since 2026-08-29. This used to
+    be a local two-way `IDENTICAL`-or-`FAST`, written when there were
+    two tiers, and it answered "FAST" for a DETERMINISTIC build -- so
+    a driver run under the middle tier printed the wrong arm onto
+    every line it produced. A correctly-labelled measurement of the
+    wrong arm is the failure this tree has been bitten by repeatedly,
+    and forty-four copies of a mode label is how it happens.
+    """
+    return numeric_mode_name()
 
 
 def _env_int(name: String, default: Int) raises -> Int:

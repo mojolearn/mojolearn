@@ -87,6 +87,7 @@ from mojo_only.numerics import (
     identical_mul,
     identical_mul_add,
     portable_fmaxf,
+    numeric_mode_name,
 )
 
 # DEVIATION 947's cross-file arm. These four imports are the only reason
@@ -249,9 +250,17 @@ def _canon(b: UInt32) -> UInt32:
 
 
 def _mode_name() -> String:
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        return String("IDENTICAL")
-    return String("FAST")
+    """The build's tier, from the ONE definition of it.
+
+    Delegates to `numeric_mode_name()` since 2026-08-29. This used to
+    be a local two-way `IDENTICAL`-or-`FAST`, written when there were
+    two tiers, and it answered "FAST" for a DETERMINISTIC build -- so
+    a driver run under the middle tier printed the wrong arm onto
+    every line it produced. A correctly-labelled measurement of the
+    wrong arm is the failure this tree has been bitten by repeatedly,
+    and forty-four copies of a mode label is how it happens.
+    """
+    return numeric_mode_name()
 
 
 # ---- the fixture --------------------------------------------------------
