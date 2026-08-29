@@ -2,7 +2,7 @@
 """identity_break: TRY TO BREAK cross-vendor bit-identity, on every estimator.
 
 `tools/repeat_run_stability.py` asks one lane one question on one benign
-fixture. This asks every public estimator SEVEN hostile questions, under the
+fixture. This asks every public estimator EIGHT hostile questions, under the
 `identical` tier, and writes a per-cell fingerprint so three vendors' runs
 can be diffed cell by cell:
 
@@ -10,6 +10,7 @@ can be diffed cell by cell:
     hashed    values derived from a hash, no structure, no ties, no symmetry
     wide      column magnitudes spanning 1e-4 .. 1e4 (accumulation order bites)
     denormal  a slice of the data sits below float32 normal (flush-to-zero)
+    denormal_ftz  the same with subnormals flushed: the diagnostic twin
     dupes     duplicated rows, a constant column, an all-zero column
     odd       n = 12345, d = 17 -- nothing a block, warp or tile divides evenly
     negative  every value negative, shifted off the origin
@@ -95,6 +96,15 @@ def fixture(kind, n=N, d=D, seed=0):
         # a quarter of the rows, three columns, pushed into the subnormal range
         X[: n // 4, :3] = (X[: n // 4, :3] * np.float32(1e-40)).astype(np.float32)
         assert np.any((X != 0) & (np.abs(X) < np.finfo(np.float32).tiny))
+    elif kind == "denormal_ftz":
+        # THE DIAGNOSTIC TWIN of `denormal`: the same bytes with every
+        # subnormal replaced by a signed zero, which is what a flush-to-zero
+        # backend sees. A vendor whose `denormal` cell equals another vendor's
+        # `denormal_ftz` cell is flushing where the other is not.
+        X, _, _ = fixture("denormal", n, d, seed)
+        sub = (X != 0) & (np.abs(X) < np.finfo(np.float32).tiny)
+        X = X.copy()
+        X[sub] = np.copysign(np.float32(0.0), X[sub])
     elif kind == "dupes":
         X = rng.standard_normal((n, d)).astype(np.float32)
         X[n // 2:] = X[: n - n // 2]          # second half duplicates the first
@@ -110,11 +120,19 @@ def fixture(kind, n=N, d=D, seed=0):
     # targets: a signed rule on two columns, and a linear regression target
     y_clf = (X[:, 0] + 0.5 * X[:, 1] > np.median(X[:, 0] + 0.5 * X[:, 1])).astype(np.int32)
     w = np.random.default_rng(seed + 1).standard_normal(X.shape[1]).astype(np.float32)
-    y_reg = (X @ w).astype(np.float32)
+    # FIXED-ORDER, ELEMENTWISE, NO BLAS. `X @ w` in float32 goes through the
+    # host BLAS (Accelerate on the Mac, OpenBLAS on a Linux box) and the
+    # accumulation order differs between them: measured 2026-08-29, 13876 of
+    # 20000 targets differed on ONE Mac between `X @ w` and this loop, and
+    # every regression lane read DIVERGENT Apple-vs-AMD for that reason alone.
+    # A cross-vendor probe must hand every vendor the same bytes.
+    y_reg = np.zeros(X.shape[0], dtype=np.float32)
+    for j in range(X.shape[1]):
+        y_reg = (y_reg + X[:, j] * w[j]).astype(np.float32)
     return X, y_clf, y_reg
 
 
-FIXTURES = ["base", "ties", "hashed", "wide", "denormal", "dupes", "odd", "negative"]
+FIXTURES = ["base", "ties", "hashed", "wide", "denormal", "denormal_ftz", "dupes", "odd", "negative"]
 
 LANES = {}
 
@@ -133,154 +151,154 @@ def lane(name):
 @lane("rf-clf")
 def _(ml, X, yc, yr):
     m = ml.RandomForestClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, yc)
-    return _h(m.predict(X), m.predict_proba(X))
+    return dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)))
 
 
 @lane("rf-reg")
 def _(ml, X, yc, yr):
     m = ml.RandomForestRegressor(n_estimators=16, max_depth=8, random_state=7).fit(X, yr)
-    return _h(m.predict(X))
+    return dict(predict=_h(m.predict(X)))
 
 
 @lane("et-clf")
 def _(ml, X, yc, yr):
     m = ml.ExtraTreesClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, yc)
-    return _h(m.predict(X), m.predict_proba(X))
+    return dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)))
 
 
 @lane("et-reg")
 def _(ml, X, yc, yr):
     m = ml.ExtraTreesRegressor(n_estimators=16, max_depth=8, random_state=7).fit(X, yr)
-    return _h(m.predict(X))
+    return dict(predict=_h(m.predict(X)))
 
 
 @lane("gbdt-symmetric")
 def _(ml, X, yc, yr):
     m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss").fit(X, yc)
-    return _h(m.predict(X), m.predict_proba(X))
+    return dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)))
 
 
 @lane("gbdt-depthwise")
 def _(ml, X, yc, yr):
     m = ml.GradientBoosting(n_estimators=20, max_depth=6, grow_policy="Depthwise",
                             loss="Logloss").fit(X, yc)
-    return _h(m.predict(X))
+    return dict(predict=_h(m.predict(X)))
 
 
 @lane("gbdt-lossguide")
 def _(ml, X, yc, yr):
     m = ml.GradientBoosting(n_estimators=20, max_leaves=32, grow_policy="Lossguide",
                             loss="Logloss").fit(X, yc)
-    return _h(m.predict(X))
+    return dict(predict=_h(m.predict(X)))
 
 
 @lane("gbdt-rmse")
 def _(ml, X, yc, yr):
     m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="RMSE").fit(X, yr)
-    return _h(m.predict(X))
+    return dict(predict=_h(m.predict(X)))
 
 
 @lane("kmeans")
 def _(ml, X, yc, yr):
     m = ml.KMeans(n_clusters=8, random_state=3).fit(X)
-    return _h(m.cluster_centers_, m.labels_)
+    return dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_))
 
 
 @lane("knn")
 def _(ml, X, yc, yr):
     m = ml.NearestNeighbors(n_neighbors=8).fit(X[:4096])
     d, i = m.kneighbors(X[4096:4160])
-    return _h(d, i)
+    return dict(dist=_h(d), idx=_h(i))
 
 
 @lane("knn-clf")
 def _(ml, X, yc, yr):
     m = ml.KNeighborsClassifier(n_neighbors=8).fit(X[:4096], yc[:4096])
-    return _h(m.predict(X[4096:4160]), m.predict_proba(X[4096:4160]))
+    return dict(predict=_h(m.predict(X[4096:4160])), proba=_h(m.predict_proba(X[4096:4160])))
 
 
 @lane("knn-reg")
 def _(ml, X, yc, yr):
     m = ml.KNeighborsRegressor(n_neighbors=8).fit(X[:4096], yr[:4096])
-    return _h(m.predict(X[4096:4160]))
+    return dict(predict=_h(m.predict(X[4096:4160])))
 
 
 @lane("dbscan")
 def _(ml, X, yc, yr):
     m = ml.DBSCAN(eps=0.9, min_samples=5).fit(X[:6000, :4])
-    return _h(m.labels_)
+    return dict(labels=_h(m.labels_))
 
 
 @lane("pca")
 def _(ml, X, yc, yr):
     m = ml.PCA(n_components=4).fit(X)
-    return _h(m.components_, m.explained_variance_, m.transform(X[:256]))
+    return dict(components=_h(m.components_), variance=_h(m.explained_variance_), transform=_h(m.transform(X[:256])))
 
 
 @lane("tsvd")
 def _(ml, X, yc, yr):
     m = ml.TruncatedSVD(n_components=4).fit(X)
-    return _h(m.components_, m.transform(X[:256]))
+    return dict(components=_h(m.components_), transform=_h(m.transform(X[:256])))
 
 
 @lane("ols")
 def _(ml, X, yc, yr):
     m = ml.LinearRegression().fit(X, yr)
-    return _h(m.coef_, m.predict(X[:256]))
+    return dict(coef=_h(m.coef_), predict=_h(m.predict(X[:256])))
 
 
 @lane("ridge")
 def _(ml, X, yc, yr):
     m = ml.Ridge(alpha=1.0).fit(X, yr)
-    return _h(m.coef_, m.predict(X[:256]))
+    return dict(coef=_h(m.coef_), predict=_h(m.predict(X[:256])))
 
 
 @lane("logistic")
 def _(ml, X, yc, yr):
     m = ml.LogisticRegression(max_iter=50).fit(X, yc)
-    return _h(m.coef_, m.predict_proba(X[:256]))
+    return dict(coef=_h(m.coef_), proba=_h(m.predict_proba(X[:256])))
 
 
 @lane("lasso")
 def _(ml, X, yc, yr):
     m = ml.Lasso(alpha=0.01, max_iter=200).fit(X, yr)
-    return _h(m.coef_, m.predict(X[:256]))
+    return dict(coef=_h(m.coef_), predict=_h(m.predict(X[:256])))
 
 
 @lane("elasticnet")
 def _(ml, X, yc, yr):
     m = ml.ElasticNet(alpha=0.01, l1_ratio=0.5, max_iter=200).fit(X, yr)
-    return _h(m.coef_, m.predict(X[:256]))
+    return dict(coef=_h(m.coef_), predict=_h(m.predict(X[:256])))
 
 
 @lane("svc")
 def _(ml, X, yc, yr):
     m = ml.SVC(C=1.0, kernel="rbf", max_iter=200).fit(X[:2000], yc[:2000])
-    return _h(m.decision_function(X[2000:2256]), m.predict(X[2000:2256]))
+    return dict(decision=_h(m.decision_function(X[2000:2256])), predict=_h(m.predict(X[2000:2256])))
 
 
 @lane("kde")
 def _(ml, X, yc, yr):
     m = ml.KernelDensity(bandwidth=0.7).fit(X[:4096, :4])
-    return _h(m.score_samples(X[4096:4352, :4]))
+    return dict(scores=_h(m.score_samples(X[4096:4352, :4])))
 
 
 @lane("iforest")
 def _(ml, X, yc, yr):
     m = ml.IsolationForest(n_estimators=16, random_state=5).fit(X)
-    return _h(m.score_samples(X), m.predict(X[:512]))
+    return dict(scores=_h(m.score_samples(X)), predict=_h(m.predict(X[:512])))
 
 
 @lane("agglomerative")
 def _(ml, X, yc, yr):
     m = ml.AgglomerativeClustering(n_clusters=4).fit(X[:2000, :4])
-    return _h(m.labels_)
+    return dict(labels=_h(m.labels_))
 
 
 @lane("spectral")
 def _(ml, X, yc, yr):
     m = ml.SpectralClustering(n_clusters=4, random_state=3).fit(X[:2000, :4])
-    return _h(m.labels_)
+    return dict(labels=_h(m.labels_))
 
 
 @lane("holtwinters")
@@ -288,7 +306,7 @@ def _(ml, X, yc, yr):
     series = (np.cumsum(X[:512, 0]) + 50.0).astype(np.float32)
     series = series - series.min() + 1.0     # positive, for the multiplicative path
     m = ml.ExponentialSmoothing(series, seasonal="additive", seasonal_periods=12).fit()
-    return _h(m.forecast(24))
+    return dict(forecast=_h(m.forecast(24)))
 
 
 @lane("gemm-pinned")
@@ -301,19 +319,19 @@ def _(ml, X, yc, yr):
     c2 = ml.linalg.matmul(wide.astype(np.float32),
                           np.ascontiguousarray(wide[:128].T).astype(np.float32),
                           identical=True) if wide.shape[1] == 4096 else c1
-    return _h(c1, c2)
+    return dict(small=_h(c1), wide=_h(c2))
 
 
 @lane("metrics")
 def _(ml, X, yc, yr):
     labels = ml.KMeans(n_clusters=4, random_state=3).fit(X[:3000, :4]).labels_
     mt = ml.metrics
-    return _h(
-        np.float64(mt.accuracy_score(yc[:3000], (labels % 2).astype(np.int32))),
-        np.float64(mt.adjusted_rand_score(yc[:3000], labels)),
-        np.float64(mt.v_measure_score(yc[:3000], labels)),
-        np.float64(mt.r2_score(yr[:3000], yr[:3000] * np.float32(0.9))),
-        np.float64(mt.silhouette_score(X[:3000, :4], labels)),
+    return dict(
+        accuracy=_h(np.float64(mt.accuracy_score(yc[:3000], (labels % 2).astype(np.int32)))),
+        ari=_h(np.float64(mt.adjusted_rand_score(yc[:3000], labels))),
+        vmeasure=_h(np.float64(mt.v_measure_score(yc[:3000], labels))),
+        r2=_h(np.float64(mt.r2_score(yr[:3000], yr[:3000] * np.float32(0.9)))),
+        silhouette=_h(np.float64(mt.silhouette_score(X[:3000, :4], labels))),
     )
 
 
@@ -332,6 +350,10 @@ def run(args):
     lanes = [n for n in LANES if not args.lanes or n in args.lanes.split(",")]
     fixtures = [f for f in FIXTURES if not args.fixtures or f in args.fixtures.split(",")]
     data = {f: fixture(f) for f in fixtures}
+    # THE FIXTURE IS PART OF THE RESULT. Every vendor must be handed the same
+    # bytes, and --diff refuses to compare columns whose fixtures differ.
+    fixture_hashes = {f: dict(X=_h(X), y_clf=_h(yc), y_reg=_h(yr))
+                      for f, (X, yc, yr) in data.items()}
 
     print(f"# identity_break  mode={mode}  {time.strftime('%Y-%m-%d %H:%M:%S')}  "
           f"{platform.platform()}")
@@ -342,23 +364,25 @@ def run(args):
         row = []
         for f in fixtures:
             X, yc, yr = data[f]
-            hs, err = [], None
+            hs, parts, err = [], [], None
             for _ in range(args.repeats):
                 try:
-                    hs.append(LANES[name](ml, X, yc, yr))
+                    p = LANES[name](ml, X, yc, yr)
+                    parts.append(p)
+                    hs.append(_h(np.frombuffer("|".join(f"{k}={v}" for k, v in sorted(p.items())).encode(), dtype=np.uint8)))
                 except Exception as exc:
                     err = f"{type(exc).__name__}: {exc}"
                     if args.verbose:
                         traceback.print_exc()
                     break
             if err:
-                cell = dict(verdict="REFUSED", error=err[:300], hashes=hs)
+                cell = dict(verdict="REFUSED", error=err[:300], hashes=hs, parts=parts)
                 shown = "REFUSED"
             elif len(set(hs)) == 1:
-                cell = dict(verdict="STABLE", hashes=hs)
+                cell = dict(verdict="STABLE", hashes=hs, parts=parts)
                 shown = hs[0]
             else:
-                cell = dict(verdict="MOVED", hashes=hs)
+                cell = dict(verdict="MOVED", hashes=hs, parts=parts)
                 shown = "MOVED " + hs[0][:8]
             cells[f"{name}/{f}"] = cell
             row.append(f"{shown:<16}")
@@ -377,7 +401,7 @@ def run(args):
         with open(args.json, "w") as fh:
             json.dump(dict(mode=mode, repeats=args.repeats, platform=platform.platform(),
                            vendor=args.vendor, commit=os.environ.get("MOJOLEARN_COMMIT", ""),
-                           cells=cells), fh, indent=1)
+                           fixtures=fixture_hashes, cells=cells), fh, indent=1)
         print(f"wrote {args.json}")
     return 1 if moved else 0
 
@@ -390,6 +414,18 @@ def diff(paths):
         cols.append((j.get("vendor") or os.path.basename(p), j))
     keys = sorted(set(k for _, j in cols for k in j["cells"]))
     names = [c for c, _ in cols]
+    # Refuse to blame the library for a fixture the vendors did not share.
+    fx = [j.get("fixtures") for _, j in cols]
+    if all(fx):
+        for f in sorted(set(k for x in fx for k in x)):
+            vals = [json.dumps(x.get(f), sort_keys=True) for x in fx]
+            if len(set(vals)) != 1:
+                print(f"FIXTURE MISMATCH on {f!r}: the columns were not handed the same bytes; "
+                      f"cells on it are the fixture's divergence, not the library's")
+                for n, x in zip(names, fx):
+                    print(f"    {n}: {x.get(f)}")
+    else:
+        print("NOTE: a column carries no fixture hashes (older harness); fixture equality unchecked")
     print(f"| {'lane/fixture':<28} | {'verdict':<10} | " + " | ".join(f"{n:<16}" for n in names) + " |")
     print(f"|{'-'*30}|{'-'*12}|" + "|".join("-" * 18 for _ in names) + "|")
     bad, counts = 0, {}
@@ -415,6 +451,18 @@ def diff(paths):
             verdict = "DIVERGENT"
         if verdict in ("MOVED", "DIVERGENT"):
             bad += 1
+        if verdict == "DIVERGENT":
+            # localise: which named part disagrees
+            per = {}
+            for n, (_, j) in zip(names, cols):
+                c = j["cells"].get(k)
+                if c and c.get("parts"):
+                    for pk, pv in c["parts"][0].items():
+                        per.setdefault(pk, []).append(pv)
+            diverging = [pk for pk, pv in per.items() if len(set(pv)) > 1]
+            agreeing = [pk for pk, pv in per.items() if len(set(pv)) == 1]
+            if per:
+                shown[0] = f"parts differ: {','.join(diverging) or '?'}; agree: {','.join(agreeing) or '-'}"
         counts[verdict.split(" ")[0]] = counts.get(verdict.split(" ")[0], 0) + 1
         print(f"| {k:<28} | {verdict:<10} | " + " | ".join(f"{s:<16}" for s in shown) + " |")
     print()
