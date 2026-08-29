@@ -1,0 +1,56 @@
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 08:51:48
+phase 9 builds: build.sh build_gbdt.sh build_estimators.sh build_linalg.sh
+fast set: 4 of 10 binaries
+deterministic set: 4 of 10 binaries
+identical set: 4 of 10 binaries
+PHASE9-FINDING: stability arm fast returned non-zero (see stability/fast.txt)
+--- stability fast
+        from .extratrees import ExtraTreesClassifier, ExtraTreesRegressor
+      File "/root/mojolearn/python/mojolearn/extratrees.py", line 54, in <module>
+        from . import _mojolearn_trees, _serialize
+    ImportError: cannot import name '_mojolearn_trees' from partially initialized module 'mojolearn' (most likely due to a circular import) (/root/mojolearn/python/mojolearn/__init__.py)
+--- stability deterministic
+        MOJOLEARN_NUMERIC_MODE=deterministic bash bindings/build_svm.sh
+      rf-clf: ImportError: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn_rf.so, which is not built. Build it with
+        MOJOLEARN_NUMERIC_MODE=deterministic bash bindings/build_rf.sh
+    wrote /root/mojolearn/bench/results/e1/2026-08-29_085144-bced8f7dcb48/stability/deterministic.json
+--- stability identical
+        MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_svm.sh
+      rf-clf: ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_rf.so, which is not built. Build it with
+        MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_rf.sh
+    wrote /root/mojolearn/bench/results/e1/2026-08-29_085144-bced8f7dcb48/stability/identical.json
+--- stability concurrent
+    
+      fast           MOVED   24 calls returned 24 DIFFERENT answers
+      deterministic  STABLE  all 12 calls returned THE SAME answer
+      identical      STABLE  all 12 calls returned THE SAME answer
+    
+    fast MOVED, which is fast working as specified: it promises speed and makes no bitwise claim.
+
+=== done === 09:00:03
+artifacts in /root/mojolearn/bench/results/e1/2026-08-29_085144-bced8f7dcb48
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card
+vendor=nvidia
+payload=phase8
+commit=e680bda6ad08f827d447ac7e29af0530712cd7c4
+work_timeout=3000
+e1_phases=9
+e1_lanes=
+started=2026-08-29T08:51:42Z
+bootstrap_exit=0
+note: a bootstrap_exit of 124 is the work timeout firing
+e1dir_source=the bootstrap's own 'artifacts in' line
+e1dir=/root/mojolearn/bench/results/e1/2026-08-29_085144-bced8f7dcb48
+identical_cards=0
+fast_cards=0
+phase8_findings=0
+finished=2026-08-29T09:00:03Z
+REMOTE_BODY_DONE

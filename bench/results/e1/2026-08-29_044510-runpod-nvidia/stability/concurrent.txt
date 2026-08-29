@@ -1,0 +1,58 @@
+3184 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3bd840000000, nodemask=2)
+# concurrent-context probe: one process, one GPU, one fit,
+# every available tier live at the same time
+
+  round 0  fast           -> fast           eec4ba9ed493266b
+  round 0  deterministic  -> deterministic  55cb2a72026a8f9a
+  round 0  identical      -> identical      7fbeefec8014f640
+  round 0  fast           -> fast           56be6785b1b52e1e
+  round 1  fast           -> fast           424404d32c3a9419
+  round 1  deterministic  -> deterministic  55cb2a72026a8f9a
+  round 1  identical      -> identical      7fbeefec8014f640
+  round 1  fast           -> fast           ea06ffe1b0e2a849
+  round 2  fast           -> fast           f50585cf75c8e1d9
+  round 2  deterministic  -> deterministic  55cb2a72026a8f9a
+  round 2  identical      -> identical      7fbeefec8014f640
+  round 2  fast           -> fast           d1ca310c62c3114d
+  round 3  fast           -> fast           09776afc368517f4
+  round 3  deterministic  -> deterministic  55cb2a72026a8f9a
+  round 3  identical      -> identical      7fbeefec8014f640
+  round 3  fast           -> fast           88b96b837ddc2c4b
+  round 4  fast           -> fast           b1c9f82db69a73dd
+  round 4  deterministic  -> deterministic  55cb2a72026a8f9a
+  round 4  identical      -> identical      7fbeefec8014f640
+  round 4  fast           -> fast           fba98e60202b0969
+  round 5  fast           -> fast           65820743b850a960
+  round 5  deterministic  -> deterministic  55cb2a72026a8f9a
+  round 5  identical      -> identical      7fbeefec8014f640
+  round 5  fast           -> fast           2c84efa7646fd5fd
+  round 6  fast           -> fast           986de76797aea4d6
+  round 6  deterministic  -> deterministic  55cb2a72026a8f9a
+  round 6  identical      -> identical      7fbeefec8014f640
+  round 6  fast           -> fast           eadfc3de480f9154
+  round 7  fast           -> fast           87419241885e4f44
+  round 7  deterministic  -> deterministic  55cb2a72026a8f9a
+  round 7  identical      -> identical      7fbeefec8014f640
+  round 7  fast           -> fast           53c17aafca862ef6
+  round 8  fast           -> fast           466234e9d58de47e
+  round 8  deterministic  -> deterministic  55cb2a72026a8f9a
+  round 8  identical      -> identical      7fbeefec8014f640
+  round 8  fast           -> fast           2fa78a797caa4560
+  round 9  fast           -> fast           985221e2840b8087
+  round 9  deterministic  -> deterministic  55cb2a72026a8f9a
+  round 9  identical      -> identical      7fbeefec8014f640
+  round 9  fast           -> fast           82b013367e79640d
+  round 10  fast           -> fast           e8a17bd88651d77b
+  round 10  deterministic  -> deterministic  55cb2a72026a8f9a
+  round 10  identical      -> identical      7fbeefec8014f640
+  round 10  fast           -> fast           cabeda11ed44cd7c
+  round 11  fast           -> fast           1d7486a1d41efa5c
+  round 11  deterministic  -> deterministic  55cb2a72026a8f9a
+  round 11  identical      -> identical      7fbeefec8014f640
+  round 11  fast           -> fast           451300f54684b475
+
+  fast           MOVED   24 calls returned 24 DIFFERENT answers
+  deterministic  STABLE  all 12 calls returned THE SAME answer
+  identical      STABLE  all 12 calls returned THE SAME answer
+
+fast MOVED, which is fast working as specified: it promises speed and makes no bitwise claim.

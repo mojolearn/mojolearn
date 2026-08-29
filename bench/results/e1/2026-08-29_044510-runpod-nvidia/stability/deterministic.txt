@@ -1,0 +1,37 @@
+2838 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b33c0000000, nodemask=2)
+2974 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3095c0000000, nodemask=1)
+# repeat-run stability, mode=deterministic, repeats=6, interleave=False
+# 2026-08-29 08:59:52
+
+| lane             | verdict  | same answer every time? | hashes |
+|------------------|----------|-------------------------|--------|
+| dbscan           | STABLE   | YES  6/6 calls agreed   | a4608e954c7420b7 |
+| et-clf           | REFUSED  | n/a (refused)           | ImportError: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/ |
+| gbdt-depthwise   | STABLE   | YES  6/6 calls agreed   | 5af5e69c7a51e998 |
+| gbdt-lossguide   | STABLE   | YES  6/6 calls agreed   | d824f0e1683d12b9 |
+| gbdt-symmetric   | STABLE   | YES  6/6 calls agreed   | f48275d3af938625 |
+| gemm-pinned      | REFUSED  | n/a (refused)           | RuntimeError: mojolearn.linalg: this process loaded the FAST build, which makes NO identit |
+| gemm-vendor      | STABLE   | YES  6/6 calls agreed   | 8e9744e2536e8e2c |
+| iforest          | REFUSED  | n/a (refused)           | ImportError: mojolearn: /root/mojolearn/python/mojolearn/deterministic/_mojolearn_svm.so i |
+| kmeans           | STABLE   | YES  6/6 calls agreed   | da3cb10e46c91256 |
+| knn-tied         | STABLE   | YES  6/6 calls agreed   | ee0e9b275fd62f90 |
+| logistic         | STABLE   | YES  6/6 calls agreed   | 4f82254ef9ad5365 |
+| ols              | STABLE   | YES  6/6 calls agreed   | e7456f8e994341c0 |
+| pca              | STABLE   | YES  6/6 calls agreed   | 33258d15b7cb95cc |
+| rf-clf           | REFUSED  | n/a (refused)           | ImportError: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/ |
+| ridge            | STABLE   | YES  6/6 calls agreed   | 2429faceacd9f531 |
+| tsvd             | STABLE   | YES  6/6 calls agreed   | 47058288d93c0afd |
+
+mode=deterministic  stable=12  moved=0  refused=4
+REFUSED: et-clf, gemm-pinned, iforest, rf-clf
+  et-clf: ImportError: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn_trees.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=deterministic bash bindings/build_trees.sh
+  gemm-pinned: RuntimeError: mojolearn.linalg: this process loaded the FAST build, which makes NO identity claim; mojolearn.identical.gemm.fp32.v1 is what the IDENTICAL build computes.
+  Set MOJOLEARN_NUMERIC_MODE=identical in the environment BEFORE importing mojolearn, having built the identical binary with
+      MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_linalg.sh
+  Or pass identical=False to say in the source that you want the fast product and are making no identity claim about it.
+  iforest: ImportError: mojolearn: /root/mojolearn/python/mojolearn/deterministic/_mojolearn_svm.so is not built; build it with
+    MOJOLEARN_NUMERIC_MODE=deterministic bash bindings/build_svm.sh
+  rf-clf: ImportError: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn_rf.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=deterministic bash bindings/build_rf.sh
+wrote /root/mojolearn/bench/results/e1/2026-08-29_085144-bced8f7dcb48/stability/deterministic.json

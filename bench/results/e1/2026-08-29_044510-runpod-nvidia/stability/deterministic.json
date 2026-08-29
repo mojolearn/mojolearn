@@ -1,0 +1,202 @@
+{
+ "mode": "deterministic",
+ "repeats": 6,
+ "rows": [
+  {
+   "lane": "dbscan",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "a4608e954c7420b7",
+    "a4608e954c7420b7",
+    "a4608e954c7420b7",
+    "a4608e954c7420b7",
+    "a4608e954c7420b7",
+    "a4608e954c7420b7"
+   ],
+   "error": null
+  },
+  {
+   "lane": "et-clf",
+   "verdict": "REFUSED",
+   "distinct": 0,
+   "hashes": [],
+   "error": "ImportError: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn_trees.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=deterministic bash bindings/build_trees.sh"
+  },
+  {
+   "lane": "gbdt-depthwise",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "5af5e69c7a51e998",
+    "5af5e69c7a51e998",
+    "5af5e69c7a51e998",
+    "5af5e69c7a51e998",
+    "5af5e69c7a51e998",
+    "5af5e69c7a51e998"
+   ],
+   "error": null
+  },
+  {
+   "lane": "gbdt-lossguide",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "d824f0e1683d12b9",
+    "d824f0e1683d12b9",
+    "d824f0e1683d12b9",
+    "d824f0e1683d12b9",
+    "d824f0e1683d12b9",
+    "d824f0e1683d12b9"
+   ],
+   "error": null
+  },
+  {
+   "lane": "gbdt-symmetric",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "f48275d3af938625",
+    "f48275d3af938625",
+    "f48275d3af938625",
+    "f48275d3af938625",
+    "f48275d3af938625",
+    "f48275d3af938625"
+   ],
+   "error": null
+  },
+  {
+   "lane": "gemm-pinned",
+   "verdict": "REFUSED",
+   "distinct": 0,
+   "hashes": [],
+   "error": "RuntimeError: mojolearn.linalg: this process loaded the FAST build, which makes NO identity claim; mojolearn.identical.gemm.fp32.v1 is what the IDENTICAL build computes.\n  Set MOJOLEARN_NUMERIC_MODE=identical in the environment BEFORE importing mojolearn, having built the identical binary with\n      MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_linalg.sh\n  Or pass identical=False to say in the source that you want the fast product and are making no identity claim about it."
+  },
+  {
+   "lane": "gemm-vendor",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "8e9744e2536e8e2c",
+    "8e9744e2536e8e2c",
+    "8e9744e2536e8e2c",
+    "8e9744e2536e8e2c",
+    "8e9744e2536e8e2c",
+    "8e9744e2536e8e2c"
+   ],
+   "error": null
+  },
+  {
+   "lane": "iforest",
+   "verdict": "REFUSED",
+   "distinct": 0,
+   "hashes": [],
+   "error": "ImportError: mojolearn: /root/mojolearn/python/mojolearn/deterministic/_mojolearn_svm.so is not built; build it with\n    MOJOLEARN_NUMERIC_MODE=deterministic bash bindings/build_svm.sh"
+  },
+  {
+   "lane": "kmeans",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "da3cb10e46c91256",
+    "da3cb10e46c91256",
+    "da3cb10e46c91256",
+    "da3cb10e46c91256",
+    "da3cb10e46c91256",
+    "da3cb10e46c91256"
+   ],
+   "error": null
+  },
+  {
+   "lane": "knn-tied",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "ee0e9b275fd62f90",
+    "ee0e9b275fd62f90",
+    "ee0e9b275fd62f90",
+    "ee0e9b275fd62f90",
+    "ee0e9b275fd62f90",
+    "ee0e9b275fd62f90"
+   ],
+   "error": null
+  },
+  {
+   "lane": "logistic",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "4f82254ef9ad5365",
+    "4f82254ef9ad5365",
+    "4f82254ef9ad5365",
+    "4f82254ef9ad5365",
+    "4f82254ef9ad5365",
+    "4f82254ef9ad5365"
+   ],
+   "error": null
+  },
+  {
+   "lane": "ols",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "e7456f8e994341c0",
+    "e7456f8e994341c0",
+    "e7456f8e994341c0",
+    "e7456f8e994341c0",
+    "e7456f8e994341c0",
+    "e7456f8e994341c0"
+   ],
+   "error": null
+  },
+  {
+   "lane": "pca",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "33258d15b7cb95cc",
+    "33258d15b7cb95cc",
+    "33258d15b7cb95cc",
+    "33258d15b7cb95cc",
+    "33258d15b7cb95cc",
+    "33258d15b7cb95cc"
+   ],
+   "error": null
+  },
+  {
+   "lane": "rf-clf",
+   "verdict": "REFUSED",
+   "distinct": 0,
+   "hashes": [],
+   "error": "ImportError: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn_rf.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=deterministic bash bindings/build_rf.sh"
+  },
+  {
+   "lane": "ridge",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "2429faceacd9f531",
+    "2429faceacd9f531",
+    "2429faceacd9f531",
+    "2429faceacd9f531",
+    "2429faceacd9f531",
+    "2429faceacd9f531"
+   ],
+   "error": null
+  },
+  {
+   "lane": "tsvd",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "47058288d93c0afd",
+    "47058288d93c0afd",
+    "47058288d93c0afd",
+    "47058288d93c0afd",
+    "47058288d93c0afd",
+    "47058288d93c0afd"
+   ],
+   "error": null
+  }
+ ]
+}

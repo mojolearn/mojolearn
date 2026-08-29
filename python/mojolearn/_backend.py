@@ -101,10 +101,42 @@ def select():
     if _SELECTED is not None:
         return _SELECTED
     mode = requested_mode()
+    pkg_dir = os.path.dirname(os.path.abspath(__file__))
     if mode == "fast":
+        # FAST USED TO RETURN HERE, INSTALLING NOTHING, and that made it the
+        # ONLY tier that cannot survive a partial build. An upper tier gets a
+        # `_MissingUpperTier` stub for each binding that did not build, so the
+        # package imports and the estimators that need that binding raise BY
+        # NAME on use. Under fast there were no stubs, so `from . import
+        # _mojolearn_trees` in extratrees.py raised at PACKAGE IMPORT and took
+        # the whole library down.
+        #
+        # Measured on a rented RTX 4090, 2026-08-29: a leg that deliberately
+        # built four of the ten bindings got tables from the deterministic and
+        # identical arms -- three lanes REFUSED by name, the rest measured --
+        # and from the fast arm got a traceback ending "cannot import name
+        # '_mojolearn_trees' ... (most likely due to a circular import)",
+        # which names the wrong cause and loses every lane that would have
+        # worked. Same partial build, two entirely different outcomes,
+        # decided by which tier was asked for.
+        #
+        # Present bindings are left to normal import: this installs a stub for
+        # a MISSING one and touches nothing else.
+        for name in _MODULES:
+            if os.path.exists(os.path.join(pkg_dir, name + ".so")):
+                continue
+            full = f"{sys.modules[__name__.rsplit('.', 1)[0]].__name__}.{name}"
+            if full in sys.modules:
+                continue
+            module = _MissingUpperTier(
+                full, os.path.join(pkg_dir, name + ".so"),
+                _build_script(name), "fast",
+            )
+            sys.modules[full] = module
+            setattr(sys.modules[__name__.rsplit(".", 1)[0]], name, module)
+            _MISSING.append(name)
         _SELECTED = "fast"
         return _SELECTED
-    pkg_dir = os.path.dirname(os.path.abspath(__file__))
     # The directory IS the mode name, for every tier above fast. Derived
     # rather than branched, so adding a fourth tier is one dict entry.
     ident_dir = os.path.join(pkg_dir, mode)
