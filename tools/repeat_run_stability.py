@@ -226,6 +226,120 @@ def _iforest(ml):
     return _h(np.asarray(m.score_samples(X)))
 
 
+# THE TWELVE LANES THAT WERE NOT HERE (2026-08-29). The deterministic tier had
+# been measured on 16 lanes and the other 12 public surfaces had never been
+# asked the one-box question under the middle tier's own binary. Every public
+# estimator is a lane now; fixtures match tools/identity_break.py's base.
+
+@lane("rf-reg")
+def _rf_reg(ml):
+    X, y = _reg()
+    m = ml.RandomForestRegressor(n_estimators=16, max_depth=8, random_state=7)
+    m.fit(X, y)
+    return _h(m.predict(X))
+
+
+@lane("et-reg")
+def _et_reg(ml):
+    X, y = _reg()
+    m = ml.ExtraTreesRegressor(n_estimators=16, max_depth=8, random_state=7)
+    m.fit(X, y)
+    return _h(m.predict(X))
+
+
+@lane("gbdt-rmse")
+def _gbdt_rmse(ml):
+    X, y = _reg()
+    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="RMSE")
+    m.fit(X, y)
+    return _h(m.predict(X))
+
+
+@lane("knn-clf")
+def _knn_clf(ml):
+    X, y = _clf()
+    m = ml.KNeighborsClassifier(n_neighbors=8)
+    m.fit(X[:4096], y[:4096])
+    return _h(m.predict(X[4096:4160]), m.predict_proba(X[4096:4160]))
+
+
+@lane("knn-reg")
+def _knn_reg(ml):
+    X, y = _reg()
+    m = ml.KNeighborsRegressor(n_neighbors=8)
+    m.fit(X[:4096], y[:4096])
+    return _h(m.predict(X[4096:4160]))
+
+
+@lane("lasso")
+def _lasso(ml):
+    X, y = _reg()
+    m = ml.Lasso(alpha=0.01, max_iter=200)
+    m.fit(X, y)
+    return _h(np.asarray(m.coef_))
+
+
+@lane("elasticnet")
+def _elasticnet(ml):
+    X, y = _reg()
+    m = ml.ElasticNet(alpha=0.01, l1_ratio=0.5, max_iter=200)
+    m.fit(X, y)
+    return _h(np.asarray(m.coef_))
+
+
+@lane("svc")
+def _svc(ml):
+    X, y = _clf()
+    m = ml.SVC(C=1.0, kernel="rbf", max_iter=200)
+    m.fit(X[:2000], y[:2000])
+    return _h(m.decision_function(X[2000:2256]))
+
+
+@lane("kde")
+def _kde(ml):
+    X, _ = _clf()
+    m = ml.KernelDensity(bandwidth=0.7)
+    m.fit(X[:4096, :4])
+    return _h(m.score_samples(X[4096:4352, :4]))
+
+
+@lane("agglomerative")
+def _agglomerative(ml):
+    X, _ = _clf()
+    m = ml.AgglomerativeClustering(n_clusters=4)
+    m.fit(X[:2000, :4])
+    return _h(m.labels_)
+
+
+@lane("spectral")
+def _spectral(ml):
+    X, _ = _clf()
+    m = ml.SpectralClustering(n_clusters=4, random_state=3)
+    m.fit(X[:2000, :4])
+    return _h(m.labels_)
+
+
+@lane("holtwinters")
+def _holtwinters(ml):
+    X, _ = _clf()
+    series = (np.cumsum(X[:512, 0]) + 50.0).astype(np.float32)
+    series = series - series.min() + 1.0
+    m = ml.ExponentialSmoothing(series, seasonal="additive", seasonal_periods=12).fit()
+    return _h(m.forecast(24))
+
+
+@lane("metrics")
+def _metrics(ml):
+    X, y = _clf()
+    labels = ml.KMeans(n_clusters=4, random_state=3).fit(X[:3000, :4]).labels_
+    mt = ml.metrics
+    return _h(
+        np.float64(mt.adjusted_rand_score(y[:3000], labels)),
+        np.float64(mt.v_measure_score(y[:3000], labels)),
+        np.float64(mt.silhouette_score(X[:3000, :4], labels)),
+    )
+
+
 @lane("gemm-vendor")
 def _gemm_vendor(ml):
     """THE OPEN QUESTION, ASKED DIRECTLY.
