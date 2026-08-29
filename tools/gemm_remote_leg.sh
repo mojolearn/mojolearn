@@ -556,6 +556,16 @@ P9_LANES="${MOJOLEARN_GEMM_LEG_P9_LANES:-}"
 P9_TIERS="${MOJOLEARN_GEMM_LEG_P9_TIERS:-}"
 P9_BREAK="${MOJOLEARN_GEMM_LEG_P9_BREAK:-0}"
 P9_DIAG="${MOJOLEARN_GEMM_LEG_P9_DIAG:-}"
+# THE LINUX WHEEL LEGS (2026-08-29, packaging/linux/leg.sh). P9_ONLY_DIAG=1
+# makes phase 9 run NOTHING but the diag script, P9_DIAG_TIMEOUT bounds it
+# (the bootstrap's default of 2400 s is too short for thirty builds plus the
+# gates), and the two WHEEL_* values reach packaging/linux/leg_diag_install.sh
+# so the install-smoke leg knows which version to pip install from which
+# index. All four are exported on the box, all four are recorded in leg.txt.
+P9_ONLY_DIAG="${MOJOLEARN_GEMM_LEG_P9_ONLY_DIAG:-0}"
+P9_DIAG_TIMEOUT="${MOJOLEARN_GEMM_LEG_P9_DIAG_TIMEOUT:-2400}"
+WHEEL_VERSION="${MOJOLEARN_WHEEL_VERSION:-}"
+WHEEL_INDEX="${MOJOLEARN_WHEEL_INDEX:-testpypi}"
 # DEVIATION 973: which phase-8 lanes the box runs. Empty means all of them.
 # Leg 12 proved the need: the lane order puts mamba LAST behind gemm's device
 # check, the largest compile in the set, so on a cold box mamba was never
@@ -2344,6 +2354,21 @@ MOJOLEARN_P9_BREAK="@P9BREAK@"
 export MOJOLEARN_P9_BREAK
 MOJOLEARN_P9_DIAG="@P9DIAG@"
 [ -n "$MOJOLEARN_P9_DIAG" ] && export MOJOLEARN_P9_DIAG || unset MOJOLEARN_P9_DIAG
+MOJOLEARN_P9_ONLY_DIAG="@P9ONLYDIAG@"
+export MOJOLEARN_P9_ONLY_DIAG
+MOJOLEARN_P9_DIAG_TIMEOUT="@P9DIAGTIMEOUT@"
+export MOJOLEARN_P9_DIAG_TIMEOUT
+MOJOLEARN_WHEEL_VERSION="@WHEELVERSION@"
+[ -n "$MOJOLEARN_WHEEL_VERSION" ] && export MOJOLEARN_WHEEL_VERSION || unset MOJOLEARN_WHEEL_VERSION
+MOJOLEARN_WHEEL_INDEX="@WHEELINDEX@"
+export MOJOLEARN_WHEEL_INDEX
+{
+    echo "p9_only_diag=$MOJOLEARN_P9_ONLY_DIAG"
+    echo "p9_diag=${MOJOLEARN_P9_DIAG:-}"
+    echo "p9_diag_timeout=$MOJOLEARN_P9_DIAG_TIMEOUT"
+    echo "wheel_version=${MOJOLEARN_WHEEL_VERSION:-}"
+    echo "wheel_index=$MOJOLEARN_WHEEL_INDEX"
+} >> "$OUT/leg.txt"
 MOJOLEARN_P9_VENDOR="nvidia-$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 | tr ' ' '-' | tr -d ',')"
 export MOJOLEARN_P9_VENDOR
 
@@ -3153,6 +3178,10 @@ leg_check_remote_body() {
         -e "s|@P9TIERS@|$P9_TIERS|g" \
         -e "s|@P9BREAK@|$P9_BREAK|g" \
         -e "s|@P9DIAG@|$P9_DIAG|g" \
+        -e "s|@P9ONLYDIAG@|$P9_ONLY_DIAG|g" \
+        -e "s|@P9DIAGTIMEOUT@|$P9_DIAG_TIMEOUT|g" \
+        -e "s|@WHEELVERSION@|$WHEEL_VERSION|g" \
+        -e "s|@WHEELINDEX@|$WHEEL_INDEX|g" \
         -e "s|@SMI@|$SMI_CMD|g" \
         "$_body" > "$_body.subst"
     mv "$_body.subst" "$_body"

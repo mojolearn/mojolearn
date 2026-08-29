@@ -553,8 +553,20 @@ P9_BINDINGS="${MOJOLEARN_P9_BINDINGS:-$E1_IDENT_BINDINGS}"
 # needs all three. Default all three. Recorded in the log so a one-tier leg
 # can never read as a three-tier one.
 P9_TIERS="${MOJOLEARN_P9_TIERS:-fast deterministic identical}"
-echo "phase 9 builds: $P9_BINDINGS"
-echo "phase 9 tiers:  $P9_TIERS"
+# DIAG ONLY (2026-08-29, the Linux wheel legs). MOJOLEARN_P9_ONLY_DIAG=1 skips
+# this phase's builds, stability arms, concurrent probe and break-it probe
+# and runs ONLY the diag script at the bottom. packaging/linux/leg_diag.sh
+# does its own thirty builds into its own directory and needs the whole
+# work bound for them; a leg that spent twelve builds and three arms here
+# first would run out of lease before the wheel's sets existed. Recorded in
+# the log so a diag-only column can never read as a phase-9 measurement.
+if [ "${MOJOLEARN_P9_ONLY_DIAG:-0}" = "1" ]; then
+  echo "phase 9: DIAG ONLY (MOJOLEARN_P9_ONLY_DIAG=1); no builds, no arms, no probes here"
+  P9_BINDINGS=""
+  P9_TIERS=""
+fi
+echo "phase 9 builds: ${P9_BINDINGS:-<none>}"
+echo "phase 9 tiers:  ${P9_TIERS:-<none>}"
 for tier in $P9_TIERS; do
   case "$tier" in
     fast) _dir="python/mojolearn" ;;
@@ -607,7 +619,7 @@ PYTHONPATH="$REPO/python" pixi run -e gbmbench python3 \
 echo "--- stability concurrent"
 tail -6 "$OUT/stability/concurrent.txt" 2>/dev/null | sed 's/^/    /'
 else
-  echo "concurrent probe SKIPPED: needs all three tiers, P9_TIERS=$P9_TIERS"
+  echo "concurrent probe SKIPPED: needs all three tiers, P9_TIERS=${P9_TIERS:-<none>}"
 fi
 
 # THE BREAK-IT PROBE (2026-08-29). tools/identity_break.py fits EVERY public
@@ -616,7 +628,7 @@ fi
 # and the control), twice each, and writes one fingerprint per cell. Diffed
 # against the Mac's column by `tools/identity_break.py --diff a.json b.json`.
 # Opt-in because it needs the full identical set built (all ten bindings).
-if [ "${MOJOLEARN_P9_BREAK:-0}" = "1" ]; then
+if [ "${MOJOLEARN_P9_BREAK:-0}" = "1" ] && [ "${MOJOLEARN_P9_ONLY_DIAG:-0}" != "1" ]; then
   echo "--- identity_break (identical, every estimator, eight fixtures)"
   # `timeout`: the iforest binding hung a whole NVIDIA lease on 2026-08-29;
   # the probe writes its JSON after every lane, so a kill keeps the rest.

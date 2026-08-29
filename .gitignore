@@ -47,3 +47,10 @@ catboost_info/
 # They are not junk and must not be ignored or removed.
 # Dry-run leg output is not a record.
 bench/results/e1g/*-dryrun/
+
+# the Linux wheel legs' fetched binary sets (packaging/linux/leg.sh). The
+# manifests, sizes, gate JSON and logs beside them ARE committed; the
+# binaries and the packed wheels are build outputs of a rented box.
+bench/results/wheels/*/wheels/sets/*/
+bench/results/wheels/*/wheels/sets/*.tar.gz
+bench/results/wheels/*/wheels/tools-venv/

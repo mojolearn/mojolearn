@@ -177,4 +177,16 @@ include-package-data = false
 # now defaults to all three. The distinction is kept anyway, because a
 # hotfix wheel cut with MOJOLEARN_RELEASE_MODES set to fewer tiers must
 # still produce a valid artifact.
-mojolearn = ["*.so", "identical/*.so", "deterministic/*.so", ".dylibs/*.dylib"]
+# THE LINUX LAYOUT IS ADMITTED TOO (2026-08-29): one directory per vendor,
+# the same three tiers inside each, and the MAX runtime `.so` staged under a
+# `.libs/` directory (docs/LINUX_WHEEL.md). The Linux wheel itself is not
+# produced by setuptools -- packaging/linux/pack_wheel.py writes it from the
+# fetched sets -- so these globs matter only to a `pip wheel` run from a Linux
+# checkout that has such a layout. They are listed so that file and this one
+# describe the same tree.
+mojolearn = [
+    "*.so", "identical/*.so", "deterministic/*.so", ".dylibs/*.dylib",
+    "cuda/*.so", "cuda/identical/*.so", "cuda/deterministic/*.so", "cuda/.libs/*",
+    "hip/*.so", "hip/identical/*.so", "hip/deterministic/*.so", "hip/.libs/*",
+    ".libs/*",
+]

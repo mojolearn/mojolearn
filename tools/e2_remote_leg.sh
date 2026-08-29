@@ -203,6 +203,13 @@ FETCH_RESERVE="${FETCH_RESERVE:-420}"
 # wave is the only way to say "this one first" without editing phase 8's order
 # for everybody. The waves share the box's pixi env and mojo cache, so only
 # the first pays the setup.
+# THE PHASE-9 DIAG KNOBS PASS THROUGH THIS LINE TOO (2026-08-29):
+# MOJOLEARN_P9_DIAG (a script path in the commit, run on the box after phase
+# 9's builds), MOJOLEARN_P9_ONLY_DIAG (1 = run nothing in phase 9 but that
+# script), MOJOLEARN_P9_DIAG_TIMEOUT, and MOJOLEARN_WHEEL_VERSION / _INDEX for
+# packaging/linux/leg_diag_install.sh. tools/e1_bootstrap.sh honours them;
+# until this line forwarded them an exported MOJOLEARN_P9_DIAG never reached
+# the box, because ssh starts a fresh environment.
 WAVES="${E2_LANE_WAVES:-${MOJOLEARN_E1_LANES:-}}"
 WAVE_N=0
 IFS=';' read -r -a WAVE_ARR <<< "$WAVES"
@@ -216,7 +223,7 @@ for WAVE in "${WAVE_ARR[@]}"; do
     continue
   fi
   log "wave $WAVE_N: phases=${MOJOLEARN_E1_PHASES:-all} lanes=${WAVE:-all}, bound ${WORK_SECONDS}s"
-  $SSH "export PATH=/root/.pixi/bin:\$PATH; cd /root/mojolearn && MOJOLEARN_E1_PHASES='${MOJOLEARN_E1_PHASES:-}' MOJOLEARN_E1_LANES='$WAVE' MOJOLEARN_P9_BINDINGS='${MOJOLEARN_P9_BINDINGS:-}' MOJOLEARN_P9_LANES='${MOJOLEARN_P9_LANES:-}' ${MOJOLEARN_P9_TIERS:+MOJOLEARN_P9_TIERS='$MOJOLEARN_P9_TIERS'} MOJOLEARN_P9_BREAK='${MOJOLEARN_P9_BREAK:-0}' MOJOLEARN_P9_VENDOR='amd-mi325x' timeout -k 30 $WORK_SECONDS bash tools/e1_bootstrap.sh > /root/e2_run_w$WAVE_N.log 2>&1; echo \"WAVE-$WAVE_N-EXIT=\$?  (124 = hit the work bound)\"; tail -30 /root/e2_run_w$WAVE_N.log"
+  $SSH "export PATH=/root/.pixi/bin:\$PATH; cd /root/mojolearn && MOJOLEARN_E1_PHASES='${MOJOLEARN_E1_PHASES:-}' MOJOLEARN_E1_LANES='$WAVE' MOJOLEARN_P9_BINDINGS='${MOJOLEARN_P9_BINDINGS:-}' MOJOLEARN_P9_LANES='${MOJOLEARN_P9_LANES:-}' ${MOJOLEARN_P9_TIERS:+MOJOLEARN_P9_TIERS='$MOJOLEARN_P9_TIERS'} MOJOLEARN_P9_BREAK='${MOJOLEARN_P9_BREAK:-0}' MOJOLEARN_P9_VENDOR='amd-mi325x' ${MOJOLEARN_P9_DIAG:+MOJOLEARN_P9_DIAG='$MOJOLEARN_P9_DIAG'} MOJOLEARN_P9_ONLY_DIAG='${MOJOLEARN_P9_ONLY_DIAG:-0}' MOJOLEARN_P9_DIAG_TIMEOUT='${MOJOLEARN_P9_DIAG_TIMEOUT:-2400}' ${MOJOLEARN_WHEEL_VERSION:+MOJOLEARN_WHEEL_VERSION='$MOJOLEARN_WHEEL_VERSION'} MOJOLEARN_WHEEL_INDEX='${MOJOLEARN_WHEEL_INDEX:-testpypi}' timeout -k 30 $WORK_SECONDS bash tools/e1_bootstrap.sh > /root/e2_run_w$WAVE_N.log 2>&1; echo \"WAVE-$WAVE_N-EXIT=\$?  (124 = hit the work bound)\"; tail -30 /root/e2_run_w$WAVE_N.log"
 done
 
 # EXTRA CHECKS: things phase 8 does not know about yet, run only when asked.
