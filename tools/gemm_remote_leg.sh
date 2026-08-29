@@ -555,6 +555,7 @@ P9_LANES="${MOJOLEARN_GEMM_LEG_P9_LANES:-}"
 # tools/identity_break.py on every estimator; see e1_bootstrap.sh phase 9.
 P9_TIERS="${MOJOLEARN_GEMM_LEG_P9_TIERS:-}"
 P9_BREAK="${MOJOLEARN_GEMM_LEG_P9_BREAK:-0}"
+P9_DIAG="${MOJOLEARN_GEMM_LEG_P9_DIAG:-}"
 # DEVIATION 973: which phase-8 lanes the box runs. Empty means all of them.
 # Leg 12 proved the need: the lane order puts mamba LAST behind gemm's device
 # check, the largest compile in the set, so on a cold box mamba was never
@@ -2341,6 +2342,8 @@ MOJOLEARN_P9_TIERS="@P9TIERS@"
 [ -n "$MOJOLEARN_P9_TIERS" ] && export MOJOLEARN_P9_TIERS || unset MOJOLEARN_P9_TIERS
 MOJOLEARN_P9_BREAK="@P9BREAK@"
 export MOJOLEARN_P9_BREAK
+MOJOLEARN_P9_DIAG="@P9DIAG@"
+[ -n "$MOJOLEARN_P9_DIAG" ] && export MOJOLEARN_P9_DIAG || unset MOJOLEARN_P9_DIAG
 MOJOLEARN_P9_VENDOR="nvidia-$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 | tr ' ' '-' | tr -d ',')"
 export MOJOLEARN_P9_VENDOR
 
@@ -3149,6 +3152,7 @@ leg_check_remote_body() {
         -e "s|@P9LANES@|$P9_LANES|g" \
         -e "s|@P9TIERS@|$P9_TIERS|g" \
         -e "s|@P9BREAK@|$P9_BREAK|g" \
+        -e "s|@P9DIAG@|$P9_DIAG|g" \
         -e "s|@SMI@|$SMI_CMD|g" \
         "$_body" > "$_body.subst"
     mv "$_body.subst" "$_body"

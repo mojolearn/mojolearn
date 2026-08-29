@@ -631,6 +631,18 @@ if [ "${MOJOLEARN_P9_BREAK:-0}" = "1" ]; then
   tail -8 "$OUT/stability/identity_break.identical.txt" 2>/dev/null | sed 's/^/    /'
 fi
 
+# A DIAGNOSTIC SCRIPT, shipped in the commit, run on the box after phase 9's
+# builds and arms (2026-08-29). MOJOLEARN_P9_DIAG names a bash script path
+# relative to the repo; it gets $OUT and $REPO in the environment and writes
+# whatever it wants under $OUT/diag/. Bounded by MOJOLEARN_P9_DIAG_TIMEOUT.
+if [ -n "${MOJOLEARN_P9_DIAG:-}" ]; then
+  step "phase 9 diag: $MOJOLEARN_P9_DIAG"
+  mkdir -p "$OUT/diag"
+  OUT="$OUT" REPO="$REPO" timeout -k 30 "${MOJOLEARN_P9_DIAG_TIMEOUT:-2400}" \
+    bash "$MOJOLEARN_P9_DIAG" > "$OUT/diag/console.log" 2>&1 \
+    || echo "PHASE9-FINDING: diag script returned non-zero (see diag/console.log)"
+  tail -20 "$OUT/diag/console.log" | sed 's/^/    /'
+fi
 fi
 step "done"
 echo "artifacts in $OUT"
