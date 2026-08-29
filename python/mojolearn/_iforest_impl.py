@@ -28,6 +28,7 @@ Two more things the lane says about itself and this class inherits:
 
 import numpy as np
 
+from ._mode import NumericModeMixin
 from ._arrays import _addr, _addr_ro, as_f32_c
 
 # THE EXTENSION LOADER LIVES IN `_svm_impl`, NOT BECAUSE THESE TWO LANES
@@ -43,7 +44,7 @@ _WANT_DECISION_FUNCTION = 1
 _WANT_PREDICT = 2
 
 
-class IsolationForest:
+class IsolationForest(NumericModeMixin):
     """Isolation Forest backed by the ported cuML path
     (`isolation_forest/`, DEVIATIONS 680-686 and 750-751), the
     scikit-learn surface.
@@ -336,7 +337,7 @@ class IsolationForest:
         values = np.empty(n_query, dtype=np.float32)
         labels = np.empty(n_query, dtype=np.int32)
         info = np.empty(3, dtype=np.float64)
-        _extension().iforest_run(
+        _extension(getattr(self, 'numeric_mode', None)).iforest_run(
             _addr_ro(train),
             _addr_ro(q),
             _addr(values),

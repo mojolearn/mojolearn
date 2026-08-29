@@ -33,6 +33,7 @@ boundary); on large matrices that is the dominant cost of the CALL.
 import numpy as np
 
 from . import _mojolearn_rf, _serialize
+from ._mode import NumericModeMixin
 from ._arrays import _addr, _addr_ro, as_f32_c
 
 #: The npz model-file format tag `save` writes and `load` requires.
@@ -125,7 +126,10 @@ def _max_features_fraction(max_features, n_features):
     return f
 
 
-class _RandomForestBase:
+class _RandomForestBase(NumericModeMixin):
+    #: This family's binding, for `NumericModeMixin._bind`.
+    _BINDING = "_mojolearn_rf"
+
     def __init__(
         self,
         n_estimators,
@@ -392,13 +396,13 @@ class RandomForestClassifier(_RandomForestBase):
             raise ValueError("y has fewer than 2 classes")
         y32 = np.ascontiguousarray(codes, dtype=np.int32)
         return self._fit_arrays(
-            X, y32, self.n_classes_, _mojolearn_rf.rf_classifier_fit
+            X, y32, self.n_classes_, self._bind("_mojolearn_rf").rf_classifier_fit
         )
 
     def predict_proba(self, X):
         Xa, n_rows, n_features = self._check_predict_input(X)
         out = np.empty(n_rows * self._num_outputs, dtype=np.float32)
-        wrote = _mojolearn_rf.rf_predict_proba(
+        wrote = self._bind("_mojolearn_rf").rf_predict_proba(
             _addr_ro(self._offsets),
             _addr_ro(self._colid),
             _addr_ro(self._quesval),
@@ -497,12 +501,12 @@ class RandomForestRegressor(_RandomForestBase):
                     " (objectives.cuh:279-281, :306-308), which would fit"
                     " a stump silently"
                 )
-        return self._fit_arrays(X, y32, 0, _mojolearn_rf.rf_regressor_fit)
+        return self._fit_arrays(X, y32, 0, self._bind("_mojolearn_rf").rf_regressor_fit)
 
     def predict(self, X):
         Xa, n_rows, n_features = self._check_predict_input(X)
         out = np.empty(n_rows, dtype=np.float32)
-        wrote = _mojolearn_rf.rf_predict_reg(
+        wrote = self._bind("_mojolearn_rf").rf_predict_reg(
             _addr_ro(self._offsets),
             _addr_ro(self._colid),
             _addr_ro(self._quesval),

@@ -24,11 +24,13 @@ the only thing standing between a swapped pair and a plausible number.
 DEVIATIONS 870-879 are this surface's. 870-875 are used and each is named
 where it bites; 876-879 are unassigned.
 
-NOT WIRED into `python/mojolearn/__init__.py` and not registered in
-`python/mojolearn/_backend.py`'s `_MODULES`. Those two files are the
-operator's convergence points. `_svm_impl.py` therefore loads this module
-itself, mode-aware, and cross-checks `svm_numeric_mode()` against the mode
-the package asked for; see the comment there.
+NOT WIRED into `python/mojolearn/__init__.py`, though `_mojolearn_svm` IS
+registered in `python/mojolearn/_backend.py`'s `_MODULES` (added with
+DEVIATION 869, when five bindings were found missing from that tuple and
+were therefore resolving to the FAST binary under the identical label).
+`_svm_impl.py` still loads this module itself, mode-aware, and cross-checks
+`svm_numeric_mode()` against the mode the package asked for; see the comment
+there.
 """
 
 from std.os import abort
@@ -64,14 +66,14 @@ def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
 
 
 def svm_numeric_mode_binding() raises -> PythonObject:
-    """1 when this binding was built under NUMERIC_IDENTICAL, else 0. The
-    same shape as `gbdt_numeric_mode`, and for the same reason: the wrapper
-    reads it once and refuses to run if the binary it loaded disagrees with
-    the mode the package asked for. A wrong-arm measurement that is
-    correctly labelled by accident is the failure this prevents."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        return PythonObject(1)
-    return PythonObject(0)
+    """THE BUILD'S TIER, as the `NUMERIC_*` code itself: 0 FAST, 1
+    IDENTICAL, 2 DETERMINISTIC. The same shape as `gbdt_numeric_mode`, and
+    for the same reason: the wrapper reads it once and refuses to run if the
+    binary it loaded disagrees with the mode the package asked for. A
+    wrong-arm measurement that is correctly labelled by accident is the
+    failure this prevents -- and a boolean could not do that job once a third
+    tier existed, because DETERMINISTIC answered 0 and read back as "fast"."""
+    return PythonObject(GLOBAL_NUMERIC_MODE)
 
 
 def svc_fit_binding(

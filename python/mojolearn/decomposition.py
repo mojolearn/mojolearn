@@ -3,6 +3,7 @@
 import numpy as np
 
 from . import _mojolearn_estimators
+from ._mode import NumericModeMixin
 from ._arrays import _addr, _addr_ro, as_f32_c
 
 
@@ -15,7 +16,7 @@ def _component_count(n_components, shape):
     return value
 
 
-class PCA:
+class PCA(NumericModeMixin):
     """Covariance-eigendecomposition PCA on the GPU: cuML's `pcaFit` route
     (covariance, then an eigensolver) with the eigensolver being cuML's
     JACOBI arm (`svd_solver='jacobi'`, cuSOLVER syevj there, a device
@@ -57,6 +58,9 @@ class PCA:
     Incremental fitting and sparse input are not implemented.
     """
 
+    #: This family's binding, for `NumericModeMixin._bind`.
+    _BINDING = "_mojolearn_estimators"
+
     def __init__(self, n_components=None, *, whiten=False, svd_solver="auto"):
         self.n_components = n_components
         self.whiten = whiten
@@ -86,7 +90,7 @@ class PCA:
         self.explained_variance_ = np.empty(nc, dtype=np.float32)
         self.explained_variance_ratio_ = np.empty(nc, dtype=np.float32)
         self.singular_values_ = np.empty(nc, dtype=np.float32)
-        self.noise_variance_ = float(_mojolearn_estimators.pca_fit(
+        self.noise_variance_ = float(self._bind("_mojolearn_estimators").pca_fit(
             _addr_ro(x), _addr(self.components_), _addr(self.mean_),
             _addr(self.explained_variance_), _addr(self.explained_variance_ratio_),
             _addr(self.singular_values_), [x.shape[0], x.shape[1], nc],
@@ -103,7 +107,7 @@ class PCA:
         if x.shape[1] != self.n_features_in_:
             raise ValueError("mojolearn PCA feature count differs from fit")
         out = np.empty((x.shape[0], self.n_components_), dtype=np.float32)
-        _mojolearn_estimators.pca_transform(
+        self._bind("_mojolearn_estimators").pca_transform(
             _addr_ro(x), _addr_ro(self.mean_), _addr_ro(self.components_),
             _addr(out), [x.shape[0], x.shape[1], self.n_components_],
         )
@@ -117,14 +121,14 @@ class PCA:
         if z.shape[1] != self.n_components_:
             raise ValueError("mojolearn PCA component count differs from fit")
         out = np.empty((z.shape[0], self.n_features_in_), dtype=np.float32)
-        _mojolearn_estimators.inverse_transform(
+        self._bind("_mojolearn_estimators").inverse_transform(
             _addr_ro(z), _addr_ro(self.components_), _addr_ro(self.mean_),
             _addr(out), [z.shape[0], self.n_features_in_, self.n_components_, 1],
         )
         return out
 
 
-class TruncatedSVD:
+class TruncatedSVD(NumericModeMixin):
     """Uncentered truncated SVD on the GPU, mirroring cuML's `tsvdFit`
     (Gram matrix + the same device Jacobi eigensolver PCA uses).
 
@@ -151,6 +155,9 @@ class TruncatedSVD:
     a second pass this port does not make).
     """
 
+    #: This family's binding, for `NumericModeMixin._bind`.
+    _BINDING = "_mojolearn_estimators"
+
     def __init__(self, n_components=2, *, algorithm="covariance_eigh"):
         self.n_components = n_components
         self.algorithm = algorithm
@@ -169,7 +176,7 @@ class TruncatedSVD:
         nc = _component_count(self.n_components, x.shape)
         self.components_ = np.empty((nc, x.shape[1]), dtype=np.float32)
         self.singular_values_ = np.empty(nc, dtype=np.float32)
-        _mojolearn_estimators.tsvd_fit(
+        self._bind("_mojolearn_estimators").tsvd_fit(
             _addr_ro(x), _addr(self.components_), _addr(self.singular_values_),
             [x.shape[0], x.shape[1], nc],
         )
@@ -184,7 +191,7 @@ class TruncatedSVD:
         if x.shape[1] != self.n_features_in_:
             raise ValueError("mojolearn TruncatedSVD feature count differs from fit")
         out = np.empty((x.shape[0], self.n_components_), dtype=np.float32)
-        _mojolearn_estimators.tsvd_transform(
+        self._bind("_mojolearn_estimators").tsvd_transform(
             _addr_ro(x), _addr_ro(self.components_), _addr(out),
             [x.shape[0], x.shape[1], self.n_components_],
         )
@@ -200,7 +207,7 @@ class TruncatedSVD:
         out = np.empty((z.shape[0], self.n_features_in_), dtype=np.float32)
         # The mean pointer is unused when add_mean is false; components is a
         # valid non-null float32 address for the boundary contract.
-        _mojolearn_estimators.inverse_transform(
+        self._bind("_mojolearn_estimators").inverse_transform(
             _addr_ro(z), _addr_ro(self.components_), _addr_ro(self.components_),
             _addr(out), [z.shape[0], self.n_features_in_, self.n_components_, 0],
         )

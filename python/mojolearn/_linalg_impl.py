@@ -149,8 +149,12 @@ def _load():
         return _binding_cache
     mode = _backend.numeric_mode()
     pkg_dir = os.path.dirname(os.path.abspath(__file__))
-    if mode == "identical":
-        path = os.path.join(pkg_dir, "identical", _MODULE_NAME + ".so")
+    # The directory IS the mode name for every tier above fast, the same
+    # rule `_backend.select()` uses. Spelled `== "identical"` until
+    # 2026-08-29, which loaded the FAST binary for a deterministic
+    # request.
+    if mode != "fast":
+        path = os.path.join(pkg_dir, mode, _MODULE_NAME + ".so")
     else:
         path = os.path.join(pkg_dir, _MODULE_NAME + ".so")
     full = __name__.rsplit(".", 1)[0] + "." + _MODULE_NAME
@@ -162,8 +166,8 @@ def _load():
         raise ImportError(
             f"mojolearn.linalg: {path} is not built. Build it with\n    "
             + (
-                f"MOJOLEARN_NUMERIC_MODE=identical bash {_BUILD_SCRIPT}"
-                if mode == "identical"
+                f"MOJOLEARN_NUMERIC_MODE={mode} bash {_BUILD_SCRIPT}"
+                if mode != "fast"
                 else f"bash {_BUILD_SCRIPT}"
             )
         )
@@ -179,7 +183,7 @@ def _load():
 
 
 def numeric_mode():
-    """'identical' or 'fast': what this process actually LOADED.
+    """'fast', 'deterministic' or 'identical': what this process LOADED.
 
     Read back from the binary through `linalg_numeric_mode()`, which is a
     compile-time answer (`is_defined["MOJOLEARN_NUMERIC_IDENTICAL"]`), and
@@ -195,7 +199,11 @@ def numeric_mode():
         return _mode_cache
     binding = _load()
     raw = int(binding.linalg_numeric_mode())
-    compiled = "identical" if raw == 1 else "fast"
+    # A NAME lookup: the binary reports the NUMERIC_* code, and the middle
+    # tier is 2. `raw == 1 else "fast"` called a deterministic binary
+    # "fast", which then AGREED with a fast selector -- a cross-check that
+    # passes on the wrong arm is worse than no cross-check.
+    compiled = _backend._CODE_MODE.get(raw, "unknown")
     selected = _backend.numeric_mode()
     if compiled != selected:
         raise RuntimeError(

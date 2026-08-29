@@ -38,7 +38,12 @@ comment says why: "min(ra, rb) would be sufficient but this speeds up
 convergence". Copied, including the extra indirection.
 """
 
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from mojo_only.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    PIN_DETERMINISM,
+    numeric_mode_name,
+)
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
@@ -167,13 +172,21 @@ def merge_labels(
         if h_m.unsafe_ptr().unsafe_load(0) == Int32(0):
             merged = True
             break
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if PIN_DETERMINISM:
+        # DEVIATION 507, and `PIN_DETERMINISM` since 2026-08-29:
+        # `propagate_label_kernel` reaches a UNIQUE fixed point whatever
+        # order its `atomicMin`s land in, so a run CUT OFF at the cap is
+        # holding the atomic order rather than the graph -- which two
+        # runs on one device need not agree about. Keyed to the top tier
+        # only, the middle tier returned it.
         if not merged:
             raise Error(
                 "merge_labels: the label equivalence graph did not settle"
                 " in "
                 + String(max_iterations)
-                + " passes. Under NUMERIC_IDENTICAL a truncated merge is"
+                + " passes. Under "
+                + numeric_mode_name()
+                + " a truncated merge is"
                 " refused rather than returned; raise max_iterations."
             )
 

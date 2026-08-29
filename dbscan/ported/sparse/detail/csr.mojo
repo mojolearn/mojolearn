@@ -57,7 +57,12 @@ mode that promises they are may not hand one back. Under `FAST` the
 upstream behaviour is unchanged, cap and all.
 """
 
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from mojo_only.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    PIN_DETERMINISM,
+    numeric_mode_name,
+)
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
@@ -213,15 +218,26 @@ def weak_cc_batched(
         if h_changed.unsafe_ptr().unsafe_load(0) == Int32(0):
             converged = True
             break
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if PIN_DETERMINISM:
         # DEVIATION 507. See DETERMINISM in the module docstring: the
         # order-independence of `atomicMin` is a property of the FIXED
         # POINT, and a run that stopped at the cap never reached one.
+        #
+        # **`PIN_DETERMINISM`, NOT `== NUMERIC_IDENTICAL`, SINCE
+        # 2026-08-29.** Read the sentence above literally: the labels
+        # of a truncated run are "a snapshot of the atomic order on
+        # THIS machine". That is a RUN-TO-RUN property, not a
+        # cross-vendor one -- two runs of the same call on the same GPU
+        # can stop at the cap holding different labels. Keyed to the
+        # top tier only, a DETERMINISTIC build returned that snapshot
+        # and called itself deterministic. IDENTICAL is unmoved.
         if not converged:
             raise Error(
                 "weak_cc_batched: label propagation did not converge in "
                 + String(max_iterations)
-                + " passes. Under NUMERIC_IDENTICAL a truncated propagation"
+                + " passes. Under "
+                + numeric_mode_name()
+                + " a truncated propagation"
                 " is refused rather than returned: its labels are a"
                 " snapshot of the atomic order on THIS machine, not a"
                 " function of the graph. Raise max_iterations."

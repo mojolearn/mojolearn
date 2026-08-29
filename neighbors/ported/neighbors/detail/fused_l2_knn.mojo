@@ -222,6 +222,7 @@ from mojo_only.kernel_matrix import TARGET_COLUMN, lib_lane_width_for
 from mojo_only.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
+    PIN_DETERMINISM,
     ftz,
     ftz_simd,
     identical_mul_add,
@@ -886,7 +887,7 @@ def fused_l2_knn(
     var cfg = fused_l2_knn_grid(n_queries, n_index)
     var grid_x = cfg[0]
     var grid_y = cfg[1]
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if PIN_DETERMINISM:
         # THE GRID PIN (IDENTITY_PATHS row 23, DEVIATION 502). At
         # `grid_dim.x > 1` the blocks sharing a row merge their queues
         # through the mutex array, and the FAISS comparator compares the
@@ -897,6 +898,26 @@ def fused_l2_knn(
         # all: one block owns every column of its rows, feeds them to the
         # queue in ascending column-tile order, and that order is a pure
         # function of (m, n, k) and the policy.
+        #
+        # **`PIN_DETERMINISM`, NOT `== NUMERIC_IDENTICAL`, SINCE
+        # 2026-08-29.** Read the sentence above: the mutex order varies
+        # "run to run on one device" AND "by the core count across two".
+        # That is BOTH promises broken by ONE cause, and the pin was keyed
+        # to the upper tier only -- so a DETERMINISTIC build took
+        # `grid_x > 1` and returned a different neighbour on a second run
+        # of the same fit on the same GPU, while calling itself
+        # deterministic. IDENTICAL is unmoved: `PIN_DETERMINISM` is true
+        # there too.
+        #
+        # THE PRICE IS REAL and it is the whole column dimension of the
+        # grid. It is also avoidable: the merge is order-dependent only
+        # because the comparator ignores the index, and `grid_x == 1`
+        # happens to resolve ties toward the LOWEST column index (ascending
+        # column-tile order, first seen wins). A comparator that broke ties
+        # on the index would be order-independent, would agree with this
+        # pin's answer, and would need no grid collapse at all. That is a
+        # kernel change with its own evidence to gather, so it is named
+        # here and not taken here.
         #
         # `grid_dim.y` needs no pin. A row's owner block changes with it,
         # but `row - tile_m` is always the same offset inside `Mblk`, so

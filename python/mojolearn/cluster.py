@@ -3,6 +3,7 @@
 import numpy as np
 
 from . import _mojolearn
+from ._mode import NumericModeMixin
 from ._arrays import _addr, _addr_ro, as_f32_c
 
 INIT_KMEANS_PLUS_PLUS = 0
@@ -20,7 +21,7 @@ _INIT_NAMES = {
 }
 
 
-class KMeans:
+class KMeans(NumericModeMixin):
     """k-means, mirroring cuVS's `kmeans::fit_predict`.
 
     **THE DEFAULTS ARE cuVS'S, NOT scikit-learn's**, and one of them changes
@@ -76,6 +77,9 @@ class KMeans:
         because a wrong answer in this algorithm comes from these two, and
         reproducing a result needs them.
     """
+
+    #: This family's binding, for `NumericModeMixin._bind`.
+    _BINDING = "_mojolearn"
 
     def __init__(
         self,
@@ -144,7 +148,7 @@ class KMeans:
                 )
             n_weights = n
 
-        inertia, n_iter, sum_scale, weight_scale = _mojolearn.kmeans_fit(
+        inertia, n_iter, sum_scale, weight_scale = self._bind("_mojolearn").kmeans_fit(
             _addr_ro(x),
             _addr(centers),
             _addr(labels),

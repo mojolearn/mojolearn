@@ -277,7 +277,12 @@ def numeric_mode(lane=LANE_HOST):
         # that ever changes.
         probe = torch.empty(1, dtype=torch.int32, device="cuda")
         ops.identical_gemm_mode_probe(probe)
-        mode = "identical" if int(probe.item()) == 1 else "fast"
+        # The probe returns the NUMERIC_* code, and there are three of
+        # them: 0 fast, 1 identical, 2 deterministic. A boolean read it
+        # as "fast" for the middle tier.
+        mode = {0: "fast", 1: "identical", 2: "deterministic"}.get(
+            int(probe.item()), "unknown"
+        )
         ver = torch.empty(1, dtype=torch.int32, device="cuda")
         ops.identical_gemm_profile_probe(ver)
         got = int(ver.item())

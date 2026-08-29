@@ -52,6 +52,7 @@ nobody times it as the fit.
 import numpy as np
 
 from . import _mojolearn_trees, _serialize
+from ._mode import NumericModeMixin
 from ._arrays import _addr, _addr_ro, as_f32_c
 
 #: The npz model-file format tag `save` writes and `load` requires.
@@ -177,7 +178,8 @@ def _fit_params(n_rows, n_features, n_classes, cfg, device, criterion):
     ]
 
 
-class _ExtraTreesBase:
+class _ExtraTreesBase(NumericModeMixin):
+    _BINDING = "_mojolearn_trees"
     def __init__(self, device):
         if device not in ("gpu", "cpu"):
             raise ValueError(
@@ -235,7 +237,7 @@ class _ExtraTreesBase:
                 f"X has {n_features} features, fit saw {self.n_features_in_}"
             )
         out = np.empty(n_rows * self._num_outputs, dtype=np.float32)
-        wrote = _mojolearn_trees.et_predict(
+        wrote = self._bind("_mojolearn_trees").et_predict(
             _addr_ro(self._offsets),
             _addr_ro(self._colid),
             _addr_ro(self._quesval),
@@ -391,7 +393,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
             X,
             codes.astype(np.float32),
             self.n_classes_,
-            _mojolearn_trees.et_classifier_fit,
+            self._bind("_mojolearn_trees").et_classifier_fit,
         )
 
     def predict_proba(self, X):
@@ -472,7 +474,7 @@ class ExtraTreesRegressor(_ExtraTreesBase):
             X,
             np.ascontiguousarray(y, dtype=np.float32),
             0,
-            _mojolearn_trees.et_regressor_fit,
+            self._bind("_mojolearn_trees").et_regressor_fit,
         )
 
     def predict(self, X):

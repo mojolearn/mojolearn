@@ -392,7 +392,13 @@ def _mode_report():
     gb = sys.modules.get(pkg_name + "._mojolearn_gbdt")
     if gb is not None and hasattr(gb, "gbdt_numeric_mode"):
         try:
-            rep.compiled = "identical" if gb.gbdt_numeric_mode() == 1 else "fast"
+            # Three tiers, so a NAME lookup rather than a boolean:
+            # DETERMINISTIC reports 2 and the old spelling called it
+            # "fast", which agrees with a fast selector and reports no
+            # conflict while the caller holds the wrong arm.
+            rep.compiled = _backend._CODE_MODE.get(
+                gb.gbdt_numeric_mode(), "unknown"
+            )
         except Exception:
             rep.compiled = None
 

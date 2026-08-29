@@ -71,15 +71,21 @@ def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
 
 
 def linalg_numeric_mode_binding() raises -> PythonObject:
-    """1 when this binding was built under NUMERIC_IDENTICAL, else 0.
+    """THE BUILD'S TIER, as the `NUMERIC_*` code itself: 0 FAST,
+    1 IDENTICAL, 2 DETERMINISTIC.
 
-    Compile-time, from `is_defined["MOJOLEARN_NUMERIC_IDENTICAL"]` through
-    `GLOBAL_NUMERIC_MODE`. The wrapper reads it once per process and gates
-    the identity guarantee on it. A `.so` that lands in the wrong directory
-    is caught here and nowhere else."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        return PythonObject(1)
-    return PythonObject(0)
+    It returned a BOOLEAN (1 for identical, else 0) until
+    2026-08-29, and a boolean stopped being able to tell the truth
+    the moment the middle tier existed: a DETERMINISTIC binary
+    answered 0 and every reader printed it as "fast". That is the
+    mislabelled measurement this read-back exists to make
+    impossible. Widening it is backward compatible because the two
+    old answers are the two codes they already were.
+
+    A caller gating the CROSS-VENDOR guarantee still tests `== 1`,
+    and should: 2 promises reproducibility on one device and says
+    nothing about a second."""
+    return PythonObject(GLOBAL_NUMERIC_MODE)
 
 
 def linalg_profile_version_binding() raises -> PythonObject:

@@ -1,0 +1,223 @@
+{
+ "mode": "deterministic",
+ "repeats": 6,
+ "rows": [
+  {
+   "lane": "dbscan",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "a4608e954c7420b7",
+    "a4608e954c7420b7",
+    "a4608e954c7420b7",
+    "a4608e954c7420b7",
+    "a4608e954c7420b7",
+    "a4608e954c7420b7"
+   ],
+   "error": null
+  },
+  {
+   "lane": "et-clf",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40"
+   ],
+   "error": null
+  },
+  {
+   "lane": "gbdt-depthwise",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "757bd55c27047cb0",
+    "757bd55c27047cb0",
+    "757bd55c27047cb0",
+    "757bd55c27047cb0",
+    "757bd55c27047cb0",
+    "757bd55c27047cb0"
+   ],
+   "error": null
+  },
+  {
+   "lane": "gbdt-lossguide",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "82628fff246a204e",
+    "82628fff246a204e",
+    "82628fff246a204e",
+    "82628fff246a204e",
+    "82628fff246a204e",
+    "82628fff246a204e"
+   ],
+   "error": null
+  },
+  {
+   "lane": "gbdt-symmetric",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "e3a9df9a11c6f5cf",
+    "e3a9df9a11c6f5cf",
+    "e3a9df9a11c6f5cf",
+    "e3a9df9a11c6f5cf",
+    "e3a9df9a11c6f5cf",
+    "e3a9df9a11c6f5cf"
+   ],
+   "error": null
+  },
+  {
+   "lane": "gemm-pinned",
+   "verdict": "REFUSED",
+   "distinct": 0,
+   "hashes": [],
+   "error": "RuntimeError: mojolearn.linalg: this process loaded the FAST build, which makes NO identity claim; mojolearn.identical.gemm.fp32.v1 is what the IDENTICAL build computes.\n  Set MOJOLEARN_NUMERIC_MODE=identical in the environment BEFORE importing mojolearn, having built the identical binary with\n      MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_linalg.sh\n  Or pass identical=False to say in the source that you want the fast product and are making no identity claim about it."
+  },
+  {
+   "lane": "gemm-vendor",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "47390974b94e233d",
+    "47390974b94e233d",
+    "47390974b94e233d",
+    "47390974b94e233d",
+    "47390974b94e233d",
+    "47390974b94e233d"
+   ],
+   "error": null
+  },
+  {
+   "lane": "iforest",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "f6923b22b145211a",
+    "f6923b22b145211a",
+    "f6923b22b145211a",
+    "f6923b22b145211a",
+    "f6923b22b145211a",
+    "f6923b22b145211a"
+   ],
+   "error": null
+  },
+  {
+   "lane": "kmeans",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "da3cb10e46c91256",
+    "da3cb10e46c91256",
+    "da3cb10e46c91256",
+    "da3cb10e46c91256",
+    "da3cb10e46c91256",
+    "da3cb10e46c91256"
+   ],
+   "error": null
+  },
+  {
+   "lane": "knn-tied",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "eb5d50fc1d09b0e1",
+    "eb5d50fc1d09b0e1",
+    "eb5d50fc1d09b0e1",
+    "eb5d50fc1d09b0e1",
+    "eb5d50fc1d09b0e1",
+    "eb5d50fc1d09b0e1"
+   ],
+   "error": null
+  },
+  {
+   "lane": "logistic",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "ee5411140bc26cbe",
+    "ee5411140bc26cbe",
+    "ee5411140bc26cbe",
+    "ee5411140bc26cbe",
+    "ee5411140bc26cbe",
+    "ee5411140bc26cbe"
+   ],
+   "error": null
+  },
+  {
+   "lane": "ols",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "8bda051c2e15fb51",
+    "8bda051c2e15fb51",
+    "8bda051c2e15fb51",
+    "8bda051c2e15fb51",
+    "8bda051c2e15fb51",
+    "8bda051c2e15fb51"
+   ],
+   "error": null
+  },
+  {
+   "lane": "pca",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "b509e01813e2ce8d",
+    "b509e01813e2ce8d",
+    "b509e01813e2ce8d",
+    "b509e01813e2ce8d",
+    "b509e01813e2ce8d",
+    "b509e01813e2ce8d"
+   ],
+   "error": null
+  },
+  {
+   "lane": "rf-clf",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "eacd6bff8b4088b8",
+    "eacd6bff8b4088b8",
+    "eacd6bff8b4088b8",
+    "eacd6bff8b4088b8",
+    "eacd6bff8b4088b8",
+    "eacd6bff8b4088b8"
+   ],
+   "error": null
+  },
+  {
+   "lane": "ridge",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "7288d1af08a3025f",
+    "7288d1af08a3025f",
+    "7288d1af08a3025f",
+    "7288d1af08a3025f",
+    "7288d1af08a3025f",
+    "7288d1af08a3025f"
+   ],
+   "error": null
+  },
+  {
+   "lane": "tsvd",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "d9953cdd48933270",
+    "d9953cdd48933270",
+    "d9953cdd48933270",
+    "d9953cdd48933270",
+    "d9953cdd48933270",
+    "d9953cdd48933270"
+   ],
+   "error": null
+  }
+ ]
+}

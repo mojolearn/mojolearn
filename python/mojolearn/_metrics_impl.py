@@ -113,12 +113,14 @@ def _get_binding():
         from . import _mojolearn_metrics as mod
     else:
         pkg_dir = os.path.dirname(os.path.abspath(__file__))
-        path = os.path.join(pkg_dir, "identical", "_mojolearn_metrics.so")
+        # The directory IS the mode name for every tier above fast.
+        path = os.path.join(pkg_dir, mode, "_mojolearn_metrics.so")
         if not os.path.exists(path):
             raise ImportError(
-                "mojolearn: MOJOLEARN_NUMERIC_MODE=identical but "
+                f"mojolearn: MOJOLEARN_NUMERIC_MODE={mode} but "
                 f"{path} is not built; build it with\n    "
-                "MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_metrics.sh"
+                f"MOJOLEARN_NUMERIC_MODE={mode} bash "
+                "bindings/build_metrics.sh"
             )
         loader = importlib.machinery.ExtensionFileLoader(full, path)
         spec = importlib.util.spec_from_loader(full, loader, origin=path)

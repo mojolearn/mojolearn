@@ -10,13 +10,14 @@ regressor built on it.
 import numpy as np
 
 from . import _mojolearn
+from ._mode import NumericModeMixin
 from ._arrays import _addr, _addr_ro, as_f32_c
 
 _DEFAULT_QUERY_TILE = 256
 _EUCLIDEAN_METRICS = ("euclidean", "l2", "minkowski")
 
 
-class NearestNeighbors:
+class NearestNeighbors(NumericModeMixin):
     """Exact k-NN by brute force, mirroring cuVS's fused L2 kernel.
 
     EXACT, not approximate. There is no index to build and no recall to trade
@@ -73,6 +74,9 @@ class NearestNeighbors:
         Set by `kneighbors`. Differs from `query_tile` when the workspace cap
         fired, which means the run was not the measured configuration.
     """
+
+    #: This family's binding, for `NumericModeMixin._bind`.
+    _BINDING = "_mojolearn"
 
     def __init__(
         self,
@@ -162,7 +166,7 @@ class NearestNeighbors:
         # Every array named here stays in a local for the whole call. That is
         # the contract `_arrays` documents and the reason it is spelled out.
         idx = self._index
-        self.used_query_tile_ = _mojolearn.knn_search(
+        self.used_query_tile_ = self._bind("_mojolearn").knn_search(
             _addr_ro(idx),
             _addr_ro(q),
             _addr(dist),
@@ -320,7 +324,7 @@ class KNeighborsClassifier(NearestNeighbors):
         uniq = np.empty(sum(n_classes), dtype=np.int32)
         idx = self._index
         y_cols = self._y_cols
-        self.used_query_tile_ = _mojolearn.knn_classify(
+        self.used_query_tile_ = self._bind("_mojolearn").knn_classify(
             _addr_ro(idx),
             _addr_ro(q),
             _addr_ro(y_cols),
@@ -457,7 +461,7 @@ class KNeighborsRegressor(NearestNeighbors):
         out = np.empty((nq, n_out), dtype=np.float32)
         idx = self._index
         y_cols = self._y_cols
-        self.used_query_tile_ = _mojolearn.knn_regress(
+        self.used_query_tile_ = self._bind("_mojolearn").knn_regress(
             _addr_ro(idx),
             _addr_ro(q),
             _addr_ro(y_cols),

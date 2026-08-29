@@ -77,7 +77,12 @@ from mojo_only.kernel_matrix import (
     lib_block_size_for,
     lib_lane_width_for,
 )
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from mojo_only.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    PIN_DETERMINISM,
+    numeric_mode_name,
+)
 from neighbors.mojo_only.pinned_distance_tile import (
     PINNED_TILE_TPB,
     pinned_distance_tile_kernel,
@@ -333,15 +338,33 @@ def tiled_brute_force_knn(
                 ctx,
             )
         else:
-            comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+            comptime if PIN_DETERMINISM:
                 # IDENTITY_PATHS row 11's closure, DEVIATIONS 500/501: the
                 # composite (distance, index) key and the ranked placement.
                 # The ported selector keeps RAFT's tie handling, which is
                 # atomic-ordered by construction; this one has no tie class
                 # and no arrival order in its output.
+                #
+                # **`PIN_DETERMINISM`, NOT `== NUMERIC_IDENTICAL`, SINCE
+                # 2026-08-29.** "Atomic-ordered by construction" is a
+                # RUN-TO-RUN property: two runs of the same fit on the same
+                # GPU can place a tied neighbour in different slots, because
+                # which thread's `atomicAdd` lands first is not a function of
+                # the input. That is the middle tier's whole promise, and the
+                # pin was keyed to the top tier only -- so a DETERMINISTIC
+                # k-NN build took RAFT's selector and was not deterministic.
+                # IDENTICAL is unmoved; `PIN_DETERMINISM` is true there too.
+                #
+                # THE REFUSAL BELOW NOW BINDS THE MIDDLE TIER TOO, and that
+                # is a real narrowing of what `deterministic` accepts rather
+                # than a formality: `k > SELECT_BLOCK` raises where a FAST
+                # build would have answered. Refusing beats returning an
+                # answer that moves between two runs of the same call.
                 if k > SELECT_BLOCK:
                     raise Error(
-                        "select_radix (IDENTICAL): k > "
+                        "select_radix ("
+                        + numeric_mode_name()
+                        + "): k > "
                         + String(SELECT_BLOCK)
                         + " is refused. The rank pass gives one thread to"
                         " each output slot; a larger k needs a loop, which"
@@ -368,8 +391,8 @@ def tiled_brute_force_knn(
                 # across that whole band. On the columns the row admits
                 # (32-lane FAST), the band takes the ported warpsort in the
                 # single-pass block form; everything else -- k outside the
-                # band, excluded columns, and IDENTICAL, whose selector is
-                # pinned above -- keeps radix byte for byte.
+                # band, excluded columns, and BOTH UPPER TIERS, whose
+                # selector is pinned above -- keeps radix byte for byte.
                 # The `comptime if` is load-bearing, not style: this
                 # function is non-generic, so any kernel named under a
                 # RUNTIME `if` here instantiates whenever the module

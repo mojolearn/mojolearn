@@ -59,8 +59,18 @@ if [ "${MOJOLEARN_NUMERIC_MODE:-fast}" = "identical" ]; then
     OUTDIR="python/mojolearn/identical"
     mkdir -p "$OUTDIR"
     export MOJOLEARN_SKIP_BUILD_GATE=1
+elif [ "${MOJOLEARN_NUMERIC_MODE:-fast}" = "deterministic" ]; then
+    # The MIDDLE tier: reproducible run to run on ONE device, with no
+    # promise about a second one. It gets its own directory because it
+    # is its own binary -- PIN_DETERMINISM is comptime, so a
+    # deterministic build is different code from both neighbours, not
+    # the identical build with a flag turned down.
+    MODE_DEFINE="-D MOJOLEARN_NUMERIC_DETERMINISTIC=1"
+    OUTDIR="python/mojolearn/deterministic"
+    mkdir -p "$OUTDIR"
+    export MOJOLEARN_SKIP_BUILD_GATE=1
 elif [ "${MOJOLEARN_NUMERIC_MODE:-fast}" != "fast" ]; then
-    echo "MOJOLEARN_NUMERIC_MODE must be fast or identical, got '$MOJOLEARN_NUMERIC_MODE'" >&2
+    echo "MOJOLEARN_NUMERIC_MODE must be fast, deterministic or identical, got '$MOJOLEARN_NUMERIC_MODE'" >&2
     exit 2
 fi
 if [ -n "${MOJOLEARN_TARGET_COLUMN:-}" ]; then

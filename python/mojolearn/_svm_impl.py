@@ -35,6 +35,7 @@ import sys
 import numpy as np
 
 from . import _backend
+from ._mode import NumericModeMixin
 from ._arrays import _addr, _addr_ro, as_f32_c
 
 # cuML's `KernelType` values (kernel_params.hpp). Only two are ported.
@@ -79,7 +80,7 @@ _PKG = __name__.rsplit(".", 1)[0]
 _ext_cache = None
 
 
-def _extension():
+def _extension(mode=None):
     """The `_mojolearn_svm` extension, in the numeric mode the package
     asked for, cross-checked against the mode the binary was COMPILED in.
 
@@ -103,20 +104,32 @@ def _extension():
     whole package down. Same policy here.
     """
     global _ext_cache
-    if _ext_cache is not None:
-        return _ext_cache
-    full = f"{_PKG}.{_EXT_NAME}"
+    # PER-MODE CACHE, keyed by tier, since 2026-08-29. It was a single slot
+    # holding whichever tier asked first, which is fine while the mode is a
+    # process-wide environment variable and wrong the moment it is a
+    # per-estimator parameter: the second tier to ask would have been handed
+    # the first one's binary under its own name.
+    if not isinstance(_ext_cache, dict):
+        _ext_cache = {}
+    mode = (mode or _backend.default_mode()).strip().lower()
+    if mode in _ext_cache:
+        return _ext_cache[mode]
+    full = f"{_PKG}._sets.{mode}.{_EXT_NAME}" if mode != "fast" else f"{_PKG}.{_EXT_NAME}"
     mod = sys.modules.get(full)
     if mod is None:
-        mode = _backend.requested_mode()
         here = os.path.dirname(os.path.abspath(__file__))
+        # The directory IS the mode name for every tier above fast, the
+        # same rule `_backend.select()` uses. It was `if mode ==
+        # "identical"` until 2026-08-29, which silently loaded the FAST
+        # binary for a deterministic request; the cross-check below caught
+        # it, but with a message blaming a misplaced file.
         path = os.path.join(here, _EXT_NAME + ".so")
-        if mode == "identical":
-            path = os.path.join(here, "identical", _EXT_NAME + ".so")
+        if mode != "fast":
+            path = os.path.join(here, mode, _EXT_NAME + ".so")
         if not os.path.exists(path):
             raise ImportError(
                 f"mojolearn: {path} is not built; build it with\n    "
-                + ("MOJOLEARN_NUMERIC_MODE=identical " if mode == "identical" else "")
+                + (f"MOJOLEARN_NUMERIC_MODE={mode} " if mode != "fast" else "")
                 + "bash bindings/build_svm.sh"
             )
         loader = importlib.machinery.ExtensionFileLoader(full, path)
@@ -124,18 +137,28 @@ def _extension():
         mod = importlib.util.module_from_spec(spec)
         loader.exec_module(mod)
         sys.modules[full] = mod
-        setattr(sys.modules[_PKG], _EXT_NAME, mod)
-    compiled = "identical" if mod.svm_numeric_mode() == 1 else "fast"
-    requested = _backend.requested_mode()
+        # Publish under the PLAIN package attribute only for the tier this
+        # process defaults to. Doing it unconditionally, as it did until
+        # 2026-08-29, made `mojolearn._mojolearn_svm` mean "whichever tier
+        # asked last" -- so one estimator built with numeric_mode="identical"
+        # would silently repoint the name every other caller reads.
+        if mode == _backend.default_mode():
+            setattr(sys.modules[_PKG], _EXT_NAME, mod)
+    # A NAME lookup, not a boolean: the middle tier reports 2 and the
+    # old spelling called it "fast", so a deterministic binary matched
+    # a fast request and the cross-check passed on the wrong arm.
+    compiled = _backend._CODE_MODE.get(mod.svm_numeric_mode(), "unknown")
+    requested = mode
     if compiled != requested:
         raise ImportError(
             f"mojolearn: {_EXT_NAME} was compiled {compiled} but "
             f"MOJOLEARN_NUMERIC_MODE asked for {requested} -- a binary is in "
-            "the wrong directory; rebuild both sets with\n    "
+            "the wrong directory; rebuild the sets with\n    "
             "bash bindings/build_svm.sh\n    "
+            "MOJOLEARN_NUMERIC_MODE=deterministic bash bindings/build_svm.sh\n    "
             "MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_svm.sh"
         )
-    _ext_cache = mod
+    _ext_cache[mode] = mod
     return mod
 
 
@@ -169,7 +192,7 @@ def _as_labels(y):
     return f, classes
 
 
-class SVC:
+class SVC(NumericModeMixin):
     """Binary C-support vector classification, backed by the ported cuML
     SMO solver and cuVS kernel matrices (`svm/`, DEVIATIONS 630-637;
     `svm/README.md`), the scikit-learn surface.
@@ -479,7 +502,7 @@ class SVC:
         support = np.empty(n_rows, dtype=np.int32)
         sv = np.empty(n_rows * n_cols, dtype=np.float32)
         info = np.empty(5, dtype=np.float64)
-        n_support = _extension().svc_fit(
+        n_support = _extension(getattr(self, 'numeric_mode', None)).svc_fit(
             _addr_ro(x),
             _addr_ro(labels),
             _addr(dual),
@@ -550,7 +573,7 @@ class SVC:
         # borrows these addresses and owns nothing (`_arrays.py`).
         dual = self.dual_coef_
         sv = self.support_vectors_
-        _extension().svc_predict(
+        _extension(getattr(self, 'numeric_mode', None)).svc_predict(
             _addr_ro(q),
             _addr_ro(dual) if self.n_support_ > 0 else 0,
             _addr_ro(sv) if self.n_support_ > 0 else 0,

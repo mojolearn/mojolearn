@@ -63,12 +63,30 @@ the worst place in the tree for that sentence to have been.
 from ._version import __version__
 
 # THE NUMERIC MODE IS CHOSEN HERE, BEFORE ANY BINDING IS IMPORTED.
-# MOJOLEARN_NUMERIC_MODE=identical loads python/mojolearn/identical/*.so
-# under the canonical names (see _backend.py); default is fast.
+# MOJOLEARN_NUMERIC_MODE picks one of THREE tiers, each keeping the one
+# below it: `fast` (the default, no promise), `deterministic` (same bits
+# run to run on ONE device) and `identical` (also the same bits across
+# Metal, CUDA and HIP). Each upper tier loads its own binary set from
+# python/mojolearn/<tier>/*.so under the canonical names; see
+# _backend.py, whose allow-list refused `deterministic` outright until
+# 2026-08-29 and so made a tier that existed in the compiler
+# unreachable from Python.
 from . import _backend as _backend
 
 _backend.select()
 numeric_mode = _backend.numeric_mode
+
+#: CHOOSE THE TIER IN CODE. `MOJOLEARN_NUMERIC_MODE` still works and still
+#: sets the starting value, but it is no longer the only way in: the mode is
+#: a runtime choice, and estimators take a per-instance `numeric_mode=`.
+#:
+#:     mojolearn.set_numeric_mode("deterministic")     # process default
+#:     mojolearn.RandomForestClassifier(numeric_mode="identical")
+#:
+#: All three tiers ship in ONE wheel and can be loaded into ONE process at
+#: once -- measured on 2026-08-29 by calling all three interleaved and
+#: checking each returned its own arithmetic. See `_backend.load_set`.
+set_numeric_mode = _backend.set_default_mode
 
 from .cluster import KMeans
 from .decomposition import PCA, TruncatedSVD
@@ -140,6 +158,7 @@ __all__ = [
     "select_d",
     "__version__",
     "numeric_mode",
+    "set_numeric_mode",
 ]
 
 # Named absences. Importing one of these raises with a reason rather than an

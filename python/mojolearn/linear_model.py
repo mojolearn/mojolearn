@@ -6,10 +6,11 @@ import math
 import numpy as np
 
 from . import _mojolearn_estimators
+from ._mode import NumericModeMixin
 from ._arrays import _addr, _addr_ro, as_f32_c
 
 
-class LinearRegression:
+class LinearRegression(NumericModeMixin):
     """Ordinary least squares through normal equations on the GPU.
 
     This is cuML's `algorithm='eig'` arm (`lstsqEig`, RAFT), which forms
@@ -57,6 +58,9 @@ class LinearRegression:
     exists to not have.
     """
 
+    #: This family's binding, for `NumericModeMixin._bind`.
+    _BINDING = "_mojolearn_estimators"
+
     def __init__(self, *, fit_intercept=True):
         self.fit_intercept = fit_intercept
 
@@ -89,7 +93,7 @@ class LinearRegression:
             self._x_mean = np.zeros(x.shape[1], dtype=np.float32)
             self._y_mean = 0.0
         self.coef_ = np.empty(x.shape[1], dtype=np.float32)
-        _mojolearn_estimators.ols_fit(
+        self._bind("_mojolearn_estimators").ols_fit(
             _addr_ro(work_x), _addr_ro(work_y), _addr(self.coef_),
             [x.shape[0], x.shape[1]],
         )
@@ -110,7 +114,7 @@ class LinearRegression:
         if x.shape[1] != self.n_features_in_:
             raise ValueError("mojolearn LinearRegression feature count differs from fit")
         out = np.empty(x.shape[0], dtype=np.float32)
-        _mojolearn_estimators.ols_predict(
+        self._bind("_mojolearn_estimators").ols_predict(
             _addr_ro(x), _addr_ro(self.coef_), _addr(out),
             [x.shape[0], x.shape[1], float(self.intercept_)],
         )
@@ -123,7 +127,7 @@ class LinearRegression:
         return 1.0 - float(np.sum(residual ** 2) / denom) if denom else 0.0
 
 
-class Ridge:
+class Ridge(NumericModeMixin):
     """l2-regularized least squares on the GPU, cuML's `solver='eig'` arm.
 
     Mirrors `cuml/python/cuml/linear_model/ridge.pyx` on top of
@@ -166,6 +170,9 @@ class Ridge:
                                   by the Mojo layer
         y 2-D           refused   one target only, at this boundary
     """
+
+    #: This family's binding, for `NumericModeMixin._bind`.
+    _BINDING = "_mojolearn_estimators"
 
     def __init__(self, *, alpha=1.0, solver="auto", fit_intercept=True,
                  normalize=False):
@@ -216,7 +223,7 @@ class Ridge:
             self._x_mean = np.zeros(x.shape[1], dtype=np.float32)
             self._y_mean = 0.0
         self.coef_ = np.empty(x.shape[1], dtype=np.float32)
-        _mojolearn_estimators.ridge_fit(
+        self._bind("_mojolearn_estimators").ridge_fit(
             _addr_ro(work_x), _addr_ro(work_y), _addr(self.coef_),
             [x.shape[0], x.shape[1], float(self.alpha)],
         )
@@ -239,7 +246,7 @@ class Ridge:
         out = np.empty(x.shape[0], dtype=np.float32)
         # The same gemv + intercept epilogue OLS predicts with
         # (`gemmPredict` upstream serves both, `base.pyx:134`).
-        _mojolearn_estimators.ols_predict(
+        self._bind("_mojolearn_estimators").ols_predict(
             _addr_ro(x), _addr_ro(self.coef_), _addr(out),
             [x.shape[0], x.shape[1], float(self.intercept_)],
         )
@@ -259,7 +266,7 @@ _QN_OPT_RETCODE = {0: "OPT_SUCCESS", 1: "OPT_NUMERIC_ERROR",
                    4: "OPT_INVALID_ARGS"}
 
 
-class LogisticRegression:
+class LogisticRegression(NumericModeMixin):
     """Binary logistic regression on the GPU, cuML's quasi-Newton solver.
 
     Mirrors `cuml/python/cuml/linear_model/logistic_regression.py` on top of
@@ -324,6 +331,9 @@ class LogisticRegression:
     records all of them. Under the default FAST mode the reductions are
     the vendor's and the count may differ across GPUs.
     """
+
+    #: This family's binding, for `NumericModeMixin._bind`.
+    _BINDING = "_mojolearn_estimators"
 
     def __init__(self, *, penalty="l2", tol=1e-4, C=1.0, fit_intercept=True,
                  class_weight=None, max_iter=1000, linesearch_max_iter=50,
@@ -397,7 +407,7 @@ class LogisticRegression:
         n_param = x.shape[1] + (1 if self.fit_intercept else 0)
         w = np.zeros(n_param, dtype=np.float32)
         info = np.zeros(2, dtype=np.float32)
-        n_iter = _mojolearn_estimators.qn_fit(
+        n_iter = self._bind("_mojolearn_estimators").qn_fit(
             _addr_ro(x), _addr_ro(y_enc), _addr(w), _addr(info),
             [x.shape[0], x.shape[1], n_classes,
              float(l1), float(l2), float(self.tol), float(self.tol * 0.01),
@@ -423,7 +433,7 @@ class LogisticRegression:
         if x.shape[1] != self.n_features_in_:
             raise ValueError("mojolearn LogisticRegression feature count differs from fit")
         out = np.empty(x.shape[0], dtype=np.float32)
-        _mojolearn_estimators.qn_decision_function(
+        self._bind("_mojolearn_estimators").qn_decision_function(
             _addr_ro(x), _addr_ro(self._w), _addr(out),
             [x.shape[0], x.shape[1], 1 if self.fit_intercept else 0],
         )
@@ -437,7 +447,7 @@ class LogisticRegression:
     def predict_proba(self, X):
         scores = self.decision_function(X)
         out = np.empty((scores.shape[0], 2), dtype=np.float64)
-        _mojolearn_estimators.qn_sigmoid(
+        self._bind("_mojolearn_estimators").qn_sigmoid(
             _addr_ro(scores), _addr(out), [scores.shape[0]])
         return out
 

@@ -3,6 +3,7 @@
 import numpy as np
 
 from . import _mojolearn_estimators
+from ._mode import NumericModeMixin
 from ._arrays import _addr, _addr_ro, as_f32_c
 
 EPS_NN_BRUTE_FORCE = 0
@@ -14,7 +15,7 @@ _ALGORITHMS = {
 }
 
 
-class DBSCAN:
+class DBSCAN(NumericModeMixin):
     """L2 DBSCAN backed by the ported cuML/RAFT GPU path.
 
     WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter,
@@ -81,6 +82,9 @@ class DBSCAN:
         sentence).
     """
 
+    #: This family's binding, for `NumericModeMixin._bind`.
+    _BINDING = "_mojolearn_estimators"
+
     def __init__(
         self,
         eps=0.5,
@@ -134,7 +138,7 @@ class DBSCAN:
         budget = 0 if self.max_mbytes_per_batch is None else int(self.max_mbytes_per_batch)
         if budget < 0:
             raise ValueError("mojolearn DBSCAN max_mbytes_per_batch cannot be negative")
-        self.n_iter_ = _mojolearn_estimators.dbscan_fit(
+        self.n_iter_ = self._bind("_mojolearn_estimators").dbscan_fit(
             _addr_ro(x),
             _addr(labels),
             # ORDER MATCHES bindings/_mojolearn_estimators.mojo::dbscan_fit_binding.
@@ -151,7 +155,7 @@ class DBSCAN:
         return self.fit(X, y=y, sample_weight=sample_weight).labels_
 
 
-class KernelDensity:
+class KernelDensity(NumericModeMixin):
     """Kernel density estimation backed by the ported cuML path (`kde/`,
     DEVIATIONS 600-604; kde/README.md), the scikit-learn surface.
 
@@ -192,6 +196,9 @@ class KernelDensity:
     sentinel -3.4028235e+38 where sklearn prints -inf (kde/README.md,
     DEVIATION 603). `score(X)` is their sum.
     """
+
+    #: This family's binding, for `NumericModeMixin._bind`.
+    _BINDING = "_mojolearn_estimators"
 
     def __init__(
         self,
@@ -277,7 +284,7 @@ class KernelDensity:
             )
         out = np.empty(q.shape[0], dtype=np.float32)
         w = self._w
-        _mojolearn_estimators.kde_score_samples(
+        self._bind("_mojolearn_estimators").kde_score_samples(
             _addr_ro(self._x),
             _addr_ro(q),
             _addr_ro(w) if w is not None else 0,

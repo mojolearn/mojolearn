@@ -106,7 +106,12 @@ from ivf.ported.neighbors.ivf_flat.ivf_flat_index import (
     ivf_search_params_validate,
     ivf_validate_data,
 )
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from mojo_only.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    PIN_DETERMINISM,
+    numeric_mode_name,
+)
 from neighbors.mojo_only.pinned_distance_tile import (
     PINNED_TILE_TPB,
     pinned_distance_tile_kernel,
@@ -261,7 +266,20 @@ def _select_top_k(
             " later pass drops every element, and last_filter reads a"
             " buffer nothing wrote (knn_brute_force.mojo's own note)."
         )
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if PIN_DETERMINISM:
+        # Ledger row 11 (DEVIATIONS 500/501), and `PIN_DETERMINISM`
+        # since 2026-08-29. The FAST arm is RAFT's own selector with its
+        # tie back-fill and ATOMIC PLACEMENT; this one writes each winner
+        # to its rank rather than to an atomic slot. Atomic placement is
+        # a run-to-run property, so the middle tier needs this pin, and
+        # this is the same cause as `knn_brute_force.mojo`'s row-11
+        # branch. The `k > SELECT_BLOCK` and `k > length` raises above
+        # sit OUTSIDE this block and already bound both modes, so
+        # re-keying adds no new refusal -- only the eight radix passes.
+        #
+        # `:180` in this file is the row-24 DISTANCE dispatch and stays
+        # keyed to identical: a vendor matmul's k-split is per-vendor,
+        # not per-run.
         ctx.enqueue_function[radix_topk_identical_kernel](
             in_val.unsafe_ptr(),
             out_val.unsafe_ptr(),

@@ -92,14 +92,18 @@ def _load_binding():
 
     mode = _backend.requested_mode()
     pkg_dir = os.path.dirname(os.path.abspath(__file__))
-    if mode == "identical":
-        path = os.path.join(pkg_dir, "identical", "_mojolearn_tsa.so")
+    # The directory IS the mode name for every tier above fast, the same
+    # rule `_backend.select()` uses. Spelled `== "identical"` until
+    # 2026-08-29, which loaded the FAST binary for a deterministic
+    # request.
+    if mode != "fast":
+        path = os.path.join(pkg_dir, mode, "_mojolearn_tsa.so")
     else:
         path = os.path.join(pkg_dir, "_mojolearn_tsa.so")
     if not os.path.exists(path):
         raise ImportError(
             f"mojolearn: {path} is not built; build it with\n    "
-            + ("MOJOLEARN_NUMERIC_MODE=identical " if mode == "identical" else "")
+            + (f"MOJOLEARN_NUMERIC_MODE={mode} " if mode != "fast" else "")
             + "bash bindings/build_tsa.sh"
         )
     full = f"{pkg_name}._mojolearn_tsa"

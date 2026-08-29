@@ -93,6 +93,7 @@ import numpy as np
 # being lost to `MACOSX_DEPLOYMENT_TARGET` in the environment plus a compiler
 # cache that does not key on it, and the basename never mattered.
 from . import _mojolearn_gbdt, _serialize
+from ._mode import NumericModeMixin
 from ._arrays import _addr, _addr_ro, as_f32_colmajor
 
 #: The npz model-file format tag `save` writes and `load` requires.
@@ -317,7 +318,7 @@ def _tri(v):
     return 1 if v else 0
 
 
-class GradientBoosting:
+class GradientBoosting(NumericModeMixin):
     """Gradient-boosted trees, mirroring CatBoost's GPU learner: its three
     growth policies (`grow_policy`), its losses, its leaf estimators.
 
@@ -522,6 +523,9 @@ class GradientBoosting:
     stopped_early_ : bool
         Whether the detector fired before `n_estimators` was reached.
     """
+
+    #: This family's binding, for `NumericModeMixin._bind`.
+    _BINDING = "_mojolearn_gbdt"
 
     def __init__(
         self,
@@ -1076,7 +1080,7 @@ class GradientBoosting:
         eval_x_holder = Ecol if Ecol is not None else Xcol
         eval_y_holder = ea if ea is not None else ya
 
-        out = _mojolearn_gbdt.gbdt_fit(
+        out = self._bind("_mojolearn_gbdt").gbdt_fit(
             _addr_ro(Xcol),
             _addr_ro(ya),
             _addr_ro(wa),
@@ -1105,7 +1109,7 @@ class GradientBoosting:
             np.asarray(out[4], dtype=np.float64) if n_eval_rows else None
         )
         self.n_features_in_ = n_features
-        self.approx_dim_ = _mojolearn_gbdt.gbdt_model_dim(self.model_)
+        self.approx_dim_ = self._bind("_mojolearn_gbdt").gbdt_model_dim(self.model_)
         # MULTICLASS DROPS A CLASS AND ONEVSALL DOES NOT. `dim` is
         # `n_classes - 1` for the first (the last class's approx is pinned
         # at zero and not stored) and `n_classes` for the second, whose
@@ -1146,7 +1150,7 @@ class GradientBoosting:
 
         if self.approx_dim_ > 1:
             out = np.empty(n_rows * self.approx_dim_, dtype=np.float32)
-            width = _mojolearn_gbdt.gbdt_predict_multi(
+            width = self._bind("_mojolearn_gbdt").gbdt_predict_multi(
                 self.model_, _addr_ro(Xcol), _addr(out),
                 [n_rows, _PREDICT_RAW],
             )
@@ -1158,7 +1162,7 @@ class GradientBoosting:
             return out.reshape(n_rows, width)
 
         out = np.empty(n_rows, dtype=np.float32)
-        wrote = _mojolearn_gbdt.gbdt_predict(
+        wrote = self._bind("_mojolearn_gbdt").gbdt_predict(
             self.model_, _addr_ro(Xcol), _addr(out), [n_rows]
         )
         if wrote != n_rows:
@@ -1196,7 +1200,7 @@ class GradientBoosting:
             Xcol, n_rows = self._check_fitted(X)
             mode = _PREDICT_SOFTMAX
             out = np.empty(n_rows * self.n_classes_, dtype=np.float32)
-            width = _mojolearn_gbdt.gbdt_predict_multi(
+            width = self._bind("_mojolearn_gbdt").gbdt_predict_multi(
                 self.model_, _addr_ro(Xcol), _addr(out), [n_rows, mode]
             )
             if width != self.n_classes_:
@@ -1214,14 +1218,14 @@ class GradientBoosting:
                 f"yourself."
             )
         raw = np.ascontiguousarray(self.predict(X).astype(np.float64))
-        if _mojolearn_gbdt.gbdt_numeric_mode() == 1:
+        if self._bind("_mojolearn_gbdt").gbdt_numeric_mode() == 1:
             # DEVIATION 258: under NUMERIC_IDENTICAL the sigmoid runs
             # through the portable double exp so the probability bits are
             # the same on every host; numpy's exp carries the host libm's
             # last bit (E2 round 1: gbdt_logloss DIVERGENT@proba with
             # identical cards and identical raw margins)
             p1 = np.empty_like(raw)
-            _mojolearn_gbdt.gbdt_sigmoid(_addr_ro(raw), _addr(p1), raw.shape[0])
+            self._bind("_mojolearn_gbdt").gbdt_sigmoid(_addr_ro(raw), _addr(p1), raw.shape[0])
         else:
             p1 = 1.0 / (1.0 + np.exp(-raw))
         return np.column_stack((1.0 - p1, p1))
@@ -1309,7 +1313,7 @@ class GradientBoosting:
         ).decode("utf-8")
         meta = _serialize.exact(arrays, "meta", np.int64)
         obj.n_features_in_ = int(meta[0])
-        obj.approx_dim_ = int(_mojolearn_gbdt.gbdt_model_dim(obj.model_))
+        obj.approx_dim_ = int(obj._bind("_mojolearn_gbdt").gbdt_model_dim(obj.model_))
         if obj.approx_dim_ != int(meta[1]):
             raise ValueError(
                 f"mojolearn: {path!r} stores approx_dim {int(meta[1])} but "
