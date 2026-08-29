@@ -1,0 +1,3 @@
+[fit_once] 100 trees, 1829804 nodes, 59303.24071 ms
+[ perf record: Woken up 11 times to write data ]
+[ perf record: Captured and wrote 2.760 MB bench/results/e1/2026-08-29_211714-mojolearn-e2-amd/lanes/et_profile/perf_shipped.data (33635 samples) ]

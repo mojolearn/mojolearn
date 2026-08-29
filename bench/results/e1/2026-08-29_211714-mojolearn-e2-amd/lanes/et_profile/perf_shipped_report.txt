@@ -1,0 +1,31 @@
+    76.41%  et_fit_once_tpb  et_fit_once_tpbshipped          [.] core::identity_trace::IdentityTrace::_emit[LITMutOrigin,::Origin[::Bool(True), $0],::Bool,LITOrigin[$2._mlir_value],::Origin[$2, $3]](core::identity_trace::IdentityTrace,::StringSpan[$2, $3, $4],::String,::SIMD[::DType(int), ::SIMDLength(1)],::Pointer[::Bool(True), $0, ::SIMD[::DType(uint8), ::SIMDLength(1)], $1, ::AddressSpace(::SIMDLength(0))],::SIMD[::DType(int), ::SIMDLength(1)]),tag.mut`2x2=false
+            |
+            ---core::identity_trace::IdentityTrace::_emit[LITMutOrigin,::Origin[::Bool(True), $0],::Bool,LITOrigin[$2._mlir_value],::Origin[$2, $3]](core::identity_trace::IdentityTrace,::StringSpan[$2, $3, $4],::String,::SIMD[::DType(int), ::SIMDLength(1)],::Pointer[::Bool(True), $0, ::SIMD[::DType(uint8), ::SIMDLength(1)], $1, ::AddressSpace(::SIMDLength(0))],::SIMD[::DType(int), ::SIMDLength(1)]),tag.mut`2x2=false
+               |          
+               |--41.70%--0x6e6f697469747261
+               |          
+               |--29.64%--0x18
+               |          0x6f69746974726170
+               |          
+                --4.74%--0x2e6e6f6974697472
+     8.38%  et_fit_once_tpb  libhsa-runtime64.so.1.15.60400  [.] 0x000000000007cbde
+            |
+            ---0x735bd107cbde
+     3.63%  et_fit_once_tpb  [kernel.kallsyms]               [k] _raw_spin_lock
+            |
+            ---_raw_spin_lock
+               |          
+                --3.59%--kfd_ioctl_wait_events
+                          kfd_ioctl
+                          __x64_sys_ioctl
+                          x64_sys_call
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __GI___ioctl
+                          0x735bd1149400
+                          |          
+                           --3.58%--0x3
+                                     0
+     1.70%  et_fit_once_tpb  [kernel.kallsyms]               [k] __raw_callee_save___pv_queued_spin_unlock
+            |
+            ---__raw_callee_save___pv_queued_spin_unlock
