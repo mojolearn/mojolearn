@@ -262,17 +262,22 @@ def require_identical():
     profile, so the failure lands at start-up rather than at the first
     matmul. `matmul` calls it for you unless you passed `identical=False`.
     """
-    if numeric_mode() != "identical":
+    loaded = numeric_mode()
+    if loaded != "identical":
+        # Names the tier that actually loaded. This said "the FAST build"
+        # for every non-identical tier and so mislabeled the deterministic
+        # build on the 2026-08-29 Apple stability run.
         raise RuntimeError(
-            "mojolearn.linalg: this process loaded the FAST build, which "
-            f"makes NO identity claim; {PROFILE} is what the IDENTICAL build "
-            "computes.\n"
-            "  Set MOJOLEARN_NUMERIC_MODE=identical in the environment "
-            "BEFORE importing mojolearn, having built the identical binary "
-            "with\n      MOJOLEARN_NUMERIC_MODE=identical bash "
-            f"{_BUILD_SCRIPT}\n"
+            f"mojolearn.linalg: this process loaded the {loaded.upper()} "
+            f"build, which makes NO cross-vendor identity claim; {PROFILE} "
+            "is what the IDENTICAL build computes.\n"
+            "  Select it with mojolearn.set_numeric_mode('identical') "
+            "before the call, or set MOJOLEARN_NUMERIC_MODE=identical "
+            "before importing mojolearn; "
+            "the identical binary builds with\n      "
+            f"MOJOLEARN_NUMERIC_MODE=identical bash {_BUILD_SCRIPT}\n"
             "  Or pass identical=False to say in the source that you want "
-            "the fast product and are making no identity claim about it."
+            f"the {loaded} product and are making no identity claim about it."
         )
 
 
