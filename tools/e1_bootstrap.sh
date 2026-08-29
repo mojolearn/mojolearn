@@ -578,8 +578,12 @@ mkdir -p "$OUT/stability"
 # rather than being skipped: "not measured" and "measured clean" must not look
 # the same in the fetched directory.
 for m in $P9_TIERS; do
+  # timeout + unbuffered (2026-08-29): a hung lane took whole NVIDIA leases
+  # with nothing on disk to say which lane; now every finished lane's row is
+  # already in the file and the arm dies after MOJOLEARN_P9_ARM_TIMEOUT.
   MOJOLEARN_NUMERIC_MODE=$m PYTHONPATH="$REPO/python" \
-    pixi run -e gbmbench python3 tools/repeat_run_stability.py \
+    timeout -k 30 "${MOJOLEARN_P9_ARM_TIMEOUT:-600}" \
+    pixi run -e gbmbench python3 -u tools/repeat_run_stability.py \
       --repeats 6 ${MOJOLEARN_P9_LANES:+--lanes "$MOJOLEARN_P9_LANES"} \
       --json "$OUT/stability/$m.json" \
       > "$OUT/stability/$m.txt" 2>&1 \
@@ -618,7 +622,7 @@ if [ "${MOJOLEARN_P9_BREAK:-0}" = "1" ]; then
   # the probe writes its JSON after every lane, so a kill keeps the rest.
   MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$REPO/python" \
     timeout -k 30 "${MOJOLEARN_P9_BREAK_TIMEOUT:-1500}" \
-    pixi run -e gbmbench python3 tools/identity_break.py \
+    pixi run -e gbmbench python3 -u tools/identity_break.py \
       --vendor "${MOJOLEARN_P9_VENDOR:-$(hostname)}" \
       ${MOJOLEARN_P9_BREAK_SKIP:+--skip "$MOJOLEARN_P9_BREAK_SKIP"} \
       --json "$OUT/stability/identity_break.identical.json" \

@@ -2314,7 +2314,16 @@ export PATH
 # devel image ships one. Exported ONLY when a ptxas is actually found and the
 # variable is not already set, and LOGGED either way -- a silent fallback is
 # how "it ran" and "it ran the way I think it ran" come apart.
-if [ -z "${MODULAR_NVPTX_COMPILER_PATH:-}" ]; then
+# ONLY WHEN THE DRIVER NEEDS IT (2026-08-29). This exported the escape
+# whenever a ptxas existed, so a driver-580 host that MAX supports natively
+# was still compiled through the image's CUDA 12.4 ptxas, and the isolation
+# forest kernel hung under that ptxas on three RTX 4090 hosts in a row while
+# the one native H100 run (2026-08-28) passed. Below 580 the escape is the
+# only way to run at all; at or above it, MAX's own compiler is the one the
+# passing column used.
+_drv_major="$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1 | cut -d. -f1)"
+echo "host driver major: ${_drv_major:-unknown} (escape needed below 580)"
+if [ -z "${MODULAR_NVPTX_COMPILER_PATH:-}" ] && [ "${_drv_major:-0}" -lt 580 ]; then
     for _px in /usr/local/cuda/bin/ptxas /usr/bin/ptxas \
                /usr/local/cuda-12.4/bin/ptxas /opt/cuda/bin/ptxas; do
         if [ -x "$_px" ]; then
