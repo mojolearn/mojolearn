@@ -3811,3 +3811,143 @@ threshold is invalidated.
 **Gate.** `pcg_rng_check`'s chain pins (regenerated), `range_draw_check` /
 `score_kernel_check` / `host_splitter_check` / `device_*_check`
 host-vs-device parity (both sides move together), and the build smoke.
+
+
+---
+
+## DEVIATION 1943 -- the frontier block is 512 threads on a 64-lane wavefront, 128 on a 32-lane warp
+
+**Where.** `ported/decisiontree/batched_levelalgo/builder.mojo`, `_device_tpb()`
+(the one definition `DEVICE_TPB` reads); the measurement harness is
+`tools/et_profile_leg.sh`, the `et-profile` case of `tools/e2_remote_leg.sh`.
+
+**Theirs.** `TPB_DEFAULT = 128` (`builder_kernels_impl.cuh:33`) and
+`n_blocks_per_node = ceildiv(count, TPB_DEFAULT)` (`builder.cuh:365-385`),
+ONE ROW PER THREAD, on CUDA only.
+
+**The number this answers.** `bench/results/BOARD_2026-08-28_three-vendor.md`
+2.3: ExtraTrees on higgs 1M / 2M, same source, FAST, 4160 / 7661 ms on an
+H100 and 18294 / 35521 ms on an MI325X, while rf and iforest were FASTER on
+the MI325X. Nothing had been profiled.
+
+**Measured, MI325X, FAST, `extratrees/bench/fit_once.mojo` with its
+`PhaseClock`, higgs 1M x 28, 100 trees, depth 16, sqrt features (leg
+`bench/results/e1/2026-08-29_202227-mojolearn-e2-amd/lanes/et_profile/`).**
+
+| pass | TPB 128 (shipped then) | 256 | 512 |
+|---|---|---|---|
+| range (init+range+decode+nonconst) | 8107 ms | 4614 ms | 2819 ms |
+| score (init+score+finalize) | 8799 ms | 5186 ms | 3288 ms |
+| partition (4 kernels) | 221 ms | 192 ms | 185 ms |
+| candidate+reduce+readback | 43 ms | 44 ms | 47 ms |
+| leaf pass | 34 ms | 34 ms | 35 ms |
+| stage + sampler | 259 ms | 212 ms | 194 ms |
+
+`rocprofv3 --kernel-trace --stats` on the same fit: 19 kernels, two of them
+(474 calls = `node_feature_range_kernel`, 286 calls =
+`node_feature_score_kernel`) hold 99.2% of the device time, 17002 ms at TPB
+128 and 6207 ms at TPB 512. The 2M rung: 108578 / 94261 / 86452 ms whole
+fit at 128 / 256 / 512.
+
+**The cause.** Both hot kernels are launched at
+`grid = (n_blocks_dimx, k)`, one block per 128 rows per node
+(`build_workload_info`, `builder_kernels_impl.mojo`), and each thread
+handles exactly one row (`stride = TPB * num_blocks`, `range_len <= TPB *
+num_blocks`), then the block runs six collectives and thread 0 publishes
+three to seven atomics. On CDNA a 128-thread workgroup is two wavefronts,
+so at higgs 1M the two passes launch about 2.6M two-wave workgroups per
+level cycle that each do one compare per lane. The MI325X is bound by the
+workgroup dispatch rate, not by the work: halving the workgroup count
+halves the pass, twice. The H100 runs the same 128 and its whole fit is
+4160 ms, so the width is keyed on the compile-time fact that separates the
+two, `WARP_SIZE`, and the row is a no-op by construction where it is 32
+(NVIDIA, Apple).
+
+**What was NOT it.** The `atomicCAS` spin lock the memory notes remember as
+80% of ET runtime survives only in `split_reduce_kernel`
+(`split.mojo:1036-1052`), which launches `ceildiv(k, TPB)` = one block per
+node at every `k <= TPB`; the reduce phase is 43 ms. The range pass's merge
+is four lock-free integer atomics (DEVIATION 204). The score pass's
+per-thread private arrays are `MAX_ACC = 32` ints; not scratch-bound (the
+pass scales with the block count, not with the class count).
+
+**The bits.** The tree cannot depend on TPB: the range fold is in key
+space under IDENTICAL (DEVIATION 452) and an integer min/max across
+blocks (DEVIATION 204); the score pass sums integers through atomics
+(DEVIATIONS 135, 171); the partition is stable by row index at any tiling
+(DEVIATION 203); the reduce is one block per node. Verified on the second
+leg, `bench/results/e1/2026-08-29_204736-mojolearn-e2-amd/`, at commit
+9c8ffc23 with the row live: phase 9 `stability/identical.txt` et-clf
+`707d2c92e92f6a40`, et-reg `a1d2eb9ddb149617`, 6/6 STABLE, the same two
+hashes as the Apple M4 and the RTX 4090 columns
+(`bench/results/stability/2026-08-29-apple-29lanes/identical.txt`,
+`bench/results/e1/2026-08-29_130931-runpod-nvidia/stability/`); FAST the
+same two hashes. `tools/identity_break.py --lanes et-clf,et-reg` under
+IDENTICAL: 18 of 18 cells equal the Apple column in
+`bench/results/identity_break/apple-m4.identical.json` (et-clf/base
+`22334a0351e6ce65`, predict `9ccaf28b51d37da6`, proba `d9d163336091bd8b`;
+et-reg/base `754d8c127ecfc04d`), file
+`lanes/et_profile/identity_break.et.identical.txt`. Both arms of
+`fit_once` build the same 1,829,804 nodes at 1M and 2,173,962 at 2M.
+
+**After, same leg, same box.** Device kernel time at 1M 16983 ms with
+`-D MOJOLEARN_ET_TPB_128` versus 6200 ms shipped; range 8080 -> 2815 ms,
+score 8803 -> 3289 ms. The whole-fit number is NOT the 18294 ms row's
+opposite, because of DEVIATION 1945 below.
+
+**Price.** None on a 32-lane vendor (the value is unchanged). On a 64-lane
+vendor, `split_reduce_shared_bytes(512, 64) = 288` bytes of shared memory
+and a 2*512-int `smem` in `node_split_kernel` (the oracle kernel, not the
+shipping path); `partition_iteration_bound` and the workspace's
+`1 + max_batch + n_rows // tpb` block bound take the same TPB.
+
+**Owed.** The NVIDIA and Apple ET timings are unchanged by construction
+(`WARP_SIZE == 32` selects the old 128) and were not re-measured. The
+`-D MOJOLEARN_ET_TPB_256` / `_512` arms on a 32-lane device have not been
+timed. AMD's `DEVICE_TPB` has not been swept past 512 (1024 is the CDNA
+maximum).
+
+---
+
+## DEVIATION 1945 -- OPEN: the host `NodeQueue.push` is 88% of a higgs ET fit on the MI325X, and the 2026-08-28 speed arm did not show it
+
+**Where.** `ported/decisiontree/batched_levelalgo/builder.mojo`,
+`NodeQueue.push` (`builder.cuh:91-134` transcribed) and the push loop in
+`train_forest_*_device_timed` (`queues[seg_queue[t]].push(items_s,
+splits_s)`), clocked on its own since commit 9c8ffc23 as
+`PHASE_HOST_PUSH` ("host: queue push (children of the batch)").
+
+**Measured, MI325X, leg `2026-08-29_204736-mojolearn-e2-amd`, FAST.** The
+SHIPPING surface, `mojolearn.ExtraTreesClassifier(n_estimators=100,
+max_depth=16, max_features="sqrt", device="gpu")` on the first 1M rows of
+HIGGS under `MOJOLEARN_STAGE_TIMES=1`
+(`lanes/et_profile/binding_higgs_1000000.txt`): total 60.5 s, of which
+`host: queue push` 53.87 s, range 2.83 s, score 3.31 s, everything else
+under 0.3 s; the untimed fit 61.8 s. At 2M
+(`binding_higgs_2000000.txt`): 87.0 s, push 74.8 s. `fit_once`, the same
+call without Python, shows the same 52.2-52.4 s push at 1M at BOTH TPB
+arms, so it is not the kernel change and not the driver.
+
+**Why it is OPEN and not a claim.** The 2026-08-28 speed arm on the same
+droplet type and dataset (`bench/results/fast_speed/2026-08-28-AMD-forest-higgs.md`,
+commit 4f6a17a) read 18294 ms at 1M, five rounds within 0.4%, and 18.3 s
+is what the two GPU passes cost at TPB 128 plus a few hundred ms; a 52 s
+push cannot have been inside it. `git diff 4f6a17a..9c8ffc23 --
+extratrees/ported/decisiontree/` touches only `_device_tpb` and the
+clock, so the push code is the same in both runs. The cost grows faster
+than the node count (1.83M nodes -> 52 s, 2.17M nodes -> 75 s; 29 -> 34 us
+per pushed node), which is the signature of a per-item cost proportional
+to the tree size, not of a slow CPU (an EPYC 9575F on both legs). Nothing
+in the push body is written as O(tree) per item; where the time goes has
+not been found and is not guessed here.
+
+**What must happen next.** Time `NodeQueue.push` on the MI325X with the
+push loop's three appends and the `sparsetree[idx] =` store separated
+(the same `PhaseClock` can carry them), then re-run the forest speed arm
+at 4f6a17a and at HEAD on one leg so the 18294 ms row is either
+reproduced or retracted with a cause. Until that lands the AMD ET column
+of the 2026-08-28 board carries BOTH numbers and the section says so; a
+whole-fit AMD ET speed claim in either direction is not supportable from
+this repository's evidence today. The Apple and NVIDIA columns are OWED a
+`MOJOLEARN_STAGE_TIMES=1` run of the same fit, because the push is host
+code and has no reason to be vendor-specific.

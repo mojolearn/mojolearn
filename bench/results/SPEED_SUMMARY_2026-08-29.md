@@ -135,8 +135,8 @@ is the board and the commit or date it records.
 | higgs 8.8M, gbm-bench 100 trees | 39.02 s | sklearn ET 10 cores 132.4 s | 3.39x faster | mode not recorded | Apple M4 | same; `README.md` 39.0 s vs 132.4 s, 3.4x |
 | covtype, gbm-bench pairs | 4.10 s | lgbm-et-cpu 6.84 s | 1.67x faster | mode not recorded | Apple M4 | `RF_ET_2026-08-22_lightgbm-pairs.md` |
 | year, gbm-bench pairs | 15.60 s | lgbm-et-cpu 6.17 s | 2.5x slower, MSE 98.0 vs 92.8 ours behind | mode not recorded | Apple M4 | same |
-| higgs 1M x 28, 5 rounds | 18294.084 | none | H100 same source 4160.298, AMD 4.40x slower | FAST | AMD MI325X | `fast_speed/2026-08-28-AMD-forest-higgs.md`, 4f6a17a |
-| higgs 2M x 28, 5 rounds | 35521.428 | none | H100 7661.135, AMD 4.64x slower | FAST | AMD MI325X | same |
+| higgs 1M x 28, 5 rounds | 18294.084 | none | H100 same source 4160.298, AMD 4.40x slower; NOT REPRODUCED at 9c8ffc23 (61772 ms, 53.9 s of it host push, DEVIATION 1945); the two GPU passes 17.0 s -> 6.2 s (DEVIATION 1943) | FAST | AMD MI325X | `fast_speed/2026-08-28-AMD-forest-higgs.md`, 4f6a17a; `e1/2026-08-29_204736-mojolearn-e2-amd/lanes/et_profile/` |
+| higgs 2M x 28, 5 rounds | 35521.428 | none | H100 7661.135, AMD 4.64x slower; NOT REPRODUCED at 9c8ffc23 (88751 ms, 74.8 s host push) | FAST | AMD MI325X | same |
 | synthclf 720,000 x 100, 10 rounds | 24199.518 | none | | FAST | AMD MI325X | `fast_speed/2026-08-28-AMD-forest.md`, 88b918d |
 
 ### 2.6 Isolation forest
@@ -471,11 +471,14 @@ stable on all three.
 
 ## 5. Anomalies the boards themselves flag
 
-- Extra trees on the MI325X is 4.40x slower than on the H100 at higgs 1M
-  (18294.084 versus 4160.298 ms) and 4.64x at 2M, same source, while rf and
-  iforest are 1.17x and 1.50x faster on AMD. "An AMD-specific ET problem
-  with a number on it for the first time" (`BOARD_2026-08-28_three-vendor.md`
-  2.3).
+- Extra trees on the MI325X read 4.40x slower than on the H100 at higgs 1M
+  (18294.084 versus 4160.298 ms) and 4.64x at 2M on 2026-08-28. Profiled
+  2026-08-29 (`extratrees/DEVIATIONS.md` 1943): the range and score passes
+  were 99% of device time at cuML's 128-thread block, and a `WARP_SIZE`-keyed
+  512-wide block takes them from 17.0 s to 6.2 s at 1M with the identical
+  hashes unchanged. The whole-fit number is now dominated by a 53.9 s host
+  `NodeQueue.push` the 2026-08-28 arm cannot have contained (DEVIATION 1945,
+  OPEN); the 2.3 rows carry both numbers.
 - The 5M rung. Lossguide read 14800.158 ms with min 6030.534 at 69f2503 on
   2026-08-27 (5.59x behind xgboost-gpu) and 6301.633 ms at 3d65d70 the next
   morning (2.61x). The symmetric arm bent superlinear between 2M and 5M at

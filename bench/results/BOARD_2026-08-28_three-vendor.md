@@ -192,13 +192,24 @@ a third vendor beside the same arm elsewhere.
 |---|---|---|---|---|
 | rf | higgs 1M | 5309 ms | **4525 ms** | AMD 1.17x faster |
 | rf | higgs 2M | 7308 ms | **6268 ms** | AMD 1.17x faster |
-| et | higgs 1M | **4160 ms** | 18294 ms | AMD **4.40x slower** |
-| et | higgs 2M | **7661 ms** | 35521 ms | AMD **4.64x slower** |
+| et | higgs 1M | **4160 ms** | 18294 ms at 4f6a17a; 61772 ms at 9c8ffc23 (DEVIATION 1945) | AMD **4.40x slower** on the row's own source; see below |
+| et | higgs 2M | **7661 ms** | 35521 ms at 4f6a17a; 88751 ms at 9c8ffc23 (DEVIATION 1945) | AMD **4.64x slower** on the row's own source; see below |
 | iforest | anomaly 500k | 232 ms | **155 ms** | AMD 1.50x faster (Apple 220 ms) |
 
 Random forest and isolation forest are FASTER on the MI325X than on the H100.
-Extra trees is 4.4-4.6x slower on AMD at both rungs, on the same source — an
-AMD-specific ET problem with a number on it for the first time.
+Extra trees was profiled on 2026-08-29 (`extratrees/DEVIATIONS.md` 1943 and
+1945, legs `e1/2026-08-29_202227-mojolearn-e2-amd` and
+`e1/2026-08-29_204736-mojolearn-e2-amd`, `lanes/et_profile/`). Two of the
+nineteen kernels, the range and score passes, held 99% of the device time:
+17.0 s at 1M with cuML's 128-thread block, one row per thread, a two-wavefront
+workgroup on CDNA that leaves the MI325X dispatch-bound. DEVIATION 1943 keys
+the block width on `WARP_SIZE` (512 on a 64-lane wavefront, 128 elsewhere),
+and the device time at 1M is 6.2 s at 9c8ffc23 with every identical-tier ET
+hash unchanged. The whole-fit AMD number did not follow it: the same shipping
+surface now spends 53.9 s at 1M in the host-side `NodeQueue.push`, a cost the
+18294 ms row cannot have contained, on push code that has not changed since
+4f6a17a. That is DEVIATION 1945, OPEN, and until it is closed this column's
+ET rows are two measurements that disagree, not a verdict.
 
 **The three gbdt lanes are absent from this board because the AMD FAST gbdt
 SPEED rows are unrun.** FAST gradient boosting builds and runs on the MI325X

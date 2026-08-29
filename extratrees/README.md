@@ -65,6 +65,15 @@ because a Mojo package directory cannot contain a dash. Recorded in
 **`quantiles.cuh` is deliberately absent** and always will be: it is the file
 this formulation exists to delete. See `UNPORTED.tsv`.
 
+**One kernel-matrix row departs from cuML's launch shape.** Their
+`TPB_DEFAULT = 128` gives every frontier block 128 rows, one per thread; on
+a 64-lane wavefront that is a two-wave workgroup doing one compare per lane
+and the MI325X is dispatch-bound (range + score passes 17.0 s of a higgs 1M
+fit). `DEVICE_TPB` in `builder.mojo` is therefore `128 if WARP_SIZE <= 32
+else 512` (DEVIATION 1943), a no-op on NVIDIA and Apple, 2.7x on the two
+hot kernels on AMD, tree bits unchanged on every tier. The whole-fit AMD
+time is a separate open question, DEVIATION 1945.
+
 ## Why this is a sibling directory and not part of `ensemble/`
 
 `ensemble/` is a parallel lane porting cuML's Random Forest. Both lanes need a
