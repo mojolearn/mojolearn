@@ -99,7 +99,12 @@ against the API (HTTP 404), never assumed.
 ## Owed
 
 * **AMD.** The whole reason the tier's promise is still a one-and-a-half
-  column result.
+  column result. First attempt 2026-08-29: an MI300X was created and never
+  produced an ssh endpoint inside the 600s readiness window, so the leg
+  terminated it and exited -- the box billed for ten minutes unarmed, which
+  is exactly the window that timeout exists to close. Retried at
+  `--ready-timeout 1200`; MI300X provisioning is slow enough that 600s is not
+  a safe default for this vendor.
 * **The GEMM question.** `gemm-vendor` is STABLE on Apple and on NVIDIA at
   256x4096 @ 4096x128, a wide k chosen to provoke a split-K epilogue. That is
   two columns of evidence that rows 24/27/28/40/41 are cross-vendor class and
