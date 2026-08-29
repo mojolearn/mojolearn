@@ -1584,13 +1584,34 @@ def make_level_workspace(
     return ws^
 
 
-comptime DEVICE_TPB = 128
+comptime DEVICE_TPB = _device_tpb()
 """Threads per block for every device pass in this file.
 
 One definition, because `build_workload_info` tiles the frontier by it and
 DEVIATION 203's partition assumes that tiling: two copies that drifted would
 put a block's rows somewhere its scatter does not write.
+
+The value comes from `_device_tpb()`: 128 (cuML's `TPB_DEFAULT`) unless a
+measurement arm overrides it with `-D MOJOLEARN_ET_TPB_256=1` or
+`-D MOJOLEARN_ET_TPB_512=1` (tools/et_profile_leg.sh builds those arms
+side by side with the default on a rented box).
 """
+
+
+def _device_tpb() -> Int:
+    """The block width of every frontier pass, chosen at compile time.
+
+    `build_workload_info` gives each block exactly TPB rows, so the block
+    count of the range, score and partition passes is `n_rows / TPB` per
+    node per feature. A measurement arm can widen the block through the
+    two defines below so the same fit runs at 256 or 512 without any other
+    source change; the shipped default is cuML's 128.
+    """
+    if is_defined["MOJOLEARN_ET_TPB_512"]():
+        return 512
+    if is_defined["MOJOLEARN_ET_TPB_256"]():
+        return 256
+    return 128
 
 comptime DEVICE_MAX_ACC = 32
 """Widest per-cell class accumulator the score kernel's shared memory admits

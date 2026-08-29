@@ -269,6 +269,14 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
       # These two print what the build targeted and what the device answered,
       # which is the only thing that separates a cross-vendor result from a
       # pair of host runs on two machines.
+      # THE EXTRATREES BREAKDOWN ON THIS VENDOR. Section 2.3 of the 2026-08-28
+      # board has ET 4.4x slower on the MI325X than on the H100 with the same
+      # source, while rf and iforest are faster there; nobody had profiled
+      # it. This runs fit_once's PhaseClock at the higgs speed-arm shape, at
+      # DEVICE_TPB 128/256/512, under rocprofv3 where the image has it.
+      # WRAP=0: it is a FAST-tier measurement, and the script builds its own
+      # arms.
+      et-profile)    CMD='bash tools/et_profile_leg.sh'; WRAP=0 ;;
       column)        CMD='pixi run mojo run -I . matrix_main.mojo' ;;
       gpu-probe)     CMD='pixi run mojo run -I . probe_main.mojo' ;;
       # (no `transformer` case: the device spelling in transformer/ported/ has
