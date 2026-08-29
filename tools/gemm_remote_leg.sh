@@ -3788,7 +3788,15 @@ leg_rehearse() {
         # P1 IS THE ONE THAT KEEPS THE REST HONEST: every check below reads
         # $LANES, and a lane list that quietly fell back to a literal would
         # make all of them pass while the newest lane went unchecked.
-        _raw=$(sed -n 's/^for lane in \(.*\); do$/\1/p' tools/e3_round_judge.sh | head -1)
+        # CONTINUATION-AWARE since 2026-08-29. This was a single-line `sed`
+        # and the judge's lane loop grew past one line when the list went from
+        # 7 lanes to 23 -- so the extraction returned EMPTY and this guard went
+        # red. That is the guard working: an empty extraction is precisely the
+        # "quietly fell back to a literal" case it exists to catch. Join the
+        # backslash continuations first, then match.
+        _raw=$(awk '
+            /^for lane in/ { buf = $0; while (buf ~ /\\$/) { sub(/\\$/, "", buf); getline nxt; buf = buf nxt } print buf; exit }
+        ' tools/e3_round_judge.sh | sed -n 's/^for lane in \(.*\); do$/\1/p' | tr -s ' ')
         if [ -n "$_raw" ] && echo " $_raw " | grep -q ' mamba '; then
             rok "P1 the lane list is READ OUT OF tools/e3_round_judge.sh ($_raw)"
         else
