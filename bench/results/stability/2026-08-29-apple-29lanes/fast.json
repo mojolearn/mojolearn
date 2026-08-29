@@ -1,0 +1,405 @@
+{
+ "mode": "fast",
+ "repeats": 6,
+ "rows": [
+  {
+   "lane": "agglomerative",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "02ca572ae936a2fa",
+    "02ca572ae936a2fa",
+    "02ca572ae936a2fa",
+    "02ca572ae936a2fa",
+    "02ca572ae936a2fa",
+    "02ca572ae936a2fa"
+   ],
+   "error": null
+  },
+  {
+   "lane": "dbscan",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "a4608e954c7420b7",
+    "a4608e954c7420b7",
+    "a4608e954c7420b7",
+    "a4608e954c7420b7",
+    "a4608e954c7420b7",
+    "a4608e954c7420b7"
+   ],
+   "error": null
+  },
+  {
+   "lane": "elasticnet",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "4e5ddce1bfb1ffae",
+    "4e5ddce1bfb1ffae",
+    "4e5ddce1bfb1ffae",
+    "4e5ddce1bfb1ffae",
+    "4e5ddce1bfb1ffae",
+    "4e5ddce1bfb1ffae"
+   ],
+   "error": null
+  },
+  {
+   "lane": "et-clf",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40"
+   ],
+   "error": null
+  },
+  {
+   "lane": "et-reg",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "a1d2eb9ddb149617",
+    "a1d2eb9ddb149617",
+    "a1d2eb9ddb149617",
+    "a1d2eb9ddb149617",
+    "a1d2eb9ddb149617",
+    "a1d2eb9ddb149617"
+   ],
+   "error": null
+  },
+  {
+   "lane": "gbdt-depthwise",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "757bd55c27047cb0",
+    "757bd55c27047cb0",
+    "757bd55c27047cb0",
+    "757bd55c27047cb0",
+    "757bd55c27047cb0",
+    "757bd55c27047cb0"
+   ],
+   "error": null
+  },
+  {
+   "lane": "gbdt-lossguide",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "82628fff246a204e",
+    "82628fff246a204e",
+    "82628fff246a204e",
+    "82628fff246a204e",
+    "82628fff246a204e",
+    "82628fff246a204e"
+   ],
+   "error": null
+  },
+  {
+   "lane": "gbdt-rmse",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "fa22f14f818359d9",
+    "fa22f14f818359d9",
+    "fa22f14f818359d9",
+    "fa22f14f818359d9",
+    "fa22f14f818359d9",
+    "fa22f14f818359d9"
+   ],
+   "error": null
+  },
+  {
+   "lane": "gbdt-symmetric",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "e3a9df9a11c6f5cf",
+    "e3a9df9a11c6f5cf",
+    "e3a9df9a11c6f5cf",
+    "e3a9df9a11c6f5cf",
+    "e3a9df9a11c6f5cf",
+    "e3a9df9a11c6f5cf"
+   ],
+   "error": null
+  },
+  {
+   "lane": "gemm-pinned",
+   "verdict": "REFUSED",
+   "distinct": 0,
+   "hashes": [],
+   "error": "RuntimeError: mojolearn.linalg: this process loaded the FAST build, which makes NO identity claim; mojolearn.identical.gemm.fp32.v1 is what the IDENTICAL build computes.\n  Set MOJOLEARN_NUMERIC_MODE=identical in the environment BEFORE importing mojolearn, having built the identical binary with\n      MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_linalg.sh\n  Or pass identical=False to say in the source that you want the fast product and are making no identity claim about it."
+  },
+  {
+   "lane": "gemm-vendor",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "47390974b94e233d",
+    "47390974b94e233d",
+    "47390974b94e233d",
+    "47390974b94e233d",
+    "47390974b94e233d",
+    "47390974b94e233d"
+   ],
+   "error": null
+  },
+  {
+   "lane": "holtwinters",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "c0162141c554318e",
+    "c0162141c554318e",
+    "c0162141c554318e",
+    "c0162141c554318e",
+    "c0162141c554318e",
+    "c0162141c554318e"
+   ],
+   "error": null
+  },
+  {
+   "lane": "iforest",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "f6923b22b145211a",
+    "f6923b22b145211a",
+    "f6923b22b145211a",
+    "f6923b22b145211a",
+    "f6923b22b145211a",
+    "f6923b22b145211a"
+   ],
+   "error": null
+  },
+  {
+   "lane": "kde",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "086b56eaffdcbc30",
+    "086b56eaffdcbc30",
+    "086b56eaffdcbc30",
+    "086b56eaffdcbc30",
+    "086b56eaffdcbc30",
+    "086b56eaffdcbc30"
+   ],
+   "error": null
+  },
+  {
+   "lane": "kmeans",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "da3cb10e46c91256",
+    "da3cb10e46c91256",
+    "da3cb10e46c91256",
+    "da3cb10e46c91256",
+    "da3cb10e46c91256",
+    "da3cb10e46c91256"
+   ],
+   "error": null
+  },
+  {
+   "lane": "knn-clf",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "f359ee4876deb908",
+    "f359ee4876deb908",
+    "f359ee4876deb908",
+    "f359ee4876deb908",
+    "f359ee4876deb908",
+    "f359ee4876deb908"
+   ],
+   "error": null
+  },
+  {
+   "lane": "knn-reg",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "ff4a92b889616aea",
+    "ff4a92b889616aea",
+    "ff4a92b889616aea",
+    "ff4a92b889616aea",
+    "ff4a92b889616aea",
+    "ff4a92b889616aea"
+   ],
+   "error": null
+  },
+  {
+   "lane": "knn-tied",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "b6add453a43beb71",
+    "b6add453a43beb71",
+    "b6add453a43beb71",
+    "b6add453a43beb71",
+    "b6add453a43beb71",
+    "b6add453a43beb71"
+   ],
+   "error": null
+  },
+  {
+   "lane": "lasso",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "af2d5296cd09e293",
+    "af2d5296cd09e293",
+    "af2d5296cd09e293",
+    "af2d5296cd09e293",
+    "af2d5296cd09e293",
+    "af2d5296cd09e293"
+   ],
+   "error": null
+  },
+  {
+   "lane": "logistic",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "ee5411140bc26cbe",
+    "ee5411140bc26cbe",
+    "ee5411140bc26cbe",
+    "ee5411140bc26cbe",
+    "ee5411140bc26cbe",
+    "ee5411140bc26cbe"
+   ],
+   "error": null
+  },
+  {
+   "lane": "metrics",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "01a17b9ad7a6275c",
+    "01a17b9ad7a6275c",
+    "01a17b9ad7a6275c",
+    "01a17b9ad7a6275c",
+    "01a17b9ad7a6275c",
+    "01a17b9ad7a6275c"
+   ],
+   "error": null
+  },
+  {
+   "lane": "ols",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "8bda051c2e15fb51",
+    "8bda051c2e15fb51",
+    "8bda051c2e15fb51",
+    "8bda051c2e15fb51",
+    "8bda051c2e15fb51",
+    "8bda051c2e15fb51"
+   ],
+   "error": null
+  },
+  {
+   "lane": "pca",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "b509e01813e2ce8d",
+    "b509e01813e2ce8d",
+    "b509e01813e2ce8d",
+    "b509e01813e2ce8d",
+    "b509e01813e2ce8d",
+    "b509e01813e2ce8d"
+   ],
+   "error": null
+  },
+  {
+   "lane": "rf-clf",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "eacd6bff8b4088b8",
+    "eacd6bff8b4088b8",
+    "eacd6bff8b4088b8",
+    "eacd6bff8b4088b8",
+    "eacd6bff8b4088b8",
+    "eacd6bff8b4088b8"
+   ],
+   "error": null
+  },
+  {
+   "lane": "rf-reg",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "91269c5ae3828665",
+    "91269c5ae3828665",
+    "91269c5ae3828665",
+    "91269c5ae3828665",
+    "91269c5ae3828665",
+    "91269c5ae3828665"
+   ],
+   "error": null
+  },
+  {
+   "lane": "ridge",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "7288d1af08a3025f",
+    "7288d1af08a3025f",
+    "7288d1af08a3025f",
+    "7288d1af08a3025f",
+    "7288d1af08a3025f",
+    "7288d1af08a3025f"
+   ],
+   "error": null
+  },
+  {
+   "lane": "spectral",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "7c5f4e5c32dc0ca1",
+    "7c5f4e5c32dc0ca1",
+    "7c5f4e5c32dc0ca1",
+    "7c5f4e5c32dc0ca1",
+    "7c5f4e5c32dc0ca1",
+    "7c5f4e5c32dc0ca1"
+   ],
+   "error": null
+  },
+  {
+   "lane": "svc",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "60045dca15cc4d63",
+    "60045dca15cc4d63",
+    "60045dca15cc4d63",
+    "60045dca15cc4d63",
+    "60045dca15cc4d63",
+    "60045dca15cc4d63"
+   ],
+   "error": null
+  },
+  {
+   "lane": "tsvd",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "d9953cdd48933270",
+    "d9953cdd48933270",
+    "d9953cdd48933270",
+    "d9953cdd48933270",
+    "d9953cdd48933270",
+    "d9953cdd48933270"
+   ],
+   "error": null
+  }
+ ]
+}
