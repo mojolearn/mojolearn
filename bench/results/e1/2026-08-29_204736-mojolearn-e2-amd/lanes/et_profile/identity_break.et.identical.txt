@@ -1,0 +1,8 @@
+# identity_break  mode=identical  2026-08-29 21:08:07  Linux-6.8.0-59-generic-x86_64-with-glibc2.39
+| lane             | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| et-clf           | 22334a0351e6ce65 | b23d563be1dcfa38 | 49420dd07b025bae | b27a85972e75b096 | 26affc1039ae729a | 26affc1039ae729a | 410ec72a72b14424 | 7370511549694aae | 10e38234095c04f9 |
+| et-reg           | 754d8c127ecfc04d | e7072e1c8fe0083c | 4e0a0d9a4670ed5f | b745e53515f59cac | 19a23f6fea44befd | 19a23f6fea44befd | 9a63fea590f79a67 | c9fe7c90673c2661 | 3fd3dff94cc79fc2 |
+
+cells=18 stable=18 moved=0 refused=0
+wrote bench/results/e1/2026-08-29_204736-mojolearn-e2-amd/lanes/et_profile/identity_break.et.identical.json

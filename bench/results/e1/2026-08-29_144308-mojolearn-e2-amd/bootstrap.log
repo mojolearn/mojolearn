@@ -1,0 +1,58 @@
+
+=== provenance === 14:43:08
+97f7507b9259dbdfe176393f203a2f6e64e1db1e
+Linux mojolearn-e2-amd 6.8.0-59-generic #61-Ubuntu SMP PREEMPT_DYNAMIC Fri Apr 11 23:16:11 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
+
+=== pixi === 14:43:08
+This script will automatically download and install Pixi (latest) for you.
+Getting it from this url: https://github.com/prefix-dev/pixi/releases/latest/download/pixi-x86_64-unknown-linux-musl.tar.gz
+The 'pixi' binary is installed into '/root/.pixi/bin'
+Updating '/root/.bashrc'
+Please restart or source your shell.
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 14:43:11
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 14:43:11
+phase 9 builds: build.sh build_estimators.sh build_gbdt.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_tsa.sh build_linalg.sh
+phase 9 tiers:  identical
+identical set: 10 of 10 binaries
+--- stability identical
+    | tsvd             | STABLE   | YES  6/6 calls agreed   | eb98ef49f9c747f0 |
+    
+    mode=identical  stable=16  moved=0  refused=0
+    wrote /root/mojolearn/bench/results/e1/2026-08-29_144308-mojolearn-e2-amd/stability/identical.json
+concurrent probe SKIPPED: needs all three tiers, P9_TIERS=identical
+--- identity_break (identical, every estimator, eight fixtures)
+    | spectral         | 7dd80ac8f13fc9eb | f160e7dc7c262f73 | 2bd3b69e87fa6b9b | d1857f998728ef34 | 4544b0d64dd6ad84 | 4544b0d64dd6ad84 | 7dd80ac8f13fc9eb | a48b941d2c585a12 | de29c53c40a728c5 |
+    | holtwinters      | 9781c2061a287937 | b2a5df45db1395b0 | 66f688c307cabc3b | 560cdc45a69cc987 | db35c88da059e9e1 | db35c88da059e9e1 | 9781c2061a287937 | 8fb4dd76d8080a46 | 8fa4116875bdf59c |
+    | gemm-pinned      | 931036cbc84c1ce0 | 8ddd60b67526c1b1 | 06057c0eeb212963 | 01701582fa724ce4 | 026720f450eda8a3 | 026720f450eda8a3 | 4d5d6e4a621ef9af | d5a7a31e551215d9 | 1ef67a1833b19819 |
+    | metrics          | e22e2837cd7745d0 | 93d3ca41833316b2 | 3af7ae738c7098cc | 9e3613ff3893df35 | 0cb824bb19790cfd | d299bedfcf4b3d8f | 90eb66ef2679a140 | 133a300fd5e82d91 | 35c902983b9eacbb |
+    
+    cells=252 stable=251 moved=0 refused=1
+    REFUSED svc/denormal_ftz: NotImplementedError: mojolearn SVC: only binary classification is implemented, got 1 classes [0]. cuML's own C++ asserts the same thing (svc_impl.cuh: 'Only binary classification is implemented at the moment'); their multiclass is a Python-layer one-vs-one/one-vs-rest wrapper and is not ported (svm/
+    wrote /root/mojolearn/bench/results/e1/2026-08-29_144308-mojolearn-e2-amd/stability/identity_break.identical.json
+
+=== done === 14:46:19
+artifacts in /root/mojolearn/bench/results/e1/2026-08-29_144308-mojolearn-e2-amd
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

@@ -1,0 +1,57 @@
+[16:44:33 amd] dead-man timer pid 63304 (3600 s, keyed by tag e2 + name mojolearn-e2-amd)
+[16:44:33 amd] creating mojolearn-e2-amd (gpu-mi325x1-256gb, tor1)
+[16:44:36 amd] droplet id 596203084
+[16:45:19 amd] active at 138.197.140.221
+[amd gpu] GPU[0]		: Card Series: 		AMD Instinct Mi325X VF
+[16:45:48 amd] bundle 9c8ffc23a36d92308ac2b691fbe3e71392db5f3d (branch e2-run)
+9c8ffc23a36d92308ac2b691fbe3e71392db5f3d
+1
+[16:47:34 amd] wave 1: phases=9 lanes=all, bound 2999s
+WAVE-1-EXIT=0  (124 = hit the work bound)
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 20:47:38
+phase 9 builds: build_trees.sh
+phase 9 tiers:  fast identical
+fast set: 1 of 10 binaries
+identical set: 1 of 10 binaries
+--- stability fast
+    | et-reg           | STABLE   | YES  6/6 calls agreed   | a1d2eb9ddb149617 |
+    
+    mode=fast  stable=2  moved=0  refused=0
+    wrote /root/mojolearn/bench/results/e1/2026-08-29_204736-mojolearn-e2-amd/stability/fast.json
+--- stability identical
+    | et-reg           | STABLE   | YES  6/6 calls agreed   | a1d2eb9ddb149617 |
+    
+    mode=identical  stable=2  moved=0  refused=0
+    wrote /root/mojolearn/bench/results/e1/2026-08-29_204736-mojolearn-e2-amd/stability/identical.json
+concurrent probe SKIPPED: needs all three tiers, P9_TIERS=fast identical
+
+=== done === 20:48:05
+artifacts in /root/mojolearn/bench/results/e1/2026-08-29_204736-mojolearn-e2-amd
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card
+[16:48:05 amd] extra check: et-profile (bound 2968s)
+EXTRA-et-profile-EXIT=0
+--- identity_break et-clf,et-reg (identical) 21:08:07
+|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| et-clf           | 22334a0351e6ce65 | b23d563be1dcfa38 | 49420dd07b025bae | b27a85972e75b096 | 26affc1039ae729a | 26affc1039ae729a | 410ec72a72b14424 | 7370511549694aae | 10e38234095c04f9 |
+| et-reg           | 754d8c127ecfc04d | e7072e1c8fe0083c | 4e0a0d9a4670ed5f | b745e53515f59cac | 19a23f6fea44befd | 19a23f6fea44befd | 9a63fea590f79a67 | c9fe7c90673c2661 | 3fd3dff94cc79fc2 |
+
+cells=18 stable=18 moved=0 refused=0
+wrote bench/results/e1/2026-08-29_204736-mojolearn-e2-amd/lanes/et_profile/identity_break.et.identical.json
+et_profile: done 21:08:09
+[17:08:09 amd] fetch artifacts
+[17:08:19 amd] fetched: amd_et_profile_leg2.log
+[17:08:23 amd] leg done; destroying
+[17:08:23 amd] teardown (rc=0)
+[17:08:24 amd] DELETE droplet 596203084 -> HTTP 204
+[17:08:30 amd] post-destroy status: active
+[17:08:30 amd] dead-man timer cancelled

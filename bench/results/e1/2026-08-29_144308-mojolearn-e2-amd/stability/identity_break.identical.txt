@@ -1,0 +1,35 @@
+# identity_break  mode=identical  2026-08-29 14:45:52  Linux-6.8.0-59-generic-x86_64-with-glibc2.39
+| lane             | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| rf-clf           | bafa9f8eece3514f | 61b041325b7116b6 | 7096e521953fdddf | e9d3eb2e9daeaf6c | 27ef29556c61c005 | 0ac9ac0cc9353c13 | 34267244131feab3 | 419a32e8b60b7503 | a73758098079eb4d |
+| rf-reg           | f032017cfd1c73dd | ec6e7b28cd0d16a9 | c755113ac878c8b9 | 8d9b05172d7a3777 | 0b44bed8c97a3a1b | feed3869ba06eaf7 | 55f5becd2a3a172c | 33f207a8fab32866 | cd81c456c75aaaf0 |
+| et-clf           | f55ad895e8d30ed8 | ccfc5aebb93d2362 | bc8ee04330bdaab6 | f311980b4068d7b9 | 7e662fbf43bff340 | c8989cf832a828e4 | b4efeb3926b82d4e | 55d502335ba58b50 | 841f83dd01bc0ebd |
+| et-reg           | 754d8c127ecfc04d | e7072e1c8fe0083c | 4e0a0d9a4670ed5f | b745e53515f59cac | 19a23f6fea44befd | 19a23f6fea44befd | 9a63fea590f79a67 | c9fe7c90673c2661 | 3fd3dff94cc79fc2 |
+| gbdt-symmetric   | e74c0dd7ab66235e | 82465dccc3554008 | 04976edc34427155 | c6fd0edcb7323e51 | 860ca8e9d689d19a | b2f24fd1bd5a4e68 | 6cecc7afa458f31a | 1a7525d722720c9d | 68359e0c1de6fab5 |
+| gbdt-depthwise   | 5f8cbfc294ac5863 | 28ba695c4254e719 | b5077701e2226c59 | c9257307814f368e | 4f014dd677ba21a1 | 8c8a69444423d170 | 230be4e9232e8768 | 5d8828ff7ce24942 | 273ca5e775a40aec |
+| gbdt-lossguide   | 8e737cd95723bcc3 | 8a46c96137dfa5d9 | 9c7c6b73f75d94a3 | 5b0589677e78ee6b | 12f1d052d5998125 | 397dead2ba535fea | cf51ed05299edb73 | 2c6ee0de07b955dc | f75c63dee5f0829d |
+| gbdt-rmse        | 3f8aef8d73be249c | 88cba1574daa922e | a89dba586c0f1ab4 | 5ea3a06d9df1d862 | 400f099e655dc453 | 400f099e655dc453 | 49848bfd3c26b52e | 7b54ca9d69e29714 | e54f74cdab3f29f0 |
+| kmeans           | 5aa44cc11034dec9 | 3de3e103006de69c | 0a570e84b0002723 | 6f0529fcb3d60536 | 993fe5caff144b0c | 993fe5caff144b0c | 2ae942d45a51757a | 43d8a3d3859f4143 | d4cc38e75f8e2d75 |
+| knn              | 6869ae45e01fcb7a | 23daf3a923d4c74f | 96db6b5a57d4d248 | 3956d623d56e1786 | c5404ea40ba502da | c5404ea40ba502da | 55dffcfe5d6aa112 | f4ddd08c4744ae8d | b73513bc451075d0 |
+| knn-clf          | c6590fc89330d882 | 4cd794758617994c | b54e80db5c867643 | 695028739263e2cd | df0db16552fab720 | 1762c78e9cc951ef | 235adcd1ac2234fb | 636df6d1529e4d66 | 505cb1da05a65015 |
+| knn-reg          | 33e7da5c3fdd343c | 556283a80ad1e387 | 81f9b8890b3f8185 | 0d128580a2408383 | 4c84ea510c9509c5 | 4c84ea510c9509c5 | 3bb71dcd3b676bd6 | 4fddd38927851559 | b34860cd7e03c8fe |
+| dbscan           | 64df251bd00de81b | b7535355c1581603 | d17808b4b9261d5d | d17808b4b9261d5d | 9c0b3563fc16b652 | 9c0b3563fc16b652 | 64df251bd00de81b | 54d129f45630ea84 | bb6bd31e075693e9 |
+| pca              | 426e098860cb885e | 2cc3098a82f5e29c | 9c43c580f84b913e | ee30334357c2fe6e | 632dd2d41a856846 | 632dd2d41a856846 | f0d80567379e28e4 | 2bde4e929e103470 | c4903e2bddacb305 |
+| tsvd             | 8e8d20af1d08720c | 86d6e87cfc1f48c0 | 7eeaca88b0e6a8de | 975f2a167b1ac6d5 | 36d9e3d5aaadcd92 | 36d9e3d5aaadcd92 | 9a24cf55eff6013c | 452fd865062565da | 22e0958cc1ded92d |
+| ols              | 3d1d7c30b12d9872 | c73c0c1158ebcb9e | 7a4cc4b643207e04 | 23bac71c5351d6a2 | f0e2e46f2203e17d | f0e2e46f2203e17d | 5d93af9edf61d3e7 | bfb2368a5a4871ba | 737566e6c5e95e7d |
+| ridge            | a91478be750dc756 | 42410e35cdae30cb | fb5037b3d70d60ee | 7215c2605901cdc6 | 2eed6e454ed965da | 2eed6e454ed965da | c69b8fef7932da21 | bdaf14e02a8f07ec | 473e3ff40fc67b0e |
+| logistic         | 862b5e169eab2161 | 77428a55c879213f | eb728512d0512bf5 | 5a410c5af7de2a6f | 674e8a4ca0cf380c | 307f16248648e881 | c6b0dd5baf0e347f | c6ec08fa7c16203e | 31193815e565aab6 |
+| lasso            | 2fa3301e45a46091 | 1e207f82f555270b | 0446105edc307f9c | d0df889b0ede05a7 | 5374b434a96382d6 | 5374b434a96382d6 | beafb1d480c34cf4 | 5593579edd6113d6 | c332c713694ff28d |
+| elasticnet       | 2cf742083831ee9d | 118eac19578010ab | 00b6923d62a41c0a | ef8800eaf0ca4f87 | 3add60ff69fd788c | 3add60ff69fd788c | 97d4c8c235d38bfe | 1a518e703b7dd1d9 | 7624315e7deffe10 |
+| svc              | c1b9980a6ff64e7e | 84c38fb759b37431 | 74118df6f40e6687 | d8bdc5d36a3ad056 | 34fd0d5ee595c90c | REFUSED          | 7c7cd416902e4184 | adb8fab7d37314ad | 05ea3b305d72c4e1 |
+| kde              | e0d6e3d0623d6112 | 0a800c7b3cca66e4 | dc279c30b7c5d070 | 36c3cbb2ef71f768 | 2128392fe1eb228a | 2128392fe1eb228a | e0d6e3d0623d6112 | 8a2b6beee09a98f3 | 84ca35b6a157c265 |
+| iforest          | 8703d4a008ffd13d | 5043855ee14799da | 72260557474879ae | 8703d4a008ffd13d | 045af056aca03f84 | 54ea9b5c8c3fc38b | b879bcf3dcf99f38 | 9b849a13c8d35adb | a5b7676e39778af5 |
+| agglomerative    | ad11b976bfbfc20b | 7dea8a094150b8a9 | 196c79a60c16166c | 24b2baa4533fb568 | b05982504c7e8646 | b05982504c7e8646 | ad11b976bfbfc20b | c747a33eff11bbe1 | 795f9975eb5ed985 |
+| spectral         | 7dd80ac8f13fc9eb | f160e7dc7c262f73 | 2bd3b69e87fa6b9b | d1857f998728ef34 | 4544b0d64dd6ad84 | 4544b0d64dd6ad84 | 7dd80ac8f13fc9eb | a48b941d2c585a12 | de29c53c40a728c5 |
+| holtwinters      | 9781c2061a287937 | b2a5df45db1395b0 | 66f688c307cabc3b | 560cdc45a69cc987 | db35c88da059e9e1 | db35c88da059e9e1 | 9781c2061a287937 | 8fb4dd76d8080a46 | 8fa4116875bdf59c |
+| gemm-pinned      | 931036cbc84c1ce0 | 8ddd60b67526c1b1 | 06057c0eeb212963 | 01701582fa724ce4 | 026720f450eda8a3 | 026720f450eda8a3 | 4d5d6e4a621ef9af | d5a7a31e551215d9 | 1ef67a1833b19819 |
+| metrics          | e22e2837cd7745d0 | 93d3ca41833316b2 | 3af7ae738c7098cc | 9e3613ff3893df35 | 0cb824bb19790cfd | d299bedfcf4b3d8f | 90eb66ef2679a140 | 133a300fd5e82d91 | 35c902983b9eacbb |
+
+cells=252 stable=251 moved=0 refused=1
+REFUSED svc/denormal_ftz: NotImplementedError: mojolearn SVC: only binary classification is implemented, got 1 classes [0]. cuML's own C++ asserts the same thing (svc_impl.cuh: 'Only binary classification is implemented at the moment'); their multiclass is a Python-layer one-vs-one/one-vs-rest wrapper and is not ported (svm/
+wrote /root/mojolearn/bench/results/e1/2026-08-29_144308-mojolearn-e2-amd/stability/identity_break.identical.json

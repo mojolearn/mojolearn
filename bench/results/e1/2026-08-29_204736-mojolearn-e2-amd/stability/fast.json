@@ -1,0 +1,34 @@
+{
+ "mode": "fast",
+ "repeats": 6,
+ "rows": [
+  {
+   "lane": "et-clf",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40"
+   ],
+   "error": null
+  },
+  {
+   "lane": "et-reg",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "a1d2eb9ddb149617",
+    "a1d2eb9ddb149617",
+    "a1d2eb9ddb149617",
+    "a1d2eb9ddb149617",
+    "a1d2eb9ddb149617",
+    "a1d2eb9ddb149617"
+   ],
+   "error": null
+  }
+ ]
+}

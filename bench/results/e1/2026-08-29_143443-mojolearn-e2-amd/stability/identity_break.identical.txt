@@ -1,0 +1,34 @@
+# identity_break  mode=identical  2026-08-29 14:37:26  Linux-6.8.0-59-generic-x86_64-with-glibc2.39
+| lane             | base             | ties             | hashed           | wide             | denormal         | dupes            | odd              | negative         |
+|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| rf-clf           | bd26b19ce6a0a01e | 7401be53fa50534d | 89eb07752d9c92f6 | 32aadbc42766e8fe | 9b946211c64c2b52 | 0c7abe08e8120840 | 03c62346ae605c78 | d72756311b443743 |
+| rf-reg           | 1972cf0519a2f939 | ef3cf6ecacd9d816 | b21177da90e6be71 | c85918d0dfc8c7c1 | 53bd82bce6bbb836 | 52251619e6a13b58 | 2e9cbfe866902ae9 | cde9a12410910f2c |
+| et-clf           | f068e7f753ff5569 | 06e911c04f04e05d | 2770a4e6a1d3d9fb | da9f3ad3261a779a | f4de4f39dffb02ee | 20b8cce93efefa67 | d93f14fa1888e8cc | ea4dbaf5fa951ec9 |
+| et-reg           | 26b8a626baa3fe13 | 8d33d02b84574126 | 32211232f2b21c6d | 3aa8f17ee145cb4b | eb648902c9920307 | d295ca912c039822 | 7cc91c22182b2597 | 9657e8e74336124a |
+| gbdt-symmetric   | c30473f512eda88a | dc30260ad6cddb9d | 099e6ea8b17a0fe9 | a0bba3feb829cabe | 9f69da538435aa50 | c6e2aa0b358a5e93 | 9487069db4246594 | 272c592ff5c80cf0 |
+| gbdt-depthwise   | b0c04741df68410a | 691e15d19c5381bb | 7080c37c3f462ca3 | 6644d2b9d3759ac7 | 5963d55bed47b73a | 4d614d6c2a507157 | 9013035e93bb0ebb | a4d71c1552e4cf1c |
+| gbdt-lossguide   | 99942e643cba62c8 | 470cf17ba3b7fe73 | f16e8be74428b39c | d0f4001f90ad25d8 | ec6f25eb9c2e8d6b | cf37f9614e2ae44c | 70dafe31fcfda667 | d7b67c3b35bea9cc |
+| gbdt-rmse        | 35bbab0e49bc7e80 | 60386ff7475e68f2 | aa0e0748c5fa52fb | 24d2b1a73d5a2405 | a3422da5ed6d5b5a | 099677296c578c6f | 161cedb0400cd200 | 652435ba6e452212 |
+| kmeans           | da3cb10e46c91256 | 4c0fb31306aeeb54 | 73e7d9d776c61685 | 3ad7888f16263188 | 370f9cb6dc7bf3b1 | d84665aaa8e83246 | df8a4981a26257ae | 3d5a5053f2fd6614 |
+| knn              | 4e01b71cc8dac4ec | f8ae31f959e98f78 | bc120048d140fb9b | 433e83a6353fa5cc | 171dcdb3a56a6d12 | c4f2214faa32ddea | 3e9840359c6f7469 | 261c16032164accd |
+| knn-clf          | f359ee4876deb908 | f7e2ff9169428e99 | 6db81871be280f38 | be1135e6471ddc68 | 3a5e34121524fc83 | 1fa4144445ae616a | ca73a62b1af2f3d5 | daf34fcb3bda8897 |
+| knn-reg          | 3443d7350e1e5d93 | bd09d7a2858c42e3 | fdcb019d0acbc3ce | 032c6656cb946b58 | a84d2bbce0c2e60c | 8eb4ce77dd17db6a | 20aa405438a454ea | acc92a419c55680d |
+| dbscan           | 632036728f6accfe | 3db49f494a12bc96 | 1f6fbd85ac2efbda | 1f6fbd85ac2efbda | 093efe02f069ce64 | 632036728f6accfe | de115f464b11504b | b3a4860bfd8d6647 |
+| pca              | adfe4468b31f0a6a | 2a2fa71d7e128653 | 72a871586d7b0144 | ba1b6b64f1c4b787 | 6d28b4fb49d062cd | df359e48f86fbbf2 | f8b1e17f92a440a3 | c815a8a54242a3fe |
+| tsvd             | 576fb81292a14bd6 | fdcd3fcf9fdb7b0c | e94f81b3a8d58af1 | e400abddace2f482 | b799c8e7238a78e2 | 067a0abafd653ed0 | 6c56ebc86358a4e5 | ba3d382c8a6e69d8 |
+| ols              | 1f78435c06168b5b | 289d486a1f9966be | 698549792022ed0f | fe62545e95594489 | a5a8fb562f36c30f | 52e3505648de984b | b37e83c329bca9a1 | b3f780fd1d5b58c2 |
+| ridge            | a6deeac0da21a5bf | f1b57032d5f02206 | 51140743966f7e0b | df2bbc2021c2a14d | c65c4f8e2148301b | ac429493972faf8e | 206cc150f88ec690 | c7d82f8398de468f |
+| logistic         | f4cf3d48c36cc632 | 133f7859fb6354e6 | 243755d624ae6e0e | b5ad7d0efbe17615 | b16180c269639b3e | 734a80fe0e0c68bf | ad5a8d4a056bcd9a | 53592d92846648ea |
+| lasso            | 621ee8bb32a2b15e | c774513a00a96935 | fa311e4133c186f7 | cddfa286d9373f43 | 319584c7362e0294 | ec7ff861e3b54f44 | 866aad113644dfd1 | 6ab2618d5ad54880 |
+| elasticnet       | cc1ac1d750dc4691 | 9f134522c724ea87 | 73e7a14d643b2e59 | 32f082f4072eb42e | 7b3b30cf5f8de99f | 0ec0ad4c11c07465 | b879c42567a8a7ed | 57d2811552c5500a |
+| svc              | 7aa0f6efdd61d3b9 | fe9b3bded1abde79 | 72fee9eda0ca47f8 | 3950bac0a8f03873 | 0e1a0674130793c6 | 9e16361a87580b36 | 5f258e42b672394e | ae6b8ad876ed5e8b |
+| kde              | 9a2d41d8dd246e5d | d07febb0d8159934 | 1ed80e3700ffbfb5 | c2fa2a9a9dccdc86 | 7a533523375fda18 | 9a2d41d8dd246e5d | 82b21664855a4dad | 64d0fd7e0a75ee21 |
+| iforest          | 4191eb2f753d111b | 136c41f3395577f8 | df613e40bf26b884 | 4191eb2f753d111b | 87f363b961c39bf2 | 8bdfa2669b879a72 | 71a6805ab19bd9da | bb9931c410c02f3d |
+| agglomerative    | 02ca572ae936a2fa | 8033ec9dd0710431 | aaece24b8cbb8e59 | a8045fdbd2a5e09e | 04ec0c85878ee8d2 | 02ca572ae936a2fa | 76a7293606971988 | e11ebe209aaca7a0 |
+| spectral         | 7c5f4e5c32dc0ca1 | edd2dab67355012e | df492a6ce04a3948 | f3c2d12227f2002e | 0aad71476dc3f05d | 7c5f4e5c32dc0ca1 | e869ccbff0c7cea4 | 34ec5bbc382a5501 |
+| holtwinters      | cff24aef76c6431d | a8bab51e34d9b9f1 | cf5c74dc7ac1f882 | 3e6f449cedbd9d76 | 310564fa3a120e17 | cff24aef76c6431d | abe1f4dddcd2bc5b | a74b7e0907b07042 |
+| gemm-pinned      | e8510b9ac516e32c | 1612e610d2292e48 | 06f5a384e8e5ddc7 | fcaa786866ff1464 | 21f6dd7383bfb748 | 501b4be777b37a3a | 635707e4b3103a7d | 3f7d06ec4c83cb23 |
+| metrics          | a447d43d12da41e0 | 739db1c897e076b3 | ce39d9ffe60d679b | ba86035833be6cec | 658224184a28c5d3 | d0694da6677039eb | 4d321e807f822155 | d4f6de4a743b7203 |
+
+cells=224 stable=224 moved=0 refused=0
+wrote /root/mojolearn/bench/results/e1/2026-08-29_143443-mojolearn-e2-amd/stability/identity_break.identical.json

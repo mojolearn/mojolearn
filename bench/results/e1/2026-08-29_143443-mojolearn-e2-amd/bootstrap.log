@@ -1,0 +1,58 @@
+
+=== provenance === 14:34:43
+49e287311a43ee6a5e1d39141274ce77d9224038
+Linux mojolearn-e2-amd 6.8.0-59-generic #61-Ubuntu SMP PREEMPT_DYNAMIC Fri Apr 11 23:16:11 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
+
+=== pixi === 14:34:43
+This script will automatically download and install Pixi (latest) for you.
+Getting it from this url: https://github.com/prefix-dev/pixi/releases/latest/download/pixi-x86_64-unknown-linux-musl.tar.gz
+The 'pixi' binary is installed into '/root/.pixi/bin'
+Updating '/root/.bashrc'
+Please restart or source your shell.
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 14:34:46
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 14:34:46
+phase 9 builds: build.sh build_estimators.sh build_gbdt.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_tsa.sh build_linalg.sh
+phase 9 tiers:  identical
+identical set: 10 of 10 binaries
+--- stability identical
+    | tsvd             | STABLE   | YES  6/6 calls agreed   | eb98ef49f9c747f0 |
+    
+    mode=identical  stable=16  moved=0  refused=0
+    wrote /root/mojolearn/bench/results/e1/2026-08-29_143443-mojolearn-e2-amd/stability/identical.json
+concurrent probe SKIPPED: needs all three tiers, P9_TIERS=identical
+--- identity_break (identical, every estimator, eight fixtures)
+    | agglomerative    | 02ca572ae936a2fa | 8033ec9dd0710431 | aaece24b8cbb8e59 | a8045fdbd2a5e09e | 04ec0c85878ee8d2 | 02ca572ae936a2fa | 76a7293606971988 | e11ebe209aaca7a0 |
+    | spectral         | 7c5f4e5c32dc0ca1 | edd2dab67355012e | df492a6ce04a3948 | f3c2d12227f2002e | 0aad71476dc3f05d | 7c5f4e5c32dc0ca1 | e869ccbff0c7cea4 | 34ec5bbc382a5501 |
+    | holtwinters      | cff24aef76c6431d | a8bab51e34d9b9f1 | cf5c74dc7ac1f882 | 3e6f449cedbd9d76 | 310564fa3a120e17 | cff24aef76c6431d | abe1f4dddcd2bc5b | a74b7e0907b07042 |
+    | gemm-pinned      | e8510b9ac516e32c | 1612e610d2292e48 | 06f5a384e8e5ddc7 | fcaa786866ff1464 | 21f6dd7383bfb748 | 501b4be777b37a3a | 635707e4b3103a7d | 3f7d06ec4c83cb23 |
+    | metrics          | a447d43d12da41e0 | 739db1c897e076b3 | ce39d9ffe60d679b | ba86035833be6cec | 658224184a28c5d3 | d0694da6677039eb | 4d321e807f822155 | d4f6de4a743b7203 |
+    
+    cells=224 stable=224 moved=0 refused=0
+    wrote /root/mojolearn/bench/results/e1/2026-08-29_143443-mojolearn-e2-amd/stability/identity_break.identical.json
+
+=== done === 14:37:46
+artifacts in /root/mojolearn/bench/results/e1/2026-08-29_143443-mojolearn-e2-amd
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

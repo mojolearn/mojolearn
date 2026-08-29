@@ -1,0 +1,10 @@
+# repeat-run stability, mode=identical, repeats=6, interleave=False
+# 2026-08-29 20:48:04
+
+| lane             | verdict  | same answer every time? | hashes |
+|------------------|----------|-------------------------|--------|
+| et-clf           | STABLE   | YES  6/6 calls agreed   | 707d2c92e92f6a40 |
+| et-reg           | STABLE   | YES  6/6 calls agreed   | a1d2eb9ddb149617 |
+
+mode=identical  stable=2  moved=0  refused=0
+wrote /root/mojolearn/bench/results/e1/2026-08-29_204736-mojolearn-e2-amd/stability/identical.json

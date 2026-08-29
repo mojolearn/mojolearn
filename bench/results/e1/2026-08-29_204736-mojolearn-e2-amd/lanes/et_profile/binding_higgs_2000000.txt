@@ -1,0 +1,28 @@
+MOJOLEARN_STAGE_TIMES [extratrees classification forest fit]
+  (serialized-by-measurement; compare total to an untimed run)
+   setup (buffers, row fill, workspace) -> 0.009694716 s
+   stage + feature sampler -> 0.303094763 s
+   range pass (init+range+decode+nonconst) -> 5.365628211 s
+   score pass (init+score+finalize) -> 6.228894369 s
+   candidate+reduce+splits readback -> 0.05790111 s
+   host: split records -> 0.004458678 s
+   partition (4 kernels) -> 0.245679486 s
+   host: pop + batch assembly -> 0.012061276 s
+   leaf pass -> 0.046618438 s
+   host: queue push (children of the batch) -> 74.772324836 s
+  total -> 87.046355883 s
+MOJOLEARN_STAGE_TIMES [extratrees classification forest fit]
+  (serialized-by-measurement; compare total to an untimed run)
+   setup (buffers, row fill, workspace) -> 0.009463079 s
+   stage + feature sampler -> 0.295607531 s
+   range pass (init+range+decode+nonconst) -> 5.355341657 s
+   score pass (init+score+finalize) -> 6.230817816 s
+   candidate+reduce+splits readback -> 0.056824415 s
+   host: split records -> 0.004524366 s
+   partition (4 kernels) -> 0.246649602 s
+   host: pop + batch assembly -> 0.01119638 s
+   leaf pass -> 0.042734036 s
+   host: queue push (children of the batch) -> 74.785860309 s
+  total -> 87.039019191 s
+[binding] fit 0: 89075.6 ms
+[binding] fit 1: 88750.9 ms

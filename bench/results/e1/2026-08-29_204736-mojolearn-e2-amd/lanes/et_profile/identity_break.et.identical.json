@@ -1,0 +1,346 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "Linux-6.8.0-59-generic-x86_64-with-glibc2.39",
+ "vendor": "mojolearn-e2-amd",
+ "commit": "",
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "cells": {
+  "et-clf/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "22334a0351e6ce65",
+    "22334a0351e6ce65"
+   ],
+   "parts": [
+    {
+     "predict": "9ccaf28b51d37da6",
+     "proba": "d9d163336091bd8b"
+    },
+    {
+     "predict": "9ccaf28b51d37da6",
+     "proba": "d9d163336091bd8b"
+    }
+   ]
+  },
+  "et-clf/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b23d563be1dcfa38",
+    "b23d563be1dcfa38"
+   ],
+   "parts": [
+    {
+     "predict": "20f5f9669a39627a",
+     "proba": "7323a94650234bc0"
+    },
+    {
+     "predict": "20f5f9669a39627a",
+     "proba": "7323a94650234bc0"
+    }
+   ]
+  },
+  "et-clf/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "49420dd07b025bae",
+    "49420dd07b025bae"
+   ],
+   "parts": [
+    {
+     "predict": "474bf95a1649ce64",
+     "proba": "5e9d69bb6b2e7e0d"
+    },
+    {
+     "predict": "474bf95a1649ce64",
+     "proba": "5e9d69bb6b2e7e0d"
+    }
+   ]
+  },
+  "et-clf/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b27a85972e75b096",
+    "b27a85972e75b096"
+   ],
+   "parts": [
+    {
+     "predict": "63ed171aec55cb2f",
+     "proba": "5c5aa08ab6bcdd84"
+    },
+    {
+     "predict": "63ed171aec55cb2f",
+     "proba": "5c5aa08ab6bcdd84"
+    }
+   ]
+  },
+  "et-clf/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "26affc1039ae729a",
+    "26affc1039ae729a"
+   ],
+   "parts": [
+    {
+     "predict": "38e3a9bc64cb02f1",
+     "proba": "7163180635dfb5dc"
+    },
+    {
+     "predict": "38e3a9bc64cb02f1",
+     "proba": "7163180635dfb5dc"
+    }
+   ]
+  },
+  "et-clf/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "26affc1039ae729a",
+    "26affc1039ae729a"
+   ],
+   "parts": [
+    {
+     "predict": "38e3a9bc64cb02f1",
+     "proba": "7163180635dfb5dc"
+    },
+    {
+     "predict": "38e3a9bc64cb02f1",
+     "proba": "7163180635dfb5dc"
+    }
+   ]
+  },
+  "et-clf/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "410ec72a72b14424",
+    "410ec72a72b14424"
+   ],
+   "parts": [
+    {
+     "predict": "d63fb858f3cd69d4",
+     "proba": "d2b5c1ccf6e9be4c"
+    },
+    {
+     "predict": "d63fb858f3cd69d4",
+     "proba": "d2b5c1ccf6e9be4c"
+    }
+   ]
+  },
+  "et-clf/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7370511549694aae",
+    "7370511549694aae"
+   ],
+   "parts": [
+    {
+     "predict": "b452d67dea87eb94",
+     "proba": "cd2ef8b57d32e37a"
+    },
+    {
+     "predict": "b452d67dea87eb94",
+     "proba": "cd2ef8b57d32e37a"
+    }
+   ]
+  },
+  "et-clf/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "10e38234095c04f9",
+    "10e38234095c04f9"
+   ],
+   "parts": [
+    {
+     "predict": "1d854b6835c29dce",
+     "proba": "c7c14fd9727a3098"
+    },
+    {
+     "predict": "1d854b6835c29dce",
+     "proba": "c7c14fd9727a3098"
+    }
+   ]
+  },
+  "et-reg/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "754d8c127ecfc04d",
+    "754d8c127ecfc04d"
+   ],
+   "parts": [
+    {
+     "predict": "73c2e778bdf4aef8"
+    },
+    {
+     "predict": "73c2e778bdf4aef8"
+    }
+   ]
+  },
+  "et-reg/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e7072e1c8fe0083c",
+    "e7072e1c8fe0083c"
+   ],
+   "parts": [
+    {
+     "predict": "720ba629738d3d19"
+    },
+    {
+     "predict": "720ba629738d3d19"
+    }
+   ]
+  },
+  "et-reg/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4e0a0d9a4670ed5f",
+    "4e0a0d9a4670ed5f"
+   ],
+   "parts": [
+    {
+     "predict": "039d3e1b571fd83e"
+    },
+    {
+     "predict": "039d3e1b571fd83e"
+    }
+   ]
+  },
+  "et-reg/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b745e53515f59cac",
+    "b745e53515f59cac"
+   ],
+   "parts": [
+    {
+     "predict": "be262491f3ee7b30"
+    },
+    {
+     "predict": "be262491f3ee7b30"
+    }
+   ]
+  },
+  "et-reg/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "19a23f6fea44befd",
+    "19a23f6fea44befd"
+   ],
+   "parts": [
+    {
+     "predict": "bcd3a14deb0ed0b6"
+    },
+    {
+     "predict": "bcd3a14deb0ed0b6"
+    }
+   ]
+  },
+  "et-reg/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "19a23f6fea44befd",
+    "19a23f6fea44befd"
+   ],
+   "parts": [
+    {
+     "predict": "bcd3a14deb0ed0b6"
+    },
+    {
+     "predict": "bcd3a14deb0ed0b6"
+    }
+   ]
+  },
+  "et-reg/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9a63fea590f79a67",
+    "9a63fea590f79a67"
+   ],
+   "parts": [
+    {
+     "predict": "6ab773e434f2e209"
+    },
+    {
+     "predict": "6ab773e434f2e209"
+    }
+   ]
+  },
+  "et-reg/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c9fe7c90673c2661",
+    "c9fe7c90673c2661"
+   ],
+   "parts": [
+    {
+     "predict": "b76b78f4ec659b4e"
+    },
+    {
+     "predict": "b76b78f4ec659b4e"
+    }
+   ]
+  },
+  "et-reg/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3fd3dff94cc79fc2",
+    "3fd3dff94cc79fc2"
+   ],
+   "parts": [
+    {
+     "predict": "37b57c4fdb9fbd80"
+    },
+    {
+     "predict": "37b57c4fdb9fbd80"
+    }
+   ]
+  }
+ },
+ "complete": true,
+ "skipped": []
+}
