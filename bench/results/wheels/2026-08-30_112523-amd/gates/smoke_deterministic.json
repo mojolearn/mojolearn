@@ -1,0 +1,180 @@
+{
+  "failures": [],
+  "lanes": {
+    "agglomerative": {
+      "hash": "02ca572ae936a2fa",
+      "ok": true,
+      "seconds": 0.71
+    },
+    "dbscan": {
+      "hash": "a4608e954c7420b7",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "elasticnet": {
+      "hash": "4626a570a63dacf2",
+      "ok": true,
+      "seconds": 0.02
+    },
+    "et-clf": {
+      "hash": "707d2c92e92f6a40",
+      "ok": true,
+      "seconds": 0.03
+    },
+    "et-reg": {
+      "hash": "a1d2eb9ddb149617",
+      "ok": true,
+      "seconds": 0.04
+    },
+    "gbdt-depthwise": {
+      "hash": "55b5854f757cd739",
+      "ok": true,
+      "seconds": 0.09
+    },
+    "gbdt-lossguide": {
+      "hash": "c38591dd2ad30b7f",
+      "ok": true,
+      "seconds": 0.16
+    },
+    "gbdt-rmse": {
+      "hash": "df3de5e82469e55e",
+      "ok": true,
+      "seconds": 0.05
+    },
+    "gbdt-symmetric": {
+      "hash": "b2547e31cd460d13",
+      "ok": true,
+      "seconds": 0.07
+    },
+    "gemm-pinned": {
+      "designed_refusal": true,
+      "ok": true,
+      "refused": "  Or pass identical=False to say in the source that you want the deterministic product and are making no identity claim about it.",
+      "seconds": 0.01
+    },
+    "gemm-vendor": {
+      "hash": "e25840533b2ba0cd",
+      "ok": true,
+      "seconds": 0.03
+    },
+    "holtwinters": {
+      "hash": "3014ac512d1161ad",
+      "ok": true,
+      "seconds": 0.06
+    },
+    "iforest": {
+      "hash": "4ebdf5bb59e30a54",
+      "ok": true,
+      "seconds": 0.08
+    },
+    "kde": {
+      "hash": "4f59c8547f8d18c0",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "kmeans": {
+      "hash": "da3cb10e46c91256",
+      "ok": true,
+      "seconds": 0.03
+    },
+    "knn-clf": {
+      "hash": "f359ee4876deb908",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "knn-reg": {
+      "hash": "ff4a92b889616aea",
+      "ok": true,
+      "seconds": 0.0
+    },
+    "knn-tied": {
+      "hash": "eb5d50fc1d09b0e1",
+      "ok": true,
+      "seconds": 0.0
+    },
+    "lasso": {
+      "hash": "3d3afb54f6bc1a30",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "logistic": {
+      "hash": "11f68df08d4ae1bb",
+      "ok": true,
+      "seconds": 0.02
+    },
+    "metrics": {
+      "hash": "01a17b9ad7a6275c",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "ols": {
+      "hash": "9a3d2aabdcce9dc2",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "pca": {
+      "hash": "d4fd24d79e0a2b1c",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "rf-clf": {
+      "hash": "1178f0463159b897",
+      "ok": true,
+      "seconds": 0.08
+    },
+    "rf-reg": {
+      "hash": "91269c5ae3828665",
+      "ok": true,
+      "seconds": 0.07
+    },
+    "ridge": {
+      "hash": "a430ab480f07d9b4",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "spectral": {
+      "hash": "7c5f4e5c32dc0ca1",
+      "ok": true,
+      "seconds": 0.08
+    },
+    "svc": {
+      "hash": "61d0cf360072c4b8",
+      "ok": true,
+      "seconds": 0.02
+    },
+    "tsvd": {
+      "hash": "a378f1007cb95451",
+      "ok": true,
+      "seconds": 0.0
+    }
+  },
+  "mode_loaded": "deterministic",
+  "mode_wanted": "deterministic",
+  "mojolearn_file": "/root/mojolearn/bench/results/e1/2026-08-30_152832-mojolearn-e2-amd/diag/pkgroot/mojolearn/__init__.py",
+  "ok": true,
+  "python": "3.14.7",
+  "vendor_how": "the box probe (device nodes and driver libraries)",
+  "vendor_loaded": "hip",
+  "vendor_per_binding": {
+    "_mojolearn": "hip",
+    "_mojolearn_estimators": "hip",
+    "_mojolearn_gbdt": "hip",
+    "_mojolearn_linalg": "hip",
+    "_mojolearn_metrics": "hip",
+    "_mojolearn_rf": "hip",
+    "_mojolearn_solver": "hip",
+    "_mojolearn_svm": "hip",
+    "_mojolearn_trees": "hip",
+    "_mojolearn_tsa": "hip"
+  },
+  "vendor_used_per_estimator": {
+    "_mojolearn": "hip",
+    "_mojolearn_estimators": "hip",
+    "_mojolearn_gbdt": "hip",
+    "_mojolearn_rf": "hip",
+    "_mojolearn_svm": "hip",
+    "_mojolearn_trees": "hip"
+  },
+  "vendor_wanted": "hip",
+  "version": "0.2.0"
+}

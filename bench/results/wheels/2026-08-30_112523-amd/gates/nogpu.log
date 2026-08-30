@@ -1,0 +1,4 @@
+  env_hidden   import rc=0 IMPORTED hip; fit rc=1
+  namespace    FAIL
+  docker       NOT TESTED: no docker daemon here
+nogpu FAIL

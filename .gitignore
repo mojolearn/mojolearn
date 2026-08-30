@@ -54,6 +54,14 @@ bench/results/e1g/*-dryrun/
 bench/results/wheels/*/wheels/sets/*/
 bench/results/wheels/*/wheels/sets/*.tar.gz
 bench/results/wheels/*/wheels/tools-venv/
+# The SAME files under their raw fetch path. `leg.sh` copies `diag/` out of
+# bench/results/e1/<stamp>-<vendor>/ into bench/results/wheels/<stamp>-<vendor>/,
+# so everything here is a second copy, and the rules above matched only the
+# copy. A 15.8 MB `cuda.tar.gz` was staged for commit on 2026-08-30 through
+# this gap.
+bench/results/e1/*/diag/wheels/sets/*/
+bench/results/e1/*/diag/wheels/sets/*.tar.gz
+bench/results/e1/*/diag/wheels/tools-venv/
 
 # macOS Finder metadata. Never content.
 .DS_Store

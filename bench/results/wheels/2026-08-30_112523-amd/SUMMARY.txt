@@ -1,0 +1,21 @@
+vendor=hip  build_rc=0  smoke_rc=0  sabotage_rc=0  nogpu_rc=1
+seconds=194
+vendor=hip
+build_rc=0 stage_rc=0
+build_seconds=188
+set_fast_count=10
+set_fast_bytes=14132168
+set_deterministic_count=10
+set_deterministic_bytes=14136992
+set_identical_count=10
+set_identical_bytes=13933112
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=11474054
+smoke[fast]: smoke v0.2.0 mode=fast vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
+smoke[deterministic]: smoke v0.2.0 mode=deterministic vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
+smoke[identical]: smoke v0.2.0 mode=identical vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
+sabotage: sabotage PASS
+nogpu: nogpu FAIL
+source_e1_dir=bench/results/e1/2026-08-30_152832-mojolearn-e2-amd/

@@ -1,0 +1,61 @@
+
+=== provenance === 15:26:33
+be44b042460f55e822dbfae402cfcd40b4327e3a
+Linux 938125d7075d 6.8.0-136-generic #136~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Fri Jul  3 16:29:11 UTC  x86_64 x86_64 x86_64 GNU/Linux
+
+=== pixi === 15:26:34
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 15:26:38
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 15:26:38
+phase 9: DIAG ONLY (MOJOLEARN_P9_ONLY_DIAG=1); no builds, no arms, no probes here
+phase 9 builds: <none>
+phase 9 tiers:  <none>
+concurrent probe SKIPPED: needs all three tiers, P9_TIERS=<none>
+
+=== phase 9 diag: packaging/linux/leg_diag.sh === 15:26:38
+    vendor=cuda  build_rc=0  smoke_rc=0  sabotage_rc=0  nogpu_rc=1
+    seconds=932
+    vendor=cuda
+    build_rc=0 stage_rc=0
+    build_seconds=915
+    set_fast_count=10
+    set_fast_bytes=22381536
+    set_deterministic_count=10
+    set_deterministic_bytes=22074000
+    set_identical_count=10
+    set_identical_bytes=19637112
+    runtime_libs_bytes=3200416
+    runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+    driver_libs_not_staged=
+    set_tar_gz_bytes=15769581
+    smoke[fast]: smoke v0.2.0 mode=fast vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+    smoke[deterministic]: smoke v0.2.0 mode=deterministic vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+    smoke[identical]: smoke v0.2.0 mode=identical vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+    sabotage: sabotage PASS
+    nogpu: nogpu NOT TESTED on this box
+
+=== done === 15:42:10
+artifacts in /root/mojolearn/bench/results/e1/2026-08-30_152633-938125d7075d
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

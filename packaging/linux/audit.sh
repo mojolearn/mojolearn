@@ -58,7 +58,17 @@ docker run --rm --cpus 2 --platform linux/amd64 \
   -v "$WHLABS:/w/$(basename "$WHL"):ro" -v "$OUT:/out" "$IMAGE" \
   sh -c "auditwheel repair --plat $PLAT $EXARGS -w /out/repaired /w/$(basename "$WHL")" 2>&1 | tee "$OUT/repair.txt"
 ls -la "$OUT/repaired"
-for r in "$OUT"/repaired/*.whl; do unzip -l "$r" | grep -c 'mojolearn.libs/' | sed 's/^/mojolearn.libs entries (want 0): /'; done
+# `grep -c` EXITS 1 WHEN THE COUNT IS 0, and 0 is the wanted answer. Under
+# `set -euo pipefail` this line killed the script on success, right before
+# `twine check`, and left no twine.txt behind while the run still looked
+# clean because the caller was reading a pipeline's exit code. Counted with
+# `|| true` and asserted separately, so a NON-zero count is the failure it
+# should always have been rather than a line of output nobody read.
+for r in "$OUT"/repaired/*.whl; do
+  n=$(unzip -l "$r" | grep -c 'mojolearn\.libs/' || true)
+  echo "mojolearn.libs entries (want 0): $n   $(basename "$r")"
+  [ "$n" = 0 ] || { echo "auditwheel repair copied the staged closure a SECOND time into mojolearn.libs/; the --exclude list is incomplete"; exit 1; }
+done
 
 docker run --rm --cpus 2 --platform linux/amd64 -v "$OUT/repaired:/r:ro" python:3.12-slim \
   sh -c "pip install -q twine >/dev/null 2>&1 && twine check /r/*.whl" 2>&1 | tee "$OUT/twine.txt"

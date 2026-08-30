@@ -1,0 +1,13 @@
+vendor=hip
+build_rc=0 stage_rc=0
+build_seconds=188
+set_fast_count=10
+set_fast_bytes=14132168
+set_deterministic_count=10
+set_deterministic_bytes=14136992
+set_identical_count=10
+set_identical_bytes=13933112
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=11474054

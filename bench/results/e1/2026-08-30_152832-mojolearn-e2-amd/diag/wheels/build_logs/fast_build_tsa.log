@@ -1,0 +1,79 @@
+start 2026-08-30T15:31:15Z
+/root/mojolearn/bindings/_mojolearn_tsa.mojo:237:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'a'
+    """auto_arima's "Choose the hyper-parameter d" block (tsa/). Returns
+       ^
+Imported from /root/mojolearn/bindings/_mojolearn_tsa.mojo:52:
+Imported from ./tsa/estimator.mojo:44:
+Imported from ./tsa/ported/tsa/stationarity.mojo:13:
+Imported from ./tsa/ported/timeSeries/stationarity.mojo:93:
+/root/mojolearn/./core/pinned_reduce.mojo:97:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = value
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_tsa.mojo:52:
+Imported from ./tsa/estimator.mojo:44:
+Imported from ./tsa/ported/tsa/stationarity.mojo:13:
+Imported from ./tsa/ported/timeSeries/stationarity.mojo:93:
+/root/mojolearn/./core/pinned_reduce.mojo:102:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_tsa.mojo:52:
+Imported from ./tsa/estimator.mojo:44:
+Imported from ./tsa/ported/tsa/stationarity.mojo:13:
+Imported from ./tsa/ported/timeSeries/stationarity.mojo:93:
+/root/mojolearn/./core/pinned_reduce.mojo:102:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_tsa.mojo:52:
+Imported from ./tsa/estimator.mojo:44:
+Imported from ./tsa/ported/tsa/stationarity.mojo:13:
+Imported from ./tsa/ported/timeSeries/stationarity.mojo:93:
+/root/mojolearn/./core/pinned_reduce.mojo:102:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                                      ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_tsa.mojo:52:
+Imported from ./tsa/estimator.mojo:44:
+Imported from ./tsa/ported/tsa/stationarity.mojo:13:
+Imported from ./tsa/ported/timeSeries/stationarity.mojo:93:
+/root/mojolearn/./core/pinned_reduce.mojo:105:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var total = red[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_tsa.mojo:51:
+Imported from ./holtwinters/estimator.mojo:25:
+/root/mojolearn/./core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_tsa.mojo:51:
+Imported from ./holtwinters/estimator.mojo:25:
+/root/mojolearn/./core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_tsa.mojo:51:
+Imported from ./holtwinters/estimator.mojo:25:
+/root/mojolearn/./core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/root/mojolearn/bindings/_mojolearn_tsa.mojo:135:26: warning: assignment to 'components_len' was never used; assign to '_' instead?
+    var components_len = 0
+                         ^
+/root/mojolearn/bindings/_mojolearn_tsa.mojo:178:19: warning: assignment to 'written' was never used; assign to '_' instead?
+    var written = 0
+                  ^
+/root/mojolearn/bindings/_mojolearn_tsa.mojo:226:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+/root/mojolearn/bindings/_mojolearn_tsa.mojo:267:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+built python/mojolearn/_mojolearn_tsa.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+end 2026-08-30T15:31:22Z OK

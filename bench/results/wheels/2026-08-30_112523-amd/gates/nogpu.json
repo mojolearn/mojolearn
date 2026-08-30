@@ -1,0 +1,33 @@
+{
+  "docker": {
+    "verdict": "NOT TESTED: no docker daemon here"
+  },
+  "env_hidden": {
+    "fit_err": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import numpy as np, mojolearn; X=np.random.default_rng(0).random((256,4),dtype=np.float32); mojolearn.KMeans(n_clusters=2).fit(X); print('FIT OK')\n                                                                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_152832-mojolearn-e2-amd/diag/pkgroot/mojolearn/cluster.py\", line 151, in fit\n    inertia, n_iter, sum_scale, weight_scale = self._bind(\"_mojolearn\").kmeans_fit(\n                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        _addr_ro(x),\n        ^^^^^^^^^^^^\n    ...<10 lines>...\n        ],\n        ^^\n    )\n    ^\nException: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Call to hipInit failed with error code: 100, error name: hipErrorNoDevice, error string: no ROCm-capable device is detected\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "fit_out": "",
+    "fit_rc": 1,
+    "import_err": "",
+    "import_out": "IMPORTED hip",
+    "import_rc": 0,
+    "verdict": "IMPORTED (expected: the probe reads device nodes, not these variables)"
+  },
+  "namespace": {
+    "err": "",
+    "found": {
+      "/dev/dri/renderD128": false,
+      "/dev/kfd": false,
+      "MOJOLEARN_VENDOR": false,
+      "NO SUPPORTED GPU FOUND": false
+    },
+    "hidden": [
+      "/dev/kfd",
+      "/dev/dri/renderD128",
+      "/opt/rocm-6.4.0/lib/libamdhip64.so",
+      "/opt/rocm-6.4.0/lib/libamdhip64.so.6"
+    ],
+    "out": "IMPORTED hip",
+    "rc": 0,
+    "verdict": "FAIL"
+  },
+  "summary": "FAIL"
+}

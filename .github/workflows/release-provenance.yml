@@ -93,6 +93,11 @@ jobs:
     outputs:
       wheel_name: ${{ steps.digest.outputs.wheel_name }}
       wheel_sha256: ${{ steps.digest.outputs.wheel_sha256 }}
+      # Every wheel this release publishes, as `sha256  filename` lines, which
+      # is `shasum -c` format on purpose. The macOS wheel is always the first
+      # line; a Linux wheel staged on the runner adds a second. The publish
+      # job checks the artifact against THIS, not against a count.
+      wheel_manifest: ${{ steps.digest.outputs.wheel_manifest }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -218,20 +223,86 @@ jobs:
           grep -q '^all interpreters passed' build.log
           rm -f build.log
 
+      # THE LINUX WHEEL IS NOT BUILT HERE AND CANNOT BE. It is compiled on a
+      # rented CUDA box and a rented HIP box (`packaging/linux/leg.sh`),
+      # packed on the Mac by `packaging/linux/pack_wheel.py`, and retagged by
+      # `auditwheel` in docker (`packaging/linux/audit.sh`). All of that
+      # happens BEFORE a release is dispatched, and none of it can happen
+      # inside this job.
+      #
+      # So it is handed over on the runner's own disk, OUTSIDE the workspace,
+      # at $MOJOLEARN_LINUX_WHEEL_DIR (default ~/.mojolearn-linux-wheel). A
+      # checkout cannot write there and this workflow never puts anything
+      # there; staging it is a deliberate act by whoever ran the audit.
+      #
+      # It is admitted only if ALL of these hold, and each is an exit:
+      #   * exactly one .whl is staged (two would make "which one" a guess)
+      #   * a `<wheel>.sha256` sidecar sits beside it and matches, so a
+      #     half-copied or swapped file is caught here and not on PyPI
+      #   * its version equals the version this job just built
+      #   * its tag is a manylinux tag; `linux_x86_64` is what pack_wheel.py
+      #     writes on purpose and PyPI refuses it, so seeing it here means
+      #     the audit step never ran
+      #   * `twine check` passes on it
+      # If the directory is absent or empty, this is a macOS-only release and
+      # the step says so and moves on. That is not a failure; it is what
+      # every release before 0.3.0 was.
+      - name: Admit a pre-built, pre-audited Linux wheel, if one is staged
+        id: linux
+        run: |
+          set -euo pipefail
+          DIR="${MOJOLEARN_LINUX_WHEEL_DIR:-$HOME/.mojolearn-linux-wheel}"
+          if [ ! -d "$DIR" ] || [ -z "$(ls -A "$DIR"/*.whl 2>/dev/null || true)" ]; then
+            echo "no Linux wheel staged at $DIR; this is a macOS-only release"
+            echo "staged=none" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          n=$(ls -1 "$DIR"/*.whl | wc -l | tr -d ' ')
+          test "$n" = 1 || { echo "::error::$n wheels staged in $DIR; stage exactly one"; exit 1; }
+          WHL=$(ls -1 "$DIR"/*.whl)
+          base=$(basename "$WHL")
+          test -f "$WHL.sha256" || { echo "::error::$base has no .sha256 sidecar"; exit 1; }
+          want=$(cut -d' ' -f1 < "$WHL.sha256" | tr -d '[:space:]')
+          got=$(shasum -a 256 "$WHL" | cut -d' ' -f1)
+          test "$want" = "$got" || { echo "::error::$base digest $got, sidecar says $want"; exit 1; }
+          v_toml=$(sed -n 's/^version = "\(.*\)"$/\1/p' python/pyproject.toml | head -1)
+          case "$base" in
+            "mojolearn-$v_toml-"*) ;;
+            *) echo "::error::$base is not version $v_toml"; exit 1 ;;
+          esac
+          case "$base" in
+            *-manylinux_*_x86_64.whl) ;;
+            *) echo "::error::$base carries no manylinux tag; packaging/linux/audit.sh has not run on it"; exit 1 ;;
+          esac
+          cp "$WHL" python/dist/
+          echo "admitted $base ($got)"
+          echo "staged=$base" >> "$GITHUB_OUTPUT"
+
       - name: Metadata check
         run: pixi run -e pkg twine check python/dist/*.whl
 
-      # The digest is recorded so the artifact that gets published can be
-      # matched against the one that was built, by anyone, later.
+      # The digests are recorded so the artifacts that get published can be
+      # matched against the ones that were built, by anyone, later.
       - name: Digest
         id: digest
         run: |
-          WHEEL=$(ls python/dist/mojolearn-*.whl)
+          set -euo pipefail
+          WHEEL=$(ls python/dist/mojolearn-*-macosx_*.whl)
           echo "wheel_name=$(basename "$WHEEL")" >> "$GITHUB_OUTPUT"
           echo "wheel_sha256=$(shasum -a 256 "$WHEEL" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-          shasum -a 256 "$WHEEL"
+          # macOS first, then anything else, so the manifest's order is fixed.
+          ( cd python/dist && shasum -a 256 mojolearn-*-macosx_*.whl
+            { ls -1 mojolearn-*.whl | grep -v -- '-macosx_' || true; } | while read -r w; do
+              shasum -a 256 "$w"; done ) > manifest.txt
+          cat manifest.txt
+          {
+            echo "wheel_manifest<<MANIFEST_EOF"
+            cat manifest.txt
+            echo "MANIFEST_EOF"
+          } >> "$GITHUB_OUTPUT"
+          rm -f manifest.txt
 
-      - name: Upload the wheel
+      - name: Upload the wheels
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: mojolearn-wheel
@@ -279,23 +350,44 @@ jobs:
       # rather than as `${{ }}` inside the script. They are a hash and a
       # filename this workflow computed itself, but a job that holds an OIDC
       # token should not have expression results spliced into a shell at all.
+      # A RELEASE MAY CARRY MORE THAN ONE WHEEL. Until 0.3.0 it was macOS
+      # alone and this step asserted `count = 1`; a Linux wheel made that
+      # assertion the thing standing between a correct artifact and PyPI.
+      # It is replaced by a STRONGER check, not a looser one: the build job
+      # emits a `sha256  filename` manifest of everything it is publishing,
+      # and both directions are checked here.
+      #   * every file named in the manifest is present and hashes to the
+      #     recorded value (`sha256sum -c`, which fails on either)
+      #   * the number of .whl files in dist equals the number of manifest
+      #     lines, so an EXTRA wheel that nobody built cannot ride along
+      #   * the macOS wheel is still checked by name and digest separately,
+      #     because that pair is what the build job's summary published and
+      #     what a reader outside this repository can verify against
       - name: What is about to be published
         env:
           EXPECTED_WHEEL: ${{ needs.build.outputs.wheel_name }}
           EXPECTED_SHA256: ${{ needs.build.outputs.wheel_sha256 }}
+          EXPECTED_MANIFEST: ${{ needs.build.outputs.wheel_manifest }}
         run: |
+          set -euo pipefail
           ls -la dist
+          printf '%s\n' "$EXPECTED_MANIFEST" | sed '/^$/d' > manifest.txt
+          echo "the build job published these:"; cat manifest.txt
+          lines=$(wc -l < manifest.txt | tr -d ' ')
+          test "$lines" -ge 1 || { echo "::error::the build job named no wheels"; exit 1; }
           count=$(find dist -type f -name '*.whl' | wc -l | tr -d ' ')
-          test "$count" = 1 || { echo "::error::expected one wheel, found $count"; exit 1; }
-          wheel=$(find dist -type f -name '*.whl')
-          test "$(basename "$wheel")" = "$EXPECTED_WHEEL" || {
-            echo "::error::artifact is $(basename "$wheel"), built $EXPECTED_WHEEL"; exit 1; }
-          shasum -a 256 "$wheel"
-          echo "expected: $EXPECTED_SHA256"
-          test "$(shasum -a 256 "$wheel" | cut -d' ' -f1)" = "$EXPECTED_SHA256" || {
-            echo "::error::artifact digest does not match the built wheel"
+          test "$count" = "$lines" || {
+            echo "::error::artifact holds $count wheels, the build job named $lines"; exit 1; }
+          ( cd dist && sha256sum -c ../manifest.txt ) || {
+            echo "::error::an artifact is missing or does not match its recorded digest"; exit 1; }
+          test -f "dist/$EXPECTED_WHEEL" || {
+            echo "::error::the macOS wheel $EXPECTED_WHEEL is not in the artifact"; exit 1; }
+          echo "expected macOS digest: $EXPECTED_SHA256"
+          test "$(sha256sum "dist/$EXPECTED_WHEEL" | cut -d' ' -f1)" = "$EXPECTED_SHA256" || {
+            echo "::error::the macOS wheel does not match the digest the build job recorded"
             exit 1
           }
+          rm -f manifest.txt
 
       - name: Publish
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0

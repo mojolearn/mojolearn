@@ -1,35 +1,80 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-08-30)
 
-Ships after 0.2.0, which is macOS only. Nothing below has run yet; every
-script named is committed unrun under the no-run order of 2026-08-29 and
-`docs/LINUX_WHEEL.md` section 9 lists what a run must confirm.
+**The Linux wheel ships.** One PyPI name, `pip install mojolearn`, no
+extras, no variants. The vendor is detected at import and the numeric tier
+stays a runtime parameter, so this adds a platform and changes nothing about
+how the library is used.
 
-### The Linux wheel, designed and tooled
+### The Linux wheel
 
-- ONE PyPI name, `mojolearn`, two wheels per release, the macOS arm64 wheel
-  and a Linux x86_64 wheel carrying BOTH a CUDA and a HIP binary set in all
-  three numeric tiers (six sets, sixty extensions), the vendor picked at
-  import. Layout `mojolearn/{cuda,hip}/{,deterministic,identical}/*.so`,
-  MAX runtime under `.libs/`. `docs/LINUX_WHEEL.md` is the design note.
+- `mojolearn-0.3.0-py3-none-manylinux_2_35_x86_64.whl`, 26.2 MB, carrying
+  BOTH a CUDA and a HIP binary set in all three numeric tiers: sixty
+  extensions, plus ONE shared `mojolearn/.libs/` because the two vendors'
+  MAX runtime closures turned out to be byte-identical. Layout
+  `mojolearn/{cuda,hip}/{,deterministic,identical}/*.so`.
+- **The manylinux level is measured, not chosen: `manylinux_2_35_x86_64`.**
+  `pack_wheel.py` deliberately writes the `linux_x86_64` tag that PyPI
+  refuses, and `auditwheel` supplies the real one. glibc 2.35 means Ubuntu
+  22.04 and Debian 12 are in and RHEL 9, on glibc 2.34, is out by one minor
+  version.
 - `mojolearn.vendor()` and `estimator.vendor_used()` report the accelerator
-  API the loaded binary was COMPILED for, read back out of the binary through a new
-  `<binding>_vendor()` export on every binding (`mojo_only/vendor.mojo`, a
+  API the loaded binary was COMPILED for, read back out of the binary through
+  a `<binding>_vendor()` export on every binding (`mojo_only/vendor.mojo`, a
   compile-time constant from `std.sys.info.has_*_gpu_accelerator()`). The
   selector refuses at import when a binary's answer disagrees with the
   directory it was loaded from, the same refusal as the tier read-back.
   `python -m mojolearn verify` and `mojolearn doctor` print it.
 - `MOJOLEARN_VENDOR=cuda|hip` picks the directory on Linux; otherwise a box
-  probe (device nodes and driver libraries) picks it, and a box with neither
-  refuses at import with a message naming every path and library it looked
-  for. There is no CPU path.
-- `packaging/linux/`: `build_sets.sh` (on a box), `stage_libs.py` (ELF
-  closure), `pack_wheel.py` (pure Python, on the Mac), `audit.sh`
-  (auditwheel and twine in docker), `smoke.py`, `sabotage.py`, `nogpu.py`,
-  and `leg.sh` (one command per vendor over the existing RunPod and
-  DigitalOcean legs). `tools/e1_bootstrap.sh` phase 9 gained
-  `MOJOLEARN_P9_ONLY_DIAG` and both legs pass the diag knobs through.
+  probe (device nodes and driver libraries) picks it. **A box with neither
+  refuses at import**, naming every path and library it looked for. There is
+  no CPU path and none is planned.
+- New classifiers `Operating System :: POSIX :: Linux` and
+  `Environment :: GPU :: NVIDIA CUDA`. The second was previously withheld
+  with the note "no NVIDIA device has ever run this"; an H100 has now run all
+  29 smoke lanes in all three tiers.
+
+### What it was actually tested on, stated narrowly
+
+Both sets were built, staged and smoked on the box that built them, on
+2026-08-30 at commit `be44b042`:
+
+- **NVIDIA H100 PCIe**, CUDA set, 29/29 smoke lanes in `fast`,
+  `deterministic` and `identical`, sabotage gate PASS.
+- **AMD Instinct MI325X**, HIP set, 29/29 lanes in all three tiers,
+  sabotage gate PASS.
+- The no-GPU refusal is verified against the finished wheel in a container
+  with no device passed through.
+
+**Whether a set built on one machine runs on a different one is NOT yet
+measured**, for the host CPU as well as the GPU: MAX embeds device kernels
+for the build target, and neither set carries any `cpuid` dispatch. The
+honest claim for 0.3.0 is that it runs on the architectures above.
+`bench/results/wheels/LEGS_2026-08-30.md` records this in full, including an
+`Illegal instruction` seen only under x86 emulation on an Apple-silicon Mac,
+which real hardware did not reproduce and which AVX-512 was tested for and
+ruled out.
+
+### Tooling and gates
+
+- `packaging/linux/`: `build_sets.sh`, `stage_libs.py`, `pack_wheel.py`
+  (pure Python, on the Mac), `audit.sh`, `smoke.py`, `sabotage.py`,
+  `nogpu.py`, `nogpu_local.sh` and `leg.sh` (one command per vendor).
+- `packaging/release_workflow_test.sh`: the release workflow's three
+  artifact-handling shell blocks, extracted from the YAML and RUN on the Mac
+  against fabricated wheels. 15 cases, no network. It found two bugs before
+  CI did, one of which would have broken every macOS-only release.
+- A release may now carry two wheels. The Linux wheel cannot be built in CI,
+  so it is staged on the runner's disk with a digest sidecar and admitted
+  only if the sidecar matches, the version agrees, and the tag is a manylinux
+  tag; the publish job then checks the artifact against a digest manifest in
+  both directions.
+- Three gate bugs found by running gates that had only ever been read:
+  `sabotage.py` searched a six-line stderr tail for strings that sit on line
+  0; `smoke.py` counted a correct refusal as a failure; `audit.sh` ended a
+  pipeline with a `grep -c` whose zero-match SUCCESS case exits 1 under
+  `pipefail`, killing the script one line before `twine check`.
 - `packaging/macos/smoke.py` asserts the vendor read-back (`metal`).
 
 ## 0.2.0 (2026-08-30)

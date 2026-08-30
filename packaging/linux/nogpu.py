@@ -12,16 +12,25 @@ Three attempts, each recorded with what it did and did not prove.
                   from the runtime, not device nodes from the filesystem,
                   and the selector's probe reads `/dev/nvidiactl` and
                   `/dev/kfd`. The record says what the first fit did.
-  namespace       `unshare -rm`, then a bind mount of /dev/null over
-                  every device node and every driver library the probe
-                  looks for, then the import. In an unprivileged
-                  container `unshare` is often refused by seccomp; when
-                  it is, that is recorded as NOT TESTED, never as a pass.
+  namespace       `unshare -rm`, then a tmpfs holding only /dev/null and
+                  friends mounted OVER /dev so every device node is
+                  genuinely gone, plus /dev/null bound over every driver
+                  library, then the import. In an unprivileged container
+                  `unshare` is often refused by seccomp; when it is, that
+                  is recorded as NOT TESTED, never as a pass. This route
+                  covered device nodes with bind mounts until 2026-08-30
+                  and could not pass: a bind mount leaves the path there
+                  for `os.path.exists` to find.
   docker          if a docker daemon is reachable (a DigitalOcean droplet
                   is a VM; a RunPod pod is not), the import inside
                   `python:3.12-slim` with NO device passed through, the
                   package bind-mounted read-only. This is the honest test
                   and the one the runbook asks for when it is available.
+                  NEITHER RENTED BOX HAS HAD IT: the RunPod pod has no
+                  daemon and the DigitalOcean image ships without docker.
+                  `packaging/linux/nogpu_local.sh` runs exactly this on the
+                  Mac against a FETCHED set, needs no box at all, and is
+                  what actually closed this gate on 2026-08-30.
 
 A pass in `namespace` or `docker` requires: non-zero exit, and the message
 naming "NO SUPPORTED GPU FOUND", each probed path, and MOJOLEARN_VENDOR.
@@ -96,11 +105,32 @@ def main():
     }
     print(f"  env_hidden   import rc={rc} {out or err.splitlines()[-1:]}; fit rc={rc2}")
 
-    targets = [p for p in DEV[a.vendor] if os.path.exists(p)] + lib_paths(LIBS[a.vendor])
-    other = {"cuda": "hip", "hip": "cuda"}[a.vendor]
-    targets += [p for p in DEV[other] if os.path.exists(p)] + lib_paths(LIBS[other])
-    mounts = " && ".join(f"mount --bind /dev/null {shlex.quote(p)}" for p in targets)
-    script = (mounts + " && " if mounts else "") + \
+    # A BIND MOUNT LEAVES THE PATH EXISTING. This block used to run
+    # `mount --bind /dev/null /dev/kfd` for every device node, and on
+    # 2026-08-30 it reported FAIL against a library that was behaving
+    # correctly: the probe asks `os.path.exists("/dev/kfd")`, and a /dev/kfd
+    # that IS /dev/null still exists. The route could not pass whatever the
+    # library did, and the gate's own FAIL was the only evidence it produced.
+    #
+    # Device nodes are therefore hidden by REPLACING /dev, not by covering
+    # entries inside it: a tmpfs is populated with only the character devices
+    # a python process needs, and mounted over /dev, so every other path
+    # under it is genuinely gone. Driver libraries are still covered with
+    # /dev/null, which is the right technique for THEM, because the probe
+    # loads a library rather than stat-ing it and `CDLL("/dev/null")` fails.
+    devs = [p for p in DEV[a.vendor] + DEV[{"cuda": "hip", "hip": "cuda"}[a.vendor]]
+            if os.path.exists(p)]
+    libs = lib_paths(LIBS[a.vendor]) + lib_paths(LIBS[{"cuda": "hip", "hip": "cuda"}[a.vendor]])
+    targets = devs + libs
+    # /dev/null is bound into the replacement BEFORE /dev is replaced, so the
+    # library covers below still have a real /dev/null to point at.
+    keep = ["null", "zero", "full", "random", "urandom", "tty", "ptmx"]
+    steps = ["mkdir -p /tmp/.nodev", "mount -t tmpfs none /tmp/.nodev"]
+    for n in keep:
+        steps.append(f"[ -e /dev/{n} ] && touch /tmp/.nodev/{n} && mount --bind /dev/{n} /tmp/.nodev/{n} || true")
+    steps += [f"mount --bind /dev/null {shlex.quote(p)}" for p in libs]
+    steps.append("mount --bind /tmp/.nodev /dev")
+    script = " && ".join(steps) + " && " + \
         f"cd {shlex.quote(root)} && PYTHONPATH={shlex.quote(root)} " + \
         " ".join(shlex.quote(x) for x in py) + " -c " + shlex.quote(SNIPPET)
     if shutil.which("unshare"):

@@ -6,9 +6,13 @@ pasted as written, with `X.Y.Z` replaced.
 
 ## 1. What a release is here
 
-* One wheel, project name `mojolearn`, macOS arm64 only, tagged `py3` and
-  `macosx_11_0_arm64`. One artifact serves python 3.10 through 3.14 because
-  the extensions link no libpython (see `python/setup.py`).
+* Up to TWO wheels under the project name `mojolearn`: the macOS arm64
+  wheel, tagged `py3` and `macosx_11_0_arm64`, built by section 3, and from
+  0.3.0 a Linux x86_64 wheel carrying both a CUDA and a HIP set, built by
+  section 9 on rented boxes and handed to the workflow as a finished
+  artifact. Each artifact serves python 3.10 through 3.14 because the
+  extensions link no libpython (see `python/setup.py`). A release with no
+  Linux wheel staged is macOS-only and that is not an error.
 * The wheel carries TEN extensions in THREE numeric tiers. This bullet said
   "five extensions in TWO numeric modes"; both halves were false by 2026-08-29
   and are replaced, not softened. The FAST set lives at
@@ -326,10 +330,31 @@ own a box, and each provider holds one at a time.
    `repair.txt`, `repaired/mojolearn-X.Y.Z-py3-none-manylinux_<measured>_x86_64.whl`
    and `twine.txt`. The repaired wheel is the one that is uploaded.
 
-5. Upload the repaired wheel to TestPyPI beside the macOS wheel (section 4's
-   workflow uploads what `python/dist/` holds; put the repaired wheel there
-   or upload it with twine from the `pkg` environment on the runner, never
-   with a token in the tree).
+5. Hand the repaired wheel to the release workflow. It CANNOT be built in
+   CI (steps 1 and 2 rent GPU boxes), so it is staged on the runner's own
+   disk, outside any checkout, with a digest sidecar:
+
+   ```sh
+   mkdir -p ~/.mojolearn-linux-wheel && rm -f ~/.mojolearn-linux-wheel/*
+   cp python/dist/audit/repaired/mojolearn-X.Y.Z-py3-none-manylinux_*_x86_64.whl \
+      ~/.mojolearn-linux-wheel/
+   ( cd ~/.mojolearn-linux-wheel && shasum -a 256 *.whl > "$(ls *.whl).sha256" )
+   ```
+
+   The build job's "Admit a pre-built, pre-audited Linux wheel" step picks it
+   up and REFUSES it unless exactly one wheel is staged, the sidecar matches
+   its bytes, the version equals the one just built, the tag is a manylinux
+   tag (`linux_x86_64` means `audit.sh` never ran) and `twine check` passes.
+   With nothing staged the release is macOS-only, which is what every release
+   before 0.3.0 was. `MOJOLEARN_LINUX_WHEEL_DIR` in the runner's environment
+   overrides the location.
+
+   The publish job then checks the artifact against a `sha256  filename`
+   manifest the build job emitted, in BOTH directions: every named wheel is
+   present and hashes correctly, and no wheel is present that was not named.
+   `bash packaging/release_workflow_test.sh` runs all three of those shell
+   blocks on the Mac against fabricated wheels, 15 cases, no network; run it
+   after editing any of them.
 
 6. Install-smoke on each vendor, from TestPyPI, in a clean venv on the box.
 

@@ -1,0 +1,8 @@
+  baseline               PASS  rc=0  {"vendor": "hip", "how": "the box probe (device nodes and driver libraries)", "mode": "identical"}
+  wrong_label_ignored    PASS  rc=0  {"vendor": "hip", "how": "the box probe (device nodes and driver libraries)", "mode": "identical"}
+  wrong_label_refused    PASS  rc=1  ImportError: mojolearn: /root/mojolearn/bench/results/e1/2026-08-30_152832-mojolearn-e2-amd/diag/sabotage_scratch/wrong_label_refused/mojolearn/cuda/identical/_moj
+  poisoned_ignored       PASS  rc=0  {"vendor": "hip", "how": "the box probe (device nodes and driver libraries)", "mode": "identical"}
+  poisoned_forced        PASS  rc=1  ImportError: /root/mojolearn/bench/results/e1/2026-08-30_152832-mojolearn-e2-amd/diag/sabotage_scratch/poisoned_forced/mojolearn/cuda/identical/_mojolearn.so: inva
+  correct_set_removed    PASS  rc=1  A device node or a driver library for one of the sets above must be visible to this process. In a container that means the GPU is passed through (`--gpus all` for 
+  tier_mislabeled        PASS  rc=1  RuntimeError: mojolearn: the loaded gbdt binary was compiled fast but the selector loaded the deterministic set -- a binary is in the wrong directory; rebuild both
+sabotage PASS

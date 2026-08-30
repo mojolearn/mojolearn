@@ -14,7 +14,7 @@ build-backend = "setuptools.build_meta"
 name = "mojolearn"
 # Must agree with python/mojolearn/_version.py. Not made dynamic, so that a
 # version bump is a visible edit in both places rather than one.
-version = "0.2.0"
+version = "0.3.0"
 description = "GPU machine learning in Mojo. Gradient boosting, random forests, extra trees, SVM, k-means, k-NN, DBSCAN, PCA, hierarchical and spectral clustering, GLMs, scoring metrics and an FP32 matmul, on Apple silicon through Metal and from the same source on NVIDIA and AMD. Three numeric modes per estimator: fast, deterministic (same bits every run) and identical (same bits on every GPU vendor)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -84,10 +84,11 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Developers",
-    # macOS on Apple silicon is the only platform with a wheel. The library
-    # builds for Linux from the same source but no Linux wheel has ever been
-    # produced, so no Linux classifier is claimed.
+    # Two platforms have a wheel as of 0.3.0: macOS on Apple silicon, and
+    # Linux x86_64 carrying both a CUDA and a HIP set. No other platform is
+    # claimed, and there is no sdist.
     "Operating System :: MacOS :: MacOS X",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -98,11 +99,14 @@ classifiers = [
     # Compiled by the Mojo toolchain against CPython, not the limited API.
     # No PyPy, no free-threaded build: max 26.5.0 depends on python-gil.
     "Programming Language :: Python :: Implementation :: CPython",
+    "Environment :: GPU :: NVIDIA CUDA",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 # Not claimed, and each is a decision rather than an oversight:
-#   Environment :: GPU :: NVIDIA CUDA   no NVIDIA device has ever run this.
+#   Environment :: GPU :: NVIDIA CUDA   claimed from 0.3.0: an H100 ran all
+#                                       29 smoke lanes in all three tiers
+#                                       on 2026-08-30. Added below.
 #   Typing :: Typed                     no py.typed marker, no stubs.
 #   License :: ...                      PEP 639 forbids a license classifier
 #                                       beside the `license` expression.

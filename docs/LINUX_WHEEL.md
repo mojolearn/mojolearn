@@ -240,29 +240,70 @@ sets + gates), both fetched; `pack_wheel.py`; `audit.sh`; upload the repaired wh
 to TestPyPI beside the macOS wheel; an install-smoke leg on each vendor; then
 PyPI.
 
-## 9. What is unverified, stated up front
+## 9. What the two legs of 2026-08-30 measured, and what is still owed
 
-* That `has_*_gpu_accelerator()` folds to the expected constant inside a
-  `--emit shared-lib` build. `readback.txt` from the first build leg is the
-  measurement; `build_sets.sh` refuses to name a set otherwise.
-* The size of the Linux MAX runtime closure, per vendor, and whether the two
-  closures are byte-identical. `manifest.json` and `SIZES-<v>-linux.json`.
-* The manylinux level the closure meets. `python/dist/audit/show.txt`.
-* Whether `auditwheel repair` honors `--exclude` for libraries it resolves
-  through `$ORIGIN`, or copies them a second time into `mojolearn.libs/`.
-  `audit.sh` prints the count of such entries; the wanted number is 0.
-* Whether thirty parallel builds fit in one lease on the chosen boxes.
-* Whether a set built on one NVIDIA architecture (the leg's box) runs on
-  another (the install-smoke box, and every user's). MAX embeds kernels for
-  the build target; the install-smoke leg on a DIFFERENT GPU model than the
-  build leg is the only evidence either way, and until it exists the wheel's
+Both legs ran green on 2026-08-30 (`bench/results/wheels/LEGS_2026-08-30.md`
+is the record; `2026-08-30_112521-nvidia` and `2026-08-30_112523-amd` are the
+directories). What this section used to list as unknown, and what came back:
+
+**MEASURED, and no longer open:**
+
+* `has_*_gpu_accelerator()` DOES fold to the expected constant inside a
+  `--emit shared-lib` build. Thirty binaries read back `cuda` on the H100 and
+  thirty read back `hip` on the MI325X, in `readback.txt` on each set.
+* The Linux MAX runtime closure is 3,200,416 bytes, four libraries, and the
+  two vendors' closures are BYTE-IDENTICAL (same sha256 on all four).
+  `pack_wheel.py` therefore chose `shared mojolearn/.libs`, one copy for both
+  vendors. `driver_libs_not_staged` is EMPTY on both: nothing driver-side is
+  bundled, because the extensions carry no `DT_NEEDED` on `libcuda` or
+  `libamdhip64` at all. MAX dlopens them, which is why the selector's probe
+  has to load them with `ctypes.CDLL` rather than read an ELF header.
+* The manylinux level is **`manylinux_2_35_x86_64`**, measured by
+  `auditwheel show`, driven by `GLIBCXX_3.4.30` and `GLIBC_2.34` in the
+  referenced versioned symbols, which is the Ubuntu 22.04 toolchain both
+  boxes run. **glibc 2.35 puts Ubuntu 22.04 and Debian 12 in and leaves
+  RHEL 9 out by one minor version** (it ships 2.34). Lowering the floor means
+  building on an older base image; it is not a retag.
+* `auditwheel repair` DOES honor `--exclude` for libraries it resolves
+  through `$ORIGIN`. Zero `mojolearn.libs/` entries in the repaired wheel, so
+  the staged closure is not shipped twice.
+* Thirty parallel builds fit in one lease with room to spare: 915 s on the
+  H100, 188 s on the MI325X. This document previously guessed "about fifty
+  minutes" of serial building.
+* The packed two-vendor wheel is 26,205,942 bytes, well under PyPI's 100 MB.
+* Gate (d), the no-GPU refusal, is CLOSED, and NOT on a rented box. Both
+  boxes are the wrong place to ask it: the RunPod pod is a container with
+  seccomp-refused `unshare` and no docker daemon, and the DigitalOcean image
+  ships without docker. `packaging/linux/nogpu_local.sh` runs the honest
+  test on the Mac against a fetched set, in `python:3.12-slim` with no
+  device passed through, and the finished wheel refuses by name with the
+  whole probe table. The gate reads the probed names out of
+  `_backend._PROBE` rather than retyping them.
+* The finished wheel installs and behaves on a Linux box: `pip install`
+  works, the default import refuses naming both sets, `MOJOLEARN_VENDOR=metal`
+  is refused by name, and `MOJOLEARN_VENDOR=cuda` loads the binaries through
+  the shared `.libs` RUNPATH outside any build environment.
+
+**STILL OWED:**
+
+* **Whether a set built on one machine's CPU and GPU runs on another's.**
+  This is the big one and it now has TWO reasons. MAX embeds device kernels
+  for the build target, and separately the host-side code carries AVX-512
+  with NO `cpuid` dispatch anywhere in either set. Under x86 EMULATION on the
+  Mac the hip set raises `Illegal instruction` during module init while the
+  cuda set imports fine; AVX-512 was tested as the cause and RULED OUT, and
+  the same hip set ran 29 smoke lanes in all three tiers on the MI325X that
+  built it. That points at the emulator, but it is an inference. The
+  install-smoke leg on a box that is NOT the build box, ideally a different
+  NVIDIA GPU model, is the only evidence either way. Until then the wheel's
   claim is "runs on the architectures it was smoked on", named in the
   CHANGELOG entry that ships it.
-* Whether the MAX runtime dlopens libraries that are not in any `DT_NEEDED`
-  (the ELF walk, like the Mach-O walk, cannot see those). The clean-venv
-  install smoke on a box without the pixi environment is the check.
-* Whether the RunPod image honors `unshare -rm` for gate (d).
-* The `Operating System :: POSIX :: Linux` classifier is NOT added in this
-  commit, because `python/pyproject.toml` feeds the macOS 0.2.0 wheel being
-  released separately today. It is added in the release commit that first ships the
-  Linux wheel, and `pack_wheel.py --check-against` shows the line.
+* Whether the MAX runtime dlopens libraries that are in no `DT_NEEDED` (the
+  ELF walk cannot see those). The clean-venv install smoke on a box without
+  the pixi environment is the check.
+* `nogpu.py`'s `namespace` route is fixed but UNRUN on a box. It covered
+  device nodes by bind-mounting `/dev/null` over them until 2026-08-30 and
+  could not pass, because a bind mount leaves the path there for
+  `os.path.exists` to find; it now mounts a minimal tmpfs OVER `/dev`. That
+  technique is verified in a privileged container on the Mac (`/dev/kfd`
+  True before, False after) but has not run on a rented box.

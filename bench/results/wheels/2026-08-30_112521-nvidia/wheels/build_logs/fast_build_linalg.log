@@ -1,0 +1,4 @@
+start 2026-08-30T15:40:47Z
+7008 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x594740000000, nodemask=2)
+built python/mojolearn/_mojolearn_linalg.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+end 2026-08-30T15:41:31Z OK
