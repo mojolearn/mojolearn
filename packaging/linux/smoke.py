@@ -91,6 +91,42 @@ ALL_BINDINGS = (
 )
 
 
+#: Lines MAX appends to a message that carry no cause. A message made only
+#: of these is a message with its cause thrown away.
+_NOISE = (
+    "To get more accurate error information",
+    "set MODULAR_DEBUG",
+)
+
+
+def _cause(exc, full):
+    """The most informative single line of a raised message.
+
+    Walks the exception's own `str()` first and falls back to the traceback,
+    taking the FIRST line that is not blank, not a traceback frame and not
+    one of MAX's trailing hints. If every line is noise the whole trimmed
+    message is returned rather than a hint, because a gate that reports only
+    "set MODULAR_DEBUG" has reported nothing."""
+    for text in (str(exc), full):
+        for ln in text.splitlines():
+            s = ln.strip()
+            if not s or s.startswith(("File \"", "Traceback", "^", "~", "|")):
+                continue
+            if any(n in s for n in _NOISE):
+                continue
+            return s
+    return _trim(full)
+
+
+def _trim(text, head=24, tail=8):
+    """The whole message when it is small, otherwise its head AND its tail.
+    Never the tail alone."""
+    lines = text.strip().splitlines()
+    if len(lines) <= head + tail:
+        return "\n".join(lines)
+    return "\n".join(lines[:head] + [f"    ... {len(lines) - head - tail} lines elided ..."] + lines[-tail:])
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--vendor", required=True, choices=("cuda", "hip", "metal"))
@@ -164,17 +200,30 @@ def main():
                                          "seconds": round(time.time() - t0, 2)}
                 print(f"  {name:<16} ok   {h}  {time.time()-t0:6.1f}s")
         except Exception as exc:
-            tb = traceback.format_exc().splitlines()[-1]
+            # NEVER `splitlines()[-1]`. MAX raises a multi-line message whose
+            # CAUSE is on the first line and which then repeats
+            # "To get more accurate error information, set MODULAR_DEBUG=..."
+            # one to three times at the end. Taking the last line recorded
+            # that hint for all 27 failing lanes of the 2026-08-30 A40 leg
+            # and threw the actual reason away, so the board said only that
+            # something went wrong and not one word about what. This is the
+            # third time today a gate has been caught reading a tail: see
+            # sabotage.py's six-line window and audit.sh's grep -c.
+            full = traceback.format_exc()
+            report_err = _trim(full)
+            short = _cause(exc, full)
             if must_refuse:
-                report["lanes"][name] = {"ok": True, "refused": tb,
+                report["lanes"][name] = {"ok": True, "refused": short,
+                                         "refused_full": report_err,
                                          "designed_refusal": True,
                                          "seconds": round(time.time() - t0, 2)}
                 print(f"  {name:<16} ok   REFUSED as designed under {mode}")
             else:
-                report["lanes"][name] = {"ok": False, "error": tb,
+                report["lanes"][name] = {"ok": False, "error": short,
+                                         "error_full": report_err,
                                          "seconds": round(time.time() - t0, 2)}
-                failures.append(f"lane {name}: {tb}")
-                print(f"  {name:<16} FAIL {tb[:120]}")
+                failures.append(f"lane {name}: {short}")
+                print(f"  {name:<16} FAIL {short[:160]}")
 
     report["failures"] = failures
     report["ok"] = not failures
