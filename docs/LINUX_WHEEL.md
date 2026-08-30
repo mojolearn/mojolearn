@@ -370,6 +370,31 @@ directories). What this section used to list as unknown, and what came back:
   is refused by name, and `MOJOLEARN_VENDOR=cuda` loads the binaries through
   the shared `.libs` RUNPATH outside any build environment.
 
+**MEASURED 2026-08-30, the cost of an architecture, and how much of it is
+waste.** Section sizes summed over all 30 binaries of one set:
+
+                    CUDA set (65 MB)   HIP set (43 MB)
+    .text            19 MB              19 MB     host CPU code
+    .rodata          36 MB              15 MB     GPU device code
+
+**The 19 MB of `.text` is IDENTICAL in both**, because it is the same Mojo
+source compiled for x86-64, and it is identical across architectures of one
+vendor for the same reason. So roughly 30 percent of every CUDA set and 45
+percent of every HIP set is bytes the wheel already carries, and a zip does
+not dedupe it because it compresses each member independently. Six sets
+duplicate about 114 MB of host code.
+
+It cannot be shared today. `mojo build` emits one COMPLETE shared library
+targeting one GPU architecture, and there is no way to ask for a host
+library plus swappable device images; that is the same limit that rejects a
+comma-separated architecture list. The irreducible part is the `.rodata`,
+which really is different machine code per architecture.
+
+**If MAX ever gains multi-architecture output the wheel roughly halves**, from
+about 324 MB uncompressed for three CUDA and three HIP sets to about 172 MB.
+Recorded here as a measurement so whoever revisits it does not have to
+re-derive it.
+
 **STILL OWED:**
 
 * **The cross-architecture question is now ANSWERED for the exact case and
