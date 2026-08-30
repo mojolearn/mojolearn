@@ -2,10 +2,22 @@
 
 ## 0.3.0 (2026-08-30)
 
-**The Linux wheel ships.** One PyPI name, `pip install mojolearn`, no
-extras, no variants. The vendor is detected at import and the numeric tier
-stays a runtime parameter, so this adds a platform and changes nothing about
-how the library is used.
+**The Linux wheel.** One PyPI name, `pip install mojolearn`, no extras, no
+variants. The vendor AND the GPU architecture are detected at import and the
+numeric tier stays a runtime parameter, so this adds a platform and changes
+nothing about how the library is used.
+
+**Not yet published at the time of writing, and the reason is the whole
+story of this release.** The first Linux wheel was built, audited, put on
+TestPyPI and installed from there onto an MI325X, where it passed every lane
+in every tier. The same wheel on an A40 failed 27 of 29 lanes with
+`CUDA_ERROR_NO_BINARY_FOR_GPU`, because `--target-accelerator` was never
+passed and MAX had compiled for the build box's own device and nothing else.
+`strings` on the shipped binary said `sm_90a`, 55 times, with no other
+architecture and no PTX. So a wheel that installs cleanly, imports cleanly
+and reports its vendor correctly would then have failed on essentially every
+call for anyone not on an H100. It was held back rather than published, and
+the architecture axis below is the fix.
 
 ### The Linux wheel
 
@@ -13,7 +25,15 @@ how the library is used.
   BOTH a CUDA and a HIP binary set in all three numeric tiers: sixty
   extensions, plus ONE shared `mojolearn/.libs/` because the two vendors'
   MAX runtime closures turned out to be byte-identical. Layout
-  `mojolearn/{cuda,hip}/{,deterministic,identical}/*.so`.
+  `mojolearn/<vendor>/<arch>/<tier>/*.so`, an ARCHITECTURE AXIS under the
+  vendor axis, because one `mojo build` emits code for exactly one GPU
+  architecture. A comma-separated list is accepted by the flag parser and
+  then rejected by the compiler, `constraint failed: GPU architecture
+  'sm_80,sm_86,sm_90a' is not supported`, and there is no PTX in any set, so
+  there is no JIT fallback either. The set is chosen at import from the
+  device's own compute capability, with a within-family fallback so an
+  `sm_86` device runs a carried `sm_80` set. An `a`-suffixed build is never
+  chosen by the family rule, because that suffix means architecture-specific.
 - **The manylinux level is measured, not chosen: `manylinux_2_35_x86_64`.**
   `pack_wheel.py` deliberately writes the `linux_x86_64` tag that PyPI
   refuses, and `auditwheel` supplies the real one. glibc 2.35 means Ubuntu
@@ -37,21 +57,30 @@ how the library is used.
 
 ### What it was actually tested on, stated narrowly
 
-Both sets were built, staged and smoked on the box that built them, on
-2026-08-30 at commit `be44b042`:
+All on 2026-08-30. `bench/results/wheels/LEGS_2026-08-30.md` records it in
+full, including the wrong turns.
 
 - **NVIDIA H100 PCIe**, CUDA set, 29/29 smoke lanes in `fast`,
-  `deterministic` and `identical`, sabotage gate PASS.
-- **AMD Instinct MI325X**, HIP set, 29/29 lanes in all three tiers,
-  sabotage gate PASS.
+  `deterministic` and `identical` on the box that built it, sabotage PASS.
+- **AMD Instinct MI325X**, HIP set, 29/29 lanes in all three tiers, sabotage
+  PASS, and again from a clean `pip install` off TestPyPI into a fresh venv,
+  which is the whole install path end to end. All 30 binaries read back
+  `gfx942`.
+- **NVIDIA A40**, the same wheel installed from TestPyPI: installs, imports,
+  picks `cuda` correctly, and then fails 27 of 29 lanes. The two that pass
+  name the cause exactly. `gemm-vendor`, which reaches cuBLAS through MAX's
+  own matmul, RAN and produced a hash, and `gemm-pinned` refused as designed.
+  Everything that launches one of OUR kernels failed and the one thing that
+  does not, worked.
 - The no-GPU refusal is verified against the finished wheel in a container
   with no device passed through.
 
-**Whether a set built on one machine runs on a different one is NOT yet
-measured**, for the host CPU as well as the GPU: MAX embeds device kernels
-for the build target, and neither set carries any `cpuid` dispatch. The
-honest claim for 0.3.0 is that it runs on the architectures above.
-`bench/results/wheels/LEGS_2026-08-30.md` records this in full.
+**Every set now records the architectures actually inside it.**
+`build_sets.sh` reads them back out of each `.so` and REFUSES with exit 4 if
+any binary names none. That check earned its place on its first run: given an
+unusable architecture list, MAX silently fell back to the build box's own GPU
+and 27 of 30 binaries came out as an architecture nobody asked for, with one
+compile error as the only other hint.
 
 **A forced vendor whose runtime is absent no longer kills the process.**
 Setting `MOJOLEARN_VENDOR=hip` on a Linux box with NO ROCm installed used to

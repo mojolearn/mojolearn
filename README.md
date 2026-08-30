@@ -363,8 +363,14 @@ The higgs GBDT accuracy gap is stated because it is there.
 
 - GPU only. No CPU fallback exists and none is planned for this release.
 - The published wheel is macOS arm64. CUDA and HIP are source builds until
-  the Linux wheel of `docs/LINUX_WHEEL.md` ships; its tooling is in the tree
-  and unrun.
+  the Linux wheel of `docs/LINUX_WHEEL.md` ships. Its tooling has now RUN, on
+  2026-08-30, on a rented H100, an A40 and an MI325X. A Linux wheel was
+  built, audited to `manylinux_2_35_x86_64`, published to TestPyPI, and
+  installed from there onto an MI325X where it passed all 29 smoke lanes in
+  each of the three numeric tiers. It is not on PyPI, because the same wheel
+  installed on an A40 showed that a set carries device code only for the GPU
+  architecture it was built on. The architecture axis that fixes it is in the
+  tree and its build legs are in progress.
 - The benchmark table is from one M4; FAST timings on an H100 and an MI325X
   are in `bench/results/BOARD_2026-08-28_three-vendor.md`. Correctness and
   identity are validated on the M4, an H100, an MI325X and an MI300X through
