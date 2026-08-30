@@ -73,11 +73,27 @@ were recorded and changes which values the border build sees. The gate
 numbers in that board are therefore historical and a reader must not
 re-run them as assertions.
 
-**What is owed:** those two constants are still written as bit-identity
-gates in a board that reads as current. Either restate them at HEAD or mark
-them superseded by DEVIATION 135 in place. Nothing in the speed row above
-depends on it, because both arms train the same configuration on the same
-bytes and each library derives its own grid, which is the point of this row.
+**DONE, 2026-08-30.** Those constants were still written as bit-identity
+gates in a board that reads as current. They are now marked superseded in
+place at every site, with a banner at the top of `PREP_BILL_2026-08-21.md`
+naming `b55e0b83` and carrying the HEAD values above. Nothing in the speed
+row here depended on it, because both arms train the same configuration on
+the same bytes and each library derives its own grid, which is the point of
+this row.
+
+One precision, recorded rather than guessed. Only the sampled eps500 path
+and covtype were re-measured today. The full-path constant 0.76594453125
+comes from `border_build_max_samples = 0`, which skips the sampler outright
+(`gbdt/train.mojo:1053`), so DEVIATION 135 has no mechanism to move it, but
+it was not run today and is recorded as UNVERIFIED AT HEAD rather than as
+holding. The fit-only constant 0.7658459375 is unaffected for the same
+reason and stands, steps 24 and 27 of the campaign board reproduce it in
+windows that ran after `b55e0b83` landed.
+
+One thing this repository cannot fix. The two paper-repo paths cited above,
+`mlsys/results/prep-bill-2026-08-21.json` and `mlsys/CLAIMS.md`, do not
+exist in this checkout and still carry the dead 24 s blocker. That
+retraction is owed in the paper repo and cannot be applied from here.
 
 ## Provenance
 
