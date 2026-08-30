@@ -2376,7 +2376,7 @@ MOJOLEARN_GPU_ARCHS="@GPUARCHS@"
     echo "p9_diag_timeout=$MOJOLEARN_P9_DIAG_TIMEOUT"
     echo "wheel_version=${MOJOLEARN_WHEEL_VERSION:-}"
     echo "wheel_index=$MOJOLEARN_WHEEL_INDEX"
-    echo "gpu_archs=${MOJOLEARN_GPU_ARCHS:-<build box's own device only>}"
+    echo "gpu_archs=${MOJOLEARN_GPU_ARCHS:-none-build-box-device-only}"
 } >> "$OUT/leg.txt"
 MOJOLEARN_P9_VENDOR="nvidia-$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 | tr ' ' '-' | tr -d ',')"
 export MOJOLEARN_P9_VENDOR
