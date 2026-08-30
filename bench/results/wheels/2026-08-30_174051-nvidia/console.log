@@ -1,0 +1,42 @@
+[21:41:57 leg_diag] 1/5 build_sets
+[21:41:57 build_sets] repo /root/mojolearn, dest /root/mojolearn/bench/results/e1/2026-08-30_214152-fec7f163bca2/diag/wheels, tiers: fast deterministic identical, jobs: 3
+[21:41:57 build_sets] pixi env: gbmbench
+[21:49:01 build_sets] builds finished in 424s (rc=0)
+[21:49:08 build_sets] vendor read-back per binary:
+    fast _mojolearn cuda
+    fast _mojolearn_gbdt cuda
+    fast _mojolearn_estimators cuda
+    fast _mojolearn_rf cuda
+    fast _mojolearn_trees cuda
+    fast _mojolearn_svm cuda
+    fast _mojolearn_solver cuda
+    fast _mojolearn_metrics cuda
+    fast _mojolearn_tsa cuda
+    fast _mojolearn_linalg cuda
+    deterministic _mojolearn cuda
+    deterministic _mojolearn_gbdt cuda
+    deterministic _mojolearn_estimators cuda
+    deterministic _mojolearn_rf cuda
+    deterministic _mojolearn_trees cuda
+    deterministic _mojolearn_svm cuda
+    deterministic _mojolearn_solver cuda
+    deterministic _mojolearn_metrics cuda
+    deterministic _mojolearn_tsa cuda
+    deterministic _mojolearn_linalg cuda
+    identical _mojolearn cuda
+    identical _mojolearn_gbdt cuda
+    identical _mojolearn_estimators cuda
+    identical _mojolearn_rf cuda
+    identical _mojolearn_trees cuda
+    identical _mojolearn_svm cuda
+    identical _mojolearn_solver cuda
+    identical _mojolearn_metrics cuda
+    identical _mojolearn_tsa cuda
+    identical _mojolearn_linalg cuda
+[21:49:09 build_sets] GPU architectures embedded, per binary:
+         30 sm_120a
+[21:49:09 build_sets] architecture set: sm_120a 
+[21:49:09 build_sets] REFUSING: MOJOLEARN_GPU_ARCHS=sm_120 was asked for but
+[21:49:09 build_sets]   every binary carries sm_120a. A set must never ship under an
+[21:49:09 build_sets]   architecture it was not verified to carry.
+[21:49:09 leg_diag] no vendor in SIZES.txt; stopping

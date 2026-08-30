@@ -1,0 +1,4 @@
+  env_hidden   import rc=1 ["A release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report the runtime's own error."]; fit rc=1
+  namespace    PASS
+  docker       NOT TESTED: no docker daemon here
+nogpu PASS

@@ -1,9 +1,9 @@
 
-=== provenance === 21:46:31
-70351b742121eb07c8b9ab5a7192a2a4d20c7de9
+=== provenance === 21:39:23
+4889f7a4b3c7ee70c905238be8a6ca804da2760a
 Linux mojolearn-e2-amd 6.8.0-59-generic #61-Ubuntu SMP PREEMPT_DYNAMIC Fri Apr 11 23:16:11 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
 
-=== pixi === 21:46:32
+=== pixi === 21:39:23
 This script will automatically download and install Pixi (latest) for you.
 Getting it from this url: https://github.com/prefix-dev/pixi/releases/latest/download/pixi-x86_64-unknown-linux-musl.tar.gz
 The 'pixi' binary is installed into '/root/.pixi/bin'
@@ -11,7 +11,7 @@ Updating '/root/.bashrc'
 Please restart or source your shell.
 ✔ The default environment has been installed.
 
-=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 21:46:34
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 21:39:26
 
 === phase 0 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
 
@@ -31,37 +31,37 @@ Please restart or source your shell.
 
 === phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
 
-=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 21:46:34
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 21:39:26
 phase 9: DIAG ONLY (MOJOLEARN_P9_ONLY_DIAG=1); no builds, no arms, no probes here
 phase 9 builds: <none>
 phase 9 tiers:  <none>
 concurrent probe SKIPPED: needs all three tiers, P9_TIERS=<none>
 
-=== phase 9 diag: packaging/linux/leg_diag.sh === 21:46:34
+=== phase 9 diag: packaging/linux/leg_diag.sh === 21:39:26
 PHASE9-FINDING: diag script returned non-zero (see diag/console.log)
     vendor=hip
-    arch=gfx90a
-    gpu_archs_requested=gfx90a
+    arch=gfx1100
+    gpu_archs_requested=gfx1100
     build_rc=0 stage_rc=0
-    build_seconds=182
+    build_seconds=179
     set_fast_count=10
-    set_fast_bytes=14210098
+    set_fast_bytes=13900570
     set_deterministic_count=10
-    set_deterministic_bytes=14214274
+    set_deterministic_bytes=13900650
     set_identical_count=10
-    set_identical_bytes=14066986
+    set_identical_bytes=13899050
     runtime_libs_bytes=3200416
     runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
     driver_libs_not_staged=
-    set_tar_gz_bytes=11506559
+    set_tar_gz_bytes=11549154
     smoke[fast]: A release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report the runtime's own error.
     smoke[deterministic]: A release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report the runtime's own error.
     smoke[identical]: A release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report the runtime's own error.
     sabotage: sabotage FAIL
     nogpu: nogpu PASS
 
-=== done === 21:49:38
-artifacts in /root/mojolearn/bench/results/e1/2026-08-30_214631-mojolearn-e2-amd
+=== done === 21:42:26
+artifacts in /root/mojolearn/bench/results/e1/2026-08-30_213923-mojolearn-e2-amd
 next: fetch this directory beside the other machine's and run
   python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
   python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card
