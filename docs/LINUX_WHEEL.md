@@ -17,16 +17,40 @@ records the run.
 
 ## 1. Why one name and not `mojolearn-cu12` and `mojolearn-rocm`
 
-Because the size allows it, on the numbers we have. The 0.1.0 macOS wheel is
-10.3 MB compressed for TWO sets of ten `.so` plus 2.7 MB of MAX dylibs. Six
-Linux sets extrapolate to roughly 30 MB compressed, under PyPI's 100 MB
-per-file limit with room. The ONE number that extrapolation does not cover
-is the size of the MAX runtime libraries a Linux extension links. The macOS
-closure is four dylibs and 2.7 MB, and the Linux closure for CUDA and HIP has
-never been measured. `packaging/linux/stage_libs.py` measures it and
-`packaging/linux/pack_wheel.py` refuses to write a wheel over the limit. If
-it refuses, the numbers are reported before any name is split, and the split
-names are not written down anywhere until then.
+Because the size allows it. That was an extrapolation when this was written
+and it is now MEASURED, 2026-08-30, and it held: six sets pack to about 77 MB
+against PyPI's 100 MB per-file default. The MAX runtime closure, the one
+number the extrapolation could not cover, came in at 3,200,416 bytes and is
+BYTE-IDENTICAL between CUDA and HIP, so it ships once for both.
+
+**77 MB is small for this category, which is the part worth keeping in mind
+when the number sounds large.** Biggest Linux wheel on PyPI, read from the
+JSON API the same day:
+
+    nvidia-cublas-cu12   554 MB
+    tensorflow           546 MB
+    torch                502 MB
+    cupy-cuda12x         141 MB
+    jaxlib                84 MB
+    mojolearn, 6 sets     77 MB
+
+and ours carries six GPU architectures across two vendors in three numeric
+tiers, where torch's 502 MB carries one CUDA version.
+
+Two facts that keep this decision from being forced later. PyPI's 100 MB is a
+per-project DEFAULT and a limit increase can be requested, so crossing it is
+a form and not a redesign. And the wheel is about half duplication today (see
+the `.text` measurement in section 9), so if MAX ever emits multi-architecture
+binaries the same layout roughly halves with no change to the selector.
+
+**A note on where bytes come from, because the intuition runs the wrong way.**
+The Python is 25 files and 544 KB, and it ships ONCE for the whole wheel.
+Every byte of Mojo is compiled per vendor, per architecture and per tier,
+which is eighteen copies in a six-set wheel. Moving host-side logic from
+Python into Mojo therefore GROWS the package by roughly eighteen times what
+it saves. Keep on the GPU what must run on the GPU and leave the rest in
+Python; that is the size-optimal rule here, and it is the opposite of the
+usual instinct.
 
 The user-facing reason is the same one that decided 0.1.0, which is `pip
 install mojolearn` on any supported box, with the import name `mojolearn`,
