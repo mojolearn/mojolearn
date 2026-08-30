@@ -175,6 +175,18 @@ the runtime's own error.
 Every path and library is named with its result. The message does not guess
 at a cause beyond the container hint, and it names the escape.
 
+**The escape's promise is conditioned on "if the device is present", and
+outside that condition the two vendors do not behave alike.** On a box with
+NO device and NO runtime of that vendor at all, `MOJOLEARN_VENDOR=cuda`
+imports and then raises a clean Python exception at the first fit, naming the
+library it could not open; `MOJOLEARN_VENDOR=hip` aborts the process with
+SIGILL during import, with no traceback. Measured 2026-08-30 against the
+finished 0.3.0 wheel (`bench/results/wheels/LEGS_2026-08-30.md`). Forcing a
+vendor whose device is absent is outside what this paragraph offers, so the
+message is not wrong, but the asymmetry is real and a user who mistypes the
+variable on the wrong box gets a crash from one branch and an error from the
+other. Making the hip path raise the way the cuda path does is owed.
+
 ## 6. Build and pack
 
 Each vendor's sets are built on that vendor's box, with the existing
@@ -286,18 +298,25 @@ directories). What this section used to list as unknown, and what came back:
 
 **STILL OWED:**
 
-* **Whether a set built on one machine's CPU and GPU runs on another's.**
-  This is the big one and it now has TWO reasons. MAX embeds device kernels
-  for the build target, and separately the host-side code carries AVX-512
-  with NO `cpuid` dispatch anywhere in either set. Under x86 EMULATION on the
-  Mac the hip set raises `Illegal instruction` during module init while the
-  cuda set imports fine; AVX-512 was tested as the cause and RULED OUT, and
-  the same hip set ran 29 smoke lanes in all three tiers on the MI325X that
-  built it. That points at the emulator, but it is an inference. The
-  install-smoke leg on a box that is NOT the build box, ideally a different
-  NVIDIA GPU model, is the only evidence either way. Until then the wheel's
+* **Whether a set built on one machine's GPU runs on another's.** MAX embeds
+  device kernels for the build target, and no leg has yet installed a set on
+  a box that did not build it. The install-smoke leg on a DIFFERENT NVIDIA
+  GPU model is the only evidence either way, and until it exists the wheel's
   claim is "runs on the architectures it was smoked on", named in the
-  CHANGELOG entry that ships it.
+  CHANGELOG entry that ships it. (The host CPU is NOT part of this question:
+  the ISA theory raised on 2026-08-30 was tested three ways and is dead. See
+  `bench/results/wheels/LEGS_2026-08-30.md`.)
+* **`MOJOLEARN_VENDOR=hip` aborts rather than raising when the HIP runtime
+  is absent entirely.** Forcing hip on a Linux box with no ROCm at all kills
+  the process with SIGILL during module init, where forcing cuda on a box
+  with no CUDA imports fine and then raises a clean Python exception at the
+  first fit. Section 5's message offers exactly this override and promises
+  "the first fit reports the runtime's own error"; on the hip branch that
+  promise is not kept. Observed under x86 emulation on the Mac against the
+  finished wheel; reproducing it on real x86-64 with no ROCm is owed, and
+  then either the init path raises the way cuda's does or the message stops
+  promising it. NOT on the default path: with `MOJOLEARN_VENDOR` unset the
+  probe refuses first, which is verified against this same wheel.
 * Whether the MAX runtime dlopens libraries that are in no `DT_NEEDED` (the
   ELF walk cannot see those). The clean-venv install smoke on a box without
   the pixi environment is the check.

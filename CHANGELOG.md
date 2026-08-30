@@ -51,10 +51,20 @@ Both sets were built, staged and smoked on the box that built them, on
 measured**, for the host CPU as well as the GPU: MAX embeds device kernels
 for the build target, and neither set carries any `cpuid` dispatch. The
 honest claim for 0.3.0 is that it runs on the architectures above.
-`bench/results/wheels/LEGS_2026-08-30.md` records this in full, including an
-`Illegal instruction` seen only under x86 emulation on an Apple-silicon Mac,
-which real hardware did not reproduce and which AVX-512 was tested for and
-ruled out.
+`bench/results/wheels/LEGS_2026-08-30.md` records this in full.
+
+**One known defect ships with this release, on the failure path only.**
+Setting `MOJOLEARN_VENDOR=hip` on a Linux box that has NO ROCm installed
+aborts the process during import instead of raising. Forcing `cuda` on a box
+with no CUDA behaves correctly: it imports and the first fit raises a clean
+Python exception naming the driver library it could not open. The refusal
+message offers this override and promises that the first fit reports the
+runtime's own error, and on the hip branch it does not. **This is not
+reachable with `MOJOLEARN_VENDOR` unset**, which is how the library is meant
+to be used: the box probe refuses first, with a table of every path and
+library it looked for. The ISA explanation was tested three ways and ruled
+out; both sets carry the same number of trap instructions and no runtime CPU
+dispatch.
 
 ### Tooling and gates
 
