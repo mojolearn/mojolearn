@@ -1,0 +1,26 @@
+Traceback (most recent call last):
+  File "/root/mojolearn/packaging/linux/smoke.py", line 254, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/root/mojolearn/packaging/linux/smoke.py", line 147, in main
+    import mojolearn as ml
+  File "/root/mojolearn/bench/results/e1/2026-08-30_215156-58508cd85802/diag/pkgroot/mojolearn/__init__.py", line 76, in <module>
+    _backend.select()
+    ~~~~~~~~~~~~~~~^^
+  File "/root/mojolearn/bench/results/e1/2026-08-30_215156-58508cd85802/diag/pkgroot/mojolearn/_backend.py", line 689, in select
+    ident_dir = tier_dir(mode)
+  File "/root/mojolearn/bench/results/e1/2026-08-30_215156-58508cd85802/diag/pkgroot/mojolearn/_backend.py", line 614, in tier_dir
+    _, base = _layout()
+              ~~~~~~~^^
+  File "/root/mojolearn/bench/results/e1/2026-08-30_215156-58508cd85802/diag/pkgroot/mojolearn/_backend.py", line 578, in _layout
+    base = _vendor_base(pkg, hits[0])
+  File "/root/mojolearn/bench/results/e1/2026-08-30_215156-58508cd85802/diag/pkgroot/mojolearn/_backend.py", line 475, in _vendor_base
+    arch, how = _pick_arch(vendor, vdir, archs)
+                ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/bench/results/e1/2026-08-30_215156-58508cd85802/diag/pkgroot/mojolearn/_backend.py", line 455, in _pick_arch
+    raise ImportError(
+    ...<5 lines>...
+    )
+ImportError: mojolearn: this device is sm_86 (compute capability from the CUDA driver) and no cuda set this install carries can run on it (cubins run forward only within one family, and `a`-suffixed builds only on their exact chip). Carried:
+    sm_120a
+A release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report the runtime's own error.

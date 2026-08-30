@@ -1,0 +1,109 @@
+[21:51:59 leg_diag] 1/5 build_sets
+[21:51:59 build_sets] repo /root/mojolearn, dest /root/mojolearn/bench/results/e1/2026-08-30_215156-58508cd85802/diag/wheels, tiers: fast deterministic identical, jobs: 3
+[21:51:59 build_sets] pixi env: gbmbench
+[21:59:02 build_sets] builds finished in 423s (rc=0)
+[21:59:09 build_sets] vendor read-back per binary:
+    fast _mojolearn cuda
+    fast _mojolearn_gbdt cuda
+    fast _mojolearn_estimators cuda
+    fast _mojolearn_rf cuda
+    fast _mojolearn_trees cuda
+    fast _mojolearn_svm cuda
+    fast _mojolearn_solver cuda
+    fast _mojolearn_metrics cuda
+    fast _mojolearn_tsa cuda
+    fast _mojolearn_linalg cuda
+    deterministic _mojolearn cuda
+    deterministic _mojolearn_gbdt cuda
+    deterministic _mojolearn_estimators cuda
+    deterministic _mojolearn_rf cuda
+    deterministic _mojolearn_trees cuda
+    deterministic _mojolearn_svm cuda
+    deterministic _mojolearn_solver cuda
+    deterministic _mojolearn_metrics cuda
+    deterministic _mojolearn_tsa cuda
+    deterministic _mojolearn_linalg cuda
+    identical _mojolearn cuda
+    identical _mojolearn_gbdt cuda
+    identical _mojolearn_estimators cuda
+    identical _mojolearn_rf cuda
+    identical _mojolearn_trees cuda
+    identical _mojolearn_svm cuda
+    identical _mojolearn_solver cuda
+    identical _mojolearn_metrics cuda
+    identical _mojolearn_tsa cuda
+    identical _mojolearn_linalg cuda
+[21:59:10 build_sets] GPU architectures embedded, per binary:
+         30 sm_120a
+[21:59:10 build_sets] architecture set: sm_120a 
+[21:59:10 build_sets] architecture: sm_120a (requested: sm_120a)
+[21:59:10 build_sets] vendor: cuda
+[21:59:14 build_sets] patchelf: /root/mojolearn/bench/results/e1/2026-08-30_215156-58508cd85802/diag/wheels/tools-venv/bin/patchelf
+[21:59:14 build_sets] pixi env lib: /root/mojolearn/.pixi/envs/gbmbench/lib
+  closure verified: 4 libraries, nothing unresolved
+  staged 4: libKGENCompilerRTShared.so, libAsyncRTMojoBindings.so, libMSupportGlobals.so, libAsyncRTRuntimeGlobals.so
+  driver libraries left to the box: none
+  extensions 66.6 MB, runtime libraries 3.2 MB, uncompressed set 69.8 MB
+vendor=cuda
+arch=sm_120a
+gpu_archs_requested=sm_120a
+build_rc=0 stage_rc=0
+build_seconds=438
+set_fast_count=10
+set_fast_bytes=22629042
+set_deterministic_count=10
+set_deterministic_bytes=22219522
+set_identical_count=10
+set_identical_bytes=21760874
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=16173432
+[21:59:17 leg_diag] 2/5 assemble the package as the wheel will lay it out
+[21:59:17 leg_diag] 3/5 gate (a): smoke, every family, every tier
+    ImportError: mojolearn: this device is sm_86 (compute capability from the CUDA driver) and no cuda set this install carries can run on it (cubins run forward only within one family, and `a`-suffixed builds only on their exact chip). Carried:
+        sm_120a
+    A release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report the runtime's own error.
+    ImportError: mojolearn: this device is sm_86 (compute capability from the CUDA driver) and no cuda set this install carries can run on it (cubins run forward only within one family, and `a`-suffixed builds only on their exact chip). Carried:
+        sm_120a
+    A release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report the runtime's own error.
+    ImportError: mojolearn: this device is sm_86 (compute capability from the CUDA driver) and no cuda set this install carries can run on it (cubins run forward only within one family, and `a`-suffixed builds only on their exact chip). Carried:
+        sm_120a
+    A release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report the runtime's own error.
+[21:59:18 leg_diag] 4/5 gate (b): sabotage
+      baseline               FAIL  rc=1  A release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report th
+      wrong_label_ignored    FAIL  rc=1  A release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report th
+      forced_vendor_without_evidence PASS  rc=1  If the device really is present and this probe is wrong, MOJOLEARN_VENDOR_FORCE=1 proceeds and accepts that risk. Unset MOJOLEARN_VENDOR to let the probe c
+      wrong_label_refused    PASS  rc=1  ImportError: mojolearn: /root/mojolearn/bench/results/e1/2026-08-30_215156-58508cd85802/diag/sabotage_scratch/wrong_label_refused/mojolearn/hip/sm_120a/identical/_
+      poisoned_ignored       FAIL  rc=1  A release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report th
+      poisoned_forced        PASS  rc=1  ImportError: mojolearn: MOJOLEARN_VENDOR=hip but this install carries no hip set under /root/mojolearn/bench/results/e1/2026-08-30_215156-58508cd85802/diag/sabotag
+      correct_set_removed    PASS  rc=1  A device node or a driver library for one of the sets above must be visible to this process. In a container that means the GPU is passed through (`--gpus all` for 
+      tier_mislabeled        FAIL  rc=1  A release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report th
+    sabotage FAIL
+[21:59:21 leg_diag] 5/5 gate (d): no GPU
+      env_hidden   import rc=0 IMPORTED cuda; fit rc=-11
+      namespace    NOT TESTED: unshare refused in this container
+      docker       NOT TESTED: no docker daemon here
+    nogpu NOT TESTED on this box
+vendor=cuda  build_rc=0  smoke_rc=1  sabotage_rc=1  nogpu_rc=1
+seconds=444
+vendor=cuda
+arch=sm_120a
+gpu_archs_requested=sm_120a
+build_rc=0 stage_rc=0
+build_seconds=438
+set_fast_count=10
+set_fast_bytes=22629042
+set_deterministic_count=10
+set_deterministic_bytes=22219522
+set_identical_count=10
+set_identical_bytes=21760874
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=16173432
+smoke[fast]: A release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report the runtime's own error.
+smoke[deterministic]: A release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report the runtime's own error.
+smoke[identical]: A release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report the runtime's own error.
+sabotage: sabotage FAIL
+nogpu: nogpu NOT TESTED on this box

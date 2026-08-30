@@ -1,0 +1,23 @@
+vendor=cuda  build_rc=0  smoke_rc=1  sabotage_rc=1  nogpu_rc=1
+seconds=444
+vendor=cuda
+arch=sm_120a
+gpu_archs_requested=sm_120a
+build_rc=0 stage_rc=0
+build_seconds=438
+set_fast_count=10
+set_fast_bytes=22629042
+set_deterministic_count=10
+set_deterministic_bytes=22219522
+set_identical_count=10
+set_identical_bytes=21760874
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=16173432
+smoke[fast]: A release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report the runtime's own error.
+smoke[deterministic]: A release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report the runtime's own error.
+smoke[identical]: A release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report the runtime's own error.
+sabotage: sabotage FAIL
+nogpu: nogpu NOT TESTED on this box
+source_e1_dir=bench/results/e1/2026-08-30_175116-runpod-nvidia/

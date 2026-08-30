@@ -1,5 +1,0 @@
-pod='le1an78dzjyhrs'
-target='-p 22050 root@194.68.245.24'
-armed_utc='2026-08-30T21:51:35Z'
-deadline_epoch=1788130295
-minutes=60
