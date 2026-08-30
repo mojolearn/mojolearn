@@ -85,6 +85,36 @@ VENDOR=$(cd / && "$VENV/bin/python" -c "import mojolearn; print(mojolearn.vendor
 say "installed mojolearn==$VER from $IDX; vendor read back: ${VENDOR:-<import failed>}"
 [ -n "$VENDOR" ] || { (cd / && "$VENV/bin/python" -c "import mojolearn") > "$D/import_error.log" 2>&1; tail -20 "$D/import_error.log"; echo "import FAILED" > "$D/SUMMARY.txt"; exit 1; }
 
+# THE HOST CPU IS A VARIABLE AND WE WERE NOT RECORDING IT.
+#
+# 2026-08-30: the published 0.3.0 wheel imported fine on an L40, read its
+# vendor back as cuda, and then EVERY tier died with SIGILL and a core dump
+# during the fits. A wrong-architecture cubin does not do that; it returns
+# CUDA_ERROR_NO_BINARY_FOR_GPU cleanly, which is what an A40 showed the same
+# morning. SIGILL is a HOST signal, and the cuda sets carry AVX-512 with no
+# cpuid dispatch anywhere, compiled for whatever CPU the build box had. So
+# the host CPU may be the variable, and no leg was recording it.
+{
+  echo "== host CPU =="
+  grep -m1 '^model name' /proc/cpuinfo 2>/dev/null
+  echo "-- ISA flags that matter for an AVX-512 build --"
+  for f in avx avx2 avx512f avx512dq avx512bw avx512vl avx512cd avx512vnni; do
+    if grep -qm1 "\b$f\b" /proc/cpuinfo 2>/dev/null; then echo "  $f PRESENT"; else echo "  $f absent"; fi
+  done
+  echo "-- what the loaded set actually is --"
+  ( cd / && "$VENV/bin/python" - <<'PYEOF' 2>&1
+import mojolearn
+from mojolearn import _backend as B
+print("  vendor", mojolearn.vendor(), "|", B.vendor_how() if hasattr(B,"vendor_how") else "")
+try:
+    print("  arch  ", B._ARCH_SELECTED, "|", B._ARCH_HOW)
+except Exception as e:
+    print("  arch   unavailable:", e)
+PYEOF
+  )
+} > "$D/host_cpu.txt" 2>&1
+sed 's/^/    /' "$D/host_cpu.txt"
+
 SMOKE_RC=0
 for tier in fast deterministic identical; do
   # cwd is / so the checkout cannot shadow the installed package.
@@ -93,6 +123,22 @@ for tier in fast deterministic identical; do
       "$VENV/bin/python" -u "$REPO/packaging/linux/smoke.py" --vendor "$VENDOR" \
       --json "$D/gates/smoke_$tier.json" ) > "$D/gates/smoke_$tier.log" 2>&1 || SMOKE_RC=1
   tail -2 "$D/gates/smoke_$tier.log" | sed 's/^/    /'
+  # A SIGILL leaves no json and no useful tail. Catch the faulting
+  # instruction while the box still exists, because the leg terminates it
+  # minutes later and the answer is not recoverable afterwards.
+  if grep -q "Illegal instruction" "$D/gates/smoke_$tier.log" 2>/dev/null; then
+    say "SIGILL in the $tier smoke; capturing the faulting instruction"
+    (command -v gdb >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq gdb)) >/dev/null 2>&1 || true
+    ( cd / && MOJOLEARN_NUMERIC_MODE=$tier gdb -q -batch \
+        -ex run -ex "x/1i \$pc" -ex "info registers rip" -ex bt \
+        --args "$VENV/bin/python" -c "
+import numpy as np, mojolearn
+X = np.random.default_rng(0).random((256,4), dtype=np.float32)
+mojolearn.KMeans(n_clusters=2).fit(X); print('FIT OK')
+" ) > "$D/gates/sigill_$tier.txt" 2>&1 || true
+    grep -aE "signal SIGILL|=> 0x|^#0|^#1|\(bad\)|vmov|zmm" "$D/gates/sigill_$tier.txt" 2>/dev/null | head -8 | sed 's/^/      /'
+    break
+  fi
 done
 {
   echo "index=$IDX version=$VER vendor=$VENDOR smoke_rc=$SMOKE_RC"
