@@ -1,0 +1,13 @@
+vendor=cuda
+build_rc=1 stage_rc=0
+build_seconds=464
+set_fast_count=9
+set_fast_bytes=18194440
+set_deterministic_count=9
+set_deterministic_bytes=18096304
+set_identical_count=9
+set_identical_bytes=16115448
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=13937630

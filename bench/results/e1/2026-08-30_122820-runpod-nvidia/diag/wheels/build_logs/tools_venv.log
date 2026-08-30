@@ -1,0 +1,7 @@
+route 2: pip install patchelf into the pixi env (gbmbench)
+/root/mojolearn/.pixi/envs/gbmbench/bin/python3: No module named pip
+route 3: throwaway venv at /root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/wheels/tools-venv
+
+[notice] A new release of pip is available: 24.0 -> 26.2.1
+[notice] To update, run: python3 -m pip install --upgrade pip
+route 3 gave /root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/wheels/tools-venv/bin/patchelf

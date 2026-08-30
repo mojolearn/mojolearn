@@ -1,0 +1,40 @@
+5520 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1b1880000000, nodemask=2)
+  agglomerative    ok   02ca572ae936a2fa     1.3s
+  dbscan           ok   a4608e954c7420b7     0.0s
+  elasticnet       ok   f4a2b16c06f0f290     0.0s
+  et-clf           ok   707d2c92e92f6a40     0.1s
+  et-reg           ok   a1d2eb9ddb149617     0.2s
+5531 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x505e40000000, nodemask=1)
+  gbdt-depthwise   ok   cd27a77258047c8e     0.1s
+  gbdt-lossguide   ok   e65c2a2686bf7341     0.1s
+  gbdt-rmse        ok   75e3f3a99e5e004b     0.0s
+  gbdt-symmetric   ok   dc987497271f92b1     0.1s
+  gemm-pinned      ok   18ff2fd121056aee     0.0s
+  gemm-vendor      ok   18ff2fd121056aee     0.0s
+  holtwinters      ok   cff24aef76c6431d     0.0s
+  iforest          ok   334ba456c6bb7644     0.2s
+  kde              ok   9a2d41d8dd246e5d     0.0s
+  kmeans           FAIL mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn.so, which is not built. Build it with
+  knn-clf          FAIL mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn.so, which is not built. Build it with
+  knn-reg          FAIL mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn.so, which is not built. Build it with
+  knn-tied         FAIL mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn.so, which is not built. Build it with
+  lasso            ok   8c61a582de814863     0.0s
+  logistic         ok   7037da78aa5950dd     0.0s
+  metrics          FAIL mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn.so, which is not built. Build it with
+  ols              ok   24aff16838df704a     0.0s
+  pca              ok   abe2157474e81469     0.0s
+  rf-clf           ok   eacd6bff8b4088b8     0.1s
+  rf-reg           ok   91269c5ae3828665     0.1s
+  ridge            ok   b72095bd450e4d05     0.0s
+  spectral         ok   7c5f4e5c32dc0ca1     0.1s
+  svc              ok   c982ba99909e46eb     0.0s
+  tsvd             ok   eb98ef49f9c747f0     0.0s
+smoke v0.3.0 mode=identical vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 FAIL
+   _mojolearn: read-back = "REFUSED ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build.sh"
+   _mojolearn: vendor_used() = "REFUSED ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build.sh"
+   _mojolearn_svm: vendor_used() = "REFUSED ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build.sh"
+   lane kmeans: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn.so, which is not built. Build it with
+   lane knn-clf: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn.so, which is not built. Build it with
+   lane knn-reg: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn.so, which is not built. Build it with
+   lane knn-tied: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn.so, which is not built. Build it with
+   lane metrics: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn.so, which is not built. Build it with

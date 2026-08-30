@@ -1,0 +1,113 @@
+[16:29:21 leg_diag] 1/5 build_sets
+[16:29:22 build_sets] repo /root/mojolearn, dest /root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/wheels, tiers: fast deterministic identical, jobs: 3
+[16:29:22 build_sets] pixi env: gbmbench
+[16:29:48 build_sets] FINDING: identical bindings/build.sh did not build; first error:
+      /root/mojolearn/bindings/_mojolearn.mojo:362:5: error: function instantiation failed
+      oss/modular/mojo/stdlib/std/gpu/host/info.mojo:2145:5: note: constraint failed: GPU architecture 'sm_80,sm_86,sm_90a' is not supported.
+[16:29:48 build_sets] FINDING: deterministic bindings/build.sh did not build; first error:
+      /root/mojolearn/bindings/_mojolearn.mojo:362:5: error: function instantiation failed
+      oss/modular/mojo/stdlib/std/gpu/host/info.mojo:2145:5: note: constraint failed: GPU architecture 'sm_80,sm_86,sm_90a' is not supported.
+[16:29:49 build_sets] FINDING: fast bindings/build.sh did not build; first error:
+      /root/mojolearn/bindings/_mojolearn.mojo:362:5: error: function instantiation failed
+      oss/modular/mojo/stdlib/std/gpu/host/info.mojo:2145:5: note: constraint failed: GPU architecture 'sm_80,sm_86,sm_90a' is not supported.
+[16:36:50 build_sets] builds finished in 448s (rc=1)
+[16:36:58 build_sets] vendor read-back per binary:
+    fast _mojolearn MISSING
+    fast _mojolearn_gbdt cuda
+    fast _mojolearn_estimators cuda
+    fast _mojolearn_rf cuda
+    fast _mojolearn_trees cuda
+    fast _mojolearn_svm cuda
+    fast _mojolearn_solver cuda
+    fast _mojolearn_metrics cuda
+    fast _mojolearn_tsa cuda
+    fast _mojolearn_linalg cuda
+    deterministic _mojolearn MISSING
+    deterministic _mojolearn_gbdt cuda
+    deterministic _mojolearn_estimators cuda
+    deterministic _mojolearn_rf cuda
+    deterministic _mojolearn_trees cuda
+    deterministic _mojolearn_svm cuda
+    deterministic _mojolearn_solver cuda
+    deterministic _mojolearn_metrics cuda
+    deterministic _mojolearn_tsa cuda
+    deterministic _mojolearn_linalg cuda
+    identical _mojolearn MISSING
+    identical _mojolearn_gbdt cuda
+    identical _mojolearn_estimators cuda
+    identical _mojolearn_rf cuda
+    identical _mojolearn_trees cuda
+    identical _mojolearn_svm cuda
+    identical _mojolearn_solver cuda
+    identical _mojolearn_metrics cuda
+    identical _mojolearn_tsa cuda
+    identical _mojolearn_linalg cuda
+[16:36:59 build_sets] GPU architectures embedded, per binary:
+         27 sm_86
+          3 MISSING
+[16:36:59 build_sets] architecture set: sm_86 
+[16:36:59 build_sets] vendor: cuda
+[16:37:04 build_sets] patchelf: /root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/wheels/tools-venv/bin/patchelf
+[16:37:04 build_sets] pixi env lib: /root/mojolearn/.pixi/envs/gbmbench/lib
+  closure verified: 4 libraries, nothing unresolved
+  staged 4: libKGENCompilerRTShared.so, libAsyncRTMojoBindings.so, libMSupportGlobals.so, libAsyncRTRuntimeGlobals.so
+  driver libraries left to the box: none
+  extensions 52.4 MB, runtime libraries 3.2 MB, uncompressed set 55.6 MB
+vendor=cuda
+build_rc=1 stage_rc=0
+build_seconds=464
+set_fast_count=9
+set_fast_bytes=18194440
+set_deterministic_count=9
+set_deterministic_bytes=18096304
+set_identical_count=9
+set_identical_bytes=16115448
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=13937630
+[16:37:07 leg_diag] 2/5 assemble the package as the wheel will lay it out
+[16:37:07 leg_diag] 3/5 gate (a): smoke, every family, every tier
+       lane knn-reg: mojolearn: numeric_mode='fast' needs python/mojolearn/_mojolearn.so, which is not built. Build it with
+       lane knn-tied: mojolearn: numeric_mode='fast' needs python/mojolearn/_mojolearn.so, which is not built. Build it with
+       lane metrics: mojolearn: numeric_mode='fast' needs python/mojolearn/_mojolearn.so, which is not built. Build it with
+       lane knn-reg: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with
+       lane knn-tied: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with
+       lane metrics: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with
+       lane knn-reg: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn.so, which is not built. Build it with
+       lane knn-tied: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn.so, which is not built. Build it with
+       lane metrics: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn.so, which is not built. Build it with
+[16:37:19 leg_diag] 4/5 gate (b): sabotage
+      baseline               PASS  rc=0  {"vendor": "cuda", "how": "the box probe (device nodes and driver libraries)", "mode": "identical"}
+      wrong_label_ignored    PASS  rc=0  {"vendor": "cuda", "how": "the box probe (device nodes and driver libraries)", "mode": "identical"}
+      wrong_label_refused    PASS  rc=1  ImportError: mojolearn: /root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/sabotage_scratch/wrong_label_refused/mojolearn/hip/identical/_mojolear
+      poisoned_ignored       PASS  rc=0  {"vendor": "cuda", "how": "the box probe (device nodes and driver libraries)", "mode": "identical"}
+      poisoned_forced        PASS  rc=1  ImportError: /root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/sabotage_scratch/poisoned_forced/mojolearn/hip/identical/_mojolearn_estimators.so
+      correct_set_removed    PASS  rc=1  A device node or a driver library for one of the sets above must be visible to this process. In a container that means the GPU is passed through (`--gpus all` for 
+      tier_mislabeled        PASS  rc=1  RuntimeError: mojolearn: the loaded gbdt binary was compiled fast but the selector loaded the deterministic set -- a binary is in the wrong directory; rebuild both
+    sabotage PASS
+[16:37:23 leg_diag] 5/5 gate (d): no GPU
+      env_hidden   import rc=0 IMPORTED cuda; fit rc=1
+      namespace    NOT TESTED: unshare refused in this container
+      docker       NOT TESTED: no docker daemon here
+    nogpu NOT TESTED on this box
+vendor=cuda  build_rc=1  smoke_rc=1  sabotage_rc=0  nogpu_rc=1
+seconds=483
+vendor=cuda
+build_rc=1 stage_rc=0
+build_seconds=464
+set_fast_count=9
+set_fast_bytes=18194440
+set_deterministic_count=9
+set_deterministic_bytes=18096304
+set_identical_count=9
+set_identical_bytes=16115448
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=13937630
+smoke[fast]:    lane metrics: mojolearn: numeric_mode='fast' needs python/mojolearn/_mojolearn.so, which is not built. Build it with
+smoke[deterministic]:    lane metrics: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with
+smoke[identical]:    lane metrics: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn.so, which is not built. Build it with
+sabotage: sabotage PASS
+nogpu: nogpu NOT TESTED on this box

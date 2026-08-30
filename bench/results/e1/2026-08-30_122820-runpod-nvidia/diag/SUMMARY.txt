@@ -1,0 +1,20 @@
+vendor=cuda  build_rc=1  smoke_rc=1  sabotage_rc=0  nogpu_rc=1
+seconds=483
+vendor=cuda
+build_rc=1 stage_rc=0
+build_seconds=464
+set_fast_count=9
+set_fast_bytes=18194440
+set_deterministic_count=9
+set_deterministic_bytes=18096304
+set_identical_count=9
+set_identical_bytes=16115448
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=13937630
+smoke[fast]:    lane metrics: mojolearn: numeric_mode='fast' needs python/mojolearn/_mojolearn.so, which is not built. Build it with
+smoke[deterministic]:    lane metrics: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with
+smoke[identical]:    lane metrics: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn.so, which is not built. Build it with
+sabotage: sabotage PASS
+nogpu: nogpu NOT TESTED on this box

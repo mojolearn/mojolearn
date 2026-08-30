@@ -1,0 +1,62 @@
+
+=== provenance === 16:29:17
+a4d5b4f197a61d92602cd0455e2d1faccc847f8c
+Linux 745b15219fd3 6.8.0-111-generic #111-Ubuntu SMP PREEMPT_DYNAMIC Sat Apr 11 23:16:02 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+
+=== pixi === 16:29:17
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 16:29:21
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 16:29:21
+phase 9: DIAG ONLY (MOJOLEARN_P9_ONLY_DIAG=1); no builds, no arms, no probes here
+phase 9 builds: <none>
+phase 9 tiers:  <none>
+concurrent probe SKIPPED: needs all three tiers, P9_TIERS=<none>
+
+=== phase 9 diag: packaging/linux/leg_diag.sh === 16:29:21
+PHASE9-FINDING: diag script returned non-zero (see diag/console.log)
+    vendor=cuda  build_rc=1  smoke_rc=1  sabotage_rc=0  nogpu_rc=1
+    seconds=483
+    vendor=cuda
+    build_rc=1 stage_rc=0
+    build_seconds=464
+    set_fast_count=9
+    set_fast_bytes=18194440
+    set_deterministic_count=9
+    set_deterministic_bytes=18096304
+    set_identical_count=9
+    set_identical_bytes=16115448
+    runtime_libs_bytes=3200416
+    runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+    driver_libs_not_staged=
+    set_tar_gz_bytes=13937630
+    smoke[fast]:    lane metrics: mojolearn: numeric_mode='fast' needs python/mojolearn/_mojolearn.so, which is not built. Build it with
+    smoke[deterministic]:    lane metrics: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with
+    smoke[identical]:    lane metrics: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn.so, which is not built. Build it with
+    sabotage: sabotage PASS
+    nogpu: nogpu NOT TESTED on this box
+
+=== done === 16:37:24
+artifacts in /root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

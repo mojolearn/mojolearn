@@ -1,0 +1,32 @@
+{
+  "docker": {
+    "verdict": "NOT TESTED: no docker daemon here"
+  },
+  "env_hidden": {
+    "fit_err": "6681 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x507180000000, nodemask=1)\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import numpy as np, mojolearn; X=np.random.default_rng(0).random((256,4),dtype=np.float32); mojolearn.KMeans(n_clusters=2).fit(X); print('FIT OK')\n                                                                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/cluster.py\", line 151, in fit\n    inertia, n_iter, sum_scale, weight_scale = self._bind(\"_mojolearn\").kmeans_fit(\n                                               ~~~~~~~~~~^^^^^^^^^^^^^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/_mode.py\", line 90, in _bind\n    return _backend.binding(\n           ~~~~~~~~~~~~~~~~^\n        name or self._BINDING, getattr(self, \"numeric_mode\", None)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/_backend.py\", line 614, in binding\n    return getattr(load_set(mode or default_mode()), name)\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/_backend.py\", line 516, in __getattr__\n    raise ImportError(\n    ...<5 lines>...\n    )\nImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build.sh",
+    "fit_out": "",
+    "fit_rc": 1,
+    "import_err": "6513 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x183780000000, nodemask=2)\n6513 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x526f00000000, nodemask=1)",
+    "import_out": "IMPORTED cuda",
+    "import_rc": 0,
+    "verdict": "IMPORTED (expected: the probe reads device nodes, not these variables)"
+  },
+  "namespace": {
+    "err": "unshare: unshare failed: Operation not permitted",
+    "found": {
+      "/dev/nvidia0": false,
+      "/dev/nvidiactl": false,
+      "MOJOLEARN_VENDOR": false,
+      "NO SUPPORTED GPU FOUND": false
+    },
+    "hidden": [
+      "/dev/nvidiactl",
+      "/lib/x86_64-linux-gnu/libcuda.so",
+      "/lib/x86_64-linux-gnu/libcuda.so.1"
+    ],
+    "out": "",
+    "rc": 1,
+    "verdict": "NOT TESTED: unshare refused in this container"
+  },
+  "summary": "NOT TESTED on this box"
+}

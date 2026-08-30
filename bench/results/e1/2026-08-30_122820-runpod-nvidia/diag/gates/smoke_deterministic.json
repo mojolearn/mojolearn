@@ -1,0 +1,195 @@
+{
+  "failures": [
+    "_mojolearn: read-back = \"REFUSED ImportError: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with\\n    MOJOLEARN_NUMERIC_MODE=deterministic bash binding\"",
+    "_mojolearn: vendor_used() = \"REFUSED ImportError: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with\\n    MOJOLEARN_NUMERIC_MODE=deterministic bash binding\"",
+    "_mojolearn_svm: vendor_used() = \"REFUSED ImportError: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with\\n    MOJOLEARN_NUMERIC_MODE=deterministic bash binding\"",
+    "lane kmeans: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with",
+    "lane knn-clf: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with",
+    "lane knn-reg: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with",
+    "lane knn-tied: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with",
+    "lane metrics: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with"
+  ],
+  "lanes": {
+    "agglomerative": {
+      "hash": "02ca572ae936a2fa",
+      "ok": true,
+      "seconds": 1.55
+    },
+    "dbscan": {
+      "hash": "a4608e954c7420b7",
+      "ok": true,
+      "seconds": 0.0
+    },
+    "elasticnet": {
+      "hash": "417b2b6ef980d28f",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "et-clf": {
+      "hash": "707d2c92e92f6a40",
+      "ok": true,
+      "seconds": 0.09
+    },
+    "et-reg": {
+      "hash": "a1d2eb9ddb149617",
+      "ok": true,
+      "seconds": 0.19
+    },
+    "gbdt-depthwise": {
+      "hash": "5af5e69c7a51e998",
+      "ok": true,
+      "seconds": 0.09
+    },
+    "gbdt-lossguide": {
+      "hash": "d824f0e1683d12b9",
+      "ok": true,
+      "seconds": 0.12
+    },
+    "gbdt-rmse": {
+      "hash": "23ff518cc9a7f332",
+      "ok": true,
+      "seconds": 0.05
+    },
+    "gbdt-symmetric": {
+      "hash": "f48275d3af938625",
+      "ok": true,
+      "seconds": 0.06
+    },
+    "gemm-pinned": {
+      "designed_refusal": true,
+      "ok": true,
+      "refused": "mojolearn.linalg: this process loaded the DETERMINISTIC build, which makes NO cross-vendor identity claim; mojolearn.identical.gemm.fp32.v1 is what the IDENTICAL build computes.",
+      "refused_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 372, in _gemm_pinned\n    return _h(ml.linalg.matmul(a, b, identical=True))\n              ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/_linalg_impl.py\", line 417, in matmul\n    require_identical()\n    ~~~~~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/_linalg_impl.py\", line 267, in require_identical\n    raise RuntimeError(\n    ...<10 lines>...\n    )\nRuntimeError: mojolearn.linalg: this process loaded the DETERMINISTIC build, which makes NO cross-vendor identity claim; mojolearn.identical.gemm.fp32.v1 is what the IDENTICAL build computes.\n  Select it with mojolearn.set_numeric_mode('identical') before the call, or set MOJOLEARN_NUMERIC_MODE=identical before importing mojolearn; the identical binary builds with\n      MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_linalg.sh\n  Or pass identical=False to say in the source that you want the deterministic product and are making no identity claim about it.",
+      "seconds": 0.03
+    },
+    "gemm-vendor": {
+      "hash": "523f5d1954f7409c",
+      "ok": true,
+      "seconds": 0.03
+    },
+    "holtwinters": {
+      "hash": "e6e43307ca85f1c7",
+      "ok": true,
+      "seconds": 0.04
+    },
+    "iforest": {
+      "hash": "cbdf90cd2472725a",
+      "ok": true,
+      "seconds": 0.2
+    },
+    "kde": {
+      "hash": "51e248a7e0bf958b",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "kmeans": {
+      "error": "mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 160, in _kmeans\n    m.fit(X)\n    ~~~~~^^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/cluster.py\", line 151, in fit\n    inertia, n_iter, sum_scale, weight_scale = self._bind(\"_mojolearn\").kmeans_fit(\n                                               ~~~~~~~~~~^^^^^^^^^^^^^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/_mode.py\", line 90, in _bind\n    return _backend.binding(\n           ~~~~~~~~~~~~~~~~^\n        name or self._BINDING, getattr(self, \"numeric_mode\", None)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/_backend.py\", line 614, in binding\n    return getattr(load_set(mode or default_mode()), name)\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/_backend.py\", line 516, in __getattr__\n    raise ImportError(\n    ...<5 lines>...\n    )\nImportError: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=deterministic bash bindings/build.sh",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "knn-clf": {
+      "error": "mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 263, in _knn_clf\n    return _h(m.predict(X[4096:4160]), m.predict_proba(X[4096:4160]))\n              ~~~~~~~~~^^^^^^^^^^^^^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/neighbors.py\", line 354, in predict\n    labels, _, _ = self._predict(X, want_proba=False)\n                   ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/neighbors.py\", line 327, in _predict\n    self.used_query_tile_ = self._bind(\"_mojolearn\").knn_classify(\n                            ~~~~~~~~~~^^^^^^^^^^^^^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/_mode.py\", line 90, in _bind\n    return _backend.binding(\n           ~~~~~~~~~~~~~~~~^\n        name or self._BINDING, getattr(self, \"numeric_mode\", None)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/_backend.py\", line 614, in binding\n    return getattr(load_set(mode or default_mode()), name)\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/_backend.py\", line 516, in __getattr__\n    raise ImportError(\n    ...<5 lines>...\n    )\nImportError: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=deterministic bash bindings/build.sh",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "knn-reg": {
+      "error": "mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 271, in _knn_reg\n    return _h(m.predict(X[4096:4160]))\n              ~~~~~~~~~^^^^^^^^^^^^^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/neighbors.py\", line 464, in predict\n    self.used_query_tile_ = self._bind(\"_mojolearn\").knn_regress(\n                            ~~~~~~~~~~^^^^^^^^^^^^^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/_mode.py\", line 90, in _bind\n    return _backend.binding(\n           ~~~~~~~~~~~~~~~~^\n        name or self._BINDING, getattr(self, \"numeric_mode\", None)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/_backend.py\", line 614, in binding\n    return getattr(load_set(mode or default_mode()), name)\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/_backend.py\", line 516, in __getattr__\n    raise ImportError(\n    ...<5 lines>...\n    )\nImportError: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=deterministic bash bindings/build.sh",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "knn-tied": {
+      "error": "mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 169, in _knn\n    d, i = m.kneighbors(q)\n           ~~~~~~~~~~~~^^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/neighbors.py\", line 169, in kneighbors\n    self.used_query_tile_ = self._bind(\"_mojolearn\").knn_search(\n                            ~~~~~~~~~~^^^^^^^^^^^^^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/_mode.py\", line 90, in _bind\n    return _backend.binding(\n           ~~~~~~~~~~~~~~~~^\n        name or self._BINDING, getattr(self, \"numeric_mode\", None)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/_backend.py\", line 614, in binding\n    return getattr(load_set(mode or default_mode()), name)\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/_backend.py\", line 516, in __getattr__\n    raise ImportError(\n    ...<5 lines>...\n    )\nImportError: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=deterministic bash bindings/build.sh",
+      "ok": false,
+      "seconds": 0.0
+    },
+    "lasso": {
+      "hash": "b21520dab533f838",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "logistic": {
+      "hash": "4f82254ef9ad5365",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "metrics": {
+      "error": "mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 334, in _metrics\n    labels = ml.KMeans(n_clusters=4, random_state=3).fit(X[:3000, :4]).labels_\n             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/cluster.py\", line 151, in fit\n    inertia, n_iter, sum_scale, weight_scale = self._bind(\"_mojolearn\").kmeans_fit(\n                                               ~~~~~~~~~~^^^^^^^^^^^^^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/_mode.py\", line 90, in _bind\n    return _backend.binding(\n           ~~~~~~~~~~~~~~~~^\n        name or self._BINDING, getattr(self, \"numeric_mode\", None)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/_backend.py\", line 614, in binding\n    return getattr(load_set(mode or default_mode()), name)\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/_backend.py\", line 516, in __getattr__\n    raise ImportError(\n    ...<5 lines>...\n    )\nImportError: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=deterministic bash bindings/build.sh",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "ols": {
+      "hash": "ebc1910229d34b43",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "pca": {
+      "hash": "b13b55c26251a58f",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "rf-clf": {
+      "hash": "eacd6bff8b4088b8",
+      "ok": true,
+      "seconds": 0.07
+    },
+    "rf-reg": {
+      "hash": "91269c5ae3828665",
+      "ok": true,
+      "seconds": 0.08
+    },
+    "ridge": {
+      "hash": "65de13bd592987f2",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "spectral": {
+      "hash": "7c5f4e5c32dc0ca1",
+      "ok": true,
+      "seconds": 0.06
+    },
+    "svc": {
+      "hash": "7ec2853daf86bef5",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "tsvd": {
+      "hash": "5d81a7de67e0d2f0",
+      "ok": true,
+      "seconds": 0.01
+    }
+  },
+  "mode_loaded": "deterministic",
+  "mode_wanted": "deterministic",
+  "mojolearn_file": "/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3/diag/pkgroot/mojolearn/__init__.py",
+  "ok": false,
+  "python": "3.14.7",
+  "vendor_how": "the box probe (device nodes and driver libraries)",
+  "vendor_loaded": "cuda",
+  "vendor_per_binding": {
+    "_mojolearn": "REFUSED ImportError: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=deterministic bash binding",
+    "_mojolearn_estimators": "cuda",
+    "_mojolearn_gbdt": "cuda",
+    "_mojolearn_linalg": "cuda",
+    "_mojolearn_metrics": "cuda",
+    "_mojolearn_rf": "cuda",
+    "_mojolearn_solver": "cuda",
+    "_mojolearn_svm": "cuda",
+    "_mojolearn_trees": "cuda",
+    "_mojolearn_tsa": "cuda"
+  },
+  "vendor_used_per_estimator": {
+    "_mojolearn": "REFUSED ImportError: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=deterministic bash binding",
+    "_mojolearn_estimators": "cuda",
+    "_mojolearn_gbdt": "cuda",
+    "_mojolearn_rf": "cuda",
+    "_mojolearn_svm": "REFUSED ImportError: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=deterministic bash binding",
+    "_mojolearn_trees": "cuda"
+  },
+  "vendor_wanted": "cuda",
+  "version": "0.3.0"
+}

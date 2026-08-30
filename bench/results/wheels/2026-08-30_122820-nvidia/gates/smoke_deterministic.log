@@ -1,0 +1,40 @@
+5337 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53da40000000, nodemask=1)
+5337 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x18e500000000, nodemask=2)
+  agglomerative    ok   02ca572ae936a2fa     1.5s
+  dbscan           ok   a4608e954c7420b7     0.0s
+  elasticnet       ok   417b2b6ef980d28f     0.0s
+  et-clf           ok   707d2c92e92f6a40     0.1s
+  et-reg           ok   a1d2eb9ddb149617     0.2s
+  gbdt-depthwise   ok   5af5e69c7a51e998     0.1s
+  gbdt-lossguide   ok   d824f0e1683d12b9     0.1s
+  gbdt-rmse        ok   23ff518cc9a7f332     0.0s
+  gbdt-symmetric   ok   f48275d3af938625     0.1s
+  gemm-pinned      ok   REFUSED as designed under deterministic
+  gemm-vendor      ok   523f5d1954f7409c     0.0s
+  holtwinters      ok   e6e43307ca85f1c7     0.0s
+  iforest          ok   cbdf90cd2472725a     0.2s
+  kde              ok   51e248a7e0bf958b     0.0s
+  kmeans           FAIL mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with
+  knn-clf          FAIL mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with
+  knn-reg          FAIL mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with
+  knn-tied         FAIL mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with
+  lasso            ok   b21520dab533f838     0.0s
+  logistic         ok   4f82254ef9ad5365     0.0s
+  metrics          FAIL mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with
+  ols              ok   ebc1910229d34b43     0.0s
+  pca              ok   b13b55c26251a58f     0.0s
+  rf-clf           ok   eacd6bff8b4088b8     0.1s
+  rf-reg           ok   91269c5ae3828665     0.1s
+  ridge            ok   65de13bd592987f2     0.0s
+  spectral         ok   7c5f4e5c32dc0ca1     0.1s
+  svc              ok   7ec2853daf86bef5     0.0s
+  tsvd             ok   5d81a7de67e0d2f0     0.0s
+smoke v0.3.0 mode=deterministic vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 FAIL
+   _mojolearn: read-back = "REFUSED ImportError: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=deterministic bash binding"
+   _mojolearn: vendor_used() = "REFUSED ImportError: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=deterministic bash binding"
+   _mojolearn_svm: vendor_used() = "REFUSED ImportError: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=deterministic bash binding"
+   lane kmeans: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with
+   lane knn-clf: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with
+   lane knn-reg: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with
+   lane knn-tied: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with
+   lane metrics: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with

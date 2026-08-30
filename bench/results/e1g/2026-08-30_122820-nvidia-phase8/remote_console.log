@@ -1,0 +1,65 @@
+host driver major: 580 (escape needed below 580)
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 16:29:21
+phase 9: DIAG ONLY (MOJOLEARN_P9_ONLY_DIAG=1); no builds, no arms, no probes here
+phase 9 builds: <none>
+phase 9 tiers:  <none>
+concurrent probe SKIPPED: needs all three tiers, P9_TIERS=<none>
+
+=== phase 9 diag: packaging/linux/leg_diag.sh === 16:29:21
+PHASE9-FINDING: diag script returned non-zero (see diag/console.log)
+    vendor=cuda  build_rc=1  smoke_rc=1  sabotage_rc=0  nogpu_rc=1
+    seconds=483
+    vendor=cuda
+    build_rc=1 stage_rc=0
+    build_seconds=464
+    set_fast_count=9
+    set_fast_bytes=18194440
+    set_deterministic_count=9
+    set_deterministic_bytes=18096304
+    set_identical_count=9
+    set_identical_bytes=16115448
+    runtime_libs_bytes=3200416
+    runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+    driver_libs_not_staged=
+    set_tar_gz_bytes=13937630
+    smoke[fast]:    lane metrics: mojolearn: numeric_mode='fast' needs python/mojolearn/_mojolearn.so, which is not built. Build it with
+    smoke[deterministic]:    lane metrics: mojolearn: numeric_mode='deterministic' needs python/mojolearn/deterministic/_mojolearn.so, which is not built. Build it with
+    smoke[identical]:    lane metrics: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn.so, which is not built. Build it with
+    sabotage: sabotage PASS
+    nogpu: nogpu NOT TESTED on this box
+
+=== done === 16:37:24
+artifacts in /root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card
+vendor=nvidia
+payload=phase8
+commit=a4d5b4f197a61d92602cd0455e2d1faccc847f8c
+work_timeout=3000
+e1_phases=9
+e1_lanes=
+p9_bindings=build.sh build_gbdt.sh build_estimators.sh build_linalg.sh
+p9_lanes=
+started=2026-08-30T16:29:15Z
+p9_only_diag=1
+p9_diag=packaging/linux/leg_diag.sh
+p9_diag_timeout=2400
+wheel_version=
+wheel_index=testpypi
+gpu_archs=sm_80,sm_86,sm_90a
+bootstrap_exit=0
+note: a bootstrap_exit of 124 is the work timeout firing
+e1dir_source=the bootstrap's own 'artifacts in' line
+e1dir=/root/mojolearn/bench/results/e1/2026-08-30_162917-745b15219fd3
+identical_cards=0
+fast_cards=0
+phase8_findings=0
+finished=2026-08-30T16:37:24Z
+REMOTE_BODY_DONE
