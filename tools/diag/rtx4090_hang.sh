@@ -22,6 +22,8 @@
 #   D2  iforest in the background: after 20 s, nvidia-smi PIDS/utilization,
 #       any ptxas/nvdisasm child, the wchan histogram, gdb if present; then
 #       kill it and ask whether the GPU still answers (H2's hypothesis)
+#   D6  ols_launch_localize, both modes, plus the linalg gate itself: a
+#       SEPARATE open item (check_ols_is_launch_invariant) riding the lease
 #   D3  the Mojo-level bisect: mojo_only/if_hang_probe.mojo BUILT then RUN
 #       once per MOJOLEARN_IF_DIAG_* guard, so "the compile hangs" and "the
 #       kernel hangs" are different files, and the TRACE build splits the
@@ -67,13 +69,28 @@ say "D0 env recorded"
 #   BAD hangs (rc 137 under timeout -s KILL) and GOOD prints DONE
 #       -> the ordering IS the poison; DEVIATION 1946 is the fix and D4's
 #          binding lanes below should now pass on this box.
-#   BOTH print DONE
+#   BAD passes but FORCED hangs
+#       -> the hazard is real and the BAD arm was too weak to build it,
+#          because it INFERS the context's death from Mojo's last-use rule
+#          while FORCED makes it structural (the buffers escape the helper
+#          that owns the context). 1946 is still the fix, and any earlier
+#          conclusion drawn from a BAD pass is void.
+#   ALL THREE print DONE
 #       -> the ordering is NOT the poison here. 1946 stays as a correctness
 #          fix, the hunt goes back to the GILReleased block, and D2/D3 below
 #          are what say so. WRITE THAT SENTENCE in this file's verdicts.
+#
+# THE FORCED ARM IS WHY A BOTH-PASS CAN BE READ AT ALL. With BAD and GOOD
+# alone, "both passed" is ambiguous between "the ordering is innocent" and
+# "the probe never constructed the bad ordering" -- and the second is exactly
+# how `rf_ctx_probe.mojo` came to exonerate the thing it was written to
+# reproduce. Three arms, one reading. All three build and pass on an M4
+# (2026-08-30), which is the control: this box has never hung.
 ORDP=ensemble/mojo_only/rf_ctx_order_probe.mojo
 run d5_order_bad_build 480 pixi run mojo build -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D ORDER_BAD=1 "$ORDP" -o "$D/probe_order_bad" \
   && run d5_order_bad_run 120 "$D/probe_order_bad"
+run d5_order_forced_build 480 pixi run mojo build -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D ORDER_FORCED=1 "$ORDP" -o "$D/probe_order_forced" \
+  && run d5_order_forced_run 120 "$D/probe_order_forced"
 run d5_order_good_build 480 pixi run mojo build -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D ORDER_GOOD=1 "$ORDP" -o "$D/probe_order_good" \
   && run d5_order_good_run 120 "$D/probe_order_good"
 
@@ -175,6 +192,34 @@ PY
 [ "$(elapsed)" -gt 2100 ] || run d1b_break_rf_base 300 $PY tools/identity_break.py --lanes rf-clf --fixtures base --repeats 1
 [ "$(elapsed)" -gt 2100 ] || run d1c_break_rf_hashed 300 $PY tools/identity_break.py --lanes rf-clf --fixtures hashed --repeats 1
 [ "$(elapsed)" -gt 2100 ] || run d1d_break_et_nine 300 $PY tools/identity_break.py --lanes et-clf --repeats 1
+
+# ---------------------------------------------------------------- D6
+# A DIFFERENT INVESTIGATION RIDING THE SAME LEASE, and labelled as one so a
+# reader does not fold its result into the hang.
+#
+# `check_ols_is_launch_invariant` has failed on the H100 and the MI325X in
+# BOTH numeric modes since E3 leg 10: two identical OLS fits in one process
+# disagree at coefficient 0 by 0.2%. Four legs have carried it forward
+# because the gate's own localizer emits two TRACED cards, and the traced
+# path does not reproduce -- `record_device` adds eight drains and holds
+# eight buffers live, and the bug goes away.
+#
+# `ols_launch_localize` hashes the seven stages from OUTSIDE an UNTRACED fit
+# (every buffer but `info` is the caller's), running the gate's own
+# interleaved pad-0/pad-37 allocation sequence. The first stage that moves
+# names the kernel. Silent on an M4 in both modes, 2026-08-30, which is the
+# control. ~90 s for both modes; it needs no dataset and no Python.
+#
+# Read the result against the table in the probe's own docstring BEFORE
+# touching a kernel. If the gate fails on this box in this leg while this is
+# silent, that difference is itself the next thing to read.
+OLSP=glm/mojo_only/ols_launch_localize.mojo
+[ "$(elapsed)" -gt 2400 ] || { run d6_ols_localize_fast_build 480 pixi run mojo build -I . "$OLSP" -o "$D/probe_ols_fast" \
+  && run d6_ols_localize_fast_run 180 "$D/probe_ols_fast"; }
+[ "$(elapsed)" -gt 2500 ] || { run d6_ols_localize_ident_build 480 pixi run mojo build -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 "$OLSP" -o "$D/probe_ols_ident" \
+  && run d6_ols_localize_ident_run 180 "$D/probe_ols_ident"; }
+# The gate itself, beside the probe, so the two are read in one leg.
+[ "$(elapsed)" -gt 2600 ] || run d6_ols_gate_ident 300 sh tools/with_identical_mode.sh pixi run mojo run -I . glm/ols_main.mojo
 
 say "DONE"; echo "=== verdicts"; cat "$D/verdicts.txt"
 pkill -9 -f py_probes.py 2>/dev/null; pkill -9 -f probe_ 2>/dev/null
