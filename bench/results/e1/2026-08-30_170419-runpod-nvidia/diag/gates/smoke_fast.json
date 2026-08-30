@@ -1,0 +1,183 @@
+{
+  "arch_how": "same-family lower architecture (sm_80 code runs forward on this sm_86 device)",
+  "arch_loaded": "sm_80",
+  "failures": [],
+  "lanes": {
+    "agglomerative": {
+      "hash": "02ca572ae936a2fa",
+      "ok": true,
+      "seconds": 1.22
+    },
+    "dbscan": {
+      "hash": "a4608e954c7420b7",
+      "ok": true,
+      "seconds": 0.23
+    },
+    "elasticnet": {
+      "hash": "417b2b6ef980d28f",
+      "ok": true,
+      "seconds": 0.12
+    },
+    "et-clf": {
+      "hash": "707d2c92e92f6a40",
+      "ok": true,
+      "seconds": 0.49
+    },
+    "et-reg": {
+      "hash": "a1d2eb9ddb149617",
+      "ok": true,
+      "seconds": 0.2
+    },
+    "gbdt-depthwise": {
+      "hash": "9b215bde3d465b5a",
+      "ok": true,
+      "seconds": 0.66
+    },
+    "gbdt-lossguide": {
+      "hash": "8b3a213947e39743",
+      "ok": true,
+      "seconds": 0.2
+    },
+    "gbdt-rmse": {
+      "hash": "fa22f14f818359d9",
+      "ok": true,
+      "seconds": 0.61
+    },
+    "gbdt-symmetric": {
+      "hash": "6ace4187a22cd7f6",
+      "ok": true,
+      "seconds": 0.07
+    },
+    "gemm-pinned": {
+      "designed_refusal": true,
+      "ok": true,
+      "refused": "mojolearn.linalg: this process loaded the FAST build, which makes NO cross-vendor identity claim; mojolearn.identical.gemm.fp32.v1 is what the IDENTICAL build computes.",
+      "refused_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 198, in main\n    h = lanes[name](ml)\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 372, in _gemm_pinned\n    return _h(ml.linalg.matmul(a, b, identical=True))\n              ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_210516-50a6ee97f07c/diag/pkgroot/mojolearn/_linalg_impl.py\", line 417, in matmul\n    require_identical()\n    ~~~~~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_210516-50a6ee97f07c/diag/pkgroot/mojolearn/_linalg_impl.py\", line 267, in require_identical\n    raise RuntimeError(\n    ...<10 lines>...\n    )\nRuntimeError: mojolearn.linalg: this process loaded the FAST build, which makes NO cross-vendor identity claim; mojolearn.identical.gemm.fp32.v1 is what the IDENTICAL build computes.\n  Select it with mojolearn.set_numeric_mode('identical') before the call, or set MOJOLEARN_NUMERIC_MODE=identical before importing mojolearn; the identical binary builds with\n      MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_linalg.sh\n  Or pass identical=False to say in the source that you want the fast product and are making no identity claim about it.",
+      "seconds": 0.04
+    },
+    "gemm-vendor": {
+      "hash": "523f5d1954f7409c",
+      "ok": true,
+      "seconds": 0.04
+    },
+    "holtwinters": {
+      "hash": "e6e43307ca85f1c7",
+      "ok": true,
+      "seconds": 0.38
+    },
+    "iforest": {
+      "hash": "cbdf90cd2472725a",
+      "ok": true,
+      "seconds": 0.28
+    },
+    "kde": {
+      "hash": "51e248a7e0bf958b",
+      "ok": true,
+      "seconds": 0.07
+    },
+    "kmeans": {
+      "hash": "da3cb10e46c91256",
+      "ok": true,
+      "seconds": 0.31
+    },
+    "knn-clf": {
+      "hash": "f359ee4876deb908",
+      "ok": true,
+      "seconds": 4.22
+    },
+    "knn-reg": {
+      "hash": "ff4a92b889616aea",
+      "ok": true,
+      "seconds": 0.03
+    },
+    "knn-tied": {
+      "hash": "8f86cf2b8e03b827",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "lasso": {
+      "hash": "b21520dab533f838",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "logistic": {
+      "hash": "4f82254ef9ad5365",
+      "ok": true,
+      "seconds": 0.18
+    },
+    "metrics": {
+      "hash": "01a17b9ad7a6275c",
+      "ok": true,
+      "seconds": 0.11
+    },
+    "ols": {
+      "hash": "ebc1910229d34b43",
+      "ok": true,
+      "seconds": 0.12
+    },
+    "pca": {
+      "hash": "b13b55c26251a58f",
+      "ok": true,
+      "seconds": 0.06
+    },
+    "rf-clf": {
+      "hash": "eacd6bff8b4088b8",
+      "ok": true,
+      "seconds": 0.37
+    },
+    "rf-reg": {
+      "hash": "91269c5ae3828665",
+      "ok": true,
+      "seconds": 0.2
+    },
+    "ridge": {
+      "hash": "65de13bd592987f2",
+      "ok": true,
+      "seconds": 0.08
+    },
+    "spectral": {
+      "hash": "7c5f4e5c32dc0ca1",
+      "ok": true,
+      "seconds": 0.24
+    },
+    "svc": {
+      "hash": "7ec2853daf86bef5",
+      "ok": true,
+      "seconds": 0.22
+    },
+    "tsvd": {
+      "hash": "5d81a7de67e0d2f0",
+      "ok": true,
+      "seconds": 0.0
+    }
+  },
+  "mode_loaded": "fast",
+  "mode_wanted": "fast",
+  "mojolearn_file": "/root/mojolearn/bench/results/e1/2026-08-30_210516-50a6ee97f07c/diag/pkgroot/mojolearn/__init__.py",
+  "ok": true,
+  "python": "3.14.7",
+  "vendor_how": "the box probe (device nodes and driver libraries)",
+  "vendor_loaded": "cuda",
+  "vendor_per_binding": {
+    "_mojolearn": "cuda",
+    "_mojolearn_estimators": "cuda",
+    "_mojolearn_gbdt": "cuda",
+    "_mojolearn_linalg": "cuda",
+    "_mojolearn_metrics": "cuda",
+    "_mojolearn_rf": "cuda",
+    "_mojolearn_solver": "cuda",
+    "_mojolearn_svm": "cuda",
+    "_mojolearn_trees": "cuda",
+    "_mojolearn_tsa": "cuda"
+  },
+  "vendor_used_per_estimator": {
+    "_mojolearn": "cuda",
+    "_mojolearn_estimators": "cuda",
+    "_mojolearn_gbdt": "cuda",
+    "_mojolearn_rf": "cuda",
+    "_mojolearn_svm": "cuda",
+    "_mojolearn_trees": "cuda"
+  },
+  "vendor_wanted": "cuda",
+  "version": "0.3.0"
+}

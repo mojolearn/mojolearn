@@ -1,0 +1,5 @@
+pod='wi9mq975mbe9h7'
+target='-p 11518 root@216.81.245.97'
+armed_utc='2026-08-30T21:22:53Z'
+deadline_epoch=1788128573
+minutes=60

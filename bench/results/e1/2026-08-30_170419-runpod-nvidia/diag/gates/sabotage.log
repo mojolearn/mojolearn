@@ -1,0 +1,8 @@
+  baseline               PASS  rc=0  {"vendor": "cuda", "how": "the box probe (device nodes and driver libraries)", "mode": "identical"}
+  wrong_label_ignored    PASS  rc=0  {"vendor": "cuda", "how": "the box probe (device nodes and driver libraries)", "mode": "identical"}
+  wrong_label_refused    FAIL  rc=1  If the device really is present and this probe is wrong, MOJOLEARN_VENDOR_FORCE=1 proceeds and accepts that risk. Unset MOJOLEARN_VENDOR to let the probe choose.
+  poisoned_ignored       PASS  rc=0  {"vendor": "cuda", "how": "the box probe (device nodes and driver libraries)", "mode": "identical"}
+  poisoned_forced        PASS  rc=1  ImportError: mojolearn: MOJOLEARN_VENDOR=hip but this install carries no hip set under /root/mojolearn/bench/results/e1/2026-08-30_210516-50a6ee97f07c/diag/sabotag
+  correct_set_removed    PASS  rc=1  A device node or a driver library for one of the sets above must be visible to this process. In a container that means the GPU is passed through (`--gpus all` for 
+  tier_mislabeled        PASS  rc=1  RuntimeError: mojolearn: the loaded gbdt binary was compiled fast but the selector loaded the deterministic set -- a binary is in the wrong directory; rebuild both
+sabotage FAIL

@@ -1,0 +1,21 @@
+vendor=cuda  build_rc=0  smoke_rc=0  sabotage_rc=0  nogpu_rc=1
+seconds=950
+vendor=cuda
+build_rc=0 stage_rc=0
+build_seconds=933
+set_fast_count=10
+set_fast_bytes=20886456
+set_deterministic_count=10
+set_deterministic_bytes=20599408
+set_identical_count=10
+set_identical_bytes=19403608
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=15481976
+smoke[fast]: smoke v0.3.0 mode=fast vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+smoke[deterministic]: smoke v0.3.0 mode=deterministic vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+smoke[identical]: smoke v0.3.0 mode=identical vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+sabotage: sabotage PASS
+nogpu: nogpu NOT TESTED on this box
+source_e1_dir=bench/results/e1/2026-08-30_164040-runpod-nvidia/

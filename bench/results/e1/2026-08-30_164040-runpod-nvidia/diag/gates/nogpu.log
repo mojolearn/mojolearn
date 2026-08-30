@@ -1,0 +1,4 @@
+  env_hidden   import rc=0 IMPORTED cuda; fit rc=-11
+  namespace    NOT TESTED: unshare refused in this container
+  docker       NOT TESTED: no docker daemon here
+nogpu NOT TESTED on this box

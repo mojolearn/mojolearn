@@ -1,0 +1,109 @@
+[21:26:28 leg_diag] 1/5 build_sets
+[21:26:28 build_sets] repo /root/mojolearn, dest /root/mojolearn/bench/results/e1/2026-08-30_212625-mojolearn-e2-amd/diag/wheels, tiers: fast deterministic identical, jobs: 3
+[21:26:28 build_sets] pixi env: gbmbench
+[21:29:22 build_sets] builds finished in 174s (rc=0)
+[21:29:24 build_sets] vendor read-back per binary:
+    fast _mojolearn hip
+    fast _mojolearn_gbdt hip
+    fast _mojolearn_estimators hip
+    fast _mojolearn_rf hip
+    fast _mojolearn_trees hip
+    fast _mojolearn_svm hip
+    fast _mojolearn_solver hip
+    fast _mojolearn_metrics hip
+    fast _mojolearn_tsa hip
+    fast _mojolearn_linalg hip
+    deterministic _mojolearn hip
+    deterministic _mojolearn_gbdt hip
+    deterministic _mojolearn_estimators hip
+    deterministic _mojolearn_rf hip
+    deterministic _mojolearn_trees hip
+    deterministic _mojolearn_svm hip
+    deterministic _mojolearn_solver hip
+    deterministic _mojolearn_metrics hip
+    deterministic _mojolearn_tsa hip
+    deterministic _mojolearn_linalg hip
+    identical _mojolearn hip
+    identical _mojolearn_gbdt hip
+    identical _mojolearn_estimators hip
+    identical _mojolearn_rf hip
+    identical _mojolearn_trees hip
+    identical _mojolearn_svm hip
+    identical _mojolearn_solver hip
+    identical _mojolearn_metrics hip
+    identical _mojolearn_tsa hip
+    identical _mojolearn_linalg hip
+[21:29:24 build_sets] GPU architectures embedded, per binary:
+         30 gfx942
+[21:29:24 build_sets] architecture set: gfx942 
+[21:29:24 build_sets] architecture: gfx942 (requested: gfx942)
+[21:29:24 build_sets] vendor: hip
+[21:29:31 build_sets] patchelf: /usr/bin/patchelf
+[21:29:31 build_sets] pixi env lib: /root/mojolearn/.pixi/envs/gbmbench/lib
+  closure verified: 4 libraries, nothing unresolved
+  staged 4: libKGENCompilerRTShared.so, libAsyncRTMojoBindings.so, libMSupportGlobals.so, libAsyncRTRuntimeGlobals.so
+  driver libraries left to the box: none
+  extensions 42.4 MB, runtime libraries 3.2 MB, uncompressed set 45.6 MB
+vendor=hip
+arch=gfx942
+gpu_archs_requested=gfx942
+build_rc=0 stage_rc=0
+build_seconds=184
+set_fast_count=10
+set_fast_bytes=14189618
+set_deterministic_count=10
+set_deterministic_bytes=14193794
+set_identical_count=10
+set_identical_bytes=13985066
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=11476838
+[21:29:32 leg_diag] 2/5 assemble the package as the wheel will lay it out
+[21:29:32 leg_diag] 3/5 gate (a): smoke, every family, every tier
+      svc              ok   61d0cf360072c4b8     0.0s
+      tsvd             ok   a378f1007cb95451     0.0s
+    smoke v0.3.0 mode=fast vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
+      svc              ok   61d0cf360072c4b8     0.0s
+      tsvd             ok   a378f1007cb95451     0.0s
+    smoke v0.3.0 mode=deterministic vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
+      svc              ok   c982ba99909e46eb     0.0s
+      tsvd             ok   eb98ef49f9c747f0     0.0s
+    smoke v0.3.0 mode=identical vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
+[21:29:37 leg_diag] 4/5 gate (b): sabotage
+      baseline               PASS  rc=0  {"vendor": "hip", "how": "the box probe (device nodes and driver libraries)", "mode": "identical"}
+      wrong_label_ignored    PASS  rc=0  {"vendor": "hip", "how": "the box probe (device nodes and driver libraries)", "mode": "identical"}
+      forced_vendor_without_evidence PASS  rc=1  If the device really is present and this probe is wrong, MOJOLEARN_VENDOR_FORCE=1 proceeds and accepts that risk. Unset MOJOLEARN_VENDOR to let the probe c
+      wrong_label_refused    PASS  rc=1  ImportError: mojolearn: /root/mojolearn/bench/results/e1/2026-08-30_212625-mojolearn-e2-amd/diag/sabotage_scratch/wrong_label_refused/mojolearn/cuda/gfx942/identic
+      poisoned_ignored       PASS  rc=0  {"vendor": "hip", "how": "the box probe (device nodes and driver libraries)", "mode": "identical"}
+      poisoned_forced        PASS  rc=1  ImportError: mojolearn: MOJOLEARN_VENDOR=cuda but this install carries no cuda set under /root/mojolearn/bench/results/e1/2026-08-30_212625-mojolearn-e2-amd/diag/s
+      correct_set_removed    PASS  rc=1  A device node or a driver library for one of the sets above must be visible to this process. In a container that means the GPU is passed through (`--gpus all` for 
+      tier_mislabeled        PASS  rc=1  RuntimeError: mojolearn: the loaded gbdt binary was compiled fast but the selector loaded the deterministic set -- a binary is in the wrong directory; rebuild both
+    sabotage PASS
+[21:29:38 leg_diag] 5/5 gate (d): no GPU
+      env_hidden   import rc=0 IMPORTED hip; fit rc=1
+      namespace    PASS
+      docker       NOT TESTED: no docker daemon here
+    nogpu PASS
+vendor=hip  build_rc=0  smoke_rc=0  sabotage_rc=0  nogpu_rc=0
+seconds=190
+vendor=hip
+arch=gfx942
+gpu_archs_requested=gfx942
+build_rc=0 stage_rc=0
+build_seconds=184
+set_fast_count=10
+set_fast_bytes=14189618
+set_deterministic_count=10
+set_deterministic_bytes=14193794
+set_identical_count=10
+set_identical_bytes=13985066
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=11476838
+smoke[fast]: smoke v0.3.0 mode=fast vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
+smoke[deterministic]: smoke v0.3.0 mode=deterministic vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
+smoke[identical]: smoke v0.3.0 mode=identical vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
+sabotage: sabotage PASS
+nogpu: nogpu PASS

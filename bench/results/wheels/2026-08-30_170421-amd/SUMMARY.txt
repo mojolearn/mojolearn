@@ -1,0 +1,23 @@
+vendor=hip  build_rc=0  smoke_rc=0  sabotage_rc=1  nogpu_rc=0
+seconds=191
+vendor=hip
+arch=gfx942
+gpu_archs_requested=gfx942
+build_rc=0 stage_rc=0
+build_seconds=184
+set_fast_count=10
+set_fast_bytes=14189618
+set_deterministic_count=10
+set_deterministic_bytes=14193794
+set_identical_count=10
+set_identical_bytes=13985066
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=11477080
+smoke[fast]: smoke v0.3.0 mode=fast vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
+smoke[deterministic]: smoke v0.3.0 mode=deterministic vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
+smoke[identical]: smoke v0.3.0 mode=identical vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
+sabotage: sabotage FAIL
+nogpu: nogpu PASS
+source_e1_dir=bench/results/e1/2026-08-30_210858-mojolearn-e2-amd/

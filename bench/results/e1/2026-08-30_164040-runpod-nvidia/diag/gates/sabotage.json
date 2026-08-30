@@ -1,0 +1,87 @@
+{
+  "cases": {
+    "baseline": {
+      "expected_import_ok": true,
+      "pass": true,
+      "returncode": 0,
+      "stderr_head": "10575 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a0a00000000, nodemask=2)",
+      "stderr_tail": "10575 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a0a00000000, nodemask=2)",
+      "stdout": "{\"vendor\": \"cuda\", \"how\": \"the box probe (device nodes and driver libraries)\", \"mode\": \"identical\"}",
+      "substrings": {},
+      "vendor_reported": "cuda"
+    },
+    "correct_set_removed": {
+      "expected_import_ok": false,
+      "pass": true,
+      "returncode": 1,
+      "stderr_head": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json, mojolearn; from mojolearn import _backend; print(json.dumps({'vendor': mojolearn.vendor(), 'how': _backend.vendor_how(), 'mode': mojolearn.numeric_mode()}))\n    ^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_204136-cb738232293f/diag/sabotage_scratch/correct_set_removed/mojolearn/__init__.py\", line 76, in <module>\n    _backend.select()",
+      "stderr_tail": "    libamdhip64.so.7             not loadable\n    libamdhip64.so.6             not loadable\n    libamdhip64.so               not loadable\n  MOJOLEARN_VENDOR is not set.\n\nA device node or a driver library for one of the sets above must be visible to this process. In a container that means the GPU is passed through (`--gpus all` for NVIDIA, `--device /dev/kfd --device /dev/dri` for AMD). If the device is present and this probe is wrong, MOJOLEARN_VENDOR=cuda or MOJOLEARN_VENDOR=hip picks the directory directly and the first fit reports the runtime's own error.",
+      "stdout": "",
+      "substrings": {
+        "MOJOLEARN_VENDOR": true,
+        "NO SUPPORTED GPU FOUND": true,
+        "['hip']": true
+      },
+      "vendor_reported": null
+    },
+    "poisoned_forced": {
+      "expected_import_ok": false,
+      "pass": true,
+      "returncode": 1,
+      "stderr_head": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json, mojolearn; from mojolearn import _backend; print(json.dumps({'vendor': mojolearn.vendor(), 'how': _backend.vendor_how(), 'mode': mojolearn.numeric_mode()}))\n    ^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_204136-cb738232293f/diag/sabotage_scratch/poisoned_forced/mojolearn/__init__.py\", line 76, in <module>\n    _backend.select()",
+      "stderr_tail": "  File \"/root/mojolearn/bench/results/e1/2026-08-30_204136-cb738232293f/diag/sabotage_scratch/poisoned_forced/mojolearn/__init__.py\", line 76, in <module>\n    _backend.select()\n    ~~~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_204136-cb738232293f/diag/sabotage_scratch/poisoned_forced/mojolearn/_backend.py\", line 443, in select\n    module = importlib.util.module_from_spec(spec)\nImportError: /root/mojolearn/bench/results/e1/2026-08-30_204136-cb738232293f/diag/sabotage_scratch/poisoned_forced/mojolearn/hip/identical/_mojolearn.so: invalid ELF header",
+      "stdout": "",
+      "substrings": {},
+      "vendor_reported": null
+    },
+    "poisoned_ignored": {
+      "expected_import_ok": true,
+      "pass": true,
+      "returncode": 0,
+      "stderr_head": "11119 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b5640000000, nodemask=2)\n11119 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x703900000000, nodemask=1)",
+      "stderr_tail": "11119 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b5640000000, nodemask=2)\n11119 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x703900000000, nodemask=1)",
+      "stdout": "{\"vendor\": \"cuda\", \"how\": \"the box probe (device nodes and driver libraries)\", \"mode\": \"identical\"}",
+      "substrings": {},
+      "vendor_reported": "cuda"
+    },
+    "tier_mislabeled": {
+      "expected_import_ok": false,
+      "pass": true,
+      "returncode": 1,
+      "stderr_head": "11372 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x39a440000000, nodemask=2)\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json, mojolearn; from mojolearn import _backend; print(json.dumps({'vendor': mojolearn.vendor(), 'how': _backend.vendor_how(), 'mode': mojolearn.numeric_mode()}))\n                                                                                                                                                  ~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_204136-cb738232293f/diag/sabotage_scratch/tier_mislabeled/mojolearn/_backend.py\", line 718, in numeric_mode",
+      "stderr_tail": "                                                                                                                                                  ~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_204136-cb738232293f/diag/sabotage_scratch/tier_mislabeled/mojolearn/_backend.py\", line 718, in numeric_mode\n    raise RuntimeError(\n    ...<3 lines>...\n    )\nRuntimeError: mojolearn: the loaded gbdt binary was compiled fast but the selector loaded the deterministic set -- a binary is in the wrong directory; rebuild both sets",
+      "stdout": "",
+      "substrings": {
+        "compiled fast": true
+      },
+      "vendor_reported": null
+    },
+    "wrong_label_ignored": {
+      "expected_import_ok": true,
+      "pass": true,
+      "returncode": 0,
+      "stderr_head": "10788 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x139d80000000, nodemask=1)",
+      "stderr_tail": "10788 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x139d80000000, nodemask=1)",
+      "stdout": "{\"vendor\": \"cuda\", \"how\": \"the box probe (device nodes and driver libraries)\", \"mode\": \"identical\"}",
+      "substrings": {},
+      "vendor_reported": "cuda"
+    },
+    "wrong_label_refused": {
+      "expected_import_ok": false,
+      "pass": true,
+      "returncode": 1,
+      "stderr_head": "11001 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b6d00000000, nodemask=2)\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json, mojolearn; from mojolearn import _backend; print(json.dumps({'vendor': mojolearn.vendor(), 'how': _backend.vendor_how(), 'mode': mojolearn.numeric_mode()}))\n    ^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_204136-cb738232293f/diag/sabotage_scratch/wrong_label_refused/mojolearn/__init__.py\", line 76, in <module>",
+      "stderr_tail": "    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-30_204136-cb738232293f/diag/sabotage_scratch/wrong_label_refused/mojolearn/_backend.py\", line 337, in _check_vendor\n    raise ImportError(\n    ...<5 lines>...\n    )\nImportError: mojolearn: /root/mojolearn/bench/results/e1/2026-08-30_204136-cb738232293f/diag/sabotage_scratch/wrong_label_refused/mojolearn/hip/identical/_mojolearn.so was compiled for cuda but sits in the hip set (/root/mojolearn/bench/results/e1/2026-08-30_204136-cb738232293f/diag/sabotage_scratch/wrong_label_refused/mojolearn/hip); a binary is in the wrong vendor directory. The set is refused rather than loaded under a label it does not answer to. Rebuild the sets with packaging/linux/build_sets.sh on the right box and repack.",
+      "stdout": "",
+      "substrings": {
+        "compiled for cuda": true,
+        "wrong vendor directory": true
+      },
+      "vendor_reported": null
+    }
+  },
+  "ok": true,
+  "other": "hip",
+  "python": "pixi run -e gbmbench python3",
+  "vendor": "cuda"
+}
