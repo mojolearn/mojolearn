@@ -60,9 +60,13 @@ from std.sys.compile import is_defined
 #:
 #: Every site that used to hardcode `NUMERIC_FAST` now reads this, so the
 #: default is unchanged bit for bit and the other mode rebuilds the whole
-#: tree. Comptime, because the two modes are different code (a float atomic
-#: and a fixed-point accumulator are not one configured value), which is the
-#: same reason `TARGET_COLUMN` is a build rather than a flag.
+#: tree. **ONE SOURCE AND ONE FLAG. There is no per-tier code anywhere in
+#: this repository**: this constant is the tier, `PIN_DETERMINISM` and
+#: `PIN_CROSS_VENDOR` derive from it, every kernel reads those, and setting
+#: the define rebuilds the same source. It is comptime rather than a value
+#: read at run time because a tier changes the code that is EMITTED (a float
+#: atomic and a fixed-point accumulator are not one configured number), which
+#: is the same reason `TARGET_COLUMN` is set at build time.
 #:
 #: **A BUILD DEFINE SINCE 2026-08-23, NOT AN EDITED LINE.** It used to read
 #: `= NUMERIC_FAST` and every identity gate flipped it with sed and reverted
@@ -210,8 +214,8 @@ struct NumericMode(Copyable, Movable):
         Integer addition is associative, so a fixed-point flush is
         order-independent and therefore reproducible; a float atomic is not,
         and no ordering guarantee is available to make it so. This is the row
-        that cannot be a toggle over one implementation: the two modes run
-        different code.
+        that cannot be a value read at run time: one flag over one source, but
+        the two settings EMIT different code.
 
         **THIS IS THE DETERMINISM PIN, AND IT IS THE ONLY ONE IN THIS FILE'S
         REACH.** DEVIATION 1941, 2026-08-28. It used to return

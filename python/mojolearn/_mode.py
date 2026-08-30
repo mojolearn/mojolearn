@@ -16,13 +16,16 @@ It is now three things, and only the first is unchanged:
 The environment variable still works and still sets the STARTING default, so
 nothing written against the old spelling breaks.
 
-WHY THIS IS AN ATTRIBUTE LOOKUP AND NOT A REBIND. The three tiers are three
-different COMPILED binaries -- `PIN_DETERMINISM` and `PIN_CROSS_VENDOR` are
-comptime, which is what lets the fast build carry none of the pinning code at
-all rather than branching past it at runtime. So a parameter cannot switch a
-flag inside one binary; it has to select which binary answers the call. That
-is `_backend.load_set`, and every call site therefore has to ask for its
-binding at CALL TIME rather than binding a module-level name at import.
+WHY THIS IS AN ATTRIBUTE LOOKUP AND NOT A REBIND. **The three tiers are one
+source under one flag, not three implementations.** `GLOBAL_NUMERIC_MODE` in
+`mojo_only/numerics.mojo` is that flag; `PIN_DETERMINISM` and
+`PIN_CROSS_VENDOR` derive from it and every kernel reads those. But the flag
+is COMPTIME, which is what lets the fast build carry none of the pinning code
+at all rather than branching past it at run time, so the three settings are
+compiled and shipped side by side and a Python parameter selects among them
+rather than flipping anything inside one of them. That is
+`_backend.load_set`, and every call site therefore has to ask for its binding
+at CALL TIME rather than binding a module-level name at import.
 
 THAT THE TIERS COEXIST IS MEASURED (2026-08-29). Each `.so` carries its own
 Mojo runtime and opens its own device context, so "two of them in one process

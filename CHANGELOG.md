@@ -219,12 +219,15 @@ nothing written against the old spelling breaks. There is no extra to install,
 nothing to rebuild and nothing to reinstall: `pip install mojolearn` is the
 whole surface and it always was.
 
-WHY IT IS A BINDING LOOKUP AND NOT A FLAG. `PIN_DETERMINISM` and
-`PIN_CROSS_VENDOR` are comptime, which is what lets the fast build carry none
-of the pinning code rather than branch past it. So a parameter cannot flip
-something inside one binary; it selects WHICH BINARY answers, which is why
-every call site resolves through `self._bind()` at call time instead of
-binding a module-level name at import. The keyword is injected by
+WHY IT IS A BINDING LOOKUP AND NOT A RUNTIME FLAG. **The tier IS a flag, one
+flag over one source: `GLOBAL_NUMERIC_MODE` in `mojo_only/numerics.mojo`, from
+which `PIN_DETERMINISM` and `PIN_CROSS_VENDOR` derive. Nothing in this tree
+forks per tier.** That flag is comptime, which is what lets the fast build
+carry none of the pinning code rather than branch past it, so its three
+settings are compiled and shipped side by side and the Python parameter picks
+among them instead of flipping something inside one of them. That is why every
+call site resolves through `self._bind()` at call time instead of binding a
+module-level name at import. The keyword is injected by
 `__init_subclass__` rather than written into eleven constructor signatures,
 because eleven copies is eleven chances for one to drift silently -- an
 estimator that ignored the keyword would run the process default while
