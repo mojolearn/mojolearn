@@ -53,18 +53,26 @@ for the build target, and neither set carries any `cpuid` dispatch. The
 honest claim for 0.3.0 is that it runs on the architectures above.
 `bench/results/wheels/LEGS_2026-08-30.md` records this in full.
 
-**One known defect ships with this release, on the failure path only.**
-Setting `MOJOLEARN_VENDOR=hip` on a Linux box that has NO ROCm installed
-aborts the process during import instead of raising. Forcing `cuda` on a box
-with no CUDA behaves correctly: it imports and the first fit raises a clean
-Python exception naming the driver library it could not open. The refusal
-message offers this override and promises that the first fit reports the
-runtime's own error, and on the hip branch it does not. **This is not
-reachable with `MOJOLEARN_VENDOR` unset**, which is how the library is meant
-to be used: the box probe refuses first, with a table of every path and
-library it looked for. The ISA explanation was tested three ways and ruled
-out; both sets carry the same number of trap instructions and no runtime CPU
-dispatch.
+**A forced vendor whose runtime is absent no longer kills the process.**
+Setting `MOJOLEARN_VENDOR=hip` on a Linux box with NO ROCm installed used to
+abort during import with no traceback, while forcing `cuda` on a box with no
+CUDA behaved correctly, importing and then raising a clean Python exception
+at the first fit naming the driver library it could not open. The two vendors
+do not degrade alike, and the promise that the first fit reports the
+runtime's own error was kept on one branch and not the other.
+
+The selector now refuses a forced vendor for which the box shows no evidence
+at all, neither a device node nor a loadable driver library, and names what
+it looked for. The refusal is in Python, which is the only place a message
+survives a trap in the binary beneath it. It does not close the escape hatch,
+because the case that hatch exists for is a device that IS present and a
+probe that missed it, and such a box has that vendor's driver library
+loadable. `MOJOLEARN_VENDOR_FORCE=1` proceeds anyway and says it may abort.
+
+This was never reachable with `MOJOLEARN_VENDOR` unset, which is how the
+library is meant to be used. The ISA explanation was tested three ways and
+ruled out; both sets carry the same number of trap instructions and no
+runtime CPU dispatch.
 
 ### Tooling and gates
 

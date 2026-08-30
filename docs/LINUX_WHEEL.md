@@ -140,9 +140,29 @@ first fit, so nothing later would catch it.
 
 The order of trust is therefore what the binary says, then what the
 environment says, then what the box appears to have. `MOJOLEARN_VENDOR`
-cannot relabel a binary; it can only open the other directory on a box that
-does not have that device, and that fails at the first device call with the
-runtime's own error, which is the honest outcome for a forced wrong choice.
+cannot relabel a binary; it can only open the other directory.
+
+**This paragraph used to end "and that fails at the first device call with
+the runtime's own error, which is the honest outcome for a forced wrong
+choice". That was measured on 2026-08-30 and it is only half true.** In a
+container with no device of either kind, against the finished wheel:
+
+    MOJOLEARN_VENDOR=cuda   imports, and the first fit raises a clean Python
+                            exception naming libnvidia-ml.so.1
+    MOJOLEARN_VENDOR=hip    SIGILL during import, no traceback at all
+
+The hip binary's module init takes a trap when the HIP runtime library is
+absent entirely, so the promised runtime error never arrives and the process
+simply dies. The two vendors do not degrade alike.
+
+So the selector now REFUSES a forced vendor for which the box shows no
+evidence at all, neither a device node nor a loadable driver library, and
+says why. That refusal costs nothing real, because the case the override
+exists for is a device that IS present and a probe that missed it, and such a
+box has that vendor's driver library loadable, which is evidence.
+`MOJOLEARN_VENDOR_FORCE=1` proceeds anyway for a genuinely mis-probed box,
+and states that it may abort. The refusal is in Python, which is the only
+place a message survives a trap in the binary below it.
 
 ## 4. The read-back from the binary
 
@@ -223,7 +243,15 @@ finished 0.3.0 wheel (`bench/results/wheels/LEGS_2026-08-30.md`). Forcing a
 vendor whose device is absent is outside what this paragraph offers, so the
 message is not wrong, but the asymmetry is real and a user who mistypes the
 variable on the wrong box gets a crash from one branch and an error from the
-other. Making the hip path raise the way the cuda path does is owed.
+other.
+
+**FIXED 2026-08-30, in the selector rather than in the binary.** A forced
+vendor with no device node and no loadable driver library is refused in
+Python before anything is dlopened, naming what it looked for and offering
+`MOJOLEARN_VENDOR_FORCE=1` for a box whose device really is present and whose
+probe is wrong. Making the hip binary itself raise the way the cuda one does
+is still owed and belongs to MAX rather than to this package; the refusal
+above means a user no longer meets it by accident.
 
 ## 6. Build and pack
 
@@ -358,8 +386,10 @@ directories). What this section used to list as unknown, and what came back:
   same way. (The host CPU is NOT part of this question: the ISA theory
   raised on 2026-08-30 was tested three ways and is dead. See
   `bench/results/wheels/LEGS_2026-08-30.md`.)
-* **`MOJOLEARN_VENDOR=hip` aborts rather than raising when the HIP runtime
-  is absent entirely.** Forcing hip on a Linux box with no ROCm at all kills
+* ~~**`MOJOLEARN_VENDOR=hip` aborts rather than raising when the HIP runtime
+  is absent entirely.**~~ FIXED 2026-08-30 by refusing in the selector; see
+  section 3 and section 5. The original finding, kept because the measurement
+  stands and the underlying binary behaviour is unchanged: Forcing hip on a Linux box with no ROCm at all kills
   the process with SIGILL during module init, where forcing cuda on a box
   with no CUDA imports fine and then raises a clean Python exception at the
   first fit. Section 5's message offers exactly this override and promises

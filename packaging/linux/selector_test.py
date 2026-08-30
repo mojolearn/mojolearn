@@ -60,7 +60,8 @@ PASSES = []
 
 
 def _reset(pkg, probe_result, vendor_env=None,
-           device=(None, "not probed in this test"), arch_env=None):
+           device=(None, "not probed in this test"), arch_env=None,
+           force_env=None):
     """Point the selector at a fabricated install and a fabricated box.
 
     `_layout()` caches in module globals and reads three things it does
@@ -84,6 +85,10 @@ def _reset(pkg, probe_result, vendor_env=None,
         os.environ.pop("MOJOLEARN_GPU_ARCH", None)
     else:
         os.environ["MOJOLEARN_GPU_ARCH"] = arch_env
+    if force_env is None:
+        os.environ.pop("MOJOLEARN_VENDOR_FORCE", None)
+    else:
+        os.environ["MOJOLEARN_VENDOR_FORCE"] = force_env
 
 
 def _probe(cuda=False, hip=False):
@@ -277,13 +282,26 @@ def run_all(root):
     def _():
         pkg = _mkinstall(os.path.join(root, "g"),
                          vendors_with_binaries=("cuda", "hip"))
-        # The box looks like NVIDIA; the user says hip. Section 3: the env
-        # can "only open the other directory on a box that does not have
-        # that device", and the first device call is what fails.
+        # The box looks like NVIDIA; the user says hip. Section 3 USED TO
+        # promise that this opens the hip directory and "the first device
+        # call is what fails". IT DOES NOT FAIL, IT KILLS THE PROCESS.
+        # Measured 2026-08-30 against the finished 0.3.0 wheel in a container
+        # with no device of either kind: forcing cuda imports and then raises
+        # a clean Python exception at the first fit, naming libnvidia-ml.so.1,
+        # while forcing hip takes a SIGILL during import with no traceback at
+        # all. So a forced vendor with no evidence whatsoever is refused in
+        # Python, where the message survives.
         _reset(pkg, _probe(cuda=True), vendor_env="hip")
+        expect_import_error(B._layout, [
+            "MOJOLEARN_VENDOR=hip", "NO evidence", "/dev/kfd",
+            "KILL THIS PROCESS", "MOJOLEARN_VENDOR_FORCE=1"])
+
+        # The escape hatch still opens, and says so explicitly.
+        _reset(pkg, _probe(cuda=True), vendor_env="hip", force_env="1")
         _, base = B._layout()
         assert os.path.basename(base) == "hip", (
-            "MOJOLEARN_VENDOR=hip did not beat a cuda-looking box: %r" % base)
+            "MOJOLEARN_VENDOR_FORCE=1 did not open the hip directory, so the "
+            "override that the refusal advertises does not work: %r" % base)
 
         # SABOTAGE: unset it and the same box must go back to cuda.
         _reset(pkg, _probe(cuda=True))
@@ -312,7 +330,9 @@ def run_all(root):
     def _():
         pkg = _mkinstall(os.path.join(root, "j"),
                          vendors_with_binaries=("cuda", "hip"))
-        _reset(pkg, _probe(cuda=True), vendor_env="  HIP  ")
+        # hip=True so this case tests CASE HANDLING and not the no-evidence
+        # refusal, which has its own case above.
+        _reset(pkg, _probe(hip=True), vendor_env="  HIP  ")
         _, base = B._layout()
         assert os.path.basename(base) == "hip", (
             "'  HIP  ' was not accepted; a user who exports it with a "

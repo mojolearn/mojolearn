@@ -267,9 +267,20 @@ def _probe_box():
     return out
 
 
-def _probe_lines(probe):
+def _force_requested():
+    """MOJOLEARN_VENDOR_FORCE, read the way a shell user would expect. Anything
+    other than these spellings is NOT a request to override, because a
+    misspelled override that silently engages is the same defect as no
+    override at all."""
+    return os.environ.get("MOJOLEARN_VENDOR_FORCE", "").strip().lower() in (
+        "1", "true", "yes", "on")
+
+
+def _probe_lines(probe, only=None):
+    """The probe table. `only` narrows it to one vendor, for a refusal that is
+    about that vendor alone."""
     lines = []
-    for v in _LINUX_VENDORS:
+    for v in (_LINUX_VENDORS if only is None else (only,)):
         r = probe[v]
         lines.append(f"  {v}:")
         for p, ok in r["paths"].items():
@@ -515,6 +526,46 @@ def _layout():
                 f"mojolearn: MOJOLEARN_VENDOR={forced} but this install "
                 f"carries no {forced} set under {os.path.join(pkg, forced)}; "
                 f"it carries {present}"
+            )
+        # A FORCED VENDOR WHOSE RUNTIME IS NOT ON THIS BOX AT ALL KILLS THE
+        # PROCESS. Measured 2026-08-30 against the finished 0.3.0 wheel, in a
+        # container with no device of either kind:
+        #
+        #   MOJOLEARN_VENDOR=cuda   imports, and the FIRST FIT raises a clean
+        #                           Python exception naming libnvidia-ml.so.1
+        #   MOJOLEARN_VENDOR=hip    SIGILL during import, no traceback at all
+        #
+        # The two vendors do not degrade alike. The hip binary's module init
+        # takes a trap when the HIP runtime library is absent, so a user who
+        # mistypes this variable, or sets it on the wrong box, gets a dead
+        # process and nothing to read. Refusing here, in Python, is the only
+        # place a message survives.
+        #
+        # THIS DOES NOT CLOSE THE ESCAPE HATCH the no-GPU refusal offers. That
+        # hatch is for "the device IS present and this probe is wrong", and a
+        # box with the device present has that vendor's driver library
+        # loadable, which is exactly what `found` means. Only the case with no
+        # device node AND no loadable driver library is refused, which is the
+        # case that cannot work whatever the binary does.
+        # MOJOLEARN_VENDOR_FORCE=1 proceeds anyway, for a box where the probe
+        # is wrong about a device that really is there. It says plainly that
+        # it may abort, because on the hip branch it may.
+        probe = _probe_box()
+        if not probe[forced]["found"] and not _force_requested():
+            raise ImportError(
+                f"mojolearn: MOJOLEARN_VENDOR={forced}, but this box shows NO "
+                f"evidence of a {forced} device. Neither a device node nor a "
+                f"driver library was found:\n"
+                + "\n".join(_probe_lines(probe, only=forced))
+                + f"\n\nLoading the {forced} set anyway can KILL THIS PROCESS "
+                "rather than raise: measured 2026-08-30, forcing hip on a box "
+                "with no ROCm aborts during import with no traceback, while "
+                "forcing cuda on a box with no CUDA raises a normal exception "
+                "at the first fit. The two are not alike and this refusal is "
+                "the one that survives.\n"
+                "If the device really is present and this probe is wrong, "
+                "MOJOLEARN_VENDOR_FORCE=1 proceeds and accepts that risk. "
+                "Unset MOJOLEARN_VENDOR to let the probe choose."
             )
         base = _vendor_base(pkg, forced)
         _VENDOR_SELECTED = forced
