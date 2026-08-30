@@ -1,0 +1,6 @@
+pod=tbv912ag9442ik
+armed=1
+terminated=1
+deadman_pid=35121
+exit=1
+at=2026-08-30T22:34:40Z

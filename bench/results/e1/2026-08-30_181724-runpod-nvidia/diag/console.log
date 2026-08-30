@@ -1,0 +1,18 @@
+[22:33:01 leg_install] venv route: python3 -m venv
+[22:33:04 leg_install] clean venv at /root/mojolearn-smoke-venv (Python 3.11.10)
+    Installing collected packages: numpy, mojolearn
+    Successfully installed mojolearn-0.3.0 numpy-2.4.6
+    
+    [notice] A new release of pip is available: 24.0 -> 26.2.1
+    [notice] To update, run: python3 -m pip install --upgrade pip
+[22:33:56 leg_install] installed mojolearn==0.3.0 from pypi; vendor read back: cuda
+      tsvd             ok   fc6b09661f624bee     0.0s
+    smoke v0.3.0 mode=fast vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+      tsvd             ok   fc6b09661f624bee     0.0s
+    smoke v0.3.0 mode=deterministic vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+      tsvd             ok   eb98ef49f9c747f0     0.0s
+    smoke v0.3.0 mode=identical vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+index=pypi version=0.3.0 vendor=cuda smoke_rc=0
+smoke[fast]: smoke v0.3.0 mode=fast vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+smoke[deterministic]: smoke v0.3.0 mode=deterministic vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+smoke[identical]: smoke v0.3.0 mode=identical vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS

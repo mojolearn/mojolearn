@@ -1,0 +1,4 @@
+index=pypi version=0.3.0 vendor=cuda smoke_rc=0
+smoke[fast]: smoke v0.3.0 mode=fast vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+smoke[deterministic]: smoke v0.3.0 mode=deterministic vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+smoke[identical]: smoke v0.3.0 mode=identical vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS

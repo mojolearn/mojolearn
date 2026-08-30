@@ -1,0 +1,59 @@
+
+=== provenance === 22:18:56
+250644a08cb19841391c540a56b2b8ba487929ab
+Linux fd8620580dbd 6.8.0-107-generic #107~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Wed Mar 18 23:40:43 UTC  x86_64 x86_64 x86_64 GNU/Linux
+
+=== pixi === 22:18:56
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 22:33:01
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 22:33:01
+phase 9: DIAG ONLY (MOJOLEARN_P9_ONLY_DIAG=1); no builds, no arms, no probes here
+phase 9 builds: <none>
+phase 9 tiers:  <none>
+concurrent probe SKIPPED: needs all three tiers, P9_TIERS=<none>
+
+=== phase 9 diag: packaging/linux/leg_diag_install.sh === 22:33:01
+    [22:33:01 leg_install] venv route: python3 -m venv
+    [22:33:04 leg_install] clean venv at /root/mojolearn-smoke-venv (Python 3.11.10)
+        Installing collected packages: numpy, mojolearn
+        Successfully installed mojolearn-0.3.0 numpy-2.4.6
+        
+        [notice] A new release of pip is available: 24.0 -> 26.2.1
+        [notice] To update, run: python3 -m pip install --upgrade pip
+    [22:33:56 leg_install] installed mojolearn==0.3.0 from pypi; vendor read back: cuda
+          tsvd             ok   fc6b09661f624bee     0.0s
+        smoke v0.3.0 mode=fast vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+          tsvd             ok   fc6b09661f624bee     0.0s
+        smoke v0.3.0 mode=deterministic vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+          tsvd             ok   eb98ef49f9c747f0     0.0s
+        smoke v0.3.0 mode=identical vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+    index=pypi version=0.3.0 vendor=cuda smoke_rc=0
+    smoke[fast]: smoke v0.3.0 mode=fast vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+    smoke[deterministic]: smoke v0.3.0 mode=deterministic vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+    smoke[identical]: smoke v0.3.0 mode=identical vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+
+=== done === 22:34:17
+artifacts in /root/mojolearn/bench/results/e1/2026-08-30_221856-fd8620580dbd
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card
