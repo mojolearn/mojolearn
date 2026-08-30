@@ -38,8 +38,12 @@ The cases, with `V` the box's vendor and `W` the other one:
                         FAST binary. The existing tier read-back must
                         refuse it on the new layout too.
 
-Each case records the exit status, the last line of stderr and whether
+Each case records the exit status, the head and tail of stderr and whether
 the expected substrings appeared. Exit 0 only if every case behaved.
+
+THE SUBSTRING MATCH READS THE WHOLE stderr and the RECORD keeps only a
+bounded head and tail. It was the other way round until 2026-08-30 and that
+cost a false FAIL on `correct_set_removed`; see `run_import`.
 """
 
 import argparse
@@ -71,9 +75,23 @@ def run_import(python, pkgroot, env_extra):
     cmd = shlex.split(python) + ["-c", PROBE_SNIPPET]
     r = subprocess.run(cmd, env=env, capture_output=True, text=True,
                        cwd=str(pkgroot), timeout=600)
-    err_tail = "\n".join(r.stderr.strip().splitlines()[-6:])
+    # THE WHOLE stderr, not the last six lines.
+    #
+    # 2026-08-30, the first NVIDIA wheel leg: `correct_set_removed` FAILED
+    # while the library behaved exactly as gate (b) specifies. The refusal
+    # fired, rc was 1, and it was the right refusal -- but this function
+    # returned only the final six lines, and the two substrings the case
+    # asserts, "NO SUPPORTED GPU FOUND" and "['hip']", are in the FIRST line
+    # of a message whose probe table alone is fourteen lines long. The check
+    # searched a window that could not contain what it was looking for.
+    #
+    # A gate that truncates its evidence before testing it does not merely
+    # produce a false alarm. It would also MISS a real regression whose only
+    # symptom is in the head -- a refusal that stopped naming which sets are
+    # carried would still show the same closing paragraph and still pass.
+    # So the match is against everything and only the REPORT is trimmed.
     out_last = r.stdout.strip().splitlines()[-1] if r.stdout.strip() else ""
-    return r.returncode, out_last, err_tail
+    return r.returncode, out_last, r.stderr
 
 
 def main():
@@ -100,6 +118,8 @@ def main():
         rc, out, err = run_import(a.python, root, env_extra)
         ok = (rc == 0) == expect_ok
         found = {s: (s in err or s in out) for s in expect_substrings}
+        # `err` is now the complete stderr; the record keeps a bounded tail
+        # so a leg's JSON does not carry a megabyte of traceback.
         ok = ok and all(found.values())
         got_vendor = None
         if rc == 0 and out:
@@ -110,7 +130,9 @@ def main():
         if expect_vendor is not None:
             ok = ok and got_vendor == expect_vendor
         results[name] = {"pass": ok, "returncode": rc, "expected_import_ok": expect_ok,
-                         "stdout": out, "stderr_tail": err, "substrings": found,
+                         "stdout": out, "substrings": found,
+                         "stderr_tail": "\n".join(err.strip().splitlines()[-6:]),
+                         "stderr_head": "\n".join(err.strip().splitlines()[:6]),
                          "vendor_reported": got_vendor}
         last = out or (err.splitlines()[-1] if err else "")
         print(f"  {name:<22} {'PASS' if ok else 'FAIL'}  rc={rc}  {last}"[:200])

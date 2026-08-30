@@ -18,6 +18,21 @@ looking for.
 THREE ASSERTIONS PER RUN, and a lane that refuses is a FAILURE here, not a
 row: this is a release gate, not a measurement.
 
+ONE EXCEPTION, AND IT IS AN ASSERTION RATHER THAN AN EXEMPTION. `gemm-pinned`
+asks `linalg.matmul(..., identical=True)`, and under `fast` and
+`deterministic` the library REFUSES it by name, because those tiers make no
+cross-vendor claim and returning a product anyway would be the library
+asserting something it cannot honour. `repeat_run_stability.py`'s own lane
+says so: "REFUSED under fast, which is the correct answer and is reported
+rather than skipped."
+
+The first NVIDIA wheel leg (2026-08-30) failed the fast and deterministic
+smokes on exactly this, 28 of 29 lanes green, and the one red one was the
+library behaving correctly. So `DESIGNED_REFUSALS` below inverts the test for
+those pairs instead of skipping them: the lane must RAISE, and a lane that
+SUCCEEDS is the failure. A skip would have hidden a library that quietly
+started honouring an identity request under a tier that cannot keep it.
+
   1. `mojolearn.numeric_mode()` reads back the tier that was asked for.
   2. `mojolearn.vendor()` reads back the vendor the box is (`--vendor`),
      and `_backend.vendor_how()` says how it was decided.
@@ -36,6 +51,15 @@ import pathlib
 import sys
 import time
 import traceback
+
+
+#: (lane, tier) pairs where the library is REQUIRED to refuse. See the
+#: module docstring. `gemm-pinned` calls matmul(identical=True); only the
+#: `identical` tier may answer it.
+DESIGNED_REFUSALS = {
+    ("gemm-pinned", "fast"),
+    ("gemm-pinned", "deterministic"),
+}
 
 
 def load_lanes(repo):
@@ -120,17 +144,37 @@ def main():
     names = [n for n in sorted(lanes) if not a.lanes or n in a.lanes.split(",")]
     for name in names:
         t0 = time.time()
+        must_refuse = (name, mode) in DESIGNED_REFUSALS
         try:
             h = lanes[name](ml)
-            report["lanes"][name] = {"ok": True, "hash": h,
-                                     "seconds": round(time.time() - t0, 2)}
-            print(f"  {name:<16} ok   {h}  {time.time()-t0:6.1f}s")
+            if must_refuse:
+                # The library answered a question this tier is not allowed
+                # to answer. That is worse than a lane failing.
+                msg = (f"lane {name} RETURNED a result under mode={mode}, "
+                       f"where it must refuse: this tier makes no "
+                       f"cross-vendor claim and the pinned product asserts "
+                       f"one")
+                report["lanes"][name] = {"ok": False, "error": msg,
+                                         "designed_refusal": True,
+                                         "seconds": round(time.time() - t0, 2)}
+                failures.append(msg)
+                print(f"  {name:<16} FAIL {msg[:120]}")
+            else:
+                report["lanes"][name] = {"ok": True, "hash": h,
+                                         "seconds": round(time.time() - t0, 2)}
+                print(f"  {name:<16} ok   {h}  {time.time()-t0:6.1f}s")
         except Exception as exc:
             tb = traceback.format_exc().splitlines()[-1]
-            report["lanes"][name] = {"ok": False, "error": tb,
-                                     "seconds": round(time.time() - t0, 2)}
-            failures.append(f"lane {name}: {tb}")
-            print(f"  {name:<16} FAIL {tb[:120]}")
+            if must_refuse:
+                report["lanes"][name] = {"ok": True, "refused": tb,
+                                         "designed_refusal": True,
+                                         "seconds": round(time.time() - t0, 2)}
+                print(f"  {name:<16} ok   REFUSED as designed under {mode}")
+            else:
+                report["lanes"][name] = {"ok": False, "error": tb,
+                                         "seconds": round(time.time() - t0, 2)}
+                failures.append(f"lane {name}: {tb}")
+                print(f"  {name:<16} FAIL {tb[:120]}")
 
     report["failures"] = failures
     report["ok"] = not failures
