@@ -566,6 +566,12 @@ P9_ONLY_DIAG="${MOJOLEARN_GEMM_LEG_P9_ONLY_DIAG:-0}"
 P9_DIAG_TIMEOUT="${MOJOLEARN_GEMM_LEG_P9_DIAG_TIMEOUT:-2400}"
 WHEEL_VERSION="${MOJOLEARN_WHEEL_VERSION:-}"
 WHEEL_INDEX="${MOJOLEARN_WHEEL_INDEX:-testpypi}"
+# MOJOLEARN_GPU_ARCHS reaches bindings/build.sh on the box and decides which
+# GPU architectures a set is compiled for. Unset means "the build box's own
+# device and nothing else", which is what shipped in 0.3.0 and what made a
+# wheel that only runs on an H100. Recorded in leg.txt so a set's coverage is
+# a property of the leg record and not of somebody's shell history.
+GPU_ARCHS="${MOJOLEARN_GPU_ARCHS:-}"
 # DEVIATION 973: which phase-8 lanes the box runs. Empty means all of them.
 # Leg 12 proved the need: the lane order puts mamba LAST behind gemm's device
 # check, the largest compile in the set, so on a cold box mamba was never
@@ -2362,12 +2368,15 @@ MOJOLEARN_WHEEL_VERSION="@WHEELVERSION@"
 [ -n "$MOJOLEARN_WHEEL_VERSION" ] && export MOJOLEARN_WHEEL_VERSION || unset MOJOLEARN_WHEEL_VERSION
 MOJOLEARN_WHEEL_INDEX="@WHEELINDEX@"
 export MOJOLEARN_WHEEL_INDEX
+MOJOLEARN_GPU_ARCHS="@GPUARCHS@"
+[ -n "$MOJOLEARN_GPU_ARCHS" ] && export MOJOLEARN_GPU_ARCHS || unset MOJOLEARN_GPU_ARCHS
 {
     echo "p9_only_diag=$MOJOLEARN_P9_ONLY_DIAG"
     echo "p9_diag=${MOJOLEARN_P9_DIAG:-}"
     echo "p9_diag_timeout=$MOJOLEARN_P9_DIAG_TIMEOUT"
     echo "wheel_version=${MOJOLEARN_WHEEL_VERSION:-}"
     echo "wheel_index=$MOJOLEARN_WHEEL_INDEX"
+    echo "gpu_archs=${MOJOLEARN_GPU_ARCHS:-<build box's own device only>}"
 } >> "$OUT/leg.txt"
 MOJOLEARN_P9_VENDOR="nvidia-$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 | tr ' ' '-' | tr -d ',')"
 export MOJOLEARN_P9_VENDOR
@@ -3182,6 +3191,7 @@ leg_check_remote_body() {
         -e "s|@P9DIAGTIMEOUT@|$P9_DIAG_TIMEOUT|g" \
         -e "s|@WHEELVERSION@|$WHEEL_VERSION|g" \
         -e "s|@WHEELINDEX@|$WHEEL_INDEX|g" \
+        -e "s|@GPUARCHS@|$GPU_ARCHS|g" \
         -e "s|@SMI@|$SMI_CMD|g" \
         "$_body" > "$_body.subst"
     mv "$_body.subst" "$_body"

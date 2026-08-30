@@ -123,6 +123,49 @@ PY
 done
 say "vendor read-back per binary:"
 sed 's/^/    /' "$READBACK"
+
+# ------------------------------------------------- ARCHITECTURE READ-BACK
+# WHICH GPU ARCHITECTURES ARE ACTUALLY IN THESE BINARIES.
+#
+# The vendor read-back above proves a binary was compiled FOR NVIDIA. It says
+# nothing about WHICH NVIDIA, and on 2026-08-30 that gap shipped: a set built
+# on an H100 carried `sm_90a` and nothing else, installed cleanly on an A40,
+# and then failed 27 of 29 lanes with CUDA_ERROR_NO_BINARY_FOR_GPU. Nothing
+# in this script noticed, because every check it had was green.
+#
+# The architectures are read straight out of the binary with `strings`, which
+# needs no CUDA or ROCm tool and works for both vendors. An EMPTY answer is
+# the loudest result of the three: it means the binary has no device code at
+# all, which is exactly what `--target-accelerator` does on Metal (measured
+# 2026-08-21) and what MOJOLEARN_GPU_ARCHS might therefore do here.
+ARCHBACK="$DEST/arch_readback.txt"
+: > "$ARCHBACK"
+arch_of() {
+  { strings -a "$1" 2>/dev/null || tr -c '[:print:]' '\n' < "$1"; } \
+    | grep -oE '\b(sm_[0-9]+[a-z]*|compute_[0-9]+[a-z]*|gfx[0-9a-f]+)\b' \
+    | sort -u | tr '\n' ',' | sed 's/,$//'
+}
+for t in $TIERS; do
+  case "$t" in fast) d=python/mojolearn ;; *) d=python/mojolearn/$t ;; esac
+  for n in $EXT_NAMES; do
+    so="$d/$n.so"
+    [ -f "$so" ] || { echo "$t $n MISSING" >> "$ARCHBACK"; continue; }
+    a=$(arch_of "$so")
+    echo "$t $n ${a:-NONE}" >> "$ARCHBACK"
+  done
+done
+say "GPU architectures embedded, per binary:"
+awk '{print $3}' "$ARCHBACK" | sort | uniq -c | sort -rn | sed 's/^/    /'
+ARCH_SET=$(awk '$3!="MISSING"{print $3}' "$ARCHBACK" | sort -u | tr '\n' ' ')
+if awk '$3=="NONE"{found=1} END{exit !found}' "$ARCHBACK"; then
+  say "REFUSING: at least one binary names NO GPU architecture, so it carries"
+  say "  no device code. If MOJOLEARN_GPU_ARCHS is set, this is the Metal"
+  say "  behaviour reproducing on this vendor: passing --target-accelerator"
+  say "  suppressed ahead-of-time compilation. Unset it and rebuild."
+  awk '$3=="NONE"{print "    " $1 " " $2}' "$ARCHBACK" | head -5
+  exit 4
+fi
+say "architecture set: $ARCH_SET"
 VENDORS=$(awk '$3!="MISSING"{print $3}' "$READBACK" | sort -u | tr '\n' ' ')
 VENDOR=$(echo "$VENDORS" | awk '{print $1}')
 case "$VENDORS" in

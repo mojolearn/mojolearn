@@ -167,6 +167,39 @@ LINK_FLAGS="-Xlinker -platform_version -Xlinker macos -Xlinker $MACOS_FLOOR -Xli
 # the banner says so at build time rather than in a comment nobody reads.
 TARGET_FLAGS="--target-cpu apple-m1"
 [ "$(uname)" = "Darwin" ] || TARGET_FLAGS=""
+
+# MOJOLEARN_GPU_ARCHS: the GPU architectures a LINUX set is compiled for.
+#
+# WHY THIS EXISTS. On 2026-08-30 the 0.3.0 Linux wheel was installed from
+# TestPyPI onto an NVIDIA A40 and 27 of 29 smoke lanes failed with
+# CUDA_ERROR_NO_BINARY_FOR_GPU. The set had been built on an H100 and
+# `strings` on the shipped binary says why: `sm_90a` appears 55 times and NO
+# OTHER ARCHITECTURE APPEARS AT ALL, with no `compute_NN` PTX either, so
+# there is not even a JIT fallback. The hip set is the same shape with
+# `gfx942`. Without this flag MAX compiles for the BUILD BOX'S OWN DEVICE and
+# nothing else, which makes a wheel that only runs on the machine that built
+# it. `sm_90a` is narrower still than `sm_90`: the `a` suffix means
+# architecture-specific.
+#
+# READ THE PARAGRAPH ABOVE BEFORE SETTING THIS. On Apple, measured
+# 2026-08-21, passing `--target-accelerator` AT ALL -- right value or wrong
+# -- suppresses ahead-of-time Metal compilation and yields ZERO kernels. That
+# was measured for Metal and it is NOT known to generalise to CUDA or HIP, so
+# this variable is OPT-IN, is ignored on Darwin, and whether it helps or
+# silently empties a set must be MEASURED on the box by reading the
+# architectures back out of the built binary. `build_sets.sh` does that read
+# and records it in the manifest; a set whose binaries name no architecture
+# is a set with no kernels in it, however green the build log looks.
+#
+#   MOJOLEARN_GPU_ARCHS="sm_80,sm_86,sm_89,sm_90"   NVIDIA
+#   MOJOLEARN_GPU_ARCHS="gfx90a,gfx942"             AMD
+if [ -n "${MOJOLEARN_GPU_ARCHS:-}" ] && [ "$(uname)" != "Darwin" ]; then
+    TARGET_FLAGS="$TARGET_FLAGS --target-accelerator $MOJOLEARN_GPU_ARCHS"
+    echo "!! MOJOLEARN_GPU_ARCHS=$MOJOLEARN_GPU_ARCHS"
+    echo "!! --target-accelerator is being passed. On Metal this flag empties"
+    echo "!! the binary of kernels (measured 2026-08-21). READ THE EMBEDDED"
+    echo "!! ARCHITECTURES BACK out of the .so before trusting this build."
+fi
 if [ "${MOJOLEARN_ALLOW_NO_GPU:-0}" = "1" ]; then
     TARGET_FLAGS="$TARGET_FLAGS --target-accelerator apple-m1"
     echo "!! MOJOLEARN_ALLOW_NO_GPU=1: pinning --target-accelerator apple-m1."
