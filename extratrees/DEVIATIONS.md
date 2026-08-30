@@ -3966,3 +3966,16 @@ whole-fit AMD ET speed claim in either direction is not supportable from
 this repository's evidence today. The Apple and NVIDIA columns are OWED a
 `MOJOLEARN_STAGE_TIMES=1` run of the same fit, because the push is host
 code and has no reason to be vendor-specific.
+
+**RUN OWED, and it is one command.** The env pass-through is fixed, so the
+old-vs-HEAD arm is now a single MI325X leg, unrun as of 2026-08-29:
+
+    E2_LANE_WAVES=et-profile \
+    ET_PROFILE_ARMS=shipped \
+    ET_PROFILE_OLD_COMMIT=4f6a17a \
+    nohup bash tools/e2_remote_leg.sh amd <token_file> &
+
+It answers one question and nothing else: does the 18294 ms row reproduce at
+4f6a17a on the SAME box as HEAD. Either it does, and the regression is real
+and bisectable, or it does not, and the row is retracted in this file and in
+every board that carries it, in that leg's commit.
