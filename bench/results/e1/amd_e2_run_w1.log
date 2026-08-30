@@ -1,9 +1,9 @@
 
-=== provenance === 21:17:14
-bd26d0922965901c89c3688fb010ea81d06902bd
+=== provenance === 07:30:15
+539228de91709e5fd4382ec17490549ebc1cf3c3
 Linux mojolearn-e2-amd 6.8.0-59-generic #61-Ubuntu SMP PREEMPT_DYNAMIC Fri Apr 11 23:16:11 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
 
-=== pixi === 21:17:14
+=== pixi === 07:30:15
 This script will automatically download and install Pixi (latest) for you.
 Getting it from this url: https://github.com/prefix-dev/pixi/releases/latest/download/pixi-x86_64-unknown-linux-musl.tar.gz
 The 'pixi' binary is installed into '/root/.pixi/bin'
@@ -11,30 +11,57 @@ Updating '/root/.bashrc'
 Please restart or source your shell.
 ✔ The default environment has been installed.
 
-=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 21:17:17
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 07:30:18
 
-=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=none) ===
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
 
-=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=none) ===
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
 
-=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=none) ===
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
 
-=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=none) ===
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
 
-=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=none) ===
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
 
-=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=none) ===
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
 
-=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=none) ===
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
 
-=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=none) ===
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
 
-=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=none) ===
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
 
-=== phase 9 SKIPPED (MOJOLEARN_E1_PHASES=none) ===
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 07:30:18
+phase 9: DIAG ONLY (MOJOLEARN_P9_ONLY_DIAG=1); no builds, no arms, no probes here
+phase 9 builds: <none>
+phase 9 tiers:  <none>
+concurrent probe SKIPPED: needs all three tiers, P9_TIERS=<none>
 
-=== done === 21:17:17
-artifacts in /root/mojolearn/bench/results/e1/2026-08-29_211714-mojolearn-e2-amd
+=== phase 9 diag: packaging/linux/leg_diag.sh === 07:30:18
+PHASE9-FINDING: diag script returned non-zero (see diag/console.log)
+        deterministic _mojolearn_trees hip
+        deterministic _mojolearn_svm hip
+        deterministic _mojolearn_solver hip
+        deterministic _mojolearn_metrics hip
+        deterministic _mojolearn_tsa hip
+        deterministic _mojolearn_linalg hip
+        identical _mojolearn hip
+        identical _mojolearn_gbdt hip
+        identical _mojolearn_estimators hip
+        identical _mojolearn_rf hip
+        identical _mojolearn_trees hip
+        identical _mojolearn_svm hip
+        identical _mojolearn_solver hip
+        identical _mojolearn_metrics hip
+        identical _mojolearn_tsa hip
+        identical _mojolearn_linalg hip
+    [07:33:14 build_sets] vendor: hip
+    [07:33:14 build_sets] could not install patchelf (see build_logs/tools_venv.log)
+    [07:33:14 build_sets] no patchelf; the set is built but NOT staged
+    [07:33:14 leg_diag] no vendor in SIZES.txt; stopping
+
+=== done === 07:33:14
+artifacts in /root/mojolearn/bench/results/e1/2026-08-30_073015-mojolearn-e2-amd
 next: fetch this directory beside the other machine's and run
   python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
   python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card
