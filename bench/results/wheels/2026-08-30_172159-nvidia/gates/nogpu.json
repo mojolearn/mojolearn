@@ -1,0 +1,32 @@
+{
+  "docker": {
+    "verdict": "NOT TESTED: no docker daemon here"
+  },
+  "env_hidden": {
+    "fit_err": "14961 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x39ba40000000, nodemask=2)",
+    "fit_out": "",
+    "fit_rc": -11,
+    "import_err": "14677 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x386d00000000, nodemask=2)",
+    "import_out": "IMPORTED cuda",
+    "import_rc": 0,
+    "verdict": "IMPORTED (expected: the probe reads device nodes, not these variables)"
+  },
+  "namespace": {
+    "err": "unshare: unshare failed: Operation not permitted",
+    "found": {
+      "/dev/nvidia0": false,
+      "/dev/nvidiactl": false,
+      "MOJOLEARN_VENDOR": false,
+      "NO SUPPORTED GPU FOUND": false
+    },
+    "hidden": [
+      "/dev/nvidiactl",
+      "/lib/x86_64-linux-gnu/libcuda.so",
+      "/lib/x86_64-linux-gnu/libcuda.so.1"
+    ],
+    "out": "",
+    "rc": 1,
+    "verdict": "NOT TESTED: unshare refused in this container"
+  },
+  "summary": "NOT TESTED on this box"
+}

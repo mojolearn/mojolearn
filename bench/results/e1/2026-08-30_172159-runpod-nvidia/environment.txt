@@ -1,0 +1,4 @@
+recorded_at=2026-08-30T21:23:42Z
+uname=Linux 32397bee68bd 6.8.0-85-generic #85~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Fri Sep 19 16:18:59 UTC 2 x86_64 x86_64 x86_64 GNU/Linux
+python=Python 3.11.10
+numpy=1.26.3
