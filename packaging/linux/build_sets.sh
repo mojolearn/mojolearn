@@ -148,17 +148,75 @@ done
 cp "$READBACK" "$SET/readback.txt"
 
 # ---------------------------------------------------------------- stage
-# patchelf from PyPI into a throwaway venv: the images do not ship it and
-# the pixi environments cannot be re-solved from here.
+# PATCHELF, FOUR WAYS, BECAUSE ONE WAY LOST A WHOLE AMD LEASE.
+#
+# 2026-08-30: the first end-to-end AMD leg built all thirty extensions in
+# 174 s, read `hip` back from every one of them, and then died here, because
+# this block had exactly one strategy and the DigitalOcean gpu-mi325x1 image
+# does not ship `ensurepip`:
+#
+#   The virtual environment was not created successfully because ensurepip
+#   is not available. On Debian/Ubuntu systems, you need to install the
+#   python3-venv package
+#
+# Thirty good binaries were thrown away for a missing apt package. The
+# routes below are tried in order and every outcome is recorded, so a
+# failure names what was attempted rather than just what was missing.
 TOOLS="$DEST/tools-venv"
-if [ ! -x "$TOOLS/bin/patchelf" ]; then
-  python3 -m venv "$TOOLS" > "$DEST/build_logs/tools_venv.log" 2>&1 \
-    && "$TOOLS/bin/pip" install -q patchelf >> "$DEST/build_logs/tools_venv.log" 2>&1 \
-    || { say "could not install patchelf (see build_logs/tools_venv.log)"; }
+PELOG="$DEST/build_logs/tools_venv.log"
+: > "$PELOG"
+PATCHELF=""
+
+# 1. Already on the box. Costs nothing to ask first.
+if command -v patchelf > /dev/null 2>&1; then
+  PATCHELF="$(command -v patchelf)"
+  echo "route 1: patchelf already on PATH at $PATCHELF" >> "$PELOG"
 fi
-PATCHELF="$TOOLS/bin/patchelf"
-[ -x "$PATCHELF" ] || PATCHELF="$(command -v patchelf || true)"
-[ -n "$PATCHELF" ] || { say "no patchelf; the set is built but NOT staged"; exit 4; }
+
+# 2. The pixi environment's own interpreter. It HAS pip and needs no
+#    ensurepip, which is exactly what the image was missing.
+if [ -z "$PATCHELF" ]; then
+  echo "route 2: pip install patchelf into the pixi env ($PIXI_ENV)" >> "$PELOG"
+  if pixi run -e "$PIXI_ENV" python3 -m pip install -q patchelf >> "$PELOG" 2>&1; then
+    CAND="$(pixi run -e "$PIXI_ENV" python3 -c \
+      'import shutil,sys; print(shutil.which("patchelf") or "")' 2>> "$PELOG" | tail -1)"
+    [ -n "$CAND" ] && [ -x "$CAND" ] && PATCHELF="$CAND"
+    if [ -z "$PATCHELF" ]; then
+      CAND="$(pixi run -e "$PIXI_ENV" python3 -c \
+        'import os,sys; print(os.path.join(sys.prefix,"bin","patchelf"))' 2>> "$PELOG" | tail -1)"
+      [ -x "$CAND" ] && PATCHELF="$CAND"
+    fi
+  fi
+  [ -n "$PATCHELF" ] && echo "route 2 gave $PATCHELF" >> "$PELOG"
+fi
+
+# 3. A throwaway venv, the original route. Works wherever ensurepip exists.
+if [ -z "$PATCHELF" ]; then
+  echo "route 3: throwaway venv at $TOOLS" >> "$PELOG"
+  if python3 -m venv "$TOOLS" >> "$PELOG" 2>&1 \
+     && "$TOOLS/bin/pip" install -q patchelf >> "$PELOG" 2>&1; then
+    [ -x "$TOOLS/bin/patchelf" ] && PATCHELF="$TOOLS/bin/patchelf"
+  fi
+  [ -n "$PATCHELF" ] && echo "route 3 gave $PATCHELF" >> "$PELOG"
+fi
+
+# 4. The distribution's own package. Last because it is the least pinned,
+#    and it is the one that would have saved the 2026-08-30 lease.
+if [ -z "$PATCHELF" ] && command -v apt-get > /dev/null 2>&1; then
+  echo "route 4: apt-get install patchelf" >> "$PELOG"
+  ( apt-get update -qq && apt-get install -y -qq patchelf ) >> "$PELOG" 2>&1
+  command -v patchelf > /dev/null 2>&1 && PATCHELF="$(command -v patchelf)"
+  [ -n "$PATCHELF" ] && echo "route 4 gave $PATCHELF" >> "$PELOG"
+fi
+
+if [ -z "$PATCHELF" ]; then
+  say "NO PATCHELF. All four routes failed; the thirty binaries ARE built"
+  say "  and readback.txt is valid, but nothing is staged. Routes tried:"
+  say "  1 PATH, 2 pixi env pip, 3 throwaway venv, 4 apt-get."
+  say "  Full transcript: build_logs/$(basename "$PELOG")"
+  exit 4
+fi
+say "patchelf: $PATCHELF"
 ENV_LIB="$(pixi run -e "$PIXI_ENV" python3 -c 'import sys,os; print(os.path.join(sys.prefix,"lib"))' | tail -1)"
 say "pixi env lib: $ENV_LIB"
 python3 packaging/linux/stage_libs.py --set "$SET" --env-lib "$ENV_LIB" \
