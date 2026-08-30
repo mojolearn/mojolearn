@@ -1,0 +1,209 @@
+{
+  "failures": [
+    "lane agglomerative: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane dbscan: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane elasticnet: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane et-clf: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane et-reg: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane gbdt-depthwise: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane gbdt-lossguide: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane gbdt-rmse: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane gbdt-symmetric: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane gemm-pinned: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane gemm-vendor: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane holtwinters: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane iforest: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane kde: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane kmeans: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane knn-clf: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane knn-reg: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane knn-tied: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane lasso: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane logistic: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane metrics: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane ols: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane pca: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane rf-clf: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane rf-reg: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane ridge: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane spectral: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane svc: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "lane tsvd: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+  ],
+  "lanes": {
+    "agglomerative": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.24
+    },
+    "dbscan": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.64
+    },
+    "elasticnet": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "et-clf": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "et-reg": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "gbdt-depthwise": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "gbdt-lossguide": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "gbdt-rmse": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "gbdt-symmetric": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "gemm-pinned": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.04
+    },
+    "gemm-vendor": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.03
+    },
+    "holtwinters": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "iforest": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.06
+    },
+    "kde": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "kmeans": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "knn-clf": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.02
+    },
+    "knn-reg": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "knn-tied": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.0
+    },
+    "lasso": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "logistic": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "metrics": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "ols": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "pca": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "rf-clf": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "rf-reg": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "ridge": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "spectral": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "svc": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "tsvd": {
+      "error": "To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    }
+  },
+  "mode_loaded": "identical",
+  "mode_wanted": "identical",
+  "mojolearn_file": "/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/__init__.py",
+  "ok": false,
+  "python": "3.11.10",
+  "vendor_how": "the box probe (device nodes and driver libraries)",
+  "vendor_loaded": "cuda",
+  "vendor_per_binding": {
+    "_mojolearn": "cuda",
+    "_mojolearn_estimators": "cuda",
+    "_mojolearn_gbdt": "cuda",
+    "_mojolearn_linalg": "cuda",
+    "_mojolearn_metrics": "cuda",
+    "_mojolearn_rf": "cuda",
+    "_mojolearn_solver": "cuda",
+    "_mojolearn_svm": "cuda",
+    "_mojolearn_trees": "cuda",
+    "_mojolearn_tsa": "cuda"
+  },
+  "vendor_used_per_estimator": {
+    "_mojolearn": "cuda",
+    "_mojolearn_estimators": "cuda",
+    "_mojolearn_gbdt": "cuda",
+    "_mojolearn_rf": "cuda",
+    "_mojolearn_svm": "cuda",
+    "_mojolearn_trees": "cuda"
+  },
+  "vendor_wanted": "cuda",
+  "version": "0.3.0"
+}

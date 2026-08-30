@@ -1,0 +1,238 @@
+{
+  "failures": [
+    "lane agglomerative: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane dbscan: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane elasticnet: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane et-clf: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane et-reg: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane gbdt-depthwise: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane gbdt-lossguide: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane gbdt-rmse: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane gbdt-symmetric: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane gemm-pinned: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane gemm-vendor: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane holtwinters: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane iforest: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane kde: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane kmeans: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane knn-clf: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane knn-reg: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane knn-tied: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane lasso: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane logistic: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane metrics: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane ols: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane pca: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane rf-clf: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane rf-reg: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane ridge: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane spectral: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane svc: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+    "lane tsvd: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)"
+  ],
+  "lanes": {
+    "agglomerative": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 310, in _agglomerative\n    m.fit(X[:2000, :4])\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/_hierarchy_impl.py\", line 289, in fit\n    _mojolearn_solver.linkage_fit(\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.21
+    },
+    "dbscan": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 177, in _dbscan\n    m.fit(X)\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/density.py\", line 141, in fit\n    self.n_iter_ = self._bind(\"_mojolearn_estimators\").dbscan_fit(\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.51
+    },
+    "elasticnet": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 286, in _elasticnet\n    m.fit(X, y)\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/_solver_impl.py\", line 337, in fit\n    n_iter = _mojolearn_solver.cd_fit(\n             ^^^^^^^^^^^^^^^^^^^^^^^^^\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "et-clf": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 124, in _et_clf\n    m.fit(X, y)\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/extratrees.py\", line 392, in fit\n    return self._fit_arrays(\n           ^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/extratrees.py\", line 210, in _fit_arrays\n    out = fit_fn(_addr_ro(Xf), _addr_ro(ya), params)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "et-reg": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 246, in _et_reg\n    m.fit(X, y)\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/extratrees.py\", line 473, in fit\n    return self._fit_arrays(\n           ^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/extratrees.py\", line 210, in _fit_arrays\n    out = fit_fn(_addr_ro(Xf), _addr_ro(ya), params)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "gbdt-depthwise": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 134, in _gbdt_dw\n    m.fit(X, y)\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/ensemble.py\", line 1083, in fit\n    out = self._bind(\"_mojolearn_gbdt\").gbdt_fit(\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "gbdt-lossguide": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 144, in _gbdt_lg\n    m.fit(X, y)\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/ensemble.py\", line 1083, in fit\n    out = self._bind(\"_mojolearn_gbdt\").gbdt_fit(\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "gbdt-rmse": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 254, in _gbdt_rmse\n    m.fit(X, y)\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/ensemble.py\", line 1083, in fit\n    out = self._bind(\"_mojolearn_gbdt\").gbdt_fit(\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "gbdt-symmetric": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 152, in _gbdt_sym\n    m.fit(X, y)\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/ensemble.py\", line 1083, in fit\n    out = self._bind(\"_mojolearn_gbdt\").gbdt_fit(\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "gemm-pinned": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 372, in _gemm_pinned\n    return _h(ml.linalg.matmul(a, b, identical=True))\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/_linalg_impl.py\", line 511, in matmul\n    binding.gemm(_addr(out_arr), _addr_ro(a_arr), _addr_ro(b_arr), params)\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.03
+    },
+    "gemm-vendor": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 362, in _gemm_vendor\n    return _h(ml.linalg.matmul(a, b, identical=False))\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/_linalg_impl.py\", line 511, in matmul\n    binding.gemm(_addr(out_arr), _addr_ro(a_arr), _addr_ro(b_arr), params)\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.03
+    },
+    "holtwinters": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 327, in _holtwinters\n    m = ml.ExponentialSmoothing(series, seasonal=\"additive\", seasonal_periods=12).fit()\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/_tsa_impl.py\", line 465, in fit\n    _mojolearn_tsa.holtwinters_fit(\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "iforest": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 225, in _iforest\n    m.fit(X)\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/_iforest_impl.py\", line 366, in fit\n    self._run(x[:1], _WANT_SCORE_SAMPLES)\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/_iforest_impl.py\", line 340, in _run\n    _extension(getattr(self, 'numeric_mode', None)).iforest_run(\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.06
+    },
+    "kde": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 303, in _kde\n    return _h(m.score_samples(X[4096:4352, :4]))\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/density.py\", line 287, in score_samples\n    self._bind(\"_mojolearn_estimators\").kde_score_samples(\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "kmeans": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 160, in _kmeans\n    m.fit(X)\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/cluster.py\", line 151, in fit\n    inertia, n_iter, sum_scale, weight_scale = self._bind(\"_mojolearn\").kmeans_fit(\n                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "knn-clf": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 263, in _knn_clf\n    return _h(m.predict(X[4096:4160]), m.predict_proba(X[4096:4160]))\n              ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/neighbors.py\", line 354, in predict\n    labels, _, _ = self._predict(X, want_proba=False)\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/neighbors.py\", line 327, in _predict\n    self.used_query_tile_ = self._bind(\"_mojolearn\").knn_classify(\n                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.02
+    },
+    "knn-reg": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 271, in _knn_reg\n    return _h(m.predict(X[4096:4160]))\n              ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/neighbors.py\", line 464, in predict\n    self.used_query_tile_ = self._bind(\"_mojolearn\").knn_regress(\n                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "knn-tied": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 169, in _knn\n    d, i = m.kneighbors(q)\n           ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/neighbors.py\", line 169, in kneighbors\n    self.used_query_tile_ = self._bind(\"_mojolearn\").knn_search(\n                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.0
+    },
+    "lasso": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 278, in _lasso\n    m.fit(X, y)\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/_solver_impl.py\", line 337, in fit\n    n_iter = _mojolearn_solver.cd_fit(\n             ^^^^^^^^^^^^^^^^^^^^^^^^^\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "logistic": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 217, in _logistic\n    m.fit(X, y)\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/linear_model.py\", line 410, in fit\n    n_iter = self._bind(\"_mojolearn_estimators\").qn_fit(\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "metrics": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 334, in _metrics\n    labels = ml.KMeans(n_clusters=4, random_state=3).fit(X[:3000, :4]).labels_\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/cluster.py\", line 151, in fit\n    inertia, n_iter, sum_scale, weight_scale = self._bind(\"_mojolearn\").kmeans_fit(\n                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "ols": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 201, in _ols\n    m.fit(X, y)\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/linear_model.py\", line 96, in fit\n    self._bind(\"_mojolearn_estimators\").ols_fit(\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "pca": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 185, in _pca\n    m.fit(X)\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/decomposition.py\", line 93, in fit\n    self.noise_variance_ = float(self._bind(\"_mojolearn_estimators\").pca_fit(\n                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "rf-clf": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 116, in _rf_clf\n    m.fit(X, y)\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/randomforest.py\", line 398, in fit\n    return self._fit_arrays(\n           ^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/randomforest.py\", line 250, in _fit_arrays\n    out = fit_fn(\n          ^^^^^^^\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "rf-reg": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 238, in _rf_reg\n    m.fit(X, y)\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/randomforest.py\", line 504, in fit\n    return self._fit_arrays(X, y32, 0, self._bind(\"_mojolearn_rf\").rf_regressor_fit)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/randomforest.py\", line 250, in _fit_arrays\n    out = fit_fn(\n          ^^^^^^^\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "ridge": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 209, in _ridge\n    m.fit(X, y)\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/linear_model.py\", line 226, in fit\n    self._bind(\"_mojolearn_estimators\").ridge_fit(\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "spectral": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 318, in _spectral\n    m.fit(X[:2000, :4])\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/_spectral_impl.py\", line 465, in fit\n    _get_binding().spectral_fit_predict_dataset(\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "svc": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 294, in _svc\n    m.fit(X[:2000], y[:2000])\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/_svm_impl.py\", line 500, in fit\n    n_support = _extension(getattr(self, 'numeric_mode', None)).svc_fit(\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    },
+    "tsvd": {
+      "error": "At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)",
+      "error_full": "Traceback (most recent call last):\n  File \"/root/mojolearn/packaging/linux/smoke.py\", line 185, in main\n    h = lanes[name](ml)\n        ^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/repeat_run_stability.py\", line 193, in _tsvd\n    m.fit(X)\n  File \"/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/decomposition.py\", line 179, in fit\n    self._bind(\"_mojolearn_estimators\").tsvd_fit(\nException: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+      "ok": false,
+      "seconds": 0.01
+    }
+  },
+  "mode_loaded": "identical",
+  "mode_wanted": "identical",
+  "mojolearn_file": "/root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/__init__.py",
+  "ok": false,
+  "python": "3.11.10",
+  "vendor_how": "the box probe (device nodes and driver libraries)",
+  "vendor_loaded": "cuda",
+  "vendor_per_binding": {
+    "_mojolearn": "cuda",
+    "_mojolearn_estimators": "cuda",
+    "_mojolearn_gbdt": "cuda",
+    "_mojolearn_linalg": "cuda",
+    "_mojolearn_metrics": "cuda",
+    "_mojolearn_rf": "cuda",
+    "_mojolearn_solver": "cuda",
+    "_mojolearn_svm": "cuda",
+    "_mojolearn_trees": "cuda",
+    "_mojolearn_tsa": "cuda"
+  },
+  "vendor_used_per_estimator": {
+    "_mojolearn": "cuda",
+    "_mojolearn_estimators": "cuda",
+    "_mojolearn_gbdt": "cuda",
+    "_mojolearn_rf": "cuda",
+    "_mojolearn_svm": "cuda",
+    "_mojolearn_trees": "cuda"
+  },
+  "vendor_wanted": "cuda",
+  "version": "0.3.0"
+}

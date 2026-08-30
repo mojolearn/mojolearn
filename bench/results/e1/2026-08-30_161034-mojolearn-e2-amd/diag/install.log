@@ -1,0 +1,11 @@
+Looking in indexes: https://test.pypi.org/simple/, https://pypi.org/simple/
+Collecting mojolearn==0.3.0
+  Downloading https://test-files.pythonhosted.org/packages/46/8f/73bd9e4e2e937915da544933572b0780c3ffbb6a546d8cfb2048aa4b3d7c/mojolearn-0.3.0-py3-none-manylinux_2_35_x86_64.whl.metadata (28 kB)
+Collecting numpy>=1.24 (from mojolearn==0.3.0)
+  Downloading numpy-2.5.2-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (6.6 kB)
+Downloading https://test-files.pythonhosted.org/packages/46/8f/73bd9e4e2e937915da544933572b0780c3ffbb6a546d8cfb2048aa4b3d7c/mojolearn-0.3.0-py3-none-manylinux_2_35_x86_64.whl (26.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 26.2/26.2 MB 11.3 MB/s eta 0:00:00
+Downloading numpy-2.5.2-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.7 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.7/16.7 MB 230.9 MB/s eta 0:00:00
+Installing collected packages: numpy, mojolearn
+Successfully installed mojolearn-0.3.0 numpy-2.5.2

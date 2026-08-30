@@ -1,0 +1,16 @@
+    Installing collected packages: numpy, mojolearn
+    Successfully installed mojolearn-0.3.0 numpy-2.4.6
+    
+    [notice] A new release of pip is available: 24.0 -> 26.2.1
+    [notice] To update, run: python3 -m pip install --upgrade pip
+[16:03:41 leg_install] installed mojolearn==0.3.0 from testpypi; vendor read back: cuda
+       lane svc: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+       lane tsvd: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+       lane svc: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+       lane tsvd: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+       lane svc: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+       lane tsvd: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+index=testpypi version=0.3.0 vendor=cuda smoke_rc=1
+smoke[fast]:    lane tsvd: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+smoke[deterministic]:    lane tsvd: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+smoke[identical]:    lane tsvd: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.

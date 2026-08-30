@@ -1,0 +1,59 @@
+725 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3106c0000000, nodemask=1)
+725 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a7640000000, nodemask=2)
+  agglomerative    FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  dbscan           FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  elasticnet       FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  et-clf           FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  et-reg           FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  gbdt-depthwise   FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  gbdt-lossguide   FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  gbdt-rmse        FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  gbdt-symmetric   FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  gemm-pinned      ok   REFUSED as designed under fast
+  gemm-vendor      ok   523f5d1954f7409c     0.1s
+  holtwinters      FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  iforest          FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  kde              FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  kmeans           FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  knn-clf          FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  knn-reg          FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  knn-tied         FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  lasso            FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  logistic         FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  metrics          FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  ols              FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  pca              FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  rf-clf           FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  rf-reg           FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  ridge            FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  spectral         FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  svc              FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+  tsvd             FAIL At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the d
+smoke v0.3.0 mode=fast vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 FAIL
+   lane agglomerative: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane dbscan: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane elasticnet: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane et-clf: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane et-reg: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane gbdt-depthwise: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane gbdt-lossguide: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane gbdt-rmse: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane gbdt-symmetric: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane holtwinters: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane iforest: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane kde: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane kmeans: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane knn-clf: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane knn-reg: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane knn-tied: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane lasso: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane logistic: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane metrics: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane ols: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane pca: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane rf-clf: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane rf-reg: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane ridge: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane spectral: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane svc: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+   lane tsvd: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)

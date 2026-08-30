@@ -1,0 +1,4 @@
+index=testpypi version=0.3.0 vendor=cuda smoke_rc=1
+smoke[fast]:    lane tsvd: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+smoke[deterministic]:    lane tsvd: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+smoke[identical]:    lane tsvd: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)

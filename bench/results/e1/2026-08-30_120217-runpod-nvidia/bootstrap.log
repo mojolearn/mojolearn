@@ -1,0 +1,58 @@
+
+=== provenance === 16:03:24
+5b3604e496ff5b70b9b09807489ed7d33489ad39
+Linux d903b24d06b1 6.8.0-136-generic #136-Ubuntu SMP PREEMPT_DYNAMIC Wed Jul  1 21:53:05 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+
+=== pixi === 16:03:24
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 16:03:27
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 16:03:27
+phase 9: DIAG ONLY (MOJOLEARN_P9_ONLY_DIAG=1); no builds, no arms, no probes here
+phase 9 builds: <none>
+phase 9 tiers:  <none>
+concurrent probe SKIPPED: needs all three tiers, P9_TIERS=<none>
+
+=== phase 9 diag: packaging/linux/leg_diag_install.sh === 16:03:27
+PHASE9-FINDING: diag script returned non-zero (see diag/console.log)
+        Installing collected packages: numpy, mojolearn
+        Successfully installed mojolearn-0.3.0 numpy-2.4.6
+        
+        [notice] A new release of pip is available: 24.0 -> 26.2.1
+        [notice] To update, run: python3 -m pip install --upgrade pip
+    [16:03:41 leg_install] installed mojolearn==0.3.0 from testpypi; vendor read back: cuda
+           lane svc: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+           lane tsvd: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+           lane svc: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+           lane tsvd: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+           lane svc: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+           lane tsvd: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+    index=testpypi version=0.3.0 vendor=cuda smoke_rc=1
+    smoke[fast]:    lane tsvd: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+    smoke[deterministic]:    lane tsvd: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+    smoke[identical]:    lane tsvd: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+
+=== done === 16:03:47
+artifacts in /root/mojolearn/bench/results/e1/2026-08-30_160324-d903b24d06b1
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

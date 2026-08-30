@@ -1,0 +1,19 @@
+[16:10:37 leg_install] venv route: python3 -m venv
+[16:10:45 leg_install] venv route: python3 -m venv after apt-get install python3.12-venv
+[16:10:47 leg_install] clean venv at /root/mojolearn-smoke-venv (Python 3.12.3)
+       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 26.2/26.2 MB 11.3 MB/s eta 0:00:00
+    Downloading numpy-2.5.2-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.7 MB)
+       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.7/16.7 MB 230.9 MB/s eta 0:00:00
+    Installing collected packages: numpy, mojolearn
+    Successfully installed mojolearn-0.3.0 numpy-2.5.2
+[16:10:52 leg_install] installed mojolearn==0.3.0 from testpypi; vendor read back: hip
+      tsvd             ok   a378f1007cb95451     0.0s
+    smoke v0.3.0 mode=fast vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
+      tsvd             ok   a378f1007cb95451     0.0s
+    smoke v0.3.0 mode=deterministic vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
+      tsvd             ok   eb98ef49f9c747f0     0.0s
+    smoke v0.3.0 mode=identical vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
+index=testpypi version=0.3.0 vendor=hip smoke_rc=0
+smoke[fast]: smoke v0.3.0 mode=fast vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
+smoke[deterministic]: smoke v0.3.0 mode=deterministic vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
+smoke[identical]: smoke v0.3.0 mode=identical vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS

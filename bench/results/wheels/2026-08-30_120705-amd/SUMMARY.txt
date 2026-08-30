@@ -1,0 +1,5 @@
+index=testpypi version=0.3.0 vendor=hip smoke_rc=0
+smoke[fast]: smoke v0.3.0 mode=fast vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
+smoke[deterministic]: smoke v0.3.0 mode=deterministic vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
+smoke[identical]: smoke v0.3.0 mode=identical vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
+source_e1_dir=bench/results/e1/2026-08-30_161034-mojolearn-e2-amd/

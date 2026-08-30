@@ -1,0 +1,5 @@
+index=testpypi version=0.3.0 vendor=cuda smoke_rc=1
+smoke[fast]:    lane tsvd: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+smoke[deterministic]:    lane tsvd: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+smoke[identical]:    lane tsvd: To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+source_e1_dir=bench/results/e1/2026-08-30_120217-runpod-nvidia/

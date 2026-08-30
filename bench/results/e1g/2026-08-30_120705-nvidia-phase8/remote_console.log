@@ -1,0 +1,64 @@
+host driver major: 580 (escape needed below 580)
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 16:08:05
+phase 9: DIAG ONLY (MOJOLEARN_P9_ONLY_DIAG=1); no builds, no arms, no probes here
+phase 9 builds: <none>
+phase 9 tiers:  <none>
+concurrent probe SKIPPED: needs all three tiers, P9_TIERS=<none>
+
+=== phase 9 diag: packaging/linux/leg_diag_install.sh === 16:08:05
+PHASE9-FINDING: diag script returned non-zero (see diag/console.log)
+    [16:08:05 leg_install] venv route: python3 -m venv
+    [16:08:08 leg_install] clean venv at /root/mojolearn-smoke-venv (Python 3.11.10)
+        Installing collected packages: numpy, mojolearn
+        Successfully installed mojolearn-0.3.0 numpy-2.4.6
+        
+        [notice] A new release of pip is available: 24.0 -> 26.2.1
+        [notice] To update, run: python3 -m pip install --upgrade pip
+    [16:08:15 leg_install] installed mojolearn==0.3.0 from testpypi; vendor read back: cuda
+           lane svc: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+           lane tsvd: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+           lane svc: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+           lane tsvd: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+           lane svc: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+           lane tsvd: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+    index=testpypi version=0.3.0 vendor=cuda smoke_rc=1
+    smoke[fast]:    lane tsvd: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+    smoke[deterministic]:    lane tsvd: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+    smoke[identical]:    lane tsvd: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+
+=== done === 16:08:20
+artifacts in /root/mojolearn/bench/results/e1/2026-08-30_160801-8d0f60a0f8b4
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card
+vendor=nvidia
+payload=phase8
+commit=40c2c5fc1780f3538df7327e5bb3f9a712e3ca8a
+work_timeout=3000
+e1_phases=9
+e1_lanes=
+p9_bindings=build.sh build_gbdt.sh build_estimators.sh build_linalg.sh
+p9_lanes=
+started=2026-08-30T16:07:59Z
+p9_only_diag=1
+p9_diag=packaging/linux/leg_diag_install.sh
+p9_diag_timeout=2400
+wheel_version=0.3.0
+wheel_index=testpypi
+bootstrap_exit=0
+note: a bootstrap_exit of 124 is the work timeout firing
+e1dir_source=the bootstrap's own 'artifacts in' line
+e1dir=/root/mojolearn/bench/results/e1/2026-08-30_160801-8d0f60a0f8b4
+identical_cards=0
+fast_cards=0
+phase8_findings=0
+finished=2026-08-30T16:08:20Z
+REMOTE_BODY_DONE

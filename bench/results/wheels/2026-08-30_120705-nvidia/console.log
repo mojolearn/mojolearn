@@ -1,0 +1,18 @@
+[16:08:05 leg_install] venv route: python3 -m venv
+[16:08:08 leg_install] clean venv at /root/mojolearn-smoke-venv (Python 3.11.10)
+    Installing collected packages: numpy, mojolearn
+    Successfully installed mojolearn-0.3.0 numpy-2.4.6
+    
+    [notice] A new release of pip is available: 24.0 -> 26.2.1
+    [notice] To update, run: python3 -m pip install --upgrade pip
+[16:08:15 leg_install] installed mojolearn==0.3.0 from testpypi; vendor read back: cuda
+       lane svc: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+       lane tsvd: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+       lane svc: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+       lane tsvd: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+       lane svc: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+       lane tsvd: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+index=testpypi version=0.3.0 vendor=cuda smoke_rc=1
+smoke[fast]:    lane tsvd: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+smoke[deterministic]:    lane tsvd: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
+smoke[identical]:    lane tsvd: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_NO_BINARY_FOR_GPU (no kernel image is available for execution on the device)
