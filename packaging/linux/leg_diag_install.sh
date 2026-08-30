@@ -18,10 +18,57 @@ VER="${MOJOLEARN_WHEEL_VERSION:?set MOJOLEARN_WHEEL_VERSION}"
 IDX="${MOJOLEARN_WHEEL_INDEX:-testpypi}"
 say() { echo "[$(date +%T) leg_install] $*"; }
 
+# A CLEAN VENV, FOUR WAYS, because `python3 -m venv` is not always available.
+#
+# 2026-08-30: this leg died here on the DigitalOcean image with "The virtual
+# environment was not created successfully because ensurepip is not
+# available", which is the SAME missing-package family that killed the AMD
+# BUILD leg on patchelf earlier the same day. That one was fixed by giving
+# the build four routes. This script was left with one, so the class of
+# defect survived in a second place and cost a second rented box. Every
+# route is tried in order and every outcome is printed, so a future failure
+# names which routes were attempted rather than just the first.
 VENV=/root/mojolearn-smoke-venv
 rm -rf "$VENV"
-python3 -m venv "$VENV" || { say "venv failed"; exit 2; }
+mkvenv() {
+  rm -rf "$VENV"
+  say "venv route: $1"
+  shift
+  "$@" >/dev/null 2>&1 && [ -x "$VENV/bin/python3" ]
+}
+VENV_OK=0
+# 1. the normal way.
+mkvenv "python3 -m venv" python3 -m venv "$VENV" && VENV_OK=1
+# 2. install the distro package that provides ensurepip, then retry. This is
+#    the actual fix on Debian and Ubuntu images, and it is what the error
+#    message itself asks for.
+if [ "$VENV_OK" = 0 ]; then
+  PYMM=$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null)
+  (apt-get update -qq && apt-get install -y -qq "python3-venv" "python${PYMM}-venv") >/dev/null 2>&1 || true
+  mkvenv "python3 -m venv after apt-get install python${PYMM}-venv" python3 -m venv "$VENV" && VENV_OK=1
+fi
+# 3. no ensurepip, so build the venv without pip and bootstrap pip into it.
+if [ "$VENV_OK" = 0 ]; then
+  if python3 -m venv --without-pip "$VENV" >/dev/null 2>&1 && [ -x "$VENV/bin/python3" ]; then
+    if (curl -fsSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py \
+        && "$VENV/bin/python3" /tmp/get-pip.py -q) >/dev/null 2>&1; then
+      say "venv route: --without-pip + get-pip.py"
+      VENV_OK=1
+    fi
+  fi
+fi
+# 4. virtualenv, which carries its own pip and needs no ensurepip at all.
+if [ "$VENV_OK" = 0 ]; then
+  (python3 -m pip install -q --user virtualenv) >/dev/null 2>&1 || true
+  mkvenv "virtualenv" python3 -m virtualenv "$VENV" && VENV_OK=1
+fi
+if [ "$VENV_OK" = 0 ] || [ ! -x "$VENV/bin/pip" ]; then
+  say "no clean venv could be made on this image; tried python3 -m venv, apt-get python3-venv, --without-pip + get-pip.py, and virtualenv"
+  echo "venv FAILED" > "$D/SUMMARY.txt"
+  exit 2
+fi
 PIP="$VENV/bin/pip"
+say "clean venv at $VENV ($("$VENV/bin/python3" -V 2>&1))"
 if [ "$IDX" = testpypi ]; then
   "$PIP" install --no-cache-dir --index-url https://test.pypi.org/simple/ \
     --extra-index-url https://pypi.org/simple/ "mojolearn==$VER" > "$D/install.log" 2>&1
