@@ -68,11 +68,39 @@ case "$VENDOR" in
 esac
 say "leg exited rc=$RC; locating the fetched diag/"
 
+# WHICH NEW DIRECTORY IS *OURS*.
+#
+# 2026-08-30: the nvidia and amd legs were run at the same time, and this
+# loop took whichever new directory sorted last. The nvidia leg filed the
+# AMD leg's result as its own and reported "build FAILED, no vendor" while
+# its own diag on disk read vendor=cuda, build_rc=0, 30 binaries staged and
+# the identical smoke passing all 29 lanes. A leg that misreports a partial
+# SUCCESS as a total failure is worse than one that just fails.
+#
+# The fetched directory names carry the vendor (`*-runpod-nvidia`,
+# `*-mojolearn-e2-amd`), so candidates are filtered by it. Two legs for the
+# same vendor still must not overlap, and that is what the pre-flight lease
+# check at the top of this file is for.
+case "$VENDOR" in
+  nvidia) VTOKEN=nvidia ;;
+  amd)    VTOKEN=amd ;;
+esac
 NEW=""
+NMATCH=0
 for d in $(ls -d bench/results/e1/*/ 2>/dev/null | sort); do
   case "$BEFORE" in *"$d"*) continue ;; esac
-  [ -f "$d/diag/SUMMARY.txt" ] && NEW="$d"
+  case "$d" in *"$VTOKEN"*) ;; *)
+      say "ignoring $d: a new directory, but not this leg's vendor ($VTOKEN)"
+      continue ;;
+  esac
+  [ -f "$d/diag/SUMMARY.txt" ] || continue
+  NEW="$d"; NMATCH=$((NMATCH + 1))
 done
+if [ "$NMATCH" -gt 1 ]; then
+  say "WARNING: $NMATCH new $VTOKEN directories with a diag/SUMMARY.txt;"
+  say "  taking the last ($NEW). Another leg for this vendor may have been"
+  say "  running concurrently, which the pre-flight check exists to prevent."
+fi
 if [ -z "$NEW" ]; then
   say "no new bench/results/e1/*/diag/SUMMARY.txt came home. Read the leg's own output above."
   exit 1

@@ -1,0 +1,181 @@
+{
+  "failures": [
+    "lane gemm-pinned:   Or pass identical=False to say in the source that you want the deterministic product and are making no identity claim about it."
+  ],
+  "lanes": {
+    "agglomerative": {
+      "hash": "02ca572ae936a2fa",
+      "ok": true,
+      "seconds": 1.34
+    },
+    "dbscan": {
+      "hash": "a4608e954c7420b7",
+      "ok": true,
+      "seconds": 0.0
+    },
+    "elasticnet": {
+      "hash": "417b2b6ef980d28f",
+      "ok": true,
+      "seconds": 0.02
+    },
+    "et-clf": {
+      "hash": "707d2c92e92f6a40",
+      "ok": true,
+      "seconds": 0.05
+    },
+    "et-reg": {
+      "hash": "a1d2eb9ddb149617",
+      "ok": true,
+      "seconds": 0.06
+    },
+    "gbdt-depthwise": {
+      "hash": "5af5e69c7a51e998",
+      "ok": true,
+      "seconds": 0.1
+    },
+    "gbdt-lossguide": {
+      "hash": "d824f0e1683d12b9",
+      "ok": true,
+      "seconds": 0.15
+    },
+    "gbdt-rmse": {
+      "hash": "23ff518cc9a7f332",
+      "ok": true,
+      "seconds": 0.06
+    },
+    "gbdt-symmetric": {
+      "hash": "f48275d3af938625",
+      "ok": true,
+      "seconds": 0.07
+    },
+    "gemm-pinned": {
+      "error": "  Or pass identical=False to say in the source that you want the deterministic product and are making no identity claim about it.",
+      "ok": false,
+      "seconds": 0.04
+    },
+    "gemm-vendor": {
+      "hash": "667dc649f7ca895f",
+      "ok": true,
+      "seconds": 0.04
+    },
+    "holtwinters": {
+      "hash": "e6e43307ca85f1c7",
+      "ok": true,
+      "seconds": 0.04
+    },
+    "iforest": {
+      "hash": "cbdf90cd2472725a",
+      "ok": true,
+      "seconds": 0.14
+    },
+    "kde": {
+      "hash": "51e248a7e0bf958b",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "kmeans": {
+      "hash": "da3cb10e46c91256",
+      "ok": true,
+      "seconds": 0.06
+    },
+    "knn-clf": {
+      "hash": "f359ee4876deb908",
+      "ok": true,
+      "seconds": 0.02
+    },
+    "knn-reg": {
+      "hash": "ff4a92b889616aea",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "knn-tied": {
+      "hash": "ee0e9b275fd62f90",
+      "ok": true,
+      "seconds": 0.0
+    },
+    "lasso": {
+      "hash": "b21520dab533f838",
+      "ok": true,
+      "seconds": 0.02
+    },
+    "logistic": {
+      "hash": "4f82254ef9ad5365",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "metrics": {
+      "hash": "01a17b9ad7a6275c",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "ols": {
+      "hash": "d09bf4fb8c46ec22",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "pca": {
+      "hash": "c9573962a3c3164b",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "rf-clf": {
+      "hash": "eacd6bff8b4088b8",
+      "ok": true,
+      "seconds": 0.09
+    },
+    "rf-reg": {
+      "hash": "91269c5ae3828665",
+      "ok": true,
+      "seconds": 0.09
+    },
+    "ridge": {
+      "hash": "7dc9df96cbecd2a7",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "spectral": {
+      "hash": "7c5f4e5c32dc0ca1",
+      "ok": true,
+      "seconds": 0.07
+    },
+    "svc": {
+      "hash": "23ec23f0a55ea0ed",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "tsvd": {
+      "hash": "4e29b408028623e8",
+      "ok": true,
+      "seconds": 0.01
+    }
+  },
+  "mode_loaded": "deterministic",
+  "mode_wanted": "deterministic",
+  "mojolearn_file": "/root/mojolearn/bench/results/e1/2026-08-30_072625-8855b7713729/diag/pkgroot/mojolearn/__init__.py",
+  "ok": false,
+  "python": "3.14.7",
+  "vendor_how": "the box probe (device nodes and driver libraries)",
+  "vendor_loaded": "cuda",
+  "vendor_per_binding": {
+    "_mojolearn": "cuda",
+    "_mojolearn_estimators": "cuda",
+    "_mojolearn_gbdt": "cuda",
+    "_mojolearn_linalg": "cuda",
+    "_mojolearn_metrics": "cuda",
+    "_mojolearn_rf": "cuda",
+    "_mojolearn_solver": "cuda",
+    "_mojolearn_svm": "cuda",
+    "_mojolearn_trees": "cuda",
+    "_mojolearn_tsa": "cuda"
+  },
+  "vendor_used_per_estimator": {
+    "_mojolearn": "cuda",
+    "_mojolearn_estimators": "cuda",
+    "_mojolearn_gbdt": "cuda",
+    "_mojolearn_rf": "cuda",
+    "_mojolearn_svm": "cuda",
+    "_mojolearn_trees": "cuda"
+  },
+  "vendor_wanted": "cuda",
+  "version": "0.2.0"
+}

@@ -1,0 +1,32 @@
+12830 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a4e00000000, nodemask=2)
+12830 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x721400000000, nodemask=1)
+  agglomerative    ok   02ca572ae936a2fa     1.2s
+  dbscan           ok   a4608e954c7420b7     0.0s
+  elasticnet       ok   f4a2b16c06f0f290     0.0s
+  et-clf           ok   707d2c92e92f6a40     0.0s
+  et-reg           ok   a1d2eb9ddb149617     0.1s
+  gbdt-depthwise   ok   cd27a77258047c8e     0.1s
+  gbdt-lossguide   ok   e65c2a2686bf7341     0.2s
+  gbdt-rmse        ok   75e3f3a99e5e004b     0.1s
+  gbdt-symmetric   ok   dc987497271f92b1     0.1s
+  gemm-pinned      ok   18ff2fd121056aee     0.0s
+  gemm-vendor      ok   18ff2fd121056aee     0.0s
+  holtwinters      ok   cff24aef76c6431d     0.0s
+  iforest          ok   334ba456c6bb7644     0.1s
+  kde              ok   9a2d41d8dd246e5d     0.0s
+  kmeans           ok   da3cb10e46c91256     0.0s
+  knn-clf          ok   f359ee4876deb908     0.0s
+  knn-reg          ok   ff4a92b889616aea     0.0s
+  knn-tied         ok   eb5d50fc1d09b0e1     0.0s
+  lasso            ok   8c61a582de814863     0.0s
+  logistic         ok   7037da78aa5950dd     0.0s
+  metrics          ok   9e779d081426adc8     0.0s
+  ols              ok   24aff16838df704a     0.0s
+  pca              ok   abe2157474e81469     0.0s
+  rf-clf           ok   eacd6bff8b4088b8     0.1s
+  rf-reg           ok   91269c5ae3828665     0.1s
+  ridge            ok   b72095bd450e4d05     0.0s
+  spectral         ok   7c5f4e5c32dc0ca1     0.1s
+  svc              ok   c982ba99909e46eb     0.0s
+  tsvd             ok   eb98ef49f9c747f0     0.0s
+smoke v0.2.0 mode=identical vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS

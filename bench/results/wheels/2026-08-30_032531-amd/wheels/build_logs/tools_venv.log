@@ -1,0 +1,11 @@
+The virtual environment was not created successfully because ensurepip is not
+available.  On Debian/Ubuntu systems, you need to install the python3-venv
+package using the following command.
+
+    apt install python3.12-venv
+
+You may need to use sudo with that command.  After installing the python3-venv
+package, recreate your virtual environment.
+
+Failing command: /root/mojolearn/bench/results/e1/2026-08-30_073015-mojolearn-e2-amd/diag/wheels/tools-venv/bin/python3
+

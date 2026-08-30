@@ -1,0 +1,62 @@
+
+=== provenance === 07:26:25
+539228de91709e5fd4382ec17490549ebc1cf3c3
+Linux 8855b7713729 6.8.0-60-generic #63~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Tue Apr 22 19:00:15 UTC 2 x86_64 x86_64 x86_64 GNU/Linux
+
+=== pixi === 07:26:26
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 07:26:31
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 07:26:31
+phase 9: DIAG ONLY (MOJOLEARN_P9_ONLY_DIAG=1); no builds, no arms, no probes here
+phase 9 builds: <none>
+phase 9 tiers:  <none>
+concurrent probe SKIPPED: needs all three tiers, P9_TIERS=<none>
+
+=== phase 9 diag: packaging/linux/leg_diag.sh === 07:26:31
+PHASE9-FINDING: diag script returned non-zero (see diag/console.log)
+    vendor=cuda  build_rc=0  smoke_rc=1  sabotage_rc=1  nogpu_rc=1
+    seconds=913
+    vendor=cuda
+    build_rc=0 stage_rc=0
+    build_seconds=894
+    set_fast_count=10
+    set_fast_bytes=22381536
+    set_deterministic_count=10
+    set_deterministic_bytes=22074000
+    set_identical_count=10
+    set_identical_bytes=19637112
+    runtime_libs_bytes=3200416
+    runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+    driver_libs_not_staged=
+    set_tar_gz_bytes=15769908
+    smoke[fast]:    lane gemm-pinned:   Or pass identical=False to say in the source that you want the fast product and are making no identity claim about it.
+    smoke[deterministic]:    lane gemm-pinned:   Or pass identical=False to say in the source that you want the deterministic product and are making no identity claim about it.
+    smoke[identical]: smoke v0.2.0 mode=identical vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+    sabotage: sabotage FAIL
+    nogpu: nogpu NOT TESTED on this box
+
+=== done === 07:41:45
+artifacts in /root/mojolearn/bench/results/e1/2026-08-30_072625-8855b7713729
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

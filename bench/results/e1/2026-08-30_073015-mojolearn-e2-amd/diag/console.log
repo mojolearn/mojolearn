@@ -1,0 +1,39 @@
+[07:30:18 leg_diag] 1/5 build_sets
+[07:30:18 build_sets] repo /root/mojolearn, dest /root/mojolearn/bench/results/e1/2026-08-30_073015-mojolearn-e2-amd/diag/wheels, tiers: fast deterministic identical, jobs: 3
+[07:30:18 build_sets] pixi env: gbmbench
+[07:33:12 build_sets] builds finished in 174s (rc=0)
+[07:33:14 build_sets] vendor read-back per binary:
+    fast _mojolearn hip
+    fast _mojolearn_gbdt hip
+    fast _mojolearn_estimators hip
+    fast _mojolearn_rf hip
+    fast _mojolearn_trees hip
+    fast _mojolearn_svm hip
+    fast _mojolearn_solver hip
+    fast _mojolearn_metrics hip
+    fast _mojolearn_tsa hip
+    fast _mojolearn_linalg hip
+    deterministic _mojolearn hip
+    deterministic _mojolearn_gbdt hip
+    deterministic _mojolearn_estimators hip
+    deterministic _mojolearn_rf hip
+    deterministic _mojolearn_trees hip
+    deterministic _mojolearn_svm hip
+    deterministic _mojolearn_solver hip
+    deterministic _mojolearn_metrics hip
+    deterministic _mojolearn_tsa hip
+    deterministic _mojolearn_linalg hip
+    identical _mojolearn hip
+    identical _mojolearn_gbdt hip
+    identical _mojolearn_estimators hip
+    identical _mojolearn_rf hip
+    identical _mojolearn_trees hip
+    identical _mojolearn_svm hip
+    identical _mojolearn_solver hip
+    identical _mojolearn_metrics hip
+    identical _mojolearn_tsa hip
+    identical _mojolearn_linalg hip
+[07:33:14 build_sets] vendor: hip
+[07:33:14 build_sets] could not install patchelf (see build_logs/tools_venv.log)
+[07:33:14 build_sets] no patchelf; the set is built but NOT staged
+[07:33:14 leg_diag] no vendor in SIZES.txt; stopping
