@@ -1118,7 +1118,7 @@ LEG_SOURCE_PATHS_PHASE8="tools/e1_bootstrap.sh tools/repeat_run_stability.py too
 # thing being measured is the device, and documentation cannot reach a
 # millisecond. But a benchmark driver, a lane it imports, or a vendor arm
 # script CAN, so all three are in here.
-LEG_SOURCE_PATHS_SPEED="bench/speed tools/speed_gemm_arm.py tools/speed_cuml_arm.py tools/speed_torch_seq.py tools/speed_gbdt_arm.py tools/vendor_gemm_price.py tools/fast_speed_table.py bench/gemm_shapes.mojo core gemm mojo_only bindings python/mojolearn pixi.toml pixi.lock"
+LEG_SOURCE_PATHS_SPEED="bench/speed tools/speed_gemm_arm.py tools/speed_cuml_arm.py tools/speed_torch_seq.py tools/speed_gbdt_arm.py tools/vendor_gemm_price.py tools/fast_speed_table.py tools/leg_status.py bench/gemm_shapes.mojo core gemm mojo_only bindings python/mojolearn pixi.toml pixi.lock"
 
 leg_check_tree_clean() {
     # THE LOCAL CARD COMES FROM THE WORKING TREE AND THE REMOTE CARD COMES
@@ -1566,11 +1566,11 @@ leg_archive_required() {
         # nothing.
         case "$SPEED_FAMILY" in
             gemmseq)
-                echo "bench/speed/gemm_speed_main.mojo bench/speed/seq_speed_main.mojo tools/speed_gemm_arm.py tools/speed_torch_seq.py tools/fast_speed_table.py" ;;
+                echo "bench/speed/gemm_speed_main.mojo bench/speed/seq_speed_main.mojo tools/speed_gemm_arm.py tools/speed_torch_seq.py tools/fast_speed_table.py tools/leg_status.py" ;;
             classical)
-                echo "bench/speed/classical_speed_main.mojo tools/speed_cuml_arm.py tools/fast_speed_table.py" ;;
+                echo "bench/speed/classical_speed_main.mojo tools/speed_cuml_arm.py tools/fast_speed_table.py tools/leg_status.py" ;;
             forest)
-                echo "bench/speed/forest_speed_arm.py tools/speed_gbdt_arm.py tools/fast_speed_table.py" ;;
+                echo "bench/speed/forest_speed_arm.py tools/speed_gbdt_arm.py tools/fast_speed_table.py tools/leg_status.py" ;;
         esac
     elif [ "$PAYLOAD" = "phase8" ]; then
         # EVERY LANE PHASE 8 DRIVES, not only the two this file is named

@@ -88,11 +88,43 @@ runarm() {
     wait "$_pid"; _rc=$?
     kill "$_wd" 2>/dev/null
     echo "arm_exit ${_log}=$_rc" >> "$OUT/leg.txt"
-    if [ "$_rc" -ge 143 ] 2>/dev/null; then
-        echo "FSPEED-NOTE lane=${_log} arm=- KILLED BY THE PER-ARM BUDGET (${ARMBUDGET}s)" >> "$LOGS/$_log"
-    fi
+    # WHICH EXIT CODES MEAN "THE BUDGET KILLED IT". The old test was
+    # `-ge 143` alone, which catches SIGTERM (143) and misses the two that
+    # matter most: 137 is SIGKILL, which on these boxes is the OOM killer,
+    # and 124 is coreutils `timeout` on the rented payload. Both were
+    # landing in the board as ordinary empty arms.
+    case "$_rc" in
+        124|137|143|152) echo "FSPEED-NOTE lane=${_log} arm=- KILLED BY THE PER-ARM BUDGET (${ARMBUDGET}s), exit $_rc" >> "$LOGS/$_log" ;;
+        *) [ "$_rc" -ge 143 ] 2>/dev/null && echo "FSPEED-NOTE lane=${_log} arm=- KILLED BY THE PER-ARM BUDGET (${ARMBUDGET}s), exit $_rc" >> "$LOGS/$_log" ;;
+    esac
     tail -3 "$LOGS/$_log" >> "$OUT/console.log" 2>&1
     return 0
+}
+
+# WHAT THE LEG INTENDED TO RUN, WRITTEN BEFORE IT TRIES.
+#
+# `builtok X && runarm ...` skips the arm SILENTLY when a build failed, and
+# a skipped arm leaves no log and no arm_exit line, so nothing downstream can
+# tell it apart from an arm that was never part of the plan. That is the
+# 2026-08-25 gemm_nt_gram case: an IDENTICAL build that had not compiled for
+# three days, and three days of boards that looked complete.
+#
+# `expect_arm <log> build=<binary>` is the plan, recorded first and read by
+# tools/leg_status.py. An arm that appears here and nowhere else is reported
+# as NOT_RUN against the build it was waiting on.
+expectarm() {
+    echo "expect_arm $1 build=${2:--}" >> "$OUT/leg.txt"
+}
+
+# expectarm + the builtok gate + runarm, so the three cannot drift apart.
+armbuilt() {
+    _bin="$1"; _log="$2"; shift 2
+    expectarm "$_log" "$_bin"
+    if builtok "$_bin"; then
+        runarm "$_log" "$@"
+    else
+        say "SKIP $_log -- $_bin did not build"
+    fi
 }
 
 buildone() {
@@ -112,24 +144,30 @@ gemmseq)
     for L in $LANES; do
         MOJOLEARN_SPEED_LANE="$L"; export MOJOLEARN_SPEED_LANE
         case "$L" in
-            gemm) builtok gemmspeed && runarm "gemm.gemm.ours.log" "$OUT/bin_gemmspeed" ;;
-            *)    builtok seqspeed  && runarm "seq.$L.ours.log"    "$OUT/bin_seqspeed" ;;
+            gemm) armbuilt gemmspeed "gemm.gemm.ours.log" "$OUT/bin_gemmspeed" ;;
+            *)    armbuilt seqspeed  "seq.$L.ours.log"    "$OUT/bin_seqspeed" ;;
         esac
     done
     # the two FAST correctness gates that DEVIATION 1876 put at risk, and
     # the same two under IDENTICAL, exactly as the rented payload runs them
+    expectarm "verify.transformer_block.fast.log"
     runarm "verify.transformer_block.fast.log" \
         pixi run mojo run -I . transformer/mojo_only/transformer_check.mojo
+    expectarm "verify.mamba_block.fast.log"
     runarm "verify.mamba_block.fast.log" \
         pixi run mojo run -I . mamba/mojo_only/mamba_check.mojo
+    expectarm "verify.transformer_block.identical.log"
     runarm "verify.transformer_block.identical.log" \
         sh tools/with_identical_mode.sh pixi run mojo run -I . transformer/mojo_only/transformer_check.mojo
+    expectarm "verify.mamba_block.identical.log"
     runarm "verify.mamba_block.identical.log" \
         sh tools/with_identical_mode.sh pixi run mojo run -I . mamba/mojo_only/mamba_check.mojo
     # the vendor arms: cuBLAS refuses here by name, torch runs on MPS
+    expectarm "gemm.gemm.cublas.log"
     runarm "gemm.gemm.cublas.log" $TORCH_PY tools/speed_gemm_arm.py --rounds "$ROUNDS"
     for L in $LANES; do
         [ "$L" = "gemm" ] && continue
+        expectarm "seq.$L.torch.log"
         runarm "seq.$L.torch.log" $TORCH_PY tools/speed_torch_seq.py \
             --lane "$L" --rounds "$ROUNDS" --dump-dir "$MOJOLEARN_SPEED_DUMP"
     done
@@ -139,7 +177,8 @@ classical)
     buildone classicalspeed bench/speed/classical_speed_main.mojo
     for L in $LANES; do
         MOJOLEARN_SPEED_LANE="$L"; export MOJOLEARN_SPEED_LANE
-        builtok classicalspeed && runarm "classical.$L.ours.log" "$OUT/bin_classicalspeed"
+        armbuilt classicalspeed "classical.$L.ours.log" "$OUT/bin_classicalspeed"
+        expectarm "classical.$L.vendor.log"
         runarm "classical.$L.vendor.log" $VENDOR_PY tools/speed_cuml_arm.py
     done
     ;;
@@ -155,9 +194,11 @@ forest)
         _dsflag=""
         if [ -n "$DS" ] && [ "$L" != "iforest" ]; then _dsflag="--dataset $DS"; fi
         if [ -z "$ROWS" ]; then
+            expectarm "forest.$L.log"
             runarm "forest.$L.log" "$FOREST_PY" bench/speed/forest_speed_arm.py --lane "$L" $_dsflag
         else
             for R in $ROWS; do
+                expectarm "forest.$L.r$R.log"
                 runarm "forest.$L.r$R.log" "$FOREST_PY" bench/speed/forest_speed_arm.py --lane "$L" $_dsflag --rows "$R"
             done
         fi
@@ -174,4 +215,26 @@ esac
   echo "ours_headers_fast=$(grep -h '^FSPEED-HEADER' "$LOGS"/*.log 2>/dev/null | grep -c 'arm=ours mode=FAST')"
   echo "ours_headers_identical=$(grep -h '^FSPEED-HEADER' "$LOGS"/*.log 2>/dev/null | grep -c 'arm=ours mode=IDENTICAL')"
 } >> "$OUT/leg.txt"
-say "done -- $OUT"
+
+# THE LEG NOW JUDGES ITSELF, AND ITS EXIT CODE SAYS WHAT IT FOUND.
+#
+# Until 2026-08-30 this script exited 0 whatever happened -- `runarm` ends in
+# `return 0` by design, so one arm's failure could not take the other five
+# down with it, which is right. What was missing is the accounting AFTER the
+# last arm. A leg that lost six of its arms and one that lost none were
+# indistinguishable to every caller, including a human reading the tail.
+#
+#   0  every arm measured or refused for a reason we meant
+#   1  OUR side broke, or a failure nobody has classified yet
+#   3  the BOX broke (budget, OOM, driver, lease, network), or a row is
+#      weaker than it looks
+#
+# 3 rather than 1 for the box, so `tools/do_speed_leg.sh` and a human can
+# tell "re-run this on another droplet" from "fix the code first" without
+# reading a log. Neither is 0: an incomplete board is never a pass.
+python3 "$REPO/tools/leg_status.py" "$OUT" --out "$OUT/STATUS.md" \
+    --json "$OUT/status.json"
+_status=$?
+echo "leg_status=$_status" >> "$OUT/leg.txt"
+say "done -- $OUT (status $_status; see STATUS.md)"
+exit "$_status"

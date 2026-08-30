@@ -508,13 +508,37 @@ def main():
         w("")
 
     text = "\n".join(lines) + "\n"
+
+    # THE STATUS SECTION GOES FIRST, AND ITS VERDICT IS THIS PROCESS'S EXIT.
+    #
+    # A ratio table is only evidence if the arms behind it ran. Until
+    # 2026-08-30 this file returned 0 unconditionally and rendered a leg that
+    # had lost half its arms exactly like a complete one, which is how nine
+    # silent defects survived a whole day of boards on 2026-08-28. The
+    # section is PREPENDED rather than appended because the failure a reader
+    # needs is the one they see before they start reading numbers.
+    status_rc = 0
+    try:
+        import leg_status
+        rep = leg_status.survey(args.run_dir)
+        status_rc = leg_status.SEVERITY_EXIT[rep["worst"]]
+        text = leg_status.render(rep) + "\n" + text
+    except Exception as exc:                      # noqa: BLE001
+        # A status reader that throws must not delete the board, and must
+        # not quietly pass either.
+        text = ("## Leg status: UNAVAILABLE\n\n"
+                "`tools/leg_status.py` raised while surveying this run:"
+                " `%s`. Nothing below has been checked for whether its arms"
+                " ran.\n\n" % exc) + text
+        status_rc = 1
+
     if args.out:
         with open(args.out, "w") as fh:
             fh.write(text)
         print(f"wrote {args.out}")
     else:
         sys.stdout.write(text)
-    return 0
+    return status_rc
 
 
 if __name__ == "__main__":
