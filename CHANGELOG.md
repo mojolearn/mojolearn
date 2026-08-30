@@ -32,7 +32,7 @@ script named is committed unrun under the no-run order of 2026-08-29 and
   `MOJOLEARN_P9_ONLY_DIAG` and both legs pass the diag knobs through.
 - `packaging/macos/smoke.py` asserts the vendor read-back (`metal`).
 
-## 0.2.0 (2026-08-29)
+## 0.2.0 (2026-08-30)
 
 Fourteen new public names and two new submodules, over lanes that were
 finished and gated at the kernel level before 0.1.0 shipped and were simply

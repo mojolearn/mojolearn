@@ -10,7 +10,7 @@ authors:
     affiliation: "Latent Archon"
 license: Apache-2.0
 version: "0.2.0"
-date-released: "2026-08-29"
+date-released: "2026-08-30"
 # The CONCEPT DOI, which always resolves to the newest release. The
 # per-version DOI (10.5281/zenodo.22068633 for v0.1.0) is minted by Zenodo
 # at each GitHub release and is recorded in README's Citing section; it
