@@ -12,7 +12,7 @@ license: Apache-2.0
 version: "0.3.0"
 date-released: "2026-08-30"
 # The CONCEPT DOI, which always resolves to the newest release. The
-# per-version DOI (10.5281/zenodo.22171041 for v0.2.0) is minted by Zenodo
+# per-version DOI (10.5281/zenodo.22181752 for v0.3.0) is minted by Zenodo
 # at each GitHub release and is recorded in README's Citing section; it
 # must not sit here, where it would name an older release than `version`.
 doi: 10.5281/zenodo.22068632

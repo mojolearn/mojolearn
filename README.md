@@ -362,15 +362,15 @@ The higgs GBDT accuracy gap is stated because it is there.
 ## Limitations and refusals
 
 - GPU only. No CPU fallback exists and none is planned for this release.
-- The published wheel is macOS arm64. CUDA and HIP are source builds until
-  the Linux wheel of `docs/LINUX_WHEEL.md` ships. Its tooling has now RUN, on
-  2026-08-30, on a rented H100, an A40 and an MI325X. A Linux wheel was
-  built, audited to `manylinux_2_35_x86_64`, published to TestPyPI, and
-  installed from there onto an MI325X where it passed all 29 smoke lanes in
-  each of the three numeric tiers. It is not on PyPI, because the same wheel
-  installed on an A40 showed that a set carries device code only for the GPU
-  architecture it was built on. The architecture axis that fixes it is in the
-  tree and its build legs are in progress.
+- Two wheels are published, macOS arm64 and Linux x86_64. The Linux wheel
+  carries six GPU architecture sets in one file, `cuda/sm_80`, `cuda/sm_90a`,
+  `cuda/sm_120a`, `hip/gfx942`, `hip/gfx1100` and `hip/gfx90a`, and picks one
+  at import from the device. It is `manylinux_2_35`, so glibc 2.35 or later,
+  which puts Ubuntu 22.04 and Debian 12 in and leaves RHEL 9 out by one minor
+  version. **There is no Windows wheel and none is possible today**, because
+  the Mojo toolchain has no Windows target; WSL2 works, being Linux. Three of
+  the six sets ran on real silicon and three ship build-verified only, which
+  `bench/results/wheels/LEGS_2026-08-30.md` states set by set.
 - The benchmark table is from one M4; FAST timings on an H100 and an MI325X
   are in `bench/results/BOARD_2026-08-28_three-vendor.md`. Correctness and
   identity are validated on the M4, an H100, an MI325X and an MI300X through
@@ -414,6 +414,7 @@ If mojolearn is useful in work you publish, please cite it.
 reads. Each GitHub release is archived on Zenodo with its own DOI; the
 concept DOI [10.5281/zenodo.22068632](https://doi.org/10.5281/zenodo.22068632)
 always resolves to the latest release. The per-version DOI is
+[10.5281/zenodo.22181752](https://doi.org/10.5281/zenodo.22181752) for 0.3.0,
 [10.5281/zenodo.22171041](https://doi.org/10.5281/zenodo.22171041) for 0.2.0
 and [10.5281/zenodo.22068633](https://doi.org/10.5281/zenodo.22068633) for
 0.1.0.
