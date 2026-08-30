@@ -1215,7 +1215,18 @@ def run_tree(
                     block_dim=(BLOCK_SIZE, 1, 1),
                 )
             else:
-                ctx.enqueue_function[binary_hist_gather_kernel](
+                # `binary_hist_gather_kernel` gained the `ridx_stats`
+                # parameter with DEVIATION 1902 and this call site was never
+                # updated, so it could not resolve the overload and the file
+                # stopped compiling for any importer that instantiates this
+                # branch. `mojo_only/level_bench.mojo` is one, and it has been
+                # unbuildable since. The bindings do not reach this branch,
+                # which is why the wheel builds and this does not. `False` is
+                # the parameter's own default and there is no `ridx_stats` in
+                # scope here, so it restores exactly the pre-1902 behaviour of
+                # this path. The gather arm that DOES take a value spells it
+                # `binary_hist_gather_kernel[ridx_stats]` at line 2248.
+                ctx.enqueue_function[binary_hist_gather_kernel[False]](
                     folds.unsafe_ptr(), fold_off.unsafe_ptr(),
                     grp_off.unsafe_ptr(), grp_sz.unsafe_ptr(),
                     Int32(n_features), cindex.unsafe_ptr(), Int32(n_rows),
