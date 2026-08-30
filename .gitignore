@@ -54,3 +54,6 @@ bench/results/e1g/*-dryrun/
 bench/results/wheels/*/wheels/sets/*/
 bench/results/wheels/*/wheels/sets/*.tar.gz
 bench/results/wheels/*/wheels/tools-venv/
+
+# macOS Finder metadata. Never content.
+.DS_Store

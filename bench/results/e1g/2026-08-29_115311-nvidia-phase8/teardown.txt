@@ -1,0 +1,6 @@
+pod=hsf415jdw8y201
+armed=1
+terminated=1
+deadman_pid=26551
+exit=143
+at=2026-08-29T17:09:15Z

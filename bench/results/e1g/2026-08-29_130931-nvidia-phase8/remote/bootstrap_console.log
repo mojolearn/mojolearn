@@ -1,0 +1,50 @@
+
+=== provenance === 17:10:24
+c6eaa9c9ecd9c6814cb70a132636d0da5d60a04e
+Linux f1a5b14b21c5 6.8.0-124-generic #124-Ubuntu SMP PREEMPT_DYNAMIC Tue May 26 13:00:45 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+
+=== pixi === 17:10:24
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 17:10:28
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 17:10:28
+phase 9 builds: build.sh build_estimators.sh build_gbdt.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_tsa.sh build_linalg.sh
+phase 9 tiers:  identical
+identical set: 10 of 10 binaries
+PHASE9-FINDING: stability arm identical returned non-zero (see stability/identical.txt)
+--- stability identical
+    | gbdt-symmetric   | STABLE   | YES  6/6 calls agreed   | dc987497271f92b1 |
+    | gemm-pinned      | STABLE   | YES  6/6 calls agreed   | 18ff2fd121056aee |
+    | gemm-vendor      | STABLE   | YES  6/6 calls agreed   | 18ff2fd121056aee |
+    | holtwinters      | STABLE   | YES  6/6 calls agreed   | cff24aef76c6431d |
+concurrent probe SKIPPED: needs all three tiers, P9_TIERS=identical
+--- identity_break (identical, every estimator, eight fixtures)
+PHASE9-FINDING: identity_break returned non-zero (a MOVED cell; see stability/identity_break.identical.txt)
+    # identity_break  mode=identical  2026-08-29 17:28:39  Linux-6.8.0-124-generic-x86_64-with-glibc2.35
+    | lane             | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+    |------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+
+=== done === 17:53:39
+artifacts in /root/mojolearn/bench/results/e1/2026-08-29_171024-f1a5b14b21c5
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

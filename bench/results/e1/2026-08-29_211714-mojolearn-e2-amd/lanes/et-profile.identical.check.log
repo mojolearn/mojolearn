@@ -1,0 +1,105 @@
+et_profile: commit bd26d092 rows=1000000/2000000 trees=100 depth=16 arms=shipped 128
+et_profile: out bench/results/e1/2026-08-29_211714-mojolearn-e2-amd/lanes/et_profile
+Linux mojolearn-e2-amd 6.8.0-59-generic #61-Ubuntu SMP PREEMPT_DYNAMIC Fri Apr 11 23:16:11 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
+GPU[0]		: Card Series: 		AMD Instinct Mi325X VF
+et_profile: rocprofv3 = rocprofv3 ; rocprof = /usr/bin/rocprof
+rocprof rocprof-compute rocprof-sys-avail rocprof-sys-causal rocprof-sys-causal-print rocprof-sys-instrument rocprof-sys-papi-avail rocprof-sys-papi-clockres rocprof-sys-papi-command-line rocprof-sys-papi-component-avail rocprof-sys-papi-cost rocprof-sys-papi-decode rocprof-sys-papi-error-codes rocprof-sys-papi-event-chooser rocprof-sys-papi-hardware-avail rocprof-sys-papi-hl-output-writer.py rocprof-sys-papi-mem-info rocprof-sys-papi-multiplex-cost rocprof-sys-papi-native-avail rocprof-sys-papi-version rocprof-sys-papi-xml-event-info rocprof-sys-run rocprof-sys-sample rocprofv2 rocprofv3 rocprofv3_avail 
+et_profile: downloading HIGGS.csv.gz (2.6 GB, bounded 900 s) 21:17:18
+et_profile: parsing the first 2000000 rows of /root/et_profile_data/HIGGS.csv.gz 21:18:23
+higgs prefix written: (2000000, 28) positives 0.5294089913368225
+et_profile: dataset=higgs total_rows=2000000
+et_profile: build tpb=shipped 21:18:34
+et_profile: build tpb=128 21:18:43
+--- ET-PROFILE dataset=higgs tpb=shipped rows=1000000 trees=100 depth=16 (phases) 21:18:52
+[fit_once] 100 trees, 1829804 nodes, 58880.207825 ms
+[phases] clocked total 58912.128019 ms vs unclocked 58880.207825 ms -- serialization distortion 1.0005421209465646 x; phase sum 58813.58471 ms
+   setup (buffers, row fill, workspace) :  3.419794 ms ( 0.005814632821417765 % )
+   stage + feature sampler :  194.361536 ms ( 0.3304704805163032 % )
+   range pass (init+range+decode+nonconst) :  2816.319267 ms ( 4.7885523062176905 % )
+   score pass (init+score+finalize) :  3287.873318 ms ( 5.590329741354751 % )
+   candidate+reduce+splits readback :  46.424063 ms ( 0.07893425171907023 % )
+   host: split records :  3.768487 ms ( 0.0064075111533870655 % )
+   partition (4 kernels) :  184.881036 ms ( 0.31435090534205257 % )
+   host: pop + batch assembly :  10.917205 ms ( 0.01856238665578866 % )
+   leaf pass :  35.431448 ms ( 0.06024364638664107 % )
+   host: queue push (children of the batch) :  52230.188556 ms ( 88.8063341378329 % )
+--- ET-PROFILE dataset=higgs tpb=128 rows=1000000 trees=100 depth=16 (phases) 21:21:49
+[fit_once] 100 trees, 1829804 nodes, 69924.852559 ms
+[phases] clocked total 69933.619317 ms vs unclocked 69924.852559 ms -- serialization distortion 1.0001253739933538 x; phase sum 69835.143484 ms
+   setup (buffers, row fill, workspace) :  3.669987 ms ( 0.00525521509215605 % )
+   stage + feature sampler :  265.345168 ms ( 0.37995936538856473 % )
+   range pass (init+range+decode+nonconst) :  8107.985813 ms ( 11.610179930191778 % )
+   score pass (init+score+finalize) :  8800.133642 ms ( 12.601296715336753 % )
+   candidate+reduce+splits readback :  43.332164 ms ( 0.06204922312492689 % )
+   host: split records :  3.763369 ms ( 0.005388932867106129 % )
+   partition (4 kernels) :  220.863701 ms ( 0.31626440497054653 % )
+   host: pop + batch assembly :  10.589962 ms ( 0.015164230316826479 % )
+   leaf pass :  32.523889 ms ( 0.04657238086358565 % )
+   host: queue push (children of the batch) :  52346.935789 ms ( 74.95786960184776 % )
+--- perf record (host) shipped rows=1000000 21:25:20
+    76.41%  et_fit_once_tpb  et_fit_once_tpbshipped          [.] core::identity_trace::IdentityTrace::_emit[LITMutOrigin,::Origin[::Bool(True), $0],::Bool,LITOrigin[$2._mlir_value],::Origin[$2, $3]](core::identity_trace::IdentityTrace,::StringSpan[$2, $3, $4],::String,::SIMD[::DType(int), ::SIMDLength(1)],::Pointer[::Bool(True), $0, ::SIMD[::DType(uint8), ::SIMDLength(1)], $1, ::AddressSpace(::SIMDLength(0))],::SIMD[::DType(int), ::SIMDLength(1)]),tag.mut`2x2=false
+            |
+            ---core::identity_trace::IdentityTrace::_emit[LITMutOrigin,::Origin[::Bool(True), $0],::Bool,LITOrigin[$2._mlir_value],::Origin[$2, $3]](core::identity_trace::IdentityTrace,::StringSpan[$2, $3, $4],::String,::SIMD[::DType(int), ::SIMDLength(1)],::Pointer[::Bool(True), $0, ::SIMD[::DType(uint8), ::SIMDLength(1)], $1, ::AddressSpace(::SIMDLength(0))],::SIMD[::DType(int), ::SIMDLength(1)]),tag.mut`2x2=false
+               |          
+               |--41.70%--0x6e6f697469747261
+               |          
+               |--29.64%--0x18
+               |          0x6f69746974726170
+               |          
+                --4.74%--0x2e6e6f6974697472
+     8.38%  et_fit_once_tpb  libhsa-runtime64.so.1.15.60400  [.] 0x000000000007cbde
+            |
+            ---0x735bd107cbde
+     3.63%  et_fit_once_tpb  [kernel.kallsyms]               [k] _raw_spin_lock
+            |
+            ---_raw_spin_lock
+               |          
+                --3.59%--kfd_ioctl_wait_events
+                          kfd_ioctl
+                          __x64_sys_ioctl
+                          x64_sys_call
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __GI___ioctl
+                          0x735bd1149400
+--- ET-PROFILE dataset=higgs tpb=shipped rows=2000000 trees=100 depth=16  21:26:25
+[fit_once] 100 trees, 2173962 nodes, 86239.72298 ms
+--- ET-PROFILE dataset=higgs tpb=128 rows=2000000 trees=100 depth=16  21:27:52
+[fit_once] 100 trees, 2173962 nodes, 108570.40202 ms
+--- rocprofv3 tpb=shipped rows=1000000 21:29:41
+E20260829 21:30:41.604517 132996586711168 output_stream.cpp:105] Opened result file: bench/results/e1/2026-08-29_211714-mojolearn-e2-amd/lanes/et_profile/rocprof_tpbshipped/et_tpbshipped_kernel_trace.csv
+E20260829 21:30:41.616249 132996586711168 output_stream.cpp:105] Opened result file: bench/results/e1/2026-08-29_211714-mojolearn-e2-amd/lanes/et_profile/rocprof_tpbshipped/et_tpbshipped_agent_info.csv
+E20260829 21:30:41.616377 132996586711168 output_stream.cpp:105] Opened result file: bench/results/e1/2026-08-29_211714-mojolearn-e2-amd/lanes/et_profile/rocprof_tpbshipped/et_tpbshipped_domain_stats.csv
+kernel stats (top 12 by total ns):
+    52.9%     3277.4 ms  calls      286  extratrees_ported_decisiontree6A6A6A6A_9ea9f7d0127855c6
+    44.9%     2784.7 ms  calls      474  extratrees_ported_decisiontree6A6A6A6A_c9e907d2c8efdbc6
+     0.4%       27.4 ms  calls      286  extratrees_ported_decisiontree6A6A6A6A_e3a670bc8965e024
+     0.4%       24.2 ms  calls     5250  __amd_rocclr_copyBuffer
+     0.4%       21.9 ms  calls      286  extratrees_ported_decisiontree6A6A6A6A_d03aef84e15ddf07
+     0.3%       20.6 ms  calls      286  extratrees_ported_decisiontree6A6A6A6A_383751eddd47ecc6
+     0.2%       12.4 ms  calls      286  extratrees_ported_decisiontree6A6A6A6A_329a4e6d705a998a
+     0.1%        5.2 ms  calls      286  extratrees_ported_decisiontree6A6A6A6A_4b84414a8196bbac
+     0.1%        5.2 ms  calls     1054  __amd_rocclr_fillBufferAligned
+     0.1%        4.3 ms  calls        2  extratrees_ported_decisiontree6A6A6A6A_6ef0df01aa52f40b
+     0.1%        3.4 ms  calls      474  extratrees_ported_decisiontree6A6A6A6A_b885a1ff67cfa1f5
+     0.0%        2.5 ms  calls      286  extratrees_ported_decisiontree6A6A6A6A_f0c11205cb798cf0
+  total device kernel time 6199.4 ms over 19 kernels
+--- rocprofv3 tpb=128 rows=1000000 21:30:41
+E20260829 21:31:52.636269 129538901641344 output_stream.cpp:105] Opened result file: bench/results/e1/2026-08-29_211714-mojolearn-e2-amd/lanes/et_profile/rocprof_tpb128/et_tpb128_kernel_trace.csv
+E20260829 21:31:52.647781 129538901641344 output_stream.cpp:105] Opened result file: bench/results/e1/2026-08-29_211714-mojolearn-e2-amd/lanes/et_profile/rocprof_tpb128/et_tpb128_agent_info.csv
+E20260829 21:31:52.647900 129538901641344 output_stream.cpp:105] Opened result file: bench/results/e1/2026-08-29_211714-mojolearn-e2-amd/lanes/et_profile/rocprof_tpb128/et_tpb128_domain_stats.csv
+kernel stats (top 12 by total ns):
+    51.7%     8794.5 ms  calls      286  extratrees_ported_decisiontree6A6A6A6A_04434e2786233cb9
+    47.5%     8089.3 ms  calls      474  extratrees_ported_decisiontree6A6A6A6A_4ebbbad78e59a0b7
+     0.1%       24.6 ms  calls      286  extratrees_ported_decisiontree6A6A6A6A_2d5f8fe95fb9641d
+     0.1%       23.3 ms  calls     5250  __amd_rocclr_copyBuffer
+     0.1%       22.4 ms  calls      286  extratrees_ported_decisiontree6A6A6A6A_f054e513a6aceab4
+     0.1%       21.1 ms  calls      286  extratrees_ported_decisiontree6A6A6A6A_bbd1706c651b6f7a
+     0.1%       12.5 ms  calls      286  extratrees_ported_decisiontree6A6A6A6A_329a4e6d705a998a
+     0.0%        7.2 ms  calls      286  extratrees_ported_decisiontree6A6A6A6A_1bfb8113fef77e16
+     0.0%        5.3 ms  calls     1054  __amd_rocclr_fillBufferAligned
+     0.0%        3.9 ms  calls      286  extratrees_ported_decisiontree6A6A6A6A_cb09cb9121de6afc
+     0.0%        3.4 ms  calls      474  extratrees_ported_decisiontree6A6A6A6A_b885a1ff67cfa1f5
+     0.0%        2.8 ms  calls        2  extratrees_ported_decisiontree6A6A6A6A_2b79237f263b504f
+  total device kernel time 17020.9 ms over 19 kernels
+et_profile: done 21:31:52

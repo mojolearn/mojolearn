@@ -1,0 +1,6 @@
+pod=ct40agls05xsj9
+armed=1
+terminated=1
+deadman_pid=659
+exit=143
+at=2026-08-29T15:53:08Z
