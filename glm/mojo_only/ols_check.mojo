@@ -623,13 +623,36 @@ def _fit_bits(
     # the two arms cannot differ because their inputs did. `salt` is the
     # same for both arms; it is a parameter only so a caller can prove the
     # comparator is not vacuous by handing the two arms different data.
+    #
+    # ONE STAGING BUFFER PER COPY. This block used to fill `big`, enqueue the
+    # copy into `a`, then OVERWRITE THE FIRST n FLOATS OF `big` and enqueue
+    # the copy into `b`, with no synchronize between them. `enqueue_copy` is
+    # a promise, not a read. On a discrete GPU the A upload is a real
+    # asynchronous DMA of 98,304 floats and the host rewrite of the first
+    # 8,192 of them races it, so `a` held a design matrix whose first ~683
+    # rows were whichever side won each cache line. That is upstream of
+    # `ols_fit` and therefore MODE-INDEPENDENT, which is exactly why
+    # `check_ols_is_launch_invariant` failed on the H100 and the MI325X in
+    # BOTH numeric modes and passed on Apple, where unified memory leaves no
+    # DMA to race. It is the harness, not a kernel. The comment above was
+    # false in the one way that mattered: the arms DID differ because their
+    # inputs did.
+    #
+    # `emit_ols_card`'s fixture (`ols_trace.mojo`) always used two host
+    # buffers, which is why the traced repro never reproduced and every leg
+    # reported that the card fixture's two fits agreed. PORTING.md item 12
+    # states the rule this violated, and records that the last time it cost
+    # an hour and "presented as a broken kernel".
+    var big_b = ctx.enqueue_create_host_buffer[DType.float32](n)
+    ctx.synchronize()
     for i in range(n * d):
         big.unsafe_ptr().unsafe_store(i, _hash_f32(i, salt))
-    ctx.enqueue_copy(dst_buf=a, src_ptr=big.unsafe_ptr())
     for i in range(n):
-        big.unsafe_ptr().unsafe_store(i, _hash_f32(i, salt + 1))
-    ctx.enqueue_copy(dst_buf=b, src_ptr=big.unsafe_ptr())
+        big_b.unsafe_ptr().unsafe_store(i, _hash_f32(i, salt + 1))
+    ctx.enqueue_copy(dst_buf=a, src_ptr=big.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=b, src_ptr=big_b.unsafe_ptr())
     ctx.synchronize()
+    _ = big_b^
 
     ols_fit(
         ctx, a, b, w, cov_a, q, qs, s_vec, ab, inv, a_alias, a_alias2,

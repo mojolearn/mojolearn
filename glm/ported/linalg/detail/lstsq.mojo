@@ -275,6 +275,13 @@ def lstsq_eig_traced(
     var h_info = ctx.enqueue_create_host_buffer[DType.float32](3)
     ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=info_buf)
     ctx.synchronize()
+    # `h_info` is alive across the copy TODAY only because the reads below sit
+    # after the synchronize. It is the one host buffer on this path without an
+    # explicit guard, and `_record_rank` twenty lines down carries one with the
+    # trap named in its comment. If the convergence branch is ever made
+    # conditional or deleted, this buffer's last use becomes the enqueue and
+    # the copy writes freed host memory. Hygiene, not the OLS defect.
+    _ = h_info
     if h_info.unsafe_ptr().unsafe_load(0) == Float32(0.0):
         raise Error(
             "lstsq_eig: the device Jacobi did not converge in "

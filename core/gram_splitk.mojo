@@ -928,6 +928,13 @@ def gemm_tn_splitk(
     var partials = ctx.enqueue_create_buffer[DType.float32](n_chunks * m * m)
     _splitk_launch(ctx, z, x, partials, m, k)
     ctx.synchronize()
+    # KEEP `partials` ALIVE PAST THE SYNCHRONIZE. Mojo frees a buffer at
+    # its LAST USE, which without this line is the launch argument above,
+    # so the destructor could run while the partial and reduce kernels are
+    # still in flight against it. Unreached at the OLS shape, where
+    # `gram_splitk_scratch_covers` takes the scratch-reuse branch, but live
+    # for the small-k callers this function names.
+    _ = partials^
 
 
 def gemm_tn_splitk_into(
@@ -984,6 +991,13 @@ def gram_centered_splitk(
     var partials = ctx.enqueue_create_buffer[DType.float32](n_chunks * m * m)
     _splitk_launch_centered(ctx, z, x, mu, partials, m, k)
     ctx.synchronize()
+    # KEEP `partials` ALIVE PAST THE SYNCHRONIZE. Mojo frees a buffer at
+    # its LAST USE, which without this line is the launch argument above,
+    # so the destructor could run while the partial and reduce kernels are
+    # still in flight against it. Unreached at the OLS shape, where
+    # `gram_splitk_scratch_covers` takes the scratch-reuse branch, but live
+    # for the small-k callers this function names.
+    _ = partials^
 
 
 def gram_centered_splitk_into(

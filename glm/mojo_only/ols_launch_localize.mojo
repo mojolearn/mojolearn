@@ -22,16 +22,31 @@ THE INSTRUMENT THAT WAS SUPPOSED TO LOCALIZE IT CANNOT, AND THAT IS THE CLUE
 come back with `<no traced repro: the card fixture's two fits agreed>`. The
 traced path does not reproduce the bug.
 
-**A traced fit is not the same program as an untraced one.** `record_device`
-begins `if not self.enabled: return`, and when it IS enabled it copies a
-device buffer to the host and calls `ctx.synchronize()`. `lstsq_eig_traced`
-carries eight of those. So the traced fit runs the same kernels with eight
-extra drains interleaved, and it also holds every recorded buffer live
-across those drains. Turning the instrument on changes both the
-synchronisation and the object lifetimes of the thing being measured, and
-the bug goes away. That is not a failure of the instrument, it is the
-strongest single fact known about the defect: **whatever moves is sensitive
-to drain placement or to buffer lifetime, not to arithmetic.**
+**SOLVED 2026-08-30. THE PARAGRAPH THAT STOOD HERE WAS A GOOD ARGUMENT FOR
+THE WRONG ANSWER, AND IT IS KEPT ONLY AS A WARNING.** It said that a traced
+fit is not the same program as an untraced one, because `record_device`
+copies a device buffer to the host and calls `ctx.synchronize()`,
+`lstsq_eig_traced` carries eight of those, and so the traced fit runs the
+same kernels with eight extra drains interleaved and every recorded buffer
+held live across them. All of that is TRUE. It concluded that whatever moves
+is sensitive to drain placement or buffer lifetime rather than to
+arithmetic, which is ALSO true, and still it pointed at the wrong file.
+
+The traced path does not reproduce the bug for a much simpler reason that no
+amount of reasoning about drains would have found: **it has a different
+fixture uploader.** `emit_ols_card` in `ols_trace.mojo` allocates TWO host
+buffers, fills both, and only then enqueues both copies. `_fit_bits` in
+`ols_check.mojo` allocated ONE, enqueued the copy into `A`, overwrote the
+first 8,192 floats of it for `b`, and enqueued the second copy with no
+synchronize between them. On a discrete GPU the `A` upload is an
+asynchronous DMA of 98,304 floats and the host rewrite races it. The two
+programs differ in their INPUT, not in their drains.
+
+The lesson worth keeping: when an instrument and the thing it measures
+disagree, compare their FIXTURES before theorising about their execution.
+This file copied the broken uploader too, which is why it was silent on the
+M4 and would have been silent on a GPU box for the wrong reason. Both are
+fixed. `PORTING.md` item 12 stated the rule from the start.
 
 Same shape as DEVIATION 1944 and as `ensemble/mojo_only/rf_ctx_probe.mojo`,
 which passed two fits in one process because its `one_fit` takes `ctx` as a
@@ -227,13 +242,24 @@ def _one_fit(
     ctx.enqueue_copy(dst_buf=a_alias2, src_ptr=big.unsafe_ptr())
     ctx.synchronize()
 
+    # ONE STAGING BUFFER PER COPY. THIS INSTRUMENT CARRIED THE DEFECT IT WAS
+    # WRITTEN TO LOCALIZE. It copied the fixture block out of `ols_check.mojo`
+    # verbatim, including the host rewrite of `big` between the two
+    # `enqueue_copy` calls, so on a discrete GPU it corrupted its own design
+    # matrix exactly the way the gate did. That is why it was silent on the
+    # M4, where unified memory leaves no DMA to race, and it would have sent
+    # a reader of its own stage table to the split-K kernel on a `step1.covA`
+    # move when the cause is upstream of step 1. PORTING.md item 12.
+    var big_b = ctx.enqueue_create_host_buffer[DType.float32](N_ROWS)
+    ctx.synchronize()
     for i in range(N_ROWS * N_COLS):
         big.unsafe_ptr().unsafe_store(i, _hash_f32(i, 527))
-    ctx.enqueue_copy(dst_buf=a, src_ptr=big.unsafe_ptr())
     for i in range(N_ROWS):
-        big.unsafe_ptr().unsafe_store(i, _hash_f32(i, 528))
-    ctx.enqueue_copy(dst_buf=b, src_ptr=big.unsafe_ptr())
+        big_b.unsafe_ptr().unsafe_store(i, _hash_f32(i, 528))
+    ctx.enqueue_copy(dst_buf=a, src_ptr=big.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=b, src_ptr=big_b.unsafe_ptr())
     ctx.synchronize()
+    _ = big_b^
 
     ols_fit(
         ctx, a, b, w, cov_a, q, qs, s_vec, ab, inv, a_alias, a_alias2,

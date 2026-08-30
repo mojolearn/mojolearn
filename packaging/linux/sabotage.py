@@ -18,16 +18,29 @@ The cases, with `V` the box's vendor and `W` the other one:
                         set under the wrong label). The probe finds V's
                         device, picks V/, never opens W/. Import succeeds,
                         vendor() == V.
-  wrong_label_refused   the same tree with MOJOLEARN_VENDOR=W forcing the
-                        selector into W/. The binaries there answer V. The
-                        import must RAISE naming the mismatch. This is the
-                        read-back beating the label.
+  forced_vendor_without_evidence
+                        MOJOLEARN_VENDOR=W on a box that is vendor V, with no
+                        override. Since 2026-08-30 the selector refuses this
+                        BEFORE any dlopen, because forcing a vendor whose
+                        runtime is absent aborts the process rather than
+                        raising. Must name the missing evidence and the
+                        override.
+  wrong_label_refused   the same tree with MOJOLEARN_VENDOR=W and
+                        MOJOLEARN_VENDOR_FORCE=1 forcing the selector into W/.
+                        The binaries there answer V. The import must RAISE
+                        naming the mismatch. This is the read-back beating the
+                        label. FORCE is required to get past the guard above,
+                        and reproduces the condition on a real W box, which
+                        would have W's driver library and so would not trip
+                        the guard at all.
   poisoned_ignored      W/ holds files named like a set but full of random
                         bytes. Import succeeds through V/; W/ was never
                         loaded.
-  poisoned_forced       MOJOLEARN_VENDOR=W on that tree. The import must
-                        raise (a load failure, from the loader), never
-                        fall through to V/.
+  poisoned_forced       MOJOLEARN_VENDOR=W and MOJOLEARN_VENDOR_FORCE=1 on
+                        that tree. The import must raise A LOAD FAILURE, FROM
+                        THE LOADER, never fall through to V/. Without FORCE
+                        this case kept passing on the guard's refusal instead,
+                        which is a case that no longer tests what it says.
   correct_set_removed   V/ deleted, W/ present and well formed (V's
                         binaries under the W label, so a fallback would
                         even WORK on this box). The import must RAISE the
@@ -165,10 +178,30 @@ def main():
 
     case("baseline", lambda pkg: None, {}, True, expect_vendor=V)
     case("wrong_label_ignored", fill_w_with_v, {}, True, expect_vendor=V)
-    case("wrong_label_refused", fill_w_with_v, {"MOJOLEARN_VENDOR": W}, False,
+
+    # MOJOLEARN_VENDOR_FORCE=1 ON EVERY CASE THAT FORCES THE OTHER VENDOR.
+    # Since 2026-08-30 the selector refuses a forced vendor for which this box
+    # shows no device node and no loadable driver library, BEFORE anything is
+    # dlopened, because forcing hip on a box with no ROCm aborts the process
+    # instead of raising. W is by definition the vendor this box is NOT, so
+    # that refusal now fires first on every one of these cases and hides the
+    # deeper check each was written for.
+    #
+    # This is not a workaround, it is the correct ordering: on a real box of
+    # vendor W the guard would not fire at all, because a W box has W's driver
+    # library. FORCE=1 reproduces that condition here. It was found by the
+    # gate turning red on the MI325X the same day the guard landed, and
+    # `poisoned_forced` is the sharper lesson: it kept PASSING, on the guard's
+    # refusal rather than the loader's, which is a case that no longer tests
+    # what its name says.
+    FORCE = {"MOJOLEARN_VENDOR": W, "MOJOLEARN_VENDOR_FORCE": "1"}
+    case("forced_vendor_without_evidence", fill_w_with_v,
+         {"MOJOLEARN_VENDOR": W}, False,
+         ("NO evidence", "MOJOLEARN_VENDOR_FORCE=1", "KILL THIS PROCESS"))
+    case("wrong_label_refused", fill_w_with_v, FORCE, False,
          (f"compiled for {V}", "wrong vendor directory"))
     case("poisoned_ignored", poison_w, {}, True, expect_vendor=V)
-    case("poisoned_forced", poison_w, {"MOJOLEARN_VENDOR": W}, False)
+    case("poisoned_forced", poison_w, FORCE, False)
     case("correct_set_removed", remove_v, {}, False,
          ("NO SUPPORTED GPU FOUND", f"['{W}']", "MOJOLEARN_VENDOR"))
     case("tier_mislabeled", mislabel_tier, {"MOJOLEARN_NUMERIC_MODE": "deterministic"},

@@ -405,13 +405,20 @@ def bench_remaining_phases(n_rows: Int, repeats: Int) raises:
 
     var nf = ctx.enqueue_create_buffer[DType.uint32](n_features)
     var nf2 = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    # ONE STAGING BUFFER PER COPY (PORTING.md item 12). `hnf` was refilled
+    # between the two enqueues with no synchronize, so on a discrete GPU
+    # `nf` could receive the second fill. Found 2026-08-30 while fixing the
+    # same defect in the OLS gate.
     var hnf = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    var hnf2 = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    ctx.synchronize()
     for f in range(n_features):
         hnf.unsafe_ptr().unsafe_store(f, UInt32(1))
+        hnf2.unsafe_ptr().unsafe_store(f, UInt32(f))
     ctx.enqueue_copy(dst_buf=nf, src_ptr=hnf.unsafe_ptr())
-    for f in range(n_features):
-        hnf.unsafe_ptr().unsafe_store(f, UInt32(f))
-    ctx.enqueue_copy(dst_buf=nf2, src_ptr=hnf.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=nf2, src_ptr=hnf2.unsafe_ptr())
+    ctx.synchronize()
+    _ = hnf2^
 
     var hist = ctx.enqueue_create_buffer[DType.float32](
         2 * stat_count * n_features

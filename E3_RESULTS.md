@@ -228,10 +228,26 @@ disagree at coefficient 0 — H100 0xbbc76fa8 vs 0xbbc6fa1b (0.2%),
 MI325X 0xbbca3989 vs 0xbba71c67 (2.5%) — in both modes, while the FIRST
 fit of every process is bit-identical across all three vendors (that is
 why every E2U OLS cell, one fit per subprocess, has been identical on
-every leg). Not a summation order: a fit-internal read-before-write that
-Metal's zeroed allocations hide. The check now prints the first diverging
-stage of two traced fits before raising (`eb5a2d1`); round 11 localizes
-it. On AMD the FAST k-NN surface check and the knn_main gate were clean;
+every leg). Not a summation order.
+
+**LOCALIZED AND FIXED 2026-08-30, and it was never in a kernel.** The
+sentence that stood here, "a fit-internal read-before-write that Metal's
+zeroed allocations hide", was wrong in both halves. `_fit_bits` in
+`glm/mojo_only/ols_check.mojo` filled ONE host staging buffer, enqueued the
+asynchronous copy into the design matrix `A`, then overwrote the first 8,192
+floats of that same buffer for `b` and enqueued the second copy, with no
+synchronize between them. On a discrete GPU the `A` upload is a real DMA of
+98,304 floats and the host rewrite races it, so `A` held whichever side won
+each cache line. That is UPSTREAM of `ols_fit` and therefore
+mode-independent, which is what let it fail in FAST and IDENTICAL alike, and
+Apple passed because unified memory leaves no DMA to race. `PORTING.md` item
+12 already stated the rule it broke, "one staging buffer per copy, or
+synchronize between them", and records that the previous instance also
+"presented as a broken kernel". The card fixture in `ols_trace.mojo` always
+used two host buffers, which is exactly why the traced repro never
+reproduced and every leg reported that the card's two fits agreed. The check
+prints the first diverging stage of two traced fits before raising
+(`eb5a2d1`). On AMD the FAST k-NN surface check and the knn_main gate were clean;
 on the H100 the FAST tiled arm's TF32 distances are RECORDED with their
 label (8 of 320 neighbours reordered, worst distance 0.0022).
 
