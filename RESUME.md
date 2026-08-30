@@ -953,16 +953,25 @@ against BOTH exact references. Verdict on Metal through MAX:
 The check is per-backend by construction; running it is the first hour
 of every new kernel-matrix column.
 
-### 2026-08-21, the user-facing hole: train()'s 24-second preparation bill
+### 2026-08-21, the user-facing hole: train()'s preparation bill. CLOSED THE SAME DAY.
 
 `mojo_only/quantize_cost_probe.mojo` (worktree at 5eed329): at
-400k x 500, `train()` end to end is 24.5-25.1 s of which the trees are
-0.75 s -- the prep bill is ~24 s, 32x the training. Every benchmark row
-stays true (both arms quantize outside the timed region), but a real
-`.fit(X, y)` pays this inside, against CatBoost's multi-threaded C++
-quantizer -- END TO END WE CURRENTLY LOSE THE SHAPE WE WIN 2-4x ON
-TREES. Components unmeasured; fix list theirs-first in
-`bench/results/PREP_BILL_2026-08-21.md` (their subsample bound for
-border building, then the already-ported device binarize kernel wired
-into train()'s prep, then the honest end-to-end row). This is the
-single largest known performance item in the library.
+400k x 500, `train()` end to end was 24.5-25.1 s of which the trees were
+0.75 s -- a prep bill of ~24 s, 32x the training, paid inside a real
+`.fit(X, y)` against CatBoost's multi-threaded C++ quantizer. It was
+called "the single largest known performance item in the library" and
+it was.
+
+**IT IS CLOSED. Steps 1 through 12 of
+`bench/results/PREP_BILL_2026-08-21.md` ran the same day and took the
+prep bill to 1.26-1.30 s, every step gated bit-exact on the trained
+model.** Re-measured at HEAD nine days later
+(`bench/results/PREP_BILL_2026-08-30_RECHECK.md`, commit `6c607835`):
+end to end at 400k x 500 is ours 1.76-2.72 s against their 2.78-3.07 s,
+**1.02x to 1.69x in our favour on the user-facing path**, with covtype
+at parity. The sentence "END TO END WE CURRENTLY LOSE THE SHAPE WE WIN
+2-4x ON TREES" was true for one day and is deleted rather than softened.
+
+Still owed, and it is a paragraph rather than an experiment: the paper
+reports two protocols (kernel rows pre-quantize both arms, this row does
+not) and must label which is which.
