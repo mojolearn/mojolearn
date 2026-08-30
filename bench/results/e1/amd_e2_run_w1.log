@@ -1,9 +1,9 @@
 
-=== provenance === 16:10:34
-40c2c5fc1780f3538df7327e5bb3f9a712e3ca8a
+=== provenance === 21:08:58
+c526e58b246b320ccd867ba7447a6932dc451f86
 Linux mojolearn-e2-amd 6.8.0-59-generic #61-Ubuntu SMP PREEMPT_DYNAMIC Fri Apr 11 23:16:11 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
 
-=== pixi === 16:10:34
+=== pixi === 21:08:58
 This script will automatically download and install Pixi (latest) for you.
 Getting it from this url: https://github.com/prefix-dev/pixi/releases/latest/download/pixi-x86_64-unknown-linux-musl.tar.gz
 The 'pixi' binary is installed into '/root/.pixi/bin'
@@ -11,7 +11,7 @@ Updating '/root/.bashrc'
 Please restart or source your shell.
 ✔ The default environment has been installed.
 
-=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 16:10:37
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 21:09:01
 
 === phase 0 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
 
@@ -31,35 +31,37 @@ Please restart or source your shell.
 
 === phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
 
-=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 16:10:37
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 21:09:01
 phase 9: DIAG ONLY (MOJOLEARN_P9_ONLY_DIAG=1); no builds, no arms, no probes here
 phase 9 builds: <none>
 phase 9 tiers:  <none>
 concurrent probe SKIPPED: needs all three tiers, P9_TIERS=<none>
 
-=== phase 9 diag: packaging/linux/leg_diag_install.sh === 16:10:37
-    [16:10:37 leg_install] venv route: python3 -m venv
-    [16:10:45 leg_install] venv route: python3 -m venv after apt-get install python3.12-venv
-    [16:10:47 leg_install] clean venv at /root/mojolearn-smoke-venv (Python 3.12.3)
-           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 26.2/26.2 MB 11.3 MB/s eta 0:00:00
-        Downloading numpy-2.5.2-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.7 MB)
-           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.7/16.7 MB 230.9 MB/s eta 0:00:00
-        Installing collected packages: numpy, mojolearn
-        Successfully installed mojolearn-0.3.0 numpy-2.5.2
-    [16:10:52 leg_install] installed mojolearn==0.3.0 from testpypi; vendor read back: hip
-          tsvd             ok   a378f1007cb95451     0.0s
-        smoke v0.3.0 mode=fast vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
-          tsvd             ok   a378f1007cb95451     0.0s
-        smoke v0.3.0 mode=deterministic vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
-          tsvd             ok   eb98ef49f9c747f0     0.0s
-        smoke v0.3.0 mode=identical vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
-    index=testpypi version=0.3.0 vendor=hip smoke_rc=0
+=== phase 9 diag: packaging/linux/leg_diag.sh === 21:09:01
+PHASE9-FINDING: diag script returned non-zero (see diag/console.log)
+    vendor=hip
+    arch=gfx942
+    gpu_archs_requested=gfx942
+    build_rc=0 stage_rc=0
+    build_seconds=184
+    set_fast_count=10
+    set_fast_bytes=14189618
+    set_deterministic_count=10
+    set_deterministic_bytes=14193794
+    set_identical_count=10
+    set_identical_bytes=13985066
+    runtime_libs_bytes=3200416
+    runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+    driver_libs_not_staged=
+    set_tar_gz_bytes=11477080
     smoke[fast]: smoke v0.3.0 mode=fast vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
     smoke[deterministic]: smoke v0.3.0 mode=deterministic vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
     smoke[identical]: smoke v0.3.0 mode=identical vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
+    sabotage: sabotage FAIL
+    nogpu: nogpu PASS
 
-=== done === 16:10:57
-artifacts in /root/mojolearn/bench/results/e1/2026-08-30_161034-mojolearn-e2-amd
+=== done === 21:12:12
+artifacts in /root/mojolearn/bench/results/e1/2026-08-30_210858-mojolearn-e2-amd
 next: fetch this directory beside the other machine's and run
   python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
   python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card
