@@ -114,6 +114,8 @@ def kpss_test_host(
         stat_ptr.unsafe_store(b, stats[b])
     _ = res^
     _ = y^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return batch_size
 
 
@@ -141,4 +143,6 @@ def select_d_host(
     for b in range(batch_size):
         d_ptr.unsafe_store(b, chosen[b])
     _ = y^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return batch_size

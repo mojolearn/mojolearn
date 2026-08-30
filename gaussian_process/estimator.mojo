@@ -674,6 +674,8 @@ def gpr_fit_host(
     _ = dls^
     _ = dk^
     _ = dstack^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
 
     trace.record_list_f32(
         "gp.ridged", _ridged_diagonal_replay(k_host, n_train, alpha)
@@ -1055,6 +1057,8 @@ def gpr_predict_host(
     _ = dvar^
     _ = dstd^
     _ = dclamp^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return GPPrediction(
         mean^, variance^, std^, clamped^, n_clamped, kss, n_star
     )

@@ -402,4 +402,14 @@ def iforest_run_host(
     else:
         out.values = est.score_samples(ctx, query, n_query, n_features)
     _ = est^
+    # DEVIATION 1946: THE CONTEXT DIES LAST. `est.model` holds EIGHT
+    # `DeviceBuffer`s (`isolation_forest.mojo:155-162`). Mojo destroys a value
+    # at its LAST USE, so without this line `ctx` was destroyed at the
+    # `score_samples`/`predict` call above and those eight buffers were then
+    # freed against a context that had already gone -- the same class as
+    # DEVIATION 1944, one call later. On an RTX 4090 (driver 580, CUDA 13)
+    # that left the process wedged: the FIRST binding call returned, and the
+    # NEXT GPU call in the process never did, GPU idle, every host thread in
+    # futex wait. H100, M4 and MI325X never minded either shape.
+    _ = ctx^
     return out^

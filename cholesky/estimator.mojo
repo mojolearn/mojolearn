@@ -174,6 +174,8 @@ def cholesky_factor_host(
     _ = da^
     _ = ws^
     _ = dwork^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return CholeskyFactor(l^, n, run.info, logdet, run.nb, jitter)
 
 
@@ -245,6 +247,8 @@ def cholesky_solve_host(
     var x = _download(ctx, db, n * nrhs)
     _ = dl^
     _ = db^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return x^
 
 
@@ -302,4 +306,6 @@ def cholesky_rank1_update_host(
     var out = _download(ctx, dl, ld * ld)
     _ = dl^
     _ = dws^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return out^

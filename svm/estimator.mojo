@@ -179,6 +179,8 @@ def svc_fit_host(
     out.support_idx = model.support_idx.copy()
     out.support_matrix = model.support_matrix.copy()
     _ = model^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return out^
 
 
@@ -261,4 +263,6 @@ def svc_predict_host(
         ctx, model, x, n_rows, n_cols, kp, buffer_size_mib, predict_class, card
     )
     _ = model^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return out^

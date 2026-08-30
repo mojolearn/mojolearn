@@ -331,6 +331,17 @@ def rf_classifier_fit_binding(
         _ = dsw^
         _ = hx^
         _ = hy^
+        # DEVIATION 1946: THE CONTEXT DIES LAST. Mojo destroys a value at its
+        # LAST USE, so without this line `ctx`'s last use is the
+        # `synchronize()` above and the five buffers -- two of them PINNED
+        # HOST allocations -- are freed against a context that is already
+        # gone. `ensemble/mojo_only/rf_ctx_order_probe.mojo` is that ordering
+        # in 60 lines with no Python. It is the same class as DEVIATION 1944
+        # (a device buffer freed against a context that is not the live one),
+        # and it is why the pure-Mojo probe passed where this binding hung:
+        # `rf_ctx_probe.mojo::one_fit` takes `ctx` as a BORROWED argument, so
+        # the caller's frame keeps it alive past every release.
+        _ = ctx^
     return _forest_out_i32(forest)
 
 
@@ -404,6 +415,9 @@ def rf_regressor_fit_binding(
         _ = dsw^
         _ = hx^
         _ = hy^
+        # DEVIATION 1946, as in `rf_classifier_fit_binding`: the context
+        # outlives every buffer created on it.
+        _ = ctx^
     return _forest_out(forest)
 
 

@@ -112,4 +112,6 @@ def kde_score_samples_host(
     _ = dquery^
     _ = dweights^
     _ = dout^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return out^

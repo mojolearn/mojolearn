@@ -13,9 +13,10 @@
 #       right after a stability arm whose iforest lane had been killed.
 #
 #   D0  what is on the GPU before anything runs (a leftover process?)
-#   ORDER on leg 2: D0, D2 (Python lifetime probes), D4 (the fix through the
-#   probe and the stability harness), D3 (Mojo lifetime probes), D1 (leg 1's
-#   reproduction, last, budget permitting).
+#   ORDER on leg 3: D0, D5 (DEVIATION 1946's ordering probe, cheapest and
+#   most decisive, needs nothing built), D2 (Python lifetime probes), D4 (the
+#   fix through the probe and the stability harness), D3 (Mojo lifetime
+#   probes), D1 (leg 1's reproduction, last, budget permitting).
 #   D1  rf-clf step by step (fit, predict, predict_proba, second fit), then
 #       identity_break on rf-clf base / hashed and on et-clf x nine fixtures
 #   D2  iforest in the background: after 20 s, nvidia-smi PIDS/utilization,
@@ -57,6 +58,24 @@ run() {
   echo "--- MODULAR_NVPTX_COMPILER_PATH=${MODULAR_NVPTX_COMPILER_PATH:-<unset>}"
 } > "$D/d0_env.log" 2>&1
 say "D0 env recorded"
+
+# ---------------------------------------------------------------- D5 (leg 3)
+# DEVIATION 1946 FIRST. The ordering alone: a context created inside a call
+# and its own buffers freed after its last use, twice in one process, in the
+# two orders, with no forest, no Python and nothing built. ~30 s for both.
+#
+#   BAD hangs (rc 137 under timeout -s KILL) and GOOD prints DONE
+#       -> the ordering IS the poison; DEVIATION 1946 is the fix and D4's
+#          binding lanes below should now pass on this box.
+#   BOTH print DONE
+#       -> the ordering is NOT the poison here. 1946 stays as a correctness
+#          fix, the hunt goes back to the GILReleased block, and D2/D3 below
+#          are what say so. WRITE THAT SENTENCE in this file's verdicts.
+ORDP=ensemble/mojo_only/rf_ctx_order_probe.mojo
+run d5_order_bad_build 480 pixi run mojo build -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D ORDER_BAD=1 "$ORDP" -o "$D/probe_order_bad" \
+  && run d5_order_bad_run 120 "$D/probe_order_bad"
+run d5_order_good_build 480 pixi run mojo build -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D ORDER_GOOD=1 "$ORDP" -o "$D/probe_order_good" \
+  && run d5_order_good_run 120 "$D/probe_order_good"
 
 # ---------------------------------------------------------------- D2 (leg 2)
 # Leg 1 (bench/results/e1/2026-08-29_163200-runpod-nvidia/diag) said: rf fit,

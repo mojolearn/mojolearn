@@ -338,11 +338,15 @@ def _(ml, X, yc, yr):
 # LAST ON PURPOSE (2026-08-29): on a RunPod RTX 4090 the isolation forest
 # binding hung at its first fit in every tier (a second DeviceContext beside
 # the caller's deadlocked at teardown on sm_89; fixed by DEVIATION 1944, the
-# estimator now uses the caller's context), and a SECOND, still OPEN 4090
-# defect makes the next GPU call after one RandomForest.fit hang. A hang cannot
-# be caught from inside this process, so the JSON is written after every lane,
-# the caller wraps the run in `timeout`, and the historically hanging lane runs
-# last; a killed run still leaves every earlier lane on disk.
+# estimator now uses the caller's context), and a SECOND 4090 defect made the
+# next GPU call after one RandomForest.fit hang -- DEVIATION 1946, the same
+# class one call later: the binding's context was destroyed at its last use
+# and its own buffers were freed behind it. 1946 is FIXED IN SOURCE AND UNRUN
+# ON A 4090 (see bench/results/identity_break/RESULTS.md, RUN OWED). A hang
+# cannot be caught from inside this process, so the JSON is written after
+# every lane, the caller wraps the run in `timeout`, and the historically
+# hanging lane runs last; a killed run still leaves every earlier lane on
+# disk.
 @lane("iforest")
 def _(ml, X, yc, yr):
     m = ml.IsolationForest(n_estimators=16, random_state=5).fit(X)

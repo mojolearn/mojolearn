@@ -113,6 +113,8 @@ def accuracy_score_host(
     var out = accuracy_score_py(ctx, dt, dp, n)
     _ = dt^
     _ = dp^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return out
 
 
@@ -130,6 +132,8 @@ def rand_score_host(
     var out = rand_index(ctx, dt, dp, n)
     _ = dt^
     _ = dp^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return out
 
 
@@ -147,6 +151,8 @@ def adjusted_rand_score_host(
     var out = adjusted_rand_index(ctx, dt, dp, n)
     _ = dt^
     _ = dp^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return out
 
 
@@ -169,6 +175,8 @@ def entropy_host(
     var dl = upload_i32(ctx, labels)
     var out = entropy(ctx, dl, n, lower, upper)
     _ = dl^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return out
 
 
@@ -194,6 +202,8 @@ def mutual_info_score_host(
     var out = mutual_info_score(ctx, dt, dp, n, lower, upper)
     _ = dt^
     _ = dp^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return out
 
 
@@ -213,6 +223,8 @@ def homogeneity_score_host(
     var out = homogeneity_score(ctx, dt, dp, n, lower, upper)
     _ = dt^
     _ = dp^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return out
 
 
@@ -236,6 +248,8 @@ def completeness_score_host(
     var out = completeness_score(ctx, dt, dp, n, lower, upper)
     _ = dt^
     _ = dp^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return out
 
 
@@ -257,6 +271,8 @@ def v_measure_score_host(
     var out = v_measure(ctx, dt, dp, n, lower, upper, beta)
     _ = dt^
     _ = dp^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return out
 
 
@@ -284,6 +300,8 @@ def r2_score_host(
     var out = r2_score_py(ctx, dy, dh, n)
     _ = dy^
     _ = dh^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return out
 
 
@@ -299,6 +317,8 @@ def kl_divergence_host(
     var out = kl_divergence(ctx, dp, dq, n)
     _ = dp^
     _ = dq^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return out
 
 
@@ -361,6 +381,8 @@ def silhouette_host(
     _ = dx^
     _ = dl^
     _ = ds^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return mean
 
 

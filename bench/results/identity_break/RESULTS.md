@@ -86,22 +86,62 @@ caller's, and on sm_89 the two contexts deadlocked at teardown.
 **DEVIATION 1944** (commit `07ca87ab`) makes `IsolationForestModel` use the
 caller's context; the fixed binding fits clean on the 4090 in one process.
 
-What the 4090 legs then found is a second, separate defect that is still
-OPEN, and leg 2 (`bench/results/e1/2026-08-29_165644-runpod-nvidia/diag/`)
-localized it to the PYTHON BINDING LAYER: in pure Mojo, two isolation
-forest fits on two contexts, on one context, and sequentially all PASS
-(`d3_if_T1..T3`), two RandomForest fits on two contexts PASS
-(`d3_rf_two_ctx`), and only the pre-1944 shape (a model built on a second
-context) hangs (`d3_if_T4`). Through the Python bindings on the same box,
-`IsolationForest.fit` returns in 1 s and the next call, `score_samples`,
-never returns; `RandomForest.fit` hangs inside the binding on its first
-default-size fit; ExtraTrees twice in one process passes. The strongest
-common factor is the `GILReleased` block every binding wraps around its
-`DeviceContext` (`bindings/_mojolearn_svm.mojo:325` and twins). It does
-not reproduce on the H100 or on Apple or AMD. The probe fits every cell
-twice, so on a 4090 the `rf-clf` cell cannot complete and the lanes after
-it are ABSENT, not clean. The probes are `tools/diag/rtx4090_hang.sh`,
-`ensemble/mojo_only/rf_ctx_probe.mojo` and
+What the 4090 legs then found is a second defect, and leg 2
+(`bench/results/e1/2026-08-29_165644-runpod-nvidia/diag/`) localized it to
+the PYTHON BINDING LAYER: in pure Mojo, two isolation forest fits on two
+contexts, on one context, and sequentially all PASS (`d3_if_T1..T3`), two
+RandomForest fits on two contexts PASS (`d3_rf_two_ctx`), and only the
+pre-1944 shape (a model built on a second context) hangs (`d3_if_T4`).
+Through the Python bindings on the same box, `IsolationForest.fit` returns
+in 1 s and the next call, `score_samples`, never returns; `RandomForest.fit`
+hangs inside the binding on its first default-size fit; ExtraTrees twice in
+one process passes. It does not reproduce on the H100 or on Apple or AMD.
+
+**DEVIATION 1946 names that defect, and it is NOT the `GILReleased` block
+this file blamed on 2026-08-29.** It is the DeviceContext lifetime again,
+one call later. Mojo destroys a value at its LAST USE. Both hanging paths
+create their context INSIDE the call and then release device-backed values
+AFTER the context's last use, so the context is destroyed first and its own
+buffers are freed against a context that has already gone:
+
+* `bindings/_mojolearn_rf.mojo` -- `ctx`'s last use was `ctx.synchronize()`,
+  and `_ = dx^ _ = dy^ _ = dsw^ _ = hx^ _ = hy^` then freed five buffers,
+  two of them PINNED HOST allocations, behind it.
+* `isolation_forest/estimator.mojo::iforest_run_host` -- `_ = est^` freed
+  the model's EIGHT `DeviceBuffer`s one line after `ctx`'s last use.
+
+The passing bindings do not have the shape: in `_mojolearn_trees.mojo` and
+`_mojolearn_gbdt.mojo` the context's last use IS the host call, and every
+device value is created and destroyed inside it. That also explains the one
+result that looked like an alibi for the bindings: `rf_ctx_probe.mojo`
+passed two fits in one process because its `one_fit` takes `ctx` as a
+BORROWED argument, so `main` owns the context and every buffer is freed
+while it is still alive. The probe accidentally fixed the ordering it was
+written to reproduce. It is the same class as DEVIATION 1944 -- a buffer
+freed against a context that is not the live one -- which is why one fix
+moved the first fit and not the second call.
+
+The fix is that the context dies LAST: an explicit `_ = ctx^` after every
+release, at both sites above and at the 33 other library entry points that
+had the same ordering (`metrics`, `kde`, `tsa`, `svm`, `mixture`,
+`resample`, `cholesky`, `gaussian_process`, `kernel_methods`). It cannot
+move a number: nothing is computed after the last `synchronize()`.
+`ensemble/mojo_only/rf_ctx_order_probe.mojo` is the ordering alone, both
+arms, in 60 lines with no forest and no Python -- that is the on-box
+discriminator the next leg should run FIRST.
+
+VERIFIED so far, all on Apple M4: every touched file compiles, the five
+rebuilt bindings (`rf`, `svm`, `metrics`, `tsa`, `estimators`) pass their
+build smoke gates, whose RandomForest gate alone does eight fits in one
+process, two sequential `iforest_run_host` calls return equal values, and
+both probe arms print DONE. NOT VERIFIED: that this fixes the 4090. Apple,
+AMD and the H100 never showed the defect, so only a 4090 leg can confirm
+it, and none has run since the fix. See RUN OWED below.
+
+The probe fits every cell twice, so on a pre-1946 4090 the `rf-clf` cell
+cannot complete and the lanes after it are ABSENT, not clean. The probes
+are `tools/diag/rtx4090_hang.sh`, `ensemble/mojo_only/rf_ctx_probe.mojo`,
+`ensemble/mojo_only/rf_ctx_order_probe.mojo` and
 `isolation_forest/mojo_only/if_ctx_probe.mojo`; the verdict file is
 `diag/verdicts.txt` in that leg.
 
@@ -109,8 +149,9 @@ The NVIDIA silicon ledger, per column, is therefore: H100 (driver
 580.126.09, `E3` round 13, `bench/results/e1/2026-08-28_131651-runpod-nvidia`)
 123 stages bit-identical to Apple and AMD, and a 12-lane `identical`
 stability arm STABLE on the 4090 at `07ca87ab`. The full 28-lane by 9-fixture
-NVIDIA column of this probe is OWED until the RF second-fit hang is fixed
-or the leg runs on an H100. OWED is not FAILED
+NVIDIA column of this probe is OWED: DEVIATION 1946 is a fix nobody has run
+on the silicon that showed the defect, so the column waits on one 4090 leg
+(or on an H100, where nothing hung in the first place). OWED is not FAILED
 ([runpod-failure-is-not-invalidation] in the orchestrator's memory): nothing
 above this section moved.
 
@@ -127,3 +168,38 @@ under `identical` is a defect on that box before it is a cross-vendor
 question. `REFUSED` carries the exception text. A column marked
 `complete=false` was killed mid-run and its later lanes are ABSENT, not
 clean.
+
+## RUN OWED
+
+Nothing below has run. Each line names the box it needs and the command.
+
+1. **The DEVIATION 1946 discriminator, one RTX 4090, ~5 minutes.** Before
+   anything else, and it needs no Python and no built bindings:
+
+       mojo build -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D ORDER_BAD=1 \
+           ensemble/mojo_only/rf_ctx_order_probe.mojo -o /tmp/order_bad
+       mojo build -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D ORDER_GOOD=1 \
+           ensemble/mojo_only/rf_ctx_order_probe.mojo -o /tmp/order_good
+       timeout 300 /tmp/order_bad ; echo "bad rc=$?"
+       timeout 300 /tmp/order_good ; echo "good rc=$?"
+
+   Expected if 1946 is the whole answer: BAD hangs (rc 124) and GOOD prints
+   `orderprobe DONE`. If BOTH print DONE, the ordering is not the poison on
+   that box, 1946 is a correctness fix and not the cure, and the hunt goes
+   back to the `GILReleased` block -- write that in `diag/verdicts.txt`
+   rather than assuming this file's thesis.
+
+2. **The binding verification leg, same box.** Rebuild the identical set and
+   run `iforest,rf-clf` stability 6/6 plus `identity_break --lanes rf-clf`;
+   the hashes must equal `apple-m4.identical.json`
+   (`c2867a6751f32d49`, `2999ccbacdecfa28` on base and hashed).
+   `P9_BINDINGS` three bindings, `P9_LANES="iforest,rf-clf"`, `P9_DIAG`.
+
+3. **The full NVIDIA column.** All ten bindings, `P9_BREAK=1`; copy
+   `stability/identity_break.identical.json|.txt` to
+   `bench/results/identity_break/nvidia-rtx4090.identical.*` and run the
+   three-way `--diff` into `diff.apple-amd-nvidia.txt`.
+
+4. **Apple, AMD and H100 re-verification is NOT owed by construction** --
+   1946 adds no arithmetic and moves no launch -- but the next scheduled leg
+   on each should confirm its lane cards unchanged, as a free check.

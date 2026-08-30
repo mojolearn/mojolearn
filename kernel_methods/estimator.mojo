@@ -314,6 +314,8 @@ def kernel_ridge_fit_host(
     _ = nb^
     _ = kws^
     _ = cws^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return KernelRidgeModel(
         dual^, x.copy(), n_samples, n_features, n_targets,
         kp.kernel, kp.degree, kp.gamma, kp.coef0, alpha, 0,
@@ -383,6 +385,8 @@ def kernel_ridge_predict_host(
     _ = kws^
     _ = dpred^
     _ = gws^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return out^
 
 
@@ -717,6 +721,8 @@ def nystroem_fit_host(
     _ = dz^
     _ = dnorm^
     _ = gws^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
 
     return NystroemModel(
         comp^, basis^, norm^, values^, vecs_ord^,
@@ -866,6 +872,8 @@ def nystroem_transform_host(
     _ = kws^
     _ = demb^
     _ = gws^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return out^
 
 
@@ -969,6 +977,8 @@ def rbf_sampler_fit_host(
     var b = _download(ctx, db, n_components)
     _ = dw^
     _ = db^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return RBFSamplerModel(
         w^, b^, n_features, n_components, gamma, seed, sigma, scale
     )
@@ -1030,4 +1040,6 @@ def rbf_sampler_transform_host(
     _ = db^
     _ = dp^
     _ = gws^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return out^

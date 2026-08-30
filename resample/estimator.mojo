@@ -950,6 +950,8 @@ def bootstrap_host(
     _ = idx_buf^
     _ = theta^
     _ = sorted_buf^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return BootstrapResult(
         theta_hat, dist^, sorted_dist^, se, interval, pos_lo, pos_hi
     )
@@ -1103,6 +1105,8 @@ def permutation_test_host(
 
     _ = dpool^
     _ = null_buf^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return PermutationResult(observed, null_dist^, pv)
 
 

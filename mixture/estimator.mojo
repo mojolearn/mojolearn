@@ -895,6 +895,8 @@ def gaussian_mixture_fit(
     _ = cws^
     _ = dwork^
     _ = hll^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
 
     return GaussianMixtureModel(
         ncomp, d, out_w^, out_m^, out_c^, out_p^, out_l^, n_iter,
@@ -1049,6 +1051,8 @@ def gaussian_mixture_score_samples(
     _ = meanll^
     _ = escratch^
     _ = gws^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return out^
 
 
@@ -1136,6 +1140,8 @@ def gaussian_mixture_predict_proba(
     _ = meanll^
     _ = escratch^
     _ = gws^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return out^
 
 
@@ -1241,6 +1247,8 @@ def gaussian_mixture_predict(
     _ = labels^
     _ = escratch^
     _ = gws^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return out^
 
 

@@ -299,6 +299,23 @@ matrix and do not touch this wheel at all.
 
 ### Known issues
 
+- **The Python bindings hung on an RTX 4090 (sm_89), twice, for two
+  DeviceContext lifetime defects.** DEVIATION 1944: the isolation forest
+  estimator built its empty model on a SECOND `DeviceContext` beside the
+  caller's, and the two deadlocked at teardown -- the first `fit` never
+  returned. DEVIATION 1946, the same class one call later: `_mojolearn_rf`
+  and `iforest_run_host` created their context inside the call and released
+  device buffers AFTER its last use, so Mojo destroyed the context first and
+  the buffers -- pinned host allocations among them -- were freed behind it;
+  the first binding call returned and the NEXT GPU call in the process never
+  did, GPU idle, every host thread in futex wait. Both are fixed in this
+  tree; 1944 is confirmed on the box, **1946 is UNRUN on a 4090** (the fix
+  cannot be exercised on Apple, AMD or the H100, none of which ever showed
+  the defect). Apple is the only platform this wheel targets and it was
+  never affected. `bench/results/identity_break/RESULTS.md` carries the
+  evidence, the discriminator
+  (`ensemble/mojo_only/rf_ctx_order_probe.mojo`) and the RUN OWED list.
+
 - `ftz`, the denormal-policy helper that IDENTITY_PATHS row 10 is built on,
   DID NOTHING ON THE GPU until 2026-08-28 (DEVIATION 1938). Its guard was two
   float comparisons, and a flush-to-zero backend evaluates those with the
