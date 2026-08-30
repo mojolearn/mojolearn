@@ -96,6 +96,13 @@ set_numeric_mode = _backend.set_default_mode
 #: device refuses at import, naming what it looked for.
 vendor = _backend.vendor
 
+#: The GPU architecture directory this process loads from ('sm_80',
+#: 'gfx942', ...) and how it was chosen -- the architecture axis
+#: (2026-08-30, docs/LINUX_WHEEL.md). Both return None-ish answers on the
+#: flat and arch-less layouts, where no choice exists to report.
+gpu_arch = _backend.gpu_arch
+gpu_arch_how = _backend.gpu_arch_how
+
 from .cluster import KMeans
 from .decomposition import PCA, TruncatedSVD
 from .density import DBSCAN, KernelDensity

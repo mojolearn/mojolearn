@@ -181,9 +181,15 @@ include-package-data = false
 # now defaults to all three. The distinction is kept anyway, because a
 # hotfix wheel cut with MOJOLEARN_RELEASE_MODES set to fewer tiers must
 # still produce a valid artifact.
-# THE LINUX LAYOUT IS ADMITTED TOO (2026-08-29): one directory per vendor,
-# the same three tiers inside each, and the MAX runtime `.so` staged under a
-# `.libs/` directory (docs/LINUX_WHEEL.md). The Linux wheel itself is not
+# THE LINUX LAYOUT IS ADMITTED TOO (2026-08-29, ARCHITECTURE AXIS ADDED
+# 2026-08-30): one directory per vendor, one per GPU ARCHITECTURE inside it
+# (sm_80, gfx942, ...), the same three tiers inside each architecture, and
+# the MAX runtime `.so` staged under a `.libs/` directory
+# (docs/LINUX_WHEEL.md). The architecture level exists because one
+# `mojo build` emits device code for exactly one architecture and no PTX --
+# the sm_90a-only 0.3.0 wheel failed 27 of 29 lanes on an A40
+# (bench/results/wheels/LEGS_2026-08-30.md). The arch-less vendor globs are
+# kept for sets that predate the axis. The Linux wheel itself is not
 # produced by setuptools -- packaging/linux/pack_wheel.py writes it from the
 # fetched sets -- so these globs matter only to a `pip wheel` run from a Linux
 # checkout that has such a layout. They are listed so that file and this one
@@ -191,6 +197,8 @@ include-package-data = false
 mojolearn = [
     "*.so", "identical/*.so", "deterministic/*.so", ".dylibs/*.dylib",
     "cuda/*.so", "cuda/identical/*.so", "cuda/deterministic/*.so", "cuda/.libs/*",
+    "cuda/sm_*/*.so", "cuda/sm_*/identical/*.so", "cuda/sm_*/deterministic/*.so", "cuda/sm_*/.libs/*",
     "hip/*.so", "hip/identical/*.so", "hip/deterministic/*.so", "hip/.libs/*",
+    "hip/gfx*/*.so", "hip/gfx*/identical/*.so", "hip/gfx*/deterministic/*.so", "hip/gfx*/.libs/*",
     ".libs/*",
 ]

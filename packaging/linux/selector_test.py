@@ -59,22 +59,31 @@ FAILURES = []
 PASSES = []
 
 
-def _reset(pkg, probe_result, vendor_env=None):
+def _reset(pkg, probe_result, vendor_env=None,
+           device=(None, "not probed in this test"), arch_env=None):
     """Point the selector at a fabricated install and a fabricated box.
 
-    `_layout()` caches in three module globals and reads two things it does
-    not take as arguments: the package directory and the box. Both are
-    replaced here rather than mocked at a higher level, so the function
-    under test is the real one, unmodified."""
+    `_layout()` caches in module globals and reads three things it does
+    not take as arguments: the package directory, the box probe, and the
+    device architecture. All are replaced here rather than mocked at a
+    higher level, so the function under test is the real one, unmodified.
+    `device` is what `_device_arch()` answers for ANY vendor."""
     B._LAYOUT = None
     B._VENDOR_SELECTED = None
     B._VENDOR_HOW = None
+    B._ARCH_SELECTED = None
+    B._ARCH_HOW = None
     B._pkg_dir = lambda: pkg
     B._probe_box = lambda: probe_result
+    B._device_arch = lambda vendor: device
     if vendor_env is None:
         os.environ.pop("MOJOLEARN_VENDOR", None)
     else:
         os.environ["MOJOLEARN_VENDOR"] = vendor_env
+    if arch_env is None:
+        os.environ.pop("MOJOLEARN_GPU_ARCH", None)
+    else:
+        os.environ["MOJOLEARN_GPU_ARCH"] = arch_env
 
 
 def _probe(cuda=False, hip=False):
@@ -92,8 +101,12 @@ def _probe(cuda=False, hip=False):
 
 
 def _mkinstall(root, vendors_with_binaries=(), empty_vendor_dirs=(),
-               flat_binaries=False):
-    """A package directory shaped like one of the three real layouts."""
+               flat_binaries=False, vendor_archs=None):
+    """A package directory shaped like one of the real layouts.
+
+    `vendors_with_binaries` builds the ARCH-LESS (legacy) vendor layout;
+    `vendor_archs` ({vendor: (arch, ...)}) builds the architecture layout,
+    one set per named architecture."""
     pkg = os.path.join(root, "mojolearn")
     os.makedirs(pkg, exist_ok=True)
     if flat_binaries:
@@ -103,6 +116,12 @@ def _mkinstall(root, vendors_with_binaries=(), empty_vendor_dirs=(),
         os.makedirs(os.path.join(d, "deterministic"), exist_ok=True)
         os.makedirs(os.path.join(d, "identical"), exist_ok=True)
         open(os.path.join(d, "_mojolearn.so"), "w").close()
+    for v, archs in (vendor_archs or {}).items():
+        for arch in archs:
+            d = os.path.join(pkg, v, arch)
+            os.makedirs(os.path.join(d, "deterministic"), exist_ok=True)
+            os.makedirs(os.path.join(d, "identical"), exist_ok=True)
+            open(os.path.join(d, "_mojolearn.so"), "w").close()
     for v in empty_vendor_dirs:
         os.makedirs(os.path.join(pkg, v), exist_ok=True)
     return pkg
@@ -324,6 +343,146 @@ def run_all(root):
         _reset(pkg, _probe())
         assert B.tier_dir("fast") == pkg, B.tier_dir("fast")
         assert B.tier_dir("identical") == os.path.join(pkg, "identical")
+
+    # ------------------------------------------------- the architecture axis
+    @case("arch layout: the device's exact architecture picks its directory")
+    def _():
+        pkg = _mkinstall(os.path.join(root, "n"),
+                         vendor_archs={"cuda": ("sm_80", "sm_86")})
+        _reset(pkg, _probe(cuda=True), device=("sm_80", "test probe"))
+        kind, base = B._layout()
+        assert kind == "vendor" and base == os.path.join(pkg, "cuda", "sm_80"), base
+        assert B.gpu_arch() == "sm_80", B.gpu_arch()
+        assert "exact match" in B.gpu_arch_how(), B.gpu_arch_how()
+
+        # SABOTAGE: a different device must move the answer.
+        _reset(pkg, _probe(cuda=True), device=("sm_86", "test probe"))
+        _, base2 = B._layout()
+        assert base2.endswith("sm_86"), (
+            "the arch did not follow the device, so the first assertion "
+            "proved nothing: %r" % base2)
+
+    @case("cuda: a device sm_XY accepts a carried sm_XYa build")
+    def _():
+        pkg = _mkinstall(os.path.join(root, "o"),
+                         vendor_archs={"cuda": ("sm_90a",)})
+        _reset(pkg, _probe(cuda=True), device=("sm_90", "test probe"))
+        _, base = B._layout()
+        assert base.endswith("sm_90a"), base
+        assert "architecture-specific" in B.gpu_arch_how(), B.gpu_arch_how()
+
+    @case("cuda family fallback: an sm_86 device runs the carried sm_80 set")
+    def _():
+        pkg = _mkinstall(os.path.join(root, "p"),
+                         vendor_archs={"cuda": ("sm_80",)})
+        _reset(pkg, _probe(cuda=True), device=("sm_86", "test probe"))
+        _, base = B._layout()
+        assert base.endswith("sm_80"), base
+        assert "same-family" in B.gpu_arch_how(), B.gpu_arch_how()
+
+        # SABOTAGE: a device of ANOTHER family must refuse, not inherit.
+        _reset(pkg, _probe(cuda=True), device=("sm_75", "test probe"))
+        expect_import_error(B._layout, ["sm_75", "sm_80", "MOJOLEARN_GPU_ARCH"])
+
+    @case("cuda family fallback never goes DOWN: sm_80 device, sm_86-only install")
+    def _():
+        pkg = _mkinstall(os.path.join(root, "q"),
+                         vendor_archs={"cuda": ("sm_86",)})
+        _reset(pkg, _probe(cuda=True), device=("sm_80", "test probe"))
+        expect_import_error(B._layout, ["sm_80", "sm_86", "MOJOLEARN_GPU_ARCH"])
+
+    @case("an a-suffixed build is never chosen by the family rule")
+    def _():
+        # sm_90a targets EXACTLY the 9.0 chip; a later 9.x device must not
+        # inherit it the way it would inherit sm_90.
+        pkg = _mkinstall(os.path.join(root, "r"),
+                         vendor_archs={"cuda": ("sm_90a",)})
+        _reset(pkg, _probe(cuda=True), device=("sm_92", "test probe"))
+        expect_import_error(B._layout, ["sm_92", "sm_90a"])
+
+        # SABOTAGE: the same install, non-a, and the same device must load.
+        pkg2 = _mkinstall(os.path.join(root, "r2"),
+                          vendor_archs={"cuda": ("sm_90",)})
+        _reset(pkg2, _probe(cuda=True), device=("sm_92", "test probe"))
+        _, base = B._layout()
+        assert base.endswith("sm_90"), (
+            "sm_90 was not inherited where sm_90a was rightly refused, so "
+            "the refusal above was not about the a suffix: %r" % base)
+
+    @case("hip is exact-only: no cross-architecture inheritance")
+    def _():
+        pkg = _mkinstall(os.path.join(root, "s"),
+                         vendor_archs={"hip": ("gfx942",)})
+        _reset(pkg, _probe(hip=True), device=("gfx90a", "test probe"))
+        expect_import_error(B._layout, ["gfx90a", "gfx942", "ISA-exact"])
+
+        # SABOTAGE: the exact device must load the same install.
+        _reset(pkg, _probe(hip=True), device=("gfx942", "test probe"))
+        _, base = B._layout()
+        assert base.endswith("gfx942"), base
+
+    @case("device arch unreadable: one carried arch is used, two refuse")
+    def _():
+        pkg = _mkinstall(os.path.join(root, "t"),
+                         vendor_archs={"cuda": ("sm_80",)})
+        _reset(pkg, _probe(cuda=True), device=(None, "no libcuda in this test"))
+        _, base = B._layout()
+        assert base.endswith("sm_80"), base
+        assert "only architecture carried" in B.gpu_arch_how(), B.gpu_arch_how()
+
+        pkg2 = _mkinstall(os.path.join(root, "t2"),
+                          vendor_archs={"cuda": ("sm_80", "sm_90a")})
+        _reset(pkg2, _probe(cuda=True), device=(None, "no libcuda in this test"))
+        expect_import_error(
+            B._layout, ["sm_80", "sm_90a", "MOJOLEARN_GPU_ARCH",
+                        "no libcuda in this test"])
+
+    @case("MOJOLEARN_GPU_ARCH outranks the device")
+    def _():
+        pkg = _mkinstall(os.path.join(root, "u"),
+                         vendor_archs={"cuda": ("sm_80", "sm_86")})
+        _reset(pkg, _probe(cuda=True), device=("sm_80", "test probe"),
+               arch_env="sm_86")
+        _, base = B._layout()
+        assert base.endswith("sm_86"), (
+            "MOJOLEARN_GPU_ARCH=sm_86 did not beat an sm_80 device: %r" % base)
+        assert "MOJOLEARN_GPU_ARCH" in B.gpu_arch_how(), B.gpu_arch_how()
+
+        # SABOTAGE: clear it and the device must decide again.
+        _reset(pkg, _probe(cuda=True), device=("sm_80", "test probe"))
+        _, base2 = B._layout()
+        assert base2.endswith("sm_80"), (
+            "clearing MOJOLEARN_GPU_ARCH did not change the answer, so the "
+            "override was not what decided the first one")
+
+    @case("MOJOLEARN_GPU_ARCH naming an absent arch refuses by name")
+    def _():
+        pkg = _mkinstall(os.path.join(root, "v"),
+                         vendor_archs={"cuda": ("sm_80",)})
+        _reset(pkg, _probe(cuda=True), device=("sm_80", "test probe"),
+               arch_env="sm_75")
+        expect_import_error(B._layout, ["sm_75", "sm_80"])
+
+    @case("tier_dir puts the tier under vendor AND arch")
+    def _():
+        pkg = _mkinstall(os.path.join(root, "w"),
+                         vendor_archs={"cuda": ("sm_80",)})
+        _reset(pkg, _probe(cuda=True), device=("sm_80", "test probe"))
+        det = B.tier_dir("deterministic")
+        assert det == os.path.join(pkg, "cuda", "sm_80", "deterministic"), det
+        assert B.tier_dir("fast") == os.path.join(pkg, "cuda", "sm_80")
+
+    @case("an arch-less vendor set keeps working beside the new layout")
+    def _():
+        # Every set built before 2026-08-30 has binaries directly under
+        # <vendor>/. That layout is supported, not deprecated.
+        pkg = _mkinstall(os.path.join(root, "x"),
+                         vendors_with_binaries=("cuda",))
+        _reset(pkg, _probe(cuda=True), device=("sm_80", "test probe"))
+        kind, base = B._layout()
+        assert (kind, os.path.basename(base)) == ("vendor", "cuda"), (kind, base)
+        assert B.gpu_arch() is None, B.gpu_arch()
+        assert "arch-less" in B.gpu_arch_how(), B.gpu_arch_how()
 
     # ------------------------------------------------------------- caching
     @case("the layout is decided ONCE per process")

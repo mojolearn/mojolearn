@@ -44,13 +44,16 @@ RUNPATH IS SET WITH BOTH CANDIDATE LOCATIONS so the packer on the Mac can
 choose the layout without rewriting a single ELF header (there is no ELF
 tool on the Mac and this plan runs nothing there beyond a pure-Python zip):
 
-    <vendor>/_mojolearn_x.so             $ORIGIN/.libs:$ORIGIN/../.libs
-    <vendor>/<tier>/_mojolearn_x.so      $ORIGIN/../.libs:$ORIGIN/../../.libs
+    <set root>/_mojolearn_x.so           $ORIGIN/.libs:$ORIGIN/../.libs:$ORIGIN/../../.libs
+    <set root>/<tier>/_mojolearn_x.so    $ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs
     .libs/lib*.so                        $ORIGIN
 
-So a `.libs/` beside the vendor directory (one shared copy for both
-vendors, when the two closures are byte-identical) and a `.libs/` inside it
-(one per vendor, when they are not) both resolve. `pack_wheel.py` picks.
+The set root is `<vendor>/<arch>/` in the wheel (the architecture axis,
+2026-08-30), so the candidates cover a `.libs/` inside the set, one beside
+the architecture directories (`mojolearn/<vendor>/.libs`), and one at the
+package root (`mojolearn/.libs`, the shared layout when every closure is
+byte-identical, which is what 2026-08-30 measured). A candidate that does
+not exist is skipped by the loader at no cost. `pack_wheel.py` picks.
 
 The dynamic section is parsed HERE, in pure Python, so the same reader can
 inspect a fetched set on the Mac. Writing RUNPATH needs `patchelf`, which
@@ -235,10 +238,10 @@ def main():
     ext_records = []
     for ext in exts:
         if ext.parent == root:
-            rp = "$ORIGIN/.libs:$ORIGIN/../.libs"
+            rp = "$ORIGIN/.libs:$ORIGIN/../.libs:$ORIGIN/../../.libs"
             tier = "fast"
         else:
-            rp = "$ORIGIN/../.libs:$ORIGIN/../../.libs"
+            rp = "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs"
             tier = ext.parent.name
         set_runpath(a.patchelf, ext, rp)
         n, runpath, rpath = elf_dynamic(ext)

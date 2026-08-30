@@ -1,12 +1,13 @@
 # The Linux wheel: one name, two vendors, six binary sets
 
 Design note, 2026-08-29. Decided by Andrew the same day. ONE PyPI name,
-`mojolearn`, with the vendor detected at import. Two wheels per release.
+`mojolearn`, with the vendor -- and, since 2026-08-30, the GPU architecture
+-- detected at import. Two wheels per release.
 
 | wheel | tag | carries |
 |---|---|---|
 | macOS (shipping since 0.1.0) | `py3-none-macosx_11_0_arm64` | Metal, three tiers, ten extensions each |
-| Linux (this note) | `py3-none-manylinux_<measured>_x86_64` | CUDA AND HIP, three tiers each, six sets, sixty extensions |
+| Linux (this note) | `py3-none-manylinux_<measured>_x86_64` | CUDA AND HIP, one set per GPU ARCHITECTURE, three tiers each (thirty extensions per architecture) |
 
 Nothing in this note has run. Every script it names was written under the
 no-run order of 2026-08-29 and is committed UNRUN; the commands in section 8
@@ -44,17 +45,30 @@ python/mojolearn/                          macOS, unchanged
     .dylibs/*.dylib                        MAX runtime (Mach-O closure)
 
 python/mojolearn/                          Linux wheel
-    cuda/_mojolearn*.so                    fast
-    cuda/deterministic/_mojolearn*.so
-    cuda/identical/_mojolearn*.so
-    hip/_mojolearn*.so
-    hip/deterministic/_mojolearn*.so
-    hip/identical/_mojolearn*.so
-    .libs/*.so             ONE shared MAX runtime closure, when both vendors'
-                           closures are byte-identical (pack_wheel.py decides)
+    cuda/sm_80/_mojolearn*.so              fast, one directory per
+    cuda/sm_80/deterministic/_mojolearn*.so  GPU ARCHITECTURE
+    cuda/sm_80/identical/_mojolearn*.so
+    cuda/sm_90a/...
+    hip/gfx942/_mojolearn*.so
+    hip/gfx942/deterministic/_mojolearn*.so
+    hip/gfx942/identical/_mojolearn*.so
+    .libs/*.so             ONE shared MAX runtime closure, when every set's
+                           closure is byte-identical (pack_wheel.py decides;
+                           2026-08-30 measured the two vendors' identical)
     cuda/.libs/*.so        otherwise one per vendor
     hip/.libs/*.so
 ```
+
+THE ARCHITECTURE LEVEL EXISTS BECAUSE ONE BUILD IS ONE ARCHITECTURE,
+measured 2026-08-30 (bench/results/wheels/LEGS_2026-08-30.md): `mojo build`
+takes exactly one `--target-accelerator` (a comma list parses and the
+compiler rejects it), emits device code for that architecture and NO PTX, so
+there is no JIT fallback -- the sm_90a-only 0.3.0 wheel installed cleanly on
+an A40 and failed 27 of 29 lanes with CUDA_ERROR_NO_BINARY_FOR_GPU. A
+portable wheel is therefore N single-architecture sets, and the import picks
+one the same way it picks the vendor. A vendor directory with binaries
+DIRECTLY in it (every set built before the axis) is the arch-less legacy
+layout and keeps working unchanged.
 
 The directory names are the accelerator APIs (`cuda`, `hip`, and `metal` as
 a name the read-back returns, never a directory) and not the vendors, because
@@ -91,6 +105,30 @@ platform.
      (`libcuda.so.1`; `libamdhip64.so.7|.6|.so`). Exactly one vendor with
      evidence is picked. Two with evidence raises and asks for
      `MOJOLEARN_VENDOR`. None raises the no-GPU refusal (section 4).
+
+Then the ARCHITECTURE, one directory further down (2026-08-30), decided in
+the same shape:
+
+* `MOJOLEARN_GPU_ARCH=<sm_80|gfx942|...>` in the environment picks the
+  directory. It must name a set the install carries or the import raises.
+* else the device's own architecture, read WITHOUT loading an extension:
+  for cuda, `cuDeviceGetAttribute(COMPUTE_CAPABILITY_MAJOR/MINOR)` through
+  ctypes on the driver library the probe already loads; for hip,
+  `gfx_target_version` out of `/sys/class/kfd/kfd/topology` (no ROCm
+  library needed). An exact match wins. On cuda a device `sm_XY` also
+  accepts a carried `sm_XYa` (the `a` restricts which devices, not this
+  one), and failing both, the HIGHEST carried non-`a` architecture of the
+  same major family not above the device -- NVIDIA documents cubin forward
+  compatibility within a family (sm_80 code on sm_86/sm_89); our own
+  measurement of it is OWED, section 9. On hip there is NO family rule:
+  gfx code objects are ISA-exact, so anything but an exact match refuses,
+  naming the device, every carried set and `MOJOLEARN_GPU_ARCH`.
+* else (the device architecture cannot be read): exactly one carried
+  architecture is used and says so in `gpu_arch_how()`; more than one
+  refuses, naming `MOJOLEARN_GPU_ARCH`.
+
+`gpu_arch()` and `gpu_arch_how()` report the choice; on the flat and
+arch-less layouts both report that no choice was made.
 
 Then, whichever way the directory was chosen, EVERY binary loaded from it
 is asked what it was compiled for, and one that disagrees with the directory
@@ -195,9 +233,14 @@ runs them), by `packaging/linux/build_sets.sh`:
 
 1. thirty builds, the three tiers as three parallel jobs (serial took about
    fifty minutes on a rented RTX 4090; the parallel time is unmeasured);
-2. the vendor READ BACK from every binary with a bare `ExtensionFileLoader`
-   import, all thirty must agree, and that answer names the set directory;
-3. the sets MOVED out of `python/mojolearn/` into `sets/<vendor>/`;
+2. the vendor AND the architecture READ BACK from every binary (a bare
+   `ExtensionFileLoader` import for the vendor, `strings` for the
+   architecture), all thirty must agree on ONE of each, a typed
+   `MOJOLEARN_GPU_ARCHS` must EQUAL the read-back (until 2026-08-30 only
+   one of the ten build scripts even read that variable, so a leg that set
+   it built one binding as asked and twenty-seven for the box's own
+   device), and those answers name the set directory;
+3. the sets MOVED out of `python/mojolearn/` into `sets/<vendor>/<arch>/`;
 4. `packaging/linux/stage_libs.py` walks the ELF `DT_NEEDED` closure (pure
    Python reader, `patchelf` from a throwaway venv for the write), stages
    the MAX runtime under `sets/<vendor>/.libs/`, sets RUNPATH on every
@@ -217,9 +260,12 @@ the phase-9 knobs that make the bootstrap run ONLY `packaging/linux/leg_diag.sh`
 both legs), which runs `build_sets.sh` and then the on-box gates of section
 7, and files the fetched `diag/` under `bench/results/wheels/<stamp>-<vendor>/`.
 
-`packaging/linux/pack_wheel.py`, pure Python on the Mac, takes both
-`sets/<vendor>` directories, refuses a set whose `readback.txt` disagrees
-with its directory or that lacks any of the thirty binaries, decides the
+`packaging/linux/pack_wheel.py`, pure Python on the Mac, takes every
+fetched `sets/<vendor>` directory (the same vendor may be given several
+times -- each leg builds ONE architecture), refuses an arch-less set, a
+duplicate (vendor, architecture), a set whose `readback.txt` or
+`arch_readback.txt` disagrees with its directory, or one that lacks any of
+the thirty binaries, decides the
 `.libs` layout (shared when both closures match by name and sha256), writes
 the wheel with a correct RECORD and a METADATA generated from
 `python/pyproject.toml` in setuptools 84's field order (`--check-against` a
@@ -298,13 +344,19 @@ directories). What this section used to list as unknown, and what came back:
 
 **STILL OWED:**
 
-* **Whether a set built on one machine's GPU runs on another's.** MAX embeds
-  device kernels for the build target, and no leg has yet installed a set on
-  a box that did not build it. The install-smoke leg on a DIFFERENT NVIDIA
-  GPU model is the only evidence either way, and until it exists the wheel's
-  claim is "runs on the architectures it was smoked on", named in the
-  CHANGELOG entry that ships it. (The host CPU is NOT part of this question:
-  the ISA theory raised on 2026-08-30 was tested three ways and is dead. See
+* **The cross-architecture question is now ANSWERED for the exact case and
+  OWED for the family case.** Same-architecture-only was measured on the
+  A40 (27 of 29 lanes down, LEGS_2026-08-30.md), which is what forced the
+  architecture axis. What remains owed is the WITHIN-FAMILY measurement the
+  selector's cuda fallback relies on: a set built `sm_80` (via
+  `MOJOLEARN_GPU_ARCHS=sm_80`) install-smoked green on an sm_86 or sm_89
+  box. NVIDIA documents that compatibility; this tree does not ship a claim
+  on documentation alone, so until that leg is green the wheel's claim is
+  "runs on the architectures it carries", and the family fallback is an
+  escape hatch rather than a promise. The per-architecture build legs
+  themselves (one leg per carried architecture, both vendors) are owed the
+  same way. (The host CPU is NOT part of this question: the ISA theory
+  raised on 2026-08-30 was tested three ways and is dead. See
   `bench/results/wheels/LEGS_2026-08-30.md`.)
 * **`MOJOLEARN_VENDOR=hip` aborts rather than raising when the HIP runtime
   is absent entirely.** Forcing hip on a Linux box with no ROCm at all kills

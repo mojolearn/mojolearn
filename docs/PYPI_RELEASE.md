@@ -263,15 +263,19 @@ picked up; or cancel with `gh run cancel <id>`.
   so a release is always a decision somebody made at a terminal.
 * No sdist. There is no source build without the Mojo toolchain and no way
   to make one that works; `python/setup.py` says so at the top.
-* No Linux wheel yet. The source builds for Linux from the same tree, and the
-  wheel's build, pack, audit and gate scripts exist under `packaging/linux/`
-  (section 9), but none has run and no Linux wheel has ever been produced, so
-  no Linux classifier is claimed in `python/pyproject.toml`. The classifier is
-  added in the release commit that first ships one.
+* No Linux wheel PUBLISHED yet. The build legs ran green on 2026-08-30 and
+  a 0.3.0 wheel was packed and audited, but each vendor set carried ONE GPU
+  architecture (the build box's own: sm_90a, gfx942) and the wheel failed
+  27 of 29 lanes on an A40, so it was never uploaded to PyPI
+  (bench/results/wheels/LEGS_2026-08-30.md). The architecture axis that
+  fixes this -- one set per architecture inside the same single wheel,
+  picked at import -- is implemented (docs/LINUX_WHEEL.md); its
+  per-architecture build legs and the cross-model install smoke are owed
+  before any Linux wheel ships.
 * No permanently registered runner. The self-hosted runner exists for one
   job and is removed.
 
-## 9. The Linux wheel (unrun, docs/LINUX_WHEEL.md)
+## 9. The Linux wheel (no wheel published; docs/LINUX_WHEEL.md)
 
 Every command below runs from the repository root on the M4, and every
 command that touches a GPU rents a box. Nothing here runs Mojo, pixi, pytest
@@ -281,16 +285,28 @@ or a wheel build on the Mac; the only local work is a pure-Python zip and two
 and the DigitalOcean droplet list before the AMD leg; another session may
 own a box, and each provider holds one at a time.
 
-1. Build the CUDA sets and run the on-box gates, on RunPod. Launch from a
-   session that will outlive it.
+1. Build the CUDA sets and run the on-box gates, on RunPod -- ONE LEG PER
+   ARCHITECTURE the release carries. A leg builds exactly one architecture
+   (one `mojo build` is one architecture, LEGS_2026-08-30.md): by default
+   the build box's own, or a named one via `MOJOLEARN_GPU_ARCHS`, which
+   `build_sets.sh` verifies against the binaries' own read-back. Match the
+   box to the architecture (`MOJOLEARN_GEMM_LEG_GPU_NVIDIA`) unless the leg
+   is deliberately measuring cross-building. Launch from a session that
+   will outlive it.
 
    ```sh
    nohup bash packaging/linux/leg.sh nvidia > bench/results/wheels/nvidia.log 2>&1 &
    disown
+   # and, for each further architecture, e.g.:
+   MOJOLEARN_GPU_ARCHS=sm_80 MOJOLEARN_GEMM_LEG_GPU_NVIDIA="NVIDIA A100 80GB PCIe" \
+     nohup bash packaging/linux/leg.sh nvidia > bench/results/wheels/nvidia-sm80.log 2>&1 &
+   disown
    ```
 
-   Lands in `bench/results/wheels/<stamp>-nvidia/`, with `wheels/sets/cuda/`
-   (thirty `.so`, `.libs/`, `manifest.json`, `readback.txt`), `wheels/SIZES.txt`,
+   Lands in `bench/results/wheels/<stamp>-nvidia/`, with
+   `wheels/sets/cuda/<arch>/`
+   (thirty `.so`, `.libs/`, `manifest.json`, `readback.txt`,
+   `arch_readback.txt`), `wheels/SIZES.txt`,
    `gates/smoke_{fast,deterministic,identical}.json`, `gates/sabotage.json`,
    `gates/nogpu.json` and `SUMMARY.txt`. The raw leg output is under
    `bench/results/e1/<stamp>-runpod-nvidia/` and `bench/results/e1g/`.
@@ -309,10 +325,15 @@ own a box, and each provider holds one at a time.
 
    ```sh
    python3 packaging/linux/pack_wheel.py \
-     --set bench/results/wheels/<stamp>-nvidia/wheels/sets/cuda \
-     --set bench/results/wheels/<stamp>-amd/wheels/sets/hip \
+     --set bench/results/wheels/<stamp1>-nvidia/wheels/sets/cuda \
+     --set bench/results/wheels/<stamp2>-nvidia/wheels/sets/cuda \
+     --set bench/results/wheels/<stamp3>-amd/wheels/sets/hip \
      --check-against python/dist/mojolearn-X.Y.Z-py3-none-macosx_11_0_arm64.whl
    ```
+
+   One `--set` per fetched leg; the same vendor repeats, one architecture
+   each, and a duplicate (vendor, architecture) or an arch-less set is
+   refused.
 
    Writes `python/dist/mojolearn-X.Y.Z-py3-none-linux_x86_64.whl` and
    `python/dist/SIZES-X.Y.Z-linux.json`, and STOPS over 100 MB with the
@@ -322,9 +343,11 @@ own a box, and each provider holds one at a time.
 
    ```sh
    bash packaging/linux/audit.sh python/dist/mojolearn-X.Y.Z-py3-none-linux_x86_64.whl \
-     bench/results/wheels/<stamp>-nvidia/wheels/sets/cuda/manifest.json \
-     bench/results/wheels/<stamp>-amd/wheels/sets/hip/manifest.json
+     bench/results/wheels/<stamp1>-nvidia/wheels/sets/cuda/<arch>/manifest.json \
+     bench/results/wheels/<stamp3>-amd/wheels/sets/hip/<arch>/manifest.json
    ```
+
+   One manifest per packed set (they sit under each architecture directory).
 
    Writes `python/dist/audit/show.txt` (the artifact, and the measured tag),
    `repair.txt`, `repaired/mojolearn-X.Y.Z-py3-none-manylinux_<measured>_x86_64.whl`
@@ -367,8 +390,10 @@ own a box, and each provider holds one at a time.
 
    Lands in `bench/results/wheels/<stamp>-<vendor>/` with `install.log`,
    `pip_show.txt`, `gates/smoke_<tier>.json` and `SUMMARY.txt`. Rent the
-   NVIDIA install leg on a DIFFERENT GPU model than the build leg
-   (`MOJOLEARN_GEMM_LEG_GPU_NVIDIA`); it is the only evidence that a set built
-   on one architecture runs on another.
+   NVIDIA install leg on a GPU model the wheel carries no exact set for but
+   whose family it does (an sm_86 or sm_89 box against a carried sm_80):
+   that is the measurement behind the selector's within-family fallback,
+   which until then rests on NVIDIA's documentation alone
+   (docs/LINUX_WHEEL.md section 9).
 
 7. Then PyPI, by section 4, with both wheels in `python/dist/`.

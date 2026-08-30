@@ -191,9 +191,21 @@ TARGET_FLAGS="--target-cpu apple-m1"
 # and records it in the manifest; a set whose binaries name no architecture
 # is a set with no kernels in it, however green the build log looks.
 #
-#   MOJOLEARN_GPU_ARCHS="sm_80,sm_86,sm_89,sm_90"   NVIDIA
-#   MOJOLEARN_GPU_ARCHS="gfx90a,gfx942"             AMD
+# EXACTLY ONE ARCHITECTURE. Measured 2026-08-30 on an A40
+# (bench/results/wheels/LEGS_2026-08-30.md): a comma list is accepted by the
+# parser, echoed back by --print-effective-target, and REJECTED by the
+# compiler ("GPU architecture 'sm_80,sm_86,sm_90a' is not supported"); a
+# repeated flag is refused too. One build, one architecture; a multi-arch
+# wheel is N builds filed under mojolearn/<vendor>/<arch>/
+# (docs/LINUX_WHEEL.md).
+#
+#   MOJOLEARN_GPU_ARCHS="sm_80"     NVIDIA (one name per build)
+#   MOJOLEARN_GPU_ARCHS="gfx942"    AMD
 if [ -n "${MOJOLEARN_GPU_ARCHS:-}" ] && [ "$(uname)" != "Darwin" ]; then
+    case "$MOJOLEARN_GPU_ARCHS" in *,*)
+        echo "MOJOLEARN_GPU_ARCHS='$MOJOLEARN_GPU_ARCHS': the compiler takes EXACTLY ONE architecture (measured 2026-08-30); run one build per architecture" >&2
+        exit 2 ;;
+    esac
     TARGET_FLAGS="$TARGET_FLAGS --target-accelerator $MOJOLEARN_GPU_ARCHS"
     echo "!! MOJOLEARN_GPU_ARCHS=$MOJOLEARN_GPU_ARCHS"
     echo "!! --target-accelerator is being passed. On Metal this flag empties"

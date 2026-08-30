@@ -2,9 +2,21 @@
 """Pack the fetched CUDA and HIP sets into ONE Linux wheel. Pure Python.
 
     python3 packaging/linux/pack_wheel.py \\
-        --set bench/results/wheels/<stamp>-nvidia/sets/cuda \\
-        --set bench/results/wheels/<stamp>-amd/sets/hip \\
+        --set bench/results/wheels/<stamp1>-nvidia/sets/cuda \\
+        --set bench/results/wheels/<stamp2>-nvidia/sets/cuda \\
+        --set bench/results/wheels/<stamp3>-amd/sets/hip \\
         --out python/dist
+
+EVERY SET CARRIES AN ARCHITECTURE LEVEL (2026-08-30): a `--set` directory is
+`sets/<vendor>/` holding one or more `<arch>/` subdirectories (`sm_80`,
+`gfx942`, ...), because one `mojo build` emits device code for exactly one
+architecture and no PTX -- the sm_90a-only 0.3.0 wheel failed 27 of 29 lanes
+on an A40 (LEGS_2026-08-30.md). Different architectures of one vendor come
+from different legs, so the same vendor may be given several times; the same
+(vendor, architecture) twice is refused. An arch-less set (binaries directly
+under `sets/<vendor>/`) predates the axis and is REFUSED: rebuild it with
+the current build_sets.sh rather than shipping a wheel that only runs on the
+GPU model that built it.
 
 RUNS ON THE MAC AND RUNS NOTHING. No setuptools, no compiler, no ELF tool:
 it reads `python/pyproject.toml` (tomllib), `python/mojolearn/_version.py`,
@@ -65,6 +77,7 @@ EXT_NAMES = (
     "_mojolearn_metrics", "_mojolearn_tsa", "_mojolearn_linalg",
 )
 TIERS = ("fast", "deterministic", "identical")
+ARCH_RE = re.compile(r"^(sm_[0-9]+a?|gfx[0-9a-f]+)$")
 PYPI_LIMIT = 100 * 1024 * 1024
 LINUX_VENDORS = ("cuda", "hip")
 
@@ -109,29 +122,57 @@ def metadata_text(proj, readme):
 
 
 def load_set(path):
+    """Every (vendor, arch, files, libs, manifest) under one sets/<vendor>
+    directory. One tuple per architecture subdirectory."""
     path = pathlib.Path(path).resolve()
     vendor = path.name
     if vendor not in LINUX_VENDORS:
         raise SystemExit(f"pack_wheel: set directory must be named cuda or hip: {path}")
-    manifest = json.loads((path / "manifest.json").read_text())
-    rb = (path / "readback.txt").read_text().split()
-    said = {w for w in rb if w in ("cuda", "hip", "metal", "none", "NO-READBACK")}
-    if said != {vendor}:
-        raise SystemExit(f"pack_wheel: {path}/readback.txt says {sorted(said)}, "
-                         f"directory says {vendor}; refusing to pack a mislabeled set")
-    files = {}
-    for tier in TIERS:
-        d = path if tier == "fast" else path / tier
-        for n in EXT_NAMES:
-            so = d / (n + ".so")
-            if not so.exists():
-                raise SystemExit(f"pack_wheel: {vendor} {tier} set is missing {n}.so")
-            rel = f"{vendor}/{n}.so" if tier == "fast" else f"{vendor}/{tier}/{n}.so"
-            files[rel] = so
-    libs = {p.name: p for p in sorted((path / ".libs").glob("*"))}
-    if not libs:
-        raise SystemExit(f"pack_wheel: {path}/.libs is empty; stage_libs.py did not run")
-    return vendor, files, libs, manifest
+    if any(path.glob("_mojolearn*.so")):
+        raise SystemExit(
+            f"pack_wheel: {path} holds binaries with NO architecture level. "
+            "That set predates the architecture axis (2026-08-30) and would "
+            "only run on the GPU model that built it -- the sm_90a/A40 "
+            "failure. Rebuild it with packaging/linux/build_sets.sh.")
+    arch_dirs = sorted(d for d in path.iterdir()
+                       if d.is_dir() and ARCH_RE.match(d.name))
+    if not arch_dirs:
+        raise SystemExit(f"pack_wheel: no <arch>/ subdirectory under {path}")
+    out = []
+    for adir in arch_dirs:
+        arch = adir.name
+        manifest = json.loads((adir / "manifest.json").read_text())
+        rb = (adir / "readback.txt").read_text().split()
+        said = {w for w in rb if w in ("cuda", "hip", "metal", "none", "NO-READBACK")}
+        if said != {vendor}:
+            raise SystemExit(f"pack_wheel: {adir}/readback.txt says {sorted(said)}, "
+                             f"directory says {vendor}; refusing to pack a mislabeled set")
+        # THE ARCHITECTURE IS VERIFIED THE SAME WAY THE VENDOR IS: read back
+        # from the binaries on the box (build_sets.sh), never typed. A set
+        # whose read-back disagrees with its directory name is refused, the
+        # exact failure mode that shipped 0.3.0 as sm_90a-only.
+        ab = (adir / "arch_readback.txt").read_text().split()
+        said_arch = {w for w in ab if ARCH_RE.match(w) or "," in w}
+        if said_arch != {arch}:
+            raise SystemExit(
+                f"pack_wheel: {adir}/arch_readback.txt says {sorted(said_arch)}, "
+                f"directory says {arch}; refusing to pack a mislabeled set")
+        files = {}
+        for tier in TIERS:
+            d = adir if tier == "fast" else adir / tier
+            for n in EXT_NAMES:
+                so = d / (n + ".so")
+                if not so.exists():
+                    raise SystemExit(
+                        f"pack_wheel: {vendor}/{arch} {tier} set is missing {n}.so")
+                rel = (f"{vendor}/{arch}/{n}.so" if tier == "fast"
+                       else f"{vendor}/{arch}/{tier}/{n}.so")
+                files[rel] = so
+        libs = {p.name: p for p in sorted((adir / ".libs").glob("*"))}
+        if not libs:
+            raise SystemExit(f"pack_wheel: {adir}/.libs is empty; stage_libs.py did not run")
+        out.append((vendor, arch, files, libs, manifest))
+    return out
 
 
 def sha(path):
@@ -159,26 +200,44 @@ def main():
                          f"_version.py says {version}")
     readme = (REPO / "README.md").read_text()
 
-    sets = [load_set(s) for s in a.set]
-    vendors = [s[0] for s in sets]
-    if len(set(vendors)) != len(vendors):
-        raise SystemExit(f"pack_wheel: the same vendor given twice: {vendors}")
+    sets = [t for s in a.set for t in load_set(s)]
+    keys = [(v, arch) for v, arch, _, _, _ in sets]
+    if len(set(keys)) != len(keys):
+        raise SystemExit(f"pack_wheel: the same (vendor, arch) given twice: {keys}")
 
-    # .libs layout: shared when every library matches by name AND sha256.
-    lib_sha = {v: {n: sha(p) for n, p in libs.items()} for v, _, libs, _ in sets}
-    shared = len(sets) > 1 and all(lib_sha[v] == lib_sha[vendors[0]] for v in vendors)
+    # .libs layout: ONE shared mojolearn/.libs when every closure across
+    # every (vendor, arch) set matches by name AND sha256 (2026-08-30
+    # measured the two vendors' closures byte-identical); otherwise one per
+    # vendor, which requires that vendor's architectures to agree among
+    # themselves -- the MAX runtime does not vary by GPU architecture, so a
+    # disagreement there is a build defect, refused rather than laid out.
+    lib_sha = {k: {n: sha(p) for n, p in libs.items()}
+               for k, (_, _, _, libs, _) in zip(keys, sets)}
+    first = keys[0]
+    shared = all(lib_sha[k] == lib_sha[first] for k in keys)
+    if not shared:
+        for vendor in {v for v, _ in keys}:
+            ks = [k for k in keys if k[0] == vendor]
+            if any(lib_sha[k] != lib_sha[ks[0]] for k in ks):
+                raise SystemExit(
+                    f"pack_wheel: the {vendor} architectures disagree on the "
+                    "MAX runtime closure; the runtime does not vary by GPU "
+                    "architecture, so one of these sets is broken: "
+                    f"{[k[1] for k in ks]}")
     entries = {}  # archive path -> filesystem path
     entries["mojolearn_diagnostics.py"] = PY_DIR / "mojolearn_diagnostics.py"
     for py in sorted(PKG.glob("*.py")):
         entries[f"mojolearn/{py.name}"] = py
-    for vendor, files, libs, _ in sets:
+    seen_vendor_libs = set()
+    for vendor, arch, files, libs, _ in sets:
         for rel, p in files.items():
             entries[f"mojolearn/{rel}"] = p
-        if not shared:
+        if not shared and vendor not in seen_vendor_libs:
+            seen_vendor_libs.add(vendor)
             for n, p in libs.items():
                 entries[f"mojolearn/{vendor}/.libs/{n}"] = p
     if shared:
-        for n, p in sets[0][2].items():
+        for n, p in sets[0][3].items():
             entries[f"mojolearn/.libs/{n}"] = p
 
     dist = f"mojolearn-{version}.dist-info"
@@ -227,8 +286,8 @@ def main():
 
     size = whl.stat().st_size
     per_set = {}
-    for vendor, files, libs, manifest in sets:
-        per_set[vendor] = {
+    for vendor, arch, files, libs, manifest in sets:
+        per_set[f"{vendor}/{arch}"] = {
             "extensions_bytes": manifest["bytes_extensions"],
             "runtime_libs_bytes": manifest["bytes_staged_libs"],
             "driver_libs_not_staged": manifest["driver_libs_not_staged"],

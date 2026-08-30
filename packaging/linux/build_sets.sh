@@ -166,6 +166,39 @@ if awk '$3=="NONE"{found=1} END{exit !found}' "$ARCHBACK"; then
   exit 4
 fi
 say "architecture set: $ARCH_SET"
+
+# ONE ARCHITECTURE PER SET, AND TYPED MUST EQUAL BUILT. Two findings of
+# 2026-08-30 meet here. (1) `--target-accelerator` takes EXACTLY ONE
+# architecture -- the comma list parses and the compiler rejects it -- so a
+# set is one architecture by construction and a mixed read-back means some
+# builds and not others received the flag. (2) That mix actually happened:
+# only bindings/build.sh read MOJOLEARN_GPU_ARCHS until 2026-08-30, so an
+# sm_80-asking leg on an A40 got twenty-seven sm_86 binaries from the nine
+# scripts that never saw the flag. The read-back, not the flag, names the
+# set's directory.
+N_ARCH=$(awk '$3!="MISSING"{print $3}' "$ARCHBACK" | sort -u | wc -l | tr -d ' ')
+if [ "$N_ARCH" != 1 ]; then
+  say "REFUSING: the binaries do not agree on ONE architecture: $ARCH_SET"
+  say "  A set is one architecture. A mixed read-back means some builds"
+  say "  received --target-accelerator and others did not; per-binary:"
+  awk '{print "    " $1 " " $2 " " $3}' "$ARCHBACK" | head -8
+  exit 5
+fi
+ARCH=$(awk '$3!="MISSING"{print $3}' "$ARCHBACK" | sort -u)
+case "$ARCH" in
+  *,*)
+    say "REFUSING: a single binary names several architectures ($ARCH);"
+    say "  no measured build has ever produced that, so this read-back is"
+    say "  telling us something new. Read arch_readback.txt before trusting it."
+    exit 5 ;;
+esac
+if [ -n "${MOJOLEARN_GPU_ARCHS:-}" ] && [ "$ARCH" != "$MOJOLEARN_GPU_ARCHS" ]; then
+  say "REFUSING: MOJOLEARN_GPU_ARCHS=$MOJOLEARN_GPU_ARCHS was asked for but"
+  say "  every binary carries $ARCH. A set must never ship under an"
+  say "  architecture it was not verified to carry."
+  exit 5
+fi
+say "architecture: $ARCH (requested: ${MOJOLEARN_GPU_ARCHS:-the box GPU itself})"
 VENDORS=$(awk '$3!="MISSING"{print $3}' "$READBACK" | sort -u | tr '\n' ' ')
 VENDOR=$(echo "$VENDORS" | awk '{print $1}')
 case "$VENDORS" in
@@ -180,8 +213,11 @@ esac
 say "vendor: $VENDOR"
 
 # ---------------------------------------------------------------- move
-SET="$DEST/sets/$VENDOR"
-rm -rf "$SET"; mkdir -p "$SET/deterministic" "$SET/identical"
+# THE ARCHITECTURE IS A DIRECTORY LEVEL, named by the read-back and never
+# typed: sets/<vendor>/<arch>/{,deterministic,identical}. The selector and
+# pack_wheel.py mirror this layout (docs/LINUX_WHEEL.md).
+SET="$DEST/sets/$VENDOR/$ARCH"
+rm -rf "$DEST/sets/$VENDOR"; mkdir -p "$SET/deterministic" "$SET/identical"
 for t in $TIERS; do
   case "$t" in fast) src=python/mojolearn; dst="$SET" ;; *) src=python/mojolearn/$t; dst="$SET/$t" ;; esac
   for n in $EXT_NAMES; do
@@ -189,6 +225,7 @@ for t in $TIERS; do
   done
 done
 cp "$READBACK" "$SET/readback.txt"
+cp "$ARCHBACK" "$SET/arch_readback.txt"
 
 # ---------------------------------------------------------------- stage
 # PATCHELF, FOUR WAYS, BECAUSE ONE WAY LOST A WHOLE AMD LEASE.
@@ -271,6 +308,8 @@ STAGE_RC=${PIPESTATUS[0]}
 ( cd "$DEST/sets" && tar czf "$VENDOR.tar.gz" "$VENDOR" )
 {
   echo "vendor=$VENDOR"
+  echo "arch=$ARCH"
+  echo "gpu_archs_requested=${MOJOLEARN_GPU_ARCHS:-}"
   echo "build_rc=$BUILD_RC stage_rc=$STAGE_RC"
   echo "build_seconds=$(( $(date +%s) - T0 ))"
   for t in $TIERS; do

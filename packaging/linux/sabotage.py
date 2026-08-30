@@ -152,9 +152,16 @@ def main():
         shutil.rmtree(pkg / V)
 
     def mislabel_tier(pkg):
-        t = pkg / V / "deterministic" / "_mojolearn_gbdt.so"
+        # The deterministic directory sits at <vendor>/<arch>/ since the
+        # architecture axis (2026-08-30), and at <vendor>/ on a legacy set.
+        # Find it rather than assume; the fast binary is its sibling's
+        # parent either way.
+        t = next((pkg / V).glob("*/deterministic/_mojolearn_gbdt.so"), None)
+        if t is None:
+            t = pkg / V / "deterministic" / "_mojolearn_gbdt.so"
+        fast = t.parent.parent / "_mojolearn_gbdt.so"
         t.unlink()
-        os.link(pkg / V / "_mojolearn_gbdt.so", t)
+        os.link(fast, t)
 
     case("baseline", lambda pkg: None, {}, True, expect_vendor=V)
     case("wrong_label_ignored", fill_w_with_v, {}, True, expect_vendor=V)

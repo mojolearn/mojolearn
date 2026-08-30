@@ -74,6 +74,22 @@ LINK_FLAGS="-Xlinker -platform_version -Xlinker macos -Xlinker $MACOS_FLOOR -Xli
 
 TARGET_FLAGS="--target-cpu apple-m1"
 [ "$(uname)" = "Darwin" ] || TARGET_FLAGS=""  # linux arm: host cpu + its GPU
+# MOJOLEARN_GPU_ARCHS: ONE GPU architecture a LINUX set is compiled for
+# (sm_80, gfx942, ...). Until 2026-08-30 ONLY bindings/build.sh read this
+# variable, so a leg that set it built ONE binding for the asked-for
+# architecture and every other binding for the build box's own device (the
+# A40 leg's 27-sm_86 read-back, bench/results/wheels/LEGS_2026-08-30.md).
+# The compiler takes EXACTLY ONE name (a comma list is rejected);
+# packaging/linux/build_sets.sh reads the architecture back out of every
+# binary and refuses a set that disagrees with what was asked.
+if [ -n "${MOJOLEARN_GPU_ARCHS:-}" ] && [ "$(uname)" != "Darwin" ]; then
+    case "$MOJOLEARN_GPU_ARCHS" in *,*)
+        echo "MOJOLEARN_GPU_ARCHS='$MOJOLEARN_GPU_ARCHS': the compiler takes EXACTLY ONE architecture (measured 2026-08-30); run one build per architecture" >&2
+        exit 2 ;;
+    esac
+    TARGET_FLAGS="$TARGET_FLAGS --target-accelerator $MOJOLEARN_GPU_ARCHS"
+    echo "!! MOJOLEARN_GPU_ARCHS=$MOJOLEARN_GPU_ARCHS (--target-accelerator); read the architecture back out of the built .so"
+fi
 
 # Explicit kernel-matrix column: MOJOLEARN_TARGET_COLUMN=apple|nvidia|amd|amd_rdna
 COLUMN_DEFINE=""

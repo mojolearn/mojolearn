@@ -15,6 +15,7 @@ import importlib.metadata
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -119,6 +120,11 @@ def _native_files() -> list[dict[str, Any]]:
     return records
 
 
+#: Architecture directory names under a vendor (the architecture axis,
+#: 2026-08-30): sm_80, sm_90a, gfx90a, gfx942, ...
+_ARCH_RE = re.compile(r"^(sm_[0-9]+a?|gfx[0-9a-f]+)$")
+
+
 def _installed_tiers(native_files: list[dict[str, Any]]) -> dict[str, Any]:
     """Which numeric tiers this install actually carries.
 
@@ -152,9 +158,15 @@ def _installed_tiers(native_files: list[dict[str, Any]]) -> dict[str, Any]:
         tier = parent if parent in counts else "fast"
         counts[tier] += 1
         vendor = "flat"
-        for part in parts:
+        for i, part in enumerate(parts):
             if part in ("cuda", "hip"):
                 vendor = part
+                # THE ARCHITECTURE AXIS (2026-08-30): one directory per GPU
+                # architecture under the vendor. Keyed together so "20 fast"
+                # under one vendor reads as two architectures' sets and not
+                # as a doubled set.
+                if i + 1 < len(parts) and _ARCH_RE.match(parts[i + 1]):
+                    vendor = f"{part}/{parts[i + 1]}"
         by_vendor.setdefault(vendor, {t: 0 for t in NUMERIC_TIERS})[tier] += 1
     return {
         "expected_extensions_per_tier": 10,
@@ -251,11 +263,18 @@ def _import_probe() -> dict[str, Any]:
             vendor = mojolearn.vendor()
         except BaseException as exc:
             vendor = "unreadable: " + type(exc).__name__
+        # THE ARCHITECTURE (2026-08-30): which sm_*/gfx* set loaded, and
+        # why -- None on the flat and arch-less layouts.
+        try:
+            gpu_arch = mojolearn.gpu_arch()
+        except BaseException as exc:
+            gpu_arch = "unreadable: " + type(exc).__name__
         print(json.dumps({
             "ok": True,
             "version": getattr(mojolearn, "__version__", None),
             "numeric_mode": mode,
             "vendor": vendor,
+            "gpu_arch": gpu_arch,
         }))
         """
     )
@@ -276,7 +295,8 @@ def _import_probe() -> dict[str, Any]:
         else:
             result["result"] = {
                 key: payload[key]
-                for key in ("ok", "type", "version", "numeric_mode", "vendor")
+                for key in ("ok", "type", "version", "numeric_mode", "vendor",
+                            "gpu_arch")
                 if key in payload
             }
     elif raw.get("error"):
@@ -345,6 +365,7 @@ def _summary(report: dict[str, Any]) -> str:
         f"numeric mode requested: {report['environment'].get('MOJOLEARN_NUMERIC_MODE', 'fast (default)')}",
         f"numeric mode loaded: {report['import_probe'].get('result', {}).get('numeric_mode') or 'unknown (import probe did not report one)'}",
         f"vendor loaded: {report['import_probe'].get('result', {}).get('vendor') or 'unknown (import probe did not report one)'}",
+        f"gpu architecture loaded: {report['import_probe'].get('result', {}).get('gpu_arch') or 'none (flat or arch-less layout, or probe did not report one)'}",
         "numeric tiers installed: {}".format(
             ", ".join(report["numeric_tiers"]["present"]) or "none"
         ),

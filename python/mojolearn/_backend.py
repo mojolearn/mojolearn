@@ -74,6 +74,49 @@ THE ORDER OF TRUST, most to least:
      not the first: a probe can be fooled by a container that mounts a
      driver it cannot use, and the binary cannot be.
 
+THE ARCHITECTURE AXIS (2026-08-30, LEGS_2026-08-30.md)
+------------------------------------------------------
+One `mojo build` emits device code for EXACTLY ONE GPU architecture and no
+PTX, so there is no JIT fallback: a binary runs on the architecture family
+it was built for and nothing else. Measured 2026-08-30: a set built on an
+H100 carried `sm_90a` only, installed cleanly on an A40, and failed 27 of
+29 lanes with CUDA_ERROR_NO_BINARY_FOR_GPU. A portable wheel therefore
+carries one set PER ARCHITECTURE, one directory level under the vendor:
+
+    python/mojolearn/cuda/sm_80/{,deterministic,identical}/*.so
+    python/mojolearn/cuda/sm_90a/...
+    python/mojolearn/hip/gfx942/...
+
+and the architecture is picked at import, right after the vendor, in this
+order:
+
+  1. `MOJOLEARN_GPU_ARCH` in the environment picks the DIRECTORY. It must
+     name a set the install carries or the import raises.
+  2. The device's own architecture, read WITHOUT loading any extension:
+     for cuda, `cuDeviceGetAttribute(COMPUTE_CAPABILITY_MAJOR/MINOR)`
+     through ctypes on the driver library the probe already loads; for
+     hip, `gfx_target_version` out of /sys/class/kfd/kfd/topology (the
+     KFD topology needs no ROCm library at all). An exact match wins; on
+     cuda a device `sm_XY` also accepts a carried `sm_XYa` (same chip,
+     architecture-specific build), and failing both, the HIGHEST carried
+     non-`a` architecture of the same major family that does not exceed
+     the device (NVIDIA documents cubin forward compatibility within a
+     family; sm_80 code runs on sm_86/sm_89). `a`-suffixed builds are
+     architecture-specific and never chosen by the family rule. On hip
+     there is NO family rule: gfx code objects are ISA-exact, so anything
+     but an exact match refuses.
+  3. When the device architecture cannot be determined and the install
+     carries exactly ONE architecture for the chosen vendor, that one is
+     used (there is nothing better to do and it is what an arch-less
+     install always did). More than one and no answer refuses, naming
+     `MOJOLEARN_GPU_ARCH`.
+
+A vendor directory whose binaries sit directly in it (no architecture
+subdirectory) keeps working as before: that is every set built before the
+axis existed, and the flat/legacy behaviour is a supported layout, not a
+deprecation. `gpu_arch()` and `gpu_arch_how()` report what was picked and
+why.
+
 THERE IS NO CPU PATH, so when the wheel layout is present and no vendor can
 be picked the import RAISES, naming every path and library it looked for
 and what it found, rather than importing a package whose every fit would
@@ -84,6 +127,7 @@ binaries; `NumericModeMixin.vendor_used()` reports it per estimator.
 import importlib.machinery
 import importlib.util
 import os
+import re
 import sys
 
 # DEVIATION 869, 2026-08-24. THIS TUPLE AND `_build_script` BELOW MUST LIST
@@ -235,8 +279,213 @@ def _probe_lines(probe):
     return lines
 
 
+# ===================================================================
+# THE ARCHITECTURE AXIS. See the module docstring.
+# ===================================================================
+
+#: Directory names that count as an architecture level under a vendor
+#: directory: sm_80, sm_90a, gfx90a, gfx942, ... Anything else under the
+#: vendor directory (deterministic/, identical/, .libs/) is not one.
+_ARCH_RE = re.compile(r"^(sm_[0-9]+a?|gfx[0-9a-f]+)$")
+
+_ARCH_SELECTED = None
+_ARCH_HOW = None
+
+
+def _arch_dirs(vdir):
+    """The architecture subdirectories of one vendor directory that hold
+    binaries, sorted. Empty list means the arch-less (legacy) layout."""
+    try:
+        names = os.listdir(vdir)
+    except OSError:
+        return []
+    return sorted(n for n in names
+                  if _ARCH_RE.match(n) and _has_binaries(os.path.join(vdir, n)))
+
+
+def _vendor_has_set(vdir):
+    """Does this vendor directory carry ANY loadable set: binaries directly
+    in it (legacy) or under an architecture subdirectory."""
+    return _has_binaries(vdir) or bool(_arch_dirs(vdir))
+
+
+def _device_arch(vendor):
+    """(arch, how) for the first visible device of `vendor`, or
+    (None, why-not). NEVER loads an extension and never opens a MAX device
+    context: cuda is asked through ctypes on the driver library the probe
+    already loads, hip through the KFD topology files, which need no ROCm
+    library at all. Every failure returns a reason a refusal can print."""
+    if vendor == "cuda":
+        import ctypes
+        lib = None
+        for name in _PROBE["cuda"]["libs"]:
+            try:
+                lib = ctypes.CDLL(name)
+                break
+            except OSError:
+                continue
+        if lib is None:
+            return None, "no libcuda could be loaded"
+        try:
+            rc = lib.cuInit(0)
+            if rc != 0:
+                return None, f"cuInit returned {rc}"
+            n = ctypes.c_int(0)
+            rc = lib.cuDeviceGetCount(ctypes.byref(n))
+            if rc != 0 or n.value < 1:
+                return None, f"cuDeviceGetCount rc={rc} count={n.value}"
+            dev = ctypes.c_int(0)
+            rc = lib.cuDeviceGet(ctypes.byref(dev), 0)
+            if rc != 0:
+                return None, f"cuDeviceGet returned {rc}"
+            major = ctypes.c_int(0)
+            minor = ctypes.c_int(0)
+            # 75/76: CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR/MINOR.
+            rc1 = lib.cuDeviceGetAttribute(ctypes.byref(major), 75, dev)
+            rc2 = lib.cuDeviceGetAttribute(ctypes.byref(minor), 76, dev)
+            if rc1 != 0 or rc2 != 0:
+                return None, f"cuDeviceGetAttribute rc={rc1}/{rc2}"
+        except (OSError, AttributeError) as exc:
+            return None, f"driver call failed: {exc}"
+        return (f"sm_{major.value}{minor.value}",
+                "compute capability from the CUDA driver")
+    if vendor == "hip":
+        # gfx_target_version encodes major*10000 + minor*100 + step; the
+        # gfx name spells minor and step in hex (gfx90a is 9.0.10). CPU
+        # nodes in the topology carry 0 and are skipped.
+        base = "/sys/class/kfd/kfd/topology/nodes"
+        try:
+            nodes = sorted(os.listdir(base))
+        except OSError:
+            return None, f"{base} not readable"
+        for node in nodes:
+            props = os.path.join(base, node, "properties")
+            try:
+                with open(props) as f:
+                    text = f.read()
+            except OSError:
+                continue
+            for line in text.splitlines():
+                parts = line.split()
+                if len(parts) == 2 and parts[0] == "gfx_target_version":
+                    v = int(parts[1])
+                    if v > 0:
+                        return (f"gfx{v // 10000:d}{(v // 100) % 100:x}{v % 100:x}",
+                                f"gfx_target_version in {props}")
+        return None, f"no GPU node with gfx_target_version under {base}"
+    return None, f"no device-architecture probe for vendor {vendor!r}"
+
+
+def _sm_parts(arch):
+    """('sm_86' -> (8, 6, False)); ('sm_90a' -> (9, 0, True)). The minor
+    digit is the LAST digit: sm_121a is 12.1."""
+    body = arch[len("sm_"):]
+    specific = body.endswith("a")
+    if specific:
+        body = body[:-1]
+    return int(body[:-1]), int(body[-1]), specific
+
+
+def _pick_arch(vendor, vdir, archs):
+    """Which of `archs` (the carried architecture directories) this box
+    should load, and how that was decided. Raises with the whole table when
+    nothing carried can run here."""
+    forced = os.environ.get("MOJOLEARN_GPU_ARCH", "").strip().lower()
+    if forced:
+        if forced not in archs:
+            raise ImportError(
+                f"mojolearn: MOJOLEARN_GPU_ARCH={forced} but this install "
+                f"carries no such set under {vdir}; it carries {archs}"
+            )
+        return forced, "MOJOLEARN_GPU_ARCH in the environment"
+    dev, how = _device_arch(vendor)
+    if dev is None:
+        if len(archs) == 1:
+            return archs[0], (f"the only architecture carried (the device's "
+                              f"own could not be read: {how})")
+        raise ImportError(
+            f"mojolearn: this install carries {vendor} sets for {archs} and "
+            f"the device's architecture could not be determined ({how}), so "
+            "there is nothing to choose by. Set MOJOLEARN_GPU_ARCH to one "
+            "of the names above."
+        )
+    if dev in archs:
+        return dev, f"exact match for the device ({how}: {dev})"
+    if vendor == "cuda":
+        # The device reports sm_XY; an sm_XYa build targets exactly that
+        # chip and runs on it (the `a` restricts WHICH DEVICES, not this
+        # one). Prefer it before any family fallback.
+        if dev + "a" in archs:
+            return dev + "a", (f"architecture-specific build for this exact "
+                               f"device ({dev} -> {dev}a)")
+        # Cubin forward compatibility WITHIN a family: NVIDIA guarantees
+        # sm_X0-class code runs on later minor revisions of major X, and
+        # `a`-suffixed builds are excluded from that guarantee, so they are
+        # excluded here. The highest carried candidate that does not exceed
+        # the device wins.
+        dmaj, dmin, _ = _sm_parts(dev)
+        cands = []
+        for a in archs:
+            if not a.startswith("sm_"):
+                continue
+            maj, minr, specific = _sm_parts(a)
+            if specific or maj != dmaj or minr > dmin:
+                continue
+            cands.append((minr, a))
+        if cands:
+            _, best = max(cands)
+            return best, (f"same-family lower architecture ({best} code "
+                          f"runs forward on this {dev} device)")
+    lines = "\n".join(f"    {a}" for a in archs)
+    hint = ("gfx code objects are ISA-exact; there is no cross-architecture "
+            "compatibility on hip" if vendor == "hip" else
+            "cubins run forward only within one family, and `a`-suffixed "
+            "builds only on their exact chip")
+    raise ImportError(
+        f"mojolearn: this device is {dev} ({how}) and no {vendor} set this "
+        f"install carries can run on it ({hint}). Carried:\n{lines}\n"
+        "A release carrying this device's architecture is needed; "
+        "MOJOLEARN_GPU_ARCH can force one of the directories above, and the "
+        "first kernel launch will then report the runtime's own error."
+    )
+
+
+def _vendor_base(pkg, vendor):
+    """The directory `tier_dir` roots at for one chosen vendor: the vendor
+    directory itself on the arch-less layout, or the chosen architecture
+    subdirectory. Sets _ARCH_SELECTED/_ARCH_HOW either way."""
+    global _ARCH_SELECTED, _ARCH_HOW
+    vdir = os.path.join(pkg, vendor)
+    archs = _arch_dirs(vdir)
+    if not archs:
+        _ARCH_SELECTED = None
+        _ARCH_HOW = "no architecture level (arch-less set)"
+        return vdir
+    arch, how = _pick_arch(vendor, vdir, archs)
+    _ARCH_SELECTED = arch
+    _ARCH_HOW = how
+    return os.path.join(vdir, arch)
+
+
+def gpu_arch():
+    """The architecture directory this process loads from ('sm_80',
+    'gfx942', ...), or None on the flat and arch-less layouts (where no
+    choice was made)."""
+    _layout()
+    return _ARCH_SELECTED
+
+
+def gpu_arch_how():
+    """How the architecture was decided, for `mojolearn doctor` and the
+    smoke: 'exact match for the device (...)', 'MOJOLEARN_GPU_ARCH in the
+    environment', 'same-family lower architecture (...)', ..."""
+    _layout()
+    return _ARCH_HOW
+
+
 def _layout():
-    """('flat', <pkg dir>) or ('vendor', <pkg dir>/<vendor>), decided ONCE.
+    """('flat', <pkg dir>) or ('vendor', <pkg dir>/<vendor>[/<arch>]),
+    decided ONCE.
 
     The wheel layout is recognised by a vendor directory WITH BINARIES IN
     IT. A bare directory does not count: the macOS wheel never has one, a
@@ -247,7 +496,7 @@ def _layout():
         return _LAYOUT
     pkg = _pkg_dir()
     present = [v for v in _LINUX_VENDORS
-               if _has_binaries(os.path.join(pkg, v))]
+               if _vendor_has_set(os.path.join(pkg, v))]
     if not present:
         # macOS, or a Linux source checkout. The vendor is whatever the
         # binaries say; `vendor()` reads it after `select()` has loaded them.
@@ -267,16 +516,18 @@ def _layout():
                 f"carries no {forced} set under {os.path.join(pkg, forced)}; "
                 f"it carries {present}"
             )
+        base = _vendor_base(pkg, forced)
         _VENDOR_SELECTED = forced
         _VENDOR_HOW = "MOJOLEARN_VENDOR in the environment"
-        _LAYOUT = ("vendor", os.path.join(pkg, forced))
+        _LAYOUT = ("vendor", base)
         return _LAYOUT
     probe = _probe_box()
     hits = [v for v in present if probe[v]["found"]]
     if len(hits) == 1:
+        base = _vendor_base(pkg, hits[0])
         _VENDOR_SELECTED = hits[0]
         _VENDOR_HOW = "the box probe (device nodes and driver libraries)"
-        _LAYOUT = ("vendor", os.path.join(pkg, hits[0]))
+        _LAYOUT = ("vendor", base)
         return _LAYOUT
     if len(hits) > 1:
         raise ImportError(
@@ -332,7 +583,10 @@ def _check_vendor(module, name, path):
             "anywhere. Rebuild it on a box with the GPU present."
         )
     if kind == "vendor":
-        expected = os.path.basename(base)
+        # NOT the basename: with the architecture axis the directory the
+        # binaries load from is <vendor>/<arch>, and its basename is the
+        # architecture. The vendor is what _layout() selected.
+        expected = _VENDOR_SELECTED
         if said != expected:
             raise ImportError(
                 f"mojolearn: {path} was compiled for {said} but sits in the "
@@ -757,7 +1011,7 @@ def vendor():
             if said is not None:
                 break
     if kind == "vendor":
-        expected = os.path.basename(base)
+        expected = _VENDOR_SELECTED
         if said is not None and said != expected:
             raise RuntimeError(
                 f"mojolearn: the loaded {loaded} binaries were compiled for "

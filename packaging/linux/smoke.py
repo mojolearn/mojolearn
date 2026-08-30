@@ -130,6 +130,9 @@ def _trim(text, head=24, tail=8):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--vendor", required=True, choices=("cuda", "hip", "metal"))
+    ap.add_argument("--arch", default="", help="the architecture the set was "
+                    "built for (sm_90a, gfx942, ...); asserted against "
+                    "gpu_arch() when given")
     ap.add_argument("--json", default="")
     ap.add_argument("--repo", default=os.environ.get(
         "MOJOLEARN_REPO", str(pathlib.Path(__file__).resolve().parents[2])))
@@ -156,6 +159,16 @@ def main():
     report["vendor_how"] = _backend.vendor_how()
     if vendor != a.vendor:
         failures.append(f"vendor() read back {vendor!r}, the box is {a.vendor!r}")
+
+    # THE ARCHITECTURE AXIS (2026-08-30): the selector must have opened the
+    # architecture directory this leg built, chosen from the DEVICE, not
+    # from the directory being the only one there.
+    report["arch_loaded"] = _backend.gpu_arch()
+    report["arch_how"] = _backend.gpu_arch_how()
+    if a.arch and _backend.gpu_arch() != a.arch:
+        failures.append(
+            f"gpu_arch() read back {_backend.gpu_arch()!r} "
+            f"({_backend.gpu_arch_how()}), the leg built {a.arch!r}")
 
     per = {}
     for name in ALL_BINDINGS:
