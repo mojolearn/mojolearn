@@ -234,7 +234,14 @@ def pinned_mul(a: Float32, b: Float32) -> Float32:
 #         -I . mamba/checks/mamba_check.mojo
 #
 # The names are disjoint from `selective_scan_interface.mojo`'s five
-# (S5, S8, S9, S10, S11), so one driver can arm any of the eleven.
+# (S5, S8, S9, S10, S11), so one driver can arm any of the twelve.
+#
+# THE TWELFTH IS NOT THIS LANE'S. `SAB_BATCHINV_NORM_CHUNK_FROM_M`
+# below belongs to `checks/batch_invariance_check.mojo` and is not in
+# contract section 8's clause (f) list; it lives here because it has to
+# be inside the RMSNorm kernel, and it carries the `BATCHINV` prefix
+# rather than an `S` number so that a reader can tell at a glance which
+# gate owns it. This comment said ELEVEN until it was added.
 # ===========================================================================
 
 comptime SAB_S14_THRESHOLD_10 = is_defined[
@@ -283,6 +290,83 @@ which reads `gemm_oracle`'s numbering and sees `OP_NN`. Every buffer is still
 exactly the right size, so nothing raises and every product is wrong. THE
 TRAP, PLANTED."""
 
+comptime SAB_BATCHINV_NORM_CHUNK_FROM_M = is_defined[
+    "MOJOLEARN_BATCHINV_SABOTAGE_NORM_CHUNK_FROM_M"
+]()
+"""S1, BUT AIMED AT THE BATCH AXIS: split the sum of squares into chunks
+whose SIZE IS DERIVED FROM `m = B * L` and fold the chunk partials.
+
+**THIS IS THE ONE SABOTAGE THE LANE'S OWN CLAUSE (c) CANNOT SEE**, and that
+is why it exists. It belongs to `checks/batch_invariance_check.mojo`, not to
+this lane's contract section 8, and it is deliberately NOT one of the eleven
+names that file's clause (f) knows.
+
+WHAT IT DOES. The clean S1 is one serial ascending chain per row, so the
+row's fold never leaves a thread's registers and no launch geometry can
+reorder it. Under this arm the chain becomes `ceil(dm / chunk)` sub-chains
+summed left to right, with
+
+    chunk = batchinv_norm_chunk(dm, m) = max(1, dm // (1 + m // 64))
+
+which is the exact defect `gemm/IDENTICAL_FP32_CONTRACT.md` section 6.1
+forbids one layer down (`L = f(k, m)`), moved one layer up: a reduction
+whose SPLIT is a function of the batch dimension. The row's arithmetic is
+then a function of how many other tokens shared the launch.
+
+WHY THE THRESHOLD IS 64 AND WHY THAT IS THE POINT. At `m < 64` the divisor
+is 1, `chunk == dm`, there is ONE chunk, and the fold is the clean ascending
+chain -- so this arm is BITWISE INERT at every shape this lane's gates run
+by default (`mamba_check` at B=1, L=4 is m=4; its clause (c) tops out at
+B=3, L=16, m=48). **A gate that only ever composes three sequences is blind
+to it.** It bites at `m >= 64`, which is B=17 at L=4 and B=64 at L=8, and
+those are the compositions `checks/batch_invariance_check.mojo` runs.
+
+CONSEQUENCE FOR THE OTHER GATES, stated so nobody debugs it twice: this arm
+IS in `BLOCK_ANY_SABOTAGE`, so `mamba/checks/mamba_check.mojo` armed with it
+at its default shape will raise "IS ARMED AND MOVED NO BIT". That message is
+correct -- the arm is inert at m=4 by construction -- and the answer is to
+run the batch-invariance driver, or that gate at MOJOLEARN_MAMBA_CHECK_B=64.
+`transformer/checks/transformer_check.mojo` will raise from
+`arm_expectation` by name, because this arm is not one of that contract's
+thirteen. Both refusals are correct: a gate that does not own an arm should
+refuse rather than score it.
+
+THE ONE PLACE IT IS NOT INERT AT m < 64: an all-zero row, where the clean
+chain gives `+0.0` and the chunked one gives `ftz(+0.0 + (-0.0))` if a
+partial reached `-0.0`. No hashed fixture has an all-zero row, and the
+signed-zero corpus cases do (case 11), which is a reason not to arm this on
+them rather than a second effect to rely on."""
+
+
+def batchinv_norm_chunk(dm: Int, m: Int) -> Int:
+    """The batch-derived chunk width of `SAB_BATCHINV_NORM_CHUNK_FROM_M`.
+
+    A HOST-SIDE `def` so that both this file's RMSNorm kernel and
+    `modeling_llama.mojo`'s read ONE spelling of the sabotage rather than two
+    that can drift, and so a reader can compute the predicted chunk for a
+    shape without reading a kernel. Pure integer arithmetic, no seam.
+    """
+    var divisor = 1 + m // 64
+    var chunk = dm // divisor
+    if chunk < 1:
+        chunk = 1
+    return chunk
+
+
+def mamba_batchinv_sabotage_armed() -> Bool:
+    """Whether THIS FILE compiled with the batch-invariance sabotage.
+
+    `modeling_llama.mojo` declares its own `is_defined` for the same `-D`
+    name, so there are two spellings of one string literal and a typo in
+    either would silently arm only half the run.
+    `checks/batch_invariance_check.mojo` compares this against the llama
+    accessor and REFUSES a disagreement -- `[[verify-reach-not-output]]`
+    applied to the sabotage's own wiring."""
+    comptime if SAB_BATCHINV_NORM_CHUNK_FROM_M:
+        return True
+    return False
+
+
 comptime BLOCK_ANY_SABOTAGE = (
     SAB_S14_THRESHOLD_10
     or SAB_S13_BIAS_LAST
@@ -290,6 +374,7 @@ comptime BLOCK_ANY_SABOTAGE = (
     or SAB_S1_FOLD_DESCENDING
     or SAB_S12_MUL_SIGMOID
     or SAB_S17_OP_NUMBERING
+    or SAB_BATCHINV_NORM_CHUNK_FROM_M
 )
 
 
@@ -310,6 +395,8 @@ def mamba_block_sabotage_name() -> String:
         return String("S12_MUL_SIGMOID")
     comptime if SAB_S17_OP_NUMBERING:
         return String("S17_OP_NUMBERING")
+    comptime if SAB_BATCHINV_NORM_CHUNK_FROM_M:
+        return String("BATCHINV_NORM_CHUNK_FROM_M")
     return String("none")
 
 
@@ -564,6 +651,34 @@ def mamba_rms_norm_kernel(
         for j in range(dm):
             var xj = ftz(x.unsafe_load(t * dm + j))
             acc = ftz(identical_mul_add(xj, xj, acc))
+
+    comptime if SAB_BATCHINV_NORM_CHUNK_FROM_M:
+        # SABOTAGE, and it is ADDITIVE rather than a third branch of the
+        # `if` above on purpose: it overwrites `acc` and leaves the two
+        # profile spellings above untouched, so reading this file for what
+        # S1 IS still means reading one if/else.
+        #
+        # `m` is `B * L`. A chunk width derived from it makes the row's
+        # summation order a function of how many other tokens were in the
+        # launch, which is gemm contract 6.1's forbidden `L = f(k, m)` one
+        # layer up. Inert at m < 64 (chunk == dm, one chunk, the clean
+        # ascending chain) -- see the arm's docstring for why that is the
+        # point and not a weakness.
+        var chunk = batchinv_norm_chunk(dm, m)
+        var acc_b = Float32(0.0)
+        var j0 = 0
+        while j0 < dm:
+            var j1 = j0 + chunk
+            if j1 > dm:
+                j1 = dm
+            var part = Float32(0.0)
+            for j in range(j0, j1):
+                var xb = ftz(x.unsafe_load(t * dm + j))
+                part = ftz(identical_mul_add(xb, xb, part))
+            acc_b = ftz(acc_b + part)
+            j0 = j1
+        acc = acc_b
+
     sumsq.unsafe_store(t, acc)
 
     # S2: the mean through `identical_div` (row 49) and the reciprocal square

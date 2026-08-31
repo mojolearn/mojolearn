@@ -293,6 +293,7 @@ from gemm.checks.gemm_oracle import OP_NN, OP_NT
 # the whole point of contract section 0 is that this block has one residual
 # add and one uncontractible multiply, not two.
 from mamba.impl.transformers.models.mamba.modeling_mamba import (
+    batchinv_norm_chunk,
     pinned_mul,
     residual_add_kernel,
 )
@@ -388,8 +389,11 @@ neither point, so both hooks are no-ops."""
 #         -D MOJOLEARN_TRANSFORMER_SABOTAGE_S17_DENOM_HALVING_TREE=1 \
 #         -I . transformer/checks/transformer_check.mojo
 #
-# The names are disjoint from the mamba lane's eleven, so one driver can arm
-# any of them without collision.
+# The names are disjoint from the mamba lane's, so one driver can arm any
+# of them without collision. This comment said the mamba lane had ELEVEN
+# until `SAB_BATCHINV_NORM_CHUNK_FROM_M` made it twelve; the count is
+# dropped rather than corrected, because a number in a comment beside a
+# list that is right there is a number that goes stale.
 #
 # TWO OF THESE PASS CLAUSE (a) BY CONSTRUCTION and the contract says so in
 # section 10's last paragraph: `S07_ROPE_RELATIVE_POSITION` and
@@ -504,6 +508,44 @@ which reads `gemm_oracle`'s numbering and sees `OP_NN`. Every buffer is
 still exactly the right SIZE, so nothing raises, no bound is exceeded and
 every product is wrong. THE TRAP, PLANTED. First stage: `q_proj.out`."""
 
+comptime SAB_BATCHINV_NORM_CHUNK_FROM_M = is_defined[
+    "MOJOLEARN_BATCHINV_SABOTAGE_NORM_CHUNK_FROM_M"
+]()
+"""S1, AIMED AT THE BATCH AXIS, and NOT one of contract section 10's
+thirteen.
+
+It belongs to `checks/batch_invariance_check.mojo` and it is the mamba
+lane's arm of the same `-D` name, declared a second time here rather than
+imported because every other arm in this file is declared here and a
+comptime that arrives by import is one more thing to be wrong about. The
+`-D` string is the SAME literal, so one define arms both blocks; the two
+`*_batchinv_sabotage_armed()` accessors exist so that the check can prove
+it did (`[[verify-reach-not-output]]`).
+
+Under it, S1's per-row sum of squares is folded in chunks of
+`batchinv_norm_chunk(d_model, m)` -- a width derived from `m = B * L` --
+instead of one serial ascending chain. That is gemm contract section 6.1's
+forbidden `L = f(k, m)` moved one layer up. It is BITWISE INERT at m < 64,
+so this lane's own clause (c) (B in {1, 2, 3}) cannot see it, and it bites
+at B = 17 and B = 64.
+
+**`transformer_check.mojo` ARMED WITH THIS WILL RAISE FROM
+`arm_expectation` BY NAME**, because that table holds the thirteen arms of
+contract section 10 and this is not one of them. That refusal is correct
+and must not be "fixed" by adding a row: a gate that does not own an arm
+should refuse to score it. Run `pixi run check-batch-invariance` instead."""
+
+
+def llama_batchinv_sabotage_armed() -> Bool:
+    """Whether THIS FILE compiled with the batch-invariance sabotage. Paired
+    with `mamba_batchinv_sabotage_armed()`; a disagreement between the two
+    means one of the two `-D` string literals is misspelled and half the run
+    is silently clean."""
+    comptime if SAB_BATCHINV_NORM_CHUNK_FROM_M:
+        return True
+    return False
+
+
 comptime BLOCK_ANY_SABOTAGE = (
     SAB_S1_FOLD_DESCENDING
     or SAB_S07_ROPE_RELATIVE_POSITION
@@ -518,6 +560,7 @@ comptime BLOCK_ANY_SABOTAGE = (
     or SAB_S19_VALUE_SUM_VIA_GEMM
     or SAB_S20_SILU_MUL_SIGMOID
     or SAB_S05_OP_NUMBERING
+    or SAB_BATCHINV_NORM_CHUNK_FROM_M
 )
 
 
@@ -554,6 +597,8 @@ def llama_block_sabotage_name() -> String:
         return String("S20_SILU_MUL_SIGMOID")
     comptime if SAB_S05_OP_NUMBERING:
         return String("S05_OP_NUMBERING")
+    comptime if SAB_BATCHINV_NORM_CHUNK_FROM_M:
+        return String("BATCHINV_NORM_CHUNK_FROM_M")
     return String("none")
 
 
@@ -1136,6 +1181,29 @@ def llama_rms_norm_kernel(
         for j in range(dm):
             var xj = ftz(x.unsafe_load(t * dm + j))
             acc = ftz(identical_mul_add(xj, xj, acc))
+
+    comptime if SAB_BATCHINV_NORM_CHUNK_FROM_M:
+        # SABOTAGE: a chunked fold whose CHUNK WIDTH is derived from
+        # `m = B * L`, so the row's summation order is a function of how
+        # many other tokens shared the launch. Additive rather than a third
+        # branch above, so S1's two profile spellings stay one if/else.
+        # `batchinv_norm_chunk` is the mamba module's, imported, so the two
+        # blocks cannot hold two opinions about the chunk width.
+        var chunk = batchinv_norm_chunk(dm, m)
+        var acc_b = Float32(0.0)
+        var j0 = 0
+        while j0 < dm:
+            var j1 = j0 + chunk
+            if j1 > dm:
+                j1 = dm
+            var part = Float32(0.0)
+            for j in range(j0, j1):
+                var xb = ftz(x.unsafe_load(t * dm + j))
+                part = ftz(identical_mul_add(xb, xb, part))
+            acc_b = ftz(acc_b + part)
+            j0 = j1
+        acc = acc_b
+
     sumsq.unsafe_store(t, acc)
 
     # S2: the mean through `identical_div` (row 49) and the reciprocal
