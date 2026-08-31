@@ -127,12 +127,14 @@ struct PolicyScoreHelper(Movable):
     var policy: Int
     var feature_count: Int
     var bin_feature_count: Int
-    var weight_count: Int
-    """`len(global_feature_ids)`. The weights arrays are indexed by FEATURE
-    id and `bin_feature_count` is a BIN-FEATURE count; keeping both named
-    is what stops the two being confused again."""
     """`GetBinFeatureCount(Policy)`: the policy's total fold count, and the
     `histLineSize` every kernel below strides by."""
+
+    var weight_count: Int
+    """`len(global_feature_ids)`. The score weights are indexed by FEATURE
+    id while `bin_feature_count` above is a BIN-FEATURE count; the two were
+    the same variable until 2026-08-31 and keeping both named is what stops
+    them being confused again."""
 
     var folds_hist: FoldsHistogram
     var hist_helper: ComputeHistogramsHelper
