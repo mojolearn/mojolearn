@@ -1,0 +1,9 @@
+  baseline               PASS  rc=0  {"vendor": "cuda", "how": "the box probe (device nodes and driver libraries)", "mode": "identical"}
+  wrong_label_ignored    FAIL  rc=1      libamdhip64.so               not loadable
+  forced_vendor_without_evidence FAIL  rc=1  ImportError: mojolearn: /root/mojolearn/bench/results/e1/2026-08-31_061436-199f9f0deb1e/diag/sabotage_scratch/forced_vendor_without_evidence/mojolearn/hip/
+  wrong_label_refused    PASS  rc=1  ImportError: mojolearn: /root/mojolearn/bench/results/e1/2026-08-31_061436-199f9f0deb1e/diag/sabotage_scratch/wrong_label_refused/mojolearn/hip/sm_80/identical/_mo
+  poisoned_ignored       PASS  rc=0  {"vendor": "cuda", "how": "the box probe (device nodes and driver libraries)", "mode": "identical"}
+  poisoned_forced        PASS  rc=1  ImportError: mojolearn: MOJOLEARN_VENDOR=hip but this install carries no hip set under /root/mojolearn/bench/results/e1/2026-08-31_061436-199f9f0deb1e/diag/sabotag
+  correct_set_removed    FAIL  rc=1  ImportError: mojolearn: /root/mojolearn/bench/results/e1/2026-08-31_061436-199f9f0deb1e/diag/sabotage_scratch/correct_set_removed/mojolearn/hip/sm_80/identical/_mo
+  tier_mislabeled        PASS  rc=1  RuntimeError: mojolearn: the loaded gbdt binary was compiled fast but the selector loaded the deterministic set -- a binary is in the wrong directory; rebuild both
+sabotage FAIL

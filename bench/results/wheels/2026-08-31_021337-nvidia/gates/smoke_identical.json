@@ -1,0 +1,181 @@
+{
+  "arch_how": "same-family lower architecture (sm_80 code runs forward on this sm_86 device)",
+  "arch_loaded": "sm_80",
+  "failures": [],
+  "lanes": {
+    "agglomerative": {
+      "hash": "02ca572ae936a2fa",
+      "ok": true,
+      "seconds": 0.65
+    },
+    "dbscan": {
+      "hash": "a4608e954c7420b7",
+      "ok": true,
+      "seconds": 0.07
+    },
+    "elasticnet": {
+      "hash": "f4a2b16c06f0f290",
+      "ok": true,
+      "seconds": 0.13
+    },
+    "et-clf": {
+      "hash": "707d2c92e92f6a40",
+      "ok": true,
+      "seconds": 0.16
+    },
+    "et-reg": {
+      "hash": "a1d2eb9ddb149617",
+      "ok": true,
+      "seconds": 0.16
+    },
+    "gbdt-depthwise": {
+      "hash": "cd27a77258047c8e",
+      "ok": true,
+      "seconds": 0.38
+    },
+    "gbdt-lossguide": {
+      "hash": "e65c2a2686bf7341",
+      "ok": true,
+      "seconds": 0.16
+    },
+    "gbdt-rmse": {
+      "hash": "75e3f3a99e5e004b",
+      "ok": true,
+      "seconds": 0.09
+    },
+    "gbdt-symmetric": {
+      "hash": "dc987497271f92b1",
+      "ok": true,
+      "seconds": 0.05
+    },
+    "gemm-pinned": {
+      "hash": "18ff2fd121056aee",
+      "ok": true,
+      "seconds": 0.07
+    },
+    "gemm-vendor": {
+      "hash": "18ff2fd121056aee",
+      "ok": true,
+      "seconds": 0.02
+    },
+    "holtwinters": {
+      "hash": "cff24aef76c6431d",
+      "ok": true,
+      "seconds": 0.41
+    },
+    "iforest": {
+      "hash": "334ba456c6bb7644",
+      "ok": true,
+      "seconds": 0.35
+    },
+    "kde": {
+      "hash": "9a2d41d8dd246e5d",
+      "ok": true,
+      "seconds": 0.08
+    },
+    "kmeans": {
+      "hash": "da3cb10e46c91256",
+      "ok": true,
+      "seconds": 0.18
+    },
+    "knn-clf": {
+      "hash": "f359ee4876deb908",
+      "ok": true,
+      "seconds": 0.06
+    },
+    "knn-reg": {
+      "hash": "ff4a92b889616aea",
+      "ok": true,
+      "seconds": 0.02
+    },
+    "knn-tied": {
+      "hash": "eb5d50fc1d09b0e1",
+      "ok": true,
+      "seconds": 0.0
+    },
+    "lasso": {
+      "hash": "8c61a582de814863",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "logistic": {
+      "hash": "7037da78aa5950dd",
+      "ok": true,
+      "seconds": 0.13
+    },
+    "metrics": {
+      "hash": "9e779d081426adc8",
+      "ok": true,
+      "seconds": 0.06
+    },
+    "ols": {
+      "hash": "24aff16838df704a",
+      "ok": true,
+      "seconds": 0.14
+    },
+    "pca": {
+      "hash": "abe2157474e81469",
+      "ok": true,
+      "seconds": 0.08
+    },
+    "rf-clf": {
+      "hash": "eacd6bff8b4088b8",
+      "ok": true,
+      "seconds": 0.21
+    },
+    "rf-reg": {
+      "hash": "91269c5ae3828665",
+      "ok": true,
+      "seconds": 0.19
+    },
+    "ridge": {
+      "hash": "b72095bd450e4d05",
+      "ok": true,
+      "seconds": 0.06
+    },
+    "spectral": {
+      "hash": "7c5f4e5c32dc0ca1",
+      "ok": true,
+      "seconds": 0.27
+    },
+    "svc": {
+      "hash": "c982ba99909e46eb",
+      "ok": true,
+      "seconds": 0.1
+    },
+    "tsvd": {
+      "hash": "eb98ef49f9c747f0",
+      "ok": true,
+      "seconds": 0.01
+    }
+  },
+  "mode_loaded": "identical",
+  "mode_wanted": "identical",
+  "mojolearn_file": "/root/mojolearn/bench/results/e1/2026-08-31_061436-199f9f0deb1e/diag/pkgroot/mojolearn/__init__.py",
+  "ok": true,
+  "python": "3.14.7",
+  "vendor_how": "the box probe (device nodes and driver libraries)",
+  "vendor_loaded": "cuda",
+  "vendor_per_binding": {
+    "_mojolearn": "cuda",
+    "_mojolearn_estimators": "cuda",
+    "_mojolearn_gbdt": "cuda",
+    "_mojolearn_linalg": "cuda",
+    "_mojolearn_metrics": "cuda",
+    "_mojolearn_rf": "cuda",
+    "_mojolearn_solver": "cuda",
+    "_mojolearn_svm": "cuda",
+    "_mojolearn_trees": "cuda",
+    "_mojolearn_tsa": "cuda"
+  },
+  "vendor_used_per_estimator": {
+    "_mojolearn": "cuda",
+    "_mojolearn_estimators": "cuda",
+    "_mojolearn_gbdt": "cuda",
+    "_mojolearn_rf": "cuda",
+    "_mojolearn_svm": "cuda",
+    "_mojolearn_trees": "cuda"
+  },
+  "vendor_wanted": "cuda",
+  "version": "0.3.1"
+}

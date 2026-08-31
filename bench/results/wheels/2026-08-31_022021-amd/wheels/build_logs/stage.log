@@ -1,0 +1,4 @@
+  closure verified: 4 libraries, nothing unresolved
+  staged 4: libKGENCompilerRTShared.so, libAsyncRTMojoBindings.so, libMSupportGlobals.so, libAsyncRTRuntimeGlobals.so
+  driver libraries left to the box: none
+  extensions 41.5 MB, runtime libraries 3.2 MB, uncompressed set 44.7 MB

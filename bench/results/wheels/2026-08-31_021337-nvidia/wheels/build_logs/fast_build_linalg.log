@@ -1,0 +1,5 @@
+start 2026-08-31T06:21:01Z
+!! MOJOLEARN_GPU_ARCHS=sm_80 (--target-accelerator); read the architecture back out of the built .so
+2907 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x504a40000000, nodemask=1)
+built python/mojolearn/_mojolearn_linalg.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+end 2026-08-31T06:21:24Z OK

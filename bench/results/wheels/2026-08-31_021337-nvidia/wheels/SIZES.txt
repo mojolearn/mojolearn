@@ -1,0 +1,15 @@
+vendor=cuda
+arch=sm_80
+gpu_archs_requested=sm_80
+build_rc=0 stage_rc=0
+build_seconds=445
+set_fast_count=10
+set_fast_bytes=22256306
+set_deterministic_count=10
+set_deterministic_bytes=21936898
+set_identical_count=10
+set_identical_bytes=21277546
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=15858488

@@ -1,0 +1,33 @@
+{
+  "docker": {
+    "verdict": "NOT TESTED: no docker daemon here"
+  },
+  "env_hidden": {
+    "fit_err": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import numpy as np, mojolearn; X=np.random.default_rng(0).random((256,4),dtype=np.float32); mojolearn.KMeans(n_clusters=2).fit(X); print('FIT OK')\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-31_062346-mojolearn-e2-amd/diag/pkgroot/mojolearn/__init__.py\", line 76, in <module>\n    _backend.select()\n    ~~~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-31_062346-mojolearn-e2-amd/diag/pkgroot/mojolearn/_backend.py\", line 689, in select\n    ident_dir = tier_dir(mode)\n  File \"/root/mojolearn/bench/results/e1/2026-08-31_062346-mojolearn-e2-amd/diag/pkgroot/mojolearn/_backend.py\", line 614, in tier_dir\n    _, base = _layout()\n              ~~~~~~~^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-31_062346-mojolearn-e2-amd/diag/pkgroot/mojolearn/_backend.py\", line 578, in _layout\n    base = _vendor_base(pkg, hits[0])\n  File \"/root/mojolearn/bench/results/e1/2026-08-31_062346-mojolearn-e2-amd/diag/pkgroot/mojolearn/_backend.py\", line 475, in _vendor_base\n    arch, how = _pick_arch(vendor, vdir, archs)\n                ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-31_062346-mojolearn-e2-amd/diag/pkgroot/mojolearn/_backend.py\", line 455, in _pick_arch\n    raise ImportError(\n    ...<5 lines>...\n    )\nImportError: mojolearn: this device is gfx942 (gfx_target_version in /sys/class/kfd/kfd/topology/nodes/1/properties) and no hip set this install carries can run on it (gfx code objects are ISA-exact; there is no cross-architecture compatibility on hip). Carried:\n    gfx1100\nA release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report the runtime's own error.",
+    "fit_out": "",
+    "fit_rc": 1,
+    "import_err": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import mojolearn; print('IMPORTED', mojolearn.vendor())\n    ^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-31_062346-mojolearn-e2-amd/diag/pkgroot/mojolearn/__init__.py\", line 76, in <module>\n    _backend.select()\n    ~~~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-31_062346-mojolearn-e2-amd/diag/pkgroot/mojolearn/_backend.py\", line 689, in select\n    ident_dir = tier_dir(mode)\n  File \"/root/mojolearn/bench/results/e1/2026-08-31_062346-mojolearn-e2-amd/diag/pkgroot/mojolearn/_backend.py\", line 614, in tier_dir\n    _, base = _layout()\n              ~~~~~~~^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-31_062346-mojolearn-e2-amd/diag/pkgroot/mojolearn/_backend.py\", line 578, in _layout\n    base = _vendor_base(pkg, hits[0])\n  File \"/root/mojolearn/bench/results/e1/2026-08-31_062346-mojolearn-e2-amd/diag/pkgroot/mojolearn/_backend.py\", line 475, in _vendor_base\n    arch, how = _pick_arch(vendor, vdir, archs)\n                ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-31_062346-mojolearn-e2-amd/diag/pkgroot/mojolearn/_backend.py\", line 455, in _pick_arch\n    raise ImportError(\n    ...<5 lines>...\n    )\nImportError: mojolearn: this device is gfx942 (gfx_target_version in /sys/class/kfd/kfd/topology/nodes/1/properties) and no hip set this install carries can run on it (gfx code objects are ISA-exact; there is no cross-architecture compatibility on hip). Carried:\n    gfx1100\nA release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report the runtime's own error.",
+    "import_out": "",
+    "import_rc": 1,
+    "verdict": "REFUSED at import"
+  },
+  "namespace": {
+    "err": "    ~~~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-31_062346-mojolearn-e2-amd/diag/pkgroot/mojolearn/_backend.py\", line 689, in select\n    ident_dir = tier_dir(mode)\n  File \"/root/mojolearn/bench/results/e1/2026-08-31_062346-mojolearn-e2-amd/diag/pkgroot/mojolearn/_backend.py\", line 614, in tier_dir\n    _, base = _layout()\n              ~~~~~~~^^\n  File \"/root/mojolearn/bench/results/e1/2026-08-31_062346-mojolearn-e2-amd/diag/pkgroot/mojolearn/_backend.py\", line 591, in _layout\n    raise ImportError(\n    ...<12 lines>...\n    )\nImportError: mojolearn: NO SUPPORTED GPU FOUND ON THIS BOX, and there is no CPU path in this package. This install carries binary sets for ['hip'] under /root/mojolearn/bench/results/e1/2026-08-31_062346-mojolearn-e2-amd/diag/pkgroot/mojolearn. What was looked for and what was found:\n  cuda:\n    /dev/nvidiactl               absent\n    /dev/nvidia0                 absent\n    libcuda.so.1                 not loadable\n    libcuda.so                   not loadable\n  hip:\n    /dev/kfd                     absent\n    /dev/dri/renderD128          absent\n    libamdhip64.so.7             not loadable\n    libamdhip64.so.6             not loadable\n    libamdhip64.so               not loadable\n  MOJOLEARN_VENDOR is not set.\n\nA device node or a driver library for one of the sets above must be visible to this process. In a container that means the GPU is passed through (`--gpus all` for NVIDIA, `--device /dev/kfd --device /dev/dri` for AMD). If the device is present and this probe is wrong, MOJOLEARN_VENDOR=cuda or MOJOLEARN_VENDOR=hip picks the directory directly and the first fit reports the runtime's own error.",
+    "found": {
+      "/dev/dri/renderD128": true,
+      "/dev/kfd": true,
+      "MOJOLEARN_VENDOR": true,
+      "NO SUPPORTED GPU FOUND": true
+    },
+    "hidden": [
+      "/dev/kfd",
+      "/dev/dri/renderD128",
+      "/opt/rocm-6.4.0/lib/libamdhip64.so",
+      "/opt/rocm-6.4.0/lib/libamdhip64.so.6"
+    ],
+    "out": "",
+    "rc": 1,
+    "verdict": "PASS"
+  },
+  "summary": "PASS"
+}
