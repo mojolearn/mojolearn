@@ -65,3 +65,20 @@ bench/results/e1/*/diag/wheels/tools-venv/
 
 # macOS Finder metadata. Never content.
 .DS_Store
+
+# BUILD ARTIFACTS AND RAW DUMPS UNDER bench/, UNTRACKED 2026-08-31.
+#
+# They were 235 files and 333 MB against an EVIDENCE BASE OF 5.5 MB. The
+# cards, the verdict markdown, the hashes and the maps are what back a claim;
+# a compiled .so, a fetched binary set and a raw tensor dump back nothing and
+# can be regenerated. They are still written and still read locally; they are
+# simply not carried in the repository, where they made the tree 18,346 files
+# and every AMD leg lose eleven minutes of a sixty-minute lease to scp.
+bench/**/*.bin
+bench/**/*.so
+bench/**/*.tar.gz
+# bootstrap.log IS NOT IGNORED, and the attempt to ignore it is why this
+# comment exists. It looked like 59 MB of compiler warnings. E1U_RESULTS.md:72
+# cites a COUNT out of it, and E1_RESULTS.md:71 and E2_RESULTS.md:126 list it
+# by name as part of the evidence bundle. Six documents reference it. An
+# artifact a result cites is evidence, whatever its signal-to-noise ratio.
