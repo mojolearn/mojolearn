@@ -338,6 +338,37 @@ def run_all(root):
             "'  HIP  ' was not accepted; a user who exports it with a "
             "trailing space gets a refusal that reads like a bug: %r" % base)
 
+    @case("the hip probe uses no device node that a non-AMD GPU also creates")
+    def _():
+        # REGRESSION, 2026-08-31. `/dev/dri/renderD128` sat in the hip probe
+        # and it is the GENERIC DRM render node: every GPU creates one,
+        # NVIDIA included. On an A40 that has /dev/dri, the probe found "hip
+        # evidence" beside real cuda evidence, and because the shipped wheel
+        # carries BOTH vendor sets the selector saw two candidates and
+        # REFUSED TO IMPORT on a machine with one NVIDIA card in it. It
+        # surfaced as three sabotage cases failing on an A40 and passing on
+        # an H100, which is the same code on two boxes.
+        #
+        # This asserts the PROBE TABLE rather than a fabricated probe result,
+        # because every other case in this file hands `_layout` a probe and
+        # so cannot see what the real one looks for.
+        generic = ("/dev/dri/renderD128", "/dev/dri/renderD129", "/dev/dri/card0",
+                   "/dev/dri", "/dev/nvidia-uvm")
+        hip_paths = B._PROBE["hip"]["paths"]
+        bad = [p for p in hip_paths if p in generic]
+        assert not bad, (
+            "the hip probe treats %r as AMD evidence, and a non-AMD GPU "
+            "creates those too. A box with one NVIDIA card would look like "
+            "both vendors and the selector would refuse to import." % bad)
+        assert "/dev/kfd" in hip_paths, (
+            "the hip probe must keep /dev/kfd, which is ROCm's kernel fusion "
+            "driver node and the one device node only an AMD GPU creates")
+        # And the cuda probe must not drift the same way.
+        cuda_bad = [p for p in B._PROBE["cuda"]["paths"] if p in generic]
+        assert not cuda_bad, (
+            "the cuda probe treats %r as NVIDIA evidence and it is generic"
+            % cuda_bad)
+
     # --------------------------------------------------------- the tier axis
     @case("tier_dir puts the tier UNDER the vendor, both axes at once")
     def _():

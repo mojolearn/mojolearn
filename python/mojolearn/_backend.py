@@ -197,7 +197,18 @@ _PROBE = {
         "libs": ("libcuda.so.1", "libcuda.so"),
     },
     "hip": {
-        "paths": ("/dev/kfd", "/dev/dri/renderD128"),
+        # `/dev/kfd` ONLY. `/dev/dri/renderD128` was here until 2026-08-31 and
+        # it is NOT AMD-specific: it is the generic DRM render node and every
+        # GPU creates one, NVIDIA included. On an A40 that has /dev/dri the
+        # probe found "hip evidence" beside real cuda evidence, and because a
+        # shipped wheel carries BOTH vendor sets the selector saw two
+        # candidates and REFUSED TO IMPORT, telling the user to set
+        # MOJOLEARN_VENDOR on a machine with one NVIDIA card in it. It
+        # surfaced as three sabotage cases failing on an A40 and passing on an
+        # H100, which is the same code on two boxes and therefore the box.
+        # `/dev/kfd` is ROCm's kernel fusion driver node, created by the
+        # amdgpu KFD path alone, so it is the honest device-node test.
+        "paths": ("/dev/kfd",),
         "libs": ("libamdhip64.so.7", "libamdhip64.so.6", "libamdhip64.so"),
     },
 }
