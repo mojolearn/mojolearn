@@ -145,6 +145,36 @@ for i in $(seq 1 30); do
   sleep 15
 done
 [ $ok = 1 ] || { log "ssh never came up"; exit 5; }
+
+# A SECOND DEAD-MAN, ON THE DROPLET, BECAUSE THE FIRST ONE DIES WITH THIS MAC.
+#
+# The dead-man armed before the create is `nohup bash -c "sleep N; curl
+# DELETE"` RUNNING LOCALLY. It does not survive the laptop sleeping, losing
+# its network, or being shut down, and an MI325X left running is a real bill.
+# RunPod has never had this exposure: `tools/runpod_guard.sh` installs its
+# watchdog ON THE POD, so the pod kills itself whatever happens here. This
+# gives the droplet the same property.
+#
+# Both timers are kept. The local one is the one that can be CANCELLED on a
+# clean teardown; this one is the one that cannot be lost. A droplet that is
+# already destroyed makes this DELETE a harmless 404.
+log "arming a second dead-man ON THE DROPLET (${DEADMAN_SECONDS}s), which the local one cannot guarantee"
+$SSH "umask 077
+cat > /tmp/mojolearn-selfkill.sh <<'SELFKILL'
+#!/bin/sh
+sleep __SECS__
+code=\$(curl -s -o /tmp/selfkill.body -w '%{http_code}' -X DELETE \
+  -H 'Authorization: Bearer __TOK__' \
+  'https://api.digitalocean.com/v2/droplets/__ID__')
+echo \"\$(date -u +%FT%TZ) DELETE __ID__ -> \$code\" >> /tmp/selfkill.out
+SELFKILL
+sed -i 's|__SECS__|$DEADMAN_SECONDS|; s|__TOK__|$TOK|; s|__ID__|$DROPLET_ID|' /tmp/mojolearn-selfkill.sh
+chmod 700 /tmp/mojolearn-selfkill.sh
+nohup /tmp/mojolearn-selfkill.sh >/tmp/selfkill.log 2>&1 &
+echo \$! > /tmp/selfkill.pid
+sleep 1
+kill -0 \$(cat /tmp/selfkill.pid) 2>/dev/null && echo ON_DROPLET_DEADMAN_ARMED || echo ON_DROPLET_DEADMAN_FAILED" \
+  2>&1 | tail -1 | sed "s/^/[$VENDOR] /"
 $SSH 'nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || rocm-smi --showproductname 2>/dev/null | grep -i "card series\|name" | head -2' | sed "s/^/[$VENDOR gpu] /"
 
 # SHIP THE COMMIT, NOT THE WORKING TREE. The first E2 legs rsync'd a
