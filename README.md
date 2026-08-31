@@ -362,6 +362,13 @@ The higgs GBDT accuracy gap is stated because it is there.
 ## Limitations and refusals
 
 - GPU only. No CPU fallback exists and none is planned for this release.
+- **0.3.0's LINUX WHEEL IS DEFECTIVE AND SHOULD NOT BE INSTALLED.** Its host
+  code was compiled with AVX-512 and no runtime `cpuid` dispatch, so it dies
+  with `SIGILL` on the first `fit()` on any x86-64 host without AVX-512, which
+  includes every AMD Zen 1, 2 and 3 part, most Intel consumer chips and every
+  Xeon before Skylake-SP. Measured 2026-08-31 on an NVIDIA L40 whose host was
+  an AMD EPYC 7773X. All thirty extensions carry it. The GPU is not involved.
+  **0.3.1 is the fix.** The macOS wheel of 0.3.0 is unaffected.
 - Two wheels are published, macOS arm64 and Linux x86_64. The Linux wheel
   carries six GPU architecture sets in one file, `cuda/sm_80`, `cuda/sm_90a`,
   `cuda/sm_120a`, `hip/gfx942`, `hip/gfx1100` and `hip/gfx90a`, and picks one
