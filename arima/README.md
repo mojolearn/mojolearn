@@ -365,7 +365,8 @@ per file what is transliterated and what is partial. `arima/NOT_IMPLEMENTED.tsv`
 lists what is not carried and why, one line each; it is long on purpose.
 `arima/SEAMS.tsv` records fused versus unfused PER SEAM with the reason,
 read off the C++ expression tree. `arima/SABOTAGES.md` is the sabotage
-list, every row of it still unrun.
+list; all 11 rows have run, 8 bite and 3 are null (see the status block at
+the top of this file, and `SABOTAGES.md` itself).
 
 ## Commands
 
@@ -376,8 +377,8 @@ list, every row of it still unrun.
         pixi run mojo run -I . arima/arima_main.mojo
     python3 tools/identity_trace_diff.py /tmp/arima.mac.card /tmp/arima.other.card
 
-No pixi task is registered; `pixi.toml` is not this lane's file. The task
-line to land is under HAND-OFF.
+Two pixi tasks are registered: `check-arima` (`pixi.toml:1055`) and
+`arima-card` (`pixi.toml:1056`).
 
 ---
 
@@ -396,7 +397,8 @@ Float32 through the IDENTICAL helpers and every host oracle that must match
 it bitwise is Float32 too. A Float64 HOST reference sits beside it
 (`kalman_oracle.mojo::kalman_host_f64`) so the gap between the two is
 MEASURED rather than assumed. The gate that measures it,
-`check_kalman_matches_float64`, is written and has not run: its bounds
+`check_kalman_matches_float64`, has RUN and passes; its measured numbers are
+in the status block near the top of this file. Its bounds
 (5e-3 relative on the undifferenced orders, 2e-2 where `n_diff > 0` because
 the diffuse `kappa = 1e6` costs Float32 about `ulp(1e6) = 0.0625` of
 absolute error in the stationary block after the first step) are DERIVED,
@@ -470,7 +472,7 @@ non-finite `P0`.
 `SABOTAGES.md` row (e) perturbs the pivot comparison, and why
 `check_lyapunov_solves_the_equation` checks `P0` against the EQUATION
 `Ts P Ts' - P + RQRs = 0` in Float64 rather than only against an oracle that
-shares its spelling. Neither has run.
+shares its spelling. Both have run and both pass.
 
 ## DEVIATION 675: tanh and atanh through identical_exp / identical_log
 
@@ -682,9 +684,9 @@ reinvention.
 
 ---
 
-## The gates, written and unrun
+## The gates
 
-`arima/checks/arima_check.mojo`, fourteen of them. Each is listed in the
+`arima/checks/arima_check.mojo`, SIXTEEN of them, all passing in both modes. Each is listed in the
 file's header with what it covers. The ones that carry the most weight:
 
     check_jones_device_equals_oracle    p = 1..4, AR and MA, forward and
