@@ -21,7 +21,11 @@ methodology that gates them have no upstream. By line count, **between 67%
 and 70% of the Mojo here has no upstream file it corresponds to**; the other
 30% to 33% is the algorithmic substrate, and it is derived work documented as
 such per file, with the upstream path and the pinned commit, in the
-derivation tables and in each file's own header. (An earlier version of this
+derivation tables and in each file's own header. **No upstream source is in
+this repository**: the shipped library is 100% Mojo, there is no CUDA and no
+C++ in it, and the only C++ in the tree is twenty test harnesses under
+`tools/*_oracle/`. See [CONTRIBUTION.md](CONTRIBUTION.md) for what was built
+and what it cost, with the command that measures each number. (An earlier version of this
 paragraph said 84.9%. That was computed as "everything outside a `derived/`
 directory" and `gbdt/`, the CatBoost mirror, has no such directory, so it
 undercounted the derived side by 61,888 lines. The range above is the

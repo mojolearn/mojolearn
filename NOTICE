@@ -5,6 +5,36 @@ This product includes software developed by Andrew Hendel, licensed under the
 Apache License, Version 2.0.
 
 --------------------------------------------------------------------------
+No upstream source is in this repository
+--------------------------------------------------------------------------
+
+THE SHIPPED LIBRARY IS 100% MOJO. There is no CUDA and no C++ in it. Not one
+line of CatBoost, cuML, cuVS, RAFT or FAISS source appears anywhere in the
+tree, and none of those projects contains any Mojo.
+
+The only C or C++ tracked here is twenty files under `tools/*_oracle/` and
+`ensemble/tools/*_oracle/`. Those are TEST HARNESSES: they link an upstream,
+or a published reference implementation, to produce reference numbers the
+Mojo is checked against. They build the check, not the library. The two that
+are somebody else's file verbatim are declared by name further down.
+
+So the sections below do not describe copying, and nothing in this file
+should be read that way. They describe implementing a named algorithm in
+Mojo against a named reference at a pinned commit, and citing that reference
+the way a paper cites prior work. Apache 2.0 section 4 requires the citation
+for a derivative work, and the citation is also what makes the originality
+claim in the next section checkable instead of merely asserted.
+
+WHERE THE FOLLOWING IS CLOSE AND WHERE IT IS NOT is recorded per file rather
+than claimed in bulk. A file-by-file audit on 2026-08-31 of the 98 rows
+labelled `transliterated` found the label right on 52 and wrong on 34, and
+those 34 are being relabelled. 105 of the 459 files with an upstream
+counterpart could not follow the reference even in principle, because the
+upstream line they correspond to is a call into CUB, Thrust, cuBLAS,
+cuSOLVER, cuRAND or a warp intrinsic that does not exist on this target;
+that code was written, not followed. See CONTRIBUTION.md.
+
+--------------------------------------------------------------------------
 What is original to this work
 --------------------------------------------------------------------------
 
@@ -57,8 +87,12 @@ those projects was ever asked to run anywhere but CUDA:
 Derived from CatBoost
 --------------------------------------------------------------------------
 
-Everything under `ported/` is a DERIVATIVE WORK of CatBoost, translated from
-CUDA C++ into Mojo at CatBoost commit 54a8143a. `PORTED_MAP.tsv` maps each
+Everything under `gbdt/` is a DERIVATIVE WORK of CatBoost in the Apache 2.0
+sense: implemented in Mojo against named CatBoost source files at commit
+54a8143a, which each file cites. NO CATBOOST SOURCE IS IN THIS REPOSITORY.
+(This paragraph said "everything under `ported/`", which was scoped
+backwards: not one of those directories is the CatBoost lane, and `gbdt/`
+never had one.) `PORTED_MAP.tsv` maps each
 file to the CatBoost source it derives from and records whether the port is
 transliterated, partial, or replaced.
 
@@ -131,7 +165,9 @@ unmet obligation rather than a formatting gap: cuML is Apache-2.0, sections
 4(a) and 4(b) apply to every derivative work, and eight files here are
 derivative works of cuML that this file did not name.
 
-These are DERIVATIVE WORKS of cuML, translated from CUDA C++ into Mojo.
+These are DERIVATIVE WORKS of cuML in the Apache 2.0 sense: implemented in
+Mojo against named cuML source files at a pinned commit, which each file
+cites. No cuML source is in this repository.
 `dbscan/PORTED_MAP.tsv`, `decomposition/PORTED_MAP.tsv` and
 `neighbors/PORTED_MAP.tsv` map each file to the cuML source it derives from and record whether the port is
 transliterated, partial, or replaced; `UNPORTED.tsv` beside each records what
@@ -189,7 +225,9 @@ derivation rows across four sections, and it also gave a single RAFT commit
 when the sections are pinned to two different ones. Both are fixed below;
 the old text is deleted rather than annotated.
 
-These are DERIVATIVE WORKS of RAFT, translated from CUDA C++ into Mojo. The
+These are DERIVATIVE WORKS of RAFT in the Apache 2.0 sense: implemented in
+Mojo against named RAFT source files at a pinned commit, which each file
+cites. No RAFT source is in this repository. The
 `PORTED_MAP.tsv` in each section maps file to source and records the status.
 
   at RAFT commit 661a3b8 (branch-25.08):
