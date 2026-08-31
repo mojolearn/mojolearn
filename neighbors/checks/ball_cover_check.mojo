@@ -160,6 +160,39 @@ def _run_one_eps(
     Returns the total number of edges. `expect_subset_only` relaxes the
     equality to containment, which is what the sabotage run asserts.
     """
+    # THE ORACLE'S OWN FIXTURE, BEFORE IT IS TRUSTED TO JUDGE ANYTHING.
+    #
+    # On 2026-08-30 this function reported, on an MI325X, "eps=8.0: row 0
+    # MISSED point 42, which brute force puts inside eps", and that became
+    # IDENTITY_PATHS row 63, "a WRONG ANSWER on one vendor". It was not.
+    # d(row 0, point 42) on this fixture is 8.413649, squared 70.78948
+    # against an eps2 of 64, so point 42 is OUTSIDE -- and it is the
+    # LOWEST-NUMBERED point row 0 correctly excludes. The device was right.
+    #
+    # `hx` had been freed. Under a zeroed `hx` every host distance is 0, so
+    # `inside` is true for every j, the "device returned an extra" arm can
+    # never fire, and the first j the device did NOT return gets reported as
+    # MISSED. j=42 is not a neighbour that went missing; it is the signature
+    # of an oracle that is gone. A comparison against a destroyed fixture
+    # does not fail. It accuses.
+    #
+    # Worse, the two `expect_subset_only=True` callers would pass VACUOUSLY
+    # under the same corruption: with `inside` true everywhere, both arms of
+    # the per-cell comparison are suppressed and only the edge count still
+    # has teeth. Two coordinates catch it, and they cost nothing per call.
+    if (
+        hx.unsafe_load(0) != _coord(0, 0)
+        or hx.unsafe_load(42 * d) != _coord(42, 0)
+    ):
+        raise Error(
+            label
+            + ": THE ORACLE'S OWN FIXTURE IS GONE, so every comparison below"
+            + " this line is meaningless and none of them is evidence about"
+            + " the device. hx[0] reads " + String(hx.unsafe_load(0))
+            + " against " + String(_coord(0, 0)) + ", hx[42*d] reads "
+            + String(hx.unsafe_load(42 * d)) + " against "
+            + String(_coord(42, 0)) + "."
+        )
     var nnz = rbc_eps_nn_query_count(
         ctx,
         x_reordered,
@@ -511,6 +544,15 @@ def check_ball_cover() raises:
         large,
     )
 
+    # `hx` IS HELD PAST ITS LAST READER. Mojo frees a buffer at its LAST USE,
+    # and `hx.unsafe_ptr()` hands out a MutUntrackedOrigin pointer that does
+    # not extend the buffer's life, so without this the pinned fixture can be
+    # released while the oracle above is still reading through it. Metal
+    # leaves the freed page mapped, which is why Apple never saw it; ROCm
+    # unmaps and returns zero pages, which is what produced the false row-63
+    # 'MISSED point 42' on the MI325X. See the note in `_run_one_eps`.
+    _ = hx^
+
 
 def check_ball_cover_dense_and_max_k() raises:
     """The other two output shapes, against the CSR one.
@@ -652,6 +694,15 @@ def check_ball_cover_dense_and_max_k() raises:
         actual_max,
     )
 
+    # `hx` IS HELD PAST ITS LAST READER. Mojo frees a buffer at its LAST USE,
+    # and `hx.unsafe_ptr()` hands out a MutUntrackedOrigin pointer that does
+    # not extend the buffer's life, so without this the pinned fixture can be
+    # released while the oracle above is still reading through it. Metal
+    # leaves the freed page mapped, which is why Apple never saw it; ROCm
+    # unmaps and returns zero pages, which is what produced the false row-63
+    # 'MISSED point 42' on the MI325X. See the note in `_run_one_eps`.
+    _ = hx^
+
 
 def check_ball_cover_reach_by_sabotage() raises:
     """Shrink the landmark radii; the answer must shrink in a known shape.
@@ -739,6 +790,15 @@ def check_ball_cover_reach_by_sabotage() raises:
         broken,
         "and every survivor is still a true neighbor",
     )
+
+    # `hx` IS HELD PAST ITS LAST READER. Mojo frees a buffer at its LAST USE,
+    # and `hx.unsafe_ptr()` hands out a MutUntrackedOrigin pointer that does
+    # not extend the buffer's life, so without this the pinned fixture can be
+    # released while the oracle above is still reading through it. Metal
+    # leaves the freed page mapped, which is why Apple never saw it; ROCm
+    # unmaps and returns zero pages, which is what produced the false row-63
+    # 'MISSED point 42' on the MI325X. See the note in `_run_one_eps`.
+    _ = hx^
 
 
 def check_ball_cover_order_is_load_bearing() raises:
@@ -837,6 +897,15 @@ def check_ball_cover_order_is_load_bearing() raises:
         "to",
         broken,
     )
+
+    # `hx` IS HELD PAST ITS LAST READER. Mojo frees a buffer at its LAST USE,
+    # and `hx.unsafe_ptr()` hands out a MutUntrackedOrigin pointer that does
+    # not extend the buffer's life, so without this the pinned fixture can be
+    # released while the oracle above is still reading through it. Metal
+    # leaves the freed page mapped, which is why Apple never saw it; ROCm
+    # unmaps and returns zero pages, which is what produced the false row-63
+    # 'MISSED point 42' on the MI325X. See the note in `_run_one_eps`.
+    _ = hx^
 
 
 def check_ball_cover_at_scale() raises:
@@ -941,6 +1010,15 @@ def check_ball_cover_at_scale() raises:
         n_landmarks,
         "landmarks",
     )
+
+    # `hx` IS HELD PAST ITS LAST READER. Mojo frees a buffer at its LAST USE,
+    # and `hx.unsafe_ptr()` hands out a MutUntrackedOrigin pointer that does
+    # not extend the buffer's life, so without this the pinned fixture can be
+    # released while the oracle above is still reading through it. Metal
+    # leaves the freed page mapped, which is why Apple never saw it; ROCm
+    # unmaps and returns zero pages, which is what produced the false row-63
+    # 'MISSED point 42' on the MI325X. See the note in `_run_one_eps`.
+    _ = hx^
 
 
 def check_ball_cover_max_k_wiring() raises:
@@ -1317,3 +1395,12 @@ def check_ball_cover_max_k_wiring() raises:
         "rows and still reports",
         strue,
     )
+
+    # `hx` IS HELD PAST ITS LAST READER. Mojo frees a buffer at its LAST USE,
+    # and `hx.unsafe_ptr()` hands out a MutUntrackedOrigin pointer that does
+    # not extend the buffer's life, so without this the pinned fixture can be
+    # released while the oracle above is still reading through it. Metal
+    # leaves the freed page mapped, which is why Apple never saw it; ROCm
+    # unmaps and returns zero pages, which is what produced the false row-63
+    # 'MISSED point 42' on the MI325X. See the note in `_run_one_eps`.
+    _ = hx^
