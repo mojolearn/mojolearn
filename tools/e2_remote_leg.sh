@@ -208,11 +208,29 @@ $SSH 'nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || rocm-smi 
 # the WORKING TREE but not this bundle, because history still carries the
 # blobs. Only the transport change fixes the transport.
 COMMIT="$(git -C "$REPO" rev-parse "${E2_COMMIT:-HEAD}")"   # pin to the Mac reference run's commit
-BUNDLE="/tmp/mojolearn-e2-$COMMIT.bundle"
-# a bundle needs a REF (a bare sha is "Refusing to create empty bundle")
-git -C "$REPO" branch -f "e2-run" "$COMMIT" >/dev/null 2>&1
-log "bundle $COMMIT (branch e2-run)"
-git -C "$REPO" bundle create "$BUNDLE" e2-run >/dev/null 2>&1 || { log "bundle failed"; exit 6; }
+BUNDLE="/tmp/mojolearn-e2-$COMMIT.tgz"
+# `git archive`, NOT `git bundle`, SINCE 2026-08-31, AND IT IS A BLOCKER FIX
+# RATHER THAN AN OPTIMISATION.
+#
+# A bundle carries the whole history, and this history is mostly
+# `bench/results`. Measured: 236 MB against 20 MB for the archive below.
+# The 2026-08-31 20:51 lanes leg spent its ENTIRE SIXTY-MINUTE LEASE on the
+# scp, the on-droplet dead-man destroyed the box mid-transfer at 3600s, the
+# scp then failed five times against a box that no longer existed, and the
+# leg tore down having run zero lanes and fetched nothing. One lease, one
+# droplet, no result. At that size no AMD leg can complete at all.
+#
+# THE ONE PROPERTY THE BUNDLE GAVE FREE IS REPLACED, NOT DROPPED. A remote
+# `git clone` checks out by hash and so cannot silently receive the wrong
+# tree; a tarball cannot. So the sha256 of the archive is computed on BOTH
+# SIDES and compared before anything runs, which is what
+# `tools/gemm_remote_leg.sh` already does and why the RunPod leg never paid
+# this cost. `bench/results` is excluded because nothing on the box reads it.
+log "archive $COMMIT (git archive, bench/results excluded)"
+git -C "$REPO" archive --format=tar "$COMMIT" -- . ':!bench/results' \
+  | gzip > "$BUNDLE" || { log "archive failed"; exit 6; }
+SRC_SHA=$( { shasum -a 256 "$BUNDLE" 2>/dev/null || sha256sum "$BUNDLE"; } | awk '{print $1}' )
+log "  archive $(du -h "$BUNDLE" | awk '{print $1}'), sha256 ${SRC_SHA:0:16}"
 # THE BUNDLE COPY RETRIES. A box answers `echo SSH-OK` before its sshd is
 # settled, and the very next scp can still come back "Connection closed" --
 # which is how the 2026-08-28 13:21 AMD identity leg died thirty seconds
@@ -222,13 +240,30 @@ git -C "$REPO" bundle create "$BUNDLE" e2-run >/dev/null 2>&1 || { log "bundle f
 _scp_ok=0
 for _try in 1 2 3 4 5; do
   if scp -q -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 \
-        "$BUNDLE" "root@$IP:/root/e2.bundle"; then _scp_ok=1; break; fi
+        "$BUNDLE" "root@$IP:/root/e2.tgz"; then _scp_ok=1; break; fi
   log "scp attempt $_try failed; retrying in 15s"
   sleep 15
 done
 [ "$_scp_ok" = 1 ] || { log "scp failed after 5 attempts"; exit 6; }
-$SSH "rm -rf /root/mojolearn && git clone -q -b e2-run /root/e2.bundle /root/mojolearn && cd /root/mojolearn && git rev-parse HEAD && git status --short | head -3 && grep -c 'is_defined\\[\"MOJOLEARN_NUMERIC_IDENTICAL\"\\]' original/numerics.mojo" \
-  || { log "remote clone/checkout failed"; exit 6; }
+# THE INTEGRITY CHECK THAT REPLACES `git clone`'s. The box recomputes the
+# sha256 of what it received and refuses if it differs from what was sent.
+# `commit.txt` is written from HERE, because an archive has no .git and the
+# box therefore cannot tell you which commit it is running; every artifact
+# the leg files is attributed from that file.
+$SSH "set -e
+      cd /root
+      got=\$( sha256sum e2.tgz | awk '{print \$1}' )
+      if [ \"\$got\" != \"$SRC_SHA\" ]; then
+        echo \"ARCHIVE SHA MISMATCH: sent $SRC_SHA got \$got\"; exit 9
+      fi
+      echo ARCHIVE-SHA-OK
+      rm -rf /root/mojolearn && mkdir -p /root/mojolearn
+      tar -xzf e2.tgz -C /root/mojolearn
+      cd /root/mojolearn
+      printf '%s\\n' '$COMMIT' > commit.txt
+      cat commit.txt
+      grep -c 'is_defined\\[\"MOJOLEARN_NUMERIC_IDENTICAL\"\\]' original/numerics.mojo" \
+  || { log "remote unpack/verify failed"; exit 6; }
 
 # THE WORK BOUND, COMPUTED FROM THE LEASE AND NOT FROM A GUESS.
 # DEVIATION 1090, 2026-08-25. This step used to be an unbounded `$SSH` that
@@ -276,7 +311,7 @@ for WAVE in "${WAVE_ARR[@]}"; do
     continue
   fi
   log "wave $WAVE_N: phases=${MOJOLEARN_E1_PHASES:-all} lanes=${WAVE:-all}, bound ${WORK_SECONDS}s"
-  $SSH "export PATH=/root/.pixi/bin:\$PATH; cd /root/mojolearn && MOJOLEARN_E1_PHASES='${MOJOLEARN_E1_PHASES:-}' MOJOLEARN_E1_LANES='$WAVE' MOJOLEARN_P9_BINDINGS='${MOJOLEARN_P9_BINDINGS:-}' MOJOLEARN_P9_LANES='${MOJOLEARN_P9_LANES:-}' ${MOJOLEARN_P9_TIERS:+MOJOLEARN_P9_TIERS='$MOJOLEARN_P9_TIERS'} MOJOLEARN_P9_BREAK='${MOJOLEARN_P9_BREAK:-0}' MOJOLEARN_P9_VENDOR='amd-mi325x' ${MOJOLEARN_P9_DIAG:+MOJOLEARN_P9_DIAG='$MOJOLEARN_P9_DIAG'} MOJOLEARN_P9_ONLY_DIAG='${MOJOLEARN_P9_ONLY_DIAG:-0}' MOJOLEARN_P9_DIAG_TIMEOUT='${MOJOLEARN_P9_DIAG_TIMEOUT:-2400}' ${MOJOLEARN_WHEEL_VERSION:+MOJOLEARN_WHEEL_VERSION='$MOJOLEARN_WHEEL_VERSION'} MOJOLEARN_WHEEL_INDEX='${MOJOLEARN_WHEEL_INDEX:-testpypi}' ${MOJOLEARN_GPU_ARCHS:+MOJOLEARN_GPU_ARCHS='$MOJOLEARN_GPU_ARCHS'} timeout -k 30 $WORK_SECONDS bash tools/e1_bootstrap.sh > /root/e2_run_w$WAVE_N.log 2>&1; echo \"WAVE-$WAVE_N-EXIT=\$?  (124 = hit the work bound)\"; tail -30 /root/e2_run_w$WAVE_N.log"
+  $SSH "export PATH=/root/.pixi/bin:\$PATH; cd /root/mojolearn && MOJOLEARN_COMMIT='$COMMIT' MOJOLEARN_E1_PHASES='${MOJOLEARN_E1_PHASES:-}' MOJOLEARN_E1_LANES='$WAVE' MOJOLEARN_P9_BINDINGS='${MOJOLEARN_P9_BINDINGS:-}' MOJOLEARN_P9_LANES='${MOJOLEARN_P9_LANES:-}' ${MOJOLEARN_P9_TIERS:+MOJOLEARN_P9_TIERS='$MOJOLEARN_P9_TIERS'} MOJOLEARN_P9_BREAK='${MOJOLEARN_P9_BREAK:-0}' MOJOLEARN_P9_VENDOR='amd-mi325x' ${MOJOLEARN_P9_DIAG:+MOJOLEARN_P9_DIAG='$MOJOLEARN_P9_DIAG'} MOJOLEARN_P9_ONLY_DIAG='${MOJOLEARN_P9_ONLY_DIAG:-0}' MOJOLEARN_P9_DIAG_TIMEOUT='${MOJOLEARN_P9_DIAG_TIMEOUT:-2400}' ${MOJOLEARN_WHEEL_VERSION:+MOJOLEARN_WHEEL_VERSION='$MOJOLEARN_WHEEL_VERSION'} MOJOLEARN_WHEEL_INDEX='${MOJOLEARN_WHEEL_INDEX:-testpypi}' ${MOJOLEARN_GPU_ARCHS:+MOJOLEARN_GPU_ARCHS='$MOJOLEARN_GPU_ARCHS'} timeout -k 30 $WORK_SECONDS bash tools/e1_bootstrap.sh > /root/e2_run_w$WAVE_N.log 2>&1; echo \"WAVE-$WAVE_N-EXIT=\$?  (124 = hit the work bound)\"; tail -30 /root/e2_run_w$WAVE_N.log"
 done
 
 # EXTRA CHECKS: things phase 8 does not know about yet, run only when asked.

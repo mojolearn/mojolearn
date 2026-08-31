@@ -67,7 +67,11 @@ digests() {   # $1 = log, $2 = mode
 }
 {
   echo "# DEVIATION 551 cross-vendor CSR digests -- THIS BOX"
-  echo "commit=$(git rev-parse HEAD 2>/dev/null)"
+  # NO `.git` ON AN ARCHIVE-DELIVERED BOX (2026-08-31, when the AMD leg
+  # stopped shipping a 236 MB bundle). `commit.txt` is written by the leg
+  # from the Mac side and is the attribution of record; `git rev-parse` is
+  # the fallback for a box that was cloned.
+  echo "commit=$(cat "$REPO/commit.txt" 2>/dev/null || git rev-parse HEAD 2>/dev/null || echo unknown)"
   echo "uname=$(uname -srm)"
   echo "fast_rc=$FAST_RC  identical_rc=$IDENT_RC"
   echo "seconds=$(( $(date +%s) - T0 ))"
