@@ -73,6 +73,44 @@ def _hash01(row: Int, feature: Int) -> Float64:
     return Float64(z >> UInt64(11)) * (1.0 / 9007199254740992.0)
 
 
+def _csr_digest(
+    hia: MutPointer[Int32, MutUntrackedOrigin],
+    hja: MutPointer[Int32, MutUntrackedOrigin],
+    n: Int,
+    nnz: Int,
+) -> UInt64:
+    """A 64-bit FNV-1a over the WHOLE CSR: shape, row starts, then columns.
+
+    THIS IS THE CROSS-VENDOR ARTIFACT. Every other assertion in this file is
+    something one box can check about itself, and `one-box-verdict-is-not-three`
+    forbids reading a cross-vendor claim off any of them. A digest is different:
+    it is a number a SECOND box prints independently, and the two are compared
+    off-box by eye or by diff.
+
+    It is printed in BOTH modes on purpose, and the two modes answer different
+    questions:
+
+      IDENTICAL  the digests from two vendors MUST be equal. That is the whole
+                 of DEVIATION 551's claim, and nothing on one box can supply it.
+      FAST       the digests from two vendors are EXPECTED to differ, because
+                 the raw emission order is lane-width dependent (32 on Apple and
+                 NVIDIA, 64 on CDNA). That difference is the NON-VACUITY control
+                 for the pair above: if FAST also matched, the IDENTICAL match
+                 would be telling us nothing about canonicalization.
+
+    The row starts are folded in as well as the columns, so a digest cannot
+    collide across two different row partitionings of the same column stream.
+    """
+    var h = UInt64(0xCBF29CE484222325)
+    h = (h ^ UInt64(n)) * UInt64(0x100000001B3)
+    h = (h ^ UInt64(nnz)) * UInt64(0x100000001B3)
+    for i in range(n + 1):
+        h = (h ^ UInt64(UInt32(hia.unsafe_load(i)))) * UInt64(0x100000001B3)
+    for p in range(nnz):
+        h = (h ^ UInt64(UInt32(hja.unsafe_load(p)))) * UInt64(0x100000001B3)
+    return h
+
+
 def _coord(row: Int, feature: Int) -> Float32:
     """A scattered point in a box of side 10.
 
@@ -296,6 +334,20 @@ def _run_one_eps(
             + " intra-row descents (longest row " + String(longest)
             + "); DEVIATION 551 removes them under IDENTICAL"
         )
+
+    # THE CROSS-VENDOR ARTIFACT. One line, greppable, printed in both modes.
+    # See `_csr_digest` for what a reader is supposed to do with the two
+    # numbers: match them under IDENTICAL, expect them to DIFFER under FAST.
+    var digest = _csr_digest(hia.unsafe_ptr(), hja.unsafe_ptr(), n, nnz)
+    var mode_name = String("FAST")
+
+    @parameter
+    if PIN_CROSS_VENDOR:
+        mode_name = String("IDENTICAL")
+    print(
+        "RBC-DIGEST mode=" + mode_name + " label=" + label + " n=" + String(n)
+        + " nnz=" + String(nnz) + " digest=" + String(digest)
+    )
 
     return nnz
 

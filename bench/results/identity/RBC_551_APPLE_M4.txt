@@ -1,0 +1,20 @@
+# DEVIATION 551 cross-vendor CSR digests -- APPLE column (M4, Metal)
+# commit: 946b97d0 + the digest line (uncommitted at measure time)
+# command: pixi run mojo run -I . neighbors/ball_cover_main.mojo
+#          tools/with_identical_mode.sh pixi run mojo run -I . neighbors/ball_cover_main.mojo
+# date: 2026-08-31
+#
+# The three eps= rows are the claim. The sabotage rows are recorded because
+# they are printed, NOT because they are portable: two of the three sabotages
+# mutate device state and their digests are only meaningful against the same
+# box's own before/after pair.
+label            mode        n     nnz       digest
+eps=0.9          FAST        1200  5132      255668769117191359
+eps=2.5          FAST        1200  73050     15889592947222279391
+eps=8.0          FAST        1200  1014290   12575777589526565627
+eps=0.9          IDENTICAL   1200  5132      1397562962144103345
+eps=2.5          IDENTICAL   1200  73050     16240815604607225637
+eps=8.0          IDENTICAL   1200  1014290   14736358725852372183
+#
+# raw intra-row descents under FAST: 1976 / 36251 / 514859 (longest row 12 / 102 / 1200)
+# raw intra-row descents under IDENTICAL: 0, asserted
