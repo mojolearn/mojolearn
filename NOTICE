@@ -4,325 +4,37 @@ Copyright 2026 Andrew Hendel
 This product includes software developed by Andrew Hendel, licensed under the
 Apache License, Version 2.0.
 
---------------------------------------------------------------------------
-No upstream source is in this repository
---------------------------------------------------------------------------
+No upstream source is in this repository. The shipped library is 100% Mojo.
+The only C or C++ tracked here is twenty test harnesses under
+`tools/*_oracle/` and `ensemble/tools/*_oracle/`, which link an upstream to
+produce reference numbers the Mojo is checked against; two of those files are
+CatBoost's own, redistributed under Apache-2.0 and changed as recorded in
+DERIVATION.md. None of the projects below contains any Mojo.
 
-THE SHIPPED LIBRARY IS 100% MOJO. There is no CUDA and no C++ in it. Not one
-line of CatBoost, cuML, cuVS, RAFT or FAISS source appears anywhere in the
-tree, and none of those projects contains any Mojo.
+This work implements algorithms whose designs come from CatBoost (Apache-2.0,
+YANDEX LLC); cuVS, cuML and RAFT (Apache-2.0, NVIDIA CORPORATION & AFFILIATES);
+FAISS, by way of RAFT's vendored copy (MIT, Facebook, Inc. and its affiliates);
+scikit-learn (BSD-3-Clause, the scikit-learn developers); HuggingFace
+transformers (Apache-2.0, The Hugging Face team, and carrying EleutherAI's and
+the state-spaces/mamba org's notices); state-spaces/mamba (Apache-2.0, Tri Dao
+and Albert Gu); the Modular MAX kernels (Apache-2.0 with LLVM Exceptions,
+Modular Inc.); and NVIDIA cuRAND, which is proprietary rather than open source
+and is recorded pending a decision by the author.
 
-The only C or C++ tracked here is twenty files under `tools/*_oracle/` and
-`ensemble/tools/*_oracle/`. Those are TEST HARNESSES: they link an upstream,
-or a published reference implementation, to produce reference numbers the
-Mojo is checked against. They build the check, not the library. The two that
-are somebody else's file verbatim are declared by name further down.
+Their licence texts are in `third_party/LICENSES/`, one file per project. The
+per-file correspondence, the commit each lane was read at, and what is
+original to this work are in the `DERIVATION_MAP.tsv` tables and DERIVATION.md.
 
-So the sections below do not describe copying, and nothing in this file
-should be read that way. They describe implementing a named algorithm in
-Mojo against a named reference at a pinned commit, and citing that reference
-the way a paper cites prior work. Apache 2.0 section 4 requires the citation
-for a derivative work, and the citation is also what makes the originality
-claim in the next section checkable instead of merely asserted.
+Checked against the pinned checkouts on 2026-08-31, none of cuVS, cuML, RAFT,
+scikit-learn, transformers, state-spaces/mamba or Modular ships a NOTICE file,
+so Apache 2.0 section 4(d) has no attribution text of theirs to reproduce
+here. CatBoost is not checked out on this machine and was not re-verified.
 
-WHERE THE FOLLOWING IS CLOSE AND WHERE IT IS NOT is recorded per file rather
-than claimed in bulk. A file-by-file audit on 2026-08-31 of the 98 rows
-labelled `transliterated` found the label right on 52 and wrong on 34, and
-those 34 are being relabelled. 105 of the 459 files with an upstream
-counterpart could not follow the reference even in principle, because the
-upstream line they correspond to is a call into CUB, Thrust, cuBLAS,
-cuSOLVER, cuRAND or a warp intrinsic that does not exist on this target;
-that code was written, not followed. See CONTRIBUTION.md.
+This project is not affiliated with, endorsed by, or sponsored by YANDEX LLC,
+NVIDIA CORPORATION, Meta Platforms, Inc., Hugging Face, Inc., EleutherAI,
+Tri Dao, Albert Gu, the state-spaces project, the scikit-learn developers,
+NumFOCUS or Modular, Inc. Their names and their projects' names are used only
+to identify the software this work derives from, or checks itself against.
 
---------------------------------------------------------------------------
-What is original to this work
---------------------------------------------------------------------------
-
-THIS SECTION WAS ADDED 2026-08-31, AND ITS ABSENCE WAS A DEFECT IN THIS FILE.
-Every word below the line was accurate and stays. What was missing was any
-statement of PROPORTION, so a reader met "Derived from CatBoost" as the first
-heading and reasonably concluded this was a port with some additions. It is
-not, and the number is the shortest way to say so.
-
-    Mojo tracked in this repository                   431,889 lines
-    has an upstream file it corresponds to     127,712 to 141,739   30% to 33%
-    has none                                   290,150 to 304,177   67% to 70%
-
-Measured 2026-08-31 by line count over tracked `*.mojo`. THE RANGE IS HONEST
-RATHER THAN EVASIVE, and the first published version of this table was WRONG
-because it did not have one. That version said 15.1% derived and 84.9% not,
-computed as "everything under a `ported/` directory" -- and `gbdt/`, the
-CatBoost mirror this file's first derivation section is about, HAS NO
-`ported/` SUBDIRECTORY. It missed 61,888 lines of the most plainly derived
-code in the repository. Corrected within the hour, before the release it was
-written for reached Zenodo.
-
-The lower bound counts every `ported/` directory plus all of `gbdt/`. The
-upper adds `ensemble/`'s cuML-mirroring code, less its own original half.
-The remaining judgement is inside `gbdt/`, where 76 of 149 files appear in no
-derivation map and three say NO CATBOOST COUNTERPART in their own headers;
-those are counted as derived in both bounds, so both bounds are generous to
-the derivation and the true original share is at the high end of the range.
-
-None of the following exists in any upstream this file names, because none of
-those projects was ever asked to run anywhere but CUDA:
-
-  * THE DETERMINISM LADDER. Three numeric tiers selected at runtime, whose
-    strictest tier produces bit-identical answers on Apple Silicon via Metal,
-    NVIDIA via CUDA and AMD via ROCm from ONE source, with the pinned
-    arithmetic primitives (`ftz`, `identical_mul_add`, `portable_sqrtf` and
-    the rest of `mojo_only/numerics.mojo`) that make it possible.
-  * THE METAL BACKEND, and every deviation Metal forced: no threadgroup float
-    atomics, no streams, a 32-lane column against CDNA's 64.
-  * THE VERIFICATION METHOD. Per-stage identity cards diffed across three
-    vendors at pinned commits, host oracles written independently of the
-    device code, and the sabotage discipline that requires each gate to be
-    shown capable of failing before its pass is believed.
-  * THE HOST CONTROL PLANE. Every `estimator.mojo`, the CPython bindings, the
-    Python surface and its refusals.
-  * THE BIT-IDENTICAL FP32 GEMM CONTRACT, and the transformer and Mamba
-    identity work, which are ported from nothing.
-
---------------------------------------------------------------------------
-Derived from CatBoost
---------------------------------------------------------------------------
-
-Everything under `gbdt/` is a DERIVATIVE WORK of CatBoost in the Apache 2.0
-sense: implemented in Mojo against named CatBoost source files at commit
-54a8143a, which each file cites. NO CATBOOST SOURCE IS IN THIS REPOSITORY.
-(This paragraph said "everything under `ported/`", which was scoped
-backwards: not one of those directories is the CatBoost lane, and `gbdt/`
-never had one.) `PORTED_MAP.tsv` maps each
-file to the CatBoost source it derives from and records whether the port is
-transliterated, partial, or replaced.
-
-    CatBoost
-    Copyright 2017-2026 YANDEX LLC
-    Licensed under the Apache License, Version 2.0
-    https://github.com/catboost/catboost
-
-CatBoost ships no NOTICE file, so there is no attribution text of theirs to
-reproduce here. This section exists because Apache 2.0 section 4(a) and 4(b)
-require a derivative work to carry the license and to state that files were
-changed, and every file under `ported/` is changed: it is a different
-language targeting a different GPU API.
-
-TWO FILES ARE NOT A TRANSLATION, THEY ARE THEIRS VERBATIM.
-`tools/permutation_oracle/mersenne64.h` and
-`tools/permutation_oracle/mersenne64.cpp` are CatBoost's own
-`util/random/mersenne64.{h,cpp}` at commit 54a8143a, redistributed under the
-same Apache License, Version 2.0, and CHANGED in two ways which are recorded
-here as section 4(b) requires: two `util/` includes are replaced by a local
-`shim.h` that supplies `ui64` and `ULL`, and the `IInputStream` constructor is
-removed because it needs their stream library and nothing here calls it.
-
-They are not part of the library. They build a test oracle -- the check that
-`gbdt/data/permutation.mojo` reproduces their random permutation -- and they
-are included verbatim on purpose: an oracle written from their code is
-evidence, and one paraphrased from it is a second guess.
-
-This project is not affiliated with, endorsed by, or sponsored by YANDEX LLC.
-"CatBoost" is used only to identify the software this work derives from.
-
---------------------------------------------------------------------------
-Derived from cuVS
---------------------------------------------------------------------------
-
-Everything under `cluster/ported/` is a DERIVATIVE WORK of cuVS, translated
-from CUDA C++ and Cython into Mojo at cuVS commit 2140532c.
-`cluster/PORTED_MAP.tsv` maps each file to the cuVS source it derives from
-and records whether the port is transliterated, partial, or replaced, and
-`cluster/UNPORTED.tsv` records what was deliberately left out.
-
-    cuVS
-    Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES
-    Licensed under the Apache License, Version 2.0
-    https://github.com/rapidsai/cuvs
-
-cuVS ships no NOTICE file, so there is no attribution text of theirs to
-reproduce here. As with the CatBoost derivation above, this section exists
-because Apache 2.0 sections 4(a) and 4(b) require a derivative work to carry
-the license and to state that files were changed, and every file under
-`cluster/ported/` is changed: it is a different language targeting a
-different GPU API.
-
-Files under `cluster/mojo_only/` are NOT derived from cuVS. They replace
-calls cuVS makes into RAFT (https://github.com/rapidsai/raft, Copyright (c)
-NVIDIA CORPORATION, Apache-2.0) and into NVIDIA cuBLAS. No RAFT or cuBLAS
-source was translated: what those files reproduce is the call site and its
-documented semantics, and each one names the call it stands in for.
-
-This project is not affiliated with, endorsed by, or sponsored by NVIDIA
-CORPORATION. "cuVS" and "RAFT" are used only to identify the software this
-work derives from.
-
---------------------------------------------------------------------------
-Derived from cuML
---------------------------------------------------------------------------
-
-CORRECTED 2026-08-20. This section did not exist, and its absence was an
-unmet obligation rather than a formatting gap: cuML is Apache-2.0, sections
-4(a) and 4(b) apply to every derivative work, and eight files here are
-derivative works of cuML that this file did not name.
-
-These are DERIVATIVE WORKS of cuML in the Apache 2.0 sense: implemented in
-Mojo against named cuML source files at a pinned commit, which each file
-cites. No cuML source is in this repository.
-`dbscan/PORTED_MAP.tsv`, `decomposition/PORTED_MAP.tsv` and
-`neighbors/PORTED_MAP.tsv` map each file to the cuML source it derives from and record whether the port is
-transliterated, partial, or replaced; `UNPORTED.tsv` beside each records what
-was deliberately left out.
-
-  at cuML commit 00094f7 (branch-25.08):
-
-    dbscan/ported/dbscan/vertexdeg/algo.mojo
-    dbscan/ported/dbscan/corepoints/compute.mojo
-    dbscan/ported/dbscan/adjgraph/algo.mojo
-    dbscan/ported/dbscan/runner.mojo
-    dbscan/ported/dbscan/dbscan.mojo
-    dbscan/ported/dbscan/mergelabels/runner.mojo
-    decomposition/ported/linalg/detail/pca.mojo
-    decomposition/ported/linalg/detail/tsvd.mojo
-    neighbors/ported/knn/knn.mojo            (added 2026-08-23, the k-NN
-        classifier and regressor; neighbors/PORTED_MAP.tsv)
-    neighbors/ported/selection/knn.mojo
-    glm/ported/glm/ols.mojo                  (cpp/src/glm/ols.cuh; the
-        dispatch and guards; glm/PORTED_MAP.tsv)
-    glm/ported/glm/ridge.mojo                (added 2026-08-23, cpp/src/glm/
-        ridge.cuh: ridgeSolve, ridgeEig, ridgeFit)
-    glm/ported/linear_model/qn.mojo          (added 2026-08-23, cpp/include/
-        cuml/linear_model/qn.h)
-    glm/ported/glm/qn/qn.mojo                (added 2026-08-23, and the
-        seven below: cpp/src/glm/qn/, the L-BFGS logistic solver)
-    glm/ported/glm/qn/glm_base.mojo
-    glm/ported/glm/qn/glm_logistic.mojo
-    glm/ported/glm/qn/glm_regularizer.mojo
-    glm/ported/glm/qn/qn_solvers.mojo
-    glm/ported/glm/qn/qn_linesearch.mojo
-    glm/ported/glm/qn/qn_util.mojo
-    glm/ported/glm/qn/simple_mat/dense.mojo
-
-    cuML
-    Copyright (c) 2018-2026, NVIDIA CORPORATION & AFFILIATES
-    Licensed under the Apache License, Version 2.0
-    https://github.com/rapidsai/cuml
-
-cuML ships no NOTICE file, so there is no attribution text of theirs to
-reproduce here. As with the derivations above, every one of these files is
-changed: it is a different language targeting a different GPU API.
-
-`decomposition/mojo_only/jacobi_eigh_device.mojo` is marked SUBSTITUTE rather
-than derived. It stands in for the `COV_EIG_JACOBI` arm of cuML's
-`tsvd.cuh::calEig`, which calls cuSOLVER; no cuML source was translated into
-it, and it reproduces the call's documented semantics rather than its code.
-
---------------------------------------------------------------------------
-Derived from RAFT
---------------------------------------------------------------------------
-
-CORRECTED 2026-08-20. This section named two files. There are eleven
-derivation rows across four sections, and it also gave a single RAFT commit
-when the sections are pinned to two different ones. Both are fixed below;
-the old text is deleted rather than annotated.
-
-These are DERIVATIVE WORKS of RAFT in the Apache 2.0 sense: implemented in
-Mojo against named RAFT source files at a pinned commit, which each file
-cites. No RAFT source is in this repository. The
-`PORTED_MAP.tsv` in each section maps file to source and records the status.
-
-  at RAFT commit 661a3b8 (branch-25.08):
-
-    dbscan/ported/neighbors/epsilon_neighborhood.mojo
-    dbscan/ported/dbscan/adjgraph/algo.mojo
-    dbscan/ported/label/merge_labels.mojo
-    dbscan/ported/label/classlabels.mojo
-    neighbors/ported/label/classlabels.mojo   (added 2026-08-23; the same
-        header, the general route for arbitrary int32 class labels)
-    dbscan/ported/sparse/detail/csr.mojo
-    decomposition/ported/linalg/detail/pca.mojo   (sign_flip_kernel only,
-        from raft matrix/detail/math.cuh:367 signFlipKernel)
-    glm/ported/linalg/detail/svd.mojo   (added 2026-08-23; svdEig from
-        linalg/detail/svd.cuh)
-    glm/ported/matrix/math.mojo         (added 2026-08-23; the matrix
-        primitives from matrix/detail/math.cuh and addScalar from
-        linalg/detail/add.cuh that ridgeSolve and svdEig call)
-
-  at RAFT commit 9aa17e5:
-
-    glm/ported/linalg/detail/lstsq.mojo
-    neighbors/ported/neighbors/detail/faiss_select/select.mojo
-    neighbors/ported/matrix/detail/select_radix.mojo
-    neighbors/ported/matrix/detail/select_warpsort.mojo
-        (from both select_warpsort.cuh and util/bitonic_sort.cuh)
-
-    RAFT
-    Copyright (c) NVIDIA CORPORATION & AFFILIATES
-    Licensed under the Apache License, Version 2.0
-    https://github.com/rapidsai/raft
-
-`dbscan/ported/dbscan/adjgraph/algo.mojo` derives from cuML AND from RAFT
-and is listed under both sections.
-
-This is a separate obligation from the cuVS and cuML ones above and is
-recorded separately because the three are different works. Files that merely
-STAND IN for a RAFT call, under `core/` and the various `mojo_only/`
-directories, are NOT derived from RAFT: no RAFT source was translated into
-them, and each names the call whose semantics it reproduces.
-
---------------------------------------------------------------------------
-Derived from FAISS (MIT, NOT Apache-2.0)
---------------------------------------------------------------------------
-
-ADDED 2026-08-20. This is the one obligation in this file that is not
-Apache-2.0, and it was the one being missed. RAFT vendors FAISS's
-register-resident warp-select queue, and RAFT's copy carries Facebook's
-copyright and the MIT license, not NVIDIA's Apache-2.0 grant
-(`raft/thirdparty/LICENSES/LICENSE.faiss`). MIT requires the copyright
-notice and the permission notice to be included in all copies or SUBSTANTIAL
-PORTIONS of the software, and a transliteration of the algorithm into another
-language is a substantial portion. Reproducing it here, and in the headers of
-the two files themselves, is what discharges that.
-
-These files derive from RAFT's vendored FAISS at RAFT commit 9aa17e5:
-
-    neighbors/ported/neighbors/detail/faiss_select/select.mojo
-        <- raft/neighbors/detail/faiss_select/Select.cuh
-    neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo
-        <- raft/neighbors/detail/faiss_select/{Comparators,
-           MergeNetworkUtils, MergeNetworkWarp}.cuh
-
-    MIT License
-
-    Copyright (c) Facebook, Inc. and its affiliates.
-
-    Permission is hereby granted, free of charge, to any person obtaining a
-    copy of this software and associated documentation files (the
-    "Software"), to deal in the Software without restriction, including
-    without limitation the rights to use, copy, modify, merge, publish,
-    distribute, sublicense, and/or sell copies of the Software, and to permit
-    persons to whom the Software is furnished to do so, subject to the
-    following conditions:
-
-    The above copyright notice and this permission notice shall be included
-    in all copies or substantial portions of the Software.
-
-    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-    OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
-    NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-    DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-    OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
-    USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-`neighbors/ported/matrix/detail/select_warpsort.mojo` is NOT covered by this
-section. RAFT ships the FAISS warp-select DESIGN twice, as two unrelated
-files, and that one is RAFT's own reimplementation under NVIDIA's copyright
-and Apache-2.0; it is listed under the RAFT section above.
-
---------------------------------------------------------------------------
-Modular trademarks
---------------------------------------------------------------------------
-
-MAX (R) and Mojo (R) are trademarks of Modular, Inc. used under license.
-
-This project is not operated or endorsed by Modular, Inc.
+MAX (R) and Mojo (R) are trademarks of Modular, Inc. used under license. This
+project is not operated or endorsed by Modular, Inc.
