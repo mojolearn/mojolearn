@@ -1,0 +1,13 @@
+{
+  "name": "mojolearn-gemm-nvidia-2026-08-31_020459",
+  "imageName": "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04",
+  "gpuTypeIds": ["NVIDIA A40"],
+  "gpuCount": 1,
+  "allowedCudaVersions": ["13.0"],
+  "cloudType": "SECURE",
+  "containerDiskInGb": 60,
+  "volumeInGb": 0,
+  "ports": ["22/tcp"],
+  "supportPublicIp": true,
+  "interruptible": false
+}

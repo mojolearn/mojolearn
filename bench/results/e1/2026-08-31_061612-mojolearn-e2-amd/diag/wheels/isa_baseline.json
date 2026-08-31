@@ -1,0 +1,187 @@
+{
+  "baseline": "x86-64-v3",
+  "failing": 0,
+  "files": 30,
+  "report": {
+    "_mojolearn.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 89194,
+      "vendored": false
+    },
+    "_mojolearn_estimators.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 128263,
+      "vendored": false
+    },
+    "_mojolearn_gbdt.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 379564,
+      "vendored": false
+    },
+    "_mojolearn_linalg.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 31905,
+      "vendored": false
+    },
+    "_mojolearn_metrics.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 146439,
+      "vendored": false
+    },
+    "_mojolearn_rf.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 106588,
+      "vendored": false
+    },
+    "_mojolearn_solver.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 72967,
+      "vendored": false
+    },
+    "_mojolearn_svm.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 94444,
+      "vendored": false
+    },
+    "_mojolearn_trees.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 100881,
+      "vendored": false
+    },
+    "_mojolearn_tsa.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 52041,
+      "vendored": false
+    },
+    "deterministic/_mojolearn.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 89352,
+      "vendored": false
+    },
+    "deterministic/_mojolearn_estimators.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 128440,
+      "vendored": false
+    },
+    "deterministic/_mojolearn_gbdt.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 379608,
+      "vendored": false
+    },
+    "deterministic/_mojolearn_linalg.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 31905,
+      "vendored": false
+    },
+    "deterministic/_mojolearn_metrics.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 146597,
+      "vendored": false
+    },
+    "deterministic/_mojolearn_rf.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 106588,
+      "vendored": false
+    },
+    "deterministic/_mojolearn_solver.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 72967,
+      "vendored": false
+    },
+    "deterministic/_mojolearn_svm.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 94444,
+      "vendored": false
+    },
+    "deterministic/_mojolearn_trees.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 100881,
+      "vendored": false
+    },
+    "deterministic/_mojolearn_tsa.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 52041,
+      "vendored": false
+    },
+    "identical/_mojolearn.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 83136,
+      "vendored": false
+    },
+    "identical/_mojolearn_estimators.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 124507,
+      "vendored": false
+    },
+    "identical/_mojolearn_gbdt.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 361829,
+      "vendored": false
+    },
+    "identical/_mojolearn_linalg.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 21459,
+      "vendored": false
+    },
+    "identical/_mojolearn_metrics.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 136151,
+      "vendored": false
+    },
+    "identical/_mojolearn_rf.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 107362,
+      "vendored": false
+    },
+    "identical/_mojolearn_solver.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 71594,
+      "vendored": false
+    },
+    "identical/_mojolearn_svm.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 93589,
+      "vendored": false
+    },
+    "identical/_mojolearn_trees.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 101191,
+      "vendored": false
+    },
+    "identical/_mojolearn_tsa.so": {
+      "cpuid": 0,
+      "findings": {},
+      "instructions": 52041,
+      "vendored": false
+    }
+  }
+}

@@ -1,0 +1,40 @@
+[06:06:04 leg_diag] 1/5 build_sets
+[06:06:04 build_sets] repo /root/mojolearn, dest /root/mojolearn/bench/results/e1/2026-08-31_060601-43695dc7b93d/diag/wheels, tiers: fast deterministic identical, jobs: 3
+[06:06:04 build_sets] pixi env: gbmbench
+[06:12:51 build_sets] builds finished in 407s (rc=0)
+[06:12:57 build_sets] vendor read-back per binary:
+    fast _mojolearn cuda
+    fast _mojolearn_gbdt cuda
+    fast _mojolearn_estimators cuda
+    fast _mojolearn_rf cuda
+    fast _mojolearn_trees cuda
+    fast _mojolearn_svm cuda
+    fast _mojolearn_solver cuda
+    fast _mojolearn_metrics cuda
+    fast _mojolearn_tsa cuda
+    fast _mojolearn_linalg cuda
+    deterministic _mojolearn cuda
+    deterministic _mojolearn_gbdt cuda
+    deterministic _mojolearn_estimators cuda
+    deterministic _mojolearn_rf cuda
+    deterministic _mojolearn_trees cuda
+    deterministic _mojolearn_svm cuda
+    deterministic _mojolearn_solver cuda
+    deterministic _mojolearn_metrics cuda
+    deterministic _mojolearn_tsa cuda
+    deterministic _mojolearn_linalg cuda
+    identical _mojolearn cuda
+    identical _mojolearn_gbdt cuda
+    identical _mojolearn_estimators cuda
+    identical _mojolearn_rf cuda
+    identical _mojolearn_trees cuda
+    identical _mojolearn_svm cuda
+    identical _mojolearn_solver cuda
+    identical _mojolearn_metrics cuda
+    identical _mojolearn_tsa cuda
+    identical _mojolearn_linalg cuda
+[06:12:58 build_sets] GPU architectures embedded, per binary:
+         30 sm_80
+[06:12:58 build_sets] architecture set: sm_80 
+packaging/linux/build_sets.sh: line 180: SET: unbound variable
+[06:12:58 leg_diag] no vendor in SIZES.txt; stopping

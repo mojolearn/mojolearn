@@ -1,0 +1,18 @@
+[22:36:04 leg_install] venv route: python3 -m venv
+[22:36:07 leg_install] clean venv at /root/mojolearn-smoke-venv (Python 3.11.10)
+    Installing collected packages: numpy, mojolearn
+    Successfully installed mojolearn-0.3.0 numpy-2.4.6
+    
+    [notice] A new release of pip is available: 24.0 -> 26.2.1
+    [notice] To update, run: python3 -m pip install --upgrade pip
+[22:36:16 leg_install] installed mojolearn==0.3.0 from pypi; vendor read back: cuda
+    timeout: the monitored command dumped core
+    packaging/linux/leg_diag_install.sh: line 94:  1227 Illegal instruction     MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_REPO="$REPO" timeout -k 30 "${MOJOLEARN_SMOKE_TIMEOUT:-900}" "$VENV/bin/python" -u "$REPO/packaging/linux/smoke.py" --vendor "$VENDOR" --json "$D/gates/smoke_$tier.json"
+    timeout: the monitored command dumped core
+    packaging/linux/leg_diag_install.sh: line 94:  1329 Illegal instruction     MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_REPO="$REPO" timeout -k 30 "${MOJOLEARN_SMOKE_TIMEOUT:-900}" "$VENV/bin/python" -u "$REPO/packaging/linux/smoke.py" --vendor "$VENDOR" --json "$D/gates/smoke_$tier.json"
+    timeout: the monitored command dumped core
+    packaging/linux/leg_diag_install.sh: line 94:  1431 Illegal instruction     MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_REPO="$REPO" timeout -k 30 "${MOJOLEARN_SMOKE_TIMEOUT:-900}" "$VENV/bin/python" -u "$REPO/packaging/linux/smoke.py" --vendor "$VENDOR" --json "$D/gates/smoke_$tier.json"
+index=pypi version=0.3.0 vendor=cuda smoke_rc=1
+smoke[fast]: packaging/linux/leg_diag_install.sh: line 94:  1227 Illegal instruction     MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_REPO="$REPO" timeout -k 30 "${MOJOLEARN_SMOKE_TIMEOUT:-900}" "$VENV/bin/python" -u "$REPO/packaging/linux/smoke.py" --vendor "$VENDOR" --json "$D/gates/smoke_$tier.json"
+smoke[deterministic]: packaging/linux/leg_diag_install.sh: line 94:  1329 Illegal instruction     MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_REPO="$REPO" timeout -k 30 "${MOJOLEARN_SMOKE_TIMEOUT:-900}" "$VENV/bin/python" -u "$REPO/packaging/linux/smoke.py" --vendor "$VENDOR" --json "$D/gates/smoke_$tier.json"
+smoke[identical]: packaging/linux/leg_diag_install.sh: line 94:  1431 Illegal instruction     MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_REPO="$REPO" timeout -k 30 "${MOJOLEARN_SMOKE_TIMEOUT:-900}" "$VENV/bin/python" -u "$REPO/packaging/linux/smoke.py" --vendor "$VENDOR" --json "$D/gates/smoke_$tier.json"

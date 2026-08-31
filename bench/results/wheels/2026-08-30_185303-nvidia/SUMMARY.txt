@@ -1,0 +1,5 @@
+index=pypi version=0.3.0 vendor=cuda smoke_rc=1
+smoke[fast]: packaging/linux/leg_diag_install.sh: line 124:  1306 Illegal instruction     MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_REPO="$REPO" timeout -k 30 "${MOJOLEARN_SMOKE_TIMEOUT:-900}" "$VENV/bin/python" -u "$REPO/packaging/linux/smoke.py" --vendor "$VENDOR" --json "$D/gates/smoke_$tier.json"
+smoke[deterministic]: 
+smoke[identical]: 
+source_e1_dir=bench/results/e1/2026-08-30_185303-runpod-nvidia/

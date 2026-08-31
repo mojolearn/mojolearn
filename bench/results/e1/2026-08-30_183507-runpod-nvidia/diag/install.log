@@ -1,0 +1,13 @@
+Collecting mojolearn==0.3.0
+  Downloading mojolearn-0.3.0-py3-none-manylinux_2_35_x86_64.whl.metadata (28 kB)
+Collecting numpy>=1.24 (from mojolearn==0.3.0)
+  Downloading numpy-2.4.6-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (6.6 kB)
+Downloading mojolearn-0.3.0-py3-none-manylinux_2_35_x86_64.whl (76.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 76.3/76.3 MB 129.3 MB/s eta 0:00:00
+Downloading numpy-2.4.6-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.9 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.9/16.9 MB 335.7 MB/s eta 0:00:00
+Installing collected packages: numpy, mojolearn
+Successfully installed mojolearn-0.3.0 numpy-2.4.6
+
+[notice] A new release of pip is available: 24.0 -> 26.2.1
+[notice] To update, run: python3 -m pip install --upgrade pip

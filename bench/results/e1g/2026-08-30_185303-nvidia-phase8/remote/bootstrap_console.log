@@ -1,0 +1,62 @@
+
+=== provenance === 22:53:52
+385c225f86ff199d3eeefa802118d475c2560ab7
+Linux 19a08bc310f3 6.8.0-137-generic #137-Ubuntu SMP PREEMPT_DYNAMIC Fri Jul 17 20:28:23 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+
+=== pixi === 22:53:52
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 22:53:55
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 22:53:55
+phase 9: DIAG ONLY (MOJOLEARN_P9_ONLY_DIAG=1); no builds, no arms, no probes here
+phase 9 builds: <none>
+phase 9 tiers:  <none>
+concurrent probe SKIPPED: needs all three tiers, P9_TIERS=<none>
+
+=== phase 9 diag: packaging/linux/leg_diag_install.sh === 22:53:55
+PHASE9-FINDING: diag script returned non-zero (see diag/console.log)
+          avx512vnni absent
+        -- what the loaded set actually is --
+        1207 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x109400000000, nodemask=1)
+          vendor cuda | the box probe (device nodes and driver libraries)
+          arch   sm_80 | same-family lower architecture (sm_80 code runs forward on this sm_89 device)
+        timeout: the monitored command dumped core
+        packaging/linux/leg_diag_install.sh: line 124:  1306 Illegal instruction     MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_REPO="$REPO" timeout -k 30 "${MOJOLEARN_SMOKE_TIMEOUT:-900}" "$VENV/bin/python" -u "$REPO/packaging/linux/smoke.py" --vendor "$VENDOR" --json "$D/gates/smoke_$tier.json"
+    [22:54:05 leg_install] SIGILL in the fast smoke; capturing the faulting instruction
+          Thread 1 "python" received signal SIGILL, Illegal instruction.
+          => 0x7d23150f2b28 <cluster::estimator::kmeans_fit(max::gpu::host::device_context::DeviceContext,::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(uint32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(float64), ::SIMDLength(1)],::SIMD[::DType(uint64), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(float64), ::SIMDLength(1)])+2040>:	vandps 0x6d7ee(%rip){1to4},%xmm2,%xmm2        # 0x7d2315160320
+          #0  0x00007d23150f2b28 in cluster::estimator::kmeans_fit(max::gpu::host::device_context::DeviceContext,::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(uint32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(float64), ::SIMDLength(1)],::SIMD[::DType(uint64), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(float64), ::SIMDLength(1)]) () from /root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/cuda/sm_80/_mojolearn.so
+          #1  0x00007d23150f1a32 in std::python::bindings::fastcall(::PyObjectPtr,::Pointer[::Bool(True), MutUntrackedOrigin, ::PyObjectPtr, *?, ::AddressSpace(::SIMDLength(0))],::SIMD[::DType(int), ::SIMDLength(1)])`0x5,method_type=[typevalue<#kgen.instref<"std::builtin::_stubs::__MLIRType,T=[(!kgen.pointer<typevalue<#kgen.instref<\1B\22std::python::python_object::PythonObject\22>>> read_mem, !kgen.pointer<typevalue<#kgen.instref<\1B\22std::python::python_object::PythonObject\22>>> read_mem, !kgen.pointer<typevalue<#kgen.instref<\1B\22std::python::python_object::PythonObject\22>>> read_mem, !kgen.pointer<typevalue<#kgen.instref<\1B\22std::python::python_object::PythonObject\22>>> read_mem, !kgen.pointer<typevalue<#kgen.instref<\1B\22std::python::python_object::PythonObject\22>>> read_mem, !kgen.pointer<typevalue<#kgen.instref<\1B\22std::builtin::error::Error\22>>> byref_error, !kgen.pointer<typevalue<#kgen.instref<\1B\22std::python::python_object::PythonObject\22>>> byref_result) throws -> !kgen.scalar<bool>, (!kgen.pointer<struct<(struct<(struct<(struct<(pointer<none>) memoryOnly>)>)>)>> read_mem, !kgen.pointer<struct<(struct<(struct<(struct<(pointer<none>) memoryOnly>)>)>)>> read_mem, !kgen.pointer<struct<(struct<(struct<(struct<(pointer<none>) memoryOnly>)>)>)>> read_mem, !kgen.pointer<struct<(struct<(struct<(struct<(pointer<none>) memoryOnly>)>)>)>> read_mem, !kgen.pointer<struct<(struct<(struct<(struct<(pointer<none>) memoryOnly>)>)>)>> read_mem, !kgen.pointer<struct<(struct<(pointer<none>, scalar<index>, scalar<index>) memoryOnly>, struct<(struct<(struct<(variant<struct<()>, struct<(pointer<none>) memoryOnly>>) memoryOnly>) memoryOnly>) memoryOnly>) memoryOnly>> byref_error, !kgen.pointer<struct<(struct<(struct<(struct<(pointer<none>) memoryOnly>)>)>)>> byref_result) throws -> !kgen.scalar<bool>]">>, (!kgen.pointer<struct<(struct<(struct<(struct<(pointer<none>) memoryOnly>)>)>)>> read_mem, !kgen.pointer<struct<(struct<(struct<(struct<(pointer<none>) memoryOnly>)>)>)>> read_mem, !kgen.pointer<struct<(struct<(struct<(struct<(pointer<none>) memoryOnly>)>)>)>> read_mem, !kgen.pointer<struct<(struct<(struct<(struct<(pointer<none>) memoryOnly>)>)>)>> read_mem, !kgen.pointer<struct<(struct<(struct<(struct<(pointer<none>) memoryOnly>)>)>)>> read_mem, !kgen.pointer<struct<(struct<(pointer<none>, scalar<index>, scalar<index>) memoryOnly>, struct<(struct<(struct<(variant<struct<()>, struct<(pointer<none>) memoryOnly>>) memoryOnly>) memoryOnly>) memoryOnly>) memoryOnly>> byref_error, !kgen.pointer<struct<(struct<(struct<(struct<(pointer<none>) memoryOnly>)>)>)>> byref_result) throws -> !kgen.scalar<bool>],self_type=[typevalue<#kgen.instref<"std::builtin::none::NoneType">>, none],func.has_kwargs`=false,func={ "_mojolearn::kmeans_fit_binding(::PythonObject,::PythonObject,::PythonObject,::PythonObject,::PythonObject)" },is_method=false () from /root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/cuda/sm_80/_mojolearn.so
+          #10 0x000000000062321f in PyRun_SimpleStringFlags ()
+          #11 0x000000000063ecc6 in Py_RunMain ()
+          #12 0x000000000060486d in Py_BytesMain ()
+          #13 0x00007d23bf8fed90 in __libc_start_call_main (main=main@entry=0x6047c0, argc=argc@entry=3, argv=argv@entry=0x7ffd001da1e8) at ../sysdeps/nptl/libc_start_call_main.h:58
+    index=pypi version=0.3.0 vendor=cuda smoke_rc=1
+    smoke[fast]: packaging/linux/leg_diag_install.sh: line 124:  1306 Illegal instruction     MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_REPO="$REPO" timeout -k 30 "${MOJOLEARN_SMOKE_TIMEOUT:-900}" "$VENV/bin/python" -u "$REPO/packaging/linux/smoke.py" --vendor "$VENDOR" --json "$D/gates/smoke_$tier.json"
+    smoke[deterministic]: 
+    smoke[identical]: 
+
+=== done === 22:54:19
+artifacts in /root/mojolearn/bench/results/e1/2026-08-30_225352-19a08bc310f3
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

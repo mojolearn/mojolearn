@@ -1,0 +1,2 @@
+build FAILED, no vendor
+source_e1_dir=bench/results/e1/2026-08-31_020459-runpod-nvidia/

@@ -1,0 +1,9 @@
+commit=ce2d320a parent 97a303b0
+vendor=nvidia
+gpu_requested=NVIDIA A40
+image=runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+minutes=60
+mode=rent
+card_full=<unset>
+trace_dump=<unset>
+started=2026-08-31T06:13:37Z

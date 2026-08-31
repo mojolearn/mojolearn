@@ -1,0 +1,65 @@
+host driver major: 580 (escape needed below 580)
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 06:06:04
+phase 9: DIAG ONLY (MOJOLEARN_P9_ONLY_DIAG=1); no builds, no arms, no probes here
+phase 9 builds: <none>
+phase 9 tiers:  <none>
+concurrent probe SKIPPED: needs all three tiers, P9_TIERS=<none>
+
+=== phase 9 diag: packaging/linux/leg_diag.sh === 06:06:04
+PHASE9-FINDING: diag script returned non-zero (see diag/console.log)
+        deterministic _mojolearn_svm cuda
+        deterministic _mojolearn_solver cuda
+        deterministic _mojolearn_metrics cuda
+        deterministic _mojolearn_tsa cuda
+        deterministic _mojolearn_linalg cuda
+        identical _mojolearn cuda
+        identical _mojolearn_gbdt cuda
+        identical _mojolearn_estimators cuda
+        identical _mojolearn_rf cuda
+        identical _mojolearn_trees cuda
+        identical _mojolearn_svm cuda
+        identical _mojolearn_solver cuda
+        identical _mojolearn_metrics cuda
+        identical _mojolearn_tsa cuda
+        identical _mojolearn_linalg cuda
+    [06:12:58 build_sets] GPU architectures embedded, per binary:
+             30 sm_80
+    [06:12:58 build_sets] architecture set: sm_80 
+    packaging/linux/build_sets.sh: line 180: SET: unbound variable
+    [06:12:58 leg_diag] no vendor in SIZES.txt; stopping
+
+=== done === 06:12:58
+artifacts in /root/mojolearn/bench/results/e1/2026-08-31_060601-43695dc7b93d
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card
+vendor=nvidia
+payload=phase8
+commit=cfb665d20ea756ac3878754c62185d42a6ac6e3b
+work_timeout=3000
+e1_phases=9
+e1_lanes=
+p9_bindings=build.sh build_gbdt.sh build_estimators.sh build_linalg.sh
+p9_lanes=
+started=2026-08-31T06:05:58Z
+p9_only_diag=1
+p9_diag=packaging/linux/leg_diag.sh
+p9_diag_timeout=2400
+wheel_version=
+wheel_index=testpypi
+gpu_archs=sm_80
+bootstrap_exit=0
+note: a bootstrap_exit of 124 is the work timeout firing
+e1dir_source=the bootstrap's own 'artifacts in' line
+e1dir=/root/mojolearn/bench/results/e1/2026-08-31_060601-43695dc7b93d
+identical_cards=0
+fast_cards=0
+phase8_findings=0
+finished=2026-08-31T06:12:58Z
+REMOTE_BODY_DONE

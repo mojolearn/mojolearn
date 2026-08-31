@@ -1,0 +1,2 @@
+build FAILED, no vendor
+source_e1_dir=bench/results/e1/2026-08-31_060808-mojolearn-e2-amd/

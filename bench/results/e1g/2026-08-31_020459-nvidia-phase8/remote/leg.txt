@@ -1,0 +1,23 @@
+vendor=nvidia
+payload=phase8
+commit=cfb665d20ea756ac3878754c62185d42a6ac6e3b
+work_timeout=3000
+e1_phases=9
+e1_lanes=
+p9_bindings=build.sh build_gbdt.sh build_estimators.sh build_linalg.sh
+p9_lanes=
+started=2026-08-31T06:05:58Z
+p9_only_diag=1
+p9_diag=packaging/linux/leg_diag.sh
+p9_diag_timeout=2400
+wheel_version=
+wheel_index=testpypi
+gpu_archs=sm_80
+bootstrap_exit=0
+note: a bootstrap_exit of 124 is the work timeout firing
+e1dir_source=the bootstrap's own 'artifacts in' line
+e1dir=/root/mojolearn/bench/results/e1/2026-08-31_060601-43695dc7b93d
+identical_cards=0
+fast_cards=0
+phase8_findings=0
+finished=2026-08-31T06:12:58Z

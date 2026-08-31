@@ -1,0 +1,121 @@
+warning: Error disabling address space randomization: Operation not permitted
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+[New Thread 0x7d233c9ff640 (LWP 2496)]
+[New Thread 0x7d233c1fe640 (LWP 2497)]
+[New Thread 0x7d233b9fd640 (LWP 2498)]
+[New Thread 0x7d233b1fc640 (LWP 2499)]
+[New Thread 0x7d233a9fb640 (LWP 2500)]
+[New Thread 0x7d233a1fa640 (LWP 2501)]
+[New Thread 0x7d23399f9640 (LWP 2502)]
+[New Thread 0x7d23391f8640 (LWP 2503)]
+[New Thread 0x7d23389f7640 (LWP 2504)]
+[New Thread 0x7d23381f6640 (LWP 2505)]
+[New Thread 0x7d23379f5640 (LWP 2506)]
+[New Thread 0x7d23371f4640 (LWP 2507)]
+[New Thread 0x7d23369f3640 (LWP 2508)]
+[New Thread 0x7d23361f2640 (LWP 2509)]
+[New Thread 0x7d23359f1640 (LWP 2510)]
+[New Thread 0x7d23351f0640 (LWP 2511)]
+[New Thread 0x7d23349ef640 (LWP 2512)]
+[New Thread 0x7d23341ee640 (LWP 2513)]
+[New Thread 0x7d23339ed640 (LWP 2514)]
+[New Thread 0x7d23331ec640 (LWP 2515)]
+[New Thread 0x7d23329eb640 (LWP 2516)]
+[New Thread 0x7d23321ea640 (LWP 2517)]
+[New Thread 0x7d23319e9640 (LWP 2518)]
+[New Thread 0x7d23311e8640 (LWP 2519)]
+[New Thread 0x7d23309e7640 (LWP 2520)]
+[New Thread 0x7d23301e6640 (LWP 2521)]
+[New Thread 0x7d232f9e5640 (LWP 2522)]
+[New Thread 0x7d232f1e4640 (LWP 2523)]
+[New Thread 0x7d232e9e3640 (LWP 2524)]
+[New Thread 0x7d232e1e2640 (LWP 2525)]
+[New Thread 0x7d232d9e1640 (LWP 2526)]
+[New Thread 0x7d232d1e0640 (LWP 2527)]
+[New Thread 0x7d232c9df640 (LWP 2528)]
+[New Thread 0x7d232c1de640 (LWP 2529)]
+[New Thread 0x7d232b9dd640 (LWP 2530)]
+[New Thread 0x7d232b1dc640 (LWP 2531)]
+[New Thread 0x7d232a9db640 (LWP 2532)]
+[New Thread 0x7d232a1da640 (LWP 2533)]
+[New Thread 0x7d23299d9640 (LWP 2534)]
+[New Thread 0x7d23291d8640 (LWP 2535)]
+[New Thread 0x7d23289d7640 (LWP 2536)]
+[New Thread 0x7d23281d6640 (LWP 2537)]
+[New Thread 0x7d23279d5640 (LWP 2538)]
+[New Thread 0x7d23271d4640 (LWP 2539)]
+[New Thread 0x7d23269d3640 (LWP 2540)]
+[New Thread 0x7d23261d2640 (LWP 2541)]
+[New Thread 0x7d23259d1640 (LWP 2542)]
+[New Thread 0x7d23251d0640 (LWP 2543)]
+[New Thread 0x7d23249cf640 (LWP 2544)]
+[New Thread 0x7d23241ce640 (LWP 2545)]
+[New Thread 0x7d23239cd640 (LWP 2546)]
+[New Thread 0x7d23231cc640 (LWP 2547)]
+[New Thread 0x7d23229cb640 (LWP 2548)]
+[New Thread 0x7d23221ca640 (LWP 2549)]
+[New Thread 0x7d23219c9640 (LWP 2550)]
+[New Thread 0x7d23211c8640 (LWP 2551)]
+[New Thread 0x7d23209c7640 (LWP 2552)]
+[New Thread 0x7d23201c6640 (LWP 2553)]
+[New Thread 0x7d231f9c5640 (LWP 2554)]
+[New Thread 0x7d231f1c4640 (LWP 2555)]
+[New Thread 0x7d231e9c3640 (LWP 2556)]
+[New Thread 0x7d231e1c2640 (LWP 2557)]
+[New Thread 0x7d231d9c1640 (LWP 2558)]
+[New Thread 0x7d2316fff640 (LWP 2559)]
+2493 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x73d000000000, nodemask=1)
+[Detaching after vfork from child process 2560]
+[New Thread 0x7d2309fff640 (LWP 2562)]
+[New Thread 0x7d23097fe640 (LWP 2563)]
+[New Thread 0x7d2308ffd640 (LWP 2564)]
+[New Thread 0x7d22fbfff640 (LWP 2565)]
+[New Thread 0x7d22fb7fe640 (LWP 2566)]
+[New Thread 0x7d22faffd640 (LWP 2567)]
+[New Thread 0x7d22fa7fc640 (LWP 2568)]
+[New Thread 0x7d22f9ffb640 (LWP 2569)]
+[New Thread 0x7d22f97fa640 (LWP 2570)]
+[New Thread 0x7d22f8ff9640 (LWP 2571)]
+[New Thread 0x7d22dbfff640 (LWP 2572)]
+[New Thread 0x7d22db7fe640 (LWP 2573)]
+[New Thread 0x7d22daffd640 (LWP 2574)]
+[New Thread 0x7d22da7fc640 (LWP 2575)]
+[New Thread 0x7d22d9ffb640 (LWP 2576)]
+[New Thread 0x7d22d97fa640 (LWP 2577)]
+[New Thread 0x7d22d8ff9640 (LWP 2578)]
+[New Thread 0x7d22bbfff640 (LWP 2579)]
+[New Thread 0x7d22bb7fe640 (LWP 2580)]
+[New Thread 0x7d22baffd640 (LWP 2581)]
+[New Thread 0x7d22ba7fc640 (LWP 2582)]
+[New Thread 0x7d22b9ffb640 (LWP 2583)]
+[New Thread 0x7d22b97fa640 (LWP 2584)]
+[New Thread 0x7d22b8ff9640 (LWP 2585)]
+[New Thread 0x7d229bfff640 (LWP 2586)]
+[New Thread 0x7d229b7fe640 (LWP 2587)]
+[New Thread 0x7d229affd640 (LWP 2588)]
+[New Thread 0x7d229a7fc640 (LWP 2589)]
+[New Thread 0x7d2299ffb640 (LWP 2590)]
+[New Thread 0x7d22997fa640 (LWP 2591)]
+[New Thread 0x7d2282fff640 (LWP 2592)]
+
+Thread 1 "python" received signal SIGILL, Illegal instruction.
+0x00007d23150f2b28 in cluster::estimator::kmeans_fit(max::gpu::host::device_context::DeviceContext,::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(uint32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(float64), ::SIMDLength(1)],::SIMD[::DType(uint64), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(float64), ::SIMDLength(1)]) () from /root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/cuda/sm_80/_mojolearn.so
+=> 0x7d23150f2b28 <cluster::estimator::kmeans_fit(max::gpu::host::device_context::DeviceContext,::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(uint32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(float64), ::SIMDLength(1)],::SIMD[::DType(uint64), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(float64), ::SIMDLength(1)])+2040>:	vandps 0x6d7ee(%rip){1to4},%xmm2,%xmm2        # 0x7d2315160320
+rip            0x7d23150f2b28      0x7d23150f2b28 <cluster::estimator::kmeans_fit(max::gpu::host::device_context::DeviceContext,::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(uint32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(float64), ::SIMDLength(1)],::SIMD[::DType(uint64), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(float64), ::SIMDLength(1)])+2040>
+#0  0x00007d23150f2b28 in cluster::estimator::kmeans_fit(max::gpu::host::device_context::DeviceContext,::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(uint32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(float64), ::SIMDLength(1)],::SIMD[::DType(uint64), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(float64), ::SIMDLength(1)]) () from /root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/cuda/sm_80/_mojolearn.so
+#1  0x00007d23150f1a32 in std::python::bindings::fastcall(::PyObjectPtr,::Pointer[::Bool(True), MutUntrackedOrigin, ::PyObjectPtr, *?, ::AddressSpace(::SIMDLength(0))],::SIMD[::DType(int), ::SIMDLength(1)])`0x5,method_type=[typevalue<#kgen.instref<"std::builtin::_stubs::__MLIRType,T=[(!kgen.pointer<typevalue<#kgen.instref<\1B\22std::python::python_object::PythonObject\22>>> read_mem, !kgen.pointer<typevalue<#kgen.instref<\1B\22std::python::python_object::PythonObject\22>>> read_mem, !kgen.pointer<typevalue<#kgen.instref<\1B\22std::python::python_object::PythonObject\22>>> read_mem, !kgen.pointer<typevalue<#kgen.instref<\1B\22std::python::python_object::PythonObject\22>>> read_mem, !kgen.pointer<typevalue<#kgen.instref<\1B\22std::python::python_object::PythonObject\22>>> read_mem, !kgen.pointer<typevalue<#kgen.instref<\1B\22std::builtin::error::Error\22>>> byref_error, !kgen.pointer<typevalue<#kgen.instref<\1B\22std::python::python_object::PythonObject\22>>> byref_result) throws -> !kgen.scalar<bool>, (!kgen.pointer<struct<(struct<(struct<(struct<(pointer<none>) memoryOnly>)>)>)>> read_mem, !kgen.pointer<struct<(struct<(struct<(struct<(pointer<none>) memoryOnly>)>)>)>> read_mem, !kgen.pointer<struct<(struct<(struct<(struct<(pointer<none>) memoryOnly>)>)>)>> read_mem, !kgen.pointer<struct<(struct<(struct<(struct<(pointer<none>) memoryOnly>)>)>)>> read_mem, !kgen.pointer<struct<(struct<(struct<(struct<(pointer<none>) memoryOnly>)>)>)>> read_mem, !kgen.pointer<struct<(struct<(pointer<none>, scalar<index>, scalar<index>) memoryOnly>, struct<(struct<(struct<(variant<struct<()>, struct<(pointer<none>) memoryOnly>>) memoryOnly>) memoryOnly>) memoryOnly>) memoryOnly>> byref_error, !kgen.pointer<struct<(struct<(struct<(struct<(pointer<none>) memoryOnly>)>)>)>> byref_result) throws -> !kgen.scalar<bool>]">>, (!kgen.pointer<struct<(struct<(struct<(struct<(pointer<none>) memoryOnly>)>)>)>> read_mem, !kgen.pointer<struct<(struct<(struct<(struct<(pointer<none>) memoryOnly>)>)>)>> read_mem, !kgen.pointer<struct<(struct<(struct<(struct<(pointer<none>) memoryOnly>)>)>)>> read_mem, !kgen.pointer<struct<(struct<(struct<(struct<(pointer<none>) memoryOnly>)>)>)>> read_mem, !kgen.pointer<struct<(struct<(struct<(struct<(pointer<none>) memoryOnly>)>)>)>> read_mem, !kgen.pointer<struct<(struct<(pointer<none>, scalar<index>, scalar<index>) memoryOnly>, struct<(struct<(struct<(variant<struct<()>, struct<(pointer<none>) memoryOnly>>) memoryOnly>) memoryOnly>) memoryOnly>) memoryOnly>> byref_error, !kgen.pointer<struct<(struct<(struct<(struct<(pointer<none>) memoryOnly>)>)>)>> byref_result) throws -> !kgen.scalar<bool>],self_type=[typevalue<#kgen.instref<"std::builtin::none::NoneType">>, none],func.has_kwargs`=false,func={ "_mojolearn::kmeans_fit_binding(::PythonObject,::PythonObject,::PythonObject,::PythonObject,::PythonObject)" },is_method=false () from /root/mojolearn-smoke-venv/lib/python3.11/site-packages/mojolearn/cuda/sm_80/_mojolearn.so
+#2  0x000000000055c0ab in ?? ()
+#3  0x000000000054b155 in PyObject_Vectorcall ()
+#4  0x000000000053d81d in _PyEval_EvalFrameDefault ()
+#5  0x0000000000613f24 in ?? ()
+#6  0x0000000000613587 in PyEval_EvalCode ()
+#7  0x000000000063439b in ?? ()
+#8  0x00000000006305f4 in ?? ()
+#9  0x0000000000623483 in PyRun_StringFlags ()
+#10 0x000000000062321f in PyRun_SimpleStringFlags ()
+#11 0x000000000063ecc6 in Py_RunMain ()
+#12 0x000000000060486d in Py_BytesMain ()
+#13 0x00007d23bf8fed90 in __libc_start_call_main (main=main@entry=0x6047c0, argc=argc@entry=3, argv=argv@entry=0x7ffd001da1e8) at ../sysdeps/nptl/libc_start_call_main.h:58
+#14 0x00007d23bf8fee40 in __libc_start_main_impl (main=0x6047c0, argc=3, argv=0x7ffd001da1e8, init=<optimized out>, fini=<optimized out>, rtld_fini=<optimized out>, stack_end=0x7ffd001da1d8) at ../csu/libc-start.c:392
+#15 0x00000000006046f5 in _start ()

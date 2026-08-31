@@ -1,0 +1,40 @@
+[06:08:11 leg_diag] 1/5 build_sets
+[06:08:11 build_sets] repo /root/mojolearn, dest /root/mojolearn/bench/results/e1/2026-08-31_060808-mojolearn-e2-amd/diag/wheels, tiers: fast deterministic identical, jobs: 3
+[06:08:11 build_sets] pixi env: gbmbench
+[06:11:04 build_sets] builds finished in 173s (rc=0)
+[06:11:06 build_sets] vendor read-back per binary:
+    fast _mojolearn hip
+    fast _mojolearn_gbdt hip
+    fast _mojolearn_estimators hip
+    fast _mojolearn_rf hip
+    fast _mojolearn_trees hip
+    fast _mojolearn_svm hip
+    fast _mojolearn_solver hip
+    fast _mojolearn_metrics hip
+    fast _mojolearn_tsa hip
+    fast _mojolearn_linalg hip
+    deterministic _mojolearn hip
+    deterministic _mojolearn_gbdt hip
+    deterministic _mojolearn_estimators hip
+    deterministic _mojolearn_rf hip
+    deterministic _mojolearn_trees hip
+    deterministic _mojolearn_svm hip
+    deterministic _mojolearn_solver hip
+    deterministic _mojolearn_metrics hip
+    deterministic _mojolearn_tsa hip
+    deterministic _mojolearn_linalg hip
+    identical _mojolearn hip
+    identical _mojolearn_gbdt hip
+    identical _mojolearn_estimators hip
+    identical _mojolearn_rf hip
+    identical _mojolearn_trees hip
+    identical _mojolearn_svm hip
+    identical _mojolearn_solver hip
+    identical _mojolearn_metrics hip
+    identical _mojolearn_tsa hip
+    identical _mojolearn_linalg hip
+[06:11:06 build_sets] GPU architectures embedded, per binary:
+         30 gfx942
+[06:11:06 build_sets] architecture set: gfx942 
+packaging/linux/build_sets.sh: line 180: SET: unbound variable
+[06:11:06 leg_diag] no vendor in SIZES.txt; stopping

@@ -1,0 +1,5 @@
+pod='wpij93movlx2eo'
+target='-p 22113 root@194.68.245.232'
+armed_utc='2026-08-31T06:14:08Z'
+deadline_epoch=1788160448
+minutes=60

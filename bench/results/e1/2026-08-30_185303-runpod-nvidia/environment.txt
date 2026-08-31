@@ -1,0 +1,4 @@
+recorded_at=2026-08-30T22:53:52Z
+uname=Linux 19a08bc310f3 6.8.0-137-generic #137-Ubuntu SMP PREEMPT_DYNAMIC Fri Jul 17 20:28:23 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+python=Python 3.11.10
+numpy=1.26.3

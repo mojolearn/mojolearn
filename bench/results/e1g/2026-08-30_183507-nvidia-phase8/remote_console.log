@@ -1,0 +1,65 @@
+host driver major: 580 (escape needed below 580)
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 22:36:04
+phase 9: DIAG ONLY (MOJOLEARN_P9_ONLY_DIAG=1); no builds, no arms, no probes here
+phase 9 builds: <none>
+phase 9 tiers:  <none>
+concurrent probe SKIPPED: needs all three tiers, P9_TIERS=<none>
+
+=== phase 9 diag: packaging/linux/leg_diag_install.sh === 22:36:04
+PHASE9-FINDING: diag script returned non-zero (see diag/console.log)
+    [22:36:04 leg_install] venv route: python3 -m venv
+    [22:36:07 leg_install] clean venv at /root/mojolearn-smoke-venv (Python 3.11.10)
+        Installing collected packages: numpy, mojolearn
+        Successfully installed mojolearn-0.3.0 numpy-2.4.6
+        
+        [notice] A new release of pip is available: 24.0 -> 26.2.1
+        [notice] To update, run: python3 -m pip install --upgrade pip
+    [22:36:16 leg_install] installed mojolearn==0.3.0 from pypi; vendor read back: cuda
+        timeout: the monitored command dumped core
+        packaging/linux/leg_diag_install.sh: line 94:  1227 Illegal instruction     MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_REPO="$REPO" timeout -k 30 "${MOJOLEARN_SMOKE_TIMEOUT:-900}" "$VENV/bin/python" -u "$REPO/packaging/linux/smoke.py" --vendor "$VENDOR" --json "$D/gates/smoke_$tier.json"
+        timeout: the monitored command dumped core
+        packaging/linux/leg_diag_install.sh: line 94:  1329 Illegal instruction     MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_REPO="$REPO" timeout -k 30 "${MOJOLEARN_SMOKE_TIMEOUT:-900}" "$VENV/bin/python" -u "$REPO/packaging/linux/smoke.py" --vendor "$VENDOR" --json "$D/gates/smoke_$tier.json"
+        timeout: the monitored command dumped core
+        packaging/linux/leg_diag_install.sh: line 94:  1431 Illegal instruction     MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_REPO="$REPO" timeout -k 30 "${MOJOLEARN_SMOKE_TIMEOUT:-900}" "$VENV/bin/python" -u "$REPO/packaging/linux/smoke.py" --vendor "$VENDOR" --json "$D/gates/smoke_$tier.json"
+    index=pypi version=0.3.0 vendor=cuda smoke_rc=1
+    smoke[fast]: packaging/linux/leg_diag_install.sh: line 94:  1227 Illegal instruction     MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_REPO="$REPO" timeout -k 30 "${MOJOLEARN_SMOKE_TIMEOUT:-900}" "$VENV/bin/python" -u "$REPO/packaging/linux/smoke.py" --vendor "$VENDOR" --json "$D/gates/smoke_$tier.json"
+    smoke[deterministic]: packaging/linux/leg_diag_install.sh: line 94:  1329 Illegal instruction     MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_REPO="$REPO" timeout -k 30 "${MOJOLEARN_SMOKE_TIMEOUT:-900}" "$VENV/bin/python" -u "$REPO/packaging/linux/smoke.py" --vendor "$VENDOR" --json "$D/gates/smoke_$tier.json"
+    smoke[identical]: packaging/linux/leg_diag_install.sh: line 94:  1431 Illegal instruction     MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_REPO="$REPO" timeout -k 30 "${MOJOLEARN_SMOKE_TIMEOUT:-900}" "$VENV/bin/python" -u "$REPO/packaging/linux/smoke.py" --vendor "$VENDOR" --json "$D/gates/smoke_$tier.json"
+
+=== done === 22:36:19
+artifacts in /root/mojolearn/bench/results/e1/2026-08-30_223601-7740bfc0375f
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card
+vendor=nvidia
+payload=phase8
+commit=0855103a8c2ff304794956d80b17c6c15562ff28
+work_timeout=3000
+e1_phases=9
+e1_lanes=
+p9_bindings=build.sh build_gbdt.sh build_estimators.sh build_linalg.sh
+p9_lanes=
+started=2026-08-30T22:35:59Z
+p9_only_diag=1
+p9_diag=packaging/linux/leg_diag_install.sh
+p9_diag_timeout=2400
+wheel_version=0.3.0
+wheel_index=pypi
+gpu_archs=none-build-box-device-only
+bootstrap_exit=0
+note: a bootstrap_exit of 124 is the work timeout firing
+e1dir_source=the bootstrap's own 'artifacts in' line
+e1dir=/root/mojolearn/bench/results/e1/2026-08-30_223601-7740bfc0375f
+identical_cards=0
+fast_cards=0
+phase8_findings=0
+finished=2026-08-30T22:36:19Z
+REMOTE_BODY_DONE

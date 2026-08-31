@@ -1,0 +1,181 @@
+{
+  "arch_how": "exact match for the device (gfx_target_version in /sys/class/kfd/kfd/topology/nodes/1/properties: gfx942)",
+  "arch_loaded": "gfx942",
+  "failures": [],
+  "lanes": {
+    "agglomerative": {
+      "hash": "02ca572ae936a2fa",
+      "ok": true,
+      "seconds": 0.31
+    },
+    "dbscan": {
+      "hash": "a4608e954c7420b7",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "elasticnet": {
+      "hash": "f4a2b16c06f0f290",
+      "ok": true,
+      "seconds": 0.02
+    },
+    "et-clf": {
+      "hash": "707d2c92e92f6a40",
+      "ok": true,
+      "seconds": 0.03
+    },
+    "et-reg": {
+      "hash": "a1d2eb9ddb149617",
+      "ok": true,
+      "seconds": 0.04
+    },
+    "gbdt-depthwise": {
+      "hash": "cd27a77258047c8e",
+      "ok": true,
+      "seconds": 0.08
+    },
+    "gbdt-lossguide": {
+      "hash": "e65c2a2686bf7341",
+      "ok": true,
+      "seconds": 0.16
+    },
+    "gbdt-rmse": {
+      "hash": "75e3f3a99e5e004b",
+      "ok": true,
+      "seconds": 0.05
+    },
+    "gbdt-symmetric": {
+      "hash": "dc987497271f92b1",
+      "ok": true,
+      "seconds": 0.06
+    },
+    "gemm-pinned": {
+      "hash": "18ff2fd121056aee",
+      "ok": true,
+      "seconds": 0.02
+    },
+    "gemm-vendor": {
+      "hash": "18ff2fd121056aee",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "holtwinters": {
+      "hash": "cff24aef76c6431d",
+      "ok": true,
+      "seconds": 0.07
+    },
+    "iforest": {
+      "hash": "334ba456c6bb7644",
+      "ok": true,
+      "seconds": 0.13
+    },
+    "kde": {
+      "hash": "9a2d41d8dd246e5d",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "kmeans": {
+      "hash": "da3cb10e46c91256",
+      "ok": true,
+      "seconds": 0.03
+    },
+    "knn-clf": {
+      "hash": "f359ee4876deb908",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "knn-reg": {
+      "hash": "ff4a92b889616aea",
+      "ok": true,
+      "seconds": 0.0
+    },
+    "knn-tied": {
+      "hash": "eb5d50fc1d09b0e1",
+      "ok": true,
+      "seconds": 0.0
+    },
+    "lasso": {
+      "hash": "8c61a582de814863",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "logistic": {
+      "hash": "7037da78aa5950dd",
+      "ok": true,
+      "seconds": 0.02
+    },
+    "metrics": {
+      "hash": "9e779d081426adc8",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "ols": {
+      "hash": "24aff16838df704a",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "pca": {
+      "hash": "abe2157474e81469",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "rf-clf": {
+      "hash": "eacd6bff8b4088b8",
+      "ok": true,
+      "seconds": 0.08
+    },
+    "rf-reg": {
+      "hash": "91269c5ae3828665",
+      "ok": true,
+      "seconds": 0.07
+    },
+    "ridge": {
+      "hash": "b72095bd450e4d05",
+      "ok": true,
+      "seconds": 0.01
+    },
+    "spectral": {
+      "hash": "7c5f4e5c32dc0ca1",
+      "ok": true,
+      "seconds": 0.09
+    },
+    "svc": {
+      "hash": "c982ba99909e46eb",
+      "ok": true,
+      "seconds": 0.02
+    },
+    "tsvd": {
+      "hash": "eb98ef49f9c747f0",
+      "ok": true,
+      "seconds": 0.0
+    }
+  },
+  "mode_loaded": "identical",
+  "mode_wanted": "identical",
+  "mojolearn_file": "/root/mojolearn/bench/results/e1/2026-08-31_061612-mojolearn-e2-amd/diag/pkgroot/mojolearn/__init__.py",
+  "ok": true,
+  "python": "3.14.7",
+  "vendor_how": "the box probe (device nodes and driver libraries)",
+  "vendor_loaded": "hip",
+  "vendor_per_binding": {
+    "_mojolearn": "hip",
+    "_mojolearn_estimators": "hip",
+    "_mojolearn_gbdt": "hip",
+    "_mojolearn_linalg": "hip",
+    "_mojolearn_metrics": "hip",
+    "_mojolearn_rf": "hip",
+    "_mojolearn_solver": "hip",
+    "_mojolearn_svm": "hip",
+    "_mojolearn_trees": "hip",
+    "_mojolearn_tsa": "hip"
+  },
+  "vendor_used_per_estimator": {
+    "_mojolearn": "hip",
+    "_mojolearn_estimators": "hip",
+    "_mojolearn_gbdt": "hip",
+    "_mojolearn_rf": "hip",
+    "_mojolearn_svm": "hip",
+    "_mojolearn_trees": "hip"
+  },
+  "vendor_wanted": "hip",
+  "version": "0.3.1"
+}

@@ -1,0 +1,15 @@
+== host CPU ==
+model name	: AMD EPYC 7773X 64-Core Processor
+-- ISA flags that matter for an AVX-512 build --
+  avx PRESENT
+  avx2 PRESENT
+  avx512f absent
+  avx512dq absent
+  avx512bw absent
+  avx512vl absent
+  avx512cd absent
+  avx512vnni absent
+-- what the loaded set actually is --
+1207 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x109400000000, nodemask=1)
+  vendor cuda | the box probe (device nodes and driver libraries)
+  arch   sm_80 | same-family lower architecture (sm_80 code runs forward on this sm_89 device)
