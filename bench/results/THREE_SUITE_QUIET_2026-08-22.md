@@ -27,9 +27,20 @@ year GBDT and covtype forest (13:11–13:12+) ran clean pre-sleep.
   the RAM-heavy CPU arms more than ours; the quiet numbers are the certified
   ones and the ones to publish. (cat-cpu higgs: 360.9 s → 177.8 s quiet.)
 - **higgs AUC moved 0.8213 → 0.82167**: the Newton-walk float32-acceptance
-  width fix (PORTING.md 140) is in this binary. Residual gap −0.0084 is the
-  tracked CONFIG-PARITY item (their stock MVS 0.8 + random_strength 1.0),
-  ruling pending.
+  width fix (PORTING.md 140) is in this binary. Residual gap −0.0084 was
+  tracked here as a CONFIG-PARITY item (their stock MVS 0.8 +
+  random_strength 1.0), ruling pending.
+  **THE RULING CAME IN 2026-08-31 AND IT IS NEGATIVE.** Matching the config
+  on their side (bootstrap_type='No', random_strength=0,
+  boosting_type='Plain') moved CatBoost UP, 0.8303359534882081 to
+  0.8304610825961414, and WIDENED the gap to −0.00885. Their shipped
+  regularization was costing them a little, not buying them the gap. The
+  configuration difference was real and it is NOT the cause, so this line
+  no longer stands as the explanation of the −0.0084 and the suspicion
+  moves to PORTING.md 140's leaf walk. `boosting_type` also came back
+  benign: read off the fitted model, CatBoost resolved it to Plain by
+  itself at this size. Evidence:
+  `bench/results/higgs_matched_config_2026-08-31.json`, script beside it.
 - year MSE parity holds (80.106 vs 79.975).
 
 ## Random Forest — 100 trees, vs sklearn RF (all 10 cores)

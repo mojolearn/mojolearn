@@ -380,7 +380,7 @@ These are the last interleaved runs of 2026-08-22 on the M4 described above.
 | dataset, arm pair | ours (Metal) | theirs (CPU, same M4) | speed | accuracy |
 |---|---|---|---|---|
 | year, symmetric GBDT 500 rounds, vs CatBoost CPU | 11.9 s | 13.6 s | 1.14x | MAE 6.261 vs 6.263, MSE 80.11 vs 79.98 |
-| higgs, symmetric GBDT, vs CatBoost CPU | 131.5 s | 177.8 s | 1.35x | AUC 0.822 vs 0.830, CONFIGS NOT MATCHED, see below |
+| higgs, symmetric GBDT, vs CatBoost CPU | 131.5 s | 177.8 s | 1.35x | AUC 0.822 vs 0.830, a real gap, see below |
 | covtype, Extra Trees 100 trees, vs scikit-learn on 10 cores | 3.7 s | 5.4 s | 1.46x | 0.647 vs 0.645 |
 | covtype, Random Forest, vs scikit-learn on 10 cores | 4.0 s | 5.3 s | 1.33x | 0.722 vs 0.720 |
 | higgs, Extra Trees, vs scikit-learn on 10 cores | 39.0 s | 132.4 s | 3.4x | AUC 0.709 vs 0.700 |
@@ -399,29 +399,52 @@ where we lose by 0.13. Quoting the metric that flatters us while the source
 record quotes the other one is the reporting half of `never build to
 datasets`, so both are now shown.
 
-THE HIGGS GBDT ROW IS NOT A MATCHED COMPARISON AND THE MISMATCH FAVOURS
-THEM. It was labelled "an open parity gap" until 2026-08-31, which stated
-the number honestly but not the configuration. gbm-bench passes CatBoost no
-`bootstrap_type` and no `random_strength`, so their arm runs its shipped
-defaults, MVS at subsample 0.8 with `random_strength` 1.0. Ours runs neither
-(`bootstrap_type=None` is no row sampling at all, and our `random_strength`
-defaults to 0.0). They are regularized on this row and we are not, and
-`boosting_type` is unpinned on their side besides. That is a different
-estimator, not a tuning difference, and MVS cannot be matched from our side
-because we do not implement it -- our searcher asserts it away. So the row
-cannot be read as evidence about either library's accuracy.
+THE HIGGS GBDT ACCURACY GAP IS REAL, IT IS NOT A CONFIGURATION ARTIFACT,
+AND MATCHING THE CONFIGURATION MAKES IT SLIGHTLY WORSE. Measured
+2026-08-31 at the full 8.8M x 28 train split, 500 rounds, depth 8, both
+arms in one process on the M4:
 
-What a matched configuration shows on this dataset and this learner, with
-`bootstrap_type='No'` and `boosting_type='Plain'` pinned on BOTH arms: at
-100 trees and depth 6 we are at parity or slightly ahead, against
-CatBoost GPU on NVIDIA (0.800447/0.800573/0.800668 vs
-0.800373/0.800336/0.800665,
-`bench/results/fast_speed/2026-08-26-nvidia-forest-postfix.md:58`) and
-against CatBoost CPU on Apple (0.800537 vs 0.799673,
-`bench/results/fast_speed/2026-08-27-APPLE-trees-evening.md:79`). Those runs
-are at a smaller shape than this table's 500 x 8, so they do not retire the
-question at this shape; the matched run at 500 x 8 is owed and is tracked in
-`NEXT_TWO.md`. Both numbers stay on this page until it lands.
+| CatBoost CPU config | their AUC | ours | delta | their fit |
+|---|---|---|---|---|
+| as gbm-bench ships it (MVS, subsample 0.8, random_strength 1.0) | 0.8303359534882081 | 0.8216098413977209 | **-0.00873** | 213.1 s |
+| matched (`bootstrap_type='No'`, `random_strength=0`, `boosting_type='Plain'`) | 0.8304610825961414 | same fit, same bits | **-0.00885** | 264.7 s |
+
+Ours fits in 129.4 s, so 1.65x and 2.05x against those two. Our arm is
+fitted ONCE and scored against both, so our column cannot move between the
+rows and any change is theirs.
+
+This retires a hypothesis this repository had carried since 2026-08-22 as
+"the tracked CONFIG-PARITY item, ruling pending". The suspicion was that
+gbm-bench passes CatBoost no `bootstrap_type` and no `random_strength`, so
+their arm ran its shipped regularization (MVS at subsample 0.8,
+`random_strength` 1.0) while ours ran neither, and that this was what the
+-0.0084 measured. It was not. Turning their regularization OFF moved
+CatBoost UP, from 0.83034 to 0.83046, and widened the gap. The
+configuration difference was real and worth stating; it is not the cause,
+and an earlier draft of this very section leaned on it as though it were.
+
+`boosting_type` is settled too, and it was the benign answer: read back off
+the fitted model, CatBoost resolved it to `Plain` on its own at this size,
+so the unpinned knob was never costing anything on this row.
+
+What remains is a genuine accuracy deficit of about 0.0089 AUC at this
+shape against CatBoost CPU, with the leading suspect now the one mechanism
+the tree has actually measured moving this number: the Logloss Newton
+leaf-estimation walk of PORTING.md item 140, where their CPU freezes at six
+accepted steps and ours stalls later. Narrowing our host fold to Float32
+moved AUC +0.00037 there, which is 4% of the gap and confirms the mechanism
+is live without explaining the size. Depth 8 over 500 trees is where that
+divergence has the most iterations to compound, and the falsifiable
+prediction is that the gap grows with depth; a matched two-point sweep at
+(100, 6) and (500, 8) separates it and needs no rented box.
+
+Set against that, the same learner at a matched config on a SMALLER shape
+(100 trees, depth 6, 1M rows) is at parity or slightly ahead on this
+dataset, on two vendors:
+`bench/results/fast_speed/2026-08-26-nvidia-forest-postfix.md:58` and
+`bench/results/fast_speed/2026-08-27-APPLE-trees-evening.md:79`. Both
+readings are on this page because the shape is the difference between them
+and nothing yet explains which way it cuts.
 
 ## Limitations and refusals
 

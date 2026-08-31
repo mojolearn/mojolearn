@@ -1037,6 +1037,59 @@ check-metrics-silhouette = "mojo run -I . metrics/checks/silhouette_check.mojo"
 check-metrics-trust = "mojo run -I . metrics/checks/trustworthiness_check.mojo"
 check-holtwinters = "mojo run -I . holtwinters/checks/hw_check.mojo"
 check-mamba-block = "mojo run -I . mamba/checks/mamba_check.mojo"
+
+# BLOCK-LEVEL BATCH INVARIANCE (checks/batch_invariance_check.mojo). The
+# lift of `IDENTICAL_FP32_CONTRACT.md` section 6.1 -- "Why `L` may not depend
+# on `m` or `n`, this is the batch-invariance clause" -- from ONE GEMM up to
+# a whole Mamba block and a whole Llama decoder layer.
+#
+# It runs both blocks at B in {1, 17, 64} on THE SAME SEQUENCES with L held
+# fixed, and compares the block output PER TOKEN plus Mamba's post-call SSM
+# state per batch row. B = 17 is there because a non-power-of-two batch is
+# the one a tiled kernel has to pad; B = 64 because that is a batch a server
+# actually forms. Both existing clauses (mamba_check::clause_c,
+# transformer_check::clause_c_batch) top out at B = 3, and at B <= 3 several
+# of these GEMM shapes take the SAME execution plan -- so part of what they
+# assert is that one kernel run twice agrees with itself.
+#
+# THE TIER IS IDENTICAL AND ONLY IDENTICAL, for a mechanical reason:
+# identical_gemm's DEVIATION 1876 branch hands every projection to the vendor
+# kernel under FAST *and* under DETERMINISTIC, so the pinned k-partition
+# never runs there. The driver prints the tier it compiled in and REPORTS
+# rather than asserts under the lower two, so the IDENTICAL pass is the
+# injector as everywhere else:
+#
+#   tools/with_identical_mode.sh pixi run check-batch-invariance
+#
+# THE SABOTAGE (a gate nobody can falsify is not a gate):
+#
+#   tools/with_identical_mode.sh pixi run mojo run \
+#       -D MOJOLEARN_BATCHINV_SABOTAGE_NORM_CHUNK_FROM_M=1 \
+#       -I . batch_invariance_main.mojo
+#
+# splits RMSNorm's per-row sum of squares into chunks whose WIDTH IS DERIVED
+# FROM m = B*L -- contract 6.1's forbidden `L = f(k, m)`, one layer up. One
+# `-D` arms both blocks and the check refuses a run where only one of them
+# took it. It is bitwise INERT at m < 64, so every gate this tree has today
+# is blind to it and this one is not; a run with it armed that moves NO bit
+# RAISES rather than being credited ([[reached-but-inert]]).
+#
+# THE SAME `-D` MAKES THE TWO LANE GATES REFUSE, and both refusals are
+# correct rather than bugs to fix: `check-mamba-block` raises "IS ARMED AND
+# MOVED NO BIT" at its default B=1,L=4 (m=4, where the arm IS inert), and
+# `transformer/checks/transformer_check.mojo` (which has no task of its own
+# in this file) raises from `arm_expectation` because this arm is not one of
+# that contract's thirteen. A gate that does not own an arm should refuse to
+# score it.
+check-batch-invariance = "mojo run -I . batch_invariance_main.mojo"
+
+# THE TRANSFORMER GATES, WHICH HAD NO TASK AT ALL UNTIL 2026-08-31.
+# Both files carry their own `def main`, so they were always runnable -- but
+# only by someone who already knew the path. A gate that cannot be named is a
+# gate that does not get run, and these two are what the batch-invariance
+# work above leans on.
+check-transformer = "mojo run -I . transformer/checks/transformer_check.mojo"
+check-transformer-backward = "mojo run -I . transformer/checks/transformer_backward_check.mojo"
 # The INDEPENDENT cross-check: torch float64 per-stage reference, the only
 # comparison in this lane whose other side is not our own code. TWO STEPS --
 # the dump is produced by the gate above, then compared:

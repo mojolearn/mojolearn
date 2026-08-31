@@ -1,0 +1,28 @@
+{
+  "n_estimators": 500,
+  "max_depth": 8,
+  "pos_weight": 1.886809039273287,
+  "ours_fit_s": 129.42818880081177,
+  "ours_auc": 0.8216098413977209,
+  "ours_pred_sha": "22509e1a71d45745",
+  "cat_published_auc": 0.8303359534882081,
+  "cat_published_fit_s": 213.14194893836975,
+  "cat_published_resolved": {
+    "bootstrap_type": "MVS",
+    "subsample": 0.800000011920929,
+    "random_strength": 1,
+    "boosting_type": "Plain",
+    "border_count": 254
+  },
+  "delta_published": -0.008726112090487237,
+  "cat_matched_auc": 0.8304610825961414,
+  "cat_matched_fit_s": 264.66096091270447,
+  "cat_matched_resolved": {
+    "bootstrap_type": "No",
+    "subsample": null,
+    "random_strength": 0,
+    "boosting_type": "Plain",
+    "border_count": 254
+  },
+  "delta_matched": -0.008851241198420512
+}
