@@ -1,0 +1,39 @@
+{
+  "digests": {
+    "input.X": "99ddd01337135e758366c8495d0ec990d6133383510e144d358b038baff89891",
+    "np.max.f32": "88120903f4326d3de07e1e982dea7700ea02ce7522dc400b95893aef955dee5d",
+    "np.mean.axis1.f32": "7b73a75284f148d5b8261b0bbcdee3d2b5666a23dcd7ceedf3730b202133b589",
+    "np.mean.f32": "c24fb84cf93c9ac5b6bb9b032018d1ef2417777a11c5964f38807250c6ec6a30",
+    "np.mean.f64": "bf350e3a154df0d53e2bc3bbac56f72b449d018250953ce80f72f752d1e6ddf9",
+    "np.min.f32": "1ba294f91bcde162d93f81fcfb5f7050e01020a9219a93b09341ef423c659433",
+    "np.sum.axis1.f32": "80293b95efe5130672c7407b2ce43b7e1d96c2346a199862747be84b5d3a04e4",
+    "np.sum.axis_none.f32": "919196fd093ef0845f1a814d2e867a5034a3219491d2078ec5dc1104435fc72e",
+    "np.sum.column.f32": "3ba6a8be6750859e778b040e304657b8b7c86e4195685a911b606d5ca0627363",
+    "np.sum.f32": "6ce633676503cbb908d99093b1034a480d57ce3a699bfc3c28b06dcdb45043f6",
+    "np.sum.fortran.axis0.f32": "3d6de8e778e7ae18f3826ddeb11bb0ecc2e1c73aaa5ab28be52ca62c84308b08",
+    "np.var.f32": "c15339bc8fb28ea531d5d66b12ec2c8d24c597f35ab2a0f8c1eb3796870d617c",
+    "np.var.f64": "7899f671e74fcc2ce939d0e68d9d1eed5fe505f3acf6df6e4f73b5ef56b4469c",
+    "serial.sum.column.f32": "6541542964e4f40fca650271486afee67bc2abf4740c787671a88f7231d51fc0",
+    "serial.sum.f32": "6ce633676503cbb908d99093b1034a480d57ce3a699bfc3c28b06dcdb45043f6",
+    "sklearn.MinMaxScaler.min_": "1f88c14db66920b684a0cef77930ca06ba7ce56c7d54176ac87766b947fc8ff7",
+    "sklearn.MinMaxScaler.scale_": "d05c8a8f0ed5e0403c6f0f6944a35cf351230926984fdc8ef4040b446d604f0b",
+    "sklearn.MinMaxScaler.transform": "9e7c8fb457dac3c3d56f082c38414510d19167ef76bb9f9500e17c2f93a5a9a9",
+    "sklearn.StandardScaler.mean_": "bf350e3a154df0d53e2bc3bbac56f72b449d018250953ce80f72f752d1e6ddf9",
+    "sklearn.StandardScaler.scale_": "03bebdc6efed40d3e017dd09b266848e905c8b28dc22a13a81b10ac845f03cf5",
+    "sklearn.StandardScaler.transform": "feccd3a549224495b98a176d2f4af8ab728d88e73c4655b9e2f328cf35a00293",
+    "sklearn.StandardScaler.var_": "7899f671e74fcc2ce939d0e68d9d1eed5fe505f3acf6df6e4f73b5ef56b4469c",
+    "sklearn.train_test_split.test": "5e5f08c4414eef8b7fe6f246b9afbeb96c71a0acfad4aa7ad6e98e409919500e",
+    "sklearn.train_test_split.train": "545dc457301432a12c398298be0c817cfed58a827384349eb0491f7d4847be33"
+  },
+  "machine": "arm64",
+  "numpy": "2.5.2",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "probe": "preprocess_identity",
+  "processor": "arm",
+  "python": "3.14.7",
+  "shape": [
+    20000,
+    24
+  ],
+  "sklearn": "1.9.0"
+}
