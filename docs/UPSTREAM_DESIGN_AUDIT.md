@@ -45,20 +45,11 @@ which one it read.
 | `upstream/raft` | `661a3b8`, `branch-25.08` | RAFT 25.08 |
 | `upstream/raft-v26.08.00` | `ebf9268`, tag `v26.08.00` | RAFT 26.08 |
 
-## The current position on vendor libraries, restated accurately
+## The current position on vendor libraries
 
-`VENDOR_LIBS.md:3-30` carries a rule change banner. The old rule, "where the
-incumbent calls a vendor primitive, call OURS", is **deleted**. The rule in
-force is **FOLLOW THEIR DISPATCH**, and it has exactly one narrow exception:
-where the path their dispatch actually takes calls a **closed** library
-(cuBLAS, cuSOLVER), call the MAX equivalent, because there is nothing to port.
-**CUB and Thrust are open and are port candidates, not substitution
-candidates.** Block and warp collectives are a third case the banner does not
-reach (`VENDOR_LIBS.md:44-51`); they run inside one kernel, cannot break a
-fusion, and are free to use.
-
-Findings 1 and 2 below are both applications of that rule, and both are the
-same failure shape the rule was written for.
+The rule in force is **FOLLOW THEIR DISPATCH**, stated in full at
+`PORTING_RULES.md` 0b-i and not restated here. Findings 1 and 2 below are both
+applications of it, and both are the same failure shape it was written for.
 
 ## Prioritized findings
 
@@ -257,7 +248,7 @@ expressible: ballot the predicate, take the popcount of the mask below your
 lane as your rank, have the lowest set lane issue one `atomicAdd` of the full
 popcount, broadcast the base.
 
-`VENDOR_LIBS.md:113-116` states the rule that applies here, after two false
+`VENDOR_LIBS.md` section 1 states the rule that applies here, after two false
 negatives of exactly this kind: "a NOT FOUND is only worth writing down if it
 names the exact paths tried, and **it expires**. Re-probe before hand-writing
 anything on the strength of one."

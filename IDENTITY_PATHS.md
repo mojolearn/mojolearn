@@ -134,11 +134,10 @@ Three residues take its place, named rather than done:
   intermediate in hardware, so on a denormal-honoring backend a running sum
   that goes denormal mid-chain diverges. The reduce fold IS flushed per step
   (only `n_chunks` steps, so the exact model is affordable there).
-- **Two documents are now wrong and are another lane's.**
-  `VENDOR_LIBRARIES.md:249` still lists `core/column_stats.mojo (2 kernels)`
-  among the `cub::BlockReduce` -> `block.sum` substitutions, which is true
-  only of the FAST arm; `UNSUPERVISED_IDENTITY.md:144` still names row 29's
-  defect as open.
+- **Both documents this bullet named as wrong are fixed.**
+  `VENDOR_LIBRARIES.md` now records `core/column_stats.mojo`'s `block.sum`
+  substitution as the FAST arm only, and `UNSUPERVISED_IDENTITY.md` no longer
+  carries row 29's defect as open.
 
 Rows 1-18 (the GBDT and forest lanes): eleven closed, five open, one
 verified-clean. Rows 19-26 (the unsupervised sections, 2026-08-23): six

@@ -49,7 +49,7 @@ it as an engineering port.
 | 4 | Inference latency and peak memory, both arms | the laptop story is not only training; their raw X was 3.2 GB against our 0.8 GB compressed | one window |
 | 5 | **Energy per tree** | nobody in this field reports it and on a laptop it is a first-class metric. `powermetrics` gives package power | one window + tooling |
 | 6 | Apple hardware ladder M1–M4, base/Pro/Max | tests whether the crossover moves left with GPU core count, which the fixed-cost model predicts | machines we do not have |
-| 7 | **The Python extension is unbuildable at HEAD** (`NOVELTY_NOTES` C8) | artifact evaluation needs something a reviewer can install. This is filed as a novelty item; it is a shipping blocker | blocked on Modular |
+| 7 | ~~**The Python extension is unbuildable at HEAD**~~ **CLOSED.** It builds and it ships: `pip install mojolearn` gets a wheel carrying every numeric mode as its own compiled binary set, 24 estimators plus the `metrics` and `linalg` submodules. Artifact evaluation has something a reviewer can install. (The `NOVELTY_NOTES` C8 this row cited no longer exists in that file.) | done |
 | 8 | ThunderGBM into related work | "Fast GBDTs and Random Forests on GPUs", CUDA + ROCm, 10x claims on sparse high-dimensional data. It **also cannot run on Apple**, so it strengthens the access claim — and it does RF on GPU, which the forests section must acknowledge | reading |
 
 ---

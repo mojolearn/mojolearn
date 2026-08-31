@@ -114,48 +114,30 @@ Nothing in that family should be started before it runs.
 
 # The plan, in order
 
-## Phase 0. Ship the arm that already wins. `NearestNeighbors`.
+## Phase 0. `NearestNeighbors`. LANDED.
 
-**This is the largest gap in the repository and it is not an algorithm.**
-`neighbors/__init__.mojo` is empty. Every entry point under `neighbors/` is a
-`*_main.mojo` benchmark or a `checks/*_check.mojo` verifier. There are no
-bindings and no estimator type anywhere in the repo. The brute-force
-k-NN -- **cannot be called by a user.**
+The phase's premise was that the largest gap in the repository was not an
+algorithm but a callable surface: five algorithms implemented, one reachable
+by a user. `NearestNeighbors`, `KNeighborsClassifier`, `KNeighborsRegressor`
+and `RadiusNeighbors` are all on the Python surface now. Building the estimator
+found two bugs, one of them arms that silently disagreed about output ORDER.
 
-STATUS 2026-08-20: `neighbors/estimator.mojo` now exists and `knn_search` is
-callable, so this phase is partly done; building it found two bugs, one of
-them arms that silently disagreed about output ORDER. What remains is
-bindings. And k-NN is no longer "the only measured win": the board is now
-k-means 2.89x, k-NN 1.53x, PCA 3.64x, OLS 4.33x matched, DBSCAN a tie.
+Still owed off this phase:
 
-Five algorithms are implemented and ONE has a callable surface. That ratio,
-not the algorithm count, is what gates a release.
+- `kneighbors_graph`, a sparse wrapper over the existing call
+- for `RadiusNeighbors`, a fitted device handle so the ball-cover index is
+  built once per fit rather than once per boundary call, and the AMD leg that
+  closes DEVIATION 551
+- metrics beyond L2 (cosine, L1) -- cuVS has them, a port not a design
 
-What the surface needs:
+Two caveats that survive the landing.
 
-- `kneighbors(X, n_neighbors, return_distance)` -- the kernel exists
-- `kneighbors_graph` -- sparse wrapper over the above
-- `radius_neighbors` -- **DONE 2026-08-31.** `mojolearn.RadiusNeighbors` over
-  the ball cover, with the distances recomputed from the finished CSR rather
-  than stored by the search (`neighbors/checks/radius_distances.mojo`).
-  Still owed: a fitted device handle so the index is built once per fit rather
-  than once per boundary call, and the AMD leg that closes DEVIATION 551
-- `KNeighborsClassifier` / `KNeighborsRegressor` -- majority vote and mean over
-  returned neighbors, both trivial
-- metrics beyond L2 (cosine, L1) -- cuVS has them, they are a port not a design
+First: `select_warpsort` is ported and cannot be wired (instantiating it at a
+launch site crashes `mojo build`), and RAFT's dispatch prefers that family for
+every k a user actually asks for. The 1.53x is on their *second* choice. The
+shipped arm is the radix path; the warpsort blocker stays filed.
 
-**Difficulty: EASY.** Days, not weeks. Highest value per line on this entire
-document, because the hard part is done and measured.
-
-It also **de-risks Phase 1**, which calls the same primitive.
-
-Blocking caveat: `select_warpsort` is ported and cannot be wired
-(instantiating it at a launch site crashes `mojo build`), and RAFT's dispatch
-prefers that family for every k a user actually asks for. The 1.53x is on
-their *second* choice. Ship on the radix path; keep the warpsort blocker
-filed.
-
-Second caveat, from `UNWIRED.md:371`: RAFT places k-NN output with `atomicAdd`
+Second, from `UNWIRED.md`: RAFT places k-NN output with `atomicAdd`
 and has no index tie-break, so **which of several equidistant neighbors is
 returned is not reproducible**. An `IDENTICAL` column cannot cover k-NN
 indices until that is fixed, and fixing it is an improvement on the upstream.
@@ -191,21 +173,17 @@ Difficulty, per file, from the pinned checkouts:
 **Overall: MEDIUM, with exactly one hard kernel.** The Boruvka MST is the risk
 and it should be the first thing built, not the last.
 
-Falls out nearly free alongside it: **single-linkage / agglomerative
-clustering**, since cuVS's `single_linkage.cuh` is the same substrate. Lower
-standalone usage, near-zero marginal cost.
+The half that was to fall out nearly free alongside it -- **single-linkage /
+agglomerative clustering** over cuVS's `single_linkage.cuh` -- SHIPPED ahead of
+it as `AgglomerativeClustering`, so HDBSCAN inherits that substrate rather than
+paying for it.
 
-## Phase 2. Random Forest, from cuML. GATED.
+## Phase 2. Random Forest, from cuML. LANDED.
 
-**Do not start before the gather measurement.** RF's inner loop is a scattered
-gather feeding a histogram accumulate -- the same shape `e4eb7cc` measured as
-38 of 41.7 ms per tree in the GBDT path. If the GPU does not clear roughly 2x
-the CPU's achieved gather bandwidth, this lands where k-means and PCA
-landed, after several thousand lines. NOTE 2026-08-20: both of those have
-since been tuned into wins (2.89x and 3.64x), so the warning is now about
-COST, several thousand lines before a number, rather than about a ceiling.
-
-Three corrections to what this document used to claim:
+`RandomForestClassifier` and `RandomForestRegressor` ship. The gate this phase
+carried (do not start before the gather measurement) is discharged. What is
+kept below is the design reasoning, because it is what the port was built
+from and three of its claims corrected an earlier version of this document:
 
 1. **It is not "nearly free" and it reuses nothing from `gbdt/`.**
    `catboost_options.mojo:441` refuses `Depthwise` and `Lossguide`; the ported
@@ -246,9 +224,11 @@ reproducible results, set `n_streams=1`"** (`randomforestclassifier.pyx:182`).
 NVIDIA's flagship RF is nondeterministic at its defaults. Having no streams
 stops being a limitation and becomes the feature.
 
-**Difficulty: MEDIUM-HARD, ~3,000 lines.**
+## Phase 3. ExtraTrees. LANDED. Two roads, and they are not the same product.
 
-## Phase 3. ExtraTrees. Two roads, and they are not the same product.
+`ExtraTreesClassifier` and `ExtraTreesRegressor` ship. Which road was taken,
+and why the other one is still the interesting question, is the analysis
+below.
 
 **Road A -- ride on RF. Cheap, small win.**
 
@@ -289,10 +269,8 @@ of the per-tree fixed cost **does not exist**, and neither does the per-row
   gates it exactly as it gates RF.
 
 If the library is ever going to contribute something upstream rather than
-transliterate, this is the candidate, and it is also the paper hook.
-
-**Difficulty: MEDIUM once RF exists, and the correctness oracle is
-scikit-learn's ExtraTrees at a fixed seed.**
+transliterate, this is the candidate, and it is also the paper hook. The
+correctness oracle is scikit-learn's ExtraTrees at a fixed seed.
 
 ---
 
@@ -301,7 +279,7 @@ scikit-learn's ExtraTrees at a fixed seed.**
 | item | verdict | why |
 |---|---|---|
 | **Gaussian Mixture Models** | **demoted 2026-08-20** | Best arithmetic intensity of anything on this list -- the full-covariance E-step is `d^2` FLOPs per point per component against k-means' `~d`, and `_gaussian_mixture.py` is already GEMM-shaped (`y = (X @ prec_chol) - (mu @ prec_chol)`). But `mixture/_gaussian_mixture.py:1002` sets `array_api_support` under `init_params="random"`, so **scikit-learn's GMM already reaches the Apple GPU.** Racing scikit-learn-on-Metal, not scikit-learn-on-CPU. Also no faithful upstream: cuML issue #2034 has been open since April 2020 with no branches or PRs, and `branch-0.11` never had a `gmm` directory. The GPU implementations that exist ([PyCave](https://github.com/borchero/pycave), [pomegranate](https://github.com/jmschrei/pomegranate)) are PyTorch wrappers over cuBLAS; the CUDA ones are unmaintained academic code. **THE MPS MEASUREMENT HAS NOW RUN, and it moves this back up.** `bench/results/SKLEARN_GPU_BASELINE_2026-08-20.md`: scikit-learn's Array API path on MPS is **1.22x SLOWER** than the same call on torch's CPU, on both arms tested, non-overlapping ranges. `aten::_linalg_eigh` is not implemented on MPS at all, `Ridge(cholesky)` is refused outright, and `linalg_svd` silently falls back to the host. So "scikit-learn's GMM already reaches the Apple GPU" was the right FACT and the wrong INFERENCE: reaching it is not the same as being fast on it, and the demotion rested on the second. **What is still needed is one measurement, not a decision:** run `GaussianMixture(init_params="random")` under `array_api_dispatch` on mps and see whether the full-covariance E-step's Cholesky is implemented there. If it is refused, or refused-then-slow like PCA, GMM is the best arithmetic intensity on this list with no live competitor. The upstream problem is unchanged and is the real cost: cuML issue #2034 open since April 2020, no faithful CUDA source to mirror. |
-| **Spectral clustering** | **skip** | cuML's is two thin files delegating to RAFT's Lanczos. Sparse iterative eigensolver: memory-bound and sequential across iterations. Wrong shape, and it is mostly UMAP's initialization anyway. |
+| **Spectral clustering** | **the "skip" was overtaken: `SpectralClustering` SHIPPED** | The reasoning that said skip is kept because it is still the right description of the SHAPE: cuML's is two thin files delegating to RAFT's Lanczos, a sparse iterative eigensolver, memory-bound and sequential across iterations, and mostly UMAP's initialization. What it got wrong is that a wrong-shaped algorithm can still be worth porting for surface and for an identity contract, which is what `spectral/` has. `SpectralEmbedding` is the half that did NOT ship. |
 | **Gaussian Processes** | **still the largest single win, still the most work** | O(n^3) Cholesky is close to the ideal GPU workload: dense, regular, high arithmetic intensity. Underserved on every platform, so the gap is wider than for anything else here. Cholesky is a call; numerical robustness, kernel choice and marginal-likelihood gradients are the work. |
 | **UMAP / t-SNE** | **hard, do not start here** | Reduce high-dimensional data to two dimensions for plotting. Dominant in single-cell genomics and in inspecting embedding spaces, and cuML accelerates both, so Mac users get the CPU versions and wait. But UMAP needs fuzzy simplicial sets, a spectral initialization and an SGD layout phase; t-SNE needs Barnes-Hut or an FFT approximation. Neither is verifiable against a hand calculation the way a histogram is. **HDBSCAN first -- it is UMAP's usual downstream partner and shares the kNN.** |
 | **Bootstrap, permutation tests, Monte Carlo** | **trivial, and still unclaimed** | Embarrassingly parallel by construction, compute-bound if the statistic is, and statisticians run them on laptops constantly. Least glamorous entry, possibly the best ratio of user-visible speedup to difficulty. A good filler between phases. |

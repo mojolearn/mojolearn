@@ -218,7 +218,7 @@ and nothing else moved. That also gives the file its first reader; it had
 none.
 
 k-means moved out of RAFT and into cuVS, so the mirror is two-layer:
-algorithms from cuVS into `cluster/gbdt/`, and the RAFT and cuBLAS
+algorithms from cuVS into `cluster/impl/`, and the RAFT and cuBLAS
 primitives they call into `cluster/checks/`. See `cluster/README.md`.
 
 `cluster/` is LAUNCHED and passing: 4 of 4 centroids recovered as a

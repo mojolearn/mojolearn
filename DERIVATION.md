@@ -7,7 +7,8 @@ which commit each lane was read at, and the two questions that are open
 rather than settled.
 
 **Nothing here is a licence.** The licence texts are in
-`third_party/LICENSES/`, one file per upstream, which is cuML's own mechanism.
+this file, which names every upstream, its licence and its pinned commit in
+one table.
 `NOTICE` names the projects. This file explains them. The per-file
 correspondence is finer than either: each lane's `DERIVATION_MAP.tsv` maps one
 of our files to the upstream file it follows and records whether the port is
@@ -109,7 +110,7 @@ that code was written, not followed. See CONTRIBUTION.md.
 
 This table exists so that cutting `NOTICE` cannot lose anything. Copyright
 holder, licence, the commit each lane was read at, and what derives from it.
-Licence texts are in `third_party/LICENSES/`.
+Licences are named per row in the table above.
 
 | upstream | copyright | licence | pinned at | what derives |
 |---|---|---|---|---|
@@ -151,7 +152,7 @@ the pinned checkouts, none of them has one:
 | Modular (MAX kernels) | none | Apache-2.0 with LLVM Exceptions |
 
 So 4(d) is close to vacuous here. What binds is 4(a), give recipients the
-licence, discharged by `LICENSE` and `third_party/LICENSES/`; 4(b), mark
+licence, discharged by `LICENSE`; 4(b), mark
 changed files; and 4(c), retain the notices present in the source form.
 
 **How 4(b) and 4(c) are carried, measured 2026-08-31.** 1,093 tracked files

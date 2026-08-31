@@ -9,9 +9,10 @@ DBSCAN.
 `E1_RESULTS.md` is the tree-ensemble half of this claim (ExtraTrees, Random
 Forest, symmetric GBDT). This is the unsupervised half, which
 `IDENTITY_PATHS.md` rows 19-26 opened on 2026-08-23 and which had **never
-been to a second vendor** until this run — there are no Python bindings for
-`cluster/`, `neighbors/` or `dbscan/`, so `tools/e1_traced_fit.py` could not
-reach them and no card existed to compare.
+been to a second vendor** until this run — the Python bindings for `cluster/`,
+`neighbors/` and `dbscan/` do not emit a per-stage certificate, so
+`tools/e1_traced_fit.py` could not produce a card for them and none existed to
+compare.
 
 ## Protocol
 

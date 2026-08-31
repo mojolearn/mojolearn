@@ -98,9 +98,10 @@ per-cell ULP/denormal classification.
 ## Phase 3u — the unsupervised cards (rows 19-26)
 
 `tools/e1_traced_fit.py` drives the GBDT/ET/RF families through the Python
-bindings, and `cluster/`, `neighbors/` and `dbscan/` have no bindings, so
-until 2026-08-23 the unsupervised half of the ledger had no way to produce
-a card at all. `bench/unsupervised_trace_main.mojo` is that way: one arm
+bindings. The bound surface does NOT emit the per-stage certificate these rows
+need -- `KMeans`, `NearestNeighbors` and `DBSCAN` are exported now, and
+`MOJOLEARN_IDENTITY_TRACE` does nothing on those paths -- so until 2026-08-23
+the unsupervised half of the ledger had no way to produce a card at all. `bench/unsupervised_trace_main.mojo` is that way: one arm
 per process (the differ refuses a card whose sequence numbers restart), a
 fixture that is an integer-exact function of a constant seed, and an input
 hash printed before the fit so both machines can be proven to have fitted

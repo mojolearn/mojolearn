@@ -1,9 +1,15 @@
-# Plan for the non-tree algorithms
+# Why the non-tree algorithms live in THIS repository
 
-Written 2026-08-19. Answers one question Andrew asked: build the other
+Written 2026-08-19, answering one question Andrew asked: build the other
 parallelizable algorithms in a new repository and merge later, or not.
 
-## Recommendation: NOT a new repository
+**This plan's work has LANDED.** k-means, brute-force k-NN and random forest
+are ported, wired, benchmarked and on the Python surface, and so are a dozen
+families this plan never named. What survives is the DECISION and the three
+findings that came out of executing it. The sequencing sections are deleted;
+`ROADMAP.md` holds what is still owed.
+
+## The decision: NOT a new repository
 
 Three reasons, and the first is decisive.
 
@@ -12,146 +18,46 @@ need a histogram; it needs a `DeviceContext`, a launch-geometry policy, a
 per-backend capability table, a determinism story, an interleaved benchmark
 harness, a machine lock, and packaging. Every one of those is in this tree and
 has been through a compiler and a GPU. `checks/kernel_matrix.mojo`,
-`checks/numerics.mojo`, `checks/interleaved.mojo`, `launch_probe.mojo`
-and `tools/remote_gpu.sh` are the substrate, not the trees.
+`checks/numerics.mojo`, `checks/interleaved.mojo`, `launch_probe.mojo` and
+`tools/remote_gpu.sh` are the substrate, not the trees. Starting elsewhere
+means rebuilding all of it and then reconciling two copies that drifted.
 
-Starting elsewhere means rebuilding all of it and then reconciling two copies
-that drifted.
+**"Merge later" is where projects go to die.** Three repositories existed
+already (mojotrees, this one, bitwise-gbdt) and none had shipped. A fourth is a
+fourth CI, a fourth packaging story, a fourth set of licence files, and a merge
+that gets deferred until it is too expensive.
 
-**"Merge later" is where projects go to die.** Three repositories exist
-already (mojotrees, this one, bitwise-gbdt) and none has shipped. A fourth is
-a fourth CI, a fourth packaging story, a fourth set of licence files, and a
-merge that gets deferred until it is too expensive.
+**The thing a new repo would protect is protectable more cheaply.** The concern
+is real: this tree's standing rule is COPY, DO NOT IMPROVE, and k-means is a
+port of nothing, so it would contaminate a controlled experiment. That is a
+DIRECTORY problem, not a repository problem. **COPY, DO NOT IMPROVE scopes to
+the mirrored code, not to the repository**, and `DERIVATION_MAP.tsv` and
+`check_upstream.sh` keep working because they name files, not the directories
+above them.
 
-**The thing a new repo would protect is protectable more cheaply.** The
-concern is real: this tree's standing rule is COPY, DO NOT IMPROVE, and
-k-means is a port of nothing, so it would contaminate a controlled experiment.
-That is a DIRECTORY problem, not a repository problem.
+## The one sequencing rule still in force
 
-## The layout that keeps the experiment controlled
+**Never HNSW.** It is a graph traversal with a serial dependency per hop, close
+to the worst case for a wide machine, and FAISS ships it CPU-only for that
+reason. Build exact brute force, measure where it stops winning, and only then
+consider IVF. See `ROADMAP.md`.
 
-    mojolearn/
-      core/          shared: device, launch policy, capability matrix,
-                     numerics ladder, harness, machine lock
-      boosting/
-        gbdt/      CatBoost derivative. COPY, DO NOT IMPROVE applies HERE
-                     AND ONLY HERE, unchanged.
-        checks/   what CatBoost never had to write
-      cluster/       k-means
-      neighbors/     k-NN
-      ensemble/      random forest
+## Three things executing step 1 settled, none of which needed a GPU
 
-The rule scopes to `boosting/gbdt/`. `DERIVATION_MAP.tsv` and `check_upstream.sh`
-keep working because they name files, not directories above them. Nothing about
-the port's control weakens.
-
-## Order, and the reasoning is dependency rather than preference
-
-**1. k-means. Do this first, and not because it is the most valuable.**
-
-It is the smallest thing that exercises the whole shared substrate: allocate,
-launch, reduce, iterate to convergence, produce a result validated against
-sklearn. It proves `core/` works on something with no histogram in it, which is
-the only way to find out whether `core/` is actually shared or is quietly
-tree-shaped.
-
-Distance computation is arithmetic-dense and embarrassingly parallel, which is
-the shape a GPU wants, unlike histogram building. So it should also show a
-LARGER GPU win than the boosting work, on far less code. A few hundred lines.
-
-**2. k-NN, brute force, exact.**
-
-Shares the distance kernel with k-means, so it is mostly free afterwards.
-
-The claim is unusually strong and worth stating carefully: at laptop scale,
-exact brute-force k-NN on the GPU can beat APPROXIMATE k-NN on the CPU,
-because brute force is a matrix multiply plus a top-k. We would return the
-right neighbours faster than a competitor returns approximate ones, on
-hardware they cannot use.
-
-Build brute force, measure where it stops winning, and only then consider IVF.
-**Never HNSW**: it is a graph traversal with a serial dependency per hop, which
-is close to the worst case for a wide machine, and FAISS ships it CPU-only for
-that reason. See `ROADMAP.md`.
-
-**3. Random Forest. Blocked, and the block is real.**
-
-RF is a delta on histograms, binning, split search and partitions. In this tree
-those exist but do not yet grow a correct tree on mixed-width data, so building
-RF now means building on the thing currently being debugged. It becomes cheap
-the moment the port grows a tree on covtype and not before.
-
-Worth the wait: trees are INDEPENDENT in RF, so it parallelizes across trees as
-well as within them, which boosting cannot. It is a better GPU fit than the
-algorithm this repository is named after.
-
-**4. Bootstrap, permutation tests.** Trivial, slot in anywhere.
-
-**5. Gaussian processes, UMAP, t-SNE.** Later. Both hard. See `ROADMAP.md`.
-
-## Why 1 and 2 are the right things to do RIGHT NOW
-
-They do not touch the tree code. The live blocker in this repository is that
-mixed-width trees do not split, bisected down to `leaf_count = 2` versus `1`.
-k-means and k-NN need nothing from that path, so they proceed in parallel with
-the debugging rather than queueing behind it.
-
-That is the actual argument for starting them now, and it is stronger than
-"they would score well".
-
-## Validation, which is not optional here
-
-mojotrees produced six stages that were built, documented and unreachable.
-This tree exists partly because of that. So each new algorithm carries the same
-discipline from its first commit:
-
-- **Validated against scikit-learn** on the same data, exact where the maths
-  permits and within a stated tolerance where it does not. Not against our own
-  previous output, which is a ratchet.
-- **Reach proved by SABOTAGE, never by a digest.** Corrupt the thing that is
-  supposed to matter and watch the result move. On 2026-08-19 an env-path reach
-  check passed for mojotrees' packed-bins arm while nothing read the buffer;
-  only sabotage caught it.
-- **Arms interleaved in one process.** This box drifts 2-3x across time
-  windows, so two numbers from two afternoons are not a comparison.
-- **`UNWIRED.md` extended.** A row nothing reads is indistinguishable from a
-  row something reads.
-
-## What this does not change
-
-The port's experiment still has to conclude. One tree, on covtype, timed,
-against mojotrees and LightGBM. Until that number exists, "CatBoost's design is
-fast on Metal" is a hypothesis, and no amount of k-means makes it a finding.
-
-## Status, 2026-08-19
-
-**Step 1 is built and is not yet reached.** `cluster/` exists, mirrors cuVS
-`94c2819` file for file, and its call graph closes from `fit` down to every
-kernel. What does not exist is a `main` that launches it, so by this tree's
-own rule nothing in it is ported yet.
-
-Three things this step already settled, none of which needed a GPU:
-
-1. **`core/` is not tree-shaped.** The fixed-point accumulator transferred
-   from histograms to centroid sums with one noun changed in its overflow
-   proof. That was the stated purpose of doing k-means first and it is
-   answered.
+1. **`core/` is not tree-shaped.** The fixed-point accumulator transferred from
+   histograms to centroid sums with one noun changed in its overflow proof.
+   That was the stated purpose of doing k-means first and it is answered.
 2. **The upstream is cuVS, not RAFT.** RAFT 26.10 ships no `cluster/` and no
    `neighbors/`; both moved. The mirror is algorithms from cuVS, primitives
-   from RAFT, and that split is cleaner than the one this plan originally
-   named.
+   from RAFT.
 3. **cuVS's float32 k-means is not float32 on NVIDIA.** Its distance GEMM
    defaults to `CUBLAS_COMPUTE_32F_FAST_TF32`, ten mantissa bits. A second
-   incumbent with a device-dependent number system, for `bitwise-gbdt`.
+   incumbent with a device-dependent number system.
 
-Step 2, brute-force k-NN, gains a concrete answer to the one thing that
-looked like a blocker: RAFT's top-k has two implementations and
+And one about k-NN's selection: RAFT's top-k has two implementations, and
 `matrix/detail/select_radix.cuh` contains **no warp intrinsics at all** (0
-occurrences of `__shfl`, `laneId`, `__ballot`, `__popc`), against 14 in
+occurrences of `__shfl`, `laneId`, `__ballot`, `__popc`) against 14 in
 `select_warpsort.cuh`. It synchronizes with `__syncthreads()` and counts with
 CUB block collectives, which is exactly the pair Mojo provides. RAFT's own
 learned dispatch prefers warpsort for every k a user actually asks for, so
-radix is their second choice; it is our only one, and the bar is not
-WarpSelect on an NVIDIA card, it is `argpartition` on a CPU, because their
-GPU arms do not run on this machine at all. In `DERIVATION_MAP.tsv` that is a
-`replaced` row, the same status `partitions_reduce.mojo` carries.
+radix is their second choice.

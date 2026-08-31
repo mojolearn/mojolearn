@@ -10,34 +10,19 @@ the rest of this repository's documentation before your first contribution.
 
 ## What you actually need
 
-**One GPU. Any vendor. That is the entire hardware requirement.**
-
-This is worth stating plainly because the surrounding code can suggest
-otherwise. Certificates in this tree are recorded on an M4, an H100 and an
-MI325X, and that is what it takes to CLOSE a cross-vendor identity claim. It
-is not what it takes to contribute, and it never was.
-
-The real floor is whatever Mojo and MAX support, which is low:
-
-| vendor | floor | examples that qualify |
-|---|---|---|
-| NVIDIA | Turing | T4, RTX 20XX, RTX 30XX, RTX 40XX, RTX 50XX. A free Google Colab T4 is enough |
-| AMD | RDNA2 | Radeon RX 6900, RX 7600, RX 7900, and the integrated 780M / 880M / 890M in ordinary laptops |
-| Apple | M1 | any Apple silicon Mac, M1 through M5 |
-
+**One GPU. Any vendor. That is the entire hardware requirement.** The vendor
+floors and the examples that qualify are the table in
+[docs/START_HERE.md](docs/START_HERE.md) section 1; they are not repeated here.
 There is no CPU path, so you do need a GPU. You do not need a good one, you do
 not need to rent one, and you do not need more than one.
 
-### What one GPU lets you close
-
-Everything except a cross-vendor identity claim. Bug reproductions and fixes,
-host oracles, separating fixtures, sabotage arms, documentation, performance
-work on your own column, and a new estimator in the `fast` tier are all fully
-closable on a single machine.
-
-A cross-vendor claim is the one thing that needs three vendors, and running
-those legs is a maintainer job. Mark the columns you did not run
-`cross-vendor-pending` and stop there. That is a complete contribution, not a
+One GPU closes everything except a cross-vendor identity claim: bug
+reproductions and fixes, host oracles, separating fixtures, sabotage arms,
+documentation, performance work on your own column, and a new estimator in the
+`fast` tier. Certificates in this tree are recorded on an M4, an H100 and an
+MI325X because that is what it takes to CLOSE a cross-vendor claim, and running
+those legs is a maintainer job. **Mark the columns you did not run
+`cross-vendor-pending` and stop there.** That is a complete contribution, not a
 partial one. Never infer a column you did not execute.
 
 ### Nothing here is built for the maintainer's machine

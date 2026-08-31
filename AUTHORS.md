@@ -32,7 +32,7 @@ the work, and those two questions have different answers here:
   * **Whose design does it follow, and what does that oblige us to do?** The
     ten upstreams below, and it obliges us to carry their license and say
     the files are changed. [NOTICE](NOTICE) names them, their licence texts
-    are in `third_party/LICENSES/`, and [DERIVATION.md](DERIVATION.md) holds
+    are named in [DERIVATION.md](DERIVATION.md), which holds
     the record.
 
 And a port is not transcription. CUDA has float64, streams, warp-local
@@ -93,7 +93,10 @@ this paragraph. The per-lane table is in [DERIVATION.md](DERIVATION.md).
 warp-select queue that RAFT vendors, which carries Facebook's copyright under
 the MIT license. MIT requires the notice to travel with substantial portions,
 so those two files carry Facebook's notice and the MIT permission text in
-their own headers, and `third_party/LICENSES/LICENSE.faiss` carries it too.
+their own headers, which is where MIT requires it and where it travels with
+the code. (The FAISS-derived files were DELETED on 2026-08-31 and replaced by
+a clean-room implementation written from Batcher 1968; see
+`neighbors/impl/neighbors/topk/`.)
 
 **HuggingFace transformers.** ADDED 2026-08-31; this section named none of
 it, and that was an unmet obligation.
@@ -124,7 +127,7 @@ calls it a transcription of `node_split_random`, and
 `extratrees/impl/decisiontree/batched_levelalgo/objectives.mojo` (1,413
 lines), which carries their impurity expressions beside cuML's. BSD-3-Clause,
 which requires the notice, the conditions and the disclaimer to be retained;
-`third_party/LICENSES/LICENSE.scikit_learn` carries all three. **Everything else in this tree that cites
+DERIVATION.md records all three. **Everything else in this tree that cites
 scikit-learn cites it as an ORACLE, not as a design source** -- `mixture/`,
 `gaussian_process/`, `resample/`, `kde/`, `kernel_methods/` and
 `decomposition/` -- because cuML, cuVS and RAFT implement those algorithms
@@ -137,7 +140,7 @@ and published (2003); the header that expresses it is NVIDIA proprietary and
 is not in this repository. This is recorded as an open question pending a
 decision by Andrew Hendel, and it is neither cleared nor conceded. The facts
 are in [DERIVATION.md](DERIVATION.md) and
-`third_party/LICENSES/LICENSE.curand`.
+DERIVATION.md's cuRAND section.
 
 Until 2026-08-20 cuML had no attribution anywhere in this project and FAISS
 had none either; until 2026-08-31 transformers, mamba and scikit-learn had

@@ -20,52 +20,32 @@ worth making deliberately rather than defaulting past: on the industrial track
 
 ## Where the surface is today
 
-| | |
-|---|---|
-| Published on PyPI | **0.1.0**, macOS arm64 wheel, both binary sets (FAST and IDENTICAL) in one wheel |
-| Estimators in the 0.1.0 release notes | 11 |
-| Estimators exported by `python/mojolearn/__init__.py` when this plan was written (2026-08-24) | **16** -- the tree was five ahead of the release: `KernelDensity`, `LogisticRegression`, `Ridge`, `KNeighborsClassifier`, `KNeighborsRegressor`. **This row said "at HEAD" and stopped being true the day after.** At 2026-08-31 the count is **24**, the additions being `SVC`, `Lasso`, `ElasticNet`, `AgglomerativeClustering`, `IsolationForest`, `SpectralClustering`, `ExponentialSmoothing` and `RadiusNeighbors`, plus the `metrics` and `linalg` submodules and the `kpss_test` / `select_d` functions. Read `python/mojolearn/__init__.py`'s `__all__`, not this table |
+Published on PyPI, macOS arm64 wheel, every numeric mode as its own compiled
+binary set in one wheel. **Read `python/mojolearn/__init__.py`'s `__all__`, not
+a table here** -- the count in this file went 11 -> 16 -> 24 in seven days and
+every written-down number was false the day after. At 2026-08-31 it is 24
+estimators plus the `metrics` and `linalg` submodules and the `kpss_test` /
+`select_d` functions.
 
-So the first action is not new binding work at all. **Cutting 0.2.0 publishes
-five estimators that are already written, already bound and already
-certified**, and it costs one release run.
+## What is built and still NOT reachable from Python
 
-## What is built and NOT reachable from Python
-
-Every row below is ported, gated, and (where the E3 rounds cover it)
-bit-identical on three vendors. None of it is importable.
+This table had ten rows on 2026-08-24. Eight of them shipped: `holtwinters`
+(`ExponentialSmoothing`), `solver` (`Lasso`, `ElasticNet`), `hierarchy`
+(`AgglomerativeClustering`), `metrics`, `isolation_forest` (`IsolationForest`),
+`svm` (`SVC`), `gemm` (the `linalg` submodule) and spectral clustering
+(`SpectralClustering`). Those rows are deleted rather than annotated. What is
+left:
 
 | family | what exists | what is missing | size |
 |---|---|---|---|
-| `isolation_forest/` | full port of cuML v26.08.00 Isolation Forest, `estimator.mojo` exists but holds helpers only | a host fit/score entry point, binding, `IsolationForest` class | **M** |
-| `holtwinters/` | `holtwinters_fit_host` and `holtwinters_forecast_host` already exist | binding + `ExponentialSmoothing` class + serialization | **S -- the cheapest new family** |
-| `solver/` | coordinate descent, `cdFit`/`cdPredict` ported, three-vendor card (20 stages) | host entry, binding, `Lasso` + `ElasticNet` | **M** |
-| `svm/` | C-SVC: SMO, block solve, working-set selection, kernel matrices; three-vendor card (32 stages) | host entry, binding, `SVC` | **M/L** (fit returns support vectors + duals; serialization is new shape) |
-| `hierarchy/` | single-linkage agglomerative, MST and dendrogram; three-vendor card (8 stages) | host entry, binding, `AgglomerativeClustering` | **M** |
-| `metrics/` | r2, kl divergence, silhouette, trustworthiness, accuracy, rand/ARI, entropy, MI, h/c/v; three-vendor card (34 stages) | binding; these are FUNCTIONS not estimators, so a `mojolearn.metrics` submodule, not a class | **M -- and the highest ratio of surface to work** |
-| `spectral/` | cuVS spectral embedding + cuML spectral clustering, its own identity contract | host entry, binding, `SpectralEmbedding` / `SpectralClustering` | **L** |
-| `arima/`, `tsa/` | batched Kalman filter likelihood, KPSS, differencing order | host entries, binding, `ARIMA` | **L**. `tsa`'s half SHIPPED as `kpss_test` and `select_d`. The clause here used to read "the lane's own README says no second vendor has run it", which stopped being true on 2026-08-28 when arima's card came home from a second vendor; what `ARIMA` still lacks is a `fit`, because `estimate_x0` and the batched L-BFGS driver are unported |
-| `gemm/` | `mojolearn.identical.gemm.fp32.v1`, bit-identical at 62 shapes on three vendors | a functional API (`mojolearn.linalg.matmul`), not an estimator | **S/M**, and it is the one item a non-ML user would install for |
-| `mamba/` | one Mamba-1 block, its own contract | not scikit-learn shaped; belongs behind a separate module or not at all in 0.2 | **defer** |
+| `spectral/` | cuVS spectral embedding as well as cuML spectral clustering, its own identity contract | `SpectralEmbedding` -- the CLUSTERING half shipped, the EMBEDDING half did not | **M** |
+| `arima/`, `tsa/` | batched Kalman filter likelihood; KPSS and differencing order SHIPPED as `kpss_test` / `select_d`; arima's card came home from a second vendor 2026-08-28 | `ARIMA` still has no `fit`, because `estimate_x0` and the batched L-BFGS driver are unported | **L** |
+| `mamba/` | one Mamba-1 block, its own contract | not scikit-learn shaped; belongs behind a separate module or not at all | **defer** |
 
-## The recommended order, and why
-
-1. **Cut 0.2.0 with what is already bound.** Five estimators, no new code,
-   and it makes the released surface match the repository's own README.
-2. **`metrics` submodule.** Highest surface per unit of work, no new
-   serialization shape, and it is what makes the library usable *with*
-   scikit-learn rather than instead of it.
-3. **`holtwinters`, then `solver` (Lasso/ElasticNet), then `hierarchy`.**
-   Each is one host entry plus one class, and each already has a
-   three-vendor card, so the identity table in the paper grows with the
-   surface rather than after it.
-4. **`isolation_forest`, then `svm`.** Both are wanted; both need more than a
-   binding.
-5. **`gemm` as a functional API**, if the audience is meant to include people
-   who want a reproducible FP32 matrix product and no estimator at all.
-6. **`spectral`, `arima`/`tsa`** last, and `arima` only after a second vendor
-   has run it.
-7. **`mamba`** is not a 0.2 item.
+The ordering rule the shipped eight followed, and the reason it worked: take
+the family with the highest surface per unit of work and an existing
+three-vendor card, so the identity table grows WITH the surface rather than
+after it.
 
 ## What this does NOT need
 
