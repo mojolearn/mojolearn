@@ -3,16 +3,35 @@
 """Entry point for the SVC gates and the card.
 
     pixi run mojo run -I . svm/svc_main.mojo -- oracle        # host only, no lock needed
+    pixi run mojo run -I . svm/svc_main.mojo -- svr-oracle    # host, regression only
     tools/with_build_lock.sh     pixi run mojo run -I . svm/svc_main.mojo
     tools/with_identical_mode.sh pixi run mojo run -I . svm/svc_main.mojo
     MOJOLEARN_IDENTITY_TRACE=/tmp/svm.card \\
         tools/with_identical_mode.sh pixi run mojo run -I . svm/svc_main.mojo -- card
 
 Every printed line carries the mode the binary COMPILED in. `oracle` runs
-the host gates only (no GPU); the default runs everything; `card` fits F2
+the host gates only (no GPU), CLASSIFICATION AND REGRESSION; `svr-oracle`
+runs the regression half of that on its own, which is the cheap loop while
+the SVR lane is being worked; the default runs everything; `card` fits F2
 once with the stage recorder pointed at `MOJOLEARN_IDENTITY_TRACE` so a
 future cross-vendor leg can diff stage by stage with
 `tools/identity_trace_diff.py`.
+
+THE REGRESSION GATES AND WHY THE DEFAULT RUN IS RED UNTIL A HAND EDIT
+--------------------------------------------------------------------
+`SmoSolver.solve` still raises for EPSILON_SVR with UNGATED as the reason.
+The four HOST regression gates below (the eps-insensitive dual's monotone
+descent, the KKT gap off an independently recomputed gradient, the eps tube,
+and the two trap measurements) do not touch the device and pass with that
+clause in place -- they are what the clause was waiting for. The two DEVICE
+regression gates cannot run at all until it goes, and they report BLOCKED
+and FAIL rather than passing quietly, because a gate that goes green when
+nothing was compared is worse than no gate.
+
+So: run `-- svr-oracle` first, read the four host gates, then delete the
+`if self.svmType == EPSILON_SVR: raise` block in
+`svm/impl/svm/smosolver.mojo::solve` and run the default. Until that edit
+the default run reports exactly two failures, both named BLOCKED.
 """
 
 from std.sys import argv
@@ -24,6 +43,7 @@ from svm.checks.svc_check import (
     _mode_name,
     _run_device,
     all_fixtures,
+    all_reg_fixtures,
     check_block_solve_signed_zero_tie,
     check_card_is_emitted,
     check_device_is_launch_invariant,
@@ -34,9 +54,18 @@ from svm.checks.svc_check import (
     check_oracle_objective_decreases,
     check_rbf_float_vs_double_reference,
     check_refusals,
+    check_svr_device_is_launch_invariant,
+    check_svr_device_matches_oracle,
+    check_svr_eps_tube,
+    check_svr_fold_order,
+    check_svr_kkt,
+    check_svr_objective_decreases,
+    check_svr_sabotage_reach,
+    check_svr_signed_zero,
     check_ws_sequence_is_pure_in_f_and_index,
     fixture_blobs,
     fixture_xor,
+    svr_oracle_fit,
 )
 
 
@@ -77,6 +106,79 @@ def run_oracle_gates(mut ran: Int, mut failed: Int) raises:
     except err:
         e2 = String(err)
     _gate("rbf_float_vs_double_reference (DEVIATION 630)", ran, failed, e2)
+
+
+def run_svr_oracle_gates(mut ran: Int, mut failed: Int) raises:
+    """The EPSILON_SVR host gates. ONE oracle solve per fixture feeds all of
+    that fixture's gates; `smo_oracle_fit` is O(n_ws^2 k) per outer iteration
+    on one host thread, so R5.big and R6.zero are the expensive rows and
+    both are capped at 8 and 6 outer iterations respectively.
+
+    The order is deliberate: the KKT gate first, because `max|f_ref - f|` is
+    the single number that fires loudest on a wrong `SvrInit`, and reading a
+    failure there first saves reading three more."""
+    var fixtures = all_reg_fixtures()
+    for i in range(len(fixtures)):
+        var name = String(fixtures[i].name)
+        var res = svr_oracle_fit(fixtures[i])
+        var e = String("")
+        try:
+            check_svr_kkt(fixtures[i], res)
+        except err:
+            e = String(err)
+        _gate("svr_kkt " + name, ran, failed, e)
+        if fixtures[i].do_objective:
+            e = ""
+            try:
+                check_svr_objective_decreases(fixtures[i], res)
+            except err:
+                e = String(err)
+            _gate("svr_objective_decreases " + name, ran, failed, e)
+        if fixtures[i].do_tube:
+            e = ""
+            try:
+                check_svr_eps_tube(fixtures[i], res)
+            except err:
+                e = String(err)
+            _gate("svr_eps_tube " + name, ran, failed, e)
+        e = ""
+        try:
+            check_svr_fold_order(fixtures[i], res)
+        except err:
+            e = String(err)
+        _gate("svr_fold_order_collisions " + name, ran, failed, e)
+        e = ""
+        try:
+            check_svr_sabotage_reach(fixtures[i], res)
+        except err:
+            e = String(err)
+        _gate("svr_sabotage_reach " + name, ran, failed, e)
+        if name == "R6.zero":
+            e = ""
+            try:
+                check_svr_signed_zero(fixtures[i], res)
+            except err:
+                e = String(err)
+            _gate("svr_signed_zero_from_ordinary_input " + name, ran, failed, e)
+        _ = res^
+
+
+def run_svr_device_gates(mut ran: Int, mut failed: Int) raises:
+    """The two device regression gates. BOTH FAIL, naming BLOCKED, while
+    `SmoSolver.solve`'s UNGATED clause is in the tree."""
+    var ctx = DeviceContext()
+    var e = String("")
+    try:
+        check_svr_device_matches_oracle(ctx, all_reg_fixtures())
+    except err:
+        e = String(err)
+    _gate("svr_device_matches_oracle (6 regression fixtures)", ran, failed, e)
+    e = ""
+    try:
+        check_svr_device_is_launch_invariant(ctx)
+    except err:
+        e = String(err)
+    _gate("svr_device_is_launch_invariant (R4, R6 x 5 arms)", ran, failed, e)
 
 
 def run_device_gates(mut ran: Int, mut failed: Int) raises:
@@ -149,9 +251,14 @@ def main() raises:
     if what == "card":
         emit_card()
         return
-    run_oracle_gates(ran, failed)
-    if what != "oracle":
-        run_device_gates(ran, failed)
+    if what == "svr-oracle":
+        run_svr_oracle_gates(ran, failed)
+    else:
+        run_oracle_gates(ran, failed)
+        run_svr_oracle_gates(ran, failed)
+        if what != "oracle":
+            run_device_gates(ran, failed)
+            run_svr_device_gates(ran, failed)
     print(
         "== svm/svc_main.mojo [" + _mode_name() + "] " + String(ran - failed)
         + "/" + String(ran) + " gates passed =="

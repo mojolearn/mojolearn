@@ -22,14 +22,39 @@ better-conditioned solve of the same problem -- not for bit comparison).
 
 WHERE EACH PIECE OF THEIRS IS IN THIS FILE
 
-    smosolver.cuh::Solve / UpdateF / SvcInit / CheckStoppingCondition
+    smosolver.cuh::Solve / UpdateF / SvcInit / SvrInit /
+                  CheckStoppingCondition
                                     -> smo_oracle_fit
+    kernelcache.cuh::GetVecIndices  -> _vec_index
+    results.cuh::CombineCoefs (SVR add arm)
+                                    -> smo_oracle_fit's coef fold
     workingset.cuh::Select / SimpleSelect / GatherAvailable
                                     -> _select_ws
     smoblocksolve.cuh::SmoBlockSolve -> _block_solve
     results.cuh::Get / CalcB        -> _results
     kernel_matrices.cu::linear/rbf  -> _kernel_cell, _row_norm
     svc_impl.cuh::svcPredict        -> smo_oracle_decision
+
+THE REGRESSION ARM (2026-08-31)
+-------------------------------
+`smo_oracle_fit` solves EPSILON_SVR through the SAME loop: only the domain
+size, the gradient init, the kernel-column projection and the coefficient
+fold differ, which is upstream's own claim (`smoblocksolve.cuh:99-101` takes
+`svmType` and never reads it). Under `param.svmType == EPSILON_SVR` the
+caller's `y` holds the REGRESSION TARGETS and the +-1 label vector is built
+here, exactly as `SvrInit` builds `y_label`.
+
+The four PROPERTY functions at the foot of this file --
+`svr_dual_objective`, `svr_gradient_reference`, `svr_kkt_gap` and
+`svr_tube_bound` -- are NOT transcriptions of anything in cuML and are
+NOT derived from `smo_oracle_fit` or from `svm/impl/`. They are written
+from the eps-insensitive dual itself (Smola & Scholkopf 2004, eq. 10-12;
+the same formulation `smosolver.cuh:375-385` cites). That is the point:
+a device-versus-oracle gate compares two transcriptions of one reading of
+cuML, so a shared misreading of `SvrInit`'s signs would pass it silently.
+These four answer to the mathematics instead. Their derivations are
+spelled out in their docstrings so a reader can check the algebra without
+opening either implementation.
 """
 
 from std.builtin.sort import sort
@@ -46,6 +71,7 @@ from gemm.checks.gemm_oracle import (
 from checks.numerics import ftz, identical_exp, identical_mul_add
 from svm.impl.svm.smosolver import fold_order_for, hash_f32_list
 from svm.impl.svm.svm_parameter import (
+    EPSILON_SVR,
     KERNEL_LINEAR,
     KERNEL_RBF,
     KernelParams,
@@ -111,6 +137,21 @@ def in_upper_g[dt: DType](a: Scalar[dt], y: Scalar[dt], C: Scalar[dt]) -> Bool:
 
 def in_lower_g[dt: DType](a: Scalar[dt], y: Scalar[dt], C: Scalar[dt]) -> Bool:
     return (y < Scalar[dt](0) and a < C) or (y > Scalar[dt](0) and a > Scalar[dt](0))
+
+
+def _vec_index(p: Int, n_rows: Int, is_svr: Bool) -> Int:
+    """`GetVecIndices`, `kernelcache.cuh:806-807`: the TRAINING-VECTOR index
+    behind a point of the solver domain. For C_SVC the domain IS the training
+    set and this is the identity; for EPSILON_SVR the domain is `2 * n_rows`
+    and index `i` and index `i + n_rows` name the SAME ROW OF X (alpha and
+    alpha* of that row), so the kernel column is `p % n_rows`, spelled as
+    theirs spell it.
+
+    This is the function whose collisions make `fold_order_for`'s docstring
+    false under SVR; see `svc_check.mojo::check_svr_fold_order_collisions`."""
+    if is_svr and p >= n_rows:
+        return p - n_rows
+    return p
 
 
 # ---------------------------------------------------------------------------
@@ -502,10 +543,20 @@ def smo_oracle_fit[
     kp: KernelParams,
     record_objective: Bool = False,
 ) raises -> OracleResult[dt]:
-    """`SmoSolver::Solve` + `Results::Get`, serial. `y` is +-1 already
-    (the caller does `getOvrlabels`; `svc_check` shares one helper)."""
+    """`SmoSolver::Solve` + `Results::Get`, serial.
+
+    C_SVC: `y` is +-1 already (the caller does `getOvrlabels`; `svc_check`
+    shares one helper), `n_train = n_rows`, `f = -y`.
+
+    EPSILON_SVR: `y` holds the REGRESSION TARGETS, `n_train = 2 * n_rows`,
+    and `SvrInit` (`smosolver.cuh:395-411`) builds both the label vector and
+    the gradient here. `res.y` is the LABEL vector in both problems, because
+    that is what the working set, the block solve, `CombineCoefs` and `CalcB`
+    all read (upstream repoints the caller's pointer at `y_label`; this file
+    and `smosolver.mojo` both keep it as a separate vector instead)."""
     var res = OracleResult[dt]()
-    var n_train = n_rows
+    var is_svr = param.svmType == EPSILON_SVR
+    var n_train = n_rows * 2 if is_svr else n_rows
     var k = n_cols
     var C = Scalar[dt](param.C)
     var tol = Scalar[dt](param.tol)
@@ -514,10 +565,35 @@ def smo_oracle_fit[
         n_ws = n_train
     # Initialize
     var alpha = List[Scalar[dt]]()
-    var f = List[Scalar[dt]]()
-    for i in range(n_train):
+    for _ in range(n_train):
         alpha.append(Scalar[dt](0))
-        f.append(-y[i])
+    var y_train = List[Scalar[dt]]()
+    var f = List[Scalar[dt]]()
+    if is_svr:
+        # `SvrInit(yr, n_rows, yc, f)`: yc = [1]*n ++ [-1]*n, f[i] = eps - y_i,
+        # f[i + n] = -eps - y_i. ONE IEEE subtraction each, no ftz and no fma,
+        # as `svr_init_kernel` spells it and for the same reason.
+        #
+        # `neg_eps` is a UNARY NEGATION of the stored epsilon and not
+        # `Scalar[dt](-param.epsilon)`, because the two differ when epsilon is
+        # zero: `-(+0.0)` is `-0.0`, and `-0.0 - (+0.0)` is `-0.0` while
+        # `+0.0 - (+0.0)` is `+0.0`. That is the ONLY route by which ordinary
+        # input puts both zero signs into one f vector, and fixture R6.zero
+        # is built on it.
+        var eps_s = Scalar[dt](param.epsilon)
+        var neg_eps = -eps_s
+        for _ in range(n_rows):
+            y_train.append(Scalar[dt](1))
+        for _ in range(n_rows):
+            y_train.append(Scalar[dt](-1))
+        for i in range(n_rows):
+            f.append(eps_s - y[i])
+        for i in range(n_rows):
+            f.append(neg_eps - y[i])
+    else:
+        for i in range(n_train):
+            y_train.append(y[i])
+            f.append(-y[i])
     var norms = List[Scalar[dt]]()
     if kp.kernel == KERNEL_RBF:
         for i in range(n_rows):
@@ -546,12 +622,15 @@ def smo_oracle_fit[
     while keep_going:
         for t in range(n_ws):
             delta_alpha[t] = Scalar[dt](0)
-        _select_ws[dt](ws, f, alpha, y, C)
+        _select_ws[dt](ws, f, alpha, y_train, C)
         # square tile K(ws, ws)
+        # `getSquareTileWithoutCaching` extracts rows of X by
+        # `ws_idx_mod` = the PROJECTED indices, so the tile is
+        # `K(x[ws%n], x[ws%n])`; under SVR a row can appear TWICE in it.
         for u in range(n_ws):
-            var iu = Int(ws.idx[u])
+            var iu = _vec_index(Int(ws.idx[u]), n_rows, is_svr)
             for t in range(n_ws):
-                var it = Int(ws.idx[t])
+                var it = _vec_index(Int(ws.idx[t]), n_rows, is_svr)
                 tile[u * n_ws + t] = _kernel_cell[dt](
                     kp, x, norms, iu, x, norms, it, n_rows, n_rows, k
                 )
@@ -561,21 +640,32 @@ def smo_oracle_fit[
             if rem < max_iter_this_block:
                 max_iter_this_block = rem
         var r = _block_solve[dt](
-            ws.idx, n_ws, y, alpha, f, tile, C, tol, max_iter_this_block, delta_alpha
+            ws.idx, n_ws, y_train, alpha, f, tile, C, tol, max_iter_this_block,
+            delta_alpha
         )
         var diff = r[0]
         var inner = r[1]
         # GetNonzeroDeltaAlpha
         var nz_idx = List[Int32]()
         var nz_da = List[Scalar[dt]]()
+        # `GetNonzeroDeltaAlpha` compacts `cache.getKernelIndices(false)`,
+        # the PROJECTED indices (`smosolver.cuh:169`), because what it feeds
+        # is a gather of ROWS OF X. Under SVR those indices are NOT distinct:
+        # if `i` and `i + n_rows` are both in the working set with nonzero
+        # delta_alpha, the list carries the same index twice.
         for t in range(n_ws):
             if delta_alpha[t] != Scalar[dt](0):
-                nz_idx.append(ws.idx[t])
+                nz_idx.append(Int32(_vec_index(Int(ws.idx[t]), n_rows, is_svr)))
                 nz_da.append(delta_alpha[t])
         var nnz = len(nz_idx)
         if nnz > 0:
             var order = fold_order_for(nz_idx)
-            for i in range(n_train):
+            # UpdateF's batch domain is n_rows for BOTH problems (the tile is
+            # `[nnz x n_rows]`). C_SVC writes it once; EPSILON_SVR writes the
+            # SAME accumulator into `f` and into `f + n_rows`, which is
+            # `smosolver.cuh:261-278`'s second gemv: one tile, one
+            # delta_alpha, only the destination moves.
+            for i in range(n_rows):
                 var acc = Scalar[dt](0)
                 for rr in range(nnz):
                     var j = Int(order[rr])
@@ -584,6 +674,8 @@ def smo_oracle_fit[
                     )
                     acc = _flush[dt](_mad[dt](kij, nz_da[j], acc))
                 f[i] = _flush[dt](f[i] + acc)
+                if is_svr:
+                    f[i + n_rows] = _flush[dt](f[i + n_rows] + acc)
         # CheckStoppingCondition
         if Float64(diff) > Float64(diff_prev) * 1.5 and n_outer_iter > 0:
             n_increased_diff += 1
@@ -616,15 +708,32 @@ def smo_oracle_fit[
         res.inner_iter_seq.append(inner)
         res.nnz_seq.append(nnz)
         if record_objective:
-            res.objective_seq.append(
-                dual_objective[dt](x, y, alpha, norms, n_rows, k, kp)
-            )
+            if is_svr:
+                res.objective_seq.append(
+                    svr_dual_objective[dt](
+                        x, y, alpha, norms, n_rows, k, kp, param.epsilon
+                    )
+                )
+            else:
+                res.objective_seq.append(
+                    dual_objective[dt](x, y_train, alpha, norms, n_rows, k, kp)
+                )
 
-    # Results
+    # Results. `CombineCoefs` (`results.cuh:189-200`): coef = alpha * y over
+    # n_train, then for EPSILON_SVR `raft::linalg::add(coef, coef, coef +
+    # n_rows, n_rows)`. Since y is [+1]*n ++ [-1]*n that add is
+    # `alpha_i - alpha*_i`, which is why upstream can spell a subtraction as
+    # an add. ONE addition per output, exactly rounded, nothing to pin.
     var coef = List[Scalar[dt]]()
     for i in range(n_train):
-        coef.append(alpha[i] * y[i])
-    for i in range(n_train):
+        coef.append(alpha[i] * y_train[i])
+    if is_svr:
+        for i in range(n_rows):
+            coef[i] = coef[i] + coef[i + n_rows]
+    # `GetDualCoefs` / `GetSupportVectorIndices` select over `n_rows`, not
+    # `n_train`, in BOTH problems (`results.cuh:210, 227`): after the fold
+    # only the first n_rows coefficients are the answer.
+    for i in range(n_rows):
         if coef[i] != Scalar[dt](0):
             res.dual_coefs.append(coef[i])
             res.support_idx.append(Int32(i))
@@ -652,11 +761,11 @@ def smo_oracle_fit[
             var nu = 0
             var nl = 0
             for i in range(n_train):
-                if in_upper_g[dt](alpha[i], y[i], C):
+                if in_upper_g[dt](alpha[i], y_train[i], C):
                     nu += 1
                     if f[i] < b_up:
                         b_up = f[i]
-                if in_lower_g[dt](alpha[i], y[i], C):
+                if in_lower_g[dt](alpha[i], y_train[i], C):
                     nl += 1
                     if f[i] > b_low:
                         b_low = f[i]
@@ -667,7 +776,7 @@ def smo_oracle_fit[
     res.f = f^
     res.n_iter = n_iter
     res.n_outer_iter = n_outer_iter
-    res.y = y.copy()
+    res.y = y_train^
     return res^
 
 
@@ -754,3 +863,208 @@ def global_kkt_gap[
             if res.f[i] > b_low:
                 b_low = res.f[i]
     return b_low - b_up
+
+
+# ---------------------------------------------------------------------------
+# THE REGRESSION PROPERTIES: written from the eps-insensitive dual, NOT from
+# `smo_oracle_fit` and NOT from `svm/impl/`
+# ---------------------------------------------------------------------------
+#
+# THE FORMULATION (Smola & Scholkopf 2004, "A tutorial on support vector
+# regression", eq. 10-12; the reference `smosolver.cuh:375-385` itself cites).
+# With alpha_i and alpha*_i the two multipliers of row i, the eps-insensitive
+# dual that SMO MINIMIZES is
+#
+#   W(alpha, alpha*) = 1/2 sum_ij (a_i - a*_i)(a_j - a*_j) K_ij
+#                      + eps sum_i (a_i + a*_i)
+#                      - sum_i yr_i (a_i - a*_i)
+#
+#   subject to  sum_i (a_i - a*_i) = 0  and  0 <= a_i, a*_i <= C.
+#
+# cuML lays the two multipliers out as ONE vector of length 2n with the label
+# vector yc = [+1]*n ++ [-1]*n, so alpha_p = a_p for p < n and alpha_p =
+# a*_{p-n} for p >= n, and the equality constraint becomes their usual
+# `sum_p alpha_p yc_p = 0`. Everything below is that W and its derivative,
+# and NOTHING below reads `f`, `y_train` or any other quantity the solver
+# produced. Three consequences, and they are the reason these exist:
+#
+#   * a sign error in `SvrInit` (`eps - y` swapped with `-eps - y`) moves the
+#     solver onto the eps -> -eps problem, so the W below RISES where the
+#     solver's own descends;
+#   * a direction error in `CombineCoefs` (a fold that adds where it should
+#     subtract, or that folds the wrong half) leaves `svr_gradient_reference`
+#     disagreeing with the solver's `f`;
+#   * neither is visible to a device-versus-oracle comparison, because both
+#     arms would carry the same error.
+#
+# All three are Float64 over the Float32 kernel cells, like `dual_objective`:
+# these are TOLERANCE gates, never bit gates.
+
+
+def svr_dual_objective[
+    dt: DType
+](
+    x: List[Scalar[dt]],
+    yr: List[Scalar[dt]],
+    alpha: List[Scalar[dt]],
+    norms: List[Scalar[dt]],
+    n: Int,
+    k: Int,
+    kp: KernelParams,
+    epsilon: Float64,
+) -> Float64:
+    """`W(alpha, alpha*)` of the eps-insensitive dual above, in Float64.
+
+        c_i = alpha[i] - alpha[i + n]                   (the folded coefficient)
+        W   = 1/2 sum_ij c_i c_j K_ij
+              + epsilon * sum_{p < 2n} alpha[p]
+              - sum_i yr_i c_i
+
+    `alpha` has length `2 * n` and `yr` holds the REGRESSION TARGETS.
+    O(n^2 k); the caller decides whether it can afford it per outer
+    iteration."""
+    var c = List[Float64]()
+    for i in range(n):
+        c.append(Float64(alpha[i]) - Float64(alpha[i + n]))
+    var quad = Float64(0)
+    for i in range(n):
+        if c[i] == 0.0:
+            continue
+        for j in range(n):
+            if c[j] == 0.0:
+                continue
+            var kij = Float64(
+                _kernel_cell[dt](kp, x, norms, i, x, norms, j, n, n, k)
+            )
+            quad += c[i] * c[j] * kij
+    var sum_alpha = Float64(0)
+    for p in range(2 * n):
+        sum_alpha += Float64(alpha[p])
+    var lin_y = Float64(0)
+    for i in range(n):
+        lin_y += Float64(yr[i]) * c[i]
+    return 0.5 * quad + epsilon * sum_alpha - lin_y
+
+
+def svr_gradient_reference[
+    dt: DType
+](
+    x: List[Scalar[dt]],
+    yr: List[Scalar[dt]],
+    alpha: List[Scalar[dt]],
+    norms: List[Scalar[dt]],
+    n: Int,
+    k: Int,
+    kp: KernelParams,
+    epsilon: Float64,
+) -> List[Float64]:
+    """The optimality-indicator vector `f_p = yc_p * dW/dalpha_p` of the
+    eps-insensitive dual, recomputed FROM ALPHA ALONE, length `2 * n`.
+
+    Differentiating the W above, with `g_i = sum_j c_j K_ij`:
+
+        dW/da_i  =  g_i + eps - yr_i      and  yc = +1  ->  f_i     =  g_i + eps - yr_i
+        dW/da*_i = -g_i + eps + yr_i      and  yc = -1  ->  f_{i+n} =  g_i - eps - yr_i
+
+    At `alpha = 0` this is `f_i = eps - yr_i` and `f_{i+n} = -eps - yr_i`,
+    which is `SvrInit` -- and that is the WHOLE point of the function: the
+    match is a DERIVED prediction, not a transcription. It also says the two
+    halves take the SAME increment `g_i` when alpha moves, which is why
+    `UpdateF`'s second gemv reuses one tile and one delta_alpha.
+
+    Float64 over the Float32 kernel cells; compare with a tolerance, never
+    bitwise."""
+    var c = List[Float64]()
+    for i in range(n):
+        c.append(Float64(alpha[i]) - Float64(alpha[i + n]))
+    var g = List[Float64]()
+    for i in range(n):
+        var acc = Float64(0)
+        for j in range(n):
+            if c[j] == 0.0:
+                continue
+            var kij = Float64(
+                _kernel_cell[dt](kp, x, norms, i, x, norms, j, n, n, k)
+            )
+            acc += c[j] * kij
+        g.append(acc)
+    var out = List[Float64]()
+    for i in range(n):
+        out.append(g[i] + epsilon - Float64(yr[i]))
+    for i in range(n):
+        out.append(g[i] - epsilon - Float64(yr[i]))
+    return out^
+
+
+def svr_kkt_gap[
+    dt: DType
+](f_ref: List[Float64], alpha: List[Scalar[dt]], n: Int, C: Float64) -> Float64:
+    """`max{f_p : p in I_low} - min{f_p : p in I_up}` over the 2n domain,
+    with `f_ref` the INDEPENDENT gradient above.
+
+    The sets are Keerthi's, which is what `smo_sets.cuh` spells and what the
+    block solve's two arg-reductions search; with `yc = [+1]*n ++ [-1]*n` they
+    read, per row `i`,
+
+        i     in I_up  iff alpha_i  < C      i     in I_low iff alpha_i  > 0
+        i + n in I_up  iff alpha*_i > 0      i + n in I_low iff alpha*_i < C
+
+    and the point is stationary iff `b_low - b_up <= 0`. SMO stops at `tol`,
+    so a converged fit has a gap below `tol`.
+
+    This is the CLASSIFICATION gap's formula over the regression domain, and
+    on its own that proves nothing -- `global_kkt_gap` would compute the same
+    number off `res.f`. What makes it a gate is the argument: `f_ref` comes
+    from `svr_gradient_reference`, so `SvrInit`, `UpdateF` and the solver's
+    own `f` are nowhere on the path."""
+    var b_up = inf[DType.float64]()
+    var b_low = -inf[DType.float64]()
+    for p in range(2 * n):
+        var yl = Float64(1.0) if p < n else Float64(-1.0)
+        var a = Float64(alpha[p])
+        if in_upper_g[DType.float64](a, yl, C):
+            if f_ref[p] < b_up:
+                b_up = f_ref[p]
+        if in_lower_g[DType.float64](a, yl, C):
+            if f_ref[p] > b_low:
+                b_low = f_ref[p]
+    return b_low - b_up
+
+
+def svr_tube_bound(epsilon: Float64, kkt_gap: Float64) -> Float64:
+    """The EXACT bound on `|yr_i - decision(x_i)|` for a row with
+    `alpha_i == 0` and `alpha*_i == 0`, given a fit whose KKT gap is
+    `kkt_gap`. Returns `epsilon + max(kkt_gap, 0)`.
+
+    DERIVATION, from the gradient above and nothing else. Write `g_i =
+    sum_j c_j K_ij`, so `decision(x_i) = g_i + b`.
+
+        f_i     = g_i + eps - yr_i   ->   yr_i - g_i =  eps - f_i
+        f_{i+n} = g_i - eps - yr_i   ->   yr_i - g_i = -eps - f_{i+n}
+
+    so the residual `r_i = yr_i - decision(x_i) = (yr_i - g_i) - b` is both
+    `eps - f_i - b` and `-eps - f_{i+n} - b`.
+
+    A row with both multipliers at zero is in I_up through `i` (alpha_i < C)
+    and in I_low through `i + n` (alpha*_i < C), so `f_i >= b_up` and
+    `f_{i+n} <= b_low`. And `-b` is a mean of `f` over the FREE support
+    vectors, each of which is in BOTH sets, so `-b` lies in `[b_up, b_low]`;
+    when there are no free SVs, `-b = (b_up + b_low)/2`, which lies there too
+    whenever `b_up <= b_low` and below `b_up` otherwise. Either way
+    `b_up <= -b <= max(b_up, b_low)`. Then
+
+        r_i =  eps - f_i     - b <=  eps - b_up  + b_low = eps + gap
+        r_i = -eps - f_{i+n} - b >= -eps - b_low + b_up  = -eps - gap
+
+    so `|r_i| <= eps + gap`, and at gap <= 0 the tube is exact: EVERY
+    non-support-vector lies inside +-epsilon. The caller adds a Float32
+    slack on top; the bound itself has none.
+
+    Independent of the other three: it needs the decision function and `b`,
+    which the dual objective and the KKT gap never touch, and it would catch
+    a `CombineCoefs` fold that produced the right dual and the wrong
+    coefficients."""
+    var g = kkt_gap
+    if g < 0.0:
+        g = 0.0
+    return epsilon + g

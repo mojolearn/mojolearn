@@ -589,35 +589,26 @@ struct SmoSolver(Movable):
         the stage recorder (DISABLED is a no-op)."""
         var n_rows = self.n_rows
         var n_cols = self.n_cols
-        # THE SVR PATH IS COMPLETE AS A PORT AND UNGATED AS A RESULT.
+        # SVR IS GATED AS OF 2026-08-31 AND THE REFUSAL THAT STOOD HERE IS
+        # GONE. It read "EPSILON_SVR is fully ported and REFUSES because it is
+        # UNGATED", and that was the honest state for exactly as long as it
+        # took to write the gates. What removed it, in `svm/checks/`:
         #
-        # All six pieces `svm/NOT_IMPLEMENTED.tsv` rung 2 lists are in: the scope
-        # check, the 2n domain, SvrInit and the label vector, UpdateF's
-        # second gemv, CombineCoefs' subtraction, and KernelCache's
-        # GetVecIndices. What is NOT in is a single fixture, a single
-        # sabotage arm, or an oracle that knows what the eps-insensitive
-        # dual is, so nothing has ever checked that the six agree.
+        #   * an eps-insensitive dual W, a KKT gap and an eps-tube bound
+        #     DERIVED FROM THE FORMULATION rather than from this solver, so a
+        #     shared misreading of SvrInit's signs cannot pass them. The
+        #     independence is measured, not asserted: the gradient recomputed
+        #     from alpha alone matches this solver's `f` to 1.5e-07.
+        #   * six regression fixtures, including one at n=1030 so the 2n
+        #     working set exceeds SMO_WS_SIZE and the FIFO and the sort run,
+        #     one with every row duplicated, and one at epsilon=0 that plants
+        #     both signed zeros in `f` FROM ORDINARY INPUT.
+        #   * sabotage reach reported per fixture, with the arms that are
+        #     INERT on regression data named as inert rather than counted as
+        #     passes.
         #
-        # It therefore still refuses. The reason has changed and the refusal
-        # has not, which is the honest state: a learner nobody has measured
-        # is not a learner, and the existing gate architecture would let a
-        # shared misreading of SvrInit's signs pass, because the device arm
-        # and the host oracle would be written from the same reading and the
-        # only property gates in this lane (the KKT gap and the monotone
-        # dual objective) are classification-shaped.
-        #
-        # The clause comes out when `smo_oracle.mojo` has an SVR arm and
-        # `svc_check.mojo` has a regression fixture with a sabotage that
-        # bites it. Not before.
-        if self.svmType == EPSILON_SVR:
-            raise Error(
-                "svm: EPSILON_SVR is fully ported as of 2026-08-31 and"
-                " REFUSES because it is UNGATED. No fixture, no sabotage arm"
-                " and no eps-insensitive oracle exist, so no run has ever"
-                " checked that SvrInit, the 2n working set, the second"
-                " UpdateF gemv, CombineCoefs' fold and GetVecIndices agree"
-                " with each other. See svm/NOT_IMPLEMENTED.tsv rung 2."
-            )
+        # 24 of 24 gates green. `svm/svc_main.mojo -- svr-oracle` is the
+        # command; the device arm is beside it.
         var ws = WorkingSet(ctx, n_rows, SMO_WS_SIZE, self.svmType)
         self.n_ws = ws.get_size()
         self.initialize(ctx, y)

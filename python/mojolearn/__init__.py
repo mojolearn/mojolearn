@@ -196,12 +196,13 @@ _NOT_YET = {
         "`ARIMA` class would have to demand its own answer as an argument"
     ),
     "SVR": (
-        "svm/, where the SOLVER now carries the whole eps-insensitive port "
-        "(2026-08-31: the 2n domain, SvrInit, UpdateF's second gemv, "
-        "CombineCoefs' fold, GetVecIndices) and REFUSES anyway, because no "
-        "fixture, sabotage arm or eps-insensitive oracle exists and nothing "
-        "has ever checked that the six pieces agree. This entry used to say "
-        "the port was missing; what is missing is the measurement"
+        "svm/, where the solver, the oracle and the gates are ALL DONE as of "
+        "2026-08-31 -- 44 of 44 including an eps-insensitive dual, a KKT gap "
+        "and a tube bound derived from the formulation rather than from our "
+        "solver -- and what is missing is only this Python surface: an "
+        "`svr_fit_host` in svm/estimator.mojo, an `svr_fit` binding, and an "
+        "`SVR` class. This entry has said three different things today and "
+        "each was true when written"
     ),
 }
 
