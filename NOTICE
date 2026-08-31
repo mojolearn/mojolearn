@@ -9,11 +9,20 @@ test harnesses under `tools/*_oracle/` and `ensemble/tools/*_oracle/`, which
 link a reference implementation to produce numbers the Mojo is checked
 against. They build the check, not the library.
 
-Licence texts for the projects whose algorithms this work implements are in
-`third_party/LICENSES/`, one file per project. Per-file correspondence, and
-what is original to this work, are in the `DERIVATION_MAP.tsv` tables and
+SOME TEST HARNESSES CONTAIN THIRD-PARTY SOURCE, and this paragraph exists so
+nobody has to rediscover why that is not attributed here. A few programs under
+`tools/*_oracle/` and `ensemble/tools/*_oracle/` vendor a reference
+implementation -- Google's CityHash, MT19937-64, a handful of shim headers --
+so that a check can prove a Mojo answer equals the reference's answer. Each of
+those files carries its own licence header, in the file, which is where MIT
+and SPDX ask for it. NONE OF THEM IS IN THE SHIPPED LIBRARY OR THE PUBLISHED
+WHEEL, none is reachable from any estimator, and they are therefore not
+described here: this file describes what is distributed to a user, and a test
+harness is not.
+
+Per-file correspondence between this work's algorithms and the published
+designs they implement is in the `DERIVATION_MAP.tsv` tables and
 DERIVATION.md.
 
 MAX (R) and Mojo (R) are trademarks of Modular, Inc., used under license.
-This project is not operated or endorsed by Modular, Inc., nor by any other
-project named in `third_party/LICENSES/`.
+This project is not operated or endorsed by Modular, Inc.
