@@ -421,6 +421,7 @@ If mojolearn is useful in work you publish, please cite it.
 reads. Each GitHub release is archived on Zenodo with its own DOI; the
 concept DOI [10.5281/zenodo.22068632](https://doi.org/10.5281/zenodo.22068632)
 always resolves to the latest release. The per-version DOI is
+[10.5281/zenodo.22211591](https://doi.org/10.5281/zenodo.22211591) for 0.3.1,
 [10.5281/zenodo.22181752](https://doi.org/10.5281/zenodo.22181752) for 0.3.0,
 [10.5281/zenodo.22171041](https://doi.org/10.5281/zenodo.22171041) for 0.2.0
 and [10.5281/zenodo.22068633](https://doi.org/10.5281/zenodo.22068633) for
