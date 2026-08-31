@@ -9,7 +9,7 @@ DEVIATION 670, the hand-off list, and the row text for both directories.
 
 ---
 
-## Status: BUILDS, GATED GREEN ON ONE APPLE DEVICE. No second vendor.
+## Status: BUILDS, GATED GREEN, AND BIT-IDENTICAL APPLE <-> AMD. NVIDIA owed.
 
     the whole tree builds                      YES
     check-arima, IDENTICAL                     PASSES
@@ -17,7 +17,11 @@ DEVIATION 670, the hand-off list, and the row text for both directories.
     arima-card                                 229 stage records
     sabotages run                              11 of 11 (8 bite, 3 null)
     inherited MEASURED claims judged           4 of 4 (2 earned, 2 struck)
-    a second vendor                            NO. Apple M4 only.
+    a second vendor                            YES, AMD MI325X, 2026-08-28
+                                               137 card records, 0 differing
+    a third vendor                             NVIDIA owed: the 2026-08-28
+                                               legs ran 7 and 9 lanes and
+                                               arima was in neither list
 
     ALL OF THE 2026-08-24 WORK NOW BUILDS AND PASSES, both modes: DEVIATION
     677, the six new card stages, orders `arma44` and `ar2_tie`, the two new
@@ -800,10 +804,13 @@ build; the rest still need someone to write them.
 
 **Needs a second vendor:**
 
-7. **A SECOND VENDOR.** Still the only goal of this work and still entirely
-   untested. `arima-card` now emits the four decision stages too, so a
-   cross-vendor diff can separate "same decisions, different arithmetic"
-   from "different decisions", which a float-only card could not.
+7. ~~**A SECOND VENDOR.**~~ **DONE 2026-08-28, and this item said "entirely
+   untested" for three days after it was.** `bench/results/e1/2026-08-28_203552-mojolearn-e2-amd/lanes/arima.identical.card` against `bench/results/e1/2026-08-28_162228-MacBook-Air-1-terrabyte/lanes/arima.identical.card`: 137 records each, 0 differing. `arima-card`
+   emits the four decision stages too, so the diff separates "same decisions,
+   different arithmetic" from "different decisions"; it needed neither,
+   because nothing differed. **A THIRD VENDOR IS STILL OWED**: the NVIDIA
+   legs of 2026-08-28 ran seven and nine lanes and arima was in neither
+   `MOJOLEARN_E1_LANES`, so the gap is lane selection, not a failure.
 8. **Sabotage (f) cannot be closed on Apple**, where `0.0/0.0` is already
    `0x7fc00000`. Only NVIDIA or AMD can test DEVIATION 676's claim.
 

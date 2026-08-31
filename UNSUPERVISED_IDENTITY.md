@@ -384,8 +384,11 @@ what `k > 64` costs.
    and those folds decide the SWEEP COUNT, so a last-bit difference changes
    the eigenvectors rather than perturbing them. `K_LIB_JACOBI_EIGH`'s 32 is
    the lane width, not a scheduling choice, so the fix is the fold and not
-   the matrix row. Reserved as DEVIATION 511; `decomposition/` is the other
-   lane's and rows 27-31 are open there.
+   the matrix row. ~~Reserved as DEVIATION 511~~ **CLOSED. It landed as
+   DEVIATION 524, IDENTITY_PATHS row 27, and both folds now go through
+   `core/pinned_reduce.pinned_block_sum` (`decomposition/mojo_only/
+   jacobi_eigh_device.mojo:56,72`). This item described it as open and
+   reserved under a deviation number it never used.**
 7. **`price-unsupervised-identity` is stale.** The table below was measured
    with AUTO pinned to the fused arm. Under DEVIATION 509 the IDENTICAL
    default IS the tiled arm, so `knn.auto` now costs what `knn.tiled` costs
