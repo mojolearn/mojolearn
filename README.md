@@ -17,11 +17,15 @@ that proves it rather than a hash that hopes so.
 **None of the CUDA libraries this draws on has such a tier**, because none of
 them was ever asked to run anywhere but CUDA. The determinism ladder, the
 Metal backend, the host control plane, the identity cards and the sabotage
-methodology that gates them have no upstream. By line count, **84.9% of the
-Mojo here has no upstream file it corresponds to**; the remaining 15.1% is
-the algorithmic substrate, and it is derived work that is documented as such
-per file, with the upstream path and the pinned commit, in the `PORTED_MAP`
-tables and in each file's own header. The algorithms come from CatBoost,
+methodology that gates them have no upstream. By line count, **between 67%
+and 70% of the Mojo here has no upstream file it corresponds to**; the other
+30% to 33% is the algorithmic substrate, and it is derived work documented as
+such per file, with the upstream path and the pinned commit, in the
+derivation tables and in each file's own header. (An earlier version of this
+paragraph said 84.9%. That was computed as "everything outside a `ported/`
+directory" and `gbdt/`, the CatBoost mirror, has no such directory, so it
+undercounted the derived side by 61,888 lines. The range above is the
+corrected figure and its bounds are stated in `NOTICE`.) The algorithms come from CatBoost,
 cuVS, cuML and RAFT; see `NOTICE`.
 
 The scikit-learn shapes are kept. The defaults follow the upstream each

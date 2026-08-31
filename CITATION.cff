@@ -31,9 +31,10 @@ abstract: >-
   host-side control plane every estimator is reached through; the identity
   cards, the host oracles and the sabotage methodology that gates them; the
   bit-identical FP32 GEMM contract; and the transformer and Mamba
-  identity work. BY LINE COUNT, 84.9% of the Mojo in this repository lies
-  outside the `ported/` directories and has no upstream file it corresponds
-  to; the remaining 15.1% is the algorithmic substrate described next.
+  identity work. BY LINE COUNT, between 67% and 70% of the Mojo in this
+  repository has no upstream file it corresponds to; the other 30% to 33% is
+  the algorithmic substrate described next. The bounds and how they were
+  computed are in NOTICE.
   THE SUBSTRATE IS DERIVED WORK AND IS DOCUMENTED AS SUCH, per file, with
   the upstream path and pinned commit, in the PORTED_MAP tables and in each
   file's own header: gradient-boosted oblivious (symmetric) trees from

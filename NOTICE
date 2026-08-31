@@ -14,14 +14,25 @@ statement of PROPORTION, so a reader met "Derived from CatBoost" as the first
 heading and reasonably concluded this was a port with some additions. It is
 not, and the number is the shortest way to say so.
 
-    Mojo in this repository            429,615 lines
-    under a `ported/` directory         64,894 lines   15.1%
-    everything else                    364,721 lines   84.9%
+    Mojo tracked in this repository                   431,889 lines
+    has an upstream file it corresponds to     127,712 to 141,739   30% to 33%
+    has none                                   290,150 to 304,177   67% to 70%
 
-Measured 2026-08-31 by line count over `*.mojo`, excluding the pixi
-environment and the upstream mirrors. The 84.9% has no upstream file it
-corresponds to. `mojo_only/` alone is 246,075 lines, 57.3%, and the rest is
-the host control plane, the drivers and the gates.
+Measured 2026-08-31 by line count over tracked `*.mojo`. THE RANGE IS HONEST
+RATHER THAN EVASIVE, and the first published version of this table was WRONG
+because it did not have one. That version said 15.1% derived and 84.9% not,
+computed as "everything under a `ported/` directory" -- and `gbdt/`, the
+CatBoost mirror this file's first derivation section is about, HAS NO
+`ported/` SUBDIRECTORY. It missed 61,888 lines of the most plainly derived
+code in the repository. Corrected within the hour, before the release it was
+written for reached Zenodo.
+
+The lower bound counts every `ported/` directory plus all of `gbdt/`. The
+upper adds `ensemble/`'s cuML-mirroring code, less its own original half.
+The remaining judgement is inside `gbdt/`, where 76 of 149 files appear in no
+derivation map and three say NO CATBOOST COUNTERPART in their own headers;
+those are counted as derived in both bounds, so both bounds are generous to
+the derivation and the true original share is at the high end of the range.
 
 None of the following exists in any upstream this file names, because none of
 those projects was ever asked to run anywhere but CUDA:
