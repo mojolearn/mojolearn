@@ -257,6 +257,17 @@ def main():
     for lf in proj.get("license-files", []):
         generated[f"{dist}/licenses/{lf}"] = (REPO / lf).read_bytes()
 
+    # THE CITATION SHIPS TOO, and it is generated here rather than relied on
+    # from the tree. This packer writes the Linux wheel itself instead of
+    # going through setuptools, so `[tool.setuptools.package-data]`'s
+    # `CITATION.cff` entry -- which is what puts it in the macOS wheel -- has
+    # no effect on this path. The 0.3.1 wheel carried licenses/LICENSE and
+    # licenses/NOTICE and no machine-readable citation at all; a `pip
+    # install` gave a user the licence and no way to cite the work. The
+    # `[project.urls]` DOI and Citation entries need no help here, because
+    # METADATA is generated from `proj` a few lines above.
+    generated["mojolearn/CITATION.cff"] = (REPO / "CITATION.cff").read_bytes()
+
     if a.check_against:
         with zipfile.ZipFile(a.check_against) as z:
             names = [n for n in z.namelist() if n.endswith(".dist-info/METADATA")]
