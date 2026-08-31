@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-# Derivative work: the upstream file and its pinned commit are recorded in this lane's DERIVATION_MAP.tsv and in this file's own docstring. See NOTICE.
 """RAFT `cpp/include/raft/stats/detail/batched/silhouette_score.cuh`
 (ebf9268; cuVS `cpp/src/stats/detail/batched/silhouette_score.cuh` is the
 same text and is what cuML 26.08 links). THIS IS THE PATH cuML's Python

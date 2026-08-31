@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-# Derivative work: the upstream file and its pinned commit are recorded in this lane's DERIVATION_MAP.tsv and in this file's own docstring. See NOTICE.
 """cuML `cpp/src/metrics/rand_index.cu` (265b9da): `ML::Metrics::rand_index` forwards to `raft::stats::rand_index`. The `int` overloads (cuML's Python passes int32 labels). cuML's signature takes `const double* y`; labels here are Int32 (the Python side casts), which is what `compute_rand_index<T>` compares with `==` either way."""
 
 from max.gpu.host import DeviceBuffer, DeviceContext

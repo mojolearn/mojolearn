@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-# Derivative work: the upstream file and its pinned commit are recorded in this lane's DERIVATION_MAP.tsv and in this file's own docstring. See NOTICE.
 """`KernelCache`: the square working-set tile and the batched full tile.
 
 PORT OF `cuml/cpp/src/svm/kernelcache.cuh` at cuML v26.08.00 (`KernelCache`

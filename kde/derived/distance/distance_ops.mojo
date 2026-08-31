@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-# Derivative work: the upstream file and its pinned commit are recorded in this lane's DERIVATION_MAP.tsv and in this file's own docstring. See NOTICE.
 """The per-pair distance ops cuML's `pairwise_distances` reaches for KDE.
 
 PORT OF cuVS `cpp/src/distance/detail/distance_ops/{l2_unexp,l1,l_inf}.cuh`

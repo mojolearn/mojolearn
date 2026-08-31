@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-# Derivative work: the upstream file and its pinned commit are recorded in this lane's DERIVATION_MAP.tsv and in this file's own docstring. See NOTICE.
 """`SimpleVec` / `SimpleDenseMat`: the vector operations the QN solver is written in.
 
 PORT OF `cuml/cpp/src/glm/qn/simple_mat/dense.hpp` at cuML `00094f7`:

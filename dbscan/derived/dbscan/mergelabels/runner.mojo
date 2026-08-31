@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-# Derivative work: the upstream file and its pinned commit are recorded in this lane's DERIVATION_MAP.tsv and in this file's own docstring. See NOTICE.
 """`MergeLabels::run`, which is one call, kept as its own file like theirs.
 
 PORT OF `cuml/cpp/src/dbscan/mergelabels/runner.cuh` at cuML `00094f7`.

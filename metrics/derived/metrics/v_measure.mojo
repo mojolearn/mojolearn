@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-# Derivative work: the upstream file and its pinned commit are recorded in this lane's DERIVATION_MAP.tsv and in this file's own docstring. See NOTICE.
 """cuML `cpp/src/metrics/v_measure.cu` (265b9da): `ML::Metrics::v_measure` forwards to `raft::stats::v_measure`. The `int` overloads (cuML's Python passes int32 labels)."""
 
 from max.gpu.host import DeviceBuffer, DeviceContext

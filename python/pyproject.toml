@@ -19,7 +19,13 @@ description = "GPU machine learning in Mojo. Gradient boosting, random forests, 
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
-license-files = ["LICENSE", "NOTICE"]
+license-files = ["LICENSE", "NOTICE", "third_party/LICENSES/*"]
+# third_party/LICENSES/ IS cuML'S MECHANISM, adopted 2026-08-31 after
+# measuring what the upstreams actually ship. cuML has no NOTICE file at all;
+# it carries a thirdparty/LICENSES/ directory with four bare licence texts,
+# and 0 of its 192 source files carry a non-NVIDIA copyright, including its
+# UMAP port. Nine licence texts sit there now, copied from the upstreams
+# themselves, and they ship in the wheel beside LICENSE.
 authors = [{ name = "Andrew Hendel" }]
 maintainers = [{ name = "Andrew Hendel" }]
 keywords = [

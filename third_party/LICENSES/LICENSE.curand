@@ -1,0 +1,16 @@
+NVIDIA cuRAND
+Copyright 2010-2014 NVIDIA Corporation
+
+The cuRAND headers are NOT open source. Their own header states the Licensed
+Deliverables are "PROPRIETARY and CONFIDENTIAL to NVIDIA" and that
+reproduction or disclosure to any third party without express written consent
+is prohibited.
+
+No cuRAND source is in this repository. isolation_forest/derived/curand/
+implements the XORWOW generator, which is Marsaglia (2003) and published; its
+precalculated transition matrices are REBUILT from the step function rather
+than copied (DEVIATION 683), and the committed fixtures are this project's own
+generator output. NVIDIA's tables are read from a local header at check time
+only and are not tracked here.
+
+Recorded pending a decision by the author.
