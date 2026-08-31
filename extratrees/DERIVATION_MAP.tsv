@@ -68,6 +68,19 @@
 #   `select_split_range_midpoint`, none of which exist at 00094f7 and none of which appear below.
 #   Re-pinning this lane is a real piece of work, not a header edit; it is recorded here as an OPEN
 #   item rather than papered over.
+#   RE-VERIFIED INDEPENDENTLY 2026-08-31, and the pin above is RIGHT: `dataset.h:22` is
+#   `const double* sample_weight` at 265b9da and does not exist at 00094f7 (whose :22 is the
+#   `template <typename DataT, typename LabelT, typename IdxT>` line); `split.cuh` has one
+#   `detail::CountLeft` and two `select_split_range_midpoint` at 265b9da and zero of each at
+#   00094f7. Going the other way, THIS lane's own citations land only at 00094f7:
+#     dataset.h:24 = "/** input dataset (assumed to be col-major) */"   (265b9da: `std::int64_t n_rows;`)
+#     objectives.cuh:52 = `HDI DataT GainPerSplit(...)`                 (265b9da: a weight guard)
+#     decisiontree.hpp:29 = `struct DecisionTreeParams {`               (265b9da: `int max_leaves;`)
+#     algo_helper.h:20 = `enum CRITERION {`                             (265b9da: blank)
+#     randomforest.cuh:50 = "// 0 for classification 1 for regression"  (265b9da: `namespace detail {`)
+#     flatnode.h:56 = `FLATNODE_HD int64_t RightChildId() const`        (265b9da: a SparseTreeNode return)
+#   The conflict is real, the pin recorded here is the one the line numbers describe, and the
+#   OPEN item is the re-pin, not the pin.
 # RAFT pinned at 661a3b840c3300f95f053812a560c952c9d049a4 (branch-25.08) at
 #   ~/CascadeProjects/upstream/raft.
 # scikit-learn pinned at tag 1.9.0 (77def0e) at ~/CascadeProjects/upstream/scikit-learn;

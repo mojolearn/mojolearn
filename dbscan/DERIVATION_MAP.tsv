@@ -11,6 +11,20 @@
 #   no-upstream     nothing upstream corresponds to this file. Older rows still spell this
 #                   `mojo-only` / `mojo_only`; those were not touched by this pass.
 # cuML pinned at 00094f7 (branch-25.08), RAFT at 661a3b8 (branch-25.08).
+# THE RAFT PIN IS 661a3b8 AND IT IS SETTLED, 2026-08-31. impl/sparse/detail/csr.mojo:6
+#   says "PORT OF ... `weak_cc_init_all_kernel` at RAFT `9aa17e5`", contradicting this
+#   line. 661a3b8 wins on the text, against the only other RAFT tree on this machine
+#   (upstream/raft-v26.08.00 = ebf92684); every citation in that file is exact at
+#   661a3b8 and off by 10 with the wrong text at ebf92684:
+#     csr.cuh:72  = the verbatim TODO the file quotes,
+#                   "/// TODO: add one element to row_ind and avoid get_stop_idx"
+#                   -- 661a3b8:72 EXACT; ebf92684:62.
+#     csr.cuh:133 = `void weak_cc_batched(` -- 661a3b8:133 EXACT; ebf92684:123.
+#     csr.cuh:149 = the `weak_cc_init_all_kernel<Index_, TPB_X>` launch
+#                   -- 661a3b8:149 EXACT; ebf92684:139.
+#     csr.cuh:61-63 = the tid / global_id / bounds guard -- 661a3b8 EXACT.
+#   OWED, NOT A MAP EDIT: impl/sparse/detail/csr.mojo:6 still says `9aa17e5` and must
+#   be changed to `661a3b8`. Its LINE NUMBERS are already right and must not be moved.
 #   replaces-upstream -- THE UPSTREAM'S STEP WAS DELETED, NOT FOLLOWED. The
 #                    file occupies an upstream file's slot and borrows its
 #                    control plane, and its BODY is a different algorithm,

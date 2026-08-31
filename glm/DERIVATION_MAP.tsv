@@ -10,7 +10,33 @@
 #   partial         only some of the upstream file is present; the notes say what is missing.
 #   no-upstream     nothing upstream corresponds to this file. Older rows still spell this
 #                   `mojo-only` / `mojo_only`; those were not touched by this pass.
-# cuML pinned at 7e29955c (OLS) / 00094f7 (ridge, qn), RAFT at 9aa17e5 (lstsq) / 661a3b8 (svd, matrix).
+# cuML pinned at 00094f7 (branch-25.08, ~/CascadeProjects/upstream/cuml), RAFT at 661a3b8
+#   (branch-25.08, ~/CascadeProjects/upstream/raft). ONE cuML pin and ONE RAFT pin.
+# CORRECTED 2026-08-31. This line read "cuML pinned at 7e29955c (OLS) / 00094f7 (ridge, qn),
+#   RAFT at 9aa17e5 (lstsq) / 661a3b8 (svd, matrix)". BOTH extra commits were wrong and
+#   neither is on this machine. The evidence, read against every checkout that IS
+#   (cuml=00094f7, cuml-v26.08.00=265b9da, raft=661a3b8, raft-v26.08.00=ebf92684):
+#     ols.cuh:120 "cuML's OLS solver algo = 1" = `case 1: raft::linalg::lstsqEig(...)`
+#       -- 00094f7:120 EXACT; 265b9da:120 is an argument, `labels,`.
+#     ols.cuh:67 = `int algo = 0,` -- 00094f7:67 EXACT; 265b9da:67 is `if (fit_intercept) {`.
+#     ols.cuh:156 = `*intercept = math_t(0);` -- 00094f7:156 EXACT; 265b9da:156 is
+#       `void gemmPredict(`.
+#     preprocess.cuh:36 = `namespace GLM {` -- 00094f7:36 EXACT.
+#     So `7e29955c` was never the OLS pin; 00094f7 is, and it is the pin
+#     impl/glm/ols.mojo:5 already names.
+#     lstsq.cuh:315 "the eigDC call site" = `raft::linalg::eigDC(handle, covA, ...)`
+#       -- 661a3b8:315 EXACT; ebf92684:315 is a bare argument, `n_cols,`.
+#     eig.cuh:149-151 = the "eigensolver couldn't converge" ASSERT -- 661a3b8:149-151
+#       EXACT; ebf92684:149-151 is a cusolver-version branch.
+#     svd.cuh:146 = the eigDC call in svdEig -- 661a3b8:146 EXACT; ebf92684:146 is a
+#       make_device_matrix_view.
+#     So `9aa17e5` was never the lstsq pin either. impl/linalg/detail/lstsq.mojo:5 was
+#     already corrected to 661a3b8 by bench/results/LANE_dispatch-audit_2026-08-19.md;
+#     THIS HEADER was the copy that never got fixed. Note that audit's stated reason
+#     ("`git cat-file -t 9aa17e5` returns Not a valid object name") does not hold on its
+#     own -- every checkout here is SHALLOW, depth 1, so cat-file fails for any commit
+#     but HEAD. The conclusion stands because the LINE NUMBERS resolve at 661a3b8; the
+#     test that was run does not support it.
 #   forced-by-definition -- the correspondence is DICTATED by the algorithm,
 #                    not chosen. Parameter structs, enums, POD types, one-line
 #                    forwarders, and mathematical predicates with exactly one

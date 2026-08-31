@@ -22,7 +22,7 @@ product is an intermediate inside a reduction belong on the fused kernel
 
 A STANDALONE register-tiled contraction used to sit here as well, a port of
 `raft/linalg/contractions.cuh::KernelPolicy` and the load/accumulate structure
-of `raft/linalg/detail/contractions.cuh` at RAFT `9aa17e5`, unfused and
+of `raft/linalg/detail/contractions.cuh` at RAFT `9aa17e5` (FLAGGED, NOT PROVEN, 2026-08-31: `gemm/DERIVATION_MAP.tsv` pins RAFT at `661a3b8` and that lane's one testable citation resolves exactly there. This citation carries no line numbers, so nothing settles it either way; do not 'fix' it toward the map without evidence), unfused and
 writing its product to memory. It is DELETED. Nothing called it once OLS's
 step 6 went to `gemv_gpu`, it was measured at about 15 GFLOP/s against
 `linalg.matmul`'s 248 at 1M x 128, and the FUSED instantiation of the same

@@ -12,7 +12,51 @@
 #                   `mojo-only` / `mojo_only`; those were not touched by this pass.
 # TWO upstreams in one section, which is why the header names them per row:
 #   cuVS  pinned at 94c2819    (the algorithm; branch-25.08, cloned 2026-08-19)
-#   RAFT  pinned at 661a3b8    (the top-k primitive, TRANSLITERATED not stood in for)
+#   RAFT  TWO PINS, SPLIT BY FILE. This line said "pinned at 661a3b8 (the top-k
+#     primitive)" until 2026-08-31 and that was WRONG for the top-k files. The
+#     line numbers were re-resolved against both RAFT checkouts on this machine
+#     (upstream/raft = 661a3b8 branch-25.08, upstream/raft-v26.08.00 = ebf92684)
+#     and they split cleanly:
+#       661a3b8 (branch-25.08) -- impl/neighbors/detail/faiss_select/*.mojo and
+#         impl/label/classlabels.mojo. DECISIVE: the faiss_select/ directory does
+#         NOT EXIST at ebf92684 at all, and at 661a3b8 every cited line is exact:
+#         Select.cuh:360 = `kNumWarpQRegisters = NumWarpQ / WarpSize`,
+#         Select.cuh:383-397 = `addThreadQ`, Comparators.cuh:17 = `Comparator::lt`.
+#       NOT 661a3b8 -- impl/matrix/detail/select_radix.mojo and
+#         impl/matrix/detail/select_warpsort.mojo, whose headers say RAFT `9aa17e5`.
+#         Every citation in those two files resolves against RAFT v26.08.00
+#         (ebf92684) to within 0 or +1 lines and MISSES 661a3b8 by 7 to 10:
+#           select_k-inl.cuh:38 `choose_select_k_algorithm` -- ebf92684:38 EXACT,
+#             661a3b8:47.  :40 `if (k > 256)` -- ebf92684:40 EXACT.
+#           bitonic_sort.cuh:180-217 `merge_impl` -- ebf92684:180 EXACT, 661a3b8:190.
+#           bitonic_sort.cuh:220-236 `sort_impl` -- ebf92684:220 EXACT, 661a3b8:230.
+#           bitonic_sort.cuh:206 "loop starts at warp_width >> 1" -- ebf92684:206 EXACT.
+#           select_warpsort.cuh:99 `kMaxCapacity=256` -- ebf92684:98, 661a3b8:105.
+#           select_warpsort.cuh:103-109 `is_ordered` -- ebf92684:104, 661a3b8:111.
+#           select_warpsort.cuh:139 `kDummy` -- ebf92684:138, 661a3b8:145.
+#           select_warpsort.cuh:327 `set_k_th_` -- ebf92684:326, 661a3b8:333.
+#           select_warpsort.cuh:846 cudaOccupancyMaxPotentialBlockSizeVariableSMem
+#             -- ebf92684:845, 661a3b8:828.
+#           select_radix.cuh:341 `cub::BlockScan` -- ebf92684:340, 661a3b8:348.
+#           select_radix.cuh:429 "ties fill from the back" -- ebf92684:429 EXACT,
+#             661a3b8:437.
+#     OPEN, AND NOT GUESSED AT: `9aa17e5` IS NOT ebf92684 EITHER, and no 9aa17e5
+#     checkout is on this machine. The six select_warpsort.cuh citations are all
+#     exactly +1 against ebf92684 and select_radix.cuh:1002,1016,1035 (the shared
+#     `atomicAdd(histogram + bucket, 1)` in filter_and_histogram_for_one_block) is
+#     +6 against ebf92684 (996/1010/1029) but only +1 against 661a3b8
+#     (1001/1015/1034), so 9aa17e5 is a distinct 26.08-era commit near ebf92684 and
+#     not either checkout. WHAT WOULD SETTLE IT: `git fetch origin 9aa17e5` into
+#     ~/CascadeProjects/upstream/raft-v26.08.00 (both trees here are SHALLOW,
+#     `git rev-list --count HEAD` = 1, so `git cat-file -t 9aa17e5` failing there
+#     proves nothing -- bench/results/LANE_dispatch-audit_2026-08-19.md read that
+#     failure as "not a valid object" and re-pinned glm/lstsq.mojo off it), then
+#     re-read select_warpsort.cuh:99 / :139 / :327 and select_radix.cuh:1002.
+#     AFFECTED CITATIONS: everything in impl/matrix/detail/select_radix.mojo and
+#     impl/matrix/detail/select_warpsort.mojo, plus neighbors/README.md:42 and
+#     impl/neighbors/detail/knn_brute_force.mojo:49 and :392, which cite
+#     select_k-inl.cuh at BOTH :38 (ebf92684's line) and :47-72 (661a3b8's line)
+#     for the same function.
 #   FAISS via RAFT's vendored copy under neighbors/detail/faiss_select/.
 #     ADDED 2026-08-20. Called "TWO upstreams" above; there are three, and the
 #     third is the one that matters most to get right because it is MIT, not

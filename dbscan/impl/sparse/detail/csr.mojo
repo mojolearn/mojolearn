@@ -3,7 +3,7 @@
 """Weakly connected components by label propagation.
 
 PORT OF `raft/sparse/detail/csr.cuh::weak_cc_label_device` and
-`weak_cc_init_all_kernel` at RAFT `9aa17e5`. Transliterated. Do not improve.
+`weak_cc_init_all_kernel` at RAFT `661a3b8`. Transliterated. Do not improve.
 
 This is the step that turns DBSCAN's neighbor graph into clusters, and it is
 the only part of DBSCAN that is not distance arithmetic.

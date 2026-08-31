@@ -385,7 +385,11 @@ only two files naming Facebook are the bare licence files
 `faiss_select/` directory does not exist at that commit at all. But our two
 files derive from RAFT at `9aa17e5`/`661a3b8`, and at `661a3b8` the directory
 does exist and **eight** source files under it carry
-`Copyright (c) Facebook, Inc. and its affiliates.` in their own headers. The
+`Copyright (c) Facebook, Inc. and its affiliates.` in their own headers UNTIL
+2026-08-31, when both files were DELETED and replaced by a clean-room
+implementation written from Batcher (1968) at `neighbors/impl/neighbors/topk/`.
+No FAISS-derived code and no third-party copyright remains in any `.mojo` file.
+The
 obligation is live at the commit we derived from. A measurement taken at the
 newer pin would have retired it wrongly.
 

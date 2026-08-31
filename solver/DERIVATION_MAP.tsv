@@ -11,6 +11,32 @@
 #   no-upstream     nothing upstream corresponds to this file. Older rows still spell this
 #                   `mojo-only` / `mojo_only`; those were not touched by this pass.
 # cuML pinned at v26.08.00 = 265b9da (upstream/cuml-v26.08.00), RAFT at v26.08.00 = ebf9268 (upstream/raft-v26.08.00). Checked out 2026-08-23; every port in this directory was written from those files, not from memory.
+# OPEN, FOUND 2026-08-31 BY A PIN AUDIT: THE PINS ABOVE ARE THE RIGHT TREES BUT TWO ROWS'
+#   LINE NUMBERS RESOLVE AGAINST NEITHER CHECKOUT ON THIS MACHINE. Nothing below has been
+#   renumbered, because the commit those numbers came from has not been identified and
+#   guessing at a span is worse than flagging it.
+#   1. impl/solver/cd.mojo, `cuml cpp/src/solver/cd.cuh`. Measured by grep and by
+#      brace-matching in both cuML checkouts:
+#                                  claimed   265b9da (pinned)   00094f7
+#        cdUpdateCoefKernel         :51-68        60-75            72-...
+#        cdFit                      :115-274     127-307          140-...
+#        cdPredict                  :293-307     331-346          346-365
+#      The claimed spans miss the pinned tree by 9, 12 and 38 lines and miss 25.08 by more.
+#      The one thing that does land is the doc comment: 265b9da:51 is the `/**` opening
+#      cdUpdateCoefKernel's block. The sample_weight arms (:136-163) overlap 265b9da's
+#      156-162 but do not match it. What the row SAYS about the algorithm was not
+#      contradicted by anything read here; only the numbers are unverifiable.
+#   2. impl/linalg/coalesced_reduction.mojo, `raft .../coalesced_reduction-inl.cuh`.
+#                                  claimed   ebf9268 (pinned)   661a3b8
+#        KahanBabushkaNeumaierSum   :22-32        36               46
+#        coalescedSumMediumKernel   :288-322     349              359
+#        ...MediumDispatcher        :353         416              426
+#      The offsets are -14, -61 and -63, i.e. not a constant, so this is not one older
+#      commit read consistently. WHAT WOULD SETTLE BOTH: identify the commit each was read
+#      against and fetch it, or re-derive the spans in the pinned checkouts and rewrite the
+#      rows in one pass. Affected: the four `-inl.cuh:` citations in
+#      impl/linalg/coalesced_reduction.mojo (:22-32, :288-322, :353, :480-483, :497) and
+#      the cd.cuh spans in row `impl/solver/cd.mojo` and in impl/solver/cd.mojo itself.
 #   forced-by-definition -- the correspondence is DICTATED by the algorithm,
 #                    not chosen. Parameter structs, enums, POD types, one-line
 #                    forwarders, and mathematical predicates with exactly one
