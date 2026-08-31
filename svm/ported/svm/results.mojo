@@ -44,7 +44,7 @@ from svm.mojo_only.device_select import (
     serial_min_f32_kernel,
     serial_sum_f32_kernel,
 )
-from svm.ported.svm.svm_parameter import SvmModel
+from svm.ported.svm.svm_parameter import C_SVC, EPSILON_SVR, SvmModel
 from svm.ported.svm.ws_util import WS_TPB, set_lower_kernel, set_upper_kernel
 
 
@@ -65,9 +65,35 @@ def combine_coefs_kernel(
         coef.unsafe_store(i, alpha.unsafe_load(i) * y.unsafe_load(i))
 
 
+def combine_coefs_svr_kernel(
+    coef: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+):
+    """The SVR fold, `raft::linalg::add(coef, coef, coef + n_rows, n_rows)`
+    (`results.cuh:195-199`).
+
+    Their doc comment states the two forms side by side:
+    `coef_i = y_i * alpha_i` for a classifier, and
+    `coef_i = y_i * alpha_i + y_{i+n/2} * alpha_{i+n/2}` for a regressor.
+    Since `y` is `[+1]*n ++ [-1]*n`, the second form is
+    `alpha_plus_i - alpha_minus_i`, which is why upstream can spell a
+    SUBTRACTION as an add.
+
+    ONE ADDITION PER OUTPUT, no reduction and no tree, so this is exactly
+    rounded and there is nothing to pin. It reads `coef[i + n]` and writes
+    `coef[i]` with `i < n`, so no thread reads a cell another thread wrote
+    and it is safe in place.
+    """
+    var n = Int(n_rows_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < n:
+        coef.unsafe_store(i, coef.unsafe_load(i) + coef.unsafe_load(i + n))
+
+
 struct Results(Movable):
     var n_rows: Int
     var n_cols: Int
+    var svm_type: Int
     var n_train: Int
     var f_idx: DeviceBuffer[DType.int32]
     var idx_selected: DeviceBuffer[DType.int32]
@@ -78,14 +104,31 @@ struct Results(Movable):
     var select: SelectScratch
 
     def __init__(
-        out self, ctx: DeviceContext, n_rows: Int, n_cols: Int
+        out self,
+        ctx: DeviceContext,
+        n_rows: Int,
+        n_cols: Int,
+        svm_type: Int = C_SVC,
     ) raises:
-        """`Results(handle, matrix, n_rows, n_cols, y, C, svmType)` for
-        C_SVC (`n_train = n_rows`)."""
+        """`Results(handle, matrix, n_rows, n_cols, y, C, svmType)`.
+
+        `n_train = (svmType == EPSILON_SVR) ? n_rows * 2 : n_rows`,
+        `results.cuh:79`, and every buffer below is sized by it exactly as
+        theirs are (`f_idx`, `idx_selected`, `val_selected`, `val_tmp`,
+        `flag`, all `n_train`). This class carried the FIELD and set it
+        flatly to `n_rows`; the conditional is what makes the field mean
+        anything.
+
+        `get_dual_coefs`, `get_support_vector_indices` and
+        `collect_support_vector_matrix` still select over `self.n_rows` and
+        that matches upstream: after `CombineCoefs` has folded the two
+        halves, only the first `n_rows` coefficients are the answer.
+        """
         self.n_rows = n_rows
         self.n_cols = n_cols
-        self.n_train = n_rows
-        var nt = n_rows
+        self.svm_type = svm_type
+        self.n_train = n_rows * 2 if svm_type == EPSILON_SVR else n_rows
+        var nt = self.n_train
         if nt < 1:
             nt = 1
         self.f_idx = ctx.enqueue_create_buffer[DType.int32](nt)
@@ -142,6 +185,13 @@ struct Results(Movable):
             Int32(self.n_train),
             grid_dim=_grid(self.n_train), block_dim=SEL_TPB,
         )
+        # `if (svmType == EPSILON_SVR) raft::linalg::add(coef, coef,
+        #  coef + n_rows, n_rows)`, `results.cuh:194-199`.
+        if self.svm_type == EPSILON_SVR:
+            ctx.enqueue_function[combine_coefs_svr_kernel](
+                self.val_tmp.unsafe_ptr(), Int32(self.n_rows),
+                grid_dim=_grid(self.n_rows), block_dim=SEL_TPB,
+            )
 
     def get_dual_coefs(mut self, ctx: DeviceContext) raises -> List[Float32]:
         """`GetDualCoefs`: the nonzero `coef` values, in index order."""

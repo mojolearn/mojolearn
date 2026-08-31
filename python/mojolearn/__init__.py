@@ -194,8 +194,12 @@ _NOT_YET = {
         "`ARIMA` class would have to demand its own answer as an argument"
     ),
     "SVR": (
-        "svm/ (C-SVC only: svmType != C_SVC raises); regression is rung 2 in "
-        "svm/UNPORTED.tsv"
+        "svm/, where the SOLVER now carries the whole eps-insensitive port "
+        "(2026-08-31: the 2n domain, SvrInit, UpdateF's second gemv, "
+        "CombineCoefs' fold, GetVecIndices) and REFUSES anyway, because no "
+        "fixture, sabotage arm or eps-insensitive oracle exists and nothing "
+        "has ever checked that the six pieces agree. This entry used to say "
+        "the port was missing; what is missing is the measurement"
     ),
 }
 

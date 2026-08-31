@@ -587,43 +587,42 @@ struct SmoSolver(Movable):
         the stage recorder (DISABLED is a no-op)."""
         var n_rows = self.n_rows
         var n_cols = self.n_cols
-        # THE SVR PATH IS HALF BUILT AND REFUSES BY NAME UNTIL IT IS NOT.
+        # THE SVR PATH IS COMPLETE AS A PORT AND UNGATED AS A RESULT.
         #
-        # `check_rung1_scope` admits EPSILON_SVR as of 2026-08-31 and the
-        # gradient init, the 2n domain and the label vector above are done.
-        # THREE PIECES BELOW ARE STILL C_SVC-ONLY, and each of them would
-        # produce a WRONG ANSWER rather than a failure if this ran today:
+        # All six pieces `svm/UNPORTED.tsv` rung 2 lists are in: the scope
+        # check, the 2n domain, SvrInit and the label vector, UpdateF's
+        # second gemv, CombineCoefs' subtraction, and KernelCache's
+        # GetVecIndices. What is NOT in is a single fixture, a single
+        # sabotage arm, or an oracle that knows what the eps-insensitive
+        # dual is, so nothing has ever checked that the six agree.
         #
-        #   1. `KernelCache` has no `GetVecIndices` (`kernelcache.cuh:794`),
-        #      so a working-set index in [n_rows, 2*n_rows) would be used to
-        #      address a row of X that does not exist.
-        #   2. `UpdateF` runs once; upstream runs a SECOND gemv on
-        #      `f + n_rows` (`smosolver.cuh:261-278`), so the lower half of
-        #      the gradient would never be updated.
-        #   3. `Results.CombineCoefs` stops at `coef = alpha * y`; the SVR
-        #      arm adds `coef[0..n) += coef[n..2n)` (`results.cuh:195-199`),
-        #      so the returned coefficients would be alpha+ alone.
+        # It therefore still refuses. The reason has changed and the refusal
+        # has not, which is the honest state: a learner nobody has measured
+        # is not a learner, and the existing gate architecture would let a
+        # shared misreading of SvrInit's signs pass, because the device arm
+        # and the host oracle would be written from the same reading and the
+        # only property gates in this lane (the KKT gap and the monotone
+        # dual objective) are classification-shaped.
         #
-        # A partially ported learner that answers is worse than one that
-        # refuses, and this repository has paid for that distinction more
-        # than once. Delete the clauses as they land, and only then wire an
-        # `svr_fit` and a Python surface.
+        # The clause comes out when `smo_oracle.mojo` has an SVR arm and
+        # `svc_check.mojo` has a regression fixture with a sabotage that
+        # bites it. Not before.
         if self.svmType == EPSILON_SVR:
             raise Error(
-                "svm: EPSILON_SVR reaches the solver but the port is"
-                " INCOMPLETE and would return a wrong answer rather than"
-                " fail. Missing: KernelCache::GetVecIndices (the ws_idx %"
-                " n_rows mapping), UpdateF's second gemv on f + n_rows, and"
-                " CombineCoefs' subtraction of the two alpha halves. The"
-                " gradient init, the 2n domain and the label vector ARE"
-                " done. See svm/UNPORTED.tsv rung 2."
+                "svm: EPSILON_SVR is fully ported as of 2026-08-31 and"
+                " REFUSES because it is UNGATED. No fixture, no sabotage arm"
+                " and no eps-insensitive oracle exist, so no run has ever"
+                " checked that SvrInit, the 2n working set, the second"
+                " UpdateF gemv, CombineCoefs' fold and GetVecIndices agree"
+                " with each other. See svm/UNPORTED.tsv rung 2."
             )
         var ws = WorkingSet(ctx, n_rows, SMO_WS_SIZE, self.svmType)
         self.n_ws = ws.get_size()
         self.initialize(ctx, y)
         var cache = KernelCache(
             ctx, x, n_rows, n_cols, self.n_ws, self.kp, self.cache_size,
-            self.kernel_tile_byte_limit, self.scratch_pad, self.scratch_poison,
+            self.kernel_tile_byte_limit, self.scratch_pad,
+            self.scratch_poison, self.svmType,
         )
         var n_ws = self.n_ws
         var threads = _block_solve_threads_for(n_ws, self.block_solve_threads)
@@ -656,9 +655,16 @@ struct SmoSolver(Movable):
                 var rem = max_iter - self.n_iter
                 if rem < max_iter_this_block:
                     max_iter_this_block = rem
+            # `cache.getKernelIndices(true)`, `smosolver.cuh:157`: the
+            # block solve addresses `alpha` and `f` over `n_train`, so it
+            # needs the UNPROJECTED index. `GetNonzeroDeltaAlpha` below
+            # takes `getKernelIndices(false)`, the projected one, because
+            # what it feeds is a gather of rows of X. For C_SVC the two
+            # buffers hold the same values.
             launch_block_solve(
                 ctx, threads, self.y_train, self.n_train, self.alpha, n_ws,
-                self.delta_alpha, self.f, cache.kernel_tile, cache.ws_idx_mod,
+                self.delta_alpha, self.f, cache.kernel_tile,
+                cache.ws_idx_mod_svr,
                 self.C_vec, self.tol, self.return_buff, max_iter_this_block,
             )
             # raft::update_host(host_return_buff, return_buff, 2)
@@ -697,6 +703,20 @@ struct SmoSolver(Movable):
                     self.update_f(
                         ctx, bd.offset, bd.batch_size, nnz_da, cache.kernel_tile
                     )
+                    # THE SECOND GEMV, `smosolver.cuh:261-278`. SVR doubled
+                    # the training vectors and the two halves share one
+                    # kernel tile and one delta_alpha; only the destination
+                    # moves, by `n_rows`. Upstream's own comment: "SVR has
+                    # doubled the number of training vectors and we need to
+                    # update alpha for both batches individually."
+                    if self.svmType == EPSILON_SVR:
+                        self.update_f(
+                            ctx,
+                            bd.offset + n_rows,
+                            bd.batch_size,
+                            nnz_da,
+                            cache.kernel_tile,
+                        )
             # DEVIATION 637: the NaN scan of alpha and f, read back with diff.
             ctx.enqueue_function[set_i32_kernel](
                 self.nan_flag.unsafe_ptr(), Int32(0), grid_dim=1, block_dim=1,
@@ -751,7 +771,7 @@ struct SmoSolver(Movable):
                 self.trace.nnz_seq.append(nnz_da)
 
         # CUML_LOG_DEBUG("SMO solver finished after %d outer iterations...")
-        var res = Results(ctx, n_rows, n_cols)
+        var res = Results(ctx, n_rows, n_cols, self.svmType)
         res.get(
             ctx, x, self.y_train, self.C_vec, self.alpha, self.f, model
         )

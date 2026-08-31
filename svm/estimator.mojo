@@ -7,11 +7,16 @@ these lists and back out; the wrapper is `python/mojolearn/_svm_impl.py`.
 
 WHAT THIS LANE HAS, IN ONE SENTENCE
 -----------------------------------
-BINARY C-SVC ONLY, dense FP32, LINEAR and RBF. There is NO SVR here.
-`svmType != C_SVC` raises by name in `svm_parameter.mojo::
-check_rung1_scope` (SVR is rung 2, `svm/UNPORTED.tsv`), so an `SVR` class
-on the Python side would have nothing to call. That absence is named on
-the Python surface rather than left for a caller to discover.
+BINARY C-SVC ONLY, dense FP32, LINEAR and RBF. There is no SVR ENTRY
+POINT here, and as of 2026-08-31 that is a different statement from "there
+is no SVR". The six porting pieces rung 2 listed all landed; what has not
+landed is a single fixture that exercises them, so `SmoSolver.solve` raises
+for EPSILON_SVR with UNGATED as the reason (`svm/UNPORTED.tsv`, and the SVR
+paragraph in `svm/README.md`). `param.svmType` below is still hard-written
+to `C_SVC`, so nothing reaches that refusal through this file, and `SVR`
+stays named in `mojolearn._NOT_YET` rather than left for a caller to
+discover. This paragraph used to say `svmType != C_SVC` raises, which is no
+longer the shape of the boundary.
 
 THE MODEL CROSSES BACK AS ARRAYS, AND THAT IS DELIBERATE (DEVIATION 873)
 ------------------------------------------------------------------------

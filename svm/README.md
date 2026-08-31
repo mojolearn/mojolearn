@@ -25,9 +25,40 @@ REPORTS (see "Commands and outputs" at the foot). No timing was measured
 and none is published. The ROW 39 AUDIT section below (2026-08-23) is the
 signed-zero / NaN / FAST-assertion audit; DEVIATIONS 635-637 came out of it.
 
+**SVR, 2026-08-31: PORTED, UNGATED, AND STILL REFUSING.** All six pieces
+`UNPORTED.tsv` rung 2 listed are in the tree: the scope check, the
+`n_train = 2 * n_rows` domain in `SmoSolver` and `Results`, `SvrInit`
+(`f = +-epsilon - y` and the `+-1` label vector), `UpdateF`'s second gemv on
+`f + n_rows`, `CombineCoefs`' fold of the two alpha halves, and
+`KernelCache`'s `ws_idx_mod_svr` with `GetVecIndices`. `solve` raises anyway,
+and the message says why: **no fixture, no sabotage arm and no
+eps-insensitive oracle exist**, so no run has ever checked that the six
+pieces agree with each other. A learner nobody has measured is not a learner.
+
+That last item is the load-bearing one and it is not paperwork. The device
+arm and `smo_oracle.mojo` are two implementations, but they are written from
+one reading of cuML, so a shared misreading of `SvrInit`'s signs or of
+`CombineCoefs`' direction would pass a device-versus-oracle gate silently.
+The two gates in this lane that test a PROPERTY rather than an agreement,
+the global KKT gap and the monotone dual objective, are both
+classification-shaped and have no SVR form. Either an independent arm on
+`tools/knn_sklearn_oracle.py`'s model, or the eps-insensitive dual and tube
+asserted directly, has to exist before the refusal comes out.
+
+Two more things a regression fixture has to be built to catch.
+`fold_order_for`'s docstring asserts that working-set indices are distinct
+within a set, which is TRUE for C_SVC and FALSE under SVR the moment row `i`
+and its twin `i + n_rows` are both selected and `ws_idx % n_rows` collides.
+And `f = +-epsilon - y` puts `+0.0` and `-0.0` into the SAME vector whenever
+`y == epsilon`, from ORDINARY input, where the signed-zero section below
+reached `f = -0.0` only through a planted negative subnormal.
+
 REFUSED BY NAME (each raises with the parameter's name;
-`check_refusals` gates all of them): `svmType != C_SVC` (SVR is rung 2),
-`epsilon != 0`, `cache_size != 0` (the LRU cache; see "the cache
+`check_refusals` gates all of them): `svmType` NU_SVC and NU_SVR, which are
+unported upstream too; **EPSILON_SVR, which is now a different kind of
+refusal**, see below; `epsilon != 0` ON A CLASSIFIER, where upstream ignores
+it (on a regressor it must be finite and non-negative instead);
+`cache_size != 0` (the LRU cache; see "the cache
 decision"), kernels `POLYNOMIAL` / `TANH` / `PRECOMPUTED`, `sample_weight`
 (and class_weight, which is sample_weight upstream), more than two classes,
 sparse input; and, DEVIATION 636, non-finite `C`, `tol`, RBF `gamma` (or a

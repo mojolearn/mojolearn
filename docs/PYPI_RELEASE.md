@@ -275,7 +275,13 @@ picked up; or cancel with `gh run cancel <id>`.
 * No permanently registered runner. The self-hosted runner exists for one
   job and is removed.
 
-## 9. The Linux wheel (no wheel published; docs/LINUX_WHEEL.md)
+## 9. The Linux wheel (docs/LINUX_WHEEL.md)
+
+**This heading read "no wheel published" until 2026-08-31 and had been wrong
+since 0.3.0.** `manylinux_2_35_x86_64` wheels are on PyPI for 0.3.0 and
+0.3.1, and 0.3.1 is the one to install: 0.3.0 SIGILLs on any x86-64 host
+without AVX-512. The steps below are how a Linux wheel gets made, not a plan
+for a first one.
 
 Every command below runs from the repository root on the M4, and every
 command that touches a GPU rents a box. Nothing here runs Mojo, pixi, pytest

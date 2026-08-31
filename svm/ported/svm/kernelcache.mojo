@@ -47,12 +47,37 @@ from svm.ported.distance.kernel_matrices import (
     kernel_workspace_floats,
     row_norms_l2sq,
 )
-from svm.ported.svm.svm_parameter import KERNEL_RBF, KernelParams
+from svm.ported.svm.svm_parameter import (
+    C_SVC,
+    EPSILON_SVR,
+    KERNEL_RBF,
+    KernelParams,
+)
 
 
 comptime CACHE_READY = 0
 comptime CACHE_WS_INITIALIZED = 1
 comptime CACHE_BATCHING_INITIALIZED = 2
+
+
+def svr_vec_indices_kernel(
+    vec_idx: MutPointer[Int32, MutAnyOrigin],
+    ws_idx: MutPointer[Int32, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_ws_in: Int32,
+):
+    """`GetVecIndices`, `kernelcache.cuh:804-808`.
+
+    "For SVR we have duplicate set of training vectors, we return the
+    original idx, which is simply ws_idx % n_rows." Their own spelling is
+    `y < n ? y : y - n` rather than a modulo, which is the same thing given
+    `ws_idx < 2 * n_rows` and is kept because a `%` would also accept an
+    index they never produce.
+    """
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_ws_in):
+        var v = ws_idx.unsafe_load(i)
+        vec_idx.unsafe_store(i, v if v < n_rows_in else v - n_rows_in)
 
 
 def _grid(n: Int) -> Int:
@@ -85,6 +110,23 @@ struct KernelCache(Movable):
 
     var kernel_tile: DeviceBuffer[DType.float32]
     var ws_idx_mod: DeviceBuffer[DType.int32]
+    var ws_idx_mod_svr: DeviceBuffer[DType.int32]
+    """THE WORKING SET IN THE UNPROJECTED 2n SPACE.
+
+    Upstream keeps two arrays and hands out one or the other through
+    `getKernelIndices(allow_svr)` (`kernelcache.cuh:529-538`):
+    `ws_idx_mod` holds indices projected into `[0, n_rows)`, which is what
+    addresses a ROW OF X and therefore what the kernel tile is built from,
+    and `ws_idx_mod_svr` holds the raw indices, which is what addresses
+    `alpha` and `f` over `n_train` inside the block solve.
+
+    This port allocates BOTH on every problem type and keeps them equal for
+    C_SVC, which costs one `n_ws` int32 buffer and one copy per outer
+    iteration (n_ws is at most 1024) and buys one code path. The alternative
+    is an accessor returning one of two buffers, which Mojo's ownership does
+    not spell, and a branch at each of the two call sites. It is the same
+    trade `SmoSolver.y_train` makes and for the same reason."""
+    var svm_type: Int
     var x_ws_dense: DeviceBuffer[DType.float32]
     var matrix_l2: DeviceBuffer[DType.float32]
     var matrix_l2_ws: DeviceBuffer[DType.float32]
@@ -102,6 +144,7 @@ struct KernelCache(Movable):
         kernel_tile_byte_limit: Int,
         scratch_pad: Int = 0,
         scratch_poison: Float32 = 0.0,
+        svm_type: Int = C_SVC,
     ) raises:
         """`KernelCache(handle, matrix, n_rows, n_cols, n_ws, kernel,
         kernel_type, cache_size, svmType, kernel_tile_byte_limit,
@@ -117,6 +160,7 @@ struct KernelCache(Movable):
         self.n_rows = n_rows
         self.n_cols = n_cols
         self.n_ws = n_ws
+        self.svm_type = svm_type
         self.kp = kp.copy()
         self.cache_state = CACHE_READY
         self.cache_size_vecs = 0
@@ -136,6 +180,7 @@ struct KernelCache(Movable):
             n_ws * tile_cols + scratch_pad
         )
         self.ws_idx_mod = ctx.enqueue_create_buffer[DType.int32](n_ws)
+        self.ws_idx_mod_svr = ctx.enqueue_create_buffer[DType.int32](n_ws)
         self.x_ws_dense = ctx.enqueue_create_buffer[DType.float32](
             n_ws * n_cols + scratch_pad
         )
@@ -176,17 +221,43 @@ struct KernelCache(Movable):
     def init_working_set(
         mut self, ctx: DeviceContext, mut ws_idx: DeviceBuffer[DType.int32]
     ) raises:
-        """`InitWorkingSet(ws_idx)`: on the `GetSize() == 0` path,
-        `raft::copy(ws_idx_mod, ws_idx, n_ws)` and nothing else."""
+        """`InitWorkingSet(ws_idx)` on the `GetSize() == 0` path.
+
+        For C_SVC that is `raft::copy(ws_idx_mod, ws_idx, n_ws)` and nothing
+        else. For EPSILON_SVR it is their two lines
+        (`kernelcache.cuh:489-494`): the RAW indices into `ws_idx_mod_svr`,
+        and `GetVecIndices` -- `ws_idx % n_rows`, spelled as
+        `y < n ? y : y - n` at `kernelcache.cuh:806-807` -- into
+        `ws_idx_mod`.
+
+        THEIR THIRD SVR LINE IS DELIBERATELY ABSENT AND IS NOT OWED.
+        `mapColumnIndicesToSVRSpace` (`kernelcache.cuh:504-509`) sits inside
+        `if (batch_cache.GetSize() > 0)`, so it exists only to undo the LRU
+        cache's reordering. This lane takes the `cache_size == 0` path,
+        where that branch is never entered, so the kernel is dead code here
+        rather than an omission. If the LRU is ever ported, it comes back.
+        """
         if self.cache_state == CACHE_WS_INITIALIZED:
             raise Error("svm KernelCache: Working set has already been initialized!")
         if self.cache_state == CACHE_BATCHING_INITIALIZED:
             raise Error("svm KernelCache: Previous batching step incomplete!")
         ctx.enqueue_function[copy_i32_kernel](
-            self.ws_idx_mod.unsafe_ptr(), ws_idx.unsafe_ptr(),
+            self.ws_idx_mod_svr.unsafe_ptr(), ws_idx.unsafe_ptr(),
             Int32(0), Int32(0), Int32(self.n_ws),
             grid_dim=_grid(self.n_ws), block_dim=SEL_TPB,
         )
+        if self.svm_type == EPSILON_SVR:
+            ctx.enqueue_function[svr_vec_indices_kernel](
+                self.ws_idx_mod.unsafe_ptr(), ws_idx.unsafe_ptr(),
+                Int32(self.n_rows), Int32(self.n_ws),
+                grid_dim=_grid(self.n_ws), block_dim=SEL_TPB,
+            )
+        else:
+            ctx.enqueue_function[copy_i32_kernel](
+                self.ws_idx_mod.unsafe_ptr(), ws_idx.unsafe_ptr(),
+                Int32(0), Int32(0), Int32(self.n_ws),
+                grid_dim=_grid(self.n_ws), block_dim=SEL_TPB,
+            )
         self.cache_state = CACHE_WS_INITIALIZED
 
     def get_square_tile_without_caching(
