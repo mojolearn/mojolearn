@@ -73,8 +73,37 @@ fi
 LINK_FLAGS="-Xlinker -platform_version -Xlinker macos -Xlinker $MACOS_FLOOR -Xlinker $MACOS_SDK"
 [ "$(uname)" = "Darwin" ] || LINK_FLAGS=""
 
+# THE LINUX x86-64 CPU BASELINE. Without it `mojo build` targets WHATEVER
+# CHIP THE BUILD BOX HAS, and on 2026-08-30 that shipped a 0.3.0 wheel whose
+# HOST code used AVX-512. It died with SIGILL on an L40 whose host was an AMD
+# EPYC 7773X, a Zen 3 part with no AVX-512, inside `cluster::estimator::
+# kmeans_fit`, on
+#
+#     vandps 0x6d7ee(%rip){1to4},%xmm2,%xmm2
+#
+# where `{1to4}` is an EVEX embedded broadcast. There is no `cpuid` dispatch
+# anywhere in these binaries, so it is unconditional. That breaks every AMD
+# Zen 1, 2 and 3 host, most Intel consumer parts and every Xeon before
+# Skylake-SP, which together are a large share of GPU servers. The GPU was
+# never involved; the selector had correctly chosen sm_80 for that sm_89
+# device.
+#
+# macOS has pinned `--target-cpu apple-m1` since 0.1.0 AND gates the result
+# with `packaging/isa_baseline.py`. Linux had NEITHER. That is the whole bug.
+#
+# x86-64-v3 is AVX2, FMA, BMI2 and SSE4.2, so Haswell 2013 and Zen 1 2017
+# onward, and it EXCLUDES AVX-512. Anything modern enough to hold a supported
+# GPU clears it.
+#
+# aarch64 Linux keeps the empty flags it always had, because an x86 CPU name
+# is meaningless there and its host CPU is not the variable that broke.
 TARGET_FLAGS="--target-cpu apple-m1"
-[ "$(uname)" = "Darwin" ] || TARGET_FLAGS=""  # linux arm: host cpu + its GPU
+if [ "$(uname)" != "Darwin" ]; then
+    case "$(uname -m)" in
+        x86_64) TARGET_FLAGS="--target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3}" ;;
+        *)      TARGET_FLAGS="" ;;   # linux arm: host cpu + its GPU
+    esac
+fi
 # MOJOLEARN_GPU_ARCHS: ONE GPU architecture a LINUX set is compiled for
 # (sm_80, gfx942, ...). Until 2026-08-30 ONLY bindings/build.sh read this
 # variable, so a leg that set it built ONE binding for the asked-for

@@ -167,6 +167,28 @@ if awk '$3=="NONE"{found=1} END{exit !found}' "$ARCHBACK"; then
 fi
 say "architecture set: $ARCH_SET"
 
+# ------------------------------------------------- CPU ISA BASELINE
+# THE HOST CPU IS A TARGET TOO, and until 2026-08-30 nothing here checked it.
+# `mojo build` defaults --target-cpu to the chip that ran the compiler, so the
+# 0.3.0 Linux wheel shipped with AVX-512 in its host code and died with SIGILL
+# on the first box whose CPU lacked it, an AMD EPYC 7773X. Every one of the
+# thirty binaries carried it, unguarded: our extensions contain no `cpuid` at
+# all. macOS had pinned a CPU and gated the result since 0.1.0; Linux had
+# neither. The build scripts now pin x86-64-v3 and this refuses the set if
+# anything above that baseline survives.
+if command -v objdump >/dev/null 2>&1; then
+  if ! pixi run -e "$PIXI_ENV" python3 "$REPO/packaging/linux/isa_baseline_linux.py" \
+        "$SET" --json "$DEST/isa_baseline.json" > "$DEST/isa_baseline.txt" 2>&1; then
+    say "REFUSING: this set is above the x86-64-v3 CPU baseline."
+    grep -E "^  FAIL|first at|REFUSING|binaries," "$DEST/isa_baseline.txt" | head -12 | sed 's/^/    /'
+    exit 5
+  fi
+  say "CPU ISA baseline: clean at x86-64-v3 ($(grep -c '^  ok' "$DEST/isa_baseline.txt") binaries)"
+else
+  say "FINDING: no objdump on this box, the CPU ISA baseline was NOT checked."
+  echo "objdump absent; baseline NOT checked" > "$DEST/isa_baseline.txt"
+fi
+
 # ONE ARCHITECTURE PER SET, AND TYPED MUST EQUAL BUILT. Two findings of
 # 2026-08-30 meet here. (1) `--target-accelerator` takes EXACTLY ONE
 # architecture -- the comma list parses and the compiler rejects it -- so a
