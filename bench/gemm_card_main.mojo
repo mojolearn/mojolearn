@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The `gemm.fp32.v1` identity card: one stage per shape, for the vendor diff.
 
 Phase 3's exit criterion is *"Apple/NVIDIA/AMD hashes agree"*. That needs a

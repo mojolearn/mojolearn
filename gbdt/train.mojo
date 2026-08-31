@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The user-facing surface: train from raw floats, predict raw floats.
 
 NOT A PORT -- this is the convenience layer over ported machinery, the

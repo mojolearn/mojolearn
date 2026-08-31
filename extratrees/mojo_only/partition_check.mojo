@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CuML's in-place split partition, checked per slot against the predicate.
 
 `partitionSamples` (`builder_kernels_impl.cuh:43-88`) is the step that makes a

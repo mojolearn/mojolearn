@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The four histogram bin types, and the atomics that fill them.
 
 MIRRORS `cpp/src/decisiontree/batched-levelalgo/bins.cuh` at

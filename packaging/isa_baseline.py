@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Prove the shipped binary contains no instruction older Apple silicon lacks.
 
 WHY DISASSEMBLY AND NOT A HEADER READ. arm64 Mach-O `cpusubtype` stays

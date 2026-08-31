@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Prove a Linux x86-64 set contains no instruction a target CPU may lack.
 
     python3 packaging/linux/isa_baseline_linux.py <dir-of-.so> [--json out]

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Pointwise objectives: value, first derivative, second derivative.
 
 PORT OF `catboost/cuda/targets/kernel/pointwise_targets.cu` at CatBoost

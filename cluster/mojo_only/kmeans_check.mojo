@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The first code that LAUNCHES the k-means port, and the sabotage that proves it.
 
 NO CUVS COUNTERPART. Their tests are gtest fixtures against a CPU reference;

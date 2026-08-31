@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Launcher for the quantized shared-histogram family (DEV 1911-1914).
 
 The host half of `kernel/hist_quantized_shared.mojo`: the per-level

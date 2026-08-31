@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The range pass, the constant test, and the keyed threshold draw.
 
 These are steps 1-3 of DEVIATION 137 — the part of `computeSplitKernel` this

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The split record's total order, checked against an independent tally.
 
 `Split.update` (`split.cuh:76-90`) is the ONLY thing that decides which

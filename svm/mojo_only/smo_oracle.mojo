@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host oracle: the SAME SMO, serial, in Float32 through the identical
 helpers (and in Float64 as a sanity reference).
 

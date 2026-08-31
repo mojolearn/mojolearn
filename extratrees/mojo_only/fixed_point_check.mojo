@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Fixed point: the bound, the order-independence, and the comparator's width.
 
 DEVIATION 135 is closed in favour of fixed point, so the properties it was

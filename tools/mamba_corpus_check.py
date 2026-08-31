@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Compare a driver's Mamba-1 stage dumps against the independent corpus.
 
 The corpus (`mamba/corpus/`, see its README.md) carries a float64 per-stage

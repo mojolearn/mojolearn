@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """What `mojolearn.identical.gemm.fp32.v1` COSTS: the Phase 4 measurement harness.
 
 Driven by `tools/gemm_price.sh`, which alternates the two build modes round by

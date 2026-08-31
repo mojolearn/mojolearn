@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The one-byte histogram kernel: 4 features per 4-byte load, 32 to 256 bins.
 
 PORT OF `hist_one_byte.cu` and the base it derives from,

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Entry point for the brute-force k-NN checks.
 
 The first three check their FALLBACK, `tiled_brute_force_knn`. The rest check

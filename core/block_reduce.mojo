@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`cub::BlockReduce<T, TPB>::Sum`: the block-wide sum cuML's RF counts with.
 
 PORT OF `cub/cub/block/block_reduce.cuh` and its default algorithm

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """scikit-learn's ExtraTrees arm, called FROM the Mojo driver in one process.
 
 Why a Python module and not a second process: this box drifts. The repository

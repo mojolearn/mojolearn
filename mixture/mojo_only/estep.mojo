@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The E-step: the log Gaussian probability, and the responsibilities.
 
 NOT A PORT, AND THERE IS NOTHING TO PORT. cuML has no Gaussian mixture model

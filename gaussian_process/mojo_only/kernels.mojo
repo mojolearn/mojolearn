@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The covariance functions of profile `mojolearn.identical.gp.fp32.v1`.
 
 **NOT A PORT, AND THERE IS NOTHING TO PORT.** cuML, cuVS and RAFT implement

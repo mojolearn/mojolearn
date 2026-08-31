@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Does the layout builder assign policies and bits correctly?
 
 Pure host arithmetic, so it needs no GPU. It is the step that decides what

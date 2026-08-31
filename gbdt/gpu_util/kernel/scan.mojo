@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`ScanVector` over `ui32`: the unsegmented device-wide prefix sum.
 
 PORT OF `catboost/cuda/cuda_util/kernel/scan.cu:10-19` (`NKernel::ScanVector`)

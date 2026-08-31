@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The binary-feature histogram kernel: 32 features per 4-byte load.
 
 PORT OF `hist_binary.cu` plus the loop it instantiates,

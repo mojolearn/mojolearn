@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The spectral lane's gates. DEVIATIONS 770-789.
 
 HOST (no lock needed, no GPU touched):

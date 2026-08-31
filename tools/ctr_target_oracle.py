@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CatBoost's OWN target borders for the CTR target grid, as a fixture.
 
     pixi run -e bench python tools/ctr_target_oracle.py > bench/ctr_target_oracle.txt

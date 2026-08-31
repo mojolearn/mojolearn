@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The M-step: the weighted moments, and the precision Cholesky that can fail.
 
 NOT A PORT. See `mixture/mojo_only/estep.mojo`'s header for the upstream

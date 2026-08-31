@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """E1 cross-machine inference driver, the train-here-infer-there leg.
 
 Machine A runs `tools/e1_traced_fit.py`, which saves each fitted model

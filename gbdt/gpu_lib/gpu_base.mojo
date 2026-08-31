@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Streams, and the handle a stream is addressed by.
 
 PORT OF `catboost/cuda/cuda_lib/cuda_base.h` at CatBoost `54a8143a`.

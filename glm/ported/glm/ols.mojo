@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+# Derivative work: the upstream file and its pinned commit are recorded in this lane's PORTED_MAP.tsv and in this file's own docstring. See NOTICE.
 """`olsFit`: the entry point, its guards, and its SOLVER DISPATCH.
 
 PORT OF `cuml/cpp/src/glm/ols.cuh::olsFit` at cuML `00094f7`. Partial.

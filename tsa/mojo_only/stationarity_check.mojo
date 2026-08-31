@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Gates for the KPSS test and the `d` choice (DEVIATIONS 671-672).
 
     tools/with_build_lock.sh     pixi run mojo run -I . tsa/mojo_only/stationarity_check.mojo

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """What the worker can be asked to do, and the tag it dispatches on.
 
 PORT OF `catboost/cuda/cuda_lib/task.h` at CatBoost `54a8143a`, plus the two

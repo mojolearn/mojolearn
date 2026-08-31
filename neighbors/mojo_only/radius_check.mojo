@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The `RadiusNeighbors` surface, against a host oracle and its own sabotage.
 
 WHAT THIS FILE CLAIMS, AND WHAT IT DELIBERATELY DOES NOT.

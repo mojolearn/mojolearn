@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Build histograms for a NON-CONTIGUOUS list of leaves and check every cell.
 
 Every other histogram check in this tree passes leaf ids `0, 1, 2, ...`. That

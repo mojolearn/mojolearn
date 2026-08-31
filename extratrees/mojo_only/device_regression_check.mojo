@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """A REGRESSION tree grown on the GPU, against the host regression tree.
 
 The classification device path is bit-identical to its host counterpart

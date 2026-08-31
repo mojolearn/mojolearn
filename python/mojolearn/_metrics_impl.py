@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Scoring functions backed by the ported cuML `cpp/src/metrics/` kernels.
 
 **metrics IS NOT AN ESTIMATOR.** It is a set of scoring functions, so this

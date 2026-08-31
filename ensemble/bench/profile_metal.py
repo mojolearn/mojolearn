@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Per-kernel GPU time for the random forest, from Apple Instruments.
 
     ensemble/bench/profile_metal.py record          # trace one fit

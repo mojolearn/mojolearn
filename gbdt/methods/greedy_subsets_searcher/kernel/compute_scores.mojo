@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Score every candidate split of a level and pick the best.
 
 PORT OF `catboost/cuda/methods/greedy_subsets_searcher/kernel/

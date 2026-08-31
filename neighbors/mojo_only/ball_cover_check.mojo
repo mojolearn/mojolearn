@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The random ball cover has to return the SAME SET brute force returns.
 
 NO CUVS COUNTERPART. Their `cpp/tests/neighbors/ball_cover.cu` compares

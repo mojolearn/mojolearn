@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The GEMM oracle, and the fixtures that make each of its clauses FALSIFIABLE.
 
 Phase 1 of `IDENTICAL_GEMM_PLAN.md`'s lane charter. The contract is

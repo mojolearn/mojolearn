@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+# Derivative work: the upstream file and its pinned commit are recorded in this lane's PORTED_MAP.tsv and in this file's own docstring. See NOTICE.
 """cuML's `KernelDensity`: the six log-kernels, their norms, the logsumexp.
 
 PORT OF cuML `python/cuml/cuml/neighbors/kernel_density.py` at cuML

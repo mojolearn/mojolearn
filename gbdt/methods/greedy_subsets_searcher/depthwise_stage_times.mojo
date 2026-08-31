@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Env-gated per-stage wall timers for the non-symmetric fit loop.
 
 NOT A PORT, and not a benchmark. CatBoost has no equivalent and the bench

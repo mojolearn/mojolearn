@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Does the TUNED kernel produce the PINNED kernel's exact bits?
 
 A faster GEMM that moves one bit is worthless here, so this is the only

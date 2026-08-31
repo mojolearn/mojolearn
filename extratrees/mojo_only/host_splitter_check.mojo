@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The check for the exact host oracle, `host_splitter.mojo`.
 
     Run:  pixi run mojo run -I . extratrees/mojo_only/host_splitter_check.mojo

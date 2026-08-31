@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+# Derivative work: the upstream file and its pinned commit are recorded in this lane's PORTED_MAP.tsv and in this file's own docstring. See NOTICE.
 """`raft/sparse/linalg/detail/laplacian.cuh`: `compute_graph_laplacian`
 (the COO overload, `:119-234` -- the one the 26.08 cuVS path reaches, since
 both `create_connectivity_graph` and the precomputed-graph `transform` hand

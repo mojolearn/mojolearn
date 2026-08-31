@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The FOLD side of the oblivious searcher: N tasks, 2N partitions.
 
 PORT OF `catboost/cuda/methods/oblivious_tree_structure_searcher.{h,cpp}` at

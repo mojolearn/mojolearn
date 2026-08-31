@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Gates for the k-NN CLASSIFIER: `neighbors/estimator.mojo::
 knn_classifier_predict` over the cuML port in `neighbors/ported/knn/knn.mojo`
 and `neighbors/ported/selection/knn.mojo`.

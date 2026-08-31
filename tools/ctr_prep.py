@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """FeatureFreq CTR fixtures for the LEGACY categorical harness.
 
 **THE CALCER HAS MOVED. This script is no longer where the arithmetic

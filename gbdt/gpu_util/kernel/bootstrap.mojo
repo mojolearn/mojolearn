@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The row-sampling draws: Bayesian, Bernoulli and Poisson.
 
 PORT OF `BayesianBootstrapImpl` (`catboost/cuda/cuda_util/kernel/

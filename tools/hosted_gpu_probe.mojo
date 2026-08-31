@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Smallest possible answer to: does Metal compute work on this machine?
 
 Written for GitHub's hosted macOS runners. They are real Apple silicon, but

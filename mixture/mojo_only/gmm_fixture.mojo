@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Six planted datasets, and every bit of every one of them is accounted for.
 
 NOT A PORT. cuML has no Gaussian mixture model at the pin

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The silhouette's pairwise distance, computed where the order is visible.
 
 NOT A PORT, and the twin of `neighbors/mojo_only/pinned_distance_tile.mojo`

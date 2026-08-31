@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Gate for the one-byte pointwise accumulators, 5, 6 and 7 bit.
 
 `TPointHist<0,0,B>`, `<0,1,B>` and `<0,2,B>`: four features per `UInt32`

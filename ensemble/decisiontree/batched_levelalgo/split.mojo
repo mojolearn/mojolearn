@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The split candidate, and the total order that makes a forest reproducible.
 
 MIRRORS `cpp/src/decisiontree/batched-levelalgo/split.cuh` at rapidsai/cuml

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The four kernels behind `ELeavesEstimation::Exact` on their GPU.
 
 PORT OF `catboost/cuda/methods/kernel/exact_estimation.cu` at CatBoost

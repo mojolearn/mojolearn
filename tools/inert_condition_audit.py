@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 r"""
 inert_condition_audit.py -- a static census of the sabotage arms and of what
 anybody has said about the inputs on which they CANNOT fire.

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """RUNG 2's GATE: the two POINTWISE searchers, one fixture, one tree, to the bit.
 
 `PORTING.md` 91 A says the feature-parallel and doc-parallel data layouts

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The ONE `n_rows`-length reduction the solver section owns under IDENTICAL,
 and it is not this section's: it is `mojolearn.identical.gemm.fp32.v1` at
 `m = n = 1, k = n_rows` (an `OP_NT` cell, `gemm/IDENTICAL_FP32_CONTRACT.md`

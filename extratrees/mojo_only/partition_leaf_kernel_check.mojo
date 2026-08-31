@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The split PARTITION and the LEAF-VALUE pass, on the device, per cell.
 
     pixi run mojo run -I . extratrees/mojo_only/partition_leaf_kernel_check.mojo

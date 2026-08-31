@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+# Derivative work: the upstream file and its pinned commit are recorded in this lane's PORTED_MAP.tsv and in this file's own docstring. See NOTICE.
 """cuML `cpp/src/metrics/kl_divergence.cu` (265b9da): `ML::Metrics::kl_divergence` forwards to `raft::stats::kl_divergence`. The `float` overload; the `double` one cannot run on Apple (no Float64 on device) and is refused by the Python surface (UNPORTED.tsv)."""
 
 from max.gpu.host import DeviceBuffer, DeviceContext

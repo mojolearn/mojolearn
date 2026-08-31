@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CatBoost's POINTWISE split scorer and its five score calcers, ported.
 
 PORT OF `catboost/cuda/methods/kernel/pointwise_scores.cu` (698 lines) and

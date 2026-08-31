@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Every sklearn parameter: honoured or refused, one named case per side.
 
 `estimator.mojo` exists because DEVIATION 154 recorded a debt — a caller

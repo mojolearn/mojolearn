@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The Linux release smoke: every estimator family, one tier, one vendor.
 
     MOJOLEARN_NUMERIC_MODE=<tier> python3 packaging/linux/smoke.py \\

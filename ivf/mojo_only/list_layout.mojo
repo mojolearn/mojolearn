@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The CSR-shaped inverted lists, the index carry, and the probe merge.
 
 NOT A PORT. cuVS lays an IVF-FLAT index out as `n_lists` separately

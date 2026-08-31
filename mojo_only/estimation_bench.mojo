@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """What the NeedEstimation arm COSTS per tree, priced by same-arm subtraction.
 
 gbm-bench runs Logloss on five of its six datasets, and `fraud` (285k rows)

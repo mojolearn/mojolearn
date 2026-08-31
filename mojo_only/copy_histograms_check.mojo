@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Check `copy_histograms_kernel` on its own.
 
 It is the only one of the three histogram-maintenance kernels with no

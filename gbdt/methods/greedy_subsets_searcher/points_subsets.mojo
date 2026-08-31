@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The state a growing tree carries between its two phases.
 
 PORT OF `TPointsSubsets`, `TLeaf` and `TBestSplitProperties` from

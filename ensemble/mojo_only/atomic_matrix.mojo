@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Per-vendor ATOMIC WIDTH rows, for the bins cuML's histograms are made of.
 
 NO CUML COUNTERPART. cuML needs no such table: CUDA gives it a 64-bit

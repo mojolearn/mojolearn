@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Sliced epsilon fixtures for the shape sweep (mojo_only/shape_sweep.mojo).
 
     pixi run -e bench python tools/shape_slices.py

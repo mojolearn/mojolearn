@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """E2 identity cards for the training paths the Python matrix does not reach.
 
     pixi run e2-growth-cards <out_dir> [card ...]

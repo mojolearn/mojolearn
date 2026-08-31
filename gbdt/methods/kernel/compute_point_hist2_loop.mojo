@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CatBoost's ONE pointwise histogram loop, written once and shared.
 
 PORT OF `catboost/cuda/methods/kernel/compute_point_hist2_loop.cuh` at

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The matrix product. One call to MAX's tuned matmul, plus RAFT's policy.
 
 WHAT IS LEFT IN THIS FILE, AND WHY THE KERNEL IS NOT

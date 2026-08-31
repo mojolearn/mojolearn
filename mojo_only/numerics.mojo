@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """What may vary between backends, and what may not.
 
 NOT a port. CatBoost has no equivalent and does not need one: it ships one

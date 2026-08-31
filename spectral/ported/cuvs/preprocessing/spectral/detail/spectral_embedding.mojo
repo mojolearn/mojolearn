@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+# Derivative work: the upstream file and its pinned commit are recorded in this lane's PORTED_MAP.tsv and in this file's own docstring. See NOTICE.
 """cuVS `cpp/src/preprocessing/spectral/detail/spectral_embedding.cuh`
 (v26.08.00, the file cuML 26.08's `ML::SpectralEmbedding::transform` reaches
 through `cuvs::preprocessing::spectral_embedding::transform`), function for

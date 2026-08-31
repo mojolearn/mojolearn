@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The mutual reachability graph as a DENSE matrix, and why it is dense.
 
 NOT A PORT of a file; a port of ONE FUNCTOR (`ReachabilityPostProcess`,

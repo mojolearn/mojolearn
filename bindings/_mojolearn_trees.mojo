@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPython boundary for the ExtraTrees estimators (`extratrees/`).
 
 Kept in its OWN extension for the same reason `_mojolearn_estimators` and

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The single-linkage gates.
 
     tools/with_build_lock.sh     pixi run mojo run -I . hierarchy/mojo_only/linkage_check.mojo

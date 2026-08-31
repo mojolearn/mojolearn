@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Import the installed wheel and run a real fit on every estimator family.
 
 Not a hello-world. It plants four separated clusters and requires k-means to

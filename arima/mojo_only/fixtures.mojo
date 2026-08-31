@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Hashed ARIMA fixtures: orders, parameter vectors, series. NOT A PORT.
 
 The series generators, the splitmix hash, `bits32`, `same_bits`, the

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`ComputeWeightedQuantile` and `ComputeExactApprox`: the Exact driver.
 
 PORT OF `catboost/cuda/methods/leaves_estimation/leaves_estimation_helper.h`

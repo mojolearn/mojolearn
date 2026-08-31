@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The score kernel's MultiClass arm, against two exact analytic identities.
 
     pixi run check-multiclass-score

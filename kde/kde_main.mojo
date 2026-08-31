@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """KernelDensity driver: one hashed fit, the identity card, the mode it ran in.
 
     MOJOLEARN_IDENTITY_TRACE=/tmp/mac.kde.card \\

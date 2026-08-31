@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Blocked right-looking FP32 Cholesky, and the profile it belongs to.
 
 Profile `mojolearn.identical.cholesky.fp32.v1`. `A = L L^T` in place, lower

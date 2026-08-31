@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The BINARY driver: 32 one-bit features per block.
 
 PORT OF `catboost/cuda/methods/kernel/pointwise_hist2_binary.cu` at CatBoost

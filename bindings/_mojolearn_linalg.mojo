@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPython boundary for `mojolearn.identical.gemm.fp32.v1`, the bit-identical
 FP32 matrix product.
 

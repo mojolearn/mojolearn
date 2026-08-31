@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE TUNED TWIN of `mojolearn.identical.gemm.fp32.v1`. EXPERIMENTAL.
 
 **THIS FILE HAS NEVER BEEN COMPILED AND HAS NEVER BEEN EXECUTED.** It was

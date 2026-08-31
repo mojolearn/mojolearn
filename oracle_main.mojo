@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The differential check: the port against CatBoost's own output.
 
 Separate from `probe_main` because it needs `bench/oracle.txt`, which is

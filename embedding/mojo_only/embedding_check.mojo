@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The gate file of profile `mojolearn.identical.embedding.fp32.v1`, the
 path `embedding/IDENTICAL_EMBEDDING_CONTRACT.md` section 11 and OWED item 1
 both name.

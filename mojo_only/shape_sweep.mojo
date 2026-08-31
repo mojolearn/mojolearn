@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Where does an epsilon tree's ~200 ms live? Fit t = a + b*R + c*F + d*R*F.
 
     pixi run -e bench python tools/shape_slices.py     # once

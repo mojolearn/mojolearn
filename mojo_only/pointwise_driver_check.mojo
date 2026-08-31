@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Gate for `gbdt/methods/kernel/pointwise_hist2_one_byte_templ.mojo`.
 
 The DRIVER, which is everything the accumulators are not: slice the feature

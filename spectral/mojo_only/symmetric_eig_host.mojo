@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host symmetric eigensolver that stands where RAFT calls cuSOLVER.
 
 NOT A PORT OF A FILE. `raft/sparse/solver/detail/lanczos.cuh:175`

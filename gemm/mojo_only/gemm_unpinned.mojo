@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE UNPINNED CONTROL ARM. A MEASUREMENT INSTRUMENT, NOT A PRODUCT.
 
 **THIS FILE HAS NEVER BEEN COMPILED AND HAS NEVER BEEN EXECUTED.** It was

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The six one-target QN losses (cuML `qnFit`: QN_LOSS_SQUARED, QN_LOSS_ABS,
 QN_LOSS_SVC_L1, QN_LOSS_SVC_L2, QN_LOSS_SVR_L1, QN_LOSS_SVR_L2): oracle,
 reach, identity.

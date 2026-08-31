@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The NVIDIA-native opponents for the gradient-boosting and forest slice,
 plus the dataset loading, the hyper-parameter tables and the output contract
 that `bench/speed/forest_speed_arm.py` shares with them.

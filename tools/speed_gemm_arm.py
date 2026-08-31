@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The cuBLAS arm of the FAST speed lane, in FSPEED lines.
 
     python3 tools/speed_gemm_arm.py                       # both arms

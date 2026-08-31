@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Does the border selection behave like CatBoost's GreedyLogSum?
 
 There is no CatBoost binary here to diff against, so this asserts the

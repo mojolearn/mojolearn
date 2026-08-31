@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """DEVIATION 612: the card records ONE NaN payload, not the vendor's.
 
 NOT A PORT. cuML has no card.

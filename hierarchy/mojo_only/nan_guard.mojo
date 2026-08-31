@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The NaN refusal at the distance seam: no computed NaN reaches a stage.
 
 NOT A PORT. cuVS hands whatever `cuvs::distance` wrote straight to the MST

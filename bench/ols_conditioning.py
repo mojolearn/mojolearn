@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """What the normal-equations route COSTS, priced in digits rather than time.
 
 `bench_sklearn.py` reports two OLS arms because we and scikit-learn solve

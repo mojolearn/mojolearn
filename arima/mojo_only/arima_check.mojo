@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Gates for the batched ARIMA Kalman filter (DEVIATIONS 670, 673-679).
 
     tools/with_build_lock.sh     pixi run mojo run -I . arima/mojo_only/arima_check.mojo

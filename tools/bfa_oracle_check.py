@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """boost_from_average against CatBoost ITSELF, bit for bit.
 
 The port's whole claim is that `gbdt/metrics/optimal_const_for_loss.mojo`

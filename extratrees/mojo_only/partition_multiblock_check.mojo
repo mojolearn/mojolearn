@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Does DEVIATION 203's three-pass partition give the one-block kernel's answer?
 
     pixi run mojo run -I . extratrees/mojo_only/partition_multiblock_check.mojo

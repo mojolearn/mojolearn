@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Independent reference corpus for the Mamba-1 block identity lane.
 
 WHAT THIS IS. A deterministic generator of small Mamba-1 block cases (inputs,

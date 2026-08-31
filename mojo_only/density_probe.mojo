@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """What indexed cindex reads really cost on THIS device, by leaf density.
 
     pixi run -e bench mojo run -I . mojo_only/density_probe.mojo

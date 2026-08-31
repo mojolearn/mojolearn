@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """IDENTITY_PATHS row 49 (DEVIATION 740): DIVISION, characterized per
 class on this backend, and the `portable_divf`/`identical_div` seam's
 certificate. Row 10's open clause was "division is still correctly rounded

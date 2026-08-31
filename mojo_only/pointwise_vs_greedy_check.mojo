@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """RUNG 1's GATE: two independent searchers, one fixture, the same tree.
 
 `NEXT_TWO.md` promised this from the start -- "its histograms must agree with

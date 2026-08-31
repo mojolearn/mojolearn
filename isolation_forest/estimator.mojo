@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The Python-facing surface: `IsolationForest(n_estimators, max_samples,
 max_depth, max_features, bootstrap, random_state, contamination)` with
 `fit`, `score_samples`, `decision_function`, `predict`, `fit_predict`.

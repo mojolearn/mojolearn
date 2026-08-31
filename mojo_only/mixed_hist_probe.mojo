@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Read the flat histogram back for a MIXED dataset and check each slice.
 
 The mixed tree conserves every row and refuses to split. Two inferences have

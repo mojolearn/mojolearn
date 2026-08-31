@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`TOptimizationSubsets`: the state CatBoost's two OBLIVIOUS tree searchers
 carry down a level, and the three-step move that takes it from depth `d` to
 depth `d+1`.

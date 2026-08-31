@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Does the forest loop build cuML's forest, and does predict read it back?
 
     pixi run mojo run -I . ensemble/mojo_only/forest_check.mojo

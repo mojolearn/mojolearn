@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE GPU BASELINE THAT ACTUALLY EXISTS ON THIS MACHINE.
 
 Andrew's rule, 2026-08-20: if a GPU library for the algorithm runs on the

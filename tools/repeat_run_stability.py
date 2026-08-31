@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Does the same fit, twice, on the same GPU, return the same bits?
 
 THE MEASUREMENT THE MIDDLE TIER IS MADE OF, and until 2026-08-29 nothing in

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE DEPTH AND FEATURE-COUNT SWEEP of the CatBoost differential.
 
 `NEXT_TWO.md` rung 5's second open item. `pixi run oracle` compares the port

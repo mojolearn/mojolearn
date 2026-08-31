@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`thrust::inclusive_scan_by_key`, FUSED: the cuML RF node partition.
 
 PORT OF the call at

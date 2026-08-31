@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """E1 Phase 3 driver: identical fixed fits, one identity-trace card each.
 
 Run this ON EACH machine at the SAME commit under the SAME numeric mode

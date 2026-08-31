@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """scikit-learn as the ORACLE for PCA at 64 and 128 features.
 
 **sklearn is an oracle here, not a design source.** The design is cuML's

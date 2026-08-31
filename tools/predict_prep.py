@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Prepare the raw-float side of the INFERENCE benchmark: column-major X
 (kept features only, prep order) and the borders in the device layout
 `BinarizeFloatFeatureImpl` reads (`binarize.cu:44-52`): per feature, one

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The tiled k-NN arm's distances, computed where we can see the order.
 
 DEVIATION 505 (IDENTITY_PATHS row 24). Reached only under

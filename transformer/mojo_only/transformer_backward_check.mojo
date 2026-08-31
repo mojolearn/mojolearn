@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The gate file of the BACKWARD pass of profile
 `mojolearn.identical.transformer.fp32.v1`, the path
 `transformer/IDENTICAL_BACKWARD_PLAN.md` section 6.2 names and section 11

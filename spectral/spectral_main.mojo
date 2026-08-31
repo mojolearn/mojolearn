@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The spectral driver: one embedding (rung 1) -- or, with
 `MOJOLEARN_SPECTRAL_CLUSTER=1`, one clustering fit (rung 2) -- on the
 hashed fixtures, with its IDENTITY CARD.

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Do the two flat-bin walks agree when INPUT ORDER IS NOT BLOCK ORDER?
 
 NO CATBOOST COUNTERPART, because CatBoost cannot have this bug. Their

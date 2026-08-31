@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The callable surface over the brute-force k-NN kernel.
 
 **Why this file exists.** Before it, `neighbors/` held a verified kernel, a

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Fixed-point accumulation, because Metal has no float atomic add.
 
 NO CATBOOST COUNTERPART. This is in `mojo_only/` because CatBoost never has

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The HOST ORACLE for `cdFit`: serial, one step at a time, through the same
 helpers the device kernels use, plus a Float64 reference and the fixtures.
 

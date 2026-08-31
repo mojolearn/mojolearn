@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The half-byte histogram kernel: 8 features per 4-byte load.
 
 PORT OF `hist_half_byte.cu` plus the loop it instantiates,

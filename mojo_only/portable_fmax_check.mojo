@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """IDENTITY_PATHS: softmax's row maximum. DEVIATION 825's `portable_fmaxf`,
 plus the one assertion DEVIATION 826's `identical_mul` was owed. The sixth
 gate of portable device arithmetic, shaped like

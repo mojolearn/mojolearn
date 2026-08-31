@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The loss and its parameters, and the leaf estimator that follows from it.
 
 PORT OF `catboost/private/libs/options/loss_description.{h,cpp}` at CatBoost

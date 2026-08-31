@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The gate file of profile `mojolearn.identical.optimizer.fp32.v1`, the
 file `training/IDENTICAL_OPTIMIZER_CONTRACT.md` section 11 names and
 section 16 item 1 calls **"the largest owed item by a wide margin"**.

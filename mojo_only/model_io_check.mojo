@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Save a model, load it back, and require the SAME BITS out of it.
 
 CatBoost never had to write this: their model serialization is flatbuffers

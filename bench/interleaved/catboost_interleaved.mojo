@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Our GPU fit vs CatBoost CPU, INTERLEAVED in one process, same data.
 
     pixi run -e bench python tools/interleaved_prep.py <dir> covtype

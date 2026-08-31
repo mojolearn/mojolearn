@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`numeric_mode=` as a PARAMETER, on the estimator, in your code.
 
 WHAT THIS REPLACES. The mode used to be reachable only as

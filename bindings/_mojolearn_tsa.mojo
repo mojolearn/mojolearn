@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPython boundary for the time-series lanes: Holt-Winters and the KPSS test.
 
 Kept in a separate extension, deliberately, so an independently changing

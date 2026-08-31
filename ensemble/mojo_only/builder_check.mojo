@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Does the host control plane build the tree cuML's `NodeQueue` builds?
 
     pixi run mojo run -I . ensemble/mojo_only/builder_check.mojo

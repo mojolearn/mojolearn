@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Host-pointer surfaces for PCA and truncated SVD.
 
 THE IDENTITY CARD (DEVIATION 518, 2026-08-23 -- the same deviation also

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Time our GPU random forest. One `ARM <name> <ms>` line per repeat.
 
     pixi run mojo build -I . ensemble/bench/rf_bench.mojo -o build/rf_bench

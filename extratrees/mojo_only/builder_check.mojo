@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The node queue: structure invariants, and the batch width proved inert.
 
 `NodeQueue` (`builder.cuh:44-135`) is the host control plane. Nothing about it

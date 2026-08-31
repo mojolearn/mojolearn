@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CatBoost at the shape the port is measured on. CPU: its GPU cannot run here.
 
 Matched to bench_realistic as closely as the two APIs allow: 800k x 100

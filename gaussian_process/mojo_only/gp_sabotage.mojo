@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The Gaussian-process kernels with their pins BROKEN ON PURPOSE.
 
 NOT A PORT, NOT REACHED by any driver, by `gaussian_process/estimator.mojo`

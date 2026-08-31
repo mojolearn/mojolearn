@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Grow one DEPTHWISE tree: every live leaf splits, each on its own feature.
 
 PORT OF the `EGrowPolicy::Depthwise` arms of

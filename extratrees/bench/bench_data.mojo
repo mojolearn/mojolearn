@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Loading the benchmark fixtures, shared by every driver in this directory.
 
 Both arms of every comparison read the SAME bytes off disk, and these are the

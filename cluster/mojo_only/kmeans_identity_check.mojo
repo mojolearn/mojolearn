@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """What `IDENTICAL` promises about k-means, gated on ONE device.
 
 NO CUVS COUNTERPART, and there cannot be one: cuVS ships a single GPU

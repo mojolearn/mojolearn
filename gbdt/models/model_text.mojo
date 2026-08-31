@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """A trained model, written to a file and read back exactly.
 
 NOT A PORT, AND THE ONLY HONEST WAY TO SAY IT. CatBoost serializes a model

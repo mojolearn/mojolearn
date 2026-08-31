@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Deterministic npz save and load for fitted models.
 
 Model files exist for the E1 train-here-infer-there leg, so two rules are

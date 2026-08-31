@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """What `IDENTICAL` promises about DBSCAN, gated on ONE device.
 
 DBSCAN is the easiest of the three to state and the hardest to be casual

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The port against CATBOOST'S OWN OUTPUT, not against a tally we wrote.
 
 WHY THIS FILE EXISTS

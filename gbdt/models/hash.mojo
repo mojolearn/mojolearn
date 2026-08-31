@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`CalcHash`: the model-side combination key fold.
 
 PORT OF `catboost/libs/model/hash.h:11-14` at `54a8143a` -- the

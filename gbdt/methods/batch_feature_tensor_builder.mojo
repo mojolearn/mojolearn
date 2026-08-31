@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`TFeatureTensor` and `TBatchFeatureTensorBuilder`: what a TREE CTR's
 source actually is, and the loop that enumerates one per categorical
 feature.

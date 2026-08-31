@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Host-pointer surface for the KPSS test and the differencing-order choice.
 
 This is the entry `bindings/_mojolearn_tsa.mojo` calls. It is shaped like

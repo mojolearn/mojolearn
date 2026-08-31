@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """One table: every kernel, every tunable it takes, per GPU vendor.
 
 NOT a port. CatBoost tunes against `TArchProps` scattered through the kernel

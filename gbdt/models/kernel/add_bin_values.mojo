@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Apply a stored oblivious tree to rows, by EVALUATING it.
 
 PORT OF `AddObliviousTreeImpl`, `catboost/cuda/models/kernel/add_model_value.cu:70-120`

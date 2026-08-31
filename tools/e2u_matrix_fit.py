@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """E2U driver: the UNSUPERVISED sub-feature matrix, one identity card per cell.
 
 The unsupervised analog of `tools/e2_matrix_fit.py` (read that docstring

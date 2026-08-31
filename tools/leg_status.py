@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """WHY A BOARD LOOKED FULL WHEN THE LEG HAD FALLEN OVER, AND WHAT FIXES IT.
 
     python3 tools/leg_status.py <run-dir> [--out STATUS.md] [--json STATUS.json]

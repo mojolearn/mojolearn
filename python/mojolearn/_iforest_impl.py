@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Isolation Forest on the GPU, mirroring cuML's `IsolationForest`.
 
 PRIVATE MODULE. `IsolationForest` is named exactly as scikit-learn names

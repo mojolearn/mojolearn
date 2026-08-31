@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """ONE traced linear-algebra run per process: the E1 payload for rows 27-31.
 
 `tools/e1_traced_fit.py` is the GBDT/ET/RF driver and goes through the Python

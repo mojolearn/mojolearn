@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Stage the FULL transitive ELF closure of MAX runtime `.so` beside a set.
 
 The Linux twin of `packaging/macos/stage_dylibs.py`, and it inherits that

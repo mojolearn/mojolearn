@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host Float32 oracle of one Mamba-1 block under profile
 `mojolearn.identical.mamba1.fp32.v1`, and the Float64 tolerance reference.
 

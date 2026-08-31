@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The fused TWO-STAT one-byte histogram: both stat columns in one pass.
 
 PORT OF `hist_2_one_byte_base.cuh` (`TPointHist2OneByteBase`, the

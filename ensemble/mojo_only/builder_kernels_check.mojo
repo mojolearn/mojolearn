@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Do the four RF device kernels put the right number in the right cell?
 
     tools/with_build_lock.sh pixi run mojo run -I . \\

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """How fast our FAST path is on the classical lanes: ONE driver, ONE lane per run.
 
     MOJOLEARN_SPEED_LANE=kmeans \\

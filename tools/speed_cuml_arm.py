@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The NVIDIA-native opponent for `bench/speed/classical_speed_main.mojo`.
 
     MOJOLEARN_SPEED_LANE=kmeans python3 tools/speed_cuml_arm.py

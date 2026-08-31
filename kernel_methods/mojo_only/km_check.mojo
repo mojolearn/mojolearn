@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """kernel_methods: refusals, exact answers, oracle identity, reach, sabotages.
 
 DEVIATIONS 1660-1689's gates. **THIS FILE IS NOT A DIGEST.** Every named path

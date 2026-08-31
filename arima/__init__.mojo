@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """arima: cuML `cpp/src/arima/` -- the batched Kalman filter log-likelihood,
 prediction/forecast, and the finite-difference gradient. `arima/ported/`
 mirrors their files one for one; `arima/mojo_only/` is what they never

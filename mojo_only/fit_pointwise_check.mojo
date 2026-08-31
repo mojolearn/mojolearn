@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`fit` actually runs CatBoost's single-target symmetric learner.
 
 The last wiring step. `gbdt/methods/doc_parallel_boosting.fit` takes

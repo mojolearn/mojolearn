@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Integer reference for cuRAND XORWOW as instantiated by cuML isolation forest:
 curand_init(seed, tree_id, 0, &state); curand(); curand_uniform().
 Source: upstream/curand-headers/nvidia/curand/include/curand_kernel.h (+ curand_precalc.h, curand_uniform.h).

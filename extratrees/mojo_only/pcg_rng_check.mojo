@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`pcg_rng.mojo` against RAFT's and cuML's OWN arithmetic, cell for cell.
 
     pixi run mojo run -I . extratrees/mojo_only/pcg_rng_check.mojo

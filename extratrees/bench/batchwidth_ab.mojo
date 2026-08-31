@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """DEVIATION 213's A/B: the merged frontier's batch bound, swept in-process.
 
     pixi run mojo run -I . extratrees/bench/batchwidth_ab.mojo \

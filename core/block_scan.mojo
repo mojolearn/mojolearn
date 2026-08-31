@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`cub::BlockScan<BinT, TPB>::InclusiveSum`, and cuML's `pdf_to_cdf` loop.
 
 PORT OF `cub/cub/block/block_scan.cuh` and its default algorithm

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Two FAST speed runs, and what moved between them.
 
     python3 tools/fast_speed_diff.py <before-logs-dir> <after-logs-dir> [--out F.md]

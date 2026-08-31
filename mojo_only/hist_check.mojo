@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Does the binary histogram kernel compute the right histogram?
 
 NO CATBOOST COUNTERPART. A correctness check, against a hand-computable

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Print the depthwise stage ladder, and localize a bitwise divergence.
 
     pixi run check-depthwise-digest

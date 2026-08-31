@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 from mojo_only.early_stop_check import check_early_stop_rollback
 from mojo_only.bootstrap_check import check_bootstrap
 from mojo_only.ctr_check import check_ctrs

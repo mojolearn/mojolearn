@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE LINUX VENDOR SELECTOR, TESTED ON A MACHINE WITH NO GPU AT ALL.
 
     python3 packaging/linux/selector_test.py

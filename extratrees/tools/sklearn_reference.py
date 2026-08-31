@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """scikit-learn ExtraTrees as a QUALITY BAND for the `extratrees/` lane.
 
     Writes:    extratrees/tools/sklearn_reference.txt

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """E2 matrix differ: N machines' e2 directories -> one verdict table.
 
 Each directory is the output of `tools/e2_matrix_fit.py` (and, when

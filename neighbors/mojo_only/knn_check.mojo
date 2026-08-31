@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Launch the brute-force k-NN, and sabotage it.
 
 NO CUVS COUNTERPART. Same discipline as `cluster/mojo_only/kmeans_check.mojo`

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """DEVIATION 211's A/B: the merged-frontier forest against the per-tree loop.
 
     pixi run mojo run -I . extratrees/bench/batched_ab.mojo \

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """scikit-learn's side of the dimensionality sweep: same fixture, same eps
 schedule (0.30 * sqrt(d/8)), same n = 200,000, their `algorithm='auto'` and
 `n_jobs=-1`. Prints which algorithm auto actually chose, because THAT is the

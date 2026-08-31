@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Alternate the two benchmark processes and report medians with a verdict.
 
 THE ALTERNATION IS THE POINT. This machine has been measured drifting two- to

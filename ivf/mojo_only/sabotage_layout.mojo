@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The layout and the merge with one pin BROKEN AT A TIME, for the check.
 
 NOT A PORT, NOT REACHED by `ivf/estimator.mojo`, `ivf/ivf_main.mojo` or

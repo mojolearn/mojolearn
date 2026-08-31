@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The mixture lane's gates. Ten checks and thirteen run-time sabotage arms.
 
     pixi run check-mixture                                                    # FAST

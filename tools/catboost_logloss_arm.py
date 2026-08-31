@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The CatBoost CPU arm for the LOGLOSS interleaved row, self-contained.
 
 A separate module from `catboost_arm.py` ON PURPOSE: that file carries

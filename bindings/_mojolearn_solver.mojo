@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPython boundary for the coordinate-descent and single-linkage kernels.
 
 Kept in a SEPARATE extension, deliberately. `bindings/build.sh` explains the

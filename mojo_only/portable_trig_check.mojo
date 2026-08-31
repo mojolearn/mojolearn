@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """IDENTITY_PATHS: the RoPE trig pair. DEVIATION 820's `portable_sinf` and
 the already-certified `portable_cosf` that it was refactored to share
 `_cephes_sincosf_core` with. The fourth gate of portable device

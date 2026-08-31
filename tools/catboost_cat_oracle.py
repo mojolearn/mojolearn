@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CatBoost's ACTUAL OUTPUT on a CATEGORICAL fixture, dumped for the port.
 
 WHY THIS IS A SEPARATE FILE FROM `tools/catboost_oracle.py`

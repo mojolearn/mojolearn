@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The gate file of profile `mojolearn.identical.loss.ce.fp32.v1`, the file
 `training/IDENTICAL_LOSS_CONTRACT.md` section 10 names and section 13 calls
 NOT WRITTEN.

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """identity_break: TRY TO BREAK cross-vendor bit-identity, on every estimator.
 
 `tools/repeat_run_stability.py` asks one lane one question on one benign

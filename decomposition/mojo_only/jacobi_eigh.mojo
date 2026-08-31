@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Cyclic Jacobi eigendecomposition of a small symmetric matrix, on the host.
 
 **THIS IS THE ORACLE, NOT A PATH ANY FIT TAKES.** The fit runs

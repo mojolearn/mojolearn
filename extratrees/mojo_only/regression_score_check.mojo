@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Does the device publish a REGRESSION key the split reduction can rank by?
 
     pixi run mojo run -I . extratrees/mojo_only/regression_score_check.mojo

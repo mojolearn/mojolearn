@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Independent reference corpus for the IDENTICAL FP32 transformer block lane.
 
 WHAT THIS IS. A deterministic generator of small Llama-shaped decoder-block

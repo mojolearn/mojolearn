@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Does a DIVERGENT threadgroup barrier actually fail on this device? NO.
 
 `PORTING.md` 11 is the reason two histogram families in this repository run

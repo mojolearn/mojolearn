@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Does every node split on a column the SAMPLER actually drew for it?
 
     pixi run mojo run -I . ensemble/mojo_only/sampled_cols_check.mojo

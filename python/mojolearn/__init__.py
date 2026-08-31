@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """mojolearn: GPU machine-learning algorithms in Mojo, running on Apple Silicon.
 
 The algorithms here mirror the designs of the CUDA implementations that

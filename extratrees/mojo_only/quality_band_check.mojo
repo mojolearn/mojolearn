@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Our forest against scikit-learn's band — the third oracle, and its limits.
 
 `extratrees/tools/sklearn_reference.txt` holds, per fixture, what sklearn's own

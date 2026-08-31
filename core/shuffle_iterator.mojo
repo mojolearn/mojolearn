@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`cuda::shuffle_iterator`, the thing that decides which features a node sees.
 
 NO CUML FILE MIRRORS THIS. It is CCCL -- NVIDIA's CUDA Core Compute

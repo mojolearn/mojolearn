@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The gate file of profile `mojolearn.identical.mamba1.fp32.v1`, the path
 `mamba/IDENTICAL_MAMBA_CONTRACT.md` section 8 names.
 

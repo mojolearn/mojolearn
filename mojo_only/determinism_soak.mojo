@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """SOAK the cell that produced DEVIATION 134's intermittent.
 
 One sweep run in roughly a hundred came back with its FIRST cell wrong --

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Prepare a dataset for bench/interleaved: borders (CatBoost's own
 quantizer), pre-binned uint8 col-major for the Mojo arm, flat y.
 

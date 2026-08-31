@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """What `IDENTICAL` promises about k-NN, and the tie class that proves it.
 
 IDENTITY_PATHS row 11 was the ledger's only REFUSE for two days: RAFT's

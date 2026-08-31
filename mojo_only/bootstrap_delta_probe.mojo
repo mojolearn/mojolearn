@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """What does Bayesian sampling cost OUR arm per tree? Interleaved, one process.
 
     pixi run -e bench mojo run -I . \

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Solve a small symmetric positive-definite system, by Cholesky.
 
 PORT OF `catboost/private/libs/lapack/linear_system.{h,cpp}` at CatBoost

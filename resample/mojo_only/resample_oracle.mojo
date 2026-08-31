@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Two host references, and they are two different things.
 
 WHAT AN ORACLE IS HERE. PORTING_RULES 0b-ii: "a host reference used to CHECK a

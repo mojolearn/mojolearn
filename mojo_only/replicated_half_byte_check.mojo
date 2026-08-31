@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """A REPLICATED half-byte histogram against a host tally.
 
 THE GAP THIS FILLS, stated as the commit that found it stated it: "EVERY

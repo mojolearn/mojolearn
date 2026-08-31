@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The pointwise winner fold and pack, on the device -- DEVIATION 207.
 
 NO CATBOOST COUNTERPART AS KERNELS. Upstream resolves each level's winner

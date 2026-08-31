@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Python-side gates for the `mojolearn` package.
 
 NOT SHIPPED IN THE WHEEL, AND THAT IS A CONSEQUENCE RATHER THAN A CHOICE.

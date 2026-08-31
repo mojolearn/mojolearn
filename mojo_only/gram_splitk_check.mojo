@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The split-K Gram path, per cell against a Float64 host oracle.
 
 BOTH SIDES OF THE DISPATCH, BY NAME. `PORTING_RULES.md 8`: a switch is

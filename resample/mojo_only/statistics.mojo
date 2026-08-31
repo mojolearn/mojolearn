@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The statistic kernels, comptime-selected, each with its own pinned fold.
 
 NO UPSTREAM. `scipy.stats.bootstrap` and `scipy.stats.permutation_test` take

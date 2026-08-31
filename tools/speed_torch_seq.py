@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE OPPONENT ARM for the sequence-model speed lane: torch on CUDA, and
 `mamba-ssm`'s fused `selective_scan_cuda` where it is installable.
 

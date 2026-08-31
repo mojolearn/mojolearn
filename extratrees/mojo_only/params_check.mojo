@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Every branch of `validity_check`, accepted and refused, one case each.
 
 `PORTING_RULES.md` rule 8: a switch is exercised on BOTH sides by a named case

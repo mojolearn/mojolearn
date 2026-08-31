@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """DEVIATION 551. The ball cover's CSR, in one canonical intra-row order.
 
 NO CUVS COUNTERPART. cuVS has no such pass because cuVS makes no cross-vendor

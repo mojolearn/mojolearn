@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Does our worker synchronize where CatBoost synchronizes, and nowhere else.
 
 Every assertion below cites the line of CatBoost that decides it. This file

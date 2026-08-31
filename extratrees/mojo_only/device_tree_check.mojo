@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """A tree grown on the GPU, against the same tree grown on the host.
 
 Until this check existed, every device kernel in this lane was reached only by

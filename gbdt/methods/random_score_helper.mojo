@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`random_strength`'s magnitude: how big the score noise is.
 
 PORT OF `catboost/cuda/methods/random_score_helper.h` at CatBoost

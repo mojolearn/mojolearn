@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Host surface for Holt-Winters: what `bindings/` calls.
 
 WIRED 2026-08-24 (DEVIATIONS 900-909). `bindings/_mojolearn_tsa.mojo` calls

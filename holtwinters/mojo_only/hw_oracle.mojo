@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host oracle for Holt-Winters: serial, ascending, written to the same
 pinned spelling as the device kernels -- and a Float64 reference through
 the same code, for tolerance sanity.

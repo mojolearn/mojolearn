@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The matrix products under `NUMERIC_IDENTICAL`: the pins, and their reach.
 
 IDENTITY_PATHS rows 27 and 28. DEVIATIONS 520, 521, 522, 526.

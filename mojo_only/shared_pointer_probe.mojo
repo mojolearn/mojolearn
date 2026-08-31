@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Can a shared-memory pointer cross a function boundary? YES.
 
 This probe exists because `PORTING.md` 13 asserted for months that it could

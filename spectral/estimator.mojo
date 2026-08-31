@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Host-list surface for spectral clustering: what `bindings/` calls.
 
 Shaped like `kde/estimator.mojo` and `metrics/estimator.mojo`. Host lists in,

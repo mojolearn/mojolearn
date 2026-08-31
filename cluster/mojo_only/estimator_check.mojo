@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Checks for the caller-facing k-means surface, `cluster/estimator.mojo`.
 
 Separate from `kmeans_check.mojo` on purpose. That file verifies the KERNELS

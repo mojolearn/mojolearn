@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Add a grown tree's leaf values to the running predictions.
 
 PORT OF the `AddModelValue` step of

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The two per-node feature samplers, and the dispatch that picks between them.
 
 `extratrees/ported/decisiontree/batched_levelalgo/kernels/builder_kernels.mojo`

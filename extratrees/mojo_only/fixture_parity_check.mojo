@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Dump the ExtraTrees fixtures CELL FOR CELL, as `<decimal>/<hexbits>`, so a
 Python reader can prove it generates the IDENTICAL BYTES.
 

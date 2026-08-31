@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """DEVIATION 211's gate: the merged-frontier forest IS the per-tree forest.
 
 `train_forest_classification_device` / `train_forest_regression_device` pop

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPython boundary for the C-SVC and Isolation Forest lanes.
 
 A THIRD extension module, and a separate one on purpose. The header of

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Group B gates: r2_score and kl_divergence, the float reductions over n.
 
     pixi run mojo run -I . metrics/mojo_only/regression_metrics_check.mojo

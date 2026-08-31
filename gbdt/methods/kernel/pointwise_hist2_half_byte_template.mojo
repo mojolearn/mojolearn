@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`TPointHistHalfByte<BlockSize>`: ONE accumulator, TWO kernels.
 
 PORT OF `catboost/cuda/methods/kernel/pointwise_hist2_half_byte_template.cuh`

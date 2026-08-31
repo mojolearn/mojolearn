@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Does the wired builder actually grow cuML's tree, end to end, on device?
 
     pixi run mojo run -I . ensemble/mojo_only/train_check.mojo

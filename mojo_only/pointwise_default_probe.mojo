@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Which searcher should `fit` default to? A measurement, not an argument.
 
 `PORTING.md` 106 shipped `use_pointwise_searcher` defaulting to False and

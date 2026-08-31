@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Device-side split resolution: the block-winner reduce and the split-
 descriptor pack, on the device, so a level blocks the host ONCE.
 

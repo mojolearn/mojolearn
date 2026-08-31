@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """One full level, end to end, against a host calculation.
 
 Everything this exercises is already verified in isolation. What is NOT yet

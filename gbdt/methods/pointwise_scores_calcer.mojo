@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """One score helper per feature policy, folded into one best split.
 
 PORT OF `catboost/cuda/methods/pointwise_scores_calcer.h` at CatBoost

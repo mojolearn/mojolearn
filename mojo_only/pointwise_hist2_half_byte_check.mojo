@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Gate for `gbdt/methods/kernel/pointwise_hist2_half_byte_template.mojo`.
 
 ONE accumulator, `TPointHistHalfByte`, and the TWO readers CatBoost builds on

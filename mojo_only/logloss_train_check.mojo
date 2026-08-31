@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Logloss end to end through `train(X, y)`: learn, agree, generalize.
 
     pixi run check-logloss-train

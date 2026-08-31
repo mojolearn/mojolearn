@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Do the DRAW and the SCORE kernels agree with the host, cell by cell, exactly?
 
     pixi run mojo run -I . extratrees/mojo_only/score_kernel_check.mojo

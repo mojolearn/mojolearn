@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Covtype at its NATIVE task: 7-class MultiClass, both arms, interleaved.
 
     pixi run -e bench mojo run -I . \

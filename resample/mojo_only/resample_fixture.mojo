@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The planted samples, ASSEMBLED FROM BITS, each with a job it alone does.
 
 NOT A PORT. IDENTITY_PATHS row 32's lesson applies verbatim, and

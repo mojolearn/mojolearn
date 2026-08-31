@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The device GEMM of profile `mojolearn.identical.gemm.fp32.v1`.
 
 Phase 2b of `IDENTICAL_GEMM_PLAN.md`'s lane charter. The contract is

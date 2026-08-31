@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """A half-open range of objects inside a buffer.
 
 PORT OF `catboost/cuda/cuda_lib/slice.h` at CatBoost `54a8143a`.

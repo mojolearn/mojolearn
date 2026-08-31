@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`cub::DeviceSegmentedRadixSort::SortKeys`, the one call in
 `quantiles.cuh` that has no shipped counterpart.
 

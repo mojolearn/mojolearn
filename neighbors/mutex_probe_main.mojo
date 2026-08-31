@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Soundness probe: cuVS's cross-block mutex handoff, on Metal, through Mojo.
 
 NO CUVS COUNTERPART. This is the gate in front of porting the

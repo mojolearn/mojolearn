@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Pointer-type tags shared across the control plane.
 
 PORT OF `catboost/cuda/cuda_lib/fwd.h` at CatBoost `54a8143a`.

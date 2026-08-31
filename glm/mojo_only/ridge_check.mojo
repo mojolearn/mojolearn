@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Ridge regression (cuML `ridgeFit`, the `eig` arm): accuracy, reach, identity.
 
 DEVIATION 545. The checks, in order:

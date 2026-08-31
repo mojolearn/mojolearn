@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The DEVICE spelling of the backward pass of one Llama-shaped decoder
 block, ONE SOURCE FOR THREE VENDORS, under profile
 `mojolearn.identical.transformer.fp32.v1` and the routing document

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """What the Newton walker needs from a leaves-estimation oracle.
 
 PORT OF `catboost/cuda/methods/leaves_estimation/oracle_interface.h` at

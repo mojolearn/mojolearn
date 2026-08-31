@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """DEVIATION 210: the plan fold, gated word for word.
 
 `update_partitions_and_plan_kernel` claims to be `update_partitions_after_

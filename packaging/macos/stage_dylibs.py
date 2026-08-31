@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Stage the FULL transitive closure of @rpath dylibs beside the extension.
 
 WHY A TRANSITIVE WALK AND NOT `otool -L` ONCE. The first version of this

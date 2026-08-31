@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Runs `mojo_only/vendor_correctness_check.mojo` and PRINTS the table.
 
 The correctness column in `VENDOR_LIBRARIES.md` is a transcript of this

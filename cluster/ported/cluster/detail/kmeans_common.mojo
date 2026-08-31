@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+# Derivative work: the upstream file and its pinned commit are recorded in this lane's PORTED_MAP.tsv and in this file's own docstring. See NOTICE.
 """The pieces every k-means path shares: batching, convergence, sampling.
 
 PORT OF `cuvs/src/cluster/detail/kmeans_common.cuh` at cuVS `94c2819`.

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The pinned RMSE comparison at a CALLER-CHOSEN depth: the depth-8 row.
 
     pixi run -e bench mojo run -I . \

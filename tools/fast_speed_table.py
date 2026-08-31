@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Turn the FSPEED lines every speed arm prints into ONE ratio table.
 
     python3 tools/fast_speed_table.py <run-dir> [--out TABLE.md]

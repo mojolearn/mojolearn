@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Does boosting actually learn? Fit a signal and watch the loss fall.
 
 Every check in this repository up to now has verified a PIECE: a histogram

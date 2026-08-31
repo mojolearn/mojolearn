@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The one kernel k-means++ needs that is a fusion of two RAFT primitives.
 
 NOT A PORT, but it is a direct translation of two consecutive RAFT calls in

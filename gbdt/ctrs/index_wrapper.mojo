@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`TIndexWrapper`: one `ui32` carrying an index AND a segment-start flag.
 
 MIRRORS `catboost/cuda/cuda_util/kernel/index_wrapper.cuh` at CatBoost

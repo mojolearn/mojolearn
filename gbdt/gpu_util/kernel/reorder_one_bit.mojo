@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Stable partition by one bit: their scan-plus-reorder path.
 
 PORT OF `catboost/cuda/cuda_util/kernel/reorder_one_bit_impl.cuh:127`

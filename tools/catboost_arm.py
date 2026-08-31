@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The CatBoost CPU arm of the interleaved benchmark, called from Mojo.
 
 One function, positional args only (Mojo interop calls it directly). The

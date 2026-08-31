@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Why did (seed 2, tree 0, node 2) on year refuse to split? Ask the cells.
 
     pixi run mojo run -I . extratrees/bench/node2_probe.mojo

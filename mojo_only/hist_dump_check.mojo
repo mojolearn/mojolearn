@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Read a leaf's histogram back at two depths and compare the bytes.
 
 The open bug: the level score is identical from depth 1 onward, which means

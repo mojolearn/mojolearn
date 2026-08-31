@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Two random-forest fits in one process, the shape of the RTX 4090 hang.
 
 Written 2026-08-29 after `tools/diag/rtx4090_hang.sh` leg 1

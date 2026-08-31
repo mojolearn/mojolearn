@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Scaling curves. The measurement the fixed-size benchmark could not give.
 
 Every number in `bench/results/` so far is at ONE size, and they are small:

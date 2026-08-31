@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Refuse a wheel whose extension contains no compiled GPU kernels.
 
 THIS CHECK EXISTS BECAUSE A GREEN BUILD SHIPPED A BROKEN WHEEL.

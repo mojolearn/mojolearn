@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The hist_2 two-stat one-byte family against the PASS family, cell for cell.
 
 WHAT THIS PROVES. CatBoost's one-byte dispatch sends every `maxBins <= 128`

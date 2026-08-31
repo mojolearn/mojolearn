@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The pinned distance tile with two pins BROKEN ON PURPOSE, for the check.
 
 NOT A PORT, NOT REACHED by any driver or by the Python-facing entry. A copy

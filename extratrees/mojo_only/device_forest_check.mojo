@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """A FOREST grown on the GPU, against the same forest grown on the host.
 
 `device_tree_check` established the tree-level claim: with deviation 183 closed

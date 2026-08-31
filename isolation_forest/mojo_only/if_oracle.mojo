@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host oracle: a SECOND, independent transcription of cuML's
 isolation tree builder and scorer, serial Float32 through the same
 `identical_*` helpers and the same XORWOW port, plus a Float64 score

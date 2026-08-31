@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Which accelerator API this binary was COMPILED for, as a constant.
 
 THE QUESTION THIS ANSWERS, AND WHO ASKS IT. As of the Linux wheel

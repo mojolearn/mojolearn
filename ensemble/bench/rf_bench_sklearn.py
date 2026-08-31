@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The scikit-learn arm of the random-forest benchmark.
 
 Prints `ARM <name> <ms>` lines that `bench/run_bench.py` alternates against

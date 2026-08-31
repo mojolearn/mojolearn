@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Quantized gradient pairs + one shared histogram per block (DEV 1911/1912).
 
 ================= DEVIATION BLOCK (whole file) =================

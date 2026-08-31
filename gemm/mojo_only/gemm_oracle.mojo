@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The IDENTICAL FP32 GEMM oracle: the contract, written out, on the host.
 
 **NOT A PORT, and it replaces no upstream call.** RAFT's standalone matrix

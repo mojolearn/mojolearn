@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The coordinate-descent driver: one Lasso fit on the planted fixture, its
 IDENTITY CARD, and the oracle's verdict.
 

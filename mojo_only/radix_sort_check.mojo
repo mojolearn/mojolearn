@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Gate the radix sort on STABILITY, not on sortedness.
 
 `gbdt/gpu_util/kernel/radix_sort.mojo` exists to put rows in

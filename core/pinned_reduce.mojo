@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The within-block float fold, with ONE shape on every vendor.
 
 DEVIATION 504 (IDENTITY_PATHS row 20). Reached only under

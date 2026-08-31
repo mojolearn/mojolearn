@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The DEPTHWISE lane's gate: seven claims, one of them the cross-GPU one.
 
 `EGrowPolicy::Depthwise` is a NEW GROWTH POLICY in this port, so almost

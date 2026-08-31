@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The distances a radius query returns, recomputed from the finished CSR.
 
 WHY THIS IS A SEPARATE PASS AND NOT FIVE STORES IN THE SEARCH KERNEL.

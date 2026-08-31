@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`TTreeUpdater`: the per-document bin array the FEATURE-PARALLEL searcher
 splits on, and the compressed-bit chain that fills it.
 

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Per-phase wall time for DBSCAN fits, printed as machine-parseable lines.
 
 THE MEASUREMENT MAIN FOR THE 50,000 DIP. `bench/results/LANE_rbc-build_

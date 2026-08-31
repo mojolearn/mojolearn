@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CatBoost's OWN MinEntropy borders, dumped as a fixture the port is gated on.
 
     pixi run -e bench python tools/minentropy_oracle.py > bench/minentropy_oracle.txt

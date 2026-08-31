@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The HONEST row: raw floats to fitted model, quantization inside, both arms.
 
     pixi run -e bench mojo run -I . \

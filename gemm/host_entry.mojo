@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host-pointer surface for `mojolearn.identical.gemm.fp32.v1`.
 
 DEVIATION 910. Written 2026-08-24 so the profile is reachable from Python.

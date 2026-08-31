@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Backtracking acceptance tests for the Newton walker.
 
 PORT OF `catboost/cuda/methods/leaves_estimation/step_estimator.{h,cpp}` at

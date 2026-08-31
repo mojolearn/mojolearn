@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Host-pointer surface for IVF-FLAT: what `bindings/` will call.
 
 **NOT YET WIRED** into `bindings/_mojolearn*.mojo` or `python/mojolearn/` --

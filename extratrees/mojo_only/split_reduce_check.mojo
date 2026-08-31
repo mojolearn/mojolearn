@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Does the DEVICE split reduction pick the same candidate as a host loop?
 
     pixi run mojo run -I . extratrees/mojo_only/split_reduce_check.mojo

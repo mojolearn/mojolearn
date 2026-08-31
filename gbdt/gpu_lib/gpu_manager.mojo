@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host-side facade every caller goes through.
 
 PORT OF `catboost/cuda/cuda_lib/cuda_manager.h` and the parts of
