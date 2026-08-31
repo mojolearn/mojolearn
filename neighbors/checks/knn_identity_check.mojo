@@ -23,7 +23,7 @@ WHAT EACH ARM OWES, AND THEY ARE DIFFERENT DEBTS
   order. So its tie set is not merely reproducible, it is NAMED: the lowest
   indices win. That is checkable against arithmetic rather than against a
   previous run, and it is what `check_knn_tie_set_is_lowest_index` asserts.
-- **FUSED** (`faiss_select::WarpSelect`): its comparator is
+- **FUSED** (`neighbors/impl/neighbors/topk`'s `WarpSelect`): its comparator is
   `Comparators.cuh:17`, the DISTANCE ONLY. Under IDENTICAL its tie set is a
   pure function of `(m, n, k)` and the pinned policy -- because `grid_x` is
   pinned to 1 so no mutex merge decides anything, and a row's lanes see the
@@ -307,10 +307,19 @@ def check_knn_tiled_is_query_tile_invariant() raises:
 def check_knn_fused_tie_set_is_geometry_invariant() raises:
     """The fused arm owes INVARIANCE, which is a weaker debt and a real one.
 
-    `faiss_select`'s comparator compares the distance only, so the fused arm
-    cannot NAME its tie set the way the composite key can. What it can
-    promise -- and what pinning `grid_x = 1` buys it (DEVIATION 502) -- is
-    that the set is a pure function of `(m, n, k)` and the pinned policy.
+    THIS CLAUSE USED TO READ "`faiss_select`'s comparator compares the
+    distance only, so the fused arm cannot NAME its tie set", and that stopped
+    being true on 2026-08-31 when the selector was rewritten clean-room
+    (`neighbors/impl/neighbors/topk/`). The new one orders on the PAIR --
+    `(key, value)`, smaller payload first on an equal key -- so its tie set IS
+    nameable and is deterministic by index.
+
+    The invariance check below is kept anyway and is not weakened to match.
+    It asks a DIFFERENT question: that the set is a pure function of
+    `(m, n, k)` and the pinned policy, which is what pinning `grid_x = 1`
+    buys (DEVIATION 502) and what a caller actually depends on. A tie rule
+    holding is not the same fact as the set being geometry-invariant, and
+    conflating them is how this file would stop testing anything.
 
     THE FIXTURE IS THE SAME QUESTION ASKED MANY TIMES. Every query is the
     same planted point, so every ROW of every run must come back with the

@@ -5,7 +5,10 @@
 PORT OF `cuvs/src/neighbors/detail/fused_l2_knn.cuh::fusedL2kNN` at cuVS
 `94c2819`, built on `raft/linalg/contractions.cuh::Policy2x8` and
 `raft/linalg/detail/contractions.cuh::Contractions_NT`, with their
-`raft/neighbors/detail/faiss_select/Select.cuh::WarpSelect` as the selector.
+`neighbors/impl/neighbors/topk/warp_topk.mojo`'s `WarpSelect` as the selector.
+That selector was written clean-room from Batcher (1968) on 2026-08-31 and
+replaced a transliteration; the queue's SHAPE is what this file depends on,
+not its provenance.
 Partial. Do not improve.
 
 WHY THIS FILE EXISTS, WHICH IS THE MOST IMPORTANT THING IN IT
@@ -58,7 +61,7 @@ and `fusedL2ExpKnnImpl:743-771` instantiates the WHOLE KERNEL at exactly two
 That is copied literally: `fused_l2_knn_kernel` is parameterized on the same
 two integers and `fused_l2_knn` below picks between the same two
 instantiations at the same thresholds. The queue is
-`neighbors/gbdt/neighbors/detail/faiss_select/select.mojo`, a struct of
+`neighbors/impl/neighbors/topk/warp_topk.mojo`, a struct of
 `SIMD` values with no shared memory and no block phase; it is what makes the
 fusion pay, because a shared-memory or device-wide selector has to read its
 input from memory and therefore forces the distance matrix to exist.
@@ -233,7 +236,7 @@ from checks.numerics import (
 from neighbors.impl.distance.detail.pairwise_distance_base import (
     launch_config_generator,
 )
-from neighbors.impl.neighbors.detail.faiss_select.select import WarpSelect
+from neighbors.impl.neighbors.topk.warp_topk import WarpSelect
 
 
 # `raft::linalg::Policy2x8<float, 1>::Policy`, which is
@@ -870,7 +873,7 @@ def fused_l2_knn(
     # `shDumpKV` (DEVIATION BLOCKS 1 and 3), where theirs adds
     # `Mblk * numOfNN * sizeof(Pair)` for the shmem queue dump it has and we
     # do not.
-    # THE 32-LANE REFUSAL (IDENTITY_PATHS row 23). `faiss_select`'s warp
+    # THE 32-LANE REFUSAL (IDENTITY_PATHS row 23). the register-resident queue's warp
     # queue is a bitonic network over `WARP_LANES = 32` lanes, and the
     # kernel's own `lid = threadIdx.x % 32` and `kNumWarpQRegisters =
     # NumWarpQ / 32` say the same thing three more times. On a 64-wide

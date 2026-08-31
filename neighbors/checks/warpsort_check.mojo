@@ -50,7 +50,7 @@ from neighbors.impl.matrix.detail.select_radix import (
 from neighbors.impl.matrix.detail.select_warpsort import (
     warpsort_topk_block_kernel,
 )
-from neighbors.impl.neighbors.detail.faiss_select.select import WarpSelect
+from neighbors.impl.neighbors.topk.warp_topk import WarpSelect
 
 
 comptime WS_ROWS = 8
@@ -377,7 +377,7 @@ def check_warpsort_reach_by_sabotage() raises:
 
 
 # =========================================================================
-# `faiss_select::WarpSelect`, the REGISTER-RESIDENT queue.
+# `neighbors/impl/neighbors/topk`'s `WarpSelect`, the REGISTER-RESIDENT queue.
 #
 # Different file, different implementation, different check. This one has no
 # shared memory and no block phase: one warp owns one row and the answer

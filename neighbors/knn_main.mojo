@@ -5,7 +5,7 @@
 The first three check their FALLBACK, `tiled_brute_force_knn`. The rest check
 the path their dispatch actually takes for k <= 64 on row-major L2, which is
 `fusedL2Knn` (`knn_brute_force.cuh:443`) with
-`faiss_select::WarpSelect` in registers as its selector.
+`neighbors/impl/neighbors/topk`'s `WarpSelect` in registers as its selector.
 
 Then the caller-facing surface, and LAST the k-NN classifier and regressor
 (`neighbors/checks/knn_classify_check.mojo`, `knn_regress_check.mojo`,

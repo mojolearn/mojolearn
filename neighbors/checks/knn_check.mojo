@@ -1277,7 +1277,7 @@ def check_dispatch_takes_fused() raises:
 # ---------------------------------------------------------------------------
 # THE REGISTER-RESIDENT SELECTOR. Everything above this line was written
 # against a shared-memory placeholder in the selector slot; these three are
-# written against `faiss_select::WarpSelect`, which is what
+# written against `neighbors/impl/neighbors/topk`'s `WarpSelect`, which is what
 # `fused_l2_knn.cuh:221-222` actually instantiates.
 #
 # The call contract that makes them necessary: `WarpSelect::checkThreadQ`
