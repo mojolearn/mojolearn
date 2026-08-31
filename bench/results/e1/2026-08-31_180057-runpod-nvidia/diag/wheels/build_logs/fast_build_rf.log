@@ -1,0 +1,120 @@
+start 2026-08-31T22:07:14Z
+!! MOJOLEARN_GPU_ARCHS=sm_80 (--target-accelerator); read the architecture back out of the built .so
+/root/mojolearn/bindings/_mojolearn_rf.mojo:88:4: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with ':'
+"""`params` for both fit entry points, in this exact order -- the wrapper
+   ^
+/root/mojolearn/bindings/_mojolearn_rf.mojo:315:47: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            hx.unsafe_ptr().unsafe_store(i, xp[i])
+                                            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_rf.mojo:317:47: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            hy.unsafe_ptr().unsafe_store(i, yp[i])
+                                            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_rf.mojo:385:47: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            hx.unsafe_ptr().unsafe_store(i, xp[i])
+                                            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_rf.mojo:387:47: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            hy.unsafe_ptr().unsafe_store(i, yp[i])
+                                            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_rf.mojo:404:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var v = Float64(yp[i])
+                            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_rf.mojo:440:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var lo = Int(offsets_p[t])
+                     ~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_rf.mojo:441:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var hi = Int(offsets_p[t + 1])
+                     ~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_rf.mojo:449:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    colid_p[i], quesval_p[i], 0.0, Int64(left_p[i]), 0
+                    ~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_rf.mojo:449:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    colid_p[i], quesval_p[i], 0.0, Int64(left_p[i]), 0
+                                ~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_rf.mojo:449:64: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    colid_p[i], quesval_p[i], 0.0, Int64(left_p[i]), 0
+                                                         ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_rf.mojo:453:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                vleaf.append(leaves_p[i * num_outputs + k])
+                             ~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_rf.mojo:538:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            rows.append(xp[i])
+                        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_rf.mojo:544:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            op[i] = probs[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_rf.mojo:598:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            rows.append(xp[i])
+                        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_rf.mojo:604:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            op[i] = preds[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_rf.mojo:60:
+Imported from ./ensemble/randomforest.mojo:336:
+Imported from ./ensemble/instruments.mojo:46:
+/root/mojolearn/./core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_rf.mojo:60:
+Imported from ./ensemble/randomforest.mojo:336:
+Imported from ./ensemble/instruments.mojo:46:
+/root/mojolearn/./core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_rf.mojo:60:
+Imported from ./ensemble/randomforest.mojo:336:
+Imported from ./ensemble/instruments.mojo:46:
+/root/mojolearn/./core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_rf.mojo:60:
+Imported from ./ensemble/randomforest.mojo:336:
+Imported from ./ensemble/instruments.mojo:46:
+/root/mojolearn/./core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_rf.mojo:60:
+Imported from ./ensemble/randomforest.mojo:336:
+Imported from ./ensemble/instruments.mojo:46:
+/root/mojolearn/./core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+/root/mojolearn/bindings/_mojolearn_rf.mojo:632:29: warning: unreachable code after function that never returns
+        return PythonObject(None)
+                            ^
+Included from /root/mojolearn/bindings/_mojolearn_rf.mojo:44:
+./ensemble/decisiontree/batched_levelalgo/objectives.mojo:351:29: warning: unreachable code after compile-time assertion failure
+        return Scalar[dtype](0)
+                            ^
+/root/mojolearn/bindings/_mojolearn_rf.mojo:523:17: warning: assignment to 'wrote' was never used; assign to '_' instead?
+    var wrote = 0
+                ^
+/root/mojolearn/bindings/_mojolearn_rf.mojo:584:17: warning: assignment to 'wrote' was never used; assign to '_' instead?
+    var wrote = 0
+                ^
+built python/mojolearn/_mojolearn_rf.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+end 2026-08-31T22:07:47Z OK

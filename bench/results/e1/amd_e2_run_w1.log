@@ -1,12 +1,17 @@
 
-=== provenance === 07:03:36
-a957a54d4ed7e4edcbabcc440b6bc77a2338109d
+=== provenance === 22:43:36
+035493e1952e54a42a4a45e6abf1634b90b3cf71
 Linux mojolearn-e2-amd 6.8.0-59-generic #61-Ubuntu SMP PREEMPT_DYNAMIC Fri Apr 11 23:16:11 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
 
-=== pixi === 07:03:36
+=== pixi === 22:43:36
+This script will automatically download and install Pixi (latest) for you.
+Getting it from this url: https://github.com/prefix-dev/pixi/releases/latest/download/pixi-x86_64-unknown-linux-musl.tar.gz
+The 'pixi' binary is installed into '/root/.pixi/bin'
+Updating '/root/.bashrc'
+Please restart or source your shell.
 ✔ The default environment has been installed.
 
-=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 07:03:36
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 22:43:38
 
 === phase 0 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
 
@@ -26,37 +31,36 @@ Linux mojolearn-e2-amd 6.8.0-59-generic #61-Ubuntu SMP PREEMPT_DYNAMIC Fri Apr 1
 
 === phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
 
-=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 07:03:36
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 22:43:38
 phase 9: DIAG ONLY (MOJOLEARN_P9_ONLY_DIAG=1); no builds, no arms, no probes here
 phase 9 builds: <none>
 phase 9 tiers:  <none>
 concurrent probe SKIPPED: needs all three tiers, P9_TIERS=<none>
 
-=== phase 9 diag: packaging/linux/leg_diag.sh === 07:03:36
-PHASE9-FINDING: diag script returned non-zero (see diag/console.log)
-    vendor=hip
-    arch=gfx90a
-    gpu_archs_requested=gfx90a
-    build_rc=0 stage_rc=0
-    build_seconds=66
-    set_fast_count=10
-    set_fast_bytes=14169138
-    set_deterministic_count=10
-    set_deterministic_bytes=14169218
-    set_identical_count=10
-    set_identical_bytes=14009642
-    runtime_libs_bytes=3200416
-    runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
-    driver_libs_not_staged=
-    set_tar_gz_bytes=11312479
-    smoke[fast]: A release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report the runtime's own error.
-    smoke[deterministic]: A release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report the runtime's own error.
-    smoke[identical]: A release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report the runtime's own error.
-    sabotage: sabotage FAIL
-    nogpu: nogpu FAIL
+=== phase 9 diag: tools/diag/identity_cost_leg.sh === 22:43:38
+        not a figure to four places. Copy the row into bench/LANES_PRICE.md
+        with the date, the sha, the machine and the thermal caveat beside it.
+        
+        == done: /root/mojolearn/bench/results/e1/2026-08-31_224336-mojolearn-e2-amd/diag/lanes_price ==
+    commit=035493e1952e54a42a4a45e6abf1634b90b3cf71
+    uname=Linux 6.8.0-59-generic x86_64
+    ols_rc=0  price_rc=0
+    seconds=284
+    -- ols --
+    check_ols_is_launch_invariant REPORT [FAST]: run-to-run control AGREES (asserted); geometry invariance is True -- coef[0] 0xbc0517a6 vs 0xbc0517a6. A False here is not a bug, it is the measurement that prices the pins.
+    check_ols_is_launch_invariant OK [IDENTICAL]: all 12 coefficients bit-identical across elem_tpb 256/64, 0/37 floats of buffer padding and two different scratch poisons (coef[0] = 0xbc0517a9), and the A-vs-A control agrees
+    check_ols_is_launch_invariant OK [IDENTICAL]: all 12 coefficients bit-identical across elem_tpb 256/64, 0/37 floats of buffer padding and two different scratch poisons (coef[0] = 0xbc0517a9), and the A-vs-A control agrees
+    -- identity tax (ratio.tsv) --
+    lane	n	fast_med_s	ident_med_s	ratio_med	ratio_min	ratio_max	fast_min_s	fast_max_s	ident_min_s	ident_max_s	fast_hash	ident_hash	hash_note
+    cd	5	0.001268	0.002593	2.045	1.940	2.200	0.001178	0.001336	0.002572	0.002645	922cef459012627f	3cb298860e514e8a	fast!=ident bits
+    kde	5	0.000557	0.000711	1.277	1.245	1.309	0.000546	0.000571	0.000697	0.000715	7ea4432cb67a0a55	3719b9e6a55377a7	fast!=ident bits
+    linkage	5	0.001587	0.001491	0.939	0.760	1.220	0.001267	0.001666	0.001187	0.001571	8038c5fc49f74652	5d3155fc940e61d2	fast!=ident bits
+    svm	5	0.002840	0.003102	1.092	0.869	1.217	0.002557	0.003529	0.003039	0.003155	5951bd10d9eac7fe	9bec403e03e1a2cc	fast!=ident bits
+    metrics	5	0.001781	0.001658	0.931	0.886	1.109	0.001516	0.001852	0.001414	0.001681	e950a50c1d7c9c26	2321a95d3439fc2b	fast!=ident bits
+    gemm	5	0.000078	0.000109	1.401	1.282	1.548	0.000071	0.000082	0.000103	0.000112	79adfe2dd5bd57e6	79adfe2dd5bd57e6	fast==ident bits
 
-=== done === 07:04:43
-artifacts in /root/mojolearn/bench/results/e1/2026-08-31_070336-mojolearn-e2-amd
+=== done === 22:48:22
+artifacts in /root/mojolearn/bench/results/e1/2026-08-31_224336-mojolearn-e2-amd
 next: fetch this directory beside the other machine's and run
   python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
   python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

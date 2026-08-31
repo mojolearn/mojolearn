@@ -1,0 +1,981 @@
+start 2026-08-31T21:21:46Z
+!! MOJOLEARN_GPU_ARCHS=gfx942
+!! --target-accelerator is being passed. On Metal this flag empties
+!! the binary of kernels (measured 2026-08-21). READ THE EMBEDDED
+!! ARCHITECTURES BACK out of the .so before trusting this build.
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:107:
+/root/mojolearn/./core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:107:
+/root/mojolearn/./core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:107:
+/root/mojolearn/./core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:107:
+/root/mojolearn/./core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:80:
+Imported from ./cluster/estimator.mojo:111:
+Imported from /root/mojolearn/./core/row_norms.mojo:60:
+/root/mojolearn/./core/pinned_reduce.mojo:99:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = value
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:80:
+Imported from ./cluster/estimator.mojo:111:
+Imported from /root/mojolearn/./core/row_norms.mojo:60:
+/root/mojolearn/./core/pinned_reduce.mojo:104:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:80:
+Imported from ./cluster/estimator.mojo:111:
+Imported from /root/mojolearn/./core/row_norms.mojo:60:
+/root/mojolearn/./core/pinned_reduce.mojo:104:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:80:
+Imported from ./cluster/estimator.mojo:111:
+Imported from /root/mojolearn/./core/row_norms.mojo:60:
+/root/mojolearn/./core/pinned_reduce.mojo:104:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                                      ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:80:
+Imported from ./cluster/estimator.mojo:111:
+Imported from /root/mojolearn/./core/row_norms.mojo:60:
+/root/mojolearn/./core/pinned_reduce.mojo:107:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var total = red[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:125:
+Imported from ./neighbors/derived/neighbors/ball_cover/ball_cover.mojo:178:
+./neighbors/derived/neighbors/ball_cover/registers.mojo:758:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:125:
+Imported from ./neighbors/derived/neighbors/ball_cover/ball_cover.mojo:178:
+Imported from ./neighbors/derived/neighbors/ball_cover/registers.mojo:120:
+./neighbors/original/ball_cover_canonical_order.mojo:167:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:107:
+/root/mojolearn/./core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:439:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    sx[r * FKNN_SMEM_STRIDE + c] = v
+                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:448:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    sy[r2 * FKNN_SMEM_STRIDE + c2] = v2
+                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:462:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:464:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        regy[j] = sy[
+                                  ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:478:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                    sx[(tr + 0) * FKNN_SMEM_STRIDE + kk]
+                                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:489:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                    sx[
+                                    ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:511:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:521:17: warning: '@parameter for' is deprecated; use 'comptime for'
+                @parameter
+                ^~~~~~~~~~
+                comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:535:17: warning: '@parameter for' is deprecated; use 'comptime for'
+                @parameter
+                ^~~~~~~~~~
+                comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:636:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:667:25: warning: '@parameter for' is deprecated; use 'comptime for'
+                        @parameter
+                        ^~~~~~~~~~
+                        comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:672:25: warning: '@parameter for' is deprecated; use 'comptime for'
+                        @parameter
+                        ^~~~~~~~~~
+                        comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:742:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:101:
+./neighbors/derived/matrix/detail/select_radix.mojo:223:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_K] = Int32(k)
+        ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:101:
+./neighbors/derived/matrix/detail/select_radix.mojo:224:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_LEN] = Int32(length)
+        ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:101:
+./neighbors/derived/matrix/detail/select_radix.mojo:225:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_PREVIOUS_LEN] = Int32(length)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:101:
+./neighbors/derived/matrix/detail/select_radix.mojo:226:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:101:
+./neighbors/derived/matrix/detail/select_radix.mojo:227:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_BACK_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:101:
+./neighbors/derived/matrix/detail/select_radix.mojo:228:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        kth_bits[0] = UInt32(0)
+        ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:101:
+./neighbors/derived/matrix/detail/select_radix.mojo:254:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_len = Int(ctr[CTR_LEN])
+                              ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:101:
+./neighbors/derived/matrix/detail/select_radix.mojo:255:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_k = Int(ctr[CTR_K])
+                            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:101:
+./neighbors/derived/matrix/detail/select_radix.mojo:256:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var previous_len = Int(ctr[CTR_PREVIOUS_LEN])
+                               ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:101:
+./neighbors/derived/matrix/detail/select_radix.mojo:268:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = Int32(0)
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:101:
+./neighbors/derived/matrix/detail/select_radix.mojo:270:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_FILTER_CNT] = Int32(0)
+            ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:101:
+./neighbors/derived/matrix/detail/select_radix.mojo:275:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var kth = kth_bits[0]
+                  ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:101:
+./neighbors/derived/matrix/detail/select_radix.mojo:333:69: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var scanned = block_prefix_sum[block_size=SELECT_BLOCK](hist[tid])
+                                                                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:101:
+./neighbors/derived/matrix/detail/select_radix.mojo:334:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = scanned
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:101:
+./neighbors/derived/matrix/detail/select_radix.mojo:340:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            prev_count = hist[tid - 1]
+                         ~~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:101:
+./neighbors/derived/matrix/detail/select_radix.mojo:341:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var cur_count = hist[tid]
+                        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:101:
+./neighbors/derived/matrix/detail/select_radix.mojo:345:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_K] = Int32(current_k - Int(prev_count))
+            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:101:
+./neighbors/derived/matrix/detail/select_radix.mojo:346:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_LEN] = Int32(Int(cur_count) - Int(prev_count))
+            ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:101:
+./neighbors/derived/matrix/detail/select_radix.mojo:347:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (UInt32(tid) << UInt32(start_bit))
+            ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:101:
+./neighbors/derived/matrix/detail/select_radix.mojo:347:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (UInt32(tid) << UInt32(start_bit))
+                          ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:101:
+./neighbors/derived/matrix/detail/select_radix.mojo:350:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_PREVIOUS_LEN] = Int32(current_len)
+            ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:101:
+./neighbors/derived/matrix/detail/select_radix.mojo:354:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES - 1:
+               ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:101:
+./neighbors/derived/matrix/detail/select_radix.mojo:354:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES - 1:
+                                    ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:101:
+./neighbors/derived/matrix/detail/select_radix.mojo:356:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var lf_kth = kth_bits[0]
+                         ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:101:
+./neighbors/derived/matrix/detail/select_radix.mojo:358:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var needed = Int(ctr[CTR_K])
+                             ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:199:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_K] = Int32(k)
+        ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:200:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_LEN] = Int32(length)
+        ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:201:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_PREVIOUS_LEN] = Int32(length)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:202:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:203:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        kth_bits[0] = UInt64(0)
+        ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:227:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_len = Int(ctr[CTR_LEN])
+                              ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:228:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_k = Int(ctr[CTR_K])
+                            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:229:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var previous_len = Int(ctr[CTR_PREVIOUS_LEN])
+                               ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:239:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = Int32(0)
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:241:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_FILTER_CNT] = Int32(0)
+            ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:246:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var kth = kth_bits[0]
+                  ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:290:69: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var scanned = block_prefix_sum[block_size=SELECT_BLOCK](hist[tid])
+                                                                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:291:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = scanned
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:296:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            prev_count = hist[tid - 1]
+                         ~~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:297:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var cur_count = hist[tid]
+                        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:299:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_K] = Int32(current_k - Int(prev_count))
+            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:300:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_LEN] = Int32(Int(cur_count) - Int(prev_count))
+            ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:301:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (
+            ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:301:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (
+                          ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:306:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_PREVIOUS_LEN] = Int32(current_len)
+            ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:309:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES_64 - 1:
+               ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:309:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES_64 - 1:
+                                    ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:315:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var lf_kth = kth_bits[0]
+                         ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:356:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        s_val[tid] = o_val.unsafe_load(tid)
+        ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:357:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        s_idx[tid] = o_idx.unsafe_load(tid)
+        ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:360:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var key_t = composite_key(s_val[tid], s_idx[tid], select_min)
+                                  ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:360:52: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var key_t = composite_key(s_val[tid], s_idx[tid], select_min)
+                                              ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:363:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if composite_key(s_val[j], s_idx[j], select_min) < key_t:
+                             ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:363:45: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if composite_key(s_val[j], s_idx[j], select_min) < key_t:
+                                       ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:365:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        o_val.unsafe_store(rank, s_val[tid])
+                                 ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:94:
+./neighbors/original/select_radix_identical.mojo:366:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        o_idx.unsafe_store(rank, s_idx[tid])
+                                 ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:105:
+./neighbors/derived/matrix/detail/select_warpsort.mojo:685:15: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    val_smem: UnsafePointer[
+              ^~~~~~~~~~~~~
+              Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:105:
+./neighbors/derived/matrix/detail/select_warpsort.mojo:690:15: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    idx_smem: UnsafePointer[
+              ^~~~~~~~~~~~~
+              Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+Imported from ./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:237:
+./neighbors/derived/neighbors/detail/faiss_select/select.mojo:283:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:80:
+Imported from ./cluster/estimator.mojo:110:
+Imported from ./cluster/derived/cluster/kmeans.mojo:36:
+Imported from ./cluster/derived/cluster/detail/kmeans.mojo:65:
+./cluster/original/plus_plus.mojo:247:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        carry[0] = Float32(0.0)
+        ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:80:
+Imported from ./cluster/estimator.mojo:110:
+Imported from ./cluster/derived/cluster/kmeans.mojo:36:
+Imported from ./cluster/derived/cluster/detail/kmeans.mojo:65:
+./cluster/original/plus_plus.mojo:258:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            csum.unsafe_store(i, base + carry[0] + inc)
+                                        ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:80:
+Imported from ./cluster/estimator.mojo:110:
+Imported from ./cluster/derived/cluster/kmeans.mojo:36:
+Imported from ./cluster/derived/cluster/detail/kmeans.mojo:65:
+./cluster/original/plus_plus.mojo:261:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            carry[0] = carry[0] + inc
+            ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:80:
+Imported from ./cluster/estimator.mojo:110:
+Imported from ./cluster/derived/cluster/kmeans.mojo:36:
+Imported from ./cluster/derived/cluster/detail/kmeans.mojo:65:
+./cluster/original/plus_plus.mojo:261:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            carry[0] = carry[0] + inc
+                       ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:105:
+./neighbors/derived/matrix/detail/select_warpsort.mojo:538:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:105:
+./neighbors/derived/matrix/detail/select_warpsort.mojo:551:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:105:
+./neighbors/derived/matrix/detail/select_warpsort.mojo:302:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:105:
+./neighbors/derived/matrix/detail/select_warpsort.mojo:433:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:105:
+./neighbors/derived/matrix/detail/select_warpsort.mojo:625:18: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        out_val: UnsafePointer[
+                 ^~~~~~~~~~~~~
+                 Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:105:
+./neighbors/derived/matrix/detail/select_warpsort.mojo:630:18: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        out_idx: UnsafePointer[
+                 ^~~~~~~~~~~~~
+                 Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:105:
+./neighbors/derived/matrix/detail/select_warpsort.mojo:572:17: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        in_val: UnsafePointer[
+                ^~~~~~~~~~~~~
+                Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:105:
+./neighbors/derived/matrix/detail/select_warpsort.mojo:577:17: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        in_idx: UnsafePointer[
+                ^~~~~~~~~~~~~
+                Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+Imported from ./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:237:
+./neighbors/derived/neighbors/detail/faiss_select/select.mojo:188:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+Imported from ./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:237:
+./neighbors/derived/neighbors/detail/faiss_select/select.mojo:195:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+Imported from ./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:237:
+./neighbors/derived/neighbors/detail/faiss_select/select.mojo:227:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+Imported from ./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:237:
+Imported from ./neighbors/derived/neighbors/detail/faiss_select/select.mojo:110:
+./neighbors/derived/neighbors/detail/faiss_select/merge_network_warp.mojo:342:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+Imported from ./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:237:
+Imported from ./neighbors/derived/neighbors/detail/faiss_select/select.mojo:110:
+./neighbors/derived/neighbors/detail/faiss_select/merge_network_warp.mojo:353:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+Imported from ./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:237:
+Imported from ./neighbors/derived/neighbors/detail/faiss_select/select.mojo:110:
+./neighbors/derived/neighbors/detail/faiss_select/merge_network_warp.mojo:366:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+Imported from ./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:237:
+Imported from ./neighbors/derived/neighbors/detail/faiss_select/select.mojo:110:
+./neighbors/derived/neighbors/detail/faiss_select/merge_network_warp.mojo:375:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+Imported from ./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:237:
+Imported from ./neighbors/derived/neighbors/detail/faiss_select/select.mojo:110:
+./neighbors/derived/neighbors/detail/faiss_select/merge_network_warp.mojo:379:13: warning: '@parameter if' is deprecated; use 'comptime if'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+Imported from ./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:237:
+Imported from ./neighbors/derived/neighbors/detail/faiss_select/select.mojo:110:
+./neighbors/derived/neighbors/detail/faiss_select/merge_network_warp.mojo:390:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:105:
+./neighbors/derived/matrix/detail/select_warpsort.mojo:519:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:105:
+./neighbors/derived/matrix/detail/select_warpsort.mojo:602:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:105:
+./neighbors/derived/matrix/detail/select_warpsort.mojo:648:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:105:
+./neighbors/derived/matrix/detail/select_warpsort.mojo:667:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:80:
+Imported from ./cluster/estimator.mojo:110:
+Imported from ./cluster/derived/cluster/kmeans.mojo:40:
+Imported from ./cluster/derived/cluster/detail/min_cluster_distance_compute.mojo:74:
+./cluster/derived/distance/fused_distance_nn/simt_kernel.mojo:479:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    s_xnorm[i] = nv
+                    ~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:80:
+Imported from ./cluster/estimator.mojo:110:
+Imported from ./cluster/derived/cluster/kmeans.mojo:40:
+Imported from ./cluster/derived/cluster/detail/min_cluster_distance_compute.mojo:74:
+./cluster/derived/distance/fused_distance_nn/simt_kernel.mojo:487:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                s_ynorm[i2] = nv2
+                ~~~~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:80:
+Imported from ./cluster/estimator.mojo:110:
+Imported from ./cluster/derived/cluster/kmeans.mojo:40:
+Imported from ./cluster/derived/cluster/detail/min_cluster_distance_compute.mojo:74:
+./cluster/derived/distance/fused_distance_nn/simt_kernel.mojo:495:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                rxn[i] = s_xnorm[i * tr + accrowid]
+                         ~~~~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:80:
+Imported from ./cluster/estimator.mojo:110:
+Imported from ./cluster/derived/cluster/kmeans.mojo:40:
+Imported from ./cluster/derived/cluster/detail/min_cluster_distance_compute.mojo:74:
+./cluster/derived/distance/fused_distance_nn/simt_kernel.mojo:498:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                ryn[j] = s_ynorm[j * tc + acccolid]
+                         ~~~~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:105:
+./neighbors/derived/matrix/detail/select_warpsort.mojo:284:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:105:
+./neighbors/derived/matrix/detail/select_warpsort.mojo:368:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:105:
+./neighbors/derived/matrix/detail/select_warpsort.mojo:376:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+Imported from ./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:237:
+Imported from ./neighbors/derived/neighbors/detail/faiss_select/select.mojo:110:
+./neighbors/derived/neighbors/detail/faiss_select/merge_network_warp.mojo:280:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+Imported from ./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:237:
+Imported from ./neighbors/derived/neighbors/detail/faiss_select/select.mojo:110:
+./neighbors/derived/neighbors/detail/faiss_select/merge_network_warp.mojo:290:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+Imported from ./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:237:
+Imported from ./neighbors/derived/neighbors/detail/faiss_select/select.mojo:110:
+./neighbors/derived/neighbors/detail/faiss_select/merge_network_warp.mojo:296:13: warning: '@parameter if' is deprecated; use 'comptime if'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+Imported from ./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:237:
+Imported from ./neighbors/derived/neighbors/detail/faiss_select/select.mojo:110:
+./neighbors/derived/neighbors/detail/faiss_select/merge_network_warp.mojo:447:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+Imported from ./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:237:
+Imported from ./neighbors/derived/neighbors/detail/faiss_select/select.mojo:110:
+./neighbors/derived/neighbors/detail/faiss_select/merge_network_warp.mojo:197:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+Imported from ./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:237:
+Imported from ./neighbors/derived/neighbors/detail/faiss_select/select.mojo:110:
+./neighbors/derived/neighbors/detail/faiss_select/merge_network_warp.mojo:206:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+Imported from ./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:237:
+Imported from ./neighbors/derived/neighbors/detail/faiss_select/select.mojo:110:
+./neighbors/derived/neighbors/detail/faiss_select/merge_network_warp.mojo:229:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+Imported from ./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:237:
+Imported from ./neighbors/derived/neighbors/detail/faiss_select/select.mojo:110:
+./neighbors/derived/neighbors/detail/faiss_select/merge_network_warp.mojo:233:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+Imported from ./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:237:
+Imported from ./neighbors/derived/neighbors/detail/faiss_select/select.mojo:110:
+./neighbors/derived/neighbors/detail/faiss_select/merge_network_warp.mojo:240:13: warning: '@parameter if' is deprecated; use 'comptime if'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+Imported from ./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:237:
+Imported from ./neighbors/derived/neighbors/detail/faiss_select/select.mojo:110:
+./neighbors/derived/neighbors/detail/faiss_select/merge_network_warp.mojo:417:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn.mojo:82:
+Imported from ./neighbors/estimator.mojo:116:
+Imported from ./neighbors/derived/neighbors/detail/knn_brute_force.mojo:111:
+Imported from ./neighbors/derived/neighbors/detail/fused_l2_knn.mojo:237:
+Imported from ./neighbors/derived/neighbors/detail/faiss_select/select.mojo:110:
+./neighbors/derived/neighbors/detail/faiss_select/merge_network_warp.mojo:434:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+/root/mojolearn/bindings/_mojolearn.mojo:332:26: warning: assignment to 'inertia' was never used; assign to '_' instead?
+    var inertia = Float64(0.0)
+                         ^
+/root/mojolearn/bindings/_mojolearn.mojo:333:18: warning: assignment to 'n_iter' was never used; assign to '_' instead?
+    var n_iter = 0
+                 ^
+/root/mojolearn/bindings/_mojolearn.mojo:334:28: warning: assignment to 'sum_scale' was never used; assign to '_' instead?
+    var sum_scale = Float64(0.0)
+                           ^
+/root/mojolearn/bindings/_mojolearn.mojo:335:31: warning: assignment to 'weight_scale' was never used; assign to '_' instead?
+    var weight_scale = Float64(0.0)
+                              ^
+Included from /root/mojolearn/bindings/_mojolearn.mojo:80:
+Included from ./cluster/estimator.mojo:110:
+Included from ./cluster/derived/cluster/kmeans.mojo:40:
+./cluster/derived/cluster/detail/min_cluster_distance_compute.mojo:198:41: warning: assignment to 'data_batch' was never used; assign to '_' instead?
+    var data_batch = get_data_batch_size(batch_samples, n_samples)
+                                        ^
+Included from /root/mojolearn/bindings/_mojolearn.mojo:80:
+Included from ./cluster/estimator.mojo:110:
+Included from ./cluster/derived/cluster/kmeans.mojo:40:
+./cluster/derived/cluster/detail/min_cluster_distance_compute.mojo:199:50: warning: assignment to 'centroid_batch' was never used; assign to '_' instead?
+    var centroid_batch = get_centroids_batch_size(batch_centroids, n_clusters)
+                                                 ^
+Included from /root/mojolearn/bindings/_mojolearn.mojo:82:
+./neighbors/estimator.mojo:578:9: warning: ref 'i' was never used, remove it?
+    for i in range(n_outputs):
+        ^
+Included from /root/mojolearn/bindings/_mojolearn.mojo:82:
+./neighbors/estimator.mojo:712:9: warning: ref 'i' was never used, remove it?
+    for i in range(n_outputs):
+        ^
+built python/mojolearn/deterministic/_mojolearn.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+end 2026-08-31T21:22:07Z OK

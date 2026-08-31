@@ -1,0 +1,66 @@
+
+=== provenance === 21:21:43
+e408f4c1e0e90a6638d9cb19c447d50c865c7f7c
+Linux mojolearn-e2-amd 6.8.0-59-generic #61-Ubuntu SMP PREEMPT_DYNAMIC Fri Apr 11 23:16:11 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
+
+=== pixi === 21:21:43
+This script will automatically download and install Pixi (latest) for you.
+Getting it from this url: https://github.com/prefix-dev/pixi/releases/latest/download/pixi-x86_64-unknown-linux-musl.tar.gz
+The 'pixi' binary is installed into '/root/.pixi/bin'
+Updating '/root/.bashrc'
+Please restart or source your shell.
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 21:21:46
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 21:21:46
+phase 9: DIAG ONLY (MOJOLEARN_P9_ONLY_DIAG=1); no builds, no arms, no probes here
+phase 9 builds: <none>
+phase 9 tiers:  <none>
+concurrent probe SKIPPED: needs all three tiers, P9_TIERS=<none>
+
+=== phase 9 diag: packaging/linux/leg_diag.sh === 21:21:46
+    vendor=hip
+    arch=gfx942
+    gpu_archs_requested=gfx942
+    build_rc=0 stage_rc=0
+    build_seconds=200
+    set_fast_count=10
+    set_fast_bytes=14328938
+    set_deterministic_count=10
+    set_deterministic_bytes=14333114
+    set_identical_count=10
+    set_identical_bytes=14140770
+    runtime_libs_bytes=3200416
+    runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+    driver_libs_not_staged=
+    set_tar_gz_bytes=11418661
+    smoke[fast]: smoke v0.3.2 mode=fast vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
+    smoke[deterministic]: smoke v0.3.2 mode=deterministic vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
+    smoke[identical]: smoke v0.3.2 mode=identical vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS
+    sabotage: sabotage PASS
+    nogpu: nogpu FAIL
+
+=== done === 21:25:13
+artifacts in /root/mojolearn/bench/results/e1/2026-08-31_212143-mojolearn-e2-amd
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card
