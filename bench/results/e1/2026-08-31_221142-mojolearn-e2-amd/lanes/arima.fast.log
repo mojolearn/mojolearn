@@ -1,0 +1,332 @@
+Imported from /root/mojolearn/arima/checks/arima_check.mojo:82:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/arima/checks/arima_check.mojo:82:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/arima/checks/arima_check.mojo:82:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/arima/checks/arima_check.mojo:82:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/arima/checks/arima_check.mojo:82:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+== arima/checks/arima_check.mojo [FAST] N_OBS=24 SALT=7 ==
+check_jones_device_equals_oracle [FAST]
+      arima.jones.fwd.p1.ma: 6 cells, 0 differ
+      arima.jones.inv.p1.ma: 6 cells, 0 differ
+      round trip p=1 ma: worst relative 1.1037896742021284e-07 (REPORTED, DEVIATION 675)
+      arima.jones.fwd.p1.ar: 6 cells, 0 differ
+      arima.jones.inv.p1.ar: 6 cells, 0 differ
+      round trip p=1 ar: worst relative 1.1037896742021284e-07 (REPORTED, DEVIATION 675)
+      arima.jones.fwd.p2.ma: 12 cells, 1 differ (first cell 4: 0xbdd755d8 vs 0xbdd755d9)
+    RECORDED [FAST] arima.jones.fwd.p2.ma device != oracle (vendor-shaped under FAST; not asserted)
+      arima.jones.inv.p2.ma: 12 cells, 0 differ
+      round trip p=2 ma: worst relative 2.2351741457704582e-07 (REPORTED, DEVIATION 675)
+      arima.jones.fwd.p2.ar: 12 cells, 1 differ (first cell 4: 0xbdc0e79e vs 0xbdc0e79d)
+    RECORDED [FAST] arima.jones.fwd.p2.ar device != oracle (vendor-shaped under FAST; not asserted)
+      arima.jones.inv.p2.ar: 12 cells, 0 differ
+      round trip p=2 ar: worst relative 2.2351741457704582e-07 (REPORTED, DEVIATION 675)
+      arima.jones.fwd.p3.ma: 18 cells, 1 differ (first cell 6: 0xbdc00bce vs 0xbdc00bcf)
+    RECORDED [FAST] arima.jones.fwd.p3.ma device != oracle (vendor-shaped under FAST; not asserted)
+      arima.jones.inv.p3.ma: 18 cells, 0 differ
+      round trip p=3 ma: worst relative 2.2351741457704582e-07 (REPORTED, DEVIATION 675)
+      arima.jones.fwd.p3.ar: 18 cells, 4 differ (first cell 3: 0xbd583f34 vs 0xbd583f35)
+    RECORDED [FAST] arima.jones.fwd.p3.ar device != oracle (vendor-shaped under FAST; not asserted)
+      arima.jones.inv.p3.ar: 18 cells, 0 differ
+      round trip p=3 ar: worst relative 2.980232194360611e-07 (REPORTED, DEVIATION 675)
+      arima.jones.fwd.p4.ma: 24 cells, 3 differ (first cell 5: 0x3e4363a2 vs 0x3e4363a3)
+    RECORDED [FAST] arima.jones.fwd.p4.ma device != oracle (vendor-shaped under FAST; not asserted)
+      arima.jones.inv.p4.ma: 24 cells, 0 differ
+      round trip p=4 ma: worst relative 6.208817302881071e-07 (REPORTED, DEVIATION 675)
+      arima.jones.fwd.p4.ar: 24 cells, 5 differ (first cell 8: 0xbe3630f4 vs 0xbe3630f3)
+    RECORDED [FAST] arima.jones.fwd.p4.ar device != oracle (vendor-shaped under FAST; not asserted)
+      arima.jones.inv.p4.ar: 24 cells, 0 differ
+      round trip p=4 ar: worst relative 8.071462493745393e-07 (REPORTED, DEVIATION 675)
+check_jones_refuses_by_name [FAST]
+    batchSize < 1: raised: jones_transform: unsupported batchSize 0
+    parameter < 1: raised: jones_transform: unsupported parameter 0
+    parameter > 8: raised: jones_transform: unsupported parameter 9
+check_jones_contraction_is_visible [FAST]
+    of 160 accumulations, the two spellings differ on 27
+check_kalman_device_equals_oracle [FAST]
+    arma11_k (p1 d0 q1 P0 D0 Q0 s0 k1) rd=2 r=2
+      arma11_k.Z: 12 cells, 0 differ
+      arma11_k.R: 12 cells, 0 differ
+      arma11_k.T: 24 cells, 0 differ
+      arma11_k.RQ: 12 cells, 0 differ
+      arma11_k.RQR: 24 cells, 0 differ
+      arma11_k.P0: 24 cells, 0 differ
+      arma11_k.alpha0: 12 cells, 0 differ
+      arma11_k.pred: 144 cells, 0 differ
+      arma11_k.vs: 144 cells, 0 differ
+      arma11_k.loglike: 6 cells, 0 differ
+      arma11_k.fc: 18 cells, 0 differ
+      loglike[0] = -91.055336 0xc2b61c55
+    ar1 (p1 d0 q0 P0 D0 Q0 s0 k0) rd=1 r=1
+      ar1.Z: 6 cells, 0 differ
+      ar1.R: 6 cells, 0 differ
+      ar1.T: 6 cells, 0 differ
+      ar1.RQ: 6 cells, 0 differ
+      ar1.RQR: 6 cells, 0 differ
+      ar1.P0: 6 cells, 0 differ
+      ar1.alpha0: 6 cells, 0 differ
+      ar1.pred: 144 cells, 0 differ
+      ar1.vs: 144 cells, 0 differ
+      ar1.loglike: 6 cells, 0 differ
+      ar1.fc: 18 cells, 0 differ
+      loglike[0] = -69.86106 0xc28bb8dd
+    ma2 (p0 d0 q2 P0 D0 Q0 s0 k0) rd=3 r=3
+      ma2.Z: 18 cells, 0 differ
+      ma2.R: 18 cells, 1 differ (first cell 7: 0x3dd8f8da vs 0x3dd8f8d9)
+    RECORDED [FAST] ma2.R device != oracle (vendor-shaped under FAST; not asserted)
+      ma2.T: 54 cells, 0 differ
+      ma2.RQ: 18 cells, 1 differ (first cell 7: 0x3d996fab vs 0x3d996faa)
+    RECORDED [FAST] ma2.RQ device != oracle (vendor-shaped under FAST; not asserted)
+      ma2.RQR: 54 cells, 5 differ (first cell 19: 0x3d996fab vs 0x3d996faa)
+    RECORDED [FAST] ma2.RQR device != oracle (vendor-shaped under FAST; not asserted)
+      ma2.P0: 54 cells, 5 differ (first cell 19: 0x3db12d62 vs 0x3db12d60)
+    RECORDED [FAST] ma2.P0 device != oracle (vendor-shaped under FAST; not asserted)
+      ma2.alpha0: 18 cells, 0 differ
+      ma2.pred: 144 cells, 10 differ (first cell 49: 0x3a8d7be2 vs 0x3a8d7be1)
+    RECORDED [FAST] ma2.pred device != oracle (vendor-shaped under FAST; not asserted)
+      ma2.vs: 144 cells, 1 differ (first cell 54: 0xbf1ada64 vs 0xbf1ada65)
+    RECORDED [FAST] ma2.vs device != oracle (vendor-shaped under FAST; not asserted)
+      ma2.loglike: 6 cells, 0 differ
+      ma2.fc: 18 cells, 0 differ
+      loglike[0] = -63.1545 0xc27c9e35
+    arima111 (p1 d1 q1 P0 D0 Q0 s0 k0) rd=3 r=2
+      arima111.Z: 18 cells, 0 differ
+      arima111.R: 18 cells, 0 differ
+      arima111.T: 54 cells, 0 differ
+      arima111.RQ: 18 cells, 0 differ
+      arima111.RQR: 54 cells, 0 differ
+      arima111.P0: 54 cells, 0 differ
+      arima111.alpha0: 18 cells, 0 differ
+      arima111.pred: 144 cells, 0 differ
+      arima111.vs: 144 cells, 0 differ
+      arima111.loglike: 6 cells, 0 differ
+      arima111.fc: 18 cells, 0 differ
+      loglike[0] = -37.35817 0xc2156ec4
+    arima212 (p2 d1 q2 P0 D0 Q0 s0 k1) rd=4 r=3
+      arima212.Z: 24 cells, 0 differ
+      arima212.R: 24 cells, 1 differ (first cell 10: 0x3dd8f8da vs 0x3dd8f8d9)
+    RECORDED [FAST] arima212.R device != oracle (vendor-shaped under FAST; not asserted)
+      arima212.T: 96 cells, 0 differ
+      arima212.RQ: 24 cells, 1 differ (first cell 10: 0x3d996fab vs 0x3d996faa)
+    RECORDED [FAST] arima212.RQ device != oracle (vendor-shaped under FAST; not asserted)
+      arima212.RQR: 96 cells, 5 differ (first cell 38: 0x3d996fab vs 0x3d996faa)
+    RECORDED [FAST] arima212.RQR device != oracle (vendor-shaped under FAST; not asserted)
+      arima212.P0: 96 cells, 3 differ (first cell 41: 0x3e3a2a58 vs 0x3e3a2a57)
+    RECORDED [FAST] arima212.P0 device != oracle (vendor-shaped under FAST; not asserted)
+      arima212.alpha0: 24 cells, 0 differ
+      arima212.pred: 144 cells, 6 differ (first cell 50: 0xbf2ba0a3 vs 0xbf2ba0a2)
+    RECORDED [FAST] arima212.pred device != oracle (vendor-shaped under FAST; not asserted)
+      arima212.vs: 144 cells, 5 differ (first cell 50: 0xc010d6f9 vs 0xc010d6fa)
+    RECORDED [FAST] arima212.vs device != oracle (vendor-shaped under FAST; not asserted)
+      arima212.loglike: 6 cells, 1 differ (first cell 2: 0xc227b716 vs 0xc227b715)
+    RECORDED [FAST] arima212.loglike device != oracle (vendor-shaped under FAST; not asserted)
+      arima212.fc: 18 cells, 0 differ
+      loglike[0] = -45.100548 0xc23466f6
+    ar2_unit (p2 d0 q0 P0 D0 Q0 s0 k0) rd=2 r=2
+      ar2_unit.Z: 12 cells, 0 differ
+      ar2_unit.R: 12 cells, 0 differ
+      ar2_unit.T: 24 cells, 0 differ
+      ar2_unit.RQ: 12 cells, 0 differ
+      ar2_unit.RQR: 24 cells, 0 differ
+      ar2_unit.P0: 24 cells, 4 differ (first cell 8: 0x4219dc33 vs 0x4219dc13)
+    RECORDED [FAST] ar2_unit.P0 device != oracle (vendor-shaped under FAST; not asserted)
+      ar2_unit.alpha0: 12 cells, 0 differ
+      ar2_unit.pred: 144 cells, 5 differ (first cell 49: 0x3b252c94 vs 0x3b252c95)
+    RECORDED [FAST] ar2_unit.pred device != oracle (vendor-shaped under FAST; not asserted)
+      ar2_unit.vs: 144 cells, 3 differ (first cell 51: 0xbf91904a vs 0xbf919054)
+    RECORDED [FAST] ar2_unit.vs device != oracle (vendor-shaped under FAST; not asserted)
+      ar2_unit.loglike: 6 cells, 0 differ
+      ar2_unit.fc: 18 cells, 0 differ
+      loglike[0] = -167.04616 0xc3270bd1
+    sarima_full (p1 d1 q1 P1 D1 Q1 s2 k0) rd=7 r=4
+      sarima_full.Z: 42 cells, 0 differ
+      sarima_full.R: 42 cells, 0 differ
+      sarima_full.T: 294 cells, 0 differ
+      sarima_full.RQ: 42 cells, 0 differ
+      sarima_full.RQR: 294 cells, 0 differ
+      sarima_full.P0: 294 cells, 0 differ
+      sarima_full.alpha0: 42 cells, 0 differ
+      sarima_full.pred: 144 cells, 0 differ
+      sarima_full.vs: 144 cells, 0 differ
+      sarima_full.loglike: 6 cells, 0 differ
+      sarima_full.fc: 18 cells, 0 differ
+      loglike[0] = -53.58188 0xc25653d8
+    sarima_rd8 (p1 d1 q0 P0 D1 Q1 s3 k0) rd=8 r=4
+      sarima_rd8.Z: 48 cells, 0 differ
+      sarima_rd8.R: 48 cells, 0 differ
+      sarima_rd8.T: 384 cells, 0 differ
+      sarima_rd8.RQ: 48 cells, 0 differ
+      sarima_rd8.RQR: 384 cells, 0 differ
+      sarima_rd8.P0: 384 cells, 0 differ
+      sarima_rd8.alpha0: 48 cells, 0 differ
+      sarima_rd8.pred: 144 cells, 0 differ
+      sarima_rd8.vs: 144 cells, 0 differ
+      sarima_rd8.loglike: 6 cells, 0 differ
+      sarima_rd8.fc: 18 cells, 0 differ
+      loglike[0] = -42.834083 0xc22b561a
+    arma44 (p4 d0 q4 P0 D0 Q0 s0 k0) rd=5 r=5
+      arma44.Z: 30 cells, 0 differ
+      arma44.R: 30 cells, 4 differ (first cell 1: 0xbb0b28de vs 0xbb0b28df)
+    RECORDED [FAST] arma44.R device != oracle (vendor-shaped under FAST; not asserted)
+      arma44.T: 150 cells, 1 differ (first cell 51: 0x3ea1e22c vs 0x3ea1e22d)
+    RECORDED [FAST] arma44.T device != oracle (vendor-shaped under FAST; not asserted)
+      arma44.RQ: 30 cells, 4 differ (first cell 1: 0xbb55133d vs 0xbb55133f)
+    RECORDED [FAST] arma44.RQ device != oracle (vendor-shaped under FAST; not asserted)
+      arma44.RQR: 150 cells, 34 differ (first cell 1: 0xbb55133d vs 0xbb55133f)
+    RECORDED [FAST] arma44.RQR device != oracle (vendor-shaped under FAST; not asserted)
+      arma44.P0: 150 cells, 22 differ (first cell 1: 0x3dd039f3 vs 0x3dd039f2)
+    RECORDED [FAST] arma44.P0 device != oracle (vendor-shaped under FAST; not asserted)
+      arma44.alpha0: 30 cells, 0 differ
+      arma44.pred: 144 cells, 24 differ (first cell 2: 0x3d2eca8c vs 0x3d2eca86)
+    RECORDED [FAST] arma44.pred device != oracle (vendor-shaped under FAST; not asserted)
+      arma44.vs: 144 cells, 14 differ (first cell 51: 0xbf8b92ae vs 0xbf8b92ad)
+    RECORDED [FAST] arma44.vs device != oracle (vendor-shaped under FAST; not asserted)
+      arma44.loglike: 6 cells, 0 differ
+      arma44.fc: 18 cells, 3 differ (first cell 6: 0x3f6486ee vs 0x3f6486e9)
+    RECORDED [FAST] arma44.fc device != oracle (vendor-shaped under FAST; not asserted)
+      loglike[0] = -52.672462 0xc252b09a
+    ar2_tie (p2 d0 q0 P0 D0 Q0 s0 k0) rd=2 r=2
+      ar2_tie.Z: 12 cells, 0 differ
+      ar2_tie.R: 12 cells, 0 differ
+      ar2_tie.T: 24 cells, 6 differ (first cell 0: 0x3f6813bc vs 0x3f6813bd)
+    RECORDED [FAST] ar2_tie.T device != oracle (vendor-shaped under FAST; not asserted)
+      ar2_tie.RQ: 12 cells, 0 differ
+      ar2_tie.RQR: 24 cells, 0 differ
+      ar2_tie.P0: 24 cells, 6 differ (first cell 1: 0xbf78d012 vs 0xbf78d014)
+    RECORDED [FAST] ar2_tie.P0 device != oracle (vendor-shaped under FAST; not asserted)
+      ar2_tie.alpha0: 12 cells, 0 differ
+      ar2_tie.pred: 144 cells, 108 differ (first cell 2: 0xc01b3da4 vs 0xc01b3da5)
+    RECORDED [FAST] ar2_tie.pred device != oracle (vendor-shaped under FAST; not asserted)
+      ar2_tie.vs: 144 cells, 83 differ (first cell 2: 0xbffde128 vs 0xbffde126)
+    RECORDED [FAST] ar2_tie.vs device != oracle (vendor-shaped under FAST; not asserted)
+      ar2_tie.loglike: 6 cells, 2 differ (first cell 1: 0xc29d5576 vs 0xc29d5578)
+    RECORDED [FAST] ar2_tie.loglike device != oracle (vendor-shaped under FAST; not asserted)
+      ar2_tie.fc: 18 cells, 16 differ (first cell 0: 0xbf0fdc5f vs 0xbf0fdc61)
+    RECORDED [FAST] ar2_tie.fc device != oracle (vendor-shaped under FAST; not asserted)
+      loglike[0] = -40.8328 0xc22354ca
+check_lyapunov_solves_the_equation [FAST]
+    arma11_k: worst relative Lyapunov residual 1.3418876367491463e-07
+    ar1: worst relative Lyapunov residual 8.693507713566749e-08
+    ma2: worst relative Lyapunov residual 9.685754776000977e-08
+    arima111: worst relative Lyapunov residual 1.3418876367491463e-07
+    arima212: worst relative Lyapunov residual 1.6827728711269323e-07
+    ar2_unit: worst relative Lyapunov residual 3.5050333563956014e-06
+    sarima_full: worst relative Lyapunov residual 4.4437324782924364e-07
+    sarima_rd8: worst relative Lyapunov residual 1.8226294476834116e-07
+    arma44: worst relative Lyapunov residual 5.614700025618396e-07
+    ar2_tie: worst relative Lyapunov residual 7.52047608326854e-08
+check_predict_sentinel_is_reached [FAST]
+    arima111: res_offset = 1 sentinel cells per series at start = 0
+    arima212: res_offset = 1 sentinel cells per series at start = 0
+    sarima_full: res_offset = 3 sentinel cells per series at start = 0
+    sarima_rd8: res_offset = 4 sentinel cells per series at start = 0
+check_predict_device_equals_oracle [FAST]
+      arma11_k.predict: 162 cells, 0 differ
+      sentinel cells checked: 0 (res_offset - start = 0)
+      ar1.predict: 162 cells, 0 differ
+      sentinel cells checked: 0 (res_offset - start = 0)
+      ma2.predict: 162 cells, 0 differ
+      sentinel cells checked: 0 (res_offset - start = 0)
+      arima111.predict: 162 cells, 0 differ
+      sentinel cells checked: 6 (res_offset - start = 1)
+      arima212.predict: 162 cells, 0 differ
+      sentinel cells checked: 6 (res_offset - start = 1)
+      ar2_unit.predict: 162 cells, 5 differ (first cell 55: 0x3b252c94 vs 0x3b252c95)
+    RECORDED [FAST] ar2_unit.predict device != oracle (vendor-shaped under FAST; not asserted)
+      sentinel cells checked: 0 (res_offset - start = 0)
+      sarima_full.predict: 162 cells, 0 differ
+      sentinel cells checked: 18 (res_offset - start = 3)
+      sarima_rd8.predict: 162 cells, 0 differ
+      sentinel cells checked: 24 (res_offset - start = 4)
+      arma44.predict: 162 cells, 0 differ
+      sentinel cells checked: 0 (res_offset - start = 0)
+      ar2_tie.predict: 162 cells, 0 differ
+      sentinel cells checked: 0 (res_offset - start = 0)
+check_grad_device_equals_oracle [FAST]
+      grad: 24 cells, 0 differ
+      N = 4 parameters x 6 series
+check_grad_reset_preserves_negative_zero [FAST]
+      d_x after the gradient: 0 of 24 cells differ (must be 0)
+      x_pert after the last reset: 0 of 24 cells differ from d_x (must be 0)
+      gradient of the LAST parameter (after N-1 resets): 0 of 6 series differ
+check_kalman_matches_float64 [FAST]
+    arma11_k: worst relative log-likelihood gap 4.744527359116388e-08 (bound 0.005, n_diff = 0)
+    ar1: worst relative log-likelihood gap 8.689333638368786e-08 (bound 0.005, n_diff = 0)
+    ma2: worst relative log-likelihood gap 1.4531027919514978e-07 (bound 0.005, n_diff = 0)
+    arima111: worst relative log-likelihood gap 0.0018282718565646762 (bound 0.02, n_diff = 1)
+    arima212: worst relative log-likelihood gap 7.995349555516258e-08 (bound 0.02, n_diff = 1)
+    ar2_unit: worst relative log-likelihood gap 1.5423309289657116e-07 (bound 0.005, n_diff = 0)
+    sarima_full: worst relative log-likelihood gap 0.001576941973671559 (bound 0.02, n_diff = 3)
+    sarima_rd8: worst relative log-likelihood gap 0.0009776751913456614 (bound 0.02, n_diff = 4)
+    arma44: worst relative log-likelihood gap 2.792004321469976e-07 (bound 0.005, n_diff = 0)
+    ar2_tie: worst relative log-likelihood gap 1.4546472755209332e-07 (bound 0.005, n_diff = 0)
+check_arima_refuses_by_name [FAST]
+    s < 2 with seasonal terms: raised: ARIMA: invalid period for seasonal ARIMA: s=1
+    d + D > 2: raised: ARIMA: invalid order, required d + D <= 2 (d=2, D=1)
+    p >= s: raised: ARIMA: invalid order, required s > p and s > q
+    p+q+P+Q+k == 0: raised: ARIMA: invalid order, at least one of p, q, P, Q, fit_intercept must be non-zero
+    p > 8: raised: ARIMA: invalid order, required p, q, P, Q <= 8
+    n_exog != 0: raised: ARIMA: exog (n_exog=2) is not ported; refused by name (arima/NOT_IMPLEMENTED.tsv)
+    rd = 9 > 8 (block-per-series kernel): raised: ARIMA: rd = d + s*D + max(p + s*P, q + s*Q + 1) = 9 > 8 selects cuML's block-per-series Kalman kernel, which is not ported; refused by name (arima/NOT_IMPLEMENTED.tsv)
+    r = 6 > 5 (Schur Lyapunov): raised: ARIMA: r = max(p + s*P, q + s*Q + 1) = 6 > 5 selects cuML's Schur/Sylvester Lyapunov solver, which is not ported; refused by name (arima/NOT_IMPLEMENTED.tsv)
+    NaN in y: raised: batched_loglike: y contains a non-finite value at index 5; missing observations are not ported and are refused by name (arima/NOT_IMPLEMENTED.tsv)
+    inf in y: raised: batched_loglike: y contains a non-finite value at index 6; missing observations are not ported and are refused by name (arima/NOT_IMPLEMENTED.tsv)
+    DEVIATION 673: F <= 0 with sigma2 = 0, trans = False: raised: batched_kalman_filter: series 0: innovation variance F <= 0 at step 0; refused by name rather than carrying log(F) into the likelihood
+check_kalman_launch_invariant [FAST]
+    block 64 / 41 floats of poison: 0 cells differ
+    block 128 / 41 floats of poison: 0 cells differ
+    poison -0.0: 0 cells differ
+    batch of 6 vs batch of 3 [4, 0, 2]: 0 cells differ
+    run twice: 0 cells differ
+check_unit_root_guard_is_reached [FAST]
+    the guard fired on 6 of 6 series
+      transformed phi_2 (series 0) before the guard: -0.9999 0xbf7ff972
+check_lu_pivot_tie_is_reached [FAST]
+      series 0: phi1 0x3f6813bc phi2 0xbeffffe3  column 0 magnitudes 0.17816508 0.4532748 0.4532748 0.24999914
+      series 1: phi1 0x3f6813bc phi2 0xbeffffe3  column 0 magnitudes 0.17816508 0.4532748 0.4532748 0.24999914
+      series 2: phi1 0x3f6813bc phi2 0xbeffffe3  column 0 magnitudes 0.17816508 0.4532748 0.4532748 0.24999914
+      series 3: phi1 0x3f6813bc phi2 0xbeffffe3  column 0 magnitudes 0.17816508 0.4532748 0.4532748 0.24999914
+      series 4: phi1 0x3f6813bc phi2 0xbeffffe3  column 0 magnitudes 0.17816508 0.4532748 0.4532748 0.24999914
+      series 5: phi1 0x3f6813bc phi2 0xbeffffe3  column 0 magnitudes 0.17816508 0.4532748 0.4532748 0.24999914
+    an exact pivot-magnitude tie is present and maximal in column 0 on 6 of 6 series
+check_guard_decisions_are_recorded [FAST]
+      ar2_unit: unit-root rewrite: guards byte 1 on series 0, expected 1; 0 of 6 series disagree
+      ar1_k_nudge: r == 1 intercept nudge: guards byte 2 on series 0, expected 2; 0 of 6 series disagree
+      arma11_k: neither guard: guards byte 0 on series 0, expected 0; 0 of 6 series disagree
+check_fold_order_is_visible [FAST]
+      arma11_k (rd=2, n_phi=1): 24 T*P cells, descending fold moves 1, Float64 fold moves 1
+      ar1 (rd=1, n_phi=1): 6 T*P cells, descending fold moves 0, Float64 fold moves 0
+      ma2 (rd=3, n_phi=0): 54 T*P cells, descending fold moves 0, Float64 fold moves 0
+      arima111 (rd=3, n_phi=1): 54 T*P cells, descending fold moves 1, Float64 fold moves 1
+      arima212 (rd=4, n_phi=2): 96 T*P cells, descending fold moves 7, Float64 fold moves 7
+      ar2_unit (rd=2, n_phi=2): 24 T*P cells, descending fold moves 3, Float64 fold moves 3
+      sarima_full (rd=7, n_phi=3): 294 T*P cells, descending fold moves 18, Float64 fold moves 18
+      sarima_rd8 (rd=8, n_phi=1): 384 T*P cells, descending fold moves 2, Float64 fold moves 2
+      arma44 (rd=5, n_phi=4): 150 T*P cells, descending fold moves 24, Float64 fold moves 24
+      ar2_tie (rd=2, n_phi=2): 24 T*P cells, descending fold moves 7, Float64 fold moves 7
+    TOTAL over 10 orders: 1110 cells, descending fold moves 63, Float64 fold moves 63; orders in which the descending fold moved something: 8
+      strongest single order moved 24 cells
+ALL ARIMA CHECKS PASSED [FAST] card: /root/mojolearn/bench/results/e1/2026-08-31_221142-mojolearn-e2-amd/lanes/arima.fast.card
