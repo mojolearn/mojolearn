@@ -11,11 +11,23 @@
 #   no-upstream     nothing upstream corresponds to this file. Older rows still spell this
 #                   `mojo-only` / `mojo_only`; those were not touched by this pass.
 # cuML pinned at 00094f7 (branch-25.08), RAFT at 661a3b8 (branch-25.08).
+#   replaces-upstream -- THE UPSTREAM'S STEP WAS DELETED, NOT FOLLOWED. The
+#                    file occupies an upstream file's slot and borrows its
+#                    control plane, and its BODY is a different algorithm,
+#                    stated in a numbered DEVIATION block in the file itself
+#                    because PORTING_RULES.md rule 4 requires a replacement to
+#                    live in the file it replaces so a reader can diff. These
+#                    rows read `partial` or `transliterated` until 2026-08-31,
+#                    which described the SLOT and not the CONTENT: a file whose
+#                    own header says "there is no upstream GPU implementation
+#                    of this formulation to be faithful to" is not a partial
+#                    port of anything. Added when it turned out 31 files and
+#                    34,945 lines were in that position.
 derived/neighbors/epsilon_neighborhood.mojo	raft cpp/include/raft/spatial/knn/detail/epsilon_neighborhood.cuh	reimplemented	EpsUnexpL2SqNeighborhood + epsUnexpL2SqNeighKernel + epsUnexpL2SqNeighborhood; Policy4x4<float> restated; FUSED, no distance matrix; unexpanded L2; logicalWarpReduce -> shuffle_xor butterfly (dev 30), vd memset by the host (dev 31)  ||  RELABELLED 2026-08-31 (audit): REIMPLEMENTED, not transliterated -- theirs raft::logicalWarpReduce<P::AccThCols> (:66), ours a shuffle_xor butterfly at offsets 1/2/4/8 (:69) because Mojo's shuffle_idx has no width argument; vd is memset by the host.
-derived/dbscan/vertexdeg/algo.mojo	cuml cpp/src/dbscan/vertexdeg/algo.cuh	partial	launcher's L2 brute-force arm, which is their default dispatch for these parameters; Cosine arm, sample_weight arm and Precomputed unported; also holds eps_neighborhood_kernel, which has NO upstream and is the check oracle only
+derived/dbscan/vertexdeg/algo.mojo	cuml cpp/src/dbscan/vertexdeg/algo.cuh	replaces-upstream	launcher's L2 brute-force arm, which is their default dispatch for these parameters; Cosine arm, sample_weight arm and Precomputed unported; also holds eps_neighborhood_kernel, which has NO upstream and is the check oracle only || REPLACES-UPSTREAM (was `partial`): this file's own header states the upstream has no counterpart for what it does; see its DEVIATION blocks
 derived/dbscan/corepoints/compute.mojo	cuml cpp/src/dbscan/corepoints/compute.cuh	transliterated	four lines, kept as its own file to mirror theirs; vd indexed by batch and mask by dataset, which is theirs
 derived/dbscan/adjgraph/algo.mojo	cuml cpp/src/dbscan/adjgraph/algo.cuh	partial+replaced	AdjGraph::run and the unmasked scan are theirs; thrust::exclusive_scan is scan-then-propagate rather than decoupled lookback (dev 32)
-derived/dbscan/adjgraph/algo.mojo	raft cpp/include/raft/sparse/convert/detail/adj_to_csr.cuh	partial	shared per-row cursor, atomic bump, 16-bool chunk loads, unordered output -- all theirs; atomicIncWarp's warp aggregation and the multi-block-per-row grid are not (dev 34)
+derived/dbscan/adjgraph/algo.mojo	raft cpp/include/raft/sparse/convert/detail/adj_to_csr.cuh	replaces-upstream	shared per-row cursor, atomic bump, 16-bool chunk loads, unordered output -- all theirs; atomicIncWarp's warp aggregation and the multi-block-per-row grid are not (dev 34) || REPLACES-UPSTREAM (was `partial`): this file's own header states the upstream has no counterpart for what it does; see its DEVIATION blocks
 derived/dbscan/runner.mojo	cuml cpp/src/dbscan/runner.cuh	partial	single GPU; both batch loops, the reversed first loop, the two-loop max_k dispatch (:257 need_ja_compute, :289 maxklen reduce, :327 if(i>0), :335 maxklen.at(i)) with algo.cuh:119's one-pass guard as rbc_take_one_pass (batch 0's fill placement is dev 39), per-batch weak_cc + MergeLabels, final_relabel and relabelForSkl are theirs; their :181 N*batch overflow ASSERT scoped to the brute arm (the RBC arm's int32 bound is the edge count, refused at the query); their nvtx ranges print as opt-in PHASE wall-clock lines (dev 38); multi-GPU arms and core_indices unported
 derived/dbscan/dbscan.mojo	cuml cpp/src/dbscan/dbscan.cuh	partial	compute_batch_size transliterated including the MAX_LABEL/n_rows overflow guard, which is gated on eps_nn_method != RBC exactly as their :71 gates it; dbscanFitImpl's memory query and workspace allocation; max_mbytes_per_batch plumbed with their Python name and their default 0; tiny-budget size_t wraparound not copied (dev 37); sample_weight, core_sample_indices, metric switch and opg unported
 derived/dbscan/mergelabels/runner.mojo	cuml cpp/src/dbscan/mergelabels/runner.cuh	transliterated	one call, kept as its own file like theirs
