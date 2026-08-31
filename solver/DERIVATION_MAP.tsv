@@ -1,8 +1,30 @@
 # our_file	upstream_file	status	notes
+# STATUS VOCABULARY, added 2026-08-31. The tree had no definition of these words anywhere,
+# which is how this column drifted; every relabel below carries its evidence in the notes.
+#   transliterated  control flow, loop structure and arithmetic follow the upstream statement by
+#                   statement. A reader could diff the two mentally. Syntax differs, program does not.
+#   reimplemented   same algorithm and same observable semantics, materially different program: a
+#                   different parallel decomposition, the host/device split moved, a reduction
+#                   re-ordered or pinned, or an upstream cub/thrust/cuBLAS/raft call replaced by our
+#                   own code.
+#   partial         only some of the upstream file is present; the notes say what is missing.
+#   no-upstream     nothing upstream corresponds to this file. Older rows still spell this
+#                   `mojo-only` / `mojo_only`; those were not touched by this pass.
 # cuML pinned at v26.08.00 = 265b9da (upstream/cuml-v26.08.00), RAFT at v26.08.00 = ebf9268 (upstream/raft-v26.08.00). Checked out 2026-08-23; every port in this directory was written from those files, not from memory.
+#   forced-by-definition -- the correspondence is DICTATED by the algorithm,
+#                    not chosen. Parameter structs, enums, POD types, one-line
+#                    forwarders, and mathematical predicates with exactly one
+#                    correct form. A struct listing an algorithm's eleven
+#                    hyperparameters must list those eleven; the SMO upper-set
+#                    test has one right spelling. These files look identical to
+#                    the upstream because nothing else would be CORRECT, which
+#                    is not transliteration in any useful sense and must not be
+#                    counted as evidence of it. Added 2026-08-31, when it turned
+#                    out that nearly every row still labelled `transliterated`
+#                    was one of these.
 derived/solver/cd.mojo	cuml cpp/src/solver/cd.cuh	partial	cdFit line for line (cd.cuh:115-274: guards, preProcessData, l1_alpha/l2_alpha, colNorm + addScalar, the five-operation coordinate step with DEVICE-pointer alphas, one host read per epoch, coefMax/diffMax stopping rule, postProcessData), cdUpdateCoefKernel (:51-68) transcribed, cdPredict (:293-307). sample_weight arms (:136-163, :240-251), shuffle=true and loss != SQRD_LOSS REFUSED BY NAME. DEVIATION 610 (the identity construction) and the per-epoch card live here
 derived/solver/shuffle.mojo	cuml cpp/src/solver/shuffle.h	partial	initShuffle (the identity permutation). shuffle (std::shuffle over std::mt19937(0)) NOT ported: the algorithm is unspecified by the standard; DEVIATION 611 reserved for an exact port, not spent
-derived/solvers/params.mojo	cuml cpp/include/cuml/solvers/params.hpp	transliterated	lr_type, loss_funct, penalty
+derived/solvers/params.mojo	cuml cpp/include/cuml/solvers/params.hpp	forced-by-definition	lr_type, loss_funct, penalty || FORCED: a parameter struct: the fields ARE the algorithm's hyperparameters, in the order the algorithm defines
 ../glm/derived/glm/preprocess.mojo (moved 2026-08-23)	cuml cpp/src/glm/preprocess.cuh	partial	preProcessData / postProcessData, unweighted arms, IN PLACE as theirs (the un-centering is not bitwise the original). HAND-OFF: belongs under glm/derived/glm/ (glm/NOT_IMPLEMENTED.tsv lists it NOT PORTED); the 26.08 file has no normalize arm
 derived/functions/linear_reg.mojo	cuml cpp/src_prims/functions/linearReg.cuh	partial	linearRegH only (cuBLAS gemm: IDENTICAL = gemm.fp32.v1 OP_TN, FAST = device transpose + gemv_gpu; addScalar one thread per row). linearRegLossGrads and penalty.cuh are the SGD solver's
 derived/linalg/coalesced_reduction.mojo	raft cpp/include/raft/linalg/detail/coalesced_reduction-inl.cuh	partial	coalescedSumMediumKernel<256> (-inl.cuh:288-322) with KahanBabushkaNeumaierSum (:22-32) per thread and two BlockReduce.Sum (block.sum); the FAST arm of colNorm and mean at EVERY shape. Thin, Thick and the numSMs dispatch (:497) NOT ported. A comptime assert keeps it out of the IDENTICAL build

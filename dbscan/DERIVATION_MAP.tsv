@@ -1,6 +1,17 @@
 # our_file	upstream_file	status	notes
+# STATUS VOCABULARY, added 2026-08-31. The tree had no definition of these words anywhere,
+# which is how this column drifted; every relabel below carries its evidence in the notes.
+#   transliterated  control flow, loop structure and arithmetic follow the upstream statement by
+#                   statement. A reader could diff the two mentally. Syntax differs, program does not.
+#   reimplemented   same algorithm and same observable semantics, materially different program: a
+#                   different parallel decomposition, the host/device split moved, a reduction
+#                   re-ordered or pinned, or an upstream cub/thrust/cuBLAS/raft call replaced by our
+#                   own code.
+#   partial         only some of the upstream file is present; the notes say what is missing.
+#   no-upstream     nothing upstream corresponds to this file. Older rows still spell this
+#                   `mojo-only` / `mojo_only`; those were not touched by this pass.
 # cuML pinned at 00094f7 (branch-25.08), RAFT at 661a3b8 (branch-25.08).
-derived/neighbors/epsilon_neighborhood.mojo	raft cpp/include/raft/spatial/knn/detail/epsilon_neighborhood.cuh	transliterated	EpsUnexpL2SqNeighborhood + epsUnexpL2SqNeighKernel + epsUnexpL2SqNeighborhood; Policy4x4<float> restated; FUSED, no distance matrix; unexpanded L2; logicalWarpReduce -> shuffle_xor butterfly (dev 30), vd memset by the host (dev 31)
+derived/neighbors/epsilon_neighborhood.mojo	raft cpp/include/raft/spatial/knn/detail/epsilon_neighborhood.cuh	reimplemented	EpsUnexpL2SqNeighborhood + epsUnexpL2SqNeighKernel + epsUnexpL2SqNeighborhood; Policy4x4<float> restated; FUSED, no distance matrix; unexpanded L2; logicalWarpReduce -> shuffle_xor butterfly (dev 30), vd memset by the host (dev 31)  ||  RELABELLED 2026-08-31 (audit): REIMPLEMENTED, not transliterated -- theirs raft::logicalWarpReduce<P::AccThCols> (:66), ours a shuffle_xor butterfly at offsets 1/2/4/8 (:69) because Mojo's shuffle_idx has no width argument; vd is memset by the host.
 derived/dbscan/vertexdeg/algo.mojo	cuml cpp/src/dbscan/vertexdeg/algo.cuh	partial	launcher's L2 brute-force arm, which is their default dispatch for these parameters; Cosine arm, sample_weight arm and Precomputed unported; also holds eps_neighborhood_kernel, which has NO upstream and is the check oracle only
 derived/dbscan/corepoints/compute.mojo	cuml cpp/src/dbscan/corepoints/compute.cuh	transliterated	four lines, kept as its own file to mirror theirs; vd indexed by batch and mask by dataset, which is theirs
 derived/dbscan/adjgraph/algo.mojo	cuml cpp/src/dbscan/adjgraph/algo.cuh	partial+replaced	AdjGraph::run and the unmasked scan are theirs; thrust::exclusive_scan is scan-then-propagate rather than decoupled lookback (dev 32)

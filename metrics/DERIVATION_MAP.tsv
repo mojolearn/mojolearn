@@ -1,31 +1,53 @@
 # our_file	upstream_file	status	notes
+# STATUS VOCABULARY, added 2026-08-31. The tree had no definition of these words anywhere,
+# which is how this column drifted; every relabel below carries its evidence in the notes.
+#   transliterated  control flow, loop structure and arithmetic follow the upstream statement by
+#                   statement. A reader could diff the two mentally. Syntax differs, program does not.
+#   reimplemented   same algorithm and same observable semantics, materially different program: a
+#                   different parallel decomposition, the host/device split moved, a reduction
+#                   re-ordered or pinned, or an upstream cub/thrust/cuBLAS/raft call replaced by our
+#                   own code.
+#   partial         only some of the upstream file is present; the notes say what is missing.
+#   no-upstream     nothing upstream corresponds to this file. Older rows still spell this
+#                   `mojo-only` / `mojo_only`; those were not touched by this pass.
 # cuML pinned at 265b9da (v26.08.00 checkout, cpp/src/metrics), RAFT at ebf9268 (v26.08.00, cpp/include/raft/stats). cuVS's stats/ (the batched silhouette and trustworthiness cuML 26.08 actually links) is the same text as RAFT's detail files and is cited by the RAFT path.
-derived/metrics/accuracy_score.mojo	cuml cpp/src/metrics/accuracy_score.cu	transliterated	accuracy_score_py, int labels
-derived/metrics/rand_index.mojo	cuml cpp/src/metrics/rand_index.cu	transliterated	rand_index; their signature takes const double* labels, ours Int32 (the comparison is ==, the same either way)
+#   forced-by-definition -- the correspondence is DICTATED by the algorithm,
+#                    not chosen. Parameter structs, enums, POD types, one-line
+#                    forwarders, and mathematical predicates with exactly one
+#                    correct form. A struct listing an algorithm's eleven
+#                    hyperparameters must list those eleven; the SMO upper-set
+#                    test has one right spelling. These files look identical to
+#                    the upstream because nothing else would be CORRECT, which
+#                    is not transliteration in any useful sense and must not be
+#                    counted as evidence of it. Added 2026-08-31, when it turned
+#                    out that nearly every row still labelled `transliterated`
+#                    was one of these.
+derived/metrics/accuracy_score.mojo	cuml cpp/src/metrics/accuracy_score.cu	forced-by-definition	accuracy_score_py, int labels || FORCED: a one-line forwarder: upstream's file is a call into detail::, and so is ours
+derived/metrics/rand_index.mojo	cuml cpp/src/metrics/rand_index.cu	forced-by-definition	rand_index; their signature takes const double* labels, ours Int32 (the comparison is ==, the same either way) || FORCED: a one-line forwarder: upstream's file is a call into detail::, and so is ours
 derived/metrics/adjusted_rand_index.mojo	cuml cpp/src/metrics/adjusted_rand_index.cu	partial	the int overload; the int64_t overload is the same code at a wider label type and is not instantiated
-derived/metrics/entropy.mojo	cuml cpp/src/metrics/entropy.cu	transliterated	
-derived/metrics/mutual_info_score.mojo	cuml cpp/src/metrics/mutual_info_score.cu	transliterated	
-derived/metrics/homogeneity_score.mojo	cuml cpp/src/metrics/homogeneity_score.cu	transliterated	
-derived/metrics/completeness_score.mojo	cuml cpp/src/metrics/completeness_score.cu	transliterated	homogeneity_score with the arrays swapped, exactly as theirs; NOTE this makes completeness's MI the TRANSPOSED fold (README)
-derived/metrics/v_measure.mojo	cuml cpp/src/metrics/v_measure.cu	transliterated	beta honored
+derived/metrics/entropy.mojo	cuml cpp/src/metrics/entropy.cu	forced-by-definition	FORCED: a one-line forwarder: upstream's file is a call into detail::, and so is ours
+derived/metrics/mutual_info_score.mojo	cuml cpp/src/metrics/mutual_info_score.cu	forced-by-definition	FORCED: a one-line forwarder: upstream's file is a call into detail::, and so is ours
+derived/metrics/homogeneity_score.mojo	cuml cpp/src/metrics/homogeneity_score.cu	forced-by-definition	FORCED: a one-line forwarder: upstream's file is a call into detail::, and so is ours
+derived/metrics/completeness_score.mojo	cuml cpp/src/metrics/completeness_score.cu	forced-by-definition	homogeneity_score with the arrays swapped, exactly as theirs; NOTE this makes completeness's MI the TRANSPOSED fold (README) || FORCED: a one-line forwarder: upstream's file is a call into detail::, and so is ours
+derived/metrics/v_measure.mojo	cuml cpp/src/metrics/v_measure.cu	forced-by-definition	beta honored || FORCED: a one-line forwarder: upstream's file is a call into detail::, and so is ours
 derived/metrics/r2_score.mojo	cuml cpp/src/metrics/r2_score.cu	partial	the float overload; the double overload cannot run on Apple (no Float64 on device) and is refused by name at the Python surface
 derived/stats/detail/contingency_matrix.mojo	raft cpp/include/raft/stats/detail/contingencyMatrix.cuh	partial	SMEM_ATOMICS and GLOBAL_ATOMICS arms (integer atomics, order-free); SORT_AND_GATOMICS not ported (same integers, locality only); the smem/global threshold is a comptime cap (CMAT_SMEM_MAX_DIM = 32) instead of a device query; getInputClassCardinality as an integer Atomic.min/max kernel
 derived/stats/detail/histogram.mojo	raft cpp/include/raft/stats/detail/histogram.cuh	partial	gmemHistKernel arm with the ARI Binner; stands in for cub::DeviceHistogram::HistogramEven at entropy.cuh countLabels and silhouette countLabels (same integers)
 derived/stats/detail/scores.mojo	raft cpp/include/raft/stats/detail/scores.cuh	partial	accuracy_score (sub + count fused; integer atomic) and r2_score (DEVIATION 653: fixed-tree sums; powerScalar(x,2) spelled x*x; mean = sum * (1/n) as mean.cuh:22,39); regression_metrics NOT ported
-derived/stats/detail/rand_index.mojo	raft cpp/include/raft/stats/detail/rand_index.cuh	transliterated	DEVIATION 652: per-block partials + host Int64 sum instead of the 64-bit atomic (Apple has none)
-derived/stats/detail/adjusted_rand_index.mojo	raft cpp/include/raft/stats/detail/adjusted_rand_index.cuh	transliterated	countUnique, nCTwo, the four early returns, the Float64 host epilogue (div/mul/sub only: identity-safe in both modes)
-derived/stats/detail/entropy.mojo	raft cpp/include/raft/stats/detail/entropy.cuh	transliterated	DEVIATIONS 650 (host epilogue from integer counts) and 651 (IDENTICAL: Float32 through identical_log; FAST: Float64 host log)
-derived/stats/detail/mutual_info_score.mojo	raft cpp/include/raft/stats/detail/mutual_info_score.cuh	transliterated	DEVIATIONS 650, 651; their int a[i]*b[j] (overflows past 46,340 per class pair) is Int64 here
-derived/stats/detail/homogeneity_score.mojo	raft cpp/include/raft/stats/detail/homogeneity_score.cuh	transliterated	
+derived/stats/detail/rand_index.mojo	raft cpp/include/raft/stats/detail/rand_index.cuh	reimplemented	DEVIATION 652: per-block partials + host Int64 sum instead of the 64-bit atomic (Apple has none)  ||  RELABELLED 2026-08-31 (audit): REIMPLEMENTED, not transliterated -- theirs is cub::BlockReduce<uint64_t>::Sum then atomicAdd(unsigned long long) (:8-9); ours is per-block partials plus a HOST Int64 sum (DEVIATION 652, :23), because Apple has no 64-bit atomic.
+derived/stats/detail/adjusted_rand_index.mojo	raft cpp/include/raft/stats/detail/adjusted_rand_index.cuh	reimplemented	countUnique, nCTwo, the four early returns, the Float64 host epilogue (div/mul/sub only: identity-safe in both modes)  ||  RELABELLED 2026-08-31 (audit): REIMPLEMENTED, not transliterated -- their mapThenSumReduce<MathT,nCTwo> and reduce<MathT> are done on the HOST in Int64 from the read-back matrix (:36-37), DEVIATION 650's split; thrust::minmax_element and raft::stats::histogram are written out here.
+derived/stats/detail/entropy.mojo	raft cpp/include/raft/stats/detail/entropy.cuh	reimplemented	DEVIATIONS 650 (host epilogue from integer counts) and 651 (IDENTICAL: Float32 through identical_log; FAST: Float64 host log)  ||  RELABELLED 2026-08-31 (audit): REIMPLEMENTED, not transliterated -- theirs is cub::DeviceHistogram::HistogramEven then a DEVICE mapThenSumReduce whose atomicAdd is an ARRIVAL order (:10-12); ours is an integer device histogram read back and folded SERIALLY ON THE HOST, ascending (DEVIATION 650, :23-40). entropy_traced and entropy_from_counts have no upstream counterpart.
+derived/stats/detail/mutual_info_score.mojo	raft cpp/include/raft/stats/detail/mutual_info_score.cuh	reimplemented	DEVIATIONS 650, 651; their int a[i]*b[j] (overflows past 46,340 per class pair) is Int64 here  ||  RELABELLED 2026-08-31 (audit): REIMPLEMENTED, not transliterated -- theirs is BlockReduce.Sum then atomicAdd(d_MI) in double, arrival order (:15); ours folds on the host from the read-back contingency matrix (DEVIATION 650, :36). contingency_matrix_host (:53) has no upstream counterpart.
+derived/stats/detail/homogeneity_score.mojo	raft cpp/include/raft/stats/detail/homogeneity_score.cuh	forced-by-definition	FORCED: a one-line forwarder: upstream's file is a call into detail::, and so is ours
 derived/metrics/kl_divergence.mojo	cuml cpp/src/metrics/kl_divergence.cu	partial	the float overload; double refused by name (no Float64 on device)
-derived/stats/detail/kl_divergence.mojo	raft cpp/include/raft/stats/detail/kl_divergence.cuh	transliterated	KLDOp through identical_log; DEVIATION 653 fold; no normalization (theirs has none)
-derived/stats/detail/v_measure.mojo	raft cpp/include/raft/stats/detail/v_measure.cuh	transliterated	
-derived/metrics/silhouette_score_batched_float.mojo	cuml cpp/src/metrics/silhouette_score_batched_float.cu	transliterated	the float batched entry (the one cuML's Python dispatches); defaults chunk 40000, metric L2SqrtUnexpanded
+derived/stats/detail/kl_divergence.mojo	raft cpp/include/raft/stats/detail/kl_divergence.cuh	reimplemented	KLDOp through identical_log; DEVIATION 653 fold; no normalization (theirs has none)  ||  RELABELLED 2026-08-31 (audit): REIMPLEMENTED, not transliterated -- theirs is mapThenSumReduce<DataT,KLDOp,size_t,256> (:10); ours is one fixed slab tree with the host folding the slabs (DEVIATION 653, :19-21). kl_divergence_launch and the _traced pair have no upstream counterpart.
+derived/stats/detail/v_measure.mojo	raft cpp/include/raft/stats/detail/v_measure.cuh	forced-by-definition	FORCED: a one-line forwarder: upstream's file is a call into detail::, and so is ours
+derived/metrics/silhouette_score_batched_float.mojo	cuml cpp/src/metrics/silhouette_score_batched_float.cu	forced-by-definition	the float batched entry (the one cuML's Python dispatches); defaults chunk 40000, metric L2SqrtUnexpanded || FORCED: a one-line forwarder: upstream's file is a call into detail::, and so is ours
 derived/stats/detail/silhouette_score.mojo	raft cpp/include/raft/stats/detail/silhouette_score.cuh	partial	SilOp and countLabels (the pieces the batched path reaches); the unbatched driver NOT ported (never dispatched)
-derived/stats/detail/batched/silhouette_score.mojo	raft cpp/include/raft/stats/detail/batched/silhouette_score.cuh	transliterated	DEVIATION 654: fill_b + compute_chunked_a_b + min reduce + SilOp as one row-owned kernel with fixed trees; the ASSERT; chunk validated, scheduling; metric refused by name
+derived/stats/detail/batched/silhouette_score.mojo	raft cpp/include/raft/stats/detail/batched/silhouette_score.cuh	reimplemented	DEVIATION 654: fill_b + compute_chunked_a_b + min reduce + SilOp as one row-owned kernel with fixed trees; the ASSERT; chunk validated, scheduling; metric refused by name  ||  RELABELLED 2026-08-31 (audit): REIMPLEMENTED, not transliterated -- their fill_b, chunked a/b, min reduce and SilOp binaryOp collapse into ONE row-owned kernel, one block per row walking j ascending (DEVIATION 654, :35, :42, :120). Their chunksize=40000 tile loop (:8, :18) is not the decomposition here; silhouette_score_launch has no upstream counterpart.
 original/pinned_distance.mojo	none	mojo-only	DEVIATION 654's distance: one thread per cell, unexpanded L2 sqrt through identical_mul_add/ftz/identical_sqrt, plus the host twin for the oracle
 original/silhouette_check.mojo	none	mojo-only	Group C gates; sabotages (g)(h)(i) in the README
-derived/metrics/trustworthiness.mojo	cuml cpp/src/metrics/trustworthiness.cu	transliterated	the one instantiation <float, L2SqrtUnexpanded>; host-array boundary (knn_search's)
+derived/metrics/trustworthiness.mojo	cuml cpp/src/metrics/trustworthiness.cu	forced-by-definition	the one instantiation <float, L2SqrtUnexpanded>; host-array boundary (knn_search's) || FORCED: a one-line forwarder: upstream's file is a call into detail::, and so is ours
 derived/stats/detail/trustworthiness_score.mojo	raft cpp/include/raft/stats/detail/trustworthiness_score.cuh	partial	DEVIATION 655: build_lookup_table + compute_rank as a counting kernel; run_knn -> neighbors' knn_search; batchSize validated (scheduling); the closed form in Float64 on the host
 original/trustworthiness_check.mojo	none	mojo-only	Group D gates; sabotage (j) in the README
 metrics_main.mojo	none	mojo-only	every ported metric on one hashed fixture; the 34-stage identity card (inputs, integer products, knn.* via the traced k-NN entry, every value by its bits)

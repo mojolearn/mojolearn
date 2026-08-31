@@ -1,4 +1,15 @@
 # our_file	upstream_file	status	notes
+# STATUS VOCABULARY, added 2026-08-31. The tree had no definition of these words anywhere,
+# which is how this column drifted; every relabel below carries its evidence in the notes.
+#   transliterated  control flow, loop structure and arithmetic follow the upstream statement by
+#                   statement. A reader could diff the two mentally. Syntax differs, program does not.
+#   reimplemented   same algorithm and same observable semantics, materially different program: a
+#                   different parallel decomposition, the host/device split moved, a reduction
+#                   re-ordered or pinned, or an upstream cub/thrust/cuBLAS/raft call replaced by our
+#                   own code.
+#   partial         only some of the upstream file is present; the notes say what is missing.
+#   no-upstream     nothing upstream corresponds to this file. Older rows still spell this
+#                   `mojo-only` / `mojo_only`; those were not touched by this pass.
 # THERE IS NO cuML / cuVS / RAFT UPSTREAM FOR THIS LANE. cuML ships no bootstrap, no permutation test and no Monte Carlo integrator, so PORTING_RULES.md's "COPY, DO NOT IMPROVE" charter governs nothing here and this directory is NOT a transliteration. Each row says so for itself rather than relying on this header being read.
 # SciPy 1.x scipy/stats/_resampling.py and scikit-learn sklearn/utils/_indexing.py::resample define the SEMANTICS and are read as the ORACLE. Their designs are serial and CPU shaped and are never the design source. The scikit-learn checkout is ~/CascadeProjects/upstream/scikit-learn.
 # The ONE thing that is a port is the generator underneath the position map, and it lives in core/philox.mojo (RAFT v26.08.00 ebf92684, cuRAND's curandStatePhilox4_32_10_t). This lane calls it and reimplements none of it.

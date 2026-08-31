@@ -1,4 +1,15 @@
 # our_file	upstream_file	status	notes
+# STATUS VOCABULARY, added 2026-08-31. The tree had no definition of these words anywhere,
+# which is how this column drifted; every relabel below carries its evidence in the notes.
+#   transliterated  control flow, loop structure and arithmetic follow the upstream statement by
+#                   statement. A reader could diff the two mentally. Syntax differs, program does not.
+#   reimplemented   same algorithm and same observable semantics, materially different program: a
+#                   different parallel decomposition, the host/device split moved, a reduction
+#                   re-ordered or pinned, or an upstream cub/thrust/cuBLAS/raft call replaced by our
+#                   own code.
+#   partial         only some of the upstream file is present; the notes say what is missing.
+#   no-upstream     nothing upstream corresponds to this file. Older rows still spell this
+#                   `mojo-only` / `mojo_only`; those were not touched by this pass.
 # cuML pinned at 00094f7, RAFT at 661a3b8 (both branch-25.08).
 # CORRECTION 2026-08-19: this file used to cite raft cpp/include/raft/linalg/detail/{pca,tsvd}.cuh.
 # NEITHER FILE HAS EVER EXISTED. `git log --all -- cpp/include/raft/linalg/detail/pca.cuh` in the

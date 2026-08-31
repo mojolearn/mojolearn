@@ -1,4 +1,15 @@
 # our_file	upstream_file	status	notes
+# STATUS VOCABULARY, added 2026-08-31. The tree had no definition of these words anywhere,
+# which is how this column drifted; every relabel below carries its evidence in the notes.
+#   transliterated  control flow, loop structure and arithmetic follow the upstream statement by
+#                   statement. A reader could diff the two mentally. Syntax differs, program does not.
+#   reimplemented   same algorithm and same observable semantics, materially different program: a
+#                   different parallel decomposition, the host/device split moved, a reduction
+#                   re-ordered or pinned, or an upstream cub/thrust/cuBLAS/raft call replaced by our
+#                   own code.
+#   partial         only some of the upstream file is present; the notes say what is missing.
+#   no-upstream     nothing upstream corresponds to this file. Older rows still spell this
+#                   `mojo-only` / `mojo_only`; those were not touched by this pass.
 # TWO upstreams in one section, which is why the header names them per row:
 #   cuVS  pinned at 94c2819    (the algorithm; branch-25.08, cloned 2026-08-19)
 #   RAFT  pinned at 661a3b8    (the top-k primitive, TRANSLITERATED not stood in for)
@@ -16,7 +27,7 @@ derived/neighbors/detail/fused_l2_knn.mojo	cuvs cpp/src/neighbors/detail/fused_l
 derived/distance/detail/pairwise_distance_base.mojo	cuvs cpp/src/distance/detail/pairwise_distance_base.cuh	partial	launchConfigGenerator (:295-322) only, M4 inputs (10 cores x thread-slot occupancy; smem is a 32 KB validity wall, not a divisor, on family 9); the PairwiseDistances loop structure is inlined in fused_l2_knn.mojo
 derived/neighbors/detail/knn_brute_force.mojo	cuvs cpp/src/neighbors/detail/knn_brute_force.cuh	partial	tiled_brute_force_knn, their FALLBACK arm, plus brute_force_knn_impl's four-condition dispatch; query-axis tiling only
 derived/neighbors/detail/faiss_select/select.mojo	raft cpp/include/raft/neighbors/detail/faiss_select/Select.cuh	partial	WarpSelect at the two instantiations fused_l2_knn.cuh:743-771 uses; register-resident, which is what makes fusion possible
-derived/neighbors/detail/faiss_select/merge_network_warp.mojo	raft cpp/include/raft/neighbors/detail/faiss_select/MergeNetworkWarp.cuh	transliterated	ADDED TO THIS MAP 2026-08-20: the file existed and was derived, but had no row here, so nothing connected it to an upstream or to its MIT obligation. Also covers Comparators.cuh (the float specialization) and MergeNetworkUtils.cuh in full. FAISS-derived, MIT, NOT Apache-2.0
+derived/neighbors/detail/faiss_select/merge_network_warp.mojo	raft cpp/include/raft/neighbors/detail/faiss_select/MergeNetworkWarp.cuh	transliterated	ADDED TO THIS MAP 2026-08-20: the file existed and was derived, but had no row here, so nothing connected it to an upstream or to its MIT obligation. Also covers Comparators.cuh (the float specialization) and MergeNetworkUtils.cuh in full. FAISS-derived, MIT, NOT Apache-2.0  ||  PARTIALITY RECORDED 2026-08-31 (audit): status stands -- the power-of-two comparator networks follow upstream statement by statement. But the NON-power-of-two BitonicMergeStep specializations are NOT PORTED (:116-129) and are rows in NOT_IMPLEMENTED.tsv; a comptime assert makes the assumption fail loudly. Sibling row derived/neighbors/detail/faiss_select/select.mojo is already marked partial for the same reason.
 derived/neighbors/ball_cover/**	cuvs cpp/src/neighbors/ball_cover/*	partial	RBC index build + the two eps paths cuML's DBSCAN actually calls (runner.cuh:262 max_k=0 two-pass, :335 max_k one-pass); exact, verified by per-row set equality
 derived/matrix/detail/select_radix.mojo	raft cpp/include/raft/matrix/detail/select_radix.cuh	partial	radix_topk_one_block only; BitsPerPass 8 not 11; CUB BlockScan replaced
 derived/matrix/detail/select_warpsort.mojo	raft cpp/include/raft/matrix/detail/select_warpsort.cuh	partial	warp_sort_immediate + block_sort + block_kernel (dense) only; the three set_k_th_ queues left out; host occupancy search replaced by a pinned geometry

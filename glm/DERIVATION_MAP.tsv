@@ -1,16 +1,38 @@
 # our_file	upstream_file	status	notes
+# STATUS VOCABULARY, added 2026-08-31. The tree had no definition of these words anywhere,
+# which is how this column drifted; every relabel below carries its evidence in the notes.
+#   transliterated  control flow, loop structure and arithmetic follow the upstream statement by
+#                   statement. A reader could diff the two mentally. Syntax differs, program does not.
+#   reimplemented   same algorithm and same observable semantics, materially different program: a
+#                   different parallel decomposition, the host/device split moved, a reduction
+#                   re-ordered or pinned, or an upstream cub/thrust/cuBLAS/raft call replaced by our
+#                   own code.
+#   partial         only some of the upstream file is present; the notes say what is missing.
+#   no-upstream     nothing upstream corresponds to this file. Older rows still spell this
+#                   `mojo-only` / `mojo_only`; those were not touched by this pass.
 # cuML pinned at 7e29955c (OLS) / 00094f7 (ridge, qn), RAFT at 9aa17e5 (lstsq) / 661a3b8 (svd, matrix).
+#   forced-by-definition -- the correspondence is DICTATED by the algorithm,
+#                    not chosen. Parameter structs, enums, POD types, one-line
+#                    forwarders, and mathematical predicates with exactly one
+#                    correct form. A struct listing an algorithm's eleven
+#                    hyperparameters must list those eleven; the SMO upper-set
+#                    test has one right spelling. These files look identical to
+#                    the upstream because nothing else would be CORRECT, which
+#                    is not transliteration in any useful sense and must not be
+#                    counted as evidence of it. Added 2026-08-31, when it turned
+#                    out that nearly every row still labelled `transliterated`
+#                    was one of these.
 derived/linalg/detail/lstsq.mojo	raft cpp/include/raft/linalg/detail/lstsq.cuh	partial	lstsqEig only, which is cuML olsFit algo=1. Their two-stream overlap is not ported
 derived/glm/ols.mojo	cuml cpp/src/glm/ols.cuh	partial	olsFit's guards and solver dispatch only. fit_intercept/normalize/sample_weight refused by name. DEVIATION 527 added ols_fit_traced, the same dispatch carrying a stage card
 original/ols_trace.mojo	none	mojo-only	DEVIATION 527. The OLS identity certificate: 11 named stages per fit, hashed as raw bytes through core/identity_trace.mojo. No upstream equivalent -- cuML ships one GPU backend and needs none
 derived/glm/ridge.mojo	cuml cpp/src/glm/ridge.cuh	partial	DEVIATION 545. ridgeSolve, ridgeEig, ridgeFit with their guards and dispatch; algo 0 (ridgeSVD), fit_intercept/normalize (host-centered in Python instead), sample_weight, n_alpha > 1 refused by name
 derived/linalg/detail/svd.mojo	raft cpp/include/raft/linalg/detail/svd.cuh	partial	svdEig only (ridgeEig's first call); the col_reverse/row_reverse is a host index sort applied by gather_columns_kernel because Jacobi does not order
 derived/matrix/math.mojo	raft cpp/include/raft/matrix/detail/math.cuh (+ linalg/detail/add.cuh addScalar)	partial	setSmallValuesZero, power, seqRoot, matrixVectorBinaryDivSkipZero (both return_zero arms), matrixVectorBinaryMult, and the gather standing in for col_reverse/row_reverse; one thread per cell
-derived/linear_model/qn.mojo	cuml cpp/include/cuml/linear_model/qn.h	transliterated	qn_params and qn_loss_type with their defaults
+derived/linear_model/qn.mojo	cuml cpp/include/cuml/linear_model/qn.h	forced-by-definition	qn_params and qn_loss_type with their defaults || FORCED: a parameter struct: eleven L-BFGS hyperparameters, and there are eleven
 derived/glm/qn/qn.mojo	cuml cpp/src/glm/qn/qn.cuh	partial	qn_fit, qn_fit_x (ALL EIGHT loss ids with their C asserts and n_targets, 2026-08-23; sample_weight refused by name), qn_decision_function (n_targets arm, n_classes defaulted 1); qn_predict and the sparse entries not ported
 derived/glm/qn/glm_base.mojo	cuml cpp/src/glm/qn/glm_base.cuh	partial	linearFwd, linearBwd, GLMDims, getLossAndDZ (unweighted arm), loss_grad, GLMWithData; C = 1 kernel for kernel, C > 1 dispatched to glm_softmax.mojo's linear kernels (DEVIATION 706), loss dispatched on the id (DEVIATION 705); LOGISTIC-BITS AUDIT in the docstring. DEVIATION 547: mapThenSumReduce's float-atomic fold replaced by one pinned block
-derived/glm/qn/glm_logistic.mojo	cuml cpp/src/glm/qn/glm_logistic.cuh	transliterated	Lz, Dlz, gradNorm = nrmMax; exp/log through identical_exp/identical_log (row 12)
-derived/glm/qn/glm_regularizer.mojo	cuml cpp/src/glm/qn/glm_regularizer.cuh	transliterated	Tikhonov (bias not penalized), RegularizedGLM's loss_grad composition (in glm_base.mojo's evaluate)
+derived/glm/qn/glm_logistic.mojo	cuml cpp/src/glm/qn/glm_logistic.cuh	partial	Lz, Dlz, gradNorm = nrmMax; exp/log through identical_exp/identical_log (row 12)  ||  RELABELLED 2026-08-31 (audit): PARTIAL, not transliterated -- this file carries logistic_lz (:54), logistic_dlz (:66) and logistic_loss_dz_kernel (:74) ONLY. gradNorm is NOT here: it is nrm_max, dispatched from derived/glm/qn/glm_base.mojo:478. The row used to claim it.
+derived/glm/qn/glm_regularizer.mojo	cuml cpp/src/glm/qn/glm_regularizer.cuh	reimplemented	Tikhonov (bias not penalized), RegularizedGLM's loss_grad composition (in glm_base.mojo's evaluate)  ||  RELABELLED 2026-08-31 (audit): REIMPLEMENTED, not transliterated -- their mapThenSumReduce is a float-atomic arrival-order fold (:26); ours accumulates 0.5*l2*w*w left to right then folds through pinned_block_sum (:25). A pinned summation order is a different program.
 derived/glm/qn/qn_solvers.mojo	cuml cpp/src/glm/qn/qn_solvers.cuh	partial	min_lbfgs, update_and_check, qn_minimize; min_owlqn/update_pseudo NOT ported, l1 != 0 raises by name. DEVIATION 548: per-iteration card stages
 derived/glm/qn/qn_linesearch.mojo	cuml cpp/src/glm/qn/qn_linesearch.cuh	partial	ls_success (all three arms), ls_backtrack; ls_backtrack_projected NOT ported. The host fx_init + step*dg_test is an fma under IDENTICAL
 derived/glm/qn/qn_util.mojo	cuml cpp/src/glm/qn/qn_util.cuh	partial	LBFGSParam (both constructors, check_param), enums, check_convergence, lbfgs_search_dir; the OWL-QN operators NOT ported
@@ -18,7 +40,7 @@ derived/glm/qn/simple_mat/dense.mojo	cuml cpp/src/glm/qn/simple_mat/dense.hpp	pa
 original/ridge_check.mojo	none	mojo-only	DEVIATION 545's gates; four sabotages recorded in its header
 original/logistic_check.mojo	none	mojo-only	DEVIATIONS 546-549's gates; three sabotages recorded in its header
 derived/glm/qn/glm_softmax.mojo	cuml cpp/src/glm/qn/glm_softmax.cuh	partial	Softmax lz/dlz as one thread per row (DEVIATION 705: their WarpReduce/BlockReduce/atomicAdd folds replaced by a serial ascending walk and the shared pinned term sum; the max is a positional SELECTION, strict >, lower index wins) plus the C > 1 linearFwd/linearBwd kernels (DEVIATION 706); getDerivative=false arm not ported
-derived/glm/qn/glm_linear.mojo	cuml cpp/src/glm/qn/glm_linear.cuh	transliterated	SquaredLoss and AbsLoss lz/dlz/gradNorm, plus nrm1 from dense.hpp:313-321 placed here under this lane's file scope (DEVIATION 707, one pinned block; HAND-OFF: belongs in simple_mat/dense.mojo)
-derived/glm/qn/glm_svm.mojo	cuml cpp/src/glm/qn/glm_svm.cuh	transliterated	SVCL1/SVCL2/SVRL1/SVRL2 lz/dlz/gradNorm (DEVIATION 708: pinned spellings, value-first clamps). DEVIATION 714: SVCL2Loss::Dlz is 2(z-s), the derivative of the lz they pair it with; theirs drops the 2 (measured by the float64 oracle against central differences)
+derived/glm/qn/glm_linear.mojo	cuml cpp/src/glm/qn/glm_linear.cuh	partial	SquaredLoss and AbsLoss lz/dlz/gradNorm, plus nrm1 from dense.hpp:313-321 placed here under this lane's file scope (DEVIATION 707, one pinned block; HAND-OFF: belongs in simple_mat/dense.mojo)  ||  RELABELLED 2026-08-31 (audit): PARTIAL, not transliterated -- squared/abs lz+dlz (:53-72) and nrm1 (:113, :132). The SquaredLoss gradNorm is nrm_max and lives in glm_base.mojo:478, not here; the row used to claim both gradNorms.
+derived/glm/qn/glm_svm.mojo	cuml cpp/src/glm/qn/glm_svm.cuh	reimplemented	SVCL1/SVCL2/SVRL1/SVRL2 lz/dlz/gradNorm (DEVIATION 708: pinned spellings, value-first clamps). DEVIATION 714: SVCL2Loss::Dlz is 2(z-s), the derivative of the lz they pair it with; theirs drops the 2 (measured by the float64 oracle against central differences)  ||  RELABELLED 2026-08-31 (audit): REIMPLEMENTED, not transliterated -- DEVIATION 714 (:40, :102): svc_l2_dlz returns 2(z-s) where theirs returns z-s. That is different observable semantics, not a different spelling. gradNorm is not in this file either (glm_base.mojo:478).
 original/multinomial_check.mojo	none	mojo-only	DEVIATIONS 709-711's gates for QN_LOSS_SOFTMAX: float64 oracle, host L-BFGS replay card, signed-zero selection fixture, launch/batch invariance; sabotages in its header
 original/qn_losses_check.mojo	none	mojo-only	DEVIATIONS 712-713's gates for the six one-target losses: float64 oracle, host replay, planted hinge boundaries and signed zeros, launch/batch invariance; sabotages in its header

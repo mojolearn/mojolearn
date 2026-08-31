@@ -1,4 +1,15 @@
 # our_file	upstream_file	status	notes
+# STATUS VOCABULARY, added 2026-08-31. The tree had no definition of these words anywhere,
+# which is how this column drifted; every relabel below carries its evidence in the notes.
+#   transliterated  control flow, loop structure and arithmetic follow the upstream statement by
+#                   statement. A reader could diff the two mentally. Syntax differs, program does not.
+#   reimplemented   same algorithm and same observable semantics, materially different program: a
+#                   different parallel decomposition, the host/device split moved, a reduction
+#                   re-ordered or pinned, or an upstream cub/thrust/cuBLAS/raft call replaced by our
+#                   own code.
+#   partial         only some of the upstream file is present; the notes say what is missing.
+#   no-upstream     nothing upstream corresponds to this file. Older rows still spell this
+#                   `mojo-only` / `mojo_only`; those were not touched by this pass.
 # cuML pinned at 00094f7 (cuml-v26.08.00 carries the same hierarchy/linkage.cu and include/cuml/cluster/linkage.hpp); cuVS at 94c2819 (cpp/src/cluster/detail/{single_linkage,connectivities,mst,agglomerative}.cuh -- in 26.08 the cluster/ directory lives in cuVS, not RAFT); RAFT at 661a3b8 (cpp/include/raft/sparse/solver/{mst,mst_solver}.cuh, detail/{mst_solver_inl,mst_kernels,mst_utils}.cuh, sparse/op/detail/sort.h).
 derived/hierarchy/linkage.mojo	cuml cpp/src/hierarchy/linkage.cu + include/cuml/cluster/linkage.hpp	transliterated	the forwarder: use_knn selects Linkage; c forwarded only with use_knn (:41). use_knn=True refused by name downstream (rung 2). Block-size knobs and `sabotage` added for the check, production defaults
 derived/cluster/detail/single_linkage.mojo	cuvs cpp/src/cluster/detail/single_linkage.cuh	partial	build_dist_linkage (:139-205) and single_linkage (:227-269); build_mr_linkage (:50-118, HDBSCAN's mutual-reachability linkage) NOT ported

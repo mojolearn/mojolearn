@@ -1,4 +1,15 @@
 # our_file	upstream_file	status	notes
+# STATUS VOCABULARY, added 2026-08-31. The tree had no definition of these words anywhere,
+# which is how this column drifted; every relabel below carries its evidence in the notes.
+#   transliterated  control flow, loop structure and arithmetic follow the upstream statement by
+#                   statement. A reader could diff the two mentally. Syntax differs, program does not.
+#   reimplemented   same algorithm and same observable semantics, materially different program: a
+#                   different parallel decomposition, the host/device split moved, a reduction
+#                   re-ordered or pinned, or an upstream cub/thrust/cuBLAS/raft call replaced by our
+#                   own code.
+#   partial         only some of the upstream file is present; the notes say what is missing.
+#   no-upstream     nothing upstream corresponds to this file. Older rows still spell this
+#                   `mojo-only` / `mojo_only`; those were not touched by this pass.
 # cuML pinned at 265b9da6a0e75dbef071a3168398b993a5ff6f0e (v26.08.00, /Users/andrewhendel/CascadeProjects/upstream/cuml-v26.08.00); RAFT v26.08.00 read for signPrim and for the reductions the callers reach. Float32 on the device where theirs is double: DEVIATION 670, stated in derived/tsa/arima_common.mojo and carried by every file here.
 # STATUS OF THE WHOLE LANE, 2026-08-23: BUILDS; check-arima passes in IDENTICAL and FAST; arima-card emits 138 stage records; 9 of 9 sabotages run. ONE APPLE M4, no second vendor. Shapes are the smallest that reach every branch (n_obs 24, batch 6, fc_steps 3, eight orders). No timing was taken.
 derived/tsa/arima_common.mojo	cuml cpp/include/cuml/tsa/arima_common.h + cpp/src/arima/arima_common.cu	partial	ARIMAOrder (:26-51) and its derived quantities transliterated; ARIMAParams (:53-148) as one DeviceBuffer per kind, allocated max(1, n) so an absent kind still has a pointer; ARIMAParams::pack / ::unpack as one thread per series. ARIMAMemory (:151-295, their arena over one char*) NOT mirrored: every buffer it carves is a DeviceBuffer owned by the struct that uses it, which is the same set of allocations without the arena. params.beta (exog) absent. validate_order carries arima.pyx:306-324's checks plus this lane's own refusals, each named for its UNPORTED row

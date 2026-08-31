@@ -1,4 +1,15 @@
 # our_file	upstream_file	status	notes
+# STATUS VOCABULARY, added 2026-08-31. The tree had no definition of these words anywhere,
+# which is how this column drifted; every relabel below carries its evidence in the notes.
+#   transliterated  control flow, loop structure and arithmetic follow the upstream statement by
+#                   statement. A reader could diff the two mentally. Syntax differs, program does not.
+#   reimplemented   same algorithm and same observable semantics, materially different program: a
+#                   different parallel decomposition, the host/device split moved, a reduction
+#                   re-ordered or pinned, or an upstream cub/thrust/cuBLAS/raft call replaced by our
+#                   own code.
+#   partial         only some of the upstream file is present; the notes say what is missing.
+#   no-upstream     nothing upstream corresponds to this file. Older rows still spell this
+#                   `mojo-only` / `mojo_only`; those were not touched by this pass.
 # PINS, read 2026-08-25 with `git -C <checkout> rev-parse --short HEAD`. cuML `upstream/cuml-v26.08.00` = 265b9da (the tree `[[mojolearn-upstream-pinned-trees]]` says to use; `upstream/cuml` = 00094f7 is 25.08 and has NO hdbscan/detail/condense.cuh in this shape). cuVS `upstream/cuvs` = 94c2819, WHICH AGREES with hierarchy/DERIVATION_MAP.tsv and with the line numbers in this lane's brief (build_mr_linkage at single_linkage.cuh:50-118). RAFT `upstream/raft` = 661a3b8. ALSO PRESENT AND NOT USED: `upstream/cuvs-v26.08.00` = 6ba2ce2 and `upstream/raft-v26.08.00` = ebf9268.
 # THE TWO PINNED TREES DO NOT COMPILE AGAINST EACH OTHER, AND THE PORT READS BOTH. cuML 265b9da's runner.h:66-113 fills `linkage_params.all_neighbors_params`, a field that exists in cuvs 6ba2ce2 (agglomerative.hpp:141-147) and NOT in cuvs 94c2819 (whose mutual_reachability_params has min_samples and alpha only). So cuML 26.08's HDBSCAN pairs with cuVS 26.08, while this repository's cluster/ lane is pinned to cuVS 94c2819. Every function this lane ports is IDENTICAL in body between 94c2819 and 6ba2ce2 except build_mr_linkage's graph-building call (94c2819 calls mutual_reachability_graph directly, 6ba2ce2 calls all_neighbors::build), and BOTH of those are DEVIATION 1600's refused half. Line citations in this lane are 94c2819's, matching hierarchy/.
 derived/hdbscan/runner.mojo	cuml cpp/src/hdbscan/runner.h	partial	build_linkage (:54-150) and _fit_hdbscan (:152-234) as ONE function, at the point their :170 calls the first from the second. HDBSCANParams mirrors hdbscan.hpp:129-140 + :192-199 minus build_params. Their :66-113 all_neighbors_params block is NOT PORTED (DEVIATION 1600); GRAPH_BUILD_ALGO::NN_DESCENT refused by name. Their min_samples+1 adjustment and clamp (:68-80) KEPT, including the discrepancy between their warning text (m-1) and their assignment (m), named in effective_min_samples' docstring. ADDED: an n_rows < 2 refusal before any n_rows-1 allocation, and the IdentityTrace threading that makes the fit emit its own card

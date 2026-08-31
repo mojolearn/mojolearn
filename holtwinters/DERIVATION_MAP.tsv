@@ -1,8 +1,30 @@
 # our_file	upstream_file	status	notes
+# STATUS VOCABULARY, added 2026-08-31. The tree had no definition of these words anywhere,
+# which is how this column drifted; every relabel below carries its evidence in the notes.
+#   transliterated  control flow, loop structure and arithmetic follow the upstream statement by
+#                   statement. A reader could diff the two mentally. Syntax differs, program does not.
+#   reimplemented   same algorithm and same observable semantics, materially different program: a
+#                   different parallel decomposition, the host/device split moved, a reduction
+#                   re-ordered or pinned, or an upstream cub/thrust/cuBLAS/raft call replaced by our
+#                   own code.
+#   partial         only some of the upstream file is present; the notes say what is missing.
+#   no-upstream     nothing upstream corresponds to this file. Older rows still spell this
+#                   `mojo-only` / `mojo_only`; those were not touched by this pass.
 # cuML pinned at 265b9da6a0e75dbef071a3168398b993a5ff6f0e (v26.08.00, /Users/andrewhendel/CascadeProjects/upstream/cuml-v26.08.00). READ THAT TREE, NOT /upstream/cuml: the latter is a different HEAD (00094f7e) whose holtwinters files carry the OLD 13-line Apache header instead of the 2-line SPDX one, which shifts every line number, and which lacks the checked_arithmetic guards the pinned tree has. Auditing the wrong one costs an audit; it already did once here.
 # Float32 only. cuML instantiates float and double; Metal has no Float64 (the repo's standing hardware limit, DEVIATION 670 in arima/). Every line span below was recomputed by brace-matching the symbol in the pinned file on 2026-08-23; the spans in the .mojo headers match these.
-derived/tsa/holtwinters_params.mojo	cuml cpp/include/cuml/tsa/holtwinters_params.h	transliterated	SeasonalType, OptimCriterion, OptimParams<float>, Norm as ints and a struct. seasonal_from_name/seasonal_name/criterion_name are ours (the pyx's string mapping, holtwinters.pyx:193-198, and card labels). Norm is unused by the fit path, as it is in theirs
-derived/holtwinters/internal/hw_utils.mojo	cuml cpp/src/holtwinters/internal/hw_utils.cuh	transliterated	STMP_EPS, GOLD, PG_EPS, MAX_BLOCKS_PER_DIM, GET_THREADS_PER_BLOCK (:44-52), GET_NUM_BLOCKS (:56-61), abs_device (:53-61), bound_device (:63-71), max3 (:73-77). DEVIATION 663: bound_device is a compare chain, not fminf(fmaxf(...)). IDX and GET_TID are spelled at their use sites. Also carries the lane's sabotage switchboard (not theirs)
+#   forced-by-definition -- the correspondence is DICTATED by the algorithm,
+#                    not chosen. Parameter structs, enums, POD types, one-line
+#                    forwarders, and mathematical predicates with exactly one
+#                    correct form. A struct listing an algorithm's eleven
+#                    hyperparameters must list those eleven; the SMO upper-set
+#                    test has one right spelling. These files look identical to
+#                    the upstream because nothing else would be CORRECT, which
+#                    is not transliteration in any useful sense and must not be
+#                    counted as evidence of it. Added 2026-08-31, when it turned
+#                    out that nearly every row still labelled `transliterated`
+#                    was one of these.
+derived/tsa/holtwinters_params.mojo	cuml cpp/include/cuml/tsa/holtwinters_params.h	forced-by-definition	SeasonalType, OptimCriterion, OptimParams<float>, Norm as ints and a struct. seasonal_from_name/seasonal_name/criterion_name are ours (the pyx's string mapping, holtwinters.pyx:193-198, and card labels). Norm is unused by the fit path, as it is in theirs || FORCED: a parameter struct
+derived/holtwinters/internal/hw_utils.mojo	cuml cpp/src/holtwinters/internal/hw_utils.cuh	partial	STMP_EPS, GOLD, PG_EPS, MAX_BLOCKS_PER_DIM, GET_THREADS_PER_BLOCK (:44-52), GET_NUM_BLOCKS (:56-61), abs_device (:53-61), bound_device (:63-71), max3 (:73-77). DEVIATION 663: bound_device is a compare chain, not fminf(fmaxf(...)). IDX and GET_TID are spelled at their use sites. Also carries the lane's sabotage switchboard (not theirs)  ||  RELABELLED 2026-08-31 (audit): PARTIAL, not transliterated -- the constants and the helpers follow theirs, but bound_device is a compare chain and NOT their fminf(fmaxf(val,.0),1.) (DEVIATION 663, :11-13), and hw_sabotage_name has no upstream counterpart.
 derived/holtwinters/internal/hw_eval.mojo	cuml cpp/src/holtwinters/internal/hw_eval.cuh	partial	holtwinters_eval_device (:13-94) line for line, holtwinters_eval_gpu_global_kernel (:158-217), holtwinters_eval_gpu (:219-288) GLOBAL ARM ONLY. DEVIATION 698 (the flush-and-fuse rule) is stated in this file's header and governs every ported file. Pointer-nullness becomes use_beta/use_gamma/write_mask. The shared-memory kernel and the shared-memory dispatch are UNPORTED (placement only)
 derived/holtwinters/internal/hw_decompose.mojo	cuml cpp/src/holtwinters/internal/hw_decompose.cuh	partial	conv1d_kernel (:23-42), conv1d (:44-59), season_mean_kernel (:61-95), season_mean (:97-112), batched_ls_solver_kernel (:129-144), stl_decomposition_gpu (:243-324) including its RAFT_FAIL on start_periods*frequency < filter_size and its checked_sub parenthesization of trend_len. season_residual_kernel is ONE kernel standing for their two elementwise arms (cublasgeam :293-306 additive, eltwiseDivide :308-311 multiplicative). host_filter mirrors :273-276 exactly, double division cast to float, ends halved for even frequency. DEVIATION 660: batched_ls (:146-241) drops cuSOLVER geqrf/orgqr + cuBLAS gemm + RinvKernel for a host float64 closed-form pinv; only the DATA-TOUCHING solver kernel is ported. TRAP recorded in place at the count line (:81): C's / truncates, Mojo's // floors
 derived/holtwinters/internal/hw_forecast.mojo	cuml cpp/src/holtwinters/internal/hw_forecast.cuh	partial	holtwinters_seasonal_forecast_kernel (:9-31) and the seasonal arm of holtwinters_forecast_gpu (:60-87). The level-only and non-seasonal kernels are UNPORTED (unreachable from ML::HoltWinters::forecast, which always passes all three coefficient arrays)

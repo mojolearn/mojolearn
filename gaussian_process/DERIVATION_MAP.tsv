@@ -1,4 +1,15 @@
 # our_file	upstream_file	status	notes
+# STATUS VOCABULARY, added 2026-08-31. The tree had no definition of these words anywhere,
+# which is how this column drifted; every relabel below carries its evidence in the notes.
+#   transliterated  control flow, loop structure and arithmetic follow the upstream statement by
+#                   statement. A reader could diff the two mentally. Syntax differs, program does not.
+#   reimplemented   same algorithm and same observable semantics, materially different program: a
+#                   different parallel decomposition, the host/device split moved, a reduction
+#                   re-ordered or pinned, or an upstream cub/thrust/cuBLAS/raft call replaced by our
+#                   own code.
+#   partial         only some of the upstream file is present; the notes say what is missing.
+#   no-upstream     nothing upstream corresponds to this file. Older rows still spell this
+#                   `mojo-only` / `mojo_only`; those were not touched by this pass.
 # THERE IS NO UPSTREAM GAUSSIAN PROCESS. Verified 2026-08-25 against the pinned checkouts, and the command is recorded so it can be re-run: `grep -ril "gaussian_process\|GaussianProcessRegressor\|gaussian process\|marginal_likelihood\|MaternKernel" upstream/cuml-v26.08.00 upstream/cuvs-v26.08.00 upstream/raft-v26.08.00` returns exactly ONE file, `cuml-v26.08.00/python/cuml/cuml_accel_tests/integration/test_kernel_ridge.py`, and its only hit is the line `from sklearn.gaussian_process.kernels import ExpSineSquared` -- an IMPORT OF SCIKIT-LEARN inside a KERNEL RIDGE test. `grep -ril matern` over the same three trees returns NOTHING. cuML at 265b9da, cuVS at 6ba2ce2, RAFT at ebf9268.
 # CONSEQUENCE, IN PORTING_RULES' OWN WORDS: **`PORTING_RULES.md`'s COPY DO NOT IMPROVE does not apply where there is nothing to copy.** Rule 0b's charter is "take an incumbent library's code and its algorithms and port them to Mojo"; for a Gaussian process there is no incumbent GPU library in this repository's pin set, so there is no file to transliterate and no dispatch to follow. Every file below is therefore `original/` by rule 0b-ii's own definition ("something they never needed"), and none of them cites a line number it cannot have.
 # scikit-learn 1.9.0 (`77def0e`, at /Users/andrewhendel/CascadeProjects/upstream/scikit-learn) is the SEMANTICS reference and the ORACLE, and is NEVER the design source: it is CPU, LAPACK-shaped and float64. What it settles is what our parameters MEAN -- which distance, which closed form, which order the three log-marginal-likelihood terms are assembled in, whether a WhiteKernel's diagonal is a structural test or a coordinate one. Every citation below is by file and line into that checkout.
