@@ -35,7 +35,7 @@ The root `UNWIRED.md` covers `gbdt/`; this one covers `extratrees/` only.
 
 ## Deliberately not built
 
-Tracked in `UNPORTED.tsv` rather than here: `quantiles.cuh` (the file this
+Tracked in `NOT_IMPLEMENTED.tsv` rather than here: `quantiles.cuh` (the file this
 formulation exists to delete), the bootstrap MASK behind `oob_score`,
 `sample_weight`, NaN/`missing_go_to_left`, three unported regression
 criteria, and cuML's dead `adaptive_sample_kernel`. (The bootstrap row

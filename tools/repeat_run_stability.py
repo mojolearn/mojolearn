@@ -350,7 +350,7 @@ def _gemm_vendor(ml):
     rocBLAS, MAX `linalg.matmul`) and classify it CROSS_VENDOR, on the
     ground that a k-split is chosen per vendor and per shape but is the SAME
     on two runs of one build. That is what keeps the 4.7x and 2.85x pins out
-    of the middle tier. But `hierarchy/mojo_only/linkage_check.mojo:583`
+    of the middle tier. But `hierarchy/original/linkage_check.mojo:583`
     speculates the other way -- "a split-K or atomic epilogue MAY land
     differently" between two launches of one shape.
 

@@ -9,7 +9,7 @@
 # Phase 3's exit criterion is *"Apple/NVIDIA/AMD hashes agree"*. Renting three
 # machines answers that properly and this does not. What this answers, for
 # free and today, is the half of it that lives in OUR SOURCE:
-# `mojo_only/kernel_matrix.mojo` makes the vendor a COMPTIME COLUMN, so
+# `original/kernel_matrix.mojo` makes the vendor a COMPTIME COLUMN, so
 # `-D MOJOLEARN_COLUMN_AMD=1` compiles this source against AMD's constants on
 # whatever silicon is attached, and the question
 #
@@ -103,7 +103,7 @@ echo "   out:     $OUT"
 echo
 if [ "$HOST_ONLY" = "1" ]; then
     echo "   TRIVIAL PASS EXPECTED. The '$ARM' arm is host-only scalar code"
-    echo "   that never reads mojo_only/kernel_matrix.mojo, so the column"
+    echo "   that never reads original/kernel_matrix.mojo, so the column"
     echo "   defines cannot reach the answer and three matching cards prove"
     echo "   nothing about the profile. This run exercises the HARNESS. The"
     echo "   gate becomes real at MOJOLEARN_GEMM_CARD_ARM=device."

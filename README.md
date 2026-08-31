@@ -22,7 +22,7 @@ and 70% of the Mojo here has no upstream file it corresponds to**; the other
 30% to 33% is the algorithmic substrate, and it is derived work documented as
 such per file, with the upstream path and the pinned commit, in the
 derivation tables and in each file's own header. (An earlier version of this
-paragraph said 84.9%. That was computed as "everything outside a `ported/`
+paragraph said 84.9%. That was computed as "everything outside a `derived/`
 directory" and `gbdt/`, the CatBoost mirror, has no such directory, so it
 undercounted the derived side by 61,888 lines. The range above is the
 corrected figure and its bounds are stated in `NOTICE`.) The algorithms come from CatBoost,
@@ -422,7 +422,7 @@ holds its copyright. What it mirrors is the design of the upstreams, file for
 file where the toolchain allows, under the rule copy, do not improve, so that
 a port can be checked against its original. That makes the ported
 directories derivative works under Apache-2.0 section 4, and
-[NOTICE](NOTICE) carries each upstream's attribution. `PORTED_MAP.tsv` maps
+[NOTICE](NOTICE) carries each upstream's attribution. `DERIVATION_MAP.tsv` maps
 every ported file to its origin and status. This is not a clean-room
 reimplementation and must not be described as one.
 

@@ -66,7 +66,7 @@ from max.gpu.primitives.block import sum as block_sum
 # Apple<->AMD, 2026-08-22). Under FAST each call compiles to the
 # `std.math` call it replaced, verbatim, so FAST bits cannot move; under
 # IDENTICAL both route through the Cephes polynomials in
-# `mojo_only/numerics.mojo` (measured <= 2 ulp, same bits everywhere).
+# `original/numerics.mojo` (measured <= 2 ulp, same bits everywhere).
 # The isfinite guard structure around the `log(1 + exp)` scores is kept
 # exactly as ported -- only the transcendental calls are routed. The
 # routing covers `exp`/`log` only; Lq's `**` (their `__powf`/`powf`)
@@ -88,7 +88,7 @@ from max.gpu.primitives.block import sum as block_sum
 # `numerics.identical_exp`/`identical_log`, so there is ONE portable
 # polynomial and no second arithmetic wearing the same name.
 # =======================================================================
-from mojo_only.numerics import (
+from original.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
     ftz,
@@ -132,7 +132,7 @@ def routed_log(x: Float32) -> Float32:
 
     return log(x)
 
-#: The mode this build compiles against; see `mojo_only/numerics.mojo`. Same
+#: The mode this build compiles against; see `original/numerics.mojo`. Same
 #: declaration as the histogram kernels', and `pinned_block_sum` below is the
 #: one reader in this file.
 comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
@@ -688,7 +688,7 @@ def pointwise_target_kernel[
     `plane_magnitudes` / `compute_magnitudes` have NO CATBOOST COUNTERPART,
     like the scale they feed: they are the two sums of absolute values --
     `plane_magnitudes[0] = sum |weight plane|`, `[1] = sum |der plane|` --
-    that `mojo_only/fixed_point.choose_scale` is specified against,
+    that `original/fixed_point.choose_scale` is specified against,
     reduced here by the same shape as `functionValue`. `compute_magnitudes`
     stands in for a null-pointer test, exactly as `compute_fv` does.
 
@@ -697,7 +697,7 @@ def pointwise_target_kernel[
     drifted rows can dominate `sum |der|` and drive the scale down until
     ordinary gradients quantize toward zero. CatBoost never meets this
     because it flushes histograms with a float `atomicAdd`, so there is no
-    source to port an answer from. `mojo_only/pointwise_target_check.mojo`
+    source to port an answer from. `original/pointwise_target_check.mojo`
     measures the surviving resolution per objective; read it before
     trusting a fit on one of the three.
     """

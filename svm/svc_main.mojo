@@ -20,7 +20,7 @@ from std.os import getenv
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
-from svm.mojo_only.svc_check import (
+from svm.original.svc_check import (
     _mode_name,
     _run_device,
     all_fixtures,

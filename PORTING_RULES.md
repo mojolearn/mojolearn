@@ -100,7 +100,7 @@ Two things this does NOT mean:
 A file in this tree is exactly one of two things:
 
 - `gbdt/` -- a port of a real file of theirs
-- `mojo_only/` -- something they never needed
+- `original/` -- something they never needed
 
 There is no third category of "good idea worth adopting."
 
@@ -215,7 +215,7 @@ undocumented departure is a bug even when it works.
 Classes keep their CatBoost names: `TCudaManager`, `TPointsSubsets`, `TLeaf`,
 `TCFeature`, `TSplitPointsContext`. Directories may be renamed when the name
 is a lie (`cuda_lib` -> `gpu_lib`, because none of it is CUDA), and the
-rename is recorded in `PORTED_MAP.tsv`.
+rename is recorded in `DERIVATION_MAP.tsv`.
 
 The symbol is the diff surface. Keep it greppable in their tree.
 

@@ -16,7 +16,7 @@ The short answer, before the detail.
   through pinned primitives. `identical_exp`, `identical_sigmoid`,
   `identical_silu`, `identical_div`, `identical_rsqrt`, `identical_mul_add`
   and `ftz` are the whole toolbox and all seven already ship. Nothing needs
-  to be added to `mojo_only/numerics.mojo`. That is the good news and it is
+  to be added to `original/numerics.mojo`. That is the good news and it is
   the only unqualified good news in this document.
 - **It does need a great deal of new ORDER.** Section 3 classifies 42
   backward operations. Four are copies, two are pure reuse, thirteen route to
@@ -65,7 +65,7 @@ The short answer, before the detail.
 - **NOTHING BELOW HAS RUN.** This document is CONSTRUCTION plus a routing and
   declaration layer. No gate in section 7 exists, no backward fixture has
   been built, no device has executed a backward call, and no line of
-  `mamba/mojo_only/mamba_backward.mojo` has been compiled. **Every sentence
+  `mamba/original/mamba_backward.mojo` has been compiled. **Every sentence
   about behavior is a prediction until a gate prints.**
 
 ---
@@ -76,11 +76,11 @@ The short answer, before the detail.
 |---|---|
 | forward `mojolearn.identical.mamba1.fp32.v1` | IDENTITY_PATHS row 55. Clauses (a) through (f) gated on Apple. **TWO vendors, not three**, leg 12 at `1b7c916`, Apple M4 (Metal) and NVIDIA RTX 4090 (CUDA), 17 of 17 card stages bit identical. **AMD has no mamba column at all.** |
 | `mojolearn.identical.gemm.fp32.v1` | IDENTITY_PATHS row 40, CLOSED on three vendors |
-| `gemm/mojo_only/gemm_backward.mojo` | derived and coded by the gemm backward lane, **UNGATED** |
+| `gemm/original/gemm_backward.mojo` | derived and coded by the gemm backward lane, **UNGATED** |
 | the backward derivation of section 2 | derived here, **UNGATED, UNCOMPILED** |
 | the seam classification of section 3 | derived here |
 | the eight new topologies of section 3.4 | DECLARED here, **NO KERNEL WRITTEN** |
-| the routing layer `mamba/mojo_only/mamba_backward.mojo` | written here, **NEVER COMPILED** |
+| the routing layer `mamba/original/mamba_backward.mojo` | written here, **NEVER COMPILED** |
 | everything in section 7 | SPECIFIED, NOT BUILT |
 
 The completion claim this lane may make when the gates of section 7 are green
@@ -113,7 +113,7 @@ announced loudly, never spelled quietly here.
 ### 2.1 Notation, taken from the forward and not invented
 
 Token-major throughout, `M = B * L` rows, exactly the oracle's layouts
-(`mamba/mojo_only/mamba_oracle.mojo::MambaStages`). `dm` is `d_model`, `di`
+(`mamba/original/mamba_oracle.mojo::MambaStages`). `dm` is `d_model`, `di`
 is `d_inner = 2 * dm`, `r` is `dt_rank`, `N` is `D_STATE = 16`, `K` is
 `D_CONV = 4`.
 
@@ -350,7 +350,7 @@ concatenations that build `dXP` and `dP` and the join at B29.
 The honest headline is that **the mamba backward is not a routing problem the
 way the gemm backward was.** The gemm backward lane could write a 595 line
 file with no multiply in it. This lane cannot, and
-`mamba/mojo_only/mamba_backward.mojo` is short because it routes what routes
+`mamba/original/mamba_backward.mojo` is short because it routes what routes
 and DECLARES the rest without writing kernels, which is the correct shape for
 a lane whose finding is that most of the work is new.
 
@@ -651,7 +651,7 @@ on the GPU as a gate that could not be written.
 ### 4.3 Launch invariance. YES, achievable, but the forward's structural argument does NOT survive.
 
 The forward's argument is quoted from
-`mamba/ported/mamba_ssm/ops/selective_scan_interface.mojo`'s kernel docstring
+`mamba/derived/mamba_ssm/ops/selective_scan_interface.mojo`'s kernel docstring
 and it is the strongest sentence in that lane.
 
 > A thread owns a whole `(b, d)` recurrence ... no float crosses a thread
@@ -1190,7 +1190,7 @@ same reason section 4 of the gemm plan orders its table.
 ## 9. Deviation block
 
 Numbers 1070 to 1089 are this lane's. 1070 to 1078 are SPENT in this document
-and in `mamba/mojo_only/mamba_backward.mojo`. The rest are reserved against
+and in `mamba/original/mamba_backward.mojo`. The rest are reserved against
 the phase they belong to.
 
 | number | what | if it is wrong | state |
@@ -1226,7 +1226,7 @@ range is reported by its first number only.
 ## 10. Open questions, and things a reader should not assume
 
 - **Nothing here has run.** Not one gate, not one fixture, not one device
-  call, not one compile. `mamba/mojo_only/mamba_backward.mojo` mirrors
+  call, not one compile. `mamba/original/mamba_backward.mojo` mirrors
   `gemm_backward.mojo`'s spellings but has never been through the compiler,
   and the five-element `Tuple` returns and the `comptime if` early returns are
   the two things most likely to need adjustment.
@@ -1262,8 +1262,8 @@ range is reported by its first number only.
 - **Two claims in files this lane may not edit are stale and are REPORTED
   rather than fixed.**
   1. `gemm/IDENTICAL_BACKWARD_PLAN.md` section 4 row T5 says "**GELU is
-     REFUSE today**: `mojo_only/numerics.mojo` has no `portable_erff` and no
-     `portable_tanhf`." Both exist, at `mojo_only/numerics.mojo:1672` and
+     REFUSE today**: `original/numerics.mojo` has no `portable_erff` and no
+     `portable_tanhf`." Both exist, at `original/numerics.mojo:1672` and
      `:1465`, along with `portable_gelu_erf` at `:1722`, `portable_gelu_tanh`
      at `:1778`, `identical_erf` at `:2009` and both `identical_gelu_*` at
      `:2023` and `:2039`, added by the transformer-block lane as DEVIATIONS

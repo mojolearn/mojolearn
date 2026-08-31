@@ -36,7 +36,7 @@ abstract: >-
   the algorithmic substrate described next. The bounds and how they were
   computed are in NOTICE.
   THE SUBSTRATE IS DERIVED WORK AND IS DOCUMENTED AS SUCH, per file, with
-  the upstream path and pinned commit, in the PORTED_MAP tables and in each
+  the upstream path and pinned commit, in the DERIVATION_MAP tables and in each
   file's own header: gradient-boosted oblivious (symmetric) trees from
   CatBoost; random forests, extremely randomized trees, DBSCAN, PCA, ridge
   and logistic regression, coordinate descent, support vector

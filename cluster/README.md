@@ -19,12 +19,12 @@ mirrors:
 | layer | upstream | where it lands here |
 |---|---|---|
 | algorithm | cuVS `cpp/src/cluster/`, `cpp/src/distance/` | `gbdt/` |
-| primitive | RAFT `linalg`, `matrix` | `mojo_only/` |
+| primitive | RAFT `linalg`, `matrix` | `original/` |
 
 A RAFT call is not itself a `gbdt/` file, because RAFT is a general library
 this tree does not mirror file for file. **It is still readable, so it is a
 PORT candidate and not a substitution candidate**: RAFT, CUB and Thrust are
-open source and their kernels get transliterated. `mojo_only/` files name the
+open source and their kernels get transliterated. `original/` files name the
 RAFT call they came from and cite the RAFT kernel they were read from --
 `reduce_by_key.mojo` cites `raft/linalg/detail/reduce_rows_by_key.cuh`, not
 just `raft::linalg::reduce_rows_by_key`.
@@ -55,7 +55,7 @@ and can be diffed against it side by side.
 have to be able to say it is cuVS's design that is slow on this hardware and
 not our interpretation of it. Every deviation is numbered in the root
 `PORTING.md` (items 14 and up belong to this section) and every unported file
-is named in `UNPORTED.tsv`.
+is named in `NOT_IMPLEMENTED.tsv`.
 
 ## What runs and what does not
 
@@ -82,7 +82,7 @@ to cuVS with citations that pointed at a function signature.
 scalable k-means|| (`initScalableKMeansPlusPlus`,
 `detail/kmeans.cuh:568-785`), ported in `gbdt/cluster/detail/kmeans.mojo::
 init_scalable_kmeans_plus_plus` with its vendor calls named kernel by kernel
-in `mojo_only/scalable_init.mojo` (PORTING.md 47 and 48 price the
+in `original/scalable_init.mojo` (PORTING.md 47 and 48 price the
 randomness and selection mechanisms). Until 2026-08-20 this arm raised
 rather than silently substituting classic k-means++; `oversampling_factor =
 0` still switches to the classic sequential variant, exactly as their
@@ -93,7 +93,7 @@ config end to end, run-twice bitwise; `check_scalable_supplement_branch`
 starves the rounds to reach the fewer-than-k random-supplement arm.
 
 **It has now been LAUNCHED and it passes.** `cluster/kmeans_main.mojo` builds
-and runs `cluster/mojo_only/kmeans_check.mojo`:
+and runs `cluster/original/kmeans_check.mojo`:
 
     check_reach_by_sabotage OK: centroid_norm moved 384/512 labels;
       x_norm moved 512 distances and 0 labels, which is the predicted shape
@@ -153,7 +153,7 @@ Two things follow, and the second is the one that matters:
    construction**, because these specializations are `ArchTag = Sm80` tensor-op
    paths and their SIMT kernel is not. No implementation on other hardware
    reproduces it bit for bit, and neither do two NVIDIA generations
-   necessarily. See `mojo_only/gemm.mojo`, and the `bitwise-gbdt` tree, where
+   necessarily. See `original/gemm.mojo`, and the `bitwise-gbdt` tree, where
    this is a second incumbent with a device-dependent number system.
 
 The kernel this tree actually ports is their SIMT one
@@ -175,7 +175,7 @@ accumulation of 32 terms, a TF32 tensor-core product. The unfused arm is
 is **1xTF32 by default with no compilable opt-out before Blackwell**
 (`use_tf32=True` is the default, the cuBLAS fallback hard-codes
 `CUBLAS_TF32_TENSOR_OP_MATH`, `use_tf32=False` asserts at compile time
-except on SM100; `mojo_only/kernel_matrix.mojo::column_vendor_fp32_matmul_is_tf32`
+except on SM100; `original/kernel_matrix.mojo::column_vendor_fp32_matmul_is_tf32`
 carries the source lines).
 
 Three consequences, in order of how much they matter:
@@ -206,5 +206,5 @@ Three consequences, in order of how much they matter:
    refused itself with "fixture too small". The row count is now derived
    from the launcher's own cap. And its "fused == unfused" label clause is
    now excused per row where the oracle gap sits inside the lossy arm's
-   budget. `mojo_only/gram_splitk_check.mojo` had the same class of
+   budget. `original/gram_splitk_check.mojo` had the same class of
    Apple-only assertion (DEVIATION 540).

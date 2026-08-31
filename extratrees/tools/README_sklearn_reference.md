@@ -24,9 +24,9 @@ and nothing in this lane may be adjusted to move our number into a band. That
 adjustment would be fitting our learner to another learner's noise. The exact
 oracles for this lane are elsewhere: a host-side Mojo transcription of
 `node_split_random` using OUR keyed draws
-(`extratrees/mojo_only/host_splitter.mojo`) and the analytic fixtures whose
+(`extratrees/original/host_splitter.mojo`) and the analytic fixtures whose
 answer is hand-computable for every admissible threshold
-(`extratrees/mojo_only/fixtures.mojo`).
+(`extratrees/original/fixtures.mojo`).
 
 Per `STANDING_ORDERS.md` rule 4 this file is also never computed on a real
 dataset. Every fixture is constructed and adversarial.
@@ -82,7 +82,7 @@ Two commands, in this order. The first is Mojo and dumps the fixtures; the
 second is Python, checks them cell for cell, and only then trains.
 
 ```
-pixi run mojo run -I . extratrees/mojo_only/fixture_parity_check.mojo > /tmp/etdump.txt
+pixi run mojo run -I . extratrees/original/fixture_parity_check.mojo > /tmp/etdump.txt
 pixi run -e bench python extratrees/tools/sklearn_reference.py --dump /tmp/etdump.txt
 ```
 

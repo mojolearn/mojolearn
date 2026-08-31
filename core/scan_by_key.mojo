@@ -179,7 +179,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from mojo_only.kernel_matrix import TARGET_COLUMN, column_shared_limit
+from original.kernel_matrix import TARGET_COLUMN, column_shared_limit
 
 
 trait ScanByKeyElement(TrivialRegisterPassable):

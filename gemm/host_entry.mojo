@@ -6,7 +6,7 @@ DEVIATION 910. Written 2026-08-24 so the profile is reachable from Python.
 
 WHY THIS FILE EXISTS
 --------------------
-`gemm/mojo_only/gemm_identical.mojo::identical_gemm` is the profile's
+`gemm/original/gemm_identical.mojo::identical_gemm` is the profile's
 host-visible entry point, and it is a DEVICE-side API: it takes a
 `DeviceContext` and three `DeviceBuffer`s. Every other family in this tree
 has an `estimator.mojo` that takes RAW HOST POINTERS, owns its device work
@@ -23,7 +23,7 @@ allocates three device buffers, copies host to device, calls the certified
 `identical_gemm`, copies device to host, and waits. A multiply or an add
 appearing below would be a second implementation of a bit-exact contract,
 which is the one thing this lane cannot afford. The bits come from
-`gemm/mojo_only/gemm_identical.mojo` and from nowhere else.
+`gemm/original/gemm_identical.mojo` and from nowhere else.
 
 WHY `identical_gemm` AND NOT `identical_gemm_into`
 --------------------------------------------------
@@ -48,8 +48,8 @@ there because the hazard is invisible at review time and free at run time.
 
 from max.gpu.host import DeviceContext
 
-from gemm.mojo_only.gemm_identical import identical_gemm
-from gemm.mojo_only.gemm_oracle import OP_NN, OP_NT, OP_TN
+from gemm.original.gemm_identical import identical_gemm
+from gemm.original.gemm_oracle import OP_NN, OP_NT, OP_TN
 
 
 def identical_gemm_host(

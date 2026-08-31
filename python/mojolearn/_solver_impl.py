@@ -4,7 +4,7 @@
 `solver='cd'` arm (`cuml/cpp/src/solver/cd.cuh::cdFit`).
 
 The port is `solver/` (DEVIATIONS 610-613 and 880); `solver/README.md`,
-`solver/PORTED_MAP.tsv` and `solver/UNPORTED.tsv` are the record. The
+`solver/DERIVATION_MAP.tsv` and `solver/NOT_IMPLEMENTED.tsv` are the record. The
 upstream is cuML pinned at `v26.08.00` = `265b9da`, and every line number
 cited in this file was read in that checkout.
 
@@ -55,7 +55,7 @@ class ElasticNet:
 
     Mirrors `cuml.linear_model.ElasticNet(solver='cd')` on top of
     `cuml/cpp/src/solver/cd.cuh::cdFit`; the Mojo port is
-    `solver/ported/solver/cd.mojo` and the host surface is
+    `solver/derived/solver/cd.mojo` and the host surface is
     `solver/estimator.mojo`.
 
     THE OBJECTIVE, AND WHOSE `alpha` THIS IS
@@ -138,7 +138,7 @@ class ElasticNet:
                                   cuML's 'auto' picks 'qn' for SPARSE input
                                   (`elastic_net.py:243-244`), and 'qn' under
                                   an l1 penalty is OWL-QN, which is not
-                                  ported (`glm/UNPORTED.tsv`). Sparse input
+                                  ported (`glm/NOT_IMPLEMENTED.tsv`). Sparse input
                                   is refused with it.
         sample_weight   refused   the weighted `preProcessData`, the
                                   sqrt-weight scaling of X and y and its
@@ -223,9 +223,9 @@ class ElasticNet:
                 "mojolearn ElasticNet: solver='qn' is not ported. cuML's "
                 "solver='auto' picks 'qn' only for SPARSE input "
                 "(elastic_net.py:243-244), and 'qn' under an l1 penalty is "
-                "OWL-QN (min_owlqn, qn_solvers.cuh), which glm/UNPORTED.tsv "
+                "OWL-QN (min_owlqn, qn_solvers.cuh), which glm/NOT_IMPLEMENTED.tsv "
                 "lists as not ported. solver='cd' (cuML's 'auto' for dense "
-                "input) is the ported arm; see solver/UNPORTED.tsv"
+                "input) is the ported arm; see solver/NOT_IMPLEMENTED.tsv"
             )
         if selection == "random":
             raise NotImplementedError(
@@ -237,7 +237,7 @@ class ElasticNet:
                 "function of the toolchain rather than of the seed and "
                 "cannot be gated bitwise or certified across vendors. An "
                 "exact port is DEVIATION 611, reserved and not spent; see "
-                "solver/UNPORTED.tsv"
+                "solver/NOT_IMPLEMENTED.tsv"
             )
         if positive:
             raise NotImplementedError(
@@ -313,8 +313,8 @@ class ElasticNet:
                 "mojolearn ElasticNet: sample_weight is not ported "
                 "(cd.cuh:156-194 and :274-287 -- the weighted "
                 "preProcessData, the sqrt-weight scaling of input and "
-                "labels and its undo; solver/UNPORTED.tsv). "
-                "solver/ported/solver/cd.mojo refuses it by name"
+                "labels and its undo; solver/NOT_IMPLEMENTED.tsv). "
+                "solver/derived/solver/cd.mojo refuses it by name"
             )
         if hasattr(X, "toarray") or hasattr(X, "tocsr"):
             raise NotImplementedError(

@@ -25,28 +25,28 @@ inside a file that carries its own `main` it is TRANSCRIBED and says so at
 the site, which is the same choice `bench/lanes_price_main.mojo` made for the
 metrics lane and `bench/gemm_price_main.mojo` made for the gemm card.
 
-    kmeans      cluster/ported/cluster/kmeans::fit         bench/bench_main.mojo's shape
-    dbscan      dbscan/ported/dbscan/dbscan::dbscan_fit_impl
-    pca         decomposition/ported/linalg/detail/pca::pca_fit
-    ols         glm/ported/linalg/detail/lstsq::lstsq_eig
-    knn         neighbors/ported/.../knn_brute_force::brute_force_knn_impl
-    cd          solver/ported/solver/cd::cd_fit_traced     Lasso
-    kde         kde/ported/kde/kde::score_samples
-    linkage     hierarchy/ported/hierarchy/linkage::single_linkage
-    svm         svm/ported/svm/svc_impl::svc_fit           FIT ONLY, see below
-    metrics     metrics/ported/metrics/*                   eleven metrics, one pass
+    kmeans      cluster/derived/cluster/kmeans::fit         bench/bench_main.mojo's shape
+    dbscan      dbscan/derived/dbscan/dbscan::dbscan_fit_impl
+    pca         decomposition/derived/linalg/detail/pca::pca_fit
+    ols         glm/derived/linalg/detail/lstsq::lstsq_eig
+    knn         neighbors/derived/.../knn_brute_force::brute_force_knn_impl
+    cd          solver/derived/solver/cd::cd_fit_traced     Lasso
+    kde         kde/derived/kde/kde::score_samples
+    linkage     hierarchy/derived/hierarchy/linkage::single_linkage
+    svm         svm/derived/svm/svc_impl::svc_fit           FIT ONLY, see below
+    metrics     metrics/derived/metrics/*                   eleven metrics, one pass
     ivf         ivf/estimator::ivf_flat_build_and_search_host
-    hdbscan     hdbscan/ported/hdbscan/runner::fit_hdbscan
-    cholesky    cholesky/mojo_only/potrf::potrf_lower + trsm::cho_solve
+    hdbscan     hdbscan/derived/hdbscan/runner::fit_hdbscan
+    cholesky    cholesky/original/potrf::potrf_lower + trsm::cho_solve
     gmm         mixture/estimator::gaussian_mixture_fit
     gp          gaussian_process/estimator::gpr_fit_host + gpr_predict_host
     krr         kernel_methods/estimator::kernel_ridge_fit_host + predict
     nystroem    kernel_methods/estimator::nystroem_fit_host + transform
     rbfsampler  kernel_methods/estimator::rbf_sampler_fit_host + transform
     resample    resample/estimator::bootstrap_host          the bootstrap
-    spectral    spectral/ported/.../spectral::fit_predict_dataset
+    spectral    spectral/derived/.../spectral::fit_predict_dataset
     holtwinters holtwinters/estimator::holtwinters_fit_host_traced
-    kpss        tsa/ported/tsa/stationarity::kpss_test
+    kpss        tsa/derived/tsa/stationarity::kpss_test
 
 WHAT ONE ROUND IS. One fit (or one score pass) through the lane's public
 entry on a fixture built ONCE, before the loop, and re-initialized where the
@@ -150,28 +150,28 @@ from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.identity_trace import FNV_OFFSET, FNV_PRIME, IdentityTrace, _hex16
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 # ---- kmeans ----------------------------------------------------------------
-from cluster.ported.cluster.kmeans import fit as kmeans_fit_api
-from cluster.ported.cluster.kmeans_params import (
+from cluster.derived.cluster.kmeans import fit as kmeans_fit_api
+from cluster.derived.cluster.kmeans_params import (
     INIT_ARRAY,
     KMeansParams,
     METRIC_L2_EXPANDED,
 )
-from mojo_only.fixed_point import choose_scale
+from original.fixed_point import choose_scale
 
 # ---- dbscan ----------------------------------------------------------------
-from dbscan.ported.dbscan.dbscan import dbscan_fit_impl
+from dbscan.derived.dbscan.dbscan import dbscan_fit_impl
 
 # ---- pca -------------------------------------------------------------------
-from decomposition.ported.linalg.detail.pca import pca_fit
+from decomposition.derived.linalg.detail.pca import pca_fit
 
 # ---- ols -------------------------------------------------------------------
-from glm.ported.linalg.detail.lstsq import lstsq_eig
+from glm.derived.linalg.detail.lstsq import lstsq_eig
 
 # ---- knn -------------------------------------------------------------------
-from neighbors.ported.neighbors.detail.knn_brute_force import (
+from neighbors.derived.neighbors.detail.knn_brute_force import (
     brute_force_knn_impl,
     compute_norms,
     KNN_METHOD_AUTO,
@@ -180,14 +180,14 @@ from neighbors.ported.neighbors.detail.knn_brute_force import (
 )
 
 # ---- cd --------------------------------------------------------------------
-from solver.mojo_only.cd_oracle import fixture_planted_sparse
-from solver.ported.solver.cd import CdLaunch, cd_fit_traced
-from solver.ported.solvers.params import LOSS_SQRD_LOSS
+from solver.original.cd_oracle import fixture_planted_sparse
+from solver.derived.solver.cd import CdLaunch, cd_fit_traced
+from solver.derived.solvers.params import LOSS_SQRD_LOSS
 
 # ---- kde -------------------------------------------------------------------
-from kde.mojo_only.kde_fixture import query_fixture, train_fixture, weight_fixture
-from kde.ported.kde.kde import score_samples
-from kde.ported.neighbors.kernel_density import (
+from kde.original.kde_fixture import query_fixture, train_fixture, weight_fixture
+from kde.derived.kde.kde import score_samples
+from kde.derived.neighbors.kernel_density import (
     host_sum_weights,
     kde_fit_validate,
     kde_validate_data,
@@ -196,7 +196,7 @@ from kde.ported.neighbors.kernel_density import (
 )
 
 # ---- linkage ---------------------------------------------------------------
-from hierarchy.mojo_only.linkage_oracle import (
+from hierarchy.original.linkage_oracle import (
     FIX_BLOBS_DUPS,
     FIX_DUPS,
     build_fixture,
@@ -206,42 +206,42 @@ from hierarchy.mojo_only.linkage_oracle import (
     fixture_n_clusters,
     fixture_name,
 )
-from hierarchy.ported.cluster.detail.connectivities import DISTANCE_L2_SQRT_EXPANDED
-from hierarchy.ported.hierarchy.linkage import single_linkage
+from hierarchy.derived.cluster.detail.connectivities import DISTANCE_L2_SQRT_EXPANDED
+from hierarchy.derived.hierarchy.linkage import single_linkage
 
 # ---- svm -------------------------------------------------------------------
-from svm.mojo_only.svc_check import all_fixtures
-from svm.ported.svm.smosolver import SmoTrace
-from svm.ported.svm.svc_impl import svc_fit
+from svm.original.svc_check import all_fixtures
+from svm.derived.svm.smosolver import SmoTrace
+from svm.derived.svm.svc_impl import svc_fit
 
 # ---- metrics ---------------------------------------------------------------
-from metrics.mojo_only.device_io import upload_f32 as met_upload_f32
-from metrics.mojo_only.device_io import upload_i32 as met_upload_i32
-from metrics.mojo_only.fixtures import (
+from metrics.original.device_io import upload_f32 as met_upload_f32
+from metrics.original.device_io import upload_i32 as met_upload_i32
+from metrics.original.fixtures import (
     hashed_floats,
     hashed_pdf,
     hashed_points,
     labels_true_pred,
     u01,
 )
-from metrics.ported.metrics.accuracy_score import accuracy_score_py
-from metrics.ported.metrics.adjusted_rand_index import adjusted_rand_index
-from metrics.ported.metrics.completeness_score import completeness_score
-from metrics.ported.metrics.entropy import entropy
-from metrics.ported.metrics.homogeneity_score import homogeneity_score
-from metrics.ported.metrics.kl_divergence import kl_divergence
-from metrics.ported.metrics.mutual_info_score import mutual_info_score
-from metrics.ported.metrics.r2_score import r2_score_py
-from metrics.ported.metrics.silhouette_score_batched_float import silhouette_score
-from metrics.ported.metrics.trustworthiness import trustworthiness_score_traced
-from metrics.ported.metrics.v_measure import v_measure
+from metrics.derived.metrics.accuracy_score import accuracy_score_py
+from metrics.derived.metrics.adjusted_rand_index import adjusted_rand_index
+from metrics.derived.metrics.completeness_score import completeness_score
+from metrics.derived.metrics.entropy import entropy
+from metrics.derived.metrics.homogeneity_score import homogeneity_score
+from metrics.derived.metrics.kl_divergence import kl_divergence
+from metrics.derived.metrics.mutual_info_score import mutual_info_score
+from metrics.derived.metrics.r2_score import r2_score_py
+from metrics.derived.metrics.silhouette_score_batched_float import silhouette_score
+from metrics.derived.metrics.trustworthiness import trustworthiness_score_traced
+from metrics.derived.metrics.v_measure import v_measure
 
 # ---- ivf -------------------------------------------------------------------
 from ivf.estimator import ivf_flat_build_and_search_host
-from ivf.mojo_only.ivf_fixture import ivf_index_fixture, ivf_query_fixture
+from ivf.original.ivf_fixture import ivf_index_fixture, ivf_query_fixture
 
 # ---- hdbscan ---------------------------------------------------------------
-from hdbscan.mojo_only.hdbscan_fixture import (
+from hdbscan.original.hdbscan_fixture import (
     HFIX_BLOBS,
     hfixture_as_list,
     hfixture_d,
@@ -250,22 +250,22 @@ from hdbscan.mojo_only.hdbscan_fixture import (
     hfixture_n,
     hfixture_name,
 )
-from hdbscan.ported.hdbscan.detail.select import CLUSTER_SELECTION_EOM
-from hdbscan.ported.hdbscan.runner import (
+from hdbscan.derived.hdbscan.detail.select import CLUSTER_SELECTION_EOM
+from hdbscan.derived.hdbscan.runner import (
     GRAPH_BUILD_BRUTE_FORCE_KNN,
     HDBSCANParams,
     fit_hdbscan,
 )
 
 # ---- cholesky --------------------------------------------------------------
-from cholesky.mojo_only.cholesky_fixture import (
+from cholesky.original.cholesky_fixture import (
     FIX_RBF,
     chol_fixture,
     chol_fixture_n,
     chol_fixture_name,
     chol_rhs_fixture,
 )
-from cholesky.mojo_only.potrf import (
+from cholesky.original.potrf import (
     CHOL_ELEM_TPB,
     CHOL_NB_PINNED,
     CHOL_PANEL_TPB,
@@ -275,7 +275,7 @@ from cholesky.mojo_only.potrf import (
     chol_workspace_floats,
     potrf_lower,
 )
-from cholesky.mojo_only.trsm import CHOL_SOLVE_TPB, cho_solve
+from cholesky.original.trsm import CHOL_SOLVE_TPB, cho_solve
 
 # ---- gmm -------------------------------------------------------------------
 from mixture.estimator import (
@@ -284,7 +284,7 @@ from mixture.estimator import (
     GmmParams,
     gaussian_mixture_fit,
 )
-from mixture.mojo_only.gmm_fixture import (
+from mixture.original.gmm_fixture import (
     FIX_SEPARATED,
     gmm_fixture,
     gmm_fixture_d,
@@ -295,7 +295,7 @@ from mixture.mojo_only.gmm_fixture import (
 
 # ---- gp --------------------------------------------------------------------
 from gaussian_process.estimator import gpr_fit_host, gpr_predict_host
-from gaussian_process.mojo_only.gp_fixture import (
+from gaussian_process.original.gp_fixture import (
     GP_FIX_ARD,
     gp_fixture_alpha,
     gp_fixture_d,
@@ -317,7 +317,7 @@ from kernel_methods.estimator import (
     rbf_sampler_fit_host,
     rbf_sampler_transform_host,
 )
-from kernel_methods.mojo_only.km_fixture import (
+from kernel_methods.original.km_fixture import (
     FIX_KM_RBF,
     km_fixture_d,
     km_fixture_n,
@@ -326,36 +326,36 @@ from kernel_methods.mojo_only.km_fixture import (
     km_fixture_x,
     km_fixture_y,
 )
-from kernel_methods.mojo_only.kernel_matrix import KM_KERNEL_RBF
-from svm.ported.svm.svm_parameter import KernelParams
+from kernel_methods.original.kernel_matrix import KM_KERNEL_RBF
+from svm.derived.svm.svm_parameter import KernelParams
 
 # ---- resample --------------------------------------------------------------
 from resample.estimator import bootstrap_host
-from resample.mojo_only.intervals import ALT_TWO_SIDED, METHOD_PERCENTILE
-from resample.mojo_only.resample_fixture import (
+from resample.original.intervals import ALT_TWO_SIDED, METHOD_PERCENTILE
+from resample.original.resample_fixture import (
     FIX_HASHED,
     build_sample,
     fixture_d as resample_fixture_d,
     fixture_n as resample_fixture_n,
 )
-from resample.mojo_only.statistics import STAT_MEAN
+from resample.original.statistics import STAT_MEAN
 
 # ---- spectral --------------------------------------------------------------
-from spectral.mojo_only.spectral_fixture import blobs_fixture
-from spectral.ported.cuvs.cluster.detail.spectral import (
+from spectral.original.spectral_fixture import blobs_fixture
+from spectral.derived.cuvs.cluster.detail.spectral import (
     SpectralClusteringParams,
     fit_predict_dataset,
 )
 
 # ---- holtwinters -----------------------------------------------------------
 from holtwinters.estimator import holtwinters_fit_host_traced
-from holtwinters.mojo_only.hw_fixture import hw_fixture, spec_additive
-from holtwinters.ported.holtwinters.runner import HW_DEFAULT_EPS
+from holtwinters.original.hw_fixture import hw_fixture, spec_additive
+from holtwinters.derived.holtwinters.runner import HW_DEFAULT_EPS
 
 # ---- kpss ------------------------------------------------------------------
-from tsa.mojo_only.fixtures import kpss_fixture
-from tsa.mojo_only.fixtures import upload_f32 as tsa_upload_f32
-from tsa.ported.tsa.stationarity import kpss_test
+from tsa.original.fixtures import kpss_fixture
+from tsa.original.fixtures import upload_f32 as tsa_upload_f32
+from tsa.derived.tsa.stationarity import kpss_test
 
 
 # ============================================================================
@@ -2381,7 +2381,7 @@ def run_spectral(ctx: DeviceContext, smoke: Bool, rounds: Int, size: String) rai
 # holtwinters
 #
 # THE ONLY LANE HERE WITH NO `*_main.mojo` OF ITS OWN. Its sizes are
-# TRANSCRIBED from `holtwinters/mojo_only/hw_check.mojo` (N = 72, FREQ = 12,
+# TRANSCRIBED from `holtwinters/original/hw_check.mojo` (N = 72, FREQ = 12,
 # BATCH = 7), which is a file that carries a `main`. Same rule and same
 # reason as the metrics sizes above: if that file's constants move, these
 # must move with them.

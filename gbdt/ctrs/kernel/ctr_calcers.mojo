@@ -24,7 +24,7 @@ change, it is not sized from shared memory, and it changes no arithmetic.
 `NonWeightedBinFreqCtrsImpl` additionally takes `elementsPerThreads = 4`
 (`ctr_calcers.cu:118`), which is theirs and is likewise scheduling.
 
-**So `mojo_only/kernel_matrix.mojo` gains nothing from this file, and that
+**So `original/kernel_matrix.mojo` gains nothing from this file, and that
 is a result rather than an omission.** It is also the reason this block was
 scoped as independent of the sort/scan lane: the kernels are the easy half,
 and the system around them -- the segmented scan, the sort, the permutation

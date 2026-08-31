@@ -125,14 +125,14 @@ abstraction is now replaced by cuML's actual files, pinned at `00094f7`:
 
 | ours | cuML |
 |---|---|
-| `ported/decisiontree/batched_levelalgo/split.mojo` | `split.cuh` |
-| `ported/decisiontree/batched_levelalgo/dataset.mojo` | `dataset.h` |
-| `ported/decisiontree/batched_levelalgo/objectives.mojo` | `objectives.cuh` |
-| `ported/decisiontree/batched_levelalgo/builder.mojo` | `builder.cuh` (`NodeQueue` + `Builder`) |
-| `ported/decisiontree/batched_levelalgo/kernels/builder_kernels.mojo` | `kernels/builder_kernels.cuh` |
-| `ported/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo` | `kernels/builder_kernels_impl.cuh` |
-| `ported/decisiontree/flatnode.mojo` | `cpp/include/cuml/tree/flatnode.h` |
-| `mojo_only/pcg_rng.mojo` | RAFT `random/detail/rng_device.cuh` + cuML's fnv1a32 chain |
+| `derived/decisiontree/batched_levelalgo/split.mojo` | `split.cuh` |
+| `derived/decisiontree/batched_levelalgo/dataset.mojo` | `dataset.h` |
+| `derived/decisiontree/batched_levelalgo/objectives.mojo` | `objectives.cuh` |
+| `derived/decisiontree/batched_levelalgo/builder.mojo` | `builder.cuh` (`NodeQueue` + `Builder`) |
+| `derived/decisiontree/batched_levelalgo/kernels/builder_kernels.mojo` | `kernels/builder_kernels.cuh` |
+| `derived/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo` | `kernels/builder_kernels_impl.cuh` |
+| `derived/decisiontree/flatnode.mojo` | `cpp/include/cuml/tree/flatnode.h` |
+| `original/pcg_rng.mojo` | RAFT `random/detail/rng_device.cuh` + cuML's fnv1a32 chain |
 
 What that buys, concretely: the node work queue, the frontier batching, the
 ragged-node `WorkloadInfo` scheme, the split record, the tie-break, the
@@ -171,7 +171,7 @@ the objectives, the RNG or the checks — none of which would be wasted.
    quantized once on the host by a power-of-two scale derived from the whole
    dataset's magnitude sum; every device accumulation is integer, so the answer
    is order-independent and identical across vendors. Implemented in
-   `mojo_only/fixed_point.mojo`. The scale had to be derived rather than copied
+   `original/fixed_point.mojo`. The scale had to be derived rather than copied
    from root's file, because this lane's exact split comparison cross-multiplies
    into `Int128` and a scale sized only for the accumulator overflows it — see
    the ledger entry for the arithmetic and the resolution schedule.

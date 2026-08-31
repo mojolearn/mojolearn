@@ -13,7 +13,7 @@ BINARY C-SVC ONLY, dense FP32, LINEAR and RBF. There is no SVR ENTRY
 POINT here, and as of 2026-08-31 that is a different statement from "there
 is no SVR". The six porting pieces rung 2 listed all landed; what has not
 landed is a single fixture that exercises them, so `SmoSolver.solve` raises
-for EPSILON_SVR with UNGATED as the reason (`svm/UNPORTED.tsv`, and the SVR
+for EPSILON_SVR with UNGATED as the reason (`svm/NOT_IMPLEMENTED.tsv`, and the SVR
 paragraph in `svm/README.md`). `param.svmType` below is still hard-written
 to `C_SVC`, so nothing reaches that refusal through this file, and `SVR`
 stays named in `mojolearn._NOT_YET` rather than left for a caller to
@@ -50,9 +50,9 @@ append their stages to the one file; the fit's stages are the 32 the
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
-from svm.ported.svm.smosolver import SmoTrace
-from svm.ported.svm.svc_impl import svc_fit, svc_predict
-from svm.ported.svm.svm_parameter import (
+from svm.derived.svm.smosolver import SmoTrace
+from svm.derived.svm.svc_impl import svc_fit, svc_predict
+from svm.derived.svm.svm_parameter import (
     C_SVC,
     KERNEL_LINEAR,
     KERNEL_RBF,
@@ -102,7 +102,7 @@ def _kernel_params(kernel: Int, gamma: Float64) raises -> KernelParams:
         raise Error(
             "svm: kernel=" + String(kernel) + " is not ported in rung 1;"
             + " only LINEAR (" + String(KERNEL_LINEAR) + ") and RBF ("
-            + String(KERNEL_RBF) + ") are (svm/UNPORTED.tsv)"
+            + String(KERNEL_RBF) + ") are (svm/NOT_IMPLEMENTED.tsv)"
         )
     return KernelParams(kernel, 3, gamma, 0.0)
 
@@ -121,14 +121,14 @@ def svc_fit_host(
 ) raises -> SvcFitOutputs:
     """`SVC(C, kernel, gamma, tol, max_iter, nochange_steps).fit(X, y)`,
     one shot. `x` is ROW-MAJOR `n_rows x n_cols` (theirs is column-major;
-    a layout, not an arithmetic, recorded in `svm/PORTED_MAP.tsv`).
+    a layout, not an arithmetic, recorded in `svm/DERIVATION_MAP.tsv`).
 
     `max_outer_iter` is fixed at -1, which is what cuML's own Python layer
     does at `svm_base.pyx:371` -- it is not on their Python surface either,
     and -1 becomes `max(100000, 100 * n_train)` in the solver.
 
     `cache_size` is fixed at 0, the `n_cache_sets == 0` arm, because the
-    `raft::cache` LRU is not ported (DEVIATION 871; `svm/UNPORTED.tsv`).
+    `raft::cache` LRU is not ported (DEVIATION 871; `svm/NOT_IMPLEMENTED.tsv`).
     `epsilon` is fixed at 0 and `svmType` at `C_SVC`; both would raise by
     name otherwise, and neither has a value a C-SVC caller could want.
 

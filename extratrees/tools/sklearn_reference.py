@@ -3,7 +3,7 @@
 """scikit-learn ExtraTrees as a QUALITY BAND for the `extratrees/` lane.
 
     Writes:    extratrees/tools/sklearn_reference.txt
-    Reads:     a dump produced by extratrees/mojo_only/fixture_parity_check.mojo
+    Reads:     a dump produced by extratrees/original/fixture_parity_check.mojo
     Explained: extratrees/tools/README_sklearn_reference.md
 
 THIS IS NOT A CORRECTNESS GATE, AND READING IT AS ONE IS A MISTAKE
@@ -62,7 +62,7 @@ bug a spot check misses and a cell-for-cell compare does not.
 
 WHAT IS MEASURED
 ----------------
-Eight fixtures, all from `extratrees/mojo_only/fixtures.mojo` at seed 20260821,
+Eight fixtures, all from `extratrees/original/fixtures.mojo` at seed 20260821,
 the same seed `fixtures_check.mojo` uses:
 
     hashed_cls              512 x 16, 3 classes.  Labels drawn from their OWN
@@ -129,7 +129,7 @@ class and tests on the other. A period-4 rule breaks both structures: it takes
 exactly half of every block of 4 and half of every parity class.
 
 USAGE
-    pixi run mojo run -I . extratrees/mojo_only/fixture_parity_check.mojo > /tmp/dump.txt
+    pixi run mojo run -I . extratrees/original/fixture_parity_check.mojo > /tmp/dump.txt
     pixi run -e bench python extratrees/tools/sklearn_reference.py --dump /tmp/dump.txt
 
     # parity only, no training, no file written:
@@ -189,7 +189,7 @@ N_SKLEARN_SEEDS = 21
 
 
 # ---------------------------------------------------------------------------
-# The generator, ported from `extratrees/mojo_only/fixtures.mojo`.
+# The generator, ported from `extratrees/original/fixtures.mojo`.
 #
 # Mojo's `UInt64` wraps; Python's `int` does not. Every arithmetic step below is
 # masked to 64 bits EXPLICITLY. Do not remove a mask because "the value is
@@ -756,7 +756,7 @@ def write_reference(
     w(f"split_rule {SPLIT_RULE}")
     w("")
 
-    w("# Fixture parity against extratrees/mojo_only/fixture_parity_check.mojo,")
+    w("# Fixture parity against extratrees/original/fixture_parity_check.mojo,")
     w("# compared on FLOAT BIT PATTERNS, cell for cell. The numbers written here")
     w("# are the actual comparison counts, not a shape calculation.")
     w(f"parity status {'EXACT' if parity.ok else 'MISMATCH'}")
@@ -824,7 +824,7 @@ def main() -> int:
     ap.add_argument(
         "--dump",
         required=True,
-        help="output of `mojo run -I . extratrees/mojo_only/fixture_parity_check.mojo`",
+        help="output of `mojo run -I . extratrees/original/fixture_parity_check.mojo`",
     )
     ap.add_argument(
         "--out",

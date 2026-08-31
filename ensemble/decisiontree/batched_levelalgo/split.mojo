@@ -44,7 +44,7 @@ rule is the identity on the BIN INDEX and is NOT the identity on the
 THRESHOLD. What follows is that the `quesval` a candidate carries through
 the reduction exists only as a tie-break key (`:181-188`); the threshold
 finally published for the node is always read back out of the quantiles
-array. `ensemble/mojo_only/split_check.mojo` arm D(iii) holds that to a
+array. `ensemble/original/split_check.mojo` arm D(iii) holds that to a
 per-node count -- it was written predicting no movement, measured 35 of 37,
 and the measurement was right.
 
@@ -171,7 +171,7 @@ NOT A DEVIATION, recorded so a reader does not go looking: `local_nLeft` is
 `unsigned long long` in `countLocalLeftKernel`
 (`kernels/builder_kernels_impl.cuh:79-81`). 64-bit integer atomics are a
 hard COMPILE error on Apple GPU (measured this session:
-`ensemble/mojo_only/atomic_width_probe.mojo`). The field keeps its Int64
+`ensemble/original/atomic_width_probe.mojo`). The field keeps its Int64
 width HERE, because nothing in this file atomically adds to it; the atomic
 width question belongs to the kernel that does, and is that lane's to
 record. What matters for this file is that `local_nLeft` takes no part in

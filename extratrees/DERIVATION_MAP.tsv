@@ -1,0 +1,26 @@
+# our_file	upstream_file	upstream	status	notes
+# cuML pinned at 00094f7 (branch-25.08) at ~/CascadeProjects/upstream/cuml.
+# RAFT pinned at 661a3b8 at ~/CascadeProjects/upstream/raft.
+# scikit-learn pinned at tag 1.9.0 (77def0e) at ~/CascadeProjects/upstream/scikit-learn;
+#   byte-identical to the .pyx shipped in this repo's `bench` pixi env (diffed 2026-08-21).
+# Paths are relative to each upstream repository root.
+# DIRECTORY RENAME: cuML's `batched-levelalgo` becomes `batched_levelalgo` here,
+#   because a Mojo package directory cannot contain a dash. Same reason
+#   `cuda_lib` became `gpu_lib` in gbdt/: the name is mechanical, not semantic.
+extratrees/derived/decisiontree/batched_levelalgo/split.mojo	cpp/src/decisiontree/batched-levelalgo/split.cuh:32-90	cuML	ported	Split + the total-order update + the DEVICE reduction (split.cuh:92-152); deviations 166-169
+extratrees/derived/decisiontree/batched_levelalgo/dataset.mojo	cpp/src/decisiontree/batched-levelalgo/dataset.h:22-38	cuML	ported	field for field; column-major
+extratrees/derived/decisiontree/batched_levelalgo/objectives.mojo	cpp/src/decisiontree/batched-levelalgo/objectives.cuh + bins.cuh	cuML+sklearn	ported	Gini, Entropy (DEVIATION 459) and MSE; shape theirs, selection arithmetic sklearn's _criterion.pyx for Gini/MSE and cuML's GainPerSplit for Entropy
+extratrees/derived/decisiontree/batched_levelalgo/builder.mojo	cpp/src/decisiontree/batched-levelalgo/builder.cuh:44-135,:556-599	cuML	partial	NodeQueue + SetLeafPredictions; Builder's device half unported
+extratrees/derived/decisiontree/batched_levelalgo/kernels/builder_kernels.mojo	kernels/builder_kernels.cuh:34-67,:152-248,:268-316	cuML	ported	structs, split_not_valid, both feature samplers
+extratrees/derived/decisiontree/batched_levelalgo/kernels/builder_kernels.mojo::plan_feature_sampling	cpp/src/decisiontree/batched-levelalgo/builder.cuh:398-471	cuML	ported	the three-arm sampler dispatch, constants included
+extratrees/derived/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo	kernels/builder_kernels_impl.cuh:43-88	cuML	partial	partitionSamples ported; computeSplitKernel REPLACED, DEVIATION 137
+extratrees/derived/decisiontree/flatnode.mojo	cpp/include/cuml/tree/flatnode.h:33-77	cuML	ported	+ TreeMetaDataNode and the predict traversal, decisiontree.cuh:394-413
+extratrees/derived/decisiontree/decisiontree.mojo	cpp/include/cuml/tree/decisiontree.hpp + cpp/src/decisiontree/decisiontree.cu:27-45	cuML	ported	params, defaults, validity_check; max_n_bins REFUSED, DEVIATION 138
+extratrees/original/pcg_rng.mojo	cpp/include/raft/random/detail/rng_device.cuh:546-683,:173-230	RAFT	ported	+ cuML's fnv1a32 chain, builder_kernels.cuh:100-113
+extratrees/original/fixed_point.mojo	(none)	-	original	no upstream counterpart; DEVIATION 135's ruling, following root original/fixed_point.mojo
+extratrees/original/host_splitter.mojo	sklearn/tree/_splitter.pyx:507-731	scikit-learn	ported	node_split_random, the EXACT oracle; deviations 130-136, 151-154
+extratrees/derived/randomforest/randomforest.mojo	cpp/src/randomforest/randomforest.cuh:50-90,:155-195,:223-256	cuML	partial	both `get_row_sample` arms since DEVIATION 460 (the bootstrap draw through core/philox, the RF lane's RAFT port); `store_bootstrap_mask` / OOB not carried
+extratrees/derived/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo::node_feature_range_kernel	kernels/builder_kernels_impl.cuh:216-340 (step 1 only)	cuML+paper	device	THE FIRST ENQUEUED KERNEL. Step 1 of DEVIATION 137; deviations 160-163.
+extratrees/derived/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo::build_workload_info	cpp/src/decisiontree/batched-levelalgo/builder.cuh:365-385	cuML	ported	lives in builder_kernels_impl.mojo for lane-ownership reasons; moving it to builder.mojo is a merge-time action
+extratrees/estimator.mojo	(none -- host-side policy)	-	original-class	sklearn's parameter names honoured or REFUSED BY NAME; closes DEVIATION 154's debt
+extratrees/derived/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo::node_feature_score_kernel	kernels/builder_kernels_impl.cuh:216-340 (steps 2-4)	cuML+paper	device	the draw and score pass; deviations 170-175

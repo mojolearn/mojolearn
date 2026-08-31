@@ -1,0 +1,73 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""The silhouette's pairwise distance, computed where the order is visible.
+
+NOT A PORT, and the twin of `neighbors/original/pinned_distance_tile.mojo`
+(DEVIATION 505): that tile is the EXPANDED L2 (`||q||^2 + ||y||^2 - 2 q.y`
+from precomputed norms), which is cuVS's `L2Expanded` arm. cuML's
+silhouette takes `DistanceType::L2SqrtUnexpanded` for its default
+`metric='euclidean'` (`python/cuml/cuml/metrics/pairwise_distances.pyx:50`,
+`silhouette_score.pyx` through `_determine_metric`), the UNEXPANDED formula
+`sqrt(sum_f (x_f - y_f)^2)`, a different arithmetic, so that tile cannot be
+called here and its discipline is mirrored instead:
+
+- one thread per cell, the feature axis walked ASCENDING, each `diff^2`
+  folded through `identical_mul_add` (row 9: one rounding, everywhere), each
+  stored intermediate through `ftz` (row 10), the root through
+  `identical_sqrt` (row 10's sqrt, DEVIATION 258: NVIDIA's stdlib sqrt is
+  approximate);
+- no shared-memory staging, no register tile, no k-split: nothing to pin
+  but the feature order, which is a pure function of `n_cols`.
+
+cuVS computes this with its Contractions tile kernel (`l2_unexp_distance`),
+whose inner fold is `acc = fma(diff, diff, acc)` per feature in a tiled
+order that is a function of the tile policy; that kernel is NOT ported
+(NOT_IMPLEMENTED.tsv) and the one-thread formula stands in under both modes.
+Under FAST the helpers are the naive chain and the stdlib sqrt; under
+IDENTICAL one arithmetic on every vendor.
+
+SIGNED ZERO AND NaN (IDENTITY_PATHS row 39): the accumulator is seeded
+`+0.0` and each step adds `diff * diff`, which is `>= +0.0` for every
+real `diff` (`(-0.0) * (-0.0)` is `+0.0`; a flushed subnormal square is
+`+0.0`), and `+0.0 + (+0.0)` is `+0.0` under round-to-nearest, so `acc`
+is never `-0.0` and `sqrt(acc)` is `+0.0` or positive, never `-0.0`
+(`identical_sqrt(+0.0)` returns `+0.0`, numerics.mojo). On a FINITE X no
+NaN can arise: `diff` is finite or `+-inf` (overflow of the subtraction),
+its square is finite or `+inf`, an all-nonnegative sum never forms
+`inf - inf`, and `sqrt` of a nonnegative is never NaN. The callers
+(silhouette's a/b sums, trustworthiness' rank compare) therefore never
+see a negative zero or a NaN distance; the `+inf` distance is handled by
+DEVIATION 656 in `sil_op` and compares as an ordinary largest value in
+the rank count.
+"""
+
+from original.numerics import ftz, identical_mul_add, identical_sqrt
+
+
+@always_inline
+def l2sqrt_unexpanded(
+    x: MutPointer[Float32, MutAnyOrigin], i: Int, j: Int, n_cols: Int
+) -> Float32:
+    """`sqrt(sum_f (x[i,f] - x[j,f])^2)`, row-major `x`, ascending f."""
+    var acc = Float32(0.0)
+    var bi = i * n_cols
+    var bj = j * n_cols
+    for f in range(n_cols):
+        var diff = ftz(ftz(x.unsafe_load(bi + f)) - ftz(x.unsafe_load(bj + f)))
+        acc = ftz(identical_mul_add(diff, diff, acc))
+    return ftz(identical_sqrt(acc))
+
+
+def host_l2sqrt_unexpanded(
+    x: List[Float32], i: Int, j: Int, n_cols: Int
+) -> Float32:
+    """The host twin, for the oracle: the same sequence through the same
+    helpers (on the host `identical_mul_add` is `std.math.fma` and
+    `identical_sqrt` is `portable_sqrtf` under IDENTICAL)."""
+    var acc = Float32(0.0)
+    var bi = i * n_cols
+    var bj = j * n_cols
+    for f in range(n_cols):
+        var diff = ftz(ftz(x[bi + f]) - ftz(x[bj + f]))
+        acc = ftz(identical_mul_add(diff, diff, acc))
+    return ftz(identical_sqrt(acc))

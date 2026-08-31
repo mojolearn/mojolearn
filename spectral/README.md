@@ -37,7 +37,7 @@ is STABLE under perturbation, because it is not.
 This section arrived as 4,536 lines of UNTRACKED work from a fan-out agent
 that died before committing anything. Two earlier rounds died the same
 way. It landed at `de4d388`, audited and renumbered, and the audit's
-findings are in `PORTED_MAP.tsv`, `UNPORTED.tsv` and section 3 here.
+findings are in `DERIVATION_MAP.tsv`, `NOT_IMPLEMENTED.tsv` and section 3 here.
 
 **No gate in this lane is GREEN, and none may be cited as one.** What is
 true, and the only thing that is:
@@ -74,15 +74,15 @@ true, and the only thing that is:
 
 Three roots, each with its constant prefix dropped:
 
-    raft   cpp/include/raft/   ->  spectral/ported/
-    cuml   cpp/src/            ->  spectral/ported/
-    cuvs   cpp/src/            ->  spectral/ported/cuvs/
+    raft   cpp/include/raft/   ->  spectral/derived/
+    cuml   cpp/src/            ->  spectral/derived/
+    cuvs   cpp/src/            ->  spectral/derived/cuvs/
 
 so `raft/sparse/solver/detail/lanczos.cuh` is
-`spectral/ported/sparse/solver/detail/lanczos.mojo` and can be diffed
+`spectral/derived/sparse/solver/detail/lanczos.mojo` and can be diffed
 against it side by side. The cuVS root keeps its `cuvs/` component
 because two of the three upstreams have a file called `spectral.cuh` and
-they are different algorithms (`UNPORTED.tsv` says which).
+they are different algorithms (`NOT_IMPLEMENTED.tsv` says which).
 
 ## 2. THE PINS, and the one that is missing
 
@@ -212,7 +212,7 @@ THE FIX, in two parts:
 
 ### 3.1 What checks out
 
-**`ported/sparse/solver/detail/lanczos.mojo` is the strong file.** Every
+**`derived/sparse/solver/detail/lanczos.mojo` is the strong file.** Every
 one of its roughly forty RAFT line citations was opened and confirmed:
 `lanczos_aux` (:247-399), `lanczos_solve_ritz` (:128-245),
 `lanczos_smallest` (:401-754), `lanczos_compute_eigenpairs` (:756-796),
@@ -270,7 +270,7 @@ port keeps two roundings in that order (`diagonal.cuh:216`).
   6. **The Jacobi `ROTATE` is two fmas where NR's C is four roundings**
      (DEVIATION 781), and **the sweep cap of 60 returns silently** where
      NR uses 50 and raises. Both CHOSEN, neither previously recorded.
-  7. **Two upstream oddities NOT ported, recorded in `UNPORTED.tsv`**: a
+  7. **Two upstream oddities NOT ported, recorded in `NOT_IMPLEMENTED.tsv`**: a
      dead `V_k_T` transpose theirs computes and never reads (`:644-647`),
      and transposed launch bounds at `:161-162` that happen to cover every
      row and move no bit.
@@ -281,7 +281,7 @@ port keeps two roundings in that order (`diagonal.cuh:216`).
      26.08 has no `coo_to_csr_matrix`. The self-loop rounding hazard
      between the two overloads does not arise on this path. It is still
      worth knowing that the two overloads round differently, so
-     `UNPORTED.tsv` keeps the mechanism and drops the alarm.
+     `NOT_IMPLEMENTED.tsv` keeps the mechanism and drops the alarm.
   9. **NEW, from the 26.08 tree: their dataset `fit_predict` hands
      `create_connectivity_graph` a PARTLY UNINITIALIZED params struct.**
      `cluster/detail/spectral.cuh:73-74` default-constructs
@@ -300,8 +300,8 @@ hidden, `alpha_i` living as both a device scalar and a host copy across
 
 ## 4. The k-means at the end is `cluster/`'s, not a second copy
 
-`ported/cuvs/cluster/detail/spectral.mojo` calls
-`cluster/ported/cluster/kmeans.mojo::fit_predict` with
+`derived/cuvs/cluster/detail/spectral.mojo` calls
+`cluster/derived/cluster/kmeans.mojo::fit_predict` with
 `oversampling_factor = 0.0` (classic k-means++, their dispatch's arm) and
 copies the device setup `cluster/estimator.mojo::kmeans_fit` performs.
 `cluster/` is READ and IMPORTED and is never edited from this lane.

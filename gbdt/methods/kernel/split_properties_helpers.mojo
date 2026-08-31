@@ -33,7 +33,7 @@ Ported here: `TPointwisePartOffsetsHelper`, the host-side
 and `ScanHistogramsImpl`.
 
 NOT ported, because they belong to the PAIRWISE family which this
-repository does not build (`gbdt/UNPORTED.tsv` already carries that family):
+repository does not build (`gbdt/NOT_IMPLEMENTED.tsv` already carries that family):
 `ConvertBlockToPart`, `GetPairwisePartIdToCalculate`,
 `TCmpBinsWithoutOneHot`, `TCmpBinsWithOneHot`, `TCmpBinsOneByteTrait`.
 
@@ -170,7 +170,7 @@ def shift_part_and_bin_sums_ptr[
     struct. Their `TDataPartition` is `{ui32 Offset; ui32 Size;}`, so part
     `p`'s SIZE is at `2 * p + 1` and its offset at `2 * p`. The `+ 1` is
     load-bearing and reading it off by one is not visible in half the
-    cases: gate P3 in `mojo_only/pointwise_offsets_check.mojo` has one pair
+    cases: gate P3 in `original/pointwise_offsets_check.mojo` has one pair
     whose smaller child is on the left and one whose smaller child is on
     the right precisely because reading `Offset` instead of `Size` gets the
     first pair RIGHT -- offsets ascend with the part id, so they order the

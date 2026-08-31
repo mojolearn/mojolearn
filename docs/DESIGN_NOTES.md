@@ -33,16 +33,16 @@ anywhere. Both are fixed; see `NOTICE`.
 
 | directory | upstream | what |
 |---|---|---|
-| `gbdt/`, `mojo_only/` | CatBoost | the GPU oblivious (symmetric) tree learner, control plane included |
+| `gbdt/`, `original/` | CatBoost | the GPU oblivious (symmetric) tree learner, control plane included |
 | `cluster/` | cuVS | k-means |
 | `neighbors/` | cuVS, RAFT, FAISS (MIT) | brute-force k-NN, the fused L2 kernel, ball cover, top-k selection |
 | `dbscan/` | cuML, RAFT | DBSCAN, epsilon-neighborhood, label merging |
 | `decomposition/` | cuML, RAFT | PCA and truncated SVD |
 | `glm/` | RAFT | ordinary least squares (`lstsqEig`, cuML's `olsFit` algo=1) |
 
-Every derivation is recorded per file in the `PORTED_MAP.tsv` beside each
+Every derivation is recorded per file in the `DERIVATION_MAP.tsv` beside each
 section, with a status of transliterated, partial, replaced, or substitute,
-and an `UNPORTED.tsv` naming what was deliberately left out.
+and an `NOT_IMPLEMENTED.tsv` naming what was deliberately left out.
 
 Renamed from `catboost-symmetric-trees` on 2026-08-19, because it stopped
 being one port.
@@ -118,7 +118,7 @@ GPU, pointwise objectives.
 **The tree mirrors CatBoost's tree, file for file, with their constant `catboost/cuda/` prefix dropped**, so a reviewer can put
 `gbdt/methods/.../hist_binary.mojo` beside their `hist_binary.cu` and diff
 them, and so "did we port this file?" is answered by `ls` rather than by
-reading. Anything with no CatBoost counterpart lives under `mojo_only/` and
+reading. Anything with no CatBoost counterpart lives under `original/` and
 has to justify its existence there.
 
 | stage | CatBoost source | port |
@@ -133,7 +133,7 @@ has to justify its existence there.
 | in-leaf reorder after a split | `.../split_points.cu` | `.../kernel/split_points.mojo` |
 | the level loop | `methods/greedy_subsets_searcher/structure_searcher_template.h`, `split_properties_helper.cpp` | `.../greedy_subsets_searcher/structure_searcher_template.mojo` |
 
-## The one thing here that is NOT a port: `mojo_only/numerics.mojo`
+## The one thing here that is NOT a port: `original/numerics.mojo`
 
 CatBoost ships one GPU backend and accepts a non-deterministic answer: its
 histogram flushes through `atomicAdd` on `float`, so two runs of the same fit
@@ -210,7 +210,7 @@ thing that can answer whether the shared substrate is actually shared or is
 quietly tree-shaped.
 
 **The first answer is in and it is a good one.** The fixed-point accumulator
-in `mojo_only/fixed_point.mojo`, written for the histogram flush, serves the
+in `original/fixed_point.mojo`, written for the histogram flush, serves the
 k-means centroid update unchanged.
 Its overflow argument transferred with one noun changed: "any leaf's rows are
 a subset of all rows" became "any cluster's rows are a subset of all rows",
@@ -219,7 +219,7 @@ none.
 
 k-means moved out of RAFT and into cuVS, so the mirror is two-layer:
 algorithms from cuVS into `cluster/gbdt/`, and the RAFT and cuBLAS
-primitives they call into `cluster/mojo_only/`. See `cluster/README.md`.
+primitives they call into `cluster/original/`. See `cluster/README.md`.
 
 `cluster/` is LAUNCHED and passing: 4 of 4 centroids recovered as a
 permutation, 0 of 512 rows misassigned, inertia within 0.3% of the
@@ -277,7 +277,7 @@ from and must travel with any redistribution.
 
 **Everything under `gbdt/` is a derivative work of CatBoost**, Copyright
 2017-2026 YANDEX LLC, Apache-2.0, translated from CUDA C++ into Mojo at commit
-`54a8143a`. `PORTED_MAP.tsv` maps each file to its origin.
+`54a8143a`. `DERIVATION_MAP.tsv` maps each file to its origin.
 
 **This is not a clean-room reimplementation and must not be described as one.**
 Clean-room means reproducing behavior from a specification without reading the

@@ -36,17 +36,17 @@ from std.os import getenv
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
-from spectral.mojo_only.spectral_fixture import blobs_fixture, hashed_graph_fixture
-from spectral.ported.cuvs.cluster.detail.spectral import (
+from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from spectral.original.spectral_fixture import blobs_fixture, hashed_graph_fixture
+from spectral.derived.cuvs.cluster.detail.spectral import (
     SpectralClusteringParams,
     fit_predict_dataset,
 )
-from spectral.ported.cuvs.preprocessing.spectral.detail.spectral_embedding import (
+from spectral.derived.cuvs.preprocessing.spectral.detail.spectral_embedding import (
     SpectralEmbeddingParams,
     transform_graph,
 )
-from spectral.ported.sparse.solver.detail.lanczos import spectral_sabotage_name
+from spectral.derived.sparse.solver.detail.lanczos import spectral_sabotage_name
 
 
 def _mode_name() -> String:

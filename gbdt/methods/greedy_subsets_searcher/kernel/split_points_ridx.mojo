@@ -3,7 +3,7 @@
 """DEVIATION 1902: at a split, move ONLY the row index.
 
 FAST-ARM LAUNCHER, routed by `ridx_only_splits_for`
-(`mojo_only/kernel_matrix.mojo`). No new kernel lives here -- every kernel
+(`original/kernel_matrix.mojo`). No new kernel lives here -- every kernel
 this file launches is `split_points.mojo`'s, unchanged -- because the whole
 deviation is a SCHEDULE: the stat planes stop being permuted at splits and
 every reader gathers them through the row index instead

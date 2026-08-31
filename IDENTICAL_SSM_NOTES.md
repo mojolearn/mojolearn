@@ -25,7 +25,7 @@ decision about the neural layer is made later against a written list.
    elementwise transcendentals (SiLU/sigmoid, softplus, exp, rsqrt: LANDED
    2026-08-23 as `portable_sigmoidf`/`portable_siluf`/`portable_softplusf`/
    `portable_rsqrtf`/`portable_log1pf` plus the division pin `portable_divf`,
-   `mojo_only/numerics.mojo`, IDENTITY_PATHS rows 49-54, Apple-gated only). There is **no pinned prefix scan or linear recurrence of
+   `original/numerics.mojo`, IDENTITY_PATHS rows 49-54, Apple-gated only). There is **no pinned prefix scan or linear recurrence of
    any kind, in any dtype, anywhere in this tree** (every existing scan is
    integer-typed: `core/block_scan.mojo`, `core/scan_by_key.mojo`,
    `gbdt/gpu_util/kernel/scan.mojo`), and MAX ships no device cumsum

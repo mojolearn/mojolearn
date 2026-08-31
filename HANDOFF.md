@@ -29,7 +29,7 @@ Half-byte replication is BACK ON, matching CatBoost
 **Root cause, and it was ours, not the kernel's.** CatBoost sums replicated
 partials with `atomicAdd(dst + fold, val)` on a FLOAT
 (`hist_half_byte.cu:45-51`) -- no scaling, no range limit. We quantize into
-an Int32 accumulator by `fixed_scale` (`mojo_only/fixed_point.mojo`). That
+an Int32 accumulator by `fixed_scale` (`original/fixed_point.mojo`). That
 scale comes from `choose_scale(mag)`, where `mag` must be a sum of absolute
 values that BOUNDS every partial the device forms.
 
@@ -76,7 +76,7 @@ selects. Nothing is forced by a vendor.
 So the range contract above is no longer live in the default build. Keep the
 lesson anyway, because IDENTICAL still pays it.
 
-`mojo_only/replicated_half_byte_check.mojo` compares a REPLICATED half-byte
+`original/replicated_half_byte_check.mojo` compares a REPLICATED half-byte
 histogram against a host tally at three arms, one block, many blocks, and a
 SABOTAGE arm. The sabotage's expectation FOLLOWS THE BUILD: under fixed point
 an unbounded scale must move cells, under the float atomic it must move none,
@@ -126,7 +126,7 @@ compiles and it self-checks, and no histogram launch goes through it.
   about 1% and the broken run was 22.3%, AND that most splits land on the
   three features the target is built from against thirteen noise features.
   The loss bar detects, the feature bar localises.
-- FIXED. `mojo_only/boosting_hist_check.mojo` failed at known-good commits,
+- FIXED. `original/boosting_hist_check.mojo` failed at known-good commits,
   and the assertion was fine while the FIXTURE was not. It built four
   asynchronous `enqueue_copy` calls out of ONE host staging buffer and
   mutated it between them, so the partition offset and the leaf id list

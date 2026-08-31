@@ -11,7 +11,7 @@ huggingface/transformers `d56c55b`. Changing any seam decision, any frozen
 constant or the stage list creates a v2; it does not amend v1.
 
 **Status, 2026-08-28: BUILT, GATED, AND IN PHASE 8 ON THREE COLUMNS.**
-`mojo_only/` holds `transformer_check.mojo`, `transformer_oracle.mojo`,
+`original/` holds `transformer_check.mojo`, `transformer_oracle.mojo`,
 `transformer_fixture.mojo` and the backward triple; the lane has thirteen
 sabotage arms and a 30-stage identity card in contract section 9's order.
 
@@ -49,7 +49,7 @@ Section 0 of the contract is the inventory, with file and line citations.
 The short version. RMSNorm, the residual add and SiLU come from the mamba
 lane and the numerics lane. Every projection AND the `q . k^T` product are
 `mojolearn.identical.gemm.fp32.v1` cells, certified three-vendor at
-`144aa5b`. Every transcendental comes from `mojo_only/numerics.mojo`.
+`144aa5b`. Every transcendental comes from `original/numerics.mojo`.
 `portable_sinf` for RoPE and `identical_fmax` for softmax's row maximum are
 the numerics lane's DEVIATIONS 820 and 825, landed 2026-08-24, cited here and
 not written here.
@@ -64,7 +64,7 @@ attention-weighted value sum. Nothing else.**
 | 0 | the contract. **LANDED**, this directory | done | no |
 | 1 | `transformer_fixture.mojo` and `transformer_oracle.mojo`, the NORMATIVE host oracle, built from `identical_mul_add`, `ftz` and the portable primitives so that it IS the contract rather than an opinion about it | moderate | no |
 | 2 | the separating fixtures in `transformer_check.mojo`. Every contested decision in contract sections 4 and 5 gets a fixture that refuses to pass unless the two alternatives produce different bits. A random-input hash is insufficient | moderate | no |
-| 3 | `ported/transformers/models/llama/modeling_llama.mojo`, the device spelling. One kernel per stage, MAX's `mha_gpu_naive` shape (one thread owns one score, one thread owns one output row), no shared memory and no warp primitive unless a clause names one | **large** | yes |
+| 3 | `derived/transformers/models/llama/modeling_llama.mojo`, the device spelling. One kernel per stage, MAX's `mha_gpu_naive` shape (one thread owns one score, one thread owns one output row), no shared memory and no warp primitive unless a clause names one | **large** | yes |
 | 4 | the device gates, clause (a) and clause (b), against the oracle at every gate shape | moderate | yes |
 | 5 | the KV cache and the decode path, then clauses (c) and (d) with their negative controls. **Clause (d) is what makes two of the sabotages non-inert; writing it late makes them look pointless** | moderate | yes |
 | 6 | the identity card and the sabotage ladder, all thirteen arms, one build each | moderate | yes |
@@ -83,14 +83,14 @@ None of these run today. They are written down so the lane lands on the same
 shape every other identity lane uses.
 
     # Phases 1-2, host only, no GPU:
-    pixi run mojo run -I . transformer/mojo_only/transformer_check.mojo
+    pixi run mojo run -I . transformer/original/transformer_check.mojo
 
     # both modes, the way the other identity gates do it:
-    tools/with_build_lock.sh     pixi run mojo run -I . transformer/mojo_only/transformer_check.mojo
-    tools/with_identical_mode.sh pixi run mojo run -I . transformer/mojo_only/transformer_check.mojo
+    tools/with_build_lock.sh     pixi run mojo run -I . transformer/original/transformer_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -I . transformer/original/transformer_check.mojo
 
     # Phases 4-6, the device gates and the card. Needs a GPU and the build lock:
-    tools/with_identical_mode.sh pixi run mojo run -I . transformer/mojo_only/transformer_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -I . transformer/original/transformer_check.mojo
 
     # Phase 7, the independent cross-check, two steps as the mamba lane does it:
     MOJOLEARN_TRANSFORMER_CORPUS_CASE=1 MOJOLEARN_TRANSFORMER_CORPUS_DUMP=<dir> \
@@ -106,7 +106,7 @@ names are `check-transformer-block` and `check-transformer-corpus`, beside
 | file | what |
 |---|---|
 | `IDENTICAL_TRANSFORMER_CONTRACT.md` | **the deliverable.** Twelve sections. The reuse inventory, the pinned reference, what one block call is, the profile constants, all twenty-three seams with their fused-or-unfused decisions, the softmax reduction order, why FlashAttention and SDPA are out of scope, decode equals prefill, the NaN and signed-zero audit, the thirty card stages, the six gated clauses with thirteen named sabotages, what is not claimed, and where this departs from the plan's sketch. |
-| `__init__.mojo`, `mojo_only/__init__.mojo`, `ported/__init__.mojo` | empty package markers. |
+| `__init__.mojo`, `original/__init__.mojo`, `derived/__init__.mojo` | empty package markers. |
 
 ## Two things a reader should not take from this directory
 

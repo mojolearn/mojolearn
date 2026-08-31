@@ -282,7 +282,7 @@ def update_partitions_and_plan_kernel(
     numbers `plan_level_kernel` loads, and every partition store is
     byte-identical to the unfused kernel's.
 
-    `plan_level_kernel` stays: `mojo_only/sibling_tiebreak_check.mojo`
+    `plan_level_kernel` stays: `original/sibling_tiebreak_check.mojo`
     exercises its tie rule, and `check-plan-fusion` gates THIS kernel's
     plan words against it on the same planted partitions.
 
@@ -1039,7 +1039,7 @@ def update_partition_stats_from_split_kernel(
 # leaf, from a host loop, to sort each leaf's range by the split flag. There
 # is no CUB in Mojo, so there is no line-for-line port of that call and a
 # reviewer diffing this file against theirs will find no counterpart for what
-# follows. It lives HERE rather than in `mojo_only/` because it replaces a
+# follows. It lives HERE rather than in `original/` because it replaces a
 # step of THIS module, and moving it elsewhere would leave the reorder
 # incomplete in the file that owns it.
 #

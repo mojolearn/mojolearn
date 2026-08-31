@@ -367,7 +367,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             gradient[bin*rowSize + cursorDim] = -total
 
         which is exact because the multinomial gradient sums to zero over
-        ALL numClasses. `mojo_only/multilogit_check.mojo` gates that
+        ALL numClasses. `original/multilogit_check.mojo` gates that
         identity on the kernel directly, which is what makes this line
         safe to write rather than merely plausible.
         """

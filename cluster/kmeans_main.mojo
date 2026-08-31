@@ -7,13 +7,13 @@ boosting side's and is under active edit by another session in this shared
 checkout; a second section adding imports to it would collide for no benefit.
 """
 
-from cluster.mojo_only.estimator_check import (
+from cluster.original.estimator_check import (
     check_kmeans_fit_recovers_planted,
     check_kmeans_fit_rejects_bad_shapes,
     check_kmeans_fit_weight_arms_agree,
     check_plan_sum_scale,
 )
-from cluster.mojo_only.kmeans_check import (
+from cluster.original.kmeans_check import (
     check_accumulate_veclen_dispatch,
     check_assignment_arm_dispatch,
     check_assignment_arms_match_oracle,

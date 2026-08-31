@@ -22,8 +22,8 @@ by the GBDT lane on `pointwise_targets.mojo` and closed there at 14 of 16
 producer sites with a fold of exactly this shape (DEVIATION 251).
 
 The unsupervised sections had the same residue at every `block.sum` they
-call -- `core/row_norms.mojo`, `cluster/mojo_only/reduce_by_key.mojo`,
-`cluster/mojo_only/plus_plus.mojo` -- and no equivalent. This file is that
+call -- `core/row_norms.mojo`, `cluster/original/reduce_by_key.mojo`,
+`cluster/original/plus_plus.mojo` -- and no equivalent. This file is that
 equivalent, and rows 19-24 of the ledger route through it.
 
 WHY IT IS A SECOND COPY, WHICH IS A COST AND IS DELIBERATE
@@ -42,7 +42,7 @@ sessions collide. The duplication is therefore a LANE boundary, not a
 judgement that two folds are fine.
 
 **The debt is named, not hidden:** the two must stay the same shape, and
-`check_pinned_fold_shape` in `cluster/mojo_only/kmeans_identity_check.mojo`
+`check_pinned_fold_shape` in `cluster/original/kmeans_identity_check.mojo`
 gates the property that matters -- that this fold is a pure function of the
 value vector and NOT of the lane width -- by folding the same inputs at
 several block widths and requiring the halving tree to agree with a host
@@ -68,7 +68,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import sum as block_sum
 from max.gpu.sync import barrier
 
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 
 @always_inline
@@ -129,7 +129,7 @@ def pinned_block_sum[block_size: Int](value: Float32) -> Float32:
 # Measured on an MI325X, 2026-08-23, by the E2 lane's AMD leg:
 # `bindings/build_estimators.sh` FAILED there, and the two call sites were
 # `block_max`/`block_min` at `SIGNFLIP_TPB = 32` in
-# `decomposition/ported/linalg/detail/pca.mojo`. So **PCA and truncated SVD
+# `decomposition/derived/linalg/detail/pca.mojo`. So **PCA and truncated SVD
 # did not build on AMD at all**, in either mode, while every gate on this
 # side was green -- a whole-section failure that one M4 cannot see and that
 # no amount of bit-comparison would have found, because there were no bits.

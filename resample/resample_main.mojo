@@ -43,7 +43,7 @@ there WITH `resample.theta` matching is a sort defect and nothing else.
 the same tree.
 
 The fixture performs no host floating-point operation on a hashed value; the
-integer fixtures are exact by construction (`resample/mojo_only/
+integer fixtures are exact by construction (`resample/original/
 resample_fixture.mojo`). Prints the first values as decimal AND hex, because
 `String(Float32)` does not round-trip in this toolchain.
 
@@ -53,21 +53,21 @@ NOTHING BELOW HAS BEEN RUN.
 from std.memory import bitcast
 from std.os import getenv
 
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 from resample.estimator import bootstrap_host
-from resample.mojo_only.intervals import (
+from resample.original.intervals import (
     ALT_TWO_SIDED,
     METHOD_BCA,
     method_from_name,
     method_name,
 )
-from resample.mojo_only.resample_fixture import (
+from resample.original.resample_fixture import (
     FIX_HASHED,
     build_sample,
     fixture_d,
     fixture_n,
 )
-from resample.mojo_only.statistics import (
+from resample.original.statistics import (
     STAT_DIFF_MEANS,
     STAT_MEAN,
     STAT_STD,

@@ -53,7 +53,7 @@ regardless of how the frontier was batched.
 **Price.** Bitwise parity with sklearn is off the table permanently. sklearn is
 therefore a QUALITY-BAND oracle only (holdout accuracy/MSE), never a gate. The
 exact oracle is a host-side transcription of `node_split_random` using OUR
-keyed draws — see `mojo_only/host_splitter.mojo`.
+keyed draws — see `original/host_splitter.mojo`.
 
 ---
 
@@ -194,7 +194,7 @@ downstream check from "exact, per cell" to "within eps" and make the same fit
 on Metal, CUDA and HIP three different models.
 
 **This is a port of a precedent in this repository, not a new idea.** Root's
-`mojo_only/fixed_point.mojo` already solves it for the GBDT learner, where
+`original/fixed_point.mojo` already solves it for the GBDT learner, where
 CatBoost flushes histograms with a float `atomicAdd` Metal does not have. Three
 of its ideas are taken unchanged with their reasoning: the bound comes from the
 WHOLE dataset once (any node's rows are a subset, so a scale that keeps the
@@ -234,8 +234,8 @@ gracefully above it. Against that, the float32 control in the same check
 disagrees with itself across summation orders (586.2111 forward, 586.2113
 reverse, 586.20996 pairwise) — which is the cost fixed point removes.
 
-**Implementation:** `mojo_only/fixed_point.mojo`, checked by
-`mojo_only/fixed_point_check.mojo` (8280 cells, seven sabotages).
+**Implementation:** `original/fixed_point.mojo`, checked by
+`original/fixed_point_check.mojo` (8280 cells, seven sabotages).
 
 **Consequence for `AggregateBin`.** `objectives.mojo` deliberately left its
 accumulator type a parameter pending this ruling. The device instantiates it
@@ -259,7 +259,7 @@ simply not ported yet, and rule 3 says an unported thing must be visible. A
 refusal is visible; a wrong answer is not.
 
 **Price.** Datasets with missing values are forfeit until this is ported.
-Tracked in `UNPORTED.tsv`.
+Tracked in `NOT_IMPLEMENTED.tsv`.
 
 ---
 
@@ -724,7 +724,7 @@ written rather than fixed, and the check asserts the NaN, because it is theirs.
 sklearn cannot reach the case — `min_samples_leaf >= 1` by validation.
 
 **Price.** Weighted samples are out of scope for the exact path.
-`sample_weight` is now listed in `UNPORTED.tsv`.
+`sample_weight` is now listed in `NOT_IMPLEMENTED.tsv`.
 
 ---
 
@@ -856,7 +856,7 @@ is countable whenever someone wants it. Unmeasured, deliberately.
 - `min_weight_leaf` is unreachable in the only configuration this port
   supports: `sample_weight=None` makes `weighted_n_left == n_left`, and
   sklearn's own `min_weight_fraction_leaf=0.0` makes the threshold zero.
-  `sample_weight` is already in `UNPORTED.tsv`.
+  `sample_weight` is already in `NOT_IMPLEMENTED.tsv`.
 - `monotonic_cst` has no field in `DecisionTreeParams` and no counterpart in
   cuML at all.
 
@@ -2305,7 +2305,7 @@ feature, having evaluated exactly one.
 **AND THAT MAKES IT CHEAP TO PORT EXACTLY.** The remaining features are drawn
 in a uniformly random order, so the first non-constant one in that order is
 UNIFORMLY DISTRIBUTED over the node's non-constant columns. `rescue_pick`
-(`mojo_only/rescue.mojo`) draws that choice directly, with RAFT's own
+(`original/rescue.mojo`) draws that choice directly, with RAFT's own
 `uniform_int_u32` on a key whose `feature_id` slot is `0xFFFFFFFF` -- a slot no
 column can occupy, so the choice of column is not correlated with that column's
 own threshold draw. Same distribution, one RNG draw instead of a sequential
@@ -3103,7 +3103,7 @@ histogram with the range pass), and CatBoost/cuML make no cross-vendor
 bit-identity claim at all; there is nothing to transcribe.
 
 **Ours.** Under `NUMERIC_IDENTICAL` (comptime `BUILD_MODE`, the
-`mojo_only/numerics.GLOBAL_NUMERIC_MODE` gate), the block fold runs over
+`original/numerics.GLOBAL_NUMERIC_MODE` gate), the block fold runs over
 `range_key(partial)` -- the SAME order-preserving UInt32 map the
 cross-block `Atomic.min/max` merge has used since DEVIATION 204 -- so the
 fold is an INTEGER min/max under a TOTAL order: any width, any grouping,
@@ -3261,7 +3261,7 @@ choice, the SECOND reason DEVIATION 199 recorded for that arm never being
 bit-identical to the host oracle even where `double` exists.
 
 **Ours.** Both helpers now return `identical_log(x)` / `identical_exp(x)`
-(`mojo_only/numerics.mojo`, commit `ed0fe5d`). Under FAST each wrapper IS
+(`original/numerics.mojo`, commit `ed0fe5d`). Under FAST each wrapper IS
 the stdlib call verbatim, so FAST bits cannot move; under IDENTICAL each
 is `portable_logf` / `portable_expf`, one Cephes polynomial through fma,
 one arithmetic on every backend. The wrappers were chosen over calling
@@ -3399,7 +3399,7 @@ full lane suite result is in the commit message.
 
 ---
 
-## DEVIATION 459 -- Entropy: cuML's float gain is the key, published as a FLOAT SEAM beside the integer Gini core (UNPORTED.tsv row 11 retired)
+## DEVIATION 459 -- Entropy: cuML's float gain is the key, published as a FLOAT SEAM beside the integer Gini core (NOT_IMPLEMENTED.tsv row 11 retired)
 
 **Theirs.** `EntropyObjectiveFunction` (`objectives.cuh:110-193` at
 `00094f7`): `GainPerSplit` (`:132-168`) is the information gain in `DataT`,
@@ -3444,7 +3444,7 @@ and device ORDER identically by construction; a device/host difference
 can only come from the gain BITS.
 
 **The log, and where its bits come from.** Every `raft::log` is
-`identical_log` (`mojo_only/numerics.mojo`, IDENTITY_PATHS row 12) --
+`identical_log` (`original/numerics.mojo`, IDENTITY_PATHS row 12) --
 the shape `ensemble/decisiontree/batched_levelalgo/objectives.mojo`'s
 DEVIATION 406 gave RF's entropy, with its `_log_seam` / `_ftz_seam`
 helpers copied. Under NUMERIC_FAST the wrapper IS `std.math.log`
@@ -3504,7 +3504,7 @@ et_clf_3class `2ed393e4c6085e0e`, et_clf_deep `3d78c1ea6e3ba776`, et_reg_cpu
 
 ---
 
-## DEVIATION 460 -- bootstrap=True: cuML's `get_row_sample` bootstrap arm, through the RF lane's Philox port; `max_samples` as sklearn resolves it (UNPORTED.tsv row 15 retired)
+## DEVIATION 460 -- bootstrap=True: cuML's `get_row_sample` bootstrap arm, through the RF lane's Philox port; `max_samples` as sklearn resolves it (NOT_IMPLEMENTED.tsv row 15 retired)
 
 **Theirs.** `randomforest.cuh:50-72`: `rs = fnv1a32(fnv1a32(basis,
 seed), tree_id)` (`:59-62`), `raft::random::Rng rng(rs, GenPhilox)`, and
@@ -3516,7 +3516,7 @@ n_rows, stream)` when `bootstrap` (`:64-67`) else `thrust::sequence`
 **Ours.** The `bootstrap == true` arm is ported on BOTH arms of the
 forest, and nothing about it is invented here:
 
-* the seed chain is `mojo_only/pcg_rng.mojo::row_sample_seed` -- their
+* the seed chain is `original/pcg_rng.mojo::row_sample_seed` -- their
   two lines on this lane's own `fnv1a32`, WITH the RF lane's DEVIATION
   400 (`ensemble/.../random_utils.mojo::fnv1a32_hash_seed_tree`): the
   high half of a 64-bit seed gets its round exactly when nonzero, so every
@@ -3817,7 +3817,7 @@ host-vs-device parity (both sides move together), and the build smoke.
 
 ## DEVIATION 1943 -- the frontier block is 512 threads on a 64-lane wavefront, 128 on a 32-lane warp
 
-**Where.** `ported/decisiontree/batched_levelalgo/builder.mojo`, `_device_tpb()`
+**Where.** `derived/decisiontree/batched_levelalgo/builder.mojo`, `_device_tpb()`
 (the one definition `DEVICE_TPB` reads); the measurement harness is
 `tools/et_profile_leg.sh`, the `et-profile` case of `tools/e2_remote_leg.sh`.
 
@@ -3911,7 +3911,7 @@ maximum).
 
 ## DEVIATION 1945 -- OPEN: the host `NodeQueue.push` is 88% of a higgs ET fit on the MI325X, and the 2026-08-28 speed arm did not show it
 
-**Where.** `ported/decisiontree/batched_levelalgo/builder.mojo`,
+**Where.** `derived/decisiontree/batched_levelalgo/builder.mojo`,
 `NodeQueue.push` (`builder.cuh:91-134` transcribed) and the push loop in
 `train_forest_*_device_timed` (`queues[seg_queue[t]].push(items_s,
 splits_s)`), clocked on its own since commit 9c8ffc23 as
@@ -3933,7 +3933,7 @@ droplet type and dataset (`bench/results/fast_speed/2026-08-28-AMD-forest-higgs.
 commit 4f6a17a) read 18294 ms at 1M, five rounds within 0.4%, and 18.3 s
 is what the two GPU passes cost at TPB 128 plus a few hundred ms; a 52 s
 push cannot have been inside it. `git diff 4f6a17a..9c8ffc23 --
-extratrees/ported/decisiontree/` touches only `_device_tpb` and the
+extratrees/derived/decisiontree/` touches only `_device_tpb` and the
 clock, so the push code is the same in both runs. The cost grows faster
 than the node count (1.83M nodes -> 52 s, 2.17M nodes -> 75 s; 29 -> 34 us
 per pushed node), which is the signature of a per-item cost proportional

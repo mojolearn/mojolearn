@@ -7,7 +7,7 @@ Separate from `knn_main.mojo` on purpose: warpsort is not wired into
 without touching a file another lane is in.
 """
 
-from neighbors.mojo_only.warpsort_check import (
+from neighbors.original.warpsort_check import (
     check_warpselect_matches_oracle,
     check_warpselect_reach_by_sabotage,
     check_warpsort_matches_radix,

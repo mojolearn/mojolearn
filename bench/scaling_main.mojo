@@ -20,9 +20,9 @@ with the scikit-learn one and compare per size.
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
 
-from dbscan.ported.dbscan.dbscan import dbscan_fit_impl
-from dbscan.ported.dbscan.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC
-from neighbors.ported.neighbors.detail.knn_brute_force import (
+from dbscan.derived.dbscan.dbscan import dbscan_fit_impl
+from dbscan.derived.dbscan.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC
+from neighbors.derived.neighbors.detail.knn_brute_force import (
     brute_force_knn_impl,
     compute_norms,
 )

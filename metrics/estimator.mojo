@@ -41,22 +41,22 @@ arithmetic: nothing here computes, it only moves bytes and forwards.
 
 from max.gpu.host import DeviceContext
 
-from metrics.mojo_only.device_io import download_f32, upload_f32, upload_i32
-from metrics.ported.metrics.accuracy_score import accuracy_score_py
-from metrics.ported.metrics.adjusted_rand_index import adjusted_rand_index
-from metrics.ported.metrics.completeness_score import completeness_score
-from metrics.ported.metrics.entropy import entropy
-from metrics.ported.metrics.homogeneity_score import homogeneity_score
-from metrics.ported.metrics.kl_divergence import kl_divergence
-from metrics.ported.metrics.mutual_info_score import mutual_info_score
-from metrics.ported.metrics.r2_score import r2_score_py
-from metrics.ported.metrics.rand_index import rand_index
-from metrics.ported.metrics.silhouette_score_batched_float import (
+from metrics.original.device_io import download_f32, upload_f32, upload_i32
+from metrics.derived.metrics.accuracy_score import accuracy_score_py
+from metrics.derived.metrics.adjusted_rand_index import adjusted_rand_index
+from metrics.derived.metrics.completeness_score import completeness_score
+from metrics.derived.metrics.entropy import entropy
+from metrics.derived.metrics.homogeneity_score import homogeneity_score
+from metrics.derived.metrics.kl_divergence import kl_divergence
+from metrics.derived.metrics.mutual_info_score import mutual_info_score
+from metrics.derived.metrics.r2_score import r2_score_py
+from metrics.derived.metrics.rand_index import rand_index
+from metrics.derived.metrics.silhouette_score_batched_float import (
     silhouette_score,
 )
-from metrics.ported.metrics.trustworthiness import trustworthiness_score
-from metrics.ported.metrics.v_measure import v_measure
-from metrics.ported.stats.detail.batched.silhouette_score import (
+from metrics.derived.metrics.trustworthiness import trustworthiness_score
+from metrics.derived.metrics.v_measure import v_measure
+from metrics.derived.stats.detail.batched.silhouette_score import (
     DISTANCE_L2_SQRT_UNEXPANDED,
 )
 

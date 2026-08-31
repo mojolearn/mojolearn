@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Entry point for the DBSCAN checks."""
 
-from dbscan.mojo_only.dbscan_check import (
+from dbscan.original.dbscan_check import (
     check_dbscan,
     check_dbscan_eps_sensitivity,
     check_dbscan_batching_agrees,

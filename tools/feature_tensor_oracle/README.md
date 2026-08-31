@@ -3,7 +3,7 @@
 CatBoost's own source text, compiled by clang, printing the canonical form,
 hash, ordering and subset relation of 52 tensor fixtures plus an 800-tensor
 collision sweep. Its output is embedded verbatim in
-`mojo_only/feature_tensor_check.mojo`, so the check is self-contained and
+`original/feature_tensor_check.mojo`, so the check is self-contained and
 this directory only has to be rebuilt when a fixture changes.
 
     c++ -std=c++17 -O2 -I ../cityhash_oracle \

@@ -26,7 +26,7 @@ and none is published. The ROW 39 AUDIT section below (2026-08-23) is the
 signed-zero / NaN / FAST-assertion audit; DEVIATIONS 635-637 came out of it.
 
 **SVR, 2026-08-31: PORTED, UNGATED, AND STILL REFUSING.** All six pieces
-`UNPORTED.tsv` rung 2 listed are in the tree: the scope check, the
+`NOT_IMPLEMENTED.tsv` rung 2 listed are in the tree: the scope check, the
 `n_train = 2 * n_rows` domain in `SmoSolver` and `Results`, `SvrInit`
 (`f = +-epsilon - y` and the `+-1` label vector), `UpdateF`'s second gemv on
 `f + n_rows`, `CombineCoefs`' fold of the two alpha halves, and
@@ -64,13 +64,13 @@ decision"), kernels `POLYNOMIAL` / `TANH` / `PRECOMPUTED`, `sample_weight`
 sparse input; and, DEVIATION 636, non-finite `C`, `tol`, RBF `gamma` (or a
 negative one), and any non-finite cell of `X`, `labels` or the predict `X`
 (`check_nan_never_recorded` gates all of them). `probability` is not in
-their C++ surface. Full table: `svm/UNPORTED.tsv`.
+their C++ surface. Full table: `svm/NOT_IMPLEMENTED.tsv`.
 
-Files: `svm/ported/svm/{svm_parameter,smo_sets,ws_util,workingset,
+Files: `svm/derived/svm/{svm_parameter,smo_sets,ws_util,workingset,
 kernelcache,smoblocksolve,smosolver,results,svc_impl}.mojo`,
-`svm/ported/distance/kernel_matrices.mojo`, `svm/mojo_only/
+`svm/derived/distance/kernel_matrices.mojo`, `svm/original/
 {device_select,pinned_argreduce,smo_oracle,svc_check}.mojo`,
-`svm/svc_main.mojo`, `svm/PORTED_MAP.tsv`, `svm/UNPORTED.tsv`.
+`svm/svc_main.mojo`, `svm/DERIVATION_MAP.tsv`, `svm/NOT_IMPLEMENTED.tsv`.
 
 ## THE IDENTITY CONTENT, written before the code
 
@@ -98,7 +98,7 @@ and `K(x, x)` can come out a hair above 1.
 Ours, ONE spelling, its rounding sequence stated:
 
     dot     = GEMM (OP_NT)      FAST: core/gemm.mojo::gemm_nt (MAX matmul, the
-                                cuBLAS stand-in); IDENTICAL: gemm/mojo_only/
+                                cuBLAS stand-in); IDENTICAL: gemm/original/
                                 gemm_identical.mojo::identical_gemm, profile
                                 mojolearn.identical.gemm.fp32.v1 (serial chain
                                 for k <= 128, leaves + the fixed balanced tree
@@ -118,7 +118,7 @@ be mirrored on this column at all; and the device `exp` differs per vendor
 (IDENTITY_PATHS row 12). The measurement is `check_rbf_float_vs_double_reference`
 in `svc_check.mojo`: the max ULP distance of our K against the host Float64
 reference of THEIR spelling. The pinned-tile spelling
-(`neighbors/mojo_only/pinned_distance_tile.mojo`, `fma(-2, dot, nx+ny)`
+(`neighbors/original/pinned_distance_tile.mojo`, `fma(-2, dot, nx+ny)`
 clamped at zero) is NOT used: it is a different association and a clamp
 they do not have, and mirroring their rounding sequence is the point.
 
@@ -232,7 +232,7 @@ Rung 1 PORTS THE STRUCTURE (`KernelCache` with `InitWorkingSet`,
 `getNextBatchKernel`, the `n_rows` batching) and takes THEIR `cache_size ==
 0` path exactly (`raft::cache::Cache` with `n_cache_sets = 0`: every
 `if (batch_cache.GetSize() > 0)` is skipped and `ws_idx_mod == ws_idx`).
-`cache_size > 0` is REFUSED BY NAME and recorded in `UNPORTED.tsv`; it is
+`cache_size > 0` is REFUSED BY NAME and recorded in `NOT_IMPLEMENTED.tsv`; it is
 not a silent substitute.
 
 ## Commands and outputs (2026-08-23, one M4)
@@ -348,19 +348,19 @@ audit found in `svm/`, site by site.
 
 | site | what it is | can +-0 / NaN reach it | verdict |
 |---|---|---|---|
-| `mojo_only/pinned_argreduce.mojo` `pinned_block_argmin` / `pinned_block_argmax` | halving-tree arg-reductions, `ov < mv or (ov == mv and ok < mk)` | YES both zeros (f = +0.0 on the margin; f = -0.0 from a negative subnormal flushed at the f seam, row 10); NaN no (DEVIATIONS 636/637) | KEY-DECIDED: `==` is TRUE on (+0,-0) on every vendor, so the training index decides and the returned value is that sample's own bits; no hardware min/max. Kept, commented, gated (Z) |
-| `mojo_only/pinned_argreduce.mojo` `pinned_block_max_all` (pre-audit `f_max`) | strict-`>` halving tree, no key | YES both zeros | DEFECT, fixed: on a (+0,-0) tie nothing updates, so the survivor was the tree POSITION's (not "lowest index": with masked lanes the survivor can be a higher position), and the oracle's serial scan keeps the FIRST index -- device diff = +0.0 vs oracle diff = -0.0 with f_u = +0.0 (`svm.iterNNN.diff` is recorded). **DEVIATION 635**: `f_max` is now the key-tied argmax; the oracle's scan carries the same tie. The old fold survives only as the `SAB_FMAX_NOKEY` sabotage arm |
-| `ported/svm/smoblocksolve.mojo` `if eta < ETA_EPS: eta = ETA_EPS` (x2) | the `max(eta, 1e-12)` floor of theirs | -0.0 eta YES (`Kd_t + Kd_u == 2*Kui` exactly gives +0.0; -0.0 only via a flushed negative subnormal difference) | a COMPARE, not a hardware max: `-0.0 < 1e-12` is TRUE on every vendor, so ETA_EPS results regardless of operand orientation; NaN eta needs a NaN kernel cell (overflow), raised by DEVIATION 637 before any record. Commented |
-| `ported/svm/smoblocksolve.mojo` `tmp_l if tmp_l < q_l else q_l`, `tmp_u if tmp_u < tmp_l2 else tmp_l2` | the alpha-step clip (their `min`) | NO: `alpha` starts at +0.0 and every `a +- q*y` with `0 <= q <= min(tmp_u, tmp_l)` stays in `[+0.0, C]` (exact zero is +0.0 in RN, a positive subnormal flushes to +0.0), so `a`, `C - a`, `q_l = (f - f_u)/eta` (f_u < f) are `>= +0.0` with the sign bit clear | PROVEN UNREACHABLE (comment in the file header) |
-| `ported/svm/smoblocksolve.mojo` `diff_end = eps if eps > d10 else d10` | their `max(eps, 0.1*diff)` | d10 = -0.0 YES (diff = -0.0, see Z order A) | compare-select; `eps > -0.0` TRUE (eps > 0 refused otherwise) -> eps on every vendor |
-| `ported/svm/smosolver.mojo` `check_stopping_condition` (`abs`, `<`, `>` on diff) | host Float64 rule | diff = -0.0 YES | host arithmetic, sign-insensitive (`abs`, `-0.0 < tol` TRUE); the raw diff bits are recorded as `svm.iterNNN.diff` and are the same on device and oracle (Z gate) |
-| `ported/svm/workingset.mojo` + `mojo_only/device_select.mojo::twiddle_keys_kernel` | the working-set order | both zeros YES | INTEGER KEYS: `-0.0` twiddles to 0x7FFFFFFF, `+0.0` to 0x80000000, so -0.0 sorts strictly BEFORE +0.0 (cub's own order), deliberately; ties on index. No float compare. Gated by F3.dup |
-| `mojo_only/device_select.mojo` `serial_min_f32_kernel` / `serial_max_f32_kernel` (`CalcB` bound-only arm) | one-thread strict `<` / `>` scans | both zeros YES (f) | FIRST INDEX in training order wins (the compaction preserves index order); the oracle's `_results` scan has the same rule; a NaN at index 0 would persist but none reaches here. Commented both sides |
-| `ported/svm/results.mojo` `b = ftz(-s / n)`, `-ftz(b_up + b_low)/2` | the intercept | `b = -0.0` YES (all free f = +0.0 -> s = +0.0 -> b = -0.0), recorded as `svm.b` | negation and division are IEEE-defined, no `nsz` rewrite on any of the three (row 39 table); device = oracle bitwise |
-| `ported/svm/svc_impl.mojo` `decision_kernel` `val = ftz(acc + b)`, `label0 if val < 0 else label1` | predict | `b = -0.0` YES; `val = +0.0` | `(+0) + (-0) = +0`; `-0.0 < 0` FALSE = `+0.0 < 0` FALSE, so the class cannot depend on the zero's sign; the host `n_support == 0` arm spells the same `0.0 + b` |
-| `ported/distance/kernel_matrices.mojo` `rbf_kernel_expanded_kernel` | `s = (nx + ny) - 2 dot`, `e = -gamma * s`, `exp(e)` | `s = -0.0` NO (norms are `>= +0.0` chains from +0.0; `a - b` is +0.0 when equal); `s < 0` from cancellation YES -> `exp(+small) > 1`, finite, as theirs; `e = -0.0` YES (`-gamma * (+0.0)`) -> `identical_exp(-0.0) = 1.0` | no max/min/sqrt on the path; NaN only from `gamma = inf` (refused, DEVIATION 636) or an overflowed norm (DEVIATION 637) |
-| `ported/svm/kernelcache.mojo` | `if b < 1`, `w1 if w1 > w2` ... | integers (tile sizing) | not numeric |
-| `mojo_only/svc_check.mojo`, `mojo_only/smo_oracle.mojo` (`abs`, `<`, `>` in the host gates) | tolerance gates and the oracle's scans | host only | oracle scans now carry the DEVIATION 635 tie (`_block_solve`), the CalcB scans commented |
+| `original/pinned_argreduce.mojo` `pinned_block_argmin` / `pinned_block_argmax` | halving-tree arg-reductions, `ov < mv or (ov == mv and ok < mk)` | YES both zeros (f = +0.0 on the margin; f = -0.0 from a negative subnormal flushed at the f seam, row 10); NaN no (DEVIATIONS 636/637) | KEY-DECIDED: `==` is TRUE on (+0,-0) on every vendor, so the training index decides and the returned value is that sample's own bits; no hardware min/max. Kept, commented, gated (Z) |
+| `original/pinned_argreduce.mojo` `pinned_block_max_all` (pre-audit `f_max`) | strict-`>` halving tree, no key | YES both zeros | DEFECT, fixed: on a (+0,-0) tie nothing updates, so the survivor was the tree POSITION's (not "lowest index": with masked lanes the survivor can be a higher position), and the oracle's serial scan keeps the FIRST index -- device diff = +0.0 vs oracle diff = -0.0 with f_u = +0.0 (`svm.iterNNN.diff` is recorded). **DEVIATION 635**: `f_max` is now the key-tied argmax; the oracle's scan carries the same tie. The old fold survives only as the `SAB_FMAX_NOKEY` sabotage arm |
+| `derived/svm/smoblocksolve.mojo` `if eta < ETA_EPS: eta = ETA_EPS` (x2) | the `max(eta, 1e-12)` floor of theirs | -0.0 eta YES (`Kd_t + Kd_u == 2*Kui` exactly gives +0.0; -0.0 only via a flushed negative subnormal difference) | a COMPARE, not a hardware max: `-0.0 < 1e-12` is TRUE on every vendor, so ETA_EPS results regardless of operand orientation; NaN eta needs a NaN kernel cell (overflow), raised by DEVIATION 637 before any record. Commented |
+| `derived/svm/smoblocksolve.mojo` `tmp_l if tmp_l < q_l else q_l`, `tmp_u if tmp_u < tmp_l2 else tmp_l2` | the alpha-step clip (their `min`) | NO: `alpha` starts at +0.0 and every `a +- q*y` with `0 <= q <= min(tmp_u, tmp_l)` stays in `[+0.0, C]` (exact zero is +0.0 in RN, a positive subnormal flushes to +0.0), so `a`, `C - a`, `q_l = (f - f_u)/eta` (f_u < f) are `>= +0.0` with the sign bit clear | PROVEN UNREACHABLE (comment in the file header) |
+| `derived/svm/smoblocksolve.mojo` `diff_end = eps if eps > d10 else d10` | their `max(eps, 0.1*diff)` | d10 = -0.0 YES (diff = -0.0, see Z order A) | compare-select; `eps > -0.0` TRUE (eps > 0 refused otherwise) -> eps on every vendor |
+| `derived/svm/smosolver.mojo` `check_stopping_condition` (`abs`, `<`, `>` on diff) | host Float64 rule | diff = -0.0 YES | host arithmetic, sign-insensitive (`abs`, `-0.0 < tol` TRUE); the raw diff bits are recorded as `svm.iterNNN.diff` and are the same on device and oracle (Z gate) |
+| `derived/svm/workingset.mojo` + `original/device_select.mojo::twiddle_keys_kernel` | the working-set order | both zeros YES | INTEGER KEYS: `-0.0` twiddles to 0x7FFFFFFF, `+0.0` to 0x80000000, so -0.0 sorts strictly BEFORE +0.0 (cub's own order), deliberately; ties on index. No float compare. Gated by F3.dup |
+| `original/device_select.mojo` `serial_min_f32_kernel` / `serial_max_f32_kernel` (`CalcB` bound-only arm) | one-thread strict `<` / `>` scans | both zeros YES (f) | FIRST INDEX in training order wins (the compaction preserves index order); the oracle's `_results` scan has the same rule; a NaN at index 0 would persist but none reaches here. Commented both sides |
+| `derived/svm/results.mojo` `b = ftz(-s / n)`, `-ftz(b_up + b_low)/2` | the intercept | `b = -0.0` YES (all free f = +0.0 -> s = +0.0 -> b = -0.0), recorded as `svm.b` | negation and division are IEEE-defined, no `nsz` rewrite on any of the three (row 39 table); device = oracle bitwise |
+| `derived/svm/svc_impl.mojo` `decision_kernel` `val = ftz(acc + b)`, `label0 if val < 0 else label1` | predict | `b = -0.0` YES; `val = +0.0` | `(+0) + (-0) = +0`; `-0.0 < 0` FALSE = `+0.0 < 0` FALSE, so the class cannot depend on the zero's sign; the host `n_support == 0` arm spells the same `0.0 + b` |
+| `derived/distance/kernel_matrices.mojo` `rbf_kernel_expanded_kernel` | `s = (nx + ny) - 2 dot`, `e = -gamma * s`, `exp(e)` | `s = -0.0` NO (norms are `>= +0.0` chains from +0.0; `a - b` is +0.0 when equal); `s < 0` from cancellation YES -> `exp(+small) > 1`, finite, as theirs; `e = -0.0` YES (`-gamma * (+0.0)`) -> `identical_exp(-0.0) = 1.0` | no max/min/sqrt on the path; NaN only from `gamma = inf` (refused, DEVIATION 636) or an overflowed norm (DEVIATION 637) |
+| `derived/svm/kernelcache.mojo` | `if b < 1`, `w1 if w1 > w2` ... | integers (tile sizing) | not numeric |
+| `original/svc_check.mojo`, `original/smo_oracle.mojo` (`abs`, `<`, `>` in the host gates) | tolerance gates and the oracle's scans | host only | oracle scans now carry the DEVIATION 635 tie (`_block_solve`), the CalcB scans commented |
 
 No site in `svm/` calls `std.math.max/min` on floats, `SIMD.reduce_max/min`,
 `.clamp()`, `Atomic.min/max`, `copysign`, or `core/pinned_reduce.mojo`'s
@@ -447,9 +447,9 @@ under FAST (a fast-math build may fold `x != x`).
 
 - IDENTITY_PATHS.md: row 44 is this lane's (assigned at `633a562`); the
   row text above is its current state after the row-39 audit.
-- `mojo_only/numerics.mojo`: no change needed for rung 1. A `TANH` kernel
+- `original/numerics.mojo`: no change needed for rung 1. A `TANH` kernel
   port would need an `identical_tanh`; not requested.
-- `core/pinned_reduce.mojo`: `svm/mojo_only/pinned_argreduce.mojo` is the
+- `core/pinned_reduce.mojo`: `svm/original/pinned_argreduce.mojo` is the
   argmin/argmax-with-index sibling of `pinned_block_max/min` (same halving
   shape, explicit key tie-break). If the identity lane wants ONE home for
   it, move it beside them; no other caller yet.
@@ -461,7 +461,7 @@ under FAST (a fast-math build may fold `x != x`).
   written in this rung): `svc_fit(ctx, x_row_major, labels, n_rows, n_cols,
   SvmParameter, KernelParams, card, trace) -> SvmModel` and
   `svc_predict(ctx, model, x, n_rows, n_cols, KernelParams, buffer_size_mib,
-  predict_class, card) -> List[Float32]`, in `svm/ported/svm/svc_impl.mojo`.
+  predict_class, card) -> List[Float32]`, in `svm/derived/svm/svc_impl.mojo`.
   sklearn-shaped defaults a wrapper should map: `C=1.0, kernel='rbf',
   gamma='scale' -> 1/(n_features * X.var()) computed on the host before the
   call (their python does the same, `svm_base.pyx:305`), `tol=1e-3,

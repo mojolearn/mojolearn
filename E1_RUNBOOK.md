@@ -16,7 +16,7 @@ on an M4 (Metal) and an MI300X (HIP/CDNA).
 - AMD box: AMD Developer Cloud MI300X droplet (activation:
   developer.amd.com profile → GPU Droplets console → Create; the $100
   credit is ~50 MI300X hours). `pixi.toml` already locks `linux-64`.
-- Both sides flip `mojo_only/numerics.mojo:74` to `NUMERIC_IDENTICAL`
+- Both sides flip `original/numerics.mojo:74` to `NUMERIC_IDENTICAL`
   for the whole session and NEVER commit the flip (`git diff` must show
   only that line; revert before ending). On AMD this is not optional:
   the hist-2 shared-slice layouts carry `comptime assert LANE_WIDTH ==
@@ -66,7 +66,7 @@ machine that fails its own gates teaches nothing.
 
 ## Phase 3 — the card diff (the actual E1)
 
-**Mojo-only cards (E2).** Four training paths have no Python surface and so fall outside `tools/e2_matrix_fit.py`: depthwise growth, lossguide growth, `MultiClassOneVsAll`, and the feature-parallel searcher. `tools/e2_mojo_cards.sh <out_dir>` emits one card each (`gbdt_depthwise.card`, `gbdt_lossguide.card`, `gbdt_multiclass_ova.card`, `gbdt_feature_parallel.card`; one fit per file, hashed fixtures that are pure functions of constants, machine-independent tags) via `mojo_only/e2_growth_cards.mojo` (pixi task `e2-growth-cards`), runs the set a second time into `<out_dir>/control/` as the run-to-run control, and writes `<out_dir>/e2_mojo_cards.json` (name, record count, description, `control_match`, numeric mode). A card whose control does not match under FAST is read only under IDENTICAL. The feature-parallel card is OUTPUT-LEVEL (splits + docBins; that searcher has no in-searcher trace plumbing). Diff them exactly like the Python cards below.
+**Mojo-only cards (E2).** Four training paths have no Python surface and so fall outside `tools/e2_matrix_fit.py`: depthwise growth, lossguide growth, `MultiClassOneVsAll`, and the feature-parallel searcher. `tools/e2_mojo_cards.sh <out_dir>` emits one card each (`gbdt_depthwise.card`, `gbdt_lossguide.card`, `gbdt_multiclass_ova.card`, `gbdt_feature_parallel.card`; one fit per file, hashed fixtures that are pure functions of constants, machine-independent tags) via `original/e2_growth_cards.mojo` (pixi task `e2-growth-cards`), runs the set a second time into `<out_dir>/control/` as the run-to-run control, and writes `<out_dir>/e2_mojo_cards.json` (name, record count, description, `control_match`, numeric mode). A card whose control does not match under FAST is read only under IDENTICAL. The feature-parallel card is OUTPUT-LEVEL (splits + docBins; that searcher has no in-searcher trace plumbing). Diff them exactly like the Python cards below.
 
 **Linear-algebra cards (rows 27-32).** `core/gemm.mojo` has no Python
 binding either, so the matrix products and OLS produce their own cards:

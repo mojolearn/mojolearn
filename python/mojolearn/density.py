@@ -51,7 +51,7 @@ class DBSCAN(NumericModeMixin):
                                        seven clusters for one, silently
         metric               refused   anything but 'euclidean': the ported
                                        eps kernels carry only L2
-                                       (dbscan/ported/neighbors/
+                                       (dbscan/derived/neighbors/
                                        epsilon_neighborhood.mojo; cuML's own
                                        runner.cuh:152-156 downgrades every
                                        other metric to L2Sqrt as well)
@@ -62,7 +62,7 @@ class DBSCAN(NumericModeMixin):
                                        not return theirs either)
 
     **`algorithm='rbc'` IS THE DEFAULT AND IT IS NOT cuML's** (DEVIATION 35,
-    `dbscan/ported/dbscan/runner.mojo`): cuML's Python default is `'brute'`,
+    `dbscan/derived/dbscan/runner.mojo`): cuML's Python default is `'brute'`,
     and on an int32-label build like this one cuML's dispatch never reaches
     the ball cover at all. The ball cover is the default here because it
     measured 2.7x-27x faster at 16k-200k rows on this hardware and
@@ -108,7 +108,7 @@ class DBSCAN(NumericModeMixin):
         if self.metric != "euclidean":
             raise ValueError(
                 f"mojolearn DBSCAN: metric={self.metric!r} is refused; only "
-                "'euclidean' is ported (the eps kernels in dbscan/ported/"
+                "'euclidean' is ported (the eps kernels in dbscan/derived/"
                 "neighbors/epsilon_neighborhood.mojo carry L2 only, and "
                 "cuML's runner.cuh:152-156 downgrades every other metric "
                 "to L2Sqrt as well)"

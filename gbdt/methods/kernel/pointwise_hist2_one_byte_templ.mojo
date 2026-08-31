@@ -41,7 +41,7 @@ choice `hist_2_one_byte_base.mojo` records for the other family:
                     which is theirs at every arch and not an arch choice
 
 Scheduling, not numeric: the same points are added in the same per-lane
-order, and `mojo_only/pointwise_hist2_check.mojo` A5 holds all four widths
+order, and `original/pointwise_hist2_check.mojo` A5 holds all four widths
 identical across all four load widths.
 
 DEVIATION 93's consequence, and it is why this file has a `comptime if`
@@ -63,11 +63,11 @@ from std.atomic import Atomic, Ordering
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from mojo_only.kernel_matrix import (
+from original.kernel_matrix import (
     TARGET_COLUMN,
     pointwise_one_byte_fixed_for,
 )
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 from gbdt.methods.kernel.compute_point_hist2_loop import (
     compute_histogram,

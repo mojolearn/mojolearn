@@ -90,8 +90,8 @@ from std.memory import stack_allocation
 
 from gbdt.gpu_util.kernel.random_gen import advance_seed_k, next_normal_f
 from gbdt.targets.kernel.pointwise_targets import pinned_block_sum
-from mojo_only.kernel_matrix import partition_chunks_sm_for
-from mojo_only.numerics import (
+from original.kernel_matrix import partition_chunks_sm_for
+from original.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
     ftz,
@@ -1187,7 +1187,7 @@ def _leafwise_argmax_write[
     lane's live arm in a shared file.
 
     THE SENTENCE THAT WAS HERE IS DELETED AS FALSE. It said "the two are
-    gated against each other in `mojo_only/leafwise_scores_check.mojo`".
+    gated against each other in `original/leafwise_scores_check.mojo`".
     They are not: that file never launches `compute_optimal_splits_kernel`
     at all, so its G4 poison-record and G5 tie-rule gates exercise THIS copy
     only. A duplication audit found it, and the reason it survived is

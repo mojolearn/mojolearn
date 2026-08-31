@@ -9,25 +9,25 @@ it should reach, shaped like `glm/estimator.mojo::ols_fit_host`.
 
 `kde_score_samples_host` takes the training rows, the query rows and the
 optional weights as host lists, validates exactly as cuML's `fit` and
-`score_samples` do (`kde/ported/neighbors/kernel_density.mojo::
+`score_samples` do (`kde/derived/neighbors/kernel_density.mojo::
 kde_fit_validate`, `kernel_from_name`, `metric_from_name` -- every
 unported choice REFUSED BY NAME) plus DEVIATION 604's finiteness rules
 (`kde_validate_data`: no NaN/inf in the data, the sqeuclidean magnitude
 bound, a normal bandwidth and normal finite weights), uploads, runs `ML::KDE::score_samples`
-(`kde/ported/kde/kde.mojo`) with the environment's identity trace
+(`kde/derived/kde/kde.mojo`) with the environment's identity trace
 (`MOJOLEARN_IDENTITY_TRACE`), and returns `n_query` float32 log-densities.
 
 cuML's `fit` keeps `X` on the device and `score_samples` reuses it; a
 bindings layer that wants that should keep the `DeviceBuffer` in the Python
-object and call `kde/ported/kde/kde.mojo::score_samples` directly. This
+object and call `kde/derived/kde/kde.mojo::score_samples` directly. This
 entry is the one-shot form, which is what the gates and the card use.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
-from kde.ported.kde.kde import score_samples
-from kde.ported.neighbors.kernel_density import (
+from kde.derived.kde.kde import score_samples
+from kde.derived.neighbors.kernel_density import (
     KDE_ELEM_TPB,
     KDE_LSE_TPB,
     host_sum_weights,

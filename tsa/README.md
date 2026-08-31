@@ -9,22 +9,22 @@ directories).** COPY, DO NOT IMPROVE.
 
 Rung 1 of the lane. What is here:
 
-    cuml/cpp/src/tsa/stationarity.cu                  -> tsa/ported/tsa/stationarity.mojo
-    cuml/cpp/src_prims/timeSeries/stationarity.cuh    -> tsa/ported/timeSeries/stationarity.mojo
-    cuml/cpp/src_prims/timeSeries/arima_helpers.cuh   -> tsa/ported/timeSeries/arima_helpers.mojo  (prepare_data only)
-    cuml/cpp/src_prims/linalg/batched/matrix.cuh      -> tsa/ported/linalg/batched/matrix.mojo     (the two diff kernels only)
-    cuml/python/cuml/cuml/tsa/auto_arima.pyx (the d block) -> tsa/ported/tsa/auto_arima.mojo::select_d
+    cuml/cpp/src/tsa/stationarity.cu                  -> tsa/derived/tsa/stationarity.mojo
+    cuml/cpp/src_prims/timeSeries/stationarity.cuh    -> tsa/derived/timeSeries/stationarity.mojo
+    cuml/cpp/src_prims/timeSeries/arima_helpers.cuh   -> tsa/derived/timeSeries/arima_helpers.mojo  (prepare_data only)
+    cuml/cpp/src_prims/linalg/batched/matrix.cuh      -> tsa/derived/linalg/batched/matrix.mojo     (the two diff kernels only)
+    cuml/python/cuml/cuml/tsa/auto_arima.pyx (the d block) -> tsa/derived/tsa/auto_arima.mojo::select_d
 
-`tsa/PORTED_MAP.tsv` pins the commit (cuML 265b9da6, v26.08.00) and says
-per file what is transliterated and what is partial; `tsa/UNPORTED.tsv`
+`tsa/DERIVATION_MAP.tsv` pins the commit (cuML 265b9da6, v26.08.00) and says
+per file what is transliterated and what is partial; `tsa/NOT_IMPLEMENTED.tsv`
 lists what was not ported and why, parameter by parameter. Float32 only:
 cuML offers `float` and `double`, Metal has no Float64 (DEVIATION 670,
 `arima/README.md`).
 
 ## Commands
 
-    tools/with_build_lock.sh     pixi run mojo run -I . tsa/mojo_only/stationarity_check.mojo
-    tools/with_identical_mode.sh pixi run mojo run -I . tsa/mojo_only/stationarity_check.mojo
+    tools/with_build_lock.sh     pixi run mojo run -I . tsa/original/stationarity_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -I . tsa/original/stationarity_check.mojo
     tools/with_build_lock.sh     pixi run mojo run -I . tsa/tsa_main.mojo
     MOJOLEARN_IDENTITY_TRACE=/tmp/tsa.card tools/with_identical_mode.sh pixi run mojo run -I . tsa/tsa_main.mojo
     python3 tools/identity_trace_diff.py /tmp/tsa.mac.card /tmp/tsa.other.card
@@ -41,7 +41,7 @@ autocovariance accumulator and its sum `s2B`; the cumulative sum and
 table 1 of Kwiatkowski 1992 by linear interpolation; `stationary = pvalue >
 threshold`. `kpss_test` differences first (`prepare_data`, `d + D <= 2`).
 
-**DEVIATION 671** (`tsa/ported/timeSeries/stationarity.mojo`): every
+**DEVIATION 671** (`tsa/derived/timeSeries/stationarity.mojo`): every
 per-series sum of theirs is RAFT's `coalescedReduction` -- a per-thread
 Kahan-Babuska-Neumaier chain, a logical-warp shuffle fold at a width chosen
 from `n_obs`, a dispatch that reads the SM COUNT -- and the scan is Thrust's.

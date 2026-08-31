@@ -11,19 +11,19 @@ attribution travelled with only two of them.
     COPIES ONE FILE        nothing travelled at all
 
 The third is not a hypothetical and it is not malice. A developer who pastes
-`gemm/mojo_only/gemm_identical.mojo` into their project receives 1,589 lines
+`gemm/original/gemm_identical.mojo` into their project receives 1,589 lines
 of the hardest work in this repository with no statement of who wrote it,
 what licence it carries, or that a DOI exists, and neither they nor anyone
 downstream of them has any way to find out. That is how attribution is
 actually lost.
 
 IT CUTS THE OTHER WAY TOO, and that half is an obligation rather than a
-preference. `NOTICE` records that everything under a `ported/` directory
+preference. `NOTICE` records that everything under a `derived/` directory
 derives from CatBoost at 54a8143a, or from cuML, cuVS, RAFT or FAISS at
-their pinned commits. A lifted file from `ported/` carried none of that
+their pinned commits. A lifted file from `derived/` carried none of that
 either, so it stripped the UPSTREAM attribution that Apache 2.0 section 4
-obliges this project to propagate. A `ported/` file therefore gets a third
-line pointing at its lane's `PORTED_MAP.tsv`, where the upstream path and
+obliges this project to propagate. A `derived/` file therefore gets a third
+line pointing at its lane's `DERIVATION_MAP.tsv`, where the upstream path and
 the pinned commit are recorded per file.
 
 Measured before the first run, 2026-08-31: 2 of 982 `.mojo` files and 0 of
@@ -53,7 +53,7 @@ COPYRIGHT = (
 )
 DERIVED = (
     "# Derivative work: the upstream file and its pinned commit are recorded "
-    "in this lane's PORTED_MAP.tsv and in this file's own docstring. See NOTICE."
+    "in this lane's DERIVATION_MAP.tsv and in this file's own docstring. See NOTICE."
 )
 
 SKIP_DIRS = {
@@ -120,7 +120,7 @@ def main():
             else:
                 skipped += 1
     verb = "would add" if check else "added"
-    print(f"{verb} a header to {added} files ({added_ported} of them under ported/)")
+    print(f"{verb} a header to {added} files ({added_ported} of them under derived/)")
     print(f"already carried one: {skipped}")
     return 0
 

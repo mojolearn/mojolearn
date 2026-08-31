@@ -71,7 +71,7 @@ is what makes caching every split in a tree affordable. The doc-parallel
 searcher caches nothing and therefore needs no intermediate.
 
 At `FoldBits == 0` and one device the two chains produce BIT-IDENTICAL
-`subsets.Bins`, which is what `mojo_only/feature_parallel_identity_check.mojo`
+`subsets.Bins`, which is what `original/feature_parallel_identity_check.mojo`
 gates. They are not the same code and rung 2 is not free.
 
 THE PACKED LAYOUT IS INTERLEAVED, NOT CONTIGUOUS
@@ -311,7 +311,7 @@ def create_compressed_split(
     permutation's order while `docBins` is in the original one. **The True
     side is not reachable from this rung** (there are no CTR columns in the
     feature-parallel searcher until rung 4), so it is gated separately in
-    `mojo_only/feature_parallel_identity_check.mojo` against the identity
+    `original/feature_parallel_identity_check.mojo` against the identity
     permutation rather than left as an unrun branch -- `PORTING_RULES.md` 8.
     """
     var num_blocks = compressed_split_blocks(doc_count)
@@ -473,7 +473,7 @@ struct TTreeUpdater(Movable):
     the old ones and a per-level allocation on a Metal queue is a stall.
     Every word is fully overwritten by `CompressBlock`, which writes an
     assignment rather than an OR, so reuse carries nothing forward -- and
-    `mojo_only/feature_parallel_identity_check.mojo`'s poison sub-gate is
+    `original/feature_parallel_identity_check.mojo`'s poison sub-gate is
     what says so rather than this sentence."""
 
     var binary_splits: List[TBinarySplit]

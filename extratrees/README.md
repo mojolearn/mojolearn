@@ -45,25 +45,25 @@ layout, the feature sampling and the RNG keying are **ports of cuML**, pinned
 at `00094f7` in `~/CascadeProjects/upstream/cuml`, mirrored file for file with
 their constant prefix dropped the way `catboost/cuda/` is dropped in `gbdt/`:
 
-    cpp/src/decisiontree/   ->  extratrees/ported/decisiontree/
-    (RAFT primitives)       ->  extratrees/mojo_only/
+    cpp/src/decisiontree/   ->  extratrees/derived/decisiontree/
+    (RAFT primitives)       ->  extratrees/original/
 
 | ours | cuML |
 |---|---|
-| `ported/decisiontree/batched_levelalgo/split.mojo` | `batched-levelalgo/split.cuh` |
-| `ported/decisiontree/batched_levelalgo/dataset.mojo` | `batched-levelalgo/dataset.h` |
-| `ported/decisiontree/batched_levelalgo/objectives.mojo` | `batched-levelalgo/objectives.cuh` |
-| `ported/decisiontree/batched_levelalgo/builder.mojo` | `batched-levelalgo/builder.cuh` |
-| `ported/decisiontree/batched_levelalgo/kernels/builder_kernels.mojo` | `batched-levelalgo/kernels/builder_kernels.cuh` |
-| `ported/decisiontree/flatnode.mojo` | `cpp/include/cuml/tree/flatnode.h` |
-| `mojo_only/pcg_rng.mojo` | `raft/random/detail/rng_device.cuh` |
+| `derived/decisiontree/batched_levelalgo/split.mojo` | `batched-levelalgo/split.cuh` |
+| `derived/decisiontree/batched_levelalgo/dataset.mojo` | `batched-levelalgo/dataset.h` |
+| `derived/decisiontree/batched_levelalgo/objectives.mojo` | `batched-levelalgo/objectives.cuh` |
+| `derived/decisiontree/batched_levelalgo/builder.mojo` | `batched-levelalgo/builder.cuh` |
+| `derived/decisiontree/batched_levelalgo/kernels/builder_kernels.mojo` | `batched-levelalgo/kernels/builder_kernels.cuh` |
+| `derived/decisiontree/flatnode.mojo` | `cpp/include/cuml/tree/flatnode.h` |
+| `original/pcg_rng.mojo` | `raft/random/detail/rng_device.cuh` |
 
 The one directory-name change is `batched-levelalgo` -> `batched_levelalgo`,
 because a Mojo package directory cannot contain a dash. Recorded in
-`PORTED_MAP.tsv`.
+`DERIVATION_MAP.tsv`.
 
 **`quantiles.cuh` is deliberately absent** and always will be: it is the file
-this formulation exists to delete. See `UNPORTED.tsv`.
+this formulation exists to delete. See `NOT_IMPLEMENTED.tsv`.
 
 **One kernel-matrix row departs from cuML's launch shape.** Their
 `TPB_DEFAULT = 128` gives every frontier block 128 rows, one per thread; on
@@ -114,7 +114,7 @@ Three oracles, in the house pattern:
 ## Instrumentation (env-gated, off by default)
 
 Both flags are read ONCE per forest fit, in
-`ported/decisiontree/batched_levelalgo/builder.mojo`; unset, the fit is
+`derived/decisiontree/batched_levelalgo/builder.mojo`; unset, the fit is
 byte-for-byte the uninstrumented program.
 
 * `MOJOLEARN_IDENTITY_TRACE=<path>` — `core/identity_trace.mojo` stage

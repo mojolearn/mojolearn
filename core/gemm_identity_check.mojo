@@ -6,7 +6,7 @@ IDENTITY_PATHS rows 27 and 28. DEVIATIONS 520, 521, 522, 526.
 
 WHAT THIS FILE IS FOR, AND WHY A GREEN `gram_splitk_check` IS NOT IT
 ---------------------------------------------------------------------
-`mojo_only/gram_splitk_check.mojo` asks whether the Gram product is RIGHT:
+`original/gram_splitk_check.mojo` asks whether the Gram product is RIGHT:
 per cell against a Float64 oracle, bitwise symmetric, both dispatch arms by
 name. It passed before this lane and it passes after, and it would pass just
 as well on a build whose summation split is a different number on every
@@ -61,8 +61,8 @@ from core.gram_splitk import (
     gram_splitk_chunk_count,
     gram_splitk_scratch_covers,
 )
-from mojo_only.hardware_matrix import gram_splitk_is_target_arm
-from mojo_only.kernel_matrix import (
+from original.hardware_matrix import gram_splitk_is_target_arm
+from original.kernel_matrix import (
     COLUMN_AMD,
     COLUMN_APPLE,
     COLUMN_BIT_IDENTICAL,
@@ -70,7 +70,7 @@ from mojo_only.kernel_matrix import (
     TARGET_COLUMN,
     column_name,
 )
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
 comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL

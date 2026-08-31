@@ -55,13 +55,13 @@ from extratrees.estimator import (
     fit_extra_trees_classifier,
     fit_extra_trees_classifier_device,
 )
-from extratrees.mojo_only.fixed_point import choose_scale, quantize
-from extratrees.ported.randomforest.randomforest import fit_regression_device
-from extratrees.ported.decisiontree.decisiontree import (
+from extratrees.original.fixed_point import choose_scale, quantize
+from extratrees.derived.randomforest.randomforest import fit_regression_device
+from extratrees.derived.decisiontree.decisiontree import (
     CRITERION_MSE,
     DecisionTreeParams,
 )
-from extratrees.ported.randomforest.randomforest import (
+from extratrees.derived.randomforest.randomforest import (
     Forest,
     predict_class_forest,
     predict_regression_forest,

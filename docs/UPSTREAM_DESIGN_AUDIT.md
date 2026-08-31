@@ -21,7 +21,7 @@ serialized, so what follows is material for a lane owner, not a patch.
 | `neighbors/` | `fused_l2_knn.mojo` deviation blocks against cuVS `fused_l2_knn.cuh` on both pins |
 | `dbscan/` | `adjgraph/algo.mojo` against cuML `adjgraph/algo.cuh` and RAFT `adj_to_csr.cuh` |
 | `hierarchy/` | `sparse/op/sort.mojo` against RAFT `sparse/op/detail/sort.h` |
-| cross-cutting | all 18 `PORTED_MAP.tsv` files, `PORTING_RULES.md`, `VENDOR_LIBS.md`, `IDENTITY_PATHS.md`, the upstream checkout revisions |
+| cross-cutting | all 18 `DERIVATION_MAP.tsv` files, `PORTING_RULES.md`, `VENDOR_LIBS.md`, `IDENTITY_PATHS.md`, the upstream checkout revisions |
 
 **Lanes NOT audited.** `gbdt/` (see finding 6, its upstream is absent from this
 machine), `ensemble/`, `extratrees/`, `isolation_forest/`, `decomposition/`,
@@ -64,16 +64,16 @@ same failure shape the rule was written for.
 
 | # | finding | our file and line | their file and line, checkout named | class | identity impact | size |
 |---|---|---|---|---|---|---|
-| 1 | KDE materializes two `n_query * n_train` matrices; cuVS 26.08 ships a fused tiled kernel that writes neither. The lane's own docstring states the fused entry does not exist. It does. | `kde/ported/neighbors/kernel_density.mojo:884-935`; false claim at `kde/ported/kde/kde.mojo:9-11` | `cuvs-v26.08.00/cpp/src/distance/kde.cu:334-473` (kernel), `:530-657` (launcher) | 1 (missed design) + 3 (false doc) | identity-safe on the single-pass arm; multi-pass needs one PIN | L |
-| 2 | SVM runs cuML's `cache_size == 0` path. Their default is 200 MiB in C++ and 1024 MiB in Python, so the kernel row cache is on for every real call. | `svm/ported/svm/kernelcache.mojo:1-22`, refusal at `svm/ported/svm/svm_parameter.mojo:145` | `cuml-v26.08.00/cpp/src/svm/kernelcache.cuh:381`, `cpp/include/cuml/svm/svc.hpp:227`, `python/cuml/cuml/svm/svm_base.pyx:274` | 1 (dispatch, rule 0b-i) | identity-safe; the lane already wrote the determinism argument | L |
-| 3 | Fused k-NN is single-buffered. RAFT/cuVS `Contractions_NT` is double-buffered, and the matrix accessor that would grant the second page already exists and is unused by this kernel. | `neighbors/ported/neighbors/detail/fused_l2_knn.mojo:153-161` | `cuvs/cpp/src/neighbors/detail/fused_l2_knn.cuh` via `raft/.../Contractions.cuh` `SmemSize = 2 * SmemPage`, both pins | 1 (missed design, open item) | identity-safe, no summation order changes | M |
-| 4 | DBSCAN's CSR compaction uses one atomic per set bit. RAFT uses a warp-aggregated atomic and prices it at up to 32x less atomic traffic. The stated blocker ("no Mojo counterpart") appears expired. | `dbscan/ported/dbscan/adjgraph/algo.mojo:334-348` | `raft-v26.08.00/cpp/include/raft/sparse/convert/detail/adj_to_csr.cuh:77-99`; `atomicIncWarp` in `raft/util/device_atomics.cuh` | 2 (hand-written weaker) | identity-neutral; the output is unordered on both sides already | S |
-| 5 | The MST edge sort runs on the host, with a full round trip of `n-1` edges. Upstream sorts on the device, and this repo already owns a deterministic device radix sort. | `hierarchy/ported/sparse/op/sort.mojo:121-160` | `raft-v26.08.00/cpp/include/raft/sparse/op/detail/sort.h:94-102` | 2 (hand-written weaker) | identity-safe if the packed total-order key is preserved | M |
+| 1 | KDE materializes two `n_query * n_train` matrices; cuVS 26.08 ships a fused tiled kernel that writes neither. The lane's own docstring states the fused entry does not exist. It does. | `kde/derived/neighbors/kernel_density.mojo:884-935`; false claim at `kde/derived/kde/kde.mojo:9-11` | `cuvs-v26.08.00/cpp/src/distance/kde.cu:334-473` (kernel), `:530-657` (launcher) | 1 (missed design) + 3 (false doc) | identity-safe on the single-pass arm; multi-pass needs one PIN | L |
+| 2 | SVM runs cuML's `cache_size == 0` path. Their default is 200 MiB in C++ and 1024 MiB in Python, so the kernel row cache is on for every real call. | `svm/derived/svm/kernelcache.mojo:1-22`, refusal at `svm/derived/svm/svm_parameter.mojo:145` | `cuml-v26.08.00/cpp/src/svm/kernelcache.cuh:381`, `cpp/include/cuml/svm/svc.hpp:227`, `python/cuml/cuml/svm/svm_base.pyx:274` | 1 (dispatch, rule 0b-i) | identity-safe; the lane already wrote the determinism argument | L |
+| 3 | Fused k-NN is single-buffered. RAFT/cuVS `Contractions_NT` is double-buffered, and the matrix accessor that would grant the second page already exists and is unused by this kernel. | `neighbors/derived/neighbors/detail/fused_l2_knn.mojo:153-161` | `cuvs/cpp/src/neighbors/detail/fused_l2_knn.cuh` via `raft/.../Contractions.cuh` `SmemSize = 2 * SmemPage`, both pins | 1 (missed design, open item) | identity-safe, no summation order changes | M |
+| 4 | DBSCAN's CSR compaction uses one atomic per set bit. RAFT uses a warp-aggregated atomic and prices it at up to 32x less atomic traffic. The stated blocker ("no Mojo counterpart") appears expired. | `dbscan/derived/dbscan/adjgraph/algo.mojo:334-348` | `raft-v26.08.00/cpp/include/raft/sparse/convert/detail/adj_to_csr.cuh:77-99`; `atomicIncWarp` in `raft/util/device_atomics.cuh` | 2 (hand-written weaker) | identity-neutral; the output is unordered on both sides already | S |
+| 5 | The MST edge sort runs on the host, with a full round trip of `n-1` edges. Upstream sorts on the device, and this repo already owns a deterministic device radix sort. | `hierarchy/derived/sparse/op/sort.mojo:121-160` | `raft-v26.08.00/cpp/include/raft/sparse/op/detail/sort.h:94-102` | 2 (hand-written weaker) | identity-safe if the packed total-order key is preserved | M |
 | 6 | `PORTING_RULES.md` section 0a, the binding "where their source is" table, is stale. It names only the 25.08 checkouts, roughly half the lanes are pinned to `v26.08.00`, and the CatBoost checkout it names is absent from this machine. | `PORTING_RULES.md:9-16` | n/a (repository documentation) | 3 (undocumented divergence) | none | S |
-| 7 | `cluster/ported/cluster/detail/kmeans.mojo:35` asserts `check_convergence` "does not exist anywhere in cuVS, cuML or RAFT". It exists in both cuML pins and, in cuVS 26.08, does precisely the lagged device-side test this lane deleted as an invention. | `cluster/ported/cluster/detail/kmeans.mojo:29-38` | `cuvs-v26.08.00/cpp/src/cluster/detail/kmeans_common.cuh:637-661`, used at `kmeans.cuh` loop top | 3 (false doc) + 1 (upstream adopted it) | the lagged flag is iteration-count equivalent, so identity-safe | S |
-| 8 | The SVM row norm is a per-row serial chain with an uncoalesced access pattern. `core/row_norms.mojo` is the pinned block fold for the same operation, and the "no fold shape to pin" reason given is contradicted by `K_LIB_ROW_NORM`. | `svm/ported/distance/kernel_matrices.mojo:77-92`; claim in `svm/UNPORTED.tsv` | `raft-v26.08.00` `linalg::norm<L2Norm, Apply::ALONG_ROWS>` via `coalescedReduction` | 2 (hand-written weaker) | changes the pinned bits, so the SVM card needs re-baselining | S |
-| 9 | cuVS 26.08 rewrote the Lloyd loop. Four separable pieces our 25.08-pinned port predates, of which two are cheap and one is a behavior fix. | `cluster/ported/cluster/detail/kmeans.mojo:1114-1300` | `cuvs-v26.08.00/cpp/src/cluster/detail/kmeans.cuh:678-980`, `kmeans_common.cuh:500-745` | 1 (missed design, mixed value) | mixed, per piece; see the section | M |
-| 10 | Confirmation, not a defect. DEVIATION 602 (the cosine kernel norm is wrong upstream for even `d`) is the identical fix cuVS 26.08 shipped, by the identical recurrence. | `kde/ported/neighbors/kernel_density.mojo:398-420` | `cuvs-v26.08.00/cpp/src/distance/kde.cu:295-317` | validation | none | none |
+| 7 | `cluster/derived/cluster/detail/kmeans.mojo:35` asserts `check_convergence` "does not exist anywhere in cuVS, cuML or RAFT". It exists in both cuML pins and, in cuVS 26.08, does precisely the lagged device-side test this lane deleted as an invention. | `cluster/derived/cluster/detail/kmeans.mojo:29-38` | `cuvs-v26.08.00/cpp/src/cluster/detail/kmeans_common.cuh:637-661`, used at `kmeans.cuh` loop top | 3 (false doc) + 1 (upstream adopted it) | the lagged flag is iteration-count equivalent, so identity-safe | S |
+| 8 | The SVM row norm is a per-row serial chain with an uncoalesced access pattern. `core/row_norms.mojo` is the pinned block fold for the same operation, and the "no fold shape to pin" reason given is contradicted by `K_LIB_ROW_NORM`. | `svm/derived/distance/kernel_matrices.mojo:77-92`; claim in `svm/NOT_IMPLEMENTED.tsv` | `raft-v26.08.00` `linalg::norm<L2Norm, Apply::ALONG_ROWS>` via `coalescedReduction` | 2 (hand-written weaker) | changes the pinned bits, so the SVM card needs re-baselining | S |
+| 9 | cuVS 26.08 rewrote the Lloyd loop. Four separable pieces our 25.08-pinned port predates, of which two are cheap and one is a behavior fix. | `cluster/derived/cluster/detail/kmeans.mojo:1114-1300` | `cuvs-v26.08.00/cpp/src/cluster/detail/kmeans.cuh:678-980`, `kmeans_common.cuh:500-745` | 1 (missed design, mixed value) | mixed, per piece; see the section | M |
+| 10 | Confirmation, not a defect. DEVIATION 602 (the cosine kernel norm is wrong upstream for even `d`) is the identical fix cuVS 26.08 shipped, by the identical recurrence. | `kde/derived/neighbors/kernel_density.mojo:398-420` | `cuvs-v26.08.00/cpp/src/distance/kde.cu:295-317` | validation | none | none |
 
 ## Finding 1. KDE materializes what cuVS fuses, and the lane believes the fused kernel does not exist
 
@@ -102,7 +102,7 @@ a compile-time `N_ACC` (`:40-207`), which is what lets a register-resident tile
 serve thirteen metrics; and `CELL_TILE` is chosen at compile time from register
 pressure (`:583-591`), `feat_tile = min(64, d)` (`:568`).
 
-**Our code.** `kde/ported/neighbors/kernel_density.mojo:884-935` allocates
+**Our code.** `kde/derived/neighbors/kernel_density.mojo:884-935` allocates
 `dist` and `logk`, both `n_query * n_train` float32, runs
 `pairwise_distance` into the first, an elementwise `log_kernel_matrix_kernel`
 into the second, and then a per-row serial `logsumexp_kernel`. That is 16 bytes
@@ -111,17 +111,17 @@ allocation per pair. At `n_query = n_train = 100,000` the two buffers are 80 GB,
 so the current path does not merely run slowly at the shipped sizes required by
 `large-data-runs-default`, it cannot allocate.
 
-**The false sentence.** `kde/ported/kde/kde.mojo:9-11` reads
+**The false sentence.** `kde/derived/kde/kde.mojo:9-11` reads
 
 > That cuVS entry is in cuVS 26.08, which this tree's pinned checkout (25.08,
 > `94c2819`) does not have, so the delegate here is
-> `kde/ported/neighbors/kernel_density.mojo` -- the 25.08 Python-layer algorithm
+> `kde/derived/neighbors/kernel_density.mojo` -- the 25.08 Python-layer algorithm
 > the fused kernel reproduces.
 
 `cuvs-v26.08.00/cpp/src/distance/kde.cu` and
 `cuvs-v26.08.00/cpp/include/cuvs/distance/kde.hpp` both exist on this machine
 and have since the tag was cloned. The lane read the `cuvs` checkout, where KDE
-genuinely is absent, while the same lane's own `PORTED_MAP.tsv` row cites cuML
+genuinely is absent, while the same lane's own `DERIVATION_MAP.tsv` row cites cuML
 at `265b9da` (26.08). This is the exact trap the pinned-tree rule exists to
 prevent, and it is the third recorded instance. Per rule 1, the sentence should
 be deleted, not annotated.
@@ -169,10 +169,10 @@ cuML's FIFO working-set selection retains a substantial fraction of the previous
 working set between outer iterations, the kernel-tile GEMM, which is the
 dominant cost of SMO, shrinks accordingly.
 
-**Our code.** `svm/ported/svm/kernelcache.mojo:1-22` states plainly that the
+**Our code.** `svm/derived/svm/kernelcache.mojo:1-22` states plainly that the
 port takes the `cache_size == 0` path, and
-`svm/ported/svm/svm_parameter.mojo:145` refuses `cache_size != 0` by name. This
-is documented, in `UNPORTED.tsv` and in `svm/README.md:184-205`, and it is not a
+`svm/derived/svm/svm_parameter.mojo:145` refuses `cache_size != 0` by name. This
+is documented, in `NOT_IMPLEMENTED.tsv` and in `svm/README.md:184-205`, and it is not a
 silent substitution. It is still a rule 0b-i miss, because the ported path is
 not the path their dispatch takes.
 
@@ -200,7 +200,7 @@ between two shared pages while the next tile's global loads are in flight. Same
 on both cuVS pins; `fused_l2_knn.cuh` is unchanged between `94c2819` and
 `6ba2ce2` apart from an include path and a namespace.
 
-**Our code.** `neighbors/ported/neighbors/detail/fused_l2_knn.mojo:153-161`
+**Our code.** `neighbors/derived/neighbors/detail/fused_l2_knn.mojo:153-161`
 records DEVIATION BLOCK 3. Two pages at Policy2x8 is 36,992 bytes against
 Metal's 32 KB threadgroup limit, so the port is single-buffered. The block
 already says what should happen next:
@@ -210,7 +210,7 @@ already says what should happen next:
 > constant, and it is left OPEN.
 
 **Why this is the most actionable of the three big ones.** The accessor exists
-already. `mojo_only/kernel_matrix.mojo:1803-1813` defines `lib_smem_pages`,
+already. `original/kernel_matrix.mojo:1803-1813` defines `lib_smem_pages`,
 returning 2 when `2 * page_bytes <= column_shared_limit(column)` and 1
 otherwise, and `lib_smem_pages_for[column, page_bytes]` at `:1995` is its
 comptime form. At an 18,496 byte page it already yields 1 on Apple, 2 on NVIDIA
@@ -238,7 +238,7 @@ and broadcasts the base with `g.shfl(warp_res, 0)` plus `g.thread_rank()`. Their
 own comment prices it: "It can reduce the amount of atomic memory traffic by a
 factor of 32."
 
-**Our code.** `dbscan/ported/dbscan/adjgraph/algo.mojo:334-348`. The 16-bool
+**Our code.** `dbscan/derived/dbscan/adjgraph/algo.mojo:334-348`. The 16-bool
 chunked load **is** ported. The atomic is not aggregated, one `Atomic.fetch_add`
 per hit, and the deviation block calls it "the largest remaining gap in this
 file". The reason given is that
@@ -279,7 +279,7 @@ and `weak_cc` converges to the same fixed point on any edge order.
 a device `thrust::sort_by_key` over `nnz` weights with the `(row, col)` pair as
 payload.
 
-**Our code.** `hierarchy/ported/sparse/op/sort.mojo:121-160` copies all three
+**Our code.** `hierarchy/derived/sparse/op/sort.mojo:121-160` copies all three
 device arrays to host buffers, sorts on the host by a packed
 `(weight_order_key, min(u,v), max(u,v))` key, and writes back.
 
@@ -296,7 +296,7 @@ every other stage is on the device.
 
 **What is available in-repo.** `gbdt/gpu_util/kernel/radix_sort.mojo` is a
 stable LSD radix sort built from CatBoost's own `ReorderOneBit`, and
-`svm/mojo_only/device_select.mojo` already establishes the precedent of a lane
+`svm/original/device_select.mojo` already establishes the precedent of a lane
 importing a `gbdt/gpu_util/` primitive. Sorting a packed UInt64 total-order key
 with a stable radix preserves DEVIATION 621 exactly, because the key is a pure
 function of the edge and no two distinct edges compare equal, so stability is
@@ -320,7 +320,7 @@ session guessing."
 `upstream/raft` `661a3b8`. It names no `v26.08.00` tree at all.
 
 **What the repository actually does.** Counting revision and version strings in
-the 18 `PORTED_MAP.tsv` files:
+the 18 `DERIVATION_MAP.tsv` files:
 
 | pinned to 25.08 (`00094f7` / `94c2819` / `661a3b8`) | pinned to v26.08.00 (`265b9da` / `6ba2ce2` / `ebf9268`) |
 |---|---|
@@ -338,14 +338,14 @@ whose upstream gained an algorithm after 25.08 should be listed as
 **And the CatBoost checkout is absent.** `/private/tmp/catboost-src` does not
 exist on this machine, and there is no `catboost` directory under
 `upstream/`. `gbdt/` is the largest ported tree in the repository, 78 rows in
-the root `PORTED_MAP.tsv`, and by the repository's own rule it currently cannot
+the root `DERIVATION_MAP.tsv`, and by the repository's own rule it currently cannot
 be audited or extended against its upstream at all. A `/private/tmp` path also
 does not survive a reboot, which is probably how it went. Re-clone it under
 `upstream/` alongside the others and update the table.
 
 ## Finding 7. `check_convergence` does exist, and cuVS 26.08 adopted the design this lane deleted
 
-**The claim.** `cluster/ported/cluster/detail/kmeans.mojo:29-38`:
+**The claim.** `cluster/derived/cluster/detail/kmeans.mojo:29-38`:
 
 > An earlier version of this port ran the test in a one-thread kernel, read the
 > flag one iteration late, and attributed both to cuVS. Neither is in their
@@ -380,7 +380,7 @@ win, not the reason the lane should look at 26.08.
 
 ## Finding 8. The SVM row norm is a serial chain where the pinned block fold already exists
 
-**Our code.** `svm/ported/distance/kernel_matrices.mojo:77-92`. One thread per
+**Our code.** `svm/derived/distance/kernel_matrices.mojo:77-92`. One thread per
 row, a serial loop over `n_cols`, reading `x[i * k + c]`. Threads in a warp
 therefore read addresses `k` apart, so the access is fully uncoalesced as well
 as serial along the reduction axis.
@@ -390,7 +390,7 @@ as serial along the reduction axis.
 `coalescedReduction`, one warp or block per row with lanes striding along the
 row so consecutive lanes read consecutive addresses.
 
-**The reason given, and why it does not hold.** `svm/UNPORTED.tsv` records the
+**The reason given, and why it does not hold.** `svm/NOT_IMPLEMENTED.tsv` records the
 substitution as "MIRRORED BY A PER-ROW SERIAL CHAIN ... no fold shape to pin".
 There is one. `core/row_norms.mojo` is exactly this operation as a pinned block
 fold: `NORM_TPB` is `lib_block_size_for[K_LIB_ROW_NORM]` (a pinned width,
@@ -402,8 +402,8 @@ rows whose block size is a summation order, and pins it. `cluster/` and `kde/`
 both already call it.
 
 **Weight.** Small. `row_norms_l2sq` is called once per fit
-(`svm/ported/svm/kernelcache.mojo:173`) and twice at predict
-(`svm/ported/svm/svc_impl.mojo:246-247`), so the win is one `O(n_rows *
+(`svm/derived/svm/kernelcache.mojo:173`) and twice at predict
+(`svm/derived/svm/svc_impl.mojo:246-247`), so the win is one `O(n_rows *
 n_cols)` pass, not a per-iteration one. I am rating it low deliberately; it
 matters mainly because the *stated reason* is wrong and will otherwise be
 copied forward.
@@ -438,7 +438,7 @@ tags, which are keyed by algorithm position and would gain a batch axis.
 Not a defect, recorded because it is a positive result and because it should
 change how the deviation is described.
 
-DEVIATION 602 (`kde/ported/neighbors/kernel_density.mojo:398-420`) found that
+DEVIATION 602 (`kde/derived/neighbors/kernel_density.mojo:398-420`) found that
 the cosine kernel's normalization loop in cuML's
 `kernel_density.py:131-137`, inherited from scikit-learn's
 `_binary_tree.pxi:465-470`, is wrong for even `d`: the loop unrolls the

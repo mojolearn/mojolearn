@@ -215,7 +215,7 @@ What is reused is the **fixture**, which is the part that had three vendors
 behind it, and the input gate above is what proves the reuse is real.
 
 The data-derived scale is not a portability hazard. `choose_scale` snaps down
-to a power of two (`mojo_only/fixed_point.mojo`), so the scale is a step
+to a power of two (`original/fixed_point.mojo`), so the scale is a step
 function of the magnitude and identical for any magnitude within a 2x band.
 That snap exists exactly so the chosen scale cannot depend on the last bits
 of a host reduction.
@@ -295,7 +295,7 @@ A reference hash that nobody knows how to reproduce becomes untouchable and
 then wrong. So the procedure is a subcommand rather than a paragraph.
 
 **A legitimate change that moves the bits requires a new reference.** Any
-change to the k-means kernels, to `mojo_only/numerics.mojo`, to the
+change to the k-means kernels, to `original/numerics.mojo`, to the
 fixed-point scale policy, or to the trace's checkpoint set will move this
 card. That is not a failure, but the new card is only a reference once it has
 been produced on two vendors and they agree.

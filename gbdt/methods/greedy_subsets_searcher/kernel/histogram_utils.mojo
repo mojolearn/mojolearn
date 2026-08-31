@@ -27,7 +27,7 @@ from std.math import floor
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from mojo_only.numerics import ftz
+from original.numerics import ftz
 
 
 @always_inline
@@ -115,7 +115,7 @@ def hist2_smem_add[
     `hist_2_one_byte_{5,6,7}bit.cu` lands its stat with a plain float add
     into a warp-PRIVATE slice; that is the `DType.float32` arm here,
     verbatim. The `DType.int32` arm is the `HIST_SMEM_SHARED2_I32` matrix
-    row (`mojo_only/kernel_matrix.hist_smem_mode_for`): the slice is shared
+    row (`original/kernel_matrix.hist_smem_mode_for`): the slice is shared
     by TWO warps, so the add must be atomic, and Metal has no local float
     atomics ("Unsupported local float atomic operation", scratchpad
     `histshare_probe.mojo`), so it is a local Int32 atomic in fixed point.
@@ -131,7 +131,7 @@ def hist2_smem_add[
     warp-private float 32 KB = 46.5 G upd/s, 2-warp-shared Int32 16 KB =
     90.2 G upd/s -- 1.94x. NVIDIA/AMD columns compile the float arm and are
     untouched. The `fixed_scale` behind `qval` must satisfy
-    `mojo_only/fixed_point.mojo`'s bound (`choose_scale` of the plane's sum
+    `original/fixed_point.mojo`'s bound (`choose_scale` of the plane's sum
     of |values|); every cell is a partial sum over a subset of all rows, so
     it stays under 2^28 - 1 plus one dither unit per row and Int32 cannot
     overflow.

@@ -10,15 +10,15 @@ a `mojolearn.AgglomerativeClustering().fit(X)` actually runs. The shape is
 `dbscan/estimator.mojo`'s: host pointers in, device buffers owned here for
 exactly one call, results read back, nothing retained.
 
-The ported entry is `hierarchy/ported/hierarchy/linkage.mojo::single_linkage`
+The ported entry is `hierarchy/derived/hierarchy/linkage.mojo::single_linkage`
 (cuML `cpp/src/hierarchy/linkage.cu`, forwarding to cuVS
 `cluster/detail/single_linkage.cuh` and RAFT's Boruvka MST). The lane's
-README, `PORTED_MAP.tsv` and `UNPORTED.tsv` are the record of what is and is
+README, `DERIVATION_MAP.tsv` and `NOT_IMPLEMENTED.tsv` are the record of what is and is
 not in it, and this file re-decides none of it.
 
 WHICH TREE THE LINE NUMBERS BELOW COME FROM. cuML `upstream/cuml-v26.08.00`
 (265b9da) and cuVS `upstream/cuvs-v26.08.00` (6ba2ce2), read 2026-08-24.
-`hierarchy/PORTED_MAP.tsv` pins cuVS at `94c2819` and RAFT at `661a3b8`,
+`hierarchy/DERIVATION_MAP.tsv` pins cuVS at `94c2819` and RAFT at `661a3b8`,
 which are the UNTAGGED default-branch checkouts rather than the release
 tags; the code is the same in both trees but the LINE NUMBERS are not, so a
 citation here and one in the lane's own files can disagree by a few dozen
@@ -75,7 +75,7 @@ All of it is the ported code's, reached from here: `use_knn=True` (rung 2,
 `labels` size checks in `linkage.mojo` itself.
 
 ON THE 46340 BOUND, because the lane's own justification names the wrong
-arm. `hierarchy/UNPORTED.tsv` and `connectivities.mojo` both say "their
+arm. `hierarchy/NOT_IMPLEMENTED.tsv` and `connectivities.mojo` both say "their
 `int nnz = m * m` (`connectivities.cuh:145`)". In BOTH cuVS trees that
 declaration belongs to the `Linkage::KNN_GRAPH` specialization, which is
 the arm that is NOT ported; the PAIRWISE arm declares `size_t nnz = m * m`
@@ -88,10 +88,10 @@ hierarchy lane.
 
 from max.gpu.host import DeviceContext
 
-from hierarchy.ported.cluster.detail.connectivities import (
+from hierarchy.derived.cluster.detail.connectivities import (
     DISTANCE_L2_SQRT_EXPANDED,
 )
-from hierarchy.ported.hierarchy.linkage import LINKAGE_DEFAULT_C, single_linkage
+from hierarchy.derived.hierarchy.linkage import LINKAGE_DEFAULT_C, single_linkage
 
 
 def linkage_fit_host(

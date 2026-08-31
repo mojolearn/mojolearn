@@ -4,9 +4,9 @@
 
 ## Provenance
 
-- [ ] Original `mojo_only` work; the file names the call or need it serves.
+- [ ] Original `original` work; the file names the call or need it serves.
 - [ ] Derived/ported work; exact upstream file, commit and license are below,
-      and `PORTED_MAP.tsv` / `UNPORTED.tsv` are updated.
+      and `DERIVATION_MAP.tsv` / `NOT_IMPLEMENTED.tsv` are updated.
 - [ ] No implementation code changed.
 
 Upstream details:

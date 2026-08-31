@@ -9,9 +9,9 @@ IMPROVE**, with five numbered departures (DEVIATIONS 600-604, below).
 **CERTIFIED Apple M4 <-> NVIDIA H100 <-> AMD MI325X at leg 11 both halves (commit 144aa5b, judged by `tools/e3_round_judge.sh` section 7 on 2026-08-23): the IDENTICAL card is bit-identical across the three vendors, 7 stages; the FAST cards differ, recorded, the shipped arm makes no cross-vendor claim; AMD MI325X is OWED (that leg was not run).** Built and gated 2026-08-23 on one M4 in both modes. No
 performance number exists for it and none is claimed.
 
-    pixi run check-kde                                                          # FAST (the task is `mojo run -I . kde/mojo_only/kde_check.mojo`; needs the GPU: use the lock)
-    tools/with_build_lock.sh     pixi run mojo run -I . kde/mojo_only/kde_check.mojo
-    tools/with_identical_mode.sh pixi run mojo run -I . kde/mojo_only/kde_check.mojo   # or: tools/with_identical_mode.sh pixi run check-kde
+    pixi run check-kde                                                          # FAST (the task is `mojo run -I . kde/original/kde_check.mojo`; needs the GPU: use the lock)
+    tools/with_build_lock.sh     pixi run mojo run -I . kde/original/kde_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -I . kde/original/kde_check.mojo   # or: tools/with_identical_mode.sh pixi run check-kde
 
     MOJOLEARN_IDENTITY_TRACE=/tmp/mac.kde.card \
         tools/with_identical_mode.sh pixi run mojo run -I . kde/kde_main.mojo
@@ -30,17 +30,17 @@ scikit-learn -- so a brute-force GPU KDE races scikit-learn-on-CPU, which
 is the fight the thesis says we get to have. cuML's own implementation is
 brute force and is what is ported.
 
-## What is ported, file for file (`kde/PORTED_MAP.tsv`)
+## What is ported, file for file (`kde/DERIVATION_MAP.tsv`)
 
 | ours | theirs | what |
 |---|---|---|
-| `ported/kde/kde.mojo` | cuML 26.08 `cpp/include/cuml/neighbors/kde.hpp`, `cpp/src/kde/kde.cu` | the `DensityKernelType` values and the `score_samples(query, train, weights, output, n_query, n_train, n_features, bandwidth, sum_weights, kernel, metric, metric_arg)` entry. Theirs delegates to `cuvs::distance::kde`, which is in cuVS 26.08 and NOT in the pinned checkout (`upstream/cuvs` is 25.08); ours delegates to the file below |
-| `ported/neighbors/kernel_density.mojo` | cuML 25.08 `python/cuml/cuml/neighbors/kernel_density.py` | THE ALGORITHM: the six `cp.fuse` log-kernels with their `FLOAT_MIN` sentinel and `1e-30` floor, `logVn`/`logSn`/`norm_log_probabilities`, the numba `logsumexp_kernel` (one thread per query row, serial ascending), `fit`'s validation, `score_samples`' sequence |
-| `ported/distance/distance.mojo` | cuVS 25.08 `cpp/src/distance/detail/distance.cuh::distance_impl` | the per-metric dispatch; the expanded arm CALLS `core/row_norms.mojo` and (IDENTICAL) `neighbors/mojo_only/pinned_distance_tile.mojo` / (FAST) `core/gemm.mojo::gemm_nt` + `core/expand_distances.mojo` |
-| `ported/distance/distance_ops.mojo` | cuVS 25.08 `cpp/src/distance/detail/distance_ops/{l2_unexp,l1,l_inf}.cuh` | the `core()`/`epilog()` of each op over a one-thread-per-cell loop (their `Policy4x4` tile NOT ported; the arithmetic inside one thread is theirs in their k order) |
-| `mojo_only/kde_oracle.mojo` | none | the float32 serial oracle (every stage) and the float64 scikit-learn-semantics reference |
-| `mojo_only/kde_fixture.mojo` | none | hashed fixtures assembled from BITS (no host arithmetic) |
-| `mojo_only/kde_check.mojo` | none | the eleven gates |
+| `derived/kde/kde.mojo` | cuML 26.08 `cpp/include/cuml/neighbors/kde.hpp`, `cpp/src/kde/kde.cu` | the `DensityKernelType` values and the `score_samples(query, train, weights, output, n_query, n_train, n_features, bandwidth, sum_weights, kernel, metric, metric_arg)` entry. Theirs delegates to `cuvs::distance::kde`, which is in cuVS 26.08 and NOT in the pinned checkout (`upstream/cuvs` is 25.08); ours delegates to the file below |
+| `derived/neighbors/kernel_density.mojo` | cuML 25.08 `python/cuml/cuml/neighbors/kernel_density.py` | THE ALGORITHM: the six `cp.fuse` log-kernels with their `FLOAT_MIN` sentinel and `1e-30` floor, `logVn`/`logSn`/`norm_log_probabilities`, the numba `logsumexp_kernel` (one thread per query row, serial ascending), `fit`'s validation, `score_samples`' sequence |
+| `derived/distance/distance.mojo` | cuVS 25.08 `cpp/src/distance/detail/distance.cuh::distance_impl` | the per-metric dispatch; the expanded arm CALLS `core/row_norms.mojo` and (IDENTICAL) `neighbors/original/pinned_distance_tile.mojo` / (FAST) `core/gemm.mojo::gemm_nt` + `core/expand_distances.mojo` |
+| `derived/distance/distance_ops.mojo` | cuVS 25.08 `cpp/src/distance/detail/distance_ops/{l2_unexp,l1,l_inf}.cuh` | the `core()`/`epilog()` of each op over a one-thread-per-cell loop (their `Policy4x4` tile NOT ported; the arithmetic inside one thread is theirs in their k order) |
+| `original/kde_oracle.mojo` | none | the float32 serial oracle (every stage) and the float64 scikit-learn-semantics reference |
+| `original/kde_fixture.mojo` | none | hashed fixtures assembled from BITS (no host arithmetic) |
+| `original/kde_check.mojo` | none | the eleven gates |
 | `estimator.mojo` | none | the host-pointer entry for `bindings/` (not wired; HAND-OFF) |
 | `kde_main.mojo` | none | one hashed fit, the seven-stage card |
 
@@ -50,7 +50,7 @@ y_k)^2)` from the coordinates), not the `||x||^2 + ||y||^2 - 2 x.y`
 identity the k-NN tile computes. So the k-NN lane's
 `pinned_distance_tile_kernel` is the wrong arithmetic for it and is
 called only for `sqeuclidean` (their `L2Expanded`). The unexpanded
-kernel in `ported/distance/distance_ops.mojo` is the same discipline
+kernel in `derived/distance/distance_ops.mojo` is the same discipline
 (one thread per cell, feature axis ascending, `identical_mul_add`, `ftz`
 at every seam, `identical_sqrt`) applied to their `l2_unexp` op; it is a
 sibling of the pinned tile, not a copy of it. **FOR THE IDENTITY LANE:**
@@ -60,7 +60,7 @@ if a shared pinned pairwise kernel is wanted, the merge is to give
 that is one move. No `pinned_kde_tile.mojo` was written because the
 tile's interface fit the one metric that needs it.
 
-## Kernels and metrics: honored or refused by name (`kde/UNPORTED.tsv`)
+## Kernels and metrics: honored or refused by name (`kde/NOT_IMPLEMENTED.tsv`)
 
 Kernels: all six (`gaussian`, `tophat`, `epanechnikov`, `exponential`,
 `linear`, `cosine`). Anything else: `invalid kernel: '<name>'`.
@@ -174,10 +174,10 @@ saturate to `+inf`, never NaN, and carry no bound -- the check runs
 `2^62` under `euclidean` and shows no NaN); (3) `bandwidth >= 2^-63` so
 `h*h` and `2*h*h` are normal; (4) weights normal and finite. The host
 entry (`estimator.mojo`) and the gates' path both call
-`kde_validate_data`; the 26.08 device entry (`ported/kde/kde.mojo`)
+`kde_validate_data`; the 26.08 device entry (`derived/kde/kde.mojo`)
 trusts its caller exactly as cuML's C++ does.
 
-## The gates (`kde/mojo_only/kde_check.mojo`), as they printed on the M4
+## The gates (`kde/original/kde_check.mojo`), as they printed on the M4
 
 IDENTICAL (`tools/with_identical_mode.sh ...`), 2026-08-23:
 
@@ -213,7 +213,7 @@ queries 0/18/36 alone (batch of 3), inside the 37, and at positions
 writes its stages under the device's tags and `first_divergence` names
 the first that differs) and every score cell by bits.
 
-## The sabotages (each applied to `ported/neighbors/kernel_density.mojo`, run under IDENTICAL, reverted)
+## The sabotages (each applied to `derived/neighbors/kernel_density.mojo`, run under IDENTICAL, reverted)
 
 | # | sabotage | result |
 |---|---|---|
@@ -268,13 +268,13 @@ vendor-shaped things) applied to this directory. Sites reviewed:
 
 | site | what | can +-0 / NaN reach it | verdict |
 |---|---|---|---|
-| `ported/neighbors/kernel_density.mojo::logsumexp_kernel` (the row max, RECORDED as `kde.rowmax`) | strict `>` from `j = 0`, one thread per row, serial | `-0.0` yes (tophat/gaussian/exponential), `+0.0` yes (the log-of-clamped kernels, weighted rows) -- but NEVER both in one legal row (proof in the kernel's docstring: unweighted rows carry one sign per kernel; a weighted cell `logk + log(w)` is `+0.0` or at least 2^-47 in magnitude); NaN refused upstream (604) | POSITIONAL, kept: the lower-index zero survives on every vendor; no hardware max. Fixture planted (below) |
-| `ported/neighbors/kernel_density.mojo::logsumexp_kernel` (`exp(v - max)` with `v = max = -inf`) | the one NaN a legal finite input could compute | yes (gaussian/exponential, `x*x/(2h^2)` or `x/h` overflowed on every training point) | FIXED: DEVIATION 603, `-inf` |
-| `ported/distance/distance_ops.mojo::linf_core` (the chebyshev selection) | strict `>`, seeded `+0.0`, candidates `abs(...)` | no: `abs` clears the sign bit, a `+0.0` tie is the same bits either way; inputs finite (604) so `abs(x - y)` is finite or +inf, never NaN | PROVEN in the comment; unchanged |
-| `mojo_only/kde_oracle.mojo::oracle_distance` (l_inf) and `::oracle_logsumexp_row` | the host spellings of the two folds above | same | same strict `>`; 603 guard added |
-| `ported/distance/distance.mojo` expanded arm's clamp | `if dist <= 0: dist = 0` in `neighbors/mojo_only/pinned_distance_tile.mojo:106` and `core/expand_distances.mojo:50` (not this lane's) | a `-0.0`/negative from cancellation | `-0.0 <= 0.0` is true, so it writes `+0.0`: equivalent to the value-first `max(v, 0.0)`; no change needed |
+| `derived/neighbors/kernel_density.mojo::logsumexp_kernel` (the row max, RECORDED as `kde.rowmax`) | strict `>` from `j = 0`, one thread per row, serial | `-0.0` yes (tophat/gaussian/exponential), `+0.0` yes (the log-of-clamped kernels, weighted rows) -- but NEVER both in one legal row (proof in the kernel's docstring: unweighted rows carry one sign per kernel; a weighted cell `logk + log(w)` is `+0.0` or at least 2^-47 in magnitude); NaN refused upstream (604) | POSITIONAL, kept: the lower-index zero survives on every vendor; no hardware max. Fixture planted (below) |
+| `derived/neighbors/kernel_density.mojo::logsumexp_kernel` (`exp(v - max)` with `v = max = -inf`) | the one NaN a legal finite input could compute | yes (gaussian/exponential, `x*x/(2h^2)` or `x/h` overflowed on every training point) | FIXED: DEVIATION 603, `-inf` |
+| `derived/distance/distance_ops.mojo::linf_core` (the chebyshev selection) | strict `>`, seeded `+0.0`, candidates `abs(...)` | no: `abs` clears the sign bit, a `+0.0` tie is the same bits either way; inputs finite (604) so `abs(x - y)` is finite or +inf, never NaN | PROVEN in the comment; unchanged |
+| `original/kde_oracle.mojo::oracle_distance` (l_inf) and `::oracle_logsumexp_row` | the host spellings of the two folds above | same | same strict `>`; 603 guard added |
+| `derived/distance/distance.mojo` expanded arm's clamp | `if dist <= 0: dist = 0` in `neighbors/original/pinned_distance_tile.mojo:106` and `core/expand_distances.mojo:50` (not this lane's) | a `-0.0`/negative from cancellation | `-0.0 <= 0.0` is true, so it writes `+0.0`: equivalent to the value-first `max(v, 0.0)`; no change needed |
 | the six log-kernels, `if z < 1e-30: z = 1e-30` | a floor, not a zero clamp | `z` is `1 - (...)`/`cos(...)`, never `-0.0` vs `+0.0` at the floor | unchanged |
-| `mojo_only/kde_check.mojo` `if diff > worst` (reporting), `_close` | host Float64 tolerance bookkeeping over `abs()` values | no | not a certified fold |
+| `original/kde_check.mojo` `if diff > worst` (reporting), `_close` | host Float64 tolerance bookkeeping over `abs()` values | no | not a certified fold |
 | `kde_main.mojo` `scores[i] < -1e38` | a count | no | -- |
 
 No `std.math.max/min`, `.clamp`, `reduce_max/min`, `Atomic.max/min`,
@@ -360,7 +360,7 @@ fixture.
 
 | n | path | what is vendor-dependent in their spelling | what we did | status |
 |---|---|---|---|---|
-| 42 | **kde/ -- KernelDensity end to end** (`kde/ported/neighbors/kernel_density.mojo`, `kde/ported/distance/*.mojo`): unexpanded pairwise distances, six log-kernels, per-row logsumexp, two host scalars | their distance is a `Policy4x4` Contractions tile (row 9's contraction, row 10's `sqrt`), the log-kernels are `cp.fuse` over `log`/`cos` (row 12) with a bool-times-float `-0.0` and a `FLOAT_MIN` sentinel, the logsumexp is a numba kernel that sums float32 `exp` into FLOAT64 (no float64 on Apple) and the norm is host `np.log`/`math.lgamma` (row 18's host-libm class); the row max sees both zeros (row 13) | one thread per cell with the feature axis ascending (`identical_mul_add`, `ftz`, `identical_sqrt`), `identical_log`/`identical_cos`/`identical_exp` at every transcendental, the logsumexp kept as THEIR serial per-row fold (a pure function of `n_train`; no block fold, no shuffle, no atomic), the norm as a float32 portable construction under IDENTICAL (DEVIATION 601), float32 throughout (DEVIATION 600), the upstream cosine-norm bug for even d FIXED (DEVIATION 602); row 13 answered: first zero in ascending j survives and cannot reach the score; row 39 audited 2026-08-23: the recorded row max is a positional strict `>` (no hardware max), no legal row mixes the zeros, the mixed rows are planted (both orders) and the lower-index zero asserted device and oracle; no legal input reaches a recorded stage as NaN (DEVIATION 604 refusals, DEVIATION 603's -inf row) | **CONSTRUCTION 2026-08-23, Apple only**: device == serial oracle bit for bit at every stage, 24 kernel/metric pairs; launch-invariant across block sizes, grids, padding, poison and batch composition; nine sabotages recorded (one ftz sabotage inert on Apple and argued inert everywhere; one hardware-max sabotage inert on Apple and expected to fail on NVIDIA/AMD); no second vendor has run it |
+| 42 | **kde/ -- KernelDensity end to end** (`kde/derived/neighbors/kernel_density.mojo`, `kde/derived/distance/*.mojo`): unexpanded pairwise distances, six log-kernels, per-row logsumexp, two host scalars | their distance is a `Policy4x4` Contractions tile (row 9's contraction, row 10's `sqrt`), the log-kernels are `cp.fuse` over `log`/`cos` (row 12) with a bool-times-float `-0.0` and a `FLOAT_MIN` sentinel, the logsumexp is a numba kernel that sums float32 `exp` into FLOAT64 (no float64 on Apple) and the norm is host `np.log`/`math.lgamma` (row 18's host-libm class); the row max sees both zeros (row 13) | one thread per cell with the feature axis ascending (`identical_mul_add`, `ftz`, `identical_sqrt`), `identical_log`/`identical_cos`/`identical_exp` at every transcendental, the logsumexp kept as THEIR serial per-row fold (a pure function of `n_train`; no block fold, no shuffle, no atomic), the norm as a float32 portable construction under IDENTICAL (DEVIATION 601), float32 throughout (DEVIATION 600), the upstream cosine-norm bug for even d FIXED (DEVIATION 602); row 13 answered: first zero in ascending j survives and cannot reach the score; row 39 audited 2026-08-23: the recorded row max is a positional strict `>` (no hardware max), no legal row mixes the zeros, the mixed rows are planted (both orders) and the lower-index zero asserted device and oracle; no legal input reaches a recorded stage as NaN (DEVIATION 604 refusals, DEVIATION 603's -inf row) | **CONSTRUCTION 2026-08-23, Apple only**: device == serial oracle bit for bit at every stage, 24 kernel/metric pairs; launch-invariant across block sizes, grids, padding, poison and batch composition; nine sabotages recorded (one ftz sabotage inert on Apple and argued inert everywhere; one hardware-max sabotage inert on Apple and expected to fail on NVIDIA/AMD); no second vendor has run it |
 
 ## HAND-OFF TO THE IDENTITY LANE
 
@@ -384,7 +384,7 @@ fixture.
 
 3. **IDENTITY_PATHS row 42**: carried at commit 633a562; the ROW TEXT above is its current wording (row 39 audit appended).
 
-4. **A portable float64 `log` and `lgamma` in `mojo_only/numerics.mojo`**
+4. **A portable float64 `log` and `lgamma` in `original/numerics.mojo`**
    would let DEVIATION 601's IDENTICAL arm keep float64 precision for the
    normalization constant (today: float32 construction, 1.4e-6 worst at
    d <= 12).
@@ -394,8 +394,8 @@ fixture.
    branch, and cuML `kernel_density.py::norm_log_probabilities` -- wrong
    for even `d`, NaN at `d = 4`. The Simpson table above is the evidence.
 
-6. **Optional merge**: `kde/ported/distance/distance_ops.mojo::
-   pairwise_unexpanded_kernel` beside `neighbors/mojo_only/
+6. **Optional merge**: `kde/derived/distance/distance_ops.mojo::
+   pairwise_unexpanded_kernel` beside `neighbors/original/
    pinned_distance_tile.mojo` -- same discipline, unexpanded vs expanded
    arithmetic; one file with two arms if the identity lane wants one.
 

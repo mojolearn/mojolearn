@@ -19,10 +19,10 @@ a general library this tree does not mirror. That is still right for a call we
 merely stand in for. It is wrong for a file we read and transliterate, which
 is what `select_radix.mojo` is, and which makes it a derivative work of RAFT.
 
-    a RAFT call we stand in for   ->  mojo_only/, naming the call
+    a RAFT call we stand in for   ->  original/, naming the call
     a RAFT file we transliterate  ->  gbdt/,  with raft as its upstream
 
-`PORTED_MAP.tsv` names the upstream per row for that reason.
+`DERIVATION_MAP.tsv` names the upstream per row for that reason.
 
 ## Both top-k families are ported now
 
@@ -37,7 +37,7 @@ namespace level below where four searches looked. `select_warpsort.mojo`
 ports `warp_sort_immediate`, its base queue, the block tree-merge and the
 dense `block_kernel`; the three `warp_sort_filtered` / `_distributed` /
 `_distributed_ext` queues are still out, for one specific reason recorded in
-that file's docstring and in `UNPORTED.tsv`.
+that file's docstring and in `NOT_IMPLEMENTED.tsv`.
 
 **Their own dispatch prefers warpsort.** `select_k-inl.cuh:38` sends
 `2 < k <= 256` to it and only `k > 256` to radix, which is every k a user
@@ -102,9 +102,9 @@ kernel was right both times.
 `ML::knn_classify` / `knn_class_proba` / `knn_regress` over the search
 above, ported file for file where cuML keeps them:
 
-    cuml cpp/src/knn/knn.cu:328-389          ->  ported/knn/knn.mojo
-    cuml cpp/src_prims/selection/knn.cuh     ->  ported/selection/knn.mojo
-    raft label/detail/classlabels.cuh        ->  ported/label/classlabels.mojo
+    cuml cpp/src/knn/knn.cu:328-389          ->  derived/knn/knn.mojo
+    cuml cpp/src_prims/selection/knn.cuh     ->  derived/selection/knn.mojo
+    raft label/detail/classlabels.cuh        ->  derived/label/classlabels.mojo
 
 The vote is `class_probs_kernel` (each of the `k` neighbour slots adds `1/k`
 to its class, serially, per query) then `class_vote_kernel` (first maximum,
@@ -118,7 +118,7 @@ DEVIATIONS 541-544 are in the DEVIATION BLOCKs of the two ported files and
 the estimator (540 was taken by the Gram/TF32 lane the same day and is
 not used here).
 
-Gates: `mojo_only/knn_classify_check.mojo`, `mojo_only/knn_regress_check.mojo`
+Gates: `original/knn_classify_check.mojo`, `original/knn_regress_check.mojo`
 (host transcription bit for bit, planted vote ties, reach by one flipped
 label / one moved target, `k = 0` refused, multi-output layout, run twice),
 run by `pixi run check-knn`; `tools/knn_sklearn_oracle.py` against
@@ -127,5 +127,5 @@ scikit-learn in both modes; E2U cells `knn_clf_k5`, `knn_clf_k15_3class`,
 (`tools/e2u_matrix_fit.py`, first passes under
 `bench/results/e2u/2026-08-23_knn_clf_reg/`).
 
-What is not ported is in `UNPORTED.tsv` (the MNMG `precomp_lbls` arm,
+What is not ported is in `NOT_IMPLEMENTED.tsv` (the MNMG `precomp_lbls` arm,
 `weights='distance'`, which cuML refuses too).

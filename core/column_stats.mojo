@@ -79,7 +79,7 @@ different tiles from the same input. `shift_columns_kernel` now mirrors
 that spelling exactly.
 """
 
-from mojo_only.kernel_matrix import (
+from original.kernel_matrix import (
     K_LIB_COLUMN_STATS,
     TARGET_COLUMN,
     lib_block_size_for,
@@ -92,10 +92,10 @@ from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
 from core.pinned_reduce import pinned_block_sum
-from mojo_only.numerics import ftz, identical_mul_add
+from original.numerics import ftz, identical_mul_add
 
 
-# READ FROM THE MATRIX, not restated here. `mojo_only/kernel_matrix.mojo`
+# READ FROM THE MATRIX, not restated here. `original/kernel_matrix.mojo`
 # owns every tunable in this tree; changing TARGET_COLUMN there rebuilds
 # this kernel for another vendor with no edit in this file.
 comptime STATS_TPB = lib_block_size_for[K_LIB_COLUMN_STATS, TARGET_COLUMN]()
@@ -307,7 +307,7 @@ def diagonal_to_vector_kernel(
     all -- one strided load, one store -- so there is no fold and no
     seam-producing operation: a copy cannot make a denormal that did not
     arrive. A denormal that DID arrive is the Jacobi sweep's to flush
-    (`decomposition/mojo_only/jacobi_eigh_device.mojo`, DEVIATION 511,
+    (`decomposition/original/jacobi_eigh_device.mojo`, DEVIATION 511,
     another lane's file), and flushing it here instead would be inert
     for this file's only consumer anyway:
     `divide_columns_by_nonzero_kernel` zeroes anything below 1e-10, which

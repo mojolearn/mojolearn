@@ -164,7 +164,7 @@ class SpectralClustering:
         a device-equals-oracle compare cannot see a change to it. Its
         sabotage does bite, on the ring fixture's degenerate pair, but the
         hash-against-a-literal check the lane wants is written down and not
-        done (`spectral/UNPORTED.tsv`, "this lane's own gaps").
+        done (`spectral/NOT_IMPLEMENTED.tsv`, "this lane's own gaps").
 
     **ON DEVIATION 780, so nobody re-inflates it.** That deviation once
     claimed five constants as this port's own: `ncv = min(n - k, max(2k+1,

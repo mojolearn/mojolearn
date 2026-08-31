@@ -8,8 +8,8 @@ somebody else's and wiring this in is their call.
 
 THERE IS NO `SVR` IN THIS MODULE, AND THAT IS NOT AN OVERSIGHT. The lane
 implements binary C-SVC only. `svmType != C_SVC` raises by name in
-`svm/ported/svm/svm_parameter.mojo::check_rung1_scope` -- epsilon-SVR is
-"rung 2" in `svm/UNPORTED.tsv`, along with `SvrInit`, the `n_train =
+`svm/derived/svm/svm_parameter.mojo::check_rung1_scope` -- epsilon-SVR is
+"rung 2" in `svm/NOT_IMPLEMENTED.tsv`, along with `SvrInit`, the `n_train =
 2 * n_rows` doubling, the second `UpdateF` gemv and `svr_impl.cuh`. An
 `SVR` class here would have nothing to call.
 
@@ -54,26 +54,26 @@ _KERNELS = {"linear": _KERNEL_LINEAR, "rbf": _KERNEL_RBF}
 _REFUSED_KERNELS = {
     "poly": (
         "POLYNOMIAL is not ported in rung 1; it is one identical_pow away "
-        "(svm/UNPORTED.tsv spells the kernel out) and was left unported "
+        "(svm/NOT_IMPLEMENTED.tsv spells the kernel out) and was left unported "
         "rather than written without a gate"
     ),
     "polynomial": (
-        "POLYNOMIAL is not ported in rung 1 (svm/UNPORTED.tsv); cuML spells "
+        "POLYNOMIAL is not ported in rung 1 (svm/NOT_IMPLEMENTED.tsv); cuML spells "
         "this kernel 'poly'"
     ),
     "sigmoid": (
         "TANH is not ported in rung 1: there is no identical_tanh in "
-        "mojo_only/numerics.mojo, so the kernel has no bit-pinned spelling "
-        "yet (svm/UNPORTED.tsv)"
+        "original/numerics.mojo, so the kernel has no bit-pinned spelling "
+        "yet (svm/NOT_IMPLEMENTED.tsv)"
     ),
     "tanh": (
-        "TANH is not ported in rung 1 (svm/UNPORTED.tsv); cuML spells this "
+        "TANH is not ported in rung 1 (svm/NOT_IMPLEMENTED.tsv); cuML spells this "
         "kernel 'sigmoid'"
     ),
     "precomputed": (
         "PRECOMPUTED is not ported: kernelcache.cuh's "
         "extractColumnsForPrecomputed and svc_impl.cuh's precomputed "
-        "predict arm are both unported (svm/UNPORTED.tsv)"
+        "predict arm are both unported (svm/NOT_IMPLEMENTED.tsv)"
     ),
 }
 
@@ -177,7 +177,7 @@ def _as_labels(y):
             "asserts the same thing (svc_impl.cuh: 'Only binary "
             "classification is implemented at the moment'); their multiclass "
             "is a Python-layer one-vs-one/one-vs-rest wrapper and is not "
-            "ported (svm/UNPORTED.tsv)"
+            "ported (svm/NOT_IMPLEMENTED.tsv)"
         )
     f = np.ascontiguousarray(a, dtype=np.float32)
     if not np.isfinite(f).all():
@@ -219,7 +219,7 @@ class SVC(NumericModeMixin):
         class_weight    refused   upstream it becomes `sample_weight`, and
                                   `sample_weight` is not ported: the
                                   weighted `InitPenalty` arm (C_vec = C * w)
-                                  has no port (svm/UNPORTED.tsv)
+                                  has no port (svm/NOT_IMPLEMENTED.tsv)
         max_iter        honored   cuML's total inner-iteration cap; -1 (the
                                   default) is no limit
         nochange_steps  honored   cuML's convergence rule, transcribed with
@@ -237,7 +237,7 @@ class SVC(NumericModeMixin):
                                   multiclass wrappers; there is no
                                   multiclass here to shape
         probability     refused   Platt scaling is not in cuML's C++ surface
-                                  at all (svm/UNPORTED.tsv)
+                                  at all (svm/NOT_IMPLEMENTED.tsv)
         output_type     refused   a cuML-internal array-type selector; this
                                   package returns NumPy
         sample_weight   refused   in fit(); see class_weight
@@ -274,7 +274,7 @@ class SVC(NumericModeMixin):
     half is NOT ported -- the solver always runs cuML's own
     `n_cache_sets == 0` path -- so `cache_size` does not affect training
     time here the way it does upstream. It cannot affect training RESULTS
-    upstream either (`svm/UNPORTED.tsv` carries that determinism
+    upstream either (`svm/NOT_IMPLEMENTED.tsv` carries that determinism
     statement), so nothing numeric hangs on it.
 
     DEVIATION 873: the fitted model crosses back to the host and is
@@ -440,7 +440,7 @@ class SVC(NumericModeMixin):
             raise NotImplementedError(
                 "mojolearn SVC: class_weight is refused; upstream it becomes "
                 "sample_weight, and the weighted InitPenalty arm "
-                "(C_vec = C * w) is not ported (svm/UNPORTED.tsv)"
+                "(C_vec = C * w) is not ported (svm/NOT_IMPLEMENTED.tsv)"
             )
         if decision_function_shape != "ovo":
             raise NotImplementedError(
@@ -452,7 +452,7 @@ class SVC(NumericModeMixin):
         if probability:
             raise NotImplementedError(
                 "mojolearn SVC: probability is refused; Platt scaling is not "
-                "in cuML's C++ surface at all (svm/UNPORTED.tsv)"
+                "in cuML's C++ surface at all (svm/NOT_IMPLEMENTED.tsv)"
             )
         self.C = C
         self.kernel = k
@@ -483,7 +483,7 @@ class SVC(NumericModeMixin):
             raise NotImplementedError(
                 "mojolearn SVC: sample_weight is not ported; the weighted "
                 "InitPenalty arm (C_vec = C * w) has no port "
-                "(svm/UNPORTED.tsv). class_weight is the same refusal"
+                "(svm/NOT_IMPLEMENTED.tsv). class_weight is the same refusal"
             )
         x, self.input_copied_ = as_f32_c(X, "X")
         labels, classes = _as_labels(y)
@@ -600,7 +600,7 @@ class SVC(NumericModeMixin):
     def predict_proba(self, X):
         raise NotImplementedError(
             "mojolearn SVC: predict_proba is not available; Platt scaling is "
-            "not in cuML's C++ surface at all (svm/UNPORTED.tsv), which is "
+            "not in cuML's C++ surface at all (svm/NOT_IMPLEMENTED.tsv), which is "
             "why the constructor refuses probability=True"
         )
 

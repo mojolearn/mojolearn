@@ -56,8 +56,8 @@ from std.os import getenv
 from core.gemm import gemm_nt, gemm_tn, gemv_n
 from core.gram_splitk import gram_splitk_applies, gram_splitk_chunk_count
 from core.identity_trace import IdentityTrace
-from mojo_only.kernel_matrix import TARGET_COLUMN, column_name
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from original.kernel_matrix import TARGET_COLUMN, column_name
+from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
 def _mode_name() -> String:

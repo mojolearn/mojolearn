@@ -110,7 +110,7 @@ preference:
 | not mirrored | why | entry |
 |---|---|---|
 | the histogram in `computeSplitKernel` | this formulation exists to delete it | 137 |
-| `quantiles.cuh` | same | `UNPORTED.tsv` |
+| `quantiles.cuh` | same | `NOT_IMPLEMENTED.tsv` |
 | `signalDone` / last-block election | `threadfence` is NVIDIA-only in Mojo | 170 |
 | `atomicAdd` on a float RANGE | no portable float `atomicMin`/`Max` | 161 |
 | `cub::BlockRadixSort` | no MAX counterpart; hand-written portably per 0b-i | 157 |
@@ -120,7 +120,7 @@ preference:
 | their `mask[0]` tile predecessor | **it is a BUG**: column 0 never drawn | 164 |
 | their `n-1` filler | **it is a BUG**: column `n-1` over-drawn 662 vs 512 | 165 |
 | `Split::update`'s metric arm on an exact tie | ordering by float noise; 145's argument, measured twice | 194 |
-| `adaptive_sample_kernel` | dead code in cuML | `UNPORTED.tsv` |
+| `adaptive_sample_kernel` | dead code in cuML | `NOT_IMPLEMENTED.tsv` |
 | `n_nodes` | dead code in cuML | this file |
 
 ## How to re-run this audit
@@ -132,7 +132,7 @@ It is a grep, not a memory:
     grep -n 'n_blks_for_cols' builder.cuh
     grep -rn 'n_nodes' builder.cuh kernels/*.cuh
 
-Then read `extratrees/ported/decisiontree/batched_levelalgo/builder.mojo`'s
+Then read `extratrees/derived/decisiontree/batched_levelalgo/builder.mojo`'s
 `train_classification_device_resident` beside it. The two should read as the
 same list of steps in the same order. **Where they do not, either there is a
 numbered deviation or there is a defect, and there is no third possibility.**

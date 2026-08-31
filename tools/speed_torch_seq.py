@@ -154,7 +154,7 @@ EXPAND = 2
 
 #: The ten llama tensor ids. Identical in
 #: `transformer/corpus/gen_corpus.py::TENSOR_IDS` and in
-#: `transformer/mojo_only/transformer_fixture.mojo::TID_*`.
+#: `transformer/original/transformer_fixture.mojo::TID_*`.
 LLAMA_TIDS = {
     "x": 1, "norm1.weight": 2, "norm2.weight": 3,
     "q_proj.weight": 4, "k_proj.weight": 5, "v_proj.weight": 6,

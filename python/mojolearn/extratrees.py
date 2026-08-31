@@ -14,7 +14,7 @@ the caller's side, from one that works. Almost all refusals fire in the Mojo
 layer (`extratrees/estimator.mojo`), which is the single place both the host
 and device arms resolve their configuration; this wrapper refuses only what
 never crosses the boundary: the criteria this port has not transcribed
-(UNPORTED.tsv rows 7 and 12-14; row 11, entropy, is PORTED -- DEVIATION
+(NOT_IMPLEMENTED.tsv rows 7 and 12-14; row 11, entropy, is PORTED -- DEVIATION
 459) and the two forest-level knobs that do not exist here (`n_jobs`,
 `verbose`). The one time this sentence was false --
 the regressor's `max_features` rode across and was overwritten on the far
@@ -82,9 +82,9 @@ _UNPORTED_CRITERIA = {
     # sklearn name -> (which estimator, the recorded reason)
     "friedman_mse": ("regressor", "no cuML counterpart; the exhaustive"
                      " splitter it serves is the ensemble/ lane"),
-    "absolute_error": ("regressor", "UNPORTED.tsv row 7: MAE needs an order"
+    "absolute_error": ("regressor", "NOT_IMPLEMENTED.tsv row 7: MAE needs an order"
                        " statistic per candidate, a different kernel shape"),
-    "poisson": ("regressor", "UNPORTED.tsv row 12: cuML objectives.cuh"
+    "poisson": ("regressor", "NOT_IMPLEMENTED.tsv row 12: cuML objectives.cuh"
                 ":267-346, marked 'not yet'"),
 }
 

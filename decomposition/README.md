@@ -32,7 +32,7 @@ structural reason this algorithm is a good GPU fit**: one bandwidth-bound
 pass, one big arithmetic-dense product, then a small dense problem that does
 not care where it runs.
 
-Step 4 runs **on the device** (`mojo_only/jacobi_eigh_device.mojo`), because
+Step 4 runs **on the device** (`original/jacobi_eigh_device.mojo`), because
 cuSOLVER's `syevj` does, and the standing rule is to mirror their host/device
 split rather than to make our own. The first version of this port put it on
 the host; that was inside `HOST_AND_DEVICE.md`'s O(rows) rule but was not a
@@ -47,7 +47,7 @@ was wrong.** `calEig` (`cuml/cpp/src/tsvd/tsvd.cuh:99`) branches on
 `svd_solver='auto'` and `'full'` onto it and reaches `COV_EIG_JACOBI` only for
 `svd_solver='jacobi'` (`pca.pyx:392-404`). So we ship their OPT-IN arm.
 
-That is a substitution and it is recorded as one in `UNPORTED.tsv`. The reason
+That is a substitution and it is recorded as one in `NOT_IMPLEMENTED.tsv`. The reason
 it is defensible: both arms end inside cuSOLVER, which is closed and has no
 source to transliterate, and MAX ships no symmetric eigensolver or SVD at all
 (`linalg` is `matmul`, `bmm`, `gemv`, `transpose`, `qr_factorization`,

@@ -5,7 +5,7 @@
 
 THIS IS NOT A PORT OF A cuML FILE. It is the replacement for a CUB call
 that `quantiles.cuh:244` and `:258` make, and it is filed under
-`mojo_only/` for exactly that reason: cuML's mirror address for this code
+`original/` for exactly that reason: cuML's mirror address for this code
 is CUB's, not theirs.
 
 WHY IT IS HAND-WRITTEN RATHER THAN CALLED
@@ -28,7 +28,7 @@ removed. That file is this repository's port of CatBoost's
 `NKernel::SegmentedRadixSort`, which is itself a
 `cub::DeviceSegmentedRadixSort::SortPairs` call -- so the construction
 below has already been through this repository's radix-sort check
-(`mojo_only/radix_sort_check.mojo`, `mojo_only/segmented_scan_check.mojo`)
+(`original/radix_sort_check.mojo`, `original/segmented_scan_check.mojo`)
 in its SortPairs form. It is DUPLICATED rather than imported because
 `gbdt/` belongs to another session this round and the lane charter
 forbids reaching into it. The duplication is a lane-ownership artifact
@@ -71,7 +71,7 @@ PORTABILITY
 No warp or wavefront width appears in this file. The one block-level
 primitive is `max.gpu.primitives.block.prefix_sum`, whose shared-memory
 footprint at `SORT_BLOCK = 512` is 512 Int32 = 2 KB -- under the 16 KB
-floor of every column declared in `mojo_only/kernel_matrix.mojo`,
+floor of every column declared in `original/kernel_matrix.mojo`,
 including the `spec-baseline` row, so no device query is needed to know
 it fits. `SORT_BLOCK` is a fixed constant rather than a queried width
 precisely so that the number of blocks, and hence the summation ORDER of
@@ -296,7 +296,7 @@ def segmented_sort_keys_f32(
 
     THE PING-PONG PARITY IS NOT LEFT TO CHANCE: thirty-two passes is
     EVEN, so the answer is back in `work_a` where the twiddle-out reads
-    it. `mojo_only/radix_sort_check.mojo` records a green run on a
+    it. `original/radix_sort_check.mojo` records a green run on a
     sabotaged copy-back that this shape simply does not have -- there is
     no copy-back, because the pass count is a compile-time constant of
     the key width and not a caller's bit range.

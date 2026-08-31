@@ -18,7 +18,7 @@ class LinearRegression(NumericModeMixin):
     This is cuML's `algorithm='eig'` arm (`lstsqEig`, RAFT), which forms
     ``X.T @ X`` and so squares the condition number. It is less robust than
     an SVD-based solver and should not be used for badly conditioned
-    designs; cuML's own SVD arms are not ported (glm/UNPORTED.tsv).
+    designs; cuML's own SVD arms are not ported (glm/NOT_IMPLEMENTED.tsv).
 
     WHAT IS HONORED, WHAT IS REFUSED, AND WHY (measured row by row by
     `tools/e2u_matrix_fit.py`):
@@ -31,11 +31,11 @@ class LinearRegression(NumericModeMixin):
                                   arm the ported `ols_fit` carries.
         sample_weight   refused   not ported (ols.cuh:99-110, a
                                   sqrt-scaling of both operands and its
-                                  inverse; glm/UNPORTED.tsv)
+                                  inverse; glm/NOT_IMPLEMENTED.tsv)
         n_features == 1 refused   cuML forces its SVD solver for one
                                   column (linear_regression.pyx:390) and
                                   that solver is not ported; the Mojo layer
-                                  raises BY NAME (glm/ported/glm/ols.mojo)
+                                  raises BY NAME (glm/derived/glm/ols.mojo)
         n_features > n  refused   A^T A is singular by construction;
                                   cuML's dispatch switches to SVD
                                   (ols.cuh:112-113), not ported; raised
@@ -47,7 +47,7 @@ class LinearRegression(NumericModeMixin):
     (center X and y on the DEVICE) and `postProcessData` (intercept =
     mean(y) - mu_X . coef; preprocess.cuh:98-176). The ported `ols_fit`
     REFUSES `fit_intercept` by name because those two are not ported
-    (glm/ported/glm/ols.mojo). This class therefore does the centering here,
+    (glm/derived/glm/ols.mojo). This class therefore does the centering here,
     in numpy: column means and the y mean in float64, subtracted in float32,
     and the intercept as `mean(y) - sum(mu_X * coef)` with `math.fsum`
     (exactly rounded; NO BLAS dot, which would be a platform-dependent host
@@ -70,7 +70,7 @@ class LinearRegression(NumericModeMixin):
         if sample_weight is not None:
             raise NotImplementedError(
                 "mojolearn LinearRegression: sample_weight is not ported "
-                "(ols.cuh:99-110; glm/UNPORTED.tsv)"
+                "(ols.cuh:99-110; glm/NOT_IMPLEMENTED.tsv)"
             )
         x, self.input_copied_ = as_f32_c(X, "X")
         target = np.asarray(y)
@@ -134,7 +134,7 @@ class Ridge(NumericModeMixin):
 
     Mirrors `cuml/python/cuml/linear_model/ridge.pyx` on top of
     `cuml/cpp/src/glm/ridge.cuh::ridgeFit` (DEVIATION 545; the Mojo port is
-    `glm/ported/glm/ridge.mojo` and the design note there is worth reading:
+    `glm/derived/glm/ridge.mojo` and the design note there is worth reading:
     their `eig` solver is an SVD through the eigendecomposition of `X.T @ X`
     followed by `ridgeSolve`, NOT "OLS with alpha added", and so is ours).
     Solves `min ||y - Xw||^2 + alpha ||w||^2`; the same objective as
@@ -156,7 +156,7 @@ class Ridge(NumericModeMixin):
                                   is `ridge.cuh:247`'s `intercept = 0` arm
         solver          'eig' only  cuML's 'auto' maps to 'eig'
                                   (ridge.pyx:304); 'svd' (ridgeSVD ->
-                                  cuSOLVER gesvd, glm/UNPORTED.tsv) and
+                                  cuSOLVER gesvd, glm/NOT_IMPLEMENTED.tsv) and
                                   'cd' (cuml/solvers/cd.pyx, a different
                                   solver) are REFUSED by name
         normalize       refused   only reachable with fit_intercept on
@@ -187,12 +187,12 @@ class Ridge(NumericModeMixin):
                 f"mojolearn Ridge: solver={solver!r} is not ported "
                 "(ridgeSVD is raft::linalg::svdQR -> cuSOLVER gesvd; 'cd' "
                 "is cuml/solvers/cd.pyx); solver='eig' (cuML's 'auto') is "
-                "the ported arm. See glm/UNPORTED.tsv"
+                "the ported arm. See glm/NOT_IMPLEMENTED.tsv"
             )
         if normalize:
             raise NotImplementedError(
                 "mojolearn Ridge: normalize is not ported (preprocess.cuh:"
-                "76-108, the meanvar arm of preProcessData; glm/UNPORTED.tsv)"
+                "76-108, the meanvar arm of preProcessData; glm/NOT_IMPLEMENTED.tsv)"
             )
         self.alpha = alpha
         self.solver = solver
@@ -203,7 +203,7 @@ class Ridge(NumericModeMixin):
         if sample_weight is not None:
             raise NotImplementedError(
                 "mojolearn Ridge: sample_weight is not ported "
-                "(ridge.cuh:197-208; glm/UNPORTED.tsv)"
+                "(ridge.cuh:197-208; glm/NOT_IMPLEMENTED.tsv)"
             )
         self.solver_ = "eig"
         x, self.input_copied_ = as_f32_c(X, "X")
@@ -273,7 +273,7 @@ class LogisticRegression(NumericModeMixin):
 
     Mirrors `cuml/python/cuml/linear_model/logistic_regression.py` on top of
     `cuml/python/cuml/solvers/qn.pyx` and `cuml/cpp/src/glm/qn/` (DEVIATIONS
-    546-549; the Mojo port is `glm/ported/glm/qn/*.mojo`, one file per
+    546-549; the Mojo port is `glm/derived/glm/qn/*.mojo`, one file per
     theirs). The objective is `mean_i logloss_i + (1/(2 C n)) ||w||^2`
     (`penalty_normalized=True`: cuML divides the penalty by n so that its
     minimizer is scikit-learn's `LogisticRegression(C)` minimizer), the
@@ -290,7 +290,7 @@ class LogisticRegression(NumericModeMixin):
                                   None is the unregularized arm (qn.cuh:61)
                         'l1' / 'elasticnet' REFUSED  they select OWL-QN
                                   (`min_owlqn`, qn_solvers.cuh:246), NOT
-                                  PORTED; glm/UNPORTED.tsv
+                                  PORTED; glm/NOT_IMPLEMENTED.tsv
         C               honored   inverse regularization strength, > 0
         tol             honored   grad_tol = tol, change_tol = tol * 0.01,
                                   ftol = change_tol * 0.1 (qn.pyx:504-506,
@@ -350,13 +350,13 @@ class LogisticRegression(NumericModeMixin):
                 f"mojolearn LogisticRegression: penalty={penalty!r} selects "
                 "OWL-QN (min_owlqn, qn_solvers.cuh:246), which is NOT PORTED; "
                 "penalty='l2' or None (L-BFGS) are the ported arms. See "
-                "glm/UNPORTED.tsv"
+                "glm/NOT_IMPLEMENTED.tsv"
             )
         if class_weight is not None:
             raise NotImplementedError(
                 "mojolearn LogisticRegression: class_weight is not ported "
                 "(it becomes a sample_weight upstream, logistic_regression.py"
-                ":400-436, and sample_weight is not ported; glm/UNPORTED.tsv)"
+                ":400-436, and sample_weight is not ported; glm/NOT_IMPLEMENTED.tsv)"
             )
         if C <= 0:
             raise ValueError(f"C must be positive, got {C}")
@@ -384,7 +384,7 @@ class LogisticRegression(NumericModeMixin):
             raise NotImplementedError(
                 "mojolearn LogisticRegression: sample_weight is not ported "
                 "(GLMBase::add_sample_weights, glm_base.cuh:115; "
-                "glm/UNPORTED.tsv)"
+                "glm/NOT_IMPLEMENTED.tsv)"
             )
         x, self.input_copied_ = as_f32_c(X, "X")
         target = np.asarray(y)
@@ -399,7 +399,7 @@ class LogisticRegression(NumericModeMixin):
             raise NotImplementedError(
                 f"mojolearn LogisticRegression: {n_classes} classes need the "
                 "softmax loss (glm_softmax.cuh, QN_LOSS_SOFTMAX), which is NOT "
-                "PORTED; binary only. See glm/UNPORTED.tsv"
+                "PORTED; binary only. See glm/NOT_IMPLEMENTED.tsv"
             )
         if n_classes < 2:
             raise ValueError("mojolearn LogisticRegression: y has one class")

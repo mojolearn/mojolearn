@@ -6,7 +6,7 @@ DEVIATIONS 660-665 and 697-698. COPY, DO NOT IMPROVE.
 
 Read this before trusting anything below.
 
-* The gate `mojo_only/hw_check.mojo` was built and run on one Apple M4 on
+* The gate `original/hw_check.mojo` was built and run on one Apple M4 on
   2026-08-23 and printed `ALL OK` under IDENTICAL and under FAST.
 * **No second vendor has run this.** Every cross-vendor claim here is a
   claim about what the spelling is designed to guarantee, not a
@@ -69,33 +69,33 @@ where 25.08 could have misled a reader are known rather than assumed:
 | `holtwinters_params.h` | header + `namespace CUML_EXPORT ML` and an `export.hpp` include | a visibility attribute; no semantic change to the enums or `OptimParams` |
 | `holtwinters.pyx` | substantial: the deprecation above, `handle` removed, `CumlArrayDescriptor` -> `ReflectedAttr`, `input_to_cupy_array` -> `check_array(..., ensure_all_finite=False)` | the VALIDATION raises this lane mirrors are unchanged between trees, and the two cited lines (`:164` eps default, `:197` seasonal refusal) plus DEVIATION 664's `check_array` at `:237-241` were each verified in the pinned tree directly |
 
-Every line span in `PORTED_MAP.tsv` and in the `.mojo` headers is against
+Every line span in `DERIVATION_MAP.tsv` and in the `.mojo` headers is against
 the PINNED tree and was recomputed by brace-matching on 2026-08-23.
 
 ## What is here
 
-    cuml/cpp/include/cuml/tsa/holtwinters_params.h -> ported/tsa/holtwinters_params.mojo
-    cuml/cpp/src/holtwinters/internal/hw_utils.cuh -> ported/holtwinters/internal/hw_utils.mojo
-    cuml/cpp/src/holtwinters/internal/hw_eval.cuh  -> ported/holtwinters/internal/hw_eval.mojo
+    cuml/cpp/include/cuml/tsa/holtwinters_params.h -> derived/tsa/holtwinters_params.mojo
+    cuml/cpp/src/holtwinters/internal/hw_utils.cuh -> derived/holtwinters/internal/hw_utils.mojo
+    cuml/cpp/src/holtwinters/internal/hw_eval.cuh  -> derived/holtwinters/internal/hw_eval.mojo
     cuml/cpp/src/holtwinters/internal/hw_decompose.cuh -> .../hw_decompose.mojo
     cuml/cpp/src/holtwinters/internal/hw_forecast.cuh  -> .../hw_forecast.mojo
     cuml/cpp/src/holtwinters/internal/hw_optim.cuh     -> .../hw_optim.mojo
-    cuml/cpp/src/holtwinters/runner.cuh            -> ported/holtwinters/runner.mojo
-    cuml/cpp/src/holtwinters/holtwinters.cu        -> ported/holtwinters/holtwinters.mojo
+    cuml/cpp/src/holtwinters/runner.cuh            -> derived/holtwinters/runner.mojo
+    cuml/cpp/src/holtwinters/holtwinters.cu        -> derived/holtwinters/holtwinters.mojo
 
-`PORTED_MAP.tsv` says per file what is transliterated and what is partial.
-`UNPORTED.tsv` has nineteen rows and is meant to be complete, not short.
+`DERIVATION_MAP.tsv` says per file what is transliterated and what is partial.
+`NOT_IMPLEMENTED.tsv` has nineteen rows and is meant to be complete, not short.
 Float32 only: cuML instantiates `float` and `double`, Metal has no
 Float64.
 
 ## Commands
 
-    tools/with_build_lock.sh     pixi run mojo run -I . holtwinters/mojo_only/hw_check.mojo
-    tools/with_identical_mode.sh pixi run mojo run -I . holtwinters/mojo_only/hw_check.mojo
+    tools/with_build_lock.sh     pixi run mojo run -I . holtwinters/original/hw_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -I . holtwinters/original/hw_check.mojo
 
 A sabotage arm is a build define and edits nothing:
 
-    tools/with_identical_mode.sh pixi run mojo run -D MOJOLEARN_HW_SABOTAGE_SWAP_FMA=1 -I . holtwinters/mojo_only/hw_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -D MOJOLEARN_HW_SABOTAGE_SWAP_FMA=1 -I . holtwinters/original/hw_check.mojo
 
 No pixi task is registered (`pixi.toml` is not this lane's). The task line
 to land is under HAND-OFF.
@@ -298,7 +298,7 @@ every bit read off a compare the optimizer already performs.
 | zero-direction guard returned | 0 | DEVIATION 662's whole behaviour; invisible otherwise |
 | Hessian reset (`phi > 0`) | 1 | changes the entire search trajectory, and is a pure comparison |
 | line search hit its limit | 2 | cuml#888's path, where the LAST nx is stored rather than the minimising one |
-| `rho_ == 0` | 3 | the second NaN route; `UNPORTED.tsv` argued it terminates deterministically and nothing could confirm reach |
+| `rho_ == 0` | 3 | the second NaN route; `NOT_IMPLEMENTED.tsv` argued it terminates deterministically and nothing could confirm reach |
 | a Hessian entry went NaN | 4 | the consequence of the above, one step later |
 | BOTH stop criteria true | 5 | the exact tie `CRIT_ORDER` perturbs. Without it nobody can say the arm's tie is reached |
 | returned at `bfgs_iter_limit` | 6 | the fall-through return |
@@ -382,7 +382,7 @@ is expected to change a criterion or a decision.
 **pixi task lines** (I do not own `pixi.toml`; land these next to
 `check-metrics-*`):
 
-    check-holtwinters = "mojo run -I . holtwinters/mojo_only/hw_check.mojo"
+    check-holtwinters = "mojo run -I . holtwinters/original/hw_check.mojo"
 
 **IDENTITY_PATHS row text** (I do not own `IDENTITY_PATHS.md`; the row
 number is the orchestrator's to assign):
@@ -417,7 +417,7 @@ size) was run rather than guessing at a construction:
 * **`RHO_ZERO` is RETIRED.** The search found the second NaN route on a
   NATURAL series, multiplicative salt 102, on 1 of 7 series. It is now a
   PINNED fixture asserted both ways: the bit must still be set, and the
-  whole mask must equal the oracle's. `UNPORTED.tsv` said this route
+  whole mask must equal the oracle's. `NOT_IMPLEMENTED.tsv` said this route
   "terminates deterministically on every vendor"; that is now a thing a
   fixture exercises rather than an argument this lane makes.
 * **`LS_LIMIT` is NOT retired.** 128 fits did not reach it. The

@@ -8,24 +8,24 @@ in and out, a `DeviceContext` created per call and destroyed with it, no
 pointer retained past the call.
 
 `kpss_test_host` runs `ML::Stationarity::kpss_test`
-(`tsa/ported/tsa/stationarity.mojo`) on a batch and writes back the per
+(`tsa/derived/tsa/stationarity.mojo`) on a batch and writes back the per
 series stationarity flag and the per series statistic.
 `select_d_host` runs auto_arima's "Choose the hyper-parameter d" loop
-(`tsa/ported/tsa/auto_arima.mojo::select_d`) and writes back the chosen `d`
+(`tsa/derived/tsa/auto_arima.mojo::select_d`) and writes back the chosen `d`
 per series.
 
 LAYOUT, AND IT IS cuML's. `y` is `batch_size * n_obs` float32 with each
 SERIES CONTIGUOUS: series `b` occupies `[b * n_obs, (b + 1) * n_obs)`.
 That is exactly what `stationarity.pyx` produces, because it calls
 `check_array(y, order="F")` on an `(n_obs, batch_size)` array, and it is
-what `matrix.cuh:74-76` indexes (`tsa/ported/linalg/batched/matrix.mojo`).
+what `matrix.cuh:74-76` indexes (`tsa/derived/linalg/batched/matrix.mojo`).
 The Python wrapper is responsible for handing over that flat order and
 says so.
 
 WHAT THIS SURFACE DOES NOT ADD. Every refusal below already exists one
 layer down and is raised there by name: `batch_size < 1` and
 `n_obs <= d + s*D` in `stationarity.mojo::kpss_test`, `d + D > 2` and
-`D with s < 2` in `tsa/ported/timeSeries/arima_helpers.mojo::prepare_data`,
+`D with s < 2` in `tsa/derived/timeSeries/arima_helpers.mojo::prepare_data`,
 non-finite input in `stationarity.mojo::_refuse_non_finite`, and
 `0 <= d_max <= 2 - D` in `auto_arima.mojo::select_d`. The only check added
 here is that `batch_size` and `n_obs` are at least one, which is what this
@@ -41,9 +41,9 @@ as certified across vendors.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from tsa.ported.timeSeries.stationarity import KPSS_ELEM_TPB, download_results
-from tsa.ported.tsa.auto_arima import select_d
-from tsa.ported.tsa.stationarity import kpss_test
+from tsa.derived.timeSeries.stationarity import KPSS_ELEM_TPB, download_results
+from tsa.derived.tsa.auto_arima import select_d
+from tsa.derived.tsa.stationarity import kpss_test
 
 
 def _upload_f32(
@@ -136,7 +136,7 @@ def select_d_host(
 
     Writes `batch_size` int32 to `d_ptr` and returns `batch_size`. `D` is
     NOT chosen here and must be given: their `D` comes from statsmodels'
-    STL on the host and is not ported (`tsa/UNPORTED.tsv`).
+    STL on the host and is not ported (`tsa/NOT_IMPLEMENTED.tsv`).
     """
     _refuse_empty_shape(batch_size, n_obs, "select_d")
     var ctx = DeviceContext()

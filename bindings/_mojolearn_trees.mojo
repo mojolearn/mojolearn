@@ -33,7 +33,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from mojo_only.vendor import COMPILED_VENDOR
+from original.vendor import COMPILED_VENDOR
 
 from max.gpu.host import DeviceContext
 
@@ -45,16 +45,16 @@ from extratrees.estimator import (
     fit_extra_trees_regressor,
     fit_extra_trees_regressor_device,
 )
-from extratrees.ported.decisiontree.decisiontree import (
+from extratrees.derived.decisiontree.decisiontree import (
     CRITERION_ENTROPY,
     CRITERION_GINI,
     CRITERION_MSE,
 )
-from extratrees.ported.decisiontree.flatnode import (
+from extratrees.derived.decisiontree.flatnode import (
     SparseTreeNode,
     TreeMetaDataNode,
 )
-from extratrees.ported.randomforest.randomforest import Forest, forest_vote
+from extratrees.derived.randomforest.randomforest import Forest, forest_vote
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -121,7 +121,7 @@ boundary. The criterion RIDES AS SLOT 21 since DEVIATION 459 (it did not
 while each entry point had exactly one criterion): `et_classifier_fit`
 admits GINI and ENTROPY, `et_regressor_fit` admits MSE, and the OTHER
 criteria are refused by name in the WRAPPER, which cites the same
-UNPORTED.tsv rows validity_check does.
+NOT_IMPLEMENTED.tsv rows validity_check does.
 """
 
 
@@ -388,7 +388,7 @@ def et_predict_binding(
 def trees_vendor_binding() raises -> PythonObject:
     """THE ACCELERATOR API THIS BINARY WAS COMPILED FOR: 'metal', 'cuda',
     'hip' or 'none'. A compile-time constant folded in from
-    `mojo_only/vendor.mojo`, the same shape as the tier read-back
+    `original/vendor.mojo`, the same shape as the tier read-back
     (`gbdt_numeric_mode`): the answer comes from the binary that actually
     loaded, never from the directory it sat in or from the environment.
     `python/mojolearn/_backend.py` refuses at import when this disagrees

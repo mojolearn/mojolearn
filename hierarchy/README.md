@@ -5,8 +5,8 @@ Mirrors `cuml/cpp/src/hierarchy/linkage.cu` (the entry), which forwards to
 whose MST is RAFT's Boruvka `raft/sparse/solver/{mst,mst_solver}.cuh` +
 `detail/{mst_solver_inl,mst_kernels,mst_utils}.cuh`. **COPY, DO NOT
 IMPROVE**, with five declared deviations (620, 621, 622; 623 and 624 from
-the row-39 audit). File-for-file map in `PORTED_MAP.tsv`; what is not here
-and why, parameter by parameter, in `UNPORTED.tsv`. DEVIATION numbers
+the row-39 audit). File-for-file map in `DERIVATION_MAP.tsv`; what is not here
+and why, parameter by parameter, in `NOT_IMPLEMENTED.tsv`. DEVIATION numbers
 620-624 spent; 625-629 free.
 
 ## Status
@@ -25,8 +25,8 @@ timing was measured and none is published.
 
 ## Commands
 
-    tools/with_build_lock.sh     pixi run mojo run -I . hierarchy/mojo_only/linkage_check.mojo
-    tools/with_identical_mode.sh pixi run mojo run -I . hierarchy/mojo_only/linkage_check.mojo
+    tools/with_build_lock.sh     pixi run mojo run -I . hierarchy/original/linkage_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -I . hierarchy/original/linkage_check.mojo
 
     tools/with_build_lock.sh     pixi run mojo run -I . hierarchy/linkage_main.mojo
     MOJOLEARN_IDENTITY_TRACE=/tmp/linkage.card \
@@ -45,7 +45,7 @@ either order-free or pinned:
 
 | stage | their spelling | ours | reduction? | why reproducible |
 |---|---|---|---|---|
-| distances `z[i,j]` | `cuvs::distance<L2SqrtExpanded>`: `\|\|x_i\|\|^2 + \|\|x_j\|\|^2 - 2 x_i.x_j`, norms precomputed, clamp, sqrt (`connectivities.cuh:157-160`) | FAST: `core/row_norms` + `core/gemm.gemm_nt` (MAX matmul) + `core/expand_distances`. IDENTICAL: `core/row_norms` (pinned fold) + `neighbors/mojo_only/pinned_distance_tile` (DEVIATION 505) | YES, two float folds: the norm and the dot product | IDENTICAL: the norm folds `NORM_TPB` strided partials then a halving tree (no lane primitive); the dot product is one thread walking the feature axis ascending through `identical_mul_add` + `ftz`; the epilogue is one `fma`; sqrt is `identical_sqrt`. Every one of those is a pure function of `d` and `NORM_TPB`. The host oracle replicates that arithmetic and the device matches it BYTE FOR BYTE on 5 fixtures (`check_linkage_distances_match_host_pinned`). `z` is exactly SYMMETRIC because both operands are `X`. FAST: not pinned (a MAX matmul's k-split is the vendor's), reported not asserted |
+| distances `z[i,j]` | `cuvs::distance<L2SqrtExpanded>`: `\|\|x_i\|\|^2 + \|\|x_j\|\|^2 - 2 x_i.x_j`, norms precomputed, clamp, sqrt (`connectivities.cuh:157-160`) | FAST: `core/row_norms` + `core/gemm.gemm_nt` (MAX matmul) + `core/expand_distances`. IDENTICAL: `core/row_norms` (pinned fold) + `neighbors/original/pinned_distance_tile` (DEVIATION 505) | YES, two float folds: the norm and the dot product | IDENTICAL: the norm folds `NORM_TPB` strided partials then a halving tree (no lane primitive); the dot product is one thread walking the feature axis ascending through `identical_mul_add` + `ftz`; the epilogue is one `fma`; sqrt is `identical_sqrt`. Every one of those is a pure function of `d` and `NORM_TPB`. The host oracle replicates that arithmetic and the device matches it BYTE FOR BYTE on 5 fixtures (`check_linkage_distances_match_host_pinned`). `z` is exactly SYMMETRIC because both operands are `X`. FAST: not pinned (a MAX matmul's k-split is the vendor's), reported not asserted |
 | self-loop | diagonal <- `FLT_MAX` (`:162-175`) | `self_loop_max_kernel` | no | elementwise |
 | MST edge set | RAFT Boruvka with a cuRAND per-vertex ALTERATION of the weights to make them distinct, then per-row min (warp), per-color `atomicMin` on the altered double, "vertices added each other" test, label propagation by `atomicMin` (`mst_solver_inl.cuh`, `mst_kernels.cuh`) | the same kernels, the same launches, with the comparison on the TOTAL ORDER `(weight_order_key(w), min(u,v), max(u,v))` and NO alteration (DEVIATION 620); the key puts `-0.0` (key -1) below `+0.0` (key 0) and every NaN on one key, so no hardware `min`/`max` ever sees a (+0, -0) pair (IDENTITY_PATHS row 39) | YES, but every one is a MIN over a total order or an integer count: per-row min (32-lane halving fold), per-color min (three integer `atomicMin` phases), `next_color` min (`atomicMin`), edge count (`atomicAdd` of ones) | a min over a total order is associative and commutative with no rounding, so the fold shape, the lane count and the atomic landing order cannot move it; an integer add is exact. Their alteration made weights distinct with a RANDOM draw and is the one thing that is NOT a function of the input; replacing it with the undirected-index tie-break makes the per-round picks, the colors, the orientation `(src = the vertex that added, dst = its neighbor)` and therefore the edge set deterministic. Under a total order the MST is UNIQUE, so a serial Kruskal must agree with Boruvka exactly -- and does, on every fixture (`check_linkage_mst_matches_kruskal`). The edge WEIGHTS are copied from `z`, so every weight byte is the pinned distance byte |
 | sort by weight | `thrust::sort_by_key` on weight alone, unstable (`sort.h:101`) | host merge sort on the same total order (DEVIATION 621) | a sort = a total order | two distinct MST edges never tie under the triple, so the sorted list is a pure function of the edge set |
@@ -76,7 +76,7 @@ reason.
 ## The five deviations
 
 **DEVIATION 620 -- no random alteration; a total order breaks ties**
-(`hierarchy/mojo_only/edge_order.mojo`, the block). RAFT draws `v` cuRAND
+(`hierarchy/original/edge_order.mojo`, the block). RAFT draws `v` cuRAND
 uniforms and adds `max * (rand[row] + rand[col])` to every weight in
 double (`mst_solver_inl.cuh:212-238`, `mst_kernels.cuh:289-307`) so the
 per-supervertex min is unique; which of two equal-weight edges wins is
@@ -92,7 +92,7 @@ standing in for cuRAND, applied to ties only, exactly as theirs is) on the
 duplicate-point / lattice fixture moves **38 of 47** sorted MST slots and
 the children; on the tie-free blobs it moves nothing, which is the point.
 
-**DEVIATION 621 -- the MST sort is total** (`hierarchy/ported/sparse/op/
+**DEVIATION 621 -- the MST sort is total** (`hierarchy/derived/sparse/op/
 sort.mojo`). `coo_sort_by_weight` is `thrust::sort_by_key` on the weight
 alone, NOT stable, so equal-weight MST edges come out in an implementation-
 chosen order, and `build_dendrogram_host` walks that order. Ours sorts on
@@ -101,7 +101,7 @@ in reverse discovery order -- an order Thrust may return) moves **47 of
 47** children rows and the labels on the lattice fixture.
 
 **DEVIATION 622 -- `UnionFind::find` reads `parent[-1]`** (`hierarchy/
-ported/cluster/detail/agglomerative.mojo`, the block). Traced line by line
+derived/cluster/detail/agglomerative.mojo`, the block). Traced line by line
 in the block: on every `find` of a root their compression loop reads one
 `int` before the vector (UB) and writes `parent[n_indices-1]`; the root it
 returns is still right. Ours is the textbook compression. MEASURED:
@@ -111,7 +111,7 @@ identical roots and sizes row for row (a Mojo `List` would have trapped
 on the `-1`, which is how it was found).
 
 **DEVIATION 623 -- a NaN distance is refused by name before any stage**
-(`hierarchy/mojo_only/nan_guard.mojo`, the block; called from
+(`hierarchy/original/nan_guard.mojo`, the block; called from
 `connectivities.mojo::pairwise_distances` after the self-loop transform).
 Theirs hands whatever `cuvs::distance` wrote to the MST. A NaN cell arises
 from a non-finite input row or from two rows whose squared norms overflow
@@ -128,7 +128,7 @@ guard skipped (`LINK_SAB_SKIP_NAN_GUARD`) the MST completes and 7 of 7
 card is byte-identical before and after (diff below).
 
 **DEVIATION 624 -- the host packing of the weight key orders a negative
-key as the device does** (`hierarchy/mojo_only/edge_order.mojo`, the block
+key as the device does** (`hierarchy/original/edge_order.mojo`, the block
 over `pack_edge_key`). Found by the row-39 fixture: the device compares
 keys as SIGNED Int32 (`triple_less`, `Atomic.min`), so `-0.0` (key -1)
 sorts before `+0.0` (key 0); the first `pack_edge_key` put the raw key bits
@@ -187,18 +187,18 @@ against those facts.
 
 | site | what | can +-0 / NaN reach it | verdict |
 |---|---|---|---|
-| `mojo_only/edge_order.mojo::weight_order_key` | the float-to-Int32 total-order key every MST comparison uses | YES by construction: any weight fed to `build_sorted_mst` | `-0.0` -> key -1, `+0.0` -> key 0, DISTINCT, `-0.0` sorts first; every NaN payload -> ONE key (`WEIGHT_KEY_NAN`). The KEY decides, never a hardware min, so the answer is the same on every vendor. Docstring now says so; fixture below |
-| `mojo_only/edge_order.mojo::triple_less`, `edge_lo`/`edge_hi` | Int32 lexicographic compare; integer min/max of two vertex ids | integers | vendor-free, kept |
-| `mojo_only/edge_order.mojo::pack_edge_key` | the host UInt64 packing of the key for `coo_sort_by_weight` and the oracle's Kruskal | a negative key (`-0.0`, negative weight) | DEFECT, fixed: host put a negative key LAST, device put it FIRST. DEVIATION 624 |
-| `ported/sparse/solver/detail/mst_kernels.mojo:164,196,228` `Atomic.min` (key / lo / hi), `:377,380` (colors) | integer atomic mins | integers | vendor-free, kept |
-| `ported/sparse/solver/detail/mst_kernels.mojo` per-lane `<` and the 32-lane halving fold | both through `triple_less` on keys | keys only | kept |
-| `ported/sparse/op/sort.mojo::coo_sort_by_weight` | host merge sort on `pack_edge_key` | via the key | kept (624 fixes the packing it calls) |
-| `ported/cluster/detail/agglomerative.mojo:283` `if c > max_child` | Int32 max over children ids | integers | kept; no float compare decides a merge or a cut (the cut is by COUNT, `n_clusters`, not by a distance threshold; `out_delta` is copied, never compared) |
-| `ported/cluster/detail/connectivities.mojo` distance step: the clamp inside `neighbors/mojo_only/pinned_distance_tile.mojo:106` (IDENTICAL) and `core/expand_distances.mojo:50` (FAST), and the oracle's `host_pinned_distance` | `if dist <= 0.0: dist = 0.0` | a cancelling expanded identity can be negative or `-0.0`; `-0.0 <= 0.0` is TRUE | an IEEE compare, not a hardware max: returns `+0.0` for `-0.0` and every negative on every vendor; `sqrt(+0.0)` is `+0.0` through `identical_sqrt` and the stdlib alike. So NO `-0.0` leaves `pairwise_distances`; PROVEN UNREACHABLE for the pairwise path (those two files are other lanes'; read, not edited) |
+| `original/edge_order.mojo::weight_order_key` | the float-to-Int32 total-order key every MST comparison uses | YES by construction: any weight fed to `build_sorted_mst` | `-0.0` -> key -1, `+0.0` -> key 0, DISTINCT, `-0.0` sorts first; every NaN payload -> ONE key (`WEIGHT_KEY_NAN`). The KEY decides, never a hardware min, so the answer is the same on every vendor. Docstring now says so; fixture below |
+| `original/edge_order.mojo::triple_less`, `edge_lo`/`edge_hi` | Int32 lexicographic compare; integer min/max of two vertex ids | integers | vendor-free, kept |
+| `original/edge_order.mojo::pack_edge_key` | the host UInt64 packing of the key for `coo_sort_by_weight` and the oracle's Kruskal | a negative key (`-0.0`, negative weight) | DEFECT, fixed: host put a negative key LAST, device put it FIRST. DEVIATION 624 |
+| `derived/sparse/solver/detail/mst_kernels.mojo:164,196,228` `Atomic.min` (key / lo / hi), `:377,380` (colors) | integer atomic mins | integers | vendor-free, kept |
+| `derived/sparse/solver/detail/mst_kernels.mojo` per-lane `<` and the 32-lane halving fold | both through `triple_less` on keys | keys only | kept |
+| `derived/sparse/op/sort.mojo::coo_sort_by_weight` | host merge sort on `pack_edge_key` | via the key | kept (624 fixes the packing it calls) |
+| `derived/cluster/detail/agglomerative.mojo:283` `if c > max_child` | Int32 max over children ids | integers | kept; no float compare decides a merge or a cut (the cut is by COUNT, `n_clusters`, not by a distance threshold; `out_delta` is copied, never compared) |
+| `derived/cluster/detail/connectivities.mojo` distance step: the clamp inside `neighbors/original/pinned_distance_tile.mojo:106` (IDENTICAL) and `core/expand_distances.mojo:50` (FAST), and the oracle's `host_pinned_distance` | `if dist <= 0.0: dist = 0.0` | a cancelling expanded identity can be negative or `-0.0`; `-0.0 <= 0.0` is TRUE | an IEEE compare, not a hardware max: returns `+0.0` for `-0.0` and every negative on every vendor; `sqrt(+0.0)` is `+0.0` through `identical_sqrt` and the stdlib alike. So NO `-0.0` leaves `pairwise_distances`; PROVEN UNREACHABLE for the pairwise path (those two files are other lanes'; read, not edited) |
 | `core/row_norms.mojo` (called) | sum of squares seeded `+0.0` | squares are `>= +0.0`, `(-0.0)*(-0.0)` is `+0.0` | never `-0.0` |
-| `ported/cluster/detail/connectivities.mojo::self_loop_max_kernel` | diagonal <- FLT_MAX | elementwise store | kept |
-| `mojo_only/nan_guard.mojo` (NEW) | integer count of NaN cells, refusal by name | the NaN is the thing counted | DEVIATION 623 |
-| `mojo_only/linkage_check.mojo:787` `rel = abs(total32 - total64) / denom` | a Float64 host tolerance on the MST total | host Float64, no `-0.0` question | FACT 3: the Float32 total is a vendor product's under FAST -> RECORDED under FAST, asserted under IDENTICAL |
+| `derived/cluster/detail/connectivities.mojo::self_loop_max_kernel` | diagonal <- FLT_MAX | elementwise store | kept |
+| `original/nan_guard.mojo` (NEW) | integer count of NaN cells, refusal by name | the NaN is the thing counted | DEVIATION 623 |
+| `original/linkage_check.mojo:787` `rel = abs(total32 - total64) / denom` | a Float64 host tolerance on the MST total | host Float64, no `-0.0` question | FACT 3: the Float32 total is a vendor product's under FAST -> RECORDED under FAST, asserted under IDENTICAL |
 
 **What was changed.** (1) `weight_order_key`'s docstring states the signed-
 zero and NaN mapping and why it is vendor-free (no bit moved). (2) DEVIATION
@@ -207,7 +207,7 @@ order equals the device's on negative keys; `unpack_edge_wk` inverts it
 (no bit of any existing fixture or card moved; measured, the blobs_dups
 card diffs IDENTICAL). (3) DEVIATION 623: `pairwise_distances` scans the
 matrix after the self-loop transform and refuses any NaN cell by name
-(`hierarchy/mojo_only/nan_guard.mojo`). (4) `pairwise_distances` routes
+(`hierarchy/original/nan_guard.mojo`). (4) `pairwise_distances` routes
 the sabotage-tile copy only for the two tile arms (`ROTATE_CONTRACTION`,
 `STD_SQRT`); the tie-break, sort and NaN-guard arms leave the distance
 step on its production path in both modes. (5) `LINK_SAB_SKIP_NAN_GUARD`
@@ -328,29 +328,29 @@ sequence, same counts, same hashes.` against the card above.
 
 ## ROW TEXT FOR THE IDENTITY LANE
 
-| 43 | **single-linkage agglomerative clustering, END TO END** -- `hierarchy/ported/hierarchy/linkage.mojo` (cuML `linkage.cu`) -> cuVS `single_linkage.cuh`/`connectivities.cuh`/`mst.cuh`/`agglomerative.cuh` -> RAFT Boruvka `mst_solver_inl.cuh`/`mst_kernels.cuh`: pairwise L2 distances, Boruvka MST, sort, host union-find dendrogram, device label extraction | the distance tile is row 24's (DEVIATION 505) and the row norm row 19's, unchanged; NEW and vendor-dependent in THEIR spelling: (a) RAFT breaks MST weight ties with a cuRAND per-vertex ALTERATION (`mst_solver_inl.cuh:212-238`), so on duplicate points or equal distances the edge SET is a function of the RNG stream, not the input; (b) `coo_sort_by_weight` is an unstable `thrust::sort_by_key` on weight alone (`sort.h:101`), so equal-weight MST edges reach the dendrogram in an implementation-chosen order; (c) the per-color min is `atomicMin` on a double (Metal has no 64-bit atomic) | (a) DEVIATION 620: the total order `(weight_order_key(w), min(u,v), max(u,v))` everywhere RAFT compared the altered weight, per-color min in three integer `atomicMin` phases; (b) DEVIATION 621: a host merge sort on the same triple; (c) folded into 620. A min over a total order and an integer count are the only reductions in the MST and both are order-free, so the edge set, the dendrogram and the labels are pure functions of the distance bytes; gated: edge set == serial Kruskal (unique MST under a total order), labels BITWISE == serial extract, launch invariance across tile/MST/extract block sizes and two paddings/poisons, 37x37 cells == the same cells of 203x203, two cards identical; sabotages 620 (38/47 slots moved) and 621 (47/47 rows moved) fail as required, rotate-contraction moves 4553/41209 cells, std-sqrt moves 0 (Apple limit); row-39 audit 2026-08-23: `-0.0` < `+0.0` by integer key (no hardware min/max on the path; planted both lane orders, key-on-abs sabotage fails order B), a NaN distance refused by name before any stage (DEVIATION 623), host key packing made to agree with the device on negative keys (DEVIATION 624) | **construction + Apple gates; no second vendor has run it.** Open: rung 2's `connect_knn_graph` host overload picks a RANDOM vertex per component (`std::mt19937(std::random_device())`, `mst.cuh:167-190`) and must be pinned when ported |
+| 43 | **single-linkage agglomerative clustering, END TO END** -- `hierarchy/derived/hierarchy/linkage.mojo` (cuML `linkage.cu`) -> cuVS `single_linkage.cuh`/`connectivities.cuh`/`mst.cuh`/`agglomerative.cuh` -> RAFT Boruvka `mst_solver_inl.cuh`/`mst_kernels.cuh`: pairwise L2 distances, Boruvka MST, sort, host union-find dendrogram, device label extraction | the distance tile is row 24's (DEVIATION 505) and the row norm row 19's, unchanged; NEW and vendor-dependent in THEIR spelling: (a) RAFT breaks MST weight ties with a cuRAND per-vertex ALTERATION (`mst_solver_inl.cuh:212-238`), so on duplicate points or equal distances the edge SET is a function of the RNG stream, not the input; (b) `coo_sort_by_weight` is an unstable `thrust::sort_by_key` on weight alone (`sort.h:101`), so equal-weight MST edges reach the dendrogram in an implementation-chosen order; (c) the per-color min is `atomicMin` on a double (Metal has no 64-bit atomic) | (a) DEVIATION 620: the total order `(weight_order_key(w), min(u,v), max(u,v))` everywhere RAFT compared the altered weight, per-color min in three integer `atomicMin` phases; (b) DEVIATION 621: a host merge sort on the same triple; (c) folded into 620. A min over a total order and an integer count are the only reductions in the MST and both are order-free, so the edge set, the dendrogram and the labels are pure functions of the distance bytes; gated: edge set == serial Kruskal (unique MST under a total order), labels BITWISE == serial extract, launch invariance across tile/MST/extract block sizes and two paddings/poisons, 37x37 cells == the same cells of 203x203, two cards identical; sabotages 620 (38/47 slots moved) and 621 (47/47 rows moved) fail as required, rotate-contraction moves 4553/41209 cells, std-sqrt moves 0 (Apple limit); row-39 audit 2026-08-23: `-0.0` < `+0.0` by integer key (no hardware min/max on the path; planted both lane orders, key-on-abs sabotage fails order B), a NaN distance refused by name before any stage (DEVIATION 623), host key packing made to agree with the device on negative keys (DEVIATION 624) | **construction + Apple gates; no second vendor has run it.** Open: rung 2's `connect_knn_graph` host overload picks a RANDOM vertex per component (`std::mt19937(std::random_device())`, `mst.cuh:167-190`) and must be pinned when ported |
 
 ## HAND-OFF TO THE IDENTITY LANE
 
 1. `IDENTITY_PATHS.md`: row 43 carries the row text above; when this
    README's row text changes, the ledger's row 43 is to be refreshed from
    it (the row-39 audit sentence is the current delta).
-2. `UNWIRED.md`, NOT wired table: `hierarchy/ported/sparse/solver/detail/
+2. `UNWIRED.md`, NOT wired table: `hierarchy/derived/sparse/solver/detail/
    mst_kernels.mojo::add_reverse_edge` | nothing (single linkage passes
    `symmetrize_output=false`, `cuvs mst.cuh:297-298`) | a caller wanting a
    symmetric MST edge list; transliterated and gated by nothing.
 3. `pixi.toml`: `check-linkage` and `linkage-main` exist (FAST via
    `pixi run check-linkage`; IDENTICAL via `tools/with_identical_mode.sh
    pixi run check-linkage`). Nothing further asked.
-4. `neighbors/mojo_only/pinned_distance_tile.mojo` is CALLED from
-   `hierarchy/ported/cluster/detail/connectivities.mojo` (IDENTICAL arm)
+4. `neighbors/original/pinned_distance_tile.mojo` is CALLED from
+   `hierarchy/derived/cluster/detail/connectivities.mojo` (IDENTICAL arm)
    with `X` as both operands through a sub-buffer view; no change to that
-   file. `hierarchy/mojo_only/sabotage_tile.mojo` is a COPY of its kernel
+   file. `hierarchy/original/sabotage_tile.mojo` is a COPY of its kernel
    with two sabotage arms, reached only by the check -- the duplication is
    recorded here so a change to the tile's arithmetic is mirrored (or the
    sabotage arms are moved into the tile behind a `sabotage` argument,
    which is the neighbors lane's call).
-5. `hierarchy/ported/sparse/op/sort.mojo::merge_sort_u64_with_index` and
+5. `hierarchy/derived/sparse/op/sort.mojo::merge_sort_u64_with_index` and
    the oracle's `merge_sort_f64_with_index` are host merge sorts written
    here because no host sort primitive with a stated stability was found in
    the tree; if `core/` grows one, these two should call it.
@@ -374,7 +374,7 @@ sequence, same counts, same hashes.` against the card above.
    sort agrees; under ties sklearn's mergesort on `mst.data` keeps scipy's
    coo order, which is NOT our `(min,max)` order -- document, do not claim
    row equality), `n_leaves_ = n_rows`, `n_connected_components_ = 1`.
-   Entry: `hierarchy/ported/hierarchy/linkage.mojo::single_linkage(ctx, x,
+   Entry: `hierarchy/derived/hierarchy/linkage.mojo::single_linkage(ctx, x,
    n_rows, n_cols, n_clusters, metric, children, labels)` with `children`
    an Int32 device buffer of `(n_rows-1)*2` and `labels` of `n_rows`.
 

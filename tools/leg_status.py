@@ -252,7 +252,7 @@ OURS_BROKE = re.compile(
     r"|assertion failed|panic|failed to build|did not build", re.I)
 
 #: ...and the refusals `arm=ours` is DESIGNED to make. This library refuses
-#: by name on purpose in two places -- an unported option (`glm/UNPORTED.tsv`
+#: by name on purpose in two places -- an unported option (`glm/NOT_IMPLEMENTED.tsv`
 #: and every `check()` that names its option) and IDENTICAL declining a shape
 #: whose summation order it cannot pin (`gemm_tn`'s row 27 refusal). Those
 #: are the port working, not failing, and they must not be reported as

@@ -38,7 +38,7 @@ a halving tree apart from a sequential fold. A fixture of uniform or small
 values cannot (measured, and it is why the generator below looks odd), and
 on such a fixture a fold that ignored the pin entirely would pass.
 
-Modelled on `cluster/mojo_only/kmeans_identity_check.mojo`, deliberately: a
+Modelled on `cluster/original/kmeans_identity_check.mojo`, deliberately: a
 second shape for the same property would be a second thing to get wrong.
 """
 
@@ -49,7 +49,7 @@ from std.memory import bitcast
 
 from core.column_stats import STATS_TPB, column_mean_kernel, xty_kernel
 from core.pinned_reduce import pinned_block_sum
-from mojo_only.kernel_matrix import (
+from original.kernel_matrix import (
     COLUMN_AMD,
     COLUMN_APPLE,
     COLUMN_BIT_IDENTICAL,
@@ -61,7 +61,7 @@ from mojo_only.kernel_matrix import (
     lib_block_bounds_a_float_fold,
     lib_block_size_for,
 )
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, numeric_mode_name
+from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, numeric_mode_name
 
 
 comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL

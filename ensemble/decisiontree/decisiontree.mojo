@@ -42,7 +42,7 @@ them is a decision somebody could get wrong from memory:
   * **A row landing EXACTLY on `quesval` therefore goes LEFT.** This is
     the single most common silent difference between two tree
     implementations and it is checked per row in
-    `mojo_only/predict_check.mojo`.
+    `original/predict_check.mojo`.
   * **The root is index 0** and the loop tests the leaf flag BEFORE
     reading a threshold, so a one-node tree (`sparsetree = [leaf]`)
     returns that leaf's value without ever touching `row`.
@@ -146,7 +146,7 @@ downstream (see `randomforest.mojo`, `compute_max_features`).
 """
 
 from ensemble.flatnode import SparseTreeNode
-from mojo_only.numerics import ftz
+from original.numerics import ftz
 
 
 def _ftz_feature[dt: DType, //](x: Scalar[dt]) -> Scalar[dt]:

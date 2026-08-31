@@ -31,7 +31,7 @@ THE PER-NODE FEATURE PLANES are the DEVIATION BLOCK of
 `compute_non_symmetric_decision_tree_bins_kernel`: theirs walks a
 `TCFeature*` array by pointer, ours seven parallel planes by index, for the
 Metal reason recorded there. The packing here is the same packing
-`mojo_only/depthwise_check.apply_bins` did inline before this file existed;
+`original/depthwise_check.apply_bins` did inline before this file existed;
 that check keeps its own copy, because a gate that imports the thing it
 gates cannot catch the thing drifting, and this file's caller is the
 boosting loop that check does not run. DEVIATION 259.

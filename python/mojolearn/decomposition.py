@@ -23,7 +23,7 @@ class PCA(NumericModeMixin):
     (covariance, then an eigensolver) with the eigensolver being cuML's
     JACOBI arm (`svd_solver='jacobi'`, cuSOLVER syevj there, a device
     Jacobi here). cuML's own 'auto' reaches the divide-and-conquer `eigDC`
-    (syevd), which is NOT ported (decomposition/UNPORTED.tsv); this class
+    (syevd), which is NOT ported (decomposition/NOT_IMPLEMENTED.tsv); this class
     accepts 'auto' and runs the Jacobi arm, and says so here.
 
     WHAT IS HONORED, WHAT IS REFUSED, AND WHY (measured row by row by
@@ -40,7 +40,7 @@ class PCA(NumericModeMixin):
                                 (both name the one ported arm, the device
                                 Jacobi); 'full' / 'randomized' / 'arpack'
                                 are different algorithms that are not
-                                ported (decomposition/UNPORTED.tsv)
+                                ported (decomposition/NOT_IMPLEMENTED.tsv)
         whiten        refused   True is not ported: it needs the
                                 `explained_var` rescale of the components
                                 on transform and its inverse on
@@ -50,7 +50,7 @@ class PCA(NumericModeMixin):
         tol, iterated_power, random_state, n_oversamples -- not on this
                                 surface: the device Jacobi runs RAFT's own
                                 defaults (tol 1e-7, 15 sweeps; see
-                                decomposition/ported/linalg/detail/pca.mojo)
+                                decomposition/derived/linalg/detail/pca.mojo)
         n_features > 128 refused UNDER NUMERIC_IDENTICAL ONLY: the pinned
                                 split-K Gram kernel's capacity
                                 (IDENTITY_PATHS row 27; the refusal names
@@ -81,7 +81,7 @@ class PCA(NumericModeMixin):
                 f"mojolearn PCA: svd_solver={self.svd_solver!r} is refused; "
                 "only 'auto' / 'covariance_eigh' (cuML's covariance + device "
                 "Jacobi arm) is ported; 'full', 'randomized' and 'arpack' are "
-                "different algorithms (decomposition/UNPORTED.tsv)"
+                "different algorithms (decomposition/NOT_IMPLEMENTED.tsv)"
             )
         x, self.input_copied_ = as_f32_c(X, "X")
         if x.shape[0] < 2 or x.shape[1] < 2:

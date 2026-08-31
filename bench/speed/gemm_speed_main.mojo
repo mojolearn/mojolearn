@@ -82,7 +82,7 @@ from bench.gemm_shapes import OP_NN as TBL_OP_NN
 from bench.gemm_shapes import OP_NT as TBL_OP_NT
 from bench.gemm_shapes import OP_TN as TBL_OP_TN
 from core.gemm import gemm_nt, gemm_tn
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
 comptime DEVICE_POISON = Float32(-987654.0)

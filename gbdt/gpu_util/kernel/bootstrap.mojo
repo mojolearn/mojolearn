@@ -90,7 +90,7 @@ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 # DEVIATION 258: the Bayesian weight -log(u) and its temperature power
 # were the device stdlib (E2 round 1: gbdt_rmse_bayesian DIVERGENT at
 # tree000.depth00.hist, the FIRST histogram, on NVIDIA); routed
-from mojo_only.numerics import identical_log, identical_pow
+from original.numerics import identical_log, identical_pow
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

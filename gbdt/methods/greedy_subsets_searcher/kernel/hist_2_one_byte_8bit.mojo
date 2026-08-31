@@ -54,7 +54,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     hist2_dither,
     hist2_quantize,
 )
-from mojo_only.kernel_matrix import TARGET_COLUMN, lane_width_for
+from original.kernel_matrix import TARGET_COLUMN, lane_width_for
 
 comptime H8_BLOCK = 512
 comptime H8_SLICE = 2048

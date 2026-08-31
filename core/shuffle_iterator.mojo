@@ -4,7 +4,7 @@
 
 NO CUML FILE MIRRORS THIS. It is CCCL -- NVIDIA's CUDA Core Compute
 Libraries, the home of Thrust, CUB and libcu++ -- which this tree does not
-mirror file for file, the same way `cluster/mojo_only/` holds ported RAFT
+mirror file for file, the same way `cluster/original/` holds ported RAFT
 primitives rather than a RAFT directory. CCCL is open source, so it is a
 PORT target and not a substitution target, and every construct below cites
 the header it was transcribed from.

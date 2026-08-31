@@ -66,8 +66,8 @@ from std.gpu import block_idx, grid_dim, thread_idx
 from std.math import exp, log, sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from mojo_only.kernel_matrix import partition_chunks_sm_for
-from mojo_only.numerics import (
+from original.kernel_matrix import partition_chunks_sm_for
+from original.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
     ftz,

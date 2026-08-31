@@ -165,7 +165,7 @@ struct PointwiseTreeWorkspace(Movable):
 
     The per-tree reset contract is CONSTRUCTOR POSTCONDITIONS
     (`reset_subsets` + `reset_for_tree`), held bit-exactly by
-    `mojo_only/pointwise_pool_check.mojo` and end-to-end by the
+    `original/pointwise_pool_check.mojo` and end-to-end by the
     pooled-vs-fresh identity of whole fits.
     """
 

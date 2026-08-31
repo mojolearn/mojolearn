@@ -1,7 +1,7 @@
 # Resume here
 
 Written 2026-08-19 at the end of a long session. Read this, then `UNWIRED.md`,
-then `PORTED_MAP.tsv`.
+then `DERIVATION_MAP.tsv`.
 
 ## What this repository is
 
@@ -9,7 +9,7 @@ A port of **CatBoost's GPU oblivious (symmetric) tree learner**
 into Mojo, targeting Metal first. Nothing from mojotrees. `gbdt/` mirrors
 CatBoost's own paths file for file (their constant `catboost/cuda/` prefix
 dropped, and `cuda_util` renamed `gpu_util` because CUDA is not our
-vocabulary). `mojo_only/` is what CatBoost never had to write.
+vocabulary). `original/` is what CatBoost never had to write.
 
 **The one rule: COPY, DO NOT IMPROVE.** Every deviation is a confound when a
 number finally arrives, and every deviation is recorded in `PORTING.md`.
@@ -82,7 +82,7 @@ inferences each found a REAL bug without finding the one being chased:
    layouts and this port only had one)
 3. the block-to-flat bridge duplicated, advancing the offset twice
 
-When stuck: **read the bytes.** `mojo_only/mixed_hist_probe.mojo` localized in
+When stuck: **read the bytes.** `original/mixed_hist_probe.mojo` localized in
 one run what three rounds of inference could not.
 
 ## Rules earned here, do not relearn them
@@ -148,7 +148,7 @@ Row sweep at 100 one-byte features, depth 6:
 `run_tree_layout` runs **9 `ctx.synchronize()` and ~16 kernel launches per
 level**, so 54 host round trips and ~96 launches per depth-6 tree.
 
-`mojo_only/sync_price.mojo` prices them, and it CORRECTED the obvious guess:
+`original/sync_price.mojo` prices them, and it CORRECTED the obvious guess:
 
     54 bare drains        0.76 ms     (0.014 ms each, nearly free)
     54 copy + drain      13.0  ms     (0.24 ms each)
@@ -366,7 +366,7 @@ A level now blocks the host ONCE where theirs blocks twice (marked
 deviation, `kernel/split_resolve.mojo`): the winner is reduced on the
 device in the host loop's exact order, descriptors pack from a
 once-per-tree bin-feature table, gates run post-drain with a one-level
-rollback that `mojo_only/early_stop_check.mojo` forces on purpose (no
+rollback that `original/early_stop_check.mojo` forces on purpose (no
 oracle fixture ever stops early, so the rollback needed its own reach
 check; building it also established that a constant-bin tree does NOT
 root-stop -- the full/empty split scores the parent's own score and
@@ -470,7 +470,7 @@ CPU evaluator everywhere except the smallest config, where it ties.
 
 * BAYESIAN BOOTSTRAP: PORTED (b4152f3, their GPU default; MVS is
   Y_ASSERTed away in their GPU oblivious searcher). Stochastic gate set
-  in mojo_only/bootstrap_check.mojo; harness 'bayesian' mode shows the
+  in original/bootstrap_check.mojo; harness 'bayesian' mode shows the
   parity band holds with sampling on and the mse bands overlap.
 * RANDOM_STRENGTH: CLOSED WITH NO CODE. On their GPU symmetric path the
   noise CANCELS BY CONSTRUCTION: `NextFeature` sets FeatureId, then
@@ -560,7 +560,7 @@ Three things worth carrying forward:
   different packing policies. A 16-category one-hot feature was silently
   unlearnable, and the fit/predict consistency assertion could not see it
   because both sides read the same wrong layout. Fixed;
-  `mojo_only/one_hot_cardinality_check.mojo` sweeps every policy boundary.
+  `original/one_hot_cardinality_check.mojo` sweeps every policy boundary.
 
 ### 2026-08-21, the 254 lever closed out (9b2b64e + 8010b2f)
 
@@ -806,7 +806,7 @@ count. The scale story is now three measured points: parity near
 
 ### 2026-08-21, later: the epsilon tree decomposed -- 83% accumulate, and the density cliff
 
-`mojo_only/shape_sweep.mojo` over prefix-slices of the epsilon fixtures
+`original/shape_sweep.mojo` over prefix-slices of the epsilon fixtures
 (full record `bench/results/SHAPE_SWEEP_2026-08-21_epsilon.md`), three
 findings, each measured:
 
@@ -829,7 +829,7 @@ findings, each measured:
    so the cliff is unaddressed in their design and merely tolerable on
    V100-class bandwidth. A density-triggered level compaction was
    priced at 15-30% and then REFUTED the same day by
-   `mojo_only/density_probe.mojo`: indexed loads beat the gather arm at
+   `original/density_probe.mojo`: indexed loads beat the gather arm at
    EVERY density (0.29-0.75x of its cost) and a dense 800MB/level copy
    exceeds depth-6 amplification losses, so the cliff is STRUCTURAL on
    this box and the on-box speed hunt at this shape closes with a
@@ -934,7 +934,7 @@ the 7-figure loss column against CatBoost's own output.
 
 ### 2026-08-21, identity lane assist: rows 9 and 10 measured on Apple
 
-`mojo_only/ieee_arith_check.mojo` (`pixi run check-ieee-arith`): 2^20
+`original/ieee_arith_check.mojo` (`pixi run check-ieee-arith`): 2^20
 hashed bit patterns through raw div, raw sqrt, the two exact
 score-kernel expression shapes, and an a*b+c contraction canary judged
 against BOTH exact references. Verdict on Metal through MAX:
@@ -955,7 +955,7 @@ of every new kernel-matrix column.
 
 ### 2026-08-21, the user-facing hole: train()'s preparation bill. CLOSED THE SAME DAY.
 
-`mojo_only/quantize_cost_probe.mojo` (worktree at 5eed329): at
+`original/quantize_cost_probe.mojo` (worktree at 5eed329): at
 400k x 500, `train()` end to end was 24.5-25.1 s of which the trees were
 0.75 s -- a prep bill of ~24 s, 32x the training, paid inside a real
 `.fit(X, y)` against CatBoost's multi-threaded C++ quantizer. It was

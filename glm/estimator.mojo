@@ -9,7 +9,7 @@ _mojolearn_estimators.mojo:198` calls `ols_fit_host` and
 
 DEVIATION 527 -- THE GUARD WAS BYPASSED ON EXACTLY THIS PATH
 -------------------------------------------------------------
-`ols_fit_host` called `lstsq_eig` DIRECTLY. `glm/ported/glm/ols.mojo` exists
+`ols_fit_host` called `lstsq_eig` DIRECTLY. `glm/derived/glm/ols.mojo` exists
 because that is not safe: `ols.cuh:112-113` switches away from the
 normal-equations solver when `n_cols > n_rows` or `n_cols == 1`, because
 `A^T A` is singular by construction in the first case and cuML's own Python
@@ -31,11 +31,11 @@ from max.gpu.host import DeviceContext
 
 from core.gemm import gemv_n
 from core.identity_trace import IdentityTrace
-from glm.ported.glm.ols import OLS_ALGO_EIG, ols_fit_traced
-from glm.ported.glm.qn.qn import qn_decision_function, qn_fit_x
-from glm.ported.glm.ridge import RIDGE_ALGO_EIG, ridge_fit_traced
-from glm.ported.linear_model.qn import QN_LOSS_LOGISTIC, QNParams
-from mojo_only.numerics import ftz, identical_exp64
+from glm.derived.glm.ols import OLS_ALGO_EIG, ols_fit_traced
+from glm.derived.glm.qn.qn import qn_decision_function, qn_fit_x
+from glm.derived.glm.ridge import RIDGE_ALGO_EIG, ridge_fit_traced
+from glm.derived.linear_model.qn import QN_LOSS_LOGISTIC, QNParams
+from original.numerics import ftz, identical_exp64
 
 
 def _add_scalar_kernel(
@@ -318,7 +318,7 @@ def qn_sigmoid_host(
     scores) and stores it into a float64 array. Here it is computed ON THE
     HOST in Float64 through `identical_exp64` -- `portable_exp64` under
     IDENTICAL, the repository's standing rule for a probability link (the
-    GBDT lane's Logloss sigmoid, `mojo_only/numerics.mojo`), because each
+    GBDT lane's Logloss sigmoid, `original/numerics.mojo`), because each
     host libm rounds double `exp` differently in the last bit and numpy's
     `np.exp` would carry the host's bit into the answer (E2 round 1's
     finding). The output dtype is float64, as cuML's and scikit-learn's

@@ -1,0 +1,14 @@
+# our_file	upstream_file	status	notes
+# cuML pinned at 00094f7, RAFT at 661a3b8 (both branch-25.08).
+# CORRECTION 2026-08-19: this file used to cite raft cpp/include/raft/linalg/detail/{pca,tsvd}.cuh.
+# NEITHER FILE HAS EVER EXISTED. `git log --all -- cpp/include/raft/linalg/detail/pca.cuh` in the
+# RAFT checkout returns nothing. PCA and truncated SVD live in cuML, and cuml/cpp/src/pca/pca.cu is
+# a thin dispatch over cuml/cpp/src/pca/pca.cuh, which calls RAFT only for stats, matrix and eig.
+derived/linalg/detail/pca.mojo	cuml cpp/src/pca/pca.cuh	partial	pcaFit and pcaTransform; plus calEig and truncCompExpVars from cuml cpp/src/tsvd/tsvd.cuh, which are inseparable from fit
+derived/linalg/detail/tsvd.mojo	cuml cpp/src/tsvd/tsvd.cuh	partial	tsvdFit only; shares eig_and_truncate with pca, which is how their two files share calEig
+original/jacobi_eigh_device.mojo	cuml cpp/src/tsvd/tsvd.cuh::calEig COV_EIG_JACOBI arm	SUBSTITUTE	not a port. Their dispatch DEFAULTS to COV_EIG_DQ (params.hpp:53, pca.pyx:392-404); both arms end in closed cuSOLVER (syevd / syevj) and MAX ships no symmetric eigensolver, so a solver had to be written. Jacobi chosen because it can be diffed against a host reference rotation by rotation. NO SIZE CAP since 0f17dde; verified at n = 16, 32, 33, 64, 128, 256
+original/jacobi_eigh.mojo	(none)	oracle	host Float64 reference the device solver is checked against. NOT a CPU fallback; there is no CPU path in this repository
+derived/linalg/detail/pca.mojo::sign_flip_kernel	raft cpp/include/raft/matrix/detail/math.cuh:367 signFlipKernel	ported, DIVERGENT CALLER	the kernel is theirs; the decision to call it from pcaFit is not. cuML's pcaFit does not flip signs at all, and pcaFitTransform flips U-based via ML::signFlip (tsvd.cuh:139). Ours matches sklearn 1.9's svd_flip(u_based_decision=False) instead, so the output is reproducible
+original/pca_check.mojo	(none)	check	invariant checks at 4 features, plus check_pca_wide / check_pca_truncation at 64 and 128
+original/jacobi_check.mojo	(none)	check	eigensolver across 16/32/33/64/128/256, reach-past-32 sabotage, scale invariance
+pca_wide_sklearn.py	(none)	oracle	sklearn.decomposition.PCA on the same fixture; sklearn is an ORACLE, not a design source

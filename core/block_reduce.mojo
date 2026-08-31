@@ -83,7 +83,7 @@ algorithm does not select it.
 #     as 4 warp aggregates on Apple and 2 on CDNA, which is a different
 #     summation tree. No float instantiation is reachable from this port
 #     today. If one is added it needs a NUMERIC row in
-#     `mojo_only/kernel_matrix.mojo` pinning the lane width, exactly as
+#     `original/kernel_matrix.mojo` pinning the lane width, exactly as
 #     `replication_lanes` is pinned to 32 there for the histogram. Declared,
 #     not taken.
 #
@@ -133,7 +133,7 @@ from std.sys.info import size_of
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from mojo_only.kernel_matrix import TARGET_COLUMN, column_shared_limit
+from original.kernel_matrix import TARGET_COLUMN, column_shared_limit
 
 
 def block_reduce_sum[

@@ -13,7 +13,7 @@ BUILT:
 * One-hot, end to end: the `build_layout` flag, the scan skip, the `==`
   predicate in `split_and_make_sequence`, the evaluator's `takeEqual`, and
   the `train.mojo` surface. Gated analytically in
-  `mojo_only/one_hot_check.mojo`.
+  `original/one_hot_check.mojo`.
 * Host-side FeatureFreq (`tools/ctr_prep.py`, 21c70ce) and a categorical
   CatBoost arm (`tools/catboost_arm.py`, `bench/interleaved/ctr_quality.mojo`).
 * **MinEntropy border selection** (`gbdt/grid_creator/binarization.
@@ -49,7 +49,7 @@ BUILT 2026-08-20, the CTR round:
   `THistoryBasedCtrCalcer`), `index_wrapper.mojo`, `ctr_binarization.mojo`,
   and `kernel/ctr_calcers.mojo` -- all TEN elementwise kernels of
   `ctrs/kernel/ctr_calcers.cu`, enqueued and gated cell by cell by
-  `mojo_only/ctr_kernels_check.mojo`. The BIN ORDERING and the SEGMENTED
+  `original/ctr_kernels_check.mojo`. The BIN ORDERING and the SEGMENTED
   SCAN moved to the DEVICE on 2026-08-21 (`TCtrBinBuilderGpu`,
   `THistoryBasedCtrCalcerGpu`); the FeatureFreq calcer is still host side
   and is all that is left of `PORTING.md` deviation 52.
@@ -239,7 +239,7 @@ this is achievable in one source.
   ACTED ON, on a tiny fixture, and it was warranted: CPU and GPU DO
   binarize CTR values differently. See the Borders entry two bullets down.
 * CONSTRUCTED fixtures, not real datasets. Correctness gates on (a) an
-  analytic answer written down in advance (`mojo_only/one_hot_check.mojo`
+  analytic answer written down in advance (`original/one_hot_check.mojo`
   is the model: the right answer is arithmetic, no fixture needed) and
   (b) CatBoost's OWN output as oracle, via `save_model(format='json')`,
   which exposes the CTR tables, config, and CTR borders. A fixture we
@@ -272,7 +272,7 @@ this is achievable in one source.
   [0,1] where the GPU builds Uniform-15 borders from the observed column.
   So the CPU arm is a quality comparison, not a value oracle, and the
   Borders VALUES are gated analytically instead, in
-  `mojo_only/ctr_check.mojo` against an independent O(n^2) tally.
+  `original/ctr_check.mojo` against an independent O(n^2) tally.
 * Real datasets are for QUALITY and SPEED reporting, a SEPARATE purpose
   from correctness. Rules when that reporting happens: fix the dataset
   list BEFORE seeing the numbers; every dataset run goes in the table

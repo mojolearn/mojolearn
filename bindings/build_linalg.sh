@@ -152,7 +152,7 @@ if [ "${MOJOLEARN_NUMERIC_MODE:-fast}" = "identical" ]; then
     # identical build. THAT BUILD'S GATE IS THE LANE'S OWN, and it is not
     # optional for this extension:
     #     tools/with_identical_mode.sh pixi run mojo run -I . \
-    #         gemm/mojo_only/gemm_device_check.mojo
+    #         gemm/original/gemm_device_check.mojo
     export MOJOLEARN_SKIP_BUILD_GATE=1
 elif [ "${MOJOLEARN_NUMERIC_MODE:-fast}" = "deterministic" ]; then
     # The MIDDLE tier: reproducible run to run on ONE device, with no
@@ -178,7 +178,7 @@ trap 'rm -rf "$tmpdir"' EXIT INT TERM
 out="$tmpdir/_mojolearn_linalg.so"
 
 # `-I .` is the mojolearn package root, so `gemm.host_entry` and
-# `mojo_only.numerics` resolve. `-I bindings` is this directory.
+# `original.numerics` resolve. `-I bindings` is this directory.
 # shellcheck disable=SC2086  # the flag strings are deliberately word-split
 pixi run mojo build --emit shared-lib \
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
@@ -212,7 +212,7 @@ fi
 # then it only lets a hopeless build skip the smoke test.
 #
 # WHERE 8 COMES FROM. Ten distinct kernel instantiations are reachable from
-# `identical_gemm_with_plan` in gemm/mojo_only/gemm_identical.mojo:
+# `identical_gemm_with_plan` in gemm/original/gemm_identical.mojo:
 #
 #     identical_gemm_flat_kernel                            1
 #     identical_gemm_tiled_kernel[TM, TN, KS], five of them:
@@ -350,7 +350,7 @@ tn = linalg.matmul(np.ascontiguousarray(a.T), b, transpose_a=True,
 # allclose, NOT array_equal, AND THAT IS DELIBERATE. Contract section 3 makes
 # bit-for-bit agreement of the three orientations a REQUIREMENT of the
 # profile, and it is gated -- `check_orientations_agree` in
-# gemm/mojo_only/gemm_oracle_check.mojo, and `check_device_matches_oracle`
+# gemm/original/gemm_oracle_check.mojo, and `check_device_matches_oracle`
 # across 62 shapes in gemm_device_check.mojo. But this build is FAST, and
 # gemm_identical.mojo's own header says check_device_matches_oracle "asserts
 # under IDENTICAL and reports under FAST". Nothing in this tree asserts

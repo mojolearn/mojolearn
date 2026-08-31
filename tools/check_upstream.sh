@@ -7,8 +7,8 @@
 #
 # This tree now mirrors TWO upstreams. Each section owns a map and a pin:
 #
-#   boosting (root)   CatBoost   PORTED_MAP.tsv          pinned 54a8143a
-#   cluster           cuVS       cluster/PORTED_MAP.tsv  pinned 2140532c
+#   boosting (root)   CatBoost   DERIVATION_MAP.tsv          pinned 54a8143a
+#   cluster           cuVS       cluster/DERIVATION_MAP.tsv  pinned 2140532c
 #
 # usage: tools/check_upstream.sh /path/to/checkout [section]
 #        section defaults to the root CatBoost map.
@@ -17,12 +17,12 @@ SRC="${1:?path to an upstream checkout required}"
 SECTION="${2:-}"
 
 if [ -z "$SECTION" ]; then
-  MAP="PORTED_MAP.tsv"
+  MAP="DERIVATION_MAP.tsv"
   OURS_PREFIX=""
   EXPECTED="54a8143a"
   NAME="CatBoost"
 else
-  MAP="$SECTION/PORTED_MAP.tsv"
+  MAP="$SECTION/DERIVATION_MAP.tsv"
   OURS_PREFIX="$SECTION/"
   EXPECTED="2140532c"
   NAME="cuVS"

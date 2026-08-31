@@ -72,9 +72,9 @@ must never be quoted as a cross-vendor result.
   generated from the WORKING TREE; the remote card is generated from the
   COMMIT. If they differ, the device is not the variable being measured.
   `--rent` refuses on a dirty tree and the dry run reports it as `BLOCK G3`.
-  Paths checked: `gemm/mojo_only`, `bench/gemm_card_main.mojo`,
+  Paths checked: `gemm/original`, `bench/gemm_card_main.mojo`,
   `bench/gemm_shapes.mojo`, `tools/gemm_card.sh`,
-  `tools/with_identical_mode.sh`, `tools/with_build_lock.sh`, `mojo_only`,
+  `tools/with_identical_mode.sh`, `tools/with_build_lock.sh`, `original`,
   `pixi.toml`, `pixi.lock`.
 - **Same commit on both sides**, recorded in the result directory as
   `commit.txt` and, because a rented box has no `.git`, cross-checked by
@@ -102,7 +102,7 @@ Run these on the Mac. Every one of them is a defect found for nothing.
     tools/gemm_column_invariance.sh                 # host arms, the harness
     MOJOLEARN_GEMM_CARD_ARM=device tools/gemm_column_invariance.sh
     tools/with_identical_mode.sh pixi run mojo run -I . \
-        gemm/mojo_only/gemm_device_check.mojo       # the kernel's own gates
+        gemm/original/gemm_device_check.mojo       # the kernel's own gates
 
 A machine that fails its own gates teaches nothing when diffed against
 another machine, so a red here is fixed before a box is created.

@@ -44,7 +44,7 @@ where CUDA does not (row 10). All four are comptime no-ops under FAST, so
 the shipped bits do not move.
 """
 
-from mojo_only.kernel_matrix import (
+from original.kernel_matrix import (
     K_LIB_ROW_NORM,
     TARGET_COLUMN,
     lib_block_size_for,
@@ -58,10 +58,10 @@ from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
 from core.pinned_reduce import pinned_block_sum
-from mojo_only.numerics import ftz, identical_mul_add
+from original.numerics import ftz, identical_mul_add
 
 
-# READ FROM THE MATRIX, not restated here. `mojo_only/kernel_matrix.mojo`
+# READ FROM THE MATRIX, not restated here. `original/kernel_matrix.mojo`
 # owns every tunable in this tree; changing TARGET_COLUMN there rebuilds
 # this kernel for another vendor with no edit in this file.
 comptime NORM_TPB = lib_block_size_for[K_LIB_ROW_NORM, TARGET_COLUMN]()

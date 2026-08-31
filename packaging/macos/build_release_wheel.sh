@@ -52,7 +52,7 @@ cp "$here/CITATION.cff" "$here/python/mojolearn/"
 # FAST set lands at python/mojolearn/*.so and the IDENTICAL set at
 # python/mojolearn/identical/*.so; python/mojolearn/_backend.py loads the
 # identical set when MOJOLEARN_NUMERIC_MODE=identical is set at import
-# (mojo_only/numerics.mojo reads the build define). Both sets ship in ONE
+# (original/numerics.mojo reads the build define). Both sets ship in ONE
 # wheel. The list below is THE list: bindings/build_*.sh that is not named
 # here does not ship, and a name here with no script fails the build.
 # 2026-08-24: five bindings were added at once (svm/isolation-forest,

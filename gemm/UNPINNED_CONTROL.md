@@ -2,7 +2,7 @@
 
 The single-variable arm that prices `mojolearn.identical.gemm.fp32.v1`.
 
-Written 2026-08-25 alongside `gemm/mojo_only/gemm_unpinned.mojo`. **Neither
+Written 2026-08-25 alongside `gemm/original/gemm_unpinned.mojo`. **Neither
 file has been compiled and neither has been executed.** The lane that wrote
 them had no execution rights of any kind. Everything in section 5 is a
 PREDICTION recorded before measurement, in the discipline of
@@ -27,7 +27,7 @@ DEVIATION 1092 says outright that none of them isolates the pin.
 
 The arm that answers it is the identical kernel's own execution plans with
 the numerical plan of `IDENTICAL_FP32_CONTRACT.md` removed and nothing else
-touched. That is `gemm/mojo_only/gemm_unpinned.mojo`.
+touched. That is `gemm/original/gemm_unpinned.mojo`.
 
 **One consequence is worth stating before anything else.** The unpinning is
 written out longhand in a separate kernel rather than reached through
@@ -357,7 +357,7 @@ source.
 
 ## OWED, AND WHY I DID NOT DO IT HERE
 
-This lane could write exactly two paths, `gemm/mojo_only/gemm_unpinned.mojo`
+This lane could write exactly two paths, `gemm/original/gemm_unpinned.mojo`
 and this file. Everything below is required to turn the instrument into a
 measurement and none of it was done here.
 
@@ -386,10 +386,10 @@ measurement and none of it was done here.
    defined in the two files this lane wrote and nowhere else, and a deviation
    that lives only in a docstring is a deviation the next lane will renumber
    over.
-6. **`gemm/mojo_only/gemm_identical.mojo` -- possibly make `_leaf_bounds` and
+6. **`gemm/original/gemm_identical.mojo` -- possibly make `_leaf_bounds` and
    `_tile_grid` public.** The instrument imports both by their underscore
    names. There is precedent for that in the tree
-   (`glm/ported/glm/qn/glm_linear.mojo` imports `_read_scalar`), so it is
+   (`glm/derived/glm/qn/glm_linear.mojo` imports `_read_scalar`), so it is
    expected to work, but if the compiler refuses the fix is to rename them
    without the underscore and update both call sites in the same commit. A
    COPY of either function into the instrument is not an acceptable fix, for

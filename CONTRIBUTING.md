@@ -66,9 +66,9 @@ MojoLearn mirrors algorithms from CatBoost, cuML, cuVS, RAFT and FAISS under
 their licenses. A contribution derived from upstream code must:
 
 - name the exact upstream file and commit;
-- update the section's `PORTED_MAP.tsv` and, when applicable, `UNPORTED.tsv`;
+- update the section's `DERIVATION_MAP.tsv` and, when applicable, `NOT_IMPLEMENTED.tsv`;
 - preserve required copyright and license notices;
-- distinguish transliteration, replacement and original `mojo_only` work.
+- distinguish transliteration, replacement and original `original` work.
 
 Do not paste code from a source whose license is incompatible or unknown.
 

@@ -42,7 +42,7 @@
 #    materializes nothing. If those two plans ever disagreed, this card would
 #    show the staged one and would not notice -- that is
 #    `check_device_is_launch_invariant`'s job in
-#    `gemm/mojo_only/gemm_device_check.mojo`, and it is a different gate.
+#    `gemm/original/gemm_device_check.mojo`, and it is a different gate.
 #    **This is a localizer, not an invariance gate.**
 #  * **Two cards agreeing does not prove the two runs computed identically.**
 #    It proves they agree at these checkpoints, on this fixture. The mechanism

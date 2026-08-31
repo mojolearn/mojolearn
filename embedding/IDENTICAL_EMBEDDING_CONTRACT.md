@@ -13,8 +13,8 @@ compiler. Read section 13 before quoting anything here.
 The three companion files are
 
     embedding/IDENTICAL_EMBEDDING_CONTRACT.md   this file, the specification
-    embedding/mojo_only/embedding_oracle.mojo   the NORMATIVE host answer
-    embedding/mojo_only/embedding_identical.mojo          the device spelling
+    embedding/original/embedding_oracle.mojo   the NORMATIVE host answer
+    embedding/original/embedding_identical.mojo          the device spelling
 
 and the two that do not exist and are owed are `embedding_fixture.mojo` and
 `embedding_check.mojo`. **Section 11 is a specification for gates, not a
@@ -42,10 +42,10 @@ The forward is a gather and is easy. It still gets rules, section 4, because
 
 Every identical kernel here reaches identity by the same construction --
 **NO FLOAT EVER CROSSES A THREAD BOUNDARY.**
-`transformer/ported/transformers/models/llama/modeling_llama.mojo` says "no
+`transformer/derived/transformers/models/llama/modeling_llama.mojo` says "no
 shared memory, no warp primitive, no atomic, no cross-block reduction";
-`mamba/ported/transformers/models/mamba/modeling_mamba.mojo` says the same;
-`training/mojo_only/optimizer.mojo` says "no cross-thread combination, no
+`mamba/derived/transformers/models/mamba/modeling_mamba.mojo` says the same;
+`training/original/optimizer.mojo` says "no cross-thread combination, no
 atomic and no reduction". Where a reduction is unavoidable the GEMM lane pins
 it as a fixed balanced tree over a `k` partition that is a pure function of
 `k` (`gemm/IDENTICAL_FP32_CONTRACT.md` sections 6 and 7.2), and the loss lane
@@ -181,7 +181,7 @@ which is section 4.1.
 | **E4** | `dW[v, j]` as stored | flush | `ftz(acc)` |
 | **E0** | the carried-in accumulator as loaded, `accumulate` only | flush | `ftz(dw_prev)` |
 
-Every one is `mojo_only/numerics.mojo::ftz`, IDENTITY_PATHS row 10's
+Every one is `original/numerics.mojo::ftz`, IDENTITY_PATHS row 10's
 construction, the actual helper and never a local copy. Under
 `NUMERIC_FAST` it compiles away and **this profile makes no claim at all**,
 which is the gemm oracle's own disclaimer about itself.
@@ -595,7 +595,7 @@ sort returns the same permutation**, whatever its tie policy, whatever its
 block shape, whatever its vendor. That converts "the sort must be stable", a
 property of an implementation, into "the sort must be correct", a property
 anybody can check. It is DEVIATION 621's argument at a second site --
-`hierarchy/ported/sparse/op/sort.mojo` replaced an unstable
+`hierarchy/derived/sparse/op/sort.mojo` replaced an unstable
 `thrust::sort_by_key` on weight alone with a total order on
 `(weight_order_key, min(u,v), max(u,v))` for exactly this reason, and
 `hierarchy/README.md` states the consequence in one line, "two distinct MST
@@ -969,7 +969,7 @@ follows -- "a Phase 3 gate cannot prove that the pin is REACHED on Apple by
 showing that pinned and unpinned bits differ, because on Apple they do not".
 Reach on Apple must be shown another way, by an oracle carrying both
 spellings that REPORTS which arm the backend took, which is what
-`cluster/mojo_only/kmeans_identity_check.mojo::check_fused_contraction_pin`
+`cluster/original/kmeans_identity_check.mojo::check_fused_contraction_pin`
 does for the contraction pin. The arm becomes a bit-level reach proof, with
 no edit, on the first non-flushing backend.
 
@@ -1030,7 +1030,7 @@ UNALIGNED split points, with `EMB_ACCUM_BY_ADD` shown to fail the same gate;
 NAMED sabotage that fails a gate, **with its predicted INERT set asserted as
 a mask** rather than merely observed to have moved something.
 
-`embedding/mojo_only/embedding_check.mojo` will be the gate file. **It does
+`embedding/original/embedding_check.mojo` will be the gate file. **It does
 not exist.** FAST arms of (a) are RECORDED, not asserted, where they are
 vendor shaped -- the metrics lane's leg-11 lesson.
 
@@ -1221,7 +1221,7 @@ number until it is measured, alternated inside one thermal window.**
 - **One embedding, not a model.** No `lm_head`, no logits, no tied weights.
   **Tied embeddings are the sharp one** -- when `lm_head.weight` IS
   `embed_tokens.weight`, the total gradient is this lane's `dW` plus the
-  `lm_head` GEMM's `dB` from `gemm/mojo_only/gemm_backward.mojo`, and **the
+  `lm_head` GEMM's `dB` from `gemm/original/gemm_backward.mojo`, and **the
   ORDER and the SEAM of combining the two is a decision this profile does not
   make.** It is a third fold, over two terms, and it needs its own clause in
   whichever lane owns the tie. Named here so it is not discovered later.
@@ -1273,11 +1273,11 @@ number until it is measured, alternated inside one thermal window.**
 
     embedding/IDENTICAL_EMBEDDING_CONTRACT.md   this file
     embedding/__init__.mojo                     empty, as its siblings are
-    embedding/mojo_only/__init__.mojo           empty
-    embedding/mojo_only/embedding_oracle.mojo   the NORMATIVE host answer
-    embedding/mojo_only/embedding_identical.mojo          the device spelling
-    embedding/mojo_only/embedding_fixture.mojo  OWED, does not exist
-    embedding/mojo_only/embedding_check.mojo    OWED, does not exist
+    embedding/original/__init__.mojo           empty
+    embedding/original/embedding_oracle.mojo   the NORMATIVE host answer
+    embedding/original/embedding_identical.mojo          the device spelling
+    embedding/original/embedding_fixture.mojo  OWED, does not exist
+    embedding/original/embedding_check.mojo    OWED, does not exist
     embedding/README.md                         OWED, does not exist
 
 The oracle carries TWO spellings of the permutation on purpose --
@@ -1311,7 +1311,7 @@ This lane owns **1300 through 1339**.
 | 1317 | NO MULTIPLY ANYWHERE, so gemm section 4 is vacuous here; the `fma(dy, 1.0, acc)` equivalence stated as a lemma and not as a choice |
 | 1318 | the nine stages and their card tags, including three INTEGER stages, and why `emb.perm` must be one of them |
 | 1319 | the sabotage set and its predicted inert masks |
-| 1320 | the one scheduling row, `EMB_TPB`, resolved through `mojo_only/kernel_matrix.mojo` with no inline vendor branch |
+| 1320 | the one scheduling row, `EMB_TPB`, resolved through `original/kernel_matrix.mojo` with no inline vendor branch |
 | 1321 | the cross-lane finding -- transformer 7.1's and loss 7.3's "the seed forbids `-0.0`" both have the `ftz` hole of 7.1 |
 | 1322 | the CSR run representation, `counts[V]` and `run_begin[V+1]` and `perm[T]`, and the decision to materialize it once for all `d` columns |
 | 1323 | the degenerate shapes -- `T == 0`, `d == 0`, `V == 0`, and the negative-argument refusals |
@@ -1327,8 +1327,8 @@ This lane was permitted to create exactly five paths and to edit none. Every
 item below is a change to a file this lane does not own, or a file it was not
 permitted to create. Nothing on this list has been done.
 
-1. **`embedding/mojo_only/embedding_check.mojo` and
-   `embedding/mojo_only/embedding_fixture.mojo` DO NOT EXIST.** Not one
+1. **`embedding/original/embedding_check.mojo` and
+   `embedding/original/embedding_fixture.mojo` DO NOT EXIST.** Not one
    clause of this document has been falsified by a sabotage; section 11 is a
    specification for gates and not a report of any. **Every sabotage switch in
    `embedding.mojo` has never been compiled, let alone shown to fail a gate.
@@ -1339,22 +1339,22 @@ permitted to create. Nothing on this list has been done.
    `gbdt/gpu_util/kernel/radix_sort.mojo::launch_radix_sort_bins`, keyed on
    the ids with the positions as the payload, plus a run-boundary pass over
    the sorted ids. That is a cross-lane import and
-   `svm/mojo_only/device_select.mojo` is the precedent for a lane importing a
+   `svm/original/device_select.mojo` is the precedent for a lane importing a
    `gbdt/gpu_util/` primitive, but it needs six scratch buffers and a
    `REORDER_BLOCK` geometry this lane has not verified against, and writing
    an unverified device sort would have added a second thing that can be
    wrong. **Clause (d) of section 11 cannot run until it exists.**
 
-3. **`refuse_nonfinite` is now a FOURTH copy.** `mamba/mojo_only/mamba_oracle.mojo:57`
-   is the first, `training/mojo_only/optimizer_oracle.mojo:162` the second and
-   `training/mojo_only/loss_oracle.mojo:167` the third, and both training
+3. **`refuse_nonfinite` is now a FOURTH copy.** `mamba/original/mamba_oracle.mojo:57`
+   is the first, `training/original/optimizer_oracle.mojo:162` the second and
+   `training/original/loss_oracle.mojo:167` the third, and both training
    files already record the same debt. It belongs in
-   `mojo_only/numerics.mojo`. **Three lanes in one repository now want the
+   `original/numerics.mojo`. **Three lanes in one repository now want the
    same edit** and that file is under concurrent edit by the numerics lane, so
    the lift is theirs and doing it here would collide.
 
 4. **The merge sort in `embedding_oracle.mojo` duplicates
-   `hierarchy/ported/sparse/op/sort.mojo::merge_sort_u64_with_index`.** It is
+   `hierarchy/derived/sparse/op/sort.mojo::merge_sort_u64_with_index`.** It is
    copied rather than imported because that module imports
    `max.gpu.host.DeviceBuffer` at module scope, and a host-only oracle that
    drags the GPU host module in is a host-only oracle that will not build
@@ -1405,6 +1405,6 @@ permitted to create. Nothing on this list has been done.
     `gbdt/gpu_util/kernel/scan.mojo` is the replacement. It is a scheduling
     debt, not a numerical one, and swapping it cannot move a bit.
 
-11. **No `embedding/README.md`, no `PORTED_MAP.tsv`, no `UNPORTED.tsv`.**
+11. **No `embedding/README.md`, no `DERIVATION_MAP.tsv`, no `NOT_IMPLEMENTED.tsv`.**
     Every other lane in this tree carries all three. This lane was permitted
     five paths and they were spent on the contract and the two Mojo files.

@@ -25,7 +25,7 @@ computes the log-likelihood, the finite-difference gradient, the in-sample
 predictions and the forecast, all bit-identical against a host oracle on
 one Apple M4. What it does NOT port is `estimate_x0` / `_start_params` /
 `_arma_least_squares` (the initial guess) and `arima.pyx`'s batched L-BFGS
-driver, both listed NOT PORTED in `arima/UNPORTED.tsv`. There is therefore
+driver, both listed NOT PORTED in `arima/NOT_IMPLEMENTED.tsv`. There is therefore
 no `fit`, and the coefficients its entry points require are exactly what
 the unported optimizer would have produced. An `ARIMA` class here would
 have to ask the caller for the answer before computing it, so there is no
@@ -48,7 +48,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from mojo_only.vendor import COMPILED_VENDOR
+from original.vendor import COMPILED_VENDOR
 
 from holtwinters.estimator import holtwinters_fit_ptr, holtwinters_forecast_ptr
 from tsa.estimator import kpss_test_host, select_d_host
@@ -275,7 +275,7 @@ def select_d_binding(
 def tsa_vendor_binding() raises -> PythonObject:
     """THE ACCELERATOR API THIS BINARY WAS COMPILED FOR: 'metal', 'cuda',
     'hip' or 'none'. A compile-time constant folded in from
-    `mojo_only/vendor.mojo`, the same shape as the tier read-back
+    `original/vendor.mojo`, the same shape as the tier read-back
     (`gbdt_numeric_mode`): the answer comes from the binary that actually
     loaded, never from the directory it sat in or from the environment.
     `python/mojolearn/_backend.py` refuses at import when this disagrees

@@ -35,14 +35,14 @@ set -e
 
 cd "$(dirname "$0")/.."
 
-FILES="cluster/mojo_only/kmeans_identity_check.mojo
-neighbors/mojo_only/knn_identity_check.mojo
-dbscan/mojo_only/dbscan_identity_check.mojo
+FILES="cluster/original/kmeans_identity_check.mojo
+neighbors/original/knn_identity_check.mojo
+dbscan/original/dbscan_identity_check.mojo
 cluster/kmeans_main.mojo
 neighbors/knn_main.mojo
 dbscan/dbscan_main.mojo"
 
-# THE COLUMN IS A BUILD, NOT A FLAG (`mojo_only/kernel_matrix.mojo`), so a
+# THE COLUMN IS A BUILD, NOT A FLAG (`original/kernel_matrix.mojo`), so a
 # vendor other than this machine's is selected with a `-D` and compiles the
 # same source against that vendor's block sizes, lane width and shared-memory
 # budget. `MOJOLEARN_UNSUP_COLUMN=AMD` runs this whole gate that way. It does
@@ -78,7 +78,7 @@ fi
 # THE FAST ARM TAKES THE BUILD LOCK TOO (DEVIATION 514). The lock is not
 # about this script's own two arms -- they are sequential -- it is about the
 # OTHER session in this checkout. `with_identical_mode.sh` mutates
-# `mojo_only/numerics.mojo` for the length of its window, so an unlocked
+# `original/numerics.mojo` for the length of its window, so an unlocked
 # FAST compile that lands inside someone else's window gets an IDENTICAL
 # binary and prints "FAST", because `_mode_name()` reads the constant it was
 # compiled against. Both arms hold the lock, so the two cannot interleave.

@@ -2,7 +2,7 @@
 
 How to make the identical GEMM fast without moving one bit.
 
-Written 2026-08-25 alongside `gemm/mojo_only/gemm_identical_tuned.mojo`.
+Written 2026-08-25 alongside `gemm/original/gemm_identical_tuned.mojo`.
 **Neither file has been compiled and neither has been executed.** The lane
 that wrote them had no execution rights of any kind -- no `mojo`, no `pixi`,
 no build, no test, no benchmark. Everything in section 6 is a PREDICTION
@@ -14,7 +14,7 @@ DEVIATIONS 1250 through 1264. The lane's range is 1250 through 1289 and the
 unused numbers 1265 through 1289 are reserved for whoever builds, gates and
 runs it.
 
-**`gemm/mojo_only/gemm_identical.mojo` WAS NOT TOUCHED.** It is the shipped
+**`gemm/original/gemm_identical.mojo` WAS NOT TOUCHED.** It is the shipped
 profile, it is gated on three vendors, and it stays untouched precisely so
 that it remains the reference the tuned file is compared against. Every edit
 this round wanted to make to it is in `OWED, AND WHY I DID NOT DO IT HERE`.
@@ -160,7 +160,7 @@ HOW IT COULD GO WRONG.
    tiling came out SLOWER than the naive 16x16 kernel across the board.
    Every accumulator in the tuned file is a lane of a `SIMD` value indexed
    by a `comptime for` bound, which is the spelling that fixed that round
-   and the spelling `cluster/ported/distance/fused_distance_nn/simt_kernel.
+   and the spelling `cluster/derived/distance/fused_distance_nn/simt_kernel.
    mojo` ships today. It is not a guarantee. Section 7's first gate is a
    register or occupancy readout, and without one this failure mode looks
    exactly like "the technique did not help".
@@ -746,13 +746,13 @@ must be excluded before a single ratio is quoted.
 ## 8. OWED, AND WHY I DID NOT DO IT HERE
 
 This lane could write exactly two paths,
-`gemm/mojo_only/gemm_identical_tuned.mojo` and this file, and had no
+`gemm/original/gemm_identical_tuned.mojo` and this file, and had no
 execution rights. Everything below is required to turn a proposal into a
 measurement and none of it was done here.
 
 ### 8.1 Before anything may route to the tuned kernel
 
-1. **`gemm/mojo_only/gemm_device_check.mojo` -- extend it to the tuned
+1. **`gemm/original/gemm_device_check.mojo` -- extend it to the tuned
    plans.** Per-cell bits against `gemm_oracle` at all 62 shapes, launch
    invariance requiring every tuned plan to equal `PLAN_FLAT` and
    `PLAN_SPLITK_STAGED` bit for bit, batch invariance across a dispatch
@@ -803,17 +803,17 @@ measurement and none of it was done here.
 
 ### 8.3 Edits to files this lane was not permitted to touch
 
-9. **`gemm/mojo_only/gemm_identical.mojo` -- possibly make `_leaf_bounds`,
+9. **`gemm/original/gemm_identical.mojo` -- possibly make `_leaf_bounds`,
    `_leaf_at`, `_tile_grid` and the `SAB_*` aliases public.** The tuned file
    imports all of them by their underscore names, as
-   `gemm/mojo_only/gemm_unpinned.mojo` already does, and there is precedent
-   in the tree (`glm/ported/glm/qn/glm_linear.mojo` imports `_read_scalar`).
+   `gemm/original/gemm_unpinned.mojo` already does, and there is precedent
+   in the tree (`glm/derived/glm/qn/glm_linear.mojo` imports `_read_scalar`).
    If the compiler refuses, rename them without the underscore and update
    every call site in the SAME commit. **A COPY of any of them into the
    tuned file is not an acceptable fix** -- a copied constant drifts, and a
    drifted leaf boundary would make the two kernels differ in more than the
    tuning.
-10. **`mojo_only/kernel_matrix.mojo` -- a `lib_acc_th_cols` row.**
+10. **`original/kernel_matrix.mojo` -- a `lib_acc_th_cols` row.**
     `TUNED_TC = 16` is the one scheduling number the tuned file names
     itself, and the matrix's own header calls a constant restated in a
     kernel the failure the table exists to prevent. The matrix pins the

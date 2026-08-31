@@ -8,7 +8,7 @@ of one Llama-shaped decoder block bit identical across Apple, NVIDIA and
 AMD, how much of it is routing onto arithmetic that is already pinned, and
 what new folds does this lane have to pin and gate itself?*
 
-The forward is GATED. `transformer/mojo_only/transformer_check.mojo` passes
+The forward is GATED. `transformer/original/transformer_check.mojo` passes
 clauses (a) through (e) on an M4: 13 fixture cases, 30 of 30 stages bit
 identical on 262,634 cells, 8 repeated launches, batch composition and
 sequence length invariance each with its own firing control, decode equals
@@ -24,8 +24,8 @@ rationalized.
 The three files this lane produced are
 
     transformer/IDENTICAL_BACKWARD_PLAN.md            this file
-    transformer/mojo_only/transformer_backward_oracle.mojo   the host oracle
-    transformer/mojo_only/transformer_backward.mojo          the device spelling
+    transformer/original/transformer_backward_oracle.mojo   the host oracle
+    transformer/original/transformer_backward.mojo          the device spelling
 
 and **none of the three has been compiled, run, or had a single bit of its
 output observed.** No gate file exists. No fixture exists. No card has been
@@ -36,7 +36,7 @@ emitted on any vendor. Section 11 lists what is owed.
 ## 0. The short answer, before the detail
 
 - **The prior art's shape does not survive.**
-  `gemm/mojo_only/gemm_backward.mojo` contains no arithmetic of its own,
+  `gemm/original/gemm_backward.mojo` contains no arithmetic of its own,
   because the gradient of a matmul is two more matmuls at a different
   transpose. That was mechanically verifiable and it is why that lane was
   cheap. **This lane cannot be that lane**, and section 2 is the table that
@@ -174,7 +174,7 @@ thought.**
 > **ROUTING.** The derivative is a call into an operation whose arithmetic
 > is ALREADY CERTIFIED, at a shape that certificate covers, with no fold
 > order and no fusion decision left to this lane. Two things qualify: a
-> `mojolearn.identical.gemm.fp32.v1` cell, and a `mojo_only/numerics.mojo`
+> `mojolearn.identical.gemm.fp32.v1` cell, and a `original/numerics.mojo`
 > primitive applied elementwise. A routed seam adds no clause to the
 > contract and needs no sabotage of its own beyond the ones its host
 > profile already carries.
@@ -1038,7 +1038,7 @@ change and never a different leaf rule.
 | 1423 | the incoming gradient refused nonfinite BY BITS before any recorded stage | SPENT |
 | 1424 | the GQA head-group fold order inside `dk` and `dv`: heads ascending outer, queries ascending inner, ONE chain and not a sum of per-head partials | SPENT |
 | 1425 | the backward oracle reuses `gemm_backward_a_call` / `_b_call` rather than restating the six-row table, so this lane's weight gradients inherit G1, G2 and the two `SAB_BWD_*` arms | SPENT, oracle |
-| 1426 | `transformer_backward.mojo` lives in `mojo_only/` and not in `ported/`, because there is no upstream file to mirror: HuggingFace ships no backward and autograd generates it | SPENT |
+| 1426 | `transformer_backward.mojo` lives in `original/` and not in `derived/`, because there is no upstream file to mirror: HuggingFace ships no backward and autograd generates it | SPENT |
 | 1427 | the device backward reuses `LlamaDims`, `LlamaDeviceWeights`, `LlamaKVCache` and `LlamaDeviceStages` from the forward device module, and restates the four private plumbing helpers locally rather than importing underscore-prefixed symbols | SPENT, device |
 | 1428 | the device backward calls the synchronizing `identical_gemm` rather than `identical_gemm_backward_*_into`, so it carries no caller-owned workspace; the cost is that gemm gate G7's workspace-sizing coverage is NOT inherited | SPENT, device |
 | 1429 | reserved | |

@@ -141,7 +141,7 @@ assert mode == os.environ.get("MOJOLEARN_NUMERIC_MODE", "fast"), mode
 # docs/LINUX_WHEEL.md). On the macOS wheel it is 'metal'; the Linux smoke
 # (packaging/linux/smoke.py) asserts 'cuda' or 'hip' the same way.
 # MOJOLEARN_SMOKE_VENDOR overrides the expectation for a Linux run of THIS
-# file. A None here is a binary built without mojo_only/vendor.mojo, which a
+# file. A None here is a binary built without original/vendor.mojo, which a
 # release build cannot be.
 vendor = mojolearn.vendor()
 assert vendor == os.environ.get("MOJOLEARN_SMOKE_VENDOR", "metal"), vendor

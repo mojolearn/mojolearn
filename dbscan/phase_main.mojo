@@ -45,8 +45,8 @@ from std.sys import argv
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
 
-from dbscan.ported.dbscan.dbscan import dbscan_fit_impl
-from dbscan.ported.dbscan.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC
+from dbscan.derived.dbscan.dbscan import dbscan_fit_impl
+from dbscan.derived.dbscan.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC
 
 
 def _u01(row: Int, k: Int, salt: Int) -> Float64:

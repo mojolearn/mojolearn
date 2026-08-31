@@ -11,8 +11,8 @@ Ported as a FUNCTION where theirs is a helper class, because we have no
 first. That is a deviation of shape, not of behavior: the order of kernels
 and the data each one reads is theirs.
 
-It lived in `mojo_only/` for one commit, which was wrong. This is a port of
-their file, so it belongs beside the other ports; `mojo_only/` is for things
+It lived in `original/` for one commit, which was wrong. This is a port of
+their file, so it belongs beside the other ports; `original/` is for things
 CatBoost never had to write at all.
 
 **Every kernel it calls is already verified in isolation.** This is the first
@@ -35,7 +35,7 @@ from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.host.device_attribute import DeviceAttribute
 
-from mojo_only.fixed_point import choose_scale
+from original.fixed_point import choose_scale
 
 from gbdt.gpu_lib.gpu_manager import TCudaManager
 from gbdt.methods.kernel_add_model_value import (
@@ -149,7 +149,7 @@ from gbdt.gpu_util.partitions_reduce import (
     STATS_BLOCK,
     compute_partition_stats,
 )
-from mojo_only.kernel_matrix import (
+from original.kernel_matrix import (
     HIST_SMEM_SHARED2_I32,
     TARGET_COLUMN,
     deterministic_flush_for,
@@ -157,8 +157,8 @@ from mojo_only.kernel_matrix import (
     greedy_sub_byte_excluded_for,
     partition_chunks_sm_for,
 )
-from mojo_only.numerics import PIN_DETERMINISM
-from mojo_only.numerics import NUMERIC_IDENTICAL
+from original.numerics import PIN_DETERMINISM
+from original.numerics import NUMERIC_IDENTICAL
 from gbdt.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     BUILD_MODE as HIST_BUILD_MODE,
 )
@@ -916,7 +916,7 @@ def run_tree(
     # magnitudes of the plane it accumulates, and one scale serves both
     # planes, so the bound is the LARGER of the two. A leaf's rows are a
     # subset of all rows, so a scale derived from that cannot overflow at any
-    # depth. `choose_scale` owns the derivation; see mojo_only/fixed_point.mojo.
+    # depth. `choose_scale` owns the derivation; see original/fixed_point.mojo.
     #
     # THIS WAS INLINED AND IT DRIFTED. The copy that stood here fell back to
     # `mag = 1.0` when both magnitudes were zero, which is a SCALE of
@@ -952,7 +952,7 @@ def run_tree(
     #
     # A 1.16x gap measured ACROSS RUNS said 32 was slower. It was noise:
     # this box has produced 59.7 and 44.8 ms for identical work an hour
-    # apart. `mojo_only/interleaved.mojo` exists for that reason and
+    # apart. `original/interleaved.mojo` exists for that reason and
     # overturned the claim the first time it ran.
     #
     # THAT SHAPE HAS NOW BEEN MEASURED and replication pays enormously
@@ -1221,7 +1221,7 @@ def run_tree(
                 # parameter with DEVIATION 1902 and this call site was never
                 # updated, so it could not resolve the overload and the file
                 # stopped compiling for any importer that instantiates this
-                # branch. `mojo_only/level_bench.mojo` is one, and it has been
+                # branch. `original/level_bench.mojo` is one, and it has been
                 # unbuildable since. The bindings do not reach this branch,
                 # which is why the wheel builds and this does not. `False` is
                 # the parameter's own default and there is no `ridx_stats` in
@@ -1980,7 +1980,7 @@ def replication_for(
     are enough leaves, which is every level below the first few.
 
     ================= WHAT THIS REPLACES =================
-    `mojo_only/kernel_matrix.replicas_for` was OURS, not theirs. It chose 16
+    `original/kernel_matrix.replicas_for` was OURS, not theirs. It chose 16
     or 1 from the HISTOGRAM WIDTH, ignoring the leaf count, the stat count
     and the device entirely. At depth 6 that asks for 16 replicas on top of
     64 leaves times 2 stats times 25 groups, which is 3200 blocks already:
@@ -2097,7 +2097,7 @@ def launch_histograms_for_blocks[
     `dense_ids` is no longer read. It was the id list handed to the scratch's
     old indexed zero; the scratch now takes a whole-buffer zero, which needs
     no ids at all. The argument stays because the callers of this function
-    live in `mojo_only/` and their signatures are not this file's to change.
+    live in `original/` and their signatures are not this file's to change.
 
     `ridx_stats` (DEVIATION 1902): True routes every GATHER kernel's stat
     loads through `row_index` -- the ridx-only split schedule, where the
@@ -2318,7 +2318,7 @@ def launch_histograms_for_blocks[
             #
             # Measured with the bound in place: boosting 0.61 mse, better
             # than the 0.66 that stood before any of this landed.
-            # `mojo_only/replicated_half_byte_check.mojo` is the standing
+            # `original/replicated_half_byte_check.mojo` is the standing
             # cover for this arm; it compares a REPLICATED half-byte
             # histogram against a host tally and sabotages the scale on
             # purpose so it fails rather than passes if it stops reaching
@@ -2380,7 +2380,7 @@ def launch_histograms_for_blocks[
             # the PASS family until 2026-08-19, a wrong-kernel-family misport
             # of exactly the shape PORTING_RULES 0b-i names: the ported
             # kernel was faithful and their dispatch never sends
-            # `maxBins <= 128` to it. `mojo_only/hist2_check.mojo` covers
+            # `maxBins <= 128` to it. `original/hist2_check.mojo` covers
             # both families on the same input and fingerprints WHICH family
             # this dispatch launched.
             #
@@ -3109,7 +3109,7 @@ def run_tree_layout_traced[
     magnitudes bounds every Int32 slot at every depth. A signed total is NOT
     that bound -- gradients cancel, so it can be arbitrarily smaller than the
     largest cell -- and passing zero asks for the largest scale the type
-    admits. See `mojo_only/fixed_point.mojo`.
+    admits. See `original/fixed_point.mojo`.
     """
     # `statCount` is `1 + point.GetColumnCount()` -- their `StochasticDer`
     # sizes `StatsToAggregate` as one weight column plus one der column

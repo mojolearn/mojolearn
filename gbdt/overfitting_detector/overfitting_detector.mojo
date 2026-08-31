@@ -15,7 +15,7 @@ THREE OF THEIR FOUR TYPES ARE HERE and the fourth is not:
     Wilcoxon  NOT PORTED: `NStatistics::Wilcoxon` is a rank-sum test in
               `library/cpp/statistics`, a dependency outside
               `catboost/`, and nothing this port runs selects it.
-              Listed in `gbdt/UNPORTED.tsv`.
+              Listed in `gbdt/NOT_IMPLEMENTED.tsv`.
 
 ## WHY `Iter` IS THE ONE PEOPLE MEAN, and why it is not its own code
 

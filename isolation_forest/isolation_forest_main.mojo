@@ -26,7 +26,7 @@ the per-node strict-compare min/max + `identical_mul_add` threshold
 Environment knobs (optional): `MOJOLEARN_IF_N_ESTIMATORS` (default 16),
 `MOJOLEARN_IF_MAX_SAMPLES` (default 256), `MOJOLEARN_IF_SEED` (default 42).
 The fixture performs no host floating-point operation
-(`isolation_forest/mojo_only/if_fixture.mojo`). Prints the first eight
+(`isolation_forest/original/if_fixture.mojo`). Prints the first eight
 scores as decimal AND hex, because `String(Float32)` does not round-trip.
 """
 
@@ -36,20 +36,20 @@ from std.os import getenv
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
-from isolation_forest.mojo_only.if_fixture import (
+from isolation_forest.original.if_fixture import (
     blob_fixture,
     plant_constant_column,
     plant_duplicates,
     plant_signed_zero_column,
     to_column_major,
 )
-from isolation_forest.ported.isolation_forest.isolation_forest import (
+from isolation_forest.derived.isolation_forest.isolation_forest import (
     IF_params,
     IsolationForestModel,
     fit,
     score_samples,
 )
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
 comptime IF_MAIN_N = 1024

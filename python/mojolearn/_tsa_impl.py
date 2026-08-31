@@ -25,7 +25,7 @@ WHAT IS NOT HERE, AND WHY IT IS NOT
                            `estimate_x0` / `_start_params` /
                            `_arma_least_squares`, nor `arima.pyx`'s batched
                            L-BFGS driver; both are listed NOT PORTED in
-                           `arima/UNPORTED.tsv`. There is no `fit`, and the
+                           `arima/NOT_IMPLEMENTED.tsv`. There is no `fit`, and the
                            coefficients its entry points require are the
                            output of the optimizer that is missing. A class
                            named `ARIMA` whose `fit` did not exist, or
@@ -161,7 +161,7 @@ def kpss_test(y, d=0, D=0, s=0, pval_threshold=0.05, return_statistic=False):
                                   index, where cuML passes
                                   `ensure_all_finite=False` and lets a NaN
                                   flow into the statistic
-                                  (`tsa/UNPORTED.tsv`).
+                                  (`tsa/NOT_IMPLEMENTED.tsv`).
         d               honored   order of simple differencing
         D               honored   order of seasonal differencing
         s               honored   seasonal period; `D > 0` needs `s >= 2`,
@@ -232,7 +232,7 @@ def select_d(y, D=0, s=0, d_max=None, pval_threshold=0.05):
                                   `seasonal_test="seas"`, which is
                                   statsmodels' STL on the host; that is not
                                   a GPU path in cuML either and it is not
-                                  ported (`tsa/UNPORTED.tsv`). Pass the `D`
+                                  ported (`tsa/NOT_IMPLEMENTED.tsv`). Pass the `D`
                                   you want.
         s               honored   seasonal period
         d_max           honored   None (the default) means `2 - D`, which
@@ -251,7 +251,7 @@ def select_d(y, D=0, s=0, d_max=None, pval_threshold=0.05):
     masks on the host. The test is per series and its result is a pure
     function of that series' bits, which is the property
     `check_kpss_batch_composition_invariant` gates in
-    `tsa/mojo_only/stationarity_check.mojo`.
+    `tsa/original/stationarity_check.mojo`.
 
     Cross-vendor status: see this module's docstring. One Apple M4.
     """
@@ -357,7 +357,7 @@ class ExponentialSmoothing:
     rapidsai/cuml#888 and it is flagged in their own comment. It is
     deterministic and vendor-independent, so fixing it would move the
     fitted parameters away from cuML's for no identity gain
-    (`holtwinters/UNPORTED.tsv`).
+    (`holtwinters/NOT_IMPLEMENTED.tsv`).
 
     A DIVERGENCE FROM cuML's PYTHON THAT IS NOT A NUMERIC ONE. cuML caches
     `forecasted_points` and recomputes only when `h` grows, so a second

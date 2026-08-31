@@ -71,7 +71,7 @@ Recorded here only because `Builder`'s constructor takes `cudaStream_t s`
 DEVIATION 301 (CLOSED). The four kernel launches ARE wired: `train` ->
 `do_split` -> `_compute_best_splits` -> `_compute_split`, plus
 `set_leaf_predictions`, calling the launchers in
-`kernels/builder_kernels_impl.mojo`. `ensemble/mojo_only/train_check.mojo`
+`kernels/builder_kernels_impl.mojo`. `ensemble/original/train_check.mojo`
 grows real trees on the device end to end -- quantiles, feature sampling,
 histogram, cdf, gain, split reduction, partition, leaf.
 
@@ -115,7 +115,7 @@ transcribed, not chosen. Their comment at `:158-162` explains it -- large
 per-block histograms, usually from large `n_classes`, cut occupancy enough
 that global memory wins even when shared would fit. What matters for a
 PORTABLE build is that 16 KiB is BELOW the per-block shared-memory limit of
-every vendor column in `mojo_only/kernel_matrix.column_shared_limit` (Apple
+every vendor column in `original/kernel_matrix.column_shared_limit` (Apple
 32 KB, NVIDIA 48 KB, AMD 64 KB, and even the 16 KB spec baseline meets it).
 So their shared-vs-global dispatch is decided by THEIR tuned constant on
 every backend, not by the hardware -- which means this port takes the same
@@ -134,7 +134,7 @@ from std.gpu import WARP_SIZE
 from std.math import ceildiv
 from std.sys.info import size_of
 
-from mojo_only.kernel_matrix import TARGET_COLUMN, column_shared_limit
+from original.kernel_matrix import TARGET_COLUMN, column_shared_limit
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
@@ -280,7 +280,7 @@ struct NodeQueue[dtype: DType, sabotage: Int = 0](Copyable, Movable):
     """`ML::DT::NodeQueue<DataT, LabelT>`, `builder.cuh:41-145`.
 
     `sabotage` is a comptime hook that is 0 in every shipping instantiation
-    and is corrupted only by `ensemble/mojo_only/builder_check.mojo`. It is
+    and is corrupted only by `ensemble/original/builder_check.mojo`. It is
     IN THE SHIPPED CODE PATH on purpose: sabotaging a copy of an algorithm
     proves nothing about the algorithm, so the corruption has to live where
     the real branch lives. Same pattern as `core/block_scan.mojo`.
@@ -1447,7 +1447,7 @@ struct Builder[O: ObjectiveLike](Movable):
         column block (`:588-591`), `splits` by `initSplitKernel`, the work
         items and workload by their uploads, `partition_row_ids` by
         `nodeSplitKernel` before anything reads it. The fingerprint gate
-        (`mojo_only/fingerprint_probe.mojo`) held bit-exact across this
+        (`original/fingerprint_probe.mojo`) held bit-exact across this
         change on all five configs, and the sabotage that freezes this
         method's `treeid` write moves every multi-tree line of it.
 

@@ -32,7 +32,7 @@ the same wheel; `MOJOLEARN_NUMERIC_MODE` only sets the starting default
 | `identical` | all of the above, AND **the same bits on Metal, CUDA and HIP** | + denormal policy, FMA contraction, transcendentals, sqrt, and every geometry taken from a machine constant |
 
 `identical` is a strict superset, which is why `PIN_DETERMINISM` in
-`mojo_only/numerics.mojo` is true under both upper tiers and
+`original/numerics.mojo` is true under both upper tiers and
 `PIN_CROSS_VENDOR` is true only under `identical`.
 
 **FAST IS NOT A BROKEN IDENTICAL.** It promises speed and nothing else, and
@@ -145,7 +145,7 @@ GEMM profile, the split-k partition count and the pinned `gemm_nt` / `gemv_n`
 kernels are classed cross-vendor and a deterministic build keeps their speed
 -- those pins measured 4.64x (gemm), 4.7x (`nt.4096x64x64`) and 2.85x (row
 24). That classification was CHALLENGED in the tree
-(`hierarchy/mojo_only/linkage_check.mojo:583` speculates "a split-K or atomic
+(`hierarchy/original/linkage_check.mojo:583` speculates "a split-K or atomic
 epilogue may land differently" between two launches of one shape) and the
 challenge was answered by measurement on 2026-08-29:
 `tools/repeat_run_stability.py --lanes gemm-vendor`, 256x4096 @ 4096x128 -- a

@@ -94,7 +94,7 @@ UNWIRED. Nothing in this repository calls any of it yet. The callers are
 `pointwise_kernels.{h,cpp}` -> `pointwise_scores_calcer.h` ->
 `oblivious_tree_doc_parallel_structure_searcher`, none of which are ported.
 `UNWIRED.md` already carries the whole pointwise family; this file joins it.
-Gated in isolation by `mojo_only/pointwise_scores_check.mojo`.
+Gated in isolation by `original/pointwise_scores_check.mojo`.
 
 FOUR THINGS UPSTREAM DOES NOT AGREE WITH ITSELF ABOUT
 ------------------------------------------------------
@@ -133,7 +133,7 @@ All four are transcribed as written. They are recorded because a reader who
    and a negative weight fails all of those exactly as zero does; the one
    unguarded line, `DenumSqr += weight * mu * mu`, multiplies a `mu` that
    is already 0 on that branch. Deleting the `max` leaves every gate in
-   `mojo_only/pointwise_scores_check.mojo` green with zero cells moved.
+   `original/pointwise_scores_check.mojo` green with zero cells moved.
    It is kept because it is theirs. The dynamic cosine clamp on
    `weightTestRight` IS live -- its `mu` comes from a DIFFERENT fold -- and
    gate D4 moves 11 cells when it is removed.
@@ -252,7 +252,7 @@ from std.math import copysign
 
 # DEVIATION 258 (row 10 sqrt on NVIDIA; row 12 log): both seam calls are
 # the stdlib under FAST and the portable pair under IDENTICAL
-from mojo_only.numerics import identical_log, identical_pow, identical_sqrt
+from original.numerics import identical_log, identical_pow, identical_sqrt
 from std.memory import stack_allocation
 
 from gbdt.gpu_util.kernel.random_gen import (

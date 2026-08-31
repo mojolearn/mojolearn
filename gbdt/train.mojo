@@ -49,7 +49,7 @@ from std.math import log2
 
 # DEVIATION 258: the probability links (double, as CatBoost computes them)
 # go through the host-portable exp64 under IDENTICAL; FAST is the stdlib
-from mojo_only.numerics import identical_exp64
+from original.numerics import identical_exp64
 from gbdt.methods.doc_parallel_boosting import (
     TAdditiveModel,
     fit_with_test,
@@ -194,7 +194,7 @@ def _build_cindex_from_floats(
     The fit/predict consistency assertion in `train_api_check` was blind to
     it BY CONSTRUCTION, because `predict_floats` came through this same
     function and read through the same wrong layout, so the two agreed on
-    the wrong answer. `mojo_only/one_hot_cardinality_check.mojo` is the gate
+    the wrong answer. `original/one_hot_cardinality_check.mojo` is the gate
     that can see it and it sweeps every policy boundary.
     """
     var n_features = len(borders)
@@ -376,7 +376,7 @@ def sample_indices_for_borders(
     MODULE LEVEL ON PURPOSE. It used to be inline in `train()`, which
     meant the only way to gate it was to re-type it into the check --
     and a check that builds its own copy of the thing it checks cannot
-    catch the copy drifting. `mojo_only/sample_indices_check.mojo`
+    catch the copy drifting. `original/sample_indices_check.mojo`
     imports THIS function.
     """
     var sample_idx = List[UInt32]()
@@ -626,8 +626,8 @@ def train(
     `predict_floats` now maps a raw category through a `Borders` table the
     same way it does a `FeatureFreq` one. A switch that outlives its
     reason is a defect (`PORTING_RULES.md` 8), so both sides stay
-    exercised: `mojo_only/ctr_apply_check.mojo` and
-    `mojo_only/ctr_train_check.mojo` each run the default AND
+    exercised: `original/ctr_apply_check.mojo` and
+    `original/ctr_train_check.mojo` each run the default AND
     `feature_freq_only()` explicitly.
 
     What this changes for a caller who passes nothing: four columns where

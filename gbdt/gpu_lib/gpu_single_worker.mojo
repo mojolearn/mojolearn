@@ -33,7 +33,7 @@ A stream that has been drained goes INACTIVE (`gpu_single_worker.h:122-126`),
 and `SyncActiveStreams` only visits active ones (`gpu_single_worker.h:194-200`).
 So a second `WaitComplete` with nothing launched in between costs zero drains,
 not one. That is a load-bearing property of their state machine and it is what
-`mojo_only/gpu_lib_worker_check.mojo` asserts.
+`original/gpu_lib_worker_check.mojo` asserts.
 
 Their inner `TComputationStream` (`gpu_single_worker.h:35-127`) keeps a queue
 of waiting tasks and one running task per stream, and `TryProceedTask` only

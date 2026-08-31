@@ -86,7 +86,7 @@ class IsolationForest(NumericModeMixin):
                                   scikit-learn's; the forest here is four
                                   flat device arrays (DEVIATION 685)
         as_treelite(),  absent    the Treelite / nvForest export is not
-        as_nvforest()             ported (isolation_forest/UNPORTED.tsv)
+        as_nvforest()             ported (isolation_forest/NOT_IMPLEMENTED.tsv)
 
     Non-finite cells of `X` are refused by name inside the Mojo entry
     (DEVIATION 680), with the row and column, rather than being split on.

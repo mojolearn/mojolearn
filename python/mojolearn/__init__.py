@@ -91,7 +91,7 @@ numeric_mode = _backend.numeric_mode
 set_numeric_mode = _backend.set_default_mode
 
 #: WHICH GPU API THE LOADED BINARIES WERE COMPILED FOR: 'metal', 'cuda' or
-#: 'hip', read back out of the binaries (`mojo_only/vendor.mojo`). On Linux
+#: 'hip', read back out of the binaries (`original/vendor.mojo`). On Linux
 #: one wheel carries a CUDA set and a HIP set and `_backend._layout()` picks
 #: one at import; `vendor()` is what it picked, cross-checked against what
 #: the binaries answer. There is no CPU path: a Linux box with neither
@@ -191,7 +191,7 @@ _NOT_YET = {
         "arima/ (the batched Kalman filter likelihood, its gradient and "
         "predict all exist and are gated on one Apple M4); NO fit. "
         "`estimate_x0`, the batched L-BFGS driver and the CSS likelihood are "
-        "NOT PORTED (arima/UNPORTED.tsv), and those are exactly what produces "
+        "NOT PORTED (arima/NOT_IMPLEMENTED.tsv), and those are exactly what produces "
         "the coefficients every existing entry point REQUIRES as input, so an "
         "`ARIMA` class would have to demand its own answer as an argument"
     ),

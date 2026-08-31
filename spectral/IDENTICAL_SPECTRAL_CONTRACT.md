@@ -5,8 +5,8 @@
 Written 2026-08-23, the spectral lane (DEVIATIONS 770-789). The shape of
 this document is `gemm/IDENTICAL_FP32_CONTRACT.md`'s and
 `mamba/IDENTICAL_MAMBA_CONTRACT.md`'s, on purpose. The code form of every
-clause is `spectral/mojo_only/spectral_oracle.mojo` (the host oracle) and
-`spectral/ported/` (the device spelling), and the clauses cite both.
+clause is `spectral/original/spectral_oracle.mojo` (the host oracle) and
+`spectral/derived/` (the device spelling), and the clauses cite both.
 
 **THE PROFILE NAME IS PART OF THE CONTRACT.** Every card, gate and claim
 under this document names `mojolearn.identical.spectral.fp32.v1`. Changing
@@ -66,7 +66,7 @@ about it produce two embeddings that differ by a column sign and two
 Lanczos trajectories that differ in every bit from the first restart on.
 
 **THE RULE, and it is applied at exactly one place.** In
-`spectral/mojo_only/symmetric_eig_host.mojo::pin_column_signs`, after the
+`spectral/original/symmetric_eig_host.mojo::pin_column_signs`, after the
 solve and after the ascending sort of section 3, **every column of the
 projected problem's eigenvector matrix is negated if and only if its FIRST
 NONZERO COMPONENT IN ASCENDING ROW INDEX IS NEGATIVE.**
@@ -255,7 +255,7 @@ RESULT passes `ftz`; a copy is not a seam.
 
 `raft::linalg::eig_dc` is cuSOLVER `syevd`, CLOSED, nothing to
 transliterate. It is replaced by
-`spectral/mojo_only/symmetric_eig_host.mojo::symmetric_eig_host`, a
+`spectral/original/symmetric_eig_host.mojo::symmetric_eig_host`, a
 Numerical Recipes cyclic Jacobi run ON THE HOST, and **THE HOST IS PART OF
 THE NUMERICAL PLAN HERE**: this is the only dense linear algebra inside
 the Lanczos loop, and running it in one place in one spelling is what

@@ -366,7 +366,7 @@ run_lane_check() {  # <lane> <mode> <cmd...>
 for mode in identical fast; do
   echo "-- lanes, $mode --"
   MOJOLEARN_GEMM_CARD_ARM=device MOJOLEARN_GEMM_CARD_HOST_CAP=1 run_lane_arm gemm "$mode" pixi run mojo run -I . bench/gemm_card_main.mojo
-  run_lane_check gemm "$mode" pixi run mojo run -I . gemm/mojo_only/gemm_device_check.mojo
+  run_lane_check gemm "$mode" pixi run mojo run -I . gemm/original/gemm_device_check.mojo
   run_lane_arm cd "$mode" pixi run mojo run -I . solver/cd_main.mojo
   run_lane_check cd "$mode" pixi run check-cd
   run_lane_arm kde "$mode" pixi run mojo run -I . kde/kde_main.mojo
@@ -389,17 +389,17 @@ for mode in identical fast; do
   # BUILT FOR THIS LANE, so a PHASE8-FINDING on the fast arm is EXPECTED here
   # and is information, not an alarm. The IDENTICAL arm is the one the leg is
   # for. Shape defaults to the tiny one; do not widen it on a rented box.
-  run_lane_arm mamba "$mode" pixi run mojo run -I . mamba/mojo_only/mamba_check.mojo
+  run_lane_arm mamba "$mode" pixi run mojo run -I . mamba/original/mamba_check.mojo
   run_lane_check mamba "$mode" pixi run check-mamba-block
   # iforest and transformer, added 2026-08-28 (DEVIATION 1932). BOTH LANES
   # ALREADY HAD EVERYTHING EXCEPT A LINE HERE, and that is the finding:
   #
-  #   * isolation_forest/mojo_only/if_check.mojo BUILT a 123-stage card and
+  #   * isolation_forest/original/if_check.mojo BUILT a 123-stage card and
   #     wrote it to a scratch path nobody collects, so iforest had ZERO cells
   #     in every cross-vendor round while its own gate went green. It now
   #     honours MOJOLEARN_IDENTITY_TRACE like mamba does (mamba needed the
   #     same repair under DEVIATION 970).
-  #   * transformer/mojo_only/transformer_check.mojo has honoured
+  #   * transformer/original/transformer_check.mojo has honoured
   #     MOJOLEARN_IDENTITY_TRACE since DEVIATION 1101 and its own docstring
   #     says "tools/e1_bootstrap.sh phase 8 sets it" -- a lane built to be
   #     here that was never listed. Its SCOPE line said "nothing cross-vendor
@@ -448,9 +448,9 @@ for mode in identical fast; do
   # tree, and it belongs in the paper beside the GEMM oracle counts.
   _tfx_clause_d=""
   [ "$mode" = identical ] && _tfx_clause_d=1
-  run_lane_arm iforest "$mode" pixi run mojo run -I . isolation_forest/mojo_only/if_check.mojo
+  run_lane_arm iforest "$mode" pixi run mojo run -I . isolation_forest/original/if_check.mojo
   MOJOLEARN_TRANSFORMER_CHECK_CLAUSE_D="$_tfx_clause_d" \
-    run_lane_arm transformer "$mode" pixi run mojo run -I . transformer/mojo_only/transformer_check.mojo
+    run_lane_arm transformer "$mode" pixi run mojo run -I . transformer/original/transformer_check.mojo
   # THE THIRTEEN LANES THAT WERE BUILT FOR THIS AND NEVER LISTED.
   # DEVIATION 1937, 2026-08-28. Andrew asked the obvious question -- is
   # EVERYTHING identical -- and the honest answer was that sixteen of the
@@ -480,20 +480,20 @@ for mode in identical fast; do
   # env constructor does NOT truncate, so listing both tsa_main.mojo and a
   # carded stationarity_check.mojo under the name `tsa` would have the second
   # run APPEND into the first's card and produce duplicate tags.
-  run_lane_arm arima "$mode" pixi run mojo run -I . arima/mojo_only/arima_check.mojo
-  run_lane_arm cholesky "$mode" pixi run mojo run -I . cholesky/mojo_only/cholesky_check.mojo
-  run_lane_arm embedding "$mode" pixi run mojo run -I . embedding/mojo_only/embedding_check.mojo
-  run_lane_arm gp "$mode" pixi run mojo run -I . gaussian_process/mojo_only/gp_check.mojo
-  run_lane_arm hdbscan "$mode" pixi run mojo run -I . hdbscan/mojo_only/hdbscan_check.mojo
-  run_lane_arm holtwinters "$mode" pixi run mojo run -I . holtwinters/mojo_only/hw_check.mojo
-  run_lane_arm ivf "$mode" pixi run mojo run -I . ivf/mojo_only/ivf_check.mojo
-  run_lane_arm kernelmethods "$mode" pixi run mojo run -I . kernel_methods/mojo_only/km_check.mojo
-  run_lane_arm gmm "$mode" pixi run mojo run -I . mixture/mojo_only/gmm_check.mojo
-  run_lane_arm resample "$mode" pixi run mojo run -I . resample/mojo_only/resample_check.mojo
-  run_lane_arm spectral "$mode" pixi run mojo run -I . spectral/mojo_only/spectral_check.mojo
-  run_lane_arm training-loss "$mode" pixi run mojo run -I . training/mojo_only/loss_check.mojo
-  run_lane_arm training-optimizer "$mode" pixi run mojo run -I . training/mojo_only/optimizer_check.mojo
-  run_lane_arm training-step "$mode" pixi run mojo run -I . training/mojo_only/train_step_check.mojo
+  run_lane_arm arima "$mode" pixi run mojo run -I . arima/original/arima_check.mojo
+  run_lane_arm cholesky "$mode" pixi run mojo run -I . cholesky/original/cholesky_check.mojo
+  run_lane_arm embedding "$mode" pixi run mojo run -I . embedding/original/embedding_check.mojo
+  run_lane_arm gp "$mode" pixi run mojo run -I . gaussian_process/original/gp_check.mojo
+  run_lane_arm hdbscan "$mode" pixi run mojo run -I . hdbscan/original/hdbscan_check.mojo
+  run_lane_arm holtwinters "$mode" pixi run mojo run -I . holtwinters/original/hw_check.mojo
+  run_lane_arm ivf "$mode" pixi run mojo run -I . ivf/original/ivf_check.mojo
+  run_lane_arm kernelmethods "$mode" pixi run mojo run -I . kernel_methods/original/km_check.mojo
+  run_lane_arm gmm "$mode" pixi run mojo run -I . mixture/original/gmm_check.mojo
+  run_lane_arm resample "$mode" pixi run mojo run -I . resample/original/resample_check.mojo
+  run_lane_arm spectral "$mode" pixi run mojo run -I . spectral/original/spectral_check.mojo
+  run_lane_arm training-loss "$mode" pixi run mojo run -I . training/original/loss_check.mojo
+  run_lane_arm training-optimizer "$mode" pixi run mojo run -I . training/original/optimizer_check.mojo
+  run_lane_arm training-step "$mode" pixi run mojo run -I . training/original/train_step_check.mojo
   run_lane_arm tsa "$mode" pixi run mojo run -I . tsa/tsa_main.mojo
   run_lane_arm metrics "$mode" pixi run mojo run -I . metrics/metrics_main.mojo
   for t in check-metrics-labels check-metrics-regression check-metrics-silhouette check-metrics-trust; do

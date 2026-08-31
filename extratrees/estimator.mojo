@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The callable surface: sklearn's parameter names, and refusal by name.
 
-**Why this file exists.** `ported/randomforest/randomforest.mojo` already fits
+**Why this file exists.** `derived/randomforest/randomforest.mojo` already fits
 a forest, but its arguments are cuML's: a `DecisionTreeParams` whose
 `max_features` is a RATIO, an `n_trees`, a seed. A caller arriving from
 scikit-learn holds `max_features='sqrt'`, `max_depth=None`,
@@ -11,9 +11,9 @@ which of those this port honours, which it silently ignores, and which do not
 exist. That gap is what DEVIATION 154 recorded as a debt against whoever wrote
 this layer, and this file is that layer.
 
-Nothing here is a port. `ported/` mirrors cuML and is governed by COPY, DO NOT
+Nothing here is a port. `derived/` mirrors cuML and is governed by COPY, DO NOT
 IMPROVE; this file is host-side policy neither cuML nor sklearn has a
-counterpart for, in the same category as `mojo_only/`. It follows
+counterpart for, in the same category as `original/`. It follows
 `cluster/estimator.mojo` and `neighbors/estimator.mojo`, which are the first
 files of this kind in the tree.
 
@@ -111,15 +111,15 @@ leaf values it returns differ from the host arm's by at most one quantization
 step, which is 135's ruling and not a defect.
 """
 
-from extratrees.mojo_only.fixed_point import ceil_log2, choose_scale, quantize
-from extratrees.ported.decisiontree.decisiontree import (
+from extratrees.original.fixed_point import ceil_log2, choose_scale, quantize
+from extratrees.derived.decisiontree.decisiontree import (
     CRITERION_ENTROPY,
     CRITERION_GINI,
     CRITERION_MSE,
     DecisionTreeParams,
     validity_check,
 )
-from extratrees.ported.randomforest.randomforest import (
+from extratrees.derived.randomforest.randomforest import (
     Forest,
     fit_classification,
     fit_classification_device,
@@ -290,14 +290,14 @@ struct ExtraTreesConfig(ImplicitlyCopyable, Movable):
 def refuse_unported(config: ExtraTreesConfig) raises:
     """Every sklearn parameter this port does NOT honour, refused BY NAME.
 
-    Each entry names the deviation or the `UNPORTED.tsv` row that explains it,
+    Each entry names the deviation or the `NOT_IMPLEMENTED.tsv` row that explains it,
     so a caller gets a reason rather than a wall.
     """
     if config.min_weight_fraction_leaf != 0.0:
         raise Error(
             "min_weight_fraction_leaf is not ported: it is a fraction of the"
             " total SAMPLE WEIGHT, and sample_weight is unported (see"
-            " UNPORTED.tsv and DEVIATION 144, whose exact integer comparison"
+            " NOT_IMPLEMENTED.tsv and DEVIATION 144, whose exact integer comparison"
             " assumes unweighted counts). Only the default 0.0 is accepted."
         )
     if config.has_monotonic_cst:
@@ -309,7 +309,7 @@ def refuse_unported(config: ExtraTreesConfig) raises:
     if config.has_class_weight:
         raise Error(
             "class_weight is not ported: it becomes a per-sample weight, and"
-            " sample_weight is unported. See UNPORTED.tsv."
+            " sample_weight is unported. See NOT_IMPLEMENTED.tsv."
         )
     # `bootstrap=True` is HONOURED since DEVIATION 460 (cuML's
     # `get_row_sample` bootstrap arm, `randomforest.cuh:64-67`, through the

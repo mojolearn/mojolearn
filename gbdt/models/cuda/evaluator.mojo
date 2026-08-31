@@ -93,7 +93,7 @@ the caller reads only the first `docs`.
 
 from std.atomic import Atomic
 
-from mojo_only.kernel_matrix import (
+from original.kernel_matrix import (
     QUANTIZE_SEARCH_TWO_LEVEL,
     TARGET_COLUMN,
     quantize_search_for,
@@ -524,7 +524,7 @@ def pack_model_for_evaluator(
     MULTICLASS PREDICTION GOES THROUGH THE OTHER APPLY:
     `gbdt/train.mojo`'s `predict_multi_floats`, over
     `compute_bins_and_add_kernel`, which IS multi-dimensional
-    (DEVIATION 81). `mojo_only/multiclass_train_check.mojo` gates it.
+    (DEVIATION 81). `original/multiclass_train_check.mojo` gates it.
     """
     var approx_dim = model_approx_dim(model)
     if approx_dim != 1:

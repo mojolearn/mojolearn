@@ -35,7 +35,7 @@ from extratrees.estimator import (
     fit_extra_trees_classifier_device,
 
 )
-from extratrees.ported.randomforest.randomforest import Forest
+from extratrees.derived.randomforest.randomforest import Forest
 
 
 def digest(forest: Forest) raises -> UInt64:

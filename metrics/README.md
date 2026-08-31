@@ -1,9 +1,9 @@
 # metrics: cuML `cpp/src/metrics/` and the RAFT `raft/stats/` headers it calls
 
 Seventh section. **COPY, DO NOT IMPROVE.** cuML's metrics are thin wrappers
-(`metrics/ported/metrics/`, one file per `.cu`) over RAFT's `raft::stats`
-(`metrics/ported/stats/detail/`, one file per `.cuh`). Pinned: cuML 265b9da,
-RAFT ebf9268 (the v26.08.00 checkouts; `PORTED_MAP.tsv`). sklearn is read
+(`metrics/derived/metrics/`, one file per `.cu`) over RAFT's `raft::stats`
+(`metrics/derived/stats/detail/`, one file per `.cuh`). Pinned: cuML 265b9da,
+RAFT ebf9268 (the v26.08.00 checkouts; `DERIVATION_MAP.tsv`). sklearn is read
 for SEMANTICS only and its formula stands beside each of ours in a comment.
 
 ## Status
@@ -44,14 +44,14 @@ The pixi tasks `check-metrics-labels`, `check-metrics-regression`,
 <task>`; no `*-identity` task exists by design). Every device run goes
 through the build lock; the long forms:
 
-    tools/with_build_lock.sh     pixi run mojo run -I . metrics/mojo_only/label_metrics_check.mojo
-    tools/with_identical_mode.sh pixi run mojo run -I . metrics/mojo_only/label_metrics_check.mojo
-    tools/with_build_lock.sh     pixi run mojo run -I . metrics/mojo_only/regression_metrics_check.mojo
-    tools/with_identical_mode.sh pixi run mojo run -I . metrics/mojo_only/regression_metrics_check.mojo
-    tools/with_build_lock.sh     pixi run mojo run -I . metrics/mojo_only/silhouette_check.mojo
-    tools/with_identical_mode.sh pixi run mojo run -I . metrics/mojo_only/silhouette_check.mojo
-    tools/with_build_lock.sh     pixi run mojo run -I . metrics/mojo_only/trustworthiness_check.mojo
-    tools/with_identical_mode.sh pixi run mojo run -I . metrics/mojo_only/trustworthiness_check.mojo
+    tools/with_build_lock.sh     pixi run mojo run -I . metrics/original/label_metrics_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -I . metrics/original/label_metrics_check.mojo
+    tools/with_build_lock.sh     pixi run mojo run -I . metrics/original/regression_metrics_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -I . metrics/original/regression_metrics_check.mojo
+    tools/with_build_lock.sh     pixi run mojo run -I . metrics/original/silhouette_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -I . metrics/original/silhouette_check.mojo
+    tools/with_build_lock.sh     pixi run mojo run -I . metrics/original/trustworthiness_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -I . metrics/original/trustworthiness_check.mojo
 
 The card (diff two machines' cards with `tools/identity_trace_diff.py`;
 both cards must come from ONE pinned SHA, since the stage list is part of
@@ -80,13 +80,13 @@ reads the integer matrix back and performs the float ops serially,
 ascending. DEVIATION 651: under IDENTICAL those ops are Float32 through
 `identical_log` / `identical_mul_add` / `ftz` (one arithmetic on every
 vendor and every host; no portable Float64 log exists in
-`mojo_only/numerics.mojo`), and under FAST they are RAFT's Float64 through
+`original/numerics.mojo`), and under FAST they are RAFT's Float64 through
 the host's `log`. IDENTICAL's value therefore differs from FAST's in the
 seventh digit by design, and is the same bits everywhere.
 
 The float metrics (Groups B, C) are different: a reduction over `n` of
 Float32 terms, where the fold shape IS the number. There the accumulator is
-replaced (DEVIATION 653, `metrics/mojo_only/pinned_sum.mojo`): a
+replaced (DEVIATION 653, `metrics/original/pinned_sum.mojo`): a
 `PINNED_SUM_W = 256` slab tree whose width is a constant of the source and
 not the launch's block size, per-chunk partials folded ascending on the
 host, `ftz` at every stored seam, gated bit for bit against a host model
@@ -298,7 +298,7 @@ bit-identical). These stages close it.
 `core/identity_trace.mojo` rule 3 forbids hashing a MACHINE-SIZED SCRATCH,
 because two backends legitimately hold different amounts of it reducing to
 the same answer. These are not that. `chunk_count(n) = ceil(n /
-PINNED_SUM_W)` is a PURE FUNCTION OF n (`mojo_only/pinned_sum.mojo:72-74`,
+PINNED_SUM_W)` is a PURE FUNCTION OF n (`original/pinned_sum.mojo:72-74`,
 and its own docstring says so); `PINNED_SUM_W` is a NUMERIC constant of
 that file ("a different W is a different tree"), not a launch width; and
 `block_size` and grid shape reach only WHICH PHYSICAL BLOCK SERVES WHICH
@@ -482,10 +482,10 @@ a Float64 host k-NN on every row. A k-NN entry for the unexpanded metric
 is neighbors/'s to add (hand-off below).
 
 **The distance is the UNEXPANDED formula, not the neighbors tile.**
-`neighbors/mojo_only/pinned_distance_tile.mojo` is the EXPANDED L2 from
+`neighbors/original/pinned_distance_tile.mojo` is the EXPANDED L2 from
 precomputed norms (cuVS `L2Expanded`); cuML's silhouette dispatches
 `'euclidean'` to `L2SqrtUnexpanded`, a different arithmetic, so
-`metrics/mojo_only/pinned_distance.mojo` mirrors that tile's discipline
+`metrics/original/pinned_distance.mojo` mirrors that tile's discipline
 (one thread per cell, ascending features, `identical_mul_add`, `ftz`,
 `identical_sqrt`) on the unexpanded formula and does not call it. cuVS's
 Contractions kernel for the unexpanded distance is not ported (UNPORTED).
@@ -532,16 +532,16 @@ compare-fold over a float in the directory):
 
 | site | what it is | can +-0 / NaN reach it | verdict |
 |---|---|---|---|
-| `ported/stats/detail/batched/silhouette_score.mojo:177` | the min over clusters for b: strict `<`, ascending c, first index wins, seeded FLT_MAX | NO. Candidates are FLT_MAX, +0.0, or +0.0-seeded sums of nonnegative terms: `x + y` is -0.0 only when both are, so no sum is -0.0; an all-nonnegative sum never forms `inf - inf`, so none is NaN. `+inf` candidates never win against FLT_MAX, so b <= FLT_MAX always | KEPT, positional; proof in the comment at the site and in silhouette_score.mojo's header; sabotage (l) (`<=`) inert everywhere, as the proof says |
-| `ported/stats/detail/silhouette_score.mojo` `sil_op` | RAFT's SilOp: tie branch, then `(b - a) / a` or `/ b` | the tie branch returns +0.0 BEFORE any division, so `0 / 0` is never computed and no `max(a, b)` is asked; a -0.0 score is unreachable (a nonzero `b - a` is at least one ulp of a value >= sqrt(FLT_MIN)/n, never subnormal; the quotient is >= ~6e-8 or exactly 0); the ONE NaN a finite X reaches is `a = +inf` (overflow-scale coordinates): `-inf / inf` | CHANGED: DEVIATION 656, NaN -> +0.0 (sklearn's nan_to_num); gate `check_silhouette_inf_distances`; sabotage (k) fails |
-| `mojo_only/pinned_distance.mojo` | `acc = fma(diff, diff, acc)` seeded +0.0, then sqrt | `diff * diff >= +0.0` always, `+0.0 + +0.0 = +0.0`: acc is never -0.0; sqrt of a nonnegative is never NaN; finite X gives finite or +inf | PROVEN in the header comment |
-| `ported/stats/detail/trustworthiness_score.mojo:133` | the rank compare `dj < de or (dj == de and j < ei)` | distances >= +0.0, never -0.0, never NaN on finite X (above); `+inf == +inf` ties by index, as their stable sort | KEPT, positional; comment at the site |
-| `ported/stats/detail/contingency_matrix.mojo:126-127` | `Atomic.min` / `Atomic.max` on Int32 labels | integer | KEPT |
-| `ported/stats/detail/adjusted_rand_index.mojo:123-124` | lower/upper label range `<` / `>` on Int32 | integer | KEPT |
-| `mojo_only/*_check.mojo` `abs(a) if abs(a) > abs(b) else abs(b)` (3 sites), `_host_knn_f64`'s `dist[j] < bd`, `_ref_silhouette_f64`'s `a if a > b else b` | host tolerance helpers and Float64 references | abs() values / host Float64 references; the reference's `0 / 0` is guarded by `mx != 0.0` | KEPT |
-| `ported/stats/detail/scores.mojo` `r2 = 1 - sse / ssto` | host epilogue | `ssto == 0` (constant y) gives -inf or `0 / 0`; an overflow-scale y gives `inf / inf` | CHANGED: DEVIATION 657 (`r2_epilogue`: force_finite values, canonical NaN); gate `check_r2_undefined_cases`; sabotage (o) fails, (p) Apple-inert |
-| `ported/stats/detail/kl_divergence.mojo` `kld_op` | `p == 0 ? 0 : p (log p - log q)` | a SUBNORMAL p took the `0` branch on Apple (hardware reads it as zero) and the `-inf` branch on a denormal-keeping vendor (identical_log flushes inside): a divergence; `q == 0` is +inf (defined, 0x7f800000 everywhere); NaN only from an out-of-contract negative/non-finite entry | CHANGED: DEVIATION 658 (operands flushed on load; the returned scalar's NaN canonical); gate `check_kl_subnormal_p_and_nan`; sabotage (n) fails |
-| `ported/stats/detail/entropy.mojo`, `mutual_info_score.mojo`, `adjusted_rand_index.mojo`, `rand_index.mojo`, `homogeneity_score.mojo`, `v_measure.mojo` | host Float64/Float32 epilogues | entropy's `p == 0` and MI's `ab == 0 or c == 0` branches skip the log (no `0 log 0`); ARI's `max - expected != 0` and `size < 2`, rand's `size < 2`, homogeneity's `size == 0` and `H != 0`, v's `h + c == 0` are all guarded as RAFT's; MI with `size == 0` was `0 / 0`, accuracy with `n == 0` was `0 / 0` | REFUSED BY NAME (mutual_info_score size <= 0, accuracy_score n <= 0); gated in label_metrics_check |
+| `derived/stats/detail/batched/silhouette_score.mojo:177` | the min over clusters for b: strict `<`, ascending c, first index wins, seeded FLT_MAX | NO. Candidates are FLT_MAX, +0.0, or +0.0-seeded sums of nonnegative terms: `x + y` is -0.0 only when both are, so no sum is -0.0; an all-nonnegative sum never forms `inf - inf`, so none is NaN. `+inf` candidates never win against FLT_MAX, so b <= FLT_MAX always | KEPT, positional; proof in the comment at the site and in silhouette_score.mojo's header; sabotage (l) (`<=`) inert everywhere, as the proof says |
+| `derived/stats/detail/silhouette_score.mojo` `sil_op` | RAFT's SilOp: tie branch, then `(b - a) / a` or `/ b` | the tie branch returns +0.0 BEFORE any division, so `0 / 0` is never computed and no `max(a, b)` is asked; a -0.0 score is unreachable (a nonzero `b - a` is at least one ulp of a value >= sqrt(FLT_MIN)/n, never subnormal; the quotient is >= ~6e-8 or exactly 0); the ONE NaN a finite X reaches is `a = +inf` (overflow-scale coordinates): `-inf / inf` | CHANGED: DEVIATION 656, NaN -> +0.0 (sklearn's nan_to_num); gate `check_silhouette_inf_distances`; sabotage (k) fails |
+| `original/pinned_distance.mojo` | `acc = fma(diff, diff, acc)` seeded +0.0, then sqrt | `diff * diff >= +0.0` always, `+0.0 + +0.0 = +0.0`: acc is never -0.0; sqrt of a nonnegative is never NaN; finite X gives finite or +inf | PROVEN in the header comment |
+| `derived/stats/detail/trustworthiness_score.mojo:133` | the rank compare `dj < de or (dj == de and j < ei)` | distances >= +0.0, never -0.0, never NaN on finite X (above); `+inf == +inf` ties by index, as their stable sort | KEPT, positional; comment at the site |
+| `derived/stats/detail/contingency_matrix.mojo:126-127` | `Atomic.min` / `Atomic.max` on Int32 labels | integer | KEPT |
+| `derived/stats/detail/adjusted_rand_index.mojo:123-124` | lower/upper label range `<` / `>` on Int32 | integer | KEPT |
+| `original/*_check.mojo` `abs(a) if abs(a) > abs(b) else abs(b)` (3 sites), `_host_knn_f64`'s `dist[j] < bd`, `_ref_silhouette_f64`'s `a if a > b else b` | host tolerance helpers and Float64 references | abs() values / host Float64 references; the reference's `0 / 0` is guarded by `mx != 0.0` | KEPT |
+| `derived/stats/detail/scores.mojo` `r2 = 1 - sse / ssto` | host epilogue | `ssto == 0` (constant y) gives -inf or `0 / 0`; an overflow-scale y gives `inf / inf` | CHANGED: DEVIATION 657 (`r2_epilogue`: force_finite values, canonical NaN); gate `check_r2_undefined_cases`; sabotage (o) fails, (p) Apple-inert |
+| `derived/stats/detail/kl_divergence.mojo` `kld_op` | `p == 0 ? 0 : p (log p - log q)` | a SUBNORMAL p took the `0` branch on Apple (hardware reads it as zero) and the `-inf` branch on a denormal-keeping vendor (identical_log flushes inside): a divergence; `q == 0` is +inf (defined, 0x7f800000 everywhere); NaN only from an out-of-contract negative/non-finite entry | CHANGED: DEVIATION 658 (operands flushed on load; the returned scalar's NaN canonical); gate `check_kl_subnormal_p_and_nan`; sabotage (n) fails |
+| `derived/stats/detail/entropy.mojo`, `mutual_info_score.mojo`, `adjusted_rand_index.mojo`, `rand_index.mojo`, `homogeneity_score.mojo`, `v_measure.mojo` | host Float64/Float32 epilogues | entropy's `p == 0` and MI's `ab == 0 or c == 0` branches skip the log (no `0 log 0`); ARI's `max - expected != 0` and `size < 2`, rand's `size < 2`, homogeneity's `size == 0` and `H != 0`, v's `h + c == 0` are all guarded as RAFT's; MI with `size == 0` was `0 / 0`, accuracy with `n == 0` was `0 / 0` | REFUSED BY NAME (mutual_info_score size <= 0, accuracy_score n <= 0); gated in label_metrics_check |
 | closed form `1 - 2 t / (n k (2n - 3k - 1))` | trustworthiness' host Float64 | `2n = 3k + 1` (e.g. n 5, k 3) makes the denominator 0: `2 / 0 * t` is inf or `0 * inf` = NaN | REFUSED BY NAME: `2 * n_neighbors >= n` (cuML's own `trustworthiness.pyx:114`), which subsumes the old `n_neighbors + 1 > n`; 5 refusals gated |
 
 **No value-first clamp exists in metrics/** (no `max(v, 0)`/`min(v, 0)`
@@ -640,8 +640,8 @@ deviations touch only the undefined cases they name.
 | 651 | entropy.mojo (banner), mutual_info_score.mojo | IDENTICAL: Float32 through identical_log / identical_mul_add / ftz; FAST: Float64 host log (RAFT's precision) |
 | 652 | rand_index.mojo | 64-bit atomic replaced by per-block Int32 partials summed on the host in Int64 (Apple has no 64-bit atomic; a 32-bit total overflows past 65,536 samples) |
 | 655 | trustworthiness_score.mojo | ranks COUNTED per (row, embedded neighbor) with the stable-sort tie-break (same integer as their sort + lookup table, O(nk) per row); the embedded k-NN is neighbors' knn_search (expanded L2) with k+1; Int32 row partials summed in Int64; n_neighbors + 1 > 256 refused by name |
-| 654 | batched/silhouette_score.mojo, mojo_only/pinned_distance.mojo | the float atomicAdd into a and b[i, c] replaced by one fixed tree per (row, cluster) over j (a pure function of n and the cluster membership), the distance tile by the one-thread unexpanded formula through identical_mul_add/ftz/identical_sqrt, min + SilOp in the row's thread; chunk is scheduling; metric != L2SqrtUnexpanded refused by name |
-| 653 | mojo_only/pinned_sum.mojo, scores.mojo (r2), kl_divergence.mojo | the float sums over n as one fixed slab tree + ascending host fold, launch-invariant by construction; FAST arm is block.sum; r2's `powerScalar(x,2)` spelled `x*x`, `mean = sum * (1/n)` as mean.cuh |
+| 654 | batched/silhouette_score.mojo, original/pinned_distance.mojo | the float atomicAdd into a and b[i, c] replaced by one fixed tree per (row, cluster) over j (a pure function of n and the cluster membership), the distance tile by the one-thread unexpanded formula through identical_mul_add/ftz/identical_sqrt, min + SilOp in the row's thread; chunk is scheduling; metric != L2SqrtUnexpanded refused by name |
+| 653 | original/pinned_sum.mojo, scores.mojo (r2), kl_divergence.mojo | the float sums over n as one fixed slab tree + ascending host fold, launch-invariant by construction; FAST arm is block.sum; r2's `powerScalar(x,2)` spelled `x*x`, `mean = sum * (1/n)` as mean.cuh |
 | 656 | silhouette_score.mojo (`sil_op`) | a NaN silhouette score (`a = +inf` from an overflow-scale coordinate difference, `-inf / inf`) is +0.0, sklearn's `nan_to_num`; RAFT records the vendor's NaN payload |
 | 657 | scores.mojo (`r2_epilogue`) | `ssto == 0` -> 1.0 (sse == 0) / 0.0, cuML's own Python surface and sklearn `force_finite=True`; any other NaN (`inf / inf` from an overflow-scale y) leaves with the one canonical payload 0x7fc00000 (`pinned_sum.mojo::canonicalize_nan`) |
 | 658 | kl_divergence.mojo (`kld_op`, the returned scalar) | the per-term operands are flushed on load (row 10: a subnormal p took the `0` branch on Apple and the `-inf` branch on a denormal-keeping vendor); a NaN (only from an out-of-contract negative or non-finite entry) leaves as 0x7fc00000 |
@@ -707,7 +707,7 @@ Nothing outside `metrics/` was edited. Three asks, none blocking:
    `run_knn` metric for trustworthiness). Until then trustworthiness's
    embedded k-NN is the expanded arm (DEVIATION 655), which can order
    near-tied neighbors differently in the last bit.
-1. `mojo_only/numerics.mojo` has `identical_exp64` but no `identical_log64`;
+1. `original/numerics.mojo` has `identical_exp64` but no `identical_log64`;
    a portable Float64 log (Cephes, the `portable_exp64` shape) would let
    DEVIATION 651 keep RAFT's double precision under IDENTICAL. Until then
    IDENTICAL is Float32 at these seams.

@@ -47,7 +47,7 @@ MIRRORS `catboost/cuda/cuda_util/partitions_reduce.h`, whose
 # values that come out of it feed a Newton ratio, so the error is relative
 # and small rather than catastrophic. No measurement has been taken against a
 # Float64 host reduction of the same fixture. Until one is,
-# `mojo_only/partitions_reduce_check.mojo` sidesteps the question entirely by
+# `original/partitions_reduce_check.mojo` sidesteps the question entirely by
 # planting integer-valued stats small enough that every intermediate sum is
 # exact in Float32, which is what lets it compare with EQUALITY and no
 # tolerance at all.
@@ -80,7 +80,7 @@ Neither phase re-derives the block count from a partition's length. The
 launcher owns that number and hands it to both, which is theirs
 (`tempVarsBlockCount` is `numBlocks.x`) and is the reason `max_leaf_rows` is
 a grid hint here rather than a correctness precondition. It was one for a
-while, silently. `mojo_only/partitions_reduce_check.mojo` runs a 40,000-row
+while, silently. `original/partitions_reduce_check.mojo` runs a 40,000-row
 leaf through a one-block grid to keep it from becoming one again.
 """
 
@@ -91,8 +91,8 @@ from max.gpu.primitives.block import sum as block_sum
 
 from gbdt.targets.kernel.pointwise_targets import pinned_block_sum
 
-from mojo_only.kernel_matrix import partition_chunks_sm_for
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from original.kernel_matrix import partition_chunks_sm_for
+from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 
 # `const ui32 blockSize = 512` (`update_part_props.cu:209`). Was 256, which

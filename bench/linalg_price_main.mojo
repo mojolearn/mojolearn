@@ -47,7 +47,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.time import perf_counter_ns
 
 from core.gemm import gemm_nt, gemm_tn, gemv_n
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
 comptime REPEATS = 3

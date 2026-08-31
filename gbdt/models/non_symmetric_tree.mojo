@@ -138,7 +138,7 @@ struct TNonSymmetricTreeStructure(Copyable, Movable):
         `binCursor` counts leaves in visit order, which IS the leaf
         numbering the apply kernel computes by accumulating `left_subtree`
         (`add_model_value.cu:378`). The two agreeing is not an assumption:
-        `mojo_only/depthwise_model_check.mojo` walks both and compares.
+        `original/depthwise_model_check.mojo` walks both and compares.
         """
         var out = List[TVisitedLeaf]()
         var current_path = TLeafPath()

@@ -40,7 +40,7 @@ THE MODE READ-BACK IS THE POINT OF `linalg_numeric_mode` (DEVIATION 912)
 ------------------------------------------------------------------------
 `mojolearn.identical.gemm.fp32.v1` is what the IDENTICAL build computes.
 The FAST build runs the SAME kernels on the SAME path with the two pins
-compiled away (`gemm/mojo_only/gemm_identical.mojo`'s header, "WHAT
+compiled away (`gemm/original/gemm_identical.mojo`'s header, "WHAT
 `NUMERIC_FAST` DOES HERE"), which is a correct GEMM that makes no identity
 claim at all. Nothing in the ANSWER distinguishes the two on Apple at these
 seams -- contract section 4.1 measured Metal fused in both modes -- so a
@@ -60,12 +60,12 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from mojo_only.vendor import COMPILED_VENDOR
+from original.vendor import COMPILED_VENDOR
 
 from max.gpu.host import DeviceContext
 
 from gemm.host_entry import identical_gemm_host
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -168,7 +168,7 @@ def gemm_binding(
 def linalg_vendor_binding() raises -> PythonObject:
     """THE ACCELERATOR API THIS BINARY WAS COMPILED FOR: 'metal', 'cuda',
     'hip' or 'none'. A compile-time constant folded in from
-    `mojo_only/vendor.mojo`, the same shape as the tier read-back
+    `original/vendor.mojo`, the same shape as the tier read-back
     (`gbdt_numeric_mode`): the answer comes from the binary that actually
     loaded, never from the directory it sat in or from the environment.
     `python/mojolearn/_backend.py` refuses at import when this disagrees

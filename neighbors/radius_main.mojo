@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Entry point for the radius-neighbours surface checks."""
 
-from neighbors.mojo_only.radius_check import (
+from neighbors.original.radius_check import (
     check_radius_neighbors_matches_host,
     check_radius_neighbors_reach_by_sabotage,
     check_radius_neighbors_refuses_short_allocation,

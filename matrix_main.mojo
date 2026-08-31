@@ -13,20 +13,20 @@ hardware nobody here owns. A readout that needs the hardware cannot do that.
     mojo build -I . matrix_main.mojo -o /tmp/matrix && /tmp/matrix
 
 To see another vendor's build, change ONE line -- `TARGET_COLUMN` in
-`mojo_only/kernel_matrix.mojo` -- and rebuild. Every constant below moves with
+`original/kernel_matrix.mojo` -- and rebuild. Every constant below moves with
 it, in six sections, with no other edit anywhere in the tree.
 """
 
 from core.column_stats import STATS_TPB
 from core.row_norms import NORM_TPB
-from cluster.mojo_only.plus_plus import PLUS_PLUS_TPB
-from cluster.ported.distance.unfused_distance_nn import (
+from cluster.original.plus_plus import PLUS_PLUS_TPB
+from cluster.derived.distance.unfused_distance_nn import (
     REDUCE_MIN_LANES,
     REDUCE_MIN_TPB,
 )
-from dbscan.ported.dbscan.vertexdeg.algo import VD_TPB
-from decomposition.mojo_only.jacobi_eigh_device import JACOBI_TPB
-from mojo_only.kernel_matrix import (
+from dbscan.derived.dbscan.vertexdeg.algo import VD_TPB
+from decomposition.original.jacobi_eigh_device import JACOBI_TPB
+from original.kernel_matrix import (
     COLUMN_AMD,
     COLUMN_APPLE,
     COLUMN_BIT_IDENTICAL,

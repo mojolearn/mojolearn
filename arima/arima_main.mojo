@@ -16,7 +16,7 @@ and everything downstream of it is noise), then every stage of the filter in
 the order the device writes them --  `Z`, `R`, `T`, `RQ`, `RQR`, `P0`,
 `alpha0`, `pred`, `vs`, `Fs`, `loglike`, `fc`, `P_final` -- and last the DECISION stages
 `piv`, `info_init`, `info_loop` and `guards`, for each of the ten orders in
-`arima/mojo_only/fixtures.mojo`'s table.
+`arima/original/fixtures.mojo`'s table.
 
 THE DECISION STAGES ARE NOT DECORATION. Every float stage records a VALUE;
 these four record a CHOICE, and a choice can differ between vendors while
@@ -39,7 +39,7 @@ Not a port: cuML ships one backend and needs no card.
 STATUS: RUN ON ONE APPLE M4, BOTH MODES. This file emits a 229-stage card
 (138 when it first ran on 2026-08-23; the 2026-08-24 round added the four
 DECISION stages, `Fs` and `P_final`). See `arima/README.md`'s status block,
-`arima/PORTED_MAP.tsv` and IDENTITY_PATHS row 58.
+`arima/DERIVATION_MAP.tsv` and IDENTITY_PATHS row 58.
 
 NO SECOND VENDOR. `tools/e1_bootstrap.sh` phase 8 carries gemm, cd, kde,
 linkage, svm, mamba and metrics, and not this lane, so no leg has ever
@@ -50,9 +50,9 @@ this card exists to make is UNTESTED. See `arima/README.md`'s OWED list.
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
-from arima.mojo_only.fixtures import (
+from arima.original.fixtures import (
     arima_fixture,
     arima_params_fixture,
     bits32,
@@ -61,8 +61,8 @@ from arima.mojo_only.fixtures import (
     upload_f32,
     upload_params,
 )
-from arima.ported.arima.batched_arima import batched_loglike
-from arima.ported.linalg.batched.matrix import LYAP_R2_MAX
+from arima.derived.arima.batched_arima import batched_loglike
+from arima.derived.linalg.batched.matrix import LYAP_R2_MAX
 
 
 comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL

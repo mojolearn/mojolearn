@@ -33,7 +33,7 @@ is an argument rather than a convenience:
 
 A caller that keeps its matrix ON THE DEVICE across many operations -- which
 a GP fitting hyperparameters will -- should call
-`cholesky/mojo_only/potrf.mojo::potrf_lower` and `trsm.mojo::cho_solve`
+`cholesky/original/potrf.mojo::potrf_lower` and `trsm.mojo::cho_solve`
 directly and keep its own `DeviceBuffer`s, exactly as cuML's `fit` keeps `X`
 on the device and `score_samples` reuses it. This entry is the one-shot form,
 which is what the gates and the card use.
@@ -42,7 +42,7 @@ which is what the gates and the card use.
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
-from cholesky.mojo_only.potrf import (
+from cholesky.original.potrf import (
     CHOL_ELEM_TPB,
     CHOL_NB_PINNED,
     CHOL_PANEL_TPB,
@@ -55,8 +55,8 @@ from cholesky.mojo_only.potrf import (
     chol_workspace_floats,
     potrf_lower,
 )
-from cholesky.mojo_only.trsm import CHOL_SOLVE_TPB, cho_solve
-from cholesky.ported.linalg.cholesky_r1_update import (
+from cholesky.original.trsm import CHOL_SOLVE_TPB, cho_solve
+from cholesky.derived.linalg.cholesky_r1_update import (
     chol_rank1_update,
     chol_rank1_update_workspace_floats,
 )
@@ -89,7 +89,7 @@ struct CholeskyFactor(Movable):
 
 def cholesky_profile_jitter() -> Float32:
     """The profile's ridge, re-exported so a downstream lane never has to
-    reach into `cholesky/mojo_only/` for it -- and so that when it appears in
+    reach into `cholesky/original/` for it -- and so that when it appears in
     a Gaussian process's source it appears as a NAME rather than as a
     literal somebody will later change. DEVIATION 1637."""
     return chol_jitter_pinned()

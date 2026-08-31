@@ -44,13 +44,13 @@ the upstream never had to make.
 **CatBoost.** `gbdt/` mirrors CatBoost's GPU oblivious tree learner, file
 for file. The tree-growing design, the packing policies, the histogram
 strategies, the smaller-sibling rule and the level loop are YANDEX's,
-Apache-2.0. `PORTED_MAP.tsv` names the source behind each file and flags where
+Apache-2.0. `DERIVATION_MAP.tsv` names the source behind each file and flags where
 a port is partial or replaced.
 
 **cuVS.** `cluster/gbdt/` mirrors cuVS's k-means and `neighbors/gbdt/`
 mirrors its brute-force k-NN and ball cover. The expanded distance identity,
 the tiling scheme, the greedy k-means++ trial rule, the two convergence tests
-and the empty-cluster rule are NVIDIA's, Apache-2.0. `cluster/UNPORTED.tsv`
+and the empty-cluster rule are NVIDIA's, Apache-2.0. `cluster/NOT_IMPLEMENTED.tsv`
 names what was deliberately left out.
 
 **cuML.** `dbscan/gbdt/` mirrors cuML's DBSCAN and `decomposition/gbdt/`
@@ -97,13 +97,13 @@ Where the no-counterpart code sits:
 
 | directory | library | checks | what |
 |---|---|---|---|
-| `mojo_only/` | 2,729 | 12,434 | the CatBoost port's host side |
+| `original/` | 2,729 | 12,434 | the CatBoost port's host side |
 | `core/` | 1,484 | 0 | shared kernels the sections build on |
-| `cluster/mojo_only/` | 1,232 | 2,150 | RAFT and cuBLAS stand-ins for k-means |
-| `decomposition/mojo_only/` | 430 | 1,308 | the Jacobi eigensolver standing in for cuSOLVER |
-| `neighbors/mojo_only/` | 0 | 4,251 | k-NN verification |
-| `dbscan/mojo_only/` | 0 | 1,019 | DBSCAN verification |
-| `glm/mojo_only/` | 0 | 283 | OLS verification |
+| `cluster/original/` | 1,232 | 2,150 | RAFT and cuBLAS stand-ins for k-means |
+| `decomposition/original/` | 430 | 1,308 | the Jacobi eigensolver standing in for cuSOLVER |
+| `neighbors/original/` | 0 | 4,251 | k-NN verification |
+| `dbscan/original/` | 0 | 1,019 | DBSCAN verification |
+| `glm/original/` | 0 | 283 | OLS verification |
 
 Most substantial single piece: the fixed-point accumulator, which serves both
 the histogram flush and the k-means centroid update unchanged. It was written
@@ -116,7 +116,7 @@ and RAFT's k-NN has no tie-break at all.
 **Also ours, and worth naming separately: the RAFT and cuBLAS stand-ins.**
 cuVS calls out to RAFT primitives and to cuBLAS for norms, keyed reductions
 and the distance GEMM. No RAFT or cuBLAS source was translated. The files
-under `cluster/mojo_only/` reproduce the CALL SITE and its documented
+under `cluster/original/` reproduce the CALL SITE and its documented
 semantics and implement the kernel themselves, and each one says which call
 it stands in for.
 

@@ -12,7 +12,7 @@ file also holds
 `RMSEWithUncertainty`, `MultiCrossEntropy`, `MultiRMSE` and
 `BuildConfusionMatrixBins`. Each of the others is a different `ELossFunction`
 with its own dispatch, and porting a kernel no caller reaches is the defect
-PORTING_RULES 3 names. They are listed in `UNPORTED.tsv` rather than left
+PORTING_RULES 3 names. They are listed in `NOT_IMPLEMENTED.tsv` rather than left
 looking absent.
 
 ## THE LAST CLASS IS IMPLICIT, AND EVERY LOOP BOUND SAYS SO
@@ -82,7 +82,7 @@ row 12's `identical_exp`/`identical_log` -- under FAST each inlines to the
 `std.math` call it replaced at the site (measured bit for bit; the shims'
 own block records why the plain wrapper was not enough); under IDENTICAL
 both route through the one portable polynomial pair in
-`mojo_only/numerics.mojo`, one arithmetic on every backend. Their file uses
+`original/numerics.mojo`, one arithmetic on every backend. Their file uses
 the CUDA fast-math forms at every site, so the substitution is in-family --
 and `pointwise_target_check` measured Mojo's device `exp` at about twenty
 ulp against libm, which is looser than `__expf`'s two. No check may expect

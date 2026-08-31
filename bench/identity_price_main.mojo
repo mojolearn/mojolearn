@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """What `IDENTICAL` costs, in milliseconds, for the three unsupervised paths.
 
-`mojo_only/numerics.mojo` opens with the rule this file exists to satisfy:
+`original/numerics.mojo` opens with the rule this file exists to satisfy:
 **the cost is a measurement, not an argument.** The two modes differ by a
 named set of rows, so "what does determinism cost" has an answer in seconds.
 
@@ -47,12 +47,12 @@ THE ARMS, and why the tiled k-NN one is separated from the default:
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
 
-from cluster.ported.cluster.detail.kmeans import kmeans_fit_main
-from cluster.ported.cluster.kmeans_params import INIT_ARRAY, KMeansParams
-from dbscan.ported.dbscan.dbscan import dbscan_fit_impl
-from dbscan.ported.dbscan.runner import EPS_NN_BRUTE_FORCE
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
-from neighbors.ported.neighbors.detail.knn_brute_force import (
+from cluster.derived.cluster.detail.kmeans import kmeans_fit_main
+from cluster.derived.cluster.kmeans_params import INIT_ARRAY, KMeansParams
+from dbscan.derived.dbscan.dbscan import dbscan_fit_impl
+from dbscan.derived.dbscan.runner import EPS_NN_BRUTE_FORCE
+from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from neighbors.derived.neighbors.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
     KNN_METHOD_TILED,
     brute_force_knn_impl,

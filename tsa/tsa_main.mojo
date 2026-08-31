@@ -23,11 +23,11 @@ CONSTRUCTION plus one Apple device's run; no second vendor has run it.
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
-from tsa.mojo_only.fixtures import bits32, download_f32, kpss_fixture, upload_f32
-from tsa.ported.timeSeries.stationarity import download_results
-from tsa.ported.tsa.auto_arima import select_d
-from tsa.ported.tsa.stationarity import kpss_test
+from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from tsa.original.fixtures import bits32, download_f32, kpss_fixture, upload_f32
+from tsa.derived.timeSeries.stationarity import download_results
+from tsa.derived.tsa.auto_arima import select_d
+from tsa.derived.tsa.stationarity import kpss_test
 
 
 comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL

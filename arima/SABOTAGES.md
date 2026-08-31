@@ -56,7 +56,7 @@ whose result was not looked at.
 
 ## (a) the Kalman fold order
 
-**Required by the brief.** `arima/ported/arima/batched_kalman.mojo`, `_mm`,
+**Required by the brief.** `arima/derived/arima/batched_kalman.mojo`, `_mm`,
 the inner `k` accumulation. This is the `MM_l` contraction that computes
 both `TP = T*P` and `P = TP*L'`, twice per observation for every series, so
 it feeds every stage downstream of step 3.
@@ -84,7 +84,7 @@ with
 ```
 
 Only the DEVICE `_mm` is touched. The oracle's `_mm_host` in
-`arima/mojo_only/kalman_oracle.mojo` is a separate spelling on purpose, so
+`arima/original/kalman_oracle.mojo` is a separate spelling on purpose, so
 it does not move with it and the two must disagree.
 
 - MUST FAIL: `check_kalman_device_equals_oracle`, first at a `P0`-fed stage
@@ -133,7 +133,7 @@ it is how that difference gets recorded rather than assumed.
 
 ## (b) the symmetrization
 
-`arima/ported/arima/batched_kalman.mojo`, `_numerical_stability`. Drop the
+`arima/derived/arima/batched_kalman.mojo`, `_numerical_stability`. Drop the
 `A = 0.5 (A + A')` pass and keep only `A_ii = |A_ii|`:
 
 ```mojo
@@ -170,7 +170,7 @@ information and both go in the column.
 ## (c) the Jones transform
 
 **Required by the brief.**
-`arima/ported/timeSeries/jones_transform.mojo`,
+`arima/derived/timeSeries/jones_transform.mojo`,
 `jones_transform_kernel`, the forward `transform` arm. Run the inner `k`
 loop descending:
 
@@ -302,7 +302,7 @@ BEFORE it is applied.
 
 ## (e) the LU pivot tie rule
 
-`arima/ported/linalg/batched/matrix.mojo`, `lu_inverse`, the pivot search.
+`arima/derived/linalg/batched/matrix.mojo`, `lu_inverse`, the pivot search.
 Change the strict comparison to non-strict:
 
 ```mojo
@@ -347,7 +347,7 @@ source. A chosen bound must be sabotaged (`sabotage-when-required`).
 
 ## (f) the canonical NaN sentinel
 
-`arima/ported/arima/batched_arima.mojo`, `in_sample_prediction_kernel`.
+`arima/derived/arima/batched_arima.mojo`, `in_sample_prediction_kernel`.
 Replace the constant sentinel with a computed one:
 
 ```mojo
@@ -399,7 +399,7 @@ vendor, and it is written here so the second-vendor run knows to try it.
 
 ## (g) the gradient reset
 
-`arima/ported/arima/batched_arima.mojo`. Put back the defect the audit
+`arima/derived/arima/batched_arima.mojo`. Put back the defect the audit
 found: call `perturb_kernel` with `h = 0` in place of `reset_param_kernel`.
 
 - MUST FAIL: `check_grad_reset_preserves_negative_zero`, at the gradient of
@@ -414,7 +414,7 @@ found: call `perturb_kernel` with `h = 0` in place of `reset_param_kernel`.
 
 ## (h) the LU pivot tie rule, ON A FIXTURE THAT HAS A TIE
 
-**This is (e) re-armed.** Same edit, `arima/ported/linalg/batched/matrix.mojo`,
+**This is (e) re-armed.** Same edit, `arima/derived/linalg/batched/matrix.mojo`,
 `lu_inverse`, `if m > best_mag:` becomes `if m >= best_mag:`. What changed is
 not the sabotage but the fixture: the `ar2_tie` order now plants an EXACT
 magnitude tie in column 0 of `I - T (x) T`, maximal by a 0.20 margin, so the
@@ -459,7 +459,7 @@ matrix the device built, so the arm is known to be armed before it is fired.
 
 ## (i) the guards decision stage
 
-`arima/ported/arima/batched_kalman.mojo`. Delete the `guard_bits |= UInt8(1)`
+`arima/derived/arima/batched_kalman.mojo`. Delete the `guard_bits |= UInt8(1)`
 line in `init_batched_kalman_matrices_kernel` (leaving the `T[1] = -0.99`
 rewrite itself in place), so the guard still fires but stops SAYING it fired.
 

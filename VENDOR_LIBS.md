@@ -341,11 +341,11 @@ This list was wrong in two places and both were load-bearing. Corrected
 
 | claim | status |
 |---|---|
-| no float `atomicAdd` | **FALSE.** 1024 threads adding 1.0 return exactly 1024.0. Every design in this tree that cited this has to stand on another argument or be undone. `mojo_only/fixed_point.mojo` stands, on DETERMINISM: an integer accumulator is order-independent, a float atomic is not, and reproducibility across devices is the claim this repository makes |
+| no float `atomicAdd` | **FALSE.** 1024 threads adding 1.0 return exactly 1024.0. Every design in this tree that cited this has to stand on another argument or be undone. `original/fixed_point.mojo` stands, on DETERMINISM: an integer accumulator is order-independent, a float atomic is not, and reproducibility across devices is the claim this repository makes |
 | no warp shuffles | **FALSE.** `std.gpu.primitives.warp` ships `shuffle_{up,down,xor,idx}`, `broadcast`, `sum`, `max`, `min`, `prefix_sum`. `shuffle_xor(lane_id, 1)` returns the partner lane, 0 wrong of 32. The earlier searches used `max.gpu.primitives.warp`, which does not resolve; the BLOCK primitives are the ones under `max` |
 | no Metal streams | true, unretested. `ctx.stream()` raises; one queue |
 | no device-to-device copy | true, unretested |
-| no float64 on Apple | true. `decomposition/mojo_only/jacobi_eigh_device.mojo` documents what it costs |
+| no float64 on Apple | true. `decomposition/original/jacobi_eigh_device.mojo` documents what it costs |
 | `linalg.matmul` refuses `transpose_a` | true, still. Not a blocker: transpose and use the N-T shape |
 | `linalg.matmul` at `n = 1` returns zeros | true. Call `gemv_gpu` there, which is what RAFT calls too |
 | `linalg.transpose` signals on device buffers | true. It dispatches to a host strided copy |
@@ -358,7 +358,7 @@ This list was wrong in two places and both were load-bearing. Corrected
 - `gbdt/gpu_util/kernel/reorder_one_bit.mojo`, device-wide scan: `nn.cumsum`
   has no `ctx` and no `target`, re-checked against the published signature.
   Only the cross-block decoupling is hand-written now.
-- `cluster/mojo_only/reduce_by_key.mojo`: the fixed-point accumulator was
+- `cluster/original/reduce_by_key.mojo`: the fixed-point accumulator was
   justified by "Metal has no float atomic add". That sentence is deleted, not
   annotated, and the determinism argument replaces it.
 - `gbdt/methods/greedy_subsets_searcher/kernel/split_points.mojo`,

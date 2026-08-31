@@ -60,8 +60,8 @@ yields ZERO, because none of these lanes has ever written a sabotage result
 into `bench/results/`. Reporting only that number would be true and useless.
 
 The wide definition also accepts an IN-SOURCE LEDGER that says MEASURED and
-names the arm -- `mamba/mojo_only/mamba_check.mojo`'s ledger and
-`mamba/ported/mamba_ssm/ops/selective_scan_interface.mojo`'s, plus
+names the arm -- `mamba/original/mamba_check.mojo`'s ledger and
+`mamba/derived/mamba_ssm/ops/selective_scan_interface.mojo`'s, plus
 `IDENTITY_PATHS.md` rows that record arms "RUN AND BITTEN". Those are real
 measurements that were simply written into source and into the path table
 rather than into `bench/results/`.
@@ -132,7 +132,7 @@ from dataclasses import dataclass, field, asdict
 # WHERE TO LOOK
 # ---------------------------------------------------------------------------
 # The five lanes that carry the identical-arithmetic profiles. Other lanes
-# (`ensemble/`, `hierarchy/`, `core/`, `cluster/`, `mojo_only/`) also carry
+# (`ensemble/`, `hierarchy/`, `core/`, `cluster/`, `original/`) also carry
 # sabotage switches, most of them INTEGER-PARAMETERIZED rather than `-D`
 # driven, and they are deliberately out of scope here: their arms are graded
 # against a different kind of contract and mixing the two would produce a
@@ -153,7 +153,7 @@ EXTRA_LANES = {
     "hierarchy": "hierarchy",
     "cluster": "cluster",
     "metrics": "metrics",
-    "mojo_only": "mojo_only",
+    "original": "original",
 }
 
 # The contract per lane. `training` has two and both are searched for every
@@ -1080,7 +1080,7 @@ def main(argv: list[str]) -> int:
                     help="restrict to one lane; repeatable")
     ap.add_argument("--all-lanes", action="store_true",
                     help="include the non-profile lanes (core, ensemble, "
-                         "hierarchy, cluster, metrics, mojo_only), clearly "
+                         "hierarchy, cluster, metrics, original), clearly "
                          "labelled. Their arms are graded against a "
                          "different kind of contract and mixing the counts "
                          "produces a number nobody can interpret.")

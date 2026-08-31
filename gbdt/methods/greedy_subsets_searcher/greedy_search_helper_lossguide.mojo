@@ -16,7 +16,7 @@ The reason is a checkout state, not a design: `greedy_search_helper.mojo` was
 mid-edit by a third session when both non-symmetric lanes opened, and a lane
 that edits another lane's live file trades a merge conflict for a silent
 overwrite. **This split folds back into `greedy_search_helper.mojo` when that
-file is quiet**, and `PORTED_MAP.tsv` points all three rows at the same
+file is quiet**, and `DERIVATION_MAP.tsv` points all three rows at the same
 upstream file so the fold is a rename and not an archaeology exercise.
 =======================================================================
 

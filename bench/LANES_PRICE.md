@@ -28,12 +28,12 @@ It is not device time and it is not a per-kernel number.
 
 | lane | entry (what `*_main.mojo` calls) | shipped size (default) | SMOKE size | output hashed |
 |---|---|---|---|---|
-| cd | `solver.ported.solver.cd.cd_fit_traced` (Lasso, alpha 0.01, intercept, 1000 epochs, tol 1e-3) on `fixture_planted_sparse(n, d, 610)` | 2048 x 16 | 256 x 4 | coef, intercept, n_iter |
-| kde | `kde.ported.kde.kde.score_samples` (gaussian, euclidean, weighted, h 2.75) on `train_fixture / query_fixture / weight_fixture` salt 1 | 1024 train x 256 query x 8 | 128 x 32 x 8 | the n_query log-densities |
-| linkage | `hierarchy.ported.hierarchy.linkage.single_linkage` (pairwise, L2SqrtExpanded) on `FIX_BLOBS_DUPS` | 102 x 5, 3 clusters | `FIX_DUPS` 48 x 2 | children, labels, Boruvka rounds |
-| svm | `svm.mojo_only.svc_check._run_device` (svc_fit + svc_predict decision + classes) on `F2.xor`, the card fixture | 240 x 2 rbf | same (no smaller fixture exists) | decision function, classes, n_support, b |
+| cd | `solver.derived.solver.cd.cd_fit_traced` (Lasso, alpha 0.01, intercept, 1000 epochs, tol 1e-3) on `fixture_planted_sparse(n, d, 610)` | 2048 x 16 | 256 x 4 | coef, intercept, n_iter |
+| kde | `kde.derived.kde.kde.score_samples` (gaussian, euclidean, weighted, h 2.75) on `train_fixture / query_fixture / weight_fixture` salt 1 | 1024 train x 256 query x 8 | 128 x 32 x 8 | the n_query log-densities |
+| linkage | `hierarchy.derived.hierarchy.linkage.single_linkage` (pairwise, L2SqrtExpanded) on `FIX_BLOBS_DUPS` | 102 x 5, 3 clusters | `FIX_DUPS` 48 x 2 | children, labels, Boruvka rounds |
+| svm | `svm.original.svc_check._run_device` (svc_fit + svc_predict decision + classes) on `F2.xor`, the card fixture | 240 x 2 rbf | same (no smaller fixture exists) | decision function, classes, n_support, b |
 | metrics | every ported metric in `metrics_main.mojo`'s order on its hashed fixtures, timed as one pass | labels 2053, floats 2053, silhouette 521 x 4, trust 301 x 6 | 257 / 257 / 67 x 4 / 61 x 6 | every returned value by its bits plus the silhouette samples |
-| gemm | `gemm.mojo_only.gemm_identical.identical_gemm` on one `bench/gemm_shapes.mojo` row | row 6 `kmeans.dist.4096x64x64` NT | row 4 `pca.transform.8192x4x4` | C |
+| gemm | `gemm.original.gemm_identical.identical_gemm` on one `bench/gemm_shapes.mojo` row | row 6 `kmeans.dist.4096x64x64` NT | row 4 `pca.transform.8192x4x4` | C |
 
 Under FAST the same entry runs with its pins (`identical_mul_add`, `ftz`,
 `identical_*`) compiled away; under IDENTICAL they are live. The two modes
@@ -158,7 +158,7 @@ The smoke output's head (from the run's stdout):
 
 One thing the smoke found and the driver now handles: `cdFit` MUTATES `x`
 and `labels` in place under `fit_intercept` and `postProcessData` does not
-restore the bits exactly (documented in `solver/ported/solver/cd.mojo`), so
+restore the bits exactly (documented in `solver/derived/solver/cd.mojo`), so
 the first smoke printed a warm-up hash for cd that differed from every later
 round. The driver re-uploads `x` and `y` before every round; that is a
 property of the entry and of the harness, not a deviation.

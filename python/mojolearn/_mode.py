@@ -20,7 +20,7 @@ nothing written against the old spelling breaks.
 
 WHY THIS IS AN ATTRIBUTE LOOKUP AND NOT A REBIND. **The three tiers are one
 source under one flag, not three implementations.** `GLOBAL_NUMERIC_MODE` in
-`mojo_only/numerics.mojo` is that flag; `PIN_DETERMINISM` and
+`original/numerics.mojo` is that flag; `PIN_DETERMINISM` and
 `PIN_CROSS_VENDOR` derive from it and every kernel reads those. But the flag
 is COMPTIME, which is what lets the fast build carry none of the pinning code
 at all rather than branching past it at run time, so the three settings are
@@ -101,7 +101,7 @@ class NumericModeMixin:
     def vendor_used(self):
         """'metal', 'cuda' or 'hip': the accelerator API of the binary THIS
         estimator will call, read back from that binary's own compile-time
-        constant (`<prefix>_vendor()`, `mojo_only/vendor.mojo`), not from
+        constant (`<prefix>_vendor()`, `original/vendor.mojo`), not from
         the directory it was loaded from and not from the platform. None
         for a binary built before the read-back existed."""
         return _backend.read_vendor(self._bind())

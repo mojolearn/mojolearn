@@ -15,7 +15,7 @@ USAGE
     <python-with-sklearn> decomposition/pca_wide_sklearn.py /tmp/pca_wide.out
 
 The fixture is regenerated here from the SAME splitmix64 stream that
-`_fill_wide` in `decomposition/mojo_only/pca_check.mojo` uses, so both fit
+`_fill_wide` in `decomposition/original/pca_check.mojo` uses, so both fit
 the same float32 matrix. Keep the two generators in step; if you change one,
 this script's first assertion (the total variance) is what catches it.
 

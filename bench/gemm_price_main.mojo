@@ -25,7 +25,7 @@ it is tabulated per arm and not per file:
                                                               RELATIVE verdict
 
 **DEVIATION 535 WIRED THE DEVICE ARMS.** Phase 2b's kernel landed
-(`gemm/mojo_only/gemm_identical.mojo`, DEVIATIONS 530-532) and the `device`
+(`gemm/original/gemm_identical.mojo`, DEVIATIONS 530-532) and the `device`
 arm, which until then was a named raising stub carrying its own wiring
 instruction, now opens a `DeviceContext` in `main()` and runs that kernel.
 What it changed is the table above. **What it did not change is every refusal
@@ -152,7 +152,7 @@ from bench.gemm_shapes import OP_NN as TBL_OP_NN
 from bench.gemm_shapes import OP_NT as TBL_OP_NT
 from bench.gemm_shapes import OP_TN as TBL_OP_TN
 from core.gemm import PINNED_GEMM_TPB, pinned_gemm_nt_kernel
-from gemm.mojo_only.gemm_identical import (
+from gemm.original.gemm_identical import (
     PLAN_FLAT,
     PLAN_SPLITK,
     PLAN_SPLITK_STAGED,
@@ -163,7 +163,7 @@ from gemm.mojo_only.gemm_identical import (
     identical_gemm_with_plan,
     identical_gemm_workspace_floats,
 )
-from gemm.mojo_only.gemm_oracle import (
+from gemm.original.gemm_oracle import (
     CONTRACT_K_LEAF_MIN,
     OP_NN,
     OP_NT,
@@ -176,7 +176,7 @@ from gemm.mojo_only.gemm_oracle import (
     gemm_oracle_serial,
     op_name,
 )
-from mojo_only.numerics import (
+from original.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
     ftz,
@@ -509,7 +509,7 @@ def _show(x: Float64) -> String:
 # pointer handed to `enqueue_copy` can be freed before the copy runs. The
 # failure is nondeterministic and a small fixture cannot see it, which is
 # exactly why the line is there rather than the argument being made once and
-# trusted. `gemm/mojo_only/gemm_device_check.mojo::_run_device` carries the
+# trusted. `gemm/original/gemm_device_check.mojo::_run_device` carries the
 # same tail for the same reason and this is modelled on it.
 
 #: Written into `C` before a device arm runs. A cell still holding it
@@ -609,7 +609,7 @@ def _plans_agree(tag: String, a_name: String, a: UInt64,
     thing and their ratio means nothing.
 
     **ASSERTED UNDER IDENTICAL, REPORTED UNDER FAST**, which is the policy
-    `gemm/mojo_only/gemm_device_check.mojo` states at the same seam: under
+    `gemm/original/gemm_device_check.mojo` states at the same seam: under
     FAST both `identical_mul_add` and `ftz` compile away, the backend is free
     to contract one kernel and not another, and whether two unpinned spellings
     agree is a measurement rather than a bug.
@@ -697,13 +697,13 @@ def _launches_staged(p: Int) -> Int:
 
 def _tbl_op(i: Int) -> Int:
     """Translate `bench/gemm_shapes.mojo`'s orientation code into
-    `gemm/mojo_only/gemm_oracle.mojo`'s.
+    `gemm/original/gemm_oracle.mojo`'s.
 
     **THE TWO FILES NUMBER THE SAME THREE WORDS DIFFERENTLY** -- the table is
     `NT=0, TN=1, NN=2` and the oracle is `NN=0, NT=1, TN=2` -- so an untranslated
     hand-off runs every row against the WRONG ADDRESSING and still returns a
     plausible float, because the operand buffers are usually large enough that
-    the mis-indexing stays in bounds. `gemm/mojo_only/gemm_device_check.mojo`
+    the mis-indexing stays in bounds. `gemm/original/gemm_device_check.mojo`
     writes the map once for the same reason; this is the same map, and
     `check_op_encodings_are_not_interchangeable` below asserts it rather than
     assuming it.
@@ -780,7 +780,7 @@ def check_device_op_encoding_matches_the_kernel() raises:
     `check_op_encodings_are_not_interchangeable` above proves the map lands on
     the ORACLE's spelling of the three words. That was enough while the only
     consumer was the oracle. **It is not enough now**: the device arm hands
-    `op` to `gemm/mojo_only/gemm_identical.mojo`, and the question that
+    `op` to `gemm/original/gemm_identical.mojo`, and the question that
     matters is which ADDRESSING that file derives from the code it is given,
     not which word a `String` comes back as.
 
@@ -1035,7 +1035,7 @@ def check_serial_fold_probe_is_the_other_topology() raises:
         2, 2, 2, 2 then 4, 4 then 8... and the tree reaches `2^24 + 6` because
         `2^24 + 1` is the halfway case round-half-to-even discards while
         `2^24 + 2` and `2^24 + 6` are exact (ulp at `2^24` is 2). That is
-        `gemm/mojo_only/gemm_oracle_check.mojo::check_f5_balanced_vs_serial_fold`'s
+        `gemm/original/gemm_oracle_check.mojo::check_f5_balanced_vs_serial_fold`'s
         fixture, reused here so the probe is anchored to a construction the
         gate file already justifies rather than to a number chosen here.
 
@@ -1495,7 +1495,7 @@ def _staging_arms_on_device(ctx: DeviceContext) raises:
     staged plan strides its scratch by `fold_node_total(P)` and the fused plan
     by `P`, so a workspace sized for the fused arm and handed to the staged
     arm is an out-of-bounds write of about a factor of two.
-    `gemm/mojo_only/gemm_identical.mojo` records that exact defect costing a
+    `gemm/original/gemm_identical.mojo` records that exact defect costing a
     run -- a SPLITK dispatch at 64x64x4096 wrote 512 KB of partials into a
     one-float buffer and whole regions of `C` came back `+0.0` -- so the size
     here is the max over BOTH plans and a `raise` guards it rather than a
@@ -1731,7 +1731,7 @@ def _timed_shape_with_device(
     kernel engineering plus the pin, against Modular's kernel engineering.
     Both terms move at once.
 
-    The arm that answers it is `gemm/mojo_only/gemm_unpinned.mojo`, written
+    The arm that answers it is `gemm/original/gemm_unpinned.mojo`, written
     2026-08-25 under DEVIATIONS 1130-1136: the identical kernel's OWN plan
     selection and tile constants, imported rather than copied, with the leaf
     loop kept AS A SCHEDULE so the staging window does not move, and only the

@@ -3,7 +3,7 @@
 """Host-pointer surfaces for PCA and truncated SVD.
 
 THE IDENTITY CARD (DEVIATION 518, 2026-08-23 -- the same deviation also
-repairs the k-means++ card, see `cluster/ported/cluster/detail/kmeans.mojo`
+repairs the k-means++ card, see `cluster/derived/cluster/detail/kmeans.mojo`
 `init_scalable_kmeans_plus_plus`). `pca_fit_host` and `tsvd_fit_host` are
 the paths `mojolearn.PCA` / `mojolearn.TruncatedSVD` take, and neither left
 a stage card: `decomposition/` has no `IdentityTrace` anywhere below this
@@ -27,7 +27,7 @@ and `tsvd.jacobi.a` / `tsvd.components` / `tsvd.singular_vals` for the
 uncentered twin. WHAT IS MISSING, named rather than glossed: a record of
 the covariance BEFORE the Jacobi (`compute_covariance`'s output). It would
 separate the Gram from the eigensolver and it needs one line inside
-`decomposition/ported/linalg/detail/pca.mojo::pca_fit`, which is the
+`decomposition/derived/linalg/detail/pca.mojo::pca_fit`, which is the
 decomposition lane's file; left for that lane.
 """
 
@@ -36,7 +36,7 @@ from max.gpu.host import DeviceContext
 from core.column_stats import TRANSPOSE_TILE, shift_columns_kernel, transpose_kernel
 from core.identity_trace import IdentityTrace
 from core.gemm import gemm_nt
-from decomposition.ported.linalg.detail.pca import (
+from decomposition.derived.linalg.detail.pca import (
     compute_covariance,
     eig_and_truncate,
     pca_transform,

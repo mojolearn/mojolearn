@@ -113,8 +113,8 @@ from mixture.estimator import (
     gaussian_mixture_score,
     gmm_mode_name,
 )
-from mixture.mojo_only.estep import GMM_PROFILE
-from mixture.mojo_only.gmm_fixture import (
+from mixture.original.estep import GMM_PROFILE
+from mixture.original.gmm_fixture import (
     FIX_COLLAPSE,
     FIX_DUPLICATES,
     FIX_ONE_D,

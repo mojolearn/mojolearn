@@ -152,16 +152,16 @@ gemmseq)
     # the same two under IDENTICAL, exactly as the rented payload runs them
     expectarm "verify.transformer_block.fast.log"
     runarm "verify.transformer_block.fast.log" \
-        pixi run mojo run -I . transformer/mojo_only/transformer_check.mojo
+        pixi run mojo run -I . transformer/original/transformer_check.mojo
     expectarm "verify.mamba_block.fast.log"
     runarm "verify.mamba_block.fast.log" \
-        pixi run mojo run -I . mamba/mojo_only/mamba_check.mojo
+        pixi run mojo run -I . mamba/original/mamba_check.mojo
     expectarm "verify.transformer_block.identical.log"
     runarm "verify.transformer_block.identical.log" \
-        sh tools/with_identical_mode.sh pixi run mojo run -I . transformer/mojo_only/transformer_check.mojo
+        sh tools/with_identical_mode.sh pixi run mojo run -I . transformer/original/transformer_check.mojo
     expectarm "verify.mamba_block.identical.log"
     runarm "verify.mamba_block.identical.log" \
-        sh tools/with_identical_mode.sh pixi run mojo run -I . mamba/mojo_only/mamba_check.mojo
+        sh tools/with_identical_mode.sh pixi run mojo run -I . mamba/original/mamba_check.mojo
     # the vendor arms: cuBLAS refuses here by name, torch runs on MPS
     expectarm "gemm.gemm.cublas.log"
     runarm "gemm.gemm.cublas.log" $TORCH_PY tools/speed_gemm_arm.py --rounds "$ROUNDS"

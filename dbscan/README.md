@@ -103,7 +103,7 @@ memory straight back: a global CSR is the whole adjacency in sparse form.
 ## Labels now match scikit-learn's
 
 `final_relabel` (monotonic `0..k-1`) and `relabelForSkl` (`MAX_LABEL` becomes
-`-1`, everything else loses one) are both ported. `UNPORTED.tsv` used to
+`-1`, everything else loses one) are both ported. `NOT_IMPLEMENTED.tsv` used to
 excuse skipping them with "labels are arbitrary up to permutation, so the
 check compares the PARTITION". That is true of the check and false of the
 API: cuML runs both on every fit, so anyone diffing our labels against cuML's

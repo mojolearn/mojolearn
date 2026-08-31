@@ -11,7 +11,7 @@
 # an MI300X, cards diffed. That needs hardware, costs money, and takes a day.
 #
 # This gate is the half of that debt which does NOT need hardware, and it is
-# a bigger half than it looks. `mojo_only/kernel_matrix.mojo` makes the
+# a bigger half than it looks. `original/kernel_matrix.mojo` makes the
 # vendor a COMPTIME COLUMN: block sizes, lane widths, shared-memory budgets,
 # occupancy and every grid computed from them are constants chosen by
 # `TARGET_COLUMN`, and `-D MOJOLEARN_COLUMN_AMD` compiles this source against
@@ -110,7 +110,7 @@ for arm in $ARMS; do
             pixi run mojo run ${MOJOLEARN_MOJO_DEFINES:-} -D "MOJOLEARN_COLUMN_${col}=1" -I . \
             bench/unsupervised_trace_main.mojo > "$log" 2>&1; then
             # THE CONTAMINATION GUARD (DEVIATION 514's other half).
-            # `mojo_only/numerics.mojo` is a SHARED FILE that this gate
+            # `original/numerics.mojo` is a SHARED FILE that this gate
             # rewrites for the length of its run, and this checkout is
             # worked by parallel sessions. A build that lands inside
             # another session's flip window compiles the OTHER arm and says
@@ -127,7 +127,7 @@ for arm in $ARMS; do
             if [ "$got_mode" != "IDENTICAL" ]; then
                 echo "  $arm/$tag: CONTAMINATED -- compiled as ${got_mode:-<none>},"
                 echo "      not IDENTICAL. Another session is flipping"
-                echo "      mojo_only/numerics.mojo. Re-run when it is idle."
+                echo "      original/numerics.mojo. Re-run when it is idle."
                 fail=1
                 rep=$((rep + 1))
                 continue

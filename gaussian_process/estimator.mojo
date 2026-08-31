@@ -11,7 +11,7 @@ binding should reach, shaped like `cholesky/estimator.mojo` and
 **THERE IS NO UPSTREAM GAUSSIAN PROCESS.** cuML, cuVS and RAFT implement
 none at the pinned commits, so `PORTING_RULES.md`'s COPY DO NOT IMPROVE does
 not apply here, because there is nothing to copy.
-`gaussian_process/PORTED_MAP.tsv` carries the grep. scikit-learn's
+`gaussian_process/DERIVATION_MAP.tsv` carries the grep. scikit-learn's
 `sklearn/gaussian_process/_gpr.py` is the SEMANTICS reference and the ORACLE
 and is never the design source; every step below cites the line of it that
 says what the step means.
@@ -83,7 +83,7 @@ honest state is a refusal with the closure condition named, not a loop that
 usually agrees.
 
 A CALLER THAT KEEPS ITS MATRICES ON THE DEVICE should call
-`gaussian_process/mojo_only/kernels.mojo::gp_kernel_matrix` and the Cholesky
+`gaussian_process/original/kernels.mojo::gp_kernel_matrix` and the Cholesky
 lane's `potrf_lower` / `cho_solve` directly and keep its own `DeviceBuffer`s
 -- which is exactly what a hyperparameter search would want, and is why
 `cholesky/estimator.mojo`'s header offers the device-level form. This entry
@@ -100,17 +100,17 @@ from cholesky.estimator import (
     cholesky_profile_jitter,
     cholesky_solve_host,
 )
-from cholesky.mojo_only.potrf import chol_jitter_pinned
-from cholesky.mojo_only.trsm import CHOL_SOLVE_TPB, trsm_lower
+from cholesky.original.potrf import chol_jitter_pinned
+from cholesky.original.trsm import CHOL_SOLVE_TPB, trsm_lower
 from core.identity_trace import IdentityTrace
-from gaussian_process.mojo_only.gp_sabotage import (
+from gaussian_process.original.gp_sabotage import (
     GP_SAB_LOGDET_RECOMPUTED,
     GP_SAB_MEAN_DESCENDING,
     GP_SAB_NONE,
     GP_SAB_YALPHA_DESCENDING,
     sabotage_mean_kernel,
 )
-from gaussian_process.mojo_only.kernels import (
+from gaussian_process.original.kernels import (
     GP_ELEM_TPB,
     GP_PROFILE,
     GPKernelSpec,
@@ -123,12 +123,12 @@ from gaussian_process.mojo_only.kernels import (
     gp_predictive_variance,
     gp_validate_kernel,
 )
-from gemm.mojo_only.gemm_identical import (
+from gemm.original.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
-from gemm.mojo_only.gemm_oracle import OP_TN
-from mojo_only.numerics import (
+from gemm.original.gemm_oracle import OP_TN
+from original.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
     ftz,
@@ -236,7 +236,7 @@ struct GPPrediction(Movable):
 
 def gp_profile_alpha() -> Float32:
     """The ridge the profile pins, re-exported so a caller never reaches
-    into `cholesky/mojo_only/` for it and so that when it appears in a
+    into `cholesky/original/` for it and so that when it appears in a
     user's source it appears as a NAME rather than as a literal somebody
     will later change. It IS `cholesky_profile_jitter()`; there is no second
     jitter knob (DEVIATION 1751)."""
@@ -248,7 +248,7 @@ def gp_validate_alpha(alpha: Float32) raises:
 
     Everything a Gaussian process can get wrong about its ridge is refused
     here with the reason and, where there is one, the closure condition.
-    `cholesky/mojo_only/potrf.mojo::chol_validate_jitter` refuses the same
+    `cholesky/original/potrf.mojo::chol_validate_jitter` refuses the same
     set one layer down; this one exists to say it in a GP's vocabulary and
     to name the 1e-10 trap before a user meets it as a pivot failure.
     """
@@ -380,7 +380,7 @@ def gp_validate_targets(y: List[Float32], n_train: Int) raises:
             + " values for "
             + String(n_train)
             + " training rows. **MULTI-OUTPUT IS NOT PORTED**"
-            " (gaussian_process/UNPORTED.tsv, DEVIATION 1763):"
+            " (gaussian_process/NOT_IMPLEMENTED.tsv, DEVIATION 1763):"
             " scikit-learn's fit accepts y of shape (n_samples, n_targets)"
             " and sums the per-target log marginal likelihoods"
             " (_gpr.py:613-617), which needs a multi-column cho_solve and"
@@ -546,7 +546,7 @@ def _ridged_diagonal_replay(
 ) -> List[Float32]:
     """`K[diag] += alpha`, on the HOST, for the card stage `gp.ridged`.
 
-    This is a HOST REPLAY of `cholesky/mojo_only/potrf.mojo::
+    This is a HOST REPLAY of `cholesky/original/potrf.mojo::
     jitter_diag_kernel` -- `ftz(d + jitter)` on each diagonal cell and
     nothing else touched -- and it exists because the brief for this lane
     requires the RIDGED matrix on this lane's card, while the device's own
@@ -1089,7 +1089,7 @@ def gpr_classify_host(
     """
     raise Error(
         "gpr_classify_host: Gaussian process CLASSIFICATION is NOT PORTED"
-        " (DEVIATION 1766, gaussian_process/UNPORTED.tsv). This lane is"
+        " (DEVIATION 1766, gaussian_process/NOT_IMPLEMENTED.tsv). This lane is"
         " rung 1: exact dense REGRESSION only.\n"
         "  It is not a thin wrapper over the regressor. scikit-learn's"
         " _gpc.py fits a LAPLACE APPROXIMATION to the posterior"
@@ -1112,11 +1112,11 @@ def gpr_sample_y_host(
     model: GPRegressor, x_star: List[Float32], n_star: Int, n_samples: Int
 ) raises -> List[Float32]:
     """`sample_y`, scikit-learn `_gpr.py:502`. **NOT PORTED.** Always
-    raises. DEVIATION 1766's sibling; see `gaussian_process/UNPORTED.tsv`.
+    raises. DEVIATION 1766's sibling; see `gaussian_process/NOT_IMPLEMENTED.tsv`.
     """
     raise Error(
         "gpr_sample_y_host: sample_y is NOT PORTED"
-        " (gaussian_process/UNPORTED.tsv). It draws from the full"
+        " (gaussian_process/NOT_IMPLEMENTED.tsv). It draws from the full"
         " posterior COVARIANCE (scikit-learn _gpr.py:530 calls"
         " rng.multivariate_normal on predict(..., return_cov=True)), and"
         " this lane computes only the DIAGONAL of that covariance"

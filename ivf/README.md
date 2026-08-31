@@ -63,7 +63,7 @@ ported against `94c2819`; that mismatch is named in WHAT IS OWED rather
 than papered over.
 
 Scope is **IVF-FLAT ONLY**. IVF-PQ, IVF-SQ, IVF-RaBitQ, CAGRA, ScaNN,
-Vamana and NN-Descent are out of scope and each is in `ivf/UNPORTED.tsv`.
+Vamana and NN-Descent are out of scope and each is in `ivf/NOT_IMPLEMENTED.tsv`.
 HNSW is REFUSED PERMANENTLY and that is a different sentence from
 unported, for the reason `PORTING_RULES.md` 0b-ii gives.
 
@@ -76,25 +76,25 @@ each. **Nothing in the list below was written again here.**
 
 | what | whose | the exact entry point this lane calls |
 |---|---|---|
-| the coarse quantizer (k-means fit) | `cluster/` | `cluster/ported/cluster/detail/kmeans.mojo::kmeans_fit_main_traced`, with `tag_prefix = "ivf.quantizer."` |
-| the list assignment (argmin over centroids) | `cluster/` | `cluster/ported/cluster/kmeans.mojo::predict` |
-| the fixed-point accumulator scale | `mojo_only/` | `mojo_only/fixed_point.mojo::choose_scale`, following `cluster/estimator.mojo`'s policy 2 |
-| every distance, IDENTICAL arm | `neighbors/` | `neighbors/mojo_only/pinned_distance_tile.mojo::pinned_distance_tile_kernel` (DEVIATION 505) |
+| the coarse quantizer (k-means fit) | `cluster/` | `cluster/derived/cluster/detail/kmeans.mojo::kmeans_fit_main_traced`, with `tag_prefix = "ivf.quantizer."` |
+| the list assignment (argmin over centroids) | `cluster/` | `cluster/derived/cluster/kmeans.mojo::predict` |
+| the fixed-point accumulator scale | `original/` | `original/fixed_point.mojo::choose_scale`, following `cluster/estimator.mojo`'s policy 2 |
+| every distance, IDENTICAL arm | `neighbors/` | `neighbors/original/pinned_distance_tile.mojo::pinned_distance_tile_kernel` (DEVIATION 505) |
 | every distance, FAST arm | `core/` | `core/gemm.mojo::gemm_nt` then `core/expand_distances.mojo::expand_distances_kernel` |
-| every top-k, IDENTICAL arm | `neighbors/` | `neighbors/mojo_only/select_radix_identical.mojo::radix_topk_identical_kernel` (DEVIATIONS 500/501) |
-| every top-k, FAST arm | `neighbors/` | `neighbors/ported/matrix/detail/select_radix.mojo::radix_topk_one_block_kernel` |
+| every top-k, IDENTICAL arm | `neighbors/` | `neighbors/original/select_radix_identical.mojo::radix_topk_identical_kernel` (DEVIATIONS 500/501) |
+| every top-k, FAST arm | `neighbors/` | `neighbors/derived/matrix/detail/select_radix.mojo::radix_topk_one_block_kernel` |
 | the row norms | `core/` | `core/row_norms.mojo::row_norm_kernel` at `NORM_TPB` from the kernel matrix |
 | the block fold inside those norms | `core/` | `core/pinned_reduce.mojo::pinned_block_sum` (DEVIATION 504), reached through the kernel |
 | GEMM | `core/` | `core/gemm.mojo`, only on the FAST arm, only through `gemm_nt` |
-| transcendentals and the flush | `mojo_only/` | `mojo_only/numerics.mojo` `ftz` / `identical_mul_add` / `identical_sqrt`, reached inside the kernels above |
+| transcendentals and the flush | `original/` | `original/numerics.mojo` `ftz` / `identical_mul_add` / `identical_sqrt`, reached inside the kernels above |
 | identity tracing | `core/` | `core/identity_trace.mojo::IdentityTrace` |
 | the brute-force truth this lane gates against | `neighbors/` | `neighbors/estimator.mojo::knn_search` at `KNN_METHOD_TILED` |
-| the hashed-fixture primitive | `kde/` | `kde/mojo_only/kde_fixture.mojo::mix64` and `::bits_value` |
-| the distance-tile sabotage arms | `hierarchy/` | `hierarchy/mojo_only/sabotage_tile.mojo::sabotage_distance_tile_kernel` |
+| the hashed-fixture primitive | `kde/` | `kde/original/kde_fixture.mojo::mix64` and `::bits_value` |
+| the distance-tile sabotage arms | `hierarchy/` | `hierarchy/original/sabotage_tile.mojo::sabotage_distance_tile_kernel` |
 
 The k-means entry point deserves its own paragraph, because WHICH one is
 the whole of DEVIATION 1795. `cluster/estimator.mojo::kmeans_fit` and
-`cluster/ported/cluster/kmeans.mojo::fit` both construct their own
+`cluster/derived/cluster/kmeans.mojo::fit` both construct their own
 `IdentityTrace()` internally (`detail/kmeans.mojo:953`), which reads
 `MOJOLEARN_IDENTITY_TRACE` and appends a second record numbered `seq 0` to
 the file this lane is already writing.
@@ -129,7 +129,7 @@ inherited pathways.
 
 | # | hazard | what it is | what this lane does | gated by |
 |---|---|---|---|---|
-| **1** | **list assignment is an argmin and ties are common** | a point exactly equidistant from two centroids has no geometric reason to prefer either, and equidistance is not rare -- a symmetric dataset produces it, and so does any duplicate row sitting between two centres | **PINNED TO THE LOWER LIST ID**, on both sides. On the build side it is `raft::argmin_op`'s `(value, key)` total order, carried by `cluster/ported/distance/fused_distance_nn/simt_kernel.mojo:537` (`d < val[i] or (d == val[i] and col < key[i])`) and INHERITED, not re-implemented. On the query side it is the coarse selector's composite key, whose low half IS the list id. DEVIATIONS 1788, 1789 | `check_assignment_ties` -- an exactly equidistant fixture, both centroid orders, plus the probe-side sabotage |
+| **1** | **list assignment is an argmin and ties are common** | a point exactly equidistant from two centroids has no geometric reason to prefer either, and equidistance is not rare -- a symmetric dataset produces it, and so does any duplicate row sitting between two centres | **PINNED TO THE LOWER LIST ID**, on both sides. On the build side it is `raft::argmin_op`'s `(value, key)` total order, carried by `cluster/derived/distance/fused_distance_nn/simt_kernel.mojo:537` (`d < val[i] or (d == val[i] and col < key[i])`) and INHERITED, not re-implemented. On the query side it is the coarse selector's composite key, whose low half IS the list id. DEVIATIONS 1788, 1789 | `check_assignment_ties` -- an exactly equidistant fixture, both centroid orders, plus the probe-side sabotage |
 | **2** | **list membership determines summation membership** | which vectors are in a list is which vectors the top-k sums over, so the assignment is a NUMERIC decision and not bookkeeping. The whole index therefore inherits every property the centroid set has and none it does not. A lane that gated its search and not its quantizer would be claiming reproducibility for a computation whose first stage it never looked at | **STATED AS A DEPENDENCY AND GATED BEFORE ANY SEARCH CLAIM.** `check_quantizer_is_reproducible` runs first among the claims that depend on it and compares centroids, centroid norms, labels and layout slots bit for bit. The CROSS-VENDOR half of the same claim is not this lane's to make -- it is `UNSUPERVISED_IDENTITY.md`'s, it is Apple and AMD only, and NVIDIA is owed there | `check_quantizer_is_reproducible`, and the `ivf.quantizer.*` / `ivf.centers` / `ivf.assign` card stages, which give a cross-vendor divergence an address inside the quantizer rather than inside IVF |
 | **3** | **the list layout is a PERMUTATION** | a permutation changes nothing only if the selection is a total order over something the permutation preserves. The selector's key is `(distance, POSITION IN THE ROW)` and it takes no index array, so the position order IS the tie-break. **THE ORIGINAL INDEX MUST TRAVEL WITH THE VECTOR, NOT THE POSITION WITHIN THE LIST.** This is the classic IVF identity bug | the carry is `list_indices` (DEVIATION 1784, their `list_index[inlist_id] = source_ix` at `ivf_flat_build.cuh:135`), the within-list order is ASCENDING ORIGINAL INDEX instead of their atomic's arrival order (DEVIATION 1783), and the probe merge preserves that order across lists (DEVIATION 1786). Together those make the selector's key `(distance, original index)` restricted to the candidates, which is the order brute force uses | `check_list_layout_and_index_carry` (the layout is a permutation, the carry ascends within every list, `list_data[slot]` is `x[carry]` bit for bit, and `IVF_SAB_CARRY_POSITION` moves the answer) and `check_ivf_sabotages` |
 | **4** | **`n_probe` is a NUMERIC parameter, not a tuning knob** | it changes which vectors are summed over, so it is part of the answer. Two runs at different `n_probe` are two different computations and must never be compared as if they were one | it is in the card's header, it has no default at the host boundary (`ivf/estimator.mojo` policy 1), and `n_probe > n_lists` RAISES where cuVS clamps at `ivf_flat_search.cuh:331` -- because a silent clamp means two callers who wrote different numbers get one answer and no card can say which computation ran. DEVIATIONS 1787, 1793 | `check_ivf_refusals` (the clamp is a refusal) and `check_recall_is_reported` (every REPORT line names its `n_probe` and its candidate count) |
@@ -196,7 +196,7 @@ Two task lines in `pixi.toml`, in the `[tasks]` block beside `check-kde`
 and `check-linkage`.
 
 ```toml
-check-ivf = "mojo run -I . ivf/mojo_only/ivf_check.mojo"
+check-ivf = "mojo run -I . ivf/original/ivf_check.mojo"
 ivf-card = "mojo run -I . ivf/ivf_main.mojo"
 ```
 
@@ -216,7 +216,7 @@ MOJOLEARN_IDENTITY_TRACE=/tmp/mac.ivf.identical.card \
 `MOJOLEARN_IVF_SEED` (default 0). `ivf_check.mojo` takes nothing from the
 environment on purpose and writes its cards to `/tmp`.
 
-`tools/with_identical_mode.sh` rewrites `mojo_only/numerics.mojo` for the
+`tools/with_identical_mode.sh` rewrites `original/numerics.mojo` for the
 length of the command and holds `/tmp/cbsym-build.lock` for the whole
 window (DEVIATION 514). The flip must never be committed.
 
@@ -240,7 +240,7 @@ the thing it is supposed to move.
 | `IVF_SAB_MERGE_PROBE_ORDER` | `sabotage_layout.mojo` | duplicate, two interleaved lists | `check_ivf_sabotages` sees the candidate order stop ascending | *(not run)* |
 | `IVF_SAB_PROBE_TIE_HIGH` | `sabotage_layout.mojo` | two lists at an exactly equal coarse distance | `check_assignment_ties` sees probe slot 0 flip from list 0 to list 1 | *(not run)* |
 | `IVF_SAB_EMPTY_COUNTS_ONE` | `sabotage_layout.mojo` | planted empty list 2 | `check_empty_list` sees the chunk total overcount by exactly one | *(not run)* |
-| `LINK_SAB_ROTATE_CONTRACTION` | `hierarchy/mojo_only/sabotage_tile.mojo`, imported | hashed | the candidate distances MUST move under IDENTICAL (a per-block summation order where a pinned one is required); a REPORT under FAST | *(not run, and not yet wired into a named check -- see WHAT IS OWED)* |
+| `LINK_SAB_ROTATE_CONTRACTION` | `hierarchy/original/sabotage_tile.mojo`, imported | hashed | the candidate distances MUST move under IDENTICAL (a per-block summation order where a pinned one is required); a REPORT under FAST | *(not run, and not yet wired into a named check -- see WHAT IS OWED)* |
 | `LINK_SAB_STD_SQRT` | same file | hashed, `L2SqrtExpanded` | a REPORT. Apple's `sqrt` is correctly rounded so the bits may not move here; on NVIDIA they should (DEVIATION 258) | *(not run, not yet wired)* |
 | the k-means entry point | manual | any | swap `kmeans_fit_main_traced` for `cluster/estimator.mojo::kmeans_fit` and the card must become UNREADABLE (two `seq 0` records), proving DEVIATION 1795 is load-bearing | *(not run)* |
 
@@ -306,7 +306,7 @@ the thing it is supposed to move.
   `List` here, so the export needs a small signature change.
 - **`cluster/` wants a `kmeans_fit_traced` host entry**, shaped like
   `neighbors/estimator.mojo::knn_search_traced`. This lane reached past
-  `cluster/estimator.mojo` into `cluster/ported/cluster/detail/kmeans.mojo`
+  `cluster/estimator.mojo` into `cluster/derived/cluster/detail/kmeans.mojo`
   to get one card, which works and is the sanctioned re-entry, but it means
   the host-side policy that entry carries (the scale, the weight bound,
   `x_norm`, `fit_predict`'s fresh assignment) is spelled again in

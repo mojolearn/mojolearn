@@ -71,8 +71,8 @@ export PATH="$HOME/.pixi/bin:$PATH"
 # the honest shape of the constraint: a threadgroup size cannot follow a
 # runtime device query.
 sed -i.bak "s/^comptime TARGET_COLUMN = .*/comptime TARGET_COLUMN = COLUMN_NVIDIA/" \
-  mojo_only/kernel_matrix.mojo
-grep -n "^comptime TARGET_COLUMN" mojo_only/kernel_matrix.mojo
+  original/kernel_matrix.mojo
+grep -n "^comptime TARGET_COLUMN" original/kernel_matrix.mojo
 
 echo "==> what this box is"
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader

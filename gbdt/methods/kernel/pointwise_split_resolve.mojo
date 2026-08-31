@@ -197,7 +197,7 @@ def pw_pack_winner_kernel(
     # because THEIRS carries it and becomes load-bearing the moment
     # per-feature weights are ported; its plumbing is held by the S1
     # per-cell gain values (score_before = -3.25 there) and by
-    # `mojo_only/pointwise_resolve_check.mojo` reading this word back.
+    # `original/pointwise_resolve_check.mojo` reading this word back.
     score_before.unsafe_store(0, score)
 
     var fid_c = Int(fid)

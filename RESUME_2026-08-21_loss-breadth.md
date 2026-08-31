@@ -84,7 +84,7 @@ one of their files beside one of ours and diff branch for branch:
 * `segmented_radix_sort.mojo` is `segmented_sort.mojo`, because their file is
   `cuda_util/kernel/segmented_sort.cu`.
 
-`gbdt/UNPORTED.tsv` is new and lists eleven symbols this section deliberately
+`gbdt/NOT_IMPLEMENTED.tsv` is new and lists eleven symbols this section deliberately
 does not port, with the reason for each -- the register `cluster/` already
 had and `gbdt/` did not.
 
@@ -161,7 +161,7 @@ NOT DONE, and this is the other half:
 * **`MultiClassOneVsAll`**, whose `GetHessianType()` is Diagonal rather than
   Symmetric (`multiclass_targets.h:118-123`) and which therefore takes the
   DIAGONAL walker arm. Its kernels are in `multilogit.cu` beside the ported
-  ones and are listed in `gbdt/UNPORTED.tsv`.
+  ones and are listed in `gbdt/NOT_IMPLEMENTED.tsv`.
 * **The Python surface for MultiClass** -- `gbdt/estimator.mojo` and
   `python/mojolearn/ensemble.py` are one-dimensional and would need
   `predict_proba` routed through `multiclass_probabilities`. Blocked behind
@@ -176,7 +176,7 @@ NOT DONE, and this is the other half:
     pixi run check-multilogit          MultiClass's two kernels, four gates,
                                        3 sabotages + 1 recorded impossible
 
-`mojo_only/bootstrap_check.mojo` gained `check_bernoulli_and_poisson`, which
+`original/bootstrap_check.mojo` gained `check_bernoulli_and_poisson`, which
 pins Bernoulli at rate 1.0 and 0.0 as exact identities and Poisson(1) against
 its own distribution (measured: 36,797 zeros of 100,000 against p(0)=0.3679;
 8,046 draws >= 3 against p=0.0803).

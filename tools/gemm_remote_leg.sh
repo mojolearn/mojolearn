@@ -1095,7 +1095,7 @@ PYEOF
 # the local (Apple) reference leg
 # ---------------------------------------------------------------------------
 
-LEG_SOURCE_PATHS="gemm/mojo_only bench/gemm_card_main.mojo bench/gemm_shapes.mojo tools/gemm_card.sh tools/with_identical_mode.sh tools/with_build_lock.sh mojo_only pixi.toml pixi.lock"
+LEG_SOURCE_PATHS="gemm/original bench/gemm_card_main.mojo bench/gemm_shapes.mojo tools/gemm_card.sh tools/with_identical_mode.sh tools/with_build_lock.sh original pixi.toml pixi.lock"
 
 # DEVIATION 865 -- THE DIRTY-TREE RULE APPLIES TO phase8 TOO, ONE STEP
 # REMOVED, AND THE gemm LIST IS THE WRONG LIST FOR IT.
@@ -1116,7 +1116,7 @@ LEG_SOURCE_PATHS="gemm/mojo_only bench/gemm_card_main.mojo bench/gemm_shapes.moj
 # the injector and the build lock, and each lane's source. Four sessions
 # share this checkout, so it WILL block sometimes. That is the check working:
 # commit or stash, then rent.
-LEG_SOURCE_PATHS_PHASE8="tools/e1_bootstrap.sh tools/repeat_run_stability.py tools/with_identical_mode.sh tools/with_deterministic_mode.sh tools/with_build_lock.sh tools/gemm_card.sh bench/gemm_card_main.mojo bench/gemm_shapes.mojo gemm/mojo_only solver kde hierarchy svm metrics mamba mojo_only bindings python/mojolearn pixi.toml pixi.lock"
+LEG_SOURCE_PATHS_PHASE8="tools/e1_bootstrap.sh tools/repeat_run_stability.py tools/with_identical_mode.sh tools/with_deterministic_mode.sh tools/with_build_lock.sh tools/gemm_card.sh bench/gemm_card_main.mojo bench/gemm_shapes.mojo gemm/original solver kde hierarchy svm metrics mamba original bindings python/mojolearn pixi.toml pixi.lock"
 
 # THE SPEED PAYLOAD'S SOURCE FOOTPRINT. Wider than either of the others,
 # because it compiles a driver per family and every lane those drivers call.
@@ -1124,7 +1124,7 @@ LEG_SOURCE_PATHS_PHASE8="tools/e1_bootstrap.sh tools/repeat_run_stability.py too
 # thing being measured is the device, and documentation cannot reach a
 # millisecond. But a benchmark driver, a lane it imports, or a vendor arm
 # script CAN, so all three are in here.
-LEG_SOURCE_PATHS_SPEED="bench/speed tools/speed_gemm_arm.py tools/speed_cuml_arm.py tools/speed_torch_seq.py tools/speed_gbdt_arm.py tools/vendor_gemm_price.py tools/fast_speed_table.py tools/leg_status.py bench/gemm_shapes.mojo core gemm mojo_only bindings python/mojolearn pixi.toml pixi.lock"
+LEG_SOURCE_PATHS_SPEED="bench/speed tools/speed_gemm_arm.py tools/speed_cuml_arm.py tools/speed_torch_seq.py tools/speed_gbdt_arm.py tools/vendor_gemm_price.py tools/fast_speed_table.py tools/leg_status.py bench/gemm_shapes.mojo core gemm original bindings python/mojolearn pixi.toml pixi.lock"
 
 leg_check_tree_clean() {
     # THE LOCAL CARD COMES FROM THE WORKING TREE AND THE REMOTE CARD COMES
@@ -1206,8 +1206,8 @@ leg_local_card() {
 leg_witness_mode() {
     # Both banners, one function. bench/gemm_card_main.mojo prints
     #   == bench/gemm_card_main.mojo [IDENTICAL] ==
-    # and gemm/mojo_only/gemm_device_check.mojo prints
-    #   == gemm/mojo_only/gemm_device_check.mojo [IDENTICAL]  sabotage: ... ==
+    # and gemm/original/gemm_device_check.mojo prints
+    #   == gemm/original/gemm_device_check.mojo [IDENTICAL]  sabotage: ... ==
     [ -f "$1" ] || { printf ''; return 0; }
     sed -n 's/^== [A-Za-z0-9_/.]*\.mojo \[\([A-Z][A-Z]*\)\].*$/\1/p' "$1" | head -1
 }
@@ -1589,9 +1589,9 @@ leg_archive_required() {
         # promise, and a leg that reaches the box without it spends the lease
         # and comes home unable to say whether `deterministic` is deterministic
         # on this vendor.
-        echo "tools/e1_bootstrap.sh tools/repeat_run_stability.py bench/gemm_card_main.mojo gemm/mojo_only/gemm_identical.mojo solver/cd_main.mojo kde/kde_main.mojo hierarchy/linkage_main.mojo svm/svc_main.mojo metrics/metrics_main.mojo mamba/mojo_only/mamba_check.mojo"
+        echo "tools/e1_bootstrap.sh tools/repeat_run_stability.py bench/gemm_card_main.mojo gemm/original/gemm_identical.mojo solver/cd_main.mojo kde/kde_main.mojo hierarchy/linkage_main.mojo svm/svc_main.mojo metrics/metrics_main.mojo mamba/original/mamba_check.mojo"
     else
-        echo "gemm/mojo_only/gemm_identical.mojo"
+        echo "gemm/original/gemm_identical.mojo"
     fi
 }
 
@@ -2215,10 +2215,10 @@ echo "pixi_install_exit=$?" >> "$OUT/leg.txt"
 pixi run mojo --version > "$OUT/mojo_version.txt" 2>&1 || true
 
 # GATE 1: the device kernel's own invariance gates, on this silicon.
-# gemm/mojo_only/gemm_device_check.mojo runs every gate and reports every
+# gemm/original/gemm_device_check.mojo runs every gate and reports every
 # verdict before it raises, so a red here names WHICH gate a defect reaches.
 tools/with_identical_mode.sh pixi run mojo run -I . \
-    gemm/mojo_only/gemm_device_check.mojo > "$OUT/device_check.log" 2>&1
+    gemm/original/gemm_device_check.mojo > "$OUT/device_check.log" 2>&1
 echo "device_check_exit=$?" >> "$OUT/leg.txt"
 
 # GATE 2: the card. Same invocation shape as the Mac's, driven through
@@ -2792,9 +2792,9 @@ MMPROBE
     # this Mac is not allowed to run them. So they run here, and their exit
     # codes come home in leg.txt beside the numbers they justify.
     runarm "verify.transformer_block.fast.log" \
-        pixi run mojo run -I . transformer/mojo_only/transformer_check.mojo
+        pixi run mojo run -I . transformer/original/transformer_check.mojo
     runarm "verify.mamba_block.fast.log" \
-        pixi run mojo run -I . mamba/mojo_only/mamba_check.mojo
+        pixi run mojo run -I . mamba/original/mamba_check.mojo
     # AND UNDER IDENTICAL, WHICH IS THE HALF THAT IS EASY TO SKIP.
     #
     # DEVIATION 1876 puts the vendor kernel behind a comptime gate, so the
@@ -2806,10 +2806,10 @@ MMPROBE
     # box, in the same lease.
     runarm "verify.transformer_block.identical.log" \
         sh tools/with_identical_mode.sh pixi run mojo run -I . \
-            transformer/mojo_only/transformer_check.mojo
+            transformer/original/transformer_check.mojo
     runarm "verify.mamba_block.identical.log" \
         sh tools/with_identical_mode.sh pixi run mojo run -I . \
-            mamba/mojo_only/mamba_check.mojo
+            mamba/original/mamba_check.mojo
     runarm "gemm.gemm.cublas.log" python3 tools/speed_gemm_arm.py --rounds "@SPEEDROUNDS@"
     for L in @SPEEDLANES@; do
         [ "$L" = "gemm" ] && continue

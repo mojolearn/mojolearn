@@ -68,7 +68,7 @@ only.
 None of that falsifies 91 A, and none of it changes the ANSWER: at
 `FoldBits == 0`, one device, one task and no CTR columns, the two chains
 produce bit-identical `subsets.Bins` at every level and therefore the same
-tree. That is what `mojo_only/feature_parallel_identity_check.mojo` gates.
+tree. That is what `original/feature_parallel_identity_check.mojo` gates.
 What it falsifies is the PRICE. Rung 2 is not free.
 
 WHY THEY BUILD `docBins` AT ALL
@@ -305,7 +305,7 @@ def fit_feature_parallel_oblivious_tree_structure(
     `PORTING_RULES.md` 8 says a switch that outlives its measurement is a
     defect, and a permanently wired defect selector is one. The reach
     evidence for this file is five defects planted by EDITING it and re-run,
-    tabulated in `mojo_only/feature_parallel_identity_check.mojo`'s
+    tabulated in `original/feature_parallel_identity_check.mojo`'s
     docstring and in `PORTING.md` 120.
     """
     # `CB_ENSURE(FoldBasedTasks.size() || SingleTaskTarget);` (`:47`)

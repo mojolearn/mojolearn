@@ -22,7 +22,7 @@ WHAT RUNS WHERE, once, so no reader has to work it out from the code:
   * the SORTS: device, `core/segmented_sort.mojo`;
   * the POINT ESTIMATE, the INTERVAL, the STANDARD ERROR and the P-VALUE:
     host, over the same pinned tree
-    (`metrics/mojo_only/pinned_sum.mojo::host_tree_sum`), because they are
+    (`metrics/original/pinned_sum.mojo::host_tree_sum`), because they are
     O(1) or O(R) scalar work on data that has to come back anyway, and
     because a host float32 add/multiply/divide/sqrt is correctly rounded on
     every host this runs on with NOT ONE LIBM CALL among them
@@ -36,14 +36,14 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
 from core.segmented_sort import SORT_BLOCK, segmented_sort_keys_f32
-from metrics.mojo_only.pinned_sum import (
+from metrics.original.pinned_sum import (
     PINNED_SUM_W,
     chunk_count,
     host_fold_partials,
     host_tree_sum,
 )
-from mojo_only.numerics import ftz, identical_div, identical_mul, identical_sqrt
-from resample.mojo_only.index_map import (
+from original.numerics import ftz, identical_div, identical_mul, identical_sqrt
+from resample.original.index_map import (
     RESAMPLE_KIND_BOOTSTRAP,
     RESAMPLE_KIND_MONTE_CARLO,
     RESAMPLE_KIND_PERMUTATION,
@@ -55,7 +55,7 @@ from resample.mojo_only.index_map import (
     validate_pooled,
     validate_positions,
 )
-from resample.mojo_only.intervals import (
+from resample.original.intervals import (
     ALT_TWO_SIDED,
     Interval,
     METHOD_BASIC,
@@ -72,7 +72,7 @@ from resample.mojo_only.intervals import (
     percentile_interval,
     permutation_pvalue,
 )
-from resample.mojo_only.statistics import (
+from resample.original.statistics import (
     MC_DIMS,
     RESAMPLE_MAX_SORT_CELLS,
     STAT_DIFF_MEANS,
@@ -331,7 +331,7 @@ def _launch_bootstrap_stat(
             "resample: threads-per-block must be 64, 128 or 256 (it must"
             " divide PINNED_SUM_W = "
             + String(PINNED_SUM_W)
-            + ", metrics/mojo_only/pinned_sum.mojo::virtual_block_sum); got "
+            + ", metrics/original/pinned_sum.mojo::virtual_block_sum); got "
             + String(tpb)
         )
 
@@ -981,7 +981,7 @@ def permutation_test_host(
     ONE-DIMENSIONAL `x` and `y`; the two-sample independent null pools them
     and re-splits, so a second column would have no meaning under it (a
     paired statistic is SciPy's `permutation_type='pairings'`, which is not
-    ported -- see `resample/UNPORTED.tsv`).
+    ported -- see `resample/NOT_IMPLEMENTED.tsv`).
 
     THE NULL IS NEVER EXHAUSTIVE HERE. SciPy switches to enumerating all
     `C(n_x + n_y, n_x)` partitions when `n_resamples >= n_max` and then drops

@@ -18,7 +18,7 @@ Tags are unique and carry no launch parameter.
 WHY THE INTERMEDIATES ARE NOT OPTIONAL. A final scalar is a LOSSY hash of
 the arithmetic that produced it. `r2 = 1 - sse/ssto` absorbs a last-bit
 move in either sum whenever `sse << ssto` -- this lane MEASURED that on
-the 4099-row fixture (`ported/stats/detail/scores.mojo::r2_score_parts`)
+the 4099-row fixture (`derived/stats/detail/scores.mojo::r2_score_parts`)
 and gated the sums in the checks while the card recorded only the ratio.
 An output-only card is blind in exactly the way three other lanes measured
 on 2026-08-23 (NOVELTY_NOTES 13, 14, 15: a fold sabotage that moves 13 of
@@ -40,8 +40,8 @@ CONSTRUCTION plus one Apple device's run; no second vendor has run it.
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
-from metrics.mojo_only.device_io import download_f32, upload_f32, upload_i32
-from metrics.mojo_only.fixtures import (
+from metrics.original.device_io import download_f32, upload_f32, upload_i32
+from metrics.original.fixtures import (
     bits32,
     bits64,
     hashed_floats,
@@ -50,27 +50,27 @@ from metrics.mojo_only.fixtures import (
     labels_true_pred,
     u01,
 )
-from metrics.ported.metrics.accuracy_score import accuracy_score_py
-from metrics.ported.metrics.adjusted_rand_index import (
+from metrics.derived.metrics.accuracy_score import accuracy_score_py
+from metrics.derived.metrics.adjusted_rand_index import (
     adjusted_rand_index_traced,
 )
-from metrics.ported.metrics.completeness_score import completeness_score
-from metrics.ported.metrics.entropy import entropy_traced
-from metrics.ported.metrics.homogeneity_score import homogeneity_score
-from metrics.ported.metrics.kl_divergence import kl_divergence_traced
-from metrics.ported.metrics.mutual_info_score import mutual_info_score_traced
-from metrics.ported.metrics.r2_score import r2_score_py_parts_traced
-from metrics.ported.metrics.rand_index import rand_index
-from metrics.ported.metrics.silhouette_score_batched_float import (
+from metrics.derived.metrics.completeness_score import completeness_score
+from metrics.derived.metrics.entropy import entropy_traced
+from metrics.derived.metrics.homogeneity_score import homogeneity_score
+from metrics.derived.metrics.kl_divergence import kl_divergence_traced
+from metrics.derived.metrics.mutual_info_score import mutual_info_score_traced
+from metrics.derived.metrics.r2_score import r2_score_py_parts_traced
+from metrics.derived.metrics.rand_index import rand_index
+from metrics.derived.metrics.silhouette_score_batched_float import (
     silhouette_score,
 )
-from metrics.ported.metrics.trustworthiness import trustworthiness_score_traced
-from metrics.ported.metrics.v_measure import v_measure
-from metrics.ported.stats.detail.mutual_info_score import (
+from metrics.derived.metrics.trustworthiness import trustworthiness_score_traced
+from metrics.derived.metrics.v_measure import v_measure
+from metrics.derived.stats.detail.mutual_info_score import (
     contingency_matrix_host,
 )
-from metrics.ported.stats.detail.rand_index import rand_index_counts
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from metrics.derived.stats.detail.rand_index import rand_index_counts
+from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
 comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL

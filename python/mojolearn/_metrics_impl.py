@@ -51,7 +51,7 @@ the kernel-level answers for out-of-contract values (a NaN reaching
 `sil_op` as `+0.0` through DEVIATION 656, `r2_score` returning the
 canonical NaN `0x7fc00000` through DEVIATION 657) are therefore NOT
 reachable from Python. They are gated where they live, in
-`metrics/mojo_only/regression_metrics_check.mojo` and
+`metrics/original/regression_metrics_check.mojo` and
 `silhouette_check.mojo`.
 """
 
@@ -162,7 +162,7 @@ def _as_i32_1d(x, name):
             f"mojolearn metrics: {name} does not fit in int32; the ported "
             "kernels are the int32 instantiation (the int64 overload of "
             "adjusted_rand_index is the same code at a wider type and is "
-            "not instantiated, metrics/UNPORTED.tsv)"
+            "not instantiated, metrics/NOT_IMPLEMENTED.tsv)"
         )
     return out
 
@@ -272,7 +272,7 @@ def accuracy_score(y_true, y_pred, *, normalize=True, sample_weight=None):
     if sample_weight is not None:
         raise NotImplementedError(
             "mojolearn accuracy_score: sample_weight is not ported "
-            "(metrics/ported/stats/detail/scores.mojo has no weighted arm)"
+            "(metrics/derived/stats/detail/scores.mojo has no weighted arm)"
         )
     if not normalize:
         raise NotImplementedError(
@@ -369,7 +369,7 @@ def entropy(clustering, *, base=None):
     Under `MOJOLEARN_NUMERIC_MODE=identical` the float epilogue is Float32
     through `identical_log` and differs from the FAST arm's Float64 in the
     seventh digit BY DESIGN (DEVIATION 651). That is the price of the same
-    bits everywhere; `mojo_only/numerics.mojo` has no portable Float64 log
+    bits everywhere; `original/numerics.mojo` has no portable Float64 log
     yet, and `metrics/README.md`'s hand-off ask 1 is exactly that.
     """
     lab = _as_i32_1d(clustering, "clustering")
@@ -411,7 +411,7 @@ def mutual_info_score(labels_true, labels_pred, *, contingency=None):
         raise NotImplementedError(
             "mojolearn mutual_info_score: contingency= is refused; the "
             "ported entry builds the contingency matrix on the device "
-            "(metrics/ported/stats/detail/contingency_matrix.mojo) and has "
+            "(metrics/derived/stats/detail/contingency_matrix.mojo) and has "
             "no arm that consumes a precomputed one"
         )
     yt, yp, n, lower, upper = _prepare_cluster_labels(labels_true, labels_pred)
@@ -551,7 +551,7 @@ def r2_score(
     if sample_weight is not None:
         raise NotImplementedError(
             "mojolearn r2_score: sample_weight is not ported "
-            "(metrics/ported/stats/detail/scores.mojo has no weighted arm)"
+            "(metrics/derived/stats/detail/scores.mojo has no weighted arm)"
         )
     if multioutput != "uniform_average":
         raise NotImplementedError(
@@ -623,7 +623,7 @@ def _silhouette(X, labels, metric, chunksize, caller):
             "DistanceType::L2SqrtUnexpanded, which is the arm cuML's "
             "silhouette_score.pyx dispatches by default). 'cityblock', "
             "'cosine', 'l1', 'manhattan' and 'sqeuclidean' are other "
-            "distance kernels and are not in metrics/ (UNPORTED.tsv)"
+            "distance kernels and are not in metrics/ (NOT_IMPLEMENTED.tsv)"
         )
     x, _copied = as_f32_c(X, "X")
     if not np.isfinite(x).all():
@@ -818,30 +818,30 @@ def trustworthiness(
 _NOT_PORTED = {
     "mean_absolute_error": (
         "RAFT's regression_metrics (scores.cuh) is NOT PORTED "
-        "(metrics/UNPORTED.tsv); it was not in this lane's brief"
+        "(metrics/NOT_IMPLEMENTED.tsv); it was not in this lane's brief"
     ),
     "mean_squared_error": (
         "RAFT's regression_metrics (scores.cuh) is NOT PORTED "
-        "(metrics/UNPORTED.tsv); it was not in this lane's brief"
+        "(metrics/NOT_IMPLEMENTED.tsv); it was not in this lane's brief"
     ),
     "root_mean_squared_error": (
         "RAFT's regression_metrics (scores.cuh) is NOT PORTED "
-        "(metrics/UNPORTED.tsv)"
+        "(metrics/NOT_IMPLEMENTED.tsv)"
     ),
     "median_absolute_error": (
         "RAFT's regression_metrics (scores.cuh) is NOT PORTED, and the "
         "median arm would additionally need a radix sort this repository "
-        "does not have on device (metrics/UNPORTED.tsv)"
+        "does not have on device (metrics/NOT_IMPLEMENTED.tsv)"
     ),
     "pairwise_distances": (
         "cuML's pairwise_distance.cu is a front-end over cuVS distances; "
         "neighbors/ owns distances in this repository "
-        "(neighbors/mojo_only/pinned_distance_tile.mojo), and it is not a "
-        "metric of a model (metrics/UNPORTED.tsv)"
+        "(neighbors/original/pinned_distance_tile.mojo), and it is not a "
+        "metric of a model (metrics/NOT_IMPLEMENTED.tsv)"
     ),
     "confusion_matrix": (
         "the CONTINGENCY matrix is ported and is what the label metrics "
-        "consume (metrics/ported/stats/detail/contingency_matrix.mojo), but "
+        "consume (metrics/derived/stats/detail/contingency_matrix.mojo), but "
         "it has no entry of its own; cuML's confusion_matrix.py is pure "
         "cupy on the host and is not a kernel this lane ported"
     ),

@@ -217,7 +217,7 @@ for _try in 1 2 3 4 5; do
   sleep 15
 done
 [ "$_scp_ok" = 1 ] || { log "scp failed after 5 attempts"; exit 6; }
-$SSH "rm -rf /root/mojolearn && git clone -q -b e2-run /root/e2.bundle /root/mojolearn && cd /root/mojolearn && git rev-parse HEAD && git status --short | head -3 && grep -c 'is_defined\\[\"MOJOLEARN_NUMERIC_IDENTICAL\"\\]' mojo_only/numerics.mojo" \
+$SSH "rm -rf /root/mojolearn && git clone -q -b e2-run /root/e2.bundle /root/mojolearn && cd /root/mojolearn && git rev-parse HEAD && git status --short | head -3 && grep -c 'is_defined\\[\"MOJOLEARN_NUMERIC_IDENTICAL\"\\]' original/numerics.mojo" \
   || { log "remote clone/checkout failed"; exit 6; }
 
 # THE WORK BOUND, COMPUTED FROM THE LEASE AND NOT FROM A GUESS.
@@ -282,7 +282,7 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
     # construction. That is DEVIATION 1091 in a different costume.
     WRAP=1
     case "$chk" in
-      gemm-backward) CMD='pixi run mojo run -I . gemm/mojo_only/gemm_backward_check.mojo' ;;
+      gemm-backward) CMD='pixi run mojo run -I . gemm/original/gemm_backward_check.mojo' ;;
       # THE SPEED LANE. Both sides run under ONE MAC cap so a row is either
       # measured on both arms or skipped on both; a full-shape vendor number
       # beside a capped one of ours would be a ratio between two different
@@ -300,14 +300,14 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
       # and is the 3.5x Apple's or the kernel's. Both arms in ONE binary,
       # output poisoned before each, poison counted, so a kernel that never
       # wrote cannot agree by accident.
-      tuned-probe)   CMD='pixi run mojo run -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_TUNED_ARM=1 gemm/mojo_only/gemm_tuned_probe.mojo'; WRAP=0 ;;
+      tuned-probe)   CMD='pixi run mojo run -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_TUNED_ARM=1 gemm/original/gemm_tuned_probe.mojo'; WRAP=0 ;;
       # THE ONE-VARIABLE PRICE OF THE FOLD PIN. Three arms in ONE binary
       # alternating call by call, so the governor drift cancels at the arm
       # level instead of being averaged over rounds. Measured 1.52x-1.55x on
       # an M4; this is the leg that asks whether that number is Apple's or
       # the profile's. WRAP=0: the driver builds its own arms and forcing it
       # under one mode would make both of them the same binary.
-      unpinned-price) CMD='pixi run mojo run -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_UNPINNED_ARM=1 gemm/mojo_only/gemm_unpinned_price.mojo'; WRAP=0 ;;
+      unpinned-price) CMD='pixi run mojo run -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_UNPINNED_ARM=1 gemm/original/gemm_unpinned_price.mojo'; WRAP=0 ;;
       # The vendor LIBRARY (cuBLAS / hipBLASLt), not MAX's linalg.matmul.
       # torch goes into a THROWAWAY VENV, never into the pinned pixi
       # environment every recorded timing in this repository was taken under.
@@ -331,7 +331,7 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
       et-profile)    CMD="env ET_PROFILE_ARMS='${ET_PROFILE_ARMS:-shipped 128}' ET_PROFILE_OLD_COMMIT='${ET_PROFILE_OLD_COMMIT:-}' ET_PROFILE_ROWS2='${ET_PROFILE_ROWS2:-}' ET_PROFILE_SKIP_BREAK='${ET_PROFILE_SKIP_BREAK:-}' ET_PROFILE_ROWS='${ET_PROFILE_ROWS:-}' ET_PROFILE_TREES='${ET_PROFILE_TREES:-}' bash tools/et_profile_leg.sh"; WRAP=0 ;;
       column)        CMD='pixi run mojo run -I . matrix_main.mojo' ;;
       gpu-probe)     CMD='pixi run mojo run -I . probe_main.mojo' ;;
-      # (no `transformer` case: the device spelling in transformer/ported/ has
+      # (no `transformer` case: the device spelling in transformer/derived/ has
       #  no check driver yet, so there is nothing here to run. Add the case in
       #  the same commit that adds the driver.)
       *) log "unknown extra check '$chk' -- skipped"; continue ;;

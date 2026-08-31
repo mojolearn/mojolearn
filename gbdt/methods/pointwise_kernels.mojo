@@ -131,7 +131,7 @@ is capped at 64, so it is always a power of two in [1, 64]; `histCount` is
 passed as 2 by the only caller). They are transcribed because a guard that
 is unreachable today is the one that catches tomorrow's caller, and
 because `min(..., 64)` is what makes the seven enough:
-`mojo_only/pointwise_dispatch_check.mojo` gate F7 sweeps 245
+`original/pointwise_dispatch_check.mojo` gate F7 sweeps 245
 configurations, finds 12 that return 128 before the clamp, and asserts
 every clamped value is one of the seven.
 
@@ -164,7 +164,7 @@ TWO SMALLER CONSEQUENCES OF THE SAME DECISION, both real ports of theirs:
     `gbdt/gpu_data/folds_histogram.mojo` the moment anything else needs it.
   * `TComputeHist1Kernel` is NOT ported. `pointwise_hist1.cu` is dead in
     the upstream -- registered, wrapped, and called by nothing
-    (`PORTING.md` 91 D, `gbdt/UNPORTED.tsv`).
+    (`PORTING.md` 91 D, `gbdt/NOT_IMPLEMENTED.tsv`).
 
 INHERITED, NOT NEW: the 8-bit path takes a `fixed_scale` their kernels have
 no parameter for. That is DEVIATION 93 (Metal has no threadgroup float
@@ -172,12 +172,12 @@ atomic, so the 8-bit accumulator is Int32 fixed point); this layer only
 threads the value through.
 """
 
-from mojo_only.kernel_matrix import (
+from original.kernel_matrix import (
     TARGET_COLUMN,
     pointwise_one_byte_fixed_for,
 )
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE as HIST_BUILD_MODE
-from mojo_only.numerics import NUMERIC_IDENTICAL
+from original.numerics import GLOBAL_NUMERIC_MODE as HIST_BUILD_MODE
+from original.numerics import NUMERIC_IDENTICAL
 from max.gpu.host import DeviceContext
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 

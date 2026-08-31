@@ -11,8 +11,8 @@ Three reasons, and the first is decisive.
 need a histogram; it needs a `DeviceContext`, a launch-geometry policy, a
 per-backend capability table, a determinism story, an interleaved benchmark
 harness, a machine lock, and packaging. Every one of those is in this tree and
-has been through a compiler and a GPU. `mojo_only/kernel_matrix.mojo`,
-`mojo_only/numerics.mojo`, `mojo_only/interleaved.mojo`, `launch_probe.mojo`
+has been through a compiler and a GPU. `original/kernel_matrix.mojo`,
+`original/numerics.mojo`, `original/interleaved.mojo`, `launch_probe.mojo`
 and `tools/remote_gpu.sh` are the substrate, not the trees.
 
 Starting elsewhere means rebuilding all of it and then reconciling two copies
@@ -36,12 +36,12 @@ That is a DIRECTORY problem, not a repository problem.
       boosting/
         gbdt/      CatBoost derivative. COPY, DO NOT IMPROVE applies HERE
                      AND ONLY HERE, unchanged.
-        mojo_only/   what CatBoost never had to write
+        original/   what CatBoost never had to write
       cluster/       k-means
       neighbors/     k-NN
       ensemble/      random forest
 
-The rule scopes to `boosting/gbdt/`. `PORTED_MAP.tsv` and `check_upstream.sh`
+The rule scopes to `boosting/gbdt/`. `DERIVATION_MAP.tsv` and `check_upstream.sh`
 keep working because they name files, not directories above them. Nothing about
 the port's control weakens.
 
@@ -153,5 +153,5 @@ CUB block collectives, which is exactly the pair Mojo provides. RAFT's own
 learned dispatch prefers warpsort for every k a user actually asks for, so
 radix is their second choice; it is our only one, and the bar is not
 WarpSelect on an NVIDIA card, it is `argpartition` on a CPU, because their
-GPU arms do not run on this machine at all. In `PORTED_MAP.tsv` that is a
+GPU arms do not run on this machine at all. In `DERIVATION_MAP.tsv` that is a
 `replaced` row, the same status `partitions_reduce.mojo` carries.

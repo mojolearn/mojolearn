@@ -40,11 +40,11 @@ from gbdt.methods.greedy_subsets_searcher.kernel.hist_quantized_shared import (
     qh_write_hist_kernel,
     quantize_pair_kernel,
 )
-from mojo_only.kernel_matrix import (
+from original.kernel_matrix import (
     TARGET_COLUMN,
     greedy_quantized_hist_for,
 )
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 #: THE ONE TRUTH the driver keys its dispatch on. Comptime, so the
 #: IDENTICAL build folds every consumer away and executes the pre-round

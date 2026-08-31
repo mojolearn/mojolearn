@@ -1,7 +1,7 @@
 # Vendor columns: every GPU that exists, its minimums, and whether identity survives it
 
 Written 2026-08-21, when three columns were declared that nothing can build
-for. Read `mojo_only/kernel_matrix.mojo` first; this file is the evidence
+for. Read `original/kernel_matrix.mojo` first; this file is the evidence
 behind its rows, and the row is the truth if the two ever disagree.
 
 ## Why declare a vendor before the toolchain has one

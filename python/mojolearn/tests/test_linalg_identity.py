@@ -10,7 +10,7 @@ WHAT THIS CLOSES
 `gemm/host_entry.mojo`, `bindings/_mojolearn_linalg.mojo` and
 `python/mojolearn/_linalg_impl.py` put the profile's product in reach of a
 Python caller. Nothing in that path compared its output against
-`gemm/mojo_only/gemm_oracle.mojo::gemm_oracle`.
+`gemm/original/gemm_oracle.mojo::gemm_oracle`.
 
 The build-time smoke test in `bindings/build_linalg.sh` proves the kernels
 launch, that all five execution plans dispatch, that the three orientations
@@ -42,7 +42,7 @@ tolerance is labeled ACCURACY and is stated not to be an identity arm.
 
 WHAT IT IS NOT
 --------------
-**It is not a second copy of `gemm/mojo_only/gemm_device_check.mojo`.** That
+**It is not a second copy of `gemm/original/gemm_device_check.mojo`.** That
 file gates the KERNEL -- oracle agreement over the shape table, launch
 invariance, batch invariance, and five sabotages that show each gate can fail,
 including the `-0.0` fixture that the reference card is blind to. The
@@ -255,7 +255,7 @@ def fixture(shape, salt):
 # REPORTING
 # ===========================================================================
 # EVERY ARM RUNS AND EVERY VERDICT IS PRINTED BEFORE THE PROCESS EXITS
-# NON-ZERO. `gemm/mojo_only/gemm_device_check.mojo` states the reason and it
+# NON-ZERO. `gemm/original/gemm_device_check.mojo` states the reason and it
 # is the same one here: stopping at the first failure shows one arm's opinion
 # when the useful evidence is WHICH arms a given defect reaches and which it
 # walks past.
@@ -1003,7 +1003,7 @@ def arm_card(rep):
             "    MOJOLEARN_GEMM_CARD=/tmp/gemm_oracle.card ...\n"
             "\n"
             "That runs bench/gemm_card_main.mojo's ORACLE arm, which is\n"
-            "gemm/mojo_only/gemm_oracle.mojo::gemm_oracle, the NORMATIVE v1\n"
+            "gemm/original/gemm_oracle.mojo::gemm_oracle, the NORMATIVE v1\n"
             "answer. It takes about a minute and needs no GPU.\n"
             "\n"
             "This is a FAILURE and not a skip. A silently skipped identity\n"

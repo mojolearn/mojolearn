@@ -1,0 +1,36 @@
+# our_file	upstream_file	status	notes
+# cuML pinned at 265b9da (v26.08.00 checkout, cpp/src/metrics), RAFT at ebf9268 (v26.08.00, cpp/include/raft/stats). cuVS's stats/ (the batched silhouette and trustworthiness cuML 26.08 actually links) is the same text as RAFT's detail files and is cited by the RAFT path.
+derived/metrics/accuracy_score.mojo	cuml cpp/src/metrics/accuracy_score.cu	transliterated	accuracy_score_py, int labels
+derived/metrics/rand_index.mojo	cuml cpp/src/metrics/rand_index.cu	transliterated	rand_index; their signature takes const double* labels, ours Int32 (the comparison is ==, the same either way)
+derived/metrics/adjusted_rand_index.mojo	cuml cpp/src/metrics/adjusted_rand_index.cu	partial	the int overload; the int64_t overload is the same code at a wider label type and is not instantiated
+derived/metrics/entropy.mojo	cuml cpp/src/metrics/entropy.cu	transliterated	
+derived/metrics/mutual_info_score.mojo	cuml cpp/src/metrics/mutual_info_score.cu	transliterated	
+derived/metrics/homogeneity_score.mojo	cuml cpp/src/metrics/homogeneity_score.cu	transliterated	
+derived/metrics/completeness_score.mojo	cuml cpp/src/metrics/completeness_score.cu	transliterated	homogeneity_score with the arrays swapped, exactly as theirs; NOTE this makes completeness's MI the TRANSPOSED fold (README)
+derived/metrics/v_measure.mojo	cuml cpp/src/metrics/v_measure.cu	transliterated	beta honored
+derived/metrics/r2_score.mojo	cuml cpp/src/metrics/r2_score.cu	partial	the float overload; the double overload cannot run on Apple (no Float64 on device) and is refused by name at the Python surface
+derived/stats/detail/contingency_matrix.mojo	raft cpp/include/raft/stats/detail/contingencyMatrix.cuh	partial	SMEM_ATOMICS and GLOBAL_ATOMICS arms (integer atomics, order-free); SORT_AND_GATOMICS not ported (same integers, locality only); the smem/global threshold is a comptime cap (CMAT_SMEM_MAX_DIM = 32) instead of a device query; getInputClassCardinality as an integer Atomic.min/max kernel
+derived/stats/detail/histogram.mojo	raft cpp/include/raft/stats/detail/histogram.cuh	partial	gmemHistKernel arm with the ARI Binner; stands in for cub::DeviceHistogram::HistogramEven at entropy.cuh countLabels and silhouette countLabels (same integers)
+derived/stats/detail/scores.mojo	raft cpp/include/raft/stats/detail/scores.cuh	partial	accuracy_score (sub + count fused; integer atomic) and r2_score (DEVIATION 653: fixed-tree sums; powerScalar(x,2) spelled x*x; mean = sum * (1/n) as mean.cuh:22,39); regression_metrics NOT ported
+derived/stats/detail/rand_index.mojo	raft cpp/include/raft/stats/detail/rand_index.cuh	transliterated	DEVIATION 652: per-block partials + host Int64 sum instead of the 64-bit atomic (Apple has none)
+derived/stats/detail/adjusted_rand_index.mojo	raft cpp/include/raft/stats/detail/adjusted_rand_index.cuh	transliterated	countUnique, nCTwo, the four early returns, the Float64 host epilogue (div/mul/sub only: identity-safe in both modes)
+derived/stats/detail/entropy.mojo	raft cpp/include/raft/stats/detail/entropy.cuh	transliterated	DEVIATIONS 650 (host epilogue from integer counts) and 651 (IDENTICAL: Float32 through identical_log; FAST: Float64 host log)
+derived/stats/detail/mutual_info_score.mojo	raft cpp/include/raft/stats/detail/mutual_info_score.cuh	transliterated	DEVIATIONS 650, 651; their int a[i]*b[j] (overflows past 46,340 per class pair) is Int64 here
+derived/stats/detail/homogeneity_score.mojo	raft cpp/include/raft/stats/detail/homogeneity_score.cuh	transliterated	
+derived/metrics/kl_divergence.mojo	cuml cpp/src/metrics/kl_divergence.cu	partial	the float overload; double refused by name (no Float64 on device)
+derived/stats/detail/kl_divergence.mojo	raft cpp/include/raft/stats/detail/kl_divergence.cuh	transliterated	KLDOp through identical_log; DEVIATION 653 fold; no normalization (theirs has none)
+derived/stats/detail/v_measure.mojo	raft cpp/include/raft/stats/detail/v_measure.cuh	transliterated	
+derived/metrics/silhouette_score_batched_float.mojo	cuml cpp/src/metrics/silhouette_score_batched_float.cu	transliterated	the float batched entry (the one cuML's Python dispatches); defaults chunk 40000, metric L2SqrtUnexpanded
+derived/stats/detail/silhouette_score.mojo	raft cpp/include/raft/stats/detail/silhouette_score.cuh	partial	SilOp and countLabels (the pieces the batched path reaches); the unbatched driver NOT ported (never dispatched)
+derived/stats/detail/batched/silhouette_score.mojo	raft cpp/include/raft/stats/detail/batched/silhouette_score.cuh	transliterated	DEVIATION 654: fill_b + compute_chunked_a_b + min reduce + SilOp as one row-owned kernel with fixed trees; the ASSERT; chunk validated, scheduling; metric refused by name
+original/pinned_distance.mojo	none	mojo-only	DEVIATION 654's distance: one thread per cell, unexpanded L2 sqrt through identical_mul_add/ftz/identical_sqrt, plus the host twin for the oracle
+original/silhouette_check.mojo	none	mojo-only	Group C gates; sabotages (g)(h)(i) in the README
+derived/metrics/trustworthiness.mojo	cuml cpp/src/metrics/trustworthiness.cu	transliterated	the one instantiation <float, L2SqrtUnexpanded>; host-array boundary (knn_search's)
+derived/stats/detail/trustworthiness_score.mojo	raft cpp/include/raft/stats/detail/trustworthiness_score.cuh	partial	DEVIATION 655: build_lookup_table + compute_rank as a counting kernel; run_knn -> neighbors' knn_search; batchSize validated (scheduling); the closed form in Float64 on the host
+original/trustworthiness_check.mojo	none	mojo-only	Group D gates; sabotage (j) in the README
+metrics_main.mojo	none	mojo-only	every ported metric on one hashed fixture; the 34-stage identity card (inputs, integer products, knn.* via the traced k-NN entry, every value by its bits)
+original/pinned_sum.mojo	none	mojo-only	DEVIATION 653: virtual_block_sum (a PINNED_SUM_W slab tree independent of the physical block), host_tree_sum (the bitwise oracle), host_fold_partials, the shifted-partition sabotage model (and why a rotation is invisible to a halving tree)
+original/fixtures.mojo	none	mojo-only	hashed, skewed, non-uniform fixtures; planted singleton / constant / product-structured / subnormal-square cases
+original/device_io.mojo	none	mojo-only	host<->device copies for the checks
+original/label_metrics_check.mojo	none	mojo-only	Group A gates; two sabotages recorded in its header and the README
+original/regression_metrics_check.mojo	none	mojo-only	Group B gates: oracle bitwise, FTZ-visible fixture, launch invariance (8 launches), KL branches; sabotages (d)(e)(f) in the README

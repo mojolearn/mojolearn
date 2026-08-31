@@ -4,8 +4,8 @@
 
 Written 2026-08-23, the mamba lane (DEVIATIONS 720-739). The shape of this
 document is `gemm/IDENTICAL_FP32_CONTRACT.md`'s, on purpose. The code form
-of every clause is `mamba/mojo_only/mamba_oracle.mojo` (the host oracle)
-and `mamba/ported/` (the device spelling), and the clauses cite both.
+of every clause is `mamba/original/mamba_oracle.mojo` (the host oracle)
+and `mamba/derived/` (the device spelling), and the clauses cite both.
 
 **THE PROFILE NAME IS PART OF THE CONTRACT.** Every card, gate and claim
 under this document names `mojolearn.identical.mamba1.fp32.v1`. Changing
@@ -193,7 +193,7 @@ the launch with 0, 1 or 2 others (the clause vLLM's batch-invariant mode
 cannot give Mamba, `supports_batch_invariance()` is False for its Mamba
 backends); (d) decode == prefill bitwise at every position; (e) the row-39
 audit of section 6; (f) every clause above falsifiable by a named sabotage
-that fails a gate. `mamba/mojo_only/mamba_check.mojo` is the gate file;
+that fails a gate. `mamba/original/mamba_check.mojo` is the gate file;
 FAST-mode arms of (a) are RECORDED, not asserted, where they are
 vendor-shaped (the metrics lane's leg-11 lesson).
 

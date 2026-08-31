@@ -141,7 +141,7 @@ from gbdt.methods.leaves_estimation.pointwise_oracle import (
 from gbdt.methods.leaves_estimation.step_estimator import (
     BACKTRACKING_ANY_IMPROVEMENT,
 )
-from mojo_only.fixed_point import choose_scale
+from original.fixed_point import choose_scale
 from gbdt.methods.random_score_helper import (
     calc_score_model_length_mult,
     compute_score_std_dev,
@@ -191,14 +191,14 @@ from gbdt.gpu_data.compressed_index_builder import (
     build_layout,
 )
 from gbdt.models.kernel.add_bin_values import compute_bins_and_add_kernel
-from mojo_only.kernel_matrix import (
+from original.kernel_matrix import (
     TARGET_COLUMN,
     deterministic_flush_for,
     greedy_one_byte_fixed_for,
 )
 from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
-from mojo_only.numerics import PIN_DETERMINISM
-from mojo_only.numerics import NUMERIC_IDENTICAL
+from original.numerics import PIN_DETERMINISM
+from original.numerics import NUMERIC_IDENTICAL
 from gbdt.gpu_util.kernel.fill import launch_make_sequence
 from gbdt.gpu_util.kernel.bootstrap import (
     bootstrap_grid_blocks,
@@ -1202,7 +1202,7 @@ def fit_with_test(
     # THE FIXED-POINT BOUND, for every build whose histogram quantizes: the
     # IDENTICAL flush, and the Apple column's `HIST_SMEM_SHARED2_I32`
     # shared-memory accumulation, which quantizes at `fixed_scale` even
-    # under FAST (`hist_smem_mode_for` in `mojo_only/kernel_matrix.mojo`).
+    # under FAST (`hist_smem_mode_for` in `original/kernel_matrix.mojo`).
     # The scale must be bounded by `sum over all rows of abs(plane)`, and
     # the two plane magnitudes are computed ON THE DEVICE by `pointwise_target_kernel`'s
     # magnitude reduce -- the same block-reduce-plus-one-atomicAdd shape as
@@ -1584,16 +1584,16 @@ def fit_with_test(
         #
         # CONTRACT AUDIT, 2026-08-19, updated for the device reduction.
         # Every caller of `choose_scale` on the tree path against
-        # `mojo_only/fixed_point.mojo`'s stated precondition, "sum over all
+        # `original/fixed_point.mojo`'s stated precondition, "sum over all
         # rows of abs(value) for the plane being accumulated":
         #
         #   this file                      sum of |stats| reduced ON DEVICE
         #                                  by `pointwise_target_kernel` from the exact
         #                                  planes it wrote, both planes, per
         #                                  iteration -- SOUND
-        #   mojo_only/level_check.mojo     abs-accumulates a signed generator
+        #   original/level_check.mojo     abs-accumulates a signed generator
         #                                  at :210-218 and :344-352 -- SOUND
-        #   mojo_only/level_bench.mojo     same, three sites -- SOUND
+        #   original/level_bench.mojo     same, three sites -- SOUND
         #   probe_main.check_fixed_point   sums |rows| directly -- SOUND
         #
         # The permutation growth applies to the stats plane does not move the
@@ -1705,7 +1705,7 @@ def fit_with_test(
             # land on the right side of; after 261 the two modes agree BIT
             # FOR BIT on this fixture (0x8cedc2e5a5fc1ae5 at depth 6, 128
             # borders, FAST; IDENTICAL deterministic at 38.299009), exactly
-            # as the oblivious driver's two modes do. `mojo_only/
+            # as the oblivious driver's two modes do. `original/
             # grow_policy_check.mojo` claim 7 is the run-to-run control at
             # this shape. The matrix row stands; an inline mode 0 here would
             # have been a vendor/arm fork hiding a race.

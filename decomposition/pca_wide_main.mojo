@@ -6,7 +6,7 @@ Separate from `pca_main.mojo` because those all run at four features, which
 is why a 32-feature cap in the eigensolver shipped unnoticed.
 """
 
-from decomposition.mojo_only.pca_check import check_pca_truncation, check_pca_wide
+from decomposition.original.pca_check import check_pca_truncation, check_pca_wide
 
 
 def main() raises:

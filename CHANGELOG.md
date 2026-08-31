@@ -11,11 +11,11 @@ fix in the tree rather than a behavior change for anyone installing this.
 ### Added
 
 - **`mojolearn.RadiusNeighbors`**, every neighbor inside a radius, over
-  cuVS's random ball cover (`neighbors/ported/neighbors/ball_cover/`). The
+  cuVS's random ball cover (`neighbors/derived/neighbors/ball_cover/`). The
   index has answered DBSCAN's eps neighborhood since 0.1.0 and had no
   caller-facing surface; it does now. The results are EXACT, not approximate:
   the ball cover's pruning is a triangle-inequality bound, and
-  `neighbors/mojo_only/radius_check.mojo` asserts the set against a host
+  `neighbors/original/radius_check.mojo` asserts the set against a host
   brute-force oracle per cell rather than per total.
 
   scikit-learn's shape, with two differences named rather than papered over.
@@ -31,7 +31,7 @@ fix in the tree rather than a behavior change for anyone installing this.
   to recover them would have written into a body whose banner reads "Partial.
   Do not improve.", and would have cost `nnz * 4` bytes on every DBSCAN fit
   in the library, in every numeric mode, to serve a surface DBSCAN does not
-  call. `neighbors/mojo_only/radius_distances.mojo` carries the reasoning and
+  call. `neighbors/original/radius_distances.mojo` carries the reasoning and
   the argument for why the recomputed value is the same value; under
   `identical` the check asserts it bit for bit, and it held for all 50,670
   edges of the fixture on Apple in BOTH modes.
@@ -193,7 +193,7 @@ the architecture axis below is the fix.
   version.
 - `mojolearn.vendor()` and `estimator.vendor_used()` report the accelerator
   API the loaded binary was COMPILED for, read back out of the binary through
-  a `<binding>_vendor()` export on every binding (`mojo_only/vendor.mojo`, a
+  a `<binding>_vendor()` export on every binding (`original/vendor.mojo`, a
   compile-time constant from `std.sys.info.has_*_gpu_accelerator()`). The
   selector refuses at import when a binary's answer disagrees with the
   directory it was loaded from, the same refusal as the tier read-back.
@@ -286,8 +286,8 @@ each class states its own.** Read the class, not this list.
 ### Estimators
 
 - `SVC` (cuML's `SVC`; binary C-SVC only. There is no `SVR`: `svmType !=
-  C_SVC` raises by name in `svm/ported/svm/svm_parameter.mojo`, and
-  epsilon-SVR is rung 2 in `svm/UNPORTED.tsv`)
+  C_SVC` raises by name in `svm/derived/svm/svm_parameter.mojo`, and
+  epsilon-SVR is rung 2 in `svm/NOT_IMPLEMENTED.tsv`)
 - `Lasso`, `ElasticNet` (cuML's `solver='cd'` arm, `cd.cuh::cdFit`;
   DEVIATIONS 610-613 and 880)
 - `AgglomerativeClustering` (cuML's `hierarchy/linkage.cu` down through
@@ -300,7 +300,7 @@ each class states its own.** Read the class, not this list.
   name). Under IDENTICAL every reduction in the objective, the gradient and
   the solver is a pinned fold where cuML's are float atomics, so the
   iteration count is part of the certificate (`qn.n_iter`). Gates:
-  `glm/mojo_only/ridge_check.mojo`, `glm/mojo_only/logistic_check.mojo`,
+  `glm/original/ridge_check.mojo`, `glm/original/logistic_check.mojo`,
   both modes, in `pixi run check-linalg-identity`; E2U cells `ridge_*`,
   `logreg_*`.
 - `KNeighborsClassifier`, `KNeighborsRegressor` (the cuVS/RAFT/FAISS k-NN
@@ -465,7 +465,7 @@ nothing to rebuild and nothing to reinstall: `pip install mojolearn` is the
 whole surface and it always was.
 
 WHY IT IS A BINDING LOOKUP AND NOT A RUNTIME FLAG. **The tier IS a flag, one
-flag over one source: `GLOBAL_NUMERIC_MODE` in `mojo_only/numerics.mojo`, from
+flag over one source: `GLOBAL_NUMERIC_MODE` in `original/numerics.mojo`, from
 which `PIN_DETERMINISM` and `PIN_CROSS_VENDOR` derive. Nothing in this tree
 forks per tier.** That flag is comptime, which is what lets the fast build
 carry none of the pinning code rather than branch past it, so its three
@@ -562,7 +562,7 @@ matrix and do not touch this wheel at all.
   the defect). Apple is the only platform this wheel targets and it was
   never affected. `bench/results/identity_break/RESULTS.md` carries the
   evidence, the discriminator
-  (`ensemble/mojo_only/rf_ctx_order_probe.mojo`) and the RUN OWED list.
+  (`ensemble/original/rf_ctx_order_probe.mojo`) and the RUN OWED list.
 
 - `ftz`, the denormal-policy helper that IDENTITY_PATHS row 10 is built on,
   DID NOTHING ON THE GPU until 2026-08-28 (DEVIATION 1938). Its guard was two

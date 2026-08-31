@@ -4,7 +4,7 @@
 
 WHY THIS EXISTS
 ---------------
-`mojo_only/oracle_check.mojo` found that our port's trees match CatBoost run
+`original/oracle_check.mojo` found that our port's trees match CatBoost run
 with `score_function=L2` at depths 0 to 2, and diverge from CatBoost run at
 its DEFAULT `Cosine` at depth 0, the root. Depth 0 is one leaf holding every
 row, so the split is a pure argmax over a histogram both sides compute from

@@ -81,7 +81,7 @@ kernel.
 # the placement scatter, tickets ordering the tiles. Everything else --
 # Apple under FAST, every column under IDENTICAL, levels at or below the
 # threshold -- keeps `launch_stable_partition` BYTE FOR BYTE. The routing
-# row is `reorder_single_pass_for` (`mojo_only/kernel_matrix.mojo`).
+# row is `reorder_single_pass_for` (`original/kernel_matrix.mojo`).
 #
 # WHY THE ROW EXCLUDES APPLE: decoupled lookback spins on another block's
 # published word, which is safe only where co-resident blocks have an
@@ -162,7 +162,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
     launch_stable_partition,
     split_points_grid_x,
 )
-from mojo_only.kernel_matrix import TARGET_COLUMN, reorder_single_pass_for
+from original.kernel_matrix import TARGET_COLUMN, reorder_single_pass_for
 
 #: `ScanTileStatus` (`single_pass_scan_operators.cuh:97-103`), renumbered so
 #: that NOT-YET-PROCESSED is 0 and a memset is the whole init kernel. CUB

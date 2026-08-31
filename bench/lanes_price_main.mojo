@@ -76,17 +76,17 @@ from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.identity_trace import FNV_OFFSET, FNV_PRIME, IdentityTrace, _hex16
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 # ---- cd --------------------------------------------------------------------
-from solver.mojo_only.cd_oracle import fixture_planted_sparse
-from solver.ported.solver.cd import CdLaunch, cd_fit_traced
-from solver.ported.solvers.params import LOSS_SQRD_LOSS
+from solver.original.cd_oracle import fixture_planted_sparse
+from solver.derived.solver.cd import CdLaunch, cd_fit_traced
+from solver.derived.solvers.params import LOSS_SQRD_LOSS
 
 # ---- kde -------------------------------------------------------------------
-from kde.mojo_only.kde_fixture import query_fixture, train_fixture, weight_fixture
-from kde.ported.kde.kde import score_samples
-from kde.ported.neighbors.kernel_density import (
+from kde.original.kde_fixture import query_fixture, train_fixture, weight_fixture
+from kde.derived.kde.kde import score_samples
+from kde.derived.neighbors.kernel_density import (
     host_sum_weights,
     kde_fit_validate,
     kde_validate_data,
@@ -95,7 +95,7 @@ from kde.ported.neighbors.kernel_density import (
 )
 
 # ---- linkage ---------------------------------------------------------------
-from hierarchy.mojo_only.linkage_oracle import (
+from hierarchy.original.linkage_oracle import (
     FIX_BLOBS_DUPS,
     FIX_DUPS,
     build_fixture,
@@ -104,33 +104,33 @@ from hierarchy.mojo_only.linkage_oracle import (
     fixture_n_clusters,
     fixture_name,
 )
-from hierarchy.ported.cluster.detail.connectivities import DISTANCE_L2_SQRT_EXPANDED
-from hierarchy.ported.hierarchy.linkage import single_linkage
+from hierarchy.derived.cluster.detail.connectivities import DISTANCE_L2_SQRT_EXPANDED
+from hierarchy.derived.hierarchy.linkage import single_linkage
 
 # ---- svm -------------------------------------------------------------------
-from svm.mojo_only.svc_check import Fixture, _run_device, all_fixtures
+from svm.original.svc_check import Fixture, _run_device, all_fixtures
 
 # ---- metrics ---------------------------------------------------------------
-from metrics.mojo_only.device_io import upload_f32, upload_i32
-from metrics.mojo_only.fixtures import (
+from metrics.original.device_io import upload_f32, upload_i32
+from metrics.original.fixtures import (
     hashed_floats,
     hashed_pdf,
     hashed_points,
     labels_true_pred,
     u01,
 )
-from metrics.ported.metrics.accuracy_score import accuracy_score_py
-from metrics.ported.metrics.adjusted_rand_index import adjusted_rand_index
-from metrics.ported.metrics.completeness_score import completeness_score
-from metrics.ported.metrics.entropy import entropy
-from metrics.ported.metrics.homogeneity_score import homogeneity_score
-from metrics.ported.metrics.kl_divergence import kl_divergence
-from metrics.ported.metrics.mutual_info_score import mutual_info_score
-from metrics.ported.metrics.r2_score import r2_score_py
-from metrics.ported.metrics.rand_index import rand_index
-from metrics.ported.metrics.silhouette_score_batched_float import silhouette_score
-from metrics.ported.metrics.trustworthiness import trustworthiness_score_traced
-from metrics.ported.metrics.v_measure import v_measure
+from metrics.derived.metrics.accuracy_score import accuracy_score_py
+from metrics.derived.metrics.adjusted_rand_index import adjusted_rand_index
+from metrics.derived.metrics.completeness_score import completeness_score
+from metrics.derived.metrics.entropy import entropy
+from metrics.derived.metrics.homogeneity_score import homogeneity_score
+from metrics.derived.metrics.kl_divergence import kl_divergence
+from metrics.derived.metrics.mutual_info_score import mutual_info_score
+from metrics.derived.metrics.r2_score import r2_score_py
+from metrics.derived.metrics.rand_index import rand_index
+from metrics.derived.metrics.silhouette_score_batched_float import silhouette_score
+from metrics.derived.metrics.trustworthiness import trustworthiness_score_traced
+from metrics.derived.metrics.v_measure import v_measure
 
 # ---- gemm ------------------------------------------------------------------
 from bench.gemm_shapes import (
@@ -144,10 +144,10 @@ from bench.gemm_shapes import (
 from bench.gemm_shapes import OP_NN as TBL_OP_NN
 from bench.gemm_shapes import OP_NT as TBL_OP_NT
 from bench.gemm_shapes import OP_TN as TBL_OP_TN
-from gemm.mojo_only.gemm_identical import identical_gemm
-from gemm.mojo_only.gemm_oracle import OP_NN as ORACLE_OP_NN
-from gemm.mojo_only.gemm_oracle import OP_NT as ORACLE_OP_NT
-from gemm.mojo_only.gemm_oracle import OP_TN as ORACLE_OP_TN
+from gemm.original.gemm_identical import identical_gemm
+from gemm.original.gemm_oracle import OP_NN as ORACLE_OP_NN
+from gemm.original.gemm_oracle import OP_NT as ORACLE_OP_NT
+from gemm.original.gemm_oracle import OP_TN as ORACLE_OP_TN
 
 
 def _mode_name() -> String:
@@ -338,7 +338,7 @@ def run_cd(ctx: DeviceContext, smoke: Bool, rounds: Int) raises:
         # so each round is the SAME fit, not a continuation. And `cdFit`
         # MUTATES `x` and `labels` IN PLACE under fit_intercept (centered,
         # then un-centered by `postProcessData`, which does not restore the
-        # bits exactly -- `solver/ported/solver/cd.mojo::cd_fit` says so),
+        # bits exactly -- `solver/derived/solver/cd.mojo::cd_fit` says so),
         # so both are re-uploaded every round: the first smoke run of this
         # harness printed a warm-up hash that differed from every later
         # round's, which was the un-restored input, not the kernel.

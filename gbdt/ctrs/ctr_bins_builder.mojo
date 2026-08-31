@@ -34,7 +34,7 @@ calls. The `Gpu` suffix is OURS -- CatBoost has one class because it has no
 host arm at all.
 
 `TCtrBinBuilder` above it is the HOST reference. It computes the same
-thing in host loops, it is what `mojo_only/ctr_check.mojo` gates the device
+thing in host loops, it is what `original/ctr_check.mojo` gates the device
 answer against cell by cell, and the FeatureFreq calcer still runs on it.
 That half is what remains of `PORTING.md` deviation 52; the bin ordering
 half is retired.
@@ -626,7 +626,7 @@ struct TCtrBinBuilderGpu(Movable):
 
         NOT THEIRS -- their builder never leaves the device. It exists for
         two callers, and both are named here so this cannot quietly become a
-        third: `mojo_only/ctr_device_check.mojo`, which compares the device
+        third: `original/ctr_device_check.mojo`, which compares the device
         ordering against the host one cell by cell, and the FeatureFreq
         calcer, which is the half of `PORTING.md` 52 that is still host
         side.

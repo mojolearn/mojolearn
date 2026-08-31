@@ -9,7 +9,7 @@
         tools/with_identical_mode.sh pixi run mojo run -I . hierarchy/linkage_main.mojo
     python3 tools/identity_trace_diff.py /tmp/linkage.apple.card /tmp/linkage.other.card
 
-Runs `hierarchy/ported/hierarchy/linkage.mojo::single_linkage` (cuML's
+Runs `hierarchy/derived/hierarchy/linkage.mojo::single_linkage` (cuML's
 entry, PAIRWISE connectivity, L2SqrtExpanded) on the check's hashed
 "three blobs plus duplicates" fixture and records every stage through
 `core/identity_trace.mojo`:
@@ -33,21 +33,21 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.identity_trace import IdentityTrace
 from core.row_norms import NORM_TPB, row_norm_kernel
-from hierarchy.mojo_only.edge_order import LINK_SAB_NONE
-from hierarchy.mojo_only.linkage_oracle import (
+from hierarchy.original.edge_order import LINK_SAB_NONE
+from hierarchy.original.linkage_oracle import (
     FIX_BLOBS_DUPS,
     fixture_n,
     fixture_d,
     fixture_name,
     build_fixture,
 )
-from hierarchy.ported.cluster.detail.connectivities import (
+from hierarchy.derived.cluster.detail.connectivities import (
     DISTANCE_L2_SQRT_EXPANDED,
     pairwise_distances,
 )
-from hierarchy.ported.cluster.detail.mst import build_sorted_mst
-from hierarchy.ported.hierarchy.linkage import single_linkage
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from hierarchy.derived.cluster.detail.mst import build_sorted_mst
+from hierarchy.derived.hierarchy.linkage import single_linkage
+from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
 def _mode_name() -> String:

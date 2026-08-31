@@ -17,7 +17,7 @@ rebuild `RandomForestMetaData` from those arrays and call the PORTED
 reimplementation at this boundary. `instance_count` and `best_metric_val`
 are not carried: the traversal reads neither.
 
-WHY THIS BINDS `ensemble/` AND NOT `extratrees/ported/randomforest`: the
+WHY THIS BINDS `ensemble/` AND NOT `extratrees/derived/randomforest`: the
 extratrees surface refuses `bootstrap=True` by name because ITS copy of the
 row sampler has no caller; `ensemble/` is the dedicated cuML RandomForest
 port and its `fit_forest` IS `RandomForest::fit` (`randomforest.cuh:286-370`)
@@ -30,7 +30,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from mojo_only.vendor import COMPILED_VENDOR
+from original.vendor import COMPILED_VENDOR
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -39,7 +39,7 @@ from ensemble.decisiontree.batched_levelalgo.bins import (
     ClassificationBin,
     RegressionBin,
 )
-from mojo_only.fixed_point import choose_scale
+from original.fixed_point import choose_scale
 from ensemble.decisiontree.batched_levelalgo.objectives import (
     ClassificationObjectiveFunction,
     RegressionObjectiveFunction,
@@ -128,7 +128,7 @@ sees it -- see DEVIATION 407 at `_check_criterion` below.
 # (`python/mojolearn/randomforest.py::_CLS_CRITERIA` / `_REG_CRITERIA`)
 # and each fit binding REFUSES BY NAME an enumerator its objective has no
 # arm for -- a silent stump is the "reached but inert" failure class
-# `ensemble/mojo_only/criteria_check.mojo` arm A/B exists to catch, and
+# `ensemble/original/criteria_check.mojo` arm A/B exists to catch, and
 # the Python surface must not reopen it. Until this deviation the binding
 # hardcoded GINI / MSE and the wrapper refused every other name; that text
 # is gone.
@@ -337,7 +337,7 @@ def rf_classifier_fit_binding(
         # LAST USE, so without this line `ctx`'s last use is the
         # `synchronize()` above and the five buffers -- two of them PINNED
         # HOST allocations -- are freed against a context that is already
-        # gone. `ensemble/mojo_only/rf_ctx_order_probe.mojo` is that ordering
+        # gone. `ensemble/original/rf_ctx_order_probe.mojo` is that ordering
         # in 60 lines with no Python. It is the same class as DEVIATION 1944
         # (a device buffer freed against a context that is not the live one),
         # and it is why the pure-Mojo probe passed where this binding hung:
@@ -609,7 +609,7 @@ def rf_predict_reg_binding(
 def rf_vendor_binding() raises -> PythonObject:
     """THE ACCELERATOR API THIS BINARY WAS COMPILED FOR: 'metal', 'cuda',
     'hip' or 'none'. A compile-time constant folded in from
-    `mojo_only/vendor.mojo`, the same shape as the tier read-back
+    `original/vendor.mojo`, the same shape as the tier read-back
     (`gbdt_numeric_mode`): the answer comes from the binary that actually
     loaded, never from the directory it sat in or from the environment.
     `python/mojolearn/_backend.py` refuses at import when this disagrees

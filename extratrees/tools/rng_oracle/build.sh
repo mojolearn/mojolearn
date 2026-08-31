@@ -10,7 +10,7 @@
 # `-ffp-contract=on` DOES contract into a single FMA -- measured: dropping this
 # flag changes the `uf` lines of pcg_reference.txt. The Mojo side is written
 # not to contract, so the reference must not either. See DEVIATION 142 in
-# ../../mojo_only/pcg_rng.mojo.
+# ../../original/pcg_rng.mojo.
 #
 # The compiled binary is a build artifact and is deleted again; only
 # pcg_reference.txt is meant to be kept.

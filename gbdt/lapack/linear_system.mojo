@@ -16,7 +16,7 @@ a device kernel.
 `SolveLinearSystem` (`:12-32`), the PACKED-storage sibling that goes through
 `dppsv_`, has no caller here: its users are the pairwise leaves calculation
 (`algo_helpers/pairwise_leaves_calculation.cpp:47`) and a pairwise unit test,
-and the pairwise oracle is not ported. It is in `gbdt/UNPORTED.tsv`.
+and the pairwise oracle is not ported. It is in `gbdt/NOT_IMPLEMENTED.tsv`.
 
 # =========================================================================
 # DEVIATION 74: theirs is LAPACK's `dposv_` (`linear_system.cpp:46-47`),
