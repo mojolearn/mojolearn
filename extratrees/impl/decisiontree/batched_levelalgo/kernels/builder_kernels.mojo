@@ -922,22 +922,25 @@ def sample_features_pertree(
 #   Ours. `plan_feature_sampling` reports a third arm, `SAMPLE_ALL_FEATURES`,
 #   and `sample_features` fills `colids` with `0..k-1` for every work item.
 #
-#   Why. The consumer branch does not exist in this lane yet -- the score pass
-#   of DEVIATION 137 is unported -- so there is nothing to carry their
-#   two-place test. Putting it in one place keeps `colids` meaning the same
-#   thing on every arm, which is what lets one check assert the same
-#   properties across all three.
+#   Why. Our consumer has no branch that could carry their two-place test:
+#   the score pass of DEVIATION 137
+#   (`builder_kernels_impl.mojo::node_feature_range_kernel` and
+#   `::node_feature_score_kernel`) reads `colids` unconditionally. Putting the
+#   test in one place keeps `colids` meaning the same thing on every arm, which
+#   is what lets one check assert the same properties across all three. (This
+#   paragraph used to give the reason as "the score pass of DEVIATION 137 is
+#   unported"; it is ported, and the conclusion is unchanged.)
 #
 #   Why it is safe. The candidate column set is identical either way: theirs
 #   is `0..N-1` implicitly, ours is `0..N-1` written down. No column that
 #   their build would consider is missed and none is added.
 #
 #   Price. One write of `len(work_items) * n` int32s that theirs does not do,
-#   on the one configuration where sampling is off. It is a HOST write in a
-#   host oracle. When the device version lands, whoever writes it must decide
-#   whether to keep the fill or restore their two-place branch, and if they
-#   restore it they must restore BOTH halves -- the guard alone, without the
-#   consumer's `if`, reads an uninitialized `colids`.
+#   on the one configuration where sampling is off. The device version landed
+#   as `sample_all_features_kernel` (`:1576`) and it KEPT the fill rather than
+#   restoring their two-place branch; its docstring is that decision written
+#   down. Restoring their branch would mean restoring BOTH halves -- the guard
+#   alone, without the consumer's `if`, reads an uninitialized `colids`.
 #
 # ---------------------------------------------------------------------------
 #

@@ -1995,7 +1995,7 @@ def _total_order_key(v: Float32) -> UInt32:
     invertible, nothing approximated.
 
     The original is `range_key` in
-    `extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:616`,
+    `extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:632`,
     where DEVIATION 204 introduced it to make a cross-block float
     min/max fold lock-free and DEVIATION 452 (IDENTITY_PATHS row 13)
     then used it to CLOSE the signed-zero hazard: `+0.0` and `-0.0`

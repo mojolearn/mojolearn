@@ -4,12 +4,21 @@
 
     Verified by:  extratrees/checks/host_splitter_check.mojo
 
-This file is the authority every later device kernel is checked against, per
-node and per candidate feature. It is a TRANSCRIPTION of scikit-learn
-`1.9.0` (`77def0e`) `sklearn/tree/_splitter.pyx:507-720`
-(`node_split_random`) -- their branches, in their order, with each branch
-citing the line it came from -- driven by this lane's counter-based keyed
-draws instead of their sequential `our_rand_r` stream (DEVIATION 130).
+WHAT THIS FILE IS, said plainly because its directory does not say it. It is a
+HOST ORACLE. It is a TRANSCRIPTION of scikit-learn `1.9.0` (`77def0e`)
+`sklearn/tree/_splitter.pyx:507-720` (`node_split_random`) -- their branches, in
+their order, with each branch citing the line it came from -- driven by this
+lane's counter-based keyed draws instead of their sequential `our_rand_r`
+stream (DEVIATION 130). Its JOB is to be the reference the device kernels of
+`impl/decisiontree/batched_levelalgo/` are measured against, per node and per
+candidate feature; in that comparison it is the authority, and
+`extratrees/DERIVATION_MAP.tsv` carries its row (upstream `scikit-learn`,
+`partial`) with the four branches of theirs that are not here. It sits under
+`checks/` because of that ROLE and for no other reason: THE DIRECTORY NAME IS
+NOT A PROVENANCE CLAIM, and it once read like one: this directory was called
+`mojo_only/` and then `original/` before `checks/`, and under either of those
+names the placement implied a file that is underived. This one is not, and
+never was; `checks/` names the ROLE, which is the only claim the shelf makes.
 
 THE SPEC, BRANCH BY BRANCH, AND WHERE EACH ONE WENT
 ---------------------------------------------------

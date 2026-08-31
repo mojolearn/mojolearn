@@ -19,14 +19,24 @@ explicit. It is written this way on purpose and stays this way permanently:
   on warp scheduling), so the host form produces the device form's exact
   `row_ids` order, not merely an equivalent partition.
 
-WHAT IS NOT HERE YET, AND WHY THE GAP IS NAMED
-----------------------------------------------
-`computeSplitKernel` (`builder_kernels_impl.cuh:216-340`) and
-`nodeSplitKernel` (`:89-107`) are not ported yet. `nodeSplitKernel` is four
-lines around the partition below. `computeSplitKernel` is the ONE place this
-directory departs from cuML, and the departure is stated here rather than in a
-new file, per `PORTING_RULES.md` rule 4 -- a replacement for a step of their
-file lives IN THAT FILE, under a marked deviation block.
+`node_split_kernel` (HERE, `builder_kernels_impl.mojo:3442`) is their
+`nodeSplitKernel` (`:89-107`, launched `:109-134`), one block per work item,
+with `partition_samples` above as its oracle. `leaf_kernel` (HERE, `:3813`) is
+their `leafKernel` (`:391-417`), with `leaf_values_host` as its oracle. Both
+are enqueued from `builder.mojo`.
+
+WHAT IS NOT HERE, AND WHY THE GAP IS NAMED
+------------------------------------------
+CORRECTED 2026-08-31: this section used to name `nodeSplitKernel` (`:89-107`)
+alongside `computeSplitKernel` as "not ported yet", calling it "four lines
+around the partition below". It is ported, HERE at `:3442`, and has been since
+partition kernel landed; the sentence is deleted rather than annotated.
+
+`computeSplitKernel` (`builder_kernels_impl.cuh:216-340`) is the one thing of
+theirs still absent, and it is REPLACED rather than owed: it is the ONE place
+this directory departs from cuML, and the departure is stated here rather than
+in a new file, per `PORTING_RULES.md` rule 4 -- a replacement for a step of
+their file lives IN THAT FILE, under a marked deviation block.
 
     ==================================================================
     DEVIATION BLOCK 137 -- computeSplitKernel has no histogram
@@ -334,12 +344,16 @@ def draw_threshold(key: SplitKey, extent: FeatureRange) -> Float32:
     `max`. `checks/range_draw_check.mojo` counts how often -- it is not
     assumed either way.
 
-    THIS IS THE HOST FORM AND IT IS THE AUTHORITY. A kernel must NOT call it:
-    the rescale it delegates to is contracted into an FMA by the GPU backend
-    and comes back up to 14 ulps away (measured -- DEVIATION BLOCK 173).
-    `draw_threshold_device` below is the same draw with the rescale pinned to
-    an EXPLICIT `fma`, which no backend may re-round, and
-    `score_kernel_check.mojo` counts how far the two disagree every run.
+    THIS IS THE HOST FORM AND IT IS THE AUTHORITY. CORRECTED 2026-08-31: this
+    paragraph used to say a kernel must not call it because the rescale it
+    delegates to is contracted into an FMA by the GPU backend and comes back up
+    to 14 ulps away. DEVIATION 142 was amended instead -- `uniform_float`
+    (`checks/pcg_rng.mojo:295`) now computes an EXPLICIT `fma` too -- so both
+    forms compute the value the source determines, and `score_kernel_check.mojo`
+    arm F REQUIRES them to agree bit for bit on every scored cell rather than
+    counting how far they drift. `draw_threshold_device` below is still the form
+    a kernel calls, because it is the one that carries DEVIATION 453's `ftz`,
+    which moves nothing but a denormal-scale range.
     """
     var gen = key.generator()
     var threshold = uniform_float(gen, extent.min_value, extent.max_value)
@@ -1327,20 +1341,21 @@ def build_workload_info(
 #     `-ffp-contract=off` (DEVIATION 142) -- a property of that oracle
 #     build, not of their kernel.
 #
-#     THE OPEN ITEM, WHICH IS NOT THIS SUB-LANE'S TO CLOSE.
+#     THE OPEN ITEM, AND IT IS CLOSED. This paragraph used to say that
 #     `draw_threshold` (host, RAFT-unfused, what `host_splitter.mojo`
 #     uses) and `draw_threshold_device` (fma) disagree in about one draw
-#     in eight -- 9 of the 44 scored cells of the check's fixture. So a
-#     tree grown on device and a tree grown by the host splitter can
-#     differ, and the lane has to pick ONE draw. The recommendation is
-#     the fma: it is the upstream's device behaviour, it is fixed by the
-#     source rather than by a compiler flag, and it is the only one of
-#     the two that a GPU can be made to produce. Taking it re-pins
-#     `tools/rng_oracle` and amends DEVIATION 142, both outside these two
-#     files. `node_feature_score_host` therefore takes `device_draw` as
-#     an ARGUMENT with no hidden default answer, and
-#     `score_kernel_check.mojo` measures the size of the disagreement
-#     every run.
+#     in eight -- 9 of the 44 scored cells of the check's fixture -- so a
+#     device tree and a host-splitter tree could differ and the lane still
+#     had to pick ONE draw. Its own recommendation was taken: DEVIATION
+#     142 was amended, and `uniform_float` (`checks/pcg_rng.mojo:295`),
+#     which the host form delegates to, computes the explicit `fma` as
+#     well. Both draws are now one IEEE-754 operation fixed by the source,
+#     and `score_kernel_check.mojo`'s arm F ASSERTS they agree bit for bit
+#     on every scored cell -- that arm's own comment records that it used
+#     to assert the opposite. What still separates the two is DEVIATION
+#     453's `ftz` in the device form, a no-op except on a denormal-scale
+#     range. `node_feature_score_host` keeps `device_draw` as an ARGUMENT
+#     so an oracle still has to say which draw it is the oracle of.
 #
 #     PRICE. The PCG stream is recomputed per thread and again in the
 #     finalize kernel: arithmetic, no memory traffic, no synchronisation,
@@ -2093,9 +2108,11 @@ def draw_threshold_device(
 ) -> Float32:
     """`draw_threshold`'s draw, written so that NO backend can re-round it.
 
-    Same PCG stream, same span-scaled uniform, same `:653-654` guard. One
-    thing is different and it is the whole of DEVIATION BLOCK 173: the rescale
-    is an EXPLICIT `fma` instead of a multiply followed by an add.
+    Same PCG stream, same span-scaled uniform, same `:653-654` guard. It exists
+    because the rescale must be an EXPLICIT `fma` that no backend can put back
+    into a multiply and an add, which is the whole of DEVIATION BLOCK 173. The
+    host form's `uniform_float` was amended to compute the same `fma`, so the
+    one thing left that is only here is DEVIATION 453's `ftz` below.
 
     WHY. A multiply-then-add in Mojo source is contracted into an FMA by the
     GPU backend and is not contracted by the host compiler, so the same source
@@ -2114,13 +2131,14 @@ def draw_threshold_device(
     `-ffp-contract=off` (DEVIATION 142), which is a property of that oracle
     build and not of their kernel.
 
-    THE OPEN ITEM, stated because it is not this sub-lane's to close: this
-    function and `draw_threshold` disagree in about one draw in eight, so a
-    tree grown on device and a tree grown by `host_splitter.mojo` can differ.
-    Closing it means choosing ONE of the two for the whole lane -- most likely
-    this one, which then re-pins `tools/rng_oracle` and amends DEVIATION 142.
-    `score_kernel_check.mojo` MEASURES the disagreement per cell every run so
-    the size of it is never a guess.
+    THAT OPEN ITEM IS CLOSED. It used to read here that this function and
+    `draw_threshold` disagree in about one draw in eight, so a device tree and a
+    `host_splitter.mojo` tree could differ, and that the lane still had to pick
+    one of the two. It picked this one: DEVIATION 142 was amended and the host
+    form's `uniform_float` computes the explicit `fma` as well, so
+    `score_kernel_check.mojo`'s arm F ASSERTS the two agree bit for bit on every
+    scored cell instead of measuring how far apart they are. The one remaining
+    difference is DEVIATION 453's `ftz` below.
     """
     # DEVIATION 453 (IDENTITY_PATHS row 10 applied): every float in this
     # draw goes through `numerics.ftz`. Metal flushes denormal OPERANDS,
@@ -2195,7 +2213,7 @@ struct ScoredCandidate(Copyable, Movable):
 
 def empty_scored_candidate(status: Int32, n_acc: Int) -> ScoredCandidate:
     """A cell nothing was accumulated into: `_empty_candidate`'s shape
-    (`host_splitter.mojo:408-430`), which reports `threshold = 0.0` and zero
+    (`host_splitter.mojo:418-440`), which reports `threshold = 0.0` and zero
     accumulators for a candidate that never reached the draw."""
     return ScoredCandidate(
         status,
@@ -2544,7 +2562,7 @@ def node_feature_score_kernel[
         in_max[unsafe_offset=slot],
         in_n_missing[unsafe_offset=slot],
     )
-    # `host_splitter.mojo:552` refuses BEFORE testing constancy, so this does
+    # `host_splitter.mojo:562` refuses BEFORE testing constancy, so this does
     # too. It is also what discharges DEVIATION 163's caller obligation: the
     # only other way to hold `min > max` is a node with no rows, and the
     # constant test's first arm catches that as `0 == 0`.

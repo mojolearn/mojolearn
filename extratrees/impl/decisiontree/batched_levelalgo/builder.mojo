@@ -21,15 +21,41 @@ detail we get to re-decide.
 
 WHAT IS HERE AND WHAT IS NOT
 -----------------------------
-`NodeQueue` is complete. `Builder` (`builder.cuh:140-601`) is NOT ported yet:
-it is the device workspace, the feature sampler launch, `computeSplit` and
-`SetLeafPredictions`, all of which need kernels this lane has not written. The
-piece of `Builder` that is pure control flow -- `train()`, `builder.cuh:344-359`
--- is the four-line loop `while queue.HasWork(): pop, doSplit, push`, and it is
-transcribed in `train_loop_shape` below as a docstring rather than as code,
-because a loop calling a function that does not exist is not a port, it is a
-placeholder pretending to be one (rule 3: an unported file is visible, a
-mis-ported one is not).
+CORRECTED 2026-08-31. This section used to say `Builder` (`builder.cuh:140-601`)
+was "NOT ported yet ... all of which need kernels this lane has not written",
+and that `train()` was held in `train_loop_shape` as a docstring because a loop
+calling a function that does not exist is a placeholder. The file falsifies
+every clause: the kernels were written and enqueued, and most of the lines
+below are the device driver that drives them.
+
+A BARE `:N` BELOW IS A LINE OF THIS FILE; anything of theirs is qualified.
+
+TRANSCRIBED: `NodeQueue` (`:178-402`), `max_nodes` (`:164`), and
+`SetLeafPredictions` (`builder.cuh:556-599`) with the `leafKernel` it launches,
+as `set_leaf_predictions_classification` (`:405`) and
+`set_leaf_predictions_regression` (`:468`).
+
+`Builder`'S DEVICE HALF IS HERE: `DeviceDataset` / `upload_dataset` (`:1189`,
+`:1229`), `LevelWorkspace` / `make_level_workspace` (`:1381`, `:1508`),
+`sample_features_for_device` (`:1286`) for the sampler launch, and `stage_batch`
+/ `search_batch` / `search_batch_regression` (`:1825`, `:1908`, `:3030`) for
+`doSplit`'s steps as device launches. The drivers are
+`train_classification_device` (`:1259`), `train_forest_classification_device`
+(`:2364`) and the regression pair (`:3442`, `:3478`), each with a resident
+variant. `train_classification` (`:570`) and `train_regression` (`:723`) stay as
+the HOST ORACLES those are checked against, which is not a CPU fallback
+(`PORTING_RULES.md` 0b-ii).
+
+ABSENT: their `allReduceHistograms`, `packedHistogramWorkspaceSize` and the
+distributed flag, all multi-GPU only, and `MLCommon::TimerCPU` with
+`tree->train_time` (`builder.cuh:377`, `:387`), declined as DEVIATION 303.
+
+NOT THEIR SHAPE, which is a deviation and not a gap: DEVIATION 211 makes one
+batch SPAN TREES -- a level cycle pops work from every in-flight tree's queue
+into one launch, tree id riding per work item -- where cuML overlaps whole trees
+with `#pragma omp parallel for num_threads(n_streams)` over CUDA streams
+(`randomforest.cuh:336-341`). Metal has no streams, so their mechanism could not
+be transcribed.
 
 THE ONE INVARIANT EVERYTHING DOWNSTREAM RESTS ON
 -------------------------------------------------
@@ -562,11 +588,13 @@ def train_classification(
         auto tree = queue.GetTree();
         this->SetLeafPredictions(tree, queue.GetInstanceRanges());
 
-    `doSplit` (`builder.cuh:379-475`) is inlined below because its device half
-    is unported: theirs samples features, launches `computeSplitKernel` per
-    column block, then launches `nodeSplitKernel` which partitions. Ours does
-    the same three steps in the same order with the host forms, which are the
-    oracles the kernels will be checked against.
+    `doSplit` (`builder.cuh:379-475`) is inlined below in its HOST form: theirs
+    samples features, launches `computeSplitKernel` per column block, then
+    launches `nodeSplitKernel` which partitions, and this function does the same
+    three steps in the same order with the host forms. They are the ORACLES the
+    device kernels are checked against, not a gap -- the device form of the same
+    three steps is `search_batch` (`:1908`), under `train_classification_device`
+    (`:1259`).
 
     **WHAT IS LOAD-BEARING ABOUT THE ORDER, MEASURED RATHER THAN ASSUMED.**
     This docstring used to say that partitioning before `Push` was essential
@@ -4011,10 +4039,12 @@ def train_loop_shape() -> String:
         auto tree = queue.GetTree();
         this->SetLeafPredictions(tree, queue.GetInstanceRanges());
 
-    `doSplit` and `SetLeafPredictions` are device work this lane has not
-    written yet. Writing the loop now against stubs would produce a file that
-    compiles, has a caller, and is wrong in a way nothing runs -- which is the
-    exact failure `PORTING_RULES.md` rule 3 was written about. So the shape is
-    recorded and the loop lands with the kernels.
+    `doSplit` and `SetLeafPredictions` were device work this lane had not
+    written when this quotation was added, so the shape was recorded instead of
+    executed. They are written now: `train_classification` (`:570`) and
+    `train_classification_device` (`:1259`) both run this loop, and
+    `set_leaf_predictions_classification` (`:405`) is its last line. What is
+    kept here is the verbatim quotation of their source that those trainers'
+    docstrings cite -- a citation, no longer a placeholder.
     """
     return "see docstring"

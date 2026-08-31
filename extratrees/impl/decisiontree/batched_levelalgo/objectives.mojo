@@ -179,9 +179,9 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
 # PRICE. Weighted samples are out of scope for the exact path -- with real
 #   `sample_weight` the counts stop being integers and only the float form
 #   applies. `sample_weight` is not ported and nothing reaches that path
-#   today. **It is not listed in `extratrees/NOT_IMPLEMENTED.tsv` either, which rule
-#   3 says it should be; that row is an OPEN item for whoever owns that file,
-#   because this lane may not edit it.**
+#   today; `extratrees/NOT_IMPLEMENTED.tsv` carries it as
+#   `sklearn/tree/_criterion.pyx::sample_weight`, `deliberate`, and that row's
+#   stated reason is this block.
 # ==========================================================================
 
 

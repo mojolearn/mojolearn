@@ -35,7 +35,7 @@ first.
                         (NVIDIA/AMD keep subnormals; Metal flushes); it
                         names, per vendor, which zero `max(+0,-0)`
                         returns -- the fact the ±0 notes in
-                        extratrees/.../builder_kernels_impl.mojo:873 and
+                        extratrees/.../builder_kernels_impl.mojo:887 and
                         core/pinned_reduce.mojo:148 reason about.
                         Apple (M4, 2026-08-23): 12832708934203007326,
                         max/min return the SECOND operand, flushes are

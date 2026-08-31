@@ -279,7 +279,7 @@ def class_ids_for(
     float-to-int conversion of its own. The host trainer takes the same labels
     as `Float32` and truncates them where it needs an index —
     `Int(dataset.labels[unsafe_offset=row])`,
-    `builder.mojo:372` — so `Int(labels[r])` here is the SAME truncation, not
+    `builder.mojo:457` — so `Int(labels[r])` here is the SAME truncation, not
     a second convention.
 
     It is done ONCE for the whole forest rather than once per tree. The cast

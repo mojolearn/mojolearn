@@ -26,12 +26,12 @@ field but the exact rational of DEVIATION 145, with their `update` -- the
 function below, unchanged and CALLED rather than re-transcribed -- as its
 tie-break.
 
-**Two files outside this lane's ownership still say otherwise and are OPEN
-items for their owners**: `extratrees/NOT_IMPLEMENTED.tsv:15` still lists
-`split.cuh::warpReduce+evalBestSplit` as "not yet", and
-`extratrees/DERIVATION_MAP.tsv:10` still scopes this file to `split.cuh:32-90`
-with "warpReduce/evalBestSplit still unported". Both sentences are false as of
-this commit.
+CORRECTED 2026-08-31: this paragraph used to call two files OPEN items for
+saying otherwise -- `NOT_IMPLEMENTED.tsv:15` listing warpReduce/evalBestSplit
+as "not yet", `DERIVATION_MAP.tsv:10` scoping this file to `split.cuh:32-90`.
+A grep refutes both. That TSV has no such row (its line 15 is header prose),
+and this file's map row scopes it to `split.cuh:30-172`, `reimplemented`, with
+the reduction and `initSplit` named in it. Nothing here is open.
 """
 
 
