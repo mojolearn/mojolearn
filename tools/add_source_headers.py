@@ -75,14 +75,47 @@ def wants_header(path):
     return True
 
 
-def header_for(path):
+# LANES THAT MIRROR AN UPSTREAM WITHOUT HAVING A `derived/` SUBDIRECTORY.
+#
+# Found 2026-08-31, and it was the reason the first proportion table was
+# wrong: `gbdt/` IS the CatBoost mirror and `ensemble/` mirrors cuML, and
+# neither has ever had a `derived/` directory, so a header rule keyed on the
+# directory gave 191 files (89,766 lines, the most plainly derived code in
+# the repository) NO provenance marker at all while 310 files under
+# `derived/` had one.
+#
+# The line for these is deliberately about the LANE rather than the file.
+# 76 of gbdt's 149 files appear in no derivation map and three say NO
+# CATBOOST COUNTERPART in their own headers, so asserting file by file here
+# would be asserting something unchecked. Pointing at the map and the file's
+# own docstring is true of every file in the lane.
+LANE_UPSTREAM = {
+    "gbdt": (
+        "# This lane MIRRORS CatBoost (pinned commit 54a8143a). Per-file "
+        "provenance is in gbdt/DERIVATION_MAP.tsv, in this file's own "
+        "docstring, and in NOTICE; files with no CatBoost counterpart say so."
+    ),
+    "ensemble": (
+        "# This lane MIRRORS cuML's random forest. Per-file provenance is in "
+        "this file's own docstring and in NOTICE."
+    ),
+}
+
+
+def header_for(path, root):
     lines = [SPDX, COPYRIGHT]
-    if (os.sep + "ported" + os.sep) in path:
+    if (os.sep + "derived" + os.sep) in path or (os.sep + "ported" + os.sep) in path:
         lines.append(DERIVED)
+    else:
+        rel = os.path.relpath(path, root)
+        lane = rel.split(os.sep)[0]
+        # `<lane>/original/` is the lane's own work, not its mirror.
+        if lane in LANE_UPSTREAM and (os.sep + "original" + os.sep) not in path:
+            lines.append(LANE_UPSTREAM[lane])
     return "\n".join(lines) + "\n"
 
 
-def process(path, write):
+def process(path, write, root):
     with open(path, "r", encoding="utf-8") as fh:
         text = fh.read()
     if "SPDX-License-Identifier" in text:
@@ -94,7 +127,7 @@ def process(path, write):
         at = 1
         if len(lines) > 1 and "coding" in lines[1] and lines[1].lstrip().startswith("#"):
             at = 2
-    new = "\n".join(lines[:at]) + ("\n" if at else "") + header_for(path) + "\n".join(lines[at:])
+    new = "\n".join(lines[:at]) + ("\n" if at else "") + header_for(path, root) + "\n".join(lines[at:])
     if write:
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(new)
@@ -112,7 +145,7 @@ def main():
             p = os.path.join(dirpath, name)
             if not wants_header(p):
                 continue
-            what = process(p, write=not check)
+            what = process(p, write=not check, root=root)
             if what == "add":
                 added += 1
                 if (os.sep + "ported" + os.sep) in p:
