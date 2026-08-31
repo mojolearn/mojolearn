@@ -112,6 +112,10 @@ from std.gpu import block_idx, thread_idx
 from std.gpu.primitives.warp import lane_id, shuffle_idx, vote
 from std.gpu.primitives.warp import sum as warp_sum
 from mojo_only.numerics import identical_sqrt  # DEVIATION 550
+from mojo_only.numerics import PIN_CROSS_VENDOR  # DEVIATION 551
+from neighbors.mojo_only.ball_cover_canonical_order import (
+    rbc_canonicalize_row_order,
+)  # DEVIATION 551
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from mojo_only.kernel_matrix import TARGET_COLUMN, lib_lane_width_for
@@ -739,6 +743,32 @@ def rbc_eps_pass_fill(
     )
     ctx.synchronize()
 
+    # DEVIATION 551: canonicalize the INTRA-ROW order. IDENTITY_PATHS row 61.
+    # `limit = (r_size // RBC_LANES) * RBC_LANES` above makes the slot
+    # assignment lane-width dependent, and DEVIATION 515 forbids pinning the
+    # lane width, so the fix is output canonicalization rather than a launch
+    # pin. `nnz` is read back from `adj_ia[n_queries]` rather than added to
+    # this function's signature, which keeps all four `rbc_eps_nn_query_*`
+    # entry points and both callers byte-for-byte unchanged;
+    # `rbc_eps_pass_count` already performs exactly this read. Compiled out
+    # entirely under FAST and DETERMINISTIC.
+    @parameter
+    if PIN_CROSS_VENDOR:
+        var h_nnz = ctx.enqueue_create_host_buffer[DType.int32](1)
+        ctx.enqueue_copy(
+            dst_ptr=h_nnz.unsafe_ptr(),
+            src_buf=adj_ia.create_sub_buffer[DType.int32](n_queries, 1),
+        )
+        ctx.synchronize()
+        rbc_canonicalize_row_order(
+            ctx,
+            adj_ia,
+            adj_ja,
+            n_queries,
+            Int(h_nnz.unsafe_ptr().unsafe_load(0)),
+        )
+        _ = h_nnz^
+
 
 def rbc_eps_pass_dense(
     ctx: DeviceContext,
@@ -883,4 +913,48 @@ def rbc_eps_pass_max_k(
         src_ptr=t.unsafe_ptr(),
     )
     ctx.synchronize()
+
+    # DEVIATION 551, the max_k arm. Wiring `rbc_eps_pass_fill` alone was not
+    # enough and the gate said so at once: `check_max_k_wiring` compares this
+    # arm's ja against the two-pass ja byte for byte and reported "batch 1
+    # ja[0] is 930 against 52 two-pass; the COLUMN ORDER moved". Two producers
+    # of one CSR must agree on the order or neither is canonical.
+    #
+    # AND A HOLE CANONICALIZATION CANNOT CLOSE. When `actual_max > max_k` this
+    # arm keeps the FIRST `max_k` hits IN EMISSION ORDER, so a 64-lane column
+    # keeps a DIFFERENT SUBSET, not merely a different order. That is the
+    # MEMBERS diverging and a sort cannot repair it, so it is refused by name.
+    # It costs nothing today: DBSCAN never dispatches this arm
+    # (`dbscan/ported/dbscan/runner.mojo` returns False unconditionally), and
+    # the check picks max_k from a prior count. The refusal exists so the hole
+    # cannot open silently later.
+    @parameter
+    if PIN_CROSS_VENDOR:
+        if actual_max > max_k:
+            raise Error(
+                "rbc_eps_pass_max_k (IDENTICAL): the longest row is "
+                + String(actual_max)
+                + " against max_k "
+                + String(max_k)
+                + ". A truncated row keeps the FIRST max_k columns in EMISSION"
+                " order, and emission order is lane-width dependent"
+                " (IDENTITY_PATHS row 61), so the truncated SET, not only its"
+                " order, differs between a 32-lane and a 64-lane column."
+                " DEVIATION 551 canonicalizes an order; it cannot repair a"
+                " set. Re-run with max_k >= the counted longest row."
+            )
+        var h_nnz2 = ctx.enqueue_create_host_buffer[DType.int32](1)
+        ctx.enqueue_copy(
+            dst_ptr=h_nnz2.unsafe_ptr(),
+            src_buf=adj_ia.create_sub_buffer[DType.int32](n_queries, 1),
+        )
+        ctx.synchronize()
+        rbc_canonicalize_row_order(
+            ctx,
+            adj_ia,
+            adj_ja,
+            n_queries,
+            Int(h_nnz2.unsafe_ptr().unsafe_load(0)),
+        )
+        _ = h_nnz2^
     return actual_max

@@ -43,6 +43,7 @@ at all.
 
 from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
+from mojo_only.numerics import PIN_CROSS_VENDOR  # DEVIATION 551
 
 from neighbors.ported.neighbors.ball_cover.ball_cover import (
     rbc_build_index,
@@ -238,6 +239,63 @@ def _run_one_eps(
                 label + ": row " + String(i) + " has " + String(end - start)
                 + " neighbors, brute force says " + String(expected)
             )
+
+    # DEVIATION 551: THE INTRA-ROW ORDER, which this file's header says it does
+    # not claim. It still does not claim it as SET equality; this is a separate
+    # assertion with its own mode split, and it lives here so that every caller
+    # of this helper inherits it rather than one check owning it.
+    #
+    # IDENTICAL: every row must be strictly ascending by column index.
+    # FAST: the pass is compiled out, so the raw emission order is visible. The
+    # descent count is REPORTED, and a count of zero is VACUOUS rather than
+    # good: it would mean this fixture cannot tell a canonical row from a raw
+    # one, and the IDENTICAL assertion above it would be proving nothing. That
+    # is the negative control, and without it a fixture that happened to emit
+    # ascending rows would pass forever.
+    var descents = 0
+    var longest = 0
+    for i in range(n):
+        var start = Int(hia.unsafe_ptr().unsafe_load(i))
+        var end = Int(hia.unsafe_ptr().unsafe_load(i + 1))
+        if end - start > longest:
+            longest = end - start
+        for p in range(start + 1, end):
+            if hja.unsafe_ptr().unsafe_load(p) <= hja.unsafe_ptr().unsafe_load(
+                p - 1
+            ):
+                descents += 1
+
+    @parameter
+    if PIN_CROSS_VENDOR:
+        if descents != 0:
+            raise Error(
+                label + ": DEVIATION 551 left " + String(descents)
+                + " intra-row descents. Under IDENTICAL every CSR row must be"
+                " strictly ascending by column index, because the raw emission"
+                " order is lane-width dependent (IDENTITY_PATHS row 61) and"
+                " the canonical order is what makes the bytes comparable"
+                " across vendors."
+            )
+    else:
+        if longest < 2:
+            raise Error(
+                label + ": VACUOUS. The longest row is " + String(longest)
+                + ", so no row can be out of order and the IDENTICAL"
+                " assertion would pass on any implementation."
+            )
+        if descents == 0:
+            raise Error(
+                label + ": VACUOUS. The RAW emission order already happens to"
+                " be ascending on this fixture (0 descents over " + String(n)
+                + " rows, longest " + String(longest) + "), so the IDENTICAL"
+                " assertion cannot distinguish a working canonicalization from"
+                " a no-op. Pick a fixture whose raw order is not sorted."
+            )
+        print(
+            "  " + label + ": raw emission order has " + String(descents)
+            + " intra-row descents (longest row " + String(longest)
+            + "); DEVIATION 551 removes them under IDENTICAL"
+        )
 
     return nnz
 
@@ -1120,6 +1178,44 @@ def check_ball_cover_max_k_wiring() raises:
     var stmp = ctx.enqueue_create_buffer[DType.int32](snp * sbound)
     var sja = ctx.enqueue_create_buffer[DType.int32](batch_nnz[sb])
     ctx.synchronize()
+    # DEVIATION 551: UNDER IDENTICAL THIS SABOTAGE MUST BE REFUSED, NOT RUN.
+    # Truncation keeps the first `max_k` hits IN EMISSION ORDER, and emission
+    # order is lane-width dependent (IDENTITY_PATHS row 61), so a 64-lane
+    # column keeps a DIFFERENT SUBSET. That is the members diverging, which no
+    # ordering pass can repair, so `rbc_eps_pass_max_k` raises by name. The
+    # clamp behaviour is still worth testing and is still tested, under FAST,
+    # where no cross-vendor promise is made. Inverting the expectation is the
+    # same move `packaging/linux/smoke.py` makes for `gemm-pinned`: a designed
+    # refusal that SUCCEEDS is the failure.
+    @parameter
+    if PIN_CROSS_VENDOR:
+        var refused = False
+        try:
+            _ = rbc_eps_nn_query_max_k(
+                ctx, x_reordered, sqb, r, r_indptr, r_1nn_cols, r_1nn_dists,
+                r_radius, adj_ia, sja, vd, stmp, scratch, snp, d, n_landmarks,
+                eps, sbound,
+            )
+        except e:
+            if String(e).find("canonicalizes an order") < 0:
+                raise Error(
+                    "max_k truncation under IDENTICAL raised, but not the"
+                    " DEVIATION 551 refusal: " + String(e)
+                )
+            refused = True
+        if not refused:
+            raise Error(
+                "max_k truncation under IDENTICAL was ACCEPTED. A bound one"
+                " short of the true longest row silently keeps a lane-width"
+                " dependent SUBSET, and DEVIATION 551's refusal is what"
+                " prevents that. It did not fire."
+            )
+        print(
+            "ball_cover: max_k truncation is REFUSED by name under IDENTICAL"
+            " (DEVIATION 551); the clamp itself is exercised under FAST"
+        )
+        return
+
     var sactual = rbc_eps_nn_query_max_k(
         ctx, x_reordered, sqb, r, r_indptr, r_1nn_cols, r_1nn_dists,
         r_radius, adj_ia, sja, vd, stmp, scratch, snp, d, n_landmarks,
