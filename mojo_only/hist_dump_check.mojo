@@ -149,7 +149,7 @@ def check_hist_depends_on_partition() raises:
         scale_keep.unsafe_ptr()
     )
 
-    ctx.enqueue_function[binary_hist_gather_kernel](
+    ctx.enqueue_function[binary_hist_gather_kernel[False]](
         folds.unsafe_ptr(), fold_off.unsafe_ptr(), grp_off.unsafe_ptr(),
         grp_sz.unsafe_ptr(), Int32(n_features), cindex.unsafe_ptr(),
         Int32(n_rows), Int32(0), row_index.unsafe_ptr(), stats.unsafe_ptr(),
@@ -172,7 +172,7 @@ def check_hist_depends_on_partition() raises:
     ctx.enqueue_copy(dst_buf=hist, src_ptr=zf.unsafe_ptr())
     ctx.synchronize()
 
-    ctx.enqueue_function[binary_hist_gather_kernel](
+    ctx.enqueue_function[binary_hist_gather_kernel[False]](
         folds.unsafe_ptr(), fold_off.unsafe_ptr(), grp_off.unsafe_ptr(),
         grp_sz.unsafe_ptr(), Int32(n_features), cindex.unsafe_ptr(),
         Int32(n_rows), Int32(0), row_index.unsafe_ptr(), stats.unsafe_ptr(),
