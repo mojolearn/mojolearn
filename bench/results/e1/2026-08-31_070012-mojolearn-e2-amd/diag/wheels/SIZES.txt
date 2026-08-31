@@ -1,0 +1,15 @@
+vendor=hip
+arch=gfx90a
+gpu_archs_requested=gfx90a
+build_rc=0 stage_rc=0
+build_seconds=198
+set_fast_count=10
+set_fast_bytes=14169138
+set_deterministic_count=10
+set_deterministic_bytes=14169218
+set_identical_count=10
+set_identical_bytes=14009642
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=11312468

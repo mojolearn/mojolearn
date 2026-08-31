@@ -1,0 +1,9 @@
+  baseline               FAIL  rc=1  A release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report th
+  wrong_label_ignored    FAIL  rc=1  A release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report th
+  forced_vendor_without_evidence PASS  rc=1  If the device really is present and this probe is wrong, MOJOLEARN_VENDOR_FORCE=1 proceeds and accepts that risk. Unset MOJOLEARN_VENDOR to let the probe c
+  wrong_label_refused    PASS  rc=1  ImportError: mojolearn: /root/mojolearn/bench/results/e1/2026-08-31_070336-mojolearn-e2-amd/diag/sabotage_scratch/wrong_label_refused/mojolearn/cuda/gfx90a/identic
+  poisoned_ignored       FAIL  rc=1  A release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report th
+  poisoned_forced        PASS  rc=1  ImportError: mojolearn: MOJOLEARN_VENDOR=cuda but this install carries no cuda set under /root/mojolearn/bench/results/e1/2026-08-31_070336-mojolearn-e2-amd/diag/s
+  correct_set_removed    PASS  rc=1  A device node or a driver library for one of the sets above must be visible to this process. In a container that means the GPU is passed through (`--gpus all` for 
+  tier_mislabeled        FAIL  rc=1  A release carrying this device's architecture is needed; MOJOLEARN_GPU_ARCH can force one of the directories above, and the first kernel launch will then report th
+sabotage FAIL

@@ -1,0 +1,5 @@
+pod='mmrs4u7dutmh6r'
+target='-p 14181 root@216.81.245.34'
+armed_utc='2026-08-31T06:57:16Z'
+deadline_epoch=1788163036
+minutes=60
