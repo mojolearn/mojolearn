@@ -127,6 +127,10 @@ struct PolicyScoreHelper(Movable):
     var policy: Int
     var feature_count: Int
     var bin_feature_count: Int
+    var weight_count: Int
+    """`len(global_feature_ids)`. The weights arrays are indexed by FEATURE
+    id and `bin_feature_count` is a BIN-FEATURE count; keeping both named
+    is what stops the two being confused again."""
     """`GetBinFeatureCount(Policy)`: the policy's total fold count, and the
     `histLineSize` every kernel below strides by."""
 
@@ -271,11 +275,42 @@ struct PolicyScoreHelper(Movable):
         )
         ctx.enqueue_memset(self.d_hist, Float32(0.0))
 
+        # THE WEIGHTS ARE INDEXED BY FEATURE ID, NOT BY BIN-FEATURE ID, so
+        # they are sized by FEATURE COUNT. They were sized `total`, the
+        # policy's bin-feature count, and `pointwise_scores.mojo:782-785`
+        # reads `weights[feature_id]` where `feature_id` is the GLOBAL id
+        # planted into `d_bf` twenty lines above. Two index spaces, two
+        # sizes, and a device read past the end of a live buffer whenever a
+        # policy's largest global id reaches its own bin-feature count.
+        #
+        # Upstream indexes by feature too (`compute_scores.cu:136`,
+        # `binFeaturesWeights[featureId]`, transcribed at
+        # `greedy_subsets_searcher/kernel/compute_scores.mojo:287-289`), and
+        # the GREEDY arm in this tree sizes them `n_features`
+        # (`greedy_search_helper.mojo:583, 1095, 2906`). Only the pointwise
+        # arm got it wrong.
+        #
+        # WHY EVERY GATE STAYED GREEN, and it is DEVIATION 114's pattern for
+        # the third time in this file. In every fixture in the tree the
+        # binary features are the FIRST input columns, so a policy's largest
+        # global id is one less than its own feature count and the read
+        # lands in bounds by a hair: `check-fit-pointwise` has one binary
+        # feature at gid 0 with total 1, `check-pointwise-vs-greedy` two at
+        # gids 0..1 with total 2, `covbin_*` forty-three at gids 0..42 with
+        # total 43. COVTYPE IS THE ONLY SHAPE WHERE THEY ARE NOT: its ten
+        # one-byte features are gids 0..9 and its forty-three binary
+        # features are gids 10..52, against a binary-policy total of 43, so
+        # ten features read off the end. And `pointwise_scores_check.mojo`
+        # cannot see it either, because it allocates these arrays itself at
+        # `fx.n_features` and hands them in, so no check has ever built one
+        # through this constructor.
+        var n_feat = len(global_feature_ids)
         var ones = List[Float32]()
-        for _ in range(total):
+        for _ in range(n_feat):
             ones.append(1.0)
-        self.d_cat_w = ctx.enqueue_create_buffer[DType.float32](total)
-        self.d_bin_w = ctx.enqueue_create_buffer[DType.float32](total)
+        self.weight_count = n_feat
+        self.d_cat_w = ctx.enqueue_create_buffer[DType.float32](n_feat)
+        self.d_bin_w = ctx.enqueue_create_buffer[DType.float32](n_feat)
         ctx.enqueue_copy(dst_buf=self.d_cat_w, src_ptr=ones.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=self.d_bin_w, src_ptr=ones.unsafe_ptr())
 
@@ -382,7 +417,7 @@ struct PolicyScoreHelper(Movable):
             self.bin_feature_count,
             self.d_cat_w,
             self.d_bin_w,
-            self.bin_feature_count,
+            self.weight_count,
             self.d_hist,
             part_stats,
             part_count,
@@ -423,7 +458,7 @@ struct PolicyScoreHelper(Movable):
             self.bin_feature_count,
             self.d_cat_w,
             self.d_bin_w,
-            self.bin_feature_count,
+            self.weight_count,
             self.d_hist,
             part_stats,
             part_count,

@@ -58,11 +58,26 @@ from gbdt.methods.doc_parallel_boosting import TAdditiveModel, fit
 from gbdt.train import train
 
 from std.sys import argv
+from std.sys.compile import is_defined
 
 comptime DEPTH = 6
 comptime TREES = 20
 comptime REPS = 2
-comptime N_ROWS = 581_012
+
+#: THE 4K ARM. `-D MOJOLEARN_COVTYPE_4K=1` runs the SAME MIXED-POLICY SHAPE
+#: on 4,096 rows instead of 581,012, off the `covtype4k_*` fixtures that
+#: already sit beside the full ones in `~/.cache/mojolearn`. Their fold file
+#: is byte-identical to the full one, so the layout, the policy split and
+#: the global feature numbering (ten one-byte at ids 0..9, forty-three
+#: binary at ids 10..52) are exactly the same; only the row count moves.
+#:
+#: It exists because this driver is the reproducer for an OPEN defect and a
+#: 581,012-row fit is not a thing to iterate a hypothesis against. A verdict
+#: still comes from the full arm; this one is for deciding WHICH run to
+#: spend.
+comptime COVTYPE_4K = is_defined["MOJOLEARN_COVTYPE_4K"]()
+comptime N_ROWS = 4_096 if COVTYPE_4K else 581_012
+comptime FIXTURE = String("covtype4k") if COVTYPE_4K else String("covtype")
 comptime N_FEATS = 54
 
 
@@ -82,10 +97,10 @@ def main() raises:
 
     # raw floats: first N_FEATS columns of epsilon, column-major, from the
     # cached X (row-major on disk, so this transposes on load)
-    var xbytes = read_all(d + "/covtype_Xcol.f32")
+    var xbytes = read_all(d + "/" + FIXTURE + "_Xcol.f32")
     if len(xbytes) != 4 * N_ROWS * N_FEATS:
         raise Error(
-            "covtype_Xcol.f32 missing or wrong size; run"
+            FIXTURE + "_Xcol.f32 missing or wrong size; run"
             " tools/slice_x500.py first"
         )
     var xp = xbytes.unsafe_ptr().unsafe_bitcast[Float32]()
@@ -93,7 +108,7 @@ def main() raises:
     for i in range(N_ROWS * N_FEATS):
         x_colmajor.append(xp[i])
 
-    var ybytes = read_all(d + "/covtype_y.f32")
+    var ybytes = read_all(d + "/" + FIXTURE + "_y.f32")
     var yp = ybytes.unsafe_ptr().unsafe_bitcast[Float32]()
     var y = List[Float32]()
     for r in range(N_ROWS):
@@ -105,13 +120,13 @@ def main() raises:
     # CatBoost's -- which check-greedylogsum gates; small drift between
     # grids changes the trees, not the timing scale)
     var folds = List[Int]()
-    var f = open(d + "/covtype_folds_128.txt", "r")
+    var f = open(d + "/" + FIXTURE + "_folds_128.txt", "r")
     var txt = f.read()
     f.close()
     for line in txt.split("\n"):
         if line.byte_length() > 0:
             folds.append(Int(line))
-    var bins = read_all(d + "/covtype_bins_128.u8")
+    var bins = read_all(d + "/" + FIXTURE + "_bins_128.u8")
 
     var lay = build_layout(folds)
     var cindex = ctx.enqueue_create_buffer[DType.uint32](
