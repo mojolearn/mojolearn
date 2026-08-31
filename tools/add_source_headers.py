@@ -92,7 +92,7 @@ def wants_header(path):
 LANE_UPSTREAM = {
     "gbdt": (
         "# This lane MIRRORS CatBoost (pinned commit 54a8143a). Per-file "
-        "provenance is in gbdt/DERIVATION_MAP.tsv, in this file's own "
+        "provenance is in the root DERIVATION_MAP.tsv, in this file's own "
         "docstring, and in NOTICE; files with no CatBoost counterpart say so."
     ),
     "ensemble": (
