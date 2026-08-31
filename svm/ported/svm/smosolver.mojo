@@ -84,6 +84,7 @@ from svm.ported.svm.results import Results
 from svm.ported.svm.smoblocksolve import SMO_WS_SIZE, smo_block_solve_kernel
 from svm.ported.svm.svm_parameter import (
     C_SVC,
+    EPSILON_SVR,
     KernelParams,
     SvmModel,
     SvmParameter,
@@ -118,6 +119,41 @@ def svc_init_kernel(
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n_in):
         f.unsafe_store(i, -y.unsafe_load(i))
+
+
+def svr_init_kernel(
+    f: MutPointer[Float32, MutAnyOrigin],
+    y_train: MutPointer[Float32, MutAnyOrigin],
+    yr: MutPointer[Float32, MutAnyOrigin],
+    epsilon_in: Float32,
+    n_rows_in: Int32,
+):
+    """`SvrInit(yr, n_rows, yc, f)`, `smosolver.cuh:395-411`.
+
+    Three of their calls in one launch, because all three are elementwise
+    over the same `n_rows` and splitting them would only add two launches:
+
+        yc = [1] * n_rows ++ [-1] * n_rows      (two thrust::copy)
+        f[i]          = epsilon - y_i           (raft::linalg::unaryOp)
+        f[i + n_rows] = -epsilon - y_i          (raft::linalg::unaryOp)
+
+    NO `ftz`, NO `identical_mul_add`, and that is not an oversight. Each
+    line is ONE IEEE subtraction of two finite float32s, which is correctly
+    rounded and therefore the same bits on every vendor with nothing to
+    pin. `svc_init_kernel` above is written the same way for the same
+    reason. The signed zero this CAN produce is a different matter and is
+    dealt with where it lands: `epsilon - y` and `-epsilon - y` put +0.0 and
+    -0.0 into the SAME vector whenever `y == epsilon`, which is reachable
+    from ordinary input here and was only reachable from a planted fixture
+    under C_SVC. See svm/README.md's signed-zero section."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var n = Int(n_rows_in)
+    if i < n:
+        var yi = yr.unsafe_load(i)
+        y_train.unsafe_store(i, Float32(1.0))
+        y_train.unsafe_store(i + n, Float32(-1.0))
+        f.unsafe_store(i, epsilon_in - yi)
+        f.unsafe_store(i + n, -epsilon_in - yi)
 
 
 def update_f_kernel(
@@ -319,8 +355,29 @@ struct SmoSolver(Movable):
     var n_ws: Int
     var n_train: Int
 
+    var epsilon: Float32
+    """The eps-insensitive tube's half width. Zero and unused for C_SVC,
+    which `check_rung1_scope` enforces."""
+
     var alpha: DeviceBuffer[DType.float32]
     var f: DeviceBuffer[DType.float32]
+    var y_train: DeviceBuffer[DType.float32]
+    """THE SOLVER'S OWN LABEL VECTOR, LENGTH `n_train`, AND IT REPLACES
+    UPSTREAM'S POINTER SWAP.
+
+    `Initialize(math_t** y, ...)` takes y BY DOUBLE POINTER and, for SVR,
+    overwrites the caller's pointer with `y_label.data()` before returning
+    (`smosolver.cuh:317-318`, with their own comment "the target values are
+    not needed anymore, they are incorporated in f"). Mojo has no shape for
+    that: a `mut DeviceBuffer` parameter cannot be repointed at a field.
+
+    So the solver keeps its own copy in BOTH problem types and every consumer
+    below reads it rather than the caller's `y`. For C_SVC it is a bitwise
+    copy of `y` over `n_rows`, which costs one n-element device copy per fit
+    and changes no number; for EPSILON_SVR it is `[+1]*n_rows ++ [-1]*n_rows`,
+    which is exactly what upstream's `y_label` holds at the same point. ONE
+    code path, no branch at four call sites, and no way for one of those
+    sites to be left reading the regression targets."""
     var C_vec: DeviceBuffer[DType.float32]
     var delta_alpha: DeviceBuffer[DType.float32]
     var return_buff: DeviceBuffer[DType.float32]
@@ -371,18 +428,26 @@ struct SmoSolver(Movable):
         self.cache_size = param.cache_size
         self.nochange_steps = param.nochange_steps
         self.svmType = param.svmType
+        self.epsilon = Float32(param.epsilon)
         self.n_rows = n_rows
         self.n_cols = n_cols
-        self.n_train = n_rows
+        # `n_train = (svmType == EPSILON_SVR) ? n_rows * 2 : n_rows`,
+        # `smosolver.cuh:307`. The SVR dual carries alpha+ and alpha- as one
+        # 2n vector; `WorkingSet` has derived its own `n_train` this way
+        # since DEVIATION 515 and the arm had never been reachable.
+        self.n_train = n_rows * 2 if param.svmType == EPSILON_SVR else n_rows
+        # `n_ws = min(1024, n_train)`, over the DOUBLED domain for SVR:
+        # upstream's SetSize takes n_train, not n_rows.
         var ws = SMO_WS_SIZE
-        if ws > n_rows:
-            ws = n_rows
+        if ws > self.n_train:
+            ws = self.n_train
         self.n_ws = ws
-        var nt = n_rows
+        var nt = self.n_train
         if nt < 1:
             nt = 1
         self.alpha = ctx.enqueue_create_buffer[DType.float32](nt)
         self.f = ctx.enqueue_create_buffer[DType.float32](nt)
+        self.y_train = ctx.enqueue_create_buffer[DType.float32](nt)
         self.C_vec = ctx.enqueue_create_buffer[DType.float32](nt)
         self.delta_alpha = ctx.enqueue_create_buffer[DType.float32](ws + scratch_pad)
         self.return_buff = ctx.enqueue_create_buffer[DType.float32](2)
@@ -464,9 +529,12 @@ struct SmoSolver(Movable):
         mut y: DeviceBuffer[DType.float32],
     ) raises:
         """`Initialize(&y, sample_weight, n_rows, n_cols)`: zero alpha,
-        `InitPenalty` (C everywhere), `SvcInit` (`f = -y`)."""
-        if self.svmType != C_SVC:
-            raise Error("SMO initialization not implemented SvmType=" + String(self.svmType))
+        `InitPenalty` (C everywhere over n_train), then the problem's own
+        gradient init.
+
+        Both arms leave `self.y_train` holding the labels the REST OF THE
+        SOLVER reads; see the field's own docstring for why that replaces
+        upstream's `*y = y_label.data()` pointer swap."""
         var nt = self.n_train
         ctx.enqueue_function[fill_f32_kernel](
             self.alpha.unsafe_ptr(), Float32(0.0), Int32(nt),
@@ -476,10 +544,31 @@ struct SmoSolver(Movable):
             self.C_vec.unsafe_ptr(), self.C, Int32(nt),
             grid_dim=_grid(nt), block_dim=SEL_TPB,
         )
-        ctx.enqueue_function[svc_init_kernel](
-            self.f.unsafe_ptr(), y.unsafe_ptr(), Int32(nt),
-            grid_dim=_grid(nt), block_dim=SEL_TPB,
-        )
+        if self.svmType == C_SVC:
+            ctx.enqueue_function[svc_init_kernel](
+                self.f.unsafe_ptr(), y.unsafe_ptr(), Int32(nt),
+                grid_dim=_grid(nt), block_dim=SEL_TPB,
+            )
+            # The labels ARE the caller's y here, copied so that every
+            # consumer below has one thing to read.
+            ctx.enqueue_copy(dst_buf=self.y_train, src_buf=y)
+        elif self.svmType == EPSILON_SVR:
+            ctx.enqueue_function[svr_init_kernel](
+                self.f.unsafe_ptr(),
+                self.y_train.unsafe_ptr(),
+                y.unsafe_ptr(),
+                self.epsilon,
+                Int32(self.n_rows),
+                grid_dim=_grid(self.n_rows), block_dim=SEL_TPB,
+            )
+        else:
+            # Upstream's own sentence, and upstream reaches it only for the
+            # NU_* types (`smosolver.cuh:321`).
+            raise Error(
+                "SMO initialization not implemented SvmType="
+                + String(self.svmType)
+            )
+        ctx.synchronize()
 
     def solve(
         mut self,
@@ -498,6 +587,37 @@ struct SmoSolver(Movable):
         the stage recorder (DISABLED is a no-op)."""
         var n_rows = self.n_rows
         var n_cols = self.n_cols
+        # THE SVR PATH IS HALF BUILT AND REFUSES BY NAME UNTIL IT IS NOT.
+        #
+        # `check_rung1_scope` admits EPSILON_SVR as of 2026-08-31 and the
+        # gradient init, the 2n domain and the label vector above are done.
+        # THREE PIECES BELOW ARE STILL C_SVC-ONLY, and each of them would
+        # produce a WRONG ANSWER rather than a failure if this ran today:
+        #
+        #   1. `KernelCache` has no `GetVecIndices` (`kernelcache.cuh:794`),
+        #      so a working-set index in [n_rows, 2*n_rows) would be used to
+        #      address a row of X that does not exist.
+        #   2. `UpdateF` runs once; upstream runs a SECOND gemv on
+        #      `f + n_rows` (`smosolver.cuh:261-278`), so the lower half of
+        #      the gradient would never be updated.
+        #   3. `Results.CombineCoefs` stops at `coef = alpha * y`; the SVR
+        #      arm adds `coef[0..n) += coef[n..2n)` (`results.cuh:195-199`),
+        #      so the returned coefficients would be alpha+ alone.
+        #
+        # A partially ported learner that answers is worse than one that
+        # refuses, and this repository has paid for that distinction more
+        # than once. Delete the clauses as they land, and only then wire an
+        # `svr_fit` and a Python surface.
+        if self.svmType == EPSILON_SVR:
+            raise Error(
+                "svm: EPSILON_SVR reaches the solver but the port is"
+                " INCOMPLETE and would return a wrong answer rather than"
+                " fail. Missing: KernelCache::GetVecIndices (the ws_idx %"
+                " n_rows mapping), UpdateF's second gemv on f + n_rows, and"
+                " CombineCoefs' subtraction of the two alpha halves. The"
+                " gradient init, the 2n domain and the label vector ARE"
+                " done. See svm/UNPORTED.tsv rung 2."
+            )
         var ws = WorkingSet(ctx, n_rows, SMO_WS_SIZE, self.svmType)
         self.n_ws = ws.get_size()
         self.initialize(ctx, y)
@@ -525,7 +645,9 @@ struct SmoSolver(Movable):
                 self.delta_alpha.unsafe_ptr(), Float32(0.0), Int32(n_ws),
                 grid_dim=_grid(n_ws), block_dim=SEL_TPB,
             )
-            ws.select_ws(ctx, self.f, self.alpha, y, self.C_vec)
+            ws.select_ws(
+                ctx, self.f, self.alpha, self.y_train, self.C_vec
+            )
             cache.init_working_set(ctx, ws.idx)
             cache.get_square_tile_without_caching(ctx, x)
 
@@ -535,7 +657,7 @@ struct SmoSolver(Movable):
                 if rem < max_iter_this_block:
                     max_iter_this_block = rem
             launch_block_solve(
-                ctx, threads, y, self.n_train, self.alpha, n_ws,
+                ctx, threads, self.y_train, self.n_train, self.alpha, n_ws,
                 self.delta_alpha, self.f, cache.kernel_tile, cache.ws_idx_mod,
                 self.C_vec, self.tol, self.return_buff, max_iter_this_block,
             )
@@ -630,7 +752,9 @@ struct SmoSolver(Movable):
 
         # CUML_LOG_DEBUG("SMO solver finished after %d outer iterations...")
         var res = Results(ctx, n_rows, n_cols)
-        res.get(ctx, x, y, self.C_vec, self.alpha, self.f, model)
+        res.get(
+            ctx, x, self.y_train, self.C_vec, self.alpha, self.f, model
+        )
         model.n_iter = self.n_iter
         if isnan(model.b):
             # DEVIATION 637: `-(b_up + b_low)/2` with b_up = +inf, b_low = -inf

@@ -130,18 +130,45 @@ def check_rung1_scope(
     param: SvmParameter, kp: KernelParams, has_sample_weight: Bool
 ) raises:
     """Every parameter of theirs is honored or refused by NAME. Rung 1."""
-    if param.svmType != C_SVC:
+    # RUNG 2 ADMITS EPSILON_SVR (2026-08-31). This block used to refuse every
+    # svmType but C_SVC and refuse a non-zero `epsilon` outright. Upstream
+    # solves BOTH problems with the same SMO -- `smoblocksolve.cuh:99-101`
+    # says so, and takes `svmType` as a parameter its body never reads -- so
+    # the two differ in the gradient initialization, the domain size and how
+    # the coefficients are combined, not in the solver.
+    #
+    # NU_SVC and NU_SVR stay refused, and that is upstream's own boundary
+    # rather than ours: `smosolver.cuh`'s Initialize has no arm for them
+    # either.
+    if param.svmType != C_SVC and param.svmType != EPSILON_SVR:
         raise Error(
             "svm: svmType=" + String(param.svmType)
-            + " is not ported (rung 1 is C_SVC only; EPSILON_SVR is rung 2,"
-            + " NU_SVC/NU_SVR are unported upstream too)"
+            + " is not ported (C_SVC and EPSILON_SVR are; NU_SVC/NU_SVR are"
+            + " unported upstream too)"
         )
-    if param.epsilon != 0.0:
-        raise Error(
-            "svm: epsilon=" + String(param.epsilon)
-            + " is the SVR parameter; C_SVC ignores it upstream, so it is"
-            + " refused rather than silently dropped"
-        )
+    # `epsilon` IS THE SVR PARAMETER AND ONLY THAT. C_SVC ignores it upstream,
+    # so a non-zero value on a classifier is still refused rather than
+    # silently dropped; on a regressor it is required to be finite and
+    # non-negative, which is DEVIATION 636's family (NaN fails `< 0.0` and
+    # would otherwise pass).
+    if param.svmType == C_SVC:
+        if param.epsilon != 0.0:
+            raise Error(
+                "svm: epsilon=" + String(param.epsilon)
+                + " is the SVR parameter; C_SVC ignores it upstream, so it is"
+                + " refused rather than silently dropped"
+            )
+    else:
+        if not isfinite(param.epsilon):
+            raise Error(
+                "svm: epsilon must be finite for EPSILON_SVR, got "
+                + String(param.epsilon) + " (DEVIATION 636)"
+            )
+        if param.epsilon < 0.0:
+            raise Error(
+                "svm: epsilon must be non-negative for EPSILON_SVR, got "
+                + String(param.epsilon)
+            )
     if param.cache_size != 0.0:
         raise Error(
             "svm: cache_size=" + String(param.cache_size)
