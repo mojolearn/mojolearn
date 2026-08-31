@@ -14,8 +14,8 @@ if [ "$(uname -s)" = "Darwin" ]; then
   echo "power=$(pmset -g batt 2>/dev/null | head -1)"
 fi
 echo "python=$(python3 --version 2>&1)"
-for pkg in mojotrees lightgbm xgboost catboost numpy; do
+for pkg in mojolearn lightgbm xgboost catboost numpy; do
   v=$(python3 -c "import $pkg,sys;sys.stdout.write(getattr($pkg,'__version__','?'))" 2>/dev/null) \
     && echo "$pkg=$v"
 done
-python3 -c "import mojotrees; mojotrees.show_versions()" 2>/dev/null || true
+python3 -c "import mojolearn; print(mojolearn.__version__, mojolearn.vendor())" 2>/dev/null || true

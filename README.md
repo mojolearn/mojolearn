@@ -364,7 +364,10 @@ path, so the comparison is our Metal path against their CPU path, on the
 same machine, all arms of one invocation interleaved in one process because
 the box drifts across thermal windows. Every arm records a sha256 of its
 prediction vector beside its timing, so determinism is visible in the results
-themselves. The reproduction command is
+themselves -- but NOT in the table below: the hash patch landed at `fe25d2e3`
+at 16:32 on 2026-08-22 and these runs are from 15:41, so their JSONs carry no
+`hashes` field. The sentence describes the harness as it stands today, and the
+rows beneath it predate that. The reproduction command is
 
 ```sh
 pixi run -e gbmbench bash bench/external/run_gbm_bench.sh year 500 gbdt
@@ -376,8 +379,8 @@ These are the last interleaved runs of 2026-08-22 on the M4 described above.
 
 | dataset, arm pair | ours (Metal) | theirs (CPU, same M4) | speed | accuracy |
 |---|---|---|---|---|
-| year, symmetric GBDT 500 rounds, vs CatBoost CPU | 11.9 s | 13.6 s | 1.14x | MAE 6.261 vs 6.263 |
-| higgs, symmetric GBDT, vs CatBoost CPU | 131.5 s | 177.8 s | 1.35x | AUC 0.822 vs 0.830, an open parity gap |
+| year, symmetric GBDT 500 rounds, vs CatBoost CPU | 11.9 s | 13.6 s | 1.14x | MAE 6.261 vs 6.263, MSE 80.11 vs 79.98 |
+| higgs, symmetric GBDT, vs CatBoost CPU | 131.5 s | 177.8 s | 1.35x | AUC 0.822 vs 0.830, CONFIGS NOT MATCHED, see below |
 | covtype, Extra Trees 100 trees, vs scikit-learn on 10 cores | 3.7 s | 5.4 s | 1.46x | 0.647 vs 0.645 |
 | covtype, Random Forest, vs scikit-learn on 10 cores | 4.0 s | 5.3 s | 1.33x | 0.722 vs 0.720 |
 | higgs, Extra Trees, vs scikit-learn on 10 cores | 39.0 s | 132.4 s | 3.4x | AUC 0.709 vs 0.700 |
@@ -386,7 +389,39 @@ These are the last interleaved runs of 2026-08-22 on the M4 described above.
 Six interleaved year runs over the day ranged from 1.14x to 1.68x as the
 laptop warmed; the table shows the last one, not the best one. The CatBoost
 pair compares symmetric trees only, because LightGBM has no symmetric mode.
-The higgs GBDT accuracy gap is stated because it is there.
+
+THE YEAR ROW IS QUOTED ON BOTH METRICS AND THE DIRECTION REVERSES BETWEEN
+THEM. Until 2026-08-31 it quoted MAE only, which is the one of the two we
+win. The two internal records this table is drawn from
+(`bench/results/THREE_SUITE_QUIET_2026-08-22.md:26`,
+`bench/results/THREE_SUITE_2026-08-22.md:23`) both quote that row on MSE,
+where we lose by 0.13. Quoting the metric that flatters us while the source
+record quotes the other one is the reporting half of `never build to
+datasets`, so both are now shown.
+
+THE HIGGS GBDT ROW IS NOT A MATCHED COMPARISON AND THE MISMATCH FAVOURS
+THEM. It was labelled "an open parity gap" until 2026-08-31, which stated
+the number honestly but not the configuration. gbm-bench passes CatBoost no
+`bootstrap_type` and no `random_strength`, so their arm runs its shipped
+defaults, MVS at subsample 0.8 with `random_strength` 1.0. Ours runs neither
+(`bootstrap_type=None` is no row sampling at all, and our `random_strength`
+defaults to 0.0). They are regularized on this row and we are not, and
+`boosting_type` is unpinned on their side besides. That is a different
+estimator, not a tuning difference, and MVS cannot be matched from our side
+because we do not implement it -- our searcher asserts it away. So the row
+cannot be read as evidence about either library's accuracy.
+
+What a matched configuration shows on this dataset and this learner, with
+`bootstrap_type='No'` and `boosting_type='Plain'` pinned on BOTH arms: at
+100 trees and depth 6 we are at parity or slightly ahead, against
+CatBoost GPU on NVIDIA (0.800447/0.800573/0.800668 vs
+0.800373/0.800336/0.800665,
+`bench/results/fast_speed/2026-08-26-nvidia-forest-postfix.md:58`) and
+against CatBoost CPU on Apple (0.800537 vs 0.799673,
+`bench/results/fast_speed/2026-08-27-APPLE-trees-evening.md:79`). Those runs
+are at a smaller shape than this table's 500 x 8, so they do not retire the
+question at this shape; the matched run at 500 x 8 is owed and is tracked in
+`NEXT_TWO.md`. Both numbers stay on this page until it lands.
 
 ## Limitations and refusals
 
