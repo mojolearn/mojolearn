@@ -1,0 +1,33 @@
+[16:51:41 leg_install] venv route: python3 -m venv
+[16:51:44 leg_install] clean venv at /root/mojolearn-smoke-venv (Python 3.11.10)
+    Installing collected packages: numpy, mojolearn
+    Successfully installed mojolearn-0.3.1 numpy-2.4.6
+    
+    [notice] A new release of pip is available: 24.0 -> 26.2.1
+    [notice] To update, run: python3 -m pip install --upgrade pip
+[16:51:49 leg_install] installed mojolearn==0.3.1 from pypi; vendor read back: cuda
+    == host CPU ==
+    model name	: AMD EPYC 7773X 64-Core Processor
+    -- ISA flags that matter for an AVX-512 build --
+      avx PRESENT
+      avx2 PRESENT
+      avx512f absent
+      avx512dq absent
+      avx512bw absent
+      avx512vl absent
+      avx512cd absent
+      avx512vnni absent
+    -- what the loaded set actually is --
+    1456 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x10ee80000000, nodemask=1)
+      vendor cuda | the box probe (device nodes and driver libraries)
+      arch   sm_80 | same-family lower architecture (sm_80 code runs forward on this sm_89 device)
+      tsvd             ok   47058288d93c0afd     0.0s
+    smoke v0.3.1 mode=fast vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+      tsvd             ok   47058288d93c0afd     0.0s
+    smoke v0.3.1 mode=deterministic vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+      tsvd             ok   eb98ef49f9c747f0     0.0s
+    smoke v0.3.1 mode=identical vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+index=pypi version=0.3.1 vendor=cuda smoke_rc=0
+smoke[fast]: smoke v0.3.1 mode=fast vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+smoke[deterministic]: smoke v0.3.1 mode=deterministic vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+smoke[identical]: smoke v0.3.1 mode=identical vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
