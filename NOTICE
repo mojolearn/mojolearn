@@ -5,6 +5,44 @@ This product includes software developed by Andrew Hendel, licensed under the
 Apache License, Version 2.0.
 
 --------------------------------------------------------------------------
+What is original to this work
+--------------------------------------------------------------------------
+
+THIS SECTION WAS ADDED 2026-08-31, AND ITS ABSENCE WAS A DEFECT IN THIS FILE.
+Every word below the line was accurate and stays. What was missing was any
+statement of PROPORTION, so a reader met "Derived from CatBoost" as the first
+heading and reasonably concluded this was a port with some additions. It is
+not, and the number is the shortest way to say so.
+
+    Mojo in this repository            429,615 lines
+    under a `ported/` directory         64,894 lines   15.1%
+    everything else                    364,721 lines   84.9%
+
+Measured 2026-08-31 by line count over `*.mojo`, excluding the pixi
+environment and the upstream mirrors. The 84.9% has no upstream file it
+corresponds to. `mojo_only/` alone is 246,075 lines, 57.3%, and the rest is
+the host control plane, the drivers and the gates.
+
+None of the following exists in any upstream this file names, because none of
+those projects was ever asked to run anywhere but CUDA:
+
+  * THE DETERMINISM LADDER. Three numeric tiers selected at runtime, whose
+    strictest tier produces bit-identical answers on Apple Silicon via Metal,
+    NVIDIA via CUDA and AMD via ROCm from ONE source, with the pinned
+    arithmetic primitives (`ftz`, `identical_mul_add`, `portable_sqrtf` and
+    the rest of `mojo_only/numerics.mojo`) that make it possible.
+  * THE METAL BACKEND, and every deviation Metal forced: no threadgroup float
+    atomics, no streams, a 32-lane column against CDNA's 64.
+  * THE VERIFICATION METHOD. Per-stage identity cards diffed across three
+    vendors at pinned commits, host oracles written independently of the
+    device code, and the sabotage discipline that requires each gate to be
+    shown capable of failing before its pass is believed.
+  * THE HOST CONTROL PLANE. Every `estimator.mojo`, the CPython bindings, the
+    Python surface and its refusals.
+  * THE BIT-IDENTICAL FP32 GEMM CONTRACT, and the transformer and Mamba
+    identity work, which are ported from nothing.
+
+--------------------------------------------------------------------------
 Derived from CatBoost
 --------------------------------------------------------------------------
 

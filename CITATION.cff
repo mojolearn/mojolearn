@@ -18,21 +18,34 @@ date-released: "2026-08-31"
 doi: 10.5281/zenodo.22068632
 repository-code: "https://github.com/mojolearn/mojolearn"
 abstract: >-
-  Ports of GPU machine-learning algorithms into Mojo from the CUDA
-  implementations that established them, targeting Apple Silicon via Metal
-  first and CUDA and ROCm from the same source. Covers gradient-boosted
-  oblivious (symmetric) trees from CatBoost; random forests, extremely
-  randomized trees, DBSCAN, PCA, ridge and logistic regression, coordinate
-  descent, support vector classification, kernel density estimation,
-  single-linkage and spectral clustering, isolation forests, Holt-Winters
-  and the scoring metrics from cuML; k-means and brute-force
-  k-nearest-neighbors from cuVS; and ordinary least squares, top-k selection
-  and the MST and Lanczos primitives from RAFT. The algorithms are the
-  upstreams' work and every derivation is recorded per file in the PORTED_MAP
-  tables; see NOTICE for the license obligations each carries, including the
-  MIT-licensed FAISS warp-select queue that RAFT vendors. What is original is
-  the host-side control plane, the determinism ladder that the CUDA upstreams
-  have no counterpart for, and the deviations Metal forced.
+  A GPU machine-learning library written in Mojo, and the first one to give
+  the same source three vendors and the same BITS across them. Its
+  distinguishing result is a three-tier numeric contract selected at runtime,
+  where the strictest tier produces bit-identical answers on Apple Silicon
+  via Metal, NVIDIA via CUDA and AMD via ROCm, verified by per-stage identity
+  cards diffed across the three at pinned commits. Nothing upstream of this
+  library has such a tier, because none of the CUDA implementations it draws
+  on was ever asked to run anywhere but CUDA.
+  ORIGINAL TO THIS WORK, with no upstream counterpart: the determinism
+  ladder and its pinned-arithmetic primitives; the Metal backend; the
+  host-side control plane every estimator is reached through; the identity
+  cards, the host oracles and the sabotage methodology that gates them; the
+  bit-identical FP32 GEMM contract; and the transformer and Mamba
+  identity work. BY LINE COUNT, 84.9% of the Mojo in this repository lies
+  outside the `ported/` directories and has no upstream file it corresponds
+  to; the remaining 15.1% is the algorithmic substrate described next.
+  THE SUBSTRATE IS DERIVED WORK AND IS DOCUMENTED AS SUCH, per file, with
+  the upstream path and pinned commit, in the PORTED_MAP tables and in each
+  file's own header: gradient-boosted oblivious (symmetric) trees from
+  CatBoost; random forests, extremely randomized trees, DBSCAN, PCA, ridge
+  and logistic regression, coordinate descent, support vector
+  classification, kernel density estimation, single-linkage and spectral
+  clustering, isolation forests, Holt-Winters and the scoring metrics from
+  cuML; k-means and brute-force k-nearest-neighbors from cuVS; and ordinary
+  least squares, top-k selection and the MST and Lanczos primitives from
+  RAFT. Those algorithms are the upstreams' work. See NOTICE for the license
+  obligations each carries, including the MIT-licensed FAISS warp-select
+  queue that RAFT vendors.
 keywords:
   - machine learning
   - GPU

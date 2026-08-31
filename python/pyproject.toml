@@ -129,6 +129,15 @@ dependencies = ["numpy>=1.24"]
 Homepage = "https://github.com/mojolearn/mojolearn"
 Repository = "https://github.com/mojolearn/mojolearn"
 Issues = "https://github.com/mojolearn/mojolearn/issues"
+# THE CITATION, ON THE PYPI PAGE. Until 2026-08-31 a reader who arrived from
+# PyPI rather than from GitHub had no route to the DOI at all: the concept
+# DOI resolves to the newest version and is the one to cite, and it appeared
+# nowhere in the distribution's metadata. `CITATION.cff` is shipped inside
+# the package for the same reason (see package-data below), so a
+# `pip install` carries the machine-readable citation and not only the
+# license.
+DOI = "https://doi.org/10.5281/zenodo.22068632"
+Citation = "https://doi.org/10.5281/zenodo.22068632"
 
 [project.scripts]
 # Kept outside the mojolearn package deliberately: this command must work
@@ -195,6 +204,11 @@ include-package-data = false
 # checkout that has such a layout. They are listed so that file and this one
 # describe the same tree.
 mojolearn = [
+    # NOT a build output: `CITATION.cff` is copied from the repository root
+    # by build_release_wheel.sh so that a `pip install` carries the
+    # machine-readable citation, not just the license. Attribution that only
+    # exists in the git repository does not travel with the artifact.
+    "CITATION.cff",
     "*.so", "identical/*.so", "deterministic/*.so", ".dylibs/*.dylib",
     "cuda/*.so", "cuda/identical/*.so", "cuda/deterministic/*.so", "cuda/.libs/*",
     "cuda/sm_*/*.so", "cuda/sm_*/identical/*.so", "cuda/sm_*/deterministic/*.so", "cuda/sm_*/.libs/*",

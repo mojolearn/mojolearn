@@ -32,6 +32,12 @@ trap 'rm -f "$STAMP"' EXIT INT TERM
 # a stale copy in a published wheel is a wrong LICENSE or a wrong README on
 # PyPI. python/.gitignore keeps them out of the checkout.
 cp "$here/LICENSE" "$here/NOTICE" "$here/README.md" "$here/python/"
+# CITATION.cff goes INSIDE the package, not beside pyproject.toml: it is
+# shipped as package data so `pip install` carries the machine-readable
+# citation. Attribution that lives only in the git repository does not
+# travel with the artifact, and the third way people acquire this library
+# is neither a clone nor a pip install but a copied file.
+cp "$here/CITATION.cff" "$here/python/mojolearn/"
 
 # EVERY EXTENSION IN THE WHEEL IS BUILT HERE. `pyproject.toml`'s
 # package-data globs `*.so`, so an extension that is NOT built here is not

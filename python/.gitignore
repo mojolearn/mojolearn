@@ -1,6 +1,7 @@
 LICENSE
 NOTICE
 README.md
+mojolearn/CITATION.cff
 mojolearn/_mojolearn.so
 mojolearn/_mojolearn_gbdt.so
 mojolearn/_mojolearn_estimators.so

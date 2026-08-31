@@ -3,16 +3,26 @@
 [![PyPI](https://img.shields.io/pypi/v/mojolearn.svg)](https://pypi.org/project/mojolearn/)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22068632.svg)](https://doi.org/10.5281/zenodo.22068632)
 
-**GPU machine learning in Mojo, on hardware the originals cannot reach.**
+**The same source, three GPU vendors, and the same bits.**
 
-mojolearn ports the GPU implementations that established today's tree and
-classical algorithms, CatBoost, cuVS, cuML and RAFT, into one Mojo source
-that runs on Apple silicon through Metal and, from the same source, on NVIDIA
-through CUDA and AMD through HIP. Every estimator accepts a numeric mode, and
-the wheel carries all three. `FAST` is the upstream's shipped behavior, and it
-promises speed and nothing else. `DETERMINISTIC` gives the same bits on every
-run of one box. `IDENTICAL` gives the same bits on every supported GPU vendor,
-with a per-stage certificate that proves it rather than a hash that hopes so.
+mojolearn is a GPU machine-learning library in Mojo whose distinguishing
+result is a numeric contract: one source that runs on Apple silicon through
+Metal, NVIDIA through CUDA and AMD through HIP, and, on request, returns
+BIT-IDENTICAL answers on all three. Every estimator accepts a numeric mode
+and the wheel carries all three. `FAST` promises speed and nothing else.
+`DETERMINISTIC` gives the same bits on every run of one box. `IDENTICAL`
+gives the same bits on every supported vendor, with a per-stage certificate
+that proves it rather than a hash that hopes so.
+
+**None of the CUDA libraries this draws on has such a tier**, because none of
+them was ever asked to run anywhere but CUDA. The determinism ladder, the
+Metal backend, the host control plane, the identity cards and the sabotage
+methodology that gates them have no upstream. By line count, **84.9% of the
+Mojo here has no upstream file it corresponds to**; the remaining 15.1% is
+the algorithmic substrate, and it is derived work that is documented as such
+per file, with the upstream path and the pinned commit, in the `PORTED_MAP`
+tables and in each file's own header. The algorithms come from CatBoost,
+cuVS, cuML and RAFT; see `NOTICE`.
 
 The scikit-learn shapes are kept. The defaults follow the upstream each
 algorithm mirrors, and every place that differs from scikit-learn is named
