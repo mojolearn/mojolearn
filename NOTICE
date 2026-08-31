@@ -1,40 +1,19 @@
-mojolearn (renamed from catboost-symmetric-trees on 2026-08-19)
+mojolearn
 Copyright 2026 Andrew Hendel
 
-This product includes software developed by Andrew Hendel, licensed under the
-Apache License, Version 2.0.
+Licensed under the Apache License, Version 2.0. See LICENSE.
 
-No upstream source is in this repository. The shipped library is 100% Mojo.
-The only C or C++ tracked here is twenty test harnesses under
-`tools/*_oracle/` and `ensemble/tools/*_oracle/`, which link an upstream to
-produce reference numbers the Mojo is checked against; two of those files are
-CatBoost's own, redistributed under Apache-2.0 and changed as recorded in
-DERIVATION.md. None of the projects below contains any Mojo.
+NO UPSTREAM SOURCE IS IN THIS REPOSITORY. The shipped library is 100% Mojo.
+There is no CUDA and no C++ in it; the only C or C++ tracked here is twenty
+test harnesses under `tools/*_oracle/` and `ensemble/tools/*_oracle/`, which
+link a reference implementation to produce numbers the Mojo is checked
+against. They build the check, not the library.
 
-This work implements algorithms whose designs come from CatBoost (Apache-2.0,
-YANDEX LLC); cuVS, cuML and RAFT (Apache-2.0, NVIDIA CORPORATION & AFFILIATES);
-FAISS, by way of RAFT's vendored copy (MIT, Facebook, Inc. and its affiliates);
-scikit-learn (BSD-3-Clause, the scikit-learn developers); HuggingFace
-transformers (Apache-2.0, The Hugging Face team, and carrying EleutherAI's and
-the state-spaces/mamba org's notices); state-spaces/mamba (Apache-2.0, Tri Dao
-and Albert Gu); the Modular MAX kernels (Apache-2.0 with LLVM Exceptions,
-Modular Inc.); and NVIDIA cuRAND, which is proprietary rather than open source
-and is recorded pending a decision by the author.
+Licence texts for the projects whose algorithms this work implements are in
+`third_party/LICENSES/`, one file per project. Per-file correspondence, and
+what is original to this work, are in the `DERIVATION_MAP.tsv` tables and
+DERIVATION.md.
 
-Their licence texts are in `third_party/LICENSES/`, one file per project. The
-per-file correspondence, the commit each lane was read at, and what is
-original to this work are in the `DERIVATION_MAP.tsv` tables and DERIVATION.md.
-
-Checked against the pinned checkouts on 2026-08-31, none of cuVS, cuML, RAFT,
-scikit-learn, transformers, state-spaces/mamba or Modular ships a NOTICE file,
-so Apache 2.0 section 4(d) has no attribution text of theirs to reproduce
-here. CatBoost is not checked out on this machine and was not re-verified.
-
-This project is not affiliated with, endorsed by, or sponsored by YANDEX LLC,
-NVIDIA CORPORATION, Meta Platforms, Inc., Hugging Face, Inc., EleutherAI,
-Tri Dao, Albert Gu, the state-spaces project, the scikit-learn developers,
-NumFOCUS or Modular, Inc. Their names and their projects' names are used only
-to identify the software this work derives from, or checks itself against.
-
-MAX (R) and Mojo (R) are trademarks of Modular, Inc. used under license. This
-project is not operated or endorsed by Modular, Inc.
+MAX (R) and Mojo (R) are trademarks of Modular, Inc., used under license.
+This project is not operated or endorsed by Modular, Inc., nor by any other
+project named in `third_party/LICENSES/`.
