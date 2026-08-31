@@ -1,0 +1,21 @@
+[19:23:11 rbc551] 1/2 FAST arm
+      eps=0.9: raw emission order has 2005 intra-row descents (longest row 12); DEVIATION 551 removes them under IDENTICAL
+    RBC-DIGEST mode=FAST label=eps=0.9 n=1200 nnz=5132 digest=6181320535270143177
+      eps=2.5: raw emission order has 36117 intra-row descents (longest row 102); DEVIATION 551 removes them under IDENTICAL
+    RBC-DIGEST mode=FAST label=eps=2.5 n=1200 nnz=73050 digest=8236448622140858299
+[19:23:16 rbc551] 2/2 IDENTICAL arm
+    RBC-DIGEST mode=IDENTICAL label=eps=0.9 n=1200 nnz=5132 digest=1397562962144103345
+    RBC-DIGEST mode=IDENTICAL label=eps=2.5 n=1200 nnz=73050 digest=16240815604607225637
+== FAST (expect DIFFER from Apple: the non-vacuity control) ==
+  FAST eps=0.9: DIFFER apple=255668769117191359 here=6181320535270143177
+  FAST eps=2.5: DIFFER apple=15889592947222279391 here=8236448622140858299
+  FAST eps=8.0: MISSING -- this box printed no digest for this fixture
+  FAST VERDICT: 1 of 3 fixtures printed NO digest. Neither arm can pass on a run that did not produce the artifact; read /root/mojolearn/bench/results/e1/2026-08-31_192308-mojolearn-e2-amd/diag/rbc551_fast.log.
+== IDENTICAL (expect SAME as Apple: the claim) ==
+  IDENTICAL eps=0.9: SAME   apple=1397562962144103345
+  IDENTICAL eps=2.5: SAME   apple=16240815604607225637
+  IDENTICAL eps=8.0: MISSING -- this box printed no digest for this fixture
+  IDENTICAL VERDICT: 1 of 3 fixtures printed NO digest. Neither arm can pass on a run that did not produce the artifact; read /root/mojolearn/bench/results/e1/2026-08-31_192308-mojolearn-e2-amd/diag/rbc551_identical.log.
+
+fast_rc=1 identical_rc=1 fast_verdict=3 identical_verdict=3
+DEVIATION 551: NOT CLOSED -- read the two arms above before believing either

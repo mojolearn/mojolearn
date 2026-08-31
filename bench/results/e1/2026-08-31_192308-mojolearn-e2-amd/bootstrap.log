@@ -1,0 +1,67 @@
+
+=== provenance === 19:23:08
+fe038d0073fd01aef23c39dc936cb43402ffdab5
+Linux mojolearn-e2-amd 6.8.0-59-generic #61-Ubuntu SMP PREEMPT_DYNAMIC Fri Apr 11 23:16:11 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
+
+=== pixi === 19:23:08
+This script will automatically download and install Pixi (latest) for you.
+Getting it from this url: https://github.com/prefix-dev/pixi/releases/latest/download/pixi-x86_64-unknown-linux-musl.tar.gz
+The 'pixi' binary is installed into '/root/.pixi/bin'
+Updating '/root/.bashrc'
+Please restart or source your shell.
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 19:23:11
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 19:23:11
+phase 9: DIAG ONLY (MOJOLEARN_P9_ONLY_DIAG=1); no builds, no arms, no probes here
+phase 9 builds: <none>
+phase 9 tiers:  <none>
+concurrent probe SKIPPED: needs all three tiers, P9_TIERS=<none>
+
+=== phase 9 diag: tools/diag/rbc_551_leg.sh === 19:23:11
+PHASE9-FINDING: diag script returned non-zero (see diag/console.log)
+          eps=0.9: raw emission order has 2005 intra-row descents (longest row 12); DEVIATION 551 removes them under IDENTICAL
+        RBC-DIGEST mode=FAST label=eps=0.9 n=1200 nnz=5132 digest=6181320535270143177
+          eps=2.5: raw emission order has 36117 intra-row descents (longest row 102); DEVIATION 551 removes them under IDENTICAL
+        RBC-DIGEST mode=FAST label=eps=2.5 n=1200 nnz=73050 digest=8236448622140858299
+    [19:23:16 rbc551] 2/2 IDENTICAL arm
+        RBC-DIGEST mode=IDENTICAL label=eps=0.9 n=1200 nnz=5132 digest=1397562962144103345
+        RBC-DIGEST mode=IDENTICAL label=eps=2.5 n=1200 nnz=73050 digest=16240815604607225637
+    == FAST (expect DIFFER from Apple: the non-vacuity control) ==
+      FAST eps=0.9: DIFFER apple=255668769117191359 here=6181320535270143177
+      FAST eps=2.5: DIFFER apple=15889592947222279391 here=8236448622140858299
+      FAST eps=8.0: MISSING -- this box printed no digest for this fixture
+      FAST VERDICT: 1 of 3 fixtures printed NO digest. Neither arm can pass on a run that did not produce the artifact; read /root/mojolearn/bench/results/e1/2026-08-31_192308-mojolearn-e2-amd/diag/rbc551_fast.log.
+    == IDENTICAL (expect SAME as Apple: the claim) ==
+      IDENTICAL eps=0.9: SAME   apple=1397562962144103345
+      IDENTICAL eps=2.5: SAME   apple=16240815604607225637
+      IDENTICAL eps=8.0: MISSING -- this box printed no digest for this fixture
+      IDENTICAL VERDICT: 1 of 3 fixtures printed NO digest. Neither arm can pass on a run that did not produce the artifact; read /root/mojolearn/bench/results/e1/2026-08-31_192308-mojolearn-e2-amd/diag/rbc551_identical.log.
+    
+    fast_rc=1 identical_rc=1 fast_verdict=3 identical_verdict=3
+    DEVIATION 551: NOT CLOSED -- read the two arms above before believing either
+
+=== done === 19:23:22
+artifacts in /root/mojolearn/bench/results/e1/2026-08-31_192308-mojolearn-e2-amd
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

@@ -1,0 +1,42 @@
+Imported from /root/mojolearn/neighbors/ball_cover_main.mojo:4:
+/root/mojolearn/neighbors/mojo_only/ball_cover_check.mojo:1242:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/neighbors/ball_cover_main.mojo:4:
+Imported from /root/mojolearn/neighbors/mojo_only/ball_cover_check.mojo:54:
+Imported from /root/mojolearn/neighbors/ported/neighbors/ball_cover/ball_cover.mojo:173:
+/root/mojolearn/neighbors/ported/neighbors/ball_cover/registers.mojo:755:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/neighbors/ball_cover_main.mojo:4:
+Imported from /root/mojolearn/neighbors/mojo_only/ball_cover_check.mojo:54:
+Imported from /root/mojolearn/neighbors/ported/neighbors/ball_cover/ball_cover.mojo:173:
+/root/mojolearn/neighbors/ported/neighbors/ball_cover/registers.mojo:931:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/neighbors/ball_cover_main.mojo:4:
+Imported from /root/mojolearn/neighbors/mojo_only/ball_cover_check.mojo:54:
+Imported from /root/mojolearn/neighbors/ported/neighbors/ball_cover/ball_cover.mojo:173:
+Imported from /root/mojolearn/neighbors/ported/neighbors/ball_cover/registers.mojo:117:
+/root/mojolearn/neighbors/mojo_only/ball_cover_canonical_order.mojo:165:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/neighbors/ball_cover_main.mojo:4:
+/root/mojolearn/neighbors/mojo_only/ball_cover_check.mojo:306:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/neighbors/ball_cover_main.mojo:4:
+/root/mojolearn/neighbors/mojo_only/ball_cover_check.mojo:344:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+RBC-DIGEST mode=IDENTICAL label=eps=0.9 n=1200 nnz=5132 digest=1397562962144103345
+RBC-DIGEST mode=IDENTICAL label=eps=2.5 n=1200 nnz=73050 digest=16240815604607225637
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: eps=8.0: row 0 MISSED point 42, which brute force puts inside eps. The index pruned a ball it had to look in.
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
