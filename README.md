@@ -170,6 +170,7 @@ that is an untested promise and is marked as one rather than assumed.
 | `KMeans` | cuVS | k-means with k-means++ init; `n_init` defaults to cuVS's 1, not scikit-learn's 10 | yes | yes (Apple + NVIDIA + AMD) | yes | Apple + NVIDIA + AMD |
 | `NearestNeighbors` | cuVS, RAFT, FAISS | brute-force k-NN, fused L2, ball cover, top-k selection | yes | yes (Apple + NVIDIA + AMD) | yes | Apple + NVIDIA + AMD |
 | `KNeighborsClassifier`, `KNeighborsRegressor` | cuVS, RAFT, FAISS | the vote and the mean on that k-NN path | yes | yes (Apple + NVIDIA + AMD) | yes | Apple + NVIDIA + AMD, on the k-NN path |
+| `RadiusNeighbors` | cuVS, RAFT | every neighbor inside a radius, over the random ball cover; exact, not approximate. Distances are recomputed from the finished neighbor list, not stored by the search | yes | yes | yes | Apple; the AMD leg is what closes the CSR's cross-vendor order (DEVIATION 551) |
 | `DBSCAN` | cuML, RAFT | epsilon neighborhoods, label propagation, border and noise points | yes | yes (Apple + NVIDIA + AMD) | yes | Apple + NVIDIA + AMD |
 | `PCA`, `TruncatedSVD` | cuML, RAFT | eigen and SVD decompositions, transform and inverse transform | yes | yes (Apple + NVIDIA + AMD) | yes | Apple + NVIDIA + AMD |
 | `LinearRegression` | RAFT | ordinary least squares (`lstsqEig`) | yes | yes (Apple + NVIDIA + AMD) | yes | Apple + NVIDIA + AMD |
@@ -193,10 +194,11 @@ probabilities included, in the E2 certificate below).
 Named rather than omitted, because "why is this missing" is a short and
 interesting question: `ARIMA` (the batched Kalman filter, its gradient and
 predict all exist; `estimate_x0` and the batched L-BFGS driver do not, so
-there is no `fit`), `SVR`, `RadiusNeighbors`, `MultiClassOneVsAll` from
+there is no `fit`), `SVR`, `MultiClassOneVsAll` from
 Python, Intel and Qualcomm GPU columns, and a CPU fallback of any kind.
-Importing one of the first three raises with the line where the thing that
-exists stops, rather than an `AttributeError`.
+Importing one of the first two raises with the line where the thing that
+exists stops, rather than an `AttributeError`. `RadiusNeighbors` was on this
+list until 2026-08-31 and is now in the table above.
 
 ## The numeric tiers
 

@@ -329,10 +329,15 @@ kernels_plausible() {
     [ "$(uname)" = "Darwin" ] || return 0  # linux gate is run_smoke
     _air=$(air_blobs "$1")
     # subsystem:floor -- floors are a filter, never the proof. A good build
-    # measured 22 cluster, 8 neighbors (4 before the k-NN classifier and
-    # regressor landed 2026-08-23) and 2 core; a suppressed one has 0 of
-    # everything.
-    for _pair in cluster:15 neighbors:3 core:1; do
+    # measured 22 cluster, 15 neighbors and 2 core on 2026-08-31; neighbors
+    # was 8 before that (4 before the k-NN classifier and regressor landed
+    # 2026-08-23) and jumped when RadiusNeighbors pulled the whole ball cover
+    # into this extension for the first time. A suppressed build has 0 of
+    # everything. THE FLOORS ARE READ OFF A BUILD, not guessed: the first
+    # version of this line for RadiusNeighbors said 5 because that was a
+    # guess at "two more kernels", and 5 would have passed a build that had
+    # lost the entire index.
+    for _pair in cluster:15 neighbors:12 core:1; do
         _sub=${_pair%%:*}
         _min=${_pair#*:}
         _n=$(printf '%s\n' "$_air" | grep -c "^${_sub}" || true)
@@ -390,6 +395,13 @@ nbr.NearestNeighbors(n_neighbors=3).fit(X).kneighbors(X[:2])
 y = (np.arange(512) * 7919 % 3).astype(np.int64) - 1
 nbr.KNeighborsClassifier(n_neighbors=3).fit(X, y).predict(X[:2])
 nbr.KNeighborsRegressor(n_neighbors=3).fit(X, X[:, 0]).predict(X[:2])
+# RadiusNeighbors is TWO boundary calls, and the smoke exercises both plus
+# the ragged unpack: a build where only the counting pass linked would
+# otherwise pass here and fail on the first real query.
+rd, ri = nbr.RadiusNeighbors(radius=0.35).fit(X).radius_neighbors(
+    X[:4], sort_results=True)
+assert len(rd) == 4 and all(len(a) == len(b) for a, b in zip(rd, ri)), rd
+assert all(len(a) >= 1 for a in ri), "every point is inside its own radius"
 shutil.rmtree(tmp, ignore_errors=True)
 PY
 }

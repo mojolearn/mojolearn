@@ -55,8 +55,13 @@ THE POLICY CHOICES
 WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
 ----------------------------------------------------------
 
-- `radius_neighbors`. `ball_cover` already does radius search for DBSCAN and
-  is the obvious substrate, but it is a different call and is not wired here.
+- `radius_neighbors` EXISTS since 2026-08-31: `radius_neighbors_count` /
+  `radius_neighbors_fill` below, over the ball cover, bound as
+  `_mojolearn.radius_neighbors_count` / `.radius_neighbors_fill` and exported
+  as `mojolearn.RadiusNeighbors`. This bullet used to name it as absent. What
+  is still owed is a FITTED DEVICE HANDLE, so the index is built once rather
+  than once per boundary call; the RADIUS NEIGHBOURS banner below says where
+  that cost is paid.
 - Metrics other than expanded L2. The ported kernel carries only that arm
   (`knn_brute_force.mojo`'s dispatch note), so cosine and L1 are a port, not
   a flag.
@@ -109,6 +114,13 @@ from neighbors.ported.neighbors.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
     brute_force_knn_impl,
     compute_norms,
+)
+from neighbors.mojo_only.radius_distances import rbc_edge_distances
+from neighbors.ported.neighbors.ball_cover.ball_cover import (
+    rbc_build_index,
+    rbc_eps_nn_query_count,
+    rbc_eps_nn_query_fill,
+    rbc_n_landmarks,
 )
 
 
@@ -721,3 +733,363 @@ def knn_regressor_predict(
     _ = d_idx^
     _ = y^
     return used_tile
+
+
+# ---------------------------------------------------------------------------
+# RADIUS NEIGHBOURS
+#
+# The bullet at the top of this file used to read "`radius_neighbors`.
+# `ball_cover` already does radius search for DBSCAN and is the obvious
+# substrate, but it is a different call and is not wired here." It is wired
+# here now, and the bullet has been rewritten rather than left to rot.
+#
+# THE TWO-CALL PROTOCOL, AND WHY IT IS NOT AN ACCIDENT.
+#
+# A radius query's output size is not a function of its inputs. `nnz` is
+# discovered by running the search, so a caller in a language that allocates
+# its own output buffers cannot allocate them before the first call. cuML has
+# the same problem and solves it the same way (`algo.cuh:137-162`: `eps_nn`
+# with a null `ja` to count, then again with a sized one to fill), and this
+# file follows it because the alternative is for Mojo to hand Python a pointer
+# it must later be told to free.
+#
+# THE COST OF THAT CHOICE IS AN INDEX BUILT TWICE, and it is written down here
+# rather than hidden. `rbc_build_index` depends only on `(x, m, n_cols,
+# n_landmarks, seed)` and never on the query, so DBSCAN builds it once and
+# queries it per batch (`dbscan/ported/dbscan/runner.mojo:361`). This surface
+# cannot, because nothing survives between the two Python calls. Making it
+# survive means a fitted device handle, which this tree does not have anywhere
+# yet, and introducing the first one to save a build on the first radius
+# surface is the wrong order to do those two things in. The build is
+# `O(sqrt(m))` landmarks against `m` points; the query is the part that scales
+# with the neighbourhood. This is named in `docs/DESIGN_NOTES.md` as the thing
+# to revisit when a handle exists.
+#
+# WHAT IS DELIBERATELY NOT HERE. `max_k` truncation. `rbc_eps_nn_query_max_k`
+# keeps the FIRST `max_k` hits in emission order, so a truncated row keeps a
+# DIFFERENT SUBSET on a 64-lane column (IDENTITY_PATHS row 61); under
+# IDENTICAL it already refuses by name. A surface that returns every neighbour
+# inside the radius has no reason to reach for it, so it does not.
+# ---------------------------------------------------------------------------
+
+
+def _rbc_index_and_count(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut queries: DeviceBuffer[DType.float32],
+    mut r: DeviceBuffer[DType.float32],
+    mut x_reordered: DeviceBuffer[DType.float32],
+    mut r_indptr: DeviceBuffer[DType.int32],
+    mut r_1nn_cols: DeviceBuffer[DType.int32],
+    mut r_1nn_dists: DeviceBuffer[DType.float32],
+    mut r_radius: DeviceBuffer[DType.float32],
+    mut adj_ia: DeviceBuffer[DType.int32],
+    mut vd: DeviceBuffer[DType.int32],
+    n_index: Int,
+    n_queries: Int,
+    n_features: Int,
+    n_landmarks: Int,
+    radius: Float32,
+) raises -> Int:
+    """Build the ball cover over `x`, then count `queries`' eps neighbours.
+
+    The six index buffers are the caller's because both public entry points
+    below need them and the fill path needs them to outlive the count.
+    """
+    var landmark_ids = ctx.enqueue_create_buffer[DType.int32](n_landmarks)
+    var slot_cols = ctx.enqueue_create_buffer[DType.int32](n_index)
+    var slot_dists = ctx.enqueue_create_buffer[DType.float32](n_index)
+    var nearest = ctx.enqueue_create_buffer[DType.int32](n_index)
+    var nearest_dist = ctx.enqueue_create_buffer[DType.float32](n_index)
+    var counts = ctx.enqueue_create_buffer[DType.int32](n_landmarks)
+    ctx.synchronize()
+
+    rbc_build_index(
+        ctx,
+        x,
+        r,
+        x_reordered,
+        landmark_ids,
+        slot_cols,
+        slot_dists,
+        nearest,
+        nearest_dist,
+        r_indptr,
+        r_1nn_cols,
+        r_1nn_dists,
+        r_radius,
+        counts,
+        n_index,
+        n_features,
+        n_landmarks,
+    )
+
+    # `eps` IS THE RADIUS, NOT ITS SQUARE. The kernel squares it internally
+    # (`registers.mojo:253`); passing the square here silently widens every
+    # neighbourhood, which is the trap `runner.mojo:391-396` warns about.
+    var nnz = rbc_eps_nn_query_count(
+        ctx,
+        x_reordered,
+        queries,
+        r,
+        r_indptr,
+        r_1nn_cols,
+        r_1nn_dists,
+        r_radius,
+        adj_ia,
+        vd,
+        n_queries,
+        n_features,
+        n_landmarks,
+        radius,
+    )
+    _ = landmark_ids^
+    _ = slot_cols^
+    _ = slot_dists^
+    _ = nearest^
+    _ = nearest_dist^
+    _ = counts^
+    return nnz
+
+
+def _radius_check_shapes(
+    n_index: Int, n_queries: Int, n_features: Int, radius: Float32, who: String
+) raises:
+    """Every shape the ball cover cannot serve, refused by name.
+
+    Same discipline as `knn_search`: a clamp would return a wrong answer
+    quietly, and this repository has paid for that more than once.
+    """
+    if n_index <= 0:
+        raise Error(who + ": n_index must be positive, got " + String(n_index))
+    if n_queries <= 0:
+        raise Error(
+            who + ": n_queries must be positive, got " + String(n_queries)
+        )
+    if n_features <= 0:
+        raise Error(
+            who + ": n_features must be positive, got " + String(n_features)
+        )
+    if not (radius > Float32(0.0)):
+        raise Error(
+            who
+            + ": radius must be positive and finite, got "
+            + String(radius)
+            + ". A radius of zero returns each query's exact duplicates only,"
+            " which the index is not built to answer, and a negative or NaN"
+            " radius has no neighbourhood at all."
+        )
+
+
+def radius_neighbors_count(
+    ctx: DeviceContext,
+    index_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_index: Int,
+    queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_queries: Int,
+    n_features: Int,
+    radius: Float32,
+    out_indptr_ptr: MutPointer[Int32, MutUntrackedOrigin],
+) raises -> Int:
+    """Pass one: how many neighbours, and where each query's row begins.
+
+    Writes `n_queries + 1` int32 into `out_indptr_ptr`, the CSR row starts,
+    and returns the total edge count. The caller sizes its index and distance
+    arrays from the return value and calls `radius_neighbors_fill`.
+    """
+    _radius_check_shapes(
+        n_index, n_queries, n_features, radius, "radius_neighbors_count"
+    )
+    var n_landmarks = rbc_n_landmarks(n_index)
+
+    var x = ctx.enqueue_create_buffer[DType.float32](n_index * n_features)
+    var queries = ctx.enqueue_create_buffer[DType.float32](
+        n_queries * n_features
+    )
+    var r = ctx.enqueue_create_buffer[DType.float32](n_landmarks * n_features)
+    var x_reordered = ctx.enqueue_create_buffer[DType.float32](
+        n_index * n_features
+    )
+    var r_indptr = ctx.enqueue_create_buffer[DType.int32](n_landmarks + 1)
+    var r_1nn_cols = ctx.enqueue_create_buffer[DType.int32](n_index)
+    var r_1nn_dists = ctx.enqueue_create_buffer[DType.float32](n_index)
+    var r_radius = ctx.enqueue_create_buffer[DType.float32](n_landmarks)
+    var adj_ia = ctx.enqueue_create_buffer[DType.int32](n_queries + 1)
+    var vd = ctx.enqueue_create_buffer[DType.int32](n_queries + 1)
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_buf=x, src_ptr=index_ptr)
+    ctx.enqueue_copy(dst_buf=queries, src_ptr=queries_ptr)
+    ctx.synchronize()
+
+    var nnz = _rbc_index_and_count(
+        ctx,
+        x,
+        queries,
+        r,
+        x_reordered,
+        r_indptr,
+        r_1nn_cols,
+        r_1nn_dists,
+        r_radius,
+        adj_ia,
+        vd,
+        n_index,
+        n_queries,
+        n_features,
+        n_landmarks,
+        radius,
+    )
+    ctx.enqueue_copy(dst_ptr=out_indptr_ptr, src_buf=adj_ia)
+    ctx.synchronize()
+    _ = x^
+    _ = queries^
+    _ = r^
+    _ = x_reordered^
+    _ = r_indptr^
+    _ = r_1nn_cols^
+    _ = r_1nn_dists^
+    _ = r_radius^
+    _ = adj_ia^
+    _ = vd^
+    return nnz
+
+
+def radius_neighbors_fill(
+    ctx: DeviceContext,
+    index_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_index: Int,
+    queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_queries: Int,
+    n_features: Int,
+    radius: Float32,
+    out_indptr_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    out_idx_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    out_dist_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    nnz_capacity: Int,
+    return_sqrt: Bool = True,
+) raises -> Int:
+    """Pass two: the columns and the distances, in CSR order.
+
+    `nnz_capacity` is what pass one returned and what the caller allocated.
+    A larger count here means the data changed between the two calls, which
+    is refused rather than truncated: a short read would be a wrong answer
+    that looked like a right one.
+
+    Distances are recomputed from the finished CSR
+    (`neighbors/mojo_only/radius_distances.mojo`), never stored by the search
+    kernel; that file carries the reasoning and the bit-equality argument.
+    """
+    _radius_check_shapes(
+        n_index, n_queries, n_features, radius, "radius_neighbors_fill"
+    )
+    if nnz_capacity < 0:
+        raise Error(
+            "radius_neighbors_fill: nnz_capacity must not be negative, got "
+            + String(nnz_capacity)
+        )
+    var n_landmarks = rbc_n_landmarks(n_index)
+
+    var x = ctx.enqueue_create_buffer[DType.float32](n_index * n_features)
+    var queries = ctx.enqueue_create_buffer[DType.float32](
+        n_queries * n_features
+    )
+    var r = ctx.enqueue_create_buffer[DType.float32](n_landmarks * n_features)
+    var x_reordered = ctx.enqueue_create_buffer[DType.float32](
+        n_index * n_features
+    )
+    var r_indptr = ctx.enqueue_create_buffer[DType.int32](n_landmarks + 1)
+    var r_1nn_cols = ctx.enqueue_create_buffer[DType.int32](n_index)
+    var r_1nn_dists = ctx.enqueue_create_buffer[DType.float32](n_index)
+    var r_radius = ctx.enqueue_create_buffer[DType.float32](n_landmarks)
+    var adj_ia = ctx.enqueue_create_buffer[DType.int32](n_queries + 1)
+    var vd = ctx.enqueue_create_buffer[DType.int32](n_queries + 1)
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_buf=x, src_ptr=index_ptr)
+    ctx.enqueue_copy(dst_buf=queries, src_ptr=queries_ptr)
+    ctx.synchronize()
+
+    var nnz = _rbc_index_and_count(
+        ctx,
+        x,
+        queries,
+        r,
+        x_reordered,
+        r_indptr,
+        r_1nn_cols,
+        r_1nn_dists,
+        r_radius,
+        adj_ia,
+        vd,
+        n_index,
+        n_queries,
+        n_features,
+        n_landmarks,
+        radius,
+    )
+    if nnz > nnz_capacity:
+        raise Error(
+            "radius_neighbors_fill: the search found "
+            + String(nnz)
+            + " edges and the caller allocated for "
+            + String(nnz_capacity)
+            + ". The two calls saw different data. Re-run"
+            " radius_neighbors_count against the arrays this call was given"
+            " rather than truncating, which would return a subset that looks"
+            " like a complete answer."
+        )
+
+    if nnz > 0:
+        var adj_ja = ctx.enqueue_create_buffer[DType.int32](nnz)
+        var out_dist = ctx.enqueue_create_buffer[DType.float32](nnz)
+        ctx.synchronize()
+        # Under IDENTICAL this call also canonicalizes each row's column
+        # order (DEVIATION 551), which is what makes the CSR below the same
+        # bytes on every vendor.
+        rbc_eps_nn_query_fill(
+            ctx,
+            x_reordered,
+            queries,
+            r,
+            r_indptr,
+            r_1nn_cols,
+            r_1nn_dists,
+            r_radius,
+            adj_ia,
+            adj_ja,
+            n_queries,
+            n_features,
+            n_landmarks,
+            radius,
+        )
+        rbc_edge_distances(
+            ctx,
+            adj_ia,
+            adj_ja,
+            queries,
+            x,
+            out_dist,
+            n_queries,
+            n_features,
+            nnz,
+            nnz,
+            return_sqrt,
+        )
+        ctx.enqueue_copy(dst_ptr=out_idx_ptr, src_buf=adj_ja)
+        ctx.enqueue_copy(dst_ptr=out_dist_ptr, src_buf=out_dist)
+        ctx.synchronize()
+        _ = adj_ja^
+        _ = out_dist^
+
+    ctx.enqueue_copy(dst_ptr=out_indptr_ptr, src_buf=adj_ia)
+    ctx.synchronize()
+    _ = x^
+    _ = queries^
+    _ = r^
+    _ = x_reordered^
+    _ = r_indptr^
+    _ = r_1nn_cols^
+    _ = r_1nn_dists^
+    _ = r_radius^
+    _ = adj_ia^
+    _ = vd^
+    return nnz

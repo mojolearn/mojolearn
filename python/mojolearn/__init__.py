@@ -6,8 +6,8 @@ those can reach. See NOTICE for the attribution each carries.
 
 WHAT IS IN THIS ALPHA, AND WHAT IS NOT
 ---------------------------------------
-Twenty-three estimators, two submodules and two functions: `NearestNeighbors`, `KNeighborsClassifier`,
-`KNeighborsRegressor`, `KMeans`, `DBSCAN`, `PCA`, `TruncatedSVD`,
+Twenty-four estimators, two submodules and two functions: `NearestNeighbors`, `KNeighborsClassifier`,
+`KNeighborsRegressor`, `RadiusNeighbors`, `KMeans`, `DBSCAN`, `PCA`, `TruncatedSVD`,
 `LinearRegression`, `Ridge`, `LogisticRegression` (binary, L-BFGS),
 `GradientBoosting`, `RandomForestClassifier`, `RandomForestRegressor`,
 `ExtraTreesClassifier` and `ExtraTreesRegressor`.
@@ -113,6 +113,7 @@ from .neighbors import (
     KNeighborsClassifier,
     KNeighborsRegressor,
     NearestNeighbors,
+    RadiusNeighbors,
 )
 from .randomforest import RandomForestClassifier, RandomForestRegressor
 
@@ -163,6 +164,7 @@ __all__ = [
     "SpectralClustering",
     "NearestNeighbors",
     "PCA",
+    "RadiusNeighbors",
     "RandomForestClassifier",
     "RandomForestRegressor",
     "Ridge",
@@ -178,8 +180,8 @@ __all__ = [
 ]
 
 # Named absences. Importing one of these raises with a reason rather than an
-# AttributeError, because "why is RadiusNeighbors missing" is a question
-# the answer to is interesting and short. Each value names the thing that
+# AttributeError, because "why is SVR missing" is a question the answer to is
+# interesting and short. Each value names the thing that
 # EXISTS and where it stops. (`KNeighborsClassifier` / `KNeighborsRegressor`
 # were here until 2026-08-23; they are exported above now.)
 _NOT_YET = {
@@ -194,10 +196,6 @@ _NOT_YET = {
     "SVR": (
         "svm/ (C-SVC only: svmType != C_SVC raises); regression is rung 2 in "
         "svm/UNPORTED.tsv"
-    ),
-    "RadiusNeighbors": (
-        "neighbors/ported/neighbors/ball_cover/ (radius search exists for "
-        "DBSCAN's eps neighbourhood); no caller-facing surface"
     ),
 }
 

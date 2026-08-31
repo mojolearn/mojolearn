@@ -473,3 +473,199 @@ class KNeighborsRegressor(NearestNeighbors):
         if self.outputs_2d_:
             return out
         return out[:, 0]
+
+
+class RadiusNeighbors(NumericModeMixin):
+    """Every neighbour inside a radius, over the random ball cover.
+
+    scikit-learn's `RadiusNeighborsMixin.radius_neighbors` shape: a ragged
+    `(distances, indices)` pair, one variable-length array per query row.
+
+    **This is not brute force and it is not one of scikit-learn's trees.**
+    The index is cuVS's random ball cover
+    (`neighbors/ported/neighbors/ball_cover/`), which DBSCAN has used for its
+    eps neighbourhood since this library's first release. It returns the
+    EXACT set -- its pruning is a triangle-inequality bound, not an
+    approximation -- and `neighbors/mojo_only/radius_check.mojo` asserts that
+    against a host brute-force oracle per cell, not per total.
+
+    **The distances are recomputed, not stored by the search.** The search
+    kernel knows every distance at the moment it decides membership and
+    throws them away; a separate pass walks the finished neighbour list and
+    recomputes them. `neighbors/mojo_only/radius_distances.mojo` carries the
+    reasoning and the argument for why the recomputed value is the same
+    value. Under `identical` the check asserts that bit for bit.
+
+    **`sort_results=True` is done here, on the host, and that is deliberate.**
+    The device returns each row in ascending INDEX order under `identical`
+    (DEVIATION 551), so a STABLE sort by distance yields exactly
+    `(distance, index)` lexicographic order, with the index tie-break coming
+    free from the order the device already committed to. Doing it host-side
+    means the tie-break cannot depend on a lane width.
+
+    Two calls cross the boundary per query, not one, because a radius query's
+    output size is not a function of its inputs: the first counts, the caller
+    allocates, the second fills. The cost is the ball-cover index built
+    twice; `neighbors/estimator.mojo` says so where it is paid.
+    """
+
+    _BINDING = "_mojolearn"
+
+    def __init__(
+        self,
+        radius=1.0,
+        *,
+        metric="euclidean",
+        algorithm="auto",
+        p=2,
+    ):
+        self.radius = radius
+        self.metric = metric
+        self.algorithm = algorithm
+        self.p = p
+        self._index = None
+
+    def _check_refusals(self):
+        """Every refusal is BY NAME with the reason, raised at fit."""
+        if self.metric not in _EUCLIDEAN_METRICS:
+            raise ValueError(
+                f"mojolearn RadiusNeighbors: metric={self.metric!r} is "
+                "refused; only Euclidean ('euclidean', 'l2', 'minkowski' "
+                "with p=2) is ported. The ball cover's distance is "
+                "`eps_dist_sq` (neighbors/ported/neighbors/ball_cover/"
+                "common.mojo), the one arm cuVS carries: another metric is a "
+                "port, not a flag"
+            )
+        if self.metric == "minkowski" and self.p != 2:
+            raise ValueError(
+                f"mojolearn RadiusNeighbors: metric='minkowski' with p="
+                f"{self.p!r} is refused; only p=2 (Euclidean) is ported"
+            )
+        if self.algorithm != "auto":
+            raise ValueError(
+                f"mojolearn RadiusNeighbors: algorithm={self.algorithm!r} is "
+                "refused. The index here is cuVS's RANDOM BALL COVER, which "
+                "is none of scikit-learn's three: it is not 'brute' (there "
+                "is an index and it prunes), and it is neither 'ball_tree' "
+                "nor 'kd_tree' (it is a one-level cover over sqrt(n) "
+                "landmarks, not a tree). Naming any of them would describe "
+                "the wrong algorithm, so only 'auto' is accepted. The "
+                "results are exact either way"
+            )
+        if not np.isfinite(self.radius) or self.radius <= 0:
+            raise ValueError(
+                f"mojolearn RadiusNeighbors: radius={self.radius!r} is "
+                "refused; it must be positive and finite"
+            )
+
+    def fit(self, X, y=None):
+        """Store the index. The ball cover is built per query, not here.
+
+        `y` is accepted and ignored, for scikit-learn call-shape
+        compatibility. THE BALL COVER IS NOT BUILT HERE and that is a known
+        cost rather than an oversight: nothing in this library holds a fitted
+        device handle yet, and introducing the first one to save a build on
+        the first radius surface is the wrong order to do those two things
+        in. `neighbors/estimator.mojo`'s RADIUS NEIGHBOURS banner records it.
+        """
+        self._check_refusals()
+        idx, _ = as_f32_c(X, "X")
+        self._index = idx
+        self.n_samples_fit_ = idx.shape[0]
+        self.n_features_in_ = idx.shape[1]
+        return self
+
+    def radius_neighbors(
+        self, X=None, radius=None, return_distance=True, sort_results=False
+    ):
+        """Neighbours within `radius`, as ragged arrays, one row per query.
+
+        Returns `(distances, indices)` when `return_distance` is True and
+        `indices` alone otherwise, matching scikit-learn. Each element is a
+        1-D array; the arrays have different lengths, so the containers are
+        object-dtype arrays rather than a rectangular block.
+
+        `X=None` queries the fitted data against itself, as scikit-learn
+        does. Note that scikit-learn EXCLUDES each point from its own
+        neighbour list in that case and this does NOT: the ball cover returns
+        the self-edge, DBSCAN counts on it, and dropping it here would make
+        the Python surface disagree with the CSR every other consumer sees.
+        That difference is named rather than papered over.
+        """
+        if self._index is None:
+            raise ValueError(
+                "mojolearn RadiusNeighbors: call fit() before "
+                "radius_neighbors()"
+            )
+        r = float(self.radius if radius is None else radius)
+        if not np.isfinite(r) or r <= 0:
+            raise ValueError(
+                f"mojolearn RadiusNeighbors: radius={radius!r} is refused; "
+                "it must be positive and finite"
+            )
+        if sort_results and not return_distance:
+            raise ValueError(
+                "mojolearn RadiusNeighbors: sort_results=True requires "
+                "return_distance=True; there is nothing to sort by otherwise"
+            )
+
+        idx = self._index
+        if X is None:
+            q = idx
+        else:
+            q, _ = as_f32_c(X, "X")
+            if q.shape[1] != idx.shape[1]:
+                raise ValueError(
+                    f"mojolearn RadiusNeighbors: X has {q.shape[1]} features "
+                    f"but the index was fit on {idx.shape[1]}"
+                )
+        nq = q.shape[0]
+
+        indptr = np.empty(nq + 1, dtype=np.int32)
+        nnz = self._bind("_mojolearn").radius_neighbors_count(
+            _addr_ro(idx), _addr_ro(q), _addr(indptr),
+            # ORDER MATCHES bindings/_mojolearn.mojo::
+            # radius_neighbors_count_binding. n_index, n_queries, n_features,
+            # radius
+            [idx.shape[0], nq, idx.shape[1], r],
+        )
+        cols = np.empty(nnz, dtype=np.int32)
+        dists = np.empty(nnz, dtype=np.float32)
+        got = self._bind("_mojolearn").radius_neighbors_fill(
+            _addr_ro(idx), _addr_ro(q), _addr(indptr), _addr(cols),
+            _addr(dists),
+            # n_index, n_queries, n_features, radius, nnz_capacity,
+            # return_sqrt
+            [idx.shape[0], nq, idx.shape[1], r, nnz, 1],
+        )
+        # The Mojo side already refuses `got > nnz`. This asserts the other
+        # direction too, because a SHORT fill would leave the tail of `cols`
+        # uninitialised and every row after it wrong, and nothing downstream
+        # would notice.
+        if got != nnz:
+            raise RuntimeError(
+                f"mojolearn RadiusNeighbors: the counting pass found {nnz} "
+                f"neighbours and the filling pass found {got}, on the same "
+                "arrays. The two passes rebuild the index independently, so "
+                "this means the input arrays changed between them"
+            )
+
+        ind = np.empty(nq, dtype=object)
+        dst = np.empty(nq, dtype=object)
+        for i in range(nq):
+            a, b = int(indptr[i]), int(indptr[i + 1])
+            row_i = cols[a:b].astype(np.int64)
+            row_d = dists[a:b]
+            if sort_results:
+                # STABLE, and the stability is the point: the row arrives in
+                # ascending index order under `identical`, so ties in
+                # distance keep that order and the result is
+                # (distance, index) lexicographic without a second key.
+                order = np.argsort(row_d, kind="stable")
+                row_i = row_i[order]
+                row_d = row_d[order]
+            ind[i] = row_i
+            dst[i] = row_d
+        if return_distance:
+            return dst, ind
+        return ind

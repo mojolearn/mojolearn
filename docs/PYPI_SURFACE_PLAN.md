@@ -24,7 +24,7 @@ worth making deliberately rather than defaulting past: on the industrial track
 |---|---|
 | Published on PyPI | **0.1.0**, macOS arm64 wheel, both binary sets (FAST and IDENTICAL) in one wheel |
 | Estimators in the 0.1.0 release notes | 11 |
-| Estimators exported by `python/mojolearn/__init__.py` at HEAD | **16** -- the tree is five ahead of the release: `KernelDensity`, `LogisticRegression`, `Ridge`, `KNeighborsClassifier`, `KNeighborsRegressor` |
+| Estimators exported by `python/mojolearn/__init__.py` when this plan was written (2026-08-24) | **16** -- the tree was five ahead of the release: `KernelDensity`, `LogisticRegression`, `Ridge`, `KNeighborsClassifier`, `KNeighborsRegressor`. **This row said "at HEAD" and stopped being true the day after.** At 2026-08-31 the count is **24**, the additions being `SVC`, `Lasso`, `ElasticNet`, `AgglomerativeClustering`, `IsolationForest`, `SpectralClustering`, `ExponentialSmoothing` and `RadiusNeighbors`, plus the `metrics` and `linalg` submodules and the `kpss_test` / `select_d` functions. Read `python/mojolearn/__init__.py`'s `__all__`, not this table |
 
 So the first action is not new binding work at all. **Cutting 0.2.0 publishes
 five estimators that are already written, already bound and already
@@ -44,7 +44,7 @@ bit-identical on three vendors. None of it is importable.
 | `hierarchy/` | single-linkage agglomerative, MST and dendrogram; three-vendor card (8 stages) | host entry, binding, `AgglomerativeClustering` | **M** |
 | `metrics/` | r2, kl divergence, silhouette, trustworthiness, accuracy, rand/ARI, entropy, MI, h/c/v; three-vendor card (34 stages) | binding; these are FUNCTIONS not estimators, so a `mojolearn.metrics` submodule, not a class | **M -- and the highest ratio of surface to work** |
 | `spectral/` | cuVS spectral embedding + cuML spectral clustering, its own identity contract | host entry, binding, `SpectralEmbedding` / `SpectralClustering` | **L** |
-| `arima/`, `tsa/` | batched Kalman filter likelihood, KPSS, differencing order | host entries, binding, `ARIMA` | **L**, and the lane's own README says no second vendor has run it |
+| `arima/`, `tsa/` | batched Kalman filter likelihood, KPSS, differencing order | host entries, binding, `ARIMA` | **L**. `tsa`'s half SHIPPED as `kpss_test` and `select_d`. The clause here used to read "the lane's own README says no second vendor has run it", which stopped being true on 2026-08-28 when arima's card came home from a second vendor; what `ARIMA` still lacks is a `fit`, because `estimate_x0` and the batched L-BFGS driver are unported |
 | `gemm/` | `mojolearn.identical.gemm.fp32.v1`, bit-identical at 62 shapes on three vendors | a functional API (`mojolearn.linalg.matmul`), not an estimator | **S/M**, and it is the one item a non-ML user would install for |
 | `mamba/` | one Mamba-1 block, its own contract | not scikit-learn shaped; belongs behind a separate module or not at all in 0.2 | **defer** |
 

@@ -225,6 +225,26 @@ cell("knn_algorithm_kd_tree", "knn", n_neighbors=10,
      algorithm="kd_tree")  # REFUSED
 cell("knn_metric_l2", "knn", n_neighbors=10, metric="l2")  # == knn_k10
 
+# --- RadiusNeighbors (2026-08-31): index X (20000 x 24), queries Xq
+# (2000 x 24). THE THREE RADII ARE CHOSEN BY THE SIZE OF THE ANSWER, not by
+# what flatters the result: in a 24-dimensional unit cube the pairwise
+# distances concentrate hard, so 1.2 / 1.4 / 1.5 give roughly 25k / 324k /
+# 900k edges and 1.8 would give 8.6M. The three span two orders of magnitude
+# of row length, which is what makes the CSR's row-start arithmetic worth
+# hashing. A radius that returned nothing, or one that returned the whole
+# cross product, would hash a shape rather than a search.
+cell("radius_r12", "radius", radius=1.2)
+cell("radius_r14", "radius", radius=1.4)
+cell("radius_r15", "radius", radius=1.5)
+cell("radius_r14_sorted", "radius", radius=1.4, _sort=True)
+cell("radius_r14_self", "radius", radius=1.4, _Xq="X_head")  # queries in index
+cell("radius_r14_ties", "radius", radius=1.4, _X="X_ties", _Xq="Xq_ties")
+cell("radius_metric_cosine", "radius", radius=1.4,
+     metric="cosine")  # REFUSED
+cell("radius_algorithm_brute", "radius", radius=1.4,
+     algorithm="brute")  # REFUSED: the index is a ball cover, not brute force
+cell("radius_zero", "radius", radius=0.0)  # REFUSED
+
 # --- KNeighborsClassifier / KNeighborsRegressor (2026-08-23): index X,
 # queries Xq; labels y_clf3 ({-1,0,1}) / y_clf2 ({0,1}); targets y_reg.
 # The vote and the mean are serial per-row folds in both modes (DEVIATION
@@ -369,6 +389,15 @@ REACH = [
      "used_query_tile"),
     ("NearestNeighbors.metric='l2'", "knn_k10", "knn_metric_l2", "same",
      None),
+    ("RadiusNeighbors.radius", "radius_r12", "radius_r14", "differ", "nnz"),
+    # sort_results REORDERS the same set. "differ" is the right expectation
+    # here even though the set is unchanged, because `indices` and
+    # `distances` are hashed in CSR order; `nnz` is carried as the side note
+    # so a reader can see the count did NOT move, which is what distinguishes
+    # a reorder from a different search. The table's "same" arm cannot
+    # express "this field holds while those two move", so it is not used.
+    ("RadiusNeighbors.sort_results", "radius_r14", "radius_r14_sorted",
+     "differ", "nnz"),
     ("KNeighborsClassifier.n_neighbors", "knn_clf_k5", "knn_clf_k15_3class",
      "differ", None),
     ("KNeighborsRegressor.n_neighbors", "knn_reg_k5", "knn_reg_k50",
@@ -483,6 +512,23 @@ def run_cell(name, out_dir):
             entry["distances"] = sha256_of(dist)
             entry["indices"] = sha256_of(ind)
             entry["used_query_tile"] = int(m.used_query_tile_)
+        elif kind == "radius":
+            # The ragged pair is hashed as ROW LENGTHS plus the concatenated
+            # columns and distances, which is exactly the CSR the device
+            # returned. Hashing the object array itself would hash pointers.
+            want_sort = bool(spec.pop("_sort", False))
+            m = mojolearn.RadiusNeighbors(**spec).fit(X)
+            dist, ind = m.radius_neighbors(Xq, sort_results=want_sort)
+            lens = np.array([len(a) for a in ind], dtype=np.int64)
+            entry["row_lengths"] = sha256_of(lens)
+            entry["nnz"] = int(lens.sum())
+            entry["indices"] = sha256_of(
+                np.concatenate(ind) if len(ind) else np.zeros(0, np.int64)
+            )
+            entry["distances"] = sha256_of(
+                np.concatenate(dist) if len(dist) else np.zeros(0, np.float32)
+            )
+            entry["sort_results"] = want_sort
         elif kind == "knn_clf":
             m = mojolearn.KNeighborsClassifier(**spec).fit(X, y)
             # predict is the TRACED call (search stages + knn_clf.uniq_labels

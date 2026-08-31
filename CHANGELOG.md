@@ -1,5 +1,48 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **`mojolearn.RadiusNeighbors`**, every neighbor inside a radius, over
+  cuVS's random ball cover (`neighbors/ported/neighbors/ball_cover/`). The
+  index has answered DBSCAN's eps neighborhood since 0.1.0 and had no
+  caller-facing surface; it does now. The results are EXACT, not approximate:
+  the ball cover's pruning is a triangle-inequality bound, and
+  `neighbors/mojo_only/radius_check.mojo` asserts the set against a host
+  brute-force oracle per cell rather than per total.
+
+  scikit-learn's shape, with two differences named rather than papered over.
+  `algorithm` accepts only `'auto'`, because the index is neither `'brute'`
+  nor either of scikit-learn's two trees and naming one of them would
+  describe the wrong algorithm. And a self-query keeps each point's own
+  self-edge, which scikit-learn drops, because the CSR every other consumer
+  in this library sees contains it.
+
+  **The distances are recomputed from the finished neighbor list, not stored
+  by the search.** The search kernel holds every distance in a register at
+  the moment it decides membership and throws them away; adding five stores
+  to recover them would have written into a body whose banner reads "Partial.
+  Do not improve.", and would have cost `nnz * 4` bytes on every DBSCAN fit
+  in the library, in every numeric mode, to serve a surface DBSCAN does not
+  call. `neighbors/mojo_only/radius_distances.mojo` carries the reasoning and
+  the argument for why the recomputed value is the same value; under
+  `identical` the check asserts it bit for bit, and it held for all 50,670
+  edges of the fixture on Apple in BOTH modes.
+
+  `sort_results=True` sorts on the host with a STABLE sort, which is what
+  makes it free: under `identical` the device already returns each row in
+  ascending index order (DEVIATION 551), so a stable sort by distance yields
+  `(distance, index)` lexicographic order with no second key and no
+  dependence on a lane width.
+
+  Two boundary calls per query, not one, because a radius query's output size
+  is not a function of its inputs. The cost is the ball-cover index built
+  twice per query, which is written down where it is paid
+  (`neighbors/estimator.mojo`, the RADIUS NEIGHBOURS banner) and is what a
+  fitted device handle would fix. Nothing in this library holds one yet.
+
+
 ## 0.3.1 (2026-08-31)
 
 **0.3.0's Linux wheel crashes on any x86-64 host without AVX-512. Use this
@@ -255,7 +298,8 @@ each class states its own.** Read the class, not this list.
 
 `ARIMA`, `SVR` and `RadiusNeighbors` are still absent and are named in
 `mojolearn._NOT_YET`: importing one raises with the line where the thing
-that exists stops, rather than an `AttributeError`. `ARIMA` in particular
+that exists stops, rather than an `AttributeError`. (`RadiusNeighbors`
+shipped after this release; see the unreleased section at the top.) `ARIMA` in particular
 has no `fit` -- `arima/` ports the batched Kalman filter likelihood, its
 gradient and predict, but `estimate_x0` and the batched L-BFGS driver are
 NOT PORTED, and those are exactly what produces the coefficients every

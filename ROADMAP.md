@@ -135,8 +135,11 @@ What the surface needs:
 
 - `kneighbors(X, n_neighbors, return_distance)` -- the kernel exists
 - `kneighbors_graph` -- sparse wrapper over the above
-- `radius_neighbors` -- a threshold rather than a top-k, and **`ball_cover`
-  already does radius search** for DBSCAN
+- `radius_neighbors` -- **DONE 2026-08-31.** `mojolearn.RadiusNeighbors` over
+  the ball cover, with the distances recomputed from the finished CSR rather
+  than stored by the search (`neighbors/mojo_only/radius_distances.mojo`).
+  Still owed: a fitted device handle so the index is built once per fit rather
+  than once per boundary call, and the AMD leg that closes DEVIATION 551
 - `KNeighborsClassifier` / `KNeighborsRegressor` -- majority vote and mean over
   returned neighbors, both trivial
 - metrics beyond L2 (cosine, L1) -- cuVS has them, they are a port not a design

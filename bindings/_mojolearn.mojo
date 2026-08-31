@@ -80,6 +80,8 @@ from neighbors.estimator import (
     knn_classifier_predict,
     knn_regressor_predict,
     knn_search,
+    radius_neighbors_count,
+    radius_neighbors_fill,
 )
 
 
@@ -358,6 +360,95 @@ def mojolearn_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
+def radius_neighbors_count_binding(
+    index_addr: PythonObject,
+    queries_addr: PythonObject,
+    out_indptr_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Pass one of the radius query. Returns the edge count.
+
+    `params` is, in this exact order:
+
+        0  n_index
+        1  n_queries
+        2  n_features
+        3  radius        (float)
+
+    A radius query's output size is not a function of its inputs, so the
+    caller cannot allocate before this call tells it how much to allocate.
+    That is why there are two of these and not one; the reasoning is in
+    `neighbors/estimator.mojo`'s RADIUS NEIGHBOURS banner.
+    """
+    if len(params) != 4:
+        raise Error(
+            "radius_neighbors_count: params must hold 4 values, got "
+            + String(len(params))
+        )
+    var ip = _f32_ptr(Int(py=index_addr))
+    var qp = _f32_ptr(Int(py=queries_addr))
+    var ap = _i32_ptr(Int(py=out_indptr_addr))
+    var ni = Int(py=params[0])
+    var nq = Int(py=params[1])
+    var nf = Int(py=params[2])
+    var rad = Float32(Float64(py=params[3]))
+
+    var nnz: Int
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        nnz = radius_neighbors_count(ctx, ip, ni, qp, nq, nf, rad, ap)
+    return PythonObject(nnz)
+
+
+def radius_neighbors_fill_binding(
+    index_addr: PythonObject,
+    queries_addr: PythonObject,
+    out_indptr_addr: PythonObject,
+    out_idx_addr: PythonObject,
+    out_dist_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Pass two. Returns the edge count it actually found.
+
+    `params` is, in this exact order:
+
+        0  n_index
+        1  n_queries
+        2  n_features
+        3  radius          (float)
+        4  nnz_capacity    what pass one returned and the caller allocated
+        5  return_sqrt     (0 or 1)
+
+    The return value is checked against `nnz_capacity` on the Mojo side and
+    refused rather than truncated; it is returned as well so the wrapper can
+    assert the same thing rather than trust it.
+    """
+    if len(params) != 6:
+        raise Error(
+            "radius_neighbors_fill: params must hold 6 values, got "
+            + String(len(params))
+        )
+    var ip = _f32_ptr(Int(py=index_addr))
+    var qp = _f32_ptr(Int(py=queries_addr))
+    var ap = _i32_ptr(Int(py=out_indptr_addr))
+    var xp = _i32_ptr(Int(py=out_idx_addr))
+    var dp = _f32_ptr(Int(py=out_dist_addr))
+    var ni = Int(py=params[0])
+    var nq = Int(py=params[1])
+    var nf = Int(py=params[2])
+    var rad = Float32(Float64(py=params[3]))
+    var cap = Int(py=params[4])
+    var sq = Int(py=params[5]) != 0
+
+    var nnz: Int
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        nnz = radius_neighbors_fill(
+            ctx, ip, ni, qp, nq, nf, rad, ap, xp, dp, cap, sq
+        )
+    return PythonObject(nnz)
+
+
 @export
 def PyInit__mojolearn() abi("C") -> PythonObject:
     try:
@@ -367,6 +458,10 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[knn_classify_binding]("knn_classify")
         m.def_function[knn_regress_binding]("knn_regress")
         m.def_function[kmeans_fit_binding]("kmeans_fit")
+        m.def_function[radius_neighbors_count_binding](
+            "radius_neighbors_count"
+        )
+        m.def_function[radius_neighbors_fill_binding]("radius_neighbors_fill")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn module: ", e))
