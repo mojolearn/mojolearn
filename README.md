@@ -26,11 +26,20 @@ through 3.14, numpy 1.24 or later. The wheel and every runtime library in
 it are built for macOS 11 and the M1 instruction set, and the build refuses
 anything newer. There is no CPU path; every estimator runs on the GPU.
 
-A Linux x86_64 wheel under the same name is designed and tooled
-(`docs/LINUX_WHEEL.md`) and not yet published: one wheel carrying both a
-CUDA and a HIP binary set in all three tiers, the vendor picked at import
-and read back from the binary (`mojolearn.vendor()`). Until it is on PyPI,
-NVIDIA and AMD are source builds.
+A Linux x86_64 wheel under the same name is **published** and has been since
+0.3.0 (`docs/LINUX_WHEEL.md`). One wheel carries both a CUDA and a HIP binary
+set in all three tiers, the vendor is picked at import and read back from the
+binary (`mojolearn.vendor()`), and the GPU architecture is picked at import
+from five sets, `cuda/sm_80`, `cuda/sm_90a`, `hip/gfx942`, `hip/gfx1100` and
+`hip/gfx90a`. A Blackwell device gets a clean refusal rather than a crash;
+`cuda/sm_120a` is not in this release. Its host code is pinned to x86-64-v3,
+which is Haswell 2013 and Zen 1 2017 onward.
+
+**Install 0.3.1 or later on Linux, never 0.3.0.** The 0.3.0 Linux wheel's host
+code carries AVX-512 with no cpuid dispatch and dies with SIGILL on any x86_64
+host without it, which is every AMD Zen 1, 2 and 3 and most Intel consumer
+parts. It was measured on an L40 whose host was a Zen 3 EPYC, and 0.3.1 is the
+fix, verified on that same machine.
 
 ```sh
 python3 -m venv .venv && source .venv/bin/activate
@@ -319,8 +328,8 @@ and the comparison against a card from another box is
 | GPU | wheel | source build | certificates |
 |---|---|---|---|
 | Apple silicon (Metal) | yes, macOS arm64, `pip install mojolearn` | yes | E1, E2 |
-| NVIDIA (CUDA) | not yet published; the Linux wheel is designed and tooled, `docs/LINUX_WHEEL.md` | yes, `tools/e2_remote_leg.sh` | E1, E2, E2U, E3 (H100); run-to-run stability (RTX 4090) |
-| AMD CDNA (HIP) | not yet published; same wheel as CUDA, vendor picked at import | yes, same script | E1, E2, E2U, E3, stability (MI325X); E1U (MI300X) |
+| NVIDIA (CUDA) | yes, Linux x86_64 since 0.3.0, `pip install mojolearn`; sets `sm_80` and `sm_90a`, no Blackwell | yes, `tools/e2_remote_leg.sh` | E1, E2, E2U, E3 (H100); run-to-run stability (RTX 4090) |
+| AMD CDNA (HIP) | yes, same wheel as CUDA, vendor and architecture picked at import; sets `gfx942`, `gfx90a`, `gfx1100` | yes, same script | E1, E2, E2U, E3, stability (MI325X); E1U (MI300X) |
 
 Support is one source; validation is what the certificates say and nothing
 more. The benchmark table below is from one machine, an M4 laptop with 10
