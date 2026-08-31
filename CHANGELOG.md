@@ -41,8 +41,24 @@ It is not a blanket ban. The MAX runtime libraries carry AVX-512 and guard it
 behind runtime `cpuid` dispatch, so they pass; our extensions contained no
 `cpuid` at all and are held to the baseline unconditionally.
 
-Everything else in 0.3.0 is unchanged, including the six architecture sets
-and the cross-vendor bit identity.
+**0.3.1 carries FIVE architecture sets, not six.** `cuda/sm_120a`, the
+Blackwell and RTX 50 set, is not rebuilt yet: RunPod reported "no instances
+currently available" across every GPU type while this was being cut, and
+shipping the fix for a crash that hits every AMD Zen host was worth more than
+waiting for one more architecture. A Blackwell device now gets a clean
+refusal naming its architecture instead of a wheel that would have crashed on
+its host anyway. `sm_120a` returns in 0.3.2.
+
+    cuda/sm_80     A100, A40, A10, L4, L40S, RTX 30, RTX 40
+    cuda/sm_90a    H100, H200
+    hip/gfx942     MI300, MI325
+    hip/gfx1100    RX 7900, RDNA3
+    hip/gfx90a     MI210, MI250
+
+Everything else in 0.3.0 is unchanged, including the cross-vendor bit
+identity: 29 of 29 lanes hash identically between an H100 and an MI325X under
+`identical`, while 18 of those same lanes differ under `fast` and
+`deterministic`.
 
 ## 0.3.0 (2026-08-30)
 

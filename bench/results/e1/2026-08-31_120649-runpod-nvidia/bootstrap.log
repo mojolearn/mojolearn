@@ -1,0 +1,61 @@
+
+=== provenance === 16:07:58
+37845a75bf2fb129ff60bd69343fcccaa78dc051
+Linux e1da4417a46d 6.8.0-107-generic #107~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Wed Mar 18 23:40:43 UTC  x86_64 x86_64 x86_64 GNU/Linux
+
+=== pixi === 16:07:58
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 16:08:02
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 16:08:02
+phase 9: DIAG ONLY (MOJOLEARN_P9_ONLY_DIAG=1); no builds, no arms, no probes here
+phase 9 builds: <none>
+phase 9 tiers:  <none>
+concurrent probe SKIPPED: needs all three tiers, P9_TIERS=<none>
+
+=== phase 9 diag: packaging/linux/leg_diag.sh === 16:08:02
+    vendor=cuda
+    arch=sm_90a
+    gpu_archs_requested=sm_90a
+    build_rc=0 stage_rc=0
+    build_seconds=604
+    set_fast_count=10
+    set_fast_bytes=22260402
+    set_deterministic_count=10
+    set_deterministic_bytes=21945090
+    set_identical_count=10
+    set_identical_bytes=21277546
+    runtime_libs_bytes=3200416
+    runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+    driver_libs_not_staged=
+    set_tar_gz_bytes=15864896
+    smoke[fast]: NOT APPLICABLE: cross-build, box is sm_86 and the set is sm_90a
+    smoke[deterministic]: NOT APPLICABLE: cross-build, box is sm_86 and the set is sm_90a
+    smoke[identical]: NOT APPLICABLE: cross-build, box is sm_86 and the set is sm_90a
+    sabotage: NOT APPLICABLE: cross-build, box is sm_86 and the set is sm_90a
+    nogpu: NOT APPLICABLE: cross-build, box is sm_86 and the set is sm_90a
+
+=== done === 16:18:07
+artifacts in /root/mojolearn/bench/results/e1/2026-08-31_160758-e1da4417a46d
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

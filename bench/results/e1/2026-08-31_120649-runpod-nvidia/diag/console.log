@@ -1,0 +1,92 @@
+[16:08:02 leg_diag] 1/5 build_sets
+[16:08:02 build_sets] repo /root/mojolearn, dest /root/mojolearn/bench/results/e1/2026-08-31_160758-e1da4417a46d/diag/wheels, tiers: fast deterministic identical, jobs: 3
+[16:08:02 build_sets] pixi env: gbmbench
+[16:17:11 build_sets] builds finished in 549s (rc=0)
+[16:17:22 build_sets] vendor read-back per binary:
+    fast _mojolearn cuda
+    fast _mojolearn_gbdt cuda
+    fast _mojolearn_estimators cuda
+    fast _mojolearn_rf cuda
+    fast _mojolearn_trees cuda
+    fast _mojolearn_svm cuda
+    fast _mojolearn_solver cuda
+    fast _mojolearn_metrics cuda
+    fast _mojolearn_tsa cuda
+    fast _mojolearn_linalg cuda
+    deterministic _mojolearn cuda
+    deterministic _mojolearn_gbdt cuda
+    deterministic _mojolearn_estimators cuda
+    deterministic _mojolearn_rf cuda
+    deterministic _mojolearn_trees cuda
+    deterministic _mojolearn_svm cuda
+    deterministic _mojolearn_solver cuda
+    deterministic _mojolearn_metrics cuda
+    deterministic _mojolearn_tsa cuda
+    deterministic _mojolearn_linalg cuda
+    identical _mojolearn cuda
+    identical _mojolearn_gbdt cuda
+    identical _mojolearn_estimators cuda
+    identical _mojolearn_rf cuda
+    identical _mojolearn_trees cuda
+    identical _mojolearn_svm cuda
+    identical _mojolearn_solver cuda
+    identical _mojolearn_metrics cuda
+    identical _mojolearn_tsa cuda
+    identical _mojolearn_linalg cuda
+[16:17:23 build_sets] GPU architectures embedded, per binary:
+         30 sm_90a
+[16:17:23 build_sets] architecture set: sm_90a 
+[16:17:23 build_sets] architecture: sm_90a (requested: sm_90a)
+[16:17:23 build_sets] vendor: cuda
+[16:17:57 build_sets] CPU ISA baseline: clean at x86-64-v3 (30 binaries)
+[16:18:02 build_sets] patchelf: /root/mojolearn/bench/results/e1/2026-08-31_160758-e1da4417a46d/diag/wheels/tools-venv/bin/patchelf
+[16:18:02 build_sets] pixi env lib: /root/mojolearn/.pixi/envs/gbmbench/lib
+  closure verified: 4 libraries, nothing unresolved
+  staged 4: libKGENCompilerRTShared.so, libAsyncRTMojoBindings.so, libMSupportGlobals.so, libAsyncRTRuntimeGlobals.so
+  driver libraries left to the box: none
+  extensions 65.5 MB, runtime libraries 3.2 MB, uncompressed set 68.7 MB
+vendor=cuda
+arch=sm_90a
+gpu_archs_requested=sm_90a
+build_rc=0 stage_rc=0
+build_seconds=604
+set_fast_count=10
+set_fast_bytes=22260402
+set_deterministic_count=10
+set_deterministic_bytes=21945090
+set_identical_count=10
+set_identical_bytes=21277546
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=15864896
+[16:18:07 leg_diag] CROSS-BUILD: this box is sm_86 and the set is sm_90a.
+[16:18:07 leg_diag]   The set cannot run here, so smoke, sabotage and nogpu are NOT
+[16:18:07 leg_diag]   APPLICABLE and are recorded as such rather than as failures.
+[16:18:07 leg_diag]   This leg's evidence is build_rc and the architecture read-back.
+[16:18:07 leg_diag] 2/5 assemble the package as the wheel will lay it out
+[16:18:07 leg_diag] 3/5..5/5 gates (a) smoke, (b) sabotage, (d) nogpu: NOT APPLICABLE
+[16:18:07 leg_diag]   this box is sm_86, the set is sm_90a; the binaries cannot run here
+vendor=cuda  build_rc=0  smoke_rc=0  sabotage_rc=0  nogpu_rc=0
+gates=NOT APPLICABLE (cross-build: box sm_86, set sm_90a); evidence is build_rc and the read-back
+seconds=605
+vendor=cuda
+arch=sm_90a
+gpu_archs_requested=sm_90a
+build_rc=0 stage_rc=0
+build_seconds=604
+set_fast_count=10
+set_fast_bytes=22260402
+set_deterministic_count=10
+set_deterministic_bytes=21945090
+set_identical_count=10
+set_identical_bytes=21277546
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=15864896
+smoke[fast]: NOT APPLICABLE: cross-build, box is sm_86 and the set is sm_90a
+smoke[deterministic]: NOT APPLICABLE: cross-build, box is sm_86 and the set is sm_90a
+smoke[identical]: NOT APPLICABLE: cross-build, box is sm_86 and the set is sm_90a
+sabotage: NOT APPLICABLE: cross-build, box is sm_86 and the set is sm_90a
+nogpu: NOT APPLICABLE: cross-build, box is sm_86 and the set is sm_90a
