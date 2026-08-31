@@ -1,9 +1,11 @@
 # What IDENTICAL costs on the six frozen lanes: the price harness
 
-Status: **CONSTRUCTION plus one Apple device's gates; no second vendor has
-run this.** The harness is built and smoke-tested (both modes build, the mode
-witness reads back, the hash is stable); **no clean-window measurement has
-been taken yet and no timing number appears in this file.**
+Status: **FIRST CLEAN-WINDOW MEASUREMENT TAKEN 2026-08-31, and it is on AMD,
+not Apple.** MI325X, 5 alternated rounds, sha `035493e1`. Three of the six
+lanes separate from 1.0; the other three do not, and are reported as no
+separation rather than as a price. **APPLE AND NVIDIA ARE BOTH STILL OWED on
+this harness**, so nothing here is a cross-vendor statement and no row ranks
+a vendor.
 
 Files:
 
@@ -104,22 +106,44 @@ No pixi task is registered for any of this.
 ## The price table
 
 Median IDENTICAL / median FAST per lane at the shipped size, 5 alternated
-rounds, one clean window, Apple M4. **No number here yet; the first
-clean-window run fills it.**
+rounds, one clean window.
 
-| lane | size | FAST median s | IDENTICAL median s | ratio (median) | ratio band (min .. max) | date / sha / host | note |
+**AMD MI325X, 2026-08-31, sha `035493e1`, 284 s of one lease.**
+
+| lane | size | FAST median s | IDENTICAL median s | ratio (median) | ratio band (min .. max) | separates from 1.0 | bits |
 |---|---|---|---|---|---|---|---|
-| cd | 2048 x 16 | | | | | | |
-| kde | 1024 x 256 x 8 | | | | | | |
-| linkage | blobs_dups 102 x 5 | | | | | | |
-| svm | F2.xor 240 x 2 | | | | | | |
-| metrics | 2053 / 2053 / 521x4 / 301x6 | | | | | | |
-| gemm | kmeans.dist.4096x64x64 | | | | | | |
+| cd | 2048 x 16 | 0.001268 | 0.002593 | 2.045 | 1.940 .. 2.200 | YES | FAST != IDENTICAL |
+| gemm | kmeans.dist.4096x64x64 | 0.000078 | 0.000109 | 1.401 | 1.282 .. 1.548 | YES | **FAST == IDENTICAL** |
+| kde | 1024 x 256 x 8 | 0.000557 | 0.000711 | 1.277 | 1.245 .. 1.309 | YES | FAST != IDENTICAL |
+| svm | F2.xor 240 x 2 | 0.002840 | 0.003102 | 1.092 | 0.869 .. 1.217 | no | FAST != IDENTICAL |
+| linkage | blobs_dups 102 x 5 | 0.001587 | 0.001491 | 0.939 | 0.760 .. 1.220 | no | FAST != IDENTICAL |
+| metrics | 2053 / 2053 / 521x4 / 301x6 | 0.001781 | 0.001658 | 0.931 | 0.886 .. 1.109 | no | FAST != IDENTICAL |
 
-Thermal caveat to print beside every filled row: one M4 laptop, governor
-drifts up to 1.7x under heat, FAST and IDENTICAL alternated per round inside
-one window, band not figure. Nothing in this table ranks vendors or
-certifies a timing.
+**THREE OF SIX LANES DO NOT SEPARATE, AND THEY ARE NOT A FINDING.** svm,
+linkage and metrics have bands straddling 1.0, two of them with a median
+BELOW 1.0. That does not mean identity is free on those lanes, and it must
+not be quoted that way: it means this fixture at this size cannot tell the
+two arms apart through the noise, which is what a band crossing 1.0 says.
+The sizes are small -- linkage is 102 x 5 -- so launch overhead is a large
+share of every number in those rows. A separated price for them needs a
+bigger fixture, not a rerun.
+
+**gemm IS THE INTERESTING ROW.** FAST and IDENTICAL produce the SAME BITS on
+this box (`79adfe2dd5bd57e6` both) and IDENTICAL still costs 1.40x, band
+1.282 .. 1.548, comfortably clear of 1.0. Same answer, 40% more time. That
+is the clean statement of what the pins buy: not a different number here,
+but the GUARANTEE that the number cannot change, which FAST does not make
+and which on another vendor or another shape it does not keep. Read with
+`[[identity-is-not-free]]`: this row is what "conforming costs on every
+vendor" looks like when the conforming answer happens to coincide.
+
+The thermal caveat that belongs beside an APPLE row does not belong beside
+these: this is a datacenter Linux box, not the laptop. `tools/lanes_price.sh`
+printed the M4 drift note under these AMD numbers on the run that produced
+them, and was fixed in the same session.
+
+Nothing in this table ranks vendors: it holds ONE box. Apple and NVIDIA rows
+are owed.
 
 ## Hashes from the smoke run (tiny sizes; hashes are not timing)
 

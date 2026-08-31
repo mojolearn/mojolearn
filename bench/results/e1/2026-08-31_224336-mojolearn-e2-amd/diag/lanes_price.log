@@ -1,0 +1,92 @@
+== lanes_price: rounds 5, lanes [cd kde linkage svm metrics gemm], smoke 0 -> /root/mojolearn/bench/results/e1/2026-08-31_224336-mojolearn-e2-amd/diag/lanes_price ==
+== build FAST -> /root/mojolearn/bench/results/e1/2026-08-31_224336-mojolearn-e2-amd/diag/lanes_price/bin/lanes_price.FAST ==
+== build IDENTICAL (tools/with_identical_mode.sh, mojo build form) -> /root/mojolearn/bench/results/e1/2026-08-31_224336-mojolearn-e2-amd/diag/lanes_price/bin/lanes_price.IDENTICAL ==
+
+== lane cd: 5 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE cd FAST 2 rounds all 922cef459012627f
+   round 1: HASH-STABLE cd IDENTICAL 2 rounds all 3cb298860e514e8a
+   round 2: HASH-STABLE cd FAST 2 rounds all 922cef459012627f
+   round 2: HASH-STABLE cd IDENTICAL 2 rounds all 3cb298860e514e8a
+   round 3: HASH-STABLE cd FAST 2 rounds all 922cef459012627f
+   round 3: HASH-STABLE cd IDENTICAL 2 rounds all 3cb298860e514e8a
+   round 4: HASH-STABLE cd FAST 2 rounds all 922cef459012627f
+   round 4: HASH-STABLE cd IDENTICAL 2 rounds all 3cb298860e514e8a
+   round 5: HASH-STABLE cd FAST 2 rounds all 922cef459012627f
+   round 5: HASH-STABLE cd IDENTICAL 2 rounds all 3cb298860e514e8a
+
+== lane kde: 5 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE kde FAST 2 rounds all 7ea4432cb67a0a55
+   round 1: HASH-STABLE kde IDENTICAL 2 rounds all 3719b9e6a55377a7
+   round 2: HASH-STABLE kde FAST 2 rounds all 7ea4432cb67a0a55
+   round 2: HASH-STABLE kde IDENTICAL 2 rounds all 3719b9e6a55377a7
+   round 3: HASH-STABLE kde FAST 2 rounds all 7ea4432cb67a0a55
+   round 3: HASH-STABLE kde IDENTICAL 2 rounds all 3719b9e6a55377a7
+   round 4: HASH-STABLE kde FAST 2 rounds all 7ea4432cb67a0a55
+   round 4: HASH-STABLE kde IDENTICAL 2 rounds all 3719b9e6a55377a7
+   round 5: HASH-STABLE kde FAST 2 rounds all 7ea4432cb67a0a55
+   round 5: HASH-STABLE kde IDENTICAL 2 rounds all 3719b9e6a55377a7
+
+== lane linkage: 5 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE linkage FAST 2 rounds all 8038c5fc49f74652
+   round 1: HASH-STABLE linkage IDENTICAL 2 rounds all 5d3155fc940e61d2
+   round 2: HASH-STABLE linkage FAST 2 rounds all 8038c5fc49f74652
+   round 2: HASH-STABLE linkage IDENTICAL 2 rounds all 5d3155fc940e61d2
+   round 3: HASH-STABLE linkage FAST 2 rounds all 8038c5fc49f74652
+   round 3: HASH-STABLE linkage IDENTICAL 2 rounds all 5d3155fc940e61d2
+   round 4: HASH-STABLE linkage FAST 2 rounds all 8038c5fc49f74652
+   round 4: HASH-STABLE linkage IDENTICAL 2 rounds all 5d3155fc940e61d2
+   round 5: HASH-STABLE linkage FAST 2 rounds all 8038c5fc49f74652
+   round 5: HASH-STABLE linkage IDENTICAL 2 rounds all 5d3155fc940e61d2
+
+== lane svm: 5 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE svm FAST 2 rounds all 5951bd10d9eac7fe
+   round 1: HASH-STABLE svm IDENTICAL 2 rounds all 9bec403e03e1a2cc
+   round 2: HASH-STABLE svm FAST 2 rounds all 5951bd10d9eac7fe
+   round 2: HASH-STABLE svm IDENTICAL 2 rounds all 9bec403e03e1a2cc
+   round 3: HASH-STABLE svm FAST 2 rounds all 5951bd10d9eac7fe
+   round 3: HASH-STABLE svm IDENTICAL 2 rounds all 9bec403e03e1a2cc
+   round 4: HASH-STABLE svm FAST 2 rounds all 5951bd10d9eac7fe
+   round 4: HASH-STABLE svm IDENTICAL 2 rounds all 9bec403e03e1a2cc
+   round 5: HASH-STABLE svm FAST 2 rounds all 5951bd10d9eac7fe
+   round 5: HASH-STABLE svm IDENTICAL 2 rounds all 9bec403e03e1a2cc
+
+== lane metrics: 5 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE metrics FAST 2 rounds all e950a50c1d7c9c26
+   round 1: HASH-STABLE metrics IDENTICAL 2 rounds all 2321a95d3439fc2b
+   round 2: HASH-STABLE metrics FAST 2 rounds all e950a50c1d7c9c26
+   round 2: HASH-STABLE metrics IDENTICAL 2 rounds all 2321a95d3439fc2b
+   round 3: HASH-STABLE metrics FAST 2 rounds all e950a50c1d7c9c26
+   round 3: HASH-STABLE metrics IDENTICAL 2 rounds all 2321a95d3439fc2b
+   round 4: HASH-STABLE metrics FAST 2 rounds all e950a50c1d7c9c26
+   round 4: HASH-STABLE metrics IDENTICAL 2 rounds all 2321a95d3439fc2b
+   round 5: HASH-STABLE metrics FAST 2 rounds all e950a50c1d7c9c26
+   round 5: HASH-STABLE metrics IDENTICAL 2 rounds all 2321a95d3439fc2b
+
+== lane gemm: 5 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE gemm FAST 2 rounds all 79adfe2dd5bd57e6
+   round 1: HASH-STABLE gemm IDENTICAL 2 rounds all 79adfe2dd5bd57e6
+   round 2: HASH-STABLE gemm FAST 2 rounds all 79adfe2dd5bd57e6
+   round 2: HASH-STABLE gemm IDENTICAL 2 rounds all 79adfe2dd5bd57e6
+   round 3: HASH-STABLE gemm FAST 2 rounds all 79adfe2dd5bd57e6
+   round 3: HASH-STABLE gemm IDENTICAL 2 rounds all 79adfe2dd5bd57e6
+   round 4: HASH-STABLE gemm FAST 2 rounds all 79adfe2dd5bd57e6
+   round 4: HASH-STABLE gemm IDENTICAL 2 rounds all 79adfe2dd5bd57e6
+   round 5: HASH-STABLE gemm FAST 2 rounds all 79adfe2dd5bd57e6
+   round 5: HASH-STABLE gemm IDENTICAL 2 rounds all 79adfe2dd5bd57e6
+
+== ratio table (written to /root/mojolearn/bench/results/e1/2026-08-31_224336-mojolearn-e2-amd/diag/lanes_price/ratio.tsv) ==
+lane     n  FAST med s IDENT med s   ratio     min     max  FAST hash        IDENT hash       hash note
+cd       5    0.001268    0.002593   2.045   1.940   2.200  922cef459012627f 3cb298860e514e8a fast!=ident bits
+kde      5    0.000557    0.000711   1.277   1.245   1.309  7ea4432cb67a0a55 3719b9e6a55377a7 fast!=ident bits
+linkage  5    0.001587    0.001491   0.939   0.760   1.220  8038c5fc49f74652 5d3155fc940e61d2 fast!=ident bits
+svm      5    0.002840    0.003102   1.092   0.869   1.217  5951bd10d9eac7fe 9bec403e03e1a2cc fast!=ident bits
+metrics  5    0.001781    0.001658   0.931   0.886   1.109  e950a50c1d7c9c26 2321a95d3439fc2b fast!=ident bits
+gemm     5    0.000078    0.000109   1.401   1.282   1.548  79adfe2dd5bd57e6 79adfe2dd5bd57e6 fast==ident bits
+
+READ THE RATIO AS A BAND: min/max are the per-round paired ratios
+(IDENTICAL_r / FAST_r) over 5 alternated rounds on one M4 whose
+governor drifts 1.7x under heat. The median is the band's center,
+not a figure to four places. Copy the row into bench/LANES_PRICE.md
+with the date, the sha, the machine and the thermal caveat beside it.
+
+== done: /root/mojolearn/bench/results/e1/2026-08-31_224336-mojolearn-e2-amd/diag/lanes_price ==
