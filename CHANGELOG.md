@@ -1,6 +1,54 @@
 # Changelog
 
+## 0.3.1 (2026-08-31)
+
+**0.3.0's Linux wheel crashes on any x86-64 host without AVX-512. Use this
+one.** The macOS wheel was never affected.
+
+`pip install mojolearn` on a Linux box whose CPU lacked AVX-512 imported
+cleanly, reported its vendor and architecture correctly, and then died with
+`SIGILL` and a core dump on the first `fit()`. Measured on an L40 whose host
+was an AMD EPYC 7773X:
+
+    vandps 0x6d7ee(%rip){1to4},%xmm2,%xmm2
+    in cluster::estimator::kmeans_fit
+
+`{1to4}` is an EVEX embedded broadcast. **The GPU was never involved**; the
+selector had correctly chosen `cuda` and then `sm_80` for that `sm_89`
+device. Every AMD Zen 1, 2 and 3 host, most Intel consumer parts and every
+Xeon before Skylake-SP would have crashed identically, and all thirty
+extensions carried it, not just k-means.
+
+**Cause.** `mojo build` defaults `--target-cpu` to the chip that ran the
+compiler, and the Linux branch of every build script passed no CPU flag at
+all, so the sets were compiled for whatever the build boxes had. All four had
+AVX-512. macOS has pinned `--target-cpu apple-m1` and gated the result with
+`packaging/isa_baseline.py` since 0.1.0; Linux pinned nothing and gated
+nothing.
+
+**Fix.** All ten build scripts pin `--target-cpu x86-64-v3` on Linux x86_64,
+which is AVX2, FMA, BMI2 and SSE4.2, so Haswell 2013 and Zen 1 2017 onward,
+and excludes AVX-512. `MOJOLEARN_LINUX_CPU` overrides it. aarch64 Linux keeps
+its previous behaviour, since an x86 CPU name means nothing there.
+
+**Gate, so it cannot regress.** `packaging/linux/isa_baseline_linux.py`
+disassembles every binary in a set and refuses `zmm` registers, `{1toN}` EVEX
+broadcasts, `k0`-`k7` opmasks and the named AVX-512 opcodes; `build_sets.sh`
+runs it and exits 5. It refuses 30 of the 34 binaries in the 0.3.0 set, which
+is how it was verified.
+
+It is not a blanket ban. The MAX runtime libraries carry AVX-512 and guard it
+behind runtime `cpuid` dispatch, so they pass; our extensions contained no
+`cpuid` at all and are held to the baseline unconditionally.
+
+Everything else in 0.3.0 is unchanged, including the six architecture sets
+and the cross-vendor bit identity.
+
 ## 0.3.0 (2026-08-30)
+
+> **WITHDRAWN IN PRACTICE. 0.3.0's Linux wheel crashes with SIGILL on any
+> x86-64 host without AVX-512, which includes all AMD Zen 1, 2 and 3 parts.
+> Use 0.3.1. The macOS wheel is unaffected.**
 
 **The Linux wheel.** One PyPI name, `pip install mojolearn`, no extras, no
 variants. The vendor AND the GPU architecture are detected at import and the

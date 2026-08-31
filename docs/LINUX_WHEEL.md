@@ -432,9 +432,12 @@ re-derive it.
   "runs on the architectures it carries", and the family fallback is an
   escape hatch rather than a promise. The per-architecture build legs
   themselves (one leg per carried architecture, both vendors) are owed the
-  same way. (The host CPU is NOT part of this question: the ISA theory
-  raised on 2026-08-30 was tested three ways and is dead. See
-  `bench/results/wheels/LEGS_2026-08-30.md`.)
+  same way. **The host CPU IS part of this question and this sentence used
+  to say it was not.** 0.3.0's Linux wheel carried AVX-512 in its host code
+  and died with SIGILL on an L40 whose host was an AMD EPYC 7773X. Fixed in
+  `cfb665d2` by pinning `--target-cpu x86-64-v3` and gating with
+  `packaging/linux/isa_baseline_linux.py`. See the correction at the end of
+  `bench/results/wheels/LEGS_2026-08-30.md`.
 * ~~**`MOJOLEARN_VENDOR=hip` aborts rather than raising when the HIP runtime
   is absent entirely.**~~ FIXED 2026-08-30 by refusing in the selector; see
   section 3 and section 5. The original finding, kept because the measurement
