@@ -1,0 +1,1079 @@
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:71:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:97:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = value
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:71:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:102:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:71:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:102:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:71:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:102:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                                      ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:71:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/row_norms.mojo:58:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/pinned_reduce.mojo:105:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var total = red[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:436:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    sx[r * FKNN_SMEM_STRIDE + c] = v
+                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:445:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    sy[r2 * FKNN_SMEM_STRIDE + c2] = v2
+                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:459:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:461:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        regy[j] = sy[
+                                  ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:475:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                    sx[(tr + 0) * FKNN_SMEM_STRIDE + kk]
+                                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:486:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                    sx[
+                                    ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:508:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:518:17: warning: '@parameter for' is deprecated; use 'comptime for'
+                @parameter
+                ^~~~~~~~~~
+                comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:532:17: warning: '@parameter for' is deprecated; use 'comptime for'
+                @parameter
+                ^~~~~~~~~~
+                comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:633:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:664:25: warning: '@parameter for' is deprecated; use 'comptime for'
+                        @parameter
+                        ^~~~~~~~~~
+                        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:669:25: warning: '@parameter for' is deprecated; use 'comptime for'
+                        @parameter
+                        ^~~~~~~~~~
+                        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:739:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:98:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:220:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_K] = Int32(k)
+        ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:98:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:221:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_LEN] = Int32(length)
+        ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:98:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:222:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_PREVIOUS_LEN] = Int32(length)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:98:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:223:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:98:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:224:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_BACK_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:98:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:225:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        kth_bits[0] = UInt32(0)
+        ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:98:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:251:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_len = Int(ctr[CTR_LEN])
+                              ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:98:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:252:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_k = Int(ctr[CTR_K])
+                            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:98:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:253:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var previous_len = Int(ctr[CTR_PREVIOUS_LEN])
+                               ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:98:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:265:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = Int32(0)
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:98:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:267:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_FILTER_CNT] = Int32(0)
+            ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:98:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:272:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var kth = kth_bits[0]
+                  ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:98:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:330:69: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var scanned = block_prefix_sum[block_size=SELECT_BLOCK](hist[tid])
+                                                                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:98:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:331:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = scanned
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:98:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:337:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            prev_count = hist[tid - 1]
+                         ~~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:98:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:338:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var cur_count = hist[tid]
+                        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:98:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:342:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_K] = Int32(current_k - Int(prev_count))
+            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:98:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:343:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_LEN] = Int32(Int(cur_count) - Int(prev_count))
+            ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:98:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:344:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (UInt32(tid) << UInt32(start_bit))
+            ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:98:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:344:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (UInt32(tid) << UInt32(start_bit))
+                          ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:98:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:347:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_PREVIOUS_LEN] = Int32(current_len)
+            ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:98:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:351:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES - 1:
+               ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:98:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:351:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES - 1:
+                                    ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:98:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:353:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var lf_kth = kth_bits[0]
+                         ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:98:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_radix.mojo:355:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var needed = Int(ctr[CTR_K])
+                             ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:197:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_K] = Int32(k)
+        ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:198:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_LEN] = Int32(length)
+        ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:199:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_PREVIOUS_LEN] = Int32(length)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:200:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:201:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        kth_bits[0] = UInt64(0)
+        ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:225:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_len = Int(ctr[CTR_LEN])
+                              ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:226:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_k = Int(ctr[CTR_K])
+                            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:227:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var previous_len = Int(ctr[CTR_PREVIOUS_LEN])
+                               ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:237:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = Int32(0)
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:239:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_FILTER_CNT] = Int32(0)
+            ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:244:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var kth = kth_bits[0]
+                  ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:288:69: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var scanned = block_prefix_sum[block_size=SELECT_BLOCK](hist[tid])
+                                                                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:289:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = scanned
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:294:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            prev_count = hist[tid - 1]
+                         ~~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:295:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var cur_count = hist[tid]
+                        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:297:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_K] = Int32(current_k - Int(prev_count))
+            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:298:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_LEN] = Int32(Int(cur_count) - Int(prev_count))
+            ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:299:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (
+            ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:299:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (
+                          ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:304:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_PREVIOUS_LEN] = Int32(current_len)
+            ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:307:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES_64 - 1:
+               ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:307:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES_64 - 1:
+                                    ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:313:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var lf_kth = kth_bits[0]
+                         ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:354:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        s_val[tid] = o_val.unsafe_load(tid)
+        ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:355:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        s_idx[tid] = o_idx.unsafe_load(tid)
+        ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:358:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var key_t = composite_key(s_val[tid], s_idx[tid], select_min)
+                                  ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:358:52: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var key_t = composite_key(s_val[tid], s_idx[tid], select_min)
+                                              ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:361:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if composite_key(s_val[j], s_idx[j], select_min) < key_t:
+                             ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:361:45: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if composite_key(s_val[j], s_idx[j], select_min) < key_t:
+                                       ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:363:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        o_val.unsafe_store(rank, s_val[tid])
+                                 ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:91:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/mojo_only/select_radix_identical.mojo:364:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        o_idx.unsafe_store(rank, s_idx[tid])
+                                 ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:102:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:682:15: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    val_smem: UnsafePointer[
+              ^~~~~~~~~~~~~
+              Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:102:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:687:15: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    idx_smem: UnsafePointer[
+              ^~~~~~~~~~~~~
+              Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:234:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:280:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:102:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:535:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:102:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:548:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:102:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:299:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:102:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:430:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:102:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:622:18: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        out_val: UnsafePointer[
+                 ^~~~~~~~~~~~~
+                 Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:102:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:627:18: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        out_idx: UnsafePointer[
+                 ^~~~~~~~~~~~~
+                 Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:102:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:569:17: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        in_val: UnsafePointer[
+                ^~~~~~~~~~~~~
+                Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:102:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:574:17: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        in_idx: UnsafePointer[
+                ^~~~~~~~~~~~~
+                Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:234:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:185:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:234:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:192:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:234:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:224:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:234:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:339:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:234:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:350:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:234:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:363:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:234:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:372:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:234:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:376:13: warning: '@parameter if' is deprecated; use 'comptime if'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:234:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:387:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:102:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:516:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:102:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:599:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:102:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:645:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:102:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:664:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:102:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:281:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:102:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:365:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:102:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/matrix/detail/select_warpsort.mojo:373:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:234:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:277:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:234:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:287:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:234:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:293:13: warning: '@parameter if' is deprecated; use 'comptime if'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:234:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:444:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:234:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:194:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:234:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:203:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:234:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:226:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:234:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:230:9: warning: '@parameter if' is deprecated; use 'comptime if'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:234:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:237:13: warning: '@parameter if' is deprecated; use 'comptime if'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:234:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:414:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:135:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:52:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/estimator.mojo:109:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/knn_brute_force.mojo:108:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/fused_l2_knn.mojo:234:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/select.mojo:107:
+/Users/andrewhendel/CascadeProjects/mojolearn/neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo:431:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:131:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/cluster/detail/spectral.mojo:34:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:33:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/kmeans.mojo:62:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/mojo_only/plus_plus.mojo:245:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        carry[0] = Float32(0.0)
+        ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:131:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/cluster/detail/spectral.mojo:34:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:33:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/kmeans.mojo:62:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/mojo_only/plus_plus.mojo:256:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            csum.unsafe_store(i, base + carry[0] + inc)
+                                        ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:131:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/cluster/detail/spectral.mojo:34:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:33:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/kmeans.mojo:62:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/mojo_only/plus_plus.mojo:259:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            carry[0] = carry[0] + inc
+            ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:131:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/cluster/detail/spectral.mojo:34:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:33:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/kmeans.mojo:62:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/mojo_only/plus_plus.mojo:259:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            carry[0] = carry[0] + inc
+                       ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:131:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/cluster/detail/spectral.mojo:34:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:37:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:71:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/distance/fused_distance_nn/simt_kernel.mojo:476:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    s_xnorm[i] = nv
+                    ~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:131:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/cluster/detail/spectral.mojo:34:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:37:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:71:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/distance/fused_distance_nn/simt_kernel.mojo:484:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                s_ynorm[i2] = nv2
+                ~~~~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:131:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/cluster/detail/spectral.mojo:34:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:37:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:71:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/distance/fused_distance_nn/simt_kernel.mojo:492:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                rxn[i] = s_xnorm[i * tr + accrowid]
+                         ~~~~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:131:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/cluster/detail/spectral.mojo:34:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:37:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:71:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/distance/fused_distance_nn/simt_kernel.mojo:495:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                ryn[j] = s_ynorm[j * tc + acccolid]
+                         ~~~~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:110:
+/Users/andrewhendel/CascadeProjects/mojolearn/decomposition/mojo_only/jacobi_eigh.mojo:85:25: warning: assignment to 't' was never used; assign to '_' instead?
+                var t = 0.0
+                        ^
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:141:
+/Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/sparse/op/coo_ops.mojo:112:9: warning: ref 'i' was never used, remove it?
+    for i in range(n):
+        ^
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:131:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/cluster/detail/spectral.mojo:34:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:37:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:195:41: warning: assignment to 'data_batch' was never used; assign to '_' instead?
+    var data_batch = get_data_batch_size(batch_samples, n_samples)
+                                        ^
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/mojo_only/spectral_check.mojo:131:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/spectral/ported/cuvs/cluster/detail/spectral.mojo:34:
+Included from /Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/kmeans.mojo:37:
+/Users/andrewhendel/CascadeProjects/mojolearn/cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:196:50: warning: assignment to 'centroid_batch' was never used; assign to '_' instead?
+    var centroid_batch = get_centroids_batch_size(batch_centroids, n_clusters)
+                                                 ^
+== spectral/mojo_only/spectral_check.mojo [IDENTICAL] sabotage=none ==
+check_tsolve_against_float64_jacobi OK: 12x12 hashed, 7 sweeps, worst eigenvalue error 3.158706798345179e-07, worst orthonormality 2.9802322e-07, 12 signs pinned
+check_tsolve_sign_pin_skips_signed_zero OK: a leading -0.0/+0.0 is skipped, the first nonzero decides, an all-zero column is untouched
+check_tsolve_tie_order_is_stable OK: diag(1,0,0,2), the DOUBLE eigenvalue 0 comes back as columns e_1 then e_2 -- original index order, the DEVIATION 778 tie rule, which no other check in this lane can see
+check_vacuous_control_fires OK: 2 of 2 clauses RAISED VACUOUS (zero cells, and two empty cards -- which first_divergence reports as AGREEMENT, confirmed here before the guard runs), and the guard stays silent on a populated 12-stage card
+check_oracle_dot_is_the_gemm_contract OK: k = 100 (1 leaf), 257 (3 leaves), 1000 (8 leaves), bit for bit
+check_spectral_ring_exact OK: C_64 unnormalized, 5 Ritz values on the closed-form spectrum 2 - 2cos(2 pi j/64) within 3.573783744492687e-07 (multiset {0, l1, l1, l2, l2} matched); converged=True restarts=7; DEGENERACY RECORDED: 2 double eigenvalues among the 5 -- the eigenvector basis inside each pair is a pure function of the bits but not a continuous one
+check_spectral_path_exact OK: P_64 normalized, 4 Ritz values = 1 - cos(pi j/63), j=0..3, within 8.44495188223604e-08, all simple; converged=True restarts=7
+check_spectral_dense_jacobi_crosscheck OK: hashed graph n=48 nnz=352: Float32 Lanczos within 6.693425924630958e-08 and Float64 Lanczos within 9.158285241284148e-12 of decomposition's dense Float64 Jacobi (4 smallest); f32 restarts=2 f64 restarts=2
+check_spectral_refusals_host OK: 4 of 4 clauses -- 3 refusals raised by name, and coo_sort ADMITS the zero padding it must (DEVIATION 777)
+check_spectral_signed_zero OK: planted -0.0, +0.0, +-5e-8 -> +0.0 (0x00000000) on device and host; -2e-7, +-1, 1e-7 untouched (the select is value-first, no max/min)
+check_spectral_device_equals_oracle OK [IDENTICAL]: path, ring, hashed, hashed_unnorm(n=300), tiny_ncv_clamp(n=22, the ncv clamp bound), blobs(dataset path): every stage hash (L, diag, v0, each step's alpha/beta, each restart's Ritz values and residual, the Ritz vectors, the embedding) and every embedding cell bit for bit; sabotage=none
+check_spectral_knn_graph_matches_host OK: blobs n=144 k=10: 1832 entries, 784 one-directional (0.5), 1048 mutual (1.0), every entry equal to the Float64 host kNN symmetrized
+check_spectral_disconnected_graph_records_the_limit OK: blobs at n_neighbors=10 give a kNN graph with EXACTLY 3 CONNECTED COMPONENTS (asserted, structural), so L's null space is triple-degenerate. RECORDED (not asserted): the ported single-vector Lanczos returned 2 of 3 near-zero Ritz values, eigenvalues of L = 0.16515295207500458 -1.5430924094061993e-08 -5.154595328349387e-08 -- a multiplicity a single-vector Krylov method cannot resolve by construction, and the reason check_spectral_blobs_separate runs on a CONNECTED graph instead
+check_spectral_blobs_separate OK: 3 blobs x 48, d=4, n_neighbors=52 (CONNECTED, L's 3 smallest eigenvalues simple): the 2-d embedding puts 144 of 144 points nearest their own blob's centroid
+check_spectral_launch_invariance OK [IDENTICAL]: hashed graph n=200: embedding bytes identical across laplacian_tpb 256/64, lanczos_tpb 256/32, scratch pad 0/37 with poisons -987654/13.5, and a repeat; matvec rows bit-equal inside a 48-row and a 96-row block-diagonal graph at tpb 128/32
+check_spectral_card_is_emitted OK: 123 stages, two runs agree line for line, the 15 documented tags present
+check_spectral_refusals_device OK: 5 of 5 refusals raised by name
+check_spectral_clustering_labels OK: RUNG 2 -- k-means (n_init=10, classic k-means++) on the 3-column embedding of 3 blobs x 48 recovers the planted partition exactly (blob->label 1,2,0)
+== spectral/mojo_only/spectral_check.mojo [IDENTICAL] ALL PASSED ==

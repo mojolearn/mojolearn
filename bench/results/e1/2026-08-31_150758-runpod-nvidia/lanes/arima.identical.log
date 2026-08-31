@@ -1,0 +1,297 @@
+646 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x589880000000, nodemask=170)
+Imported from /root/mojolearn/arima/mojo_only/arima_check.mojo:80:
+/root/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/arima/mojo_only/arima_check.mojo:80:
+/root/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/arima/mojo_only/arima_check.mojo:80:
+/root/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/arima/mojo_only/arima_check.mojo:80:
+/root/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/arima/mojo_only/arima_check.mojo:80:
+/root/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+646 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x527080000000, nodemask=85)
+== arima/mojo_only/arima_check.mojo [IDENTICAL] N_OBS=24 SALT=7 ==
+check_jones_device_equals_oracle [IDENTICAL]
+      arima.jones.fwd.p1.ma: 6 cells, 0 differ
+      arima.jones.inv.p1.ma: 6 cells, 0 differ
+      round trip p=1 ma: worst relative 2.7318796132676714e-06 (REPORTED, DEVIATION 675)
+      arima.jones.fwd.p1.ar: 6 cells, 0 differ
+      arima.jones.inv.p1.ar: 6 cells, 0 differ
+      round trip p=1 ar: worst relative 2.7318796132676714e-06 (REPORTED, DEVIATION 675)
+      arima.jones.fwd.p2.ma: 12 cells, 0 differ
+      arima.jones.inv.p2.ma: 12 cells, 0 differ
+      round trip p=2 ma: worst relative 2.7318796132676714e-06 (REPORTED, DEVIATION 675)
+      arima.jones.fwd.p2.ar: 12 cells, 0 differ
+      arima.jones.inv.p2.ar: 12 cells, 0 differ
+      round trip p=2 ar: worst relative 2.7318796132676714e-06 (REPORTED, DEVIATION 675)
+      arima.jones.fwd.p3.ma: 18 cells, 0 differ
+      arima.jones.inv.p3.ma: 18 cells, 0 differ
+      round trip p=3 ma: worst relative 2.7318796132676714e-06 (REPORTED, DEVIATION 675)
+      arima.jones.fwd.p3.ar: 18 cells, 0 differ
+      arima.jones.inv.p3.ar: 18 cells, 0 differ
+      round trip p=3 ar: worst relative 2.7318796132676714e-06 (REPORTED, DEVIATION 675)
+      arima.jones.fwd.p4.ma: 24 cells, 0 differ
+      arima.jones.inv.p4.ma: 24 cells, 0 differ
+      round trip p=4 ma: worst relative 2.7318796132676714e-06 (REPORTED, DEVIATION 675)
+      arima.jones.fwd.p4.ar: 24 cells, 0 differ
+      arima.jones.inv.p4.ar: 24 cells, 0 differ
+      round trip p=4 ar: worst relative 1.0554989414897822e-06 (REPORTED, DEVIATION 675)
+check_jones_refuses_by_name [IDENTICAL]
+    batchSize < 1: raised: jones_transform: unsupported batchSize 0
+    parameter < 1: raised: jones_transform: unsupported parameter 0
+    parameter > 8: raised: jones_transform: unsupported parameter 9
+check_jones_contraction_is_visible [IDENTICAL]
+    of 160 accumulations, the two spellings differ on 27
+check_kalman_device_equals_oracle [IDENTICAL]
+    arma11_k (p1 d0 q1 P0 D0 Q0 s0 k1) rd=2 r=2
+      arma11_k.Z: 12 cells, 0 differ
+      arma11_k.R: 12 cells, 0 differ
+      arma11_k.T: 24 cells, 0 differ
+      arma11_k.RQ: 12 cells, 0 differ
+      arma11_k.RQR: 24 cells, 0 differ
+      arma11_k.P0: 24 cells, 0 differ
+      arma11_k.alpha0: 12 cells, 0 differ
+      arma11_k.pred: 144 cells, 0 differ
+      arma11_k.vs: 144 cells, 0 differ
+      arma11_k.loglike: 6 cells, 0 differ
+      arma11_k.fc: 18 cells, 0 differ
+      loglike[0] = -91.055336 0xc2b61c55
+    ar1 (p1 d0 q0 P0 D0 Q0 s0 k0) rd=1 r=1
+      ar1.Z: 6 cells, 0 differ
+      ar1.R: 6 cells, 0 differ
+      ar1.T: 6 cells, 0 differ
+      ar1.RQ: 6 cells, 0 differ
+      ar1.RQR: 6 cells, 0 differ
+      ar1.P0: 6 cells, 0 differ
+      ar1.alpha0: 6 cells, 0 differ
+      ar1.pred: 144 cells, 0 differ
+      ar1.vs: 144 cells, 0 differ
+      ar1.loglike: 6 cells, 0 differ
+      ar1.fc: 18 cells, 0 differ
+      loglike[0] = -69.86106 0xc28bb8dd
+    ma2 (p0 d0 q2 P0 D0 Q0 s0 k0) rd=3 r=3
+      ma2.Z: 18 cells, 0 differ
+      ma2.R: 18 cells, 0 differ
+      ma2.T: 54 cells, 0 differ
+      ma2.RQ: 18 cells, 0 differ
+      ma2.RQR: 54 cells, 0 differ
+      ma2.P0: 54 cells, 0 differ
+      ma2.alpha0: 18 cells, 0 differ
+      ma2.pred: 144 cells, 0 differ
+      ma2.vs: 144 cells, 0 differ
+      ma2.loglike: 6 cells, 0 differ
+      ma2.fc: 18 cells, 0 differ
+      loglike[0] = -63.1545 0xc27c9e35
+    arima111 (p1 d1 q1 P0 D0 Q0 s0 k0) rd=3 r=2
+      arima111.Z: 18 cells, 0 differ
+      arima111.R: 18 cells, 0 differ
+      arima111.T: 54 cells, 0 differ
+      arima111.RQ: 18 cells, 0 differ
+      arima111.RQR: 54 cells, 0 differ
+      arima111.P0: 54 cells, 0 differ
+      arima111.alpha0: 18 cells, 0 differ
+      arima111.pred: 144 cells, 0 differ
+      arima111.vs: 144 cells, 0 differ
+      arima111.loglike: 6 cells, 0 differ
+      arima111.fc: 18 cells, 0 differ
+      loglike[0] = -37.35817 0xc2156ec4
+    arima212 (p2 d1 q2 P0 D0 Q0 s0 k1) rd=4 r=3
+      arima212.Z: 24 cells, 0 differ
+      arima212.R: 24 cells, 0 differ
+      arima212.T: 96 cells, 0 differ
+      arima212.RQ: 24 cells, 0 differ
+      arima212.RQR: 96 cells, 0 differ
+      arima212.P0: 96 cells, 0 differ
+      arima212.alpha0: 24 cells, 0 differ
+      arima212.pred: 144 cells, 0 differ
+      arima212.vs: 144 cells, 0 differ
+      arima212.loglike: 6 cells, 0 differ
+      arima212.fc: 18 cells, 0 differ
+      loglike[0] = -45.100548 0xc23466f6
+    ar2_unit (p2 d0 q0 P0 D0 Q0 s0 k0) rd=2 r=2
+      ar2_unit.Z: 12 cells, 0 differ
+      ar2_unit.R: 12 cells, 0 differ
+      ar2_unit.T: 24 cells, 0 differ
+      ar2_unit.RQ: 12 cells, 0 differ
+      ar2_unit.RQR: 24 cells, 0 differ
+      ar2_unit.P0: 24 cells, 0 differ
+      ar2_unit.alpha0: 12 cells, 0 differ
+      ar2_unit.pred: 144 cells, 0 differ
+      ar2_unit.vs: 144 cells, 0 differ
+      ar2_unit.loglike: 6 cells, 0 differ
+      ar2_unit.fc: 18 cells, 0 differ
+      loglike[0] = -167.04616 0xc3270bd1
+    sarima_full (p1 d1 q1 P1 D1 Q1 s2 k0) rd=7 r=4
+      sarima_full.Z: 42 cells, 0 differ
+      sarima_full.R: 42 cells, 0 differ
+      sarima_full.T: 294 cells, 0 differ
+      sarima_full.RQ: 42 cells, 0 differ
+      sarima_full.RQR: 294 cells, 0 differ
+      sarima_full.P0: 294 cells, 0 differ
+      sarima_full.alpha0: 42 cells, 0 differ
+      sarima_full.pred: 144 cells, 0 differ
+      sarima_full.vs: 144 cells, 0 differ
+      sarima_full.loglike: 6 cells, 0 differ
+      sarima_full.fc: 18 cells, 0 differ
+      loglike[0] = -53.58188 0xc25653d8
+    sarima_rd8 (p1 d1 q0 P0 D1 Q1 s3 k0) rd=8 r=4
+      sarima_rd8.Z: 48 cells, 0 differ
+      sarima_rd8.R: 48 cells, 0 differ
+      sarima_rd8.T: 384 cells, 0 differ
+      sarima_rd8.RQ: 48 cells, 0 differ
+      sarima_rd8.RQR: 384 cells, 0 differ
+      sarima_rd8.P0: 384 cells, 0 differ
+      sarima_rd8.alpha0: 48 cells, 0 differ
+      sarima_rd8.pred: 144 cells, 0 differ
+      sarima_rd8.vs: 144 cells, 0 differ
+      sarima_rd8.loglike: 6 cells, 0 differ
+      sarima_rd8.fc: 18 cells, 0 differ
+      loglike[0] = -42.83408 0xc22b5619
+    arma44 (p4 d0 q4 P0 D0 Q0 s0 k0) rd=5 r=5
+      arma44.Z: 30 cells, 0 differ
+      arma44.R: 30 cells, 0 differ
+      arma44.T: 150 cells, 0 differ
+      arma44.RQ: 30 cells, 0 differ
+      arma44.RQR: 150 cells, 0 differ
+      arma44.P0: 150 cells, 0 differ
+      arma44.alpha0: 30 cells, 0 differ
+      arma44.pred: 144 cells, 0 differ
+      arma44.vs: 144 cells, 0 differ
+      arma44.loglike: 6 cells, 0 differ
+      arma44.fc: 18 cells, 0 differ
+      loglike[0] = -52.672462 0xc252b09a
+    ar2_tie (p2 d0 q0 P0 D0 Q0 s0 k0) rd=2 r=2
+      ar2_tie.Z: 12 cells, 0 differ
+      ar2_tie.R: 12 cells, 0 differ
+      ar2_tie.T: 24 cells, 0 differ
+      ar2_tie.RQ: 12 cells, 0 differ
+      ar2_tie.RQR: 24 cells, 0 differ
+      ar2_tie.P0: 24 cells, 0 differ
+      ar2_tie.alpha0: 12 cells, 0 differ
+      ar2_tie.pred: 144 cells, 0 differ
+      ar2_tie.vs: 144 cells, 0 differ
+      ar2_tie.loglike: 6 cells, 0 differ
+      ar2_tie.fc: 18 cells, 0 differ
+      loglike[0] = -40.8328 0xc22354ca
+check_lyapunov_solves_the_equation [IDENTICAL]
+    arma11_k: worst relative Lyapunov residual 7.28116301225436e-08
+    ar1: worst relative Lyapunov residual 9.259486391272264e-08
+    ma2: worst relative Lyapunov residual 8.195638656616211e-08
+    arima111: worst relative Lyapunov residual 7.28116301225436e-08
+    arima212: worst relative Lyapunov residual 1.9170555855109027e-07
+    ar2_unit: worst relative Lyapunov residual 3.5050333563956014e-06
+    sarima_full: worst relative Lyapunov residual 4.271336096288293e-07
+    sarima_rd8: worst relative Lyapunov residual 1.8621002671448099e-07
+    arma44: worst relative Lyapunov residual 4.627797894473332e-07
+    ar2_tie: worst relative Lyapunov residual 1.2414309601642617e-07
+check_predict_sentinel_is_reached [IDENTICAL]
+    arima111: res_offset = 1 sentinel cells per series at start = 0
+    arima212: res_offset = 1 sentinel cells per series at start = 0
+    sarima_full: res_offset = 3 sentinel cells per series at start = 0
+    sarima_rd8: res_offset = 4 sentinel cells per series at start = 0
+check_predict_device_equals_oracle [IDENTICAL]
+      arma11_k.predict: 162 cells, 0 differ
+      sentinel cells checked: 0 (res_offset - start = 0)
+      ar1.predict: 162 cells, 0 differ
+      sentinel cells checked: 0 (res_offset - start = 0)
+      ma2.predict: 162 cells, 0 differ
+      sentinel cells checked: 0 (res_offset - start = 0)
+      arima111.predict: 162 cells, 0 differ
+      sentinel cells checked: 6 (res_offset - start = 1)
+      arima212.predict: 162 cells, 0 differ
+      sentinel cells checked: 6 (res_offset - start = 1)
+      ar2_unit.predict: 162 cells, 0 differ
+      sentinel cells checked: 0 (res_offset - start = 0)
+      sarima_full.predict: 162 cells, 0 differ
+      sentinel cells checked: 18 (res_offset - start = 3)
+      sarima_rd8.predict: 162 cells, 0 differ
+      sentinel cells checked: 24 (res_offset - start = 4)
+      arma44.predict: 162 cells, 0 differ
+      sentinel cells checked: 0 (res_offset - start = 0)
+      ar2_tie.predict: 162 cells, 0 differ
+      sentinel cells checked: 0 (res_offset - start = 0)
+check_grad_device_equals_oracle [IDENTICAL]
+      grad: 24 cells, 0 differ
+      N = 4 parameters x 6 series
+check_grad_reset_preserves_negative_zero [IDENTICAL]
+      d_x after the gradient: 0 of 24 cells differ (must be 0)
+      x_pert after the last reset: 0 of 24 cells differ from d_x (must be 0)
+      gradient of the LAST parameter (after N-1 resets): 0 of 6 series differ
+check_kalman_matches_float64 [IDENTICAL]
+    arma11_k: worst relative log-likelihood gap 4.744527359116388e-08 (bound 0.005, n_diff = 0)
+    ar1: worst relative log-likelihood gap 8.056717804322832e-08 (bound 0.005, n_diff = 0)
+    ma2: worst relative log-likelihood gap 1.3742385687676754e-07 (bound 0.005, n_diff = 0)
+    arima111: worst relative log-likelihood gap 0.0018282718565646762 (bound 0.02, n_diff = 1)
+    arima212: worst relative log-likelihood gap 7.200607982193185e-08 (bound 0.02, n_diff = 1)
+    ar2_unit: worst relative log-likelihood gap 1.5423309289657116e-07 (bound 0.005, n_diff = 0)
+    sarima_full: worst relative log-likelihood gap 0.001576949946934015 (bound 0.02, n_diff = 3)
+    sarima_rd8: worst relative log-likelihood gap 0.0009776785440126848 (bound 0.02, n_diff = 4)
+    arma44: worst relative log-likelihood gap 3.643483656615369e-08 (bound 0.005, n_diff = 0)
+    ar2_tie: worst relative log-likelihood gap 8.025188505452208e-08 (bound 0.005, n_diff = 0)
+check_arima_refuses_by_name [IDENTICAL]
+    s < 2 with seasonal terms: raised: ARIMA: invalid period for seasonal ARIMA: s=1
+    d + D > 2: raised: ARIMA: invalid order, required d + D <= 2 (d=2, D=1)
+    p >= s: raised: ARIMA: invalid order, required s > p and s > q
+    p+q+P+Q+k == 0: raised: ARIMA: invalid order, at least one of p, q, P, Q, fit_intercept must be non-zero
+    p > 8: raised: ARIMA: invalid order, required p, q, P, Q <= 8
+    n_exog != 0: raised: ARIMA: exog (n_exog=2) is not ported; refused by name (arima/UNPORTED.tsv)
+    rd = 9 > 8 (block-per-series kernel): raised: ARIMA: rd = d + s*D + max(p + s*P, q + s*Q + 1) = 9 > 8 selects cuML's block-per-series Kalman kernel, which is not ported; refused by name (arima/UNPORTED.tsv)
+    r = 6 > 5 (Schur Lyapunov): raised: ARIMA: r = max(p + s*P, q + s*Q + 1) = 6 > 5 selects cuML's Schur/Sylvester Lyapunov solver, which is not ported; refused by name (arima/UNPORTED.tsv)
+    NaN in y: raised: batched_loglike: y contains a non-finite value at index 5; missing observations are not ported and are refused by name (arima/UNPORTED.tsv)
+    inf in y: raised: batched_loglike: y contains a non-finite value at index 6; missing observations are not ported and are refused by name (arima/UNPORTED.tsv)
+    DEVIATION 673: F <= 0 with sigma2 = 0, trans = False: raised: batched_kalman_filter: series 0: innovation variance F <= 0 at step 0; refused by name rather than carrying log(F) into the likelihood
+check_kalman_launch_invariant [IDENTICAL]
+    block 64 / 41 floats of poison: 0 cells differ
+    block 128 / 41 floats of poison: 0 cells differ
+    poison -0.0: 0 cells differ
+    batch of 6 vs batch of 3 [4, 0, 2]: 0 cells differ
+    run twice: 0 cells differ
+check_unit_root_guard_is_reached [IDENTICAL]
+    the guard fired on 6 of 6 series
+      transformed phi_2 (series 0) before the guard: -0.9999 0xbf7ff972
+check_lu_pivot_tie_is_reached [IDENTICAL]
+      series 0: phi1 0x3f6813bd phi2 0xbeffffe4  column 0 magnitudes 0.17816496 0.45327485 0.45327485 0.24999916
+      series 1: phi1 0x3f6813bd phi2 0xbeffffe4  column 0 magnitudes 0.17816496 0.45327485 0.45327485 0.24999916
+      series 2: phi1 0x3f6813bd phi2 0xbeffffe4  column 0 magnitudes 0.17816496 0.45327485 0.45327485 0.24999916
+      series 3: phi1 0x3f6813bd phi2 0xbeffffe4  column 0 magnitudes 0.17816496 0.45327485 0.45327485 0.24999916
+      series 4: phi1 0x3f6813bd phi2 0xbeffffe4  column 0 magnitudes 0.17816496 0.45327485 0.45327485 0.24999916
+      series 5: phi1 0x3f6813bd phi2 0xbeffffe4  column 0 magnitudes 0.17816496 0.45327485 0.45327485 0.24999916
+    an exact pivot-magnitude tie is present and maximal in column 0 on 6 of 6 series
+check_guard_decisions_are_recorded [IDENTICAL]
+      ar2_unit: unit-root rewrite: guards byte 1 on series 0, expected 1; 0 of 6 series disagree
+      ar1_k_nudge: r == 1 intercept nudge: guards byte 2 on series 0, expected 2; 0 of 6 series disagree
+      arma11_k: neither guard: guards byte 0 on series 0, expected 0; 0 of 6 series disagree
+check_fold_order_is_visible [IDENTICAL]
+      arma11_k (rd=2, n_phi=1): 24 T*P cells, descending fold moves 2, Float64 fold moves 2
+      ar1 (rd=1, n_phi=1): 6 T*P cells, descending fold moves 0, Float64 fold moves 0
+      ma2 (rd=3, n_phi=0): 54 T*P cells, descending fold moves 0, Float64 fold moves 0
+      arima111 (rd=3, n_phi=1): 54 T*P cells, descending fold moves 2, Float64 fold moves 2
+      arima212 (rd=4, n_phi=2): 96 T*P cells, descending fold moves 5, Float64 fold moves 5
+      ar2_unit (rd=2, n_phi=2): 24 T*P cells, descending fold moves 1, Float64 fold moves 1
+      sarima_full (rd=7, n_phi=3): 294 T*P cells, descending fold moves 13, Float64 fold moves 13
+      sarima_rd8 (rd=8, n_phi=1): 384 T*P cells, descending fold moves 1, Float64 fold moves 1
+      arma44 (rd=5, n_phi=4): 150 T*P cells, descending fold moves 25, Float64 fold moves 25
+      ar2_tie (rd=2, n_phi=2): 24 T*P cells, descending fold moves 6, Float64 fold moves 6
+    TOTAL over 10 orders: 1110 cells, descending fold moves 55, Float64 fold moves 55; orders in which the descending fold moved something: 8
+      strongest single order moved 25 cells
+ALL ARIMA CHECKS PASSED [IDENTICAL] card: /root/mojolearn/bench/results/e1/2026-08-31_191014-5e426de4e4eb/lanes/arima.identical.card

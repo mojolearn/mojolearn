@@ -1,0 +1,171 @@
+# knn n_index=144 n_queries=144 d=4 k=10 method=2 sqrt=True
+# format: mojolearn-identity-trace v1
+0	knn.index_norm	f32	144	9d9751173ff0aead
+1	knn.query_norm	f32	144	9d9751173ff0aead
+2	knn.out_dist	f32	1440	f9bd91b536cb0fe4
+3	knn.out_idx	u32	1440	a8bb578a804be81c
+4	knn.sorted_dist	f32	1440	f9bd91b536cb0fe4
+5	knn.sorted_idx	u32	1440	a8bb578a804be81c
+# knn n_index=144 n_queries=144 d=4 k=10 method=2 sqrt=True
+# format: mojolearn-identity-trace v1
+0	knn.index_norm	f32	144	9d9751173ff0aead
+1	knn.query_norm	f32	144	9d9751173ff0aead
+2	knn.out_dist	f32	1440	f9bd91b536cb0fe4
+3	knn.out_idx	u32	1440	a8bb578a804be81c
+4	knn.sorted_dist	f32	1440	f9bd91b536cb0fe4
+5	knn.sorted_idx	u32	1440	a8bb578a804be81c
+# knn n_index=144 n_queries=144 d=4 k=10 method=2 sqrt=True
+# format: mojolearn-identity-trace v1
+0	knn.index_norm	f32	144	9d9751173ff0aead
+1	knn.query_norm	f32	144	9d9751173ff0aead
+2	knn.out_dist	f32	1440	f9bd91b536cb0fe4
+3	knn.out_idx	u32	1440	a8bb578a804be81c
+4	knn.sorted_dist	f32	1440	f9bd91b536cb0fe4
+5	knn.sorted_idx	u32	1440	a8bb578a804be81c
+# knn n_index=144 n_queries=144 d=4 k=10 method=2 sqrt=True
+# format: mojolearn-identity-trace v1
+0	knn.index_norm	f32	144	9d9751173ff0aead
+1	knn.query_norm	f32	144	9d9751173ff0aead
+2	knn.out_dist	f32	1440	f9bd91b536cb0fe4
+3	knn.out_idx	u32	1440	a8bb578a804be81c
+4	knn.sorted_dist	f32	1440	f9bd91b536cb0fe4
+5	knn.sorted_idx	u32	1440	a8bb578a804be81c
+# knn n_index=144 n_queries=144 d=4 k=52 method=2 sqrt=True
+# format: mojolearn-identity-trace v1
+0	knn.index_norm	f32	144	9d9751173ff0aead
+1	knn.query_norm	f32	144	9d9751173ff0aead
+2	knn.out_dist	f32	7488	00df6e58ba2453c5
+3	knn.out_idx	u32	7488	f2d00e6cae27aa83
+4	knn.sorted_dist	f32	7488	00df6e58ba2453c5
+5	knn.sorted_idx	u32	7488	f2d00e6cae27aa83
+# knn n_index=30 n_queries=30 d=2 k=5 method=2 sqrt=True
+# format: mojolearn-identity-trace v1
+0	knn.index_norm	f32	30	8a8fb38d9b640ab1
+1	knn.query_norm	f32	30	8a8fb38d9b640ab1
+2	knn.out_dist	f32	150	c5303fc29658f29d
+3	knn.out_idx	u32	150	1b1cb795845d80f3
+4	knn.sorted_dist	f32	150	c5303fc29658f29d
+5	knn.sorted_idx	u32	150	1b1cb795845d80f3
+# knn n_index=144 n_queries=144 d=4 k=52 method=2 sqrt=True
+# format: mojolearn-identity-trace v1
+0	knn.index_norm	f32	144	9d9751173ff0aead
+1	knn.query_norm	f32	144	9d9751173ff0aead
+2	knn.out_dist	f32	7488	00df6e58ba2453c5
+3	knn.out_idx	u32	7488	f2d00e6cae27aa83
+4	knn.sorted_dist	f32	7488	00df6e58ba2453c5
+5	knn.sorted_idx	u32	7488	f2d00e6cae27aa83
+# kmeans n=144 d=3 k=3 metric=0 seed=42 n_init=10 max_iter=300
+# format: mojolearn-identity-trace v1
+0	fit.x_norm	f32	144	7c9699bbc76296b4
+1	restart00.init.centroids	f32	9	c8f4304b98ef6c4f
+2	restart00.iter01.centroid_norm	f32	3	1b127608b3aa91cd
+3	restart00.iter01.labels	u32	144	1a67d8fbce8a2b45
+4	restart00.iter01.min_dist	f32	144	b9f88873e1715f3e
+5	restart00.iter01.sums_i32	i32	9	437c515543e7c7d4
+6	restart00.iter01.weight_i32	i32	3	2270652f7fe9ead4
+7	restart00.iter01.new_centroids	f32	9	8b2d702c55e06929
+8	restart00.iter01.shift	f32	1	8e5a7335726a82d4
+9	restart00.final.labels	u32	144	00bb322d889b5da5
+10	restart00.final.centroids	f32	9	8b2d702c55e06929
+11	restart00.final.inertia	f32	1	3604ae3bbd6d4765
+12	restart01.init.centroids	f32	9	e92301ac3e4cd8d9
+13	restart01.iter01.centroid_norm	f32	3	99211faacf88af43
+14	restart01.iter01.labels	u32	144	564804e0a703dda5
+15	restart01.iter01.min_dist	f32	144	68f599225264dce6
+16	restart01.iter01.sums_i32	i32	9	5726c4fffc578411
+17	restart01.iter01.weight_i32	i32	3	6f557da67a3e9a21
+18	restart01.iter01.new_centroids	f32	9	1d7f77a4fd327ffd
+19	restart01.iter01.shift	f32	1	2b352f71459c29e1
+20	restart01.final.labels	u32	144	564804e0a703dda5
+21	restart01.final.centroids	f32	9	1d7f77a4fd327ffd
+22	restart01.final.inertia	f32	1	4796b8426cd364dc
+23	restart02.init.centroids	f32	9	6a1991aa502dc38a
+24	restart02.iter01.centroid_norm	f32	3	11503d2f36be783f
+25	restart02.iter01.labels	u32	144	ec092a5db732dda5
+26	restart02.iter01.min_dist	f32	144	975875ac42d0b171
+27	restart02.iter01.sums_i32	i32	9	11313c14a7caf6e5
+28	restart02.iter01.weight_i32	i32	3	6f557da67a3e9a21
+29	restart02.iter01.new_centroids	f32	9	f23c4366511705e5
+30	restart02.iter01.shift	f32	1	8223f786046242d4
+31	restart02.final.labels	u32	144	ec092a5db732dda5
+32	restart02.final.centroids	f32	9	f23c4366511705e5
+33	restart02.final.inertia	f32	1	4796b8426cd364dc
+34	restart03.init.centroids	f32	9	b4b8f9b1f7152fce
+35	restart03.iter01.centroid_norm	f32	3	c5174a463e5cc06f
+36	restart03.iter01.labels	u32	144	945e1c501b3d5da5
+37	restart03.iter01.min_dist	f32	144	35365196d84eea39
+38	restart03.iter01.sums_i32	i32	9	83293cec9fb0d075
+39	restart03.iter01.weight_i32	i32	3	6f557da67a3e9a21
+40	restart03.iter01.new_centroids	f32	9	94bc191f24fd01a1
+41	restart03.iter01.shift	f32	1	713a707b1c8c1570
+42	restart03.final.labels	u32	144	945e1c501b3d5da5
+43	restart03.final.centroids	f32	9	94bc191f24fd01a1
+44	restart03.final.inertia	f32	1	4796b8426cd364dc
+45	restart04.init.centroids	f32	9	6ffc76a0ea5181de
+46	restart04.iter01.centroid_norm	f32	3	9b9607a5eff39529
+47	restart04.iter01.labels	u32	144	ec092a5db732dda5
+48	restart04.iter01.min_dist	f32	144	9fe08b1cac2a6542
+49	restart04.iter01.sums_i32	i32	9	11313c14a7caf6e5
+50	restart04.iter01.weight_i32	i32	3	6f557da67a3e9a21
+51	restart04.iter01.new_centroids	f32	9	f23c4366511705e5
+52	restart04.iter01.shift	f32	1	a81269706b162385
+53	restart04.final.labels	u32	144	ec092a5db732dda5
+54	restart04.final.centroids	f32	9	f23c4366511705e5
+55	restart04.final.inertia	f32	1	4796b8426cd364dc
+56	restart05.init.centroids	f32	9	7c78e7c92c16dcc3
+57	restart05.iter01.centroid_norm	f32	3	87ef083119c34819
+58	restart05.iter01.labels	u32	144	ec092a5db732dda5
+59	restart05.iter01.min_dist	f32	144	38457d4c1d2c6f27
+60	restart05.iter01.sums_i32	i32	9	11313c14a7caf6e5
+61	restart05.iter01.weight_i32	i32	3	6f557da67a3e9a21
+62	restart05.iter01.new_centroids	f32	9	f23c4366511705e5
+63	restart05.iter01.shift	f32	1	7d0f8c86926d80a2
+64	restart05.final.labels	u32	144	ec092a5db732dda5
+65	restart05.final.centroids	f32	9	f23c4366511705e5
+66	restart05.final.inertia	f32	1	4796b8426cd364dc
+67	restart06.init.centroids	f32	9	078b0d2fdef7ddf2
+68	restart06.iter01.centroid_norm	f32	3	05d6145e55fdc5a8
+69	restart06.iter01.labels	u32	144	945e1c501b3d5da5
+70	restart06.iter01.min_dist	f32	144	443e839e4bd5eb3c
+71	restart06.iter01.sums_i32	i32	9	83293cec9fb0d075
+72	restart06.iter01.weight_i32	i32	3	6f557da67a3e9a21
+73	restart06.iter01.new_centroids	f32	9	94bc191f24fd01a1
+74	restart06.iter01.shift	f32	1	1d64255ab83e7348
+75	restart06.final.labels	u32	144	945e1c501b3d5da5
+76	restart06.final.centroids	f32	9	94bc191f24fd01a1
+77	restart06.final.inertia	f32	1	4796b8426cd364dc
+78	restart07.init.centroids	f32	9	9ace29e6bd7cc3d8
+79	restart07.iter01.centroid_norm	f32	3	2531bd922115c028
+80	restart07.iter01.labels	u32	144	ec092a5db732dda5
+81	restart07.iter01.min_dist	f32	144	e828db1baf6ee774
+82	restart07.iter01.sums_i32	i32	9	11313c14a7caf6e5
+83	restart07.iter01.weight_i32	i32	3	6f557da67a3e9a21
+84	restart07.iter01.new_centroids	f32	9	f23c4366511705e5
+85	restart07.iter01.shift	f32	1	3de067ff41032ca2
+86	restart07.final.labels	u32	144	ec092a5db732dda5
+87	restart07.final.centroids	f32	9	f23c4366511705e5
+88	restart07.final.inertia	f32	1	4796b8426cd364dc
+89	restart08.init.centroids	f32	9	e8957135255161e5
+90	restart08.iter01.centroid_norm	f32	3	87aa2cf5d3e734c9
+91	restart08.iter01.labels	u32	144	564804e0a703dda5
+92	restart08.iter01.min_dist	f32	144	b99f4b22dfbf629f
+93	restart08.iter01.sums_i32	i32	9	5726c4fffc578411
+94	restart08.iter01.weight_i32	i32	3	6f557da67a3e9a21
+95	restart08.iter01.new_centroids	f32	9	1d7f77a4fd327ffd
+96	restart08.iter01.shift	f32	1	7d0f8c86926d80a2
+97	restart08.final.labels	u32	144	564804e0a703dda5
+98	restart08.final.centroids	f32	9	1d7f77a4fd327ffd
+99	restart08.final.inertia	f32	1	4796b8426cd364dc
+100	restart09.init.centroids	f32	9	ef51cdff9e011cca
+101	restart09.iter01.centroid_norm	f32	3	97a0fc5afcfad6ae
+102	restart09.iter01.labels	u32	144	00bb322d889b5da5
+103	restart09.iter01.min_dist	f32	144	1c0f3394f1646edd
+104	restart09.iter01.sums_i32	i32	9	8021dd16fb1a51f9
+105	restart09.iter01.weight_i32	i32	3	6f557da67a3e9a21
+106	restart09.iter01.new_centroids	f32	9	75247298e4e66079
+107	restart09.iter01.shift	f32	1	4f369d0dcbf6f1e0
+108	restart09.final.labels	u32	144	00bb322d889b5da5
+109	restart09.final.centroids	f32	9	75247298e4e66079
+110	restart09.final.inertia	f32	1	4796b8426cd364dc
+111	fit.centroids	f32	9	1d7f77a4fd327ffd
+112	fit.labels	u32	144	00bb322d889b5da5

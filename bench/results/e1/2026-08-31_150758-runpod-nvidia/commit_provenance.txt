@@ -1,0 +1,15 @@
+commit.txt in this directory was written by
+tools/gemm_remote_leg.sh --payload phase8, NOT by git on the box.
+
+commit=fe038d00 parent 946b97d0
+vendor=nvidia
+remote_dir=/root/mojolearn/bench/results/e1/2026-08-31_191014-5e426de4e4eb
+pod=ivllaurjko7czb
+
+The box has no .git: the source arrives as 'git archive' at a
+pinned sha (see this leg's header for why a clone and a bundle
+were both rejected), so the bootstrap's own 'git rev-parse HEAD'
+wrote an empty file. The evidence that the box ran this commit
+is source_sha256.txt, computed with one recipe at both ends:
+  here:  5dce9a7a21a4c80ba0fffa2b3368449b767e311c1517e3d5a3c6834c4c360ac6
+  there: 5dce9a7a21a4c80ba0fffa2b3368449b767e311c1517e3d5a3c6834c4c360ac6
