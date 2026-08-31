@@ -65,10 +65,15 @@ benchmark.
 | `iforest` | `mojolearn.IsolationForest()` -> `isolation_forest/` via `_mojolearn_svm` | `sklearn-iforest-cpu`, and `cuml-iforest-gpu` **if this cuML has one** | `anomaly` 500,000 x 32 synthetic, planted labels |
 
 `training/` is **not covered and has no lane**. It is the neural-network
-training-step lane; `training/TRAINING_LOOP_PLAN.md` states in its own first
-paragraph that as of 2026-08-25 no `mojo` process has read any of its three
-files, and it contains no gradient-boosting or forest estimator. There is
-nothing to time.
+training-step lane and it contains no gradient-boosting or forest estimator,
+so there is nothing here to time.
+
+CORRECTED 2026-08-31. This paragraph used to add that
+`training/TRAINING_LOOP_PLAN.md` stated in its own first paragraph that, as of
+2026-08-25, no `mojo` process had read any of its three files. **Commit
+`5ce6eb17` falsified that**: the lane compiles and `train_step_check.mojo` ran
+green on one device. That plan's banner is corrected in place. The reason
+`training/` has no lane in this document never rested on it.
 
 ### Why LightGBM and XGBoost are placed where they are
 

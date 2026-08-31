@@ -1,18 +1,32 @@
 """The device cross-entropy of profile `mojolearn.identical.loss.ce.fp32.v1`.
 
-**THIS FILE HAS NEVER BEEN COMPILED AND HAS NEVER BEEN EXECUTED.** No GPU has
-run a kernel from it, no gate has ever failed against it, no sabotage arm has
-ever been built, and every claim in its docstrings was derived on paper or
-read out of source on 2026-08-25. Written by the training lane, DEVIATIONS
-1150-1169. The contract is `training/IDENTICAL_LOSS_CONTRACT.md`; the answer
-is `training/mojo_only/loss_oracle.mojo`, bit for bit.
+**THIS BANNER WAS FALSE AND IS CORRECTED. COMPILED, RUN AND GATED ON ONE
+DEVICE.** Until 2026-08-31 this header read "THIS FILE HAS NEVER BEEN COMPILED
+AND HAS NEVER BEEN EXECUTED", and added that no GPU had run a kernel from it,
+no gate had ever failed against it, and no sabotage arm had ever been built.
+**Commit `ecd1a436` is the first execution of this file together with
+`loss_check.mojo`, `loss_fixture.mojo` and `loss_oracle.mojo`**, and it
+falsified every clause: six clauses passed, 24 cases and 61,925 cells matched
+the oracle BITWISE, and clause (f) MEASURED a real defect here, that this file
+never called `ce_refuse_inputs` so a planted NaN reached 40 recorded cells. The
+refusal was added at `b90f52ab` (DEVIATION 1495) and calls the oracle's own
+function. Written by the training lane, DEVIATIONS 1150-1169. The contract is
+`training/IDENTICAL_LOSS_CONTRACT.md`; the answer is
+`training/mojo_only/loss_oracle.mojo`, bit for bit.
+
+**WHAT IS STILL UNPAID: THE OTHER TWO VENDORS.** Everything above was measured
+on one device.
 
 WHAT IS OWED
 ------------
-  - `training/mojo_only/loss_check.mojo` and
-    `training/mojo_only/loss_fixture.mojo` DO NOT EXIST, so **every sabotage
-    switch below has never been compiled, let alone shown to fail a gate.** A
-    switch that has never fired is a comment.
+  - ~~`training/mojo_only/loss_check.mojo` and
+    `training/mojo_only/loss_fixture.mojo` DO NOT EXIST, so every sabotage
+    switch below has never been compiled, let alone shown to fail a gate.~~
+    **Both exist and both ran, `ecd1a436`.** The sabotage arms were compiled
+    and fired there, and firing them is what corrected DEVIATION 1490, where
+    the assertion about `L_MAX_SEED_ZERO`'s inert case had the claim inverted.
+    A switch that has never fired is still a comment; these have fired on one
+    device and on no other.
   - `pinned_block_fmax` below is a LOCAL fold (DEVIATION 1165). The clean fix
     is to give `core/pinned_reduce.mojo::pinned_block_max` `identical_fmax`
     as its combine step, which is `portable_fmaxf`'s own suggestion and that

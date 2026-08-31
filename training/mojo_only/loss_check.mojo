@@ -7,18 +7,33 @@ NOT A PORT. It runs the device cross-entropy
 (`training/mojo_only/loss_oracle.mojo`) and compares every recorded stage
 BY BITS.
 
-**NOTHING IN THIS FILE HAS EVER BEEN COMPILED OR EXECUTED.** Written
-2026-08-25, DEVIATIONS 1450-1469. No `mojo` process has read it, no device
-has run it, no bit produced by it has been observed. Neither has anything
-it tests: `loss.mojo`, `loss_oracle.mojo` and the contract were all written
-the same day and **not one of the twenty-five sabotage arms in contract
-10.1 has ever been built.** Every sentence below that says a clause
-"passes", an arm "bites" or a stage "moves" is a PREDICTION about what the
-source says. The whole point of the file is to turn those predictions into
-measurements, and the ledger below therefore has a column for every arm and
-a value in NONE of them. Inventing numbers for a file that has not run
-would be the single worst thing a gate could do, because a fabricated
-ledger reads exactly like evidence.
+**THIS BANNER WAS FALSE AND IS CORRECTED. THIS GATE HAS RUN ON ONE
+DEVICE.** Until 2026-08-31 this header read "NOTHING IN THIS FILE HAS EVER
+BEEN COMPILED OR EXECUTED", added that no `mojo` process had read it, no
+device had run it and no bit produced by it had been observed, said the same
+of `loss.mojo` and `loss_oracle.mojo`, claimed that not one of the
+twenty-five sabotage arms in contract 10.1 had ever been built, and called
+every "passes", "bites" and "moves" below a PREDICTION. **Commit `ecd1a436`
+is the first execution of this file and it falsified all of that.** Written
+2026-08-25, DEVIATIONS 1450-1469. What was measured:
+
+    clause (a) PASS  24 cases, 61925 cells, device vs oracle BITWISE
+    clause (b) PASS  8 launches, 189 cells, fresh state each
+    clause (c) PASS  828 cells, control fires on 11 of 11 per-row stages
+    clause (d) PASS  4 named GEMM plans reproduce ce.denom bit for bit
+    clause (e) PASS  264 cells against a HAND-WRITTEN CLOSED FORM, no epsilon
+    clause (f) PASS  9 planted inputs refused by name, reach measured
+
+Clause (f) is the first kernel defect the training half produced: `loss.mojo`
+never called `ce_refuse_inputs`, so a planted NaN reached 40 recorded cells,
+first at `ce.max`. Fixed at `b90f52ab`, DEVIATION 1495. Running the gate also
+found three defects in the gate itself, DEVIATIONS 1490 through 1492, none of
+them in a kernel.
+
+Inventing numbers for a file that has not run would still be the single worst
+thing a gate could do, because a fabricated ledger reads exactly like
+evidence. **The numbers above are the run's, and they are ONE DEVICE. Read
+every clause below as measured there and unrun on the other two vendors.**
 
 WHAT IT CHECKS
 ---------------

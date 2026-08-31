@@ -2,16 +2,23 @@
 
 # PROFILE `mojolearn.identical.optimizer.fp32.v1`
 
-**STATUS, AND IT IS THE FIRST THING A READER NEEDS.** Nothing in this lane
-has been compiled or executed. `training/mojo_only/optimizer_oracle.mojo`
-and `training/mojo_only/optimizer.mojo` were written against the contract
-below and against the repository's existing pinned primitives, and neither
-file has been through a compiler. Every number in this document that is
-labelled PREDICTED was derived off-repository in host double precision and
-is a prediction about what the gate will print, not a measurement. Nothing
-here has run on any GPU, on one vendor or on three. Section 16 lists what
-is owed, including the gate file this contract's sabotage set requires and
-which is NOT part of this lane's write set.
+**STATUS, AND IT IS THE FIRST THING A READER NEEDS. CORRECTED 2026-08-31:
+COMPILED AND RUN, ON ONE DEVICE.** This banner used to say "Nothing in this
+lane has been compiled or executed", that neither
+`training/mojo_only/optimizer_oracle.mojo` nor
+`training/mojo_only/optimizer.mojo` had been through a compiler, that every
+PREDICTED number was a prediction about what the gate would print, and that
+nothing here had run on any GPU on one vendor or on three. **The gate file it
+said was not in this lane's write set was written at `ecd1a436` and RAN at
+`b90f52ab`**, which falsified the first three of those. The run measured a
+real defect: with clipping off, a non-finite planted in a PARAMETER reached
+`param.out`, because the only device-side refusal lived in
+`identical_clip_grad_norm`, which does not run when clipping is off, and
+covered `grad` alone. DEVIATION 1496 moved the refusal to the first statement
+of `identical_optimizer_step` and made it call the oracle's own function.
+PREDICTED numbers that no clause covered are still predictions. **THE LAST
+CLAUSE OF THE OLD BANNER SURVIVES AND IS THE IMPORTANT ONE: this has run on
+ONE VENDOR and not on three.** Section 16 lists what is owed.
 
 The companion documents, and this contract is not readable without the
 first of them.
@@ -949,8 +956,11 @@ actually executes -- an unreached refusal is an untested guard.
 gate**, and every sabotage accompanied by the fixture property that makes
 it non-vacuous. Section 12.
 
-`training/mojo_only/optimizer_check.mojo` is the gate file. **It does not
-exist.** Section 16.
+`training/mojo_only/optimizer_check.mojo` is the gate file. ~~**It does not
+exist.**~~ **It was written at `ecd1a436` and RAN at `b90f52ab`, correction
+made 2026-08-31.** Six clauses on one device, and clause (f) measured a real
+device-side defect that DEVIATION 1496 fixed. Section 16. **One vendor, not
+three.**
 
 ---
 
@@ -1014,7 +1024,7 @@ advance, which is what this row does.
 | 9.2 | `microbatch_split_is_identical` | `training/mojo_only/optimizer_oracle.mojo` |
 | NORMATIVE | `optimizer_step_oracle` | `training/mojo_only/optimizer_oracle.mojo` |
 | 12 | `optimizer_sabotage_name` and the `SAB_*` switches | `training/mojo_only/optimizer.mojo` |
-| every clause's fixture | `check_*` | `training/mojo_only/optimizer_check.mojo` -- **DOES NOT EXIST** |
+| every clause's fixture | `check_*` | `training/mojo_only/optimizer_check.mojo` -- ~~**DOES NOT EXIST**~~ **EXISTS AND RAN, `ecd1a436` + `b90f52ab`, ONE DEVICE ONLY** (corrected 2026-08-31) |
 
 ---
 
@@ -1031,7 +1041,9 @@ advance, which is what this row does.
 3. **Nothing cross-vendor.** No leg has run. The v1 GEMM this contract
    delegates its reductions to HAS run on three vendors at leg 11, and
    that measurement is the GEMM's, not this lane's.
-4. **Nothing has been compiled.** See the status banner.
+4. ~~**Nothing has been compiled.**~~ **Compiled and run on one device,
+   `ecd1a436` and `b90f52ab`. See the corrected status banner.** What is not
+   done is item 3 above, the cross-vendor leg.
 5. **No performance number**, and no claim about what the pins cost.
    `IDENTITY IS NOT FREE` is a standing rule -- conforming costs on every
    vendor, and this lane has priced nothing. In particular the per-element
@@ -1085,11 +1097,18 @@ This lane's write set was exactly three new files --
 mojo` and this document. Everything below needs a file outside that set
 and is therefore described rather than done.
 
-1. **`training/mojo_only/optimizer_check.mojo`.** The gate file. Every
+1. ~~**`training/mojo_only/optimizer_check.mojo`.** The gate file. Every
    sabotage in section 12 and every fixture property in its last column
    is specified and none is implemented. **Without it this contract is
    prose and nothing in it has been falsified.** This is the largest owed
-   item by a wide margin.
+   item by a wide margin.~~ **PAID, corrected 2026-08-31.** The gate file was
+   written at `ecd1a436` and RAN at `b90f52ab`. This contract is no longer
+   prose: six clauses were falsifiable and passed, the sabotage arms were
+   built and fired, and clause (f) found a real defect in the device entry
+   point (DEVIATION 1496). Two arms could NOT be made non-vacuous and that is
+   recorded as DEVIATIONS 1493 and 1613 rather than papered over. **What
+   replaces this as the largest owed item is item 3 of section 15: the
+   CROSS-VENDOR LEG. Everything above was measured on ONE DEVICE.**
 2. **A `pixi.toml` task.** `check-optimizer`, and the sabotage arms as
    `-D MOJOLEARN_OPT_SABOTAGE_*` builds, following the
    `check-portable-nn` and `gemm_device_check` patterns. `pixi.toml` is

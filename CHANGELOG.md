@@ -43,6 +43,45 @@
   fitted device handle would fix. Nothing in this library holds one yet.
 
 
+### Removed
+
+- **`torchbridge/` and `mojolearn.torch_ops`, the PyTorch custom-op surface,
+  are DELETED as of 2026-08-31.** They shipped in the 0.2.x and 0.3.x wheels
+  as `mojolearn/torch_ops.py` and they should not have. This entry is the
+  tombstone: the surface existed, it is gone, and nobody should re-plan it
+  from the absence of a file.
+
+  What was there: `torchbridge/TORCH_BRIDGE_PLAN.md` (812 lines),
+  `torchbridge/identical_ops.mojo` (490 lines),
+  `torchbridge/__init__.mojo` (17 lines) and
+  `python/mojolearn/torch_ops.py` (1,138 lines), written 2026-08-25 under
+  DEVIATIONS 1200 through 1213. It proposed two transport lanes to
+  `mojolearn.identical.gemm.fp32.v1` from a `torch.Tensor`, a
+  `torch.autograd.Function` backward over the same forward op, and nine
+  gates T1 through T9.
+
+  **Why it is gone, and not finished.** Its own three file headers said, in
+  capitals, that not one line of it had ever been through the Mojo compiler
+  or a Python interpreter. That was still true on the day it was deleted:
+  none of the nine gates was ever written, `bindings/build_torchbridge.sh`
+  never existed, and no `torch_ops` bytecode was ever produced anywhere in
+  the tree. So the cost of keeping it was a plan nobody was going to write
+  and 2,457 lines advertising a capability the library did not have.
+
+  **And it was the wrong shape.** This library is a competitor to the
+  PyTorch stacks, not a plugin into one. A bit-identical GEMM reached
+  through `max.experimental.torch` is a MAX custom op wearing our name; the
+  claim this repository actually makes is about its own kernels on three
+  vendors, and that claim is made and gated in `gemm/`,
+  `python/mojolearn/_linalg_impl.py` and the identical wheel tier, none of
+  which needs torch to be installed.
+
+  PyTorch stays in this tree in the ONE role it earns: a benchmark opponent
+  and a float64 reference oracle (`pixi.toml`'s `pytorch` dependency,
+  `tools/speed_torch_seq.py` and the per-stage cross-checks). Those are
+  evidence and they are untouched.
+
+
 ## 0.3.1 (2026-08-31)
 
 **0.3.0's Linux wheel crashes on any x86-64 host without AVX-512. Use this

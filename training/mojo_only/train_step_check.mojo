@@ -1,13 +1,23 @@
 """The gate of `mojolearn.identical.train.step.fp32.v1`.
 
-**NOTHING IN THIS FILE HAS EVER BEEN COMPILED OR EXECUTED.** No compiler has
-read it, no device has run it, no bit produced by it has been observed.
-Neither has anything it tests: `train_loop.mojo` and
-`training/TRAINING_LOOP_PLAN.md` were written the same day, 2026-08-25, by
-the same lane, DEVIATIONS 1550 through 1589. **Every sentence below that says
-a clause "passes" or a control "fires" is a PREDICTION.** There is no ledger
-of results in this file because a fabricated ledger reads exactly like
-evidence.
+**THIS BANNER WAS FALSE AND IS CORRECTED. THIS GATE HAS RUN: ALL CLAUSES
+GREEN ON ONE DEVICE.** Until 2026-08-31 this header read "NOTHING IN THIS FILE
+HAS EVER BEEN COMPILED OR EXECUTED", added that no compiler had read it, no
+device had run it and no bit produced by it had been observed, said the same of
+`train_loop.mojo` and `training/TRAINING_LOOP_PLAN.md`, and closed by calling
+every "passes" and every "fires" below a PREDICTION. **Commit `5ce6eb17` is
+the first execution and it falsified all of that.** Thirteen stages compared
+device against host oracle BITWISE, four negative controls all firing,
+parameters measurably moved everywhere, a checkpoint at step 4 resumed through
+step 8 reproducing eight continuous steps exactly, and the same digest twice.
+Written 2026-08-25 by the training-loop lane, DEVIATIONS 1550 through 1589.
+
+**READ THE CLAUSES BELOW AS MEASURED ON ONE DEVICE AND UNRUN ON THE OTHER
+TWO.** The run's own summary is the honest one: "ALL CLAUSES GREEN on ONE
+device. That makes the cross-vendor run worth paying for; it does not replace
+it, and it does not make the two ungated stages correct on any other vendor."
+There is still no ledger of results in this file, because a fabricated ledger
+reads exactly like evidence; the ledger is the commit.
 
 WHY THIS FILE IS SHAPED THE WAY IT IS
 --------------------------------------

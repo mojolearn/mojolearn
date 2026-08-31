@@ -1,15 +1,19 @@
 """The fixture of profile `mojolearn.identical.loss.ce.fp32.v1`.
 
-**NOTHING IN THIS FILE HAS EVER BEEN COMPILED OR EXECUTED.** Written
-2026-08-25 by the training-gate lane, DEVIATIONS 1450-1469. No `mojo`
-process has read it, no device has consumed a case from it, and every
-sentence below that says a case "separates" an arm or that a value "is
-exact" is a PREDICTION derived on paper from `training/
-IDENTICAL_LOSS_CONTRACT.md` and from the source of `loss.mojo` and
-`loss_oracle.mojo`. The whole point of the file is that
-`training/mojo_only/loss_check.mojo` turns those predictions into
-measurements. Until it runs, this is a specification wearing a `.mojo`
-extension.
+**THIS BANNER WAS FALSE AND IS CORRECTED. COMPILED AND CONSUMED ON ONE
+DEVICE.** Until 2026-08-31 this header read "NOTHING IN THIS FILE HAS EVER
+BEEN COMPILED OR EXECUTED", added that no `mojo` process had read it and no
+device had consumed a case from it, and called every "separates" and every
+"is exact" below a PREDICTION. **Commit `ecd1a436` is the first execution of
+this file, driven by `training/mojo_only/loss_check.mojo`**, and it turned
+those predictions into measurements: 24 cases and 61,925 cells device against
+oracle BITWISE, plus 264 cells against a hand-written closed form with no
+epsilon. Written 2026-08-25 by the training-gate lane, DEVIATIONS 1450-1469.
+
+**Two limits survive the run and neither is a formality.** It ran on ONE
+DEVICE and on no other vendor, and it ran at the DEFAULT vocabulary, not at
+`V = 128256`, which is the shape the profile is actually for. See OWED item 5
+at the bottom of this file.
 
 WHAT IT IS FOR
 ---------------
@@ -1585,9 +1589,13 @@ def describe_case(c: CeCase) raises -> String:
 # ===========================================================================
 # OWED, AND WHY IT IS NOT HERE
 #
-# 1. **A COMPILE AND A RUN.** Nothing in this file has been through the
+# 1. ~~**A COMPILE AND A RUN.** Nothing in this file has been through the
 #    front end and no device has consumed a case from it. Every property
-#    asserted above is asserted by code that has never executed.
+#    asserted above is asserted by code that has never executed.~~
+#    **PAID ON ONE DEVICE, commit `ecd1a436`.** It compiles, it ran, and the
+#    properties asserted above were measured rather than predicted. What
+#    replaces this item is the OTHER TWO VENDORS, on which none of it has
+#    run.
 #
 # 2. **`training/corpus/`.** Contract 12.3's A3 arm wants a Float64
 #    reference produced OUTSIDE this repository. `ce_forward_f64` in the

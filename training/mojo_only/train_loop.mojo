@@ -1,11 +1,23 @@
 """The composed training step of `mojolearn.identical.train.step.fp32.v1`.
 
-**THIS FILE HAS NEVER BEEN COMPILED AND HAS NEVER BEEN EXECUTED.** No
-compiler has read it, no GPU has run a step from it, no checkpoint digest has
-ever been computed by it, and therefore no two digests have ever been
-compared. Written 2026-08-25 by the training-loop lane, DEVIATIONS 1550
-through 1589. The design is `training/TRAINING_LOOP_PLAN.md` and the gate is
-`training/mojo_only/train_step_check.mojo`, which has also never been run.
+**THIS BANNER WAS FALSE AND IS CORRECTED. COMPILED AND RUN, GREEN ON ONE
+DEVICE, NOT ON THREE.** Until 2026-08-31 this header read "THIS FILE HAS NEVER
+BEEN COMPILED AND HAS NEVER BEEN EXECUTED", and added that no compiler had
+read it, no GPU had run a step from it, no checkpoint digest had ever been
+computed by it, and therefore no two digests had ever been compared.
+**Commit `5ce6eb17` falsified all four clauses in the same commit that added
+this file.** It compiles; `train_step_check.mojo` drove a whole step through
+it with all clauses green on one device, thirteen stages bitwise against the
+host oracle; a digest was computed, computed twice with the same result, and a
+checkpoint taken at step 4 and resumed through step 8 reproduced eight
+continuous steps exactly. Written 2026-08-25 by the training-loop lane,
+DEVIATIONS 1550 through 1589. The design is
+`training/TRAINING_LOOP_PLAN.md` and the gate is
+`training/mojo_only/train_step_check.mojo`, which has run.
+
+**WHAT IS STILL UNPAID: THE OTHER TWO VENDORS.** No two digests from DIFFERENT
+VENDORS have been compared, and that comparison is the claim this file exists
+to support. One device is one device.
 
 WHAT THIS IS
 ------------
@@ -32,8 +44,10 @@ WHAT IS OWED, and the first two are not optional
      Three machines computing the same wrong gradient agree perfectly.
      Correctness lives in `train_step_check.mojo` clause (a), on ONE device,
      and it must be green BEFORE any GPU is rented.
-  3. This file has never been compiled. Its header's section at the bottom
-     lists what it is least confident about.
+  3. ~~This file has never been compiled.~~ **It compiles as of `5ce6eb17`.**
+     Its header's section at the bottom is kept as the record of what the
+     lane was least confident about before that compile; it is answered, not
+     pending. What replaces this item is the cross-vendor run.
   4. `llama_decoder_layer_backward` takes its incoming gradient as a HOST
      `List[Float32]` (DEVIATION 1577), so the step downloads `d_h` and
      re-uploads it in the middle of every step. At this model size that is

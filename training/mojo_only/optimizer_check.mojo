@@ -7,15 +7,27 @@ NOT A PORT. It runs the device optimizer step
 (`training/mojo_only/optimizer_oracle.mojo`) and compares every recorded
 stage BY BITS, at every step of a multi-step run.
 
-**NOTHING IN THIS FILE HAS EVER BEEN COMPILED OR EXECUTED.** Written
-2026-08-25, DEVIATIONS 1470-1489. No `mojo` process has read it, no device
-has run it, no bit produced by it has been observed. Neither has anything
-it tests: the contract, `optimizer.mojo` and `optimizer_oracle.mojo` were
-all written the same day, and contract section 16 item 1 says in as many
-words that without this file "this contract is prose and nothing in it has
-been falsified". Every sentence below that says a clause "passes" or an arm
-"bites" is a PREDICTION. The ledger has a column for every arm and a value
-in NONE of them, because a fabricated ledger reads exactly like evidence.
+**THIS BANNER WAS FALSE AND IS CORRECTED. THIS GATE HAS RUN ON ONE
+DEVICE.** Until 2026-08-31 this header read "NOTHING IN THIS FILE HAS EVER
+BEEN COMPILED OR EXECUTED", added that no `mojo` process had read it, no
+device had run it and no bit produced by it had been observed, said the same
+of `optimizer.mojo` and `optimizer_oracle.mojo`, and called every "passes"
+and every "bites" below a PREDICTION. Written 2026-08-25, DEVIATIONS
+1470-1489. **It was compiled at `ecd1a436` and RAN at `b90f52ab`**, where it
+falsified all of that and measured a real device-side defect: with clipping
+OFF, a non-finite planted in a PARAMETER reached `param.out`, because the only
+device-side refusal lived in `identical_clip_grad_norm`, which does not run
+when clipping is off, and covered `grad` alone. `param`, `grad`, `m` and `v`
+are all inputs and `m` / `v` are CARRIED STATE, so a non-finite entering `v`
+is permanent. DEVIATION 1496 is the fix. Running this gate also produced
+DEVIATIONS 1493 and 1613, both about arms it could NOT make non-vacuous, which
+are recorded rather than hidden.
+
+Contract section 16 item 1's sentence, that without this file "this contract
+is prose and nothing in it has been falsified", no longer applies. A
+fabricated ledger still reads exactly like evidence, so the ledger below is
+whatever the run prints. **ONE DEVICE. Nothing below has run on a second
+vendor.**
 
 WHY THE CASES CARRY A **STEP COUNT** AND THE GATE COMPARES AT EVERY STEP
 --------------------------------------------------------------------------

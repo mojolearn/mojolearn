@@ -145,9 +145,14 @@ FAMILY = "forest"
 _ACC_TOL = 0.02
 
 #: The lanes this file knows. `training/` is deliberately absent: it is the
-#: neural-network training-step lane (`training/TRAINING_LOOP_PLAN.md`), it
-#: has no gradient-boosting or forest surface, and as of 2026-08-25 nothing
-#: in it has ever been compiled. There is no entry point to time.
+#: neural-network training-step lane (`training/TRAINING_LOOP_PLAN.md`) and it
+#: has no gradient-boosting or forest surface, so there is no entry point to
+#: time.
+#:
+#: CORRECTED 2026-08-31. This comment used to add "and as of 2026-08-25
+#: nothing in it has ever been compiled". Commit `5ce6eb17` falsified that;
+#: the lane compiles and its step gate ran green on one device. The absence
+#: from this tuple was never for that reason.
 LANE_NAMES = (
     "gbdt-symmetric",
     "gbdt-depthwise",

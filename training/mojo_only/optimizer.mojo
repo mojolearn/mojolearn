@@ -1,12 +1,23 @@
 """The device optimizer step of `mojolearn.identical.optimizer.fp32.v1`.
 
-**NOTHING IN THIS FILE HAS EVER BEEN COMPILED OR EXECUTED.** No compiler
-has seen it, no GPU has run it, and it has been to no vendor. The contract
-is `training/IDENTICAL_OPTIMIZER_CONTRACT.md`; the answer is
+**THIS BANNER WAS FALSE AND IS CORRECTED. COMPILED, RUN AND GATED ON ONE
+DEVICE.** Until 2026-08-31 this header read "NOTHING IN THIS FILE HAS EVER BEEN
+COMPILED OR EXECUTED", and added that no compiler had seen it, no GPU had run
+it, that it had been to no vendor, that its agreement with the oracle had not
+been checked once, and that `training/mojo_only/optimizer_check.mojo` did not
+exist. **`optimizer_check.mojo` was written at `ecd1a436` and both gates ran at
+`b90f52ab`**, which falsified all of it. The run measured a real defect here:
+with clipping OFF, a NaN planted in a PARAMETER reached `param.out`, because
+the only device-side refusal lived in `identical_clip_grad_norm`, which does
+not run at all when clipping is off, and covered `grad` alone. `param`, `grad`,
+`m` and `v` are all inputs and `m` / `v` are CARRIED STATE, so a non-finite
+entering `v` is permanent. DEVIATION 1496 added the refusal as the first
+statement of `identical_optimizer_step`, calling the ORACLE'S OWN function
+rather than restating it. The contract is
+`training/IDENTICAL_OPTIMIZER_CONTRACT.md`; the answer is
 `training/mojo_only/optimizer_oracle.mojo::optimizer_step_oracle`, bit for
-bit, and **that agreement has not been checked once**, because
-`training/mojo_only/optimizer_check.mojo` does not exist. Contract section
-16 lists what is owed. Read that before believing any sentence here.
+bit. Contract section 16 lists what is owed. **IT HAS STILL BEEN TO ONE
+VENDOR AND NOT THREE.**
 
 ONE SOURCE, THREE VENDORS, AND NO INLINE VENDOR TEST
 -----------------------------------------------------

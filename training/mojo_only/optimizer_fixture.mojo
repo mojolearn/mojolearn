@@ -1,14 +1,15 @@
 """The fixture of profile `mojolearn.identical.optimizer.fp32.v1`.
 
-**NOTHING IN THIS FILE HAS EVER BEEN COMPILED OR EXECUTED.** Written
-2026-08-25 by the training-gate lane, DEVIATIONS 1470-1489. No `mojo`
-process has read it, no device has consumed a case from it, and every
-sentence below that says a case "separates" an arm is a PREDICTION derived
-on paper from `training/IDENTICAL_OPTIMIZER_CONTRACT.md` and from the
-source of `optimizer.mojo` and `optimizer_oracle.mojo`.
-`training/mojo_only/optimizer_check.mojo` is what turns those predictions
-into measurements. Until it runs, this is a specification wearing a `.mojo`
-extension.
+**THIS BANNER WAS FALSE AND IS CORRECTED. COMPILED AND CONSUMED ON ONE
+DEVICE.** Until 2026-08-31 this header read "NOTHING IN THIS FILE HAS EVER
+BEEN COMPILED OR EXECUTED", added that no `mojo` process had read it and no
+device had consumed a case from it, and called every "separates" below a
+PREDICTION. **`training/mojo_only/optimizer_check.mojo` was written at
+`ecd1a436` and ran at `b90f52ab`**, which turned those predictions into
+measurements and produced a real kernel defect: with clipping off, a NaN
+planted in a PARAMETER reached `param.out` (DEVIATION 1496). Written
+2026-08-25 by the training-gate lane, DEVIATIONS 1470-1489. **ONE DEVICE, and
+no other vendor has consumed a case from this file.**
 
 WHAT IT IS FOR
 ---------------

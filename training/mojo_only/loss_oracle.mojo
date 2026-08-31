@@ -1,10 +1,18 @@
 """The host FP32 oracle of softmax cross-entropy under profile
 `mojolearn.identical.loss.ce.fp32.v1`, and its Float64 tolerance reference.
 
-**THIS FILE HAS NEVER BEEN COMPILED AND HAS NEVER BEEN EXECUTED.** No device
-has run a single stage of it, no gate has ever failed against it, and every
-number in its docstrings was derived on paper or read out of source on
-2026-08-25. Written by the training lane, DEVIATIONS 1150-1169.
+**THIS BANNER WAS FALSE AND IS CORRECTED. COMPILED AND RUN ON ONE DEVICE.**
+Until 2026-08-31 this header read "THIS FILE HAS NEVER BEEN COMPILED AND HAS
+NEVER BEEN EXECUTED", and added that no device had run a single stage of it and
+no gate had ever failed against it. **Commit `ecd1a436` is the first execution
+of this file, with `loss.mojo`, `loss_check.mojo` and `loss_fixture.mojo`**,
+and clause (a) matched this oracle against the device BITWISE over 24 cases and
+61,925 cells. Clause (f) then failed against a real defect in `loss.mojo`,
+which is a gate failing against this file's contract exactly as intended. The
+numbers in the docstrings below were derived on paper on 2026-08-25 and the run
+did not contradict them; they are still paper arithmetic where they are not
+marked measured. Written by the training lane, DEVIATIONS 1150-1169. **One
+device, not three.**
 
 WHAT IS OWED, and none of it is in this file
 ---------------------------------------------

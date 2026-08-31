@@ -10,10 +10,21 @@ this document is `transformer/IDENTICAL_TRANSFORMER_CONTRACT.md`'s, which is
 
 The code form of every clause is `training/mojo_only/loss_oracle.mojo` (the
 NORMATIVE host oracle) and `training/mojo_only/loss.mojo` (the device
-spelling, one source for three vendors). **Neither file has ever been
-compiled or executed. Nothing in this lane has been built or run, no device
-has evaluated a single stage of it, and every number in this document was
-derived on paper or read out of source on 2026-08-25.**
+spelling, one source for three vendors).
+
+**STATUS BANNER, CORRECTED 2026-08-31.** This paragraph used to read
+"Neither file has ever been compiled or executed. Nothing in this lane has
+been built or run, no device has evaluated a single stage of it, and every
+number in this document was derived on paper or read out of source on
+2026-08-25." **Commit `ecd1a436` falsified it**: `loss.mojo`,
+`loss_oracle.mojo`, `loss_check.mojo` and `loss_fixture.mojo` all ran there
+for the first time, six clauses passed, 24 cases and 61,925 cells matched
+device against oracle BITWISE, and clause (f) measured a real defect in the
+device entry point that `b90f52ab` then fixed (DEVIATION 1495). Numbers in
+this document that are still labelled PREDICTED and were not covered by a
+clause remain paper arithmetic. **THE RUN WAS ON ONE DEVICE. Nothing in this
+lane has run on a second vendor, so every cross-vendor sentence below is
+still construction.**
 
 **THE PROFILE NAME IS PART OF THE CONTRACT.** Every card, gate and claim
 under this document names `mojolearn.identical.loss.ce.fp32.v1`. Changing any
@@ -897,7 +908,10 @@ reference on an EXACTLY-REPRESENTABLE fixture (section 12); (f) the row-39
 audit of section 8; (g) every clause above falsifiable by a NAMED sabotage
 that fails a gate, with its predicted INERT set asserted as a mask.
 
-`training/mojo_only/loss_check.mojo` will be the gate file. It does not exist.
+`training/mojo_only/loss_check.mojo` is the gate file. ~~It does not exist.~~
+**It exists and RAN at `ecd1a436`, correction made 2026-08-31**: clauses (a)
+through (f) all passed on ONE DEVICE, and (f) measured a real defect in
+`loss.mojo` that `b90f52ab` fixed. It has run on no second vendor.
 FAST arms of (a) are RECORDED, not asserted, where they are vendor-shaped
 (the metrics lane's leg-11 lesson). Clause (e) is asserted in BOTH modes,
 because on an exactly representable fixture a contracted multiply-add and an
@@ -997,9 +1011,14 @@ is the transformer contract's warning about `S07_ROPE_RELATIVE_POSITION` and
   The GEMM lane's own history is the standing reason to say so -- Apple and
   AMD agreed bit for bit through 302 stages while NVIDIA diverged at
   `tree001.winners.scores` -- so two backends agreeing closes nothing.
-- **Nothing here has been compiled.** No file in `training/` other than these
-  three has any content, `training/mojo_only/loss_check.mojo` does not exist,
-  and no gate in section 10 has ever been run.
+- ~~**Nothing here has been compiled.** No file in `training/` other than
+  these three has any content, `training/mojo_only/loss_check.mojo` does not
+  exist, and no gate in section 10 has ever been run.~~ **FALSE SINCE
+  `ecd1a436`, corrected 2026-08-31.** `loss_check.mojo` and
+  `loss_fixture.mojo` exist and ran, six clauses of section 10 passed on one
+  device, and the sabotage arms were built and fired. `training/` has since
+  grown the optimizer and composed-step files as well. **The cross-vendor
+  bullet above still stands, unchanged: one device is not three.**
 
 ---
 

@@ -1,11 +1,17 @@
 """The IDENTICAL FP32 optimizer step, written out, on the host.
 
-**NOTHING IN THIS FILE HAS EVER BEEN COMPILED OR EXECUTED.** It was
-written against `training/IDENTICAL_OPTIMIZER_CONTRACT.md` and against the
-repository's existing pinned primitives, and no compiler has seen it. What
-is owed is listed at the bottom of that contract, section 16; the largest
-single item is `training/mojo_only/optimizer_check.mojo`, which does not
-exist, so **not one clause below has been falsified by a sabotage.**
+**THIS BANNER WAS FALSE AND IS CORRECTED. COMPILED AND RUN ON ONE
+DEVICE.** Until 2026-08-31 this header read "NOTHING IN THIS FILE HAS EVER
+BEEN COMPILED OR EXECUTED", said no compiler had seen it, and said that
+`training/mojo_only/optimizer_check.mojo` did not exist so not one clause
+below had been falsified by a sabotage. **That check file was written at
+`ecd1a436` and ran at `b90f52ab`**, where the optimizer gate's clause (f)
+measured that a non-finite planted in a PARAMETER reached `param.out`. This
+file's own `opt_refuse_bad_inputs` is now what the device entry point calls,
+so both sides fail with the same name (DEVIATION 1496). It was written against
+`training/IDENTICAL_OPTIMIZER_CONTRACT.md` and against the repository's
+existing pinned primitives. What is owed is listed at the bottom of that
+contract, section 16. **ONE DEVICE, NOT THREE.**
 
 **NOT A PORT, and it replaces no upstream call.** cuML, cuVS and RAFT
 contain no optimizer -- they are inference and classical-ML libraries --
@@ -1014,8 +1020,9 @@ def optimizer_step_oracle(
     most likely vacuous gate in this lane. Sabotage
     `OPT_SAB_ADAMW_AS_ADAM`.
 
-    This function has never been compiled. What it is least confident
-    about is listed in the contract's section 16.
+    This function compiles and has run on one device (`ecd1a436`,
+    `b90f52ab`); it had never been compiled when this docstring was written.
+    What it is least confident about is listed in the contract's section 16.
     """
     var stages = OptimizerStages()
     var j_count = len(offsets) - 1

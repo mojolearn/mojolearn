@@ -1,13 +1,43 @@
 # The training step, composed -- `mojolearn.identical.train.step.fp32.v1`
 
-**NOTHING DESCRIBED HERE HAS BEEN COMPILED OR EXECUTED.** This plan and its
-two companion files (`training/mojo_only/train_loop.mojo`,
+**THIS BANNER WAS FALSE AND IS CORRECTED. STATUS: COMPILED AND RUN, GREEN ON
+ONE DEVICE, NOT ON THREE.** This plan and its two companion files
+(`training/mojo_only/train_loop.mojo`,
 `training/mojo_only/train_step_check.mojo`) were written on 2026-08-25 by the
-training-loop lane, DEVIATIONS 1550 through 1589. No `mojo` process has read
-any of the three. No device has run a step. No checkpoint hash has ever been
-computed, on any vendor, and therefore **no two checkpoint hashes have ever
-been compared.** Every sentence below that says a clause "catches" something
-or an arm "must move" is a PREDICTION with no measurement behind it.
+training-loop lane, DEVIATIONS 1550 through 1589.
+
+*What this banner used to say, and what killed it.* Until 2026-08-31 the line
+above read "**NOTHING DESCRIBED HERE HAS BEEN COMPILED OR EXECUTED**", and
+went on: no `mojo` process had read any of the three files, no device had run
+a step, no checkpoint hash had ever been computed on any vendor, and therefore
+no two checkpoint hashes had ever been compared. **Commit `5ce6eb17` falsified
+every clause of that, and it falsified them in the same commit that added this
+file**, so the banner was already wrong the day it landed and nobody went back
+for it. `train_step_check.mojo` ran, on its first execution, with ALL CLAUSES
+GREEN ON ONE DEVICE: thirteen stages compared device against the host oracle
+BITWISE, four negative controls all firing, parameters measurably moved
+everywhere, a checkpoint taken at step 4 and resumed through step 8
+reproducing eight continuous steps exactly, and the same digest twice. A whole
+step, embedding through attention, MLP, cross-entropy, the full backward and
+an Adam update, matched an oracle bit for bit.
+
+The loss and optimizer halves under this plan were already running before
+that: `ecd1a436` is the first execution of `loss_check.mojo`,
+`loss_fixture.mojo`, `loss.mojo` and `loss_oracle.mojo` (six clauses, and
+clause (f) measured a real kernel defect), and `b90f52ab` is where both gates,
+loss and optimizer, measured that a promised non-finite refusal existed in the
+oracle and not in the device entry point (DEVIATIONS 1495 through 1497).
+
+**What is still true, and is the only thing this banner should have said.**
+GREEN ON ONE DEVICE IS NOT GREEN ON THREE. The cross-vendor run is unpaid, so
+no two checkpoint hashes from DIFFERENT VENDORS have ever been compared, and
+that is the claim in section 0 that the whole plan exists to establish. The
+gate's own summary is the honest one and is left in place throughout: "ALL
+CLAUSES GREEN on ONE device. That makes the cross-vendor run worth paying for;
+it does not replace it, and it does not make the two ungated stages correct on
+any other vendor." Where a sentence below predicts that a clause "catches"
+something or an arm "must move", read it as measured on one device and unrun
+on the other two, unless it names a vendor.
 
 Section 12 lists what is owed. Read that before believing anything else.
 
@@ -733,8 +763,12 @@ kernel cannot express one.
 
 ## 12. OWED, and none of it is optional
 
-1. **Compile all three files.** None has been read by a compiler. Section 13
-   lists what this lane is least confident about.
+1. ~~**Compile all three files.** None has been read by a compiler.~~
+   **DONE, commit `5ce6eb17`.** All three compile and `train_step_check.mojo`
+   ran green on one device. Section 13 is kept as the record of what this lane
+   was least confident about before the first compile, and is now answered
+   rather than pending. **What replaces this item: RUN IT ON THE OTHER TWO
+   VENDORS.** One device is one device.
 2. **A gate for `transformer/mojo_only/transformer_backward.mojo`.** It is on
    the critical path of every step and nothing has compared it to its oracle.
    Section 1.1.
@@ -771,18 +805,27 @@ kernel cannot express one.
     wrong, and clause (f) round-trips the pair rather than reading them. A
     single table that all three consume is the real fix and is owed.
 
-DEVIATIONS 1578 through 1589 are unallocated and reserved for what the first
-compile finds.
+DEVIATIONS 1578 through 1589 were reserved for what the first compile would
+find. The first compile and the first run happened at `5ce6eb17`; 1580 and
+1598 are what they cost, and the rest of the reservation stands for the
+cross-vendor leg.
 
 ---
 
-## 13. What this lane is least confident compiles
+## 13. What this lane was least confident compiles
+
+**ANSWERED. All three files compile as of commit `5ce6eb17`, so this section
+is now a record and not a warning.** It is kept rather than deleted because it
+is the lane's own list of where it expected to be wrong, and the first compile
+is what graded it. Nothing below is an open compile risk.
 
 In order.
 
 1. **`ctx.enqueue_function` with a kernel that takes an `Int32` offset plus
    two pointers.** The spelling is copied from `loss.mojo` and
-   `optimizer.mojo` and has never been compiled either.
+   `optimizer.mojo`. Those two had also never been compiled when this was
+   written; `ecd1a436` and `b90f52ab` compiled and ran them, and `5ce6eb17`
+   compiled this lane's copy. The spelling is correct.
 2. **Passing a STRUCT FIELD as a `mut` argument**, which
    `train_loop.mojo::train_step` does constantly (`tb.logits` into
    `identical_ce_forward_into`). `optimizer_oracle.mojo` avoids this

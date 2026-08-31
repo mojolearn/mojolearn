@@ -109,9 +109,16 @@ import speed_gbdt_arm as spec           # noqa: E402
 
 #: What each lane calls in `python/mojolearn/`, for the report and for the
 #: `--list-arms` output. `training/` is absent on purpose: it is the neural
-#: training-step lane, it has no boosting or forest estimator, and as of
-#: 2026-08-25 `training/TRAINING_LOOP_PLAN.md` states in its own first
-#: paragraph that no `mojo` process has ever read any of its three files.
+#: training-step lane and it has no boosting or forest estimator, so there is
+#: no entry point here to time.
+#:
+#: CORRECTED 2026-08-31. This comment used to add that, as of 2026-08-25,
+#: `training/TRAINING_LOOP_PLAN.md` stated in its own first paragraph that no
+#: `mojo` process had ever read any of its three files. Commit `5ce6eb17`
+#: falsified that plan's banner (the lane compiles and its step gate ran green
+#: on one device) and the banner is now corrected in place. The reason
+#: `training/` is absent from THIS file never depended on it: no forest, no
+#: boosting, nothing to time.
 OUR_ENTRY_POINTS = {
     "gbdt-symmetric": "mojolearn.GradientBoosting(grow_policy='SymmetricTree')"
                       " -> gbdt/ via _mojolearn_gbdt",
