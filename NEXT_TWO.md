@@ -36,7 +36,7 @@ structure searcher differs.
 
 ## OPEN DEFECT, blocking the covtype leg of the searcher-parity claim
 
-`original/searcher_parity_covtype_check.mojo` (performance lane,
+`checks/searcher_parity_covtype_check.mojo` (performance lane,
 2026-08-22): the two searchers are bit-identical at eps500 and on the
 oracle fixtures, but at covtype (43 BINARY-policy features, 581k rows)
 the pointwise arm produces a WORSE model -- mse 1.184 vs greedy's

@@ -26,7 +26,7 @@ record-per-line, keyword-first shape is `bench/oracle.txt`'s.
 
 Bits, because **decimal text through this toolchain is NOT exact and that was
 MEASURED, not assumed.** 200,000 random bit patterns per width through
-`String(x)` and back (`original/model_io_check.mojo` re-takes this
+`String(x)` and back (`checks/model_io_check.mojo` re-takes this
 measurement every run, and REFUSES to pass if it ever comes back clean,
 because then the reason for the bits is gone):
 

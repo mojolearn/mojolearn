@@ -90,7 +90,7 @@ with every weight 1.0, so `binSums[bin]` is the category's row count as a
 Float32 and `totalWeight` is `Float32(n_rows)`. `Calc(count, n_rows)` is
 the same three operations on the same three Float32 values, so a learn row
 scored through this table lands on the SAME BITS the fit trained on --
-which `original/ctr_apply_check.mojo` asserts per row rather than
+which `checks/ctr_apply_check.mojo` asserts per row rather than
 assuming. FeatureFreq is permutation-independent
 (`ctr_type.cpp:44-58`), which is what makes that identity available at all.
 

@@ -34,7 +34,7 @@ change the arithmetic inside this one.
 **This document is the contract. Nothing may claim identity before this file
 says what identity means**, which is the charter's own precondition
 ("Record the contract before claiming identity"). The code form of every
-clause below is `gemm/original/gemm_oracle.mojo`, and the two are meant to
+clause below is `gemm/checks/gemm_oracle.mojo`, and the two are meant to
 be read together: each clause names the function that implements it and each
 function's docstring names its clause.
 
@@ -114,7 +114,7 @@ deletes a materialized transpose from a shipped path.
 ### 0.3 Batched GEMM: DEFERRED, and the caller evidence for deferring it
 
 **No production caller passes a batch dimension.** `linalg.bmm.batched_matmul`
-appears exactly once in this repository, in `original/
+appears exactly once in this repository, in `checks/
 vendor_correctness_check.mojo:1820`, whose own header records it as NOT
 WIRED. `core/gram_splitk.mojo:28-33` considered and rejected it for the Gram
 shape on performance grounds (its only Apple GPU arm is
@@ -152,10 +152,10 @@ now or in Phase 2.
 
 | arm | file | why routing it through GEMM is wrong |
 |---|---|---|
-| `fused_distance_nn_kernel` | `cluster/derived/distance/fused_distance_nn/simt_kernel.mojo:245` | its product feeds a per-row `(value, key)` argmin held in registers. At k-means' shipped shape (200,000 rows x 16 clusters) the materialized product is 3.2 M floats this kernel never writes. |
-| `fused_l2_knn_kernel` | `neighbors/derived/neighbors/detail/fused_l2_knn.mojo:297` | its product feeds a register-resident `WarpSelect` top-k. The file's own header prices the alternative: a 409.6 MB distance matrix per tile, ~23 GB of traffic across eight tiles, for 51.2 GFLOP of work. |
-| `eps_unexp_l2_sq_neigh_kernel` | `dbscan/derived/neighbors/epsilon_neighborhood.mojo:132` | **it is not a matrix product at all.** It accumulates `Σ(x−y)²` UNEXPANDED, then thresholds against `eps²` and reduces vertex degrees in the same kernel. Reaching it through a GEMM would require the expanded identity `‖x‖²+‖y‖²−2x·y`, which is a DIFFERENT arithmetic with different cancellation — and in DBSCAN one ULP moves a point across `<= eps` and flips an adjacency BIT (IDENTITY_PATHS row 19). |
-| `eps_dist_sq` | `neighbors/derived/neighbors/ball_cover/common.mojo:58` | a per-pair `Σ(a−b)²` functor called from inside nine ball-cover kernel sites; its value feeds an eps compare or a 1-NN argmin immediately. There is no matrix here to produce. |
+| `fused_distance_nn_kernel` | `cluster/impl/distance/fused_distance_nn/simt_kernel.mojo:245` | its product feeds a per-row `(value, key)` argmin held in registers. At k-means' shipped shape (200,000 rows x 16 clusters) the materialized product is 3.2 M floats this kernel never writes. |
+| `fused_l2_knn_kernel` | `neighbors/impl/neighbors/detail/fused_l2_knn.mojo:297` | its product feeds a register-resident `WarpSelect` top-k. The file's own header prices the alternative: a 409.6 MB distance matrix per tile, ~23 GB of traffic across eight tiles, for 51.2 GFLOP of work. |
+| `eps_unexp_l2_sq_neigh_kernel` | `dbscan/impl/neighbors/epsilon_neighborhood.mojo:132` | **it is not a matrix product at all.** It accumulates `Σ(x−y)²` UNEXPANDED, then thresholds against `eps²` and reduces vertex degrees in the same kernel. Reaching it through a GEMM would require the expanded identity `‖x‖²+‖y‖²−2x·y`, which is a DIFFERENT arithmetic with different cancellation — and in DBSCAN one ULP moves a point across `<= eps` and flips an adjacency BIT (IDENTITY_PATHS row 19). |
+| `eps_dist_sq` | `neighbors/impl/neighbors/ball_cover/common.mojo:58` | a per-pair `Σ(a−b)²` functor called from inside nine ball-cover kernel sites; its value feeds an eps compare or a 1-NN argmin immediately. There is no matrix here to produce. |
 | `std_dev_partials_kernel` | `gbdt/methods/random_score_helper.mojo:86` | DEVIATION 137 fused CatBoost's `DivideVector` + `DotProduct` specifically so their `tmp` vector is never materialized. |
 
 Two more are contractions but not GEMMs and stay where they are:
@@ -206,7 +206,7 @@ is the obvious "improvement" and it would silently break the contract three
 different ways:
 
 - **FP64 is not portable.** Metal has no device float64
-  (`original/hardware_matrix.mojo`), so a backend that had an FP64
+  (`checks/hardware_matrix.mojo`), so a backend that had an FP64
   accumulator would produce different bits from one that did not — precisely
   the failure this lane exists to prevent.
 - **A compensated fold is a different arithmetic.** It is portable and it
@@ -268,7 +268,7 @@ The mechanism, and it is the whole of it:
 
     C[i, j]      =  the section-7 evaluation of  Σ_p A_eff[i,p] · B_eff[p,j]
 
-`gemm/original/gemm_oracle.mojo::_a_at` and `::_b_at` are those four lines.
+`gemm/checks/gemm_oracle.mojo::_a_at` and `::_b_at` are those four lines.
 Everything else — the leaf partition, the accumulation order, the fold, the
 flush policy — is character for character the same code in all three cases.
 
@@ -284,7 +284,7 @@ transposing a fixture on the host and running all three.
 **Every product-accumulate step is a fused multiply-add: `acc ← fma(a, b,
 acc)`, ONE rounding of `a*b + acc`, never two.**
 
-The declared spelling is `original/numerics.mojo::identical_mul_add`, which
+The declared spelling is `checks/numerics.mojo::identical_mul_add`, which
 under `NUMERIC_IDENTICAL` is `std.math.fma` and under `NUMERIC_FAST` is the
 naive `a*b + c`. Under FAST there is no contract; the backend does whatever it
 measures fastest. This document describes the IDENTICAL arm only.
@@ -299,7 +299,7 @@ its absence, so the contract pins fusion.
 
 ### 4.1 The correction of 2026-08-23, and what reasoning it invalidates
 
-`identical_mul_add`'s docstring in `original/numerics.mojo` used to read
+`identical_mul_add`'s docstring in `checks/numerics.mojo` used to read
 *"Metal measured UNFUSED on 2^20 patterns (`check-ieee-arith`, fused 0 /
 unfused 1,046,394)"* and concluded *"IDENTICAL-mode bits therefore differ from
 FAST-mode bits on Apple BY DESIGN."* **That sentence was wrong and
@@ -327,7 +327,7 @@ Consequences that bind this contract:
    because on Apple they do not. Reach on Apple must be shown some other way
    — a device oracle carrying both spellings that REPORTS which arm the
    backend took, which is what
-   `cluster/original/kmeans_identity_check.mojo::check_fused_contraction_pin`
+   `cluster/checks/kmeans_identity_check.mojo::check_fused_contraction_pin`
    does — and it becomes a bit-level reach proof, with no edit, on the first
    non-contracting backend.
 
@@ -348,7 +348,7 @@ kind.
 
 ## 5. Denormals: flush to signed zero, at every named seam
 
-The declared spelling is `original/numerics.mojo::ftz`, which under
+The declared spelling is `checks/numerics.mojo::ftz`, which under
 IDENTICAL flushes any operand of magnitude below `2^-126` (the smallest
 normal, `1.1754943508222875e-38`) to a zero of its own sign, and under FAST
 compiles away.
@@ -494,7 +494,7 @@ irreducible ordered product chain and the kernel must match the oracle on it.
             acc = ftz( fma( ftz(A_eff[i,p]), ftz(B_eff[p,j]), acc ) )
         return ftz(acc)
 
-`gemm/original/gemm_oracle.mojo::oracle_leaf_partial`. This is character
+`gemm/checks/gemm_oracle.mojo::oracle_leaf_partial`. This is character
 for character `core/gemm.mojo::pinned_gemm_nt_kernel`'s loop.
 
 **No sub-partition of a leaf is permitted**, and that is the clause a
@@ -536,7 +536,7 @@ F6a — not here, where somebody might implement it by accident.
 
         return ftz(current[0])
 
-`gemm/original/gemm_oracle.mojo::fold_balanced_tree`.
+`gemm/checks/gemm_oracle.mojo::fold_balanced_tree`.
 
 **The five clauses of the topology, each of which is separately falsifiable:**
 
@@ -604,7 +604,7 @@ convenience and is one legal realization of it, not the requirement:
 and for the whole `m x n` output, cell `(i, j)`'s block begins at
 `(i*n + j) * fold_node_total(P)`.
 
-`gemm/original/gemm_oracle.mojo::fold_level_width`, `::fold_level_count`,
+`gemm/checks/gemm_oracle.mojo::fold_level_width`, `::fold_level_count`,
 `::fold_level_base`, `::fold_node_addr`, `::fold_node_total`,
 `::fold_node_is_carry` — all host-computable, all pure functions of `P`.
 
@@ -868,7 +868,7 @@ overwriting `C`.
 - **`bias`** is `beta` with a broadcast, same objection.
 - **Epilogues** — activations, the expanded-L2 `‖x‖²+‖y‖²−2·acc` — are where
   fused kernels live, and section 0.4 is the charter's instruction not to
-  disturb them. `neighbors/original/pinned_distance_tile.mojo` already
+  disturb them. `neighbors/checks/pinned_distance_tile.mojo` already
   carries the expanded-L2 epilogue under its own pin (DEVIATION 505) and is a
   CONSUMER of this contract's arithmetic, not a shape of it.
 
@@ -938,17 +938,17 @@ was measured.
 
 | clause | function | file |
 |---|---|---|
-| 1 | `Float32` throughout; no other accumulator type appears | `gemm/original/gemm_oracle.mojo` |
-| 3 | `_a_at`, `_b_at`, `OP_NN/OP_NT/OP_TN` | `gemm/original/gemm_oracle.mojo` |
-| 4 | `identical_mul_add` | `original/numerics.mojo` |
-| 5 | `ftz` | `original/numerics.mojo` |
-| 6 | `contract_leaf_size`, `leaf_count`, `leaf_begin`, `leaf_end` | `gemm/original/gemm_oracle.mojo` |
-| 7.1 | `oracle_leaf_partial` | `gemm/original/gemm_oracle.mojo` |
-| 7.2, 7.3, 9.2 | `fold_balanced_tree` | `gemm/original/gemm_oracle.mojo` |
-| 7.2.2 (the node address space) | `fold_level_width`, `fold_level_count`, `fold_level_base`, `fold_node_addr`, `fold_node_total`, `fold_node_is_carry` | `gemm/original/gemm_oracle.mojo` |
-| 7.5 NORMATIVE | `gemm_oracle` | `gemm/original/gemm_oracle.mojo` |
-| 7.5 DIAGNOSTIC | `gemm_oracle_serial`, `gemm_oracle_serial_cell` | `gemm/original/gemm_oracle.mojo` |
-| every clause's separating fixture | `check_*` | `gemm/original/gemm_oracle_check.mojo` |
+| 1 | `Float32` throughout; no other accumulator type appears | `gemm/checks/gemm_oracle.mojo` |
+| 3 | `_a_at`, `_b_at`, `OP_NN/OP_NT/OP_TN` | `gemm/checks/gemm_oracle.mojo` |
+| 4 | `identical_mul_add` | `checks/numerics.mojo` |
+| 5 | `ftz` | `checks/numerics.mojo` |
+| 6 | `contract_leaf_size`, `leaf_count`, `leaf_begin`, `leaf_end` | `gemm/checks/gemm_oracle.mojo` |
+| 7.1 | `oracle_leaf_partial` | `gemm/checks/gemm_oracle.mojo` |
+| 7.2, 7.3, 9.2 | `fold_balanced_tree` | `gemm/checks/gemm_oracle.mojo` |
+| 7.2.2 (the node address space) | `fold_level_width`, `fold_level_count`, `fold_level_base`, `fold_node_addr`, `fold_node_total`, `fold_node_is_carry` | `gemm/checks/gemm_oracle.mojo` |
+| 7.5 NORMATIVE | `gemm_oracle` | `gemm/checks/gemm_oracle.mojo` |
+| 7.5 DIAGNOSTIC | `gemm_oracle_serial`, `gemm_oracle_serial_cell` | `gemm/checks/gemm_oracle.mojo` |
+| every clause's separating fixture | `check_*` | `gemm/checks/gemm_oracle_check.mojo` |
 
 ### 12.1 Clause-5 distinction to fixture
 

@@ -33,7 +33,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from original.vendor import COMPILED_VENDOR
+from checks.vendor import COMPILED_VENDOR
 
 from max.gpu.host import DeviceContext
 
@@ -45,16 +45,16 @@ from extratrees.estimator import (
     fit_extra_trees_regressor,
     fit_extra_trees_regressor_device,
 )
-from extratrees.derived.decisiontree.decisiontree import (
+from extratrees.impl.decisiontree.decisiontree import (
     CRITERION_ENTROPY,
     CRITERION_GINI,
     CRITERION_MSE,
 )
-from extratrees.derived.decisiontree.flatnode import (
+from extratrees.impl.decisiontree.flatnode import (
     SparseTreeNode,
     TreeMetaDataNode,
 )
-from extratrees.derived.randomforest.randomforest import Forest, forest_vote
+from extratrees.impl.randomforest.randomforest import Forest, forest_vote
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -388,7 +388,7 @@ def et_predict_binding(
 def trees_vendor_binding() raises -> PythonObject:
     """THE ACCELERATOR API THIS BINARY WAS COMPILED FOR: 'metal', 'cuda',
     'hip' or 'none'. A compile-time constant folded in from
-    `original/vendor.mojo`, the same shape as the tier read-back
+    `checks/vendor.mojo`, the same shape as the tier read-back
     (`gbdt_numeric_mode`): the answer comes from the binary that actually
     loaded, never from the directory it sat in or from the environment.
     `python/mojolearn/_backend.py` refuses at import when this disagrees

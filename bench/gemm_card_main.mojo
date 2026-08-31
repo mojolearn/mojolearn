@@ -16,7 +16,7 @@ diffed against, and it was worth having before the kernel existed.
 
     oracle   `gemm_oracle`, the normative v1 answer
     serial   `gemm_oracle_serial`, the DIAGNOSTIC reference
-    device   `gemm/original/gemm_identical.mojo`, the Phase 2b kernel
+    device   `gemm/checks/gemm_identical.mojo`, the Phase 2b kernel
 
 The `serial` arm is not decoration. Emitting both and diffing them is the
 one-command demonstration that the profile's fold topology is load-bearing:
@@ -163,7 +163,7 @@ coverage with a SYNTHETIC fixture whose every leaf partial is `-0.0`, and
 a row to it so a gate goes green is `[[never build to datasets]]`, and that
 file's own banner says a table containing shapes chosen to satisfy its own
 check has stopped being a record. So the coverage lives where it belongs, in
-`gemm/original/gemm_device_check.mojo`, and this file states the boundary:
+`gemm/checks/gemm_device_check.mojo`, and this file states the boundary:
 **a green card says two runs AGREE, never that the kernel is RIGHT.** The
 correctness gate is `gemm_device_check`; this is the cross-vendor diff
 instrument, and it is blind to any defect the shipped shapes do not evaluate
@@ -201,22 +201,22 @@ from bench.gemm_shapes import (
     leaf_count,
 )
 from core.identity_trace import IdentityTrace
-from original.kernel_matrix import TARGET_COLUMN, column_name
-from gemm.original.gemm_identical import (
+from checks.kernel_matrix import TARGET_COLUMN, column_name
+from gemm.checks.gemm_identical import (
     choose_gemm_plan,
     gemm_plan_name,
     gemm_sabotage_name,
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
-from gemm.original.gemm_oracle import (
+from gemm.checks.gemm_oracle import (
     OP_NN as ORACLE_OP_NN,
     OP_NT as ORACLE_OP_NT,
     OP_TN as ORACLE_OP_TN,
     gemm_oracle,
     gemm_oracle_serial,
 )
-from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
 def _mode_name() -> String:
@@ -291,7 +291,7 @@ comptime DEVICE_FLOAT_BUDGET = 1024 * 1024 if SAB_TINY_DEVICE_BUDGET else DEVICE
 #: holding it afterwards was NEVER WRITTEN, and hashing it into the card
 #: would record a hash of poison -- which is a divergence that looks exactly
 #: like an arithmetic one and is not. Same constant and same reasoning as
-#: `gemm/original/gemm_device_check.mojo::POISON`.
+#: `gemm/checks/gemm_device_check.mojo::POISON`.
 comptime POISON = Float32(-987654.0)
 
 
@@ -324,7 +324,7 @@ def _oracle_op(tbl: Int) -> Int:
     shipped without noticing:
 
         bench/gemm_shapes.mojo    NT = 0, TN = 1, NN = 2
-        gemm/original/gemm_oracle.mojo   NN = 0, NT = 1, TN = 2
+        gemm/checks/gemm_oracle.mojo   NN = 0, NT = 1, TN = 2
 
     So a table `OP_TN` (1) reached the oracle as `OP_NT`, and a table
     `OP_NT` (0) reached it as `OP_NN`. **Every row of the reference card was
@@ -339,13 +339,13 @@ def _oracle_op(tbl: Int) -> Int:
     agreement.
 
     Found by the Phase 4 lane, which hit the same mismatch and wrote its own
-    map first (`gemm/original/gemm_device_check.mojo::_tbl_op`). Two lanes
+    map first (`gemm/checks/gemm_device_check.mojo::_tbl_op`). Two lanes
     independently needing this map is the argument for one of the two files
     changing its constants; until then the map is written where it is used
     and says so.
 
     **THE DEVICE KERNEL USES THE ORACLE'S NUMBERING, NOT A THIRD ONE**
-    (DEVIATION 534). `gemm/original/gemm_identical.mojo:105-110` does not
+    (DEVIATION 534). `gemm/checks/gemm_identical.mojo:105-110` does not
     define `OP_NN`/`OP_NT`/`OP_TN` at all -- it IMPORTS them from
     `gemm_oracle.mojo`, and `identical_gemm`'s docstring says so in words:
     *"`op` is `OP_NN`, `OP_NT` or `OP_TN` from `gemm_oracle.mojo`"*. So this
@@ -581,7 +581,7 @@ def main() raises:
         # the same reason `gemm_device_check.mojo` prints it: a card emitted
         # from a deliberately broken build is worth exactly as much as the
         # line that says so.
-        print("kernel gemm/original/gemm_identical.mojo  sabotage", gemm_sabotage_name())
+        print("kernel gemm/checks/gemm_identical.mojo  sabotage", gemm_sabotage_name())
 
     var path = String(getenv("MOJOLEARN_IDENTITY_TRACE"))
     if path == "":

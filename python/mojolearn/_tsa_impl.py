@@ -251,7 +251,7 @@ def select_d(y, D=0, s=0, d_max=None, pval_threshold=0.05):
     masks on the host. The test is per series and its result is a pure
     function of that series' bits, which is the property
     `check_kpss_batch_composition_invariant` gates in
-    `tsa/original/stationarity_check.mojo`.
+    `tsa/checks/stationarity_check.mojo`.
 
     Cross-vendor status: see this module's docstring. One Apple M4.
     """

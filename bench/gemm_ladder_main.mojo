@@ -49,7 +49,7 @@ owns, reads the workspace back, and hashes each level from the host.
 
 THE WORKSPACE SLOT LAYOUT, read out of the kernel rather than assumed
 ---------------------------------------------------------------------
-Four sources, all in `gemm/original/gemm_identical.mojo`:
+Four sources, all in `gemm/checks/gemm_identical.mojo`:
 
   * `identical_gemm_with_plan` sets `stride = fold_node_total(P)` for
     `PLAN_SPLITK_STAGED` (it is `P` for `PLAN_SPLITK`, which materializes
@@ -132,7 +132,7 @@ WHAT THIS CARD CANNOT TELL YOU
     the shapes must NOT be tuned until this goes red -- a fixture chosen to
     make a check fire has stopped being a record of what the library
     computes. The right fix is a fixture whose carried node is `-0.0` (the
-    host-side F7 fixture in `gemm/original/gemm_oracle_check.mojo` is that
+    host-side F7 fixture in `gemm/checks/gemm_oracle_check.mojo` is that
     case) or a subnormal one; the right thing to do until then is to say so
     here. This is exactly row 9's failure class -- 2^20 patterns that scored
     a contracting backend as unfused because not one separated the two
@@ -153,7 +153,7 @@ THE THREE THINGS THIS DRIVER ASSERTS
    emit seam.
 2. **THE LADDER AGREES WITH THE NORMATIVE ANSWER
    (`_check_matches_oracle`).** Under `NUMERIC_IDENTICAL` the staged plan's
-   `C` must be bit-identical to `gemm/original/gemm_oracle.mojo::gemm_oracle`
+   `C` must be bit-identical to `gemm/checks/gemm_oracle.mojo::gemm_oracle`
    at every shape. A plan that moves bits is a Phase 3 failure, and this
    driver reports it as one rather than routing around it. Under `FAST` the
    comparison is REPORTED, not asserted -- the same seam
@@ -168,7 +168,7 @@ THE THREE THINGS THIS DRIVER ASSERTS
 THE ORIENTATION TRAP, AND HOW THE MAP IS VERIFIED HERE
 --------------------------------------------------------
     bench/gemm_shapes.mojo           NT = 0, TN = 1, NN = 2
-    gemm/original/gemm_oracle.mojo  NN = 0, NT = 1, TN = 2
+    gemm/checks/gemm_oracle.mojo  NN = 0, NT = 1, TN = 2
 
 Two files, two encodings of the same three words. Passing one file's code
 into the other has already shipped a whole reference card of plausible,
@@ -219,7 +219,7 @@ from bench.gemm_shapes import OP_NN as TBL_OP_NN
 from bench.gemm_shapes import OP_NT as TBL_OP_NT
 from bench.gemm_shapes import OP_TN as TBL_OP_TN
 from core.identity_trace import FNV_OFFSET, IdentityTrace, fnv1a64_bytes
-from gemm.original.gemm_identical import (
+from gemm.checks.gemm_identical import (
     PLAN_SPLITK_STAGED,
     contract_partition,
     gemm_operand_strides,
@@ -228,7 +228,7 @@ from gemm.original.gemm_identical import (
     identical_gemm_with_plan,
     identical_gemm_workspace_floats,
 )
-from gemm.original.gemm_oracle import (
+from gemm.checks.gemm_oracle import (
     OP_NN,
     OP_NT,
     OP_TN,
@@ -239,8 +239,8 @@ from gemm.original.gemm_oracle import (
     gemm_oracle,
     op_name,
 )
-from original.kernel_matrix import TARGET_COLUMN, column_name
-from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from checks.kernel_matrix import TARGET_COLUMN, column_name
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
@@ -957,7 +957,7 @@ def _check_matches_oracle(
     """PROOF 2. The staged plan computes `gemm_oracle`, bit for bit.
 
     ASSERTED UNDER `IDENTICAL`, REPORTED UNDER `FAST`, which is the seam
-    `gemm/original/gemm_device_check.mojo` and `core/gemm_identity_check.mojo`
+    `gemm/checks/gemm_device_check.mojo` and `core/gemm_identity_check.mojo`
     both draw: under FAST both sides are the unpinned spelling, the host CPU
     and the device backend are free to contract and to flush differently, and
     whether they agree is a measurement rather than a bug.

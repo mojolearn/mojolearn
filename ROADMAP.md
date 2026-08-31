@@ -118,7 +118,7 @@ Nothing in that family should be started before it runs.
 
 **This is the largest gap in the repository and it is not an algorithm.**
 `neighbors/__init__.mojo` is empty. Every entry point under `neighbors/` is a
-`*_main.mojo` benchmark or a `original/*_check.mojo` verifier. There are no
+`*_main.mojo` benchmark or a `checks/*_check.mojo` verifier. There are no
 bindings and no estimator type anywhere in the repo. The brute-force
 k-NN -- **cannot be called by a user.**
 
@@ -137,7 +137,7 @@ What the surface needs:
 - `kneighbors_graph` -- sparse wrapper over the above
 - `radius_neighbors` -- **DONE 2026-08-31.** `mojolearn.RadiusNeighbors` over
   the ball cover, with the distances recomputed from the finished CSR rather
-  than stored by the search (`neighbors/original/radius_distances.mojo`).
+  than stored by the search (`neighbors/checks/radius_distances.mojo`).
   Still owed: a fitted device handle so the index is built once per fit rather
   than once per boundary call, and the AMD leg that closes DEVIATION 551
 - `KNeighborsClassifier` / `KNeighborsRegressor` -- majority vote and mean over
@@ -237,7 +237,7 @@ independent of the reduction tree. And `bins.cuh`:
   This would be the cleanest `IDENTICAL` column in the library.
 - **Regression, `AggregateBin { double label_sum }`.** float64 atomics, which
   Metal does not have at any speed. Needs the fixed-point accumulation already
-  built in `cluster/original/reduce_by_key.mojo`.
+  built in `cluster/checks/reduce_by_key.mojo`.
 
 Ship classification first for that reason.
 

@@ -107,7 +107,7 @@ def folds_histogram_for(folds: List[UInt32]) raises -> FoldsHistogram:
             # So every one-byte feature whose fold count is not a power of
             # two goes unhistogrammed, SILENTLY: the tree still grows, on
             # whatever the other policies offer. Caught by
-            # `original/pointwise_vs_greedy_check.mojo` on its first run.
+            # `checks/pointwise_vs_greedy_check.mojo` on its first run.
             #
             # It is also why their one-byte ranges start at FOUR
             # (`PORTING.md` 102a): ceil(log2(16)) is 4, so a 16-fold
@@ -652,7 +652,7 @@ struct ScoresCalcerOnCompressedDataSet(Movable):
         (`TakeBest(helper->Read(), best)`, `:94-105`). `is_first` seeds the
         incumbent slot with the undefined sentinel, so a dataset whose every
         helper is empty resolves to `FeatureId = (ui32)-1` exactly as the
-        host fold returns the default record. `original/
+        host fold returns the default record. `checks/
         pointwise_resolve_check.mojo` plants the tie cases and compares this
         against the host fold record for record."""
         var first = True

@@ -55,7 +55,7 @@ upstream's line is `cub::DeviceScan::ExclusiveSum(...)`, there is nothing to
 transcribe. The scan has to be written.
 
     git grep -lE 'cub::|thrust::|cublas|cusolver|cusparse|curand|__shfl|raft::linalg|raft::matrix|cudaMemcpyAsync|DeviceScan|DeviceRadixSort|DeviceSegmented|BlockReduce|BlockScan|WarpReduce' \
-      -- '*/derived/*.mojo' '*/derived/**/*.mojo' 'gbdt/*.mojo' 'gbdt/**/*.mojo'
+      -- '*/impl/*.mojo' '*/impl/**/*.mojo' 'gbdt/*.mojo' 'gbdt/**/*.mojo'
 
 Written from scratch, each replacing one upstream library call: a decoupled
 lookback scan, a one-bit-per-pass radix sort, a segmented radix sort, a

@@ -26,7 +26,7 @@ this repository**: the shipped library is 100% Mojo, there is no CUDA and no
 C++ in it, and the only C++ in the tree is twenty test harnesses under
 `tools/*_oracle/`. See [CONTRIBUTION.md](CONTRIBUTION.md) for what was built
 and what it cost, with the command that measures each number. (An earlier version of this
-paragraph said 84.9%. That was computed as "everything outside a `derived/`
+paragraph said 84.9%. That was computed as "everything outside a `impl/`
 directory" and `gbdt/`, the CatBoost mirror, has no such directory, so it
 undercounted the derived side by 61,888 lines. The range above is the
 corrected figure and its bounds are stated in `NOTICE`.) The algorithms come from CatBoost,
@@ -455,6 +455,37 @@ always resolves to the latest release. The per-version DOI is
 [10.5281/zenodo.22171041](https://doi.org/10.5281/zenodo.22171041) for 0.2.0
 and [10.5281/zenodo.22068633](https://doi.org/10.5281/zenodo.22068633) for
 0.1.0.
+
+### Do you also have to cite CatBoost, cuML, cuVS and RAFT?
+
+Almost certainly not, and the two halves of that answer are different things
+that are easy to conflate.
+
+**If you USE mojolearn** and publish a result, cite mojolearn. You do not
+inherit its bibliography, any more than citing a paper obliges you to cite
+everything in its reference list. Citation is not transitive.
+
+The one thing that is worth citing alongside is the METHOD, if your paper
+describes it. A paper that says "gradient-boosted oblivious trees" would
+normally cite CatBoost for the method whichever implementation it ran, and
+that is ordinary methods attribution rather than anything to do with where
+this library's code came from.
+
+**If you REDISTRIBUTE mojolearn** -- fork it, vendor it, ship it inside your
+own package -- Apache 2.0 section 4(d) asks you to carry a readable copy of
+the attribution notices from the `NOTICE` file. `NOTICE` already contains the
+CatBoost, cuVS, cuML, RAFT, FAISS, HuggingFace and other attributions, so
+carrying it is the whole of that obligation. You do not have to go read those
+projects and assemble your own list. That part IS transitive, deliberately:
+the attribution work here exists so that nobody downstream has to repeat it.
+
+**Just using the library, including in commercial work, requires no
+attribution at all.** Apache 2.0's conditions attach to distributing the work
+or a derivative of it, not to running it.
+
+This is a description of what the licence says and of ordinary citation
+convention, not legal advice; an unusual redistribution arrangement is worth
+a lawyer rather than a README.
 
 ## Where things are
 

@@ -207,7 +207,7 @@ SCORE_FUNCTION_L2 = 6
 #: instead of the raw weight (`pointwise_target_impl.h:193-201`), which is
 #: CatBoost's own structure (`compute_scores.cu:201-219`). That flag IS
 #: ported and gated per cell and per model by
-#: `original/second_der_weights_check.mojo`; for RMSE alone the Newton
+#: `checks/second_der_weights_check.mojo`; for RMSE alone the Newton
 #: spellings coincide with their pair bit for bit, because
 #: `TRmseTarget::Der2` returns 1.0.
 SCORE_FUNCTIONS = ("Cosine", "L2", "NewtonCosine", "NewtonL2")
@@ -240,7 +240,7 @@ _SCORE_FUNCTION_NAMES = {
 #: NewtonCosine and NewtonL2 used to sit in this dict for a different
 #: reason -- `secondDerAsWeights` was unported, so each silently fit its
 #: non-Newton twin -- and left it when that flag landed, gated by
-#: `original/second_der_weights_check.mojo`.
+#: `checks/second_der_weights_check.mojo`.
 _UNPORTED_SCORE_FUNCTIONS = {
     "SolarL2": (
         "the greedy searcher this port runs has no SolarL2 arm and falls "

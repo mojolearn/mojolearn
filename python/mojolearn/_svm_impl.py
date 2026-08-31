@@ -8,7 +8,7 @@ somebody else's and wiring this in is their call.
 
 THERE IS NO `SVR` IN THIS MODULE, AND THAT IS NOT AN OVERSIGHT. The lane
 implements binary C-SVC only. `svmType != C_SVC` raises by name in
-`svm/derived/svm/svm_parameter.mojo::check_rung1_scope` -- epsilon-SVR is
+`svm/impl/svm/svm_parameter.mojo::check_rung1_scope` -- epsilon-SVR is
 "rung 2" in `svm/NOT_IMPLEMENTED.tsv`, along with `SvrInit`, the `n_train =
 2 * n_rows` doubling, the second `UpdateF` gemv and `svr_impl.cuh`. An
 `SVR` class here would have nothing to call.
@@ -63,7 +63,7 @@ _REFUSED_KERNELS = {
     ),
     "sigmoid": (
         "TANH is not ported in rung 1: there is no identical_tanh in "
-        "original/numerics.mojo, so the kernel has no bit-pinned spelling "
+        "checks/numerics.mojo, so the kernel has no bit-pinned spelling "
         "yet (svm/NOT_IMPLEMENTED.tsv)"
     ),
     "tanh": (

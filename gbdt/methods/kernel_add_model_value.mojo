@@ -39,7 +39,7 @@ point it at. Recorded so that gap is visible.
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 
-from original.numerics import identical_mul_add
+from checks.numerics import identical_mul_add
 
 
 def add_model_value_kernel(

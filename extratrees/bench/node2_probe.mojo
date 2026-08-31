@@ -17,11 +17,11 @@ from max.gpu.host import DeviceContext
 
 from extratrees.bench.bench_data import read_column_prefix, read_f32
 from extratrees.estimator import quantize_labels
-from extratrees.derived.decisiontree.decisiontree import (
+from extratrees.impl.decisiontree.decisiontree import (
     CRITERION_MSE,
     DecisionTreeParams,
 )
-from extratrees.derived.decisiontree.batched_levelalgo.builder import (
+from extratrees.impl.decisiontree.batched_levelalgo.builder import (
     make_level_workspace,
     search_batch_regression,
     upload_dataset,
@@ -29,16 +29,16 @@ from extratrees.derived.decisiontree.batched_levelalgo.builder import (
     n_sampled_cols_for,
     PhaseClock,
 )
-from extratrees.derived.decisiontree.batched_levelalgo.kernels.builder_kernels import (
+from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels import (
     InstanceRange,
     NodeWorkItem,
 )
-from extratrees.derived.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import (
+from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import (
     FeatureRange,
     node_feature_min_max,
     node_feature_score_host,
 )
-from extratrees.original.pcg_rng import key_for
+from extratrees.checks.pcg_rng import key_for
 
 
 def main() raises:

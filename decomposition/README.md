@@ -32,7 +32,7 @@ structural reason this algorithm is a good GPU fit**: one bandwidth-bound
 pass, one big arithmetic-dense product, then a small dense problem that does
 not care where it runs.
 
-Step 4 runs **on the device** (`original/jacobi_eigh_device.mojo`), because
+Step 4 runs **on the device** (`checks/jacobi_eigh_device.mojo`), because
 cuSOLVER's `syevj` does, and the standing rule is to mirror their host/device
 split rather than to make our own. The first version of this port put it on
 the host; that was inside `HOST_AND_DEVICE.md`'s O(rows) rule but was not a

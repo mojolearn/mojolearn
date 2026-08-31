@@ -40,7 +40,7 @@ dispatch onto the Cosine and L2 calcers, which is CatBoost's own structure
 -- the Newton spellings differ only in which derivative the caller put in
 the stat planes -- and that choice, `secondDerAsWeights`, is now ported
 (PORTING.md 144) and gated per cell and per model by
-`original/second_der_weights_check.mojo`. `SolarL2`, `LOOL2` and `SatL2`
+`checks/second_der_weights_check.mojo`. `SolarL2`, `LOOL2` and `SatL2`
 still fall through the greedy searcher's dispatch to Cosine and stay
 refused by name from Python rather than accepted and silently substituted.
 

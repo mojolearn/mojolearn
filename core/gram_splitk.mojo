@@ -107,7 +107,7 @@ this kernel passed the same Float64 oracle at ten shapes in the same
 process. MAX 26.5.0's `linalg.matmul` defaults `use_tf32=True`, its cuBLAS
 fallback hard-codes `CUBLAS_TF32_TENSOR_OP_MATH`, and `use_tf32=False` is a
 compile-time assert on every NVIDIA part before Blackwell
-(`original/kernel_matrix.mojo::column_vendor_fp32_matmul_is_tf32`, with
+(`checks/kernel_matrix.mojo::column_vendor_fp32_matmul_is_tf32`, with
 the source lines). So: **under FAST on the NVIDIA column every Gram
 product PCA, truncated SVD and OLS compute is a TF32 tensor-core product
 (10-bit mantissa operands, fp32 accumulation), at EVERY shape, because
@@ -123,7 +123,7 @@ over the chunks -- 240 of them on the Apple column) is a two-level
 pairwise-style summation: its error grows like
 O(k/chunks + chunks) rounding steps instead of the O(k) of one serial fp32
 chain, so it is BETTER conditioned than the route it replaces, not worse.
-`original/gram_splitk_check.mojo` proves it against a Float64 host oracle
+`checks/gram_splitk_check.mojo` proves it against a Float64 host oracle
 at shapes that force every chunk live.
 
 THE CENTERED READ: RAFT'S `stable=false` TODO, IMPLEMENTED
@@ -151,21 +151,21 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
-from original.hardware_matrix import gram_splitk_is_target_arm
-from original.kernel_matrix import (
+from checks.hardware_matrix import gram_splitk_is_target_arm
+from checks.kernel_matrix import (
     COLUMN_BIT_IDENTICAL,
     K_LIB_GRAM_SPLITK,
     TARGET_COLUMN,
     lib_block_size_for,
 )
-from original.numerics import (
+from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
     ftz,
     ftz_simd,
     identical_mul_add,
 )
-from neighbors.derived.distance.detail.pairwise_distance_base import (
+from neighbors.impl.distance.detail.pairwise_distance_base import (
     TARGET_GPU_CORES,
     max_active_blocks_per_core,
 )

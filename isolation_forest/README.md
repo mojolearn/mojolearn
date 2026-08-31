@@ -70,8 +70,8 @@ The swapped reading is built in as `-D MOJOLEARN_IF_SABOTAGE_U64_SWAP=1`.
 One build at a time.
 
 ```sh
-tools/with_build_lock.sh     pixi run mojo run -I . isolation_forest/original/if_check.mojo
-tools/with_identical_mode.sh pixi run mojo run -I . isolation_forest/original/if_check.mojo
+tools/with_build_lock.sh     pixi run mojo run -I . isolation_forest/checks/if_check.mojo
+tools/with_identical_mode.sh pixi run mojo run -I . isolation_forest/checks/if_check.mojo
 ```
 
 Nine checks: the two xorwow gates, refusals, oracle semantics, device vs
@@ -85,7 +85,7 @@ FAST means.
 
 ## The oracle
 
-`original/if_oracle.mojo` is a second, independent transcription, written
+`checks/if_oracle.mojo` is a second, independent transcription, written
 from the `.cuh` again rather than by calling the device function on the
 host. It recurses over `List`s where the device walks an explicit stack over
 four flat arrays. That is deliberate: the device builder's pointer

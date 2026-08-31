@@ -60,8 +60,8 @@ yields ZERO, because none of these lanes has ever written a sabotage result
 into `bench/results/`. Reporting only that number would be true and useless.
 
 The wide definition also accepts an IN-SOURCE LEDGER that says MEASURED and
-names the arm -- `mamba/original/mamba_check.mojo`'s ledger and
-`mamba/derived/mamba_ssm/ops/selective_scan_interface.mojo`'s, plus
+names the arm -- `mamba/checks/mamba_check.mojo`'s ledger and
+`mamba/impl/mamba_ssm/ops/selective_scan_interface.mojo`'s, plus
 `IDENTITY_PATHS.md` rows that record arms "RUN AND BITTEN". Those are real
 measurements that were simply written into source and into the path table
 rather than into `bench/results/`.
@@ -132,7 +132,7 @@ from dataclasses import dataclass, field, asdict
 # WHERE TO LOOK
 # ---------------------------------------------------------------------------
 # The five lanes that carry the identical-arithmetic profiles. Other lanes
-# (`ensemble/`, `hierarchy/`, `core/`, `cluster/`, `original/`) also carry
+# (`ensemble/`, `hierarchy/`, `core/`, `cluster/`, `checks/`) also carry
 # sabotage switches, most of them INTEGER-PARAMETERIZED rather than `-D`
 # driven, and they are deliberately out of scope here: their arms are graded
 # against a different kind of contract and mixing the two would produce a

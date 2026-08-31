@@ -78,14 +78,14 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from original.kernel_matrix import (
+from checks.kernel_matrix import (
     TARGET_COLUMN,
     lane_width_for,
     pointwise_one_byte_fixed_for,
     pw_hist2_block_size_for,
     pw_hist2_smem_floats_for,
 )
-from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 from gbdt.methods.kernel.compute_point_hist2_loop import PointHist2
 
@@ -288,7 +288,7 @@ struct PointHist5[origin: MutOrigin](PointHist2):
         the result at `Buffer[2 * (32 * f + fold) + w]` -- feature-major,
         then fold, then STAT PARITY, which is the stat-MINOR layout the
         module docstring warns about and which
-        `original/pointwise_hist2_5bit_check.mojo` gates per cell.
+        `checks/pointwise_hist2_5bit_check.mojo` gates per cell.
         """
         var tid = Int(thread_idx.x)
         # `Buffer -= SliceOffset()` (`:206`): back to the block base

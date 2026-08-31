@@ -50,12 +50,12 @@ cd "$(dirname "$0")/.."
 # Identity files first, then the algorithm suites they must not have broken.
 FILES="core/gemm_identity_check.mojo
 core/column_stats_identity_check.mojo
-original/gram_splitk_check.mojo
-decomposition/original/jacobi_check.mojo
-decomposition/original/pca_check.mojo
-glm/original/ols_check.mojo
-glm/original/ridge_check.mojo
-glm/original/logistic_check.mojo
+checks/gram_splitk_check.mojo
+decomposition/checks/jacobi_check.mojo
+decomposition/checks/pca_check.mojo
+glm/checks/ols_check.mojo
+glm/checks/ridge_check.mojo
+glm/checks/logistic_check.mojo
 decomposition/pca_main.mojo
 decomposition/jacobi_main.mojo
 glm/ols_main.mojo"

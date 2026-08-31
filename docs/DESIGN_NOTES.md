@@ -33,7 +33,7 @@ anywhere. Both are fixed; see `NOTICE`.
 
 | directory | upstream | what |
 |---|---|---|
-| `gbdt/`, `original/` | CatBoost | the GPU oblivious (symmetric) tree learner, control plane included |
+| `gbdt/`, `checks/` | CatBoost | the GPU oblivious (symmetric) tree learner, control plane included |
 | `cluster/` | cuVS | k-means |
 | `neighbors/` | cuVS, RAFT, FAISS (MIT) | brute-force k-NN, the fused L2 kernel, ball cover, top-k selection |
 | `dbscan/` | cuML, RAFT | DBSCAN, epsilon-neighborhood, label merging |
@@ -118,7 +118,7 @@ GPU, pointwise objectives.
 **The tree mirrors CatBoost's tree, file for file, with their constant `catboost/cuda/` prefix dropped**, so a reviewer can put
 `gbdt/methods/.../hist_binary.mojo` beside their `hist_binary.cu` and diff
 them, and so "did we port this file?" is answered by `ls` rather than by
-reading. Anything with no CatBoost counterpart lives under `original/` and
+reading. Anything with no CatBoost counterpart lives under `checks/` and
 has to justify its existence there.
 
 | stage | CatBoost source | port |
@@ -133,7 +133,7 @@ has to justify its existence there.
 | in-leaf reorder after a split | `.../split_points.cu` | `.../kernel/split_points.mojo` |
 | the level loop | `methods/greedy_subsets_searcher/structure_searcher_template.h`, `split_properties_helper.cpp` | `.../greedy_subsets_searcher/structure_searcher_template.mojo` |
 
-## The one thing here that is NOT a port: `original/numerics.mojo`
+## The one thing here that is NOT a port: `checks/numerics.mojo`
 
 CatBoost ships one GPU backend and accepts a non-deterministic answer: its
 histogram flushes through `atomicAdd` on `float`, so two runs of the same fit
@@ -210,7 +210,7 @@ thing that can answer whether the shared substrate is actually shared or is
 quietly tree-shaped.
 
 **The first answer is in and it is a good one.** The fixed-point accumulator
-in `original/fixed_point.mojo`, written for the histogram flush, serves the
+in `checks/fixed_point.mojo`, written for the histogram flush, serves the
 k-means centroid update unchanged.
 Its overflow argument transferred with one noun changed: "any leaf's rows are
 a subset of all rows" became "any cluster's rows are a subset of all rows",
@@ -219,7 +219,7 @@ none.
 
 k-means moved out of RAFT and into cuVS, so the mirror is two-layer:
 algorithms from cuVS into `cluster/gbdt/`, and the RAFT and cuBLAS
-primitives they call into `cluster/original/`. See `cluster/README.md`.
+primitives they call into `cluster/checks/`. See `cluster/README.md`.
 
 `cluster/` is LAUNCHED and passing: 4 of 4 centroids recovered as a
 permutation, 0 of 512 rows misassigned, inertia within 0.3% of the

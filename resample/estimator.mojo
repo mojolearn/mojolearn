@@ -22,7 +22,7 @@ WHAT RUNS WHERE, once, so no reader has to work it out from the code:
   * the SORTS: device, `core/segmented_sort.mojo`;
   * the POINT ESTIMATE, the INTERVAL, the STANDARD ERROR and the P-VALUE:
     host, over the same pinned tree
-    (`metrics/original/pinned_sum.mojo::host_tree_sum`), because they are
+    (`metrics/checks/pinned_sum.mojo::host_tree_sum`), because they are
     O(1) or O(R) scalar work on data that has to come back anyway, and
     because a host float32 add/multiply/divide/sqrt is correctly rounded on
     every host this runs on with NOT ONE LIBM CALL among them
@@ -36,14 +36,14 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
 from core.segmented_sort import SORT_BLOCK, segmented_sort_keys_f32
-from metrics.original.pinned_sum import (
+from metrics.checks.pinned_sum import (
     PINNED_SUM_W,
     chunk_count,
     host_fold_partials,
     host_tree_sum,
 )
-from original.numerics import ftz, identical_div, identical_mul, identical_sqrt
-from resample.original.index_map import (
+from checks.numerics import ftz, identical_div, identical_mul, identical_sqrt
+from resample.checks.index_map import (
     RESAMPLE_KIND_BOOTSTRAP,
     RESAMPLE_KIND_MONTE_CARLO,
     RESAMPLE_KIND_PERMUTATION,
@@ -55,7 +55,7 @@ from resample.original.index_map import (
     validate_pooled,
     validate_positions,
 )
-from resample.original.intervals import (
+from resample.checks.intervals import (
     ALT_TWO_SIDED,
     Interval,
     METHOD_BASIC,
@@ -72,7 +72,7 @@ from resample.original.intervals import (
     percentile_interval,
     permutation_pvalue,
 )
-from resample.original.statistics import (
+from resample.checks.statistics import (
     MC_DIMS,
     RESAMPLE_MAX_SORT_CELLS,
     STAT_DIFF_MEANS,
@@ -331,7 +331,7 @@ def _launch_bootstrap_stat(
             "resample: threads-per-block must be 64, 128 or 256 (it must"
             " divide PINNED_SUM_W = "
             + String(PINNED_SUM_W)
-            + ", metrics/original/pinned_sum.mojo::virtual_block_sum); got "
+            + ", metrics/checks/pinned_sum.mojo::virtual_block_sum); got "
             + String(tpb)
         )
 

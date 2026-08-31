@@ -10,7 +10,7 @@ loaded.
         python3 tools/knn_sklearn_oracle.py
 
 WHAT IS COMPARED, AND WHY THE FIXTURE IS SHAPED THIS WAY. The Mojo gates
-(`neighbors/original/knn_classify_check.mojo`, `knn_regress_check.mojo`)
+(`neighbors/checks/knn_classify_check.mojo`, `knn_regress_check.mojo`)
 prove the device equals a host transcription of cuML's kernels; this file
 proves that transcription is the ALGORITHM scikit-learn ships -- uniform
 vote, argmax with the LOWEST class on a tie (`scipy.stats.mode`), mean of

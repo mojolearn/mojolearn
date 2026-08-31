@@ -55,8 +55,8 @@ ssh "$HOST" bash -s <<REMOTE
 set -euo pipefail
 cd $REMOTE_DIR
 sed -i.bak "s/^comptime TARGET_COLUMN = .*/comptime TARGET_COLUMN = $COLUMN/" \
-  original/kernel_matrix.mojo
-grep -n "^comptime TARGET_COLUMN" original/kernel_matrix.mojo
+  checks/kernel_matrix.mojo
+grep -n "^comptime TARGET_COLUMN" checks/kernel_matrix.mojo
 mojo run -I . probe_main.mojo
 REMOTE
 

@@ -16,7 +16,7 @@ of a LADDER in which each rung keeps the rung below it:
                    run. Says NOTHING about a second box.
     identical      all of the above, AND the same bits on Metal, CUDA and
                    HIP. A strict superset, which is why `PIN_DETERMINISM` in
-                   `original/numerics.mojo` is true under both upper tiers.
+                   `checks/numerics.mojo` is true under both upper tiers.
 
 `MOJOLEARN_NUMERIC_MODE=<tier>` in the environment AT IMPORT TIME makes
 `mojolearn` load that set under the canonical module names, so every caller's
@@ -28,7 +28,7 @@ until 2026-08-29, when the tier existed in the compiler and was unreachable
 from Python because this function's allow-list had two entries in it.
 
 The mode is a BUILD DEFINE (`-D MOJOLEARN_NUMERIC_IDENTICAL=1`, read by
-`original/numerics.mojo` through `is_defined`), and the identical binaries
+`checks/numerics.mojo` through `is_defined`), and the identical binaries
 come from `MOJOLEARN_NUMERIC_MODE=<tier> bash bindings/build_*.sh`. It
 used to be a line in numerics.mojo flipped by sed and rebuilt in place, which
 is fine for one lab session and wrong for a product (and for two sessions
@@ -58,7 +58,7 @@ has ever built and it keeps working exactly as before.
 THE ORDER OF TRUST, most to least:
 
   1. WHAT THE BINARY SAYS. Every binding exports `<prefix>_vendor()`, a
-     compile-time constant (`original/vendor.mojo`): 'metal', 'cuda',
+     compile-time constant (`checks/vendor.mojo`): 'metal', 'cuda',
      'hip' or 'none'. After a set is loaded, EVERY module in it is asked,
      and one that disagrees with the directory it was loaded from is
      refused at import, the same refusal as a tier mismatch. A CUDA `.so`
@@ -168,7 +168,7 @@ _SELECTED = None
 
 
 #: Tier name -> the code `<ext>_numeric_mode()` reports, which is the
-#: `NUMERIC_*` constant in `original/numerics.mojo`. Keep the two in step:
+#: `NUMERIC_*` constant in `checks/numerics.mojo`. Keep the two in step:
 #: this dict is how a binary in the wrong directory is caught.
 _MODE_CODE = {"fast": 0, "identical": 1, "deterministic": 2}
 _CODE_MODE = {v: k for k, v in _MODE_CODE.items()}

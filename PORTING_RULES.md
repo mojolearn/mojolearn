@@ -100,7 +100,7 @@ Two things this does NOT mean:
 A file in this tree is exactly one of two things:
 
 - `gbdt/` -- a port of a real file of theirs
-- `original/` -- something they never needed
+- `checks/` -- something they never needed
 
 There is no third category of "good idea worth adopting."
 

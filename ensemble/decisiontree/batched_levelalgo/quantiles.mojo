@@ -176,7 +176,7 @@ already been bitten once by assuming a Mojo stdlib numeric matched libm
 
 DEVIATION 111. `cub::DeviceSegmentedRadixSort::SortKeys`
 (`quantiles.cuh:244`, `:258`) is hand-written as
-`ensemble/original/segmented_sort.mojo`.
+`ensemble/checks/segmented_sort.mojo`.
 
 WHAT IT COSTS: CUB is OPEN, so under the charter the correct move is to
 port the kernel rather than substitute a vendor primitive -- and there
@@ -255,7 +255,7 @@ THE IDENTICAL-MODE ALIGNMENT (DEVIATION 403, 2026-08-22). The paragraph
 above establishes that cuML's exact behavior is not reproducible on
 Metal; what IS available is ONE behavior on every vendor, which is what
 `NUMERIC_IDENTICAL` promises. IDENTITY_PATHS row 10's construction
-(`original/numerics.ftz`) does exactly this: the `unique` comparison in
+(`checks/numerics.ftz`) does exactly this: the `unique` comparison in
 `compute_quantiles_batched_kernel` compares `ftz(cur) != ftz(prev)`.
 Under FAST, `ftz` is a comptime no-op and this file's behavior is
 unchanged bit for bit -- Apple keeps its hardware flush, CUDA keeps
@@ -282,7 +282,7 @@ from std.gpu import block_dim, block_idx, thread_idx
 
 from core.launch_log import log_launch
 from core.segmented_sort import segmented_sort_keys_f32
-from original.numerics import ftz
+from checks.numerics import ftz
 
 
 # ===========================================================================

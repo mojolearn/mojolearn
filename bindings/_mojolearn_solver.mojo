@@ -35,7 +35,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from original.vendor import COMPILED_VENDOR
+from checks.vendor import COMPILED_VENDOR
 
 from max.gpu.host import DeviceContext
 
@@ -82,7 +82,7 @@ def cd_fit_binding(
         5  l1_ratio           (float; Lasso passes 1.0)
         6  tol                (float)
         7  shuffle            (0/1; selection='random' is 1 and is REFUSED
-                               BY NAME by solver/derived/solver/cd.mojo,
+                               BY NAME by solver/impl/solver/cd.mojo,
                                DEVIATION 611 reserved and not spent)
         8  has_sample_weight  (0/1; 1 is REFUSED BY NAME by the same file)
 
@@ -176,7 +176,7 @@ def linkage_fit_binding(
         2  n_clusters
         3  metric    (cuML DistanceType: 1 = L2SqrtExpanded, cuML's
                       'euclidean'/'l2'; 0 = L2Expanded. Every other code is
-                      REFUSED BY NAME by hierarchy/derived/cluster/detail/
+                      REFUSED BY NAME by hierarchy/impl/cluster/detail/
                       connectivities.mojo)
         4  use_knn   (0/1; 1 is connectivity='knn', rung 2, REFUSED BY NAME
                       by get_distance_graph in the same file)
@@ -213,7 +213,7 @@ def linkage_fit_binding(
 def solver_vendor_binding() raises -> PythonObject:
     """THE ACCELERATOR API THIS BINARY WAS COMPILED FOR: 'metal', 'cuda',
     'hip' or 'none'. A compile-time constant folded in from
-    `original/vendor.mojo`, the same shape as the tier read-back
+    `checks/vendor.mojo`, the same shape as the tier read-back
     (`gbdt_numeric_mode`): the answer comes from the binary that actually
     loaded, never from the directory it sat in or from the environment.
     `python/mojolearn/_backend.py` refuses at import when this disagrees

@@ -33,11 +33,11 @@ from extratrees.bench.bench_data import (
     read_f32,
 )
 from extratrees.estimator import resolve_max_features, quantize_labels
-from extratrees.derived.decisiontree.decisiontree import (
+from extratrees.impl.decisiontree.decisiontree import (
     CRITERION_MSE,
     DecisionTreeParams,
 )
-from extratrees.derived.decisiontree.batched_levelalgo.builder import (
+from extratrees.impl.decisiontree.batched_levelalgo.builder import (
     train_forest_classification_device,
     train_forest_classification_device_timed,
     train_forest_regression_device,
@@ -49,7 +49,7 @@ from extratrees.derived.decisiontree.batched_levelalgo.builder import (
     N_PHASES,
     PhaseClock,
 )
-from extratrees.derived.randomforest.randomforest import class_ids_for
+from extratrees.impl.randomforest.randomforest import class_ids_for
 
 
 def main() raises:

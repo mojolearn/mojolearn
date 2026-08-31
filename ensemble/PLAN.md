@@ -343,7 +343,7 @@ than a hoped-for one.
 
 ## MEASURED: this device has no 64-bit integer atomic, and it says so loudly
 
-`ensemble/original/atomic_width_probe.mojo`. `Atomic.fetch_add` on a
+`ensemble/checks/atomic_width_probe.mojo`. `Atomic.fetch_add` on a
 `UInt64` is a hard **compile** error on the Apple target:
 
     error: Atomic operation is not supported for this type on Apple GPU
@@ -364,7 +364,7 @@ lane) and under the kernels lane's numbers for `local_nLeft`.
 
 ## MEASURED, and it is a finding rather than a port detail
 
-Two things came out of `ensemble/original/split_check.mojo`, both by
+Two things came out of `ensemble/checks/split_check.mojo`, both by
 running rather than by reasoning:
 
 1. **Their split reduction operator is NOT associative.** `Split::update`
@@ -502,7 +502,7 @@ Numbers as actually used, which is what PORTING.md takes:
 | 403 | `quantiles.mojo` | the subnormal hardware row (DEVIATION 123's divergence) gets its acting half: the `unique` compare runs `ftz(cur) != ftz(prev)`. FAST: comptime no-op, transcription unchanged (quantiles_check green, cells identical). IDENTICAL: one denormal policy (flush, Apple's hardware behavior) on every vendor, so `n_bins_array` is the same bytes on Metal/CUDA/HIP; stored representatives never move (integer-keyed sort, first-of-run kept). IDENTITY_PATHS row 10's construction at its first RF seam. It was the ONLY one until DEVIATION 1942 (2026-08-29), which measured the family still diverging across vendors on subnormal inputs and flushed X itself |
 | 404 | `split.mojo`, `kernels/builder_kernels_impl.mojo` | the split reduction width PINNED to 32 under `NUMERIC_IDENTICAL` (`eval_best_split_pinned`: the same rotate-and-reduce with shuffle spelled through shared memory + barriers; publish tail factored into `_publish_to_global`, shared, body unchanged). Acts on 104's price: AMD CDNA's 64-wide grouping can, by 105's non-associativity, pick a different split in the equal-gain-equal-column tie class. AUDIT RESULT recorded with it: the CROSS-BLOCK mutex merge needs no pin — one block per (node, sampled column) and feature sampling is a permutation, so mutex-merged candidates always differ in `colid` and the merge is a plain total-order max. GATED: arm C-pinned (TPB 32) and C-pinned/128 (four groups) hold the pinned arm to the planted winners; phase-1 self-shuffle sabotage moved 4/4 at both widths; phase-2 group-drop was INERT at TPB 32 (one group, predicted) and moved 4/4 at TPB 128 |
 | 405 | `objectives.mojo`, `builder.mojo` | IDENTITY_PATHS rows 9/10 applied to the transcendental-free gains: `GiniGain`, `MSEGain`, `InverseGaussianGain`, both `SetLeafVector`s and `WeightAt` route seams through `_ftz_seam` / `_mul_add_seam` (comptime no-ops under FAST; explicit `fma` + signed-zero flush under IDENTICAL — one arithmetic on Metal/PTX/AMDGPU). Entropy/Poisson/Gamma NOT converted (device `std.math.log` is row 12's per-vendor lowering, DEVIATION 113); under IDENTICAL the Builder REFUSES them by name — the third move. GATED: cuml_oracle_check still holds GINI gains BIT-EXACT against cuML's compiled oracle, and all ten fingerprint hashes match a pre-edit worktree run at 4df2f06 exactly. The Entropy/Poisson/Gamma REFUSE arm was the 2026-08-22 answer and is RETIRED by 406 below; the rows 9/10 seam work stands |
-| 406 | `objectives.mojo`, `builder.mojo` | row 12 closed (commit ed0fe5d, `portable_expf`/`portable_logf` in `original/numerics.mojo`), so 405's REFUSE is upgraded to a real run. Every `log` in `EntropyGain`/`PoissonGain`/`GammaGain` routes through `_log_seam` -> `identical_log` (under FAST the wrapper IS `std.math.log` verbatim, DEVIATION 113's pricing stands; under IDENTICAL it is `portable_logf` -- one Cephes polynomial through fma, max 1 ulp vs float64 stdlib, device bits == host bits per lane), and the arithmetic around the logs is pinned by 405's discipline (`_ftz_seam` on divisions/products/`eps_`-guard stores, `_mul_add_seam` on accumulations, association order preserved). The `builder.mojo` REFUSE for exactly those three criteria is removed with its history kept in place. Bit-comparability with cuML's three log criteria stays lost in BOTH modes -- `portable_logf` is not `raft::log` either. GATED under FAST: objectives_check, criteria_check, builder_check, cuml_oracle_check outputs identical before/after (ENTROPY oracle delta 4.087839495070066e-06 relative, unchanged); IDENTICAL compile/run deferred to the orchestrator's consolidated pass |
+| 406 | `objectives.mojo`, `builder.mojo` | row 12 closed (commit ed0fe5d, `portable_expf`/`portable_logf` in `checks/numerics.mojo`), so 405's REFUSE is upgraded to a real run. Every `log` in `EntropyGain`/`PoissonGain`/`GammaGain` routes through `_log_seam` -> `identical_log` (under FAST the wrapper IS `std.math.log` verbatim, DEVIATION 113's pricing stands; under IDENTICAL it is `portable_logf` -- one Cephes polynomial through fma, max 1 ulp vs float64 stdlib, device bits == host bits per lane), and the arithmetic around the logs is pinned by 405's discipline (`_ftz_seam` on divisions/products/`eps_`-guard stores, `_mul_add_seam` on accumulations, association order preserved). The `builder.mojo` REFUSE for exactly those three criteria is removed with its history kept in place. Bit-comparability with cuML's three log criteria stays lost in BOTH modes -- `portable_logf` is not `raft::log` either. GATED under FAST: objectives_check, criteria_check, builder_check, cuml_oracle_check outputs identical before/after (ENTROPY oracle delta 4.087839495070066e-06 relative, unchanged); IDENTICAL compile/run deferred to the orchestrator's consolidated pass |
 | 401 | `instruments.mojo`, `randomforest.mojo`, `builder.mojo` | identity-trace checkpoints threaded through `fit_forest` and `Builder`'s phase methods (`mut instr: FitInstruments`); cuML has no counterpart. Tags: `forest.quantiles.{nbins,values}`, `forest.binned`, `treeT.rows`, `treeT.batchB.roundR.colsamples` (added 2026-08-22 with the identity audit: the feature-sample RNG's only output, so an RNG divergence is separable from a histogram divergence), `treeT.batchB.roundR.colsC.hist`, `treeT.batchB.roundR.cand`, `treeT.batchB.splits`, `treeT.nodes`, `treeT.leaves`. Serial drives (`train`, `do_split`, `_compute_best_splits`) run DISABLED instruments so no check changed. Host structs recorded FIELD BY FIELD (padding), 64-bit values split lo/hi with explicit masks. GATED: all ten fingerprint hashes unchanged, trace byte-identical across two runs, and K=1 vs K=4 agree PER TAG on all 279 records of the CLF-BOOT fixture — a finer gate than the forest hash |
 | 402 | `instruments.mojo`, `randomforest.mojo`, `builder.mojo` | `MOJOLEARN_STAGE_TIMES=1` per-stage wall timers (stages: quantiles, bin_dataset, row_sampling, device_wait, leaf_values, oob, fit_total, derived other), the replacement for their `TimerCPU`/`train_time` declined under 303. `stop()` drains to close each stage, so A STAGED RUN IS NEVER A CERTIFIABLE TIMING; env read once per fit, `start`/`stop` return on one boolean when unset. Fingerprints unchanged with the flag ON |
 | 1916 | `builder.mojo`, `kernels/builder_kernels.mojo`, `kernels/builder_kernels_impl.mojo` | ONE fused setup launch per sampling round (`phase_setup_kernel`, census tag `phase_setup`). `computeBestSplits`'s three setup ops -- `initSplit` (`builder.cuh:489`), the mutex re-zero over max_batch_size (`:490`, an unlogged `enqueue_memset`), and `sampleFeatures` (`:505-520`) -- were three host-priced enqueues per round, ~9.5k rounds per covtype fit (per 1909's census): ~19k logged kernel launches + ~9.5k blits. Now one grid-stride kernel writes all three: `splits[i] = Split()` over the live n, `mutex[i] = 0` over max_batch_size, `column_samples[i]` via `sampled_column_at` -- the SAME `@always_inline` body `sample_features_kernel` runs, factored out of it (with `recombine_seed_halves`, the sign-extension masks single-sourced) so the fused path IMPORTS the sampler rather than transcribing it. TRANSCRIPTION-EXACT because the three write DISJOINT buffers, none reads another's output, every element is a pure function of its flat index and arguments, and NO accumulation exists in any of them -- block shape (256 vs 128/256/blit) can move no value. The launch sits AFTER the phase upload where the trio sat before it: the feature sample reads the uploaded work items (as before), and `splits`/`mutex` have no reader before `find_best_splits`, so on the in-order queue the two positions are equivalent to every reader. Serial drives (`train`/`do_split`/`_compute_best_splits`) go through the same `enqueue_best_splits`, so K=1 and K=4 change together. `_sample_features` deleted; `init_split_kernel` and `sample_features_kernel` stand for their checks (split_check, shuffle_check). Predicted census: `init_split` (~9.5k) and `sample_features` (~9.5k) -> `phase_setup` (~9.5k); net ~-9.5k logged ops and ~-9.5k unlogged mutex blits per covtype fit |
@@ -512,7 +512,7 @@ Numbers as actually used, which is what PORTING.md takes:
 | 1942 | `randomforest.mojo`, `decisiontree/decisiontree.mojo` | THE FEATURE MATRIX ITSELF was never flushed. MEASURED 2026-08-29 (`tools/identity_break.py`, commit 97f7507b, Apple M4 Metal vs AMD MI325X HIP, both IDENTICAL, hash-identical fixtures), 248 of 252 cells bit-identical, and three of the four that diverged were this family on the `denormal` fixture (rf-clf predict and predict_proba, rf-reg predict), while the same subnormal bytes agreed on every gbdt and extratrees lane. DEVIATION 403 flushed the `unique` compare and nothing else; the values a subnormal reaches are ALSO the quantile sort, the `lower_bound` bin lookup, the split partition and the HOST predict walk, and the host CPU honors denormals on every vendor while the device flushes them only on Apple, so even one vendor's `denormal` cell differed from its own `denormal_ftz`. The fix is that under NUMERIC_IDENTICAL `fit_forest` launches `ftz_features_kernel` over the device copy of X ONCE, before `compute_quantiles` (its first reader), and `DecisionTree.predict_one` flushes the feature it compares (`_ftz_feature`). Every threshold a tree stores is a copy of an X value, so flushing X flushes them all. FAST never enqueues the kernel and `ftz` is a comptime no-op. VERIFIED on Apple, `base` hashes unchanged (rf-clf 46818f3b6808ffc3/4dcffe6dd74faff3, rf-reg 001863c75ccd46be); with the SAME labels handed to both arms (the probe's own y_clf is a numpy rule on columns 0 and 1, which the fixture makes subnormal, so the probe's rf-clf `denormal` and `denormal_ftz` cells carry DIFFERENT labels in 2493 rows and can never be equal, the same reason et-clf's two cells differ) rf-clf and rf-reg on `denormal` now hash to their `denormal_ftz` cells (0efd56e67f6dcae6/493eb34b695d5eaf and 5f4354e8a7ee8f07); sabotage of each flush moves the `denormal` cell away again. NVIDIA and AMD columns are re-measured by rented legs, NOT claimed here. |
 | 1909 | `builder.mojo` | args uploads collapse to PER TREE PER WIDTH. The census counted ~20.7k `xfer_args_upload` per covtype fit surviving DEVIATION 1893's per-round cadence: 2 per sampling round (~9.5k rounds: histogram + find-best) + 1 per node-split batch (~1.6k) + 1 per tree's leaf pass (~100). Inside one tree the split blobs are a pure function of the round's `n_sampled_cols` -- dataset pointers/counts fixed per tree, quantiles and the objective (a pure function of `params`, `builder.cuh:592-596`) fixed per fit -- and that width takes at most TWO values per tree (full `original_n_sampled_cols`; the short last round, `sampled_cols_in_round`). Two cached `DeviceArgs` slots per launcher (`hist_args`/`hist_args_alt`, `find_args`/`find_args_alt`, keyed by `args_cols_a`/`args_cols_b`) hold both widths and every later round re-hands the device pointer; `enqueue_best_splits` selects, `_compute_split` receives the pointers as arguments. The partition blob (`node_split_args`, width always restored to original, `:458`) stages once per tree behind one Bool. STILL DISTINCT PER STAGING, with reasons: `xfer_nodesplit_ops` (~1.6k, unchanged) embeds per-phase DEVICE POINTERS -- since 1908 the workload pointer moves with the packed span's `cur_wl_rel`, so the ops functor's bytes genuinely differ per batch; `xfer_splits_upload` (~1.6k, unchanged) is DATA, not args -- the batch's chosen splits; `leaf_args` (~1/tree, unchanged, already 1893's cadence) embeds the leaf objective built with the 3-arg constructor. Cache invalidation is at `reset_for_tree` AND every drive entry (`begin_tree`, `do_split`, `_compute_best_splits`), so a reused builder can never launch against a blob embedding an earlier drive's dataset; overwriting a slot is safe because a builder's previous phase drained at the caller's last synchronize before a new enqueue reaches the staging site. Predicted `xfer_args_upload` per covtype fit: 2/tree (full width) + 2/tree (short width, only in trees where some batch reaches the last round) + 1/tree (partition) + 1/tree (leaf) = 4-6/tree, ~400-600 vs 20.7k. Same blob bytes reach the same kernels; no value moves in either numeric mode |
 | 1908 | `builder.mojo`, `randomforest.mojo` | ONE splits readback per pipeline cycle, and ONE control-plane upload per phase. The 2026-08-26 transfer census (covtype 522911x54, 100 trees, K=4) priced ~57k transfers per fit as the host-side remainder vs cuml-rf-gpu; cuML's four streams pay cheap CUDA async `update_host`/`update_device` per tree (`builder.cuh:479`, `:501`, `:466`, `:405`) where each enqueue here is host-priced. Two moves, neither touching a computed value: (a) `SplitStaging` -- every slot's `splits`/`h_splits` region carved from one device/pinned pair at a 512-byte slot stride (`adopt_shared_splits`); `_enqueue_splits_download` on an adopted builder RECORDS its byte count and the forest loop's `flush_splits_downloads` copies the covering prefix ONCE per cycle, before the cycle's synchronize (~11.1k `xfer_splits_download` -> ~one per cycle, ~2.8k at K=4). The prefix carries the dead stretch between a slot's live `n` and the next slot's base -- bounded by `(K-1)*slot_stride` (~590 KB/cycle at defaults, float32) against K-1 saved host-priced enqueues per cycle. (b) the per-phase `update_device` pair (work items + workload map) packs into one pinned span `[items | pad-to-512 | workload]` sent as ONE copy (`_enqueue_phase_upload`, tag `xfer_phase_upload`) into the SAME `d_work_items`/`workload_info` arena stretch, whose adjacency the untouched `workspace_layout` already guarantees; `xfer_work_items`/`xfer_workload_info` -> 0, replaced by ~11.1k `xfer_phase_upload`. PER-CYCLE batching of the uploads themselves is NOT possible under the state machine: a phase's work items are computed from splits read in the same cycle, and the in-order queue would put a cycle-end upload AFTER the kernels that read it. `xfer_splits_upload` stays separate: the partition kernels read AND update those splits in place and the batch's final download reads them back, so its destination must alias the download region. Serial drives keep pre-1908 behavior: never-adopted builders copy immediately, and `_download_splits` flushes its own slot so a check on an adopted builder still reads real bytes. Kernels write the same bytes at different addresses; no arithmetic, no ordering of any accumulation moves |
-| 313 | `builder.mojo`, `randomforest.mojo` | ONE Builder per FOREST, reset per tree (`reset_for_tree`), and the leaf pass's six staging buffers pooled with it. Their Builder is constructed per tree, but from RMM's POOLED resources -- pointer carving, not driver allocation -- so per-tree Metal buffer creates were a cost their design never pays. Also deleted in the same round, under HOST_AND_DEVICE.md rule two: the two per-tree `RowSampler` synchronizes (their `sample()` has NONE -- every arm is stream-ordered, `randomforest.cuh:110-165` -- while the host-staging arms keep theirs as DEVIATION 305's price). Gated by `original/fingerprint_probe.mojo`: five configs bit-exact across every step, and the treeid-freeze sabotage moves every multi-tree line |
+| 313 | `builder.mojo`, `randomforest.mojo` | ONE Builder per FOREST, reset per tree (`reset_for_tree`), and the leaf pass's six staging buffers pooled with it. Their Builder is constructed per tree, but from RMM's POOLED resources -- pointer carving, not driver allocation -- so per-tree Metal buffer creates were a cost their design never pays. Also deleted in the same round, under HOST_AND_DEVICE.md rule two: the two per-tree `RowSampler` synchronizes (their `sample()` has NONE -- every arm is stream-ordered, `randomforest.cuh:110-165` -- while the host-staging arms keep theirs as DEVIATION 305's price). Gated by `checks/fingerprint_probe.mojo`: five configs bit-exact across every step, and the treeid-freeze sabotage moves every multi-tree line |
 
 **RESOLVED, 2026-08-21, in the same session:** `core/`'s 112/113/114 were
 renumbered to **124/125/126** in `core/block_reduce.mojo` and
@@ -558,7 +558,7 @@ references, one IEEE (what cuML computes) and one with the measured flush,
 gates the port on what it controls, and prints the divergence per column as
 a named line rather than folding it into a pass/fail.
 
-**This belongs in `original/kernel_matrix.mojo` as a CAPABILITY row** — not
+**This belongs in `checks/kernel_matrix.mojo` as a CAPABILITY row** — not
 a NUMERIC or SCHEDULING row, because those are knobs this project chooses
 and nobody chose this. It is stated in `quantiles.mojo` for now. **OPEN
 merge-time item.**
@@ -572,12 +572,12 @@ merge-time item.**
   device buffer and loads it in the kernel's first line. `dataset.mojo` is
   `(Copyable, Movable)` and will hit this the first time the histogram
   kernel tries to take it. Decide once, apply everywhere.
-- **`ensemble/original/` can never be `mojo precompile`d.** Every check
+- **`ensemble/checks/` can never be `mojo precompile`d.** Every check
   file has a `main()`, which the packager rejects. Three lanes hit this and
   all three reported it as somebody else's failure. Either checks move to a
   sibling outside the package or that command leaves the briefs.
 - **`gbdt/gpu_util/kernel/segmented_sort.mojo` is duplicated** into
-  `ensemble/original/segmented_sort.mojo`, deliberately, because
+  `ensemble/checks/segmented_sort.mojo`, deliberately, because
   `ensemble/` must not import `gbdt/`. Collapse at merge.
 - **`Split` should reconcile with the ET lane's**, which is writing its own
   under `extratrees/`.
@@ -602,7 +602,7 @@ merge-time item.**
 
 # State at the end of 2026-08-21: the directory trains
 
-`ensemble/original/train_check.mojo` grows real trees on the device, end to
+`ensemble/checks/train_check.mojo` grows real trees on the device, end to
 end — quantiles, feature sampling, histogram, cdf, gain, split reduction,
 partition, leaf. All **ten** checks in this directory pass together:
 `split`, `shuffle`, `atomic_width_probe`, `objectives`, `quantiles`,
@@ -682,10 +682,10 @@ Metal/CUDA/HIP, and against cuML itself, still needs the NVIDIA column.
 - `Bin` could conform to `core/block_scan.BlockScanElement` directly,
   deleting the `ScanBin` adapter.
 - The subnormal-flush row (DEVIATION 123) belongs in
-  `original/kernel_matrix.mojo` as a CAPABILITY row.
-- `ensemble/original/segmented_sort.mojo` duplicates
+  `checks/kernel_matrix.mojo` as a CAPABILITY row.
+- `ensemble/checks/segmented_sort.mojo` duplicates
   `gbdt/gpu_util/kernel/segmented_sort.mojo`.
-- `ensemble/original/` can never be `mojo precompile`d while its checks
+- `ensemble/checks/` can never be `mojo precompile`d while its checks
   carry `main()`.
 - No `pixi.toml` task exists for any check here; all ten run by path.
 
@@ -794,12 +794,12 @@ commits, all pushed: `af91bae` (DEVIATION 313 workspace pool + DEVIATION
 304 revised to their memset bytes + the two per-tree sampler syncs
 deleted), `a7d9bac` (Philox, segmented sort and the shuffle iterator --
 THREE shipping-path files, the earlier count of two missed the shuffle
-iterator -- lifted from `original/` to `core/`), `d113ba8` (the eps500
+iterator -- lifted from `checks/` to `core/`), `d113ba8` (the eps500
 bench row behind `RF_BENCH_EPS_DIR`, and
 `bench/results/RF_2026-08-21_control-plane.md`, which is this round's
 record and the place to read what may be claimed without a window).
 
-The gate for all of it is `original/fingerprint_probe.mojo`: five
+The gate for all of it is `checks/fingerprint_probe.mojo`: five
 recorded FNV-1a64 forest hashes, bit-exact across every step, sabotaged
 once per mechanism. The per-BATCH syncs were checked against their source
 and KEPT -- two `update_host` + `sync_stream` per doSplit is cuML's own
@@ -842,13 +842,13 @@ quoted.
   carries a duplicate for want of it.
 - `Bin` could conform to `BlockScanElement` directly, deleting `ScanBin`.
 - The subnormal-flush row (DEVIATION 123) belongs in
-  `original/kernel_matrix.mojo` as a CAPABILITY row.
-- `ensemble/original/segmented_sort.mojo` duplicates the `gbdt/` one.
-- `ensemble/original/` cannot be `mojo precompile`d while its checks carry
+  `checks/kernel_matrix.mojo` as a CAPABILITY row.
+- `ensemble/checks/segmented_sort.mojo` duplicates the `gbdt/` one.
+- `ensemble/checks/` cannot be `mojo precompile`d while its checks carry
   `main()`; all EIGHTEEN run by path (the count said fourteen until
   `oob_check`, `sampled_cols_check` and the rest landed), and no
   `pixi.toml` task exists for any of them.
-- **RESOLVED 2026-08-21: `ensemble/original/` is no longer on the
+- **RESOLVED 2026-08-21: `ensemble/checks/` is no longer on the
   shipping path.** The three primitives it held that shipping code
   imported -- Philox (`randomforest.mojo`), the segmented radix sort
   (`quantiles.mojo`), and the shuffle iterator (`builder_kernels.mojo`,

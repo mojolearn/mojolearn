@@ -5,8 +5,8 @@
 **STATUS, AND IT IS THE FIRST THING A READER NEEDS. CORRECTED 2026-08-31:
 COMPILED AND RUN, ON ONE DEVICE.** This banner used to say "Nothing in this
 lane has been compiled or executed", that neither
-`training/original/optimizer_oracle.mojo` nor
-`training/original/optimizer.mojo` had been through a compiler, that every
+`training/checks/optimizer_oracle.mojo` nor
+`training/checks/optimizer.mojo` had been through a compiler, that every
 PREDICTED number was a prediction about what the gate would print, and that
 nothing here had run on any GPU on one vendor or on three. **The gate file it
 said was not in this lane's write set was written at `ecd1a436` and RAN at
@@ -91,11 +91,11 @@ second precision anywhere in the profile.
 
 ### 0.3 The two references, and which one is normative
 
-`training/original/optimizer_oracle.mojo::optimizer_step_oracle` is
+`training/checks/optimizer_oracle.mojo::optimizer_step_oracle` is
 **NORMATIVE**. It is host, scalar, single threaded, and it is built from
-`original/numerics.mojo`'s actual helpers rather than from local copies
+`checks/numerics.mojo`'s actual helpers rather than from local copies
 of them, so it cannot drift into a second opinion about what IDENTICAL
-means. That is `gemm/original/gemm_oracle.mojo`'s construction and the
+means. That is `gemm/checks/gemm_oracle.mojo`'s construction and the
 consequence is the same one -- under `NUMERIC_FAST` both helpers compile
 away and the oracle is then the FAST spelling of the same loops, not the
 contract.
@@ -823,7 +823,7 @@ bits exactly.
 **CLAUSE 9.2.** For `A` microbatches over `T` tokens, gradient
 accumulation is bit-identical to the unsplit computation when ALL of the
 following hold. `L` is `contract_leaf_size(T)` from
-`gemm/original/gemm_oracle.mojo`.
+`gemm/checks/gemm_oracle.mojo`.
 
 1. `contract_leaf_size(T / A) == contract_leaf_size(T)`. The leaf rule
    holds `L` at 128 for every `k` in `(128, 131072]`, so this says both
@@ -956,7 +956,7 @@ actually executes -- an unreached refusal is an untested guard.
 gate**, and every sabotage accompanied by the fixture property that makes
 it non-vacuous. Section 12.
 
-`training/original/optimizer_check.mojo` is the gate file. ~~**It does not
+`training/checks/optimizer_check.mojo` is the gate file. ~~**It does not
 exist.**~~ **It was written at `ecd1a436` and RAN at `b90f52ab`, correction
 made 2026-08-31.** Six clauses on one device, and clause (f) measured a real
 device-side defect that DEVIATION 1496 fixed. Section 16. **One vendor, not
@@ -967,7 +967,7 @@ three.**
 ## 12. The sabotage set
 
 Each is a comptime switch read by `is_defined`, off in every build that
-does not name it, following `gemm/original/gemm_identical.mojo`'s
+does not name it, following `gemm/checks/gemm_identical.mojo`'s
 convention. The "must not pass on" column is the fixture property without
 which the arm goes inert, and it is the column to read first.
 
@@ -1008,23 +1008,23 @@ advance, which is what this row does.
 
 | clause | function | file |
 |---|---|---|
-| 1 | `OptimizerConfig`, `OPT_*` constants | `training/original/optimizer_oracle.mojo` |
-| 3.2 | `clip_tensor_sumsq_oracle` | `training/original/optimizer_oracle.mojo` |
-| 3.2 device | `identical_clip_grad_norm` | `training/original/optimizer.mojo` |
-| 3.3 | `clip_grad_norm_oracle` | `training/original/optimizer_oracle.mojo` |
-| 3.4 | `clip_coefficient` | `training/original/optimizer_oracle.mojo` |
-| 4, 6 | `identical_sqrt`, `identical_div`, `identical_mul`, `identical_mul_add`, `ftz` | `original/numerics.mojo` |
-| 5.1 | `pow_int_f32` | `training/original/optimizer_oracle.mojo` |
-| 7.1 | `StepScalars`, `step_scalars` | `training/original/optimizer_oracle.mojo` |
-| 7.2 | `adam_element_oracle` | `training/original/optimizer_oracle.mojo` |
-| 7.2 device | `adam_update_kernel` | `training/original/optimizer.mojo` |
-| 7.3 | `sgd_element_oracle` | `training/original/optimizer_oracle.mojo` |
-| 7.3 device | `sgd_update_kernel` | `training/original/optimizer.mojo` |
-| 8a | `refuse_nonfinite` | `training/original/optimizer_oracle.mojo` |
-| 9.2 | `microbatch_split_is_identical` | `training/original/optimizer_oracle.mojo` |
-| NORMATIVE | `optimizer_step_oracle` | `training/original/optimizer_oracle.mojo` |
-| 12 | `optimizer_sabotage_name` and the `SAB_*` switches | `training/original/optimizer.mojo` |
-| every clause's fixture | `check_*` | `training/original/optimizer_check.mojo` -- ~~**DOES NOT EXIST**~~ **EXISTS AND RAN, `ecd1a436` + `b90f52ab`, ONE DEVICE ONLY** (corrected 2026-08-31) |
+| 1 | `OptimizerConfig`, `OPT_*` constants | `training/checks/optimizer_oracle.mojo` |
+| 3.2 | `clip_tensor_sumsq_oracle` | `training/checks/optimizer_oracle.mojo` |
+| 3.2 device | `identical_clip_grad_norm` | `training/checks/optimizer.mojo` |
+| 3.3 | `clip_grad_norm_oracle` | `training/checks/optimizer_oracle.mojo` |
+| 3.4 | `clip_coefficient` | `training/checks/optimizer_oracle.mojo` |
+| 4, 6 | `identical_sqrt`, `identical_div`, `identical_mul`, `identical_mul_add`, `ftz` | `checks/numerics.mojo` |
+| 5.1 | `pow_int_f32` | `training/checks/optimizer_oracle.mojo` |
+| 7.1 | `StepScalars`, `step_scalars` | `training/checks/optimizer_oracle.mojo` |
+| 7.2 | `adam_element_oracle` | `training/checks/optimizer_oracle.mojo` |
+| 7.2 device | `adam_update_kernel` | `training/checks/optimizer.mojo` |
+| 7.3 | `sgd_element_oracle` | `training/checks/optimizer_oracle.mojo` |
+| 7.3 device | `sgd_update_kernel` | `training/checks/optimizer.mojo` |
+| 8a | `refuse_nonfinite` | `training/checks/optimizer_oracle.mojo` |
+| 9.2 | `microbatch_split_is_identical` | `training/checks/optimizer_oracle.mojo` |
+| NORMATIVE | `optimizer_step_oracle` | `training/checks/optimizer_oracle.mojo` |
+| 12 | `optimizer_sabotage_name` and the `SAB_*` switches | `training/checks/optimizer.mojo` |
+| every clause's fixture | `check_*` | `training/checks/optimizer_check.mojo` -- ~~**DOES NOT EXIST**~~ **EXISTS AND RAN, `ecd1a436` + `b90f52ab`, ONE DEVICE ONLY** (corrected 2026-08-31) |
 
 ---
 
@@ -1093,11 +1093,11 @@ Range 1170 to 1189, assigned to this lane.
 ## 16. OWED, AND WHY I DID NOT DO IT HERE
 
 This lane's write set was exactly three new files --
-`training/original/optimizer.mojo`, `training/original/optimizer_oracle.
+`training/checks/optimizer.mojo`, `training/checks/optimizer_oracle.
 mojo` and this document. Everything below needs a file outside that set
 and is therefore described rather than done.
 
-1. ~~**`training/original/optimizer_check.mojo`.** The gate file. Every
+1. ~~**`training/checks/optimizer_check.mojo`.** The gate file. Every
    sabotage in section 12 and every fixture property in its last column
    is specified and none is implemented. **Without it this contract is
    prose and nothing in it has been falsified.** This is the largest owed
@@ -1128,7 +1128,7 @@ and is therefore described rather than done.
    pseudocode and of `torch/optim/adam.py`'s single-tensor path, which
    violates `read-their-source-against-ours`. Clone `pytorch/pytorch` at a
    pinned tag, mirror `torch/optim/{sgd,adam,adamw}.py` and
-   `torch/nn/utils/clip_grad.py` into `training/derived/`, and re-check
+   `torch/nn/utils/clip_grad.py` into `training/impl/`, and re-check
    every "the reference spells it" sentence. **Where the source disagrees
    with a clause here, the CLAUSE is what stands -- the profile is
    normative and PyTorch is the design reference -- but the citation must
@@ -1139,16 +1139,16 @@ and is therefore described rather than done.
    a SCHEDULING row and free in both modes, so no bit depends on it -- but
    `column_max_block_size(COLUMN_SPEC_BASELINE)` is 128, so a literal 256
    would be REFUSED on the portable-floor column rather than resolved
-   downward. `original/kernel_matrix.mojo` is outside the write set.
-7. **A shared home for `refuse_nonfinite`.** `mamba/original/
+   downward. `checks/kernel_matrix.mojo` is outside the write set.
+7. **A shared home for `refuse_nonfinite`.** `mamba/checks/
    mamba_oracle.mojo:57` carries a function of the same name and the same
-   body, and this lane now carries a third. `original/numerics.mojo` is
+   body, and this lane now carries a third. `checks/numerics.mojo` is
    the canonical home for row-39 helpers and is outside the write set.
    Three copies of one predicate have three chances to drift, which is
    `identical_mul`'s own docstring's complaint about `pinned_mul`.
 8. **`DERIVATION_MAP.tsv` and `NOT_IMPLEMENTED.tsv` entries for `training/`.** The
    directory has no mapping rows. Neither file is in the write set.
-9. **`training/__init__.mojo` and `training/original/__init__.mojo`
+9. **`training/__init__.mojo` and `training/checks/__init__.mojo`
    already exist and were NOT touched**, per the lane brief.
 10. **A corpus.** The mamba lane's `mamba/corpus` is the model -- planted
     adversarial cases with names (`adv_signed_zeros`, `adv_softplus_

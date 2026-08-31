@@ -43,7 +43,7 @@ below it is comparable at all. `chol.logdet` moving with `chol.diag`
 identical is `identical_log` (row 12) and nothing else.
 
 The fixture performs no unaccounted host floating-point operation; see
-`cholesky/original/cholesky_fixture.mojo`'s header for the two
+`cholesky/checks/cholesky_fixture.mojo`'s header for the two
 constructions and their arguments. Prints scalars as decimal AND hex,
 because `String(Float32)` does not round trip.
 """
@@ -52,7 +52,7 @@ from std.memory import bitcast
 from std.os import getenv
 
 from core.identity_trace import IdentityTrace
-from cholesky.original.cholesky_fixture import (
+from cholesky.checks.cholesky_fixture import (
     FIX_DENORMAL_PIVOT,
     FIX_ILL,
     FIX_PLANTED,
@@ -64,7 +64,7 @@ from cholesky.original.cholesky_fixture import (
     chol_fixture_name,
     chol_rhs_fixture,
 )
-from cholesky.original.potrf import (
+from cholesky.checks.potrf import (
     CHOL_ELEM_TPB,
     CHOL_NB_PINNED,
     CHOL_PANEL_TPB,
@@ -75,8 +75,8 @@ from cholesky.original.potrf import (
     chol_workspace_floats,
     potrf_lower,
 )
-from cholesky.original.trsm import CHOL_SOLVE_TPB, cho_solve
-from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from cholesky.checks.trsm import CHOL_SOLVE_TPB, cho_solve
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 from max.gpu.host import DeviceContext
 

@@ -61,24 +61,24 @@ strategies, the smaller-sibling rule and the level loop are YANDEX's,
 Apache-2.0. `DERIVATION_MAP.tsv` names the source behind each file and flags where
 a port is partial or replaced.
 
-**cuVS.** `cluster/derived/` mirrors cuVS's k-means and `neighbors/derived/`
+**cuVS.** `cluster/impl/` mirrors cuVS's k-means and `neighbors/impl/`
 mirrors its brute-force k-NN and ball cover. The expanded distance identity,
 the tiling scheme, the greedy k-means++ trial rule, the two convergence tests
 and the empty-cluster rule are NVIDIA's, Apache-2.0. `cluster/NOT_IMPLEMENTED.tsv`
 names what was deliberately left out.
 
-**cuML.** `dbscan/derived/` mirrors cuML's DBSCAN and
-`decomposition/derived/` mirrors its PCA and truncated SVD, and later lanes
-added `glm/derived/`, `neighbors/derived/`, `isolation_forest/derived/`,
-`hdbscan/derived/`, `svm/derived/`, `arima/derived/`, `holtwinters/derived/`,
-`tsa/derived/` and `extratrees/derived/`. NVIDIA, Apache-2.0.
+**cuML.** `dbscan/impl/` mirrors cuML's DBSCAN and
+`decomposition/impl/` mirrors its PCA and truncated SVD, and later lanes
+added `glm/impl/`, `neighbors/impl/`, `isolation_forest/impl/`,
+`hdbscan/impl/`, `svm/impl/`, `arima/impl/`, `holtwinters/impl/`,
+`tsa/impl/` and `extratrees/impl/`. NVIDIA, Apache-2.0.
 
 **RAFT.** CORRECTED 2026-08-31. This said "Eleven files across `dbscan/`,
 `decomposition/`, `glm/` and `neighbors/` ... pinned at two different
 commits". What corrected it was a recount out of the derivation maps
 themselves: across the 28 `DERIVATION_MAP.tsv` files, **54 rows name a RAFT
 source in their upstream column, in sixteen lanes**. One of those rows
-(`svm/original/device_select.mojo`) names RAFT only among the calls it stands
+(`svm/checks/device_select.mojo`) names RAFT only among the calls it stands
 in for, leaving 53 derivation rows over 52 distinct files, at **three**
 pinned commits, not two. The lanes are `cholesky/`, `core/`, `dbscan/`,
 `decomposition/`, `ensemble/`, `extratrees/`, `gemm/`, `glm/`, `hdbscan/`,
@@ -89,7 +89,7 @@ this count moves as lanes land; it rose by one during the pass that wrote
 this paragraph. The per-lane table is in [DERIVATION.md](DERIVATION.md).
 
 **FAISS, and this one is NOT Apache-2.0.**
-`neighbors/derived/neighbors/detail/faiss_select/` mirrors the FAISS
+`neighbors/impl/neighbors/detail/faiss_select/` mirrors the FAISS
 warp-select queue that RAFT vendors, which carries Facebook's copyright under
 the MIT license. MIT requires the notice to travel with substantial portions,
 so those two files carry Facebook's notice and the MIT permission text in
@@ -97,13 +97,13 @@ their own headers, and `third_party/LICENSES/LICENSE.faiss` carries it too.
 
 **HuggingFace transformers.** ADDED 2026-08-31; this section named none of
 it, and that was an unmet obligation.
-`transformer/derived/transformers/models/llama/modeling_llama.mojo` (3,143
+`transformer/impl/transformers/models/llama/modeling_llama.mojo` (3,143
 lines) mirrors their `modeling_llama.py` and
-`mamba/derived/transformers/models/mamba/modeling_mamba.mojo` (1,419 lines)
+`mamba/impl/transformers/models/mamba/modeling_mamba.mojo` (1,419 lines)
 mirrors their `modeling_mamba.py`, both at commit `d56c55b`, both inference
 only and partial by design. Hugging Face, Apache-2.0.
 
-**state-spaces/mamba.** ADDED 2026-08-31, same reason. `mamba/derived/` is
+**state-spaces/mamba.** ADDED 2026-08-31, same reason. `mamba/impl/` is
 2,916 lines; its `mamba_ssm/` half mirrors `selective_scan_ref` and
 `Mamba.step` at commit `e9594ce`. The recurrence design, the conv window and
 the inference cache are Tri Dao's and Albert Gu's, Apache-2.0. `mamba/` had
@@ -111,7 +111,7 @@ no `DERIVATION_MAP.tsv` when this paragraph was first drafted, which was a
 real gap; one landed on 2026-08-31 and the gap is closed.
 
 **Modular MAX kernels.** ADDED 2026-08-31, and it is a tenth upstream nobody
-had counted. `mamba/derived/mamba_ssm/ops/selective_scan_interface.mojo`
+had counted. `mamba/impl/mamba_ssm/ops/selective_scan_interface.mojo`
 takes THE KERNEL SHAPE, and explicitly not the arithmetic, from
 `max/kernels/src/state_space/selective_scan.mojo` at commit `10d978e`.
 Modular Inc., Apache-2.0 **with LLVM Exceptions**, which is not the plain
@@ -119,9 +119,9 @@ Apache-2.0 the rest of this list carries.
 
 **scikit-learn, and this one is NOT Apache-2.0 either.** ADDED 2026-08-31.
 Two files mirror scikit-learn arithmetic at commit `77def0e` (1.9.0):
-`extratrees/original/host_splitter.mojo` (1,049 lines), whose own docstring
+`extratrees/checks/host_splitter.mojo` (1,049 lines), whose own docstring
 calls it a transcription of `node_split_random`, and
-`extratrees/derived/decisiontree/batched_levelalgo/objectives.mojo` (1,413
+`extratrees/impl/decisiontree/batched_levelalgo/objectives.mojo` (1,413
 lines), which carries their impurity expressions beside cuML's. BSD-3-Clause,
 which requires the notice, the conditions and the disclaimer to be retained;
 `third_party/LICENSES/LICENSE.scikit_learn` carries all three. **Everything else in this tree that cites
@@ -131,7 +131,7 @@ scikit-learn cites it as an ORACLE, not as a design source** -- `mixture/`,
 nowhere at the pinned commits. Reading a reference is not mirroring it.
 
 **NVIDIA cuRAND, which is the one upstream here that is NOT OPEN SOURCE.**
-`isolation_forest/derived/curand/curand_kernel.mojo` implements the XORWOW
+`isolation_forest/impl/curand/curand_kernel.mojo` implements the XORWOW
 generator cuML's isolation forest draws from. The algorithm is Marsaglia's
 and published (2003); the header that expresses it is NVIDIA proprietary and
 is not in this repository. This is recorded as an open question pending a
@@ -159,7 +159,7 @@ DIFFERENT REPOSITORY. It said:
       of which checks and probes                  21,445
 
 Three things were wrong with it. The path `*/gbdt/` never existed and was a
-bad find-and-replace of `ported/`, which is itself now `derived/`. The total
+bad find-and-replace of `ported/`, which is itself now `impl/`. The total
 it implies, 56,838 lines, was measured when this repository held five lanes;
 it now holds twenty-six. And it split a lane count against a whole-tree
 count, so the 48.1% was not a percentage of anything. The current figures,
@@ -169,7 +169,7 @@ which [DERIVATION.md](DERIVATION.md) states and derives:
     has an upstream file it corresponds to     127,712 to 141,739   30% to 33%
     has none                                   290,150 to 304,177   67% to 70%
 
-The lower bound counts every `derived/` directory plus all of `gbdt/`; the
+The lower bound counts every `impl/` directory plus all of `gbdt/`; the
 upper adds `ensemble/`'s cuML-mirroring code less its own original half. Both
 bounds are generous to the derivation, so the true original share sits at the
 high end. `DERIVATION.md` carries the reasoning.
@@ -201,16 +201,16 @@ current whole-directory totals are given beside it so the drift is visible.
 
 | directory | library (08-20) | checks (08-20) | total now (08-31) | what |
 |---|---|---|---|---|
-| `original/` | 2,729 | 12,434 | 66,477 | the CatBoost port's host side |
+| `checks/` | 2,729 | 12,434 | 66,477 | the CatBoost port's host side |
 | `core/` | 1,484 | 0 | 7,652 | shared kernels the sections build on |
-| `cluster/original/` | 1,232 | 2,150 | 5,296 | RAFT and cuBLAS stand-ins for k-means |
-| `decomposition/original/` | 430 | 1,308 | 4,223 | the Jacobi eigensolver standing in for cuSOLVER |
-| `neighbors/original/` | 0 | 4,251 | 7,360 | k-NN verification |
-| `dbscan/original/` | 0 | 1,019 | 1,520 | DBSCAN verification |
-| `glm/original/` | 0 | 283 | 5,489 | OLS verification |
+| `cluster/checks/` | 1,232 | 2,150 | 5,296 | RAFT and cuBLAS stand-ins for k-means |
+| `decomposition/checks/` | 430 | 1,308 | 4,223 | the Jacobi eigensolver standing in for cuSOLVER |
+| `neighbors/checks/` | 0 | 4,251 | 7,360 | k-NN verification |
+| `dbscan/checks/` | 0 | 1,019 | 1,520 | DBSCAN verification |
+| `glm/checks/` | 0 | 283 | 5,489 | OLS verification |
 
 Those seven directories are 98,017 lines today. They are no longer most of
-the no-counterpart code: tracked `*/original/` across all twenty-six lanes is
+the no-counterpart code: tracked `*/checks/` across all twenty-six lanes is
 246,793 lines.
 
 Most substantial single piece: the fixed-point accumulator, which serves both
@@ -224,7 +224,7 @@ and RAFT's k-NN has no tie-break at all.
 **Also ours, and worth naming separately: the RAFT and cuBLAS stand-ins.**
 cuVS calls out to RAFT primitives and to cuBLAS for norms, keyed reductions
 and the distance GEMM. No RAFT or cuBLAS source was translated. The files
-under `cluster/original/` reproduce the CALL SITE and its documented
+under `cluster/checks/` reproduce the CALL SITE and its documented
 semantics and implement the kernel themselves, and each one says which call
 it stands in for.
 

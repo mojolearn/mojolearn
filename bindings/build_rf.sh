@@ -78,7 +78,7 @@ fi
 COLUMN_DEFINE=""
 # THE NUMERIC MODE IS A BUILD DEFINE, NOT A SOURCE FLIP (2026-08-23).
 # MOJOLEARN_NUMERIC_MODE=identical compiles with -D MOJOLEARN_NUMERIC_IDENTICAL=1
-# (original/numerics.mojo reads it through is_defined, the same shape as
+# (checks/numerics.mojo reads it through is_defined, the same shape as
 # the column define) and lands the binary under python/mojolearn/identical/,
 # where python/mojolearn/_backend.py picks it up when the env var
 # MOJOLEARN_NUMERIC_MODE=identical is set at import. Default is fast and the

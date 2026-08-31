@@ -83,7 +83,7 @@ honest state is a refusal with the closure condition named, not a loop that
 usually agrees.
 
 A CALLER THAT KEEPS ITS MATRICES ON THE DEVICE should call
-`gaussian_process/original/kernels.mojo::gp_kernel_matrix` and the Cholesky
+`gaussian_process/checks/kernels.mojo::gp_kernel_matrix` and the Cholesky
 lane's `potrf_lower` / `cho_solve` directly and keep its own `DeviceBuffer`s
 -- which is exactly what a hyperparameter search would want, and is why
 `cholesky/estimator.mojo`'s header offers the device-level form. This entry
@@ -100,17 +100,17 @@ from cholesky.estimator import (
     cholesky_profile_jitter,
     cholesky_solve_host,
 )
-from cholesky.original.potrf import chol_jitter_pinned
-from cholesky.original.trsm import CHOL_SOLVE_TPB, trsm_lower
+from cholesky.checks.potrf import chol_jitter_pinned
+from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
 from core.identity_trace import IdentityTrace
-from gaussian_process.original.gp_sabotage import (
+from gaussian_process.checks.gp_sabotage import (
     GP_SAB_LOGDET_RECOMPUTED,
     GP_SAB_MEAN_DESCENDING,
     GP_SAB_NONE,
     GP_SAB_YALPHA_DESCENDING,
     sabotage_mean_kernel,
 )
-from gaussian_process.original.kernels import (
+from gaussian_process.checks.kernels import (
     GP_ELEM_TPB,
     GP_PROFILE,
     GPKernelSpec,
@@ -123,12 +123,12 @@ from gaussian_process.original.kernels import (
     gp_predictive_variance,
     gp_validate_kernel,
 )
-from gemm.original.gemm_identical import (
+from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
-from gemm.original.gemm_oracle import OP_TN
-from original.numerics import (
+from gemm.checks.gemm_oracle import OP_TN
+from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
     ftz,
@@ -236,7 +236,7 @@ struct GPPrediction(Movable):
 
 def gp_profile_alpha() -> Float32:
     """The ridge the profile pins, re-exported so a caller never reaches
-    into `cholesky/original/` for it and so that when it appears in a
+    into `cholesky/checks/` for it and so that when it appears in a
     user's source it appears as a NAME rather than as a literal somebody
     will later change. It IS `cholesky_profile_jitter()`; there is no second
     jitter knob (DEVIATION 1751)."""
@@ -248,7 +248,7 @@ def gp_validate_alpha(alpha: Float32) raises:
 
     Everything a Gaussian process can get wrong about its ridge is refused
     here with the reason and, where there is one, the closure condition.
-    `cholesky/original/potrf.mojo::chol_validate_jitter` refuses the same
+    `cholesky/checks/potrf.mojo::chol_validate_jitter` refuses the same
     set one layer down; this one exists to say it in a GP's vocabulary and
     to name the 1e-10 trap before a user meets it as a pivot failure.
     """
@@ -546,7 +546,7 @@ def _ridged_diagonal_replay(
 ) -> List[Float32]:
     """`K[diag] += alpha`, on the HOST, for the card stage `gp.ridged`.
 
-    This is a HOST REPLAY of `cholesky/original/potrf.mojo::
+    This is a HOST REPLAY of `cholesky/checks/potrf.mojo::
     jitter_diag_kernel` -- `ftz(d + jitter)` on each diagonal cell and
     nothing else touched -- and it exists because the brief for this lane
     requires the RIDGED matrix on this lane's card, while the device's own

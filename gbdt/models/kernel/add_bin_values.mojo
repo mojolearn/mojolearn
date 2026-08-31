@@ -202,7 +202,7 @@ def compute_bins_kernel(
 #
 # and the accumulated `bin` is the number of leaves to the left of this row's
 # leaf, which is exactly the numbering `TNonSymmetricTreeStructure.visit_bins`
-# hands out. THE TWO AGREEING IS NOT ASSUMED: `original/depthwise_check.mojo`
+# hands out. THE TWO AGREEING IS NOT ASSUMED: `checks/depthwise_check.mojo`
 # walks both and compares per row.
 #
 # THE FEATURE ARRAY IS PARALLEL TO THE NODE ARRAY, one `TCFeature` per

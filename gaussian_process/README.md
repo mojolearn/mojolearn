@@ -85,7 +85,7 @@ There is no performance number, no accuracy number, no card, no cross-vendor
 claim, and no claim of any kind that rests on a measurement. Every table
 below is a PREDICTION until an orchestrator runs it. The three predictions
 that could be wrong in an interesting way are named in
-`original/gp_check.mojo`'s header rather than smoothed over, and the
+`checks/gp_check.mojo`'s header rather than smoothed over, and the
 strongest of them is the first.
 
 1. **Whether the predictive-variance CLAMP fires at all.** The argument that
@@ -105,8 +105,8 @@ strongest of them is the first.
 The commands, once the orchestrator has wired them.
 
     pixi run check-gaussian-process                                             # FAST
-    tools/with_build_lock.sh     pixi run mojo run -I . gaussian_process/original/gp_check.mojo
-    tools/with_identical_mode.sh pixi run mojo run -I . gaussian_process/original/gp_check.mojo
+    tools/with_build_lock.sh     pixi run mojo run -I . gaussian_process/checks/gp_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -I . gaussian_process/checks/gp_check.mojo
 
     MOJOLEARN_IDENTITY_TRACE=/tmp/mac.gp.identical.card \
         tools/with_identical_mode.sh pixi run mojo run -I . gaussian_process/gp_main.mojo
@@ -131,7 +131,7 @@ three trees returns nothing at all. cuML is pinned at `265b9da`, cuVS at
 nothing to copy.** Rule 0b's charter is to take an incumbent library's code
 and its algorithms and port them; for a Gaussian process there is no
 incumbent GPU library in this repository's pin set, so there is no file to
-transliterate and no dispatch to follow. Every file here is `original/` by
+transliterate and no dispatch to follow. Every file here is `checks/` by
 rule 0b-ii's own definition, "something they never needed", and none of them
 cites a line number it cannot have.
 
@@ -210,24 +210,24 @@ before a line was written.
 |---|---|---|
 | **The Cholesky factorization**, `L L^T = K + alpha I` | `cholesky/estimator.mojo::cholesky_factor_host` | gated green on an Apple M4 in both modes at `1339da7`, twelve checks and ten runtime sabotage arms. Profile `mojolearn.identical.cholesky.fp32.v1`. A second factorization here would have to earn that certificate again |
 | **The two triangular solves**, `alpha_ = K^-1 y` | `cholesky/estimator.mojo::cholesky_solve_host`, which is `cho_solve` | same certificate |
-| **The single triangular solve**, `v = L^-1 k_star` | `cholesky/original/trsm.mojo::trsm_lower`, called DIRECTLY on device buffers so `predict` stays asynchronous | its right-hand-side layout, `n x nrhs` row-major, is exactly the orientation DEVIATION 1758 stores the cross-covariance in, so nothing is transposed between the two |
-| **The log-determinant** | `cholesky/original/potrf.mojo::chol_logdet`, reached through `cholesky_logdet_host` | DEVIATION 1639 made it an ENTRY POINT precisely so a GP, a kernel-ridge solver and a Gaussian mixture cannot each invent a fold order and a `log` for the same quantity. This lane taking it rather than computing its own is the entire reason it exists. DEVIATION 1757, and `GP_SAB_LOGDET_RECOMPUTED` is the arm that proves the gate would see a recomputation |
+| **The single triangular solve**, `v = L^-1 k_star` | `cholesky/checks/trsm.mojo::trsm_lower`, called DIRECTLY on device buffers so `predict` stays asynchronous | its right-hand-side layout, `n x nrhs` row-major, is exactly the orientation DEVIATION 1758 stores the cross-covariance in, so nothing is transposed between the two |
+| **The log-determinant** | `cholesky/checks/potrf.mojo::chol_logdet`, reached through `cholesky_logdet_host` | DEVIATION 1639 made it an ENTRY POINT precisely so a GP, a kernel-ridge solver and a Gaussian mixture cannot each invent a fold order and a `log` for the same quantity. This lane taking it rather than computing its own is the entire reason it exists. DEVIATION 1757, and `GP_SAB_LOGDET_RECOMPUTED` is the arm that proves the gate would see a recomputation |
 | **The ridge** | `cholesky_factor_host`'s `jitter` argument and `chol_validate_jitter` | DEVIATION 1751. `alpha` IS that jitter, passed through unchanged. There is no second knob, no second validator and no second pinned value |
-| **The matrix product** in the posterior mean | `gemm/original/gemm_identical.mojo::identical_gemm_into` at `OP_TN`, sized by `identical_gemm_workspace_max_floats` | profile `mojolearn.identical.gemm.fp32.v1`, gated at 62 shapes across eight execution plans with six sabotages. `linalg.matmul` is refused under IDENTICAL and is not called |
-| **The normative answer for that product**, in the oracle | `gemm/original/gemm_oracle.mojo::gemm_oracle` at `OP_TN` | `contract_partition`'s docstring is explicit that a second spelling of the leaf rule is a second thing that can be wrong, and records that the shape table already shipped one such re-spelling and got it wrong |
-| **The per-feature step of the squared distance** | `kde/derived/distance/distance_ops.mojo::l2_unexp_core`, ported from cuVS `distance_ops/l2_unexp.cuh:62-63` | DEVIATION 1754. What is NOT reusable is the surrounding kernel, because that file's `pairwise_unexpanded_kernel` applies cuVS's `L2SqrtUnexpanded` epilog unconditionally and an RBF needs the squared distance with no root. So the ARITHMETIC is imported and only the loop is written here; the right merge is named under WHAT IS OWED |
-| **The float64 factorization, solve and log-determinant** in the reference | `cholesky/original/cholesky_oracle.mojo::reference_potrf_lower_f64`, `reference_solve_f64`, `reference_logdet_f64`, plus `oracle_add_jitter` | a textbook Cholesky written a second time here, even in float64 and even in an oracle, is exactly the duplication this section exists to refuse |
-| **Transcendentals and the arithmetic pins**: `identical_exp`, `identical_sqrt`, `identical_log`, `identical_div`, `identical_mul`, `identical_mul_add`, `ftz` | `original/numerics.mojo` | rows 9, 10, 12 and 49 of `IDENTITY_PATHS.md`. Nothing in this directory calls `std.math` on a numeric path; the only `std.math` here is in the FLOAT64 host reference and inside the `GP_SAB_STD_EXP` sabotage arm, both by design |
+| **The matrix product** in the posterior mean | `gemm/checks/gemm_identical.mojo::identical_gemm_into` at `OP_TN`, sized by `identical_gemm_workspace_max_floats` | profile `mojolearn.identical.gemm.fp32.v1`, gated at 62 shapes across eight execution plans with six sabotages. `linalg.matmul` is refused under IDENTICAL and is not called |
+| **The normative answer for that product**, in the oracle | `gemm/checks/gemm_oracle.mojo::gemm_oracle` at `OP_TN` | `contract_partition`'s docstring is explicit that a second spelling of the leaf rule is a second thing that can be wrong, and records that the shape table already shipped one such re-spelling and got it wrong |
+| **The per-feature step of the squared distance** | `kde/impl/distance/distance_ops.mojo::l2_unexp_core`, ported from cuVS `distance_ops/l2_unexp.cuh:62-63` | DEVIATION 1754. What is NOT reusable is the surrounding kernel, because that file's `pairwise_unexpanded_kernel` applies cuVS's `L2SqrtUnexpanded` epilog unconditionally and an RBF needs the squared distance with no root. So the ARITHMETIC is imported and only the loop is written here; the right merge is named under WHAT IS OWED |
+| **The float64 factorization, solve and log-determinant** in the reference | `cholesky/checks/cholesky_oracle.mojo::reference_potrf_lower_f64`, `reference_solve_f64`, `reference_logdet_f64`, plus `oracle_add_jitter` | a textbook Cholesky written a second time here, even in float64 and even in an oracle, is exactly the duplication this section exists to refuse |
+| **Transcendentals and the arithmetic pins**: `identical_exp`, `identical_sqrt`, `identical_log`, `identical_div`, `identical_mul`, `identical_mul_add`, `ftz` | `checks/numerics.mojo` | rows 9, 10, 12 and 49 of `IDENTITY_PATHS.md`. Nothing in this directory calls `std.math` on a numeric path; the only `std.math` here is in the FLOAT64 host reference and inside the `GP_SAB_STD_EXP` sabotage arm, both by design |
 | **Stage hashing and the differ** | `core/identity_trace.mojo` | one hash function per repository |
-| **The fixture hash and its value constructors** | `cholesky/original/cholesky_fixture.mojo::chol_mix64`, `bits_value`, `exact_offdiag` | that lane's README records that four copies of one splitmix64 already exist in this tree and that a fifth would be a debt. This lane adds NONE |
-| **The RBF Gram fixture itself** | `cholesky/original/cholesky_fixture.mojo::rbf_gram` | its docstring says it lives there rather than here "so that the callers cannot disagree about the fixture". `check_kernels_vs_oracle`'s cross-lane arm is what stops them disagreeing: our `RBF([1.0])` must equal it BIT FOR BIT, and if it does not, one of the two lanes is wrong about what an RBF is |
+| **The fixture hash and its value constructors** | `cholesky/checks/cholesky_fixture.mojo::chol_mix64`, `bits_value`, `exact_offdiag` | that lane's README records that four copies of one splitmix64 already exist in this tree and that a fifth would be a debt. This lane adds NONE |
+| **The RBF Gram fixture itself** | `cholesky/checks/cholesky_fixture.mojo::rbf_gram` | its docstring says it lives there rather than here "so that the callers cannot disagree about the fixture". `check_kernels_vs_oracle`'s cross-lane arm is what stops them disagreeing: our `RBF([1.0])` must equal it BIT FOR BIT, and if it does not, one of the two lanes is wrong about what an RBF is |
 | **The pinned block fold**, considered and NOT used | `core/pinned_reduce.mojo` | named because a reviewer will look for it. No kernel in this lane folds across threads at all, so there is no fold shape to pin and importing one would suggest there is |
-| **Fixed-point accumulation**, considered and NOT used | `original/fixed_point.mojo` | it exists to REPLACE float atomics and this lane has none. There is no float atomic, no integer atomic, no `Atomic.fetch_add`, no warp shuffle, ballot or vote, and no `block.sum` anywhere in `gaussian_process/` |
-| **The EXPANDED RBF**, deliberately NOT used | `svm/derived/distance/kernel_matrices.mojo::kernel_op` | DEVIATION 1755. It is correct for an SVM and wrong for a GP, and the argument is below |
+| **Fixed-point accumulation**, considered and NOT used | `checks/fixed_point.mojo` | it exists to REPLACE float atomics and this lane has none. There is no float atomic, no integer atomic, no `Atomic.fetch_add`, no warp shuffle, ballot or vote, and no `block.sum` anywhere in `gaussian_process/` |
+| **The EXPANDED RBF**, deliberately NOT used | `svm/impl/distance/kernel_matrices.mojo::kernel_op` | DEVIATION 1755. It is correct for an SVM and wrong for a GP, and the argument is below |
 
 ### Why the SVM lane's RBF is not reused
 
-`svm/derived/distance/kernel_matrices.mojo` already ships an RBF kernel
+`svm/impl/distance/kernel_matrices.mojo` already ships an RBF kernel
 matrix, ported from cuVS, and it is the natural thing to reach for. It
 computes the squared distance by the EXPANDED identity, `||x||^2 + ||y||^2 -
 2 x.y`, because that is what cuVS does and because it turns the whole matrix
@@ -257,7 +257,7 @@ does not demonstrate.
 
 | n | path | what is vendor-dependent in the ordinary spelling | what we did | status |
 |---|---|---|---|---|
-| 67 | **`gaussian_process/` -- the COVARIANCE FUNCTION** (`original/kernels.mojo::gp_rbf_kernel`, `gp_matern_kernel`) | every cell of a Gram matrix goes through a device `exp`, and Matern additionally through a `sqrt` and a divide. A device `exp` is a VENDOR CHOICE in its last bit (row 12), NVIDIA's PTX `sqrt` is off by one ulp on 180,714 of 2^20 patterns (DEVIATION 258), and the feature-axis accumulation is a contraction a codegen may or may not fuse (row 9). Nothing about a GP is small enough for those to stay invisible: the factorization amplifies them and the marginal likelihood is a log of a determinant of the result | **PIN EVERY SEAM.** `identical_exp`, `identical_sqrt`, `identical_div`, `identical_mul`, `identical_mul_add`, and `ftz` at every stored intermediate. ONE THREAD OWNS ONE CELL and walks the feature axis ASCENDING in its own registers, so no float crosses a thread boundary and the summation order is a pure function of `d`. The per-feature step is IMPORTED from the KDE lane rather than re-spelled. DEVIATIONS 1753, 1754, 1767 | **CONSTRUCTION 2026-08-25, NOTHING RUN.** `check_kernels_vs_oracle` compares 11 kernel cases on 5 point sets, per cell, bit for bit under IDENTICAL, and additionally asserts the unit diagonal, exact two-argument symmetry, exact ARD irrelevance, row-39 zero-sign blindness and bit equality with the Cholesky lane's own `rbf_gram` |
+| 67 | **`gaussian_process/` -- the COVARIANCE FUNCTION** (`checks/kernels.mojo::gp_rbf_kernel`, `gp_matern_kernel`) | every cell of a Gram matrix goes through a device `exp`, and Matern additionally through a `sqrt` and a divide. A device `exp` is a VENDOR CHOICE in its last bit (row 12), NVIDIA's PTX `sqrt` is off by one ulp on 180,714 of 2^20 patterns (DEVIATION 258), and the feature-axis accumulation is a contraction a codegen may or may not fuse (row 9). Nothing about a GP is small enough for those to stay invisible: the factorization amplifies them and the marginal likelihood is a log of a determinant of the result | **PIN EVERY SEAM.** `identical_exp`, `identical_sqrt`, `identical_div`, `identical_mul`, `identical_mul_add`, and `ftz` at every stored intermediate. ONE THREAD OWNS ONE CELL and walks the feature axis ASCENDING in its own registers, so no float crosses a thread boundary and the summation order is a pure function of `d`. The per-feature step is IMPORTED from the KDE lane rather than re-spelled. DEVIATIONS 1753, 1754, 1767 | **CONSTRUCTION 2026-08-25, NOTHING RUN.** `check_kernels_vs_oracle` compares 11 kernel cases on 5 point sets, per cell, bit for bit under IDENTICAL, and additionally asserts the unit diagonal, exact two-argument symmetry, exact ARD irrelevance, row-39 zero-sign blindness and bit equality with the Cholesky lane's own `rbf_gram` |
 | 68 | **`gaussian_process/` -- the KERNEL ALGEBRA** (`gp_kernel_matrix`'s postfix walk) | a sum of products is an EXPRESSION, and an implementation is free to distribute, factor or reassociate it. `(A + B) * C` and `A*C + B*C` are the same mathematics and two different float32 answers, and a library that normalizes its kernel expressions before evaluating them would give two answers for one user-visible kernel | **PIN THE EVALUATION ORDER.** The kernel is a POSTFIX node list evaluated once, in order, over a device operand stack, and nothing is distributed, factored or reassociated. `Sum` and `Product` are elementwise into the LEFT operand's slot, which is scikit-learn's own two lines. The node count and stack depth are pinned CAPACITIES and are refused by name rather than grown. DEVIATION 1756 | **CONSTRUCTION, NOTHING RUN.** `check_kernel_algebra` compares a sum, a product and a NESTED `(Const * RBF) + White` against the hand-composed matrices, and requires `ConstantKernel(1.0) * RBF` to equal the bare `RBF` bit for bit in BOTH modes |
 | 69 | **`gaussian_process/` -- the PREDICTIVE VARIANCE and its CLAMP** (`gp_variance_kernel`) | `k** - v^T v` is a Schur complement, non-negative in exact arithmetic and NOT in float32 -- at a test point coinciding with a training point the true value is exactly zero and the computed one is a few ulps either side. So the clamp fires in ordinary use. scikit-learn clamps on `y_var < 0`, which is FALSE for `-0.0`, so a negative zero survives into the output where no tolerance comparison can see it; and a `max(v, 0.0)` spelling would return `+0` on NVIDIA and AMD and `-0` on Apple (row 39, measured) | **PIN THE COMPARISON AND RECORD THE CLAMP.** Spelled `not (v > 0.0)`, so NaN and both zeros take the same branch on every vendor and no `max` is involved. The fold is ONE THREAD PER TEST POINT, ascending, never a GEMM. The clamp is recorded as a per-test-point FLAG VECTOR set from a BIT COMPARISON of stored against computed, hashed as the card stage `gp.clamped` and summed on the host -- never a count, never an atomic. DEVIATIONS 1759, 1760 | **CONSTRUCTION, NOTHING RUN.** `check_variance_is_nonnegative_and_clamps_are_counted` asserts no negative and no `-0.0` reaches the output, compares the FLAGS cell by cell against the oracle, REPORTS the count per fixture whether or not it is zero, and RAISES if it is zero everywhere |
 | 70 | **`gaussian_process/` -- the LOG MARGINAL LIKELIHOOD** (`gp_log_marginal_likelihood_value`) | three terms, two of them folds and one of them a transcendental constant. A caller that recomputes `log|K|` from the factor instead of taking the one the factorization already produced introduces a SECOND fold order and a SECOND `log` for one quantity, which is rows 21 and 12 at once; and the three terms may be assembled in any order a codegen likes unless they are named | **TAKE IT FROM THE FACTOR AND PIN THE ASSEMBLY.** `log|K|` comes from `cholesky_logdet_host` and is never recomputed; `y^T alpha` is a HOST ascending fold over two vectors that are already on the host (the contrast with `chol_logdet`, which is on the device because ITS input is, is stated in the source); `log(2 pi)` is a pinned float32 constant written as BITS. The three terms are two named partials and one final add, in scikit-learn's order. DEVIATIONS 1757, 1767 | **CONSTRUCTION, NOTHING RUN.** `check_log_marginal_likelihood` asserts `dual_coef` and `y^T alpha` BIT FOR BIT against a hand derivation, compares `log|K|` and the likelihood to float64, and DRIVES `GP_SAB_LOGDET_RECOMPUTED` requiring the number to move |
@@ -276,8 +276,8 @@ lane's file and the orchestrator assigns them.
 | **1751** | **`alpha` IS the Cholesky lane's jitter, passed through unchanged.** There is no second jitter knob. Under IDENTICAL the two pinned values are the only ones accepted |
 | **1752** | scikit-learn's default `alpha = 1e-10` is a NO-OP in float32 on a unit-diagonal kernel matrix, because `1.0f + 1e-10f` is exactly `1.0f`. Refused by name under IDENTICAL with that explanation, and the claim itself is asserted by bits |
 | **1753** | the ARD length scale is applied by SCALING THE COORDINATES, scikit-learn's own `X / length_scale`, and it is FUSED into the feature loop rather than materialized. Bit-equal because each quotient is rounded to float32 before the subtraction either way, and the oracle materializes it so the equality is gated |
-| **1754** | the per-feature step of the squared distance is `l2_unexp_core`, IMPORTED from `kde/derived/distance/distance_ops.mojo` rather than re-spelled. Only the loop is written here, because that file's kernel applies an unconditional `sqrt` epilog |
-| **1755** | the EXPANDED RBF (`svm/derived/distance/kernel_matrices.mojo`) is NOT used. Cancellation between two large nearly-equal quantities is what a Gram matrix is made of, and the unit diagonal would additionally become a function of `d` |
+| **1754** | the per-feature step of the squared distance is `l2_unexp_core`, IMPORTED from `kde/impl/distance/distance_ops.mojo` rather than re-spelled. Only the loop is written here, because that file's kernel applies an unconditional `sqrt` epilog |
+| **1755** | the EXPANDED RBF (`svm/impl/distance/kernel_matrices.mojo`) is NOT used. Cancellation between two large nearly-equal quantities is what a Gram matrix is made of, and the unit diagonal would additionally become a function of `d` |
 | **1756** | the kernel expression is POSTFIX and is NEVER distributed, factored or reassociated. The node count and stack depth are pinned CAPACITIES, refused by name rather than grown silently |
 | **1757** | `log|K|` comes from `cholesky_logdet_host` and is NEVER recomputed. scikit-learn's `sum(log(diag L))` is spelled `0.5 * logdet` |
 | **1758** | the cross-covariance is stored `n_train x n_star`, which is `K_trans^T`, and NOTHING is ever transposed. That one orientation feeds both `trsm_lower` (as `n x nrhs`) and the mean (as `OP_TN`'s left operand), and it is legitimate because every kernel here is exactly symmetric in its two arguments BY BITS |
@@ -302,7 +302,7 @@ Nothing outside `gaussian_process/` was edited by this lane. These lines are
 wanted in `pixi.toml`, in the file's existing format, beside the other
 classical lanes' tasks (`check-cholesky` is at line 983 today).
 
-    check-gaussian-process = "mojo run -I . gaussian_process/original/gp_check.mojo"
+    check-gaussian-process = "mojo run -I . gaussian_process/checks/gp_check.mojo"
     gaussian-process-main = "mojo run -I . gaussian_process/gp_main.mojo"
 
 The IDENTICAL pass is the injector, exactly as for every other gate.
@@ -322,21 +322,21 @@ Also owed by the orchestrator, and none of it is this lane's to do.
 4. **The Python surface**, when a binding is wanted. `gpr_fit_host`,
    `gpr_predict_host`, `gpr_log_marginal_likelihood`, `gp_profile_alpha`,
    and the six kernel constructors in
-   `gaussian_process/original/kernels.mojo`. Refuse `float64` inputs, any
+   `gaussian_process/checks/kernels.mojo`. Refuse `float64` inputs, any
    `optimizer` other than `None`, `normalize_y=True` and a two-dimensional
    `y`, by name, in Python.
 5. **A file this lane's file list did not name.**
-   `gaussian_process/original/gp_sabotage.mojo` is not in the brief's list
+   `gaussian_process/checks/gp_sabotage.mojo` is not in the brief's list
    of files, and it exists because the brief ALSO requires the sabotages to
-   be runtime-selectable "the way `cholesky/original/chol_sabotage.mojo`
+   be runtime-selectable "the way `cholesky/checks/chol_sabotage.mojo`
    does it", and that construction is a separate file by design. Recorded
    here rather than slipped in.
 
 ## SABOTAGES TO PERFORM
 
 All eleven are selected at RUN TIME through the `sabotage` argument
-(`gaussian_process/original/gp_sabotage.mojo`), copying
-`cholesky/original/chol_sabotage.mojo`'s construction and how
+(`gaussian_process/checks/gp_sabotage.mojo`), copying
+`cholesky/checks/chol_sabotage.mojo`'s construction and how
 `cholesky_check.mojo` drives it. **No source edit and no rebuild is required
 for any of them**; `check_gp_sabotages` drives all eleven in one run and
 prints a line per arm. Every arm below is a PREDICTION until it has run.
@@ -491,11 +491,11 @@ measures.
    `info = 2`, and whether the reassociation arm is inert.** The three
    predictions in the Status section. The orchestrator records what it got.
 4. **A `DIST_L2_SQ_UNEXPANDED` metric value in
-   `kde/derived/distance/distance_ops.mojo`,** and the deletion of this
+   `kde/impl/distance/distance_ops.mojo`,** and the deletion of this
    lane's `gp_scaled_sqdist` loop in favour of it. DEVIATION 1754. That is
    the KDE lane's file, so it is named here rather than done.
 5. **A single-sided forward-solve oracle in
-   `cholesky/original/cholesky_oracle.mojo`.** This lane's
+   `cholesky/checks/cholesky_oracle.mojo`.** This lane's
    `gp_oracle_forward_solve` is a second spelling of `trsm_lower_kernel`
    that exists only because that lane's oracle exposes `oracle_cho_solve`
    (both substitutions) and not `oracle_trsm_lower` at an arbitrary `nrhs`.
@@ -515,7 +515,7 @@ measures.
    a reader of a raw card should not have to discover it.
 8. **A blocked kernel matrix.** `gp_scaled_sqdist` reads `d` floats of each
    operand per output cell with no reuse. A Contractions tile
-   (`dbscan/derived/neighbors/epsilon_neighborhood.mojo` transcribes one)
+   (`dbscan/impl/neighbors/epsilon_neighborhood.mojo` transcribes one)
    would read each row once per tile. It is a speed idea, it would introduce
    a staging shape to pin, and this lane has measured nothing.
 9. **An `n == 1` row in the gemm shape table.** The posterior mean is an

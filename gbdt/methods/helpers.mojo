@@ -80,7 +80,7 @@ THREE DEPARTURES, ALL IN THIS FILE, NONE ARITHMETIC.
    as `0.333333` there and `0.33333334` here. This affects LOG TEXT ONLY --
    no split, score, bin or model value is derived from these strings, and
    `MEMORY.md`'s "String(float) does not round-trip" rule is why nothing
-   numeric ever will be. `original/pointwise_subsets_check.mojo` gates the
+   numeric ever will be. `checks/pointwise_subsets_check.mojo` gates the
    STRUCTURE of every message (which comparator, which border index, which
    nan arm) and deliberately does not gate the digits.
 ==============================================================
@@ -143,7 +143,7 @@ def best_split_properties_less(
     therefore NOT less than each other, and since `TakeBest` is written
     `first < second ? first : second`, a full tie falls through to the
     SECOND argument. This docstring said "first" until
-    `original/pointwise_subsets_check.mojo` was run against it and the
+    `checks/pointwise_subsets_check.mojo` was run against it and the
     named tie case failed; the code was right and the sentence was wrong.
     """
     if first.gain < second.gain:
@@ -598,7 +598,7 @@ def merge_bits(x: Int, y: Int) -> Int:
     `x` lands in the even positions and `y` in the odd ones, so
     `GetEvenBits(MergeBits(x, y)) == x & 255` and
     `GetOddBits(MergeBits(x, y)) == y & 255`. That round trip is what
-    `original/pointwise_subsets_check.mojo` gates, over the whole 8-bit
+    `checks/pointwise_subsets_check.mojo` gates, over the whole 8-bit
     square, because it ties the three functions to each other rather than to
     a transcription of the same constants.
     """

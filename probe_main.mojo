@@ -1,38 +1,38 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-from original.early_stop_check import check_early_stop_rollback
-from original.bootstrap_check import check_bootstrap
-from original.ctr_check import check_ctrs
-from original.ctr_kernels_check import check_ctr_kernels
-from original.ctr_train_check import check_ctr_train
-from original.one_hot_cardinality_check import check_one_hot_cardinality
-from original.one_hot_check import check_one_hot
-from original.train_api_check import check_train_api
-from original.launch_probe import probe
-from original.permuted_ids_check import check_permuted_leaf_ids
-from original.replicated_half_byte_check import (
+from checks.early_stop_check import check_early_stop_rollback
+from checks.bootstrap_check import check_bootstrap
+from checks.ctr_check import check_ctrs
+from checks.ctr_kernels_check import check_ctr_kernels
+from checks.ctr_train_check import check_ctr_train
+from checks.one_hot_cardinality_check import check_one_hot_cardinality
+from checks.one_hot_check import check_one_hot
+from checks.train_api_check import check_train_api
+from checks.launch_probe import probe
+from checks.permuted_ids_check import check_permuted_leaf_ids
+from checks.replicated_half_byte_check import (
     check_replicated_half_byte,
 )
-from original.boosting_hist_check import check_boosting_histogram
-from original.copy_histograms_check import check_copy_histograms
-from original.boosting_check import check_boosting_learns
-from original.binarization_check import check_binarization
-from original.reorder_check import check_reorder_one_bit
-from original.partitions_reduce_check import (
+from checks.boosting_hist_check import check_boosting_histogram
+from checks.copy_histograms_check import check_copy_histograms
+from checks.boosting_check import check_boosting_learns
+from checks.binarization_check import check_binarization
+from checks.reorder_check import check_reorder_one_bit
+from checks.partitions_reduce_check import (
     check_partitions_reduce,
     check_partitions_reduce_narrow_grid,
     check_partitions_reduce_sabotage,
 )
-from original.options_check import check_options
-from original.mixed_hist_probe import probe_mixed_histogram
-from original.layout_check import (
+from checks.options_check import check_options
+from checks.mixed_hist_probe import probe_mixed_histogram
+from checks.layout_check import (
     check_feature_blocks,
     check_layout,
     check_split_resolution,
 )
-from original.level_check import check_mixed_tree, check_one_level, check_tree
-from original.hist_dump_check import check_hist_depends_on_partition
-from original.level_bench import (
+from checks.level_check import check_mixed_tree, check_one_level, check_tree
+from checks.hist_dump_check import check_hist_depends_on_partition
+from checks.level_bench import (
     bench_histogram_only,
     bench_level,
     bench_partition_only,
@@ -44,8 +44,8 @@ from original.level_bench import (
     bench_tree,
     bench_tree_shapes,
 )
-from original.pack_check import check_packing
-from original.hist_check import (
+from checks.pack_check import check_packing
+from checks.hist_check import (
     check_binary_histogram,
     check_gather_matches_direct,
     check_half_byte_histogram,
@@ -62,14 +62,14 @@ from original.hist_check import (
 from gbdt.methods.greedy_subsets_searcher.structure_searcher_template import (
     grow_tree_schedule,
 )
-from original.fixed_point import (
+from checks.fixed_point import (
     SCALE_LIMIT,
     choose_scale,
     dequantize,
     max_representable,
     quantize,
 )
-from original.kernel_matrix import (
+from checks.kernel_matrix import (
     COLUMN_AMD,
     COLUMN_APPLE,
     COLUMN_BIT_IDENTICAL,
@@ -86,7 +86,7 @@ from original.kernel_matrix import (
     hist_floats_per_thread_for,
     lane_width_for,
 )
-from original.kernel_matrix import (
+from checks.kernel_matrix import (
     K_LIB_FUSED_DISTANCE_NN,
     K_LIB_SELECT_WARPSORT,
     PINNED_LIB_REDUCE_LANES,
@@ -95,20 +95,20 @@ from original.kernel_matrix import (
     lib_smem_pages_for,
     lib_spec_for,
 )
-from original.numerics import NumericMode, NUMERIC_FAST, NUMERIC_IDENTICAL
+from checks.numerics import NumericMode, NUMERIC_FAST, NUMERIC_IDENTICAL
 
 # Imported FROM THE KERNELS, not recomputed here. If these agree with the
 # matrix, the kernels are reading the table rather than restating it.
 # Importing a module is not reading it; agreeing with it is.
 from core.row_norms import NORM_TPB
 from core.column_stats import STATS_TPB
-from cluster.original.plus_plus import PLUS_PLUS_TPB
-from cluster.derived.distance.unfused_distance_nn import (
+from cluster.checks.plus_plus import PLUS_PLUS_TPB
+from cluster.impl.distance.unfused_distance_nn import (
     REDUCE_MIN_LANES,
     REDUCE_MIN_TPB,
 )
-from dbscan.derived.dbscan.vertexdeg.algo import VD_TPB
-from decomposition.original.jacobi_eigh_device import JACOBI_TPB
+from dbscan.impl.dbscan.vertexdeg.algo import VD_TPB
+from decomposition.checks.jacobi_eigh_device import JACOBI_TPB
 from gbdt.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
     BLOCK_SIZE,
     HIST_SIZE,

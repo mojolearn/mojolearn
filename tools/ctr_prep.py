@@ -7,7 +7,7 @@ lives.** `gbdt/ctrs/ctr_calcers.TWeightedBinFreqCalcer` and
 `gbdt/ctrs/ctr_bins_builder.TCtrBinBuilder`, mirroring
 `catboost/cuda/ctrs/ctr_calcers.h` and `ctr_bins_builder.h`, are the
 implementation; `train(cat_features=...)` calls them, and
-`original/ctr_check.mojo` gates it against planted counts across eleven
+`checks/ctr_check.mojo` gates it against planted counts across eleven
 cardinalities.
 
 What is left here is FIXTURE GENERATION for

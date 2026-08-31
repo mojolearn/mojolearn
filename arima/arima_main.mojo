@@ -16,7 +16,7 @@ and everything downstream of it is noise), then every stage of the filter in
 the order the device writes them --  `Z`, `R`, `T`, `RQ`, `RQR`, `P0`,
 `alpha0`, `pred`, `vs`, `Fs`, `loglike`, `fc`, `P_final` -- and last the DECISION stages
 `piv`, `info_init`, `info_loop` and `guards`, for each of the ten orders in
-`arima/original/fixtures.mojo`'s table.
+`arima/checks/fixtures.mojo`'s table.
 
 THE DECISION STAGES ARE NOT DECORATION. Every float stage records a VALUE;
 these four record a CHOICE, and a choice can differ between vendors while
@@ -50,9 +50,9 @@ this card exists to make is UNTESTED. See `arima/README.md`'s OWED list.
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
-from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
-from arima.original.fixtures import (
+from arima.checks.fixtures import (
     arima_fixture,
     arima_params_fixture,
     bits32,
@@ -61,8 +61,8 @@ from arima.original.fixtures import (
     upload_f32,
     upload_params,
 )
-from arima.derived.arima.batched_arima import batched_loglike
-from arima.derived.linalg.batched.matrix import LYAP_R2_MAX
+from arima.impl.arima.batched_arima import batched_loglike
+from arima.impl.linalg.batched.matrix import LYAP_R2_MAX
 
 
 comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL

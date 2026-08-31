@@ -29,7 +29,7 @@ without the fold guard it writes over its neighbour's head. But on
 well-formed data those overrun bins are EMPTY, the value is an exact zero,
 and the epsilon guard suppresses the write anyway.
 
-Measured against `original/pointwise_small_bin_driver_check.mojo`:
+Measured against `checks/pointwise_small_bin_driver_check.mojo`:
 
     fold guard removed        every gate green
     epsilon guard removed     every gate green

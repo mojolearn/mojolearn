@@ -41,22 +41,22 @@ arithmetic: nothing here computes, it only moves bytes and forwards.
 
 from max.gpu.host import DeviceContext
 
-from metrics.original.device_io import download_f32, upload_f32, upload_i32
-from metrics.derived.metrics.accuracy_score import accuracy_score_py
-from metrics.derived.metrics.adjusted_rand_index import adjusted_rand_index
-from metrics.derived.metrics.completeness_score import completeness_score
-from metrics.derived.metrics.entropy import entropy
-from metrics.derived.metrics.homogeneity_score import homogeneity_score
-from metrics.derived.metrics.kl_divergence import kl_divergence
-from metrics.derived.metrics.mutual_info_score import mutual_info_score
-from metrics.derived.metrics.r2_score import r2_score_py
-from metrics.derived.metrics.rand_index import rand_index
-from metrics.derived.metrics.silhouette_score_batched_float import (
+from metrics.checks.device_io import download_f32, upload_f32, upload_i32
+from metrics.impl.metrics.accuracy_score import accuracy_score_py
+from metrics.impl.metrics.adjusted_rand_index import adjusted_rand_index
+from metrics.impl.metrics.completeness_score import completeness_score
+from metrics.impl.metrics.entropy import entropy
+from metrics.impl.metrics.homogeneity_score import homogeneity_score
+from metrics.impl.metrics.kl_divergence import kl_divergence
+from metrics.impl.metrics.mutual_info_score import mutual_info_score
+from metrics.impl.metrics.r2_score import r2_score_py
+from metrics.impl.metrics.rand_index import rand_index
+from metrics.impl.metrics.silhouette_score_batched_float import (
     silhouette_score,
 )
-from metrics.derived.metrics.trustworthiness import trustworthiness_score
-from metrics.derived.metrics.v_measure import v_measure
-from metrics.derived.stats.detail.batched.silhouette_score import (
+from metrics.impl.metrics.trustworthiness import trustworthiness_score
+from metrics.impl.metrics.v_measure import v_measure
+from metrics.impl.stats.detail.batched.silhouette_score import (
     DISTANCE_L2_SQRT_UNEXPANDED,
 )
 

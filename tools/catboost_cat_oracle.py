@@ -153,7 +153,7 @@ THE TEXT FORMAT IS THE NUMERIC ONE PLUS TWO RECORDS
 keeps its exact numeric meaning. Splits of both kinds are written in DEPTH
 ORDER inside a tree, interleaved, so a reader that appends in file order
 gets the tree's levels in order without knowing which kind came next --
-which is what `original/oracle_check.mojo` does, leaving the three
+which is what `checks/oracle_check.mojo` does, leaving the three
 numeric fixtures byte-identical in their handling.
 
 USAGE

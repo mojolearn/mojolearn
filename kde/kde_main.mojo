@@ -25,7 +25,7 @@ and `lognorm` are HOST scalars (row 18's class; `lognorm` is DEVIATION
 601's construction under IDENTICAL), and `scores` is two subtractions.
 
 The fixture performs no host floating-point operation (see
-`kde/original/kde_fixture.mojo`). Prints the first eight scores as decimal
+`kde/checks/kde_fixture.mojo`). Prints the first eight scores as decimal
 AND hex, because `String(Float32)` does not round-trip.
 """
 
@@ -33,8 +33,8 @@ from std.memory import bitcast
 from std.os import getenv
 
 from kde.estimator import kde_score_samples_host
-from kde.original.kde_fixture import query_fixture, train_fixture, weight_fixture
-from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from kde.checks.kde_fixture import query_fixture, train_fixture, weight_fixture
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
 comptime KDE_MAIN_N_TRAIN = 1024

@@ -1206,8 +1206,8 @@ leg_local_card() {
 leg_witness_mode() {
     # Both banners, one function. bench/gemm_card_main.mojo prints
     #   == bench/gemm_card_main.mojo [IDENTICAL] ==
-    # and gemm/original/gemm_device_check.mojo prints
-    #   == gemm/original/gemm_device_check.mojo [IDENTICAL]  sabotage: ... ==
+    # and gemm/checks/gemm_device_check.mojo prints
+    #   == gemm/checks/gemm_device_check.mojo [IDENTICAL]  sabotage: ... ==
     [ -f "$1" ] || { printf ''; return 0; }
     sed -n 's/^== [A-Za-z0-9_/.]*\.mojo \[\([A-Z][A-Z]*\)\].*$/\1/p' "$1" | head -1
 }
@@ -1589,9 +1589,9 @@ leg_archive_required() {
         # promise, and a leg that reaches the box without it spends the lease
         # and comes home unable to say whether `deterministic` is deterministic
         # on this vendor.
-        echo "tools/e1_bootstrap.sh tools/repeat_run_stability.py bench/gemm_card_main.mojo gemm/original/gemm_identical.mojo solver/cd_main.mojo kde/kde_main.mojo hierarchy/linkage_main.mojo svm/svc_main.mojo metrics/metrics_main.mojo mamba/original/mamba_check.mojo"
+        echo "tools/e1_bootstrap.sh tools/repeat_run_stability.py bench/gemm_card_main.mojo gemm/checks/gemm_identical.mojo solver/cd_main.mojo kde/kde_main.mojo hierarchy/linkage_main.mojo svm/svc_main.mojo metrics/metrics_main.mojo mamba/checks/mamba_check.mojo"
     else
-        echo "gemm/original/gemm_identical.mojo"
+        echo "gemm/checks/gemm_identical.mojo"
     fi
 }
 
@@ -2215,10 +2215,10 @@ echo "pixi_install_exit=$?" >> "$OUT/leg.txt"
 pixi run mojo --version > "$OUT/mojo_version.txt" 2>&1 || true
 
 # GATE 1: the device kernel's own invariance gates, on this silicon.
-# gemm/original/gemm_device_check.mojo runs every gate and reports every
+# gemm/checks/gemm_device_check.mojo runs every gate and reports every
 # verdict before it raises, so a red here names WHICH gate a defect reaches.
 tools/with_identical_mode.sh pixi run mojo run -I . \
-    gemm/original/gemm_device_check.mojo > "$OUT/device_check.log" 2>&1
+    gemm/checks/gemm_device_check.mojo > "$OUT/device_check.log" 2>&1
 echo "device_check_exit=$?" >> "$OUT/leg.txt"
 
 # GATE 2: the card. Same invocation shape as the Mac's, driven through
@@ -2792,9 +2792,9 @@ MMPROBE
     # this Mac is not allowed to run them. So they run here, and their exit
     # codes come home in leg.txt beside the numbers they justify.
     runarm "verify.transformer_block.fast.log" \
-        pixi run mojo run -I . transformer/original/transformer_check.mojo
+        pixi run mojo run -I . transformer/checks/transformer_check.mojo
     runarm "verify.mamba_block.fast.log" \
-        pixi run mojo run -I . mamba/original/mamba_check.mojo
+        pixi run mojo run -I . mamba/checks/mamba_check.mojo
     # AND UNDER IDENTICAL, WHICH IS THE HALF THAT IS EASY TO SKIP.
     #
     # DEVIATION 1876 puts the vendor kernel behind a comptime gate, so the
@@ -2806,10 +2806,10 @@ MMPROBE
     # box, in the same lease.
     runarm "verify.transformer_block.identical.log" \
         sh tools/with_identical_mode.sh pixi run mojo run -I . \
-            transformer/original/transformer_check.mojo
+            transformer/checks/transformer_check.mojo
     runarm "verify.mamba_block.identical.log" \
         sh tools/with_identical_mode.sh pixi run mojo run -I . \
-            mamba/original/mamba_check.mojo
+            mamba/checks/mamba_check.mojo
     runarm "gemm.gemm.cublas.log" python3 tools/speed_gemm_arm.py --rounds "@SPEEDROUNDS@"
     for L in @SPEEDLANES@; do
         [ "$L" = "gemm" ] && continue

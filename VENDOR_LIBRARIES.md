@@ -120,7 +120,7 @@ M4, `WARP_SIZE = 32`.
 | `linalg.transpose.transpose` | `raft::linalg::transpose` | **GPU, WRONG** | no | 257x129 device buffers: **ABORTS the process**, not a catchable raise, inside `linalg::transpose::_copy_with_strides rank=2 dtype=f32` — "enqueue_cpu_range is only supported on CPU DeviceContexts". `vendor_main --transpose` reproduces it. Re-verified 2026-08-19 evening (LANE covariance-unblock): still exit 133, same abort. |
 | `linalg.matmul` with a **`col_major` view** as operand A (zero-copy T-N) | `cublasGemmEx` (OP_T strides) | **GPU, WRONG — ARM-DEPENDENT** | no | The dispatcher honors the view's strides on some arms and silently IGNORES them on others, writing plausible wrong numbers: correct at 32x32x100003, 33x17x255, 8x8x8, 129x127x513; **EVERY cell wrong across m=n in {4..64} x k in {64..2048}** (8x8x512, 32x32x2048, 64x64x64...) and at n=1 with m>1 (8x1x33, WRITTEN wrong, not unwritten). The ok/wrong boundary zigzags with shape and matches no predicate, so the view is **UNWIREABLE**; `gemm_tn`'s vendor arm stays on the materialized transpose (its DEFAULT arm for the shipped small-output shapes is the split-K kernel, `core/gram_splitk.mojo`). Full sweep in `bench/results/LANE_covariance-unblock_2026-08-19.md`. |
 | `linalg.gemv.gemv_gpu` with a **`col_major` view** as A | `cublasSgemv` (OP_T) | **GPU, WRONG** | no | wrong at 8 of 8 outputs, k=4001: the GEMV kernel indexes A as row-major raw memory, ignoring the layout. This is why the zero-copy `X^T y` has NO vendor route and `column_stats.mojo::xty_kernel` stays hand-written. |
-| `core/gemm.mojo::gemm_tn` (DISPATCHER: split-K / transpose x2 + `gemm_nt`) | `raft::stats::cov` / `lstsqEig` gemm (`OP_T, OP_N`) | **GPU, CORRECT** | **YES** | 32x32x10007 through the real wrapper, which DISPATCHES this shape to the hand-written split-K Gram kernel (`core/gram_splitk.mojo`; the vendor matmul is measured ~25 GFLOP/s on tile-starved Gram shapes, LANE_gram-splitk). The table row prints which arm ran. Tolerance is mag-relative 1e-5, not the 2e-6 of the cancellation-shaped checks: operands are the SAME matrix, so the diagonal is a same-sign sum, and the measured accumulation-order spread is 4.09e-6 relative. Both arms plus hazard shapes (m=n=1, odd k, k below/above the chunk grid, m=33, 64, 128) run per cell against Float64 in `original/gram_splitk_check.mojo` via `pca_main`. |
+| `core/gemm.mojo::gemm_tn` (DISPATCHER: split-K / transpose x2 + `gemm_nt`) | `raft::stats::cov` / `lstsqEig` gemm (`OP_T, OP_N`) | **GPU, CORRECT** | **YES** | 32x32x10007 through the real wrapper, which DISPATCHES this shape to the hand-written split-K Gram kernel (`core/gram_splitk.mojo`; the vendor matmul is measured ~25 GFLOP/s on tile-starved Gram shapes, LANE_gram-splitk). The table row prints which arm ran. Tolerance is mag-relative 1e-5, not the 2e-6 of the cancellation-shaped checks: operands are the SAME matrix, so the diagonal is a same-sign sum, and the measured accumulation-order spread is 4.09e-6 relative. Both arms plus hazard shapes (m=n=1, odd k, k below/above the chunk grid, m=33, 64, 128) run per cell against Float64 in `checks/gram_splitk_check.mojo` via `pca_main`. |
 | `core/gemm.mojo::gemm_tn_via_transpose` (vendor arm, by name) | `raft::stats::cov` / `lstsqEig` gemm (`OP_T, OP_N`) | **GPU, CORRECT** | **YES** | 32x32x10007 called explicitly, output AND both alias buffers pre-poisoned — a transpose that does not run cannot pass. This row keeps the transpose x2 + `gemm_nt` route covered now that the wrapper dispatches small outputs to split-K (`PORTING_RULES.md 8`: reach is per-branch). |
 | `linalg.matmul.matmul[transpose_b=True]` | `cublasGemmEx` (N-T) | **GPU, CORRECT** | YES | 1x1x1, 1x8x3, 255x255x33, 256x256x64, 257x257x65, 513x129x127, 1024x512x32, 100003x4x8, vs a Float64 host triple loop |
 | `linalg.gemv.gemv_gpu[transpose_b=False]` | `raft::linalg::gemv` / `cublasSgemv` | **GPU, CORRECT** | YES | m in {1, 2, 255, 256, 257, 512, 513, 1023, 1024, 1025, 4096, 100003}, k in {3..9}; plus m=1000 k=1025 |
@@ -188,9 +188,9 @@ and which tests CORRECT above.
 The correctness table above is an Apple M4 measurement, and its two
 `linalg.matmul` rows say **GPU, CORRECT** against a Float64 oracle at an fp32
 budget. On the H100 leg of E2 the same products failed that budget under FAST:
-`original/gram_splitk_check.mojo::check_gram_vendor_arm` at 33x33x257 by
+`checks/gram_splitk_check.mojo::check_gram_vendor_arm` at 33x33x257 by
 2.4e-5 of the magnitude, and the k-means unfused assignment arm
-(`cluster/original/kmeans_check.mojo::check_assignment_arm_dispatch`) by 4e-5
+(`cluster/checks/kmeans_check.mojo::check_assignment_arm_dispatch`) by 4e-5
 -- both ~100x outside fp32 and well inside TF32. Both are `core/gemm.mojo::
 gemm_nt` = `linalg.matmul`. Read from the pinned toolchain's source (tag
 `max/v26.5.0`):
@@ -214,7 +214,7 @@ gemm_nt` = `linalg.matmul`. Read from the pinned toolchain's source (tag
 
 So the rows above are **GPU, CORRECT AT FP32 ON APPLE M1-M4 AND AMD CDNA,
 TF32-ACCURACY ON NVIDIA** under FAST. The property is a KERNEL MATRIX row
-(`original/kernel_matrix.mojo::column_vendor_fp32_matmul_is_tf32` /
+(`checks/kernel_matrix.mojo::column_vendor_fp32_matmul_is_tf32` /
 `vendor_fp32_matmul_is_lossy`, the latter folding in the M5 generation at
 runtime), read by both checks, which hold a vendor product to
 `VENDOR_TF32_PRODUCT_REL_BOUND` (1e-3 of the magnitude: 2^-10, a product of
@@ -292,7 +292,7 @@ What follows from it has to be re-derived rather than assumed:
 **A float `atomicAdd` DOES work on Metal.** Probed on this M4: 1024 threads
 each adding 1.0 return exactly 1024.0. This file previously called it a
 hardware limit; that was wrong, and every design in this tree that cited it
-has to be re-argued on its own merits. `original/fixed_point.mojo` survives
+has to be re-argued on its own merits. `checks/fixed_point.mojo` survives
 the re-argument, but on a different ground: an integer accumulator is exactly
 order-independent and a float atomic is not, so fixed point is what makes a
 fit reproducible run to run and device to device. It is a CHOICE about
@@ -511,7 +511,7 @@ run it. That is not permission to use it.
 `cub::DeviceScan::InclusiveSum` has no shipped GPU counterpart. `nn.cumsum`
 carries neither `ctx` nor `target` and is CPU-only.
 
-So `cluster/original/plus_plus.mojo` builds one from
+So `cluster/checks/plus_plus.mojo` builds one from
 `max.gpu.primitives.block.prefix_sum` in three stages: chunk sums, an
 exclusive scan of the chunk totals, then an inclusive scan within each chunk
 plus its offset. `check_device_inclusive_scan` verifies it against a host
@@ -535,7 +535,7 @@ Three steps, and the third is not optional.
    separates CPU ONLY from reachable, and nothing more.
 3. **Run it against an independent host oracle** and put a verdict in the
    correctness table at the top of this file, with the sizes and the date.
-   Add the check to `original/vendor_correctness_check.mojo` so the next
+   Add the check to `checks/vendor_correctness_check.mojo` so the next
    person regenerates the row instead of trusting it. Scattered hashed
    fixture, sizes straddling the block width, oracle computed independently.
 
@@ -714,7 +714,7 @@ settled:
   sorted" is not a way to tell them apart; the verified content is in
   `current`.
 
-`original/vendor_correctness_check.mojo::check_radix_sort_pairs` is the
+`checks/vendor_correctness_check.mojo::check_radix_sort_pairs` is the
 runnable version of this paragraph.
 
 **2. There IS a device-wide reduce with a custom operator, but NOT where this
@@ -940,7 +940,7 @@ the crawl in A0.
            shmem.ep_comm.block_prefix_sum, and one tile-scheduler internal.
            A full-text search for "prefix sum" / "exclusive sum" / "cumulative
            sum" across every crawled page returns six files, all of those.
-           The three-stage build in cluster/original/plus_plus.mojo remains
+           The three-stage build in cluster/checks/plus_plus.mojo remains
            the answer and is now known to be the ONLY answer.
     cub::DeviceSegmentedReduce over RAGGED segments (an offsets array)
         -> nothing takes segment offsets. Equal-length is covered (A2 item 3).

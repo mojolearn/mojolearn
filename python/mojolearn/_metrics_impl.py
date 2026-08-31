@@ -51,7 +51,7 @@ the kernel-level answers for out-of-contract values (a NaN reaching
 `sil_op` as `+0.0` through DEVIATION 656, `r2_score` returning the
 canonical NaN `0x7fc00000` through DEVIATION 657) are therefore NOT
 reachable from Python. They are gated where they live, in
-`metrics/original/regression_metrics_check.mojo` and
+`metrics/checks/regression_metrics_check.mojo` and
 `silhouette_check.mojo`.
 """
 
@@ -272,7 +272,7 @@ def accuracy_score(y_true, y_pred, *, normalize=True, sample_weight=None):
     if sample_weight is not None:
         raise NotImplementedError(
             "mojolearn accuracy_score: sample_weight is not ported "
-            "(metrics/derived/stats/detail/scores.mojo has no weighted arm)"
+            "(metrics/impl/stats/detail/scores.mojo has no weighted arm)"
         )
     if not normalize:
         raise NotImplementedError(
@@ -369,7 +369,7 @@ def entropy(clustering, *, base=None):
     Under `MOJOLEARN_NUMERIC_MODE=identical` the float epilogue is Float32
     through `identical_log` and differs from the FAST arm's Float64 in the
     seventh digit BY DESIGN (DEVIATION 651). That is the price of the same
-    bits everywhere; `original/numerics.mojo` has no portable Float64 log
+    bits everywhere; `checks/numerics.mojo` has no portable Float64 log
     yet, and `metrics/README.md`'s hand-off ask 1 is exactly that.
     """
     lab = _as_i32_1d(clustering, "clustering")
@@ -411,7 +411,7 @@ def mutual_info_score(labels_true, labels_pred, *, contingency=None):
         raise NotImplementedError(
             "mojolearn mutual_info_score: contingency= is refused; the "
             "ported entry builds the contingency matrix on the device "
-            "(metrics/derived/stats/detail/contingency_matrix.mojo) and has "
+            "(metrics/impl/stats/detail/contingency_matrix.mojo) and has "
             "no arm that consumes a precomputed one"
         )
     yt, yp, n, lower, upper = _prepare_cluster_labels(labels_true, labels_pred)
@@ -551,7 +551,7 @@ def r2_score(
     if sample_weight is not None:
         raise NotImplementedError(
             "mojolearn r2_score: sample_weight is not ported "
-            "(metrics/derived/stats/detail/scores.mojo has no weighted arm)"
+            "(metrics/impl/stats/detail/scores.mojo has no weighted arm)"
         )
     if multioutput != "uniform_average":
         raise NotImplementedError(
@@ -836,12 +836,12 @@ _NOT_PORTED = {
     "pairwise_distances": (
         "cuML's pairwise_distance.cu is a front-end over cuVS distances; "
         "neighbors/ owns distances in this repository "
-        "(neighbors/original/pinned_distance_tile.mojo), and it is not a "
+        "(neighbors/checks/pinned_distance_tile.mojo), and it is not a "
         "metric of a model (metrics/NOT_IMPLEMENTED.tsv)"
     ),
     "confusion_matrix": (
         "the CONTINGENCY matrix is ported and is what the label metrics "
-        "consume (metrics/derived/stats/detail/contingency_matrix.mojo), but "
+        "consume (metrics/impl/stats/detail/contingency_matrix.mojo), but "
         "it has no entry of its own; cuML's confusion_matrix.py is pure "
         "cupy on the host and is not a kernel this lane ported"
     ),

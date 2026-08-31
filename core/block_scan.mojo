@@ -115,7 +115,7 @@ fields cannot be carried at their width -- that is DEVIATION 101 in
 # FLOAT field (`RegressionBin::label_sum`, once it is carried as Float32
 # here) IT IS NOT, and that is a cross-vendor numeric difference this
 # repository refuses to leave implicit: a float-field bin needs a NUMERIC
-# row in `original/kernel_matrix.mojo` pinning the lane group, the way
+# row in `checks/kernel_matrix.mojo` pinning the lane group, the way
 # `replication_lanes` is already pinned to 32 there. DECLARED AND NOT
 # TAKEN, because no float-field bin is wired to this scan yet -- and it is
 # recorded as an OPEN item rather than a solved one.
@@ -129,7 +129,7 @@ from std.sys.info import size_of
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from original.kernel_matrix import TARGET_COLUMN, column_shared_limit
+from checks.kernel_matrix import TARGET_COLUMN, column_shared_limit
 
 
 trait BlockScanElement(TrivialRegisterPassable):

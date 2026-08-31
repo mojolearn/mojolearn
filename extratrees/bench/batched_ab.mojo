@@ -35,18 +35,18 @@ from extratrees.bench.bench_data import (
     read_f32,
 )
 from extratrees.estimator import resolve_max_features, quantize_labels
-from extratrees.derived.decisiontree.decisiontree import (
+from extratrees.impl.decisiontree.decisiontree import (
     CRITERION_MSE,
     DecisionTreeParams,
 )
-from extratrees.derived.decisiontree.batched_levelalgo.builder import (
+from extratrees.impl.decisiontree.batched_levelalgo.builder import (
     train_forest_classification_device,
     train_forest_regression_device,
     upload_dataset,
     DeviceDataset,
 )
-from extratrees.derived.decisiontree.flatnode import TreeMetaDataNode
-from extratrees.derived.randomforest.randomforest import class_ids_for
+from extratrees.impl.decisiontree.flatnode import TreeMetaDataNode
+from extratrees.impl.randomforest.randomforest import class_ids_for
 
 
 def forest_digest(trees: List[TreeMetaDataNode[DType.float32]]) -> UInt64:

@@ -109,9 +109,9 @@ tools/with_identical_mode.sh pixi run check-portable-sqrtcos || echo "PHASE1-FIN
 step "phase 2: the local gates, IDENTICAL"
 # Already inside the flip, so the files run directly rather than through
 # check_unsupervised_identity.sh (which would try to flip again).
-for f in cluster/original/kmeans_identity_check.mojo \
-         neighbors/original/knn_identity_check.mojo \
-         dbscan/original/dbscan_identity_check.mojo \
+for f in cluster/checks/kmeans_identity_check.mojo \
+         neighbors/checks/knn_identity_check.mojo \
+         dbscan/checks/dbscan_identity_check.mojo \
          cluster/kmeans_main.mojo \
          neighbors/knn_main.mojo \
          dbscan/dbscan_main.mojo; do

@@ -12,7 +12,7 @@
     python3 tools/identity_trace_diff.py /tmp/mac.card /tmp/amd.card
 
 Eleven records, one fit, `core/identity_trace.mojo`'s v1 format. See
-`glm/original/ols_trace.mojo` for the stage list and for why the fixture is
+`glm/checks/ols_trace.mojo` for the stage list and for why the fixture is
 built with no floating-point operation in it.
 
 THE RUN-TO-RUN CONTROL IS NOT OPTIONAL AND IS NOT SEPARATE. Set
@@ -41,14 +41,14 @@ from std.os import getenv
 from std.sys import exit
 
 from core.identity_trace import IdentityTrace, first_divergence
-from glm.original.ols_trace import (
+from glm.checks.ols_trace import (
     OLS_CARD_COLS,
     OLS_CARD_ROWS,
     emit_ols_card,
     ols_card_mode_name,
 )
-from glm.derived.linalg.detail.lstsq import OLS_ELEM_TPB
-from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from glm.impl.linalg.detail.lstsq import OLS_ELEM_TPB
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 
 comptime CARD_ENV = "MOJOLEARN_IDENTITY_TRACE"

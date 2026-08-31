@@ -91,7 +91,7 @@ numeric_mode = _backend.numeric_mode
 set_numeric_mode = _backend.set_default_mode
 
 #: WHICH GPU API THE LOADED BINARIES WERE COMPILED FOR: 'metal', 'cuda' or
-#: 'hip', read back out of the binaries (`original/vendor.mojo`). On Linux
+#: 'hip', read back out of the binaries (`checks/vendor.mojo`). On Linux
 #: one wheel carries a CUDA set and a HIP set and `_backend._layout()` picks
 #: one at import; `vendor()` is what it picked, cross-checked against what
 #: the binaries answer. There is no CPU path: a Linux box with neither

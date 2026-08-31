@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Runs `original/vendor_correctness_check.mojo` and PRINTS the table.
+"""Runs `checks/vendor_correctness_check.mojo` and PRINTS the table.
 
 The correctness column in `VENDOR_LIBRARIES.md` is a transcript of this
 program's output. Regenerate it here rather than trusting the file:
@@ -23,7 +23,7 @@ inside the main run would take the table down with it.
 
 from std.sys import argv, exit
 
-from original.vendor_correctness_check import (
+from checks.vendor_correctness_check import (
     check_transpose_aborts,
     run_vendor_correctness,
 )

@@ -27,12 +27,12 @@ One **decoder block** or one **Mamba-1 block**, or one submodule of either.
 
 | lane | our entry | file:line |
 | --- | --- | --- |
-| `transformer` | `llama_decoder_layer_forward` | `transformer/derived/transformers/models/llama/modeling_llama.mojo:3024` |
+| `transformer` | `llama_decoder_layer_forward` | `transformer/impl/transformers/models/llama/modeling_llama.mojo:3024` |
 | `attention` | `llama_attention_forward` | same file `:2494` |
 | `mlp` | `llama_mlp_forward` | same file `:2695` |
 | `rmsnorm` | `llama_rms_norm` | same file `:1127` |
-| `mamba` | `mamba_block_forward` | `mamba/derived/transformers/models/mamba/modeling_mamba.mojo:1269` |
-| `selective_scan` | `selective_scan_fn` | `mamba/derived/mamba_ssm/ops/selective_scan_interface.mojo:465` |
+| `mamba` | `mamba_block_forward` | `mamba/impl/transformers/models/mamba/modeling_mamba.mojo:1269` |
+| `selective_scan` | `selective_scan_fn` | `mamba/impl/mamba_ssm/ops/selective_scan_interface.mojo:465` |
 
 **This is not a model and it is not a token.** A served Llama-3-8B is
 thirty-two of the `transformer` lane's block plus an embedding, a head, a
@@ -240,7 +240,7 @@ rather than guess; and the `attention`, `mlp`, `rmsnorm` and
 lanes exist.
 
 **(b) Our GEMM is the identity lane's kernel in both modes.**
-`modeling_llama.mojo:277` imports `gemm.original.gemm_identical.identical_gemm`
+`modeling_llama.mojo:277` imports `gemm.checks.gemm_identical.identical_gemm`
 and calls it for every projection. FAST does not swap in MAX's
 `linalg.matmul` or anything else; it compiles the same pinned balanced-tree
 kernel with the pins removed. So the `attention` and `mlp` ratios are

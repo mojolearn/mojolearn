@@ -7,7 +7,7 @@ functions the Mojo side reads them with. `sklearn_arm.py` takes the same
 subset the same way on the scikit-learn side.
 
 Nothing here is timed and nothing here is a port -- it is fixture handling, in
-the same category as `original/fixtures.mojo`.
+the same category as `checks/fixtures.mojo`.
 """
 
 from extratrees.estimator import (

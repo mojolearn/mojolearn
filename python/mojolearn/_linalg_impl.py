@@ -3,8 +3,8 @@
 """`mojolearn.linalg`: the bit-identical FP32 matrix product.
 
 Profile `mojolearn.identical.gemm.fp32.v1`. Contract
-`gemm/IDENTICAL_FP32_CONTRACT.md`; kernel `gemm/original/gemm_identical.mojo`;
-oracle `gemm/original/gemm_oracle.mojo::gemm_oracle`.
+`gemm/IDENTICAL_FP32_CONTRACT.md`; kernel `gemm/checks/gemm_identical.mojo`;
+oracle `gemm/checks/gemm_oracle.mojo::gemm_oracle`.
 
 Everything else this package exposes is an estimator. This is a numerical
 primitive, and its audience is anyone who needs a matrix product that returns
@@ -23,7 +23,7 @@ name.** Two builds of the extension can sit in the package
 and `MOJOLEARN_NUMERIC_MODE=identical` in the environment AT IMPORT TIME is
 what selects the second. The FAST build runs the SAME kernels on the SAME
 path with the fused-multiply-add pin and the flush-to-zero pin compiled away
-(`gemm/original/gemm_identical.mojo`, "WHAT `NUMERIC_FAST` DOES HERE"). It is
+(`gemm/checks/gemm_identical.mojo`, "WHAT `NUMERIC_FAST` DOES HERE"). It is
 a correct GEMM. **It makes no identity claim of any kind**, and contract
 section 11.4 declines to promise even that it DIFFERS from the identical one.
 
@@ -101,7 +101,7 @@ PROFILE_VERSION = 1
 PROFILE = f"{PROFILE_FAMILY}.v{PROFILE_VERSION}"
 
 #: The three operations of contract section 0.1, and their `op` codes as
-#: `gemm/original/gemm_oracle.mojo` defines them. `gemv` is `OP_NT` at
+#: `gemm/checks/gemm_oracle.mojo` defines them. `gemv` is `OP_NT` at
 #: `n == 1` and is NOT a fourth operation.
 OP_NN = 0
 OP_NT = 1
@@ -242,8 +242,8 @@ def profile():
         "dtype": "float32",
         "ops": ("OP_NN", "OP_NT", "OP_TN"),
         "contract": "gemm/IDENTICAL_FP32_CONTRACT.md",
-        "kernel": "gemm/original/gemm_identical.mojo",
-        "oracle": "gemm/original/gemm_oracle.mojo::gemm_oracle",
+        "kernel": "gemm/checks/gemm_identical.mojo",
+        "oracle": "gemm/checks/gemm_oracle.mojo::gemm_oracle",
         # The measured extent of the claim, not the extent of the API. Both
         # numbers are the lane's own, from gemm/README.md; read it rather than
         # quoting these.

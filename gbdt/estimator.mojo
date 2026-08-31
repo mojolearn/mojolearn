@@ -9,7 +9,7 @@ caller is a check or a benchmark that built its own lists in Mojo.
 
 Nothing here is a port. `gbdt/` mirrors CatBoost and is governed by COPY, DO
 NOT IMPROVE; this file is host-side policy in the same category as
-`original/`, following `neighbors/estimator.mojo` and `cluster/estimator.mojo`
+`checks/`, following `neighbors/estimator.mojo` and `cluster/estimator.mojo`
 -- including their convention that data crosses as raw pointers plus lengths
 so a CPython extension can pass buffer addresses straight through.
 

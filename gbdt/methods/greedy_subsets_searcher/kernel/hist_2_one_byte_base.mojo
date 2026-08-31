@@ -92,7 +92,7 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from original.kernel_matrix import (
+from checks.kernel_matrix import (
     HIST_SMEM_SHARED2_I32,
     K_HIST_2_ONE_BYTE,
     TARGET_COLUMN,
@@ -103,8 +103,8 @@ from original.kernel_matrix import (
     lane_width_for,
     requires_uniform_iteration_for,
 )
-from original.numerics import PIN_DETERMINISM
-from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+from checks.numerics import PIN_DETERMINISM
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 
 from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     hist2_dither,

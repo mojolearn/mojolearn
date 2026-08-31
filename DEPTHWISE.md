@@ -65,7 +65,7 @@ symmetric or lossguide lanes were editing.
 | `.../kernel/compute_scores.mojo` | `ComputeOptimalSplitsRegion` (`:303`) | appended at the foot |
 | `gbdt/models/kernel/add_bin_values.mojo` | `ComputeNonSymmetricDecisionTreeBinsImpl` (`add_model_value.cu:353`) | appended at the foot |
 | `.../greedy_search_helper_depthwise.mojo` | the Depthwise arms + `FitImpl` + `MakeSplit`'s multi-leaf arm | **merged**: now `fit_non_symmetric_tree` with four policy branches, `fit_depthwise_tree` a thin wrapper |
-| `original/depthwise_check.mojo` | — | the gate, 7 claims |
+| `checks/depthwise_check.mojo` | — | the gate, 7 claims |
 | `gbdt/methods/greedy_subsets_searcher/points_subsets.mojo` | `TLeaf.Path` | `depth: Int` became the real `TLeafPath`, closing that field's own TODO |
 
 ### What was REUSED rather than rewritten, which is most of it
@@ -174,7 +174,7 @@ a*b + 0` exactly.
 ## Running the two arms, and the stage ladder
 
 `check-depthwise` gates whichever numeric mode the build carries.
-`GLOBAL_NUMERIC_MODE` is a `comptime` in `original/numerics.mojo` and the
+`GLOBAL_NUMERIC_MODE` is a `comptime` in `checks/numerics.mojo` and the
 shipped default is `NUMERIC_FAST`, so the `IDENTICAL` arm needs a build with
 that one line flipped. **Do not flip it in the shared checkout** — three
 sessions compile against it. Use a detached worktree:
@@ -183,15 +183,15 @@ sessions compile against it. Use a detached worktree:
 WT=/tmp/wt-identical
 git worktree add --detach "$WT" HEAD
 sed -i '' 's/^comptime GLOBAL_NUMERIC_MODE = NUMERIC_FAST$/comptime GLOBAL_NUMERIC_MODE = NUMERIC_IDENTICAL/' \
-  "$WT/original/numerics.mojo"
-pixi run mojo run -I "$WT" "$WT/original/depthwise_check.mojo"
-pixi run mojo run -I "$WT" "$WT/original/depthwise_trace_probe.mojo"
+  "$WT/checks/numerics.mojo"
+pixi run mojo run -I "$WT" "$WT/checks/depthwise_check.mojo"
+pixi run mojo run -I "$WT" "$WT/checks/depthwise_trace_probe.mojo"
 git worktree remove "$WT"
 ```
 
 `check-depthwise-trace` is the STAGE LADDER, and **it is the lossguide lane's
 `core/identity_trace.mojo`, not a second instrument.** This lane briefly had
-its own (`original/stage_digest.mojo`, commit `e5cef46`) because both lanes
+its own (`checks/stage_digest.mojo`, commit `e5cef46`) because both lanes
 built the same thing inside the same hour without knowing. It is deleted.
 Theirs is a strict superset — generic over `DType` where mine was four
 hand-written methods, `create_sub_buffer` for a short read where mine needed
@@ -205,7 +205,7 @@ files.
 
 What this lane added to that file, at the foot: `read_trace_lines` and
 `first_divergence`, so a MOJO check that produces two traces in one process
-can raise on the difference. `original/identity_trace_check.mojo` had
+can raise on the difference. `checks/identity_trace_check.mojo` had
 already written that loop inline and can now drop its copy.
 
 The probe answers two questions locally and leaves both traces on disk for

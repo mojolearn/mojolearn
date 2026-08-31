@@ -28,7 +28,7 @@ The tax decomposes into five terms, each derivable per stage.
 
 **1. Transcendental tax.** Every portable transcendental replaces one hardware
 instruction with a polynomial. Count the ops in `identical_exp`,
-`identical_log1p`, `identical_rsqrt`, `identical_div` in `original/numerics.mojo`.
+`identical_log1p`, `identical_rsqrt`, `identical_div` in `checks/numerics.mojo`.
 Count the call sites per stage from the profile's stage list. Multiply. For the
 Mamba scan this term is dominated by S6, one `exp` per (d, n, l).
 
@@ -185,7 +185,7 @@ ALREADY certify does not wait on anything.
 ### Stage 1. The static identity tax calculator. NEEDS NOTHING NEW.
 
 Part 1's five terms, computed from the frozen contracts and
-`original/numerics.mojo` by counting. Output is a predicted tax per stage per
+`checks/numerics.mojo` by counting. Output is a predicted tax per stage per
 lane, with the derivation shown, and it is FALSIFIABLE later.
 
 This is the only rung that proceeds under the standing measurement freeze,

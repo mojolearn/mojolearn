@@ -34,10 +34,10 @@ It is not in `condense`. Both implementations read
 is `condense.cuh`'s own order. The disagreement is one stage earlier, in
 what the DENDROGRAM put in those two slots.
 
-**The suspect, named precisely.** `original/hdbscan_oracle.mojo::oracle_dendrogram`
+**The suspect, named precisely.** `checks/hdbscan_oracle.mojo::oracle_dendrogram`
 appends `(find(lo[i]), find(hi[i]))`, taking its child order from the
 CANONICALIZED edge pair, `lo` being `min(u, v)`. The device path goes
-through `hierarchy/derived/cluster/detail/agglomerative.mojo::build_dendrogram_host`
+through `hierarchy/impl/cluster/detail/agglomerative.mojo::build_dendrogram_host`
 fed by the device MST, which carries the edge in the orientation Boruvka
 stored it. At any edge where the MST stored the higher index first, left and
 right swap.
@@ -76,8 +76,8 @@ cuML's own dispatch -- is NOT ported and is refused by name; see
 
 ## Commands
 
-    tools/with_build_lock.sh     pixi run mojo run -I . hdbscan/original/hdbscan_check.mojo
-    tools/with_identical_mode.sh pixi run mojo run -I . hdbscan/original/hdbscan_check.mojo
+    tools/with_build_lock.sh     pixi run mojo run -I . hdbscan/checks/hdbscan_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -I . hdbscan/checks/hdbscan_check.mojo
     tools/with_build_lock.sh     pixi run mojo run -I . hdbscan/hdbscan_main.mojo
     MOJOLEARN_IDENTITY_TRACE=/tmp/hdbscan.card \
         tools/with_identical_mode.sh pixi run mojo run -I . hdbscan/hdbscan_main.mojo
@@ -122,21 +122,21 @@ unchanged" **held, with one qualification stated at the end.**
 
 | file | what this lane takes from it | reached from |
 |---|---|---|
-| `hierarchy/derived/sparse/solver/mst_solver.mojo` | RAFT's Boruvka `MST_solver`, `Graph_COO`, the `mst()` entry | `build_sorted_mst` |
-| `hierarchy/derived/sparse/solver/detail/mst_kernels.mojo` | every Boruvka kernel, including DEVIATION 620's three integer `atomicMin` phases | same |
-| `hierarchy/derived/cluster/detail/mst.mojo` | `build_sorted_mst`, `get_n_components`, and the `connect_knn_graph` refusal this lane depends on being loud | `build_mr_linkage` |
-| `hierarchy/derived/cluster/detail/agglomerative.mojo` | `UnionFind` (DEVIATION 622) and `build_dendrogram_host` | `build_mr_linkage` |
-| `hierarchy/derived/cluster/detail/connectivities.mojo` | the PAIRWISE distance graph: `pairwise_distances`, `fill_indices2`, `indptr_sequence_kernel`, `self_loop_max_kernel`, `FLOAT32_MAX`, `PAIRWISE_MAX_ROWS`, `DISTANCE_L2_SQRT_EXPANDED` | `build_mr_linkage` |
-| `hierarchy/derived/sparse/op/sort.mojo` | `coo_sort_by_weight` (DEVIATION 621) AND `merge_sort_u64_with_index`, which is also the condensed tree's sort (DEVIATION 1611) | `build_sorted_mst`, `condense()`, `select_parent_csr` |
-| `hierarchy/original/edge_order.mojo` | the **total order**: `weight_order_key`, `pack_edge_key`, `triple_less`, `edge_lo`/`edge_hi`. **No second order was invented.** It orders MST edges, the segment minimum of the lambdas (DEVIATION 1604), the parent-lambda max in `do_labelling_on_host`, `max_lambda_of`, and the oracle's `(distance, index)` k-NN sort | everywhere a float is compared |
-| `hierarchy/original/nan_guard.mojo` | DEVIATION 623's NaN refusal on the distance matrix, called from inside `pairwise_distances`. This lane's DEVIATION 1607 covers the arrays 623 does not reach and does not duplicate it | `pairwise_distances` |
-| `hierarchy/original/linkage_oracle.mojo` | the oracle's substrate: `host_row_norms_pinned`, `host_pinned_distance`, `host_kruskal`, `NaiveUnionFind`, `merge_sort_f64_with_index`, `partitions_agree`, and the fixture hash `_hash_unit` | `hdbscan_oracle.mojo`, `hdbscan_fixture.mojo` |
+| `hierarchy/impl/sparse/solver/mst_solver.mojo` | RAFT's Boruvka `MST_solver`, `Graph_COO`, the `mst()` entry | `build_sorted_mst` |
+| `hierarchy/impl/sparse/solver/detail/mst_kernels.mojo` | every Boruvka kernel, including DEVIATION 620's three integer `atomicMin` phases | same |
+| `hierarchy/impl/cluster/detail/mst.mojo` | `build_sorted_mst`, `get_n_components`, and the `connect_knn_graph` refusal this lane depends on being loud | `build_mr_linkage` |
+| `hierarchy/impl/cluster/detail/agglomerative.mojo` | `UnionFind` (DEVIATION 622) and `build_dendrogram_host` | `build_mr_linkage` |
+| `hierarchy/impl/cluster/detail/connectivities.mojo` | the PAIRWISE distance graph: `pairwise_distances`, `fill_indices2`, `indptr_sequence_kernel`, `self_loop_max_kernel`, `FLOAT32_MAX`, `PAIRWISE_MAX_ROWS`, `DISTANCE_L2_SQRT_EXPANDED` | `build_mr_linkage` |
+| `hierarchy/impl/sparse/op/sort.mojo` | `coo_sort_by_weight` (DEVIATION 621) AND `merge_sort_u64_with_index`, which is also the condensed tree's sort (DEVIATION 1611) | `build_sorted_mst`, `condense()`, `select_parent_csr` |
+| `hierarchy/checks/edge_order.mojo` | the **total order**: `weight_order_key`, `pack_edge_key`, `triple_less`, `edge_lo`/`edge_hi`. **No second order was invented.** It orders MST edges, the segment minimum of the lambdas (DEVIATION 1604), the parent-lambda max in `do_labelling_on_host`, `max_lambda_of`, and the oracle's `(distance, index)` k-NN sort | everywhere a float is compared |
+| `hierarchy/checks/nan_guard.mojo` | DEVIATION 623's NaN refusal on the distance matrix, called from inside `pairwise_distances`. This lane's DEVIATION 1607 covers the arrays 623 does not reach and does not duplicate it | `pairwise_distances` |
+| `hierarchy/checks/linkage_oracle.mojo` | the oracle's substrate: `host_row_norms_pinned`, `host_pinned_distance`, `host_kruskal`, `NaiveUnionFind`, `merge_sort_f64_with_index`, `partitions_agree`, and the fixture hash `_hash_unit` | `hdbscan_oracle.mojo`, `hdbscan_fixture.mojo` |
 | `neighbors/estimator.mojo` | `knn_search_traced` -- the k-NN, its tile planning, its arm pin (DEVIATION 509), and its `(distance, index)` host sort, which is what makes the k-th order statistic well defined | `compute_knn` |
-| `neighbors/original/pinned_distance_tile.mojo` | the pinned distance arithmetic (DEVIATION 505), through `hierarchy`'s call, not this lane's | the distance step |
-| `neighbors/original/select_radix_identical.mojo` | the composite `(distance, index)` top-k key (DEVIATION 500), through `knn_search` | the k-NN |
+| `neighbors/checks/pinned_distance_tile.mojo` | the pinned distance arithmetic (DEVIATION 505), through `hierarchy`'s call, not this lane's | the distance step |
+| `neighbors/checks/select_radix_identical.mojo` | the composite `(distance, index)` top-k key (DEVIATION 500), through `knn_search` | the k-NN |
 | `core/identity_trace.mojo` | `IdentityTrace`, `record_device`, `record_host`, `record_list_*`, `first_divergence`. **Every stage hash in this lane goes through it** | the whole fit |
 | `core/row_norms.mojo`, `core/gemm.mojo`, `core/expand_distances.mojo` | the FAST distance arm, through `hierarchy`'s call | the distance step |
-| `original/numerics.mojo` | `ftz`, `identical_mul_add`, `identical_mul`, `identical_div`, `identical_sqrt`, and **`identical_fmax` / `portable_fmaxf`**, which is the total-order max DEVIATION 1601 needs. It already existed (DEVIATION 825, for softmax) and was not re-derived | the three-way max, every seam |
+| `checks/numerics.mojo` | `ftz`, `identical_mul_add`, `identical_mul`, `identical_div`, `identical_sqrt`, and **`identical_fmax` / `portable_fmaxf`**, which is the total-order max DEVIATION 1601 needs. It already existed (DEVIATION 825, for softmax) and was not re-derived | the three-way max, every seam |
 
 **Not re-implemented, and it is worth naming the negative explicitly**:
 the MST solver, the agglomerative labeling, the union-find, the edge
@@ -177,7 +177,7 @@ names are H1, H2 and H3.
 
 **DEVIATION 1600 -- the mutual reachability graph is the COMPLETE
 PAIRWISE one, not their sparse k-NN COO**
-(`hdbscan/original/mutual_reachability_dense.mojo`, the block). Two
+(`hdbscan/checks/mutual_reachability_dense.mojo`, the block). Two
 walls, both other lanes': `connect_knn_graph`/`cross_component_nn`/
 `merge_msts` are NOT PORTED in `hierarchy/` and a k-NN mutual
 reachability graph over separated clusters is a forest; and
@@ -194,14 +194,14 @@ NOT MEASURED: that sentence is an array-size statement.
 
 **DEVIATION 1601 -- the three-way max is a total-order selection**
 (same file, second block; the helper is
-`original/hdbscan_sabotage.mojo::mr_max3`). Row H2 above.
+`checks/hdbscan_sabotage.mojo::mr_max3`). Row H2 above.
 
 **DEVIATION 1602 -- the core distance is read from a `(distance,
 index)`-SORTED k-NN result, and the two claims are stated apart**
-(`derived/hdbscan/detail/reachability.mojo`, the block). Row H1 above.
+(`impl/hdbscan/detail/reachability.mojo`, the block). Row H1 above.
 
 **DEVIATION 1603 -- the stability sum is a per-cluster serial ascending
-fold, not a float `atomicAdd`** (`derived/hdbscan/detail/stabilities.mojo`,
+fold, not a float `atomicAdd`** (`impl/hdbscan/detail/stabilities.mojo`,
 the block). Row H3b.
 
 **DEVIATION 1604 -- the per-parent minimum lambda is a total-order scan,
@@ -213,19 +213,19 @@ careful not to touch; ours writes the identity explicitly.
 
 **DEVIATION 1605 -- the Excess-of-Mass loop runs on the host over one
 download, and its subtree sum is serial and ascending**
-(`derived/hdbscan/detail/select.mojo`, the block). Row H3b. Their loop is
+(`impl/hdbscan/detail/select.mojo`, the block). Row H3b. Their loop is
 already on the host; what moved is one scalar readback and one
 `thrust::transform_reduce` per node.
 
 **DEVIATION 1606 -- `lambda = 1 / distance` through `identical_div`**
-(`derived/hdbscan/detail/condense.mojo`, the block). Row H5.
+(`impl/hdbscan/detail/condense.mojo`, the block). Row H5.
 
 **DEVIATION 1607 -- a non-finite value is refused by name before it can
-reach a recorded stage** (`original/mutual_reachability_dense.mojo`,
+reach a recorded stage** (`checks/mutual_reachability_dense.mojo`,
 third block). Row H7.
 
 **DEVIATION 1609 -- `TreeUnionFind::find` is iterative**
-(`derived/hdbscan/detail/extract.mojo`, the block). Theirs recurses; same
+(`impl/hdbscan/detail/extract.mojo`, the block). Theirs recurses; same
 root, same fully compressed array, no unbounded stack. `hierarchy`'s
 DEVIATION 622 is the sibling with the opposite cause (there the recursion
 was fine and the INDEXING was out of bounds).
@@ -238,14 +238,14 @@ reversed; `NOT_IMPLEMENTED.tsv` has the row.
 
 **DEVIATION 1611 -- the condensed-tree sort is a host stable merge sort
 on a packed `(parent, child)` key**
-(`derived/hdbscan/condensed_hierarchy.mojo`, the block). The merge sort is
+(`impl/hdbscan/condensed_hierarchy.mojo`, the block). The merge sort is
 `hierarchy`'s, imported. `pack_edge_key` is NOT reused for it and the
 block says why: that packing has 16-bit vertex fields sized for an
 undirected edge of the distance graph, and these are 32-bit tree node
 ids.
 
 **DEVIATION 1613 -- `cluster_sizes[0]` is a data race in their kernel and
-a serial fold in ours** (`derived/hdbscan/detail/select.mojo`, second
+a serial fold in ours** (`impl/hdbscan/detail/select.mojo`, second
 block). Row H6.
 
 (1608 and 1612 were reserved during drafting and released; they are not
@@ -253,7 +253,7 @@ used. 1614-1629 are free.)
 
 ## The checks
 
-Thirteen, all in `original/hdbscan_check.mojo`, each printing
+Thirteen, all in `checks/hdbscan_check.mojo`, each printing
 `check_<name> OK [<mode>]: <what it established>`. **These are written,
 not run.**
 
@@ -297,7 +297,7 @@ NOT move.
 the alphabetical block that currently runs from `check-kde` to
 `check-metrics-trust` (around line 978):
 
-    check-hdbscan = "mojo run -I . hdbscan/original/hdbscan_check.mojo"
+    check-hdbscan = "mojo run -I . hdbscan/checks/hdbscan_check.mojo"
     hdbscan-main = "mojo run -I . hdbscan/hdbscan_main.mojo"
 
 FAST is `pixi run check-hdbscan`; IDENTICAL is
@@ -308,7 +308,7 @@ task, by the same design decision `hierarchy/README.md` records.
 
     hdbscan/estimator.mojo::hdbscan_fit_host | nothing | bindings/ and a
       python/mojolearn HDBSCAN class; see HAND-OFF below
-    hdbscan/derived/hdbscan/detail/extract.mojo::do_labelling_on_host's
+    hdbscan/impl/hdbscan/detail/extract.mojo::do_labelling_on_host's
       allow_single_cluster branch | nothing | a fixture with
       allow_single_cluster=True; see WHAT IS OWED
 
@@ -396,7 +396,7 @@ the first.** Nothing in this directory has been built or executed.
    tie-break that does not read a row index, and no such order exists in
    this tree.
 7. **A change `neighbors/` may want, NOT MADE.**
-   `neighbors/derived/neighbors/detail/knn_brute_force.mojo` has no
+   `neighbors/impl/neighbors/detail/knn_brute_force.mojo` has no
    `DistanceEpilogue` parameter, and that single gap is the whole of
    DEVIATION 1600's wall (b). If the neighbors lane threads an epilogue
    through `tiled_brute_force_knn` -- their template parameter, so it is
@@ -410,7 +410,7 @@ the first.** Nothing in this directory has been built or executed.
    vertex index per component is the obvious pin, and it is already named
    in `hierarchy/NOT_IMPLEMENTED.tsv`. Separately, `hierarchy`'s
    `sorted_coo_to_csr`-shaped counting scan now exists in three places
-   (`spectral/derived/sparse/op/coo_ops.mojo`,
-   `hdbscan/derived/hdbscan/detail/utils.mojo`, and RAFT's original); if
+   (`spectral/impl/sparse/op/coo_ops.mojo`,
+   `hdbscan/impl/hdbscan/detail/utils.mojo`, and RAFT's original); if
    `core/` ever grows a container-free CSR scan, all of them should call
    it. This lane did not touch `hierarchy/`.

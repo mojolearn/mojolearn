@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Entry point for the random ball cover checks."""
 
-from neighbors.original.ball_cover_check import (
+from neighbors.checks.ball_cover_check import (
     check_ball_cover,
     check_ball_cover_at_scale,
     check_ball_cover_dense_and_max_k,

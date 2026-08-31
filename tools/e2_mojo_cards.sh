@@ -3,7 +3,7 @@
 #
 #   tools/e2_mojo_cards.sh <out_dir>
 #
-# Runs `original/e2_growth_cards.mojo` (pixi task `e2-growth-cards`) ONCE
+# Runs `checks/e2_growth_cards.mojo` (pixi task `e2-growth-cards`) ONCE
 # into <out_dir>, producing one card per Mojo-only training path:
 #
 #   <out_dir>/gbdt_depthwise.card         depthwise growth, depth 4

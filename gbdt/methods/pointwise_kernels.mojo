@@ -131,7 +131,7 @@ is capped at 64, so it is always a power of two in [1, 64]; `histCount` is
 passed as 2 by the only caller). They are transcribed because a guard that
 is unreachable today is the one that catches tomorrow's caller, and
 because `min(..., 64)` is what makes the seven enough:
-`original/pointwise_dispatch_check.mojo` gate F7 sweeps 245
+`checks/pointwise_dispatch_check.mojo` gate F7 sweeps 245
 configurations, finds 12 that return 128 before the clamp, and asserts
 every clamped value is one of the seven.
 
@@ -172,12 +172,12 @@ atomic, so the 8-bit accumulator is Int32 fixed point); this layer only
 threads the value through.
 """
 
-from original.kernel_matrix import (
+from checks.kernel_matrix import (
     TARGET_COLUMN,
     pointwise_one_byte_fixed_for,
 )
-from original.numerics import GLOBAL_NUMERIC_MODE as HIST_BUILD_MODE
-from original.numerics import NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE as HIST_BUILD_MODE
+from checks.numerics import NUMERIC_IDENTICAL
 from max.gpu.host import DeviceContext
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 

@@ -7,7 +7,7 @@ sizes that cross where the old `JACOBI_MAX_N = 32` cap sat, without a PCA
 around it to blur what failed.
 """
 
-from decomposition.original.jacobi_check import (
+from decomposition.checks.jacobi_check import (
     check_jacobi_device_sizes,
     check_jacobi_reaches_past_32,
     check_jacobi_scale_invariance,

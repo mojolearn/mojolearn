@@ -83,7 +83,7 @@ are not typos:
 * it returns **`int`**, and `THash<int>` is the plain `(size_t)` cast, so
   a result at or above 2^31 enters `MultiHash` SIGN-EXTENDED as
   `0xffffffff________`. Half of the fixtures in
-  `original/feature_tensor_check.mojo` land there. This is the same
+  `checks/feature_tensor_check.mojo` land there. This is the same
   defect `gbdt/models/hash.mojo:cat_hash_chain_element` documents for
   `ctr_provider.h:107`, at a second site, and it is written here as the
   same explicit branch for the same reason: a chained SIMD cast got the
@@ -170,7 +170,7 @@ BOTH the comparator and the hash. `std::tie(FeatureId, BinIdx, SplitType)`
 orders `0x80000001` ABOVE `0x7fffffff`; read as `Int32` it orders below,
 which reverses the canonical form and therefore the hash. So every read of
 those fields in this file goes through `_as_u32`, and
-`original/feature_tensor_check.mojo` carries a fixture whose splits are
+`checks/feature_tensor_check.mojo` carries a fixture whose splits are
 `0x7fffffff` and `0x80000001` for no other reason than to fail if one of
 those reads is ever dropped. Moving `TBinarySplit` to `UInt32` is the real
 fix and belongs to whoever next touches the model.

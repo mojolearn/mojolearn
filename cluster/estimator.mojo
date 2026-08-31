@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The callable surface over the k-means fit.
 
-**Why this file exists.** `cluster/derived/cluster/kmeans.mojo` already has
+**Why this file exists.** `cluster/impl/cluster/kmeans.mojo` already has
 `fit`, `predict` and `fit_predict`, faithfully mirroring
 `cuvs/src/cluster/kmeans.cuh`. None of them is callable by anyone outside this
 repository, for two reasons that are both this file's job to fix:
@@ -17,9 +17,9 @@ repository, for two reasons that are both this file's job to fix:
      existing caller is a check that computed them from a fixture it
      generated itself.
 
-Nothing here is a port. `cluster/derived/` mirrors cuVS and is governed by
+Nothing here is a port. `cluster/impl/` mirrors cuVS and is governed by
 COPY, DO NOT IMPROVE; this file is host-side policy cuVS has no counterpart
-for, in the same category as `original/`. It follows
+for, in the same category as `checks/`. It follows
 `neighbors/estimator.mojo`, which is the first file of this kind, including
 its convention that data crosses as raw pointers plus lengths so a CPython
 extension can pass buffer addresses straight through.
@@ -41,7 +41,7 @@ THE POLICY CHOICES
    answer on data whose magnitude it did not anticipate.
 
 2. **`row_count` IS PASSED TO `choose_scale`, AND THE CHECKS DO NOT DO THAT.**
-   `original/fixed_point.mojo:55-70` documents that stating the row count
+   `checks/fixed_point.mojo:55-70` documents that stating the row count
    sharpens the overflow bound from a blanket three-bit headroom to an exact
    allowance, buying a scale 4x finer, and records that the blanket scale's
    dither noise cost 1.6% train mse on the boosting side at 254 borders. The
@@ -106,16 +106,16 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
 
 from max.gpu.host import DeviceContext
 
-from cluster.derived.cluster.detail.kmeans_common import metric_is_sqrt
-from cluster.derived.cluster.kmeans import fit_predict
+from cluster.impl.cluster.detail.kmeans_common import metric_is_sqrt
+from cluster.impl.cluster.kmeans import fit_predict
 from core.row_norms import NORM_TPB, row_norm_kernel
-from cluster.derived.cluster.kmeans_params import (
+from cluster.impl.cluster.kmeans_params import (
     INIT_ARRAY,
     INIT_KMEANS_PLUS_PLUS,
     KMeansParams,
     METRIC_L2_EXPANDED,
 )
-from original.fixed_point import choose_scale
+from checks.fixed_point import choose_scale
 
 
 @fieldwise_init

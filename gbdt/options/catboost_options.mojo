@@ -333,7 +333,7 @@ struct CatBoostOptions(Copyable, Movable):
     searcher, 2026-08-23 from `train()`, DEVIATION 259): `is_terminal_leaf`
     runs their size test, boundary included -- theirs is `leaf.Size <=
     MinLeafSize`, so a minimum of 1 marks a ONE-ROW LEAF TERMINAL rather
-    than permitting it. `original/depthwise_check.mojo` claim 5 probes that
+    than permitting it. `checks/depthwise_check.mojo` claim 5 probes that
     `<=` at a leaf size that actually occurs, and `check-grow-policy` claim
     3 shows 1 vs 500 move a boosted model under both policies.
 
@@ -537,7 +537,7 @@ struct CatBoostOptions(Copyable, Movable):
 
     DECLARED AND VALIDATED, WIRED TO NOTHING (recorded 2026-08-21). The
     two flushes are different compiled code, so the operative switch is
-    `GLOBAL_NUMERIC_MODE` (`original/numerics.mojo`), whose default is
+    `GLOBAL_NUMERIC_MODE` (`checks/numerics.mojo`), whose default is
     `NUMERIC_FAST` -- CatBoost's shipped behavior, vendor's fastest path
     per kernel-matrix column. A field that validates but changes nothing
     is recorded here rather than silently kept: wiring it would mean a
@@ -1044,8 +1044,8 @@ struct TCatFeatureParams(Copyable, Movable):
         That is deviation 55a -- a quality difference on the same
         estimator, not a different one.
 
-        Both surfaces are exercised: `original/ctr_device_check.mojo`,
-        `original/ctr_apply_check.mojo` and `original/ctr_train_check.mojo`
+        Both surfaces are exercised: `checks/ctr_device_check.mojo`,
+        `checks/ctr_apply_check.mojo` and `checks/ctr_train_check.mojo`
         each run `default()` and this one side by side, because a switch
         with one side unexercised is an unchecked branch
         (`PORTING_RULES.md` 8).

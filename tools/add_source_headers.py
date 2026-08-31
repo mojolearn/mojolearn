@@ -11,18 +11,18 @@ attribution travelled with only two of them.
     COPIES ONE FILE        nothing travelled at all
 
 The third is not a hypothetical and it is not malice. A developer who pastes
-`gemm/original/gemm_identical.mojo` into their project receives 1,589 lines
+`gemm/checks/gemm_identical.mojo` into their project receives 1,589 lines
 of the hardest work in this repository with no statement of who wrote it,
 what licence it carries, or that a DOI exists, and neither they nor anyone
 downstream of them has any way to find out. That is how attribution is
 actually lost.
 
 IT CUTS THE OTHER WAY TOO, and that half is an obligation rather than a
-preference. `NOTICE` records that everything under a `derived/` directory
+preference. `NOTICE` records that everything under a `impl/` directory
 derives from CatBoost at 54a8143a, or from cuML, cuVS, RAFT or FAISS at
-their pinned commits. A lifted file from `derived/` carried none of that
+their pinned commits. A lifted file from `impl/` carried none of that
 either, so it stripped the UPSTREAM attribution that Apache 2.0 section 4
-obliges this project to propagate. A `derived/` file therefore gets a third
+obliges this project to propagate. A `impl/` file therefore gets a third
 line pointing at its lane's `DERIVATION_MAP.tsv`, where the upstream path and
 the pinned commit are recorded per file.
 
@@ -75,14 +75,14 @@ def wants_header(path):
     return True
 
 
-# LANES THAT MIRROR AN UPSTREAM WITHOUT HAVING A `derived/` SUBDIRECTORY.
+# LANES THAT MIRROR AN UPSTREAM WITHOUT HAVING A `impl/` SUBDIRECTORY.
 #
 # Found 2026-08-31, and it was the reason the first proportion table was
 # wrong: `gbdt/` IS the CatBoost mirror and `ensemble/` mirrors cuML, and
-# neither has ever had a `derived/` directory, so a header rule keyed on the
+# neither has ever had a `impl/` directory, so a header rule keyed on the
 # directory gave 191 files (89,766 lines, the most plainly derived code in
 # the repository) NO provenance marker at all while 310 files under
-# `derived/` had one.
+# `impl/` had one.
 #
 # The line for these is deliberately about the LANE rather than the file.
 # 76 of gbdt's 149 files appear in no derivation map and three say NO
@@ -109,7 +109,7 @@ def header_for(path, root):
     else:
         rel = os.path.relpath(path, root)
         lane = rel.split(os.sep)[0]
-        # `<lane>/original/` is the lane's own work, not its mirror.
+        # `<lane>/checks/` is the lane's own work, not its mirror.
         if lane in LANE_UPSTREAM and (os.sep + "original" + os.sep) not in path:
             lines.append(LANE_UPSTREAM[lane])
     return "\n".join(lines) + "\n"
@@ -153,7 +153,7 @@ def main():
             else:
                 skipped += 1
     verb = "would add" if check else "added"
-    print(f"{verb} a header to {added} files ({added_ported} of them under derived/)")
+    print(f"{verb} a header to {added} files ({added_ported} of them under impl/)")
     print(f"already carried one: {skipped}")
     return 0
 

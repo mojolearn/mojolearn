@@ -20,7 +20,7 @@ paper.
 
 2. **The cross-vendor hazard for tree learners is DENORMAL POLICY, not
    fast-math.** Measured 2026-08-21 on Metal through MAX
-   (`original/ieee_arith_check.mojo`, 2^20 hashed patterns): division
+   (`checks/ieee_arith_check.mojo`, 2^20 hashed patterns): division
    and sqrt correctly rounded on every normal input, ZERO fast-math
    substitution, no FMA contraction -- and 100.0% of divergence is
    documented flush-to-zero, operands, intermediates and results. CUDA
@@ -60,7 +60,7 @@ paper.
    candidate remedies (their GatherBins arm; level compaction) are
    refuted by the same numbers on this device. A micro-architecture
    result GBDT papers do not usually carry. Evidence:
-   SHAPE_SWEEP_2026-08-21, `original/density_probe.mojo`.
+   SHAPE_SWEEP_2026-08-21, `checks/density_probe.mojo`.
 
 10. **A measured, bit-exact model of a GPU's denormal behavior as the
    portability construction itself.** Instead of designing a denormal
@@ -162,7 +162,7 @@ paper.
    therefore not that per-stage traces are convenient: it is that output
    equality is the WRONG INSTRUMENT for a determinism contract, and cannot
    falsify the clauses such a contract is made of. Evidence:
-   `mamba/original/mamba_check.mojo`'s sabotage ledger, IDENTITY_PATHS row 55.
+   `mamba/checks/mamba_check.mojo`'s sabotage ledger, IDENTITY_PATHS row 55.
    **INDEPENDENTLY REPRODUCED THE SAME NIGHT IN AN UNRELATED ALGORITHM**, which
    is what moves this off "a mamba quirk". holtwinters, 9 sabotage arms run on
    one M4: `LS_TIE` moves 9 of 37 stages and 64 of 2800 cells and leaves the
@@ -176,7 +176,7 @@ paper.
    in six because the other five run a single block where the rotation is the
    identity -- an arm can look inert for a reason that has nothing to do with
    absorption, so reach must be measured per fixture as well.
-   Evidence: `holtwinters/original/hw_check.mojo` arm table, IDENTITY_PATHS
+   Evidence: `holtwinters/checks/hw_check.mojo` arm table, IDENTITY_PATHS
    row 57.
    **AND THE CONVERSE, MEASURED IN A THIRD LANE 2026-08-24, which is the
    practical payoff rather than the warning:** recording ONE decision stage in
@@ -282,8 +282,8 @@ paper.
    The lane had predicted the opposite in writing and left the wrong prediction
    in the docstring beside the outcome. Widening a fixture means widening the
    part that carries ARITHMETIC, not the part that carries STRUCTURE.
-   Evidence: IDENTITY_PATHS rows 55, 58 and 59, `spectral/original/spectral_check.mojo`,
-   `mamba/original/mamba_check.mojo`.
+   Evidence: IDENTITY_PATHS rows 55, 58 and 59, `spectral/checks/spectral_check.mojo`,
+   `mamba/checks/mamba_check.mojo`.
    PRIOR-ART CHECK NEEDED, against mutation-testing coverage literature, where
    the neighbouring notion is mutant-killing test minimality.
 

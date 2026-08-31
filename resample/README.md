@@ -4,7 +4,7 @@
 machines is a defect in published work, and nobody today ships a reproducible
 GPU bootstrap.** That is the design goal of this lane and it is the whole
 reason it exists. Every other property below is a consequence of one decision,
-stated once here and once in `original/index_map.mojo`.
+stated once here and once in `checks/index_map.mojo`.
 
 **The resample index for replicate `r` at position `i` is a pure function of
 `(seed, kind, r, i)` through the counter-based Philox generator, not a draw
@@ -151,11 +151,11 @@ written. **If a construction below ever gets a second copy inside
 |---|---|---|
 | Philox-4x32-10, `PhiloxState`, `skipahead_sequence`, `skipahead`, `next_u32`, `philox_next_u64` | `core/philox.mojo` | the generator, whole. This lane calls `PhiloxState.init(key, subsequence, offset)` and nothing else |
 | `custom_next_uniform_int_u32` (RAFT's Lemire bounded draw with its rejection loop) | `core/philox.mojo` | the range reduction for every drawn observation index. Not `x % n`, which is a different and wrong distribution |
-| `virtual_block_sum`, `host_tree_sum`, `host_fold_partials`, `chunk_count`, `linear_block_id`, `physical_block_count`, `canonicalize_nan`, `PINNED_SUM_W` | `metrics/original/pinned_sum.mojo` | **every fold in this lane, without exception.** That file already solves the problem `check_launch_invariance` poses, by folding a fixed 256-wide tree that a 64-thread block and a 256-thread block fill identically |
+| `virtual_block_sum`, `host_tree_sum`, `host_fold_partials`, `chunk_count`, `linear_block_id`, `physical_block_count`, `canonicalize_nan`, `PINNED_SUM_W` | `metrics/checks/pinned_sum.mojo` | **every fold in this lane, without exception.** That file already solves the problem `check_launch_invariance` poses, by folding a fixed 256-wide tree that a 64-thread block and a 256-thread block fill identically |
 | `segmented_sort_keys_f32`, `float_to_sortable` (CUB's `TwiddleIn`), `SORT_BLOCK` | `core/segmented_sort.mojo` | the per-replicate sort for the order statistics and the sort of the bootstrap distribution for the interval. Stable LSD radix, so ties keep replicate order, and `-0.0` sorts below `+0.0` |
-| `ftz`, `identical_mul_add`, `identical_mul`, `identical_div`, `identical_sqrt`, `GLOBAL_NUMERIC_MODE` | `original/numerics.mojo` | every float seam. No `std.math` transcendental appears on any path reaching an output |
+| `ftz`, `identical_mul_add`, `identical_mul`, `identical_div`, `identical_sqrt`, `GLOBAL_NUMERIC_MODE` | `checks/numerics.mojo` | every float seam. No `std.math` transcendental appears on any path reaching an output |
 | `IdentityTrace`, `first_divergence`, `FNV_OFFSET`, `FNV_PRIME` | `core/identity_trace.mojo` | the card, and the FNV-1a64 constants the derived key is hashed with (rather than a second hash function, for that file's own stated reason) |
-| `mix64` / `bits_value` (splitmix64 into a float32 by bitcast) | `kde/original/kde_fixture.mojo` | the hashed fixtures, so no host floating-point operation builds an input |
+| `mix64` / `bits_value` (splitmix64 into a float32 by bitcast) | `kde/checks/kde_fixture.mojo` | the hashed fixtures, so no host floating-point operation builds an input |
 | `log_launch` | `core/launch_log.mojo` | reached through `segmented_sort_keys_f32`; this lane adds no launch-log site of its own yet (see WHAT IS OWED) |
 
 Deliberately NOT reused, with the reason stated so it is a decision and not an
@@ -164,12 +164,12 @@ oversight.
 - **`core/pinned_reduce.mojo::pinned_block_sum`.** It folds `block_size`
   values and therefore makes the fold a function of the launch, which is
   exactly what `check_launch_invariance` forbids here.
-  `metrics/original/pinned_sum.mojo` exists because of that difference and
+  `metrics/checks/pinned_sum.mojo` exists because of that difference and
   its header says so; this lane takes the one that fits.
 - **`core/block_reduce.mojo` and `core/block_scan.mojo`.** Nothing in this
   lane reduces or scans outside the pinned tree and the segmented sort, both
   of which already own their primitives.
-- **`original/fixed_point.mojo`.** Fixed-point accumulation is the REPLACE
+- **`checks/fixed_point.mojo`.** Fixed-point accumulation is the REPLACE
   move for a float atomic (IDENTITY_PATHS rows 1 and 2). **This lane has no
   atomic to replace.** Every fold is a block-local tree writing one scalar
   per replicate, so there is no contended accumulator anywhere and a
@@ -206,7 +206,7 @@ nothing has run.**
 |---|---|---|---|---|
 | R1 | **the resample index map** | SciPy's is a sequential `Generator` stream, so replicate `r` depends on how many draws preceded it, which depends on `n_resamples`, on `batch`, and on whether the run was extended | **REPLACE** with a counter-based position map, DEVIATION 1690. `subsequence = (r << 32) \| i`, injective, into the HIGH half of the Philox counter; the Lemire rejection loop walks the LOW half of that position's own stream | DESIGNED. Gates written: `check_index_map_is_positional`, `check_batch_invariance`, `check_prefix_stability`. Sabotage `RSAB_BATCH_DEPENDENT` targets it |
 | R2 | **the derived key** | one seed feeding three different uses would correlate them | **PIN** to FNV-1a64 over `(seed, kind)`, DEVIATION 1691, with `core/identity_trace.mojo`'s constants. Host only, integer only | DESIGNED. Recorded as `resample.key`, which is pure integer arithmetic and cannot differ between two runs given the same seed |
-| R3 | **the per-replicate statistic fold** | any block reduction whose cross-lane stage runs at the hardware warp width (32 on Apple and NVIDIA, 64 on AMD CDNA) | **PIN** to `metrics/original/pinned_sum.mojo::virtual_block_sum`, a 256-wide halving tree filled identically by any admitted block width. `PINNED_SUM_W` is NUMERIC; threads per block and grid shape are SCHEDULING | DESIGNED. `check_launch_invariance` (fold tpb 256/128/64), `check_bootstrap_vs_oracle` |
+| R3 | **the per-replicate statistic fold** | any block reduction whose cross-lane stage runs at the hardware warp width (32 on Apple and NVIDIA, 64 on AMD CDNA) | **PIN** to `metrics/checks/pinned_sum.mojo::virtual_block_sum`, a 256-wide halving tree filled identically by any admitted block width. `PINNED_SUM_W` is NUMERIC; threads per block and grid shape are SCHEDULING | DESIGNED. `check_launch_invariance` (fold tpb 256/128/64), `check_bootstrap_vs_oracle` |
 | R4 | **the chunk chain** | folding `ceil(n/256)` chunk totals in an arrival order | **PIN** to ascending, through `ftz`, executed by thread 0 in the kernel and by `host_fold_partials` on the host | DESIGNED. Sabotage `RSAB_FOLD_DESCENDING` |
 | R5 | **float atomics** | the usual REPLACE row | **NONE EXIST.** No `Atomic.fetch_add`, no `Atomic.max`, no `Atomic.min` on any float anywhere in `resample/`. Each replicate writes one scalar from thread 0 | DESIGNED, and it is a grep rather than an argument |
 | R6 | **warp and lane primitives** | `warp.sum`, `warp.shuffle_*`, `lane_id()` on a numeric path | **NONE EXIST** in `resample/`. The block broadcast goes through one threadgroup float, not `warp.broadcast` | DESIGNED, also a grep |
@@ -216,7 +216,7 @@ nothing has run.**
 | R10 | **the sort's tie handling and its zeros** | an unstable sort leaves equal keys in an implementation-chosen order, and `-0.0`/`+0.0` compare equal as floats | **PIN** to the total order `(float_to_sortable(theta_r), r)`. CUB's `TwiddleIn` makes `-0.0` (key `0x7FFFFFFF`) sort strictly below `+0.0` (key `0x80000000`), and the LSD radix is stable, so bitwise-equal values keep ascending replicate order | DESIGNED, and **HONESTLY BOUNDED**: the replicate-index half is NOT OBSERVABLE in this lane's output, because the interval reads VALUES at ranks and two bitwise-equal values are the same bits either way. `check_percentile_interval` ASSERTS the zero ordering on a planted distribution and REPORTS the stability |
 | R11 | **the order-statistic interpolation** | inheriting a library's default `method`, which is free to change between versions | **PIN** to Hyndman-Fan type 7 spelled out, DEVIATION 1698, with the `frac = +0.0` knife edge gated on both sides | DESIGNED. `check_percentile_interval` |
 | R12 | **the permutation** | `numpy.random.Generator.permutation` is Fisher-Yates, so position `i` depends on every swap before it and the number of stream words consumed depends on `n_obs` | **REPLACE** with a rank over the total order `(philox_u64(key, r, j), j)`. 64-bit keys so ties are ~3e-14, index tie-break so the order is total and the rank is a bijection. Integer compares only | DESIGNED. `check_permutation_separable` asserts the bijection; sabotage `RSAB_PERM_KEY_ONLY` narrows the key to 4 bits and drops the tie-break |
-| R13 | **BCa's interval endpoints** | needs `ndtri`, the inverse normal CDF, which has no portable construction in `original/numerics.mojo` | **REFUSE**, by name, in BOTH modes, DEVIATION 1699. Everything BCa needs besides `ndtri` is built, identical and recorded (`resample.bca.z0p`, `resample.jackknife`, `resample.bca.ahat`) | REFUSED. `check_resample_refusals` asserts the raise; `check_jackknife_and_bca` gates the half that works |
+| R13 | **BCa's interval endpoints** | needs `ndtri`, the inverse normal CDF, which has no portable construction in `checks/numerics.mojo` | **REFUSE**, by name, in BOTH modes, DEVIATION 1699. Everything BCa needs besides `ndtri` is built, identical and recorded (`resample.bca.z0p`, `resample.jackknife`, `resample.bca.ahat`) | REFUSED. `check_resample_refusals` asserts the raise; `check_jackknife_and_bca` gates the half that works |
 | R14 | **NaN payloads** | a computed NaN carries the vendor's payload (Apple `0x7fc00000`, NVIDIA `0x7fffffff`, AMD `0xffc00000`), IDENTITY_PATHS row 39 FACT 2 | **PIN** to `canonicalize_nan` at every stored statistic; non-finite INPUT is refused by name before any launch | DESIGNED. Sabotage `RSAB_NO_CANON_NAN` shows the payload reaching `resample.theta` |
 | R15 | **signed zero in the folds** | `x + (+0.0) == x` for everything except `x = -0.0` | **STATED AND PROVEN, not pinned**, because there is nothing to pin. Every fold is `+0.0` seeded and `+0.0` padded on every vendor, `x - x` is `+0.0`, and `fma(frac, +0.0, -0.0)` is `+0.0`, so no `-0.0` can reach a recorded stage through a fold statistic. The property that `-0.0` really is ORDERED below `+0.0` is checked by PLANTING a distribution | DESIGNED. `check_percentile_interval`'s signed-zero half |
 | R16 | **float64 on the device** | none | **NONE.** Float64 appears only in `resample_oracle.mojo::reference_*_f64`, which runs on the host and is a tolerance reference | DESIGNED, a grep |
@@ -227,19 +227,19 @@ Range 1690 to 1719 is this lane's. Thirteen are spent.
 
 | # | what | where |
 |---|---|---|
-| **1690** | **THE RESAMPLE INDEX IS A POSITION, NOT A STREAM DRAW.** SciPy walks a sequential `Generator`; this lane gives position `(r, i)` its own Philox subsequence. Required rather than preferred, because there is no partition of a sequential stream that is simultaneously parallel, machine-independent and independent of the batch size. Price, paid on every drawn index: two Philox block evaluations per draw where a stream amortises one over four, about 8x the RNG arithmetic | `original/index_map.mojo` |
-| 1691 | The derived key is FNV-1a64 over `(seed, kind)`, not the seed, so the bootstrap draw, the permutation key and the Monte Carlo coordinate cannot share counter positions. cuML derives its per-tree RF seed the same way and for the same reason | `original/index_map.mojo` |
-| 1692 | RAFT's launch geometry is NOT used. `launch_uniform_int`'s `RNG_STRIDE = 110592` mapping is a stream partition and is the thing 1690 gives up; `RNG_STRIDE` appears nowhere in `resample/`. Consequence, stated so nobody looks for it: a `resample/` bootstrap sample does not equal an `ensemble/` Random Forest bootstrap sample from the same seed | `original/index_map.mojo` |
-| 1693 | The uniform float is RAFT's `next_float` (`val = next_u32() >> 8; val / 2^24`), and its division is EXACT on every vendor, so it needs neither `identical_div` nor `ftz`. The affine map onto the box is a different matter and IS pinned | `original/index_map.mojo` |
-| 1694 | The drawn values are RECOMPUTED per pass, not materialised. Storing them costs 40 GB at a million resamples of a thousand observations; the map is a pure function, so the second pass provably sees the same values. The two order statistics are the exception and they materialise, under `RESAMPLE_MAX_SORT_CELLS` | `original/statistics.mojo` |
-| 1695 | `pearson`'s denominator is `sqrt(sxx * syy)`, not `sqrt(sxx) * sqrt(syy)`. One rounding fewer, and stated because a reader diffing against `np.corrcoef` will see the last bit move | `original/statistics.mojo` |
-| 1696 | A degenerate `pearson` returns the CANONICAL NaN, not the vendor's. Reachable with real probability at small `n` | `original/statistics.mojo` |
-| 1697 | `std` and the returned `standard_error` are ddof = 1, matching `scipy.stats.bootstrap`'s `correction=1`. `ddof = 0` is not silently available | `original/statistics.mojo` |
-| 1698 | The interpolation between order statistics is Hyndman-Fan type 7 SPELLED OUT, not inherited. Three reasons, the first of which is that the last line is a multiply-add and therefore a contraction seam | `original/statistics.mojo` |
-| **1699** | **BCa IS REFUSED BY NAME, IN BOTH MODES.** The blocker is `ndtri`, the inverse normal CDF, which `original/numerics.mojo` does not have. The bias percentile, the jackknife and the acceleration ARE identical and are computed, recorded and gated. Closure condition named in the error text | `original/intervals.mojo` |
-| 1700 | The jackknife's fold keeps the full `n`-slot layout with `+0.0` in the left-out slot rather than compacting to `n - 1`, so `theta_hat_i`'s tree is the same tree as `theta_hat`'s for every `i` | `original/intervals.mojo` |
-| 1701 | `alternative` narrows the interval exactly as SciPy does, infinities and order included | `original/intervals.mojo` |
-| 1702 | The permutation p-value carries SciPy's `gamma` tolerance and its `+1` adjustment, computed from OUR dtype. Consequence, and it is the easy mistake here: the two-sided floor is `2/(n_resamples+1)`, NOT `1/(n_resamples+1)` | `original/intervals.mojo` |
+| **1690** | **THE RESAMPLE INDEX IS A POSITION, NOT A STREAM DRAW.** SciPy walks a sequential `Generator`; this lane gives position `(r, i)` its own Philox subsequence. Required rather than preferred, because there is no partition of a sequential stream that is simultaneously parallel, machine-independent and independent of the batch size. Price, paid on every drawn index: two Philox block evaluations per draw where a stream amortises one over four, about 8x the RNG arithmetic | `checks/index_map.mojo` |
+| 1691 | The derived key is FNV-1a64 over `(seed, kind)`, not the seed, so the bootstrap draw, the permutation key and the Monte Carlo coordinate cannot share counter positions. cuML derives its per-tree RF seed the same way and for the same reason | `checks/index_map.mojo` |
+| 1692 | RAFT's launch geometry is NOT used. `launch_uniform_int`'s `RNG_STRIDE = 110592` mapping is a stream partition and is the thing 1690 gives up; `RNG_STRIDE` appears nowhere in `resample/`. Consequence, stated so nobody looks for it: a `resample/` bootstrap sample does not equal an `ensemble/` Random Forest bootstrap sample from the same seed | `checks/index_map.mojo` |
+| 1693 | The uniform float is RAFT's `next_float` (`val = next_u32() >> 8; val / 2^24`), and its division is EXACT on every vendor, so it needs neither `identical_div` nor `ftz`. The affine map onto the box is a different matter and IS pinned | `checks/index_map.mojo` |
+| 1694 | The drawn values are RECOMPUTED per pass, not materialised. Storing them costs 40 GB at a million resamples of a thousand observations; the map is a pure function, so the second pass provably sees the same values. The two order statistics are the exception and they materialise, under `RESAMPLE_MAX_SORT_CELLS` | `checks/statistics.mojo` |
+| 1695 | `pearson`'s denominator is `sqrt(sxx * syy)`, not `sqrt(sxx) * sqrt(syy)`. One rounding fewer, and stated because a reader diffing against `np.corrcoef` will see the last bit move | `checks/statistics.mojo` |
+| 1696 | A degenerate `pearson` returns the CANONICAL NaN, not the vendor's. Reachable with real probability at small `n` | `checks/statistics.mojo` |
+| 1697 | `std` and the returned `standard_error` are ddof = 1, matching `scipy.stats.bootstrap`'s `correction=1`. `ddof = 0` is not silently available | `checks/statistics.mojo` |
+| 1698 | The interpolation between order statistics is Hyndman-Fan type 7 SPELLED OUT, not inherited. Three reasons, the first of which is that the last line is a multiply-add and therefore a contraction seam | `checks/statistics.mojo` |
+| **1699** | **BCa IS REFUSED BY NAME, IN BOTH MODES.** The blocker is `ndtri`, the inverse normal CDF, which `checks/numerics.mojo` does not have. The bias percentile, the jackknife and the acceleration ARE identical and are computed, recorded and gated. Closure condition named in the error text | `checks/intervals.mojo` |
+| 1700 | The jackknife's fold keeps the full `n`-slot layout with `+0.0` in the left-out slot rather than compacting to `n - 1`, so `theta_hat_i`'s tree is the same tree as `theta_hat`'s for every `i` | `checks/intervals.mojo` |
+| 1701 | `alternative` narrows the interval exactly as SciPy does, infinities and order included | `checks/intervals.mojo` |
+| 1702 | The permutation p-value carries SciPy's `gamma` tolerance and its `+1` adjustment, computed from OUR dtype. Consequence, and it is the easy mistake here: the two-sided floor is `2/(n_resamples+1)`, NOT `1/(n_resamples+1)` | `checks/intervals.mojo` |
 
 1703 to 1719 are unspent and are this lane's to use.
 
@@ -250,7 +250,7 @@ Nothing outside `resample/` was touched. These are the exact lines.
 ### 1. `pixi.toml`, in the `[tasks]` block beside `check-kde` and `check-linkage`
 
 ```toml
-check-resample = "mojo run -I . resample/original/resample_check.mojo"
+check-resample = "mojo run -I . resample/checks/resample_check.mojo"
 resample-card = "mojo run -I . resample/resample_main.mojo"
 ```
 
@@ -261,8 +261,8 @@ other gate in this tree. No `*-identity` task is wanted.
 Both need the GPU, so use the lock.
 
 ```
-tools/with_build_lock.sh     pixi run mojo run -I . resample/original/resample_check.mojo
-tools/with_identical_mode.sh pixi run mojo run -I . resample/original/resample_check.mojo
+tools/with_build_lock.sh     pixi run mojo run -I . resample/checks/resample_check.mojo
+tools/with_identical_mode.sh pixi run mojo run -I . resample/checks/resample_check.mojo
 
 MOJOLEARN_IDENTITY_TRACE=/tmp/mac.resample.identical.card \
     tools/with_identical_mode.sh pixi run mojo run -I . resample/resample_main.mojo
@@ -287,7 +287,7 @@ and number.
 > shuffle that cannot be evaluated at a position, and `numpy` folds free to
 > choose any summation order. Ours is DEVIATION 1690's counter-based position
 > map (`(r << 32) | i` into the Philox counter's high half, RAFT's Lemire
-> reduction unchanged), every fold `metrics/original/pinned_sum.mojo`'s
+> reduction unchanged), every fold `metrics/checks/pinned_sum.mojo`'s
 > 256-wide tree, every sort `core/segmented_sort.mojo`'s stable radix over
 > CUB's `TwiddleIn` key, no float atomic and no warp primitive anywhere, and
 > BCa REFUSED on `ndtri` (DEVIATION 1699). **CONSTRUCTION ONLY, 2026-08-25 --
@@ -321,8 +321,8 @@ repository-level files if that is how the orchestrator wants them.
 
 All nine arms are written, comptime-selectable, and driven by
 `check_resample_sabotages`. **The result column is empty because nothing has
-been run.** The pattern is `hierarchy/original/sabotage_tile.mojo`'s and the
-driver is `hierarchy/original/linkage_check.mojo`'s.
+been run.** The pattern is `hierarchy/checks/sabotage_tile.mojo`'s and the
+driver is `hierarchy/checks/linkage_check.mojo`'s.
 
 | arm | what it breaks | fixture | expected | result |
 |---|---|---|---|---|
@@ -340,7 +340,7 @@ Two sabotages considered and NOT written, with the reason, so nobody adds them
 thinking they were forgotten.
 
 - **A rotation of the slab fill inside a chunk.** Measured INERT by the metrics
-  lane (`metrics/original/pinned_sum.mojo::sabotage_shifted_host_tree_sum`)
+  lane (`metrics/checks/pinned_sum.mojo::sabotage_shifted_host_tree_sum`)
   for every rotation amount, because the halving tree's subtrees at level `k`
   are the residue classes mod `2^k` and a rotation maps residue classes onto
   residue classes. `RSAB_REVERSED_POSITIONS` is the sabotage of that tree that
@@ -418,7 +418,7 @@ while `resample.theta` matches is a sort defect and nothing else.
    `prefix_sum`, and the latter runs at `SORT_BLOCK = 512`, above every warp
    width.
 5. **DEVIATION 1699's closure.** `portable_ndtri` / `identical_ndtri` in
-   `original/numerics.mojo`, gated the way `check-division` gates
+   `checks/numerics.mojo`, gated the way `check-division` gates
    `portable_divf`, then BCa ships.
 6. **A launch-log site per kernel.** `core/launch_log.mojo::log_launch` is
    reached only through `segmented_sort_keys_f32` today, so a Metal trace

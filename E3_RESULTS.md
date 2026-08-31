@@ -31,7 +31,7 @@ after this one (DEVIATION 550) — and re-certified the same day: see
 Every k-NN cell that returns DISTANCES diverges on the H100 at
 `knn.out_dist`, after `knn.index_norm` and `knn.query_norm` agree, and
 agrees on the MI325X. One unrouted `sqrt`:
-`neighbors/original/pinned_distance_tile.mojo:110` took the stdlib
+`neighbors/checks/pinned_distance_tile.mojo:110` took the stdlib
 `sqrt`, which on NVIDIA is the approximate PTX square root (DEVIATION
 258 measured 180,714 of 2^20 inputs one ulp off; the phase-1 gate on the
 H100 still raises "non-denormal divergence ... IDENTITY_PATHS row 10 is
@@ -41,7 +41,7 @@ are identical on both boxes, because a one-ulp distance did not reorder
 a neighbour on these fixtures — which is the reason the card hashes the
 distance stage and not only the output. DEVIATION 550 routes that site
 and the three `sqrt` calls in the ball-cover pruning bound
-(`neighbors/derived/neighbors/ball_cover/registers.mojo:280,422,547`)
+(`neighbors/impl/neighbors/ball_cover/registers.mojo:280,422,547`)
 through `identical_sqrt`; the FAST arm is the stdlib call verbatim.
 
 ## What the round exposed in the GATES (not the kernels)
@@ -56,11 +56,11 @@ Five check defects, all fixed 2026-08-23 after this round:
 
 | where | what it asserted | what is true | fix |
 |---|---|---|---|
-| `original/hardware_matrix_check.mojo` (phase 0, runs under the IDENTICAL define) | a non-Apple build must NOT route the Gram shape to split-K | under IDENTICAL DEVIATION 521 routes split-K on EVERY column | FAST asserts vendor-matmul, IDENTICAL asserts split-K |
-| `decomposition/original/jacobi_check.mojo::check_jacobi_denormal_exit_test` | raised when the device did not flush denormals | its own message says under FAST that is "the honest hardware answer" | FAST prints RECORDED; IDENTICAL still raises |
-| `neighbors/original/knn_check.mojo::check_dispatch_takes_fused` | FUSED at 1,920 queries because "1,920 = minGridSize on the M4" | the H100's 108 SMs give a different `fused_l2_knn_grid` | FAST expectation derived from this column's grid |
+| `checks/hardware_matrix_check.mojo` (phase 0, runs under the IDENTICAL define) | a non-Apple build must NOT route the Gram shape to split-K | under IDENTICAL DEVIATION 521 routes split-K on EVERY column | FAST asserts vendor-matmul, IDENTICAL asserts split-K |
+| `decomposition/checks/jacobi_check.mojo::check_jacobi_denormal_exit_test` | raised when the device did not flush denormals | its own message says under FAST that is "the honest hardware answer" | FAST prints RECORDED; IDENTICAL still raises |
+| `neighbors/checks/knn_check.mojo::check_dispatch_takes_fused` | FUSED at 1,920 queries because "1,920 = minGridSize on the M4" | the H100's 108 SMs give a different `fused_l2_knn_grid` | FAST expectation derived from this column's grid |
 | `neighbors/knn_main.mojo` | called the 32-lane FUSED arm by name | it refuses at entry on a 64-lane wavefront (row 23), by design | fused-arm checks RECORDED as refused on a 64-lane column |
-| `original/gram_splitk_check.mojo::check_gram_dispatch` | a vendor fp32 matmul is bitwise symmetric | MI325X: 768x768x257 cells (0,32)/(32,0) = 7.1912665 vs 7.1912646 — a closed library's accumulation order | REPORT for every vendor-product arm; only OUR split-K arm is held to symmetry |
+| `checks/gram_splitk_check.mojo::check_gram_dispatch` | a vendor fp32 matmul is bitwise symmetric | MI325X: 768x768x257 cells (0,32)/(32,0) = 7.1912665 vs 7.1912646 — a closed library's accumulation order | REPORT for every vendor-product arm; only OUR split-K arm is held to symmetry |
 
 These are Apple-shaped expectations written before a box existed to
 contradict them. None moved a kernel bit; every one of them stopped a
@@ -233,7 +233,7 @@ every leg). Not a summation order.
 **LOCALIZED AND FIXED 2026-08-30, and it was never in a kernel.** The
 sentence that stood here, "a fit-internal read-before-write that Metal's
 zeroed allocations hide", was wrong in both halves. `_fit_bits` in
-`glm/original/ols_check.mojo` filled ONE host staging buffer, enqueued the
+`glm/checks/ols_check.mojo` filled ONE host staging buffer, enqueued the
 asynchronous copy into the design matrix `A`, then overwrote the first 8,192
 floats of that same buffer for `b` and enqueued the second copy, with no
 synchronize between them. On a discrete GPU the `A` upload is a real DMA of
@@ -386,7 +386,7 @@ phase-8 finding, on NVIDIA and on AMD and not on Apple:
 
 That is `check_device_is_batch_invariant` -- a cell whose BITS depend on how
 many other cells shared the launch. It is asserted in BOTH modes on purpose,
-and `gemm/original/gemm_device_check.mojo`'s own header says why: launch and
+and `gemm/checks/gemm_device_check.mojo`'s own header says why: launch and
 batch invariance "are properties of the kernel's SHAPE -- no float crosses a
 thread boundary, and the leaf partition comes from `k` alone -- not of the
 arithmetic pins, so FAST has no excuse for failing them and a FAST failure is

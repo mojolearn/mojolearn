@@ -82,7 +82,7 @@ row 12's `identical_exp`/`identical_log` -- under FAST each inlines to the
 `std.math` call it replaced at the site (measured bit for bit; the shims'
 own block records why the plain wrapper was not enough); under IDENTICAL
 both route through the one portable polynomial pair in
-`original/numerics.mojo`, one arithmetic on every backend. Their file uses
+`checks/numerics.mojo`, one arithmetic on every backend. Their file uses
 the CUDA fast-math forms at every site, so the substitution is in-family --
 and `pointwise_target_check` measured Mojo's device `exp` at about twenty
 ulp against libm, which is looser than `__expf`'s two. No check may expect

@@ -102,7 +102,7 @@ Run these on the Mac. Every one of them is a defect found for nothing.
     tools/gemm_column_invariance.sh                 # host arms, the harness
     MOJOLEARN_GEMM_CARD_ARM=device tools/gemm_column_invariance.sh
     tools/with_identical_mode.sh pixi run mojo run -I . \
-        gemm/original/gemm_device_check.mojo       # the kernel's own gates
+        gemm/checks/gemm_device_check.mojo       # the kernel's own gates
 
 A machine that fails its own gates teaches nothing when diffed against
 another machine, so a red here is fixed before a box is created.

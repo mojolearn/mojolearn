@@ -50,7 +50,7 @@ class PCA(NumericModeMixin):
         tol, iterated_power, random_state, n_oversamples -- not on this
                                 surface: the device Jacobi runs RAFT's own
                                 defaults (tol 1e-7, 15 sweeps; see
-                                decomposition/derived/linalg/detail/pca.mojo)
+                                decomposition/impl/linalg/detail/pca.mojo)
         n_features > 128 refused UNDER NUMERIC_IDENTICAL ONLY: the pinned
                                 split-K Gram kernel's capacity
                                 (IDENTITY_PATHS row 27; the refusal names

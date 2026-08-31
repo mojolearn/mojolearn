@@ -15,7 +15,7 @@ written and stopped being true here.
 host list (each series contiguous, cuML's numpy convention `(ts_num, n)`),
 validates exactly as `holtwinters.pyx` does (`holtwinters_validate_params`,
 by name) plus DEVIATION 664's finiteness / positivity rules, uploads, runs
-`ML::HoltWinters::fit` (`holtwinters/derived/holtwinters/holtwinters.mojo`)
+`ML::HoltWinters::fit` (`holtwinters/impl/holtwinters/holtwinters.mojo`)
 with the given trace, and returns every output as host lists.
 `holtwinters_forecast_host` re-uploads the fitted components and runs
 `ML::HoltWinters::forecast` (the one-shot form; a bindings layer that
@@ -25,15 +25,15 @@ keeps the `DeviceBuffer`s can call the ported entries directly).
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
-from holtwinters.derived.holtwinters.holtwinters import buffer_size, fit, forecast
-from holtwinters.derived.holtwinters.internal.hw_utils import HW_OPTIM_TPB
-from holtwinters.derived.holtwinters.runner import (
+from holtwinters.impl.holtwinters.holtwinters import buffer_size, fit, forecast
+from holtwinters.impl.holtwinters.internal.hw_utils import HW_OPTIM_TPB
+from holtwinters.impl.holtwinters.runner import (
     HW_DEFAULT_EPS,
     HW_DEFAULT_TRACE_ITERS,
     holtwinters_validate_data,
     holtwinters_validate_params,
 )
-from holtwinters.derived.tsa.holtwinters_params import seasonal_from_name
+from holtwinters.impl.tsa.holtwinters_params import seasonal_from_name
 
 
 struct HWFit(Movable):

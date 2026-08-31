@@ -35,10 +35,10 @@ from std.os import getenv
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
-from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
-from solver.original.cd_oracle import cd_oracle_fit, fixture_planted_sparse
-from solver.derived.solver.cd import CdLaunch, cd_fit_traced, cd_predict
-from solver.derived.solvers.params import LOSS_SQRD_LOSS
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from solver.checks.cd_oracle import cd_oracle_fit, fixture_planted_sparse
+from solver.impl.solver.cd import CdLaunch, cd_fit_traced, cd_predict
+from solver.impl.solvers.params import LOSS_SQRD_LOSS
 
 
 def _mode_name() -> String:

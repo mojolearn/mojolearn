@@ -119,7 +119,7 @@ fi
 COLUMN_DEFINE=""
 # THE NUMERIC MODE IS A BUILD DEFINE, NOT A SOURCE FLIP.
 # MOJOLEARN_NUMERIC_MODE=identical compiles with -D MOJOLEARN_NUMERIC_IDENTICAL=1
-# (original/numerics.mojo reads it through is_defined, the same shape as the
+# (checks/numerics.mojo reads it through is_defined, the same shape as the
 # column define) and lands the binary under python/mojolearn/identical/.
 #
 # NOTE FOR WHOEVER WIRES THE PACKAGE. python/mojolearn/_backend.py's `_MODULES`
@@ -268,7 +268,7 @@ assert es.level_.shape == (2, 24 - 4), es.level_.shape
 
 # KPSS: an AR(1) around a mean is stationary, a random walk is not. The
 # assertion is on the SHAPES and finiteness, not on the two verdicts:
-# this is a build gate, and the verdicts belong to tsa/original/
+# this is a build gate, and the verdicts belong to tsa/checks/
 # stationarity_check.mojo, which asserts them against an oracle.
 n_obs = 120
 ar = np.zeros(n_obs, dtype=np.float32)

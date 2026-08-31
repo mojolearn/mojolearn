@@ -23,7 +23,7 @@ all of them edit.
 The certificate itself is `glm/ols_trace_main.mojo`.
 """
 
-from glm.original.ols_check import (
+from glm.checks.ols_check import (
     check_ols_arms_are_pinned,
     check_ols_beats_truth_on_noise,
     check_ols_card_hashes_raw_bytes,

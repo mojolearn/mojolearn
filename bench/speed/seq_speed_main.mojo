@@ -10,9 +10,9 @@
 
 **NOTHING IN THIS FILE HAS BEEN COMPILED OR RUN.** It was written on
 2026-08-25 by an agent that was forbidden to run anything, against the
-signatures it read in `transformer/derived/.../modeling_llama.mojo`,
-`mamba/derived/.../modeling_mamba.mojo` and
-`mamba/derived/mamba_ssm/ops/selective_scan_interface.mojo`. Every sentence
+signatures it read in `transformer/impl/.../modeling_llama.mojo`,
+`mamba/impl/.../modeling_mamba.mojo` and
+`mamba/impl/mamba_ssm/ops/selective_scan_interface.mojo`. Every sentence
 below that says what a number WILL be is a prediction. The first run of this
 file is a BUILD, not a benchmark, and the mamba lane's FAST arm has per the
 lane notes never been built on some vendors at all.
@@ -46,7 +46,7 @@ they exist, and the refusal is ALSO timed on its own and printed as an
 `FSPEED-NOTE` so a reader can subtract it rather than guess at it.
 
 **(2) OUR GEMM IS `identical_gemm` IN BOTH MODES.** `modeling_llama.mojo`
-imports `gemm.original.gemm_identical.identical_gemm` and calls it for every
+imports `gemm.checks.gemm_identical.identical_gemm` and calls it for every
 projection; FAST does not swap in `linalg.matmul`, it compiles the same
 pinned balanced-tree kernel with its pins removed. So the ratio this file
 prints for `attention` and `mlp` is mostly the ratio between that kernel and
@@ -162,23 +162,23 @@ from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import FNV_OFFSET, IdentityTrace, _hex16, fnv1a64_bytes
-from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 # ---- transformer -----------------------------------------------------------
-from transformer.original.transformer_fixture import RMS_EPS as LLAMA_RMS_EPS
-from transformer.original.transformer_fixture import ROPE_THETA as LLAMA_ROPE_THETA
-from transformer.original.transformer_fixture import TID_NORM1_W as T_TID_NORM1_W
-from transformer.original.transformer_fixture import TID_NORM2_W as T_TID_NORM2_W
-from transformer.original.transformer_fixture import TID_W_DOWN as T_TID_W_DOWN
-from transformer.original.transformer_fixture import TID_W_GATE as T_TID_W_GATE
-from transformer.original.transformer_fixture import TID_W_K as T_TID_W_K
-from transformer.original.transformer_fixture import TID_W_O as T_TID_W_O
-from transformer.original.transformer_fixture import TID_W_Q as T_TID_W_Q
-from transformer.original.transformer_fixture import TID_W_UP as T_TID_W_UP
-from transformer.original.transformer_fixture import TID_W_V as T_TID_W_V
-from transformer.original.transformer_fixture import TID_X as T_TID_X
-from transformer.original.transformer_fixture import fixture_tensor
-from transformer.derived.transformers.models.llama.modeling_llama import (
+from transformer.checks.transformer_fixture import RMS_EPS as LLAMA_RMS_EPS
+from transformer.checks.transformer_fixture import ROPE_THETA as LLAMA_ROPE_THETA
+from transformer.checks.transformer_fixture import TID_NORM1_W as T_TID_NORM1_W
+from transformer.checks.transformer_fixture import TID_NORM2_W as T_TID_NORM2_W
+from transformer.checks.transformer_fixture import TID_W_DOWN as T_TID_W_DOWN
+from transformer.checks.transformer_fixture import TID_W_GATE as T_TID_W_GATE
+from transformer.checks.transformer_fixture import TID_W_K as T_TID_W_K
+from transformer.checks.transformer_fixture import TID_W_O as T_TID_W_O
+from transformer.checks.transformer_fixture import TID_W_Q as T_TID_W_Q
+from transformer.checks.transformer_fixture import TID_W_UP as T_TID_W_UP
+from transformer.checks.transformer_fixture import TID_W_V as T_TID_W_V
+from transformer.checks.transformer_fixture import TID_X as T_TID_X
+from transformer.checks.transformer_fixture import fixture_tensor
+from transformer.impl.transformers.models.llama.modeling_llama import (
     PLANT_AT_NONE,
     LlamaDeviceStages,
     LlamaDeviceWeights,
@@ -194,7 +194,7 @@ from transformer.derived.transformers.models.llama.modeling_llama import (
 )
 
 # ---- mamba -----------------------------------------------------------------
-from mamba.original.mamba_fixture import (
+from mamba.checks.mamba_fixture import (
     D_STATE,
     MambaDims,
     MambaWeights,
@@ -202,8 +202,8 @@ from mamba.original.mamba_fixture import (
     corpus_x,
     fan_in_scale,
 )
-from mamba.derived.mamba_ssm.ops.selective_scan_interface import selective_scan_fn
-from mamba.derived.transformers.models.mamba.modeling_mamba import (
+from mamba.impl.mamba_ssm.ops.selective_scan_interface import selective_scan_fn
+from mamba.impl.transformers.models.mamba.modeling_mamba import (
     MambaDeviceStages,
     MambaDeviceState,
     MambaDeviceWeights,

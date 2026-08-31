@@ -58,7 +58,7 @@ from std.gpu import thread_idx
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from original.kernel_matrix import (
+from checks.kernel_matrix import (
     K_POINTWISE_HIST_2_HALF_BYTE,
     TARGET_COLUMN,
     block_size_for,

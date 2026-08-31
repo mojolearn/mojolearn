@@ -45,18 +45,18 @@ layout, the feature sampling and the RNG keying are **ports of cuML**, pinned
 at `00094f7` in `~/CascadeProjects/upstream/cuml`, mirrored file for file with
 their constant prefix dropped the way `catboost/cuda/` is dropped in `gbdt/`:
 
-    cpp/src/decisiontree/   ->  extratrees/derived/decisiontree/
-    (RAFT primitives)       ->  extratrees/original/
+    cpp/src/decisiontree/   ->  extratrees/impl/decisiontree/
+    (RAFT primitives)       ->  extratrees/checks/
 
 | ours | cuML |
 |---|---|
-| `derived/decisiontree/batched_levelalgo/split.mojo` | `batched-levelalgo/split.cuh` |
-| `derived/decisiontree/batched_levelalgo/dataset.mojo` | `batched-levelalgo/dataset.h` |
-| `derived/decisiontree/batched_levelalgo/objectives.mojo` | `batched-levelalgo/objectives.cuh` |
-| `derived/decisiontree/batched_levelalgo/builder.mojo` | `batched-levelalgo/builder.cuh` |
-| `derived/decisiontree/batched_levelalgo/kernels/builder_kernels.mojo` | `batched-levelalgo/kernels/builder_kernels.cuh` |
-| `derived/decisiontree/flatnode.mojo` | `cpp/include/cuml/tree/flatnode.h` |
-| `original/pcg_rng.mojo` | `raft/random/detail/rng_device.cuh` |
+| `impl/decisiontree/batched_levelalgo/split.mojo` | `batched-levelalgo/split.cuh` |
+| `impl/decisiontree/batched_levelalgo/dataset.mojo` | `batched-levelalgo/dataset.h` |
+| `impl/decisiontree/batched_levelalgo/objectives.mojo` | `batched-levelalgo/objectives.cuh` |
+| `impl/decisiontree/batched_levelalgo/builder.mojo` | `batched-levelalgo/builder.cuh` |
+| `impl/decisiontree/batched_levelalgo/kernels/builder_kernels.mojo` | `batched-levelalgo/kernels/builder_kernels.cuh` |
+| `impl/decisiontree/flatnode.mojo` | `cpp/include/cuml/tree/flatnode.h` |
+| `checks/pcg_rng.mojo` | `raft/random/detail/rng_device.cuh` |
 
 The one directory-name change is `batched-levelalgo` -> `batched_levelalgo`,
 because a Mojo package directory cannot contain a dash. Recorded in
@@ -114,7 +114,7 @@ Three oracles, in the house pattern:
 ## Instrumentation (env-gated, off by default)
 
 Both flags are read ONCE per forest fit, in
-`derived/decisiontree/batched_levelalgo/builder.mojo`; unset, the fit is
+`impl/decisiontree/batched_levelalgo/builder.mojo`; unset, the fit is
 byte-for-byte the uninstrumented program.
 
 * `MOJOLEARN_IDENTITY_TRACE=<path>` — `core/identity_trace.mojo` stage

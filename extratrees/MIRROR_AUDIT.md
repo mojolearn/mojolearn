@@ -132,7 +132,7 @@ It is a grep, not a memory:
     grep -n 'n_blks_for_cols' builder.cuh
     grep -rn 'n_nodes' builder.cuh kernels/*.cuh
 
-Then read `extratrees/derived/decisiontree/batched_levelalgo/builder.mojo`'s
+Then read `extratrees/impl/decisiontree/batched_levelalgo/builder.mojo`'s
 `train_classification_device_resident` beside it. The two should read as the
 same list of steps in the same order. **Where they do not, either there is a
 numbered deviation or there is a defect, and there is no third possibility.**

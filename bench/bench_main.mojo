@@ -14,7 +14,7 @@ finished, because on this stack an un-synchronized timing measures how fast
 we can enqueue and nothing else.
 
 The arms interleave inside this process, and `run_bench.py` interleaves this
-process with scikit-learn's. That is coarser than `original/
+process with scikit-learn's. That is coarser than `checks/
 interleaved.mojo`'s within-process round robin, and it is the best available
 across two languages. **This box has been measured drifting two- to
 threefold between thermal windows**, so the alternation is not optional.
@@ -23,20 +23,20 @@ threefold between thermal windows**, so the alternation is not optional.
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
 
-from cluster.derived.cluster.kmeans import fit as kmeans_fit_api
-from cluster.derived.cluster.kmeans_params import (
+from cluster.impl.cluster.kmeans import fit as kmeans_fit_api
+from cluster.impl.cluster.kmeans_params import (
     INIT_ARRAY,
     KMeansParams,
     METRIC_L2_EXPANDED,
 )
-from dbscan.derived.dbscan.dbscan import dbscan_fit_impl
-from decomposition.derived.linalg.detail.pca import pca_fit
-from glm.derived.linalg.detail.lstsq import lstsq_eig
-from neighbors.derived.neighbors.detail.knn_brute_force import (
+from dbscan.impl.dbscan.dbscan import dbscan_fit_impl
+from decomposition.impl.linalg.detail.pca import pca_fit
+from glm.impl.linalg.detail.lstsq import lstsq_eig
+from neighbors.impl.neighbors.detail.knn_brute_force import (
     brute_force_knn_impl,
     compute_norms,
 )
-from original.fixed_point import choose_scale
+from checks.fixed_point import choose_scale
 
 
 comptime REPEATS = 5

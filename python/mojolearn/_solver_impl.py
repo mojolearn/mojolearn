@@ -55,7 +55,7 @@ class ElasticNet:
 
     Mirrors `cuml.linear_model.ElasticNet(solver='cd')` on top of
     `cuml/cpp/src/solver/cd.cuh::cdFit`; the Mojo port is
-    `solver/derived/solver/cd.mojo` and the host surface is
+    `solver/impl/solver/cd.mojo` and the host surface is
     `solver/estimator.mojo`.
 
     THE OBJECTIVE, AND WHOSE `alpha` THIS IS
@@ -314,7 +314,7 @@ class ElasticNet:
                 "(cd.cuh:156-194 and :274-287 -- the weighted "
                 "preProcessData, the sqrt-weight scaling of input and "
                 "labels and its undo; solver/NOT_IMPLEMENTED.tsv). "
-                "solver/derived/solver/cd.mojo refuses it by name"
+                "solver/impl/solver/cd.mojo refuses it by name"
             )
         if hasattr(X, "toarray") or hasattr(X, "tocsr"):
             raise NotImplementedError(

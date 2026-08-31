@@ -238,7 +238,7 @@ from std.gpu import block_dim, thread_idx
 from std.math import log
 from max.gpu.memory import AddressSpace
 
-from original.numerics import ftz, identical_log, identical_mul_add
+from checks.numerics import ftz, identical_log, identical_mul_add
 
 from ensemble.decisiontree.batched_levelalgo.bins import (
     Bin,

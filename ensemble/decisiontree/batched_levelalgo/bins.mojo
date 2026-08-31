@@ -24,7 +24,7 @@ and `bins.cuh:29-32` adds to it with a single 64-bit integer `atomicAdd`.
 **Apple GPU has no 64-bit integer atomic.** MEASURED, not assumed:
 `Atomic.fetch_add` on a `UInt64` is a hard COMPILE error there,
 "Atomic operation is not supported for this type on Apple GPU"
-(`ensemble/original/atomic_width_probe.mojo` is the probe that asks the
+(`ensemble/checks/atomic_width_probe.mojo` is the probe that asks the
 question; its three outcomes each write a different version of this file,
 and outcome 3 is the one that happened).
 
@@ -63,10 +63,10 @@ cuML cannot accept either.
 THE VENDOR ROW LIVES IN A TABLE, NOT IN THIS FILE. There is no `if apple`
 anywhere here; the width is a single constant for every column, which is
 what makes one model out of three backends. The per-vendor facts behind
-that constant are `ensemble/original/atomic_matrix.mojo`
+that constant are `ensemble/checks/atomic_matrix.mojo`
 (`column_has_64bit_int_atomics`, `bin_counter_bits`,
 `bin_counter_is_exact_at_32_bits`), written by the same round. This file
-does not IMPORT that table -- `ensemble/original/` is this lane's CHECKS
+does not IMPORT that table -- `ensemble/checks/` is this lane's CHECKS
 directory, and since 2026-08-21 the shipping path imports nothing from it
 (the three primitives it once held -- Philox, the segmented sort, the
 shuffle iterator -- live in `core/` now). WIRING `UInt32` HERE TO
@@ -88,12 +88,12 @@ THEIRS: `WeightedClassificationBin::weight`, `RegressionBin::label_sum`,
 (`bins.cuh:73-74, 114-115, 160-162`).
 OURS: each is an `Int32` FIXED-POINT raw slot, summed with a 32-bit
 integer atomic, dequantized on read by dividing by a scale the host
-chooses once per fit (`original/fixed_point.mojo::choose_scale`, the
+chooses once per fit (`checks/fixed_point.mojo::choose_scale`, the
 accumulator this repository already built for `gbdt/` and transferred
 unchanged to `cluster/`).
 REASON: Float32 was the obvious substitute and it is the wrong one. A
 float atomic is order-nondeterministic RUN TO RUN, not merely vendor to
-vendor (`original/numerics.mojo`, "what a mode cannot do"), so a Float32
+vendor (`checks/numerics.mojo`, "what a mode cannot do"), so a Float32
 accumulator would put the regression path permanently outside this
 library's identity floor -- and that floor is FROZEN, so there would be no
 way back later except an API change. Integer addition is associative, so
@@ -148,7 +148,7 @@ struct BinScales(TrivialRegisterPassable):
     Two independent planes, because their magnitudes are independent:
     `label_sum` accumulates labels (or `label * weight`, `bins.cuh:157`)
     and `weight` accumulates sample weights (`dataset.h:22`). Both come
-    from `original/fixed_point.mojo::choose_scale` on the host.
+    from `checks/fixed_point.mojo::choose_scale` on the host.
 
     `ClassificationBin` and `RegressionBin` never read either field --
     their `Weight()` is a count, which is exact -- but they accept the
@@ -170,7 +170,7 @@ struct BinScales(TrivialRegisterPassable):
 
 @always_inline
 def _quantize(value: Float32, scale: Float32) -> Int32:
-    """The device-side twin of `original/fixed_point.mojo::quantize`.
+    """The device-side twin of `checks/fixed_point.mojo::quantize`.
 
     That one takes and returns Float64 because it is host code; this one
     cannot, because there is no float64 on this device. Truncation toward
@@ -256,7 +256,7 @@ trait Bin(TrivialRegisterPassable):
         falls back to a global one only when the histogram will not fit
         (`kernels/builder_kernels_impl.cuh:322-333`, `builder.cuh:545`).
         A callee annotated `MutAnyOrigin` rejects a `stack_allocation`
-        pointer -- see `original/shared_pointer_probe.mojo`.
+        pointer -- see `checks/shared_pointer_probe.mojo`.
         """
         ...
 

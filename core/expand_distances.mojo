@@ -17,7 +17,7 @@ negative, and `sqrt` of that is NaN.
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import sqrt
 
-from original.numerics import ftz, identical_mul_add
+from checks.numerics import ftz, identical_mul_add
 
 
 def expand_distances_kernel(

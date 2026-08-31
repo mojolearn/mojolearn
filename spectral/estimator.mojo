@@ -23,7 +23,7 @@ Two entries, because cuVS has two: `fit_predict` on a DATASET (which builds
 a kNN connectivity graph first, cuML's `affinity='nearest_neighbors'`) and
 `fit_predict` on a connectivity GRAPH given as COO triples (cuML's
 `affinity='precomputed'`). Both land in
-`spectral/derived/spectral/spectral_clustering.mojo`, which is cuML's own
+`spectral/impl/spectral/spectral_clustering.mojo`, which is cuML's own
 surface, so nothing here reimplements a forward.
 
 **THE IDENTITY CARD IS EMITTED FROM HERE WHEN THE ENVIRONMENT ASKS FOR
@@ -62,12 +62,12 @@ Nothing else in this file computes.
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
-from spectral.derived.spectral.spectral_clustering import (
+from spectral.impl.spectral.spectral_clustering import (
     MLSpectralClusteringParams,
     fit_predict,
     fit_predict_connectivity,
 )
-from spectral.derived.sparse.coo import CooGraph
+from spectral.impl.sparse.coo import CooGraph
 
 
 def _config(

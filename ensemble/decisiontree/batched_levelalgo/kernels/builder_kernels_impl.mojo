@@ -67,7 +67,7 @@ WHY THE DEFAULT IS THEIR CONSTANT AND NOT THIS LAPTOP'S 32 KiB:
 `tunable_split_histogram_dynamic_smem_limit_bytes = 16 * 1024` and
 `builder.cuh:545-547` sends any configuration ABOVE it to the global
 path regardless of how much shared memory the device has. 16 KiB is below
-every row of `original/kernel_matrix.column_shared_limit`, so their
+every row of `checks/kernel_matrix.column_shared_limit`, so their
 dispatch is already vendor-independent and the constant is transcribed
 rather than re-derived from a queried budget.
 IS THE BLOB BIG ENOUGH FOR EVERY CONFIGURATION THEY SEND TO SHARED? Yes,
@@ -116,7 +116,7 @@ falling back from.
 PRICE: two kernel objects instead of one, i.e. two entries in the
 compiled binary per (objective, bin, TPB) tuple. Zero at runtime, zero in
 value, and both arms are separately named and separately checked in
-`ensemble/original/builder_kernels_check.mojo` -- an opt-in path is an
+`ensemble/checks/builder_kernels_check.mojo` -- an opt-in path is an
 unchecked path, so neither of these is opt-in.
 
 --- 103c. THE LEAF HISTOGRAM IS A COMPTIME CAP ---------------------
@@ -146,7 +146,7 @@ DEVIATION 127. NO 64-BIT INTEGER ATOMIC. `countLocalLeftKernel` ends
               static_cast<unsigned long long>(block_count));
 
 `Atomic.fetch_add` on a `UInt64` is a hard COMPILE error on Apple GPU
-(measured, `ensemble/original/atomic_width_probe.mojo`), so the 64-bit
+(measured, `ensemble/checks/atomic_width_probe.mojo`), so the 64-bit
 atomic cannot be transcribed. Resolved as a 32-bit shadow counter.
 
 WHAT WAS DONE. A device array `local_nleft` of `Int32`, one slot per work
@@ -419,7 +419,7 @@ from ensemble.decisiontree.batched_levelalgo.split import (
     PINNED_SPLIT_REDUCE_LANES,
     Split,
 )
-from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels import (
     InstanceRange,
     NodeWorkItem,
@@ -437,7 +437,7 @@ comptime TPB_DEFAULT = 128
 
 # DEVIATION 404 -- the one line the gbdt kernel files also carry
 # (`comptime BUILD_MODE = GLOBAL_NUMERIC_MODE`): the numeric mode is read
-# from `original/numerics` ONCE here, and the split reduction's width pin
+# from `checks/numerics` ONCE here, and the split reduction's width pin
 # defaults from it. Checks may instantiate either arm explicitly through
 # `find_best_splits_kernel`'s `pinned_reduce` parameter without flipping
 # the global.

@@ -746,7 +746,7 @@ build changes: all new comptime parameters default to the old body.
      `compute_partition_stats_gather` -- phase 1 transcribed with the one
      gathered load (cross-referenced both ways with its twin), phase 2
      and the pinned chunk formula IMPORTED from `partitions_reduce.mojo`.
-  5. `original/kernel_matrix.mojo`: `ridx_only_splits_for[column,
+  5. `checks/kernel_matrix.mojo`: `ridx_only_splits_for[column,
      identical]` -- the named row. True on apple/nvidia/amd/amd-rdna
      under FAST; False under IDENTICAL on EVERY column, so the identical
      route keeps the stat-moving path byte for byte and the merge gate's
@@ -891,7 +891,7 @@ plus its launcher: XGBoost's integer-quantized gradients with ONE
 shared-memory histogram per block (recon_xgboost_gpu.md a / borrows 2, 3,
 5) and LightGBM's packed pair + grid floor (recon_lightgbm_cuda.md b2 and
 the `min_grid_dim_y` note). All FAST-only: the routing row
-(`greedy_quantized_hist_for`, `original/kernel_matrix.mojo`) is comptime
+(`greedy_quantized_hist_for`, `checks/kernel_matrix.mojo`) is comptime
 False under IDENTICAL, so the IDENTICAL column never elaborates the branch
 and its schedule -- and the merge gate's byte-compare -- are untouched by
 construction. DEV 1915 was reserved for this round and is UNUSED.
@@ -899,7 +899,7 @@ construction. DEV 1915 was reserved for this round and is UNUSED.
 **Files:** `kernel/hist_quantized_shared.mojo` (new: the kernels),
 `quantized_hist_launcher.mojo` (new: shape test, grid math, launch chain),
 `greedy_search_helper_depthwise.mojo` (workspace planes + dispatch),
-`original/kernel_matrix.mojo` (two rows). NOTE FOR BOTH LANES: the
+`checks/kernel_matrix.mojo` (two rows). NOTE FOR BOTH LANES: the
 non-symmetric driver serves Depthwise AND Lossguide, so this round moves
 the Lossguide FAST histogram arm too -- deliberately; the leaf-choice
 variance candidate below is a Lossguide finding.
@@ -1036,7 +1036,7 @@ variance candidate below is a Lossguide finding.
 
 ### THE AUG 28 ROUND'S GATE RECORD (DEV 1902 wiring + 1911-1914 + 1921-1923, orchestrator, one consolidated pass)
 
-* Parse compile of `original/depthwise_check.mojo`: 0 errors on Apple
+* Parse compile of `checks/depthwise_check.mojo`: 0 errors on Apple
   FAST, Apple IDENTICAL, NVIDIA FAST, AMD 64-lane FAST.
 * Seeded A/B byte-compare vs main `3d65d70`, same device, same window
   (200k x 24 rng(11), 20 trees depth 6 seed 7): SymmetricTree, Depthwise,

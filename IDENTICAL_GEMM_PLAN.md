@@ -22,11 +22,11 @@ Not a plan; a list of things that run today with checks and named deviations.
 
 | piece | file | what it proves |
 |---|---|---|
-| `pinned_distance_tile` | `neighbors/original/pinned_distance_tile.mojo` | a fixed ascending-k contraction can replace a vendor GEMM in a real algorithm (DEVIATION 505, row 24), priced at 2.85x |
+| `pinned_distance_tile` | `neighbors/checks/pinned_distance_tile.mojo` | a fixed ascending-k contraction can replace a vendor GEMM in a real algorithm (DEVIATION 505, row 24), priced at 2.85x |
 | `gram_splitk` | `core/gram_splitk.mojo` | the SCALABLE architecture: parallel named partials, then one explicit fold. No atomics anywhere |
 | `pinned_block_sum` | `core/pinned_reduce.mojo` | a vendor-independent reduction tree with no warp primitive in it (DEVIATION 504, row 20) |
-| `identical_mul_add`, `ftz` | `original/numerics.mojo` | an actual floating-point CONTRACT: one rounding for a multiply-add, one denormal policy (rows 9, 10) |
-| `portable_expf` / `portable_logf` | `original/numerics.mojo` | transcendentals that are one polynomial from one source rather than each vendor's intrinsic (DEVIATION 406, row 12) |
+| `identical_mul_add`, `ftz` | `checks/numerics.mojo` | an actual floating-point CONTRACT: one rounding for a multiply-add, one denormal policy (rows 9, 10) |
+| `portable_expf` / `portable_logf` | `checks/numerics.mojo` | transcendentals that are one polynomial from one source rather than each vendor's intrinsic (DEVIATION 406, row 12) |
 | `pinned_gemm_nt_kernel`, `pinned_gemv_n_kernel` | `core/gemm.mojo` | the N-T product and the matrix-vector product under the contract (DEVIATION 526, row 28) |
 | the identity checks and their sabotages | `core/gemm_identity_check.mojo` and siblings | **arguably the most important item here.** Every pin has a fixture that separates it from the unpinned spelling and a demonstrated failure when the pin is removed |
 
@@ -252,11 +252,11 @@ not broaden into any of them.
 
 **Mirror cuML/RAFT's structure and algorithms first**, as every other section
 of this repository does: `raft/linalg/` is the upstream for contractions and
-GEMM policy, the ported code goes under `*/derived/` with a `DERIVATION_MAP.tsv`
+GEMM policy, the ported code goes under `*/impl/` with a `DERIVATION_MAP.tsv`
 and an `NOT_IMPLEMENTED.tsv`, and the rule there is COPY, DO NOT IMPROVE. **When
 cuML and RAFT are exhausted for a routine, switch to PyTorch's algorithms and
 mirror those**, recording the switch and the file it came from. A routine
-with no upstream at all is `original/` and says so in its header, naming the
+with no upstream at all is `checks/` and says so in its header, naming the
 call it replaces.
 
 ## The core design rule
@@ -398,7 +398,7 @@ DEVIATIONS 530-539 are this lane's.
 **THE IDENTITY / E2 LANE owns everything already shipped, and everything
 about how it is built, certified and timed:**
 
-    original/numerics.mojo, kernel_matrix.mojo, hardware_matrix.mojo
+    checks/numerics.mojo, kernel_matrix.mojo, hardware_matrix.mojo
     IDENTITY_PATHS.md              the ledger
     pixi.toml                      task registration
     core/**, decomposition/**, glm/**, cluster/**, neighbors/**, dbscan/**
@@ -513,7 +513,7 @@ DEVIATIONS 530-539 are this lane's. Allocation as of 2026-08-23:
 
 | number | what | state |
 |---|---|---|
-| 530 | the register-stack realization of the contract's fold tree | SPENT, Phase 2b (`gemm/original/gemm_identical.mojo`) |
+| 530 | the register-stack realization of the contract's fold tree | SPENT, Phase 2b (`gemm/checks/gemm_identical.mojo`) |
 | 531 | Phase 2b's second | SPENT |
 | 532 | Phase 2b's third | SPENT |
 | 533 | the fold-ladder card: per-level stage hashing so a cross-vendor divergence localizes to a fold level and a leaf | SPENT (`bench/gemm_ladder_main.mojo`, `tools/gemm_ladder.sh`); GREEN on Apple, 57 records over 5 shapes |
@@ -535,7 +535,7 @@ Four numbers were handed to four parallel agents on the strength of
 
 which returned nothing between 529 and 540 and therefore looked like an empty
 block. **It is not empty. The repository writes the plural form for ranges** --
-`DEVIATIONS 530-532` in `gemm/original/gemm_identical.mojo:89`,
+`DEVIATIONS 530-532` in `gemm/checks/gemm_identical.mojo:89`,
 `gemm/README.md:56` and `gemm/README.md:453` -- and the singular pattern
 matches none of them. Three of the four assignments collided with committed
 work and were corrected before any header was written.

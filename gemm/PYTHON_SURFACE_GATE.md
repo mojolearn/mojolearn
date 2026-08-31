@@ -10,7 +10,7 @@ written 2026-08-24.
 `gemm/host_entry.mojo`, `bindings/_mojolearn_linalg.mojo` and
 `python/mojolearn/_linalg_impl.py` put the profile's product in reach of a
 Python caller on 2026-08-24. Nothing in that path compared its output against
-`gemm/original/gemm_oracle.mojo::gemm_oracle`.
+`gemm/checks/gemm_oracle.mojo::gemm_oracle`.
 
 The build-time smoke test in `bindings/build_linalg.sh` proves the kernels
 launch, that all five execution plans dispatch, that the three orientations
@@ -60,7 +60,7 @@ carries twice.
 
 ## What it does not prove
 
-- **It does not gate the kernel.** `gemm/original/gemm_device_check.mojo`
+- **It does not gate the kernel.** `gemm/checks/gemm_device_check.mojo`
   does that, with five sabotages beside it. Nothing here is a second opinion
   about the arithmetic.
 - **It is one machine.** The three-vendor claim is `gemm/README.md`'s and this

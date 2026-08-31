@@ -32,8 +32,8 @@ the kernels their own code calls. It is what `train()` computes a `Borders`
 column with.
 
 `THistoryBasedCtrCalcer` above it -- no suffix -- is the HOST reference the
-device answer is gated against in `original/ctr_device_check.mojo`, and it
-is what `original/ctr_check.mojo` gates against an independent O(n^2)
+device answer is gated against in `checks/ctr_device_check.mojo`, and it
+is what `checks/ctr_check.mojo` gates against an independent O(n^2)
 tally. `TWeightedBinFreqCalcer` is still host side and that is what remains
 of `PORTING.md` deviation 52.
 """
@@ -295,7 +295,7 @@ def segmented_scan_and_scatter_non_negative_vector(
     `launch_segmented_scan_and_scatter_non_negative`
     (`gpu_util/kernel/segmented_scan.mojo`, deviation 49) and
     `THistoryBasedCtrCalcerGpu` below is what calls it;
-    `original/ctr_device_check.mojo` compares the two cell by cell.
+    `checks/ctr_device_check.mojo` compares the two cell by cell.
 
     The exclusive-and-restart semantics are what make the result an ORDERED
     statistic: position `i` receives the sum over the rows that PRECEDE it
@@ -372,8 +372,8 @@ struct THistoryBasedCtrCalcer(Movable):
     `THistoryBasedCtrCalcerGpu` at the bottom of this file is what `train()`
     runs. This class computes the same statistic in host loops and exists to
     be compared against it cell by cell
-    (`original/ctr_device_check.mojo`), and to be compared itself against
-    an independent O(n^2) tally (`original/ctr_check.mojo`). A host
+    (`checks/ctr_device_check.mojo`), and to be compared itself against
+    an independent O(n^2) tally (`checks/ctr_check.mojo`). A host
     reference used to CHECK a device answer is not a CPU path
     (`PORTING_RULES.md` 0b-ii).
 
@@ -551,7 +551,7 @@ struct THistoryBasedCtrCalcerGpu(Movable):
     Every step below is a kernel their own code calls, and none of them is
     new: `GatherTrivialWeights`, `FillBinarizedTargetsStats`,
     `MakeMeansAndScatter` and `GatherWithMask` were ported and gated by
-    `original/ctr_kernels_check.mojo`, and
+    `checks/ctr_kernels_check.mojo`, and
     `SegmentedScanAndScatterNonNegativeVector` by
     `pixi run check-segscan`. What this class adds is the wiring, which was
     the missing half.

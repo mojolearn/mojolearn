@@ -29,7 +29,7 @@ lower id: `:861-862`, `:976-977`) and the comparison is a strict `<` on it,
 so an equal-sized pair falls through to the `else` and the RIGHT child is the
 one built. Equal sibling sizes are the common case on a binary feature -- 632
 of 744 planned pairs on the balanced fixture in
-`original/sibling_tiebreak_check.mojo` -- and the choice is NOT inert: the
+`checks/sibling_tiebreak_check.mojo` -- and the choice is NOT inert: the
 subtraction runs in float32 on cells that have already been rounded out of
 float32's exact-integer range, so swapping it moves histogram bits. PORTING.md
 136.

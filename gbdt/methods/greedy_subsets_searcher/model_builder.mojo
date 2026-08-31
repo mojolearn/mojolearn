@@ -34,7 +34,7 @@ Theirs has `BuildTreeLikeModel<TObliviousTreeModel>`,
 `EDuplicateTerminalLeavesPolicy` IS ported, both arms, because their
 non-symmetric call site passes `Exception` (`model_builder.cpp:288`) and the
 `Combine` arm is what makes the enum meaningful. `Combine` is reached by
-`original/depthwise_model_check.mojo`'s duplicate-path claim, so neither arm
+`checks/depthwise_model_check.mojo`'s duplicate-path claim, so neither arm
 is inert.
 """
 

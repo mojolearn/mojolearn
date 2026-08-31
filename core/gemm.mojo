@@ -73,7 +73,7 @@ from core.gram_splitk import (
     gemm_tn_splitk_into,
     gram_splitk_applies,
 )
-from original.numerics import (
+from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
     ftz,
@@ -92,7 +92,7 @@ from original.numerics import (
 # shape, its k-split and, on some backends, its mantissa width are chosen per
 # vendor and per shape, and a k-split IS a summation order. IDENTITY_PATHS
 # row 24 reached this verdict for the k-NN distance step and paid for it
-# (`neighbors/original/pinned_distance_tile.mojo`, measured 2.85x); these
+# (`neighbors/checks/pinned_distance_tile.mojo`, measured 2.85x); these
 # two are the same verdict for the two products OLS and PCA run through.
 #
 # THE CONSTRUCTION, and it is deliberately the simplest correct one:
@@ -299,7 +299,7 @@ def gemm_nt(
     materialized in another layout.
 
     **`n == 1` GOES TO GEMV, BECAUSE `transpose_b=True` DOES NOT WRITE THERE.**
-    Measured 2026-08-19 through this wrapper (`original/
+    Measured 2026-08-19 through this wrapper (`checks/
     vendor_correctness_check.mojo`): m=64, n=1, k=32, output poisoned before
     the call, **63 of the 64 rows still held the poison afterwards**. Nothing
     was written wrong; 63 rows were not written at all, so a caller reusing a
@@ -427,7 +427,7 @@ def gemm_nt_gram(
         # which is what the docstring claimed all along and what this line
         # finally spells. `unsafe_origin_cast[MutUntrackedOrigin]` is the
         # repo's existing spelling for the same coercion (see
-        # ensemble/original/sampled_cols_check.mojo).
+        # ensemble/checks/sampled_cols_check.mojo).
         #
         # BITS: the kernel, its launch geometry and its fold order are
         # untouched, and the FAST arm below is not compiled in this branch.
@@ -482,7 +482,7 @@ def gemm_tn(
     LANE_gram-splitk -- so those targets hand the Gram shape back to
     `linalg.matmul` through the transpose route.
 
-    Both arms are exercised by name: `original/gram_splitk_check.mojo`
+    Both arms are exercised by name: `checks/gram_splitk_check.mojo`
     runs each directly against a Float64 host oracle, and the vendor table
     covers each through this wrapper (`check_matmul_colmajor`'s tail rows).
 
@@ -641,7 +641,7 @@ def gemm_tn_via_transpose(
         block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
     )
     # DEVIATION 1899 -- BOTH UNCONDITIONAL SYNCS DELETED (the class DEVIATION
-    # 1877 names in gemm/original/gemm_identical.mojo). This function
+    # 1877 names in gemm/checks/gemm_identical.mojo). This function
     # allocates NOTHING: `z`, `x`, `xt`, `xt2` are all caller-owned, so no
     # local buffer's lifetime hangs on a wait here. The transpose above and
     # `gemm_nt_gram` below are enqueued on the SAME ctx and are

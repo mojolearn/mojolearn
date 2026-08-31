@@ -8,9 +8,9 @@ the Python surface; this file is the entry it should reach, shaped like
 `kde/estimator.mojo::kde_score_samples_host` and
 `neighbors/estimator.mojo::knn_search`.
 
-Nothing here is a port. `ivf/derived/` mirrors cuVS and is governed by COPY,
+Nothing here is a port. `ivf/impl/` mirrors cuVS and is governed by COPY,
 DO NOT IMPROVE; this file is host-side policy cuVS has no counterpart for,
-in the same category as `original/`.
+in the same category as `checks/`.
 
 THE POLICY CHOICES
 ------------------
@@ -60,21 +60,21 @@ THE POLICY CHOICES
 
 from max.gpu.host import DeviceContext
 
-from cluster.derived.cluster.kmeans_params import METRIC_L2_EXPANDED
+from cluster.impl.cluster.kmeans_params import METRIC_L2_EXPANDED
 from core.identity_trace import IdentityTrace
-from ivf.derived.neighbors.ivf_flat.ivf_flat_build import ivf_flat_build
-from ivf.derived.neighbors.ivf_flat.ivf_flat_index import (
+from ivf.impl.neighbors.ivf_flat.ivf_flat_build import ivf_flat_build
+from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
     IvfFlatIndex,
     IvfFlatIndexParams,
     IvfFlatSearchParams,
     ivf_refuse_algorithm,
 )
-from ivf.derived.neighbors.ivf_flat.ivf_flat_search import (
+from ivf.impl.neighbors.ivf_flat.ivf_flat_search import (
     IVF_EXPAND_TPB,
     IvfSearchResult,
     ivf_flat_search_traced,
 )
-from neighbors.original.pinned_distance_tile import PINNED_TILE_TPB
+from neighbors.checks.pinned_distance_tile import PINNED_TILE_TPB
 
 
 def ivf_flat_build_host(

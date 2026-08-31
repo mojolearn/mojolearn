@@ -18,7 +18,7 @@ cp.percentile(score_samples(X), 100 * contamination)` else `-0.5`
 name here. Treelite / nvForest export (`as_treelite`, `as_nvforest`,
 `_score_samples_nvforest`) is NOT ported (NOT_IMPLEMENTED.tsv).
 
-Host only; the device work is `derived/isolation_forest/`. The percentile
+Host only; the device work is `impl/isolation_forest/`. The percentile
 is numpy/cupy's default `linear` interpolation computed in Float64 over
 the sorted float32 scores (`percentile_linear`); the threshold handed to
 the device is `Float32(-offset_)` as their `<float>threshold` cast.
@@ -36,7 +36,7 @@ what that costs.
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
-from isolation_forest.derived.isolation_forest.isolation_forest import (
+from isolation_forest.impl.isolation_forest.isolation_forest import (
     IF_params,
     IFLaunchKnobs,
     IsolationForestModel,
@@ -114,7 +114,7 @@ struct IsolationForestEstimator(Movable):
         while the first was mid-fit. On an RTX 4090 (driver 580, CUDA 13)
         that never returned: GPU idle, every host thread in futex wait, in
         every numeric tier, on four hosts, while the same fit through ONE
-        context (`original/if_hang_probe.mojo`) returned the M4's bits.
+        context (`checks/if_hang_probe.mojo`) returned the M4's bits.
         H100, M4 and MI325X never minded. One context per call is the rule
         `bindings/_mojolearn_estimators.mojo` already states; this is the
         estimator obeying it."""

@@ -74,12 +74,12 @@ true, and the only thing that is:
 
 Three roots, each with its constant prefix dropped:
 
-    raft   cpp/include/raft/   ->  spectral/derived/
-    cuml   cpp/src/            ->  spectral/derived/
-    cuvs   cpp/src/            ->  spectral/derived/cuvs/
+    raft   cpp/include/raft/   ->  spectral/impl/
+    cuml   cpp/src/            ->  spectral/impl/
+    cuvs   cpp/src/            ->  spectral/impl/cuvs/
 
 so `raft/sparse/solver/detail/lanczos.cuh` is
-`spectral/derived/sparse/solver/detail/lanczos.mojo` and can be diffed
+`spectral/impl/sparse/solver/detail/lanczos.mojo` and can be diffed
 against it side by side. The cuVS root keeps its `cuvs/` component
 because two of the three upstreams have a file called `spectral.cuh` and
 they are different algorithms (`NOT_IMPLEMENTED.tsv` says which).
@@ -212,7 +212,7 @@ THE FIX, in two parts:
 
 ### 3.1 What checks out
 
-**`derived/sparse/solver/detail/lanczos.mojo` is the strong file.** Every
+**`impl/sparse/solver/detail/lanczos.mojo` is the strong file.** Every
 one of its roughly forty RAFT line citations was opened and confirmed:
 `lanczos_aux` (:247-399), `lanczos_solve_ritz` (:128-245),
 `lanczos_smallest` (:401-754), `lanczos_compute_eigenpairs` (:756-796),
@@ -300,8 +300,8 @@ hidden, `alpha_i` living as both a device scalar and a host copy across
 
 ## 4. The k-means at the end is `cluster/`'s, not a second copy
 
-`derived/cuvs/cluster/detail/spectral.mojo` calls
-`cluster/derived/cluster/kmeans.mojo::fit_predict` with
+`impl/cuvs/cluster/detail/spectral.mojo` calls
+`cluster/impl/cluster/kmeans.mojo::fit_predict` with
 `oversampling_factor = 0.0` (classic k-means++, their dispatch's arm) and
 copies the device setup `cluster/estimator.mojo::kmeans_fit` performs.
 `cluster/` is READ and IMPORTED and is never edited from this lane.

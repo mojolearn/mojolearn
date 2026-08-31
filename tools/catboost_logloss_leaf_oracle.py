@@ -14,7 +14,7 @@ RMSE gets one. This port implements the whole ten-iteration descent walker
 pointwise_oracle}.mojo`) and until this file existed NOTHING had ever
 compared its output to CatBoost's.
 
-The one gate that existed, `original/logloss_estimator_check.mojo`,
+The one gate that existed, `checks/logloss_estimator_check.mojo`,
 compares the device walker against a float64 host reimplementation written
 in the same file. That is a good gate for the device path and it has teeth
 -- truncating the simulation to one iteration fails all twelve leaves --

@@ -28,7 +28,7 @@ certification at E3 round 11 (`a32e304`). The certification is not thereby
 wrong, but **the instrument backing it is weaker than the claim implies, and
 the lane has already measured that it is.**
 
-`metrics/derived/stats/detail/scores.mojo:287-291` says, in the lane's own
+`metrics/impl/stats/detail/scores.mojo:287-291` says, in the lane's own
 words, that `r2 = 1 - sse/ssto` **ABSORBS** a last-bit move in either sum
 whenever `sse << ssto`, measured on the 4099-row fixture, "so the checks gate
 the sums, not only the ratio." The CHECKS gate `(y_bar, sse, ssto)`. **THE CARD
@@ -44,7 +44,7 @@ recorded intermediate is `metrics.contingency` (`:120`) while ARI, homogeneity,
 completeness and v_measure are each ratios of differences of large numbers.
 
 **The fix is nearly free and rule-legal.** `chunk_count` is a pure function of
-n (`metrics/original/pinned_sum.mojo:72-74`), so the chunk partials are NOT
+n (`metrics/checks/pinned_sum.mojo:72-74`), so the chunk partials are NOT
 the machine-sized scratch that `core/identity_trace.mojo` rule 3 forbids.
 
 Groups C and D of that lane are fine and need nothing: silhouette records

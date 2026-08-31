@@ -6,12 +6,12 @@
 benchmark that timed it, and checks that proved it correct -- and no way for
 anyone outside this repository to call any of it. `neighbors/__init__.mojo`
 was empty and every entry point under `neighbors/` was a `*_main.mojo` driver
-or a `original/*_check.mojo` verifier. Five algorithms measured, zero
+or a `checks/*_check.mojo` verifier. Five algorithms measured, zero
 reachable.
 
 Nothing here is a port. `neighbors/gbdt/` mirrors cuVS and is governed by
 COPY, DO NOT IMPROVE; this file is host-side policy that cuVS does not have a
-counterpart for, in the same category as `original/`. Every choice it makes
+counterpart for, in the same category as `checks/`. Every choice it makes
 that a caller could observe is named in THE POLICY CHOICES below rather than
 left implicit.
 
@@ -69,8 +69,8 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
   a flag.
 - `KNeighborsClassifier` / `KNeighborsRegressor` EXIST since 2026-08-23:
   `knn_classifier_predict` / `knn_regressor_predict` below, over the cuML
-  port in `neighbors/derived/knn/knn.mojo` and
-  `neighbors/derived/selection/knn.mojo`, bound as `_mojolearn.knn_classify`
+  port in `neighbors/impl/knn/knn.mojo` and
+  `neighbors/impl/selection/knn.mojo`, bound as `_mojolearn.knn_classify`
   / `.knn_regress` and exported as `mojolearn.KNeighborsClassifier` /
   `.KNeighborsRegressor`. This bullet used to name them as absent.
 - The CPython extension EXISTS: `bindings/_mojolearn.mojo::knn_search_binding`
@@ -107,18 +107,18 @@ ORDER of the set, which is a different property from WHICH set.
 from core.identity_trace import IdentityTrace
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from neighbors.derived.knn.knn import (
+from neighbors.impl.knn.knn import (
     knn_class_proba,
     knn_classify,
     knn_regress,
 )
-from neighbors.derived.neighbors.detail.knn_brute_force import (
+from neighbors.impl.neighbors.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
     brute_force_knn_impl,
     compute_norms,
 )
-from neighbors.original.radius_distances import rbc_edge_distances
-from neighbors.derived.neighbors.ball_cover.ball_cover import (
+from neighbors.checks.radius_distances import rbc_edge_distances
+from neighbors.impl.neighbors.ball_cover.ball_cover import (
     rbc_build_index,
     rbc_eps_nn_query_count,
     rbc_eps_nn_query_fill,
@@ -466,7 +466,7 @@ def knn_search_traced(
 # THE k-NN CLASSIFIER AND REGRESSOR, 2026-08-23
 #
 # Host-side composition of TWO things that already exist: `knn_search_traced`
-# above, and the cuML port in `neighbors/derived/knn/knn.mojo` (`ML::knn_classify`,
+# above, and the cuML port in `neighbors/impl/knn/knn.mojo` (`ML::knn_classify`,
 # `ML::knn_class_proba`, `ML::knn_regress`). cuML's Python does exactly this
 # composition -- `kneighbors(X, return_distance=False)` then `knn_classify(...)`
 # on the indices (`kneighbors_classifier.pyx:245-285`) -- and the only reason
@@ -758,7 +758,7 @@ def knn_regressor_predict(
 # THE COST OF THAT CHOICE IS AN INDEX BUILT TWICE, and it is written down here
 # rather than hidden. `rbc_build_index` depends only on `(x, m, n_cols,
 # n_landmarks, seed)` and never on the query, so DBSCAN builds it once and
-# queries it per batch (`dbscan/derived/dbscan/runner.mojo:361`). This surface
+# queries it per batch (`dbscan/impl/dbscan/runner.mojo:361`). This surface
 # cannot, because nothing survives between the two Python calls. Making it
 # survive means a fitted device handle, which this tree does not have anywhere
 # yet, and introducing the first one to save a build on the first radius
@@ -978,7 +978,7 @@ def radius_neighbors_fill(
     that looked like a right one.
 
     Distances are recomputed from the finished CSR
-    (`neighbors/original/radius_distances.mojo`), never stored by the search
+    (`neighbors/checks/radius_distances.mojo`), never stored by the search
     kernel; that file carries the reasoning and the bit-equality argument.
     """
     _radius_check_shapes(

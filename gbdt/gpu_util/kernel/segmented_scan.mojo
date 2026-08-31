@@ -117,7 +117,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from original.kernel_matrix import TARGET_COLUMN, column_shared_limit
+from checks.kernel_matrix import TARGET_COLUMN, column_shared_limit
 
 
 #: `TIndexWrapper::Index()` is `Idx & 0x3FFFFFFF` (`index_wrapper.cuh:22`).
@@ -144,7 +144,7 @@ def seg_scan_block_size[column: Int]() -> Int:
     """The block, from the vendor's shared-memory budget, capped at theirs.
 
     NOT from what this laptop has. `column_shared_limit`
-    (`original/kernel_matrix.mojo`) is the declared per-vendor threadgroup
+    (`checks/kernel_matrix.mojo`) is the declared per-vendor threadgroup
     budget -- 32 KB Apple, 48 KB NVIDIA, 64 KB AMD -- and 8 bytes a thread
     puts the ceiling at 4096, 6144 and 8192. CatBoost's own 768 is below all
     three, so the cap binds on every vendor and the geometry is IDENTICAL

@@ -65,7 +65,7 @@ sequence a divergence would first show up in:
 - `nys.basis_indices` moving means the POSITION MAP moved -- a different
   seed, a different kind byte, or a stream-shaped draw. It is Int32 and it
   cannot move for a floating-point reason at all, so a difference here is a
-  difference in `resample/original/index_map.mojo` or in this lane's rank
+  difference in `resample/checks/index_map.mojo` or in this lane's rank
   pass.
 - `nys.eigenvectors_flipped` moving with `nys.basis_kernel` identical is the
   JACOBI or the SIGN FLIP, both of which are `decomposition/`'s. Check
@@ -102,7 +102,7 @@ from kernel_methods.estimator import (
     rbf_sampler_fit_host,
     rbf_sampler_transform_host,
 )
-from kernel_methods.original.km_fixture import (
+from kernel_methods.checks.km_fixture import (
     FIX_KM_DUP,
     FIX_KM_MIXED,
     FIX_KM_ORTHO,
@@ -116,13 +116,13 @@ from kernel_methods.original.km_fixture import (
     km_fixture_y,
     km_hex32,
 )
-from kernel_methods.original.kernel_matrix import (
+from kernel_methods.checks.kernel_matrix import (
     km_kernel_from_name,
     km_kernel_name,
     KM_KERNEL_RBF,
 )
-from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
-from svm.derived.svm.svm_parameter import KernelParams
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from svm.impl.svm.svm_parameter import KernelParams
 
 
 def _mode_name() -> String:
@@ -268,7 +268,7 @@ def main() raises:
         "    THE SWEEP COUNT IS A NUMERIC PARAMETER, NOT A DIAGNOSTIC. Two"
         " runs reporting different sweep counts are not comparable below"
         " nys.eigenvectors_flipped at all"
-        " (decomposition/original/jacobi_eigh_device.mojo, DEVIATION BLOCK"
+        " (decomposition/checks/jacobi_eigh_device.mojo, DEVIATION BLOCK"
         " 3)."
     )
     _ = nys^

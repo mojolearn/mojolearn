@@ -42,14 +42,14 @@ from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import syncwarp
 
-from original.kernel_matrix import (
+from checks.kernel_matrix import (
     lane_width_for,
     K_HIST_HALF_BYTE,
     TARGET_COLUMN,
     block_size_for,
     hist_floats_per_thread_for,
 )
-from original.numerics import (
+from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_FAST,
     NUMERIC_IDENTICAL,
@@ -57,14 +57,14 @@ from original.numerics import (
 )
 
 
-#: READ FROM THE MATRIX, not restated here. `original/kernel_matrix.mojo`
+#: READ FROM THE MATRIX, not restated here. `checks/kernel_matrix.mojo`
 #: owns every knob that is a BUDGET, and a kernel that hardcodes one makes
 #: the table decoration. CatBoost uses 768; Apple's 32 KB ceiling over 16
 #: floats per thread yields 512, which is exactly 32,768 bytes.
 comptime BLOCK_SIZE = block_size_for[K_HIST_HALF_BYTE, TARGET_COLUMN]()
 
 
-#: The mode this build compiles against. See `original/numerics.mojo`. FAST
+#: The mode this build compiles against. See `checks/numerics.mojo`. FAST
 #: is the default, and under FAST the flush is CatBoost's own float
 #: `atomicAdd` (`hist_half_byte.cu:45-51`) on every vendor Mojo builds for.
 #: The fixed-point Int32 accumulator is what IDENTICAL selects, and it is
@@ -115,7 +115,7 @@ comptime LANE_WIDTH = lane_width_for[
 #: standing for stage 2 to un-scramble. Any other width sums the wrong
 #: cells, so this is a NUMERIC quantity and not a tunable one.
 #:
-#: It used to be read from `original/kernel_matrix.mojo`, whose
+#: It used to be read from `checks/kernel_matrix.mojo`, whose
 #: `reduce_width_for` returns the BLOCK SIZE under `NUMERIC_FAST`. That is
 #: 512 on Apple by accident and 768 on CatBoost's own configuration, where
 #: it would be wrong. The block size does not belong in this quantity, so

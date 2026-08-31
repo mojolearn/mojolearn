@@ -72,8 +72,8 @@ predicted at all -- the check asserts device-equals-oracle either way and
 prints the `info` it got).
 
     pixi run check-cholesky                                                    # FAST
-    tools/with_build_lock.sh     pixi run mojo run -I . cholesky/original/cholesky_check.mojo
-    tools/with_identical_mode.sh pixi run mojo run -I . cholesky/original/cholesky_check.mojo
+    tools/with_build_lock.sh     pixi run mojo run -I . cholesky/checks/cholesky_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -I . cholesky/checks/cholesky_check.mojo
 
     MOJOLEARN_IDENTITY_TRACE=/tmp/mac.chol.identical.card \
         tools/with_identical_mode.sh pixi run mojo run -I . cholesky/cholesky_main.mojo
@@ -89,7 +89,7 @@ prints the `info` it got).
 **The upstream situation, recorded honestly.** cuML and cuVS do not implement
 Cholesky at all. Every factorization in either tree is a cuSOLVER call, and
 cuSOLVER is a closed vendor library with no source. There is nothing to
-transliterate, so `cholesky/original/potrf.mojo` and `trsm.mojo` are NOT
+transliterate, so `cholesky/checks/potrf.mojo` and `trsm.mojo` are NOT
 ports and their headers say so instead of citing line numbers they cannot
 have. `VENDOR_LIBS.md`'s surviving exception -- call the platform equivalent
 where the dispatch reaches a CLOSED library, because there is nothing to port
@@ -115,19 +115,19 @@ before a line was written.
 
 | what | the file it lives in | why not a second copy |
 |---|---|---|
-| **The matrix product** in the trailing update `A22 -= L21 L21^T` | `gemm/original/gemm_identical.mojo::identical_gemm_into`, sized by `identical_gemm_workspace_max_floats`, at `OP_NT` from `gemm/original/gemm_oracle.mojo` | profile `mojolearn.identical.gemm.fp32.v1` is gated at 62 shapes across eight execution plans with six sabotages. A hand-written contraction here would be a second contraction in one repository and would have to earn that certificate again |
-| **The normative answer for that product**, in the oracle | `gemm/original/gemm_oracle.mojo::gemm_oracle` | `gemm_identical.mojo::contract_partition` is explicit that a second spelling of the leaf rule is a second thing that can be wrong, and records that the shape table already shipped one such re-spelling and got it wrong |
-| **Transcendentals and the arithmetic pins**: `identical_sqrt`, `identical_log`, `identical_div`, `identical_mul`, `identical_mul_add`, `ftz` | `original/numerics.mojo` | rows 9, 10, 12 and 49 of `IDENTITY_PATHS.md`. Nothing in this directory calls `std.math` on a numeric path; the only `std.math` here is `sqrt` and `log` inside the FLOAT64 host reference and inside the `CHOL_SAB_STD_SQRT` sabotage arm, both by design |
+| **The matrix product** in the trailing update `A22 -= L21 L21^T` | `gemm/checks/gemm_identical.mojo::identical_gemm_into`, sized by `identical_gemm_workspace_max_floats`, at `OP_NT` from `gemm/checks/gemm_oracle.mojo` | profile `mojolearn.identical.gemm.fp32.v1` is gated at 62 shapes across eight execution plans with six sabotages. A hand-written contraction here would be a second contraction in one repository and would have to earn that certificate again |
+| **The normative answer for that product**, in the oracle | `gemm/checks/gemm_oracle.mojo::gemm_oracle` | `gemm_identical.mojo::contract_partition` is explicit that a second spelling of the leaf rule is a second thing that can be wrong, and records that the shape table already shipped one such re-spelling and got it wrong |
+| **Transcendentals and the arithmetic pins**: `identical_sqrt`, `identical_log`, `identical_div`, `identical_mul`, `identical_mul_add`, `ftz` | `checks/numerics.mojo` | rows 9, 10, 12 and 49 of `IDENTITY_PATHS.md`. Nothing in this directory calls `std.math` on a numeric path; the only `std.math` here is `sqrt` and `log` inside the FLOAT64 host reference and inside the `CHOL_SAB_STD_SQRT` sabotage arm, both by design |
 | **Stage hashing and the differ** | `core/identity_trace.mojo`: `IdentityTrace`, `record_device`, `record_host`, `record_list_i32`, `fnv1a64_bytes`, `first_divergence`, `read_trace_lines` | one hash function per repository. The tag-uniqueness invariant is what forced the three-digit panel numbering |
 | **The pinned block fold**, considered and NOT used | `core/pinned_reduce.mojo` | named here because a reviewer will look for it. No kernel in this lane folds across threads at all -- the panel, both solves and the log-determinant each keep every sum inside one thread -- so there is no fold shape to pin and importing one would suggest there is |
-| **Fixed-point accumulation**, considered and NOT used | `original/fixed_point.mojo` | same. It exists to REPLACE float atomics, and this lane has none. There is no float atomic, no `Atomic.fetch_add`, no warp shuffle, ballot or vote, and no `block.sum` anywhere in `cholesky/` |
+| **Fixed-point accumulation**, considered and NOT used | `checks/fixed_point.mojo` | same. It exists to REPLACE float atomics, and this lane has none. There is no float atomic, no `Atomic.fetch_add`, no warp shuffle, ballot or vote, and no `block.sum` anywhere in `cholesky/` |
 | **Top-k, distance kernels, RNG** | `neighbors/`, `cluster/`, `gbdt/gpu_util/kernel/random_gen.mojo` | a Cholesky needs none of them. The only randomness in the lane is the fixture hash |
-| **The float32 GEMM used to CHECK the reconstruction** | `cholesky/original/cholesky_fixture.mojo::gram_from_lower`, which is host code the fixtures already needed | rather than a second device product for the checking path |
+| **The float32 GEMM used to CHECK the reconstruction** | `cholesky/checks/cholesky_fixture.mojo::gram_from_lower`, which is host code the fixtures already needed | rather than a second device product for the checking path |
 
 **One duplication is taken, and it is named rather than hidden.**
 `chol_mix64` in `cholesky_fixture.mojo` is the same three lines as
-`kde/original/kde_fixture.mojo:18`, `holtwinters/original/hw_fixture.mojo:30`
-and `isolation_forest/original/if_fixture.mojo:32`, with the same splitmix64
+`kde/checks/kde_fixture.mojo:18`, `holtwinters/checks/hw_fixture.mojo:30`
+and `isolation_forest/checks/if_fixture.mojo:32`, with the same splitmix64
 constants. That is the established per-lane convention in this tree; the
 alternative is a cross-lane import of another lane's fixture file, which
 `core/pinned_reduce.mojo` argues against at length for hot files. Four copies
@@ -166,7 +166,7 @@ call, and it is named so that the call can be made.**
 
 | n | path | what is vendor-dependent in the ordinary spelling | what we did | status |
 |---|---|---|---|---|
-| 60 | **`cholesky/` -- the panel BLOCK SIZE `NB`** (`cholesky/original/potrf.mojo::chol_nb_for`) | a blocked factorization's block size looks like a tuning knob and IS a summation order: it partitions the `k` axis of the trailing update, so two values of it bracket the same sum differently and return two different float32 factors. Every LAPACK and cuSOLVER implementation picks it from the shape and the device, per vendor | **PIN.** `CHOL_NB_PINNED = 32` for every shape under IDENTICAL, and a caller hint asking for anything else RAISES BY NAME rather than being ignored. NOT derived from `n`, so the factor of a leading block equals the corresponding part of the factor of the whole. Under FAST it is free. DEVIATION 1630 | **CONSTRUCTION 2026-08-25, NOTHING RUN.** `check_block_size_is_pinned` reads the block size back from the run and from the card's own `chol.nb` stage under IDENTICAL, and under FAST requires two `NB` values to produce DIFFERENT bits |
+| 60 | **`cholesky/` -- the panel BLOCK SIZE `NB`** (`cholesky/checks/potrf.mojo::chol_nb_for`) | a blocked factorization's block size looks like a tuning knob and IS a summation order: it partitions the `k` axis of the trailing update, so two values of it bracket the same sum differently and return two different float32 factors. Every LAPACK and cuSOLVER implementation picks it from the shape and the device, per vendor | **PIN.** `CHOL_NB_PINNED = 32` for every shape under IDENTICAL, and a caller hint asking for anything else RAISES BY NAME rather than being ignored. NOT derived from `n`, so the factor of a leading block equals the corresponding part of the factor of the whole. Under FAST it is free. DEVIATION 1630 | **CONSTRUCTION 2026-08-25, NOTHING RUN.** `check_block_size_is_pinned` reads the block size back from the run and from the card's own `chol.nb` stage under IDENTICAL, and under FAST requires two `NB` values to produce DIFFERENT bits |
 | 61 | **`cholesky/` -- the PIVOT DECISION** (`panel_factor_kernel`) | Cholesky failure is DATA-DEPENDENT. The value compared is a float sum and the comparison is spelled `s <= 0` in LAPACK, `isnan(sqrt(...))` in RAFT. A subnormal pivot is positive on a column that keeps subnormals and zero on one that flushes, so two vendors can disagree about whether the input is positive definite at all -- one returns a factor, the other returns an error, and no downstream bitwise gate ever runs | **PIN, both halves.** The value is `ftz`-flushed and folded ascending through `identical_mul_add`; the comparison is `not (s > 0.0)`, so NaN fails, both zeros fail, and a flushed subnormal fails on every column. `info` follows LAPACK and is read back per panel. DEVIATION 1634 | **CONSTRUCTION, NOTHING RUN.** `check_pivot_failure_is_identical` (an exactly singular fixture stopping at `info = 38` by arithmetic, with the PARTIAL factor compared cell by cell) and `check_signed_zero_and_denormal` (a subnormal pivot refused at `info = 36`) |
 | 62 | **`cholesky/` -- the TRAILING UPDATE** (`potrf_lower`) | `A22 -= L21 L21^T` is a matrix product, and a vendor GEMM's k-split is a per-vendor summation order that nothing in this repository can pin, read or check | **REUSE THE PINNED ONE.** `identical_gemm_into` at `OP_NT`, profile `mojolearn.identical.gemm.fp32.v1`, plus a pinned elementwise subtract over the lower triangle. `linalg.matmul` is refused. At `NB = 32 <= CONTRACT_K_LEAF_MIN` the profile's partition is one leaf, so the fold is an ascending chain. DEVIATION 1636 | **CONSTRUCTION, NOTHING RUN.** `CHOL_SAB_VENDOR_MATMUL` swaps `linalg.matmul` in so the gate can be shown to see it |
 | 63 | **`cholesky/` -- the TRIANGULAR SOLVES** (`trsm.mojo`) | `cublastrsm` and `cusolverDnpotrs` are closed; their blocking is a summation order | **ONE THREAD PER RIGHT-HAND-SIDE COLUMN**, `k` ascending in both substitutions, every divide an `identical_div` and never a reciprocal-times. No float crosses a thread boundary, so launch and batch invariance are properties of the kernel's shape. DEVIATIONS 1631, 1643 | **CONSTRUCTION, NOTHING RUN.** `check_cho_solve_residual` (a planted solution recovered BIT FOR BIT on an exactly-representable fixture) and `check_launch_invariance` |
@@ -206,7 +206,7 @@ Nothing outside `cholesky/` was edited by this lane. These lines are wanted
 in `pixi.toml`, in the file's existing format, beside the other classical
 lanes' tasks:
 
-    check-cholesky = "mojo run -I . cholesky/original/cholesky_check.mojo"
+    check-cholesky = "mojo run -I . cholesky/checks/cholesky_check.mojo"
     cholesky-main = "mojo run -I . cholesky/cholesky_main.mojo"
 
 The IDENTICAL pass is the injector, exactly as for every other gate:
@@ -220,7 +220,7 @@ Also owed by the orchestrator, and none of it is this lane's to do:
    in neither.
 3. **`UNWIRED.md`**: `cholesky/estimator.mojo` has no caller in
    `bindings/_mojolearn_estimators.mojo` or `python/mojolearn/`, and
-   `cholesky/derived/matrix/detail/matrix.mojo`'s
+   `cholesky/impl/matrix/detail/matrix.mojo`'s
    `get_lower_triangular_kernel`, `copy_vector_to_matrix_diagonal_kernel` and
    `matrix_diagonal_inverse_kernel` have no caller in this lane (the last one
    deliberately, DEVIATION 1645; the first two are ported-and-unwired and
@@ -234,8 +234,8 @@ Also owed by the orchestrator, and none of it is this lane's to do:
 ## SABOTAGES TO PERFORM
 
 All ten are selected at RUN TIME through the `sabotage` argument
-(`cholesky/original/chol_sabotage.mojo`), copying
-`hierarchy/original/sabotage_tile.mojo`'s construction and how
+(`cholesky/checks/chol_sabotage.mojo`), copying
+`hierarchy/checks/sabotage_tile.mojo`'s construction and how
 `linkage_check.mojo` drives it. **No source edit and no rebuild is required
 for any of them**; `check_cholesky_sabotages` drives all ten in one run and
 prints a line per arm. Every arm below is a PREDICTION until it has run.

@@ -59,7 +59,7 @@ def _sha(a):
 
 
 def _splitmix(rows, cols):
-    """The same generator `neighbors/original/ball_cover_check.mojo` uses.
+    """The same generator `neighbors/checks/ball_cover_check.mojo` uses.
 
     Written with explicit uint64 wrapping so the matrix does not depend on
     numpy's own RNG, whose stream is a compatibility promise but not a

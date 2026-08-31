@@ -15,7 +15,7 @@
 #
 # WHAT THIS IS FOR, AND WHAT IT HONESTLY IS NOT
 # ---------------------------------------------
-# `original/kernel_matrix.mojo` makes the vendor a COMPTIME COLUMN, so
+# `checks/kernel_matrix.mojo` makes the vendor a COMPTIME COLUMN, so
 # `-D MOJOLEARN_COLUMN_AMD` compiles this source against AMD's constants on
 # whatever device is attached. That answers, for free and today,
 #
@@ -103,7 +103,7 @@ for arm in $ARMS; do
             if [ "$got_mode" != "IDENTICAL" ]; then
                 echo "  $arm/$tag: CONTAMINATED -- compiled as ${got_mode:-<none>},"
                 echo "      not IDENTICAL. Another session is flipping"
-                echo "      original/numerics.mojo. Re-run when it is idle."
+                echo "      checks/numerics.mojo. Re-run when it is idle."
                 fail=1
                 rep=$((rep + 1))
                 continue

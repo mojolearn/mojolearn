@@ -68,7 +68,7 @@ single rounding and the unfused form's second rounding round the same real
 number. Sufficient (not necessary) condition on the inputs: `a` and `b` each
 carry at most 12 significant bits, so their product carries at most 24.
 
-**Instance. DEVIATION 1147, MEASURED.** `gemm/original/gemm_unpinned_price.mojo`'s
+**Instance. DEVIATION 1147, MEASURED.** `gemm/checks/gemm_unpinned_price.mojo`'s
 first fixture emitted integers scaled by `2^-4`. Every product was exactly
 representable, so FMA contraction was bit-neutral and `ftz` could never fire.
 **Sixteen of twenty rows had two genuinely different kernels produce IDENTICAL
@@ -282,7 +282,7 @@ uses the WIDE definition** -- a measurement recorded anywhere, including an
 in-source ledger. Under the narrow definition (a run log in `bench/results/`)
 FIRED is ZERO across all five lanes. See DEVIATION 1602.
 
-### 3.1 gemm, forward -- `gemm/original/gemm_identical.mojo`
+### 3.1 gemm, forward -- `gemm/checks/gemm_identical.mojo`
 
 | arm | changes | inert condition | class |
 |---|---|---|---|
@@ -297,7 +297,7 @@ FIRED is ZERO across all five lanes. See DEVIATION 1602.
 states an inert condition in its own doc block, despite being the most-run and
 longest-standing arms in the tree. DEVIATION 1607.
 
-### 3.2 gemm, backward -- `gemm/original/gemm_backward.mojo`
+### 3.2 gemm, backward -- `gemm/checks/gemm_backward.mojo`
 
 | arm | changes | inert condition | class |
 |---|---|---|---|
@@ -308,7 +308,7 @@ longest-standing arms in the tree. DEVIATION 1607.
 Ledger is PREDICTED 2026-08-25, not measured. `gemm_backward_check.mojo` says
 so in its first line.
 
-### 3.3 mamba, selective scan -- `mamba/derived/mamba_ssm/ops/selective_scan_interface.mojo`
+### 3.3 mamba, selective scan -- `mamba/impl/mamba_ssm/ops/selective_scan_interface.mojo`
 
 | arm | changes | inert condition | class |
 |---|---|---|---|
@@ -323,7 +323,7 @@ file's own note is the important part** -- "A FIXTURE WHOSE ONLY SHAPE IS
 `L = 1` CANNOT SEE S5, S6 OR S9 AT ALL, and that is structural rather than
 unlucky." Gate D's decode arm is exactly an `L = 1` call.
 
-### 3.4 mamba, block -- `mamba/derived/transformers/models/mamba/modeling_mamba.mojo`
+### 3.4 mamba, block -- `mamba/impl/transformers/models/mamba/modeling_mamba.mojo`
 
 | arm | changes | inert condition | class |
 |---|---|---|---|
@@ -351,7 +351,7 @@ that clause is still one we wrote.
 | `SABOTAGE_BIAS_LAST` (`mamba_simple`) | decode conv bias last | DERIVED -- twin of `SAB_S13_BIAS_LAST`, same condition | INERT-DERIVED |
 | `SABOTAGE_NO_CARRY` (`mamba_simple`) | state carry cut | STATED -- "token 0 legitimately agrees: at token 0 the carried state IS the zero cache" | INERT-STATED |
 
-### 3.6 transformer, block -- `transformer/derived/transformers/models/llama/modeling_llama.mojo`
+### 3.6 transformer, block -- `transformer/impl/transformers/models/llama/modeling_llama.mojo`
 
 | arm | changes | inert condition | class |
 |---|---|---|---|
@@ -369,7 +369,7 @@ that clause is still one we wrote.
 | `SAB_S20_SILU_MUL_SIGMOID` | `z*sigmoid(z)` not the quotient | DERIVED -- same as `SAB_S12_MUL_SIGMOID`. The BACKWARD twin states the threshold | INERT-DERIVED |
 | `SAB_S05_OP_NUMBERING` | `OP_NT` read as `OP_NN` | DERIVED -- `op(A) == A` elementwise | INERT-DERIVED |
 
-### 3.7 transformer, backward -- `transformer/original/transformer_backward.mojo`
+### 3.7 transformer, backward -- `transformer/checks/transformer_backward.mojo`
 
 **All twenty state an inert condition.** This is the best-documented arm set in
 the tree and the table below is a transcription, not a derivation.
@@ -397,7 +397,7 @@ the tree and the table below is a transcription, not a derivation.
 | `SAB_B_FANIN_ZERO_SEED` | fan-in seeded `+0.0` | **PREDICTED TO MOVE ZERO CELLS ON EVERY UNPLANTED FIXTURE**; vacuous without a planted `-0.0` | INERT-STATED |
 | `SAB_B_FANIN_ORDER_QKV_REVERSED` | `v,k,q` not `q,k,v` | wherever any two of the three terms are zero | INERT-STATED |
 
-### 3.8 training, loss -- `training/original/loss.mojo`
+### 3.8 training, loss -- `training/checks/loss.mojo`
 
 | arm | changes | inert condition | class |
 |---|---|---|---|
@@ -428,7 +428,7 @@ contract 4.2(c), DEVIATION 1457. A pinned decision with no falsifier in the
 tree. A census of declarations structurally cannot see it, which is
 false-negative item 5 in the auditor's own list.
 
-### 3.9 training, optimizer -- `training/original/optimizer.mojo`
+### 3.9 training, optimizer -- `training/checks/optimizer.mojo`
 
 | arm | changes | inert condition | class |
 |---|---|---|---|
@@ -458,7 +458,7 @@ by a `-D`, because both describe a defect in the CALLER --
 `OPT_SAB_RESUME_REINIT` and `OPT_SAB_MICROBATCH_SERIAL`, DEVIATION 1473. They
 are not counted in the 115.
 
-### 3.10 embedding -- `embedding/original/embedding_identical.mojo`
+### 3.10 embedding -- `embedding/checks/embedding_identical.mojo`
 
 | arm | changes | inert condition | class |
 |---|---|---|---|
@@ -662,7 +662,7 @@ combination of three things.
    are those closed forms and they are all one line each.
 2. **Those forms are computable on the HOST, cheaply, BEFORE the device runs**,
    which makes them a preflight assertion rather than a post-hoc diagnosis.
-   `training/original/loss_check.mojo`'s preflight is the mechanized form and
+   `training/checks/loss_check.mojo`'s preflight is the mechanized form and
    it is the strongest evidence in this repository -- it asserts the fixture
    constants' bits, the three `splitmix64` copies' agreement, the leaf rule
    against the gemm oracle at 16 lengths, and `identical_exp(+0.0) == 1.0`
@@ -807,7 +807,7 @@ this tree are honest unknowns and they read better than a hedge would.
 
 **3. COMPUTE THE CONDITION ON THE HOST, IN A PREFLIGHT, BEFORE ANY DEVICE
 CALL, AND RAISE IF THE FIXTURE SATISFIES IT.** This is the whole proposal and
-`training/original/loss_check.mojo`'s preflight is the model. It asserts
+`training/checks/loss_check.mojo`'s preflight is the model. It asserts
 fixture constants by bits, the three `splitmix64` copies against each other,
 the leaf rule against the gemm oracle at 16 lengths, and two `identical_exp`
 theorems -- all before the device is touched, so a bad constant fails in a

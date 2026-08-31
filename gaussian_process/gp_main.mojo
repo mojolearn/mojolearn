@@ -95,7 +95,7 @@ from gaussian_process.estimator import (
     gpr_log_marginal_likelihood,
     gpr_predict_host,
 )
-from gaussian_process.original.gp_fixture import (
+from gaussian_process.checks.gp_fixture import (
     GP_FIX_ARD,
     GP_FIX_DUPLICATE,
     GP_FIX_HANDWORKED,
@@ -111,12 +111,12 @@ from gaussian_process.original.gp_fixture import (
     gp_fixture_x_star,
     gp_fixture_y,
 )
-from gaussian_process.original.kernels import (
+from gaussian_process.checks.kernels import (
     GP_PROFILE,
     gp_hex32_bits,
     gp_kernel_name,
 )
-from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
 def _mode_name() -> String:

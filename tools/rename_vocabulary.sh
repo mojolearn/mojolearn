@@ -5,8 +5,8 @@
 # THE 2026-08-31 VOCABULARY CHANGE, recorded as a script so the rename is
 # auditable rather than a wall of untraceable edits.
 #
-#   mojo_only/       -> original/            no upstream file corresponds
-#   ported/          -> derived/             Apache-2.0 section 4's own word
+#   mojo_only/       -> checks/            no upstream file corresponds
+#   ported/          -> impl/             Apache-2.0 section 4's own word
 #   PORTED_MAP.tsv   -> DERIVATION_MAP.tsv
 #   UNPORTED.tsv     -> NOT_IMPLEMENTED.tsv
 #
@@ -18,8 +18,8 @@
 # evidence. `derived` is true of every file in there today.
 #
 # WHY THE NESTING IS NOT FLATTENED. The boundary is what makes the 84.9%
-# measurable at all, and the path underneath `derived/` is a path-for-path
-# mirror of the upstream tree (spectral/derived/cuvs/preprocessing/spectral/
+# measurable at all, and the path underneath `impl/` is a path-for-path
+# mirror of the upstream tree (spectral/impl/cuvs/preprocessing/spectral/
 # detail/ against cuVS's cpp/src/preprocessing/spectral/detail/), which is
 # what lets a reviewer diff file for file. Renaming fixes the words. Removing
 # the boundary would delete the evidence.
@@ -63,10 +63,10 @@ printf '%s\n' "$FILES" | while IFS= read -r f; do
     perl -pi -e 's/\bPORTED_MAP\b/DERIVATION_MAP/g' "$f"
     perl -pi -e 's/\bUNPORTED\.tsv/NOT_IMPLEMENTED.tsv/g' "$f"
     # 3b. mojo_only is a whole token and only ever names this directory
-    perl -pi -e 's/\bmojo_only\b/original/g' "$f"
+    perl -pi -e 's/\bmojo_only\b/checks/g' "$f"
     # 3c. `ported` ONLY in import and path position. `\b` before `ported`
     #     does not match inside `unported`, so prose survives.
-    perl -pi -e 's/\.ported\./.derived./g' "$f"
-    perl -pi -e 's{\bported/}{derived/}g' "$f"
+    perl -pi -e 's/\.ported\./.impl./g' "$f"
+    perl -pi -e 's{\bported/}{impl/}g' "$f"
 done
 echo "done"

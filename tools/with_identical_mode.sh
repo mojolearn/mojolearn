@@ -6,7 +6,7 @@
 #   tools/with_identical_mode.sh bash extratrees/tools/check.sh
 #
 # THREE FORMS, one mechanism: `-D MOJOLEARN_NUMERIC_IDENTICAL=1`, which
-# `original/numerics.mojo` reads through `is_defined` (the same shape as the
+# `checks/numerics.mojo` reads through `is_defined` (the same shape as the
 # column defines).
 #   1. The argv contains `mojo run` / `mojo build`: the define is inserted
 #      right after it.

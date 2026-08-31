@@ -176,7 +176,7 @@ NOT DONE, and this is the other half:
     pixi run check-multilogit          MultiClass's two kernels, four gates,
                                        3 sabotages + 1 recorded impossible
 
-`original/bootstrap_check.mojo` gained `check_bernoulli_and_poisson`, which
+`checks/bootstrap_check.mojo` gained `check_bernoulli_and_poisson`, which
 pins Bernoulli at rate 1.0 and 0.0 as exact identities and Poisson(1) against
 its own distribution (measured: 36,797 zeros of 100,000 against p(0)=0.3679;
 8,046 draws >= 3 against p=0.0803).

@@ -190,10 +190,10 @@ place a message survives a trap in the binary below it.
 
 ## 4. The read-back from the binary
 
-`original/vendor.mojo` defines `COMPILED_VENDOR`, a compile-time constant
+`checks/vendor.mojo` defines `COMPILED_VENDOR`, a compile-time constant
 resolved from `std.sys.info.has_amd_gpu_accelerator()`,
 `has_nvidia_gpu_accelerator()` and `has_apple_gpu_accelerator()`, the same
-predicates `original/kernel_matrix.mojo` uses to pick `DETECTED_COLUMN`,
+predicates `checks/kernel_matrix.mojo` uses to pick `DETECTED_COLUMN`,
 folded to `hip`, `cuda`, `metal` or `none`. It is a property of the BUILD
 TARGET, not a runtime query. No `DeviceContext` is opened at import, and the
 answer is about the binary rather than about what the process can see.

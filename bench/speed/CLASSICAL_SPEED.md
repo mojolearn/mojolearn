@@ -156,28 +156,28 @@ labeled `cuml-gpu` **is** a cuml call.
 
 | lane | our entry point | opponent arm | library call | true NVIDIA GPU equivalent? |
 | --- | --- | --- | --- | --- |
-| `kmeans` | `cluster.derived.cluster.kmeans::fit` | `cuml-gpu` | `cuml.cluster.KMeans` | **yes** |
-| `dbscan` | `dbscan.derived.dbscan.dbscan::dbscan_fit_impl` | `cuml-gpu` | `cuml.cluster.DBSCAN` | **yes** (this is the code we ported) |
-| `pca` | `decomposition.derived.linalg.detail.pca::pca_fit` | `cuml-gpu` | `cuml.decomposition.PCA` | **yes**, if `svd_solver="covariance_eigh"` exists on the build |
-| `ols` | `glm.derived.linalg.detail.lstsq::lstsq_eig` | `cuml-gpu` | `cuml.linear_model.LinearRegression(algorithm="eig")` | **yes** |
-| `knn` | `neighbors.derived...knn_brute_force::brute_force_knn_impl` | `cuml-gpu` | `cuml.neighbors.NearestNeighbors(algorithm="brute")` | **yes** |
-| `cd` | `solver.derived.solver.cd::cd_fit_traced` | `cuml-gpu` | `cuml.linear_model.Lasso` | **yes** |
-| `kde` | `kde.derived.kde.kde::score_samples` | `cuml-gpu` | `cuml.neighbors.KernelDensity` | **yes** |
-| `linkage` | `hierarchy.derived.hierarchy.linkage::single_linkage` | `cuml-gpu` | `cuml.cluster.AgglomerativeClustering(linkage="single")` | **yes** |
-| `svm` | `svm.derived.svm.svc_impl::svc_fit` | `cuml-gpu` | `cuml.svm.SVC` | **yes** |
-| `metrics` | eleven `metrics.derived.metrics.*` entries | `cuml-gpu` | `cuml.metrics` + `cuml.metrics.cluster` | **yes** |
+| `kmeans` | `cluster.impl.cluster.kmeans::fit` | `cuml-gpu` | `cuml.cluster.KMeans` | **yes** |
+| `dbscan` | `dbscan.impl.dbscan.dbscan::dbscan_fit_impl` | `cuml-gpu` | `cuml.cluster.DBSCAN` | **yes** (this is the code we ported) |
+| `pca` | `decomposition.impl.linalg.detail.pca::pca_fit` | `cuml-gpu` | `cuml.decomposition.PCA` | **yes**, if `svd_solver="covariance_eigh"` exists on the build |
+| `ols` | `glm.impl.linalg.detail.lstsq::lstsq_eig` | `cuml-gpu` | `cuml.linear_model.LinearRegression(algorithm="eig")` | **yes** |
+| `knn` | `neighbors.impl...knn_brute_force::brute_force_knn_impl` | `cuml-gpu` | `cuml.neighbors.NearestNeighbors(algorithm="brute")` | **yes** |
+| `cd` | `solver.impl.solver.cd::cd_fit_traced` | `cuml-gpu` | `cuml.linear_model.Lasso` | **yes** |
+| `kde` | `kde.impl.kde.kde::score_samples` | `cuml-gpu` | `cuml.neighbors.KernelDensity` | **yes** |
+| `linkage` | `hierarchy.impl.hierarchy.linkage::single_linkage` | `cuml-gpu` | `cuml.cluster.AgglomerativeClustering(linkage="single")` | **yes** |
+| `svm` | `svm.impl.svm.svc_impl::svc_fit` | `cuml-gpu` | `cuml.svm.SVC` | **yes** |
+| `metrics` | eleven `metrics.impl.metrics.*` entries | `cuml-gpu` | `cuml.metrics` + `cuml.metrics.cluster` | **yes** |
 | `ivf` | `ivf.estimator::ivf_flat_build_and_search_host` | `cuvs-gpu` | `cuvs.neighbors.ivf_flat.build` + `.search` | **yes** |
-| `hdbscan` | `hdbscan.derived.hdbscan.runner::fit_hdbscan` | `cuml-gpu` | `cuml.cluster.HDBSCAN` | **yes** |
-| `cholesky` | `cholesky.original.potrf::potrf_lower` + `trsm::cho_solve` | `torch-gpu` | `torch.linalg.cholesky` + `torch.cholesky_solve` | **yes** — this is cuSOLVER `potrf`/`potrs`, which is what the lane was ported against. RAPIDS exposes no public Cholesky estimator. |
+| `hdbscan` | `hdbscan.impl.hdbscan.runner::fit_hdbscan` | `cuml-gpu` | `cuml.cluster.HDBSCAN` | **yes** |
+| `cholesky` | `cholesky.checks.potrf::potrf_lower` + `trsm::cho_solve` | `torch-gpu` | `torch.linalg.cholesky` + `torch.cholesky_solve` | **yes** — this is cuSOLVER `potrf`/`potrs`, which is what the lane was ported against. RAPIDS exposes no public Cholesky estimator. |
 | `krr` | `kernel_methods.estimator::kernel_ridge_fit_host` + `_predict_host` | `cuml-gpu` | `cuml.kernel_ridge.KernelRidge` | **yes** |
 | `holtwinters` | `holtwinters.estimator::holtwinters_fit_host_traced` | `cuml-gpu` | `cuml.ExponentialSmoothing` | **yes** |
-| `kpss` | `tsa.derived.tsa.stationarity::kpss_test` | `cuml-gpu` **or** `statsmodels-cpu` | `cuml.tsa.stationarity.kpss_test` where the build exposes it, else `statsmodels.tsa.stattools.kpss` per series | **conditional** — the arm label says which ran |
+| `kpss` | `tsa.impl.tsa.stationarity::kpss_test` | `cuml-gpu` **or** `statsmodels-cpu` | `cuml.tsa.stationarity.kpss_test` where the build exposes it, else `statsmodels.tsa.stattools.kpss` per series | **conditional** — the arm label says which ran |
 | `gmm` | `mixture.estimator::gaussian_mixture_fit` | `sklearn-cpu` | `sklearn.mixture.GaussianMixture` | **no** |
 | `gp` | `gaussian_process.estimator::gpr_fit_host` + `gpr_predict_host` | `sklearn-cpu` | `sklearn.gaussian_process.GaussianProcessRegressor` | **no** |
 | `nystroem` | `kernel_methods.estimator::nystroem_fit_host` + `_transform_host` | `sklearn-cpu` | `sklearn.kernel_approximation.Nystroem` | **no** |
 | `rbfsampler` | `kernel_methods.estimator::rbf_sampler_fit_host` + `_transform_host` | `sklearn-cpu` | `sklearn.kernel_approximation.RBFSampler` | **no** |
 | `resample` | `resample.estimator::bootstrap_host` | `scipy-cpu` | `scipy.stats.bootstrap` | **no** |
-| `spectral` | `spectral.derived.cuvs...::fit_predict_dataset` | `sklearn-cpu` | `sklearn.cluster.SpectralClustering` | **no** |
+| `spectral` | `spectral.impl.cuvs...::fit_predict_dataset` | `sklearn-cpu` | `sklearn.cluster.SpectralClustering` | **no** |
 
 ### Lanes with NO honest NVIDIA opponent, stated plainly
 
@@ -217,7 +217,7 @@ inference from a label:
 * **`cholesky`** — RAPIDS exposes no public Cholesky estimator, but this one
   is **not** a CPU fallback: `torch.linalg.cholesky` is cuSOLVER's `potrf` on
   the GPU and `torch.cholesky_solve` is its `potrs`, which is exactly the pair
-  `cholesky/original/potrf.mojo` was ported against. The arm is labeled
+  `cholesky/checks/potrf.mojo` was ported against. The arm is labeled
   `torch-gpu` because torch is what is being called.
 * **`kpss`** — conditional. Where `cuml.tsa.stationarity.kpss_test` exists it
   is used and the arm is `cuml-gpu`. Where it does not, the fallback is
@@ -227,7 +227,7 @@ inference from a label:
 
 ### Lanes NOT covered at all
 
-* **`arima`** — `arima/derived/arima/batched_arima::batched_loglike` is one
+* **`arima`** — `arima/impl/arima/batched_arima::batched_loglike` is one
   batched Kalman-filter log-likelihood evaluation at given parameters.
   `cuml.tsa.ARIMA` exposes no such entry: its `fit()` is a BFGS optimization
   that calls the log-likelihood many times, so racing it against one

@@ -205,7 +205,7 @@ def plan_level_kernel(
     Measured on this port's own kernels at a 4096-row fixture with
     `fixed_scale` 65536 and cells up to 5.3e8: 19 of 2048 derived cells
     differ from the built sibling one way, 24 of 2048 the other, worst
-    gap 3 ulp (`original/sibling_tiebreak_check.mojo`). What survives of
+    gap 3 ulp (`checks/sibling_tiebreak_check.mojo`). What survives of
     the old paragraph is only the second half: making THEIR choice keeps
     the computed set the smaller half, which is the point of the halving.
     """

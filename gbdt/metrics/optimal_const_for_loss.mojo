@@ -28,7 +28,7 @@ bias on real data.
 
 `Logit` is their `math_utils.h` log(x / (1 - x)), taken through libm's
 `log` by `external_call` and NOT through `std.math.log`, whose ~5e-8 error
-re-decides last bits (the `original/pointwise_target_check.mojo` finding).
+re-decides last bits (the `checks/pointwise_target_check.mojo` finding).
 """
 
 from std.ffi import external_call

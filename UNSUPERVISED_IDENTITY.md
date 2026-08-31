@@ -74,17 +74,17 @@ within-run one.
 
 | # | move | where |
 |---|---|---|
-| 500 | composite `(distance, index)` radix key: the tie class stops existing | `neighbors/original/select_radix_identical.mojo` |
+| 500 | composite `(distance, index)` radix key: the tie class stops existing | `neighbors/checks/select_radix_identical.mojo` |
 | 501 | ranked output placement: slots come from the key, not from `atomicAdd` | same file |
 | 502 | `grid_x = 1` and the ARM pinned to cuVS's own dispatch; 64-lane columns REFUSED | `fused_l2_knn.mojo`, `knn_brute_force.mojo` |
 | 503 | k-means assignment: contraction + flush pins | `cluster/.../simt_kernel.mojo`, `unfused_distance_nn.mojo` |
 | 504 | `pinned_block_sum`: a halving fold with no lane primitive in it | `core/pinned_reduce.mojo` |
-| 505 | the tiled k-NN arm's distances off the vendor matmul | `neighbors/original/pinned_distance_tile.mojo` |
+| 505 | the tiled k-NN arm's distances off the vendor matmul | `neighbors/checks/pinned_distance_tile.mojo` |
 | 506 | DBSCAN's eps accumulators, brute-force AND ball-cover | `epsilon_neighborhood.mojo`, `ball_cover/common.mojo` |
 | 507 | a truncated label propagation raises instead of returning | `csr.mojo`, `merge_labels.mojo` |
-| 508 | the float-fold library rows pinned at the comptime accessor | `original/kernel_matrix.mojo` |
+| 508 | the float-fold library rows pinned at the comptime accessor | `checks/kernel_matrix.mojo` |
 | 509 | under IDENTICAL, AUTO pins to the **TILED** arm on every column, superseding 502's pin to fused | `knn_brute_force.mojo` |
-| 510 | `K_LIB_COLUMN_STATS` added to the float-fold classifier (the fourth row 508 missed) | `original/kernel_matrix.mojo` |
+| 510 | `K_LIB_COLUMN_STATS` added to the float-fold classifier (the fourth row 508 missed) | `checks/kernel_matrix.mojo` |
 | 512 | AUTO may not choose an arm this column does not have, in EITHER mode | `knn_brute_force.mojo` |
 | 513 | DBSCAN's batch-count check reads the real batch count and gates that its budgets moved it | `dbscan_identity_check.mojo`, `dbscan/estimator.mojo` |
 | 514 | the mode flip holds the shared build lock for its whole window | `tools/with_identical_mode.sh` |
@@ -98,7 +98,7 @@ decomposition lane the same day.)
 The lane's first owed item was "a second vendor". Half of it turns out not
 to need one, and that half found three defects.
 
-`TARGET_COLUMN` is a COMPTIME choice (`original/kernel_matrix.mojo`), so
+`TARGET_COLUMN` is a COMPTIME choice (`checks/kernel_matrix.mojo`), so
 `-D MOJOLEARN_COLUMN_AMD=1` compiles this source against AMD's block sizes,
 64-wide lane width, LDS budget and 110-core occupancy **on the attached
 device**. The arithmetic stays Metal's -- contraction, denormals and device
@@ -152,7 +152,7 @@ called it green.
 
 ### 3. The mode flip is a shared-file mutation with no lock
 
-`tools/with_identical_mode.sh` rewrites `original/numerics.mojo` for the
+`tools/with_identical_mode.sh` rewrites `checks/numerics.mojo` for the
 length of a command that runs for minutes, and this checkout is worked by
 parallel sessions. The failure is not a merge conflict, it is a **silently
 mislabelled measurement**: a build that lands inside another session's flip
@@ -182,7 +182,7 @@ own centroid at magnitude 1.3e9) against an unfused value of ~51968, 400
 ulps, which fp32 accumulation of 32 terms cannot produce -- and the
 unfused arm is `gemm_nt`, MAX 26.5.0's `linalg.matmul`, **TF32 on NVIDIA by
 default with no compilable opt-out before Blackwell.** The Gram check in
-`original/gram_splitk_check.mojo` failed the same leg at 2.4e-5 of the
+`checks/gram_splitk_check.mojo` failed the same leg at 2.4e-5 of the
 magnitude for the same reason.
 
 DEVIATION 529 (k-means) and DEVIATION 540 (Gram): the capability is a
@@ -206,8 +206,8 @@ on NVIDIA are TF32-accuracy (`cluster/README.md`).
 
 `mojolearn.KNeighborsClassifier` / `KNeighborsRegressor` landed as cuML's
 `ML::knn_classify` / `knn_class_proba` / `knn_regress` over `knn_search`
-(`neighbors/derived/knn/knn.mojo`, `neighbors/derived/selection/knn.mojo`,
-`neighbors/derived/label/classlabels.mojo`; `neighbors/README.md` has the
+(`neighbors/impl/knn/knn.mojo`, `neighbors/impl/selection/knn.mojo`,
+`neighbors/impl/label/classlabels.mojo`; `neighbors/README.md` has the
 file map). What this lane's identity ledger owes for them is short,
 because cuML's kernels are already the serial shape IDENTICAL wants:
 
@@ -312,7 +312,7 @@ per-batch records would have tested is gated directly instead
     pixi run check-unsupervised-identity     # both modes, all six files
     pixi run price-unsupervised-identity     # the cost, alternated
 
-Both flip `original/numerics.mojo` session-locally through
+Both flip `checks/numerics.mojo` session-locally through
 `tools/with_identical_mode.sh`, which reverts on EXIT/INT/TERM. The flip must
 never be committed (E1_RUNBOOK's preconditions).
 
@@ -379,14 +379,14 @@ what `k > 64` costs.
    the shipped answer well-defined without it.
 5. **`k > SELECT_BLOCK` in the identical selector.** Refused at the
    launcher, not silent. The rank pass needs a loop.
-6. **`decomposition/original/jacobi_eigh_device.mojo`** folds two Float32
+6. **`decomposition/checks/jacobi_eigh_device.mojo`** folds two Float32
    sums (`fro2`, `off`) through the library `block.sum` at `JACOBI_TPB`,
    and those folds decide the SWEEP COUNT, so a last-bit difference changes
    the eigenvectors rather than perturbing them. `K_LIB_JACOBI_EIGH`'s 32 is
    the lane width, not a scheduling choice, so the fix is the fold and not
    the matrix row. ~~Reserved as DEVIATION 511~~ **CLOSED. It landed as
    DEVIATION 524, IDENTITY_PATHS row 27, and both folds now go through
-   `core/pinned_reduce.pinned_block_sum` (`decomposition/original/
+   `core/pinned_reduce.pinned_block_sum` (`decomposition/checks/
    jacobi_eigh_device.mojo:56,72`). This item described it as open and
    reserved under a deviation number it never used.**
 7. **`price-unsupervised-identity` is stale.** The table below was measured

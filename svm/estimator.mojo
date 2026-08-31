@@ -50,9 +50,9 @@ append their stages to the one file; the fit's stages are the 32 the
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
-from svm.derived.svm.smosolver import SmoTrace
-from svm.derived.svm.svc_impl import svc_fit, svc_predict
-from svm.derived.svm.svm_parameter import (
+from svm.impl.svm.smosolver import SmoTrace
+from svm.impl.svm.svc_impl import svc_fit, svc_predict
+from svm.impl.svm.svm_parameter import (
     C_SVC,
     KERNEL_LINEAR,
     KERNEL_RBF,

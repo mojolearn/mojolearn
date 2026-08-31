@@ -24,7 +24,7 @@ the key. The whole ordered-target-statistic story downstream --
 `SegmentedScanAndScatterNonNegativeVector` summing "the rows of my bin that
 came before me" -- is true only if the tie order is the permutation order.
 So stability is not a quality of the implementation here, it is half the
-algorithm, and `original/radix_sort_check.mojo` gates it separately from
+algorithm, and `checks/radix_sort_check.mojo` gates it separately from
 sortedness for that reason.
 
 ## What their dispatch calls, and what is written here instead

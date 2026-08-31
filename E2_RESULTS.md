@@ -72,7 +72,7 @@ ET and RF cell was already identical on both vendors:
    differs macOS↔Linux) and the Mojo links used Mojo's own host `exp`
    (~1e-13 off libm, measured). Raw margins identical, `proba` not.
 
-**DEVIATION 258 closed all three** (`original/numerics.mojo`): `portable_sqrtf`
+**DEVIATION 258 closed all three** (`checks/numerics.mojo`): `portable_sqrtf`
 — correctly rounded BY CONSTRUCTION (exponent-halving seed, three Heron
 steps through the exact divide, candidate selection on the fma residual
 with tiny inputs scaled up), measured 0 of 2^20 mismatches against the

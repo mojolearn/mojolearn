@@ -27,7 +27,7 @@ Everything that decides WHERE those boundaries fall is host integer
 arithmetic over `sampleCount`, `min_fold_size`, `fold_len_multiplier` and the
 sample grouping. No buffer, no kernel, no device. So it is a closed form and
 it can be gated against an independently written one --
-`original/dynamic_boosting_folds_check.mojo` does exactly that. That is the
+`checks/dynamic_boosting_folds_check.mojo` does exactly that. That is the
 whole reason this piece is worth landing on its own, ahead of the
 `TDynamicBoosting` loop and the feature-parallel searcher that consume it.
 
@@ -153,7 +153,7 @@ the extremes the check sweeps: 4,899 folds at `n = 5,000, g = 1.0000001`
 against a bound of 5,002; 78 at `g = 1.05`; 6 at the default `g = 2.0`. It has
 never come within 100 passes of the bound.
 
-Sabotage S1 in `original/dynamic_boosting_folds_check.mojo` is the measured
+Sabotage S1 in `checks/dynamic_boosting_folds_check.mojo` is the measured
 case: with the `+ 1` removed the guard raises at 502 passes over 499 samples
 and the run goes red in 2 seconds. Sabotage S6 -- stepping the series from
 `min_estimation` instead of the previous right edge -- trips it at 9 passes

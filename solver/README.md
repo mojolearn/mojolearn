@@ -2,9 +2,9 @@
 
 Seventh section. **COPY, DO NOT IMPROVE.** `cdFit` and `cdPredict`
 (`upstream/cuml-v26.08.00/cpp/src/solver/cd.cuh`) and every RAFT primitive
-their control plane calls, file for file, under `solver/derived/`; the one
+their control plane calls, file for file, under `solver/impl/`; the one
 thing cuML never needed -- a row-length reduction with ONE fold shape on
-three vendors -- under `solver/original/`. DEVIATION 610 is the identity
+three vendors -- under `solver/checks/`. DEVIATION 610 is the identity
 construction; 611 is reserved and NOT spent (see `shuffle` below); 612 is
 the card's NaN canonicalization and 613 the NaN/inf parameter refusals
 (the ROW 39 AUDIT section); 614-619 are unused.
@@ -16,14 +16,14 @@ or run on NVIDIA or AMD. No performance was measured and no timing is
 printed by any file in this directory; the cross-vendor leg and the
 benchmark arena are the identity lane's.
 
-    == solver/original/cd_check.mojo [IDENTICAL] ALL PASSED ==
-    == solver/original/cd_check.mojo [FAST] ALL PASSED ==
+    == solver/checks/cd_check.mojo [IDENTICAL] ALL PASSED ==
+    == solver/checks/cd_check.mojo [FAST] ALL PASSED ==
 
 ## Commands
 
     # the gates, both arms (every line carries the mode the binary COMPILED in)
-    tools/with_build_lock.sh     pixi run mojo run -I . solver/original/cd_check.mojo
-    tools/with_identical_mode.sh pixi run mojo run -I . solver/original/cd_check.mojo
+    tools/with_build_lock.sh     pixi run mojo run -I . solver/checks/cd_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -I . solver/checks/cd_check.mojo
     # the same through the registered pixi tasks (no *-identity task exists by design)
     pixi run check-cd
     tools/with_identical_mode.sh pixi run check-cd
@@ -34,7 +34,7 @@ benchmark arena are the identity lane's.
     pixi run cd-main
 
     # a sabotage build (the define goes right after `mojo run`)
-    tools/with_identical_mode.sh pixi run mojo run -D MOJOLEARN_CD_SABOTAGE_ZERO_FOLD_MAX=1 -I . solver/original/cd_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -D MOJOLEARN_CD_SABOTAGE_ZERO_FOLD_MAX=1 -I . solver/checks/cd_check.mojo
 
     # the identity card
     MOJOLEARN_IDENTITY_TRACE=/tmp/cd.apple.card \
@@ -50,19 +50,19 @@ lines above are the whole interface.
 
 | ours | theirs | what |
 |---|---|---|
-| `solver/derived/solver/cd.mojo` | `cuml cpp/src/solver/cd.cuh` | `cdFit` line for line (guards, preprocess, `l1_alpha`/`l2_alpha`, colNorm + addScalar, the five-operation coordinate step with DEVICE-pointer alphas, one host read per epoch, the stopping rule, postprocess), `cdUpdateCoefKernel` transcribed, `cdPredict` |
-| `solver/derived/solver/shuffle.mojo` | `cd solver/shuffle.h` | `initShuffle` (the identity permutation); `shuffle` REFUSED, see below |
-| `solver/derived/solvers/params.mojo` | `cuml include/cuml/solvers/params.hpp` | the three enums |
-| `glm/derived/glm/preprocess.mojo (moved there 2026-08-23 by the identity lane, per the hand-off)` | `cuml cpp/src/glm/preprocess.cuh` | `preProcessData` / `postProcessData`, unweighted arms, IN PLACE as theirs (HAND-OFF: it belongs under `glm/derived/`) |
-| `solver/derived/functions/linear_reg.mojo` | `cuml cpp/src_prims/functions/linearReg.cuh` | `linearRegH` only |
-| `solver/derived/linalg/coalesced_reduction.mojo` | `raft linalg/detail/coalesced_reduction-inl.cuh` | `coalescedSumMediumKernel<256>` with its per-thread Kahan-Babushka-Neumaier sum and two `BlockReduce.Sum`s -- the FAST arm of colNorm and mean |
-| `solver/derived/linalg/norm.mojo` | `raft linalg/detail/norm.cuh` | `colNorm<L2Norm, rowMajor=false>` (a SUM OF SQUARES; no sqrt) |
-| `solver/derived/stats/mean.mojo` | `raft stats/detail/mean.cuh`, `mean_center.cuh` | `mean<false>` = sum times `1/N` (a multiply), `meanCenter`/`meanAdd` as `matrixVectorOp` along columns |
-| `solver/derived/linalg/axpy.mojo` | `raft linalg/detail/axpy.cuh` | `axpy<T, DevicePointerMode=true>` -- cuBLAS axpy with a DEVICE alpha; MAX has no axpy, so the mirror is one thread per row reading alpha from device memory |
-| `solver/original/profile_dot.mojo` | none | DEVIATION 610: every `n_rows` reduction under IDENTICAL is the `mojolearn.identical.gemm.fp32.v1` `OP_NT` cell at `1 x 1 x n_rows`, CALLED from the gemm lane (`identical_gemm_with_plan`) -- no second fold is spelled; the sum for the means is the dot against ones |
-| `solver/original/cd_oracle.mojo` | none | the host oracle (device arithmetic, serial), the whole-row serial variant, the Float64 reference, the hashed fixtures |
-| `solver/original/record_canon.mojo` | none | DEVIATION 612: every float stage of the card is hashed through a copy whose NaNs are rewritten to the one payload `0x7FC00000` (IDENTITY_PATHS row 39 FACT 2) |
-| `solver/original/cd_check.mojo` | none | the gates, below |
+| `solver/impl/solver/cd.mojo` | `cuml cpp/src/solver/cd.cuh` | `cdFit` line for line (guards, preprocess, `l1_alpha`/`l2_alpha`, colNorm + addScalar, the five-operation coordinate step with DEVICE-pointer alphas, one host read per epoch, the stopping rule, postprocess), `cdUpdateCoefKernel` transcribed, `cdPredict` |
+| `solver/impl/solver/shuffle.mojo` | `cd solver/shuffle.h` | `initShuffle` (the identity permutation); `shuffle` REFUSED, see below |
+| `solver/impl/solvers/params.mojo` | `cuml include/cuml/solvers/params.hpp` | the three enums |
+| `glm/impl/glm/preprocess.mojo (moved there 2026-08-23 by the identity lane, per the hand-off)` | `cuml cpp/src/glm/preprocess.cuh` | `preProcessData` / `postProcessData`, unweighted arms, IN PLACE as theirs (HAND-OFF: it belongs under `glm/impl/`) |
+| `solver/impl/functions/linear_reg.mojo` | `cuml cpp/src_prims/functions/linearReg.cuh` | `linearRegH` only |
+| `solver/impl/linalg/coalesced_reduction.mojo` | `raft linalg/detail/coalesced_reduction-inl.cuh` | `coalescedSumMediumKernel<256>` with its per-thread Kahan-Babushka-Neumaier sum and two `BlockReduce.Sum`s -- the FAST arm of colNorm and mean |
+| `solver/impl/linalg/norm.mojo` | `raft linalg/detail/norm.cuh` | `colNorm<L2Norm, rowMajor=false>` (a SUM OF SQUARES; no sqrt) |
+| `solver/impl/stats/mean.mojo` | `raft stats/detail/mean.cuh`, `mean_center.cuh` | `mean<false>` = sum times `1/N` (a multiply), `meanCenter`/`meanAdd` as `matrixVectorOp` along columns |
+| `solver/impl/linalg/axpy.mojo` | `raft linalg/detail/axpy.cuh` | `axpy<T, DevicePointerMode=true>` -- cuBLAS axpy with a DEVICE alpha; MAX has no axpy, so the mirror is one thread per row reading alpha from device memory |
+| `solver/checks/profile_dot.mojo` | none | DEVIATION 610: every `n_rows` reduction under IDENTICAL is the `mojolearn.identical.gemm.fp32.v1` `OP_NT` cell at `1 x 1 x n_rows`, CALLED from the gemm lane (`identical_gemm_with_plan`) -- no second fold is spelled; the sum for the means is the dot against ones |
+| `solver/checks/cd_oracle.mojo` | none | the host oracle (device arithmetic, serial), the whole-row serial variant, the Float64 reference, the hashed fixtures |
+| `solver/checks/record_canon.mojo` | none | DEVIATION 612: every float stage of the card is hashed through a copy whose NaNs are rewritten to the one payload `0x7FC00000` (IDENTITY_PATHS row 39 FACT 2) |
+| `solver/checks/cd_check.mojo` | none | the gates, below |
 | `solver/cd_main.mojo` | none | the driver and the card |
 
 Upstream pins: cuML `v26.08.00` = `265b9da`, RAFT `v26.08.00` = `ebf9268`
@@ -125,7 +125,7 @@ what the Python estimator returns. cuML ships one backend and accepts that.
 Here, under IDENTICAL:
 
 - ALL FOUR reductions are the `mojolearn.identical.gemm.fp32.v1` dot
-  (`solver/original/profile_dot.mojo`): `L = contract_leaf_size(n_rows)`,
+  (`solver/checks/profile_dot.mojo`): `L = contract_leaf_size(n_rows)`,
   `P = ceil(n_rows / L)`, serial ascending `fma` inside a leaf with every
   seam flushed, a fixed balanced tree over the leaves -- a pure function of
   `n_rows`, and the gemm lane's own gates and launch-invariance stand behind
@@ -176,7 +176,7 @@ the row. On the planted fixture (2048 x 16, Lasso alpha 0.01) the card has
 20 records over 3 epochs; `check_cd_card_is_emitted` asserts the list and a
 run-to-run control.
 
-## The gates (`solver/original/cd_check.mojo`), and what each one saw on the M4
+## The gates (`solver/checks/cd_check.mojo`), and what each one saw on the M4
 
     check_cd_refuses_by_name              shuffle=true, sample_weight, loss=HINGE, n_cols=0,
                                           n_rows=1, alpha<0, l1_ratio=1.5, predict loss=HINGE,
@@ -267,20 +267,20 @@ site in `solver/` was read against those three facts.
 
 | site | what it is | can +-0.0 / NaN reach it | verdict |
 |---|---|---|---|
-| `solver/derived/solver/cd.mojo` `cd_update_coef_kernel`, the soft threshold `c > l1_alpha ? c - l1_alpha : (c < -l1_alpha ? c + l1_alpha : 0)` | a branch, no max/min | `c` can be -0.0 (a flushed negative dot): both compares are false, `r = +0.0` literal; a nonzero arm's result is strictly signed (`c > a` implies `c - a > 0`); a NaN `c` takes the `0` arm (both compares false) | no hardware max/min; UNCHANGED. The SOFT_SWAP sabotage (below) already shows the operand order is not a bit |
+| `solver/impl/solver/cd.mojo` `cd_update_coef_kernel`, the soft threshold `c > l1_alpha ? c - l1_alpha : (c < -l1_alpha ? c + l1_alpha : 0)` | a branch, no max/min | `c` can be -0.0 (a flushed negative dot): both compares are false, `r = +0.0` literal; a nonzero arm's result is strictly signed (`c > a` implies `c - a > 0`); a NaN `c` takes the `0` arm (both compares false) | no hardware max/min; UNCHANGED. The SOFT_SWAP sabotage (below) already shows the operand order is not a bit |
 | the same kernel, `r = r / sq` then `ftz(r)` | a quotient that CAN flush to a SIGNED zero | yes: `dot / squared` below the normal floor is -0.0 for a negative dot (Apple's hardware flush and `ftz` agree, row 10); stored to `coef` and negated into `conv[0]` | IEEE division, negation and the signed flush are vendor-invariant; the -0.0 is a RECORDED bit (`cd.sweepNNN.coef`, `.conv`) and `check_cd_signed_zero_coefficients` plants it and compares the card bit for bit. PROVEN in a comment at the site |
 | the same kernel, `diffMax`/`coefMax` folds: `if conv[2] < diff: conv[2] = diff`, `if conv[1] < absv: conv[1] = absv` | two max folds spelled as strict compares | candidates are `abs()` values (`abs(-0.0)` is +0.0, the sign bit is cleared), seed is the +0.0 `enqueue_memset` wrote, strict `<` keeps the EARLIER value on a tie by position, `x < NaN` is false so a NaN never enters | PROVEN in a comment at the site; no hardware max; UNCHANGED. The -0.0 fixture reaches both folds with both zeros in both orders; the ZERO_FOLD_MAX sabotage shows what a hardware-max spelling would do |
-| `solver/original/cd_oracle.mojo` `cd_oracle_fit`, the same folds on the host | the oracle's spelling | identical reasoning | comment added; asserted in both modes that the sign bit of `coefMax`/`diffMax` is never set |
-| `solver/derived/linalg/coalesced_reduction.mojo:84` `if abs(sum) >= abs(cur)` | RAFT's KBN branch selecting the compensation FORMULA | both operands `abs()`; on a magnitude tie the two formulas compute the same `c`; NaN takes the second arm as RAFT's does | PROVEN in the docstring; FAST-only (comptime assert); UNCHANGED |
-| `solver/derived/stats/mean.mojo`, `glm/preprocess.mojo`, `linalg/norm.mojo`, `linalg/axpy.mojo`, `functions/linear_reg.mojo` | sums, a multiply by `1/N`, `x - mu`, `fma`, `x + s`; `norm` is a SUM OF SQUARES with NO sqrt | no clamp, no max/min, no sqrt, no division by a data value anywhere (`ratio = 1/N` with `n_rows >= 2`); a zero column gives `colnorm = 0`, `squared = l2_alpha`, and `cd.cuh:62`'s `1e-5` guard zeroes the coefficient; a zero-variance column under `fit_intercept` centers to the zero column | nothing to change |
-| `solver/original/profile_dot.mojo:64,88` `if p > w`, `if p < 0` | Int | not floats | nothing |
-| `solver/original/cd_check.mojo` `if e > worst` (tolerance scans) | host Float64 `abs()` maxima | report values only | nothing |
+| `solver/checks/cd_oracle.mojo` `cd_oracle_fit`, the same folds on the host | the oracle's spelling | identical reasoning | comment added; asserted in both modes that the sign bit of `coefMax`/`diffMax` is never set |
+| `solver/impl/linalg/coalesced_reduction.mojo:84` `if abs(sum) >= abs(cur)` | RAFT's KBN branch selecting the compensation FORMULA | both operands `abs()`; on a magnitude tie the two formulas compute the same `c`; NaN takes the second arm as RAFT's does | PROVEN in the docstring; FAST-only (comptime assert); UNCHANGED |
+| `solver/impl/stats/mean.mojo`, `glm/preprocess.mojo`, `linalg/norm.mojo`, `linalg/axpy.mojo`, `functions/linear_reg.mojo` | sums, a multiply by `1/N`, `x - mu`, `fma`, `x + s`; `norm` is a SUM OF SQUARES with NO sqrt | no clamp, no max/min, no sqrt, no division by a data value anywhere (`ratio = 1/N` with `n_rows >= 2`); a zero column gives `colnorm = 0`, `squared = l2_alpha`, and `cd.cuh:62`'s `1e-5` guard zeroes the coefficient; a zero-variance column under `fit_intercept` centers to the zero column | nothing to change |
+| `solver/checks/profile_dot.mojo:64,88` `if p > w`, `if p < 0` | Int | not floats | nothing |
+| `solver/checks/cd_check.mojo` `if e > worst` (tolerance scans) | host Float64 `abs()` maxima | report values only | nothing |
 
 No `max(`/`min(` on a float, no `.clamp()`, no `reduce_max/min`, no
 `pinned_block_max/min`, no `Atomic.max/min`, no `copysign` exists in
 `solver/`. No clamp was rewritten because there is none.
 
-### FACT 2, the recorded stages (DEVIATION 612, `solver/original/record_canon.mojo`)
+### FACT 2, the recorded stages (DEVIATION 612, `solver/checks/record_canon.mojo`)
 
 cuML's `cdFit` has no finiteness guard. With FINITE inputs of moderate
 scale no stage can hold a NaN (a zero column, a zero-variance column,
@@ -363,10 +363,10 @@ host-only computation.
 
 ### Outputs
 
-    tools/with_build_lock.sh     pixi run mojo run -I . solver/original/cd_check.mojo
-    == solver/original/cd_check.mojo [FAST] ALL PASSED ==
-    tools/with_identical_mode.sh pixi run mojo run -I . solver/original/cd_check.mojo
-    == solver/original/cd_check.mojo [IDENTICAL] ALL PASSED ==
+    tools/with_build_lock.sh     pixi run mojo run -I . solver/checks/cd_check.mojo
+    == solver/checks/cd_check.mojo [FAST] ALL PASSED ==
+    tools/with_identical_mode.sh pixi run mojo run -I . solver/checks/cd_check.mojo
+    == solver/checks/cd_check.mojo [IDENTICAL] ALL PASSED ==
     tools/with_identical_mode.sh pixi run mojo run -I . solver/cd_main.mojo
     [IDENTICAL] oracle: n_iter=3 intercept 0x3ad72d10; coefficients differing from the device: 0 of 16
     (card: 20 records)
@@ -394,14 +394,14 @@ host-only computation.
 1. **Estimators.** `mojolearn.Lasso(alpha=1.0, fit_intercept=True,
    max_iter=1000, tol=1e-3, selection='cyclic')` and
    `mojolearn.ElasticNet(alpha=1.0, l1_ratio=0.5, ...)` over
-   `solver/derived/solver/cd.mojo::cd_fit` / `cd_predict` (F-order input,
+   `solver/impl/solver/cd.mojo::cd_fit` / `cd_predict` (F-order input,
    `coef` zeroed by the caller, `selection='random'` and `sample_weight`
    refused by name, `solver='qn'` refused by name, `positive`/`precompute`/
    `warm_start` refused by name as cuML's `_params_from_cpu` does). The
    binding goes beside `LinearRegression`/`Ridge` in
    `bindings/_mojolearn_estimators.mojo` and `python/mojolearn/linear_model.py`;
    the card prefix is `cd`.
-2. **`glm/derived/glm/preprocess.mojo (moved there 2026-08-23 by the identity lane, per the hand-off)` belongs under `glm/derived/glm/`**
+2. **`glm/impl/glm/preprocess.mojo (moved there 2026-08-23 by the identity lane, per the hand-off)` belongs under `glm/impl/glm/`**
    (it is cuML's `glm/preprocess.cuh`, which `glm/NOT_IMPLEMENTED.tsv` lists as
    NOT PORTED). Move it and delete that UNPORTED entry in the same commit;
    `glm/estimator.mojo`'s host-side centering could then call it.
@@ -421,4 +421,4 @@ host-only computation.
 
 ## ROW TEXT FOR THE IDENTITY LANE (row 41)
 
-| 41 | **coordinate descent (Lasso / ElasticNet): the row-length reductions and the epoch count** -- `solver/derived/solver/cd.mojo` (cuML `solver/cd.cuh`): `colNorm` and the means on RAFT `coalescedReduction`, whose kernel is CHOSEN BY SM COUNT (`-inl.cuh:497`) and compensates per thread then folds with CUB; `dot(X[:,ci], residual)` on cuBLAS `gemv`; `coef > l1_alpha` and `diffMax / coefMax < tol` branch on those bits, so `n_iter` is per card | yes: three fold shapes, one of them closed, one of them a device property | DEVIATION 610: all four reductions are the `gemm.fp32.v1` `OP_NT` cell at `1 x 1 x n_rows` (`solver/original/profile_dot.mojo`, CALLED from the gemm lane; the means are the dot against ones); axpys `identical_mul_add` + `ftz` at the residual (store and load); `cdUpdateCoefKernel` flushes quotient, diff, |r|; card `cd.colnorm/squared/sweepNNN.coef/resid/conv/final.coef/intercept/n_iter` | **CONSTRUCTION plus one Apple device's gates, 2026-08-23**: device == host oracle bit for bit on every stage and cell of three fixtures incl. a denormal-residual one; launch-invariant across 4 plans / 2 block sizes / 2 grids / 3 paddings; FAST vs IDENTICAL differ in 2 of 16 coefficients on the planted fixture; three sabotages fail where predicted (FOLD_SERIAL everywhere, LEAF_ROTATE only at P = 157, NO_FTZ_RESID only on the denormal fixture); `shuffle=true` refused by name (611 reserved); ROW 39 AUDIT 2026-08-23: no float max/min/clamp in the section, the coefMax/diffMax folds are abs()-and-strict-`<` (proven at the site, -0.0 planted in both orders and card-compared), the card's NaN stages are canonicalized to 0x7FC00000 (DEVIATION 612, planted computed and propagated NaN), non-finite alpha / NaN l1_ratio / NaN tol refused by name (DEVIATION 613), vendor-shaped FAST claims RECORDED; CERTIFIED Apple M4 <-> NVIDIA H100 at leg 11 (commit 144aa5b, judged by tools/e3_round_judge.sh section 7 on 2026-08-23): the IDENTICAL card is bit-identical across the two vendors, 20 stages; the FAST cards differ, recorded, the shipped arm makes no cross-vendor claim; AMD MI325X is OWED (that leg was not run) |
+| 41 | **coordinate descent (Lasso / ElasticNet): the row-length reductions and the epoch count** -- `solver/impl/solver/cd.mojo` (cuML `solver/cd.cuh`): `colNorm` and the means on RAFT `coalescedReduction`, whose kernel is CHOSEN BY SM COUNT (`-inl.cuh:497`) and compensates per thread then folds with CUB; `dot(X[:,ci], residual)` on cuBLAS `gemv`; `coef > l1_alpha` and `diffMax / coefMax < tol` branch on those bits, so `n_iter` is per card | yes: three fold shapes, one of them closed, one of them a device property | DEVIATION 610: all four reductions are the `gemm.fp32.v1` `OP_NT` cell at `1 x 1 x n_rows` (`solver/checks/profile_dot.mojo`, CALLED from the gemm lane; the means are the dot against ones); axpys `identical_mul_add` + `ftz` at the residual (store and load); `cdUpdateCoefKernel` flushes quotient, diff, |r|; card `cd.colnorm/squared/sweepNNN.coef/resid/conv/final.coef/intercept/n_iter` | **CONSTRUCTION plus one Apple device's gates, 2026-08-23**: device == host oracle bit for bit on every stage and cell of three fixtures incl. a denormal-residual one; launch-invariant across 4 plans / 2 block sizes / 2 grids / 3 paddings; FAST vs IDENTICAL differ in 2 of 16 coefficients on the planted fixture; three sabotages fail where predicted (FOLD_SERIAL everywhere, LEAF_ROTATE only at P = 157, NO_FTZ_RESID only on the denormal fixture); `shuffle=true` refused by name (611 reserved); ROW 39 AUDIT 2026-08-23: no float max/min/clamp in the section, the coefMax/diffMax folds are abs()-and-strict-`<` (proven at the site, -0.0 planted in both orders and card-compared), the card's NaN stages are canonicalized to 0x7FC00000 (DEVIATION 612, planted computed and propagated NaN), non-finite alpha / NaN l1_ratio / NaN tol refused by name (DEVIATION 613), vendor-shaped FAST claims RECORDED; CERTIFIED Apple M4 <-> NVIDIA H100 at leg 11 (commit 144aa5b, judged by tools/e3_round_judge.sh section 7 on 2026-08-23): the IDENTICAL card is bit-identical across the two vendors, 20 stages; the FAST cards differ, recorded, the shipped arm makes no cross-vendor claim; AMD MI325X is OWED (that leg was not run) |

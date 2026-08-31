@@ -37,8 +37,8 @@ THE SHAPE IS AN ARGUMENT, NOT A CONVENIENCE, IN FOUR PLACES:
 
 A CALLER THAT KEEPS ITS DATA ON THE DEVICE across a hyperparameter sweep --
 which a kernel-ridge cross-validation will -- should call
-`kernel_methods/original/kernel_matrix.mojo::km_kernel_matrix` and
-`kernel_methods/derived/kernel_ridge/kernel_ridge.mojo::kernel_ridge_solve`
+`kernel_methods/checks/kernel_matrix.mojo::km_kernel_matrix` and
+`kernel_methods/impl/kernel_ridge/kernel_ridge.mojo::kernel_ridge_solve`
 directly and keep its own `DeviceBuffer`s, exactly as cuML's `fit` keeps `X`
 on the device. These entries are the one-shot form, which is what the gates
 and the card use.
@@ -47,28 +47,28 @@ and the card use.
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from cholesky.original.potrf import (
+from cholesky.checks.potrf import (
     CHOL_ELEM_TPB,
     CHOL_PANEL_TPB,
 )
-from cholesky.original.trsm import CHOL_SOLVE_TPB
+from cholesky.checks.trsm import CHOL_SOLVE_TPB
 from core.identity_trace import IdentityTrace
-from decomposition.original.jacobi_eigh_device import (
+from decomposition.checks.jacobi_eigh_device import (
     JACOBI_SWEEPS,
     JACOBI_TOL,
     JACOBI_TPB,
     jacobi_eigh_kernel,
 )
-from decomposition.derived.linalg.detail.pca import (
+from decomposition.impl.linalg.detail.pca import (
     SIGNFLIP_TPB,
     sign_flip_kernel,
 )
-from gemm.original.gemm_identical import (
+from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
-from gemm.original.gemm_oracle import OP_NN, OP_NT
-from kernel_methods.original.km_sabotage import (
+from gemm.checks.gemm_oracle import OP_NN, OP_NT
+from kernel_methods.checks.km_sabotage import (
     KMSAB_BASIS_FROM_LAUNCH,
     KMSAB_EIGEN_ORDER_ASCENDING,
     KMSAB_EIGEN_TIE_UNSTABLE,
@@ -77,7 +77,7 @@ from kernel_methods.original.km_sabotage import (
     KMSAB_NO_EIGEN_CLIP,
     KMSAB_NO_SIGN_FLIP,
 )
-from kernel_methods.original.kernel_matrix import (
+from kernel_methods.checks.kernel_matrix import (
     KM_KERNEL_LINEAR,
     KM_TPB,
     km_kernel_matrix,
@@ -86,7 +86,7 @@ from kernel_methods.original.kernel_matrix import (
     km_validate_kernel_params,
     km_validate_matrix,
 )
-from kernel_methods.original.random_features import (
+from kernel_methods.checks.random_features import (
     KM_RF_TPB,
     km_basis_indices,
     km_feature_map_epilogue,
@@ -95,14 +95,14 @@ from kernel_methods.original.random_features import (
     km_random_weights,
     km_weight_sigma,
 )
-from kernel_methods.derived.distance.kernel_matrices import KM_EPILOGUE_TPB
-from kernel_methods.derived.kernel_ridge.kernel_ridge import (
+from kernel_methods.impl.distance.kernel_matrices import KM_EPILOGUE_TPB
+from kernel_methods.impl.kernel_ridge.kernel_ridge import (
     KRR_RIDGE_TPB,
     kernel_ridge_solve,
     kernel_ridge_workspace_floats,
 )
-from original.numerics import ftz, identical_div, identical_sqrt
-from svm.derived.svm.svm_parameter import KernelParams
+from checks.numerics import ftz, identical_div, identical_sqrt
+from svm.impl.svm.svm_parameter import KernelParams
 
 
 # ===========================================================================
@@ -247,7 +247,7 @@ def kernel_ridge_fit_host(
     # DEVIATION 1684. The training Gram is `K(X, X)` and `km_kernel_matrix`
     # takes its two operands as two MUTABLE buffers, which Mojo refuses to
     # satisfy from one allocation (PORTING.md 24, and
-    # `decomposition/derived/linalg/detail/pca.mojo` carries the same note for
+    # `decomposition/impl/linalg/detail/pca.mojo` carries the same note for
     # `X^T X`). So `X` is uploaded TWICE. The alternative -- a special
     # diagonal path -- would be a SECOND kernel-matrix code path reached only
     # when the two operands are the same, which is exactly the non-default
@@ -303,7 +303,7 @@ def kernel_ridge_fit_host(
             " A float32 kernel matrix needs a larger ridge than cuML's"
             " float64 one at the same data (DEVIATION 1661). To close it"
             " properly, port an SVD-based least-squares arm -- there is one"
-            " at solver/original/lstsq.mojo -- and gate BOTH sides of the"
+            " at solver/checks/lstsq.mojo -- and gate BOTH sides of the"
             " branch; kernel_methods/NOT_IMPLEMENTED.tsv carries the row"
         )
 
@@ -425,7 +425,7 @@ def kernel_ridge_primal_weights(
             + String(model.n_targets)
             + ")"
         )
-    from original.numerics import identical_mul_add
+    from checks.numerics import identical_mul_add
 
     var out = List[Float32]()
     for c in range(model.n_features):
@@ -517,7 +517,7 @@ struct NystroemModel(Movable):
     var seed: UInt64
     var sweeps: Int
     """How many Jacobi sweeps the device solver executed. NOT a diagnostic:
-    `decomposition/original/jacobi_eigh_device.mojo`'s DEVIATION BLOCK 3
+    `decomposition/checks/jacobi_eigh_device.mojo`'s DEVIATION BLOCK 3
     measured that a one-ulp difference in the convergence quantity changes
     the SWEEP COUNT, and a different sweep count is a different matrix in
     the fifth decimal. Two runs that disagree here are not comparable below
@@ -558,7 +558,7 @@ def nystroem_fit_host(
     only symmetric eigensolver in this tree, and cuSOLVER's `gesvd` is closed.
 
     DEVIATION 1668: the eigenvector SIGN convention is
-    `decomposition/derived/linalg/detail/pca.mojo::sign_flip_kernel`, RAFT's
+    `decomposition/impl/linalg/detail/pca.mojo::sign_flip_kernel`, RAFT's
     `signFlipKernel`, CALLED. It is NOT reinvented here, and the README's
     reuse table says why at length.
     """

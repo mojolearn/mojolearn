@@ -34,13 +34,13 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier, syncwarp
 
-from original.kernel_matrix import (
+from checks.kernel_matrix import (
     lane_width_for,
     TARGET_COLUMN,
     deterministic_flush_for,
     requires_uniform_iteration_for,
 )
-from original.numerics import (
+from checks.numerics import (
     PIN_DETERMINISM,
     GLOBAL_NUMERIC_MODE,
     NUMERIC_FAST,
@@ -83,7 +83,7 @@ comptime LOAD_SIZE = 4
 comptime POINTS_PER_ITER = UNROLL * LOAD_SIZE
 
 
-#: The mode this build compiles against; see `original/numerics.mojo`.
+#: The mode this build compiles against; see `checks/numerics.mojo`.
 comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
 
 #: Lanes moving in lockstep. READ FROM THE MATRIX, not pinned here.
@@ -457,7 +457,7 @@ def binary_hist_kernel(
             # Their guard, copied: skip a flush that cannot matter, so the
             # non-deterministic atomic is not paid for nothing.
             if abs(val) > Float32(1e-20):
-                # THE FLUSH, and the one row `original/numerics.mojo` says a
+                # THE FLUSH, and the one row `checks/numerics.mojo` says a
                 # vendor can override. CatBoost writes
                 #
                 #     if (blockCount > 1) atomicAdd(dst + fold, val);
@@ -968,7 +968,7 @@ def binary_hist_gather_kernel[ridx_stats: Bool = False](
             # Their guard, copied: skip a flush that cannot matter, so the
             # non-deterministic atomic is not paid for nothing.
             if abs(val) > Float32(1e-20):
-                # THE FLUSH, and the one row `original/numerics.mojo` says a
+                # THE FLUSH, and the one row `checks/numerics.mojo` says a
                 # vendor can override. CatBoost writes
                 #
                 #     if (blockCount > 1) atomicAdd(dst + fold, val);

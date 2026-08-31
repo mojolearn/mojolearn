@@ -50,7 +50,7 @@ A cross-vendor run that diverges has an address:
                       the pair is two tags rather than one).
 
 The fixture performs no host floating-point operation (see
-`ivf/original/ivf_fixture.mojo`). Prints the first eight neighbours as
+`ivf/checks/ivf_fixture.mojo`). Prints the first eight neighbours as
 decimal AND hex, because `String(Float32)` does not round-trip.
 
 NO NUMBER PRINTED HERE IS A PERFORMANCE NUMBER. This driver has never been
@@ -63,10 +63,10 @@ from std.os import getenv
 
 from max.gpu.host import DeviceContext
 
-from cluster.derived.cluster.kmeans_params import METRIC_L2_EXPANDED
+from cluster.impl.cluster.kmeans_params import METRIC_L2_EXPANDED
 from ivf.estimator import ivf_flat_build_and_search_host
-from ivf.original.ivf_fixture import ivf_index_fixture, ivf_query_fixture
-from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from ivf.checks.ivf_fixture import ivf_index_fixture, ivf_query_fixture
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
 comptime IVF_MAIN_N_ROWS = 512

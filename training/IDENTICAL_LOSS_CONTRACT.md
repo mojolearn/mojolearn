@@ -8,8 +8,8 @@ this document is `transformer/IDENTICAL_TRANSFORMER_CONTRACT.md`'s, which is
 `mamba/IDENTICAL_MAMBA_CONTRACT.md`'s, which is
 `gemm/IDENTICAL_FP32_CONTRACT.md`'s, on purpose.
 
-The code form of every clause is `training/original/loss_oracle.mojo` (the
-NORMATIVE host oracle) and `training/original/loss.mojo` (the device
+The code form of every clause is `training/checks/loss_oracle.mojo` (the
+NORMATIVE host oracle) and `training/checks/loss.mojo` (the device
 spelling, one source for three vendors).
 
 **STATUS BANNER, CORRECTED 2026-08-31.** This paragraph used to read
@@ -49,17 +49,17 @@ Read in the tree on 2026-08-25 and cited by file and by symbol.
 
 | piece | verdict | where it already is |
 |---|---|---|
-| `exp` | **REUSED** | `original/numerics.mojo::identical_exp` over `::portable_expf`, IDENTITY_PATHS row 12 |
+| `exp` | **REUSED** | `checks/numerics.mojo::identical_exp` over `::portable_expf`, IDENTITY_PATHS row 12 |
 | `log` | **REUSED** | `::identical_log` over `::portable_logf`. Mojo's own `std.math.log` carries about `5e-8` absolute error and re-decides plateau ties, which is the whole reason row 12 exists. This lane never spells `std.math.log` under IDENTICAL |
 | division | **REUSED** | `::identical_div` over `::portable_divf`, DEVIATION 740, row 49 |
 | the order-free maximum | **REUSED**, and it was built for exactly this reduction | `::identical_fmax` over `::portable_fmaxf`, DEVIATION 825. Its own docstring says it was written for softmax's row maximum and for no other seam |
 | the flush | **REUSED** | `::ftz`, IDENTITY_PATHS row 10 |
 | the uncontractible product | **REUSED, AND IT IS NOW IN `numerics.mojo`** | `::identical_mul`, DEVIATION 826, `identical_mul_add(a, b, -0.0)`. The transformer contract's section 12.3 item 816 records this as a `pinned_mul` copy the transformer lane still owed; the numerics lane landed it centrally on 2026-08-24. **This lane makes no fifth copy** |
 | the fused multiply-add | **REUSED** | `::identical_mul_add`, row 9 |
-| **every fold in this document** | **REUSED, ROUTED, NOT REBUILT** | profile `mojolearn.identical.gemm.fp32.v1`, entry `gemm/original/gemm_oracle.mojo::gemm_oracle` on the host and `gemm/original/gemm_identical.mojo::identical_gemm_into` on the device. Section 5 is the argument |
-| the reduction-as-a-GEMM technique | **REUSED** | `gemm/original/gemm_backward.mojo::identical_gemm_backward_bias_into`, DEVIATION 851. That file proved `db[j] = sum_i dC[i, j]` is `ones . dC` under gemm v1 and therefore needs no second fold shape. This lane applies the same finding to three more reductions |
+| **every fold in this document** | **REUSED, ROUTED, NOT REBUILT** | profile `mojolearn.identical.gemm.fp32.v1`, entry `gemm/checks/gemm_oracle.mojo::gemm_oracle` on the host and `gemm/checks/gemm_identical.mojo::identical_gemm_into` on the device. Section 5 is the argument |
+| the reduction-as-a-GEMM technique | **REUSED** | `gemm/checks/gemm_backward.mojo::identical_gemm_backward_bias_into`, DEVIATION 851. That file proved `db[j] = sum_i dC[i, j]` is `ones . dC` under gemm v1 and therefore needs no second fold shape. This lane applies the same finding to three more reductions |
 | the stage card and the differ | **REUSED** | `core/identity_trace.mojo` (`IdentityTrace.record_device` :313, `::record_host` :369), `tools/identity_trace_diff.py` |
-| the refusal of a nonfinite input | **PATTERN REUSED, CODE COPIED** | `mamba/original/mamba_oracle.mojo::refuse_nonfinite` (:57) and, since 2026-08-25, `training/original/optimizer_oracle.mojo:162`. It is not in `numerics.mojo`; this lane makes a THIRD copy and owes the lift. DEVIATION 1164, section 13 |
+| the refusal of a nonfinite input | **PATTERN REUSED, CODE COPIED** | `mamba/checks/mamba_oracle.mojo::refuse_nonfinite` (:57) and, since 2026-08-25, `training/checks/optimizer_oracle.mojo:162`. It is not in `numerics.mojo`; this lane makes a THIRD copy and owes the lift. DEVIATION 1164, section 13 |
 | **the log-sum-exp, the negation, the label-smoothing combine and the gradient cell** | **NEW** | sections 4 and 6. That is the entire new arithmetic of this lane |
 
 **Three refusals, each of a thing already in the tree that looks like the
@@ -172,7 +172,7 @@ describes a different call.
 |---|---|---|---|
 | dtype | Float32 for logits, every intermediate, every accumulator, the loss and the gradient | **YES** | Andrew's order, and `ForCausalLMLoss` :59 upcasts to float for the same reason |
 | target dtype | Int32 | **YES** | integers do not flush and do not round |
-| `CONTRACT_K_LEAF_MIN` | `128` | **YES**, inherited | `gemm/original/gemm_oracle.mojo` |
+| `CONTRACT_K_LEAF_MIN` | `128` | **YES**, inherited | `gemm/checks/gemm_oracle.mojo` |
 | `CONTRACT_MAX_LEAVES` | `1024` | **YES**, inherited | same |
 | `V`, the vocabulary | free per model, **FROZEN FOR THE RUN** | see 3.1 | `LlamaConfig.vocab_size`; Llama-3-8B is `128256` |
 | `ignore_index` | free, default `-100` | no | `fixed_cross_entropy` :36 |
@@ -430,7 +430,7 @@ IDENTITY_PATHS row 13 closed everywhere else, and its own block comment says
 a caller whose inputs can carry `+-0.0` must state why before using it. This
 caller cannot. **The clean fix is to give that fold `identical_fmax` as its
 combine step**, which is `portable_fmaxf`'s own suggestion and is that file's
-owner's call, not this lane's. Until then `training/original/loss.mojo`
+owner's call, not this lane's. Until then `training/checks/loss.mojo`
 carries a local `pinned_block_fmax` and DEVIATION 1165 is the debt.
 
 **What would make L1 pass while gating nothing.** A fixture with no `-0.0`
@@ -460,7 +460,7 @@ of gemm v1 computes `acc = ftz(fma(ftz(e_p), ftz(1.0), acc))`, and
 the ones vector turns the reduction into the contract's own ascending flushed
 chain inside a leaf and the contract's own balanced tree across leaves. That
 sentence is not this lane's invention -- it is
-`gemm/original/gemm_backward.mojo`'s module docstring, DEVIATION 851, where
+`gemm/checks/gemm_backward.mojo`'s module docstring, DEVIATION 851, where
 the bias gradient's row sum was routed the same way for the same reason.
 
 **Why this DEPARTS from transformer 5.3, which pinned a serial chain.**
@@ -547,7 +547,7 @@ The `SUM` and the `MEAN` are the same fold; only L13's divisor differs.
 the property the transformer refused to accept on its key axis, and this lane
 accepts it knowingly because there is no alternative -- a batch reduction's
 length IS the batch. It is the same finding
-`gemm/original/gemm_backward.mojo::gemm_backward_b_call` recorded about the
+`gemm/checks/gemm_backward.mojo::gemm_backward_b_call` recorded about the
 weight gradient, in the same words, and the consequence is the same one --
 **the microbatch schedule is part of a training run's numerical
 specification, not an execution detail.**
@@ -908,7 +908,7 @@ reference on an EXACTLY-REPRESENTABLE fixture (section 12); (f) the row-39
 audit of section 8; (g) every clause above falsifiable by a NAMED sabotage
 that fails a gate, with its predicted INERT set asserted as a mask.
 
-`training/original/loss_check.mojo` is the gate file. ~~It does not exist.~~
+`training/checks/loss_check.mojo` is the gate file. ~~It does not exist.~~
 **It exists and RAN at `ecd1a436`, correction made 2026-08-31**: clauses (a)
 through (f) all passed on ONE DEVICE, and (f) measured a real defect in
 `loss.mojo` that `b90f52ab` fixed. It has run on no second vendor.
@@ -1012,7 +1012,7 @@ is the transformer contract's warning about `S07_ROPE_RELATIVE_POSITION` and
   AMD agreed bit for bit through 302 stages while NVIDIA diverged at
   `tree001.winners.scores` -- so two backends agreeing closes nothing.
 - ~~**Nothing here has been compiled.** No file in `training/` other than
-  these three has any content, `training/original/loss_check.mojo` does not
+  these three has any content, `training/checks/loss_check.mojo` does not
   exist, and no gate in section 10 has ever been run.~~ **FALSE SINCE
   `ecd1a436`, corrected 2026-08-31.** `loss_check.mojo` and
   `loss_fixture.mojo` exist and ran, six clauses of section 10 passed on one
@@ -1133,13 +1133,13 @@ three and raises rather than adjusting the fixture.
 ## 13. Where the code goes, and the deviation numbers
 
     training/IDENTICAL_LOSS_CONTRACT.md      this file
-    training/original/loss_oracle.mojo      the NORMATIVE host oracle
-    training/original/loss.mojo             the device spelling, one source
-    training/original/loss_fixture.mojo     NOT WRITTEN -- config and planted cases
-    training/original/loss_check.mojo       NOT WRITTEN -- the gates and the sabotages
+    training/checks/loss_oracle.mojo      the NORMATIVE host oracle
+    training/checks/loss.mojo             the device spelling, one source
+    training/checks/loss_fixture.mojo     NOT WRITTEN -- config and planted cases
+    training/checks/loss_check.mojo       NOT WRITTEN -- the gates and the sabotages
     training/corpus/                         NOT WRITTEN -- the independent torch reference
 
-`training/__init__.mojo` and `training/original/__init__.mojo` already exist
+`training/__init__.mojo` and `training/checks/__init__.mojo` already exist
 and were not touched by this lane.
 
 ### 13.1 The deviation block, 1150 through 1169
@@ -1160,11 +1160,11 @@ and were not touched by this lane.
 | 1161 | the three theorems of 8.2 and the one stated gap they leave (`shift[y]` overflowing to `-inf` from finite logits) |
 | 1162 | the row-independence clause -- `N` is a launch shape for everything except L12 |
 | 1163 | the EXACT-ANALYTIC gradient gate, the two exact fixture families, and the DEMOTION of finite differences |
-| 1164 | the local `refuse_nonfinite`, its debt to `original/numerics.mojo` |
+| 1164 | the local `refuse_nonfinite`, its debt to `checks/numerics.mojo` |
 | 1165 | the local `pinned_block_fmax`, its debt to `core/pinned_reduce.mojo::pinned_block_max` |
 | 1166 | the stage list and its card tags |
 | 1167 | the sabotage set and its predicted INERT masks |
-| 1168 | the block size resolved from `original/kernel_matrix.mojo` rather than written as a literal, and the argument that every scheduling row here IS scheduling |
+| 1168 | the block size resolved from `checks/kernel_matrix.mojo` rather than written as a literal, and the argument that every scheduling row here IS scheduling |
 | 1169 | reserved |
 
 No number outside 1150-1169 is claimed by this lane. Numbers cited from
@@ -1179,9 +1179,9 @@ This lane was permitted to write exactly three files. Everything below needs
 a file this lane may not touch, and each item names the file, the change and
 the reason it is somebody else's edit.
 
-1. **`original/numerics.mojo` should carry `refuse_nonfinite`.** It existed
-   once, at `mamba/original/mamba_oracle.mojo:57`. The concurrent optimizer
-   lane added a second at `training/original/optimizer_oracle.mojo:162` on
+1. **`checks/numerics.mojo` should carry `refuse_nonfinite`.** It existed
+   once, at `mamba/checks/mamba_oracle.mojo:57`. The concurrent optimizer
+   lane added a second at `training/checks/optimizer_oracle.mojo:162` on
    2026-08-25 and its own header already counts them; this lane makes a third
    (DEVIATION 1164). **Three copies of a refusal are three chances to
    disagree about what a NaN is**, and two of them are now in one directory
@@ -1191,7 +1191,7 @@ the reason it is somebody else's edit.
    numerics lane, so the lift is theirs to make. The copy in
    `loss_oracle.mojo` carries a pointer to this item.
 
-2. **`original/numerics.mojo` should carry `neg_by_bits`.** DEVIATION 1154
+2. **`checks/numerics.mojo` should carry `neg_by_bits`.** DEVIATION 1154
    introduces it and it is one XOR. It belongs beside `identical_mul`, for
    the reason DEVIATION 826 gives about `pinned_mul` -- a reader looks for it
    there, and four copies of an arithmetic have four chances to drift. Not
@@ -1212,8 +1212,8 @@ the reason it is somebody else's edit.
    MEASURED. That file is the repository's ledger and is edited by whoever
    owns the ledger.
 
-5. **`training/original/loss_fixture.mojo` and
-   `training/original/loss_check.mojo` do not exist**, so **not one clause
+5. **`training/checks/loss_fixture.mojo` and
+   `training/checks/loss_check.mojo` do not exist**, so **not one clause
    in this document has ever been falsified by a sabotage.** Every entry in
    section 10.1 is a specification for a gate, not a report of one. This is
    the largest single gap in the lane and it is deliberate -- the brief

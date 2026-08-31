@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The callable surface over DBSCAN.
 
-`dbscan/derived/dbscan/dbscan.mojo:132` already has `dbscan_fit_impl`,
+`dbscan/impl/dbscan/dbscan.mojo:132` already has `dbscan_fit_impl`,
 mirroring `cuml/cpp/src/dbscan/dbscan.cuh:101`. It takes `DeviceBuffer`s, so
 a caller holding a numpy array cannot reach it. This file is the same shape as
 `neighbors/estimator.mojo` and `cluster/estimator.mojo`: host pointers in,
@@ -22,13 +22,13 @@ THE POLICY CHOICES
 1. **THE LABEL CONVENTION IS scikit-learn's AND IT COMES FROM THE PORT, NOT
    FROM HERE.** Noise is `-1` and clusters are exactly `0..n_clusters-1`.
    That is what cuML's `final_relabel` plus `relabelForSkl`
-   (`runner.cuh:410-416`) produce and what `dbscan/original/dbscan_check.mojo`
+   (`runner.cuh:410-416`) produce and what `dbscan/checks/dbscan_check.mojo`
    asserts. This file does not renumber anything, and a caller can compare
    `labels_` against scikit-learn's directly.
 
 2. **`eps_nn_method` DEFAULTS TO `EPS_NN_RBC`, the random ball cover, AND
    THAT IS THIS PORT'S DEFAULT, NOT cuML's** -- DEVIATION 35 in
-   `dbscan/derived/dbscan/runner.mojo`: cuML's Python default is
+   `dbscan/impl/dbscan/runner.mojo`: cuML's Python default is
    `algorithm='brute'` and on an int32-label build their dispatch never
    reaches RBC. (This item used to say "cuML's default"; corrected
    2026-08-23.) The ball cover measured 2.7x-27x faster at 16k-200k rows
@@ -65,8 +65,8 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
 
 from max.gpu.host import DeviceContext
 
-from dbscan.derived.dbscan.dbscan import dbscan_fit_impl
-from dbscan.derived.dbscan.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC
+from dbscan.impl.dbscan.dbscan import dbscan_fit_impl
+from dbscan.impl.dbscan.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC
 
 
 def dbscan_fit(

@@ -19,7 +19,7 @@ a general library this tree does not mirror. That is still right for a call we
 merely stand in for. It is wrong for a file we read and transliterate, which
 is what `select_radix.mojo` is, and which makes it a derivative work of RAFT.
 
-    a RAFT call we stand in for   ->  original/, naming the call
+    a RAFT call we stand in for   ->  checks/, naming the call
     a RAFT file we transliterate  ->  gbdt/,  with raft as its upstream
 
 `DERIVATION_MAP.tsv` names the upstream per row for that reason.
@@ -102,9 +102,9 @@ kernel was right both times.
 `ML::knn_classify` / `knn_class_proba` / `knn_regress` over the search
 above, ported file for file where cuML keeps them:
 
-    cuml cpp/src/knn/knn.cu:328-389          ->  derived/knn/knn.mojo
-    cuml cpp/src_prims/selection/knn.cuh     ->  derived/selection/knn.mojo
-    raft label/detail/classlabels.cuh        ->  derived/label/classlabels.mojo
+    cuml cpp/src/knn/knn.cu:328-389          ->  impl/knn/knn.mojo
+    cuml cpp/src_prims/selection/knn.cuh     ->  impl/selection/knn.mojo
+    raft label/detail/classlabels.cuh        ->  impl/label/classlabels.mojo
 
 The vote is `class_probs_kernel` (each of the `k` neighbour slots adds `1/k`
 to its class, serially, per query) then `class_vote_kernel` (first maximum,
@@ -118,7 +118,7 @@ DEVIATIONS 541-544 are in the DEVIATION BLOCKs of the two ported files and
 the estimator (540 was taken by the Gram/TF32 lane the same day and is
 not used here).
 
-Gates: `original/knn_classify_check.mojo`, `original/knn_regress_check.mojo`
+Gates: `checks/knn_classify_check.mojo`, `checks/knn_regress_check.mojo`
 (host transcription bit for bit, planted vote ties, reach by one flipped
 label / one moved target, `k = 0` refused, multi-output layout, run twice),
 run by `pixi run check-knn`; `tools/knn_sklearn_oracle.py` against

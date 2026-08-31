@@ -9,7 +9,7 @@ The short answer, before the detail.
 - **The backward GEMM needs no new arithmetic.** `dA` and `dB` are the
   operations the forward already implements, at a different transpose, and
   the shape table in section 2 is the proof rather than the assertion. The
-  code that follows from it is `gemm/original/gemm_backward.mojo`, which
+  code that follows from it is `gemm/checks/gemm_backward.mojo`, which
   contains no multiply and no add.
 - **The bias gradient also needs no new arithmetic**, which was not the
   expected answer. It is a v1 `OP_NN` GEMM against a vector of ones.
@@ -41,7 +41,7 @@ The short answer, before the detail.
 | forward `mojolearn.identical.gemm.fp32.v1` | CLOSED on three vendors, IDENTITY_PATHS row 40, leg 11 at `144aa5b`, 60 card stages bit identical Apple M4 / NVIDIA H100 / AMD MI325X, and holding on a fourth part, an NVIDIA RTX 4090 (Ada sm_89, a different architecture from the H100's Hopper sm_90) |
 | the backward routing table (section 2) | derived here, coded in `gemm_backward.mojo`, **UNGATED** |
 | the bias gradient as a v1 GEMM (section 3.3) | derived here, coded, **UNGATED** |
-| the gates of section 5, G1 to G9 | **WRITTEN AND NEVER RUN**, `gemm/original/gemm_backward_check.mojo`, 2026-08-25. Never compiled, no device call, and every predicted count in it is on paper |
+| the gates of section 5, G1 to G9 | **WRITTEN AND NEVER RUN**, `gemm/checks/gemm_backward_check.mojo`, 2026-08-25. Never compiled, no device call, and every predicted count in it is on paper |
 | the backward identity card (G9) | written, emitted from the check file rather than from a new `bench/` driver, **NEVER RUN**. No card exists on any vendor |
 | the three-vendor leg (G10) | NOT STARTED |
 | everything else identical training needs (section 4) | enumerated here, mostly NOT BUILT |
@@ -388,7 +388,7 @@ their outputs.
 | T2 | bias gradient | yes, a reduction | PIN as a v1 GEMM (3.3) | `gemm_backward.mojo`, ungated |
 | T3 | loss reduction (mean over tokens) | yes, a fold plus a division | PIN as a v1 GEMM against ones, then `identical_div` | `identical_div` exists, DEVIATION 740, row 49; the composition does not |
 | T4 | loss elementwise part (cross entropy) | the log-softmax max reduction, and `exp`/`log` | PIN | `identical_exp` / `identical_log` exist (row 12); the row max has row 13's signed-zero hazard and no pinned form here |
-| T5 | activation backward | elementwise, no fold | PIN per activation | SiLU and sigmoid derivatives expressible from `portable_sigmoidf` (rows 52, 53). **GELU is PIN, not REFUSE.** This row said `original/numerics.mojo` "has no `portable_erff` and no `portable_tanhf`" until 2026-08-25; BOTH EXIST and are Cephes ports, `portable_tanhf:1465` and `portable_erff:1672`, with `portable_gelu_erf:1722`, `portable_gelu_tanh:1778`, `identical_erf:2009`, `identical_gelu_erf:2023` and `identical_gelu_tanh:2039`, DEVIATIONS 820-825. They landed the same day this plan was written |
+| T5 | activation backward | elementwise, no fold | PIN per activation | SiLU and sigmoid derivatives expressible from `portable_sigmoidf` (rows 52, 53). **GELU is PIN, not REFUSE.** This row said `checks/numerics.mojo` "has no `portable_erff` and no `portable_tanhf`" until 2026-08-25; BOTH EXIST and are Cephes ports, `portable_tanhf:1465` and `portable_erff:1672`, with `portable_gelu_erf:1722`, `portable_gelu_tanh:1778`, `identical_erf:2009`, `identical_gelu_erf:2023` and `identical_gelu_tanh:2039`, DEVIATIONS 820-825. They landed the same day this plan was written |
 | T6 | norm backward (LayerNorm, RMSNorm) | yes, two folds over the feature axis | REPLACE | forward RMSNorm primitives exist (rows 50 to 54). The backward folds do not, and they must choose v1's tree or state their own |
 | T7 | softmax and attention backward | yes; every FlashAttention backward accumulates `dK`/`dV` across blocks with a float atomic | REFUSE for now | nothing. Charter boundary, and the atomic makes it a REPLACE when it is taken up |
 | T8 | RNG for init, dropout masks, shuffling | a stream position is an order | PIN, counter based | **`core/philox.mojo` exists and is gated against RAFT's own compiled oracle at six separable layers.** Directly reusable |
@@ -509,7 +509,7 @@ few operations it performs.
 
 ## 5. The gates and the sabotages
 
-**WRITTEN 2026-08-25 AND NEVER RUN.** `gemm/original/gemm_backward_check.mojo`
+**WRITTEN 2026-08-25 AND NEVER RUN.** `gemm/checks/gemm_backward_check.mojo`
 is the file. It has never been compiled, no device has executed a backward
 call, and every number below is a PREDICTION derived on paper. The point of
 writing the predictions down before the run is that a disagreement is then a
@@ -972,7 +972,7 @@ Numbers 850 to 859 are this lane's.
 
 | number | what | state |
 |---|---|---|
-| 850 | the backward routing table as a pure host function with two producers, and the six calls | SPENT, `gemm/original/gemm_backward.mojo` |
+| 850 | the backward routing table as a pure host function with two producers, and the six calls | SPENT, `gemm/checks/gemm_backward.mojo` |
 | 851 | the bias gradient spelled as a v1 `OP_NN` GEMM against a ones vector, rather than as a new pinned reduction, and the decision that `pinned_block_sum` is not reusable | SPENT, same file |
 | 852 | the asynchronous caller-owned-workspace backward launchers and their sizing helpers | SPENT, same file |
 | 853 | the host routing and correctness gates, G1 and G2, and the bilinear exact-derivative fixture | RESERVED, phase B |

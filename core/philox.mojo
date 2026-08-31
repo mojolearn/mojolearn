@@ -4,8 +4,8 @@
 every tree in the forest is trained on.
 
 NO CUML FILE MIRRORS THIS. It is RAFT -- `cpp/include/raft/random/` -- which
-this tree does not mirror file for file, the same way `ensemble/original/
-shuffle_iterator.mojo` holds CCCL and `cluster/original/` holds ported RAFT
+this tree does not mirror file for file, the same way `ensemble/checks/
+shuffle_iterator.mojo` holds CCCL and `cluster/checks/` holds ported RAFT
 primitives rather than a RAFT directory. RAFT is Apache-2.0, so it is a PORT
 target and not a substitution target, and every construct below cites the
 header and line it was transcribed from.
@@ -175,9 +175,9 @@ repository found, at the moment of writing:
 
   * 181 -- `ensemble/randomforest.mojo:1241`, the unported weighted /
     zero-weight `RowSampler` arms;
-  * 182 -- `extratrees/derived/decisiontree/batched_levelalgo/builder.mojo:732`
+  * 182 -- `extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:732`
     and `:990`, scored cells into reduction candidates;
-  * 183 -- `extratrees/original/device_tree_check.mojo:265`, the device's
+  * 183 -- `extratrees/checks/device_tree_check.mojo:265`, the device's
     missing `min_impurity_decrease` gate. THIS ONE APPEARED DURING THIS
     LANE'S OWN SESSION: a grep at the start of the work showed 183 free, and a
     grep before writing this paragraph showed it taken, by a lane running

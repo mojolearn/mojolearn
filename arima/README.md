@@ -351,14 +351,14 @@ statement they described. None changed a finding; a citation that lands on
 
 ## What is here
 
-    cuml/cpp/include/cuml/tsa/arima_common.h      -> arima/derived/tsa/arima_common.mojo
+    cuml/cpp/include/cuml/tsa/arima_common.h      -> arima/impl/tsa/arima_common.mojo
     cuml/cpp/src_prims/timeSeries/jones_transform.cuh
-                                                  -> arima/derived/timeSeries/jones_transform.mojo
+                                                  -> arima/impl/timeSeries/jones_transform.mojo
     cuml/cpp/src_prims/timeSeries/arima_helpers.cuh
-                                                  -> arima/derived/timeSeries/arima_helpers.mojo
-    cuml/cpp/src_prims/linalg/batched/matrix.cuh  -> arima/derived/linalg/batched/matrix.mojo  (the r <= 5 Lyapunov path only)
-    cuml/cpp/src/arima/batched_kalman.cu          -> arima/derived/arima/batched_kalman.mojo
-    cuml/cpp/src/arima/batched_arima.cu           -> arima/derived/arima/batched_arima.mojo
+                                                  -> arima/impl/timeSeries/arima_helpers.mojo
+    cuml/cpp/src_prims/linalg/batched/matrix.cuh  -> arima/impl/linalg/batched/matrix.mojo  (the r <= 5 Lyapunov path only)
+    cuml/cpp/src/arima/batched_kalman.cu          -> arima/impl/arima/batched_kalman.mojo
+    cuml/cpp/src/arima/batched_arima.cu           -> arima/impl/arima/batched_arima.mojo
 
 `arima/DERIVATION_MAP.tsv` pins the commit (cuML 265b9da6, v26.08.00) and says
 per file what is transliterated and what is partial. `arima/NOT_IMPLEMENTED.tsv`
@@ -369,8 +369,8 @@ list, every row of it still unrun.
 
 ## Commands
 
-    tools/with_build_lock.sh     pixi run mojo run -I . arima/original/arima_check.mojo
-    tools/with_identical_mode.sh pixi run mojo run -I . arima/original/arima_check.mojo
+    tools/with_build_lock.sh     pixi run mojo run -I . arima/checks/arima_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -I . arima/checks/arima_check.mojo
     tools/with_identical_mode.sh pixi run mojo run -I . arima/arima_main.mojo
     MOJOLEARN_IDENTITY_TRACE=/tmp/arima.card tools/with_identical_mode.sh \
         pixi run mojo run -I . arima/arima_main.mojo
@@ -383,7 +383,7 @@ line to land is under HAND-OFF.
 
 ## DEVIATION 670: their `double` is our Float32 on the device
 
-Stated once in `arima/derived/tsa/arima_common.mojo` and carried by every
+Stated once in `arima/impl/tsa/arima_common.mojo` and carried by every
 file in `arima/` and `tsa/`.
 
 THEIRS. Every ARIMA kernel is instantiated on `double` only, and
@@ -516,11 +516,11 @@ and the optimizer is NOT PORTED. So:
 
   A. ACCEPT and document. Costs nothing. Keeps every recorded card valid.
   B. Fix the atanh half with `identical_log1p`, which ALREADY EXISTS
-     (`original/numerics.mojo`, row 51's seam): `2*atanh(v) =
+     (`checks/numerics.mojo`, row 51's seam): `2*atanh(v) =
      log1p(2v/(1-v))` removes that cancellation entirely. Available today,
      no new primitive.
   C. Fix the tanh half with `expm1`: `tanh(x/2) = expm1(x)/(expm1(x)+2)`.
-     `identical_expm1` DOES NOT EXIST and `original/numerics.mojo` is not
+     `identical_expm1` DOES NOT EXIST and `checks/numerics.mojo` is not
      this lane's file, so this is a HAND-OFF to the numerics lane, not
      something that can be done here.
   D. Refuse small `|x|`. Not sensible: small coefficients are the normal
@@ -574,7 +574,7 @@ exactly where theirs does.
 
 ## THE RUNG 0 AUDIT: are we mirroring or reinventing?
 
-Mirroring. Every kernel in `arima/derived/` follows cuML branch for branch
+Mirroring. Every kernel in `arima/impl/` follows cuML branch for branch
 and loop for loop, and the divergences are the numbered ones above plus the
 spelling collapses recorded below. What the symbol-by-symbol read found was
 not reinvention; it was four defects and about thirty wrong citations.
@@ -684,7 +684,7 @@ reinvention.
 
 ## The gates, written and unrun
 
-`arima/original/arima_check.mojo`, fourteen of them. Each is listed in the
+`arima/checks/arima_check.mojo`, fourteen of them. Each is listed in the
 file's header with what it covers. The ones that carry the most weight:
 
     check_jones_device_equals_oracle    p = 1..4, AR and MA, forward and
@@ -716,7 +716,7 @@ loop runs zero times and a gate that never enters it proves nothing.
 
 ### pixi task line (I do not own `pixi.toml`)
 
-    check-arima = "mojo run -I . arima/original/arima_check.mojo"
+    check-arima = "mojo run -I . arima/checks/arima_check.mojo"
     arima-card  = "mojo run -I . arima/arima_main.mojo"
 
 ### IDENTITY_PATHS row 58 (I do not own `IDENTITY_PATHS.md`)
@@ -829,7 +829,7 @@ build; the rest still need someone to write them.
     (`arma11_k`, `arima111`): sabotage (b) moved nothing there. `arma44` may
     now cover it; check when (b) is re-run.
 12. **Hand-off: `identical_expm1`** to whoever owns
-    `original/numerics.mojo`, needed only if item 5's measurement says
+    `checks/numerics.mojo`, needed only if item 5's measurement says
     DEVIATION 675's tanh half matters. And `identical_log1p` for the atanh
     half the day the optimizer is ported, not before: that half is off the
     ported path today.

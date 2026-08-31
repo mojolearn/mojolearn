@@ -100,7 +100,7 @@ stat columns for one bin are adjacent (LightGBM's interleaved-pair layout,
 `cuda_histogram_constructor.cu:31-67`).
 
 OVERFLOW GUARD, stated once: `fixed_scale` satisfies
-`original/fixed_point.choose_scale`'s bound -- the FULL-plane sum of
+`checks/fixed_point.choose_scale`'s bound -- the FULL-plane sum of
 magnitudes maps under 2^30 - 1 with the dither's +1/row allowance exact --
 and every cell here (shared: one block's rows; global: one leaf's rows) is
 a partial sum over a SUBSET of all rows, so no Int32 cell can wrap at any
@@ -118,11 +118,11 @@ from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     hist2_dither,
     hist2_quantize,
 )
-from original.kernel_matrix import (
+from checks.kernel_matrix import (
     TARGET_COLUMN,
     quantized_hist_group_features_for,
 )
-from original.numerics import ftz
+from checks.numerics import ftz
 
 comptime QH_BLOCK = 512
 comptime QH_BINS = 256

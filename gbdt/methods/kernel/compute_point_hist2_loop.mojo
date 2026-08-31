@@ -19,7 +19,7 @@ histogram because a fix landed in one copy and not the other. The stated
 reason was that Mojo could not pass a shared-memory pointer across a function
 boundary.
 
-That was false, and `original/shared_pointer_probe.mojo` measures it: the
+That was false, and `checks/shared_pointer_probe.mojo` measures it: the
 callee simply has to take the origin as a PARAMETER rather than assert
 `MutAnyOrigin`, which is a different origin and not a wildcard. So this
 family is written CatBoost's way from the first line -- one loop, one
@@ -68,7 +68,7 @@ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.gpu.intrinsics import ldg
 from max.gpu.sync import barrier
 
-from original.kernel_matrix import (
+from checks.kernel_matrix import (
     TARGET_COLUMN,
     requires_uniform_iteration_for,
 )
@@ -215,7 +215,7 @@ def _peel[
     IT. When `compute_histogram`'s body was converged, these peel loops were
     left as theirs -- they looked like peels, not like body loops. At
     `BLOCK_SIZE = 256` and `span = 128`, exactly half the block enters, and
-    `original/pointwise_hist2_5bit_check.mojo` came back with 115 wrong
+    `checks/pointwise_hist2_5bit_check.mojo` came back with 115 wrong
     cells for the `uint2` form and 73 for `uint4` while the scalar forms
     were exact -- points silently missing, totals low.
 

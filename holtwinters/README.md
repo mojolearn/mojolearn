@@ -6,7 +6,7 @@ DEVIATIONS 660-665 and 697-698. COPY, DO NOT IMPROVE.
 
 Read this before trusting anything below.
 
-* The gate `original/hw_check.mojo` was built and run on one Apple M4 on
+* The gate `checks/hw_check.mojo` was built and run on one Apple M4 on
   2026-08-23 and printed `ALL OK` under IDENTICAL and under FAST.
 * **No second vendor has run this.** Every cross-vendor claim here is a
   claim about what the spelling is designed to guarantee, not a
@@ -74,14 +74,14 @@ the PINNED tree and was recomputed by brace-matching on 2026-08-23.
 
 ## What is here
 
-    cuml/cpp/include/cuml/tsa/holtwinters_params.h -> derived/tsa/holtwinters_params.mojo
-    cuml/cpp/src/holtwinters/internal/hw_utils.cuh -> derived/holtwinters/internal/hw_utils.mojo
-    cuml/cpp/src/holtwinters/internal/hw_eval.cuh  -> derived/holtwinters/internal/hw_eval.mojo
+    cuml/cpp/include/cuml/tsa/holtwinters_params.h -> impl/tsa/holtwinters_params.mojo
+    cuml/cpp/src/holtwinters/internal/hw_utils.cuh -> impl/holtwinters/internal/hw_utils.mojo
+    cuml/cpp/src/holtwinters/internal/hw_eval.cuh  -> impl/holtwinters/internal/hw_eval.mojo
     cuml/cpp/src/holtwinters/internal/hw_decompose.cuh -> .../hw_decompose.mojo
     cuml/cpp/src/holtwinters/internal/hw_forecast.cuh  -> .../hw_forecast.mojo
     cuml/cpp/src/holtwinters/internal/hw_optim.cuh     -> .../hw_optim.mojo
-    cuml/cpp/src/holtwinters/runner.cuh            -> derived/holtwinters/runner.mojo
-    cuml/cpp/src/holtwinters/holtwinters.cu        -> derived/holtwinters/holtwinters.mojo
+    cuml/cpp/src/holtwinters/runner.cuh            -> impl/holtwinters/runner.mojo
+    cuml/cpp/src/holtwinters/holtwinters.cu        -> impl/holtwinters/holtwinters.mojo
 
 `DERIVATION_MAP.tsv` says per file what is transliterated and what is partial.
 `NOT_IMPLEMENTED.tsv` has nineteen rows and is meant to be complete, not short.
@@ -90,12 +90,12 @@ Float64.
 
 ## Commands
 
-    tools/with_build_lock.sh     pixi run mojo run -I . holtwinters/original/hw_check.mojo
-    tools/with_identical_mode.sh pixi run mojo run -I . holtwinters/original/hw_check.mojo
+    tools/with_build_lock.sh     pixi run mojo run -I . holtwinters/checks/hw_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -I . holtwinters/checks/hw_check.mojo
 
 A sabotage arm is a build define and edits nothing:
 
-    tools/with_identical_mode.sh pixi run mojo run -D MOJOLEARN_HW_SABOTAGE_SWAP_FMA=1 -I . holtwinters/original/hw_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -D MOJOLEARN_HW_SABOTAGE_SWAP_FMA=1 -I . holtwinters/checks/hw_check.mojo
 
 No pixi task is registered (`pixi.toml` is not this lane's). The task line
 to land is under HAND-OFF.
@@ -382,7 +382,7 @@ is expected to change a criterion or a decision.
 **pixi task lines** (I do not own `pixi.toml`; land these next to
 `check-metrics-*`):
 
-    check-holtwinters = "mojo run -I . holtwinters/original/hw_check.mojo"
+    check-holtwinters = "mojo run -I . holtwinters/checks/hw_check.mojo"
 
 **IDENTITY_PATHS row text** (I do not own `IDENTITY_PATHS.md`; the row
 number is the orchestrator's to assign):

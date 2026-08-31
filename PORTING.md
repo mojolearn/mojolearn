@@ -66,7 +66,7 @@ correction is re-derived in `VENDOR_LIBRARIES.md` and is NOT yet done:
 dispatch prefers it for every k a k-NN user asks for.
 
 **Metal's missing float `atomicAdd` is a HARDWARE limit and is untouched by
-this.** `original/fixed_point.mojo` and its overflow proof stand.
+this.** `checks/fixed_point.mojo` and its overflow proof stand.
 
 ## 3. `float` accumulation, not fixed point -- NOW PER COLUMN
 
@@ -131,7 +131,7 @@ add at all, that the instruction does not exist, and that the port therefore
 could not be literal here on our primary target.
 
 **That was false, and it was the load-bearing claim under
-`original/fixed_point.mojo`.** Probed 2026-08-19 on the M4: 1024 threads
+`checks/fixed_point.mojo`.** Probed 2026-08-19 on the M4: 1024 threads
 each adding 1.0 through `Atomic.fetch_add` return exactly 1024.0. The
 instruction is there. Nothing forced the substitution.
 
@@ -279,7 +279,7 @@ and it compiles and runs:
         smem: MutPointer[Float32, origin, address_space = AddressSpace.SHARED]
     )
 
-Measured, not argued: `original/shared_pointer_probe.mojo` allocates a
+Measured, not argued: `checks/shared_pointer_probe.mojo` allocates a
 threadgroup buffer, accumulates into it through exactly such a callee, and
 reads back the 64 expected values. `pixi run check-shared-pointer`.
 
@@ -366,7 +366,7 @@ That was OUR artifact, not their design, and `HOST_AND_DEVICE.md` is explicit
 that a wait we have and they do not is a fidelity defect rather than an
 optimization opportunity. So it is fixed:
 
-- `original/reduce_by_key.mojo::finish_sum_kernel` folds the block partials
+- `checks/reduce_by_key.mojo::finish_sum_kernel` folds the block partials
   into a device scalar, so no sum reaches the host.
 - `detail/kmeans_common.mojo::check_convergence_kernel` is their
   `check_convergence` as the device function it is in their source, advancing
@@ -386,7 +386,7 @@ to draw its candidates, ONCE PER ACCEPTED CENTROID, which is O(rows) host
 traffic and breaks `HOST_AND_DEVICE.md`'s first rule outright. cuVS draws on
 device (`raft::random::discrete`, `detail/kmeans.cuh:187`), so again this was
 ours and not theirs. It is now a two-level device search in
-`original/plus_plus.mojo`: contiguous chunk sums, pick the chunk over at
+`checks/plus_plus.mojo`: contiguous chunk sums, pick the chunk over at
 most 256 totals, then scan inside that chunk, plus a one-launch
 `gather_rows_kernel` where there used to be one copy per trial.
 
@@ -402,7 +402,7 @@ remaining device-to-host read is one flag, one scalar, or `n_trials` floats.
 
 `detail/kmeans.cuh:196-215` writes an `n_trials x n_samples` matrix with
 `matrix_vector_op(min_op)` and then reduces it with `reduce<ALONG_ROWS>`.
-`cluster/original/plus_plus.mojo` does both in one kernel and never
+`cluster/checks/plus_plus.mojo` does both in one kernel and never
 materializes the matrix.
 
 Arithmetically identical, and still a deviation, because it changes the
@@ -427,14 +427,14 @@ oracle itself before any tolerance is chosen.
 ## 18. cuBLAS is not a file we can read
 
 `cublasGemmEx` (`unfused_distance_nn.cuh:205`) is closed source, so
-`cluster/original/gemm.mojo` is a plain tiled product and is not pretending
+`cluster/checks/gemm.mojo` is a plain tiled product and is not pretending
 to be a port.
 
 **Their call carries the most interesting finding in the cuVS source**, and it
 is a fact about their numerics rather than about our port: for `float` input
 the compute type is `CUBLAS_COMPUTE_32F_FAST_TF32`, ten mantissa bits. cuVS's
 shipped float32 k-means does not compute float32 distances on NVIDIA. See
-`cluster/original/gemm.mojo` and the `bitwise-gbdt` tree.
+`cluster/checks/gemm.mojo` and the `bitwise-gbdt` tree.
 
 # Deviations and hazards in the `neighbors/` section (cuVS + RAFT)
 
@@ -987,7 +987,7 @@ False at every shape) run the shipped `stable=true` path verbatim: center,
 `linalg.matmul` via transpose, restore.
 
 Bit-identity is proven by `check_gram_centered_fused`
-(`original/gram_splitk_check.mojo`), not argued: the shipped pipeline
+(`checks/gram_splitk_check.mojo`), not argued: the shipped pipeline
 (`column_mean_kernel` -> `shift_columns_kernel(-1)` -> `gemm_tn_splitk`)
 against the fused arm on the same device mu and hashed, offset-mean data,
 every cell compared with `!=` -- the fused tile load performs the identical
@@ -995,7 +995,7 @@ fp32 subtraction the center pass stores (`x + (-1.0) * mu` is bitwise
 `x - mu`), and products of bit-identical fp32 inputs in the same order are
 bit-identical. The same check asserts X is bit-identical after the fused
 call, and `check_covariance_fused_and_fallback_restore`
-(`decomposition/original/pca_check.mojo`) holds the wired arm to it while
+(`decomposition/checks/pca_check.mojo`) holds the wired arm to it while
 proving the fallback arm's center + restore pair still runs by sentinel
 (center must MOVE x when the restore is withheld). The fusion is OPT-IN:
 `gemm_tn` never dispatches to the centered entry, so OLS and tSVD are
@@ -1022,7 +1022,7 @@ path -- took assignment from 63 to 21 ms/iter (re-verdict 2026-08-20,
 commit ef0c4ba), while the faithful-scalar accumulate sat at 54 ms/iter =
 ~9.5 GB/s effective on a ~120 GB/s device at 4M x 32 float32. So the
 privatized centroid-sum kernel
-(`cluster/original/reduce_by_key.mojo::accumulate_centroid_sums_
+(`cluster/checks/reduce_by_key.mojo::accumulate_centroid_sums_
 privatized_kernel`) now takes a comptime `veclen` and reads X as
 `SIMD[float32, veclen]`, one chunk of `veclen` consecutive cells per
 thread step -- a DELIBERATE DEVIATION BEYOND upstream, priced here, not a
@@ -1069,7 +1069,7 @@ counter-based device generator whose stream nothing in Mojo reproduces
 (deviation 17 already prices the host-side half of the RNG story). Two
 constraints pin the replacement: `HOST_AND_DEVICE.md` forbids the host
 manufacturing O(rows) randomness, and validation needs the draw to be a pure
-function of (seed, index). `cluster/original/scalable_init.mojo::
+function of (seed, index). `cluster/checks/scalable_init.mojo::
 scalable_uniform` is splitmix64 -- the same finalizer `HostRng` uses, short
 enough to audit -- as a counter hash of `(round_seed, sample_index)`, with
 the host contributing ONE 64-bit seed per round. Same mechanism class as
@@ -1326,7 +1326,7 @@ UNWIRED.md carries the entry until the line lands. The
 reached by no benchmark, and the same number on a fit with no test pool.
 
 `THistoryBasedCtrCalcer` (no suffix) is likewise kept, as the reference
-`original/ctr_device_check.mojo` compares the device calcer against cell by
+`checks/ctr_device_check.mojo` compares the device calcer against cell by
 cell. A host reference used to CHECK a device answer is not a CPU path
 (`PORTING_RULES.md` 0b-ii).
 
@@ -1341,7 +1341,7 @@ Two consequences that were stated here in advance and both held:
   distinction earned its keep: under the skip-the-sort sabotage the run
   prints both, and under an off-by-one bit count it prints 60 descending
   steps at k=17 against 2003 wrong index words.
-* `original/ctr_check.mojo` gating the host arithmetic against planted
+* `checks/ctr_check.mojo` gating the host arithmetic against planted
   counts and an independent O(n^2) tally is what gave the device version a
   reference to match rather than a claim to inherit.
 
@@ -1395,7 +1395,7 @@ another) and the first index wins as theirs does.
 **The one-line fix is `@no_inline` on `_penalty_min_entropy`, and this lane
 does not own that file.** Reported rather than applied. Four of the fifteen
 cases in `bench/ctr_target_oracle.txt` diverge by exactly one adjacent,
-equally optimal cut; `original/ctr_check.mojo` names them, still requires
+equally optimal cut; `checks/ctr_check.mojo` names them, still requires
 the divergence to be exactly one ADJACENT border, and FAILS if one of them
 ever matches exactly, so the allowance is deleted when the fix lands rather
 than left standing.
@@ -1449,7 +1449,7 @@ register: no warp width assumed, no wavefront primitive, no shared memory,
 no atomic beyond the one the file already had. Nothing about it is vendor
 specific.
 
-REACH IS PROVED, not asserted. `original/ctr_apply_check.mojo` flips every
+REACH IS PROVED, not asserted. `checks/ctr_apply_check.mojo` flips every
 one-hot split's type to `TakeGreater` in a LOADED model and re-runs the
 evaluator, which has no layout to cross-check against: 405 of 512
 predictions move. A no-op arm would have been bit-identical and green.
@@ -1586,7 +1586,7 @@ has, which may be sorted by target.
 
 MEASURED, on a 4001-row target-sorted fixture with a category that carries
 no information about the target
-(`original/ctr_device_check.mojo` section 3):
+(`checks/ctr_device_check.mojo` section 3):
 
     leak = mean(ctr | target bin 1) - mean(ctr | target bin 0)
 
@@ -1628,7 +1628,7 @@ at two target classes is 510 ints stored three times instead of once,
 What it does NOT cost: work. `build_ctr_tables` computes the histogram
 ONCE per categorical feature and hands the same `List[Int]` to every
 `Borders` config; only the prior differs, and only inside `Calc`. That is
-their decomposition, and `original/ctr_apply_check.mojo` asserts the
+their decomposition, and `checks/ctr_apply_check.mojo` asserts the
 three tables are bit-identical blobs producing three different columns,
 because a build that recomputed the histogram per prior would be doing
 three passes for one answer and nothing about the ANSWER would say so.
@@ -1654,7 +1654,7 @@ exercised by name (`PORTING_RULES.md` 8).
 Worth writing down beside the deviation because it looks like one and is
 not. `FeatureFreq` is permutation-independent (`ctr_type.cpp:44-58`), so
 the apply-time table reproduces the learn column bit for bit and
-`original/ctr_train_check.mojo` gates exactly that. `Borders` has no such
+`checks/ctr_train_check.mojo` gates exactly that. `Borders` has no such
 identity in CatBoost either: the column a fit trains on is the ORDERED
 statistic over the estimation permutation, and the column an applied model
 carries is the FULL-LEARN-SET histogram their `CalcFinalCtrsImpl` builds
@@ -1713,7 +1713,7 @@ getting ready as growing.
 single-stream port needs. `fit` holds a `List[TTreeWorkspace]` across the
 boosting loop; a tree reuses the planes when they are large enough and
 rebuilds them when they are not. An EMPTY list means no pool and restores
-allocate-per-call exactly, which is what the `original/` callers pass.
+allocate-per-call exactly, which is what the `checks/` callers pass.
 
 The `FillBuffer` semantics of `CreateInitialSubsets` are unchanged: both
 pooled planes are still memset at tree start, because a pooled plane
@@ -2252,7 +2252,7 @@ magnitude, rather than one sum per plane.
 WHY IT IS VALID FOR EVERY PLANE: for any class `k`,
 `sum_rows |der_k| <= sum_rows max_j |der_j|`, so the bound holds for all
 planes at once and overflow stays impossible -- which is the only property
-`original/fixed_point.mojo` requires of it.
+`checks/fixed_point.mojo` requires of it.
 
 WHY IT IS ONE NUMBER: `choose_scale` takes ONE scale for the whole
 histogram, and `greedy_search_helper` already maxes the weight and gradient
@@ -2262,7 +2262,7 @@ max anyway.
 WHAT IT COSTS, **MEASURED 2026-08-21** rather than bounded. The bound is
 `sum_rows max_k |der_k|`; the tightest valid per-plane bound is
 `max_k sum_rows |der_k|`. Their ratio IS the resolution given up, and
-`original/multilogit_check.mojo` prints it on every run. On 2,053 hashed
+`checks/multilogit_check.mojo` prints it on every run. On 2,053 hashed
 rows:
 
     numClasses  2    1.0000x     worst case 1x    0.00 bits
@@ -2278,7 +2278,7 @@ plane the max over planes IS that plane.
 lanes where the deterministic fold is comptime-fixed at two, and it would
 buy back under two bits of a twenty-bit margin.
 
-`original/multilogit_check.mojo` verifies the bound actually bounds: every
+`checks/multilogit_check.mojo` verifies the bound actually bounds: every
 class plane's own sum of absolute values is checked against the reported
 magnitude, at 2, 3 and 7 classes.
 
@@ -2501,7 +2501,7 @@ arithmetic is `CrossEntropyImpl`'s term for term, so reusing that kernel is
 tempting -- and would be wrong: their `ClipProb`
 (`cuda_util/kernel/kernel_helpers.cuh:228-230`) clamps the probability at
 **1e-7**, where `CrossEntropyImpl`'s inline clamp is **1e-40**
-(`pointwise_targets.cu:354`). `original/multilogit_check.mojo` gates both
+(`pointwise_targets.cu:354`). `checks/multilogit_check.mojo` gates both
 halves of that: the two kernels must AGREE per plane on a fixture inside
 +-6 where neither clamp bites, and must DISAGREE at an approx of -40, where
 they read 1.0e-7 and 4.2e-18 -- ten orders of magnitude, which is the clamp
@@ -2544,7 +2544,7 @@ their own data-dependent rule (`:106-108`), so the default path is
 bit-identical to theirs and nothing that does not name the option can hit
 this.
 
-`original/overfitting_detector_check.mojo` gate 5 pins the refusal, beside
+`checks/overfitting_detector_check.mojo` gate 5 pins the refusal, beside
 the same gate for `od_type` without an eval set, which this port already
 refused for the same reason.
 
@@ -2937,13 +2937,13 @@ OBSERVED:
 **The gate written to catch a divergent barrier cannot catch one, because a
 divergent barrier does not fail on this device.**
 
-`original/pointwise_loop_check.mojo` L6 runs the whole sweep through an
+`checks/pointwise_loop_check.mojo` L6 runs the whole sweep through an
 accumulator that barriers inside `add_point`. Reverting `compute_histogram_2`
 to CatBoost's per-thread count -- which genuinely diverges, 8 iterations on
 the thread at `i == 0` against 7 at `i == 254` -- leaves **all 160 cases
 exact**.
 
-`original/divergent_barrier_probe.mojo` then tested it directly, at item
+`checks/divergent_barrier_probe.mojo` then tested it directly, at item
 11's own shape: a 512-thread block, a barrier inside a loop whose count is
 `(n - tid + block - 1) / block`, so warp 0 runs one iteration and warps 1-15
 run zero. All 512 slots correct, at n = 64, 100, 511, 512, 513, 1000, 2000.
@@ -3020,10 +3020,10 @@ data.
 ### The rule this leaves behind, and it is not the one drafted first
 
 **Gate a kernel against a REAL accumulator, not a convenient one.**
-`original/pointwise_loop_check.mojo` gives every thread a private tally, so
+`checks/pointwise_loop_check.mojo` gives every thread a private tally, so
 it measures coverage, and coverage was correct in both the broken and the
 fixed version -- all 160 cases, all six gates, at block 128 AND at block 256.
-It could not have found this. `original/pointwise_hist2_5bit_check.mojo`
+It could not have found this. `checks/pointwise_hist2_5bit_check.mojo`
 found it on its first run, because eight of its threads share a slot and the
 barrier is what keeps them apart.
 
@@ -3087,7 +3087,7 @@ ignore the argument.
 
 COSTS quantization error, which the dither makes zero-mean and
 O(sqrt(rows)) rather than O(rows). Measured in
-`original/pointwise_hist2_8bit_check.mojo` B3: signed error **-0.0105 per
+`checks/pointwise_hist2_8bit_check.mojo` B3: signed error **-0.0105 per
 row-stat** over 28,000 of them, and 680 of 1,224 non-exact cells erring
 negative. Truncation, sabotaged in, gives **1,224 of 1,224 negative**.
 
@@ -3160,7 +3160,7 @@ already `raises`, and a library that kills the process instead of returning an
 error cannot be gated. Both are unreachable by construction --
 `EstimateBlockPerFeatureMultiplier` only doubles from 1 and is clamped to 64,
 so it is always a power of two in [1, 64]; `histCount` is 2 at the only
-caller. `original/pointwise_dispatch_check.mojo` F7 sweeps 245
+caller. `checks/pointwise_dispatch_check.mojo` F7 sweeps 245
 configurations, finds 12 that return 128 BEFORE the clamp, and asserts every
 clamped value is one of the seven -- so the clamp is live and the raise is not.
 
@@ -3370,7 +3370,7 @@ same place.
    under COPY-DO-NOT-IMPROVE), and it is already the GATED CONTRACT of two
    layers that landed first -- `kernel/split_properties_helpers.mojo:193,196`
    and `kernel/pointwise_hist2_one_byte_templ.mojo:291-292`, with
-   `original/pointwise_dispatch_check.mojo` green on 3,686 and 12,360 cells.
+   `checks/pointwise_dispatch_check.mojo` green on 3,686 and 12,360 cells.
    **Cost, named:** the offsets kernel is PORTED, not reused. In a
    parallel-array layout `TPartitionOffsetWriter::Write` and
    `TVecOffsetWriter::Write` collapse to one store; interleaved they do not,
@@ -3404,7 +3404,7 @@ Two adapters exist for this and are labelled not-a-port:
 contract), and `pack_partition_stats_kernel` widens stride 2 to 3 and writes
 the Count arm. Both run at most `max_part_count` threads: 64 at depth 6.
 
-Gated per cell by `original/pointwise_subsets_check.mojo`, whose
+Gated per cell by `checks/pointwise_subsets_check.mojo`, whose
 `check_layout_contract` pins the record with `comptime assert` against
 literals taken from the call sites above -- because the first version of that
 check spelled the layout with this file's own constants, and a swap of
@@ -3657,7 +3657,7 @@ signal on features inside the first group of their policy. The wrong column
 was therefore never the one carrying the answer: the tree still grew, still
 matched the greedy searcher, and still drove the loss down.
 
-It was caught by `original/pointwise_default_probe.mojo` -- a TIMING probe
+It was caught by `checks/pointwise_default_probe.mojo` -- a TIMING probe
 -- because that probe asserts the two arms end at the same loss before it
 reports a ratio. The fixture it happened to use put the signal on the fifth
 one-byte feature.
@@ -4038,7 +4038,7 @@ Two independent blockers, both in their source:
 Their GPU arm has both. Their GPU arm cannot run on this machine
 (DEVIATION 109). So the honest description is: the ONE-HOT half of our
 categorical path is checked against CatBoost's own decisions, 21 of 21, and
-the CTR half is checked against everything else in `original/ctr_*` and
+the CTR half is checked against everything else in `checks/ctr_*` and
 against no CatBoost output at all. The CTR half is not oracle-covered, and
 DEVIATION 109's "their CPU arm is the comparison" does not repair that --
 this is the one place where their CPU arm is not merely slower than their
@@ -4107,7 +4107,7 @@ respect to inputs the product never passes, and the real constructor sits
 underneath, unexamined, for as long as its output is well-formed enough not
 to crash.
 
-`original/one_hot_flags_check.mojo` is the countermeasure for this one:
+`checks/one_hot_flags_check.mojo` is the countermeasure for this one:
 it hands `PolicyScoreHelper` a LAYOUT and reads back off the device what the
 constructor actually built.
 
@@ -4146,7 +4146,7 @@ the hash. `std::tie(FeatureId, BinIdx, SplitType)` orders `0x80000001` ABOVE
 `0x7fffffff`; read as `Int32` it orders below, which reverses the canonical
 form and therefore the hash and therefore the tree-CTR dataset cache key. So
 every field read in that file goes through `_as_u32`, and
-`original/feature_tensor_check.mojo` fixtures 41 and 42 exist to fail if
+`checks/feature_tensor_check.mojo` fixtures 41 and 42 exist to fail if
 one of those reads is ever dropped (sabotage: they turn gates 1, 2, 4 and 5
 red). Moving `TBinarySplit` to `UInt32` is the real fix and belongs to
 whoever next touches the model.
@@ -4603,7 +4603,7 @@ one bin are resolved -- and none of that changes a value. So 48 of 48 on
 that landed one width low would have been indistinguishable from one that
 did not.
 
-`original/onebyte_reach_check.mojo` is the observation
+`checks/onebyte_reach_check.mojo` is the observation
 (`pixi run check-onebyte-reach`). DEVIATION 115's rule decides what it may
 build: everything that DECIDES the dispatch comes from the product --
 `build_layout` assigns the policy, and `PolicyScoreHelper.__init__` builds
@@ -4651,7 +4651,7 @@ at the defaults. `ORACLE_FEATS` below 8 is refused rather than silently
 reshaped: the target is drawn from columns 0, 3 and 7, and a fixture whose
 target changed with its width would make every cell a different question.
 
-`original/oracle_sweep_main.mojo` (`pixi run oracle-sweep`) runs five depths
+`checks/oracle_sweep_main.mojo` (`pixi run oracle-sweep`) runs five depths
 (1, 2, 4, 6, 8) by three feature counts (8, 16, 32), both searchers.
 **Thirty cells, 1512 splits, ZERO disagreeing** in the stable state, losses
 matching CatBoost to 8-9 significant figures at every cell.
@@ -4735,8 +4735,8 @@ bit-identical in all ninety), and six FORCED COLD-RECOMPILE single-cell runs.
 WHAT IS ESTABLISHED ABOUT THE MECHANISM, and it is half an answer.
 
 `GLOBAL_NUMERIC_MODE = NUMERIC_FAST` is the shipping default
-(`original/numerics.mojo:74`). Under FAST on a column that HAS float atomics
--- Apple does -- `deterministic_flush_for` (`original/kernel_matrix.mojo:1003`)
+(`checks/numerics.mojo:74`). Under FAST on a column that HAS float atomics
+-- Apple does -- `deterministic_flush_for` (`checks/kernel_matrix.mojo:1003`)
 returns False and the GREEDY family's multi-block histogram flush takes
 CatBoost's float `atomicAdd` (`hist_half_byte.mojo:527-528`, same shape at
 `hist_binary.mojo:524` and `hist_2_one_byte_base.mojo:484-521`). The file says
@@ -5187,7 +5187,7 @@ cells are arbitrary integers.
 
 ### 136b. MEASURED, on this port's own kernels
 
-`original/sibling_tiebreak_check.mojo`, 2026-08-21, M4. Fixture: 4096 rows, a
+`checks/sibling_tiebreak_check.mojo`, 2026-08-21, M4. Fixture: 4096 rows, a
 full factorial of 8 binary columns over 256 cells x 16 replicate rows (so every
 binary split halves every leaf EXACTLY) plus 4 columns at 254 folds that are a
 function of the within-cell index alone, hence independent of every leaf those
@@ -5244,7 +5244,7 @@ an untested branch is right** -- the same lesson as 131, on a different branch.
 
 ### 136c. THE GATE, AND WHAT MOVES IT
 
-`original/sibling_tiebreak_check.mojo`. Four crafted sibling pairs, two of
+`checks/sibling_tiebreak_check.mojo`. Four crafted sibling pairs, two of
 them exact ties, through the SHIPPED `plan_level_kernel`, against their `:1318`
 rule worked by hand. The sabotage is `plan_level_inverted_kernel` in the same
 file: the pre-136 body verbatim, run on the same input, required to disagree on
@@ -5328,11 +5328,11 @@ from the entry point proves they read THE line.
 
 ## 140. LOGLOSS'S TEN NEWTON ITERATIONS: neither arm runs ten, and the two stop at different places
 
-**Found 2026-08-21 by `original/logloss_leaf_oracle_check.mojo`, the first
+**Found 2026-08-21 by `checks/logloss_leaf_oracle_check.mojo`, the first
 comparison of this port's leaf ESTIMATOR against CatBoost's own leaf values.**
 Until it existed, the ten-iteration Newton walker -- CatBoost's DEFAULT for
 Logloss (`private/libs/options/catboost_options.cpp:157-164`, then
-`:315-329`) -- had exactly one gate, `original/logloss_estimator_check.mojo`,
+`:315-329`) -- had exactly one gate, `checks/logloss_estimator_check.mojo`,
 which compares the device against a float64 host reimplementation written in
 the same file. That gate has teeth and it is not a comparison with CatBoost:
 if our reading of their walker were wrong, the reimplementation would encode
@@ -5617,7 +5617,7 @@ non-zero was wrong.
 
 ## 142. THE NOISE CANCELS ON THE GREEDY ARM, and three of the eight sabotages move nothing
 
-`original/random_strength_check.mojo`, `pixi run check-random-strength`.
+`checks/random_strength_check.mojo`, `pixi run check-random-strength`.
 Six gates, all driven through a real `fit`; nothing hands a kernel its
 inputs (PORTING.md 115).
 
@@ -5733,7 +5733,7 @@ discards the value; this port refuses it, because an option that reads as
 live and is not is worse than one absent.
 
 **AND IT GATES NOTHING TODAY.** `CatBoostOptions` is constructed by exactly
-one thing in this tree, `original/options_check.mojo`. No fit path
+one thing in this tree, `checks/options_check.mojo`. No fit path
 builds one. `gbdt/train.mojo` is where real callers arrive and it takes
 `random_strength` as a plain parameter with no validation of that pairing.
 Closing that is a `train()`-signature lane, not this one; it is named here
@@ -5745,7 +5745,7 @@ so the next reader does not mistake `check()` for a guard.
 `oblivious_tree_doc_parallel_structure_searcher.mojo:134` -- whose entry
 belongs to that lane; this one takes the next number after it.)
 
-`original/second_der_weights_check.mojo`, `pixi run
+`checks/second_der_weights_check.mojo`, `pixi run
 check-second-der-weights`.
 
 CatBoost decides what the histogram's WEIGHT plane holds FROM THE SCORE
@@ -5901,7 +5901,7 @@ question whose answer is a table.
 
 So the table is built once per fit, indexed by bin-feature. **It is filled BY
 `resolve_split`**, so it cannot disagree with the function it replaces --
-and `original/depthwise_check.mojo` claim 1 asserts that cell for cell
+and `checks/depthwise_check.mojo` claim 1 asserts that cell for cell
 anyway, because "cannot disagree by construction" is a sentence this
 repository has been wrong about before (`build_layout`'s two walks agreed only
 because every fixture happened to be binary-first).
@@ -6167,7 +6167,7 @@ on this fixture at either score function -- every leaf improves at every
 level, so "split every improving leaf" and "split the best leaf until the
 budget" close on the same full tree; they differ as soon as the budget
 binds (depth 6 vs 31 leaves) or `min_data_in_leaf` does.
-`original/grow_policy_check.mojo` is the gate (seven claims: the
+`checks/grow_policy_check.mojo` is the gate (seven claims: the
 three-way contrast, the shape, the knobs, train/predict consistency, the
 `ntree` round trip, five refusals, and a run-to-run control at the 8-bit
 histogram shape); `check-depthwise`, `check-lossguide`,

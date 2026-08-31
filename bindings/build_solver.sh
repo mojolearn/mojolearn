@@ -137,7 +137,7 @@ fi
 COLUMN_DEFINE=""
 # THE NUMERIC MODE IS A BUILD DEFINE, NOT A SOURCE FLIP (2026-08-23).
 # MOJOLEARN_NUMERIC_MODE=identical compiles with -D MOJOLEARN_NUMERIC_IDENTICAL=1
-# (original/numerics.mojo reads it through is_defined) and lands the binary
+# (checks/numerics.mojo reads it through is_defined) and lands the binary
 # under python/mojolearn/identical/, where python/mojolearn/_backend.py picks
 # it up when MOJOLEARN_NUMERIC_MODE=identical is set at import.
 #
@@ -195,8 +195,8 @@ pixi run mojo build --emit shared-lib \
 
 # `_gpu_shared_mem` is a prefix the compiler puts on the blob symbol; it is
 # not part of the Metal function name. The blob name carries the DEFINING
-# module's path with `/` and `.` flattened to `_`, so `solver/derived/solver/
-# cd.mojo`'s kernels begin `solver` and `hierarchy/derived/...`'s begin
+# module's path with `/` and `.` flattened to `_`, so `solver/impl/solver/
+# cd.mojo`'s kernels begin `solver` and `hierarchy/impl/...`'s begin
 # `hierarchy`.
 air_blobs() {
     strings -a "$1" \
@@ -221,13 +221,13 @@ air_blobs() {
 # `enqueue_function[...]` sites reachable from this module's two entry points:
 #
 #   solver      9-11  (cd.mojo 3, axpy 1, stats/mean 2, functions/linear_reg
-#                      1-2, original/record_canon 1, linalg/coalesced_
+#                      1-2, checks/record_canon 1, linalg/coalesced_
 #                      reduction 1 -- the last two of those are arm-dependent,
 #                      the FAST build has more than the IDENTICAL one)
 #   hierarchy   ~20   (sparse/solver/detail/mst_kernels ~13, cluster/detail/
 #                      agglomerative 4, cluster/detail/connectivities 4-6,
-#                      cluster/detail/mst 1, original/nan_guard 1,
-#                      original/sabotage_tile 1)
+#                      cluster/detail/mst 1, checks/nan_guard 1,
+#                      checks/sabotage_tile 1)
 #
 # 4 and 8 are far under both counts and far over a suppressed build's 0, which
 # is all a pre-filter has to be. THE FIRST CORRECT BUILD ON THIS MACHINE

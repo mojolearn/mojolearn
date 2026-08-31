@@ -2,8 +2,8 @@
 
 **THIS BANNER WAS FALSE AND IS CORRECTED. STATUS: COMPILED AND RUN, GREEN ON
 ONE DEVICE, NOT ON THREE.** This plan and its two companion files
-(`training/original/train_loop.mojo`,
-`training/original/train_step_check.mojo`) were written on 2026-08-25 by the
+(`training/checks/train_loop.mojo`,
+`training/checks/train_step_check.mojo`) were written on 2026-08-25 by the
 training-loop lane, DEVIATIONS 1550 through 1589.
 
 *What this banner used to say, and what killed it.* Until 2026-08-31 the line
@@ -96,16 +96,16 @@ The step, in order. `M = B * L` token-major rows throughout.
 | # | stage | entry point | status |
 |---|-------|-------------|--------|
 | 1 | data | `train_loop.mojo::train_batch_ids` (this lane) | NEW, ungated |
-| 2 | embed | `embedding/original/embedding_identical.mojo::identical_embedding_forward_into` | **WRITTEN, NO GATE** |
-| 3 | block forward | `transformer/derived/transformers/models/llama/modeling_llama.mojo::llama_decoder_layer_forward` | **GATED** (5 clauses, 13 arms fired 2026-08-24) |
-| 4 | lm_head | `gemm/original/gemm_identical.mojo::identical_gemm_into`, `OP_NT` at `(M, V, d_model)` | **GATED**, three vendors |
-| 5 | loss | `training/original/loss.mojo::identical_ce_forward_into` | **GATED** (6 clauses, first execution 2026-08-25) |
-| 6 | loss backward | `training/original/loss.mojo::identical_ce_backward_into` | **GATED** (same 6 clauses) |
-| 7 | lm_head backward | `gemm/original/gemm_backward.mojo::identical_gemm_backward_a_into` and `_b_into` | **GATED** |
-| 8 | block backward | `transformer/original/transformer_backward.mojo::llama_decoder_layer_backward` | **WRITTEN, NO GATE** |
-| 9 | embedding backward | `embedding/original/embedding_identical.mojo::identical_embedding_backward_into` | **WRITTEN, NO GATE** |
+| 2 | embed | `embedding/checks/embedding_identical.mojo::identical_embedding_forward_into` | **WRITTEN, NO GATE** |
+| 3 | block forward | `transformer/impl/transformers/models/llama/modeling_llama.mojo::llama_decoder_layer_forward` | **GATED** (5 clauses, 13 arms fired 2026-08-24) |
+| 4 | lm_head | `gemm/checks/gemm_identical.mojo::identical_gemm_into`, `OP_NT` at `(M, V, d_model)` | **GATED**, three vendors |
+| 5 | loss | `training/checks/loss.mojo::identical_ce_forward_into` | **GATED** (6 clauses, first execution 2026-08-25) |
+| 6 | loss backward | `training/checks/loss.mojo::identical_ce_backward_into` | **GATED** (same 6 clauses) |
+| 7 | lm_head backward | `gemm/checks/gemm_backward.mojo::identical_gemm_backward_a_into` and `_b_into` | **GATED** |
+| 8 | block backward | `transformer/checks/transformer_backward.mojo::llama_decoder_layer_backward` | **WRITTEN, NO GATE** |
+| 9 | embedding backward | `embedding/checks/embedding_identical.mojo::identical_embedding_backward_into` | **WRITTEN, NO GATE** |
 | 10 | pack gradients | `train_loop.mojo::train_copy_range_kernel` (this lane) | NEW, ungated |
-| 11 | optimizer | `training/original/optimizer.mojo::identical_optimizer_step` | **GATED** (6 clauses, first execution 2026-08-25) |
+| 11 | optimizer | `training/checks/optimizer.mojo::identical_optimizer_step` | **GATED** (6 clauses, first execution 2026-08-25) |
 | 12 | digest | `train_loop.mojo::snapshot` and `::digest_of_lists` (this lane) | NEW, ungated |
 
 ### 1.1 The headline caveat, and it is not a footnote (DEVIATION 1570)
@@ -654,14 +654,14 @@ The host side is assembled from the oracles that already exist and no second
 spelling of anything is written.
 
 ```
-emb_forward_oracle                    embedding/original/embedding_oracle.mojo
-transformer_block_oracle              transformer/original/transformer_oracle.mojo
-gemm_oracle                           gemm/original/gemm_oracle.mojo        (lm_head, OP_NT)
-ce_forward_oracle / ce_backward_oracle  training/original/loss_oracle.mojo
+emb_forward_oracle                    embedding/checks/embedding_oracle.mojo
+transformer_block_oracle              transformer/checks/transformer_oracle.mojo
+gemm_oracle                           gemm/checks/gemm_oracle.mojo        (lm_head, OP_NT)
+ce_forward_oracle / ce_backward_oracle  training/checks/loss_oracle.mojo
 gemm backward via gemm_oracle           the a-call and b-call shapes from gemm_backward.mojo
-transformer_block_backward_oracle     transformer/original/transformer_backward_oracle.mojo
-emb_backward_oracle                   embedding/original/embedding_oracle.mojo
-optimizer_step_oracle                 training/original/optimizer_oracle.mojo
+transformer_block_backward_oracle     transformer/checks/transformer_backward_oracle.mojo
+emb_backward_oracle                   embedding/checks/embedding_oracle.mojo
+optimizer_step_oracle                 training/checks/optimizer_oracle.mojo
 ```
 
 Every INTERMEDIATE is compared, not only the final parameters (DEVIATION
@@ -670,9 +670,9 @@ disagreement in `param.out` alone tells you a step is wrong and nothing about
 where.
 
 The hazard this clause carries, and it is real. The device path uses
-`LlamaDims` / `LlamaDeviceWeights` (in `transformer/derived/`) and the oracle
+`LlamaDims` / `LlamaDeviceWeights` (in `transformer/impl/`) and the oracle
 path uses `TransformerDims` / `TransformerWeights` (in
-`transformer/original/`), because the two halves of that lane were written
+`transformer/checks/`), because the two halves of that lane were written
 by different agents and deliberately do not import each other. **Two shape
 structs describing one model is a place to put a different number in each**
 (DEVIATION 1552), so the check builds BOTH from one table of integers and
@@ -769,10 +769,10 @@ kernel cannot express one.
    was least confident about before the first compile, and is now answered
    rather than pending. **What replaces this item: RUN IT ON THE OTHER TWO
    VENDORS.** One device is one device.
-2. **A gate for `transformer/original/transformer_backward.mojo`.** It is on
+2. **A gate for `transformer/checks/transformer_backward.mojo`.** It is on
    the critical path of every step and nothing has compared it to its oracle.
    Section 1.1.
-3. **A gate for `embedding/original/embedding_identical.mojo`.** Same. Its
+3. **A gate for `embedding/checks/embedding_identical.mojo`.** Same. Its
    `PLAN_SORT` is additionally not written, so the embedding contract's
    plan-invariance clause -- the strongest evidence available that its
    arithmetic does not read the plan -- cannot run at all.

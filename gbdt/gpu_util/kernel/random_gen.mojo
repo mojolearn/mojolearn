@@ -23,7 +23,7 @@ f32, which changes no distribution and keeps every draw deterministic.
 # which differ per vendor (row 10 sqrt is approximate on NVIDIA; row 12 log
 # and cos are each vendor's own); under IDENTICAL the three seam calls are
 # the portable pair, under FAST the stdlib verbatim
-from original.numerics import identical_cos, identical_log, identical_sqrt
+from checks.numerics import identical_cos, identical_log, identical_sqrt
 
 
 def advance_seed(s: UInt64) -> UInt64:

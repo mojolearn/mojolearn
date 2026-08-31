@@ -58,7 +58,7 @@ with `Uniform(t)` the REJECTION-SAMPLED `NPrivate::GenUniform`
 (`common_ops.h:48-60`), not a plain modulo. There is no oracle for this on
 this box -- their GPU learner does not run on Apple silicon and their CPU
 learner never exposes the order -- so the only defence is that every line
-below is theirs, and that `original/ctr_permutation_check.mojo` gates
+below is theirs, and that `checks/ctr_permutation_check.mojo` gates
 `TMersenne64` against the published MT19937-64 reference stream.
 
 `blockSize` is 1 everywhere this port reaches: the CTR estimation

@@ -86,8 +86,8 @@ order-independent by construction rather than by pinning:
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.host.device_attribute import DeviceAttribute
 
-from original.fixed_point import choose_scale
-from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.fixed_point import choose_scale
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gbdt.gpu_lib.gpu_manager import TCudaManager
 from gbdt.data.leaf_path import TLeafPath, split_leaf_path
 from gbdt.data.permutation import TRandom
@@ -150,7 +150,7 @@ from gbdt.gpu_util.kernel.reorder_single_pass import (
 from gbdt.methods.greedy_subsets_searcher.kernel.split_points_ridx import (
     launch_reorder_index_only,
 )
-from original.kernel_matrix import TARGET_COLUMN, ridx_only_splits_for
+from checks.kernel_matrix import TARGET_COLUMN, ridx_only_splits_for
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
     StageTimes,
 )
@@ -237,7 +237,7 @@ struct TBinFeatureTable(Copyable, Movable):
     the level loop indexes it. That is a change of ALGORITHM on the host and
     therefore a deviation (PORTING.md 351), and it is bit-inert by
     construction: `resolve_split` is the function that fills the table, so
-    the table cannot disagree with it. `original/depthwise_check.mojo`
+    the table cannot disagree with it. `checks/depthwise_check.mojo`
     claim 1 asserts the two agree cell for cell anyway, because "cannot
     disagree by construction" is exactly the sentence this repository has
     been wrong about before.
@@ -785,7 +785,7 @@ def fit_non_symmetric_tree[
     # (DENORMAL-vs-ZERO / SIGN / NAN-payload / ULP<=n / LARGE), which is the
     # diagnosis where a hash is only the location.
     #
-    # THIS LANE BRIEFLY HAD ITS OWN COPY (`original/stage_digest.mojo`,
+    # THIS LANE BRIEFLY HAD ITS OWN COPY (`checks/stage_digest.mojo`,
     # commit e5cef46) because both lanes built the same instrument inside
     # the same hour without knowing. It is deleted. Two implementations of
     # one instrument is the drift surface every rule in this tree is about,
@@ -851,7 +851,7 @@ def fit_non_symmetric_tree[
     CatBoost's float atomic. Same contract, same words, as
     `run_tree_layout`: every partial sum the device forms is over a SUBSET
     of the rows, so bounding the full-dataset sum of magnitudes bounds every
-    Int32 slot at every depth. See `original/fixed_point.mojo`.
+    Int32 slot at every depth. See `checks/fixed_point.mojo`.
 
     ================= DEVIATION 352 =================
     THE PARTITION STATS ARE RECOMPUTED, NOT UPDATED IN THE SPLIT.
@@ -1678,7 +1678,7 @@ def fit_non_symmetric_tree[
             # `SelectLeavesToVisit` returns exactly the leaves that lack
             # one. Ported as a raise, because the state that breaks it --
             # a leaf left undefined by a poison record -- is reachable and
-            # is recorded in `original/lossguide_policy_check.mojo` P6.
+            # is recorded in `checks/lossguide_policy_check.mojo` P6.
             #
             # THE RECORD LAYOUT IS THE SAME on both arms: block (x, y)
             # writes `x + y * gridDim.x`, so the host reduce below is
@@ -2572,7 +2572,7 @@ def fit_depthwise_tree[
     """The Depthwise name, kept so nothing that already calls it moves.
 
     `fit_non_symmetric_tree` is the same function; this wrapper exists
-    because `original/depthwise_check.mojo` and the digest probe were
+    because `checks/depthwise_check.mojo` and the digest probe were
     written against this name and a rename that moves a gate is a rename
     that costs a review.
 

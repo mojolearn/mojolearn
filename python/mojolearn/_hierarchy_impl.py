@@ -40,7 +40,7 @@ _METRICS = {
 _CONNECTIVITIES = {"pairwise": 0, "knn": 1}
 
 # The dense connectivity matrix is `m * m` of their `int`, so it overflows
-# past this (`hierarchy/derived/cluster/detail/connectivities.mojo`).
+# past this (`hierarchy/impl/cluster/detail/connectivities.mojo`).
 PAIRWISE_MAX_ROWS = 46340
 
 # The import-time mode guard that stood here is deleted with the one it came
@@ -54,7 +54,7 @@ class AgglomerativeClustering:
 
     Mirrors `cuml.cluster.AgglomerativeClustering` on top of cuML's
     `ML::linkage::single_linkage`; the Mojo entry is
-    `hierarchy/derived/hierarchy/linkage.mojo` and the host surface is
+    `hierarchy/impl/hierarchy/linkage.mojo` and the host surface is
     `hierarchy/estimator.mojo`.
 
     TWO DEFAULTS DIFFER FROM THE ESTIMATORS THIS MIRRORS, AND BOTH CHANGE
@@ -275,7 +275,7 @@ class AgglomerativeClustering:
                 f"mojolearn AgglomerativeClustering: n_rows={n_rows} > "
                 f"{PAIRWISE_MAX_ROWS}; the dense connectivity matrix is "
                 "m * m of cuVS's int and overflows past that "
-                "(hierarchy/derived/cluster/detail/connectivities.mojo "
+                "(hierarchy/impl/cluster/detail/connectivities.mojo "
                 "refuses it by name too)"
             )
         k = int(self.n_clusters)

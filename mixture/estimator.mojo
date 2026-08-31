@@ -45,12 +45,12 @@ THE SURFACE, AND WHY IT IS SHAPED LIKE THIS
 4. **Nothing here takes a threads-per-block argument that reaches a number.**
    The tuning arguments exist so `check_launch_invariance` can drive them,
    and every one of them is SCHEDULING: block shape and grid shape are free
-   in both modes (`original/numerics.mojo::free_block_shape`). The NUMERIC
+   in both modes (`checks/numerics.mojo::free_block_shape`). The NUMERIC
    parameters -- the fold directions, the row-max rule, `GMM_LOG_2PI`,
    `GMM_TEN_EPS`, the Cholesky's `NB` -- are not arguments at all.
 
 A caller that keeps its data ON THE DEVICE across many fits should call
-`mixture/original/estep.mojo::gmm_e_step` and `mstep.mojo::gmm_m_step`
+`mixture/checks/estep.mojo::gmm_e_step` and `mstep.mojo::gmm_m_step`
 directly and keep its own `DeviceBuffer`s. This entry is the one-shot form,
 which is what the gates and the card use.
 """
@@ -58,16 +58,16 @@ which is what the gates and the card use.
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from cholesky.original.potrf import CHOL_ELEM_TPB, CHOL_PANEL_TPB
-from cholesky.original.trsm import CHOL_SOLVE_TPB
+from cholesky.checks.potrf import CHOL_ELEM_TPB, CHOL_PANEL_TPB
+from cholesky.checks.trsm import CHOL_SOLVE_TPB
 from cluster.estimator import kmeans_fit
-from cluster.derived.cluster.kmeans_params import (
+from cluster.impl.cluster.kmeans_params import (
     INIT_KMEANS_PLUS_PLUS,
     METRIC_L2_EXPANDED,
 )
 from core.identity_trace import IdentityTrace
 from core.philox import philox4x32_10
-from mixture.original.estep import (
+from mixture.checks.estep import (
     GMM_COMP_TPB,
     GMM_ELEM_TPB,
     GMM_PROFILE,
@@ -82,12 +82,12 @@ from mixture.original.estep import (
     gmm_neg_inf,
     gmm_predict_labels,
 )
-from mixture.original.gmm_sabotage import (
+from mixture.checks.gmm_sabotage import (
     GMM_SAB_NONE,
     GMM_SAB_TOL_ULP,
     gmm_ulp_down,
 )
-from mixture.original.mstep import (
+from mixture.checks.mstep import (
     GmmMStepRun,
     gmm_chol_dwork_floats,
     gmm_chol_workspace_floats,
@@ -96,7 +96,7 @@ from mixture.original.mstep import (
     gmm_mstep_scratch_floats,
     gmm_precision_cholesky,
 )
-from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, numeric_mode_name
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, numeric_mode_name
 
 
 # ===========================================================================
@@ -198,7 +198,7 @@ def init_params_from_name(name: String) raises -> Int:
             " one-hots the CHOSEN INDICES rather than a full assignment"
             " (_base.py:148-155), so it needs the seeding routine's own"
             " draw sequence to be reproducible on three vendors."
-            " cluster/original/plus_plus.mojo is cuVS's k-means++ and its"
+            " cluster/checks/plus_plus.mojo is cuVS's k-means++ and its"
             " draw order is cuVS's, not scikit-learn's, so wiring it here"
             " would give a DIFFERENT initialization under a scikit-learn"
             " parameter name -- which mixture/README.md's semantics table"
@@ -917,7 +917,7 @@ def _safe_log(v: Float32) -> Float32:
     successor stage is otherwise the kind of thing a reader spends an
     afternoon on.
     """
-    from original.numerics import identical_log
+    from checks.numerics import identical_log
 
     if v == Float32(0.0):
         return bitcast[DType.float32](UInt32(0xFF800000))
@@ -956,7 +956,7 @@ def _collapse_message(
         + gmm_hex32(params.reg_covar)
         + ". THE COMPONENT IS NOT RESET AND THE FIT IS NOT CONTINUED"
         " (DEVIATION 1723): the pivot decision is pinned in both halves by"
-        " cholesky/original/potrf.mojo's DEVIATION 1634, so this refusal"
+        " cholesky/checks/potrf.mojo's DEVIATION 1634, so this refusal"
         " is identical on every vendor -- and a silent reset would turn a"
         " decision that is identical into a value that is not, which is"
         " the worst outcome this lane can produce"
@@ -1158,7 +1158,7 @@ def _exp_resp(v: Float32) -> Float32:
     would have produced -- otherwise a caller comparing `predict_proba`
     against a card's `resp` stage would find a difference with no cause.
     """
-    from original.numerics import identical_exp
+    from checks.numerics import identical_exp
 
     return ftz(identical_exp(ftz(v)))
 
@@ -1265,7 +1265,7 @@ def gaussian_mixture_score(
     a second device fold for a number that is about to be read back is a fold
     shape nobody needs.
     """
-    from original.numerics import identical_div
+    from checks.numerics import identical_div
 
     var s = gaussian_mixture_score_samples(model, x, n_samples)
     var acc = Float32(0.0)
@@ -1287,7 +1287,7 @@ def gaussian_mixture_bic(
     COUNT is integer arithmetic (`gmm_oracle.mojo::n_parameters`), where
     scikit-learn divides by `2.0` in float and casts.
     """
-    from original.numerics import identical_log, identical_mul
+    from checks.numerics import identical_log, identical_mul
 
     var sc = gaussian_mixture_score(model, x, n_samples)
     var p = gmm_n_parameters(model.n_features, model.n_components)
@@ -1311,7 +1311,7 @@ def gaussian_mixture_aic(
 
         -2 * score(X) * n_samples + 2 * n_parameters
     """
-    from original.numerics import identical_mul
+    from checks.numerics import identical_mul
 
     var sc = gaussian_mixture_score(model, x, n_samples)
     var p = gmm_n_parameters(model.n_features, model.n_components)

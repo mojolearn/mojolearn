@@ -43,12 +43,12 @@ CatBoost mirror this file's first derivation section is about, HAS NO
 `ported/` SUBDIRECTORY. It missed 61,888 lines of the most plainly derived
 code in the repository. Corrected within the hour, before the release it was
 written for reached Zenodo. (The two `ported/` above are QUOTATIONS of that
-wrong version. On 2026-08-31 `ported/` became `derived/`, `mojo_only/` became
-`original/`, `PORTED_MAP.tsv` became `DERIVATION_MAP.tsv` and `UNPORTED.tsv`
+wrong version. On 2026-08-31 `ported/` became `impl/`, `mojo_only/` became
+`checks/`, `PORTED_MAP.tsv` became `DERIVATION_MAP.tsv` and `UNPORTED.tsv`
 became `NOT_IMPLEMENTED.tsv`; every live path in this file is the new
 spelling and was checked to exist on disk.)
 
-The lower bound counts every `derived/` directory plus all of `gbdt/`. The
+The lower bound counts every `impl/` directory plus all of `gbdt/`. The
 upper adds `ensemble/`'s cuML-mirroring code, less its own original half.
 The remaining judgement is inside `gbdt/`, where 76 of 149 files appear in no
 derivation map and three say NO CATBOOST COUNTERPART in their own headers;
@@ -62,7 +62,7 @@ those projects was ever asked to run anywhere but CUDA:
     strictest tier produces bit-identical answers on Apple Silicon via Metal,
     NVIDIA via CUDA and AMD via ROCm from ONE source, with the pinned
     arithmetic primitives (`ftz`, `identical_mul_add`, `portable_sqrtf` and
-    the rest of `original/numerics.mojo`) that make it possible.
+    the rest of `checks/numerics.mojo`) that make it possible.
   * THE METAL BACKEND, and every deviation Metal forced: no threadgroup float
     atomics, no streams, a 32-lane column against CDNA's 64.
   * THE VERIFICATION METHOD. Per-stage identity cards diffed across three
@@ -114,15 +114,15 @@ Licence texts are in `third_party/LICENSES/`.
 | upstream | copyright | licence | pinned at | what derives |
 |---|---|---|---|---|
 | CatBoost | Copyright 2017-2026 YANDEX LLC | Apache-2.0 | `54a8143a` | all of `gbdt/`; plus two files redistributed VERBATIM, see below |
-| cuVS | Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES | Apache-2.0 | `2140532c`; later lanes `94c2819`, `6ba2ce2` | `cluster/derived/`, `ivf/derived/` |
+| cuVS | Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES | Apache-2.0 | `2140532c`; later lanes `94c2819`, `6ba2ce2` | `cluster/impl/`, `ivf/impl/` |
 | cuML | Copyright (c) 2018-2026, NVIDIA CORPORATION & AFFILIATES | Apache-2.0 | `00094f7` (branch-25.08); later lanes `265b9da6` (v26.08.00) | `dbscan/`, `decomposition/`, `neighbors/`, `glm/`, `isolation_forest/`, `hdbscan/`, `svm/`, `arima/`, `holtwinters/`, `tsa/`, `extratrees/` |
 | RAFT | Copyright (c) NVIDIA CORPORATION & AFFILIATES | Apache-2.0 | `661a3b8`, `9aa17e5`, `ebf92684` | 53 rows over 52 files in 16 lanes, below |
-| FAISS, via RAFT's vendored copy | Copyright (c) Facebook, Inc. and its affiliates. | **MIT** | RAFT `9aa17e5` | the two `neighbors/derived/.../faiss_select/` files |
-| scikit-learn | Copyright (c) 2007-2026 The scikit-learn developers. All rights reserved. | **BSD-3-Clause** | `77def0ed6e3beab57244885d2a584470e96c103d` (1.9.0) | `extratrees/original/host_splitter.mojo`, `extratrees/derived/decisiontree/batched_levelalgo/objectives.mojo` |
-| HuggingFace transformers | Copyright 2018- The Hugging Face team. All rights reserved. | Apache-2.0 | `d56c55bf564ddb176759eb6ec199442682564916` (5.16.0.dev0) | `transformer/derived/.../modeling_llama.mojo`, `mamba/derived/.../modeling_mamba.mojo` |
-| state-spaces/mamba | Copyright 2023 Tri Dao, Albert Gu | Apache-2.0 | `e9594ce1c732d97440f0332fdc43170a2294dbfa` | `mamba/derived/mamba_ssm/` |
-| Modular MAX kernels | Copyright (c) 2026, Modular Inc. All rights reserved. | Apache-2.0 **with LLVM Exceptions** | `10d978e3c783ef940d1d30d0a10852b69fe285c8` | kernel shape only in `mamba/derived/mamba_ssm/ops/selective_scan_interface.mojo` |
-| NVIDIA cuRAND | Copyright 2010-2014 NVIDIA Corporation | **PROPRIETARY, not open source** | 10.3.10.19 headers | `isolation_forest/derived/curand/`; open question, below |
+| FAISS, via RAFT's vendored copy | Copyright (c) Facebook, Inc. and its affiliates. | **MIT** | RAFT `9aa17e5` | the two `neighbors/impl/.../faiss_select/` files |
+| scikit-learn | Copyright (c) 2007-2026 The scikit-learn developers. All rights reserved. | **BSD-3-Clause** | `77def0ed6e3beab57244885d2a584470e96c103d` (1.9.0) | `extratrees/checks/host_splitter.mojo`, `extratrees/impl/decisiontree/batched_levelalgo/objectives.mojo` |
+| HuggingFace transformers | Copyright 2018- The Hugging Face team. All rights reserved. | Apache-2.0 | `d56c55bf564ddb176759eb6ec199442682564916` (5.16.0.dev0) | `transformer/impl/.../modeling_llama.mojo`, `mamba/impl/.../modeling_mamba.mojo` |
+| state-spaces/mamba | Copyright 2023 Tri Dao, Albert Gu | Apache-2.0 | `e9594ce1c732d97440f0332fdc43170a2294dbfa` | `mamba/impl/mamba_ssm/` |
+| Modular MAX kernels | Copyright (c) 2026, Modular Inc. All rights reserved. | Apache-2.0 **with LLVM Exceptions** | `10d978e3c783ef940d1d30d0a10852b69fe285c8` | kernel shape only in `mamba/impl/mamba_ssm/ops/selective_scan_interface.mojo` |
+| NVIDIA cuRAND | Copyright 2010-2014 NVIDIA Corporation | **PROPRIETARY, not open source** | 10.3.10.19 headers | `isolation_forest/impl/curand/`; open question, below |
 
 Two upstream copyright notices travel INSIDE our source, because the upstream
 files carry their own beyond the project's:
@@ -204,11 +204,11 @@ evidence, and one paraphrased from it is a second guess.
 
 ## cuVS
 
-Everything under `cluster/derived/` is translated from CUDA C++ and Cython.
+Everything under `cluster/impl/` is translated from CUDA C++ and Cython.
 `cluster/DERIVATION_MAP.tsv` maps each file to its cuVS source;
 `cluster/NOT_IMPLEMENTED.tsv` records what was deliberately left out.
 
-Files under `cluster/original/` are **not** derived from cuVS. They replace
+Files under `cluster/checks/` are **not** derived from cuVS. They replace
 calls cuVS makes into RAFT and into NVIDIA cuBLAS. No RAFT or cuBLAS source
 was translated: what those files reproduce is the call site and its
 documented semantics, and each one names the call it stands in for.
@@ -222,38 +222,38 @@ works of cuML that `NOTICE` did not name.
 
 At cuML commit `00094f7` (branch-25.08), unless the lane map says otherwise:
 
-    dbscan/derived/dbscan/vertexdeg/algo.mojo
-    dbscan/derived/dbscan/corepoints/compute.mojo
-    dbscan/derived/dbscan/adjgraph/algo.mojo
-    dbscan/derived/dbscan/runner.mojo
-    dbscan/derived/dbscan/dbscan.mojo
-    dbscan/derived/dbscan/mergelabels/runner.mojo
-    decomposition/derived/linalg/detail/pca.mojo
-    decomposition/derived/linalg/detail/tsvd.mojo
-    neighbors/derived/knn/knn.mojo            (added 2026-08-23, the k-NN
+    dbscan/impl/dbscan/vertexdeg/algo.mojo
+    dbscan/impl/dbscan/corepoints/compute.mojo
+    dbscan/impl/dbscan/adjgraph/algo.mojo
+    dbscan/impl/dbscan/runner.mojo
+    dbscan/impl/dbscan/dbscan.mojo
+    dbscan/impl/dbscan/mergelabels/runner.mojo
+    decomposition/impl/linalg/detail/pca.mojo
+    decomposition/impl/linalg/detail/tsvd.mojo
+    neighbors/impl/knn/knn.mojo            (added 2026-08-23, the k-NN
         classifier and regressor)
-    neighbors/derived/selection/knn.mojo
-    glm/derived/glm/ols.mojo                  (cpp/src/glm/ols.cuh; the
+    neighbors/impl/selection/knn.mojo
+    glm/impl/glm/ols.mojo                  (cpp/src/glm/ols.cuh; the
         dispatch and guards)
-    glm/derived/glm/ridge.mojo                (added 2026-08-23,
+    glm/impl/glm/ridge.mojo                (added 2026-08-23,
         cpp/src/glm/ridge.cuh: ridgeSolve, ridgeEig, ridgeFit)
-    glm/derived/linear_model/qn.mojo          (added 2026-08-23,
+    glm/impl/linear_model/qn.mojo          (added 2026-08-23,
         cpp/include/cuml/linear_model/qn.h)
-    glm/derived/glm/qn/qn.mojo                (added 2026-08-23, and the
+    glm/impl/glm/qn/qn.mojo                (added 2026-08-23, and the
         seven below: cpp/src/glm/qn/, the L-BFGS logistic solver)
-    glm/derived/glm/qn/glm_base.mojo
-    glm/derived/glm/qn/glm_logistic.mojo
-    glm/derived/glm/qn/glm_regularizer.mojo
-    glm/derived/glm/qn/qn_solvers.mojo
-    glm/derived/glm/qn/qn_linesearch.mojo
-    glm/derived/glm/qn/qn_util.mojo
-    glm/derived/glm/qn/simple_mat/dense.mojo
+    glm/impl/glm/qn/glm_base.mojo
+    glm/impl/glm/qn/glm_logistic.mojo
+    glm/impl/glm/qn/glm_regularizer.mojo
+    glm/impl/glm/qn/qn_solvers.mojo
+    glm/impl/glm/qn/qn_linesearch.mojo
+    glm/impl/glm/qn/qn_util.mojo
+    glm/impl/glm/qn/simple_mat/dense.mojo
 
 Later lanes added more; `isolation_forest/`, `hdbscan/`, `svm/`, `arima/`,
 `holtwinters/`, `tsa/` and `extratrees/` all carry cuML rows and several pin
 cuML at `265b9da6` (v26.08.00) instead. The maps are the authority.
 
-`decomposition/original/jacobi_eigh_device.mojo` is marked SUBSTITUTE rather
+`decomposition/checks/jacobi_eigh_device.mojo` is marked SUBSTITUTE rather
 than derived. It stands in for the `COV_EIG_JACOBI` arm of cuML's
 `tsvd.cuh::calEig`, which calls cuSOLVER; no cuML source was translated into
 it, and it reproduces the call's documented semantics rather than its code.
@@ -269,10 +269,10 @@ being replaced said "Eleven files across `dbscan/`, `decomposition/`, `glm/`
 and `neighbors/`". What corrected it was a recount straight out of the
 derivation maps. Across the 28 `DERIVATION_MAP.tsv` files in the tree, **54
 rows name a RAFT source in their upstream column, in sixteen lanes, not
-four.** One of those 54, `svm/original/device_select.mojo`, names RAFT only
+four.** One of those 54, `svm/checks/device_select.mojo`, names RAFT only
 among the calls it stands in for and its upstream column is `none`, so 53
 rows are derivation rows, over 52 distinct files
-(`neighbors/derived/matrix/detail/select_warpsort.mojo` has two rows, one per
+(`neighbors/impl/matrix/detail/select_warpsort.mojo` has two rows, one per
 RAFT header it draws on).
 
 The twelve lanes the section had never named are `cholesky/`, `ensemble/`,
@@ -324,33 +324,33 @@ The files the old section named, path-corrected. They are a **subset** of the
 51:
 
     at RAFT 661a3b8 (branch-25.08):
-      dbscan/derived/neighbors/epsilon_neighborhood.mojo
-      dbscan/derived/dbscan/adjgraph/algo.mojo
-      dbscan/derived/label/merge_labels.mojo
-      dbscan/derived/label/classlabels.mojo
-      dbscan/derived/sparse/detail/csr.mojo
-      neighbors/derived/label/classlabels.mojo   (added 2026-08-23; the same
+      dbscan/impl/neighbors/epsilon_neighborhood.mojo
+      dbscan/impl/dbscan/adjgraph/algo.mojo
+      dbscan/impl/label/merge_labels.mojo
+      dbscan/impl/label/classlabels.mojo
+      dbscan/impl/sparse/detail/csr.mojo
+      neighbors/impl/label/classlabels.mojo   (added 2026-08-23; the same
           header, the general route for arbitrary int32 class labels)
-      decomposition/derived/linalg/detail/pca.mojo   (sign_flip_kernel only,
+      decomposition/impl/linalg/detail/pca.mojo   (sign_flip_kernel only,
           from raft matrix/detail/math.cuh:367 signFlipKernel)
-      glm/derived/linalg/detail/svd.mojo   (added 2026-08-23; svdEig from
+      glm/impl/linalg/detail/svd.mojo   (added 2026-08-23; svdEig from
           linalg/detail/svd.cuh)
-      glm/derived/matrix/math.mojo         (added 2026-08-23; the matrix
+      glm/impl/matrix/math.mojo         (added 2026-08-23; the matrix
           primitives from matrix/detail/math.cuh and addScalar from
           linalg/detail/add.cuh that ridgeSolve and svdEig call)
 
     at RAFT 9aa17e5:
-      glm/derived/linalg/detail/lstsq.mojo
-      neighbors/derived/neighbors/detail/faiss_select/select.mojo
-      neighbors/derived/matrix/detail/select_radix.mojo
-      neighbors/derived/matrix/detail/select_warpsort.mojo
+      glm/impl/linalg/detail/lstsq.mojo
+      neighbors/impl/neighbors/detail/faiss_select/select.mojo
+      neighbors/impl/matrix/detail/select_radix.mojo
+      neighbors/impl/matrix/detail/select_warpsort.mojo
           (from both select_warpsort.cuh and util/bitonic_sort.cuh)
 
-`dbscan/derived/dbscan/adjgraph/algo.mojo` derives from cuML **and** from
+`dbscan/impl/dbscan/adjgraph/algo.mojo` derives from cuML **and** from
 RAFT and is listed under both.
 
 Files that merely **stand in** for a RAFT call, under `core/` and the various
-`original/` directories, are not derived from RAFT: no RAFT source was
+`checks/` directories, are not derived from RAFT: no RAFT source was
 translated into them, and each names the call whose semantics it reproduces.
 
 ## FAISS, by way of RAFT
@@ -366,13 +366,13 @@ all copies or **substantial portions** of the software, and a transliteration
 of the algorithm into another language is a substantial portion. The notice
 is therefore in `NOTICE` and in the headers of the two files themselves.
 
-    neighbors/derived/neighbors/detail/faiss_select/select.mojo
+    neighbors/impl/neighbors/detail/faiss_select/select.mojo
         <- raft/neighbors/detail/faiss_select/Select.cuh
-    neighbors/derived/neighbors/detail/faiss_select/merge_network_warp.mojo
+    neighbors/impl/neighbors/detail/faiss_select/merge_network_warp.mojo
         <- raft/neighbors/detail/faiss_select/{Comparators,
            MergeNetworkUtils, MergeNetworkWarp}.cuh
 
-`neighbors/derived/matrix/detail/select_warpsort.mojo` is **not** covered.
+`neighbors/impl/matrix/detail/select_warpsort.mojo` is **not** covered.
 RAFT ships the FAISS warp-select *design* twice, as two unrelated files, and
 that one is RAFT's own reimplementation under NVIDIA's copyright and
 Apache-2.0. It is a RAFT derivation, not a FAISS one.
@@ -398,7 +398,7 @@ gap.
 At `d56c55bf564ddb176759eb6ec199442682564916` (`d56c55b`, version
 5.16.0.dev0):
 
-* `transformer/derived/transformers/models/llama/modeling_llama.mojo`, 3,143
+* `transformer/impl/transformers/models/llama/modeling_llama.mojo`, 3,143
   lines, from `src/transformers/models/llama/modeling_llama.py`. One
   Llama-shaped decoder block on the device: RMSNorm, the rotary embedding,
   eager attention, the gated MLP, and the decoder layer that drives them.
@@ -407,7 +407,7 @@ At `d56c55bf564ddb176759eb6ec199442682564916` (`d56c55b`, version
   online softmax's rescale count is an execution-plan quantity, which is a
   summation order the identity contract cannot reach by pinning a fold
   topology). The map is symbol-by-symbol with upstream line ranges.
-* `mamba/derived/transformers/models/mamba/modeling_mamba.mojo`, 1,419 lines,
+* `mamba/impl/transformers/models/mamba/modeling_mamba.mojo`, 1,419 lines,
   from `src/transformers/models/mamba/modeling_mamba.py`. One Mamba-1 block:
   `MambaRMSNorm`, the `causal_conv1d_fn` torch fallback, the
   `mamba_selective_scan` torch fallback, `MambaMixer.forward` and
@@ -426,7 +426,7 @@ is closed.** That map also revealed a tenth upstream, below.
 ## Modular MAX kernels
 
 Found 2026-08-31, in the `mamba/` map on the day it landed, and nobody had
-counted it. `mamba/derived/mamba_ssm/ops/selective_scan_interface.mojo`
+counted it. `mamba/impl/mamba_ssm/ops/selective_scan_interface.mojo`
 carries a second derivation row against
 `max/kernels/src/state_space/selective_scan.mojo` at Modular commit
 `10d978e3c783ef940d1d30d0a10852b69fe285c8`, status `reimplemented`.
@@ -454,17 +454,17 @@ under licence, which `NOTICE` records at its foot.
 
 ## state-spaces/mamba
 
-`mamba/derived/` is 2,916 lines of Mojo written against a named upstream, and
+`mamba/impl/` is 2,916 lines of Mojo written against a named upstream, and
 `NOTICE` named none of it until 2026-08-31.
 
 At `e9594ce1c732d97440f0332fdc43170a2294dbfa` (`e9594ce`):
 
-* `mamba/derived/mamba_ssm/ops/selective_scan_interface.mojo`, 628 lines, from
+* `mamba/impl/mamba_ssm/ops/selective_scan_interface.mojo`, 628 lines, from
   `mamba_ssm/ops/selective_scan_interface.py::selective_scan_ref` (:127-193).
   The recurrent core, on the device, forward only. Several upstream options
   (`z`, `delta_bias`, `delta_softplus`, `return_last_state=False`) are
   REFUSED by name rather than implemented, recorded as DEVIATION 723.
-* `mamba/derived/mamba_ssm/modules/mamba_simple.mojo`, 848 lines, from
+* `mamba/impl/mamba_ssm/modules/mamba_simple.mojo`, 848 lines, from
   `mamba_ssm/modules/mamba_simple.py::Mamba.step` (:208-253) and
   `::allocate_inference_cache` (:255-266). The decode path.
 
@@ -500,14 +500,14 @@ derivative work.
 closely enough that the BSD-3 notice condition is engaged. At `77def0e`
 (version 1.9.0):
 
-* `extratrees/original/host_splitter.mojo`, 1,049 lines, from
+* `extratrees/checks/host_splitter.mojo`, 1,049 lines, from
   `sklearn/tree/_splitter.pyx::node_split_random` (:507-731). Its own
   docstring calls it "a TRANSCRIPTION" and carries a branch-by-branch table
-  of where each upstream line went. It sits under `original/` rather than
-  `derived/` because it is a **host oracle**, and that placement records its
+  of where each upstream line went. It sits under `checks/` rather than
+  `impl/` because it is a **host oracle**, and that placement records its
   role in the check, not its provenance. Its provenance is its map row and
   `NOTICE`.
-* `extratrees/derived/decisiontree/batched_levelalgo/objectives.mojo`, 1,413
+* `extratrees/impl/decisiontree/batched_levelalgo/objectives.mojo`, 1,413
   lines, from `sklearn/tree/_criterion.pyx` beside cuML's `objectives.cuh`.
   The scikit-learn part is the impurity and proxy-improvement **expressions**,
   transcribed. The file states that cuML's Gini and scikit-learn's Gini are
@@ -552,7 +552,7 @@ reads in part:
 
 **What is in this repository.**
 
-* `isolation_forest/derived/curand/curand_kernel.mojo`, 403 lines. It
+* `isolation_forest/impl/curand/curand_kernel.mojo`, 403 lines. It
   implements XORWOW, the generator `curandState` is a typedef for, and it is
   here because cuML's isolation forest calls `curand_init` and `curand` on
   that state and those draws decide which rows and which features every tree
@@ -578,7 +578,7 @@ reads in part:
   **rebuilds** both from the step function by repeated squaring, in about 130
   integer matrix squarings on the host, and the rebuilt tables are what the
   kernel receives. The check that the rebuild is right
-  (`isolation_forest/original/xorwow_reference.py`) parses the header's
+  (`isolation_forest/checks/xorwow_reference.py`) parses the header's
   tables at run time and compares word for word, all 32 sequence matrices and
   all 32 offset matrices; the header's tables themselves are never written
   into this tree. DEVIATION 751 records why the offset table needed its own
@@ -586,7 +586,7 @@ reads in part:
   lane stepped it, and half of DEVIATION 683's claim was unverified until a
   reference was built for it.
 * **NVIDIA's own numbers, except four.** The committed TSV fixtures
-  (`isolation_forest/original/xorwow_reference.tsv` and
+  (`isolation_forest/checks/xorwow_reference.tsv` and
   `xorwow_offset_reference.tsv`) are **our** generator's output, not NVIDIA's
   tables. `curand_kernel.mojo` contains three distinct hexadecimal literals:
   `0xAAD26B49` and `0xF7DCEFDD`, the two seed-salt constants, and

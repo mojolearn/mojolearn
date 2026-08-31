@@ -5,8 +5,8 @@
 Written 2026-08-24, the transformer lane (DEVIATIONS 800-819). The shape of
 this document is `mamba/IDENTICAL_MAMBA_CONTRACT.md`'s, which is
 `gemm/IDENTICAL_FP32_CONTRACT.md`'s, on purpose. The code form of every
-clause will be `transformer/original/transformer_oracle.mojo` (the host
-oracle) and `transformer/derived/` (the device spelling), and the clauses
+clause will be `transformer/checks/transformer_oracle.mojo` (the host
+oracle) and `transformer/impl/` (the device spelling), and the clauses
 will cite both. **Neither file exists yet. Nothing in this lane has been
 built, compiled or run.**
 
@@ -37,31 +37,31 @@ softmax and nothing else.** Everything below was read in the tree on
 
 | piece | verdict | where it already is |
 |---|---|---|
-| RMSNorm, all four seams | **REUSED** | mamba contract seams S1-S4. Host form `mamba/original/mamba_oracle.mojo:249-262`. Device form `mamba/derived/transformers/models/mamba/modeling_mamba.mojo::mamba_rms_norm_kernel` (:529-575) and its launcher `::mamba_rms_norm` (:578-598). See the eps note below. |
+| RMSNorm, all four seams | **REUSED** | mamba contract seams S1-S4. Host form `mamba/checks/mamba_oracle.mojo:249-262`. Device form `mamba/impl/transformers/models/mamba/modeling_mamba.mojo::mamba_rms_norm_kernel` (:529-575) and its launcher `::mamba_rms_norm` (:578-598). See the eps note below. |
 | residual add | **REUSED** | mamba contract seam S16, `modeling_mamba.mojo::residual_add_kernel` (:988-1004). |
-| SiLU | **REUSED** | `original/numerics.mojo::identical_silu` over `::portable_siluf`, DEVIATION 744, IDENTITY_PATHS row 53. |
-| every linear projection (q, k, v, o, gate, up, down) | **REUSED** | profile `mojolearn.identical.gemm.fp32.v1`, entry `gemm/original/gemm_identical.mojo::identical_gemm(ctx, c, a, b, m, n, k, op)` (:1363), ops `OP_NN = 0`, `OP_NT = 1`, `OP_TN = 2` from `gemm/original/gemm_oracle.mojo:194-198`. Certified three-vendor at E3 round 11 (`144aa5b`), IDENTITY_PATHS row 40. |
+| SiLU | **REUSED** | `checks/numerics.mojo::identical_silu` over `::portable_siluf`, DEVIATION 744, IDENTITY_PATHS row 53. |
+| every linear projection (q, k, v, o, gate, up, down) | **REUSED** | profile `mojolearn.identical.gemm.fp32.v1`, entry `gemm/checks/gemm_identical.mojo::identical_gemm(ctx, c, a, b, m, n, k, op)` (:1363), ops `OP_NN = 0`, `OP_NT = 1`, `OP_TN = 2` from `gemm/checks/gemm_oracle.mojo:194-198`. Certified three-vendor at E3 round 11 (`144aa5b`), IDENTITY_PATHS row 40. |
 | **the QK product** | **REUSED**, and this was not on the lane brief's list | it is a `gemm.fp32.v1` `OP_NT` cell with `k = head_dim` (section 4, seam S11). |
-| exp, division, rsqrt, sqrt, log, cos, pow | **REUSED** | `original/numerics.mojo`. `portable_expf`, `identical_div`, `identical_rsqrt`, `portable_sqrtf`, `portable_cosf`, `portable_powf`. DEVIATIONS 258 and 740-746, IDENTITY_PATHS rows 10, 12, 49-54. |
-| `pinned_mul`, the uncontractible multiply | **REUSED IN SPIRIT, COPIED IN FACT** | DEVIATION 720. It is NOT in `original/numerics.mojo`. Three identical copies exist, at `mamba/original/mamba_oracle.mojo:41`, `mamba/derived/transformers/models/mamba/modeling_mamba.mojo:207` and `mamba/derived/mamba_ssm/ops/selective_scan_interface.mojo:263`. This lane needs a fourth or an import. DEVIATION 816, section 12.3. |
-| `identical_fmax`, the order-free maximum | **REUSED**, and it was built for this seam | `original/numerics.mojo::identical_fmax` over `::portable_fmaxf`, DEVIATION 825, landed 2026-08-24. It is the softmax row maximum (section 5.1) and it closes IDENTITY_PATHS row 13 at this site. |
+| exp, division, rsqrt, sqrt, log, cos, pow | **REUSED** | `checks/numerics.mojo`. `portable_expf`, `identical_div`, `identical_rsqrt`, `portable_sqrtf`, `portable_cosf`, `portable_powf`. DEVIATIONS 258 and 740-746, IDENTITY_PATHS rows 10, 12, 49-54. |
+| `pinned_mul`, the uncontractible multiply | **REUSED IN SPIRIT, COPIED IN FACT** | DEVIATION 720. It is NOT in `checks/numerics.mojo`. Three identical copies exist, at `mamba/checks/mamba_oracle.mojo:41`, `mamba/impl/transformers/models/mamba/modeling_mamba.mojo:207` and `mamba/impl/mamba_ssm/ops/selective_scan_interface.mojo:263`. This lane needs a fourth or an import. DEVIATION 816, section 12.3. |
+| `identical_fmax`, the order-free maximum | **REUSED**, and it was built for this seam | `checks/numerics.mojo::identical_fmax` over `::portable_fmaxf`, DEVIATION 825, landed 2026-08-24. It is the softmax row maximum (section 5.1) and it closes IDENTITY_PATHS row 13 at this site. |
 | deterministic block folds | **BOTH REFUSED** | `core/pinned_reduce.mojo::pinned_block_sum` (:73), `::pinned_block_max` (:159), `::pinned_block_min` (:193). `pinned_block_sum` may not be the softmax denominator (section 5.3) and `pinned_block_max` may not be the softmax row max (section 5.1). Neither refusal is about determinism; both helpers are perfectly deterministic. They compute different answers. |
 | the stage card and the differ | **REUSED** | `core/identity_trace.mojo` (`IdentityTrace.record_device` :313, `::record_host` :369), `tools/identity_trace_diff.py`. |
-| the refusal of a nonfinite input | **REUSED** | `mamba/original/mamba_oracle.mojo::refuse_nonfinite` (:57), tested by BITS because Metal flushes compare operands (IDENTITY_PATHS row 49). |
+| the refusal of a nonfinite input | **REUSED** | `mamba/checks/mamba_oracle.mojo::refuse_nonfinite` (:57), tested by BITS because Metal flushes compare operands (IDENTITY_PATHS row 49). |
 | the independent reference corpus pattern | **REUSED** | `mamba/corpus/`, generator and `tools/mamba_corpus_check.py`. A transformer corpus is a later phase and does not exist. |
 | **RoPE, the angle table and the rotation** | **NEW** | nothing in this repository computes a sine. Section 4 seams S6 through S10. |
-| **softmax** | **NEW** | there is no device softmax anywhere in the tree. The four `softmax` hits under `gbdt/` and `original/` are CatBoost's HOST float64 multiclass probability, a different arithmetic in a different lane. Section 5. |
+| **softmax** | **NEW** | there is no device softmax anywhere in the tree. The four `softmax` hits under `gbdt/` and `checks/` are CatBoost's HOST float64 multiclass probability, a different arithmetic in a different lane. Section 5. |
 | **the attention-weighted value sum** | **NEW**, and deliberately NOT routed through the GEMM | section 4 seam S19 and section 7.2. This is the least obvious decision in the document. |
-| `portable_sinf` and `identical_sin` | **REUSED**, and NOT this lane's to edit | DEVIATION 820, `original/numerics.mojo`, LANDED 2026-08-24 by the concurrent numerics lane while this document was being written. It shares `_cephes_sincosf_core` with `portable_cosf`, so RoPE's sin and cos of one angle come from one certified reduction. Its docstring addresses this lane by name about the domain; section 3 answers it. |
+| `portable_sinf` and `identical_sin` | **REUSED**, and NOT this lane's to edit | DEVIATION 820, `checks/numerics.mojo`, LANDED 2026-08-24 by the concurrent numerics lane while this document was being written. It shares `_cephes_sincosf_core` with `portable_cosf`, so RoPE's sin and cos of one angle come from one certified reduction. Its docstring addresses this lane by name about the domain; section 3 answers it. |
 | `portable_tanhf`, `portable_erff`, both GELU forms | **LANDED AND NOT USED HERE** | DEVIATIONS 821-824. They are not on the Llama path and are not seams of this profile (section 11). |
 
 Three corrections to the brief this lane was given, because a table that
 agrees with a guess is worth less than one that is right.
 
-1. `pinned_mul` is not in `original/numerics.mojo`. It is DEVIATION 720 and
+1. `pinned_mul` is not in `checks/numerics.mojo`. It is DEVIATION 720 and
    it is duplicated three times inside `mamba/`.
 2. The RMSNorm kernel is reusable but not yet parameterized. `RMS_EPS` is a
-   module constant `1e-5` at `mamba/original/mamba_fixture.mojo:44`, read
+   module constant `1e-5` at `mamba/checks/mamba_fixture.mojo:44`, read
    directly by `mamba_rms_norm_kernel`. Llama's default is `1e-6`. Taking
    the kernel therefore requires lifting eps to an argument, which is
    DEVIATION 801 and a cross-lane edit that the mamba lane must agree to.
@@ -75,7 +75,7 @@ agrees with a guess is worth less than one that is right.
    softmax's row reduction**, and it decides section 5.1. It was not in the
    brief and it landed on 2026-08-24, after this lane started reading.
 
-Line numbers into `original/numerics.mojo` are deliberately absent from
+Line numbers into `checks/numerics.mojo` are deliberately absent from
 this document. That file is under concurrent edit by the numerics lane and
 moved by about 200 lines during the writing of this one; symbol names and
 DEVIATION numbers are stable and line numbers are not.
@@ -283,7 +283,7 @@ section rather than four rows of a table.
     m(row) = the fold of identical_fmax over EVERY element of the row,
              masked cells included, in ANY order, with no seed.
 
-`identical_fmax` is DEVIATION 825, `original/numerics.mojo`, added by the
+`identical_fmax` is DEVIATION 825, `checks/numerics.mojo`, added by the
 numerics lane on 2026-08-24 for this seam and for no other. Under IDENTICAL
 it is `portable_fmaxf`, which canonicalizes a NaN operand to `0x7FC00000`
 first, flushes both operands, and then selects on `_total_order_key`, the
@@ -674,7 +674,7 @@ control; (d) decode equals prefill bitwise at every position, with a KV
 cache; (e) the row-39 audit of section 8; (f) every clause above falsifiable
 by a NAMED sabotage that fails a gate.
 
-`transformer/original/transformer_check.mojo` will be the gate file. FAST
+`transformer/checks/transformer_check.mojo` will be the gate file. FAST
 arms of (a) are RECORDED, not asserted, where they are vendor-shaped (the
 metrics lane's leg-11 lesson).
 
@@ -771,15 +771,15 @@ IDENTITY_PATHS row 40 closed on three vendors at `144aa5b` on 2026-08-23.
 
     transformer/IDENTICAL_TRANSFORMER_CONTRACT.md   this file
     transformer/README.md                           the lane's status
-    transformer/original/transformer_fixture.mojo  config, weights, planted cases
-    transformer/original/transformer_oracle.mojo   the NORMATIVE host oracle
-    transformer/original/transformer_check.mojo    the gates and the sabotages
-    transformer/derived/transformers/models/llama/modeling_llama.mojo
+    transformer/checks/transformer_fixture.mojo  config, weights, planted cases
+    transformer/checks/transformer_oracle.mojo   the NORMATIVE host oracle
+    transformer/checks/transformer_check.mojo    the gates and the sabotages
+    transformer/impl/transformers/models/llama/modeling_llama.mojo
                                                     the device spelling
     transformer/corpus/                             the independent torch reference
     transformer/DERIVATION_MAP.tsv, NOT_IMPLEMENTED.tsv        upstream to ours
 
-The `derived/` path mirrors the upstream path exactly, as `mamba/derived/`
+The `impl/` path mirrors the upstream path exactly, as `mamba/impl/`
 does. PORTED IS OURS; the derivative-work language belongs in `NOTICE`.
 
 ### 12.3 The deviation numbers
@@ -789,7 +789,7 @@ This lane owns 800 through 819.
 | # | what |
 |---|---|
 | 800 | the block composition `transformer.fp32.v1`, the IDENTITY_PATHS row |
-| 801 | RMSNorm reused from the mamba lane with eps lifted to an ARGUMENT (`RMS_EPS` is hardcoded at `mamba/original/mamba_fixture.mojo:44`), a cross-lane edit the mamba lane must agree to |
+| 801 | RMSNorm reused from the mamba lane with eps lifted to an ARGUMENT (`RMS_EPS` is hardcoded at `mamba/checks/mamba_fixture.mojo:44`), a cross-lane edit the mamba lane must agree to |
 | 802 | the attention scale pinned as a host `identical_rsqrt(Float32(head_dim))` constant |
 | 803 | the additive causal mask, its value and the clause that the `+0.0` add may not be elided |
 | 804 | the softmax row max through `identical_fmax` (DEVIATION 825), the fold shape left free, and the refusal of `pinned_block_max` |

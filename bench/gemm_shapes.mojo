@@ -97,7 +97,7 @@ moves between them, something has read `m` that should not have, and the
 table doubles as a batch-invariance smoke test at production shapes.
 """
 
-from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
 def _mode_name() -> String:
@@ -297,7 +297,7 @@ def gemm_shape_provenance(i: Int) -> String:
         )
     if i == 3:
         return String(
-            "glm/derived/linalg/detail/lstsq.mojo:219 at the OLS identity"
+            "glm/impl/linalg/detail/lstsq.mojo:219 at the OLS identity"
             " card's fixture (n_rows=65536, n_cols=16), DEVIATION 527."
         )
     if i == 4:
@@ -312,7 +312,7 @@ def gemm_shape_provenance(i: Int) -> String:
         )
     if i == 6:
         return String(
-            "cluster/derived/cluster/detail/min_cluster_distance_compute"
+            "cluster/impl/cluster/detail/min_cluster_distance_compute"
             ".mojo:308, and bench/linalg_price_main.mojo:120 prices it --"
             " the arm measured at ~4.7x, so v1 is comparable against it."
         )

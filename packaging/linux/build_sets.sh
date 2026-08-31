@@ -207,7 +207,7 @@ case "$VENDORS" in
   *)
     say "REFUSING: the built binaries do not agree on ONE vendor: '$VENDORS'"
     say "  (a binary that answers 'none' had no accelerator target; one that"
-    say "   answers NO-READBACK predates original/vendor.mojo; anything that"
+    say "   answers NO-READBACK predates checks/vendor.mojo; anything that"
     say "   looks like a Python traceback is a load failure, read it above)"
     exit 3 ;;
 esac

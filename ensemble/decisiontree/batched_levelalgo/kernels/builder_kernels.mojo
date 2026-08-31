@@ -60,11 +60,11 @@ ported, below. Their body is:
 
 `fnv1a32_hash` is `random_utils.mojo`. The other two are CCCL --
 `cuda::std::minstd_rand` and `cuda::shuffle_iterator` -- and are ported in
-`ensemble/original/shuffle_iterator.mojo` against CCCL 3.4.3
+`ensemble/checks/shuffle_iterator.mojo` against CCCL 3.4.3
 (`9d65c77f`), the version rapids-cmake v26.08.00 resolves for cuML
-v26.08.00. They live in `original/` rather than in a mirrored path
+v26.08.00. They live in `checks/` rather than in a mirrored path
 because CCCL is a general library this tree does not mirror file for file,
-the same way `cluster/original/` holds ported RAFT primitives.
+the same way `cluster/checks/` holds ported RAFT primitives.
 
 THIS FILE WAS HELD OPEN ON PURPOSE UNTIL THAT WAS EXACT, because the
 failure mode is uniquely bad: a plausible-looking sampler that is not

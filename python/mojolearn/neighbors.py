@@ -6,7 +6,7 @@ regressor built on it.
 `NearestNeighbors` mirrors cuVS's brute force; `KNeighborsClassifier` and
 `KNeighborsRegressor` mirror cuML's `kneighbors_classifier.pyx` /
 `kneighbors_regressor.pyx` over `ML::knn_classify` / `ML::knn_regress`
-(`neighbors/derived/knn/knn.mojo`, `neighbors/derived/selection/knn.mojo`).
+(`neighbors/impl/knn/knn.mojo`, `neighbors/impl/selection/knn.mojo`).
 """
 
 import numpy as np
@@ -37,7 +37,7 @@ class NearestNeighbors(NumericModeMixin):
                                 NUMERIC_IDENTICAL ONLY, above 256 -- the
                                 identical selector's rank pass gives one
                                 thread per output slot (DEVIATION 500,
-                                neighbors/original/select_radix_identical
+                                neighbors/checks/select_radix_identical
                                 .mojo). FAST runs k > 256 through the
                                 ported RAFT radix select.
         query_tile    honored   a MEMORY number; the answer does not depend
@@ -46,7 +46,7 @@ class NearestNeighbors(NumericModeMixin):
         metric        refused   anything but Euclidean ('euclidean', 'l2',
                                 or 'minkowski' with p=2). The ported kernels
                                 carry only the expanded-L2 arm
-                                (neighbors/derived/neighbors/detail/
+                                (neighbors/impl/neighbors/detail/
                                 knn_brute_force.mojo's dispatch note):
                                 cosine and L1 are a PORT, not a flag.
         algorithm     refused   anything but 'brute' (and 'auto', which IS
@@ -105,7 +105,7 @@ class NearestNeighbors(NumericModeMixin):
                 f"mojolearn NearestNeighbors: metric={self.metric!r} is "
                 "refused; only Euclidean ('euclidean', 'l2', 'minkowski' with "
                 "p=2) is ported. The brute-force kernels carry the "
-                "expanded-L2 arm only (neighbors/derived/neighbors/detail/"
+                "expanded-L2 arm only (neighbors/impl/neighbors/detail/"
                 "knn_brute_force.mojo): another metric is a port, not a flag"
             )
         if self.metric == "minkowski" and self.p != 2:
@@ -193,7 +193,7 @@ class KNeighborsClassifier(NearestNeighbors):
     (`src_prims/selection/knn.cuh:74-109`), scikit-learn's `mode`. The vote
     is a serial fold per query in neighbour order (nearest first, ties in
     distance by lowest index), so it is bit-identical in both numeric modes
-    by construction (`neighbors/derived/selection/knn.mojo`, DEVIATION 542).
+    by construction (`neighbors/impl/selection/knn.mojo`, DEVIATION 542).
 
     WHAT IS HONORED, WHAT IS REFUSED, AND WHY (measured row by row by
     `tools/e2u_matrix_fit.py`; the `NearestNeighbors` rows apply as well):
@@ -258,7 +258,7 @@ class KNeighborsClassifier(NearestNeighbors):
                 "is refused; only 'uniform' is ported. cuML refuses it too "
                 "(kneighbors_classifier.pyx:191, 'Only uniform weighting "
                 "strategy is supported currently') and the ported vote "
-                "(neighbors/derived/selection/knn.mojo) carries no weight: "
+                "(neighbors/impl/selection/knn.mojo) carries no weight: "
                 "a distance-weighted vote is a port, not a flag"
             )
 
@@ -419,7 +419,7 @@ class KNeighborsRegressor(NearestNeighbors):
                 f"mojolearn {type(self).__name__}: weights={self.weights!r} "
                 "is refused; only 'uniform' is ported. cuML refuses it too "
                 "(kneighbors_regressor.pyx:188) and the ported mean "
-                "(neighbors/derived/selection/knn.mojo) carries no weight: "
+                "(neighbors/impl/selection/knn.mojo) carries no weight: "
                 "a distance-weighted mean is a port, not a flag"
             )
 
@@ -485,16 +485,16 @@ class RadiusNeighbors(NumericModeMixin):
 
     **This is not brute force and it is not one of scikit-learn's trees.**
     The index is cuVS's random ball cover
-    (`neighbors/derived/neighbors/ball_cover/`), which DBSCAN has used for its
+    (`neighbors/impl/neighbors/ball_cover/`), which DBSCAN has used for its
     eps neighbourhood since this library's first release. It returns the
     EXACT set -- its pruning is a triangle-inequality bound, not an
-    approximation -- and `neighbors/original/radius_check.mojo` asserts that
+    approximation -- and `neighbors/checks/radius_check.mojo` asserts that
     against a host brute-force oracle per cell, not per total.
 
     **The distances are recomputed, not stored by the search.** The search
     kernel knows every distance at the moment it decides membership and
     throws them away; a separate pass walks the finished neighbour list and
-    recomputes them. `neighbors/original/radius_distances.mojo` carries the
+    recomputes them. `neighbors/checks/radius_distances.mojo` carries the
     reasoning and the argument for why the recomputed value is the same
     value. Under `identical` the check asserts that bit for bit.
 
@@ -534,7 +534,7 @@ class RadiusNeighbors(NumericModeMixin):
                 f"mojolearn RadiusNeighbors: metric={self.metric!r} is "
                 "refused; only Euclidean ('euclidean', 'l2', 'minkowski' "
                 "with p=2) is ported. The ball cover's distance is "
-                "`eps_dist_sq` (neighbors/derived/neighbors/ball_cover/"
+                "`eps_dist_sq` (neighbors/impl/neighbors/ball_cover/"
                 "common.mojo), the one arm cuVS carries: another metric is a "
                 "port, not a flag"
             )

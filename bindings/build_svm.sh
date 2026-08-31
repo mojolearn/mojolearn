@@ -126,7 +126,7 @@ COLUMN_DEFINE=""
 
 # THE NUMERIC MODE IS A BUILD DEFINE, NOT A SOURCE FLIP.
 # MOJOLEARN_NUMERIC_MODE=identical compiles with -D MOJOLEARN_NUMERIC_IDENTICAL=1
-# (original/numerics.mojo reads it through is_defined) and lands the binary
+# (checks/numerics.mojo reads it through is_defined) and lands the binary
 # under python/mojolearn/identical/. The build-time smoke gate imports the
 # FAST package, so it is skipped for an identical build.
 #
@@ -205,8 +205,8 @@ fi
 #
 # WHERE THE NUMBERS COME FROM. Counted by hand from the source, not from an
 # artifact: `svm/` launches 33 distinct kernel functions across
-# derived/svm/*.mojo, derived/distance/kernel_matrices.mojo and
-# original/device_select.mojo, plus the parameterized
+# impl/svm/*.mojo, impl/distance/kernel_matrices.mojo and
+# checks/device_select.mojo, plus the parameterized
 # `smo_block_solve_kernel` at six instantiation sites in smosolver.mojo.
 # `isolation_forest/` launches 5 (build_isolation_trees_global,
 # compute_path_lengths_global, anomaly_score, predict_labels,

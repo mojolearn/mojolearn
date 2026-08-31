@@ -166,7 +166,7 @@ THE STATE'S LAYOUT: FLOAT32 STATS, AND A `Count` PLANE NOTHING READS.
      `gbdt/methods/kernel/split_properties_helpers.mojo:193` and `:196` read
      `2 * p + 1` to pick the smaller sibling, and
      `gbdt/methods/kernel/pointwise_hist2_one_byte_templ.mojo:291-292` reads
-     both halves. `original/pointwise_dispatch_check.mojo` gates that family
+     both halves. `checks/pointwise_dispatch_check.mojo` gates that family
      end to end at 3,686 and 12,360 cells on this layout, so a parallel-array
      `TOptimizationSubsets` would have invalidated a green gate to satisfy a
      convention.
@@ -234,7 +234,7 @@ THE STATE'S LAYOUT: FLOAT32 STATS, AND A `Count` PLANE NOTHING READS.
    and `jacobi_eigh_device.mojo` both record. **THE COST IS UNPRICED HERE
    TOO.** Their `PartitionUpdateImpl` accumulates in `double` from end to
    end; ours sums Float32 in a two-level tree.
-   `original/pointwise_subsets_check.mojo` sidesteps the question by
+   `checks/pointwise_subsets_check.mojo` sidesteps the question by
    planting integer stats small enough that every intermediate sum is exact
    in Float32, which is what lets it compare with equality and no tolerance
    -- it does NOT establish that the Float32 reduction is adequate on real
@@ -393,7 +393,7 @@ STATUS: UNWIRED. Nothing in this tree calls `create_subsets` or
 `pointwise_hist2*` histogram family below them are both unported, and they
 are rung 1 of `PORTING.md` 91 E. `PORTING_RULES.md` rule 3 is why this
 sentence is here: a ported file no caller reaches is not done, and the gate
-in `original/pointwise_subsets_check.mojo` is what stands in for a caller
+in `checks/pointwise_subsets_check.mojo` is what stands in for a caller
 until one exists.
 """
 
@@ -1112,7 +1112,7 @@ def update_bins_from_desc_kernel(
     arguments -- DEVIATION 207, the blind level loop. Descriptor layout:
     `(offset_elems, mask, shift, one_hot, bin)`. The body below is the
     transcription above, unchanged; only where the scalars COME FROM
-    differs, and `original/pointwise_pool_check.mojo`'s P1 plus the fit
+    differs, and `checks/pointwise_pool_check.mojo`'s P1 plus the fit
     gates hold the two routes bit-equal."""
     var size = Int(size_in)
     var f_offset = Int(split_desc.unsafe_load(0))
@@ -1200,7 +1200,7 @@ def update_subsets_stats(
     `Partitions` is one allocation on both sides and only the VIEW moves.
     What it does mean is that slots at or above `current_part_count()` hold
     the PREVIOUS level's values rather than being freed, and no consumer may
-    read them. `original/pointwise_subsets_check.mojo` poisons that tail and
+    read them. `checks/pointwise_subsets_check.mojo` poisons that tail and
     checks the poison survives.
 
     THE ORDER IS NOT INTERCHANGEABLE. Dimensions before gather before stats:
@@ -1261,7 +1261,7 @@ def update_subsets_stats(
     #  depth 0 there is exactly one partition, so their grid is a single
     #  threadgroup for the whole dataset, and this repository has lost to
     #  that shape twice on the greedy path. **Measured 2026-08-21 and the
-    #  fear does not materialise** (`original/partition_reducer_probe.mojo`,
+    #  fear does not materialise** (`checks/partition_reducer_probe.mojo`,
     #  200k rows, 10 SMs, 5 interleaved reps, min of each):
     #
     #      parts     theirs    ours (2 chunked calls)   theirs/ours
@@ -1429,7 +1429,7 @@ def reset_subsets(
     the pooled path run THE SAME statements in the same order and cannot
     drift. The contract is CONSTRUCTOR POSTCONDITIONS: after this call the
     struct is indistinguishable from a freshly created one over the same
-    source (`original/pointwise_pool_check.mojo` holds that bit-exactly).
+    source (`checks/pointwise_pool_check.mojo` holds that bit-exactly).
 
     A caller with folds overwrites the bins afterwards with
     `write_fold_based_initial_bins`, exactly as after `create_subsets` --
@@ -1510,7 +1510,7 @@ def split_subsets(
     inside it, which changes `Indices`, changes every gathered stat's
     position, and changes which document a downstream tie resolves to --
     while leaving partition offsets, partition sizes and every per-partition
-    total bit-identical. `original/pointwise_subsets_check.mojo` gates
+    total bit-identical. `checks/pointwise_subsets_check.mojo` gates
     stability separately for that reason.
 
     `bits == 1` also means an ODD number of radix passes, so

@@ -9,7 +9,7 @@
         tools/with_identical_mode.sh pixi run mojo run -I . hdbscan/hdbscan_main.mojo
     python3 tools/identity_trace_diff.py /tmp/hdbscan.apple.card /tmp/hdbscan.other.card
 
-Runs `hdbscan/derived/hdbscan/runner.mojo::fit_hdbscan` (cuML's
+Runs `hdbscan/impl/hdbscan/runner.mojo::fit_hdbscan` (cuML's
 `_fit_hdbscan`, dense mutual reachability by DEVIATION 1600,
 L2SqrtExpanded, Excess of Mass) on the `blobs96` fixture and records every
 stage through `core/identity_trace.mojo`. THE FIT ITSELF EMITS THE CARD:
@@ -57,7 +57,7 @@ or printed here.
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
-from hdbscan.original.hdbscan_fixture import (
+from hdbscan.checks.hdbscan_fixture import (
     HFIX_BLOBS,
     build_hfixture,
     hfixture_as_list,
@@ -67,16 +67,16 @@ from hdbscan.original.hdbscan_fixture import (
     hfixture_n,
     hfixture_name,
 )
-from hdbscan.derived.hdbscan.runner import (
+from hdbscan.impl.hdbscan.runner import (
     GRAPH_BUILD_BRUTE_FORCE_KNN,
     HDBSCANParams,
     fit_hdbscan,
 )
-from hdbscan.derived.hdbscan.detail.select import CLUSTER_SELECTION_EOM
-from hierarchy.derived.cluster.detail.connectivities import (
+from hdbscan.impl.hdbscan.detail.select import CLUSTER_SELECTION_EOM
+from hierarchy.impl.cluster.detail.connectivities import (
     DISTANCE_L2_SQRT_EXPANDED,
 )
-from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
 def _mode_name() -> String:

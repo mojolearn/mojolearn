@@ -3,7 +3,7 @@
 #
 #   pixi run check-identity-trace
 #
-# `original/identity_trace_check.mojo` proves the WRITER is honest (it is
+# `checks/identity_trace_check.mojo` proves the WRITER is honest (it is
 # self-consistent, it localizes a one-cell perturbation, it hashes contents
 # and not the grid width, it can see a denormal, and its dumps agree with its
 # hashes). This script then proves the READER agrees with that writer, which
@@ -21,7 +21,7 @@
 set -e
 
 echo "== writer =="
-mojo run ${MOJOLEARN_MOJO_DEFINES:-} -I . original/identity_trace_check.mojo
+mojo run ${MOJOLEARN_MOJO_DEFINES:-} -I . checks/identity_trace_check.mojo
 
 echo
 echo "== reader, own selftest =="

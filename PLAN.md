@@ -11,8 +11,8 @@ Three reasons, and the first is decisive.
 need a histogram; it needs a `DeviceContext`, a launch-geometry policy, a
 per-backend capability table, a determinism story, an interleaved benchmark
 harness, a machine lock, and packaging. Every one of those is in this tree and
-has been through a compiler and a GPU. `original/kernel_matrix.mojo`,
-`original/numerics.mojo`, `original/interleaved.mojo`, `launch_probe.mojo`
+has been through a compiler and a GPU. `checks/kernel_matrix.mojo`,
+`checks/numerics.mojo`, `checks/interleaved.mojo`, `launch_probe.mojo`
 and `tools/remote_gpu.sh` are the substrate, not the trees.
 
 Starting elsewhere means rebuilding all of it and then reconciling two copies
@@ -36,7 +36,7 @@ That is a DIRECTORY problem, not a repository problem.
       boosting/
         gbdt/      CatBoost derivative. COPY, DO NOT IMPROVE applies HERE
                      AND ONLY HERE, unchanged.
-        original/   what CatBoost never had to write
+        checks/   what CatBoost never had to write
       cluster/       k-means
       neighbors/     k-NN
       ensemble/      random forest

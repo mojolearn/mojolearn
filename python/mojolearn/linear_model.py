@@ -35,7 +35,7 @@ class LinearRegression(NumericModeMixin):
         n_features == 1 refused   cuML forces its SVD solver for one
                                   column (linear_regression.pyx:390) and
                                   that solver is not ported; the Mojo layer
-                                  raises BY NAME (glm/derived/glm/ols.mojo)
+                                  raises BY NAME (glm/impl/glm/ols.mojo)
         n_features > n  refused   A^T A is singular by construction;
                                   cuML's dispatch switches to SVD
                                   (ols.cuh:112-113), not ported; raised
@@ -47,7 +47,7 @@ class LinearRegression(NumericModeMixin):
     (center X and y on the DEVICE) and `postProcessData` (intercept =
     mean(y) - mu_X . coef; preprocess.cuh:98-176). The ported `ols_fit`
     REFUSES `fit_intercept` by name because those two are not ported
-    (glm/derived/glm/ols.mojo). This class therefore does the centering here,
+    (glm/impl/glm/ols.mojo). This class therefore does the centering here,
     in numpy: column means and the y mean in float64, subtracted in float32,
     and the intercept as `mean(y) - sum(mu_X * coef)` with `math.fsum`
     (exactly rounded; NO BLAS dot, which would be a platform-dependent host
@@ -134,7 +134,7 @@ class Ridge(NumericModeMixin):
 
     Mirrors `cuml/python/cuml/linear_model/ridge.pyx` on top of
     `cuml/cpp/src/glm/ridge.cuh::ridgeFit` (DEVIATION 545; the Mojo port is
-    `glm/derived/glm/ridge.mojo` and the design note there is worth reading:
+    `glm/impl/glm/ridge.mojo` and the design note there is worth reading:
     their `eig` solver is an SVD through the eigendecomposition of `X.T @ X`
     followed by `ridgeSolve`, NOT "OLS with alpha added", and so is ours).
     Solves `min ||y - Xw||^2 + alpha ||w||^2`; the same objective as
@@ -273,7 +273,7 @@ class LogisticRegression(NumericModeMixin):
 
     Mirrors `cuml/python/cuml/linear_model/logistic_regression.py` on top of
     `cuml/python/cuml/solvers/qn.pyx` and `cuml/cpp/src/glm/qn/` (DEVIATIONS
-    546-549; the Mojo port is `glm/derived/glm/qn/*.mojo`, one file per
+    546-549; the Mojo port is `glm/impl/glm/qn/*.mojo`, one file per
     theirs). The objective is `mean_i logloss_i + (1/(2 C n)) ||w||^2`
     (`penalty_normalized=True`: cuML divides the penalty by n so that its
     minimizer is scikit-learn's `LogisticRegression(C)` minimizer), the

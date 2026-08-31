@@ -39,13 +39,13 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier, syncwarp
 
-from original.kernel_matrix import (
+from checks.kernel_matrix import (
     lane_width_for,
     TARGET_COLUMN,
     deterministic_flush_for,
     requires_uniform_iteration_for,
 )
-from original.numerics import (
+from checks.numerics import (
     PIN_DETERMINISM,
     GLOBAL_NUMERIC_MODE,
     NUMERIC_FAST,
@@ -92,7 +92,7 @@ comptime LOAD_SIZE = 4
 comptime POINTS_PER_ITER = UNROLL * LOAD_SIZE
 
 
-#: The mode this build compiles against; see `original/numerics.mojo`. Same
+#: The mode this build compiles against; see `checks/numerics.mojo`. Same
 #: row as `hist_binary.mojo`, and the flush below follows the matrix.
 comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
 

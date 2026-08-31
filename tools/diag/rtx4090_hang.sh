@@ -24,7 +24,7 @@
 #       kill it and ask whether the GPU still answers (H2's hypothesis)
 #   D6  ols_launch_localize, both modes, plus the linalg gate itself: a
 #       SEPARATE open item (check_ols_is_launch_invariant) riding the lease
-#   D3  the Mojo-level bisect: original/if_hang_probe.mojo BUILT then RUN
+#   D3  the Mojo-level bisect: checks/if_hang_probe.mojo BUILT then RUN
 #       once per MOJOLEARN_IF_DIAG_* guard, so "the compile hangs" and "the
 #       kernel hangs" are different files, and the TRACE build splits the
 #       launch into enqueue (MAX compiles there) and synchronize
@@ -86,7 +86,7 @@ say "D0 env recorded"
 # how `rf_ctx_probe.mojo` came to exonerate the thing it was written to
 # reproduce. Three arms, one reading. All three build and pass on an M4
 # (2026-08-30), which is the control: this box has never hung.
-ORDP=ensemble/original/rf_ctx_order_probe.mojo
+ORDP=ensemble/checks/rf_ctx_order_probe.mojo
 run d5_order_bad_build 480 pixi run mojo build -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D ORDER_BAD=1 "$ORDP" -o "$D/probe_order_bad" \
   && run d5_order_bad_run 120 "$D/probe_order_bad"
 run d5_order_forced_build 480 pixi run mojo build -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D ORDER_FORCED=1 "$ORDP" -o "$D/probe_order_forced" \
@@ -157,12 +157,12 @@ mprobe() {  # mprobe NAME SRC defines...
   run "d3_${name}_build" 480 pixi run mojo build -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 "$@" "$src" -o "$D/probe_$name" || return
   run "d3_${name}_run" 90 "$D/probe_$name"
 }
-IFP=isolation_forest/original/if_ctx_probe.mojo
+IFP=isolation_forest/checks/if_ctx_probe.mojo
 mprobe if_T4_model_on_second_ctx "$IFP" -D MOJOLEARN_IF_DIAG_TRACE=1 -D T4=1
 mprobe if_T1_two_alive_fit_second "$IFP" -D MOJOLEARN_IF_DIAG_TRACE=1 -D T1=1
 mprobe if_T3_two_alive_fit_first "$IFP" -D MOJOLEARN_IF_DIAG_TRACE=1 -D T3=1
 mprobe if_T2_sequential "$IFP" -D MOJOLEARN_IF_DIAG_TRACE=1 -D T2=1
-RFP=ensemble/original/rf_ctx_probe.mojo
+RFP=ensemble/checks/rf_ctx_probe.mojo
 mprobe rf_two_ctx "$RFP" -D RF_TWO_CTX=1
 mprobe rf_same_ctx "$RFP" -D RF_SAME_CTX=1
 
@@ -213,7 +213,7 @@ PY
 # Read the result against the table in the probe's own docstring BEFORE
 # touching a kernel. If the gate fails on this box in this leg while this is
 # silent, that difference is itself the next thing to read.
-OLSP=glm/original/ols_launch_localize.mojo
+OLSP=glm/checks/ols_launch_localize.mojo
 [ "$(elapsed)" -gt 2400 ] || { run d6_ols_localize_fast_build 480 pixi run mojo build -I . "$OLSP" -o "$D/probe_ols_fast" \
   && run d6_ols_localize_fast_run 180 "$D/probe_ols_fast"; }
 [ "$(elapsed)" -gt 2500 ] || { run d6_ols_localize_ident_build 480 pixi run mojo build -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 "$OLSP" -o "$D/probe_ols_ident" \

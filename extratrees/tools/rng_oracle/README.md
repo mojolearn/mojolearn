@@ -1,13 +1,13 @@
 # rng_oracle
 
-The reference values for `extratrees/original/pcg_rng.mojo`.
+The reference values for `extratrees/checks/pcg_rng.mojo`.
 
 `main.cpp` is a small C++ program that **copies** RAFT's `PCGenerator`, RAFT's
 `custom_next` uniform-int and uniform-float overloads, RAFT's `wmul_64bit`, and
 cuML's `fnv1a32`, with the CUDA decorations (`HDI`, `DI`, `__CUDA_ARCH__`)
 defined away. Every line of arithmetic in it is upstream text, not a
 re-derivation. It writes `pcg_reference.txt`, which
-`extratrees/original/pcg_rng_check.mojo` compares against cell by cell.
+`extratrees/checks/pcg_rng_check.mojo` compares against cell by cell.
 
 That is the point: the Mojo port is checked against **their** arithmetic, not
 against a tally we wrote twice.

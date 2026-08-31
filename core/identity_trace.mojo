@@ -40,7 +40,7 @@ the other".
 
 1. **BIT PATTERNS, NEVER DECIMAL TEXT.** `String(Float32)` does not round
    trip in this toolchain -- see `[[mojo-string-float-roundtrip]]`, which is
-   why `original/` writes `<decimal>/<hex bits>` pairs everywhere. A trace
+   why `checks/` writes `<decimal>/<hex bits>` pairs everywhere. A trace
    built on formatted floats would report agreement across a real
    difference, which is the worst failure an instrument of this kind can
    have.
@@ -88,7 +88,7 @@ from std.sys.info import size_of
 
 comptime FNV_OFFSET: UInt64 = 0xCBF29CE484222325
 comptime FNV_PRIME: UInt64 = 0x100000001B3
-"""FNV-1a64, the same constants `ensemble/original/fingerprint_probe.mojo`
+"""FNV-1a64, the same constants `ensemble/checks/fingerprint_probe.mojo`
 folds a whole forest with. Reused rather than re-chosen so a hash from either
 instrument means the same kind of thing, and because a second hash function
 in one repository is a second thing to get wrong."""
@@ -194,7 +194,7 @@ struct IdentityTrace(Movable):
     ) raises -> Self:
         """A trace pointed at an explicit file, ignoring the environment.
 
-        For CHECKS. `original/identity_trace_check.mojo` has to produce two
+        For CHECKS. `checks/identity_trace_check.mojo` has to produce two
         traces in one process and compare them, and a check whose behavior
         depends on whether the operator happens to have
         `MOJOLEARN_IDENTITY_TRACE` exported is a check that passes or fails
@@ -432,7 +432,7 @@ struct IdentityTrace(Movable):
 #
 # What these two functions are for is the case Python cannot serve: a MOJO
 # CHECK that produces two traces in one process and has to RAISE on the
-# difference. `original/identity_trace_check.mojo` already needed exactly
+# difference. `checks/identity_trace_check.mojo` already needed exactly
 # this and wrote the loop inline (`:71` and `:262-283`); the depthwise
 # probe needed it second. Two inline copies is how a third gets written, so
 # it lives here where both callers can reach it. THE INLINE COPY IN THAT

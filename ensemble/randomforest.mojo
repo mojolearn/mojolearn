@@ -142,7 +142,7 @@ sqrt to be correctly rounded and libm cannot differ; `log2` has no such
 requirement.
 
 **MEASURED, so the choice is not left as an assumption.**
-`original/predict_check.mojo` compares `std.math.log2` against libm's
+`checks/predict_check.mojo` compares `std.math.log2` against libm's
 `log2` at every integer `n_cols` from 2 to 4096 and finds **4051
 bit-level disagreements out of 4095, the first at n_cols = 3** -- so the
 scar generalizes from `log` to `log2` and the two functions are not the
@@ -214,7 +214,7 @@ each refused by name at its own call site rather than quietly missing.
 (`randomforest.cuh:286-370`) is ported as the free function `fit_forest`
 below, and `detail::RowSampler` (`:62-226`) as `RowSampler`;
 `computeQuantiles` and the builder both exist now. A forest trains, and
-`ensemble/original/forest_check.mojo` fits one and predicts it back.
+`ensemble/checks/forest_check.mojo` fits one and predicts it back.
 
 ALL FOUR `RowSampler` ARMS RUN. This block used to say three of them
 were "still out, each raising by name"; that stopped being true and the
@@ -309,7 +309,7 @@ three.
 from std.gpu import global_idx
 from std.math import ceildiv as _ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from original.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 
 from ensemble.decisiontree.batched_levelalgo.bins import Bin
 from ensemble.decisiontree.batched_levelalgo.builder import (

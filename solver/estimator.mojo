@@ -10,7 +10,7 @@ what a `mojolearn.Lasso().fit(X, y)` actually runs. The shape is
 device buffers owned here for exactly one call, results read back, nothing
 retained.
 
-The ported solver is `solver/derived/solver/cd.mojo` (cuML
+The ported solver is `solver/impl/solver/cd.mojo` (cuML
 `cpp/src/solver/cd.cuh`, pinned at `v26.08.00` = `265b9da`); the lane's
 README, `DERIVATION_MAP.tsv` and `NOT_IMPLEMENTED.tsv` are the record of what is and is
 not in it. Nothing here re-decides any of that: every guard cdFit carries is
@@ -26,7 +26,7 @@ takes. The Python layer does the conversion with `np.asfortranarray` and
 names the copy, because doing it here would be a scalar host loop over
 `n_rows * n_cols` elements in Mojo where numpy has a blocked one.
 `cd_predict_host`'s `x_ptr` is column-major for the same reason
-(`linearRegH` reads the same layout, `solver/derived/functions/linear_reg.mojo`).
+(`linearRegH` reads the same layout, `solver/impl/functions/linear_reg.mojo`).
 
 ==========================================================================
 DEVIATION 880 -- THE CALLER'S DESIGN MATRIX IS NOT MUTATED
@@ -73,8 +73,8 @@ that cannot leave a card. The trace is off unless the variable is set.
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
-from solver.derived.solver.cd import CdLaunch, cd_fit_traced, cd_predict
-from solver.derived.solvers.params import LOSS_SQRD_LOSS
+from solver.impl.solver.cd import CdLaunch, cd_fit_traced, cd_predict
+from solver.impl.solvers.params import LOSS_SQRD_LOSS
 
 
 def cd_fit_host(
