@@ -34,30 +34,49 @@ structure searcher differs.
     check-pointwise-vs-greedy         RUNG 1's GATE: two searchers, one tree
     check-fit-pointwise               `fit` both ways, 20 iterations identical
 
-## OPEN DEFECT, blocking the covtype leg of the searcher-parity claim
+## CLOSED 2026-08-31: the covtype leg of the searcher-parity claim
 
-`checks/searcher_parity_covtype_check.mojo` (performance lane,
-2026-08-22): the two searchers are bit-identical at eps500 and on the
-oracle fixtures, but at covtype (43 BINARY-policy features, 581k rows)
-the pointwise arm produces a WORSE model -- mse 1.184 vs greedy's
-0.9486, and without the Apple i32 routing row it also wobbles run to
-run (float-atomic flush in the binary family). Established in a clean
-worktree with the routing row disabled, so it is not the row. The
-suspect is the pointwise BINARY path (or mixed-policy interaction) at
-scales the oracle fixtures never reach. The rung-1 "two arms
-bit-identical" claim holds only on shapes without binary-policy
-features until this is found.
-LOCALIZED (same session, performance lane): each policy ALONE is
+`checks/searcher_parity_covtype_check.mojo`, at the FULL 581,012 rows and
+53 mixed-policy features, both reps:
+
+    mse greedy 0.9486324077643835  pointwise 0.9486324077643835  identical True
+
+That greedy value is the one the defect was reported against, and the
+pointwise arm -- which produced 1.1843180519507341 -- now matches it bit
+for bit. The rung-1 "two searchers, one tree, same bits" claim holds on
+mixed-policy shapes, which is the case it was blocked on.
+
+THE BUG, and it was not where the localization pointed. The suspects
+recorded below were the per-policy `bin_sums` segment offsets and the
+cross-policy best-split id mapping; both were innocent. In
+`gbdt/methods/pointwise_scores_calcer.mojo` the per-feature weights
+buffer was ALLOCATED at the BIN-FEATURE count and INDEXED by GLOBAL
+feature id. On a single-policy shape those two numberings coincide and
+nothing is wrong -- which is exactly why each policy alone passed and the
+mix failed, and why every oracle fixture was silent.
+
+The localization below is kept because it was correct and it is what made
+the bug findable: each policy ALONE bit-identical, the two together not,
+is the observation that says "numbering", not "arithmetic".
+
+WHAT THE 4k FIXTURE COULD NOT SETTLE. The fix was first confirmed on a
+4,000-row slice. That slice carries the same fold file and therefore the
+same policy split and the same global numbering, so it was a strong
+argument -- but the divergence was MEASURED at 581k and an argument is not
+a measurement. The full arm above is the closing evidence.
+
+CORRECTED WHILE CLOSING: the note below reads "pure one-byte POINTWISE
+BEAT GREEDY 1.5x at 4k x 10". True where it was taken, and it does not
+survive scale. At 581k the same arm is 2.8x SLOWER (greedy 0.247 s,
+pointwise 0.701 s, ratio 0.352 and 0.361 across the two reps). The 4k
+number is left standing as the small-shape datum it is; it is not
+evidence about the shipped size.
+
+LOCALIZED (2026-08-22, performance lane): each policy ALONE is
 bit-identical -- covtype's 10 one-byte features pass (`covob_*`
 fixtures), its 43 binary features pass (`covbin_*`), the 53 together
-fail. The defect is the POLICY-MIX interaction: the per-policy
-`bin_sums` segment offsets (one policy's writes or the scorer's reads
-landing against the wrong segment base) or the cross-policy
-best-split id mapping are the suspects. Reproduce the split with the
-`covob`/`covbin` fixtures in ~/.cache/mojolearn, built by slicing the
-covtype fixture by fold count. Bonus datum: pure one-byte POINTWISE
-BEAT GREEDY 1.5x at 4k x 10 -- the arm is fast when its histograms
-are honest.
+fail. Reproduce the split with the `covob`/`covbin` fixtures in
+~/.cache/mojolearn, built by slicing the covtype fixture by fold count.
 
 ## BEFORE ANYTHING ELSE: DEVIATION 134 IS OPEN
 
