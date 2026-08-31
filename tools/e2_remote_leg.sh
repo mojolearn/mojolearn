@@ -184,6 +184,19 @@ $SSH 'nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || rocm-smi 
 # refused the flip and git had no repository. A bundle of HEAD is exact
 # by construction: the remote clones it, checks out the hash, and the
 # commit recorded in every artifact is the commit that ran.
+# MEASURED COST, 2026-08-31: THE BUNDLE IS 247 MB AND THE scp TAKES ELEVEN
+# MINUTES OF A SIXTY MINUTE LEASE. `git bundle` carries the whole history and
+# this repository's history carries `bench/results`, which is most of it.
+# Twenty-seven of these were sitting in /tmp, 5.6 GB.
+#
+# Not changed here, deliberately, because the transport is what gives this
+# leg its "SHIP THE COMMIT, NOT THE WORKING TREE" property and swapping it
+# mid-flight would need its own leg to verify. The two candidates, in order:
+# `--depth=1` on the bundle, which keeps the property and drops the history;
+# or `git archive` at the sha with `':!bench/results/e1'` excluded, which is
+# what `tools/gemm_remote_leg.sh:3270` already does and is why the RunPod leg
+# does not pay this. Either one hands every future leg back a fifth of its
+# lease.
 COMMIT="$(git -C "$REPO" rev-parse "${E2_COMMIT:-HEAD}")"   # pin to the Mac reference run's commit
 BUNDLE="/tmp/mojolearn-e2-$COMMIT.bundle"
 # a bundle needs a REF (a bare sha is "Refusing to create empty bundle")

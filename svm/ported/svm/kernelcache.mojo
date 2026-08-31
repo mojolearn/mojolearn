@@ -38,6 +38,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from svm.mojo_only.device_select import (
     SEL_TPB,
     copy_i32_kernel,
+    svr_vec_indices_kernel,
     fill_f32_kernel,
     gather_f32_kernel,
     gather_rows_kernel,
@@ -58,26 +59,6 @@ from svm.ported.svm.svm_parameter import (
 comptime CACHE_READY = 0
 comptime CACHE_WS_INITIALIZED = 1
 comptime CACHE_BATCHING_INITIALIZED = 2
-
-
-def svr_vec_indices_kernel(
-    vec_idx: MutPointer[Int32, MutAnyOrigin],
-    ws_idx: MutPointer[Int32, MutAnyOrigin],
-    n_rows_in: Int32,
-    n_ws_in: Int32,
-):
-    """`GetVecIndices`, `kernelcache.cuh:804-808`.
-
-    "For SVR we have duplicate set of training vectors, we return the
-    original idx, which is simply ws_idx % n_rows." Their own spelling is
-    `y < n ? y : y - n` rather than a modulo, which is the same thing given
-    `ws_idx < 2 * n_rows` and is kept because a `%` would also accept an
-    index they never produce.
-    """
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n_ws_in):
-        var v = ws_idx.unsafe_load(i)
-        vec_idx.unsafe_store(i, v if v < n_rows_in else v - n_rows_in)
 
 
 def _grid(n: Int) -> Int:

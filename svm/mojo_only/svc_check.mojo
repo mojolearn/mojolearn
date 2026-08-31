@@ -694,12 +694,42 @@ def check_refusals(ctx: DeviceContext) raises:
     var p1 = SvmParameter.default()
     p1.cache_size = 200.0
     hits += _try_refusal(ctx, fx, p1, KernelParams.linear(), False, "cache_size")
+    # THE svmType REFUSAL MOVED, AND THIS BLOCK IS WHAT NOTICED.
+    #
+    # It used to read `p2.svmType = 2` (EPSILON_SVR) and expect the word
+    # "svmType" out of `check_rung1_scope`. On 2026-08-31 the scope check
+    # began ADMITTING EPSILON_SVR, so that assertion stopped being about a
+    # refusal: the fit ran on into a 2n-domain solve and this gate HUNG
+    # rather than failed, twice, for seventeen minutes each. A refusal test
+    # whose subject stops refusing does not fail loudly, it stops being a
+    # test, and that is the whole reason the four cases below are separate.
+    #
+    # 3 is NU_SVR, which is unported UPSTREAM too and still comes out of the
+    # scope check by name.
     var p2 = SvmParameter.default()
-    p2.svmType = 2
+    p2.svmType = 3
     hits += _try_refusal(ctx, fx, p2, KernelParams.linear(), False, "svmType")
+    # 2 is EPSILON_SVR, which is now PORTED and refuses for a different
+    # reason, from a different place: `SmoSolver.solve`, because nothing has
+    # ever gated it. Asserting the word UNGATED is what keeps this honest;
+    # the day a fixture exists, this line has to be deleted deliberately
+    # rather than passing on a message that happens to still match.
+    var p2b = SvmParameter.default()
+    p2b.svmType = 2
+    hits += _try_refusal(ctx, fx, p2b, KernelParams.linear(), False, "UNGATED")
+    # `epsilon` on a CLASSIFIER, where upstream ignores it.
     var p3 = SvmParameter.default()
     p3.epsilon = 0.1
     hits += _try_refusal(ctx, fx, p3, KernelParams.linear(), False, "epsilon")
+    # and a NEGATIVE epsilon on a regressor, which is DEVIATION 636's family
+    # and must be caught BEFORE the UNGATED refusal above, or the scope
+    # check is not the thing rejecting it.
+    var p3b = SvmParameter.default()
+    p3b.svmType = 2
+    p3b.epsilon = -1.0
+    hits += _try_refusal(
+        ctx, fx, p3b, KernelParams.linear(), False, "epsilon must be non-negative"
+    )
     hits += _try_refusal(ctx, fx, SvmParameter.default(), KernelParams(1, 3, 1.0, 0.0), False, "POLYNOMIAL")
     hits += _try_refusal(ctx, fx, SvmParameter.default(), KernelParams(3, 3, 1.0, 0.0), False, "TANH")
     hits += _try_refusal(ctx, fx, SvmParameter.default(), KernelParams(4, 3, 1.0, 0.0), False, "PRECOMPUTED")
@@ -716,7 +746,12 @@ def check_refusals(ctx: DeviceContext) raises:
             raise Error("multiclass refusal does not say binary: " + String(e))
     if not raised:
         raise Error("multiclass was not refused")
-    print("  refusals by name: " + String(hits + 1) + " (cache_size, svmType, epsilon, POLYNOMIAL, TANH, PRECOMPUTED, sample_weight, multiclass)")
+    print(
+        "  refusals by name: " + String(hits + 1)
+        + " (cache_size, svmType=NU_SVR, EPSILON_SVR/UNGATED, epsilon on"
+        " C_SVC, negative epsilon on SVR, POLYNOMIAL, TANH, PRECOMPUTED,"
+        " sample_weight, multiclass)"
+    )
 
 
 def check_card_is_emitted(ctx: DeviceContext, path_a: String, path_b: String) raises:
