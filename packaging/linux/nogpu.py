@@ -48,8 +48,19 @@ import shutil
 import subprocess
 import sys
 
+# THE DEVICE NODES THIS GATE EXPECTS THE REFUSAL TO NAME, and they must be
+# the SAME SET the selector probes. `/dev/dri/renderD128` was in the hip row
+# until 2026-08-31 and was removed from `_backend.py`'s probe that day for a
+# measured reason: it is the generic DRM render node EVERY GPU creates, NVIDIA
+# included, so an A40 with /dev/dri was being offered the hip set. This list
+# was not updated with it, so the gate went on asserting that the refusal
+# names a path the fix deliberately stopped naming, and the AMD leg reported
+# `nogpu FAIL` for a refusal that was working perfectly.
+#
+# A gate that outlives the thing it checks does not fail loudly; it fails
+# quietly and for the wrong reason, which costs more than the bug would have.
 DEV = {"cuda": ["/dev/nvidiactl", "/dev/nvidia0"],
-       "hip": ["/dev/kfd", "/dev/dri/renderD128"]}
+       "hip": ["/dev/kfd"]}
 LIBS = {"cuda": ["libcuda.so.1", "libcuda.so"],
         "hip": ["libamdhip64.so.7", "libamdhip64.so.6", "libamdhip64.so"]}
 SNIPPET = "import mojolearn; print('IMPORTED', mojolearn.vendor())"
