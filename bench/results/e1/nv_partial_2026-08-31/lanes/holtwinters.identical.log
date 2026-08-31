@@ -1,0 +1,51 @@
+/root/mojolearn/holtwinters/checks/hw_check.mojo:1562:24: warning: 'if' condition always evaluates to 'False'; 'if' branch is unreachable
+    if HW_RHO_PIN_SALT < 0:
+                       ^
+Imported from /root/mojolearn/holtwinters/checks/hw_check.mojo:173:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/holtwinters/checks/hw_check.mojo:173:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/holtwinters/checks/hw_check.mojo:173:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/holtwinters/checks/hw_check.mojo:173:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/holtwinters/checks/hw_check.mojo:173:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Included from /root/mojolearn/holtwinters/checks/hw_check.mojo:201:
+/root/mojolearn/holtwinters/checks/hw_oracle.mojo:232:28: warning: assignment to 'clevel' was never used; assign to '_' instead?
+    var clevel = Scalar[dt](0)
+                           ^
+Included from /root/mojolearn/holtwinters/checks/hw_check.mojo:201:
+/root/mojolearn/holtwinters/checks/hw_oracle.mojo:233:28: warning: assignment to 'ctrend' was never used; assign to '_' instead?
+    var ctrend = Scalar[dt](0)
+                           ^
+== holtwinters/checks/hw_check.mojo [IDENTICAL] sabotage=none pack_sabotage=none ==
+check_hw_refusals OK [IDENTICAL]: 13 refusals by name (cuML's wrapper rules + DEVIATION 664); a zero under additive accepted
+check_hw_decompose_vs_reference OK [IDENTICAL]: R1Qt == float64 pinv at 172 weights (6 trend_len) with the four pinv identities; planted slope/intercept/season recovered (worst season err 0.0001125335693359375); float32 vs float64 start values worst rel err 3.201789708778331e-05
+  additive series 0: start SSE 111.197044 -> fitted 83.86659 (float64 83.8445294035202), params 0.22879592/0.0/0.63337076, niter 23, OPTIM_MIN_PARAM_DIFF
+  multiplicative series 0: start SSE 272.98178 -> fitted 151.57564 (float64 151.58859694291056), params 0.9983359/0.0/0.2598621, niter 19, OPTIM_MIN_ERROR_DIFF
+check_hw_optimizer_reduces_sse OK [IDENTICAL]: 14 series, fitted SSE <= start SSE everywhere, parameters in [0,1], 0 hit the 1000-iteration limit; float32 vs float64 SSE worst rel diff 0.00379656045223281 (report)
+  additive: worst |forecast - planted| 0.01910400390625 (rel 1.8811253769462736e-05) over h=24, 3 series; params s0 0.9969003/0.00043305117/0.76311433
+  multiplicative: worst |forecast - planted| 1.569091796875 (rel 0.0005049758596906099) over h=24, 3 series; params s0 0.9999065/0.0/0.08499094
+check_hw_forecast_continues_pattern OK [IDENTICAL]: noiseless planted additive and multiplicative series continued within 0.5% over 2 seasons (worst rel 0.0005049758596906099)
+check_hw_signed_zero_clamp OK [IDENTICAL]: host bound(-0.0)=0x00000000, bound(NaN)=+0.0, bound(inf)=1; device eval at alpha=beta=gamma=-0.0 == eval at +0.0 bit for bit (724 cells), == oracle; RECORDED clamp: start (-0.0, NaN, -0.0) on the zero series -> 0x00000000/0x00000000/0x00000000
