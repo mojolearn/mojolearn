@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.3.2 (2026-08-31)
+
+A new estimator, and 1,138 lines of never-executed code taken back out of the
+wheel. Nothing in the 0.3.1 surface changes its numbers: the GBDT fix in this
+release is on the POINTWISE searcher, which the Python surface does not reach
+(`GradientBoosting` runs the greedy subsets searcher), so it is a correctness
+fix in the tree rather than a behavior change for anyone installing this.
 
 ### Added
 

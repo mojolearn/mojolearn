@@ -9,7 +9,7 @@ authors:
     orcid: "https://orcid.org/0009-0000-9877-3623"
     affiliation: "Latent Archon"
 license: Apache-2.0
-version: "0.3.1"
+version: "0.3.2"
 date-released: "2026-08-31"
 # The CONCEPT DOI, which always resolves to the newest release. The
 # per-version DOI (10.5281/zenodo.22211591 for v0.3.1) is minted by Zenodo
