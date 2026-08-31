@@ -322,10 +322,22 @@ if smoke:
     print("and the hash is stable. NO NUMBER HERE IS A PRICE.")
 else:
     print("READ THE RATIO AS A BAND: min/max are the per-round paired ratios")
-    print("(IDENTICAL_r / FAST_r) over %d alternated rounds on one M4 whose" % rounds)
-    print("governor drifts 1.7x under heat. The median is the band's center,")
-    print("not a figure to four places. Copy the row into bench/LANES_PRICE.md")
-    print("with the date, the sha, the machine and the thermal caveat beside it.")
+    print("(IDENTICAL_r / FAST_r) over %d alternated rounds on THIS box." % rounds)
+    print("The median is the band's center, not a figure to four places. Copy")
+    print("the row into bench/LANES_PRICE.md with the date, the sha and the")
+    print("machine beside it.")
+    # THE CAVEAT MUST NAME THE BOX IT APPLIES TO. This block read "on one M4
+    # whose governor drifts 1.7x under heat" unconditionally, so the AMD leg of
+    # 2026-08-31 printed a thermal caveat about an Apple laptop underneath
+    # numbers taken on an MI325X in a Linux datacenter. A caveat attached to
+    # the wrong machine is worse than none: it invites the reader to discount a
+    # number for a reason that does not apply to it.
+    import platform as _pf
+    if _pf.system() == "Darwin":
+        print("")
+        print("THIS BOX IS THE LAPTOP: heat pins its GPU at MINIMUM clock and")
+        print("the governor drifts 1.7x within one session, so alternate the")
+        print("arms INSIDE one window or the number is fiction.")
 PY
 # The binaries are rebuilt by every run and are not results; they stay out
 # of the committed tree unless asked for.
