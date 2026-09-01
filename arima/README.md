@@ -9,7 +9,7 @@ DEVIATION 670, the hand-off list, and the row text for both directories.
 
 ---
 
-## Status: BUILDS, GATED GREEN, AND BIT-IDENTICAL APPLE <-> AMD. NVIDIA owed.
+## Status: BUILDS, GATED GREEN, AND BIT-IDENTICAL ON THREE VENDORS
 
     the whole tree builds                      YES
     check-arima, IDENTICAL                     PASSES
@@ -19,9 +19,10 @@ DEVIATION 670, the hand-off list, and the row text for both directories.
     inherited MEASURED claims judged           4 of 4 (2 earned, 2 struck)
     a second vendor                            YES, AMD MI325X, 2026-08-28
                                                137 card records, 0 differing
-    a third vendor                             NVIDIA owed: the 2026-08-28
-                                               legs ran 7 and 9 lanes and
-                                               arima was in neither list
+    a third vendor                             YES, NVIDIA, 2026-08-31, at
+                                               commit 221aa141: the Apple,
+                                               AMD and NVIDIA cards are all
+                                               139 lines and byte-identical
 
     ALL OF THE 2026-08-24 WORK NOW BUILDS AND PASSES, both modes: DEVIATION
     677, the six new card stages, orders `arma44` and `ar2_tie`, the two new
@@ -44,11 +45,17 @@ loglike fc` -- with ZERO cells differing anywhere, including at `rd = 8`,
 the largest state this lane accepts. So is `predict`, and so is the
 finite-difference gradient.
 
-**What that does and does not mean.** It means the device and a serial host
-replay through the same numeric helpers agree bit for bit on one machine. It
-does NOT mean bitwise identity across vendors, which is the actual goal and
-which nothing here has tested. Row 58 stays SOURCE-ONLY on the vendor
-question until an NVIDIA or AMD card is diffed against this one.
+**What that does and does not mean.** Device-versus-oracle agreement means
+the device and a serial host replay through the same numeric helpers agree
+bit for bit on one machine. Cross-vendor identity is a separate claim and it
+is now MEASURED rather than argued. At commit `221aa141` the Apple M4, AMD
+MI325X and NVIDIA `arima.identical.card` files are byte-identical, 139 lines
+each.
+The evidence is `bench/results/e1/CERT_2026-08-31.md` and the three card
+sets under `bench/results/e1/2026-08-31_180957-MacBook-Air-1-terrabyte/lanes/`,
+`bench/results/e1/2026-08-31_221142-mojolearn-e2-amd/lanes/` and
+`bench/results/e1/nv_partial_2026-08-31/lanes/`. Row 58 is a THREE-VENDOR
+row.
 
 ## What the gates found (2026-08-23, Apple M4, both modes)
 
@@ -377,8 +384,8 @@ the top of this file, and `SABOTAGES.md` itself).
         pixi run mojo run -I . arima/arima_main.mojo
     python3 tools/identity_trace_diff.py /tmp/arima.mac.card /tmp/arima.other.card
 
-Two pixi tasks are registered: `check-arima` (`pixi.toml:1055`) and
-`arima-card` (`pixi.toml:1056`).
+Two pixi tasks are registered: `check-arima` (`pixi.toml:1108`) and
+`arima-card` (`pixi.toml:1109`).
 
 ---
 
@@ -716,19 +723,24 @@ loop runs zero times and a gate that never enters it proves nothing.
 
 ## HAND-OFF
 
-### pixi task line (I do not own `pixi.toml`)
+### pixi task lines, LANDED
+
+Both tasks are registered in `pixi.toml`, at lines 1108 and 1109. Nothing is
+owed here.
 
     check-arima = "mojo run -I . arima/checks/arima_check.mojo"
     arima-card  = "mojo run -I . arima/arima_main.mojo"
 
 ### IDENTITY_PATHS row 58 (I do not own `IDENTITY_PATHS.md`)
 
-Landed by the orchestrator as row 58 (55 is mamba's). The status cell needs
-replacing now that the lane has run. Corrected text below.
+Landed by the orchestrator as row 58 (55 is mamba's). The status cell in
+`IDENTITY_PATHS.md` still reads as it did on 2026-08-28 and needs replacing
+with the three-vendor result. Corrected text below, current as of
+2026-09-01.
 
 | n | path | what is vendor-dependent in their spelling | what we did | status |
 |---|---|---|---|---|
-| 58 | arima: the batched Kalman filter log-likelihood, prediction and finite-difference gradient (`batched_kalman.cu`, `batched_arima.cu`, `jones_transform.cuh`) | every ARIMA kernel is `double` only and Metal has no Float64; `P0` is a cuBLAS batched `getrf`/`getri` whose association and pivot tie rule are closed and whose `info` the caller never reads; `RQR` and the Lyapunov solve are `cublasgemmStridedBatched`; `raft::tanh` / `raft::atanh` are the vendor's transcendentals (row 12); the undefined in-sample predictions are `nan("")`, whose payload differs per vendor in a recorded buffer; `d_y_p[0] = 0.0` is a cross-thread race in their lambda | DEVIATION 670 (Float32 device, Float64 host reference beside it); DEVIATION 673 (`F <= 0` refused by name); DEVIATION 677 (the same refusal at the diffuse steps, where an unchecked `1/F` reached the gain); DEVIATION 674 (the LU, both substitutions and both gemm shapes written out serial ascending through `identical_mul_add`, `info` raised by name); DEVIATION 675 (`tanh`/`atanh` through `identical_exp`/`identical_log`, ACCEPTED at ~23 ulp with the decision rule recorded); DEVIATION 676 (the sentinel is the constant `0x7fc00000`); their race not ported. `rd > 8`, `r > 5`, exog, confidence intervals, CSS and missing observations all refused by name | **ONE APPLE DEVICE, both modes, 2026-08-24.** Device == host oracle BITWISE on 10 orders x 11 stages, 0 cells differing, at `rd` up to 8 and `r = 5` (the 25x25 Lyapunov LU); `predict` and the gradient likewise; launch-invariant over block width, poisoned padding, batch composition and a repeat run. Card carries 229 stage records including four DECISION stages (`piv`, `guards`, `info_init`, `info_loop`) plus `Fs` and `P_final`. 11 of 11 sabotage arms run: 8 bite, 3 null. **Arm (i) is decision-only: 1 of 229 card tags, ZERO float stages** -- the model rewrite still happens and only the hashed decision notices. Arm (h) re-armed DEVIATION 674's pivot tie on a CONSTRUCTED exact tie and bites (6 of 229 tags), but `piv` and `P0` BOTH move, so `piv` is corroborating there and not decisive. Two arms remain null for recorded reasons: (c) is structural, (f) needs a second vendor. **NO SECOND VENDOR: the cross-vendor claim this row exists to make is UNTESTED.** |
+| 58 | arima: the batched Kalman filter log-likelihood, prediction and finite-difference gradient (`batched_kalman.cu`, `batched_arima.cu`, `jones_transform.cuh`) | every ARIMA kernel is `double` only and Metal has no Float64; `P0` is a cuBLAS batched `getrf`/`getri` whose association and pivot tie rule are closed and whose `info` the caller never reads; `RQR` and the Lyapunov solve are `cublasgemmStridedBatched`; `raft::tanh` / `raft::atanh` are the vendor's transcendentals (row 12); the undefined in-sample predictions are `nan("")`, whose payload differs per vendor in a recorded buffer; `d_y_p[0] = 0.0` is a cross-thread race in their lambda | DEVIATION 670 (Float32 device, Float64 host reference beside it); DEVIATION 673 (`F <= 0` refused by name); DEVIATION 677 (the same refusal at the diffuse steps, where an unchecked `1/F` reached the gain); DEVIATION 674 (the LU, both substitutions and both gemm shapes written out serial ascending through `identical_mul_add`, `info` raised by name); DEVIATION 675 (`tanh`/`atanh` through `identical_exp`/`identical_log`, ACCEPTED at ~23 ulp with the decision rule recorded); DEVIATION 676 (the sentinel is the constant `0x7fc00000`); their race not ported. `rd > 8`, `r > 5`, exog, confidence intervals, CSS and missing observations all refused by name | **THREE VENDORS, same commit `221aa141`, 2026-08-31.** Apple M4, AMD MI325X and NVIDIA each ran `check-arima` green and emitted `arima.identical.card`; the three cards are 139 lines each and BYTE-IDENTICAL, and all three run directories carry `221aa141` in their own `commit.txt`, so this is a same-commit diff and not a comparison across a refactor. Evidence: `bench/results/e1/CERT_2026-08-31.md`, `bench/results/e1/2026-08-31_180957-MacBook-Air-1-terrabyte/lanes/`, `bench/results/e1/2026-08-31_221142-mojolearn-e2-amd/lanes/` and `bench/results/e1/nv_partial_2026-08-31/lanes/`. Sixteen gates pass in both modes. Device == host oracle BITWISE on 10 orders x 11 stages, 0 cells differing, at `rd` up to 8 and `r = 5` (the 25x25 Lyapunov LU); `predict` and the gradient likewise; launch-invariant over block width, poisoned padding, batch composition and a repeat run. `arima-card` carries 229 stage records including four DECISION stages (`piv`, `guards`, `info_init`, `info_loop`) plus `Fs` and `P_final`. 11 of 11 sabotage arms run: 8 bite, 3 null. **Arm (i) is decision-only: 1 of 229 card tags, ZERO float stages** -- the model rewrite still happens and only the hashed decision notices. Arm (h) re-armed DEVIATION 674's pivot tie on a CONSTRUCTED exact tie and bites (6 of 229 tags), but `piv` and `P0` BOTH move, so `piv` is corroborating there and not decisive. Two arms remain null for recorded reasons: (c) is structural, and (f) is Apple-null by construction; the sabotage arms themselves have only ever been run on Apple, so (f)'s NEGATIVE control is still owed on AMD or NVIDIA even though the three-vendor card already carries positive evidence for DEVIATION 676. |
 
 ### A hand-off to whoever owns the deviation ledger
 
@@ -776,26 +788,36 @@ trust your memory of what you staged.
 
 ## OWED
 
-Reordered 2026-08-24. Items marked WRITTEN exist in source and need only a
-build; the rest still need someone to write them.
+Rewritten 2026-09-01 against the run record. Items 1 through 4 and item 7
+are CLOSED; each is kept, with its result, because the reason it was opened
+is worth keeping.
 
-**Needs a compile slot, nothing else:**
+**Closed:**
 
-1. **BUILD AND RUN EVERYTHING WRITTEN ON 2026-08-24.** Two new orders, two
-   new plants, two new gates, a widened gate, DEVIATION 677, and four new
-   card stages. None has been compiled. Expect signature errors around the
-   `guards` buffer in particular: it threads a new argument through two
-   kernel launches.
-2. **Run sabotage (h)**, the pivot tie rule re-armed on `ar2_tie`, and
-   record `piv` and `P0` SEPARATELY. If `piv` moves and `P0` does not, that
-   is the result worth having and not a weak one: it is this lane's
-   holtwinters `CRIT_ORDER`.
-3. **Run sabotage (i)**, the guards decision bit, and confirm NO float stage
-   moves. If one does, the edit was not confined to the decision.
-4. **Re-run the widened `check_fold_order_is_visible`** and raise its floor
-   from "at least two orders move something" to what is observed, per order.
-   The docstring carries a falsifiable prediction: `ar1` must move zero,
-   `rd = 2` few, `rd >= 4` a substantial fraction.
+1. **BUILD AND RUN EVERYTHING WRITTEN ON 2026-08-24: DONE 2026-08-24, first
+   attempt.** Two new orders, two new plants, two new gates, a widened gate,
+   DEVIATION 677 and four new card stages all compiled clean. The predicted
+   signature errors around the `guards` buffer did not happen; the wrong
+   prediction is kept in the status block at the top of this file.
+2. **Sabotage (h): RUN.** The pivot tie rule re-armed on `ar2_tie` bites on
+   6 of 229 card tags, and `piv` and `P0` BOTH move. The hoped-for "`piv`
+   moves while `P0` holds" shape did not appear, because swapping two tied
+   rows changes the permutation AND the arithmetic after it, so `piv` is
+   corroborating here rather than decisive. The lane recorded that instead
+   of spinning it.
+3. **Sabotage (i): RUN.** The guards decision bit moves exactly one card tag
+   (`ar2_unit.guards`) and ZERO float stages, which is the decision-only
+   shape this arm was written to produce.
+4. **`check_fold_order_is_visible`: RE-RUN AND ITS FLOORS RAISED** to what
+   was observed, per order. The prediction was mostly wrong and the wrong
+   prediction stays in the docstring. The driver is `n_phi`, not chain
+   length, so `sarima_rd8` at `rd = 8` moves 0.3 percent while `ar2_tie` at
+   `rd = 2` moves 25 percent. The gate now asserts `ar1` moves zero, at
+   least 6 orders move something (8 observed), at least 35 cells total (55
+   observed) and at least 15 cells in one order (25 on `arma44`).
+
+**Still open, and each needs a compile slot:**
+
 5. **Take the DEVIATION 675 end-to-end measurement** described in that
    section: give `kalman_host_f64` its own Float64 Jones transform so the
    reference spans the transform instead of starting downstream of it. The
@@ -804,17 +826,27 @@ build; the rest still need someone to write them.
 6. **Replace the four derived bounds** using the table under "What the gates
    found". Do not do this without running.
 
-**Needs a second vendor:**
+**Vendors:**
 
-7. ~~**A SECOND VENDOR.**~~ **DONE 2026-08-28, and this item said "entirely
-   untested" for three days after it was.** `bench/results/e1/2026-08-28_203552-mojolearn-e2-amd/lanes/arima.identical.card` against `bench/results/e1/2026-08-28_162228-MacBook-Air-1-terrabyte/lanes/arima.identical.card`: 137 records each, 0 differing. `arima-card`
+7. ~~**A SECOND VENDOR.**~~ ~~**A THIRD VENDOR.**~~ **BOTH CLOSED.** AMD
+   MI325X landed 2026-08-28 (137 records, 0 differing) and NVIDIA landed
+   2026-08-31 at commit `221aa141`, where the Apple, AMD and NVIDIA
+   `arima.identical.card` files are 139 lines each and byte-identical. All
+   three run directories carry `221aa141` in their own `commit.txt`.
+   Evidence: `bench/results/e1/CERT_2026-08-31.md` and the three lane
+   directories named in the status block at the top of this file. `arima-card`
    emits the four decision stages too, so the diff separates "same decisions,
    different arithmetic" from "different decisions"; it needed neither,
-   because nothing differed. **A THIRD VENDOR IS STILL OWED**: the NVIDIA
-   legs of 2026-08-28 ran seven and nine lanes and arima was in neither
-   `MOJOLEARN_E1_LANES`, so the gap is lane selection, not a failure.
-8. **Sabotage (f) cannot be closed on Apple**, where `0.0/0.0` is already
-   `0x7fc00000`. Only NVIDIA or AMD can test DEVIATION 676's claim.
+   because nothing differed.
+8. **Sabotage (f) still cannot be closed on Apple**, where `0.0/0.0` is
+   already `0x7fc00000`. The three-vendor card diff is positive evidence for
+   DEVIATION 676: the sentinel bytes inside the recorded `pred` and
+   `predict` stages are the same on Apple, AMD and NVIDIA. What arm (f)
+   would add is the NEGATIVE control, that a computed `0.0/0.0` WOULD be
+   caught, and every sabotage arm in this lane has only ever been run on
+   Apple. RUN OWED on AMD or NVIDIA. Revert `CANONICAL_NAN_BITS` to a
+   computed `Float32(0.0) / Float32(0.0)` per `arima/SABOTAGES.md` section
+   (f), then re-run `check-arima`.
 
 **Still unwritten:**
 

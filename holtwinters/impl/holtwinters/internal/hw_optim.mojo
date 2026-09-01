@@ -143,10 +143,11 @@ WHAT OURS DOES: one extra Int32 per series, `hw.opt.decisions`, packed:
     bits 16+   the TOTAL number of line-search halvings over the whole fit
 No arithmetic is added and none is moved: every bit is set from a compare
 the optimizer already performed. The cost is one integer per series.
-MEASURED: OWED. This is written but NOT BUILT (the lane had no compile
-slot when it was written); the gate compares it device-vs-oracle like
-every other stage, and the oracle sets the same bits from the same
-compares.
+MEASURED. BUILT AND GREEN in both modes since 2026-08-24, and green on two
+vendors at commit 221aa141: `check_hw_decision_branches` compares the mask
+device-vs-oracle on 5 fixtures, and the oracle sets the same bits from the
+same compares. The Apple and AMD cards carrying it are byte-identical
+(bench/results/e1/CERT_2026-08-31.md).
 ============================================================================
 
 ============ DEVIATION 665 (2026-08-23): THE OPTIMIZER WRITES ITS

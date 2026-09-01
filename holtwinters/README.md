@@ -2,15 +2,37 @@
 
 DEVIATIONS 660-665 and 697-698. COPY, DO NOT IMPROVE.
 
-## Status: Apple M4 only, both modes green, and PART OF IT IS UNVERIFIED
+## Status: BIT-IDENTICAL APPLE vs AMD, both modes green. NVIDIA OWED.
 
 Read this before trusting anything below.
 
 * The gate `checks/hw_check.mojo` was built and run on one Apple M4 on
   2026-08-23 and printed `ALL OK` under IDENTICAL and under FAST.
-* **No second vendor has run this.** Every cross-vendor claim here is a
-  claim about what the spelling is designed to guarantee, not a
-  measurement. NVIDIA and AMD re-prints are OWED.
+* **A SECOND VENDOR HAS RUN THIS.** At commit `221aa141`, 2026-08-31, the
+  Apple M4 and the AMD MI325X both ran all eleven gates green and emitted
+  `holtwinters.identical.card`; the two cards are 182 lines each and
+  BYTE-IDENTICAL, and both run directories carry `221aa141` in their own
+  `commit.txt`. Evidence: `bench/results/e1/CERT_2026-08-31.md`,
+  `bench/results/e1/2026-08-31_180957-MacBook-Air-1-terrabyte/lanes/` and
+  `bench/results/e1/2026-08-31_221142-mojolearn-e2-amd/lanes/`. Apple and
+  AMD are as far apart as this tree's columns get, 32-wide against 64-wide
+  lanes.
+* **THE NVIDIA COLUMN IS OWED, and it is a real debt, not a formality.**
+  Two is not three, per `[[one-box-verdict-is-not-three]]`. The NVIDIA leg
+  of 2026-08-31 did not fail this lane; it HUNG in it and never reported.
+  The cause is DEVIATION 1946, a context-lifetime defect in
+  `holtwinters/checks/hw_check.mojo`. In `check_hw_signed_zero_clamp`,
+  `ctx`'s last use was a `download_f32` with 25 buffer releases after it,
+  and Mojo frees at last use, so every one of those releases ran against a
+  context that was already gone; the NEXT `DeviceContext()` in the process
+  never came back. FIXED 2026-09-01, tree-wide, 81 functions in 57 files.
+  The fix is VERIFIED ON APPLE to move no bit, and it is NOT yet verified
+  to cure the hang, because the defect only manifests on sm_89 and no RTX
+  4090 leg has run since. Read `bench/results/e1/CERT_2026-08-31.md` for
+  the full account.
+* **The sabotage arms have only ever been run on Apple.** The AMD leg ran
+  the clean gate, not the arms, so `STD_SQRT` and `HW_MAX_CLAMP` are still
+  Apple-null REACH FAILURES and are still owed a non-Apple run.
 * **Every arm and both modes have now been built and run against the
   current tree** (2026-08-23, serially, one compile at a time): the clean
   IDENTICAL gate, the clean FAST gate, and all nine sabotage arms. The
@@ -205,7 +227,9 @@ places the lane is not cuML's numbers.
 
 Every arm is a `-D MOJOLEARN_HW_SABOTAGE_<NAME>=1` build under IDENTICAL;
 nothing is edited and nothing is reverted. All nine were built and run
-serially on one M4 on 2026-08-23 against the current tree. **Stages and
+serially on one M4 on 2026-08-23 against the current tree, and ON APPLE
+ONLY, which is still true. The AMD leg of 2026-08-31 ran the clean gate and
+not the arms. **Stages and
 cells are counted, not just first divergence**, because the mamba lane
 measured an arm that moves 13 of 16 stages and still leaves the final
 output bit-identical. Cell counts are device vs oracle on the `additive`
@@ -338,10 +362,20 @@ assertions, because the card's job is to be independent of them.
                                      tpb_decomp 32/256, tpb_optim 128/64, pad 0/37, two
                                      poisons, run twice, and batch 1 == 7 == 512
     check_hw_card_is_emitted         the stage list and the run-to-run control
+    check_hw_decision_branches       DEVIATION 699's mask device == oracle on 5 fixtures,
+                                     plus the reach census and the bounded reach search
+    check_hw_pack_round_trip         the packed comps/stats/flags buffers equal the
+                                     structured lists bitwise, with seven SEPARATION arms
 
-Measured 2026-08-23 on one M4, IDENTICAL: all nine OK, 6 of 6 fixtures
-bit-identical at every stage and cell, 37 stages recorded, both negative
-controls pass.
+Measured 2026-08-23 on one M4, IDENTICAL: all nine gates that existed then
+OK, 6 of 6 fixtures bit-identical at every stage and cell, 37 stages
+recorded, both negative controls pass.
+
+Re-measured 2026-08-31 at commit `221aa141` on BOTH an Apple M4 and an AMD
+MI325X: ELEVEN gates OK on each, and the two `holtwinters.identical.card`
+files are 182 lines and byte-identical. FAST is green on both and its cards
+DIFFER between them, which is what FAST promises; FAST buys speed and never
+bits.
 
 FAST, rebuilt and run the same day, RECORDED not asserted (exit 0): all
 nine checks run and `check_hw_device_equals_oracle` REPORTS rather than
@@ -379,17 +413,18 @@ is expected to change a criterion or a decision.
 
 ## HAND-OFF
 
-**pixi task lines** (I do not own `pixi.toml`; land these next to
-`check-metrics-*`):
+**pixi task line: LANDED.** `check-holtwinters` is registered in
+`pixi.toml` at line 1038. Nothing is owed here.
 
     check-holtwinters = "mojo run -I . holtwinters/checks/hw_check.mojo"
 
-**IDENTITY_PATHS row text** (I do not own `IDENTITY_PATHS.md`; the row
-number is the orchestrator's to assign):
+**IDENTITY_PATHS row text** (I do not own `IDENTITY_PATHS.md`). It is landed
+as row 57, and its status cell still reads as it did before the AMD leg.
+Corrected text below, current as of 2026-09-01.
 
 | n | path | what is vendor-dependent in their spelling | what we did | status |
 |---|---|---|---|---|
-| 57 | holtwinters: Holt-Winters exponential smoothing (`runner.cuh`, `internal/hw_{eval,optim,decompose,forecast}.cuh`) | a strictly sequential recurrence with no fold to pin, so the exposure is elsewhere: every `a*x + b*y` update leaves the contraction to the compiler (C++ does not say which product fuses); every stored intermediate inherits the vendor's denormal mode; `bound_device` is `fminf(fmaxf(v,0),1)` and meets both `-0.0` and a computed NaN; `batched_ls` reaches `pinv([1,t])` through cuSOLVER geqrf/orgqr + cuBLAS gemm; the Hessian diagonal is computed in float64 in H11/H33 and float32 in H22 through a `2.` vs `2` literal; the optimizer can compute NaN on a legal all-zero series and report (0,0,0) | DEVIATION 698 (one flush-and-fuse rule, first product fused and second stored at every seam, ftz at every stored intermediate; seam table in the README); DEVIATION 663 (the clamp as a compare chain); DEVIATION 660 (R1Qt as a host float64 closed form); DEVIATION 697 (the Hessian diagonal in float32 on all three entries -- Metal has no float64, so their arm is unportable); DEVIATION 662 (a zero direction returns their own MIN_GRAD_NORM criterion); DEVIATION 661 (one NaN payload in the card); DEVIATION 664 (non-finite and non-positive-under-multiplicative refused by name); DEVIATION 665 (per-iteration parameters, niter and criterion recorded); DEVIATION 699 (the optimizer's DECISIONS recorded as a packed mask -- which clamp arm fired, whether the Hessian was reset, whether the line search hit its limit, whether rho_ was zero, whether BOTH stop criteria fired -- because this lane MEASURED two arms that move almost no numbers: CRIT_ORDER moves 0 of 2800 cells and LS_TIE leaves the final forecast bit-identical) | device == oracle bitwise under IDENTICAL on one Apple M4, 6 fixtures x every stage and cell; launch-invariant across two block widths, two paddings, two poisons, and batch 1 == 7 == 512, with two negative controls proving the comparison is not vacuous; 9 sabotage arms built and run, 7 FAIL with stage and cell counts recorded, and 2 (STD_SQRT, HW_MAX_CLAMP) are APPLE-NULL and counted as REACH FAILURES, NOT passes -- both are other vendors' arms and ONLY a second vendor can exercise them; NO SECOND VENDOR HAS RUN THIS, so every cross-vendor sentence is a claim about the spelling and not a measurement; DEVIATION 699 and the reach census are WRITTEN BUT UNBUILT (README OWED list) |
+| 57 | holtwinters: Holt-Winters exponential smoothing (`runner.cuh`, `internal/hw_{eval,optim,decompose,forecast}.cuh`) | a strictly sequential recurrence with no fold to pin, so the exposure is elsewhere: every `a*x + b*y` update leaves the contraction to the compiler (C++ does not say which product fuses); every stored intermediate inherits the vendor's denormal mode; `bound_device` is `fminf(fmaxf(v,0),1)` and meets both `-0.0` and a computed NaN; `batched_ls` reaches `pinv([1,t])` through cuSOLVER geqrf/orgqr + cuBLAS gemm; the Hessian diagonal is computed in float64 in H11/H33 and float32 in H22 through a `2.` vs `2` literal; the optimizer can compute NaN on a legal all-zero series and report (0,0,0) | DEVIATION 698 (one flush-and-fuse rule, first product fused and second stored at every seam, ftz at every stored intermediate; seam table in the README); DEVIATION 663 (the clamp as a compare chain); DEVIATION 660 (R1Qt as a host float64 closed form); DEVIATION 697 (the Hessian diagonal in float32 on all three entries -- Metal has no float64, so their arm is unportable); DEVIATION 662 (a zero direction returns their own MIN_GRAD_NORM criterion); DEVIATION 661 (one NaN payload in the card); DEVIATION 664 (non-finite and non-positive-under-multiplicative refused by name); DEVIATION 665 (per-iteration parameters, niter and criterion recorded); DEVIATION 699 (the optimizer's DECISIONS recorded as a packed mask -- which clamp arm fired, whether the Hessian was reset, whether the line search hit its limit, whether rho_ was zero, whether BOTH stop criteria fired -- because this lane MEASURED two arms that move almost no numbers: CRIT_ORDER moves 0 of 2800 cells and LS_TIE leaves the final forecast bit-identical) | **TWO VENDORS, same commit `221aa141`, 2026-08-31: Apple M4 and AMD MI325X, eleven gates green in both modes, and the two `holtwinters.identical.card` files are 182 lines each and BYTE-IDENTICAL** (`bench/results/e1/CERT_2026-08-31.md`, `bench/results/e1/2026-08-31_180957-MacBook-Air-1-terrabyte/lanes/`, `bench/results/e1/2026-08-31_221142-mojolearn-e2-amd/lanes/`). Device == oracle bitwise under IDENTICAL, 6 fixtures x every stage and cell; launch-invariant across two block widths, two paddings, two poisons, and batch 1 == 7 == 512, with two negative controls proving the comparison is not vacuous; 9 sabotage arms built and run ON APPLE ONLY, 7 FAIL with stage and cell counts recorded, and 2 (STD_SQRT, HW_MAX_CLAMP) are APPLE-NULL and counted as REACH FAILURES, NOT passes. DEVIATION 699 and the reach census BUILD and are green in both modes on both vendors. **THE NVIDIA COLUMN IS OWED.** It did not fail; the 2026-08-31 NVIDIA leg HUNG inside this lane's gate on DEVIATION 1946, a context-lifetime defect where 25 buffer releases followed `ctx`'s last use in `check_hw_signed_zero_clamp`, so the next `DeviceContext()` never returned. Fixed tree-wide 2026-09-01 (81 functions, 57 files), verified on Apple to move no bit, NOT yet verified to cure the hang because the defect only manifests on sm_89 and no RTX 4090 leg has run since. The two Apple-null arms are also still owed a non-Apple run, which the AMD leg did not supply because it ran the clean gate and not the arms. |
 
 **The Python surface** is not this lane's directory. `estimator.mojo` is
 the entry `bindings/` should reach.
@@ -397,7 +432,9 @@ the entry `bindings/` should reach.
 ## The reach census, and what it retired
 
 DEVIATION 699's mask turned four "is this branch ever reached?" arguments
-into facts. Measured on one M4, IDENTICAL:
+into facts. Measured on one M4, IDENTICAL, and reproduced line for line on
+the AMD MI325X leg of 2026-08-31
+(`bench/results/e1/2026-08-31_221142-mojolearn-e2-amd/lanes/holtwinters.identical.log`):
 
 | bit | reached by the standard fixtures? |
 |---|---|
@@ -437,11 +474,20 @@ is for.
    where `step * cauchy` underflows while `loss(nx)` stays strictly above
    `loss_ref`; constructing that deliberately is a search problem, and it
    is left owed rather than faked.
-2. **NVIDIA and AMD prints.** `STD_SQRT` and `HW_MAX_CLAMP` are
-   Apple-null REACH FAILURES and only a second vendor can exercise them.
-   DEVIATION 699 did NOT rescue them, and that is worth saying: a
-   decision stage promotes an arm only when the arm is decision-shaped,
-   and these two are a `sqrt` spelling and an LLVM constant fold.
+2. **The NVIDIA print, and a non-Apple run of the two null arms.** The AMD
+   print landed 2026-08-31 at commit `221aa141`, byte-identical to Apple
+   over 182 card lines, so the clean two-vendor claim is measured. Two
+   things are still open. First, NVIDIA: the 2026-08-31 leg hung on
+   DEVIATION 1946 inside this lane's own gate and never reported, and the
+   fix of 2026-09-01 is verified on Apple to move no bit but is NOT
+   verified to cure the hang, because the defect only manifests on sm_89.
+   RUN OWED, an RTX 4090 e1 leg with `holtwinters` in `MOJOLEARN_E1_LANES`.
+   Second, `STD_SQRT` and `HW_MAX_CLAMP` remain Apple-null REACH FAILURES;
+   the AMD leg ran the clean gate, not the sabotage arms, so nothing has
+   exercised them yet. DEVIATION 699 did NOT rescue them, and that is
+   worth saying, because a decision stage promotes an arm only when the arm
+   is decision-shaped, and these two are a `sqrt` spelling and an LLVM
+   constant fold.
 3. **The multiplicative `stmp_eps` clamp**, still the best remaining
    candidate for a decision stage. The build made it no cheaper: the
    Metal 31-argument cap means it must reuse an existing slice rather

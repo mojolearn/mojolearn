@@ -383,9 +383,10 @@ named sabotage that FAILS a gate.
 
 **THE SABOTAGE ARMS THIS CONTRACT REQUIRES**, each a build define, none
 ever on by default. **ALL NINE WERE RUN ON 2026-08-23**, one build each,
-IDENTICAL, one Apple M4. Seven bite. The table below is the MEASURED
-result; the predictions it replaces are corrected underneath rather than
-deleted.
+IDENTICAL, one Apple M4, and on Apple only, which is still true. EIGHT
+bite; the ninth, `STD_SQRT`, is INERT and that null is a measurement. The
+table below is the MEASURED result; the predictions it replaces are
+corrected underneath rather than deleted.
 
 | arm | verdict | which check, and which FIXTURE reached it | stages moved | cells moved |
 |---|---|---|---|---|
@@ -451,9 +452,11 @@ and they are corrected rather than quietly updated.**
 **Every run also passed the VACUOUS negative controls** (`_refuse_vacuous`
 and the two inline guards), which raise VACUOUS rather than FAILED when a
 comparison covers zero cells or a card carries too few stages. They did not
-fire once in ten runs, which is the correct outcome and also means THE
-CONTROLS THEMSELVES ARE UNEXERCISED. A self-test that forces one to fire is
-OWED.
+fire once in ten runs, which is the correct outcome. The follow-up that
+stood here, a self-test that forces one to fire, is NO LONGER OWED. It
+landed as `check_vacuous_control_fires` and passes on both vendors: 2 of 2
+clauses RAISED VACUOUS, and the guard is required to stay SILENT on a
+populated 12-stage card so that an always-raising guard fails too.
 
 The original prediction table, kept because a prediction this document got
 wrong is worth as much as one it got right:
@@ -470,10 +473,12 @@ wrong is worth as much as one it got right:
 | `MOJOLEARN_SPECTRAL_SABOTAGE_STD_SQRT` | the host norms' `sqrt` becomes `std.math.sqrt` | seams K3, K13, L4 | REPORT. Inert on a host with a correctly rounded `sqrt`; it exists to be measured per host, not asserted |
 
 **A sabotage that passes is a finding, not a nuisance.** Three of the eight
-above are declared REPORT or EXPECTED-INERT rather than FAIL, and each says
-why BEFORE it runs, so that a pass cannot later be read as a success. The
-`ROTATE_UNFUSED` row in particular records a real hole in this lane's
-coverage rather than papering over it: `reached but inert` is not a gate.
+PREDICTIONS above were declared REPORT or EXPECTED-INERT rather than FAIL,
+and each says why BEFORE it runs, so that a pass cannot later be read as a
+success. The prediction that `ROTATE_UNFUSED` records a real hole in this
+lane's coverage was WRONG and is corrected in the measured table above:
+the arm BITES, failing `check_spectral_ring_exact` by breaking the ring's
+degenerate pair. Only `STD_SQRT` came back inert.
 
 ## 10. What is NOT claimed, and the one thing a reader must know first
 
@@ -503,11 +508,21 @@ Three consequences, all in this lane's favor and one against it:
   (c) AGAINST THIS LANE: C1, C2 and C3 of section 4 were claimed as ours
       and are verbatim theirs. See section 4.
 
-Not claimed: no cross-vendor result of any kind (nothing has run anywhere
-but one M4). No performance number, ever, in this lane. No `LM` or `SM`
+CLAIMED, and measured. TWO VENDORS at commit `221aa141`, 2026-08-31: an
+Apple M4 and an AMD MI325X each ran all 18 checks green under IDENTICAL and
+emitted `spectral.identical.card`, and the two cards are 171 lines each and
+BYTE-IDENTICAL, same commit
+(`bench/results/e1/CERT_2026-08-31.md`). Section 9's arms have all been
+built and run, eight of nine bite, and `STD_SQRT`'s null is a measurement.
+
+NOT claimed: a THIRD vendor. The NVIDIA column is OWED and it never ran;
+`holtwinters` was queued ahead of this lane on the 2026-08-31 NVIDIA leg and
+hung on DEVIATION 1946, so `spectral` never started. Two is not three. Nor
+is any sabotage arm claimed off Apple: every arm was a build on the M4, and
+the AMD leg ran the clean gate rather than the arms.
+
+Also not claimed: no performance number, ever, in this lane. No `LM` or `SM`
 `which` arm. No CSR Laplacian overload. No multi-GPU. No RAFT
 `randomized_svds`, `partition`, `modularity_maximization` or the old
 `cuvs::sparse::cluster::spectral::detail::fit_embedding` path. No
-eigenvector stability claim inside a degenerate subspace (section 3). No
-gate is claimed GREEN by this document: section 9's arms are written and
-UNRUN.
+eigenvector stability claim inside a degenerate subspace (section 3).

@@ -36,15 +36,20 @@ DEVIATION 674's hand-written LU where theirs is a closed cuBLAS batched
 
 Not a port: cuML ships one backend and needs no card.
 
-STATUS: RUN ON ONE APPLE M4, BOTH MODES. This file emits a 229-stage card
+STATUS: RUN IN BOTH MODES ON THREE VENDORS. This file emits a 229-stage card
 (138 when it first ran on 2026-08-23; the 2026-08-24 round added the four
 DECISION stages, `Fs` and `P_final`). See `arima/README.md`'s status block,
 `arima/DERIVATION_MAP.tsv` and IDENTITY_PATHS row 58.
 
-NO SECOND VENDOR. `tools/e1_bootstrap.sh` phase 8 carries gemm, cd, kde,
-linkage, svm, mamba and metrics, and not this lane, so no leg has ever
-produced an arima card on an NVIDIA or AMD box and the cross-vendor claim
-this card exists to make is UNTESTED. See `arima/README.md`'s OWED list.
+THREE VENDORS, SAME COMMIT. At `221aa141` the e1 legs produced an
+`arima.identical.card` on an Apple M4, on an AMD MI325X and on NVIDIA, and
+the three are byte-identical, 139 lines each. The cross-vendor claim this
+card exists to make is MEASURED. Evidence: `bench/results/e1/CERT_2026-08-31.md`,
+`bench/results/e1/2026-08-31_180957-MacBook-Air-1-terrabyte/lanes/`,
+`bench/results/e1/2026-08-31_221142-mojolearn-e2-amd/lanes/` and
+`bench/results/e1/nv_partial_2026-08-31/lanes/`. What is still owed is
+narrower and is in `arima/README.md`'s OWED list. The sabotage arms have
+only ever been run on Apple.
 """
 
 from max.gpu.host import DeviceContext

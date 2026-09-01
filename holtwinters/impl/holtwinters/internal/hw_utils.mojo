@@ -36,7 +36,9 @@ zero series). TWO sabotage arms, and only one bites:
                 compile-time constant and `llvm.maxnum(0.0, v)` is folded
                 to a compare-select returning `+0.0` on the tie, which LLVM
                 may do because maxnum's zero-tie answer is unspecified. The
-                arm is kept unrun for a vendor that does not fold it.
+                arm is kept for a vendor that does not fold it, and it has
+                still never been built off Apple. The AMD leg of 2026-08-31
+                ran the clean gate, not the arms.
 That null is exactly why the clamp is a compare chain and not a `max`: the
 spelling's answer here depends on whether a constant got folded, which is
 not a property anyone should be relying on for a recorded stage.
@@ -58,9 +60,10 @@ comptime SAB_ROTATE_CONV = is_defined["MOJOLEARN_HW_SABOTAGE_ROTATE_CONV"]()
 #: `identical_sqrt` (row 10: approximate on NVIDIA, correctly rounded on
 #: Apple/AMD). MEASURED 2026-08-23: NULL ON APPLE -- the whole gate is
 #: byte-identical to the clean build, because on Metal both spellings are
-#: the correctly-rounded hardware sqrt. It is the NVIDIA arm of the seam
-#: and stays here unrun until a second vendor prints. RECORDED, not a
-#: failing arm on this box.
+#: the correctly-rounded hardware sqrt. It is the NVIDIA arm of the seam.
+#: The AMD leg of 2026-08-31 does NOT discharge it. That leg ran the clean
+#: gate, not the sabotage arms, so this arm has still never been built on a
+#: non-Apple box. RECORDED, not a failing arm on this box.
 comptime SAB_STD_SQRT = is_defined["MOJOLEARN_HW_SABOTAGE_STD_SQRT"]()
 #: `ftz` dropped at the eval recurrence's stored intermediates. RECORD.
 comptime SAB_NO_FTZ = is_defined["MOJOLEARN_HW_SABOTAGE_NO_FTZ"]()

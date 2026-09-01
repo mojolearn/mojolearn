@@ -5,7 +5,35 @@ the `tsa/` half; `arima/README.md` covers `arima/` and carries the lane's
 shared material (DEVIATION 670, the hand-off list, the row text for both
 directories).** COPY, DO NOT IMPROVE.
 
-## Status: CONSTRUCTION plus one Apple device's gates; no second vendor has run this
+## Status: BYTE-IDENTICAL APPLE vs AMD on the card. Gates are Apple-only. NVIDIA owed.
+
+Two vendors, same commit. At `221aa141`, 2026-08-31, an Apple M4 and an AMD
+MI325X each ran `tsa/tsa_main.mojo` under IDENTICAL and emitted
+`tsa.identical.card`; the two cards are 13 lines each and BYTE-IDENTICAL,
+covering all 11 stages from `tsa.input` through `tsa.d`. Both run
+directories carry `221aa141` in their own `commit.txt`. Evidence:
+`bench/results/e1/CERT_2026-08-31.md`,
+`bench/results/e1/2026-08-31_180957-MacBook-Air-1-terrabyte/lanes/` and
+`bench/results/e1/2026-08-31_221142-mojolearn-e2-amd/lanes/`.
+
+Three things are still owed, and they are different debts.
+
+* **THE NVIDIA COLUMN.** Two is not three, per
+  `[[one-box-verdict-is-not-three]]`. The NVIDIA leg of 2026-08-31 did not
+  fail this lane; it never reached it. `holtwinters` ran ahead of `tsa` and
+  HUNG on DEVIATION 1946, a context-lifetime defect in
+  `holtwinters/checks/hw_check.mojo`, so `spectral` and `tsa` were queued
+  behind it and never started. The defect is fixed tree-wide as of
+  2026-09-01 (81 functions, 57 files), verified on Apple to move no bit and
+  NOT yet verified to cure the hang, because it only manifests on sm_89 and
+  no RTX 4090 leg has run since. `bench/results/e1/CERT_2026-08-31.md`
+  carries the full account.
+* **THE GATES OFF APPLE.** `tools/e1_bootstrap.sh` runs `tsa_main.mojo` for
+  this lane and NOT `tsa/checks/stationarity_check.mojo`, so the gates below
+  have only ever been measured on the M4.
+* **THE SABOTAGE ARMS OFF APPLE.** Every arm in the table below was applied
+  by hand on the M4 and reverted there. None has been built on another
+  vendor.
 
 Rung 1 of the lane. What is here:
 
@@ -29,8 +57,12 @@ cuML offers `float` and `double`, Metal has no Float64 (DEVIATION 670,
     MOJOLEARN_IDENTITY_TRACE=/tmp/tsa.card tools/with_identical_mode.sh pixi run mojo run -I . tsa/tsa_main.mojo
     python3 tools/identity_trace_diff.py /tmp/tsa.mac.card /tmp/tsa.other.card
 
-No pixi task is registered (pixi.toml is not this lane's); the suggested
-task names are in `arima/README.md` under HAND-OFF.
+No pixi task is registered for this lane. `pixi.toml` is not this lane's
+file and carries no `check-tsa` and no `tsa-card`; the arima half's two
+tasks are landed there at lines 1108 and 1109, and `arima/README.md`'s
+HAND-OFF section shows the shape a tsa pair would take. What actually runs
+this lane today is `tools/e1_bootstrap.sh`, which invokes
+`tsa/tsa_main.mojo` directly.
 
 ## The algorithm, and the two deviations
 
@@ -90,6 +122,15 @@ inside the tree. The oracle now models the FTZ column (`pinned_fold_host`
 flushes each step); the one-line fix to the shared tree is in
 `arima/README.md` under HAND-OFF TO THE IDENTITY LANE.
 
+MEASURED 2026-08-31, and it does not retract the hand-off. At commit
+`221aa141` the Apple and AMD `tsa.identical.card` files are byte-identical,
+`tsa.s2B` included, and the `random_walk_x2^-66` series is in that card's
+batch, so the hazard did not fire between those two columns at `tsa_main`'s
+shape (`n_obs = 520`, `batch = 8`). What that does NOT say is that the tree
+is safe. The shape where the subnormal partial was actually observed is the
+CHECK driver's, which has never run off Apple, and the NVIDIA column has
+never run at all.
+
 ## Sabotage table
 
 | # | what was broken | result under IDENTICAL |
@@ -115,7 +156,7 @@ to be pasted unchanged.
 
 | n | path | what is vendor-dependent in their spelling | what we did | status |
 |---|---|---|---|---|
-| NN | tsa: KPSS stationarity test (`stationarity.cuh`) and auto_arima's `d` loop | per-series sums are `raft::linalg::coalescedReduction`: a per-thread Kahan chain whose thread->element map follows a policy table keyed on `n_obs`, a logical-warp shuffle fold, a CUB block fold past 512 rows, and a dispatch that reads `getMultiProcessorCount()`; the scan is Thrust's decoupled look-back; `0/0` yields a NaN whose payload is the vendor's | DEVIATION 671: one pinned shape per series (STATS_TPB strided partials, `pinned_block_sum`, serial scan); DEVIATION 672: `0/0 -> 0.0`, same decision; non-finite inputs refused by name; FOUND: `pinned_block_sum`'s tree keeps or flushes a subnormal partial per vendor (hand-off) | device == oracle bitwise under IDENTICAL on the M4 for 5 orders x 10 stages; launch/batch invariant both modes; no second vendor |
+| NN | tsa: KPSS stationarity test (`stationarity.cuh`) and auto_arima's `d` loop | per-series sums are `raft::linalg::coalescedReduction`: a per-thread Kahan chain whose thread->element map follows a policy table keyed on `n_obs`, a logical-warp shuffle fold, a CUB block fold past 512 rows, and a dispatch that reads `getMultiProcessorCount()`; the scan is Thrust's decoupled look-back; `0/0` yields a NaN whose payload is the vendor's | DEVIATION 671: one pinned shape per series (STATS_TPB strided partials, `pinned_block_sum`, serial scan); DEVIATION 672: `0/0 -> 0.0`, same decision; non-finite inputs refused by name; FOUND: `pinned_block_sum`'s tree keeps or flushes a subnormal partial per vendor (hand-off) | device == oracle bitwise under IDENTICAL on the M4 for 5 orders x 10 stages; launch/batch invariant both modes. **TWO VENDORS ON THE CARD, same commit `221aa141`, 2026-08-31: the Apple M4 and AMD MI325X `tsa.identical.card` files are 13 lines each and BYTE-IDENTICAL over all 11 stages** (`bench/results/e1/CERT_2026-08-31.md`). The NVIDIA column is OWED and never ran, because `holtwinters` hung ahead of it on DEVIATION 1946 and `tsa` was queued behind; the gates and the sabotage arms are Apple-only, because the e1 lane runs `tsa_main.mojo` and not the check driver |
 
 ## HAND-OFF
 

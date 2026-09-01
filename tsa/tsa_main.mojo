@@ -16,8 +16,11 @@ chosen differencing order per series (an INTEGER stage; read it first when
 two cards disagree, because a different `d` is a different model, not a
 rounding). Tags are unique and carry no launch parameter.
 
-Not a port: cuML ships one backend and needs no card. This driver is a
-CONSTRUCTION plus one Apple device's run; no second vendor has run it.
+Not a port: cuML ships one backend and needs no card. RUN ON TWO VENDORS at
+commit `221aa141`, 2026-08-31: the Apple M4 and AMD MI325X cards are 13
+lines each and byte-identical. The NVIDIA column is OWED and never ran; the
+holtwinters lane hung ahead of it on DEVIATION 1946 and this lane was queued
+behind. Evidence: `bench/results/e1/CERT_2026-08-31.md`.
 """
 
 from max.gpu.host import DeviceContext

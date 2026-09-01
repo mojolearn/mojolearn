@@ -90,13 +90,18 @@ pass cannot afterwards be read as a success:
                                                     solver is SHARED by both
                                                     arms and the bit compare
                                                     cannot see it
-    -D MOJOLEARN_SPECTRAL_SABOTAGE_MAXITER=1        EXPECTED INERT (every
-                                                    fixture converges early)
-    -D MOJOLEARN_SPECTRAL_SABOTAGE_ROTATE_UNFUSED=1 EXPECTED REACHED BUT
-                                                    INERT, AND THAT IS A HOLE:
-                                                    seam J4 has no gate with
-                                                    teeth until a certificate
-                                                    check lands (NOT_IMPLEMENTED.tsv)
+    -D MOJOLEARN_SPECTRAL_SABOTAGE_MAXITER=1        MEASURED: BITES on all
+                                                    six fixtures, 1 stage
+                                                    (spectral.lanczos.config),
+                                                    0 cells. Predicted inert;
+                                                    recording the config
+                                                    decision made it live
+    -D MOJOLEARN_SPECTRAL_SABOTAGE_ROTATE_UNFUSED=1 MEASURED: BITES. Fails
+                                                    check_spectral_ring_exact
+                                                    by breaking the ring's
+                                                    degenerate pair. Predicted
+                                                    reached-but-inert; the
+                                                    prediction was wrong
     -D MOJOLEARN_SPECTRAL_SABOTAGE_STD_SQRT=1       REPORT (inert on a
                                                     correctly-rounded host)
 """

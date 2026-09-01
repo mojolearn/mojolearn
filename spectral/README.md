@@ -39,8 +39,28 @@ that died before committing anything. Two earlier rounds died the same
 way. It landed at `de4d388`, audited and renumbered, and the audit's
 findings are in `DERIVATION_MAP.tsv`, `NOT_IMPLEMENTED.tsv` and section 3 here.
 
-**No gate in this lane is GREEN, and none may be cited as one.** What is
-true, and the only thing that is:
+**THE GATES ARE GREEN, AND ON TWO VENDORS.** The sentence that stood here
+said no gate in this lane was green and none might be cited as one. That was
+written before the four blocked checks were fixed and before this lane got a
+compile slot back, and the run record has contradicted it since. What is
+true as of 2026-08-31, at commit `221aa141`:
+
+  * **ALL 18 CHECKS PASS under IDENTICAL on an Apple M4 AND on an AMD
+    MI325X, and the two `spectral.identical.card` files are 171 lines each
+    and BYTE-IDENTICAL.** Both run directories carry `221aa141` in their own
+    `commit.txt`, so this is a same-commit diff. Evidence:
+    `bench/results/e1/CERT_2026-08-31.md`,
+    `bench/results/e1/2026-08-31_180957-MacBook-Air-1-terrabyte/lanes/` and
+    `bench/results/e1/2026-08-31_221142-mojolearn-e2-amd/lanes/`.
+  * **THE NVIDIA COLUMN IS OWED, and it never ran.** `holtwinters` was
+    queued ahead of `spectral` on the 2026-08-31 NVIDIA leg and hung on
+    DEVIATION 1946, so this lane never started. Section 7 item 7 carries
+    the account, and `bench/results/e1/CERT_2026-08-31.md` carries all of
+    it. Two is not three.
+  * **The sabotage arms have only ever been built on Apple.** The AMD leg
+    ran the clean gate, not the arms.
+
+The history below is kept because it is how the lane got here:
 
   * Both binaries compiled clean once, on 2026-08-23, before this lane
     lost its compile slot to a box whose load average had hit 20.
@@ -54,21 +74,32 @@ true, and the only thing that is:
           embedding cell bit for bit
 
   * **ALL NINE SABOTAGE ARMS HAVE NOW RUN**, one build each, 2026-08-23,
-    IDENTICAL, one M4. **Seven bite.** Section 6 carries the measured
+    IDENTICAL, one M4, and on Apple only. **EIGHT bite**, and the ninth
+    (`STD_SQRT`) is INERT and that null is a measurement. Section 6's table
+    is the authority on the count. Section 6 carries the measured
     table: which check each arm failed, which stage moved first, how many
     stages and cells moved, and WHICH FIXTURE reached it. Three of the
     seven live arms are carried by ONE FIXTURE EACH, which is the finding
     to read before any of the green ones.
   * `check_spectral_blobs_separate` is DIAGNOSED and fixed, and the four
     checks it used to block now run. **ALL 18 CHECKS PASS**, under
-    IDENTICAL **and under FAST**, on one M4. The verdict is section 3.05
-    and it went against the CHECK, not the port.
+    IDENTICAL **and under FAST**, on the Apple M4 and on the AMD MI325X.
+    The verdict is section 3.05 and it went against the CHECK, not the
+    port.
   * **FAST is RECORDED, never asserted.** Under FAST the identity clauses
     print `RECORDED [FAST] agreement on this column (no identity claim
     under FAST)` instead of raising, per the metrics lane's leg-11 lesson.
-    The device and oracle arms did agree bitwise under FAST on this Apple
-    column, which is an OBSERVATION about this column and not a property
-    of the profile: FAST is unversioned and makes no identity claim.
+    On the 2026-08-23 Apple run the device and oracle arms happened to
+    agree bitwise under FAST, and that was recorded as an observation about
+    that column rather than a property of the profile. **AT COMMIT
+    `221aa141` THEY NO LONGER AGREE, on either vendor, and nothing is
+    wrong.** The Apple FAST log records `device != oracle` on every fixture
+    (`path` 269 of 298 stages, `ring` STRUCTURAL at 151 stages against
+    283), and so does the AMD one (`path` 273 of 298). The two FAST cards
+    also differ from each other. That is exactly what FAST promises: FAST
+    buys speed and never bits, so a FAST arm is never asked a bitwise
+    question. Both FAST runs still exit green, because the identity clauses
+    RECORD instead of asserting.
 
 ## 1. Path mirroring
 
@@ -319,7 +350,10 @@ copies the device setup `cluster/estimator.mojo::kmeans_fit` performs.
 ## 6. The sabotages, and what each is honestly expected to do
 
 All nine are build defines, none on by default. **All nine RAN**, one
-build each, 2026-08-23, IDENTICAL, one M4. Seven bite.
+build each, 2026-08-23, IDENTICAL, one M4, and on Apple only. Eight bite;
+the ninth, `STD_SQRT`, is INERT and that null is a measurement, not a gap.
+`MAXITER` is counted as biting because recording `spectral.lanczos.config`
+turned it from a reach failure into a live arm.
 
 | arm | verdict | which check, and which FIXTURE reached it | stages moved | cells moved |
 |---|---|---|---|---|
@@ -395,8 +429,13 @@ and they are corrected rather than quietly updated.**
 
 
 **The VACUOUS negative controls did not fire in any of the ten runs**,
-which is the correct outcome and also means the controls are themselves
-unexercised. A self-test that forces one to fire is OWED.
+which is the correct outcome. The follow-up that used to sit here, a
+self-test that forces one to fire, is NO LONGER OWED: it LANDED as
+`check_vacuous_control_fires`, and it passes on both vendors. On the
+2026-08-31 runs it reports 2 of 2 clauses RAISED VACUOUS (zero cells, and
+two empty cards, which `first_divergence` reports as AGREEMENT), and it
+requires the guard to stay SILENT on a populated 12-stage card, so an
+always-raising guard fails it too.
 
 ## 6.5 MORE HASHES: the decisions this pipeline makes, and which are recorded
 
@@ -464,17 +503,40 @@ taken unilaterally:
      catches a changed bound directly, so the arm bites on all six
      existing fixtures with zero cells moved.
   6. ~~Re-run everything under FAST and record, not assert.~~ **DONE.**
-     All 18 pass under FAST; the identity clauses RECORD rather than
-     assert, and the recorded outcome on this Apple column is agreement.
-  7. **The cross-vendor legs.** Nothing here has run anywhere but one M4,
-     so no cross-vendor claim exists.
+     All 18 pass under FAST on both vendors; the identity clauses RECORD
+     rather than assert. At commit `221aa141` the recorded outcome is
+     `device != oracle` on every fixture, on Apple and on AMD alike, which
+     is what FAST is allowed to do and is not a regression.
+  7. **The cross-vendor legs. TWO OF THREE ARE IN.** At commit `221aa141`,
+     2026-08-31, an Apple M4 and an AMD MI325X each ran all 18 checks green
+     under IDENTICAL and emitted `spectral.identical.card`; the two cards
+     are 171 lines each and BYTE-IDENTICAL, and both run directories carry
+     `221aa141` in their own `commit.txt`. Evidence:
+     `bench/results/e1/CERT_2026-08-31.md`,
+     `bench/results/e1/2026-08-31_180957-MacBook-Air-1-terrabyte/lanes/` and
+     `bench/results/e1/2026-08-31_221142-mojolearn-e2-amd/lanes/`.
+     **THE NVIDIA LEG IS OWED.** It did not fail this lane; it never
+     reached it. `holtwinters` ran ahead of `spectral` and HUNG on
+     DEVIATION 1946, a context-lifetime defect in
+     `holtwinters/checks/hw_check.mojo`, so `spectral` and `tsa` were
+     queued behind it and never started. That defect is fixed tree-wide as
+     of 2026-09-01 (81 functions, 57 files), verified on Apple to move no
+     bit and NOT yet verified to cure the hang, because it only manifests
+     on sm_89 and no RTX 4090 leg has run since. Two is not three, per
+     `[[one-box-verdict-is-not-three]]`.
+  7b. **The sabotage arms off Apple.** Every arm in section 6 was a build
+     on the M4. The AMD leg ran the clean gate, not the arms, so no arm in
+     this lane has ever been built on another vendor.
   8. ~~A cuVS 26.08 checkout.~~ **DONE**, 2026-08-23, `6ba2ce2`. It
      settled five questions at once and cost this lane three deviation
      clauses it should never have claimed. Section 3.0.
 
-The pixi task line and the IDENTITY_PATHS row this lane needs are in the
-lane report rather than applied here, because `pixi.toml` and
-`IDENTITY_PATHS.md` belong to the orchestrator.
+`pixi.toml` and `IDENTITY_PATHS.md` belong to the orchestrator, not to this
+lane. Both are landed: `check-spectral` and `spectral-card` are registered
+at `pixi.toml:1112` and `:1113`, and the IDENTITY_PATHS row is 59. The
+comment above those two task lines in `pixi.toml` still calls this lane
+SOURCE ONLY with no gate ever run, which the run record contradicts; fixing
+it is the orchestrator's, because this lane does not own that file.
 
 ## 8. No performance number appears in this section, ever
 

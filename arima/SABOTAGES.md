@@ -33,6 +33,14 @@ ADDED AND RUN 2026-08-24:
                                                     ZERO float stages: the
                                                     decision-only shape
 
+EVERY ARM IN THIS FILE HAS ONLY EVER BEEN RUN ON APPLE. The clean gate has
+run on three vendors at commit `221aa141` and the three cards are
+byte-identical (`bench/results/e1/CERT_2026-08-31.md`), but that is the
+clean tree; the arms are applied by hand on the box that runs them, and no
+non-Apple box has run one. Arm (f) is the one this actually blocks, and it
+is `arima/README.md`'s OWED item 8. Arm (e)'s null was a REACH FAILURE and
+was discharged by arm (h), not by a vendor.
+
 Runs use `MOJOLEARN_ARIMA_SURVEY=1`, which makes the gate print
 `SABOTAGE-MOVED` and CONTINUE instead of raising on the first differing
 stage, so one run enumerates every stage an arm reached. The control is that
@@ -364,12 +372,43 @@ DEVIATION 676's whole claim is that the recorded bytes are the same on every
 vendor. On Apple, `0.0/0.0` happens to be `0x7fc00000` too, so this is
 expected to be INERT on this box and to fail only on NVIDIA
 (`0x7fffffff`). That makes it a sabotage that CANNOT be closed on one
-vendor, and it is written here so the second-vendor run knows to try it.
+vendor, and it is written here so the first non-Apple run of these arms
+knows to try it. The distinction matters. AMD and NVIDIA have both run the
+CLEAN gate at commit `221aa141`, but no vendor other than Apple has ever run
+a sabotage arm.
 
 - EXPECTED on Apple: no bit moves, and `check_predict_device_equals_oracle`
   still passes. That is the null, not a pass.
 - EXPECTED on NVIDIA: `check_predict_device_equals_oracle` FAILS at the
   sentinel assertion with the observed bits printed.
+- OBSERVED 2026-08-23, Apple M4: **NULL, 0 stage comparisons moved, the
+  expected null, and it closes nothing.** On Apple `0.0/0.0` produces
+  `0x7fc00000`, the same bits the constant writes, so the sabotage is
+  invisible here by construction. DEVIATION 676's claim is about a payload
+  that differs BETWEEN vendors, and one vendor cannot test it. STILL OWED,
+  and only an AMD or NVIDIA run of THIS ARM can discharge it.
+- The POSITIVE half of DEVIATION 676's claim is now measured separately, and
+  this arm is not what measured it. At commit `221aa141` on 2026-08-31 the
+  Apple, AMD and NVIDIA `arima.identical.card` files are byte-identical, 139
+  lines each, so the recorded sentinel bytes inside `pred` and `predict` are
+  in fact the same on all three vendors
+  (`bench/results/e1/CERT_2026-08-31.md`). What this arm would still add is
+  the NEGATIVE control, that a computed sentinel WOULD be caught. No
+  sabotage arm in this lane has ever been run off Apple.
+
+CORRECTED 2026-09-01: the OBSERVED bullet that stood here described arm (g),
+the gradient reset, and (g)'s section carried this one. The scoreboard at
+the top of this file had the two the right way round the whole time. They
+are swapped back below.
+
+## (g) the gradient reset
+
+`arima/impl/arima/batched_arima.mojo`. Put back the defect the audit
+found: call `perturb_kernel` with `h = 0` in place of `reset_param_kernel`.
+
+- MUST FAIL: `check_grad_reset_preserves_negative_zero`, at the gradient of
+  the LAST parameter, on every series (all six have `-0.0` planted in
+  parameter 0 by that gate).
 - OBSERVED 2026-08-23, and this row changed the gate. **First run: NULL, 0
   stage comparisons moved. The gate written to catch this defect did not
   catch it.**
@@ -396,21 +435,6 @@ vendor, and it is written here so the second-vendor run knows to try it.
   fixture's negative zero was doing work nobody had checked. The old indirect
   assertion is kept beside the new one, labelled inert, so the lesson stays
   in the file.
-
-## (g) the gradient reset
-
-`arima/impl/arima/batched_arima.mojo`. Put back the defect the audit
-found: call `perturb_kernel` with `h = 0` in place of `reset_param_kernel`.
-
-- MUST FAIL: `check_grad_reset_preserves_negative_zero`, at the gradient of
-  the LAST parameter, on every series (all six have `-0.0` planted in
-  parameter 0 by that gate).
-- OBSERVED 2026-08-23, Apple M4: **NULL, 0 stage comparisons moved -- the
-  expected null, and it closes nothing.** On Apple `0.0/0.0` produces
-  `0x7fc00000`, the same bits the constant writes, so the sabotage is
-  invisible here by construction. DEVIATION 676's entire claim is about a
-  payload that differs BETWEEN vendors, and one vendor cannot test it.
-  STILL OWED, and only NVIDIA or AMD can discharge it.
 
 ## (h) the LU pivot tie rule, ON A FIXTURE THAT HAS A TIE
 

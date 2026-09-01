@@ -93,15 +93,18 @@ comptime SAB_SWEEP_CAP = is_defined["MOJOLEARN_SPECTRAL_SABOTAGE_SWEEP_CAP"]()
 #: SABOTAGE. Spell `ROTATE` as NR's FOUR roundings instead of the pinned
 #: TWO fmas (DEVIATION 781, seam J4).
 #:
-#: REACH, stated honestly and BEFORE it is run: shared solver again, so
-#: this is expected to be INERT against device == oracle, AND the
-#: perturbation is a last-bit one that every existing tolerance in this
-#: lane (`1e-4` on the closed forms, `2e-6` on the Float64 Jacobi compare)
-#: absorbs. **THIS ARM IS THEREFORE EXPECTED TO BE REACHED BUT INERT, AND
-#: THAT IS A HOLE, NOT A PASS.** Seam J4 has no gate with teeth until this
-#: lane records a CERTIFICATE -- an FNV hash of `symmetric_eig_host`'s
-#: output on a pinned fixture, compared against a literal. That check is
-#: OWED and is named in `spectral/README.md`.
+#: REACH, predicted BEFORE it was run and then MEASURED. The prediction was
+#: that the shared solver makes this INERT against device == oracle and
+#: that the perturbation is a last-bit one every tolerance in this lane
+#: absorbs, so seam J4 would have no gate with teeth. **THE PREDICTION WAS
+#: WRONG. MEASURED 2026-08-23: THIS ARM BITES.** It FAILS
+#: `check_spectral_ring_exact` by breaking the ring's DEGENERATE PAIR: with
+#: NR's four roundings the solver returns five distinct Ritz values where
+#: the doubled spectrum requires {0, l1, l1, l2, l2}. Seam J4 therefore
+#: HAS an instrument. A CERTIFICATE, an FNV hash of `symmetric_eig_host`'s
+#: output on a pinned fixture compared against a literal, would still be
+#: cheaper and sharper than an indirect reference, so it stays a
+#: nice-to-have and is named as one in `spectral/README.md` section 7.
 comptime SAB_ROTATE_UNFUSED = is_defined[
     "MOJOLEARN_SPECTRAL_SABOTAGE_ROTATE_UNFUSED"
 ]()
