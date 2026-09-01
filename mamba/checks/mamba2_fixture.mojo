@@ -12,18 +12,23 @@ second copy: the element rule is `mojolearn.mamba.corpus.hash.v1` unchanged
 tensor names"), so the only things new here are the SEED BASE, the tensor
 names/ids and the case table.
 
-THE CASE TABLE IS THIS LANE'S PROPOSAL, PENDING THE CORPUS GENERATOR.
-`mamba/corpus/gen_corpus.py` is the corpus lane's file and does not carry
-mamba2 cases yet. Contract section 8g pins the element rule and the gate
-lengths (L in {1, 4, 256, 257, 513, 770}) and names the adversarial cases;
-this file fixes the remaining free choices (seed base, tensor ids, exact
-shapes, ranges) so the device gates can run without the corpus directory,
-exactly as the Mamba-1 fixture does. When the corpus lane lands its
-generator, the byte-compare gate (`mamba2_check.mojo`'s corpus arm: file
-bytes == this generator's bytes, asserted FIRST) is the arbiter -- if the
-two lanes disagree, that gate fails loudly and ONE of the two tables is
-wrong ON THE RECORD, never silently. Until the files exist the corpus arm
+THE CASE TABLE MIRRORS `mamba/corpus/gen_corpus.py`'s LANDED mamba2 family
+(commit 35e7ceaa, `M2_SEED_BASE`/`M2_TENSOR_IDS`/`M2_CASES`) bit for bit --
+seed base 0x4D6D6232436F7270 ("Mmb2Corp"), tensor ids 21-31 disjoint from
+the Mamba-1 table, cases landing in `mamba/corpus/mamba2/<case>/`. This
+file REIMPLEMENTS that table (the Mamba-1 fixture's rule: the check that
+loads a corpus case FIRST asserts file bytes == this generator's bytes,
+so the two lanes agreeing on the fixture is itself a gate) and the byte
+gate is the arbiter if either side drifts. Until the corpus files are
+GENERATED (generation is RUN OWED on the corpus side) the corpus arm
 REFUSES BY NAME (missing-fixture refusal, not a skip).
+
+One measured-by-design lesson carried from the corpus table: the
+STATEPASS witness cases (L = 513, L = 770, the init-states case) override
+`A_log` to [-4, -1] so `exp(dA_cs_last)` stays a NORMAL FP32 number
+across chunk hops -- under the default range some heads' chunk decay
+underflows to +0.0 and the STATEPASS sabotage arms would be bitwise inert
+on those cells (a fixture that cannot witness is a clause not gated).
 
 Scale note (why the ranges are what they are): with `dt_bias` in [-7, -2]
 and fan-in-scaled `in_proj`, `dt = clamp(softplus(dt_raw + bias))` spans
@@ -155,22 +160,22 @@ struct Mamba2Weights(Copyable, Movable):
 # Corpus file names are `<name>.f32` inside `mamba/corpus/<case>/`.
 # ===========================================================================
 
-comptime M2_TID_X = 1  # x.f32                  [B, L, d_model]
-comptime M2_TID_W_IN = 2  # in_proj.weight.f32  [d_in_proj, d_model]
-comptime M2_TID_CONV_W = 3  # conv1d.weight.f32 [conv_dim, 4]
-comptime M2_TID_CONV_B = 4  # conv1d.bias.f32   [conv_dim]
-comptime M2_TID_DT_BIAS = 5  # dt_bias.f32      [nheads]
-comptime M2_TID_A_LOG = 6  # A_log.f32          [nheads]
-comptime M2_TID_D = 7  # D.f32                  [nheads]
-comptime M2_TID_GNORM_W = 8  # norm_gated.weight.f32 [d_inner]
-comptime M2_TID_NORM_W = 9  # norm.weight.f32   [d_model]
-comptime M2_TID_W_OUT = 10  # out_proj.weight.f32 [d_model, d_inner]
-comptime M2_TID_INIT_STATES = 12  # initial_states.f32 [B, H, P, N]
+comptime M2_TID_X = 21  # x.f32                        [B, L, d_model]
+comptime M2_TID_BLOCK_NORM_W = 22  # block_norm.weight.f32 [d_model]
+comptime M2_TID_W_IN = 23  # in_proj.weight.f32        [d_in_proj, d_model]
+comptime M2_TID_CONV_W = 24  # conv1d.weight.f32       [CD, 1, 4]
+comptime M2_TID_CONV_B = 25  # conv1d.bias.f32         [CD]
+comptime M2_TID_DT_BIAS = 26  # dt_bias.f32            [H]
+comptime M2_TID_A_LOG = 27  # A_log.f32                [H]
+comptime M2_TID_D = 28  # D.f32                        [H]
+comptime M2_TID_GNORM_W = 29  # norm.weight.f32 (GATED norm) [d_inner]
+comptime M2_TID_W_OUT = 30  # out_proj.weight.f32      [d_model, d_inner]
+comptime M2_TID_INIT_STATES = 31  # initial_states.f32 [B, H, P, N]
 
-comptime M2_CORPUS_SEED_BASE: UInt64 = 0x4D616D6261324353
-"""ASCII "Mamba2CS". DISTINCT from the mamba-1 base 0x4D616D6261436F72 so no
-mamba2 tensor can collide with a mamba1 tensor's stream; case k's seed is
-BASE + 0x1000 * k, the mamba-1 rule unchanged."""
+comptime M2_CORPUS_SEED_BASE: UInt64 = 0x4D6D6232436F7270
+"""gen_corpus.py::M2_SEED_BASE, ASCII "Mmb2Corp" -- DISTINCT from the
+mamba-1 base and with DISJOINT tensor ids, so no (seed, id) pair can
+alias; case k's seed is BASE + 0x1000 * k, the mamba-1 rule unchanged."""
 
 
 def m2_case_seed(k: Int) -> UInt64:
@@ -213,10 +218,10 @@ def m2_pos_inf() -> Float32:
 
 
 def m2_corpus_case(k: Int) raises -> Mamba2CorpusCase:
-    # Base shapes: every gate length appears at least once; L = 256 is the
-    # exact-one-chunk boundary, 257 the first crossing, 513 the first
-    # THREE-chunk shape (the two-hop decay STATEPASS_MATRIX needs), 770 the
-    # four-chunk composition shape.
+    """gen_corpus.py::M2_CASES, index for index -- the byte gate depends on
+    this table and that one being the SAME table. L = 256 is the exact
+    one-chunk boundary, 257 the first crossing, 513 the first three-chunk
+    shape, 770 the four-chunk shape; the notes live in gen_corpus.py."""
     if k == 0:
         return Mamba2CorpusCase(
             "m2_base_b1_l1_d32", 1, 1, 32, 0, -1, 0.0, m2_pos_inf(), False
@@ -227,89 +232,90 @@ def m2_corpus_case(k: Int) raises -> Mamba2CorpusCase:
         )
     if k == 2:
         return Mamba2CorpusCase(
-            "m2_base_b1_l256_d32", 1, 256, 32, 2, -1, 0.0, m2_pos_inf(), False
+            "m2_base_b3_l4_d64", 3, 4, 64, 2, -1, 0.0, m2_pos_inf(), False
         )
     if k == 3:
         return Mamba2CorpusCase(
-            "m2_base_b3_l257_d32", 3, 257, 32, 3, -1, 0.0, m2_pos_inf(), False
+            "m2_base_b1_l256_d32", 1, 256, 32, 3, -1, 0.0, m2_pos_inf(), False
         )
     if k == 4:
-        # THREE chunks: the shape STATEPASS_MATRIX / STATEPASS_UNFUSED need
-        # (contract 8f: a zero-init two-chunk case is bitwise inert there).
         return Mamba2CorpusCase(
-            "m2_base_b1_l513_d32", 1, 513, 32, 4, -1, 0.0, m2_pos_inf(), False
+            "m2_base_b1_l257_d64", 1, 257, 64, 4, -1, 0.0, m2_pos_inf(), False
         )
     if k == 5:
         return Mamba2CorpusCase(
-            "m2_base_b2_l770_d32", 2, 770, 32, 5, -1, 0.0, m2_pos_inf(), False
+            "m2_comp_b2_l257_d32", 2, 257, 32, 5, -1, 0.0, m2_pos_inf(), False
         )
     if k == 6:
         return Mamba2CorpusCase(
-            "m2_base_b1_l4_d64", 1, 4, 64, 6, -1, 0.0, m2_pos_inf(), False
+            "m2_comp_row0_b1_l257_d32", 1, 257, 32, 5, 0,
+            0.0, m2_pos_inf(), False,
         )
     if k == 7:
         return Mamba2CorpusCase(
-            "m2_base_b1_l257_d64", 1, 257, 64, 7, -1, 0.0, m2_pos_inf(), False
+            "m2_comp_row1_b1_l257_d32", 1, 257, 32, 5, 1,
+            0.0, m2_pos_inf(), False,
         )
     if k == 8:
-        # dt_bias drawn from [8, 14]: the softplus guard's DISTINGUISHING
-        # band (the mamba-1 adv_softplus_guard lesson: a 20-straddling
-        # fixture is vacuous; plant IN THE BAND).
+        # THREE chunks, the two-hop STATEPASS witness; A_log override in
+        # m2_case_weights keeps the chunk decay a normal FP32 number.
         return Mamba2CorpusCase(
-            "m2_adv_softplus_band_b2_l8_d32", 2, 8, 32, 8, -1,
+            "m2_statepass_b1_l513_d32", 1, 513, 32, 8, -1,
             0.0, m2_pos_inf(), False,
         )
     if k == 9:
-        # A_log in [-18, -12]: A within ulps of 0, decay near 1 -- the
-        # cancellation-prone `dA_cs_last - dA_cs` (S15) and the segsum's
-        # small-argument band.
         return Mamba2CorpusCase(
-            "m2_adv_a_near_zero_b3_l8_d32", 3, 8, 32, 9, -1,
+            "m2_statepass_b2_l770_d64", 2, 770, 64, 9, -1,
             0.0, m2_pos_inf(), False,
         )
     if k == 10:
-        # The mamba-1 zero rule applied to x: whole +0.0 tokens, whole -0.0
-        # tokens, scattered -0.0 -- section 6's sign-bit claims.
+        # dt_bias IN the distinguishing band [8, 14] (never straddling 20:
+        # the mamba-1 adv_softplus_guard lesson); A_log tiny keeps the
+        # scan alive.
         return Mamba2CorpusCase(
-            "m2_adv_signed_zeros_b2_l8_d32", 2, 8, 32, 10, -1,
+            "m2_adv_softplus_band_b2_l8_d32", 2, 8, 32, 10, -1,
             0.0, m2_pos_inf(), False,
         )
     if k == 11:
-        # The gate half of in_proj.weight in [-2^30, 2^30]: a saturating z
-        # through S8/S21 (the adv_gate_saturation shape; its corpus
-        # tolerance is calibrated per case, never carried over).
+        # A within ulps of 0: the cancellation-prone dA_cs_last - dA_cs.
         return Mamba2CorpusCase(
-            "m2_adv_gate_saturation_b1_l8_d64", 1, 8, 64, 11, -1,
+            "m2_adv_a_near_zero_b3_l64_d32", 3, 64, 32, 11, -1,
             0.0, m2_pos_inf(), False,
         )
     if k == 12:
-        # ACTIVE dt_limit (0.001, 0.1): both limits BIND on real cells
-        # (default dt spans ~[3e-4, 0.3]). The CLAMP_BEFORE_SOFTPLUS arm's
-        # witnessing fixture (contract 8f) and S9's active-clamp path.
+        # The mamba-1 zero rule applied to x (section 6's sign-bit claims).
         return Mamba2CorpusCase(
-            "m2_adv_dt_limit_b2_l8_d32", 2, 8, 32, 12, -1,
-            0.001, 0.1, False,
-        )
-    if k == 13:
-        # NONZERO initial_states at L = 257 (two chunks): the OTHER
-        # witnessing fixture the STATEPASS arms need (contract 8f), and
-        # ssd_minimal:64-66's chunk -1 semantics exercised.
-        return Mamba2CorpusCase(
-            "m2_adv_initstate_b1_l257_d32", 1, 257, 32, 13, -1,
-            0.0, m2_pos_inf(), True,
-        )
-    if k == 14:
-        return Mamba2CorpusCase(
-            "m2_comp_b2_l257_d32", 2, 257, 32, 14, -1, 0.0, m2_pos_inf(), False
-        )
-    if k == 15:
-        return Mamba2CorpusCase(
-            "m2_comp_row0_b1_l257_d32", 1, 257, 32, 14, 0,
+            "m2_adv_signed_zeros_b2_l8_d32", 2, 8, 32, 12, -1,
             0.0, m2_pos_inf(), False,
         )
-    if k == 16:
+    if k == 13:
+        # The z ROWS of in_proj.weight in [-2^30, 2^30]: a saturating z
+        # through S8/S21.
         return Mamba2CorpusCase(
-            "m2_comp_row1_b1_l257_d32", 1, 257, 32, 14, 1,
+            "m2_adv_gate_saturation_b1_l8_d64", 1, 8, 64, 13, -1,
+            0.0, m2_pos_inf(), False,
+        )
+    if k == 14:
+        # ACTIVE dt_limit (0.001, 0.1); dt_bias widened to [-9, -1] so
+        # BOTH limits bind (the CLAMP_BEFORE_SOFTPLUS witness).
+        return Mamba2CorpusCase(
+            "m2_adv_dt_limit_b2_l8_d32", 2, 8, 32, 14, -1, 0.001, 0.1, False
+        )
+    if k == 15:
+        # NONZERO initial_states at L = 257: the OTHER STATEPASS witness
+        # (a zero-init two-chunk case is bitwise inert there).
+        return Mamba2CorpusCase(
+            "m2_init_states_b1_l257_d32", 1, 257, 32, 15, -1,
+            0.0, m2_pos_inf(), True,
+        )
+    if k == 16:
+        # The corpus's decode-continuation case (kind="decode",
+        # prefill_len=260 in gen_corpus.py): as a CASE TABLE row it is the
+        # L = 261 prefill, because DEVIATION 786 makes that prefill the
+        # decode reference; the decode CHAIN itself is this lane's gate
+        # (d), not a fixture.
+        return Mamba2CorpusCase(
+            "m2_decode_b1_l260p1_d32", 1, 261, 32, 16, -1,
             0.0, m2_pos_inf(), False,
         )
     raise Error("m2_corpus_case: no case " + String(k))
@@ -329,7 +335,7 @@ def m2_case_weights(k: Int) raises -> Mamba2Weights:
     var h = dims.nheads
     var s_in = fan_in_scale(dims.d_model)
     var s_out = fan_in_scale(di)
-    w.norm_w = corpus_tensor(seed, M2_TID_NORM_W, dims.d_model, 0.5, 1.5)
+    w.norm_w = corpus_tensor(seed, M2_TID_BLOCK_NORM_W, dims.d_model, 0.5, 1.5)
     w.w_in = corpus_tensor(seed, M2_TID_W_IN, dip * dims.d_model, -s_in, s_in)
     w.conv_w = corpus_tensor(seed, M2_TID_CONV_W, cd * M2_D_CONV, -0.5, 0.5)
     w.conv_b = corpus_tensor(seed, M2_TID_CONV_B, cd, -0.125, 0.125)
@@ -338,11 +344,19 @@ def m2_case_weights(k: Int) raises -> Mamba2Weights:
     w.d_skip = corpus_tensor(seed, M2_TID_D, h, 0.5, 1.5)
     w.gnorm_w = corpus_tensor(seed, M2_TID_GNORM_W, di, 0.5, 1.5)
     w.w_out = corpus_tensor(seed, M2_TID_W_OUT, dims.d_model * di, -s_out, s_out)
-    if k == 8:  # dt_bias IN THE BAND [8, 14], not straddling 20
+    # Overrides, gen_corpus.py::M2_CASES's, branch per case.
+    if k == 8 or k == 9 or k == 15:
+        # the STATEPASS liveness override: A in [-0.368, -0.018] keeps
+        # exp(dA_cs_last) a normal FP32 number over >= 2 chunk hops.
+        w.a_log = corpus_tensor(seed, M2_TID_A_LOG, h, -4.0, -1.0)
+    if k == 10:  # dt_bias IN THE BAND [8, 14]; A_log tiny keeps dt*A small
         w.dt_bias = corpus_tensor(seed, M2_TID_DT_BIAS, h, 8.0, 14.0)
-    if k == 9:  # A within ulps of 0
         w.a_log = corpus_tensor(seed, M2_TID_A_LOG, h, -18.0, -12.0)
-    if k == 11:  # the z half of in_proj.weight in [-2^30, 2^30]
+    if k == 11:  # A within ulps of 0
+        w.a_log = corpus_tensor(seed, M2_TID_A_LOG, h, -18.0, -12.0)
+    if k == 14:  # active dt_limit: dt_bias widened so BOTH limits bind
+        w.dt_bias = corpus_tensor(seed, M2_TID_DT_BIAS, h, -9.0, -1.0)
+    if k == 13:  # the z ROWS of in_proj.weight in [-2^30, 2^30]
         # Column order is z | xBC | dt (mamba2.py:211-215): the z channels
         # are ROWS [0, d_inner) of w_in ([d_in_proj, d_model] row-major).
         var n = dip * dims.d_model
@@ -375,7 +389,7 @@ def m2_case_x(k: Int) raises -> List[Float32]:
             out.append(px[c.x_row * row_len + i])
         return out^
     var x = corpus_tensor(seed, M2_TID_X, c.b * c.l * c.d_model, -2.0, 2.0)
-    if k == 10:
+    if k == 12:
         # The mamba-1 zero rule verbatim (gen_corpus.py::apply_zero_rule):
         # whole +0.0 tokens (t%4==0), whole -0.0 tokens (t%4==2), scattered
         # -0.0 at flat i%7==3 elsewhere.
@@ -415,9 +429,9 @@ def m2_case_init_states(k: Int) raises -> List[Float32]:
 
 
 def m2_corpus_dir(k: Int) raises -> String:
-    """Where the corpus lane's files for this case will live, per the
-    mamba-1 layout: `mamba/corpus/<case>/<tensor>.f32` plus `ref32/`,
-    `ref64/` and `manifest.json`. The check that reads these REFUSES BY
-    NAME when the directory does not exist yet -- a missing fixture is a
-    refusal, never a skip."""
-    return String("mamba/corpus/") + String(m2_corpus_case(k).name)
+    """Where the corpus files for this case live (gen_corpus.py's mamba2
+    family layout): `mamba/corpus/mamba2/<case>/<tensor>.f32` plus the
+    reference dumps and manifest. The check that reads these REFUSES BY
+    NAME when the directory does not exist yet -- generation is RUN OWED
+    on the corpus side; a missing fixture is a refusal, never a skip."""
+    return String("mamba/corpus/mamba2/") + String(m2_corpus_case(k).name)

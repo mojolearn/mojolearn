@@ -61,8 +61,8 @@ not this lane's editable set -- so the raw commands are spelled:
 WITNESSING, BY CONSTRUCTION AND ASSERTED (contract 8f's table): the armed
 run picks the fixture the contract names and FIRST asserts the property
 that makes the arm falsifiable there -- STATEPASS arms: >= 3 working
-chunks (m2_base_b1_l513_d32) AND the nonzero-initial_states two-chunk
-case (m2_adv_initstate_b1_l257_d32), both asserted (chunk count computed,
+chunks (m2_statepass_b1_l513_d32) AND the nonzero-initial_states two-chunk
+case (m2_init_states_b1_l257_d32), both asserted (chunk count computed,
 initial h downloaded and counted nonzero); CLAMP_BEFORE_SOFTPLUS: the
 active-(0.001, 0.1) case with the check COUNTING cells the clamp actually
 moves (host-side, from the oracle's dt) and refusing a zero count as
@@ -1392,8 +1392,8 @@ def sabotage_main(ctx: DeviceContext) raises:
             )
         print("  witness: nonuniform dt cells =", nonuni)
     elif arm == "CHUNK_SIZE_128":
-        case_k = 3
-        b = 3
+        case_k = 5
+        b = 2
         l = 257
         expect_first = String("ydiag.out")
         token_only = True
@@ -1407,16 +1407,16 @@ def sabotage_main(ctx: DeviceContext) raises:
     elif arm == "STATEPASS_MATRIX" or arm == "STATEPASS_UNFUSED":
         # BOTH witnessing fixtures, contract 8f: the three-chunk case AND
         # the nonzero-initial_states two-chunk case; each must move.
-        var cases: List[Int] = [4, 13]
+        var cases: List[Int] = [8, 15]
         for i in range(2):
             var ck = cases[i]
             var cc = m2_corpus_case(ck)
-            if ck == 4 and m2_n_chunks(cc.l) < 3:
+            if ck == 8 and m2_n_chunks(cc.l) < 3:
                 raise Error(
                     "SABOTAGE VACUOUS: the L = 513 case no longer has >= 3"
                     " working chunks"
                 )
-            if ck == 13:
+            if ck == 15:
                 if not cc.has_init_states:
                     raise Error(
                         "SABOTAGE VACUOUS: the initstate case carries no"
@@ -1461,8 +1461,8 @@ def sabotage_main(ctx: DeviceContext) raises:
     elif arm == "PAIR_DT_B":
         expect_first = String("xd.out")
     elif arm == "FOLD_SERIAL_ZERO_SEED":
-        case_k = 3
-        b = 3
+        case_k = 5
+        b = 2
         l = 257
         expect_first = String("ydiag.out")
         print(
@@ -1473,7 +1473,7 @@ def sabotage_main(ctx: DeviceContext) raises:
     elif arm == "S6_BIAS_LAST" or arm == "S6_TAPS_REVERSED":
         expect_first = String("conv.out")
     elif arm == "CLAMP_BEFORE_SOFTPLUS":
-        case_k = 12
+        case_k = 14
         b = 2
         l = 8
         expect_first = String("dt.out")
@@ -1591,8 +1591,10 @@ def main() raises:
     if mode == "decode-cross":
         # prefill 250, decode through 262: crosses the Q = 256 boundary
         # at token 256 -- a boundary never crossed is a clause never
-        # gated. Also the handoff arm (prefill L1 + decode L2).
-        var fails = gate_d(ctx, 2, 250, 262)
+        # gated. Also the handoff arm (prefill L1 + decode L2). Case 3's
+        # weights (m2_base_b1_l256_d32); x regenerated at L = 262 under
+        # the same element rule.
+        var fails = gate_d(ctx, 3, 250, 262)
         if fails != 0:
             raise Error(
                 String("GATE D (cross) FAILED: ")
@@ -1608,7 +1610,7 @@ def main() raises:
         return
 
     if mode == "handoff":
-        gate_d2(ctx, 2)
+        gate_d2(ctx, 3)
         return
 
     # default: gates (a) + card, (b), (c) at the env shape (ONE shape per
@@ -1618,7 +1620,7 @@ def main() raises:
     var dm = env_int(String("MOJOLEARN_MAMBA2_CHECK_DM"), 32)
     var case_k = 0
     if dm == 64:
-        case_k = 6
+        case_k = 2  # m2_base_b3_l4_d64's weights; x regenerated at (B, L)
     elif dm != 32:
         raise Error("mamba2_check: d_model must be 32 or 64 (contract s3)")
     print("shape: B =", b, "L =", l, "d_model =", dm)
