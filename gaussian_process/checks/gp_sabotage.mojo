@@ -17,6 +17,16 @@ sabotage that requires editing source cannot be run by an orchestrator that
 is forbidden to edit source. **No source edit and no rebuild is required for
 any arm below.**
 
+ONE SYMBOL HERE IS ON THE SHIPPED PATH AND IT LAUNCHES NOTHING.
+`gp_sabotage_name` is called by `gpr_fit_host` and `gpr_predict_host` on
+EVERY call, `GP_SAB_NONE` included, to write `sabotage=` into the card
+header. That is deliberate, added 2026-09-01: a card that mixes sabotaged
+runs with shipped runs and does not say which is which gets read wrong, and
+it got read wrong once already
+(`bench/results/e1/GP_CROSS_VENDOR_DIVERGENCE.md`). The function is a chain
+of integer comparisons returning a string; no kernel below it is reachable
+from the shipped path, and the shipped BITS still never depend on this file.
+
 DEVIATION 1769.
 
 THE ARMS, and what each is a plausible way to get wrong
@@ -31,7 +41,17 @@ THE ARMS, and what each is a plausible way to get wrong
                             CHOICE in its last bit (IDENTITY_PATHS row 12)
                             and EVERY cell of a GP Gram matrix goes through
                             one, so this is the single widest seam in the
-                            lane.
+                            lane. **MEASURED ACROSS TWO VENDORS, 2026-08-28,
+                            and it is the only place the two cards differ:**
+                            this arm's block on the planted fixture is the
+                            one fit in a 3,494-line card whose `gp.kernel`
+                            is `58092f5ccc47e1a1` on the M4 and
+                            `ddce183b7f4ba51d` on the MI325X, while every
+                            other line of both cards agrees byte for byte.
+                            The arm claims a vendor choice exists and two
+                            boxes then disagreed on it, which is the arm
+                            doing exactly what it was built to do. See
+                            `bench/results/e1/GP_CROSS_VENDOR_DIVERGENCE.md`.
 `GP_SAB_EXPANDED_RBF`       the squared distance becomes `||x||^2 + ||y||^2
                             - 2 x.y` instead of `sum_f (x_f - y_f)^2`. This
                             is the arithmetic `svm/impl/distance/
@@ -43,7 +63,15 @@ THE ARMS, and what each is a plausible way to get wrong
 `GP_SAB_NO_FTZ_KERNEL`      `ftz` dropped at the kernel-matrix seam. Metal
                             flushes in hardware, so this is expected INERT on
                             Apple and live on a denormal-honoring column.
-                            RECORDED, never claimed.
+                            RECORDED, never claimed. **The MI325X leg of
+                            2026-08-28 reported it INERT on all five fixtures
+                            too**, identically to the M4, so the second half
+                            of that expectation is UNWITNESSED: either no
+                            cell of these five Gram matrices reaches the
+                            denormal range at all, or that column flushes as
+                            well. A fixture that plants a denormal kernel
+                            value is what would separate the two, and it is
+                            owed.
 `GP_SAB_ALGEBRA_REASSOCIATE` a Sum or Product node combines `b op a` instead
                             of `a op b`. Float addition and multiplication
                             are exactly commutative away from NaN payloads

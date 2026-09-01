@@ -14,11 +14,28 @@ fitted under the other.
 
 ## Status
 
-CORRECTED 2026-09-01, by diffing the cards rather than reading a status block: **RED ACROSS VENDORS.** The gp card DIVERGES Apple against AMD, md5 6e638e82a73e against 6bdeb28d6c81, on 8 of 3494 stages, originating at gp.kernel. Both legs printed ALL PASSED because neither compares against the other. DO NOT expose this lane through the Python surface until it is understood. See bench/results/e1/GP_CROSS_VENDOR_DIVERGENCE.md.  The sentence that stood here said no second vendor had run this lane, and commit 89c1920c fixed the adjacent false sentence in the same paragraph while leaving this one standing.
-HAS RUN THIS UNDER IDENTICAL, so there is no identity card outside the M4.**
+**TWO VENDORS, AND THE CARDS AGREE EVERYWHERE THE SHIPPED PATH REACHES.**
+Corrected twice on 2026-09-01. The first correction, taken by diffing the
+Apple and AMD cards rather than reading a status block, called the lane RED
+across vendors on the strength of 8 differing lines out of 3,494. The second
+went and found out which block those 8 lines are in: they are the sabotaged
+half of one `GP_SAB_STD_EXP` pair, the arm whose entire statement is that a
+device `exp` is a vendor choice in its last bit, and every other line of both
+cards is byte-identical. So the M4 and the MI325X agree, under IDENTICAL, on
+every stage of every unsabotaged fit in the card, and they disagree exactly
+where an arm was built to make them. The derivation, and what the header now
+carries so that nobody has to redo it, are in
+`bench/results/e1/GP_CROSS_VENDOR_DIVERGENCE.md`.
+
+The Python surface withheld this lane because its card was believed to
+diverge. That reason is gone; the decision to expose it is the
+orchestrator's, and `SUPPORT_MATRIX.md`, `docs/PYPI_SURFACE_PLAN.md` and
+`python/mojolearn/__init__.py`'s `_NOT_YET` still quote the withdrawn reading.
+
 An NVIDIA H100 compiled and ran this lane under FAST on 2026-08-26
 (`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`), which is
-a speed leg and not an identity one.
+a speed leg and not an identity one, so there is no identity card on a third
+column.
 `pixi run check-gaussian-process` is green in FAST and green
 under `tools/with_identical_mode.sh`, eleven checks each, nine sabotage arms
 driven at run time with no source edited.
@@ -425,8 +442,17 @@ variable is set, `cholesky_factor_host` and `cholesky_solve_host` write
 their own `chol.*` stages into the same file, so a divergence inside the
 factorization has a per-panel address without this lane doing anything.
 
-**No card has been emitted.** The stage list above is what the source
-records, not a transcript.
+**Two cards have been emitted and compared**, both from
+`checks/gp_check.mojo` and not from this driver, on the M4 and on an MI325X
+on 2026-08-28. 3,494 lines each, and the only eight lines that differ are
+inside the one fit block the `GP_SAB_STD_EXP` arm produced. See the Status
+section above and `bench/results/e1/GP_CROSS_VENDOR_DIVERGENCE.md`.
+
+**The fit and predict headers now name the sabotage arm and the kernel's
+hyperparameters**, since 2026-09-01, because one card file collects every fit
+a run makes and thirty blocks of the planted fixture used to share a
+byte-identical header. `estimator.mojo`'s comment above `trace.header` lists
+what is in it, and what is deliberately left out and why.
 
 ## WHAT THIS WILL COST
 

@@ -84,8 +84,20 @@ yanked.
 ## GaussianProcessRegressor: NOT reachable, and NOT for the usual reason
 
 Every other entry on this page is absent because it lacks a binding. This one
-has everything it needs and is held back deliberately: its IDENTICAL card
-diverges Apple against AMD on 8 of 3494 stages, starting at `gp.kernel`. It
-was on the shortlist for exposure and was pulled after the cards were diffed,
-which no leg had done. See `bench/results/e1/GP_CROSS_VENDOR_DIVERGENCE.md`
-and the `_NOT_YET` entry in `python/mojolearn/__init__.py`.
+has everything it needs and is held back deliberately.
+
+THE STATED REASON WAS WRONG AND IS WITHDRAWN, 2026-09-01. This paragraph read
+"its IDENTICAL card diverges Apple against AMD on 8 of 3494 stages, starting
+at `gp.kernel`". Those eight lines all sit inside ONE block, and that block is
+the SABOTAGED half of the `GP_SAB_STD_EXP` clean-then-sabotaged pair -- an arm
+whose entire purpose is that a device `exp` is a vendor choice in its last
+bit. The shipped path is byte-identical across the other 3,486 lines. The
+cards were diffed, which no leg had done, and then the diff was read without
+noticing that the sweep writes sabotaged fits into the same card.
+
+It remains NOT reachable, because exposing an estimator is Andrew's call and
+not a consequence of correcting a misreading. What is owed first is the
+regenerated card showing the new `sabotage=` header field naming that block,
+on Apple and then on AMD. See
+`bench/results/e1/GP_CROSS_VENDOR_DIVERGENCE.md` (corrected in place) and the
+`_NOT_YET` entry in `python/mojolearn/__init__.py`.

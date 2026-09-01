@@ -78,8 +78,24 @@ derived from the variance's bits) and would mean the flag is not derived
 from what it says. `gp.std` moving with `gp.var` identical is
 `identical_sqrt`.
 
-**NO CARD HAS BEEN EMITTED.** The stage list above is what the source
-records, not a transcript.
+**TWO CARDS HAVE BEEN EMITTED AND COMPARED**, both from
+`gaussian_process/checks/gp_check.mojo` rather than from this driver, on
+2026-08-28:
+
+    Apple  bench/results/e1/2026-08-28_162228-MacBook-Air-1-terrabyte/lanes/
+    AMD    bench/results/e1/2026-08-28_203552-mojolearn-e2-amd/lanes/
+
+3,494 lines each, and the only eight lines that differ are inside the ONE
+fit block the `GP_SAB_STD_EXP` sabotage arm produced. See
+`bench/results/e1/GP_CROSS_VENDOR_DIVERGENCE.md`. This driver's own single
+block has not been compared across two boxes.
+
+**THE FIT AND PREDICT HEADERS NAME THE SABOTAGE ARM AND THE KERNEL'S
+HYPERPARAMETERS**, since 2026-09-01, because one card file collects every
+fit a run makes and until then thirty blocks of one fixture shared a
+byte-identical header. `gaussian_process/estimator.mojo`'s comment above
+`trace.header` carries the argument and the list of what is deliberately
+left out.
 
 WHAT THIS DRIVER IS NOT. It is not a benchmark and it prints no time. A
 traced run drains the queue at every stage by construction

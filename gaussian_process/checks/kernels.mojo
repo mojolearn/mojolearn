@@ -496,11 +496,59 @@ def gp_kernel_from_name(name: String) raises -> Int:
     )
 
 
+def _gp_length_scale_render(spec: GPKernelSpec, t: Int) -> String:
+    """`ls<count>=<bits>[,<bits>...]` for one RBF or Matern node.
+
+    **A COUNT IS NOT AN IDENTITY, AND THIS USED TO PRINT ONLY THE COUNT.**
+    Every RBF node rendered as `RBF(ls1)` whatever its length scale was, so
+    `RBF([1.0])` and `RBF([2.0])` carried the SAME NAME, and a card header
+    built out of that name could not tell two fits of the same shape apart.
+    The length scale is the only free parameter an RBF has and every cell of
+    the Gram matrix is divided by it, so a header that omits it cannot say
+    what produced the matrix recorded below it. Found 2026-09-01 while
+    closing the header defect in
+    `bench/results/e1/GP_CROSS_VENDOR_DIVERGENCE.md`.
+
+    Written as BITS, for the reason every other float in this lane is
+    (`[[mojo-string-float-roundtrip]]`), and every entry is listed rather
+    than summarized: an ARD vector reduced to a count or a hash is a second
+    thing to get wrong, and the whole point of the field is that a reader
+    can reproduce the number.
+
+    The bounds are re-checked here rather than assumed, because this
+    function is a NAMING function and is called from paths that run BEFORE
+    `gp_validate_kernel` does -- `gp_main.mojo` prints the kernel's name
+    before it calls `gpr_fit_host` -- so a malformed offset must come back
+    as a question mark and never as a read past the table.
+    """
+    var ln = Int(spec.ls_len[t])
+    var off = Int(spec.ls_off[t])
+    var out = String("ls")
+    out += String(ln)
+    out += "="
+    if ln < 0 or off < 0 or off + ln > len(spec.length_scales):
+        out += "?"
+        return out
+    for i in range(ln):
+        if i > 0:
+            out += ","
+        out += "0x" + gp_hex32_bits(spec.length_scales[off + i])
+    return out
+
+
 def gp_kernel_name(spec: GPKernelSpec) -> String:
     """A one-line rendering of the postfix expression, for the card header
     and for an error message. Not sklearn's `__repr__` and not parseable
     back: it names the nodes in evaluation order, which is what a card
-    reader needs."""
+    reader needs.
+
+    **EVERY HYPERPARAMETER IS IN IT, AS BITS.** A node's constant, its noise
+    level, its `nu` and its length scales all appear, because this string is
+    the card header's entire account of the covariance function and a header
+    that cannot distinguish two kernels cannot name the block it heads.
+    `_gp_length_scale_render` carries the length-scale half of that and the
+    argument for it.
+    """
     var out = String("")
     for t in range(len(spec.kinds)):
         if t > 0:
@@ -511,11 +559,11 @@ def gp_kernel_name(spec: GPKernelSpec) -> String:
         elif k == GP_K_WHITE:
             out += "White(0x" + gp_hex32_bits(spec.params[t]) + ")"
         elif k == GP_K_RBF:
-            out += "RBF(ls" + String(Int(spec.ls_len[t])) + ")"
+            out += "RBF(" + _gp_length_scale_render(spec, t) + ")"
         elif k == GP_K_MATERN:
             out += (
-                "Matern(ls"
-                + String(Int(spec.ls_len[t]))
+                "Matern("
+                + _gp_length_scale_render(spec, t)
                 + ",nu=0x"
                 + gp_hex32_bits(spec.params[t])
                 + ")"

@@ -69,6 +69,50 @@ survivable, but it must not be spelled as an arithmetic STAGE in any profile
 whose contract freezes its stage list (mamba section 7 is explicit that
 changing the stage list creates a v2).
 
+## THE ONE THAT ACTUALLY BIT: a gp HEADER that could not name its own block
+
+Added 2026-09-01, and it is the first entry in this file written after the
+gap it describes had already cost somebody a wrong reading rather than
+before.
+
+`gaussian_process`'s fit header carried `n_train`, `d`, a kernel name and
+`alpha_bits`. One `MOJOLEARN_IDENTITY_TRACE` file collects EVERY fit a run
+makes, and `gaussian_process/checks/gp_check.mojo` writes THIRTY blocks of
+the planted fixture into one card, all four of whose header fields are
+identical. So when the Apple and AMD cards were diffed for the first time on
+2026-09-01 and exactly one of those thirty blocks differed, **the card could
+locate the block and could not name it**, and the divergence was written up
+as the lane being RED across vendors.
+
+It was not. The block is the sabotaged half of a clean-then-sabotaged pair
+driven by `check_gp_sabotages`, the arm is `GP_SAB_STD_EXP`, and that arm's
+entire statement is that a device `exp` is a vendor choice in its last bit.
+Two vendors then disagreed about `std.math.exp`, which is the arm working.
+Every other line of both 3,494-line cards is byte-identical.
+`bench/results/e1/GP_CROSS_VENDOR_DIVERGENCE.md` carries the derivation and
+the correction.
+
+**THE RULE THIS ADDS.** A card that mixes SABOTAGED runs with SHIPPED runs
+must say in the header which is which, or the first person to diff two of
+them reads a deliberate divergence as a defect. The arm id passes the test
+this file already sets: `sabotage` changes the ARITHMETIC without changing
+any input, so it is a decision the ALGORITHM makes and not one the SCHEDULER
+makes. `elem_tpb` fails that test and stays out.
+
+The fix landed the same day, in `gaussian_process/estimator.mojo` and
+`gaussian_process/checks/kernels.mojo`: `sabotage=<ARM NAME>` on both the fit
+and the predict header, the kernel named on the predict header at all, and
+the kernel's length scales printed AS BITS rather than as a count (every RBF
+node used to render as `RBF(ls1)` whatever its length scale was, so
+`RBF([1.0])` and `RBF([2.0])` shared one name). A header is a `#` comment
+line that both readers drop, so none of that moves a record or makes a v2.
+**RUN OWED**: nothing has been compiled.
+
+The same question is open in every lane whose checks drive sabotage arms at
+run time through an argument rather than through a source edit, which is the
+discipline this tree is converging on. `cholesky/checks/chol_sabotage.mojo`
+is the other one already built that way.
+
 ## Three more cards that hash on the far side of a washer
 
 - **spectral**: `spectral.ritz.vectors` is recorded AFTER `pin_column_signs`

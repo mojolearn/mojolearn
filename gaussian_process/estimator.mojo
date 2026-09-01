@@ -108,6 +108,7 @@ from gaussian_process.checks.gp_sabotage import (
     GP_SAB_MEAN_DESCENDING,
     GP_SAB_NONE,
     GP_SAB_YALPHA_DESCENDING,
+    gp_sabotage_name,
     sabotage_mean_kernel,
 )
 from gaussian_process.checks.kernels import (
@@ -616,6 +617,41 @@ def gpr_fit_host(
     gp_validate_alpha(alpha)
 
     var trace = _trace_for(trace_path, True)
+    # ============ WHAT THE HEADER HAS TO SAY, AND WHY THIS LIST ============
+    # **A HEADER THAT CANNOT TELL TWO BLOCKS APART CANNOT NAME EITHER.**
+    # One `MOJOLEARN_IDENTITY_TRACE` file collects EVERY fit a run makes --
+    # `gaussian_process/checks/gp_check.mojo` writes thirty blocks of the
+    # planted fixture alone into one card -- so the header is the only thing
+    # that separates them, and until 2026-09-01 it carried `n_train`, `d`,
+    # a kernel name that omitted its hyperparameters, and `alpha_bits`, all
+    # four of which are equal across all thirty.
+    # `bench/results/e1/GP_CROSS_VENDOR_DIVERGENCE.md` is what that cost: a
+    # block whose `gp.kernel` differed from its twenty-nine siblings could
+    # be located in the card and could not be NAMED from it.
+    #
+    # Every remaining argument of this function is now accounted for:
+    #   `x`, `y`               hashed as `gp.x_train` and `gp.y_train`
+    #   `n_train`, `n_features`, `alpha`, `kernel`   in the header below,
+    #                          the kernel WITH its hyperparameters as bits
+    #   `sabotage`             in the header below. It is the one argument
+    #                          that changes the ARITHMETIC without changing
+    #                          any input, so it is exactly a decision the
+    #                          ALGORITHM makes and `CARD_GAPS.md`'s rule
+    #                          admits it
+    #   `optimizer`,           cannot vary: `gp_validate_optimizer` accepts
+    #   `n_restarts_optimizer`,  only "none", 0 and False and refuses the
+    #   `normalize_y`          rest BY NAME (DEVIATIONS 1761, 1764)
+    #   `elem_tpb`             DELIBERATELY ABSENT. Threads per block is
+    #                          SCHEDULING, `check_launch_invariance` exists
+    #                          to prove no bit reads it, and `CARD_GAPS.md`
+    #                          forbids launch geometry in an identity trace
+    #                          because recording it would break the very
+    #                          property that check establishes
+    #   `trace_path`          selects this file and enters no arithmetic
+    #
+    # This is a `#` comment line (`core/identity_trace.mojo:231-239`), which
+    # both readers drop, so adding fields moves no record, changes no stage
+    # list and does NOT make a v2 of the profile.
     trace.header(
         "gaussian_process fit: profile="
         + GP_PROFILE
@@ -627,6 +663,8 @@ def gpr_fit_host(
         + gp_kernel_name(kernel)
         + " alpha_bits=0x"
         + gp_hex32_bits(alpha)
+        + " sabotage="
+        + gp_sabotage_name(sabotage)
     )
     trace.record_list_f32("gp.x_train", x)
     trace.record_list_f32("gp.y_train", y)
@@ -937,6 +975,10 @@ def gpr_predict_host(
     var kss = gp_kernel_diag(model.kernel)
 
     var trace = _trace_for(trace_path, False)
+    # The fit header's argument, applied here: `kernel` and `sabotage` are
+    # what separate two predictions of the same shape, and the kernel was
+    # not named here at all. `solve_tpb` is SCHEDULING and stays out for the
+    # same reason `elem_tpb` does.
     trace.header(
         "gaussian_process predict: profile="
         + GP_PROFILE
@@ -946,8 +988,12 @@ def gpr_predict_host(
         + String(n_star)
         + " d="
         + String(d)
+        + " kernel="
+        + gp_kernel_name(model.kernel)
         + " return_std="
         + String(return_std)
+        + " sabotage="
+        + gp_sabotage_name(sabotage)
     )
     trace.record_scalar_f32("gp.kss", kss)
 

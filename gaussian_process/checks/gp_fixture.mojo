@@ -378,7 +378,7 @@ def gp_fixture_kernel(which: Int) raises -> GPKernelSpec:
 
 def gp_fixture_ard_reduced_kernel() raises -> GPKernelSpec:
     """`GP_FIX_ARD`'s kernel with the irrelevant feature's length scale
-    dropped: `RBF([1.0, 2.0])` over the first two features only.
+    dropped: `RBF([0.5, 1.0])` over the first two features only.
 
     `check_kernels_vs_oracle`'s ARD arm requires the three-feature matrix
     and the two-feature matrix to be equal BIT FOR BIT. Two things fail that
