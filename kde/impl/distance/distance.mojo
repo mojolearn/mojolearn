@@ -134,12 +134,23 @@ def pairwise_distance(
         # `lp_unexp.cuh:41`: `use_norms = false`. The two norm pointers are
         # never read, so `x` is passed twice rather than allocating a
         # buffer nothing reads (Mojo refuses a null pointer argument).
+        # THE TWO NORM SLOTS GET A ONE-ELEMENT DUMMY, NOT COPIES OF `x`.
+        # `lp_unexp.cuh:41` sets use_norms = false, so they are never read.
+        # Passing `x.unsafe_ptr()` twice more is two further mutable borrows
+        # of one value, which Mojo refuses as aliasing, and it broke the kde
+        # build on 2026-09-01. Mojo also refuses a null pointer argument,
+        # which is why the first attempt reached for `x`. One float costs
+        # nothing, is never read, and is a distinct value.
+        # TWO buffers, not one passed twice: Mojo refuses ANY pointer that
+        # appears twice in one argument list, a dummy included.
+        var unused_xn = ctx.enqueue_create_buffer[DType.float32](1)
+        var unused_yn = ctx.enqueue_create_buffer[DType.float32](1)
         ctx.enqueue_function[metric_distance_kernel](
             dist.unsafe_ptr(),
             x.unsafe_ptr(),
             y.unsafe_ptr(),
-            x.unsafe_ptr(),
-            x.unsafe_ptr(),
+            unused_xn.unsafe_ptr(),
+            unused_yn.unsafe_ptr(),
             Int32(m),
             Int32(n),
             Int32(k),

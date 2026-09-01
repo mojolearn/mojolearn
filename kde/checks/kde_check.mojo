@@ -1262,9 +1262,10 @@ def check_kde_cosine_norm_is_the_sqrt_norm() raises:
         train, query, none, False, n_train, n_query, d, BANDWIDTH,
         KDE_KERNEL_GAUSSIAN, DIST_COSINE_EXPANDED,
     )
+    var _tr0 = IdentityTrace.disabled()
     var dev = _device_scores(
         ctx, train, query, none, False, n_train, n_query, d, BANDWIDTH,
-        KDE_KERNEL_GAUSSIAN, DIST_COSINE_EXPANDED, IdentityTrace.disabled(),
+        KDE_KERNEL_GAUSSIAN, DIST_COSINE_EXPANDED, _tr0,
     )
     var self_cell = st.dists[0 * n_train + 0]
     if abs(self_cell) > Float32(1e-4):
@@ -1294,13 +1295,15 @@ def check_kde_cosine_norm_is_the_sqrt_norm() raises:
             " fixture is degenerate (every row norm 1?)"
         )
 
+    var _tr1 = IdentityTrace.disabled()
     var euc = _device_scores(
         ctx, train, query, none, False, n_train, n_query, d, BANDWIDTH,
-        KDE_KERNEL_GAUSSIAN, DIST_L2_SQRT_UNEXPANDED, IdentityTrace.disabled(),
+        KDE_KERNEL_GAUSSIAN, DIST_L2_SQRT_UNEXPANDED, _tr1,
     )
+    var _tr2 = IdentityTrace.disabled()
     var sqe = _device_scores(
         ctx, train, query, none, False, n_train, n_query, d, BANDWIDTH,
-        KDE_KERNEL_GAUSSIAN, DIST_L2_EXPANDED, IdentityTrace.disabled(),
+        KDE_KERNEL_GAUSSIAN, DIST_L2_EXPANDED, _tr2,
     )
     var same_e = 0
     var same_s = 0
@@ -1445,10 +1448,14 @@ def check_kde_minkowski_general_p() raises:
         )
 
     # the device agrees with the oracle at a general p too
+    var _tr3 = IdentityTrace.disabled()
     var devp = _device_scores(
         ctx, train, query, none, False, n_train, n_query, d, BANDWIDTH,
-        KDE_KERNEL_GAUSSIAN, DIST_LP_UNEXPANDED, IdentityTrace.disabled(),
-        0, Float32(-987654.0), Float32(3.0),
+        KDE_KERNEL_GAUSSIAN, DIST_LP_UNEXPANDED, _tr3,
+        # KEYWORDS, because the three optionals after `trace` are
+        # elem_tpb, lse_tpb, pad, poison, metric_arg, and passing these
+        # positionally put metric_arg's 3.0 into lse_tpb.
+        pad=0, poison=Float32(-987654.0), metric_arg=Float32(3.0),
     )
     var stp = _oracle(train, query, none, False, n_train, n_query, d, BANDWIDTH, KDE_KERNEL_GAUSSIAN, DIST_LP_UNEXPANDED, Float32(3.0))
     var ndiff = 0
