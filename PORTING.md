@@ -5358,11 +5358,30 @@ or 25 min).** What happened, logs in `bench/results/soak134/`:
   processes, watchdog at 10, longer cap, same prebuilt binaries
   (`build/soak134_fast`, `build/soak134_control`).
 
+**RUN RECORD #3, 2026-09-01 evening — the reduced sustained window ran
+(6 loads + control, watchdog 10, 30-min cap; logs
+`bench/results/soak134/attempt2/`).** The cap fired with NO saturation:
+~39 minutes of sustained 7-process load (the one mid-window sample read
+8; the monitor shell was starved between t=81s and t=2339s, so the
+profile is under-sampled — a known flaw of this attempt, not of the
+soaks). ZERO disagreement lines from any process, SABOTAGED CONTROL
+INCLUDED — and the driver prints those event-driven, at the rep, so
+quiet logs mean quiet runs, not lost output. Rep counts are UNKNOWN
+because teardown preceded the end-of-run summaries; the next attempt
+should size reps to finish inside the cap (control ~800) so the
+summary lands. Taken together with runs #1-#2: the pre-a4aee262 ctor
+has now run quiet for ~40+ minutes under genuine multi-process load
+plus 1,200 quiet-box reps, and the un-sabotaged arms are quiet
+everywhere except at outright saturation (DEVIATION 2002's regime,
+which reproduced garbage, not 134's signature).
+
 **STATUS: DEVIATION 134 STAYS OPEN and the no-speed-claim embargo
-stands.** Still owed: the reduced sustained-load window above, and the
-IDENTICAL-mode soak (`tools/with_identical_mode.sh pixi run
-soak-determinism` — needs a rebuild) as the second half of the closing
-pair.
+stands** — but the evidence now leans hard toward "the historical
+sighting's hazard is fixed and the sighting is not reproducible at
+these loads." Still owed before closing: a summary-landing rerun of
+the sustained window (sized reps), and the IDENTICAL-mode soak
+(`tools/with_identical_mode.sh pixi run soak-determinism` — needs a
+rebuild) as the second half of the closing pair.
 
 ## 2002. [OPEN, FIX OWED] Saturated-device fits return silent garbage instead of raising
 
