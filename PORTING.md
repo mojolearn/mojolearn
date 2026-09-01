@@ -6957,7 +6957,34 @@ Gates, NONE RUN:
 - `pixi run oracle` and `pixi run oracle-sweep`
 - `pixi run check-searcher-parity-covtype` (greedy mse row)
 
-## 2009. [OPEN, RUN OWED] The offsets-export drain rides the tree's own
+## 2009. [NEGATIVE, REVERTED 2026-09-01 SAME DAY] The offsets-export drain rides the tree's own
+
+**VERDICT FIRST, written the evening the entry was built: THE PREMISE
+BELOW IS FALSE ON THIS DEVICE AND THE CHANGE BROKE THE ESTIMATION PATH.
+REVERTED same session; the drain count is back to three.** The record:
+`check-logloss-train` at the wired form failed ALL FIVE claims (logloss
+0.6928 -> 0.6908 over ten iterations against 0.538 -> 0.416 healthy at
+c4af1f42; the fit's own replay diverged; holdout lost to the mean
+predictor), and passed completely the moment the offsets copy moved
+back AFTER the drain with its own `ctx.synchronize()`. So the reading
+of `wait_complete` two paragraphs down -- "submit-all then
+sync_active_streams AT CALL TIME, so a copy enqueued before the call is
+inside the drain" -- is CONTRADICTED BY THE BENCH: the host read stale
+`h_off` (the root-seed zeros) and the estimator trained every leaf at
+offset 0. The OLD comment's warning ("wait_complete does not order
+copies enqueued after it was armed") was measured fact from the
+34x-coverage incident, and it won. TWO LESSONS, paid for twice now:
+(1) a source read of the sync primitive does not overrule the recorded
+incident that shaped the code it guards; (2) the identity-card A/B ran
+green through the whole defect because the oracle fixture is RMSE and
+`export_offsets` is the estimation arm's branch -- A GATE MUST EXERCISE
+THE CHANGED ARM, and this entry's gate list had the right check
+(`check-logloss-train` was implied by "the estimation path") without
+running it first. What survives of the entry: the offsets copy now
+lands in `h_off` (own buffer, own sync) instead of reusing `h_sz`, so
+the offsets and sizes host reads can never race EACH OTHER. The
+original (falsified) design text is kept below unedited, as the record
+of what was claimed.
 
 Every `need_estimation` fit paid a THIRD full drain per tree: the
 offsets-export tail reused `h_sz` for the `p_off` copy, which would race

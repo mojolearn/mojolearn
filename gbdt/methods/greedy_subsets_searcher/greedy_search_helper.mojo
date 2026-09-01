@@ -4049,26 +4049,27 @@ def run_tree_layout_traced[
         mgr.stream_kernel()
         times.end(ctx, "sym.leaves")
 
-    # ================= DEVIATION 2009 =================
-    # THE OFFSETS RIDE THE SAME DRAIN AS THE SIZES. The export tail below
-    # used to reuse `h_sz` for the offsets copy, which would race the
-    # sizes read the host does right after this drain, so it paid its own
-    # `ctx.synchronize()` -- a THIRD full drain per tree on every
-    # `need_estimation` fit. `h_off` is pool-owned and FREE at this
-    # point: its last use was the root-partition seed upload at the top
-    # of this tree (queue-ordered long behind us; the host never writes
-    # it again), so the offsets get their own host buffer and both d2h
-    # copies -- different device buffers into different host buffers on
-    # one in-order queue -- become readable at the ONE `wait_complete`
-    # below. Zero device arithmetic; two copies moved, one drain deleted.
-    # NO ALIASING HAZARD DOWNSTREAM: `out_leaf_offsets` is a `List[Int]`
-    # filled BY VALUE from `h_off` before this function returns
-    # (`doc_parallel_boosting.mojo` hands the values to
-    # `_estimate_and_apply` as host integers), so no caller holds a view
-    # into `h_off` when the next tree's seed upload rewrites it.
-    # ====================================================
-    if export_offsets:
-        ctx.enqueue_copy(dst_ptr=h_off.unsafe_ptr(), src_buf=p_off)
+    # ============ DEVIATION 2009: NEGATIVE, REVERTED ============
+    # The attempt: enqueue the `p_off` d2h into pool-owned `h_off`
+    # BEFORE this `wait_complete`, so the offsets ride the same drain
+    # as the sizes and the export tail's own `ctx.synchronize()` -- a
+    # third full drain per tree on every `need_estimation` fit -- dies.
+    # In-order-queue reasoning said both copies become readable at the
+    # one drain. THE BENCH SAID OTHERWISE, 2026-09-01:
+    # `check-logloss-train` failed ALL FIVE claims at the wired form
+    # (logloss 0.6928 -> 0.6908 over ten iterations vs 0.538 -> 0.416
+    # healthy; replay diverged from its own fit) and passed again the
+    # moment the copy moved back after the drain. The old banner's
+    # warning was measured fact, not caution: `mgr.wait_complete` does
+    # NOT cover every copy enqueued before the call on this device, so
+    # the host read stale `h_off` -- the root-seed ZEROS -- and the
+    # estimator trained every leaf at offset 0. The RMSE identity card
+    # was green throughout, because `export_offsets` is the estimation
+    # arm's branch: A GATE MUST EXERCISE THE CHANGED ARM. The one piece
+    # that survives: the offsets copy lands in `h_off` (its own buffer,
+    # own sync) instead of reusing `h_sz`, so the two host reads cannot
+    # race each other. Drain count is back to the pre-2009 three.
+    # ============================================================
     ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
     mgr.wait_complete()
     if apply_to_cursor:
@@ -4106,6 +4107,11 @@ def run_tree_layout_traced[
     # Guarded because it costs one d2h copy per tree, which the RMSE arm
     # has no reason to pay: its cursor update happened above.
     if export_offsets:
+        # The pre-2009 form (copy after the drain, its own sync) --
+        # DEVIATION 2009's revert; `h_off` destination kept so the
+        # offsets and sizes reads use distinct host buffers.
+        ctx.enqueue_copy(dst_ptr=h_off.unsafe_ptr(), src_buf=p_off)
+        ctx.synchronize()
         out_leaf_offsets.clear()
         for i in range(n_live):
             out_leaf_offsets.append(Int(h_off.unsafe_ptr().unsafe_load(i)))
