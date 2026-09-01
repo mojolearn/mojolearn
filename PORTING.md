@@ -6728,3 +6728,186 @@ which is the only arm that reaches this path. They were blocked by the same
 until 2026-09-01, and they are cleared by the same `-O1` build level, so
 this deviation is GATED too as of that day. Both pass on the `rbc` arm on an
 Apple M4; a three-vendor leg is owed.
+
+## 2007. [OPEN, RUN OWED] The host floor: the per-tree SM-count query, and the dead `partsCpu` root seeds
+
+Two per-tree host costs on the shipped symmetric driver
+(`run_tree_layout_traced`), both with no CatBoost counterpart, both
+removed as BIT-INERT restructurings. DEVIATION 134's nondeterminism
+embargo is OPEN, so NO SPEED CLAIM is quoted here or anywhere for these
+changes; what this entry asserts is only what was deleted and why the
+bits cannot move. DEV 209's boundary is respected: nothing here touches
+`compile_function` or per-launch cost -- these are HOST-FLOOR terms
+(a device query and two uploads), which are exactly the reducible kind.
+
+**(a) The SM-count query.** Their `TArchProps::SMCount()` is a cached
+static read once at init; ours was `ctx.get_attribute(MULTIPROCESSOR_COUNT)`
+ONCE PER TREE at the top of the driver, repo-priced at 1.26 ms/call on
+this Metal device (the measurement lives in
+`gbdt/gpu_util/partitions_reduce.mojo`'s threading note: 100 calls in
+126 ms, ~9 ms/tree when it was per level). `TTreeWorkspace.__init__`
+already makes the same query for chunk sizing, so the value is now a
+field on the pooled workspace (`sm_count`, NOT a pool key) and every
+driver reads it back: the traced symmetric driver
+(`greedy_search_helper.mojo`), the depthwise/lossguide driver
+(`greedy_search_helper_depthwise.mojo`, where a positive
+`sm_count_override` keeps its old meaning byte for byte), and
+`create_subsets` (`pointwise_optimization_subsets.mojo`), which grew the
+same `sm_count: Int = -1` query-if-negative parameter
+`compute_partition_stats` already uses -- every existing call site's
+behavior is unchanged. A machine constant within a process: every reader
+gets the IDENTICAL INTEGER the deleted query returned, so every grid,
+every replication factor and every pinned-vs-device choice is
+byte-for-byte the same. `run_one_level`/`run_tree` (old unshipped
+drivers) keep their own queries untouched.
+
+**(b) The `hp_off`/`hp_sz` root seeds.** Deleted from the traced driver,
+from `run_tree`, and from the depthwise driver: two uploads per tree
+into buffers that are WRITE-ONLY. Their only other references are the
+output arguments of `update_partitions_and_plan_kernel` /
+`update_partitions_after_split_kernel` (`kernel/split_points.mojo` --
+read both: every touch of `host_offset`/`host_size` is an
+`unsafe_store`), the `partsCpu` mirror that nothing on our side reads
+because the pinned-host half was never wired
+(`gpu_util/gpu_data/partitions.mojo`'s deviation block, UNWIRED.md).
+`checks/plan_fusion_check.mojo` seeds exactly this pair with POISON
+(0xDEADBEEF memsets at its lines 150-151) and compares the written words
+per cell against a host oracle -- the check's own design treats the
+pre-kernel contents as meaningless, which is the standing proof the seed
+upload was never load-bearing. `run_one_level`'s seed pair stays (old
+driver, not optimized).
+
+Sabotage arm (verify-reach, OWED with the runs): under a temporary env
+flag, poison the cached `sm_count` to 1 instead of the device count. The
+IDENTICAL column's identity card must NOT move (row-7 pins --
+`partition_chunks_sm_for` -- exist to make the machine count
+bits-invisible there), while a FAST-column traced run's
+`*.depthNN.pstats` rows MUST move (the float reduce's chunk count
+changes); grids and the launch counter shrink in both. That pair of
+outcomes proves the kernels read the cache, not a leftover query.
+
+Gates, NONE RUN (this Mac runs nothing; every command owed as-is):
+- identity A/B at the parent vs this commit:
+  `MOJOLEARN_IDENTITY_TRACE=/tmp/before.card python3 tools/e1_traced_fit.py gbdt_rmse`
+  (parent), same with `/tmp/after.card` (this commit), then
+  `python3 tools/identity_trace_diff.py /tmp/before.card /tmp/after.card`
+  -- ZERO divergent stages required.
+- `pixi run check-plan-fusion` (the 2007b pair's per-cell gate)
+- `pixi run oracle` and `pixi run oracle-sweep`
+- `pixi run check-searcher-parity-covtype` (read the greedy mse row; the
+  pointwise flag is known red)
+
+## 2008. [OPEN, RUN OWED] Dead zero passes: the level loop's compute-slot zero and the per-tree histogram memset
+
+Same driver, same embargo discipline as 2007: bit-inert deletions only,
+no speed claim quotable while DEVIATION 134 is open.
+
+**(a) `zero_histograms_kernel` is out of the shipped level loop** (one
+launch per level, six per depth-6 tree). Every cell it zeroed is
+unconditionally overwritten before the next reader
+(`scan_histograms_kernel`): `hist` is written ONLY by
+`launch_histograms_for_blocks`' writeback kernels (the histogram kernels
+touch `block_hist`/`acc_i32`, never `hist`), and all three writeback
+arms -- `write_reduces_histograms_kernel`,
+`write_reduces_from_fixed_kernel[True]`,
+`write_reduces_from_fixed_kernel[False]`
+(`kernel/histogram_utils.mojo:600-756`) -- end in an UNGUARDED store for
+every `bin_feature_id < bin_features_in_block`, on a grid spanning every
+(compute leaf, stat). The blocks tile the flat bins exactly
+(`build_layout` sets `hist_cells = sum(folds)`; `blocks_for` walks the
+same features in the same order, `gpu_data/feature_blocks.mojo:41-66`),
+so the stores cover [0, hist_cells_per_leaf) with no gap. Empty leaves
+store zeros sourced from the per-block scratch memset (their
+`ZeroBuffer`) or the accumulator. THE ARM THAT NEEDED EXPLICIT
+VERIFICATION, verified by reading the kernel: the POLICY_ONE_BYTE
+`scratch_dead` route skips the scratch memset, and its writeback is
+`write_reduces_from_fixed_kernel[False]` -- there `val` starts at 0.0,
+the `q == 0` / `read_scratch == False` case leaves it 0.0, and the store
+sits OUTSIDE the `q` branch, so a q==0 cell is written WITH zero, not
+left unwritten. That q==0-means-zero reading is sound because `acc_i32`
+is all-zero between levels: the per-tree memset (kept, DEVIATION 1892's
+gate) establishes it and the writeback re-zeroes every nonzero cell it
+converts (`:738`) on a grid covering every span the histogram kernels
+write. No comptime guard was needed; the removal is unconditional.
+Derived siblings never needed the zero (parent copy, then in-place
+subtract). `zero_histograms_kernel` ITSELF STAYS: `run_one_level`,
+`run_tree`, the depthwise driver and the checks still call it, and all
+still compile against it. The DEVIATION 94 bullet that said the compute
+slots "are now zeroed unconditionally" was corrected in place, same
+change.
+
+**(b) the per-tree `enqueue_memset(hist, 0)`** is deleted by the same
+argument, the class DEV 1892 established one line below it for
+`acc_i32`: no cell of `hist` is read before it is written -- depth 0's
+only live slot is fully stored by the writebacks per (a) before the scan
+reads it, and every deeper slot receives the parent via
+`copy_histograms_*` at split time before any read. The identity trace
+hashes only the LIVE PREFIX per depth (identity_trace rule 3), which is
+exactly the written set, so the traced hashes cannot see the deleted
+zeros either. The depthwise driver's per-tree memset stays (its loop
+zeroes selectively and was not audited here).
+
+Sabotage arm (verify-reach, OWED): under a temporary env flag, replace
+the deleted zero with a MULTIPLICATIVE poison
+(`enqueue_memset(hist, Float32(1e30))` at the same two points -- level
+top and tree top). If the coverage argument holds, the identity card is
+byte-identical to the unpoisoned run: `*.depthNN.hist`,
+`*.depthNN.pstats`, `*.winners.*` and `*.leaves` all still. ANY moved
+row refutes the argument and reinstates the zero. This is the poison
+class that cannot hide in a plateau tie.
+
+Gates, NONE RUN:
+- the identity A/B of entry 2007 (one pass covers all three entries)
+- `pixi run check-hist2` (the gate for this class: cross-family
+  histogram cells per cell, and the family fingerprint)
+- `pixi run oracle` and `pixi run oracle-sweep`
+- `pixi run check-searcher-parity-covtype` (greedy mse row)
+
+## 2009. [OPEN, RUN OWED] The offsets-export drain rides the tree's own
+
+Every `need_estimation` fit paid a THIRD full drain per tree: the
+offsets-export tail reused `h_sz` for the `p_off` copy, which would race
+the sizes read right after the tree's second `wait_complete`, so it
+carried its own `ctx.synchronize()` (the old comment said exactly this,
+and the 34x-coverage incident it cites is why the reuse was ordered so
+carefully). The fix gives the offsets their own host buffer: the
+pool-owned `h_off` (`TTreeWorkspace.h_off`) is FREE at the tail -- its
+last queue use is the root-partition seed upload at the top of the tree
+(and with 2007b that upload pair shrank to one), and the host never
+writes it again inside the tree -- so the `p_off -> h_off` copy is
+enqueued BEFORE the tree's existing `wait_complete`, both d2h copies
+(different device buffers into different host buffers on one in-order
+queue) are readable after the ONE drain, and the tail's `synchronize`
+is deleted. Nothing between the enqueue point and the old copy point
+writes `p_off` (the rollback path re-uploads `p_sz` only), so the bytes
+copied are identical. `wait_complete` was read before trusting it:
+`gpu_lib/gpu_single_worker.mojo:322` is `wait_submit_and_sync` --
+submit-all then `sync_active_streams` AT CALL TIME, not an event armed
+earlier -- so a copy enqueued before the call is inside the drain.
+
+THE ALIASING QUESTION THE CHANGE HUNG ON, verified at the caller:
+`doc_parallel_boosting.mojo`'s `leaf_offsets` is a `List[Int]` filled BY
+VALUE from `h_off` before the searcher returns, and `_estimate_and_apply`
+takes `leaf_offsets: List[Int]` (`doc_parallel_boosting.mojo:590-596`) --
+host integers, re-uploaded from its own staging. No caller holds a view
+into `h_off` when the next tree's seed upload rewrites it, so no
+copy-out and no second pooled buffer was needed. Bit-inert: zero device
+arithmetic; two copies moved, one drain deleted. Embargo note as above:
+DEVIATION 134 is open, no timing is quoted for the removed drain.
+
+Sabotage arm (verify-reach, OWED): under a temporary env flag, source
+the offsets copy from `p_sz` instead of `p_off` (wrong buffer, same
+shape). `check-newton-walker`'s replay and the logloss coverage
+accounting must go red (the 34x-over-row-count class), proving the
+exported offsets are load-bearing on the estimation path and that the
+gate can see this copy at all.
+
+Gates, NONE RUN:
+- the identity A/B of entry 2007
+- `pixi run check-newton-walker` and `pixi run estimation-bench`
+  (`checks/estimation_bench.mojo`) for the estimation path
+- `pixi run oracle` and `pixi run oracle-sweep`
+- timing A/B (all three entries): intra-window per the M4-drift rule --
+  alternate parent/HEAD builds INSIDE one thermal window -- and LABELED
+  as running over the OPEN DEVIATION 134 embargo, so the numbers are for
+  the ledger, not for any claim.
