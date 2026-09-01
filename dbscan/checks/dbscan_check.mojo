@@ -1077,7 +1077,25 @@ def check_dbscan_rbc_two_loop_arms() raises:
 # have come out differently, and raises "degenerate" if it could not.
 
 
-comptime L1_EPS = Float64(1.0)
+# 1.2, NOT 1.0, AND TWO GATES PIN IT THERE.
+#
+# At eps = 1.0 the squared threshold IS the threshold, so SABOTAGE A, which
+# runs the L1 kernel against a squared threshold, could not move a single
+# adjacency cell and the gate refused itself as vacuous on 2026-09-01. That
+# refusal was correct: with eps = 1 an implementation that squared the L1
+# radius by mistake would have passed every cell of this fixture.
+#
+# 1.2 squares to 1.44, so the two radii admit visibly different sets over a
+# fixture spread across roughly [-1.5, 1.5] in two dimensions, and the arm
+# has something to detect.
+#
+# It cannot be just any non-unit value. check_dbscan_manhattan_changes_the_
+# labels plants a diagonal bridge at L2 0.98995 and L1 1.4, and needs that
+# bridge INSIDE under L2 and OUTSIDE under L1 so the metric is shown to be
+# load bearing. A first attempt at 1.4 put the bridge exactly ON the L1
+# radius and broke that gate. 1.2 clears both: 1.2 != 1.44, 0.98995 < 1.2,
+# and 1.4 > 1.2.
+comptime L1_EPS = Float64(1.2)
 """The planted fixture's radius, in the units `_l1_coord` lays out.
 
 Spelled `Float64` rather than left a literal because it crosses into
