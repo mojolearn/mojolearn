@@ -396,10 +396,61 @@ def check_invparams_contraction_is_visible() raises:
                     j -= 1
     print("    of " + String(total) + " numerators the two associations differ on "
           + String(moved) + "; the VERDICT flips on " + String(verdict_moved))
-    _assert(moved > 0,
-            "the one-rounding and two-rounding spellings of test_invparams' numerator are"
-            " bit-identical on every cell of this fixture: sabotage (j) cannot fail and"
-            " the correction is unverifiable here")
+
+    # BUILT TO SEPARATE, because the fixture's own values cannot.
+    #
+    # The natural Jones-transformed parameters gave moved == 0 on all 1152
+    # numerators when this gate first ran, and that is NOT evidence the two
+    # associations agree. It is the same trap `identical_mul_add`'s own
+    # docstring records against `check-ieee-arith`: random exponents put the
+    # product and the addend so far apart that a fused and an unfused
+    # spelling round identically, so a hashed fixture scores a contracting
+    # backend and a non-contracting one exactly alike. That verdict had to be
+    # replaced with a BUILT-TO-SEPARATE arm, and Metal then reported FUSED on
+    # 1629 of 1629 separating patterns. This gate needs the same treatment.
+    #
+    # A separating triple needs the product's lost bits to survive the add,
+    # which means the addend must very nearly cancel the product. With
+    # a = x = 1 + 2^-12, the exact product is 1 + 2^-11 + 2^-24 and the 2^-24
+    # falls off the float32 mantissa at that exponent, so:
+    #     fused:   round(a*x + acc) keeps it       -> 2^-24
+    #     unfused: round(round(a*x) + acc) does not -> 0
+    var sep_a = Float32(1.0) + Float32(1.0) / Float32(4096.0)      # 1 + 2^-12
+    var sep_x = sep_a
+    var sep_acc = -(Float32(1.0) + Float32(1.0) / Float32(2048.0))  # -(1 + 2^-11)
+    var sep_one = ftz(identical_mul_add(sep_a, sep_x, sep_acc))
+    var sep_two = ftz(identical_mul_add(Float32(1.0), ftz(sep_a * sep_x), sep_acc))
+    print("    built to separate: one-rounding " + String(sep_one)
+          + " vs two-rounding " + String(sep_two))
+    # ASSERTED UNDER IDENTICAL, REPORTED UNDER FAST, and the difference is
+    # the point rather than a hedge. `identical_mul_add` is `_fma_f32` under
+    # IDENTICAL and a bare `a*b + c` under FAST, so the pin that makes this
+    # seam OBSERVABLE only exists in the strict tier. Measured 2026-09-01 on
+    # Metal: under IDENTICAL the two associations differ on 448 of 1152
+    # numerators and the planted triple gives 2^-24 against 0; under FAST
+    # this backend does not contract the expression at all, both spellings
+    # round the same way, and the seam is genuinely INERT.
+    #
+    # So a FAST run finding moved == 0 is not a defect and must not be
+    # asserted into one. That is the standing rule against asking a FAST arm
+    # a bitwise question. The first version of this arm asserted in both
+    # tiers and went red under FAST for exactly that reason.
+    comptime if IDENTICAL:
+        _assert(not same_bits(sep_one, sep_two),
+                "the BUILT-TO-SEPARATE triple did not separate the two"
+                " associations under IDENTICAL, where identical_mul_add is"
+                " _fma_f32. Either the pin stopped contracting, which is"
+                " IDENTITY_PATHS row 9's whole subject, or this construction"
+                " is wrong. Read row 9 before touching this")
+        _assert(moved > 0,
+                "the two associations are bit-identical on every one of this"
+                " fixture's numerators UNDER IDENTICAL, so sabotage (j) cannot"
+                " fail and the correction is unverifiable here")
+    else:
+        print("    REPORT [FAST]: the seam is inert in this tier because"
+              " identical_mul_add is a bare a*b + c here and this backend does"
+              " not contract it. Nothing is asserted; run IDENTICAL to gate"
+              " the seam and to check sabotage (j)")
 
 
 # ===========================================================================
