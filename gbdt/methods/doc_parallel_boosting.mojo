@@ -127,6 +127,10 @@ from gbdt.gpu_util.kernel.transform import (
     launch_gather_planes_with_mask_f32,
     launch_gather_with_mask_f32,
 )
+from core.device_liveness import (
+    DEAD_DEVICE_POISON,
+    SAB_2002_DEAD_DEVICE,
+)
 from core.identity_trace import IdentityTrace
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
     StageTimes,
@@ -2065,10 +2069,51 @@ def fit_with_test(
         fv_part.unsafe_ptr(), Int32(final_blocks), fv.unsafe_ptr(),
         grid_dim=1, block_dim=256,
     )
-    ctx.enqueue_copy(dst_ptr=h_fv.unsafe_ptr(), src_buf=fv)
+    # ================= DEVIATION 2002, LEG 2 =================
+    # THE POISONED FINAL-LOSS WORD, the whole-fit backstop across every
+    # grow policy this loop drives. The 134 loaded window measured fits
+    # returning with `mse -0.0` because a dead Metal context silently
+    # stopped delivering readbacks: `h_fv` kept its stale +0.0 and
+    # `-0.0 / n` became the reported train loss. The host plants a
+    # poison BIT PATTERN in the word before the copy is enqueued; on a
+    # live device the drain overwrites it with the accumulated
+    # `functionValue`, and the exact poison bits surviving means the
+    # loss was NEVER DELIVERED -- so the fit raises rather than record
+    # a loss it never computed. Bit-compared, not value-compared, so a
+    # legitimate loss of ANY value (including a constant-target fit's
+    # exact -0.0) passes: only non-delivery fails, which cannot happen
+    # on a live in-order queue with the synchronize below.
+    # `-D MOJOLEARN_2002_SABOTAGE=1` (REQUIRED-RED, see
+    # `core/device_liveness.mojo`) compiles the copy out to fake
+    # exactly that signature.
+    # =========================================================
+    h_fv.unsafe_ptr().bitcast[UInt32]().unsafe_store(
+        0, DEAD_DEVICE_POISON
+    )
+    comptime if not SAB_2002_DEAD_DEVICE:
+        ctx.enqueue_copy(dst_ptr=h_fv.unsafe_ptr(), src_buf=fv)
     ctx.synchronize()
     _ = fv_part^  # past the drain (step-33 race class, device side)
     _ = fv^  # past the drain (step-33 race class, device side)
+    if (
+        h_fv.unsafe_ptr().bitcast[UInt32]().unsafe_load(0)
+        == DEAD_DEVICE_POISON
+    ):
+        raise Error(
+            "DEVIATION 2002: refusing to return this fit -- the final"
+            " train loss was never delivered (the host-side poison"
+            " survived the drain). This is the dead/saturated-device"
+            " signature (Metal context death under load): fits in this"
+            " state return empty models and a stale mse of -0.0 with no"
+            " error, so the fit raises instead. The process's GPU"
+            " context is not trustworthy; restart the process on a"
+            " quieter box."
+            + (
+                " [SABOTAGE ARM -D MOJOLEARN_2002_SABOTAGE=1 IS ARMED:"
+                " this failure is the REQUIRED-RED verdict.]"
+                if SAB_2002_DEAD_DEVICE else ""
+            )
+        )
     losses.append(
         -Float64(h_fv.unsafe_ptr().unsafe_load(0)) / Float64(n_rows)
     )

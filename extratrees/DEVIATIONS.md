@@ -4519,3 +4519,33 @@ the sabotage A/B (RED observed, then clean GREEN):
     pixi run mojo run -I . -D MOJOLEARN_ET_SAB_STAGE_SKIP_ALWAYS=1 extratrees/checks/device_batched_check.mojo
 
 plus the shared IdentityTrace pre/post diff and timing A/B named in 470.
+
+## DEVIATION 2002 (gbdt-ledgered, cross-referenced here) [FIX LANDED 2026-09-01, RUNS OWED] -- forest fits raise on a dead device instead of returning stump forests
+
+THE NUMBER AND THE FULL ENTRY LIVE IN THE ROOT `PORTING.md` (DEVIATION
+2002): at box saturation (Metal context death, measured during the 134
+loaded window) device readbacks silently deliver stale zeros. For THIS
+lane that means the merged-frontier loop's per-cycle split readbacks
+come back empty, every node quietly leafs out, and
+`train_forest_classification_device` / `train_forest_regression_device`
+return a WELL-FORMED FOREST OF STUMPS with no error -- shared exposure
+by reading, not loud failure. Both untimed wrappers now end with
+`assert_device_alive` (`core/device_liveness.mojo`): reset a device
+word, one-thread canary kernel, read back, RAISE a named
+"DEVIATION 2002" error on mismatch. One tiny kernel + 4-byte copy +
+one drain per FOREST fit; the `_timed` entries (bench/check callers)
+stay uncovered on purpose. Degenerate-data safe by construction: the
+canary witnesses command-stream execution, never the model, so a
+legitimate stump forest (constant labels, min_data refusals) stays
+green.
+
+**Gate (owed, verdict inversion -- the armed run must FAIL with the
+2002 error):**
+
+    pixi run mojo run -I . extratrees/checks/device_batched_check.mojo
+    pixi run mojo run -D MOJOLEARN_2002_SABOTAGE=1 -I . extratrees/checks/device_batched_check.mojo
+
+The define compiles out the canary kernel inside `assert_device_alive`
+(the only writer of the checked word), so the armed RED is
+deterministic and the arm terminates -- it deletes work, adds none. It
+must never reach a shipped build.

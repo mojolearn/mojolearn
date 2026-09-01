@@ -348,6 +348,7 @@ from ensemble.decisiontree.batched_levelalgo.quantiles import (
 from ensemble.decisiontree.batched_levelalgo.random_utils import (
     fnv1a32_hash_seed_tree,
 )
+from core.device_liveness import assert_device_alive
 from core.launch_log import log_launch
 from ensemble.instruments import FitInstruments
 from core.philox import (
@@ -2929,4 +2930,11 @@ def fit_forest[
     # drained.
     instr.times.stop_host("fit_total", t_fit)
     instr.times.report()
+    # DEVIATION 2002: on a dead/saturated device (the 134 loaded window's
+    # Metal context death) this loop's per-cycle readbacks -- the split
+    # records and done flags the host queue is driven by -- deliver stale
+    # zeros with no error, so every node quietly leafs out and the fit
+    # returns a well-formed forest of stumps. The end-of-fit canary
+    # (`core/device_liveness.mojo`) raises instead; one drain per fit.
+    assert_device_alive(ctx, "randomforest fit (fit_forest)")
     return forest^

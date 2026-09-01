@@ -177,6 +177,22 @@
 
 ### Changed
 
+- **A fit on a dead or saturated GPU device now RAISES a named
+  "DEVIATION 2002" error instead of returning a silent empty model.**
+  Measured 2026-09-01 (PORTING.md DEVIATION 2002): at box saturation
+  (Metal context death under 9-process load) every fit returned a
+  coherent-shaped empty model — 0 splits, mse -0.0 — with no error.
+  Fits now witness their own device delivery: a per-tree canary word in
+  the greedy symmetric driver (rides the tree's existing drain, no
+  added synchronize), a poisoned final-loss word in the boosting loop
+  (covers every grow policy), and an end-of-fit canary in the
+  extratrees and randomforest forest fits (one tiny kernel + drain per
+  forest). Legitimately degenerate data (constant labels, unsplittable
+  folds) cannot trip any of these — they check delivery, never the
+  model. Sabotage arm `-D MOJOLEARN_2002_SABOTAGE=1` fakes the dead
+  device, REQUIRED-RED; never in a shipped build. UNVERIFIED, ALL RUNS
+  OWED — the exact commands are in PORTING.md's DEVIATION 2002 entry.
+
 - **`RandomForestClassifier` / `RandomForestRegressor`: an unspecified
   `max_depth` now means UNLIMITED depth, not 16.** BEHAVIOR CHANGE on the
   Python surface. Through 0.3.2, `max_depth=None` (the default) substituted

@@ -159,6 +159,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
 from std.time import perf_counter_ns
 from std.os import getenv
 
+from core.device_liveness import assert_device_alive
 from core.identity_trace import IdentityTrace
 from extratrees.checks.host_splitter import HostSplitResult
 from extratrees.checks.rescue import rescue_key, rescue_pick
@@ -3457,6 +3458,14 @@ def train_forest_classification_device(
         ctx, dataset, params, tree_ids, seed, sabotage, row_slot_cap, clock,
         bootstrap, n_sampled_rows, bf_sabotage,
     )
+    # DEVIATION 2002: on a dead/saturated device (the 134 loaded window's
+    # Metal context death) this loop's per-cycle split readbacks deliver
+    # stale zeros, every node quietly becomes a leaf, and the fit returns
+    # a well-formed forest of stumps with no error. The end-of-fit canary
+    # (`core/device_liveness.mojo`) raises instead. One drain per FOREST
+    # fit; `_timed` direct callers (bench, checks) are check-tier and
+    # uncovered on purpose.
+    assert_device_alive(ctx, "extratrees classification forest fit")
     print_stage_times(clock, "extratrees classification forest fit")
     return out^
 
@@ -4743,6 +4752,9 @@ def train_forest_regression_device(
         ctx, dataset, scale, params, tree_ids, seed, sabotage, row_slot_cap,
         clock, bootstrap, n_sampled_rows, bf_sabotage,
     )
+    # DEVIATION 2002: same dead-device canary as the classification twin
+    # directly above -- see that banner and `core/device_liveness.mojo`.
+    assert_device_alive(ctx, "extratrees regression forest fit")
     print_stage_times(clock, "extratrees regression forest fit")
     return out^
 

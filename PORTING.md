@@ -5383,22 +5383,113 @@ the sustained window (sized reps), and the IDENTICAL-mode soak
 (`tools/with_identical_mode.sh pixi run soak-determinism` — needs a
 rebuild) as the second half of the closing pair.
 
-## 2002. [OPEN, FIX OWED] Saturated-device fits return silent garbage instead of raising
+## 2002. [FIX LANDED 2026-09-01, UNVERIFIED — ALL RUNS OWED] Saturated-device fits return silent garbage instead of raising
 
-Found by 134's loaded window (record above): when the box saturates
-(nine concurrent GPU fit processes, 1-min load 18, Metal printing
-"Context leak detected, CoreAnalytics returned false"), a fit does not
-raise — it RETURNS an empty model: greedy searcher 0 splits, mse -0.0,
-and once a process enters this state EVERY subsequent fit in it is
-garbage. A training call that hands back a coherent-shaped but empty
-model under resource exhaustion is a correctness hazard for any caller
-that doesn't cross-check the loss. FIX SHAPE (owed): the fit paths
-should validate cheap invariants after the drain (root partition size
-== n_rows; at least one split OR a named refusal; loss finite and not
-negative-zero-everywhere) and RAISE on violation, naming the device
-state. The soak driver's per-rep print is the current only witness.
-RUN OWED to reproduce deliberately: the window recipe at 9+ processes
-until load > 15, then observe the onset rep in any log.
+**VERDICT: a fit on a dead/saturated device now RAISES a named
+"DEVIATION 2002" error instead of returning an empty model. The fix is
+WRITTEN, not run: every gate below is OWED, and until the armed legs
+have been seen RED and the un-armed suite green, this entry does not
+close.**
+
+**THE INCIDENT (2026-09-01, preserved).** Found by 134's loaded window
+(record above): when the box saturates (nine concurrent GPU fit
+processes, 1-min load 18, Metal printing "Context leak detected,
+CoreAnalytics returned false"), a fit does not raise — it RETURNS an
+empty model: greedy searcher 0 splits, mse -0.0, and once a process
+enters this state EVERY subsequent fit in it is garbage. A training
+call that hands back a coherent-shaped but empty model under resource
+exhaustion is a correctness hazard for any caller that doesn't
+cross-check the loss. RUN OWED to reproduce deliberately: the window
+recipe at 9+ processes until load > 15, then observe the onset rep in
+any log — with the fix in, the onset must now be a raise, not a
+garbage rep.
+
+**THE FIX'S MECHANISM** (shared home `core/device_liveness.mojo`; the
+incident regime is one where NOTHING raises — kernels stop executing
+and drain copies stop delivering, both silently — so every leg
+witnesses DELIVERY, never the model, and legitimately degenerate data
+(constant labels, no admissible split, empty leaves) cannot trip any
+of them by construction):
+
+* **Leg 1, the per-tree nonce canary (greedy symmetric driver,
+  `greedy_search_helper.mojo`).** `winners_bf`/`h_wbf` carry one extra
+  slot; a one-thread kernel enqueued AFTER the tree's last launch
+  writes `0x2002A11E ^ nonce` (nonce bumps per tree on the pool) into
+  it; the host poisons the landing word (`0xDEAD2002`) and the winner
+  slots before the tree's one drain, and checks after it. Poison back
+  = the drain copy never ran; stale/zero back = the kernels never ran
+  (the nonce is what stops tree N's leftover magic vouching for tree
+  N+1); either raises before the identity trace or the gate walk
+  touches a word. NO added drain, NO added copy — the word rides the
+  winners' existing d2h — and the trace records only the `max_depth`
+  winner slots, so identity hashes cannot see the canary. A second
+  check after the final-sizes drain asserts the final leaf partitions
+  cover exactly `n_rows` (splits conserve rows; the root was seeded to
+  `n_rows`) — that one also catches a genuine row-conservation bug,
+  and says so.
+* **Leg 2, the poisoned final-loss word (`doc_parallel_boosting.mojo`).**
+  The fit's final `functionValue` readback lands on a host word
+  poisoned with the `0xDEAD2002` BIT PATTERN first; the exact bits
+  surviving the drain = the loss was never delivered = raise. Bit
+  compare, not value compare, so a legitimate loss of any value —
+  including a constant-target fit's exact `-0.0` — passes. This is the
+  whole-fit backstop for every grow policy the boosting loop drives
+  (depthwise/lossguide/non-symmetric trees have no per-tree canary;
+  they are covered here, at fit granularity).
+* **Leg 3, `assert_device_alive` (forest families).** extratrees'
+  `train_forest_{classification,regression}_device` and
+  ensemble/randomforest's `fit_forest` were SHARED EXPOSURE, not
+  loud-failure, by reading: their fits are host-driven loops whose
+  per-cycle readbacks (split records, done flags) come back stale/zero
+  on a dead device, so every node quietly leafs out and the fit
+  returns a well-formed forest of stumps. Each now ends with one
+  canary round-trip (reset word, kernel write, read back, compare) —
+  one tiny kernel + 4-byte copy + one drain per FOREST fit. The
+  `_timed` extratrees entries (bench/check callers) are deliberately
+  uncovered check-tier.
+
+**THE SABOTAGE ARM: `-D MOJOLEARN_2002_SABOTAGE=1`, REQUIRED-RED.**
+Compiles out every canary write and leg 2's final-loss copy — the
+dead-device signature faked on a live device. Verdict inversion (the
+134f house pattern): an armed run of any gated fit MUST fail with a
+"DEVIATION 2002" error; an armed run that returns a model means the
+validation is not wired. By-construction witness: the only writer of
+each checked word is deleted and the expectation is fresh per call, so
+the armed RED is deterministic, and the arm terminates because it only
+deletes work. The define must never reach a shipped build; nothing but
+the gate invocation passes it, and it lives in no pixi task.
+
+**RUNS OWED (all of them — nothing below has executed), in dependency
+order, one at a time per the standing subagent rule:**
+
+1. Compile + un-armed green, gbdt legs (the changed arms must be
+   exercised green before any red is meaningful):
+   `MOJOLEARN_SOAK_REPS=1 pixi run soak-determinism`
+   then `pixi run check-logloss-train` (export/estimation arm) and
+   `pixi run check-train-api`.
+2. Un-armed green, forest legs:
+   `pixi run mojo run -I . extratrees/checks/device_batched_check.mojo`
+   and `pixi run mojo run -I . ensemble/checks/forest_check.mojo`.
+3. ARMED RED, greedy leg (must FAIL printing "DEVIATION 2002" at the
+   first tree):
+   `MOJOLEARN_SOAK_REPS=1 pixi run mojo run -D MOJOLEARN_2002_SABOTAGE=1 -I . checks/determinism_soak.mojo`
+4. ARMED RED, extratrees leg (must FAIL with "DEVIATION 2002" at the
+   first forest fit's end):
+   `pixi run mojo run -D MOJOLEARN_2002_SABOTAGE=1 -I . extratrees/checks/device_batched_check.mojo`
+5. ARMED RED, ensemble RF leg (same required failure):
+   `pixi run mojo run -D MOJOLEARN_2002_SABOTAGE=1 -I . ensemble/checks/forest_check.mojo`
+6. The live reproduction (closing run): the 134 window recipe at 9+
+   processes until load > 15 — the onset must now appear in the logs
+   as raised "DEVIATION 2002" errors, not garbage reps. Apple column
+   only so far; the NVIDIA/AMD columns are UNRUN and OWED as usual
+   (a one-box verdict is not three).
+
+**RESIDUAL, stated:** leg 1 cannot see a device that dies in the
+microseconds between a tree's first drain (canary green) and its final
+sizes copy — the NEXT tree's canary catches that within one tree, and
+the incident's failure mode is persistent, not transient. A dead
+device that HANGS a host loop instead of returning garbage is outside
+this deviation's scope (nothing here adds timeouts).
 
 ## 125. [CLOSED] `CreateSubsets`' fold arm pays ONE extra partition reduce, per TREE and not per level
 

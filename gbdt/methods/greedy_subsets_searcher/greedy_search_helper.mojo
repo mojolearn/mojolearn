@@ -57,6 +57,12 @@ from gbdt.methods.greedy_subsets_searcher.split_properties_helper import (
 )
 from std.sys.compile import is_defined
 from std.sys.info import size_of
+from core.device_liveness import (
+    DEAD_DEVICE_CANARY_MAGIC,
+    DEAD_DEVICE_POISON,
+    SAB_2002_DEAD_DEVICE,
+    write_canary_kernel,
+)
 from core.identity_trace import IdentityTrace
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
     StageTimes,
@@ -2784,9 +2790,19 @@ struct TTreeWorkspace(Movable):
     var out_score: DeviceBuffer[DType.float32]
     var out_bin: DeviceBuffer[DType.uint32]
     var winners_score: DeviceBuffer[DType.float32]
+    # DEVIATION 2002: `winners_bf`/`h_wbf` carry ONE EXTRA SLOT past the
+    # `max_depth` winner records -- the dead-device canary word, written
+    # by a one-thread kernel enqueued after the tree's last launch and
+    # read back by the drain copy the winners already ride. See the leg-1
+    # banner in `run_tree_layout_traced` and `core/device_liveness.mojo`.
     var winners_bf: DeviceBuffer[DType.uint32]
     var h_wsc: HostBuffer[DType.float32]
     var h_wbf: HostBuffer[DType.uint32]
+    # DEVIATION 2002: the per-tree canary nonce. Counts up once per
+    # `run_tree_layout_traced` call on this pool, so a previous tree's
+    # leftover canary word can never satisfy the current tree's check
+    # when the device has stopped executing kernels.
+    var canary_nonce: UInt32
     var sp_feats: DeviceBuffer[DType.uint8]
     var sp_feats_h: HostBuffer[DType.uint8]
     var sp_bins: DeviceBuffer[DType.uint32]
@@ -2924,9 +2940,18 @@ struct TTreeWorkspace(Movable):
         self.winners_score = ctx.enqueue_create_buffer[DType.float32](
             max_depth
         )
-        self.winners_bf = ctx.enqueue_create_buffer[DType.uint32](max_depth)
+        # DEVIATION 2002: `+ 1` is the canary slot (index `max_depth`),
+        # see the field's comment. `winners_score`/`h_wsc` stay at
+        # `max_depth`: one witness slot is enough, and it lives on the
+        # buffer the gate walk consumes.
+        self.winners_bf = ctx.enqueue_create_buffer[DType.uint32](
+            max_depth + 1
+        )
         self.h_wsc = ctx.enqueue_create_host_buffer[DType.float32](max_depth)
-        self.h_wbf = ctx.enqueue_create_host_buffer[DType.uint32](max_depth)
+        self.h_wbf = ctx.enqueue_create_host_buffer[DType.uint32](
+            max_depth + 1
+        )
+        self.canary_nonce = UInt32(0)
         var built_f = make_split_features_buffers(ctx, max_leaves)
         self.sp_feats = built_f[0]
         self.sp_feats_h = built_f[1]
@@ -3198,6 +3223,12 @@ def run_tree_layout_traced[
             ctx, layout, blocks, n_rows, stat_count, max_depth,
             _ACC_LIVE,
         ))
+    # DEVIATION 2002: the per-tree canary nonce, bumped HERE -- while
+    # `ws[0]` is still unborrowed, before the `ref` bindings below pin
+    # it -- and folded into this tree's expected canary word. The
+    # canary launch and the check live at the tree's one drain.
+    ws[0].canary_nonce += UInt32(1)
+    var canary_expect = DEAD_DEVICE_CANARY_MAGIC ^ ws[0].canary_nonce
     # DEVIATION 2007a: the machine constant, off the pool. Same integer
     # the deleted per-tree `get_attribute` returned, minus its 1.26 ms.
     var sm_count = ws[0].sm_count
@@ -3898,17 +3929,94 @@ def run_tree_layout_traced[
 
         n_live = n_live * 2
 
+    # ================= DEVIATION 2002, LEG 1 =================
+    # THE PER-TREE DEAD-DEVICE CANARY. The 134 loaded window measured a
+    # regime (Metal context death at box saturation) where NOTHING in
+    # this function raises: kernels stop executing, drain copies stop
+    # delivering, and the tree comes home as a coherent-shaped EMPTY
+    # model (0 splits, mse -0.0). So the tree carries its own witness:
+    # a one-thread kernel, enqueued HERE -- behind every launch of the
+    # tree on the one in-order queue -- writes `MAGIC ^ nonce` into the
+    # canary slot of `winners_bf` (index `max_depth`, past the winner
+    # records), the host poisons the landing word before the drain
+    # copies below, and the check after the drain accepts nothing but
+    # the expectation. A live device cannot fail it (queue order:
+    # canary launch, then the copy, then the drain the host returned
+    # from); a dead one cannot pass it (poison back = the copy never
+    # ran; anything else = the kernels never ran -- the nonce keeps a
+    # previous tree's leftover magic from vouching). NO added drain, no
+    # added copy: the word rides the winners' existing d2h. The model
+    # is never consulted, so legitimately degenerate fits (constant
+    # labels, no admissible split) stay green by construction.
+    #
+    # THE SABOTAGE ARM, REQUIRED-RED (`core/device_liveness.mojo`):
+    # `-D MOJOLEARN_2002_SABOTAGE=1` compiles this launch out, faking
+    # the signature on a live device; the armed fit MUST fail with the
+    # DEVIATION 2002 error below, at the first tree.
+    # =========================================================
+    comptime if not SAB_2002_DEAD_DEVICE:
+        ctx.enqueue_function[write_canary_kernel](
+            winners_bf.unsafe_ptr(),
+            Int32(max_depth),
+            canary_expect,
+            grid_dim=(1, 1, 1),
+            block_dim=(1, 1, 1),
+        )
+        mgr.stream_kernel()
+
     # ---- THE ONE DRAIN OF THE TREE (DEVIATION 94) --------------------
     # Their per-level `bestProps.Read` and `RebuildLeavesSizes` reads,
     # folded into one: the winner records hold every level, the partition
     # sizes hold the final leaves, and both ride home behind everything
     # the loop enqueued.
     times.begin(ctx)
+    # DEVIATION 2002: poison the canary's landing word and every winner
+    # slot BEFORE their copy is enqueued (host writes after the enqueue
+    # would race the DMA). The winner-slot poison is the second, cheaper
+    # witness: the gate walk below consumes exactly these words, so a
+    # drain that failed to deliver them must not be walked.
+    for i in range(max_depth + 1):
+        h_wbf.unsafe_ptr().unsafe_store(i, DEAD_DEVICE_POISON)
     ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
     ctx.enqueue_copy(dst_ptr=h_wsc.unsafe_ptr(), src_buf=winners_score)
     ctx.enqueue_copy(dst_ptr=h_wbf.unsafe_ptr(), src_buf=winners_bf)
     mgr.wait_complete()
     times.end(ctx, "sym.drain")
+
+    # ---- DEVIATION 2002: the end-of-fit validation, before anything
+    # trusts the drain. Checked FIRST -- before the identity trace
+    # records the winner words and before the gate walk consumes them --
+    # so a dead device raises instead of exporting garbage anywhere.
+    var canary_read = h_wbf.unsafe_ptr().unsafe_load(max_depth)
+    if canary_read != canary_expect:
+        raise Error(
+            "DEVIATION 2002: refusing to return this tree -- the device"
+            " did not execute the fit's command stream (per-tree canary"
+            " read back " + String(canary_read) + " where "
+            + String(canary_expect) + " was required; the poison value "
+            + String(DEAD_DEVICE_POISON) + " means the drain copy never"
+            " ran, anything else means the kernels never ran). This is"
+            " the dead/saturated-device signature (Metal context death"
+            " under load): fits in this state return coherent-shaped"
+            " but EMPTY models (0 splits, mse -0.0) with no error, so"
+            " the fit raises instead. The process's GPU context is not"
+            " trustworthy; restart the process on a quieter box."
+            + (
+                " [SABOTAGE ARM -D MOJOLEARN_2002_SABOTAGE=1 IS ARMED:"
+                " this failure is the REQUIRED-RED verdict.]"
+                if SAB_2002_DEAD_DEVICE else ""
+            )
+        )
+    for i in range(max_depth):
+        if h_wbf.unsafe_ptr().unsafe_load(i) == DEAD_DEVICE_POISON:
+            raise Error(
+                "DEVIATION 2002: refusing to return this tree -- the"
+                " one drain of the tree delivered no winner record for"
+                " level " + String(i) + " (the host-side poison"
+                " survived the copy). Dead/saturated-device signature;"
+                " the fit raises instead of walking garbage winner"
+                " records into a model."
+            )
 
     # ---- identity checkpoint: the tree's winner records --------------
     # Every level's score and packed bin-feature id, exactly as the one
@@ -4072,6 +4180,34 @@ def run_tree_layout_traced[
     # ============================================================
     ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
     mgr.wait_complete()
+    # ---- DEVIATION 2002: the root-coverage invariant, the model-shape
+    # half of the validation. The root partition was seeded to cover
+    # `n_rows` and every split MOVES rows between leaves and creates
+    # none, so on a live device the final sizes sum to `n_rows` exactly
+    # -- at every depth, through the rollback merge, on legitimately
+    # degenerate data (empty leaves are size 0, a stump is one leaf of
+    # `n_rows`). A sum that disagrees is either the dead-device readback
+    # (the 134-window incident's empty models) or a real row-conservation
+    # bug, and BOTH must raise rather than ship a model whose leaves do
+    # not cover the data. NOT poisoned like the winners: between the
+    # first drain and here the host may legitimately rewrite `h_sz` (the
+    # rollback merge) and re-upload it, so a poison would race that
+    # upload's DMA read; the sum is the invariant instead.
+    var covered_rows = 0
+    for i in range(n_live):
+        covered_rows += Int(h_sz.unsafe_ptr().unsafe_load(i))
+    if covered_rows != n_rows:
+        raise Error(
+            "DEVIATION 2002: refusing to return this tree -- the fit"
+            " produced an empty or non-covering model: the final leaf"
+            " partitions cover " + String(covered_rows) + " of "
+            + String(n_rows) + " rows across " + String(n_live)
+            + " leaves. On a live device splits conserve rows, so this"
+            " is either the dead/saturated-device signature (readbacks"
+            " no longer delivered) or a row-conservation defect; either"
+            " way the model is not trustworthy and the fit raises"
+            " instead of returning it."
+        )
     if apply_to_cursor:
         # their `result[i].AddWeakModel(model)`, the half that keeps the tree
         # rather than only its effect on the cursor.
