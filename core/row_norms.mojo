@@ -58,7 +58,7 @@ from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
 from core.pinned_reduce import pinned_block_sum
-from checks.numerics import ftz, identical_mul_add
+from checks.numerics import ftz, identical_mul_add, identical_sqrt
 
 
 # READ FROM THE MATRIX, not restated here. `checks/kernel_matrix.mojo`
@@ -99,5 +99,21 @@ def row_norm_kernel(
         if take_sqrt_in != 0:
             if total <= Float32(0.0):
                 total = Float32(0.0)
-            total = ftz(sqrt(total))
+            # PINNED. This was the stdlib `sqrt`, and it was the ONE
+            # unpinned operation in a kernel whose every other step is
+            # `identical_mul_add`, `ftz` and `pinned_block_sum`. On NVIDIA
+            # the stdlib routes to the approximate PTX square root
+            # (DEVIATION 258), so a norm computed here could differ by an
+            # ulp from Apple's while every surrounding stage agreed. That is
+            # exactly the one-ulp, sqrt-localized divergence the identity
+            # card was built to find, and leaving it here meant the tree
+            # shipped a live instance of its own worked example.
+            #
+            # `identical_sqrt` branches on the mode itself, taking
+            # `portable_sqrtf` under IDENTICAL and the stdlib otherwise, so
+            # FAST is byte-for-byte unchanged and only the strict tier moves.
+            # Apple's stdlib sqrt is correctly rounded and so is
+            # `portable_sqrtf`, so Apple's cards should not move either; the
+            # column this fixes is NVIDIA.
+            total = ftz(identical_sqrt(total))
         out_norm.unsafe_store(row, total)
