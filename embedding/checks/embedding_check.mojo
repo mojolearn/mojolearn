@@ -9,7 +9,7 @@ NOT A PORT. It runs the device spelling
 (`embedding/checks/embedding_oracle.mojo`) and compares every recorded
 stage BY BITS.
 
-**NOTHING IN THIS FILE HAS EVER BEEN COMPILED OR EXECUTED.** Written
+**RAN ON TWO COLUMNS.** Apple and AMD both produced `embedding.identical.card` at md5 `c7f824c35336bef2a3d0f672a172ef29`, clause (a) passing on 6,887 cells. What is still true is that NO SABOTAGE ARM WAS EVER BUILT for this lane and there is no NVIDIA leg, so the gate has never been shown capable of failing. Written
 2026-08-25, DEVIATIONS 1500 through 1524. No `mojo` process has read it, no
 device has run it, no bit produced by it has been observed. Every sentence
 below that says a clause "passes", a sabotage "bites", or a stage "moves" is
@@ -2966,8 +2966,9 @@ def main() raises:
         " mojolearn.identical.embedding.fp32.v1"
     )
     print(
-        "=== NOTHING IN THIS FILE HAS EVER BEEN COMPILED OR RUN BEFORE THIS"
-        " PROCESS. Read the header."
+        "=== embedding_check: clause (a) ran on Apple and AMD, cards md5"
+        " c7f824c3, 6887 cells. NO SABOTAGE ARM EXISTS, so this gate has"
+        " never been shown capable of failing. Read the header."
     )
     print(
         "mode "
