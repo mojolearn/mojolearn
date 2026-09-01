@@ -18,24 +18,36 @@ whose dense table (`metrics/pairwise_distances.pyx:68-86`) sends
     "sqeuclidean"                       -> DistanceType.L2Expanded
     "l1" / "cityblock" / "manhattan"    -> DistanceType.L1
     "chebyshev"                         -> DistanceType.Linf
+    "cosine"                            -> DistanceType.CosineExpanded
+    "minkowski"                         -> DistanceType.LpUnexpanded
 
-and cuVS `distance-inl.cuh:286-302` dispatches each of those to the op of
+(the last two added 2026-09-01; `pairwise_distances.pyx:70` and `:78`) and
+cuVS `distance-inl.cuh:268-306` dispatches each of those to the op of
 the same name. **Their default `euclidean` is UNEXPANDED** -- `sum_k
 (x_k - y_k)^2` straight from the coordinates, then `sqrt` -- NOT the
 `||x||^2 + ||y||^2 - 2 x.y` identity the k-NN tile uses, so the k-NN lane's
 `pinned_distance_tile_kernel` is the wrong arithmetic for it and is called
 here only for `sqeuclidean`, which IS their expanded op (`distance.cuh`,
-the `L2Expanded` tag). The four ops:
+the `L2Expanded` tag). The three ops THIS FILE'S KERNEL runs:
 
     l2_unexp.cuh:62-63   core: diff = x - y; acc += diff * diff
     l2_unexp.cuh:74-80   epilog: if (sqrt) acc = raft::sqrt(acc)
     l1.cuh:32            core: acc += raft::abs(x - y)
     l_inf.cuh:33-34      core: diff = raft::abs(x - y); acc = raft::max(acc, diff)
 
-Every other metric in their table (cosine, canberra, minkowski, hellinger,
-correlation, jensenshannon, hamming, kldivergence, russellrao,
-nan_euclidean) is REFUSED BY NAME at `kde/impl/neighbors/
-kernel_density.mojo::metric_from_name`; see `kde/NOT_IMPLEMENTED.tsv`.
+COSINE AND MINKOWSKI, ADDED 2026-09-01, DO NOT COME THROUGH THIS KERNEL.
+They are `cosine_distance_op` (`cosine.cuh:43-96`, `use_norms = true`, an
+inner product with a `1 - dot/(nx*ny)` epilogue) and `lp_unexp_distance_op`
+(`lp_unexp.cuh:30-76`, `acc += pow(|x-y|, p)` then `pow(acc, 1/p)`), and
+both live with every other op in `neighbors/impl/distance/detail/
+distance_ops.mojo::metric_distance_kernel`. `kde/impl/distance/
+distance.mojo` routes them there. Cosine also needs a norm this file never
+computes: the TRUE L2 norm, not the squared one (`knn_brute_force.cuh:122`).
+
+The rest of their table (canberra, hellinger, correlation, jensenshannon,
+hamming, kldivergence, russellrao, nan_euclidean) is still REFUSED BY NAME
+at `kde/impl/neighbors/kernel_density.mojo::metric_from_name`; see
+`kde/NOT_IMPLEMENTED.tsv`.
 
 WHAT IS NOT PORTED: THEIR TILE
 ------------------------------
@@ -67,50 +79,45 @@ IDENTITY (the rows this kernel answers to)
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 
-from checks.numerics import ftz, identical_mul_add, identical_sqrt
+from checks.numerics import ftz, identical_sqrt
 
-#: Their `DistanceType` values as this lane spells them. The metric string
-#: table lives in `kde/impl/neighbors/kernel_density.mojo`.
-comptime DIST_L2_SQRT_UNEXPANDED = 0
-comptime DIST_L2_EXPANDED = 1
-comptime DIST_L1 = 2
-comptime DIST_LINF = 3
+# ===========================================================================
+# THE OPS AND THE ENUM MOVED, 2026-09-01. This lane no longer spells either.
+#
+# `l2_unexp_core`, `l1_core` and `linf_core` used to have their bodies HERE,
+# and `neighbors/` was about to need the same three beside cosine and
+# Minkowski. Two copies of one arithmetic have two chances to drift, which
+# is the objection `checks/numerics.mojo::identical_mul` already records
+# against its own four copies. The three moved to
+# `neighbors/impl/distance/detail/distance_ops.mojo` -- cuVS's own layout,
+# where ONE `distance_ops/` directory serves every consumer -- body for body
+# and comment for comment. IDENTITY_PATHS rows 9, 10 and 39 still describe
+# them; only the file changed.
+#
+# The four `DIST_*` values used to be a LOCAL INVENTION here (0, 1, 2, 3).
+# They are now cuVS's actual enumerators (`cuvs/distance/distance.h:22-69`:
+# L2Expanded = 0, CosineExpanded = 2, L1 = 3, L2SqrtUnexpanded = 5,
+# Linf = 7, LpUnexpanded = 9). Every use in this lane was BY NAME -- the
+# oracle, the nine gates, `metric_from_name`, `metric_name`, the trace
+# header, which records the metric's NAME -- so no gate and no identity
+# card moves. The names are re-exported below so no import in this lane
+# changes either.
+# ===========================================================================
+
+from neighbors.impl.distance.detail.distance_ops import (
+    DIST_COSINE_EXPANDED,
+    DIST_L1,
+    DIST_L2_EXPANDED,
+    DIST_L2_SQRT_UNEXPANDED,
+    DIST_LINF,
+    DIST_LP_UNEXPANDED,
+    l1_core,
+    l2_unexp_core,
+    linf_core,
+)
 
 #: SCHEDULING: one thread owns one cell; the block width moves no bit.
 comptime PAIRWISE_ELEM_TPB = 256
-
-
-def l2_unexp_core(acc: Float32, x: Float32, y: Float32) -> Float32:
-    """`l2_unexp.cuh:62-63`. `diff = x - y; acc += diff * diff`."""
-    var diff = ftz(x - y)
-    return ftz(identical_mul_add(diff, diff, acc))
-
-
-def l1_core(acc: Float32, x: Float32, y: Float32) -> Float32:
-    """`l1.cuh:32`. `acc += abs(x - y)`."""
-    return ftz(acc + abs(ftz(x - y)))
-
-
-def linf_core(acc: Float32, x: Float32, y: Float32) -> Float32:
-    """`l_inf.cuh:33-34`. `diff = abs(x - y); acc = max(acc, diff)`.
-
-    Written as their `max`: the larger survives, and on a tie either one
-    (they are the same bits -- both non-negative, so no zero-sign question).
-
-    IDENTITY_PATHS row 39 (2026-08-23), proof that neither zero's sign nor
-    a NaN can make this selection vendor-shaped: `acc` is seeded `+0.0` by
-    the caller and only ever takes a `diff`; every `diff` is `abs(...)`,
-    whose sign bit is clear, so `-0.0` is never a candidate and a `+0.0`
-    tie returns identical bits whichever side wins; the compare is a
-    strict `>` (first-seen wins), not a hardware `max`; inputs are refused
-    non-finite before any launch (DEVIATION 604), and a finite `x - y`
-    is finite or +-inf, whose `abs` is +inf, never NaN. The host oracle
-    (`kde_oracle.mojo::oracle_distance`) spells the same strict `>`.
-    """
-    var diff = abs(ftz(x - y))
-    if diff > acc:  # row 39: strict `>`, operands non-negative
-        return diff
-    return acc
 
 
 def pairwise_unexpanded_kernel(

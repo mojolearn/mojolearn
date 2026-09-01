@@ -14,8 +14,16 @@ not have, so the delegate here is `kde/impl/neighbors/kernel_density.mojo`
 of this entry is theirs: the `DensityKernelType` values, the argument order,
 `weights` nullable, `sum_weights` supplied by the caller (`kde.hpp:44`:
 "sum of `weights`, or `n_train` when weights is null"), `metric` as a
-DistanceType value. `metric_arg` (Minkowski's `p`) is accepted and REFUSED
-unless it is the default `2.0`, because no ported metric reads it.
+DistanceType value, `metric_arg` as Minkowski's `p`.
+
+`metric_arg` USED TO BE REFUSED UNLESS 2.0, and that refusal is gone as of
+2026-09-01. It read "is read only by metric='minkowski', which is NOT
+PORTED"; `LpUnexpanded` is ported now (`neighbors/impl/distance/detail/
+distance_ops.mojo`), so the argument is forwarded to the distance dispatch
+and VALIDATED there by value (DEVIATION 552: p must be finite, positive
+and normal). A non-Lp metric still accepts and discards it, which is what
+every `distance_impl` overload but one does upstream (`distance.cuh:193`,
+`DataT)  // unused`).
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -70,13 +78,6 @@ def score_samples(
     double` instantiation is NOT ported: no float64 on the device column
     this tree is built on (DEVIATION 600).
     """
-    if metric_arg != Float32(2.0):
-        raise Error(
-            "kde: metric_arg="
-            + String(metric_arg)
-            + " is read only by metric='minkowski', which is NOT PORTED;"
-            " pass 2.0 (the default)"
-        )
     kde_score_samples_device(
         ctx,
         train,
@@ -94,4 +95,5 @@ def score_samples(
         trace,
         elem_tpb,
         lse_tpb,
+        metric_arg,
     )

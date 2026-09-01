@@ -2,12 +2,20 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """KernelDensity: refusals, norms, oracle sanity, device identity, reach.
 
-DEVIATIONS 600-602's gates. The checks, in order:
+DEVIATIONS 600-604's gates, plus 552/553 for the two metrics added
+2026-09-01. The checks, in order:
 
     check_kde_refusals                 every unported kernel / metric /
                                        parameter RAISES BY NAME; bandwidth
                                        <= 0, a non-positive weight, a
-                                       metric_arg != 2.0
+                                       Minkowski p that is non-finite,
+                                       <= 0 or SUBNORMAL (DEVIATION 552),
+                                       an all-zero row under cosine
+                                       (DEVIATION 553). It read
+                                       "a metric_arg != 2.0" until Lp was
+                                       ported, and that is now the
+                                       opposite of the truth: any finite
+                                       positive normal p is accepted
     check_kde_zero_sign_cannot_leak    the two facts row 13's argument
                                        rests on: `identical_log(1) == +0.0`,
                                        `identical_exp(+/-0.0) == 1.0`,
@@ -20,14 +28,14 @@ DEVIATIONS 600-602's gates. The checks, in order:
                                        DEVIATION 601's float32 drift)
     check_kde_oracle_vs_float64        the float32 oracle against the
                                        float64 scikit-learn-semantics
-                                       reference, 6 kernels x 4 metrics, per
+                                       reference, 6 kernels x 6 metrics, per
                                        cell, tolerance; a -inf reference cell
                                        must be a <= -1e38 oracle cell
     check_kde_logsumexp_beats_naive    a PLANTED far query: the unshifted
                                        log-sum underflows to -inf, the
                                        shifted form is finite and within
                                        tolerance of float64
-    check_kde_device_equals_oracle     6 kernels x 4 metrics: every stage's
+    check_kde_device_equals_oracle     6 kernels x 6 metrics: every stage's
                                        hash (dists, logk, rowmax, logsumexp,
                                        logsw, lognorm, scores) and every
                                        SCORE CELL bit for bit under IDENTICAL;
@@ -60,6 +68,23 @@ DEVIATIONS 600-602's gates. The checks, in order:
                                        DEVIATION 603's all--inf row, which
                                        is -inf (0xff800000) on device and
                                        oracle, never a vendor-payload NaN
+    check_kde_cosine_norm_is_the       ADDED 2026-09-01. Cosine's norm is
+      _sqrt_norm                       the TRUE L2 norm, not the squared
+                                       one: a planted self-neighbour scores
+                                       zero-ish, a SQUARED-norm sabotage
+                                       must move at least one cell, and
+                                       cosine must not equal euclidean or
+                                       sqeuclidean on any query
+    check_kde_minkowski_general_p      ADDED 2026-09-01. p=1 tracks L1 and
+                                       p=2 tracks euclidean as tolerances
+                                       (the exp(p log) cost, printed);
+                                       every cell within tolerance of the
+                                       float64 HOST-pow reference; four p
+                                       values PAIRWISE DISTINCT on every
+                                       cell (the arm that fails if
+                                       metric_arg is never read); Lp
+                                       non-increasing in p (the arm that
+                                       fails if p and 1/p are swapped)
 
 ROW 39 FAST DEMOTIONS (2026-08-23): `check_kde_weights`' all-ones ==
 unweighted claim is RECORDED under FAST (the vendor's `log(1.0)`);
@@ -100,10 +125,12 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace, first_divergence
 from kde.impl.distance.distance_ops import (
+    DIST_COSINE_EXPANDED,
     DIST_L1,
     DIST_L2_EXPANDED,
     DIST_L2_SQRT_UNEXPANDED,
     DIST_LINF,
+    DIST_LP_UNEXPANDED,
 )
 from kde.impl.kde.kde import score_samples
 from kde.impl.neighbors.kernel_density import (
@@ -134,9 +161,12 @@ from kde.checks.kde_fixture import (
 )
 from kde.checks.kde_oracle import (
     KdeOracleStages,
+    _host_row_norm_halving,
+    oracle_distance,
     oracle_logsumexp_row,
     oracle_naive_log_sum_row,
     oracle_score_samples,
+    reference_distance_f64,
     reference_log_kernel_norm_f64,
     reference_score_samples_f64,
 )
@@ -243,6 +273,7 @@ def _device_scores(
     lse_tpb: Int = KDE_LSE_TPB,
     pad: Int = 0,
     poison: Float32 = Float32(-987654.0),
+    metric_arg: Float32 = Float32(2.0),
 ) raises -> List[Float32]:
     # DEVIATION 604 on the gates' path too (the host entry calls the same).
     kde_validate_data(train, n_train, d, metric, "train")
@@ -267,7 +298,7 @@ def _device_scores(
         sum_w = host_sum_weights(weights)
     score_samples(
         ctx, dquery, dtrain, dweights, has_weights, dout,
-        n_query, n_train, d, h, sum_w, kernel, metric, Float32(2.0), trace,
+        n_query, n_train, d, h, sum_w, kernel, metric, metric_arg, trace,
         elem_tpb, lse_tpb,
     )
     var out = _read(ctx, dout, n_query)
@@ -296,9 +327,11 @@ def _oracle(
     h: Float32,
     kernel: Int,
     metric: Int,
+    metric_arg: Float32 = Float32(2.0),
 ) raises -> KdeOracleStages:
     return oracle_score_samples(
-        train, query, weights, has_weights, n_train, n_query, d, h, kernel, metric
+        train, query, weights, has_weights, n_train, n_query, d, h, kernel,
+        metric, metric_arg,
     )
 
 
@@ -333,7 +366,20 @@ def _all_kernels() -> List[Int]:
 
 
 def _all_metrics() -> List[Int]:
-    return [DIST_L2_SQRT_UNEXPANDED, DIST_L2_EXPANDED, DIST_L1, DIST_LINF]
+    """The SIX metrics this lane computes. `cosine` and `minkowski` joined
+    on 2026-09-01; every gate that loops this list -- device-vs-oracle,
+    launch invariance, the weighted arm -- covers them from that moment
+    with no per-gate edit, which is why the list is a function and not six
+    literals scattered through the file. `minkowski` is at its `metric_arg`
+    default of 2 here; general p is `check_kde_minkowski_general_p`."""
+    return [
+        DIST_L2_SQRT_UNEXPANDED,
+        DIST_L2_EXPANDED,
+        DIST_L1,
+        DIST_LINF,
+        DIST_COSINE_EXPANDED,
+        DIST_LP_UNEXPANDED,
+    ]
 
 
 # ===========================================================================
@@ -355,8 +401,10 @@ def _expect_raise(what: String, kernel_s: String, metric_s: String, h: Float32, 
 def check_kde_refusals() raises:
     var none = List[Float32]()
     _expect_raise("kernel='triangular'", "triangular", "euclidean", Float32(1.0), none, False)
-    _expect_raise("metric='cosine' (in their table, unported)", "gaussian", "cosine", Float32(1.0), none, False)
-    _expect_raise("metric='minkowski' (in their table, unported)", "gaussian", "minkowski", Float32(1.0), none, False)
+    # `cosine` and `minkowski` USED TO BE REFUSED HERE and are ported as of
+    # 2026-09-01; the two `_expect_raise` lines are deleted rather than
+    # commented, and the two names now appear in the resolve list below.
+    _expect_raise("metric='canberra' (in their table, unported)", "gaussian", "canberra", Float32(1.0), none, False)
     _expect_raise("metric='nan_euclidean' (in their table, unported)", "gaussian", "nan_euclidean", Float32(1.0), none, False)
     _expect_raise("metric='haversine' (unknown)", "gaussian", "haversine", Float32(1.0), none, False)
     _expect_raise("bandwidth=0", "gaussian", "euclidean", Float32(0.0), none, False)
@@ -378,7 +426,11 @@ def check_kde_refusals() raises:
     var ok_w = _weight_fixture(N_TRAIN, 1)
     ok_w[0] = Float32(1.1754943508222875e-38)
     kde_fit_validate(N_TRAIN, N_FEATURES, Float32(1.0842021724855044e-19), KDE_KERNEL_GAUSSIAN, DIST_L2_SQRT_UNEXPANDED, ok_w, True)
-    # metric_arg != 2.0 at the 26.08 entry
+    # DEVIATION 552: p by VALUE at the 26.08 entry. `metric_arg=3.0` used to
+    # be refused HERE with "is read only by metric='minkowski', which is NOT
+    # PORTED"; it is now accepted for Lp and discarded for everything else,
+    # exactly as every `distance_impl` overload but one does upstream. What
+    # is still refused is a p that cannot be one arithmetic.
     var ctx = DeviceContext()
     var train = _train_fixture(4, 2, 0)
     var q = _query_fixture(train, 4, 2, 2, 0)
@@ -387,16 +439,52 @@ def check_kde_refusals() raises:
     var dw = _upload(ctx, q, 0, Float32(0.0))
     var dout = ctx.enqueue_create_buffer[DType.float32](2)
     var tr = IdentityTrace.disabled()
-    var raised = False
+    var bad_p: List[Float32] = [
+        Float32(0.0),
+        Float32(-1.5),
+        bitcast[DType.float32](UInt32(0x7F800000)),   # +inf
+        bitcast[DType.float32](UInt32(0x7FC00000)),   # NaN
+        Float32(1e-40),                               # subnormal
+    ]
+    for pv in bad_p:
+        var praised = False
+        try:
+            score_samples(ctx, dq, dtrain, dw, False, dout, 2, 4, 2, Float32(1.0), Float32(4.0), KDE_KERNEL_GAUSSIAN, DIST_LP_UNEXPANDED, pv, tr)
+        except e:
+            praised = True
+            print("  refused  minkowski p=" + String(pv) + ": " + String(e))
+        if not praised:
+            raise Error(
+                "check_kde_refusals: minkowski p=" + String(pv)
+                + " did NOT raise (DEVIATION 552)"
+            )
+    # ...and the SAME p is accepted and discarded by a non-Lp metric, which
+    # is their `DataT)  // unused` at distance.cuh:193. If this raised, the
+    # validation would be over-reaching.
+    score_samples(ctx, dq, dtrain, dw, False, dout, 2, 4, 2, Float32(1.0), Float32(4.0), KDE_KERNEL_GAUSSIAN, DIST_L2_SQRT_UNEXPANDED, Float32(0.0), tr)
+
+    # DEVIATION 553: a zero row under cosine, refused BY NAME before upload.
+    var zero_train = _train_fixture(4, 3, 0)
+    for f in range(3):
+        zero_train[2 * 3 + f] = Float32(0.0)
+    var zraised = False
     try:
-        score_samples(ctx, dq, dtrain, dw, False, dout, 2, 4, 2, Float32(1.0), Float32(4.0), KDE_KERNEL_GAUSSIAN, DIST_L2_SQRT_UNEXPANDED, Float32(3.0), tr)
+        kde_validate_data(zero_train, 4, 3, DIST_COSINE_EXPANDED, "train")
     except e:
-        raised = True
-        print("  refused  metric_arg=3.0: " + String(e))
-    if not raised:
-        raise Error("check_kde_refusals: metric_arg=3.0 did NOT raise")
-    # and the seven ported names resolve
-    var metric_names: List[String] = ["euclidean", "l2", "sqeuclidean", "l1", "cityblock", "manhattan", "chebyshev"]
+        zraised = True
+        print("  refused  cosine zero row: " + String(e))
+    if not zraised:
+        raise Error(
+            "check_kde_refusals: an all-zero row under cosine did NOT raise"
+            " (DEVIATION 553); it would have divided by ||x|| = 0"
+        )
+    # the SAME fixture is fine under every other metric -- the refusal is
+    # cosine's, not a blanket rule.
+    kde_validate_data(zero_train, 4, 3, DIST_L2_SQRT_UNEXPANDED, "train")
+    kde_validate_data(zero_train, 4, 3, DIST_LP_UNEXPANDED, "train")
+
+    # and the nine ported names resolve
+    var metric_names: List[String] = ["euclidean", "l2", "sqeuclidean", "l1", "cityblock", "manhattan", "chebyshev", "cosine", "minkowski"]
     for name in metric_names:
         _ = metric_from_name(name)
     var kernel_names: List[String] = ["gaussian", "tophat", "epanechnikov", "exponential", "linear", "cosine"]
@@ -413,7 +501,11 @@ def check_kde_refusals() raises:
     # the process then never returns (GPU idle, host threads in futex wait);
     # Apple and AMD do not show it, which is how it stayed latent here.
     _ = ctx^
-    print("check_kde_refusals OK [" + _mode_name() + "]: 13 refusals by name, 13 names resolve, h=2^-63 and w=2^-126 accepted")
+    print(
+        "check_kde_refusals OK [" + _mode_name() + "]: 12 refusals by name +"
+        " 5 bad Minkowski p + 1 cosine zero row, 15 names resolve,"
+        " h=2^-63 and w=2^-126 accepted, p discarded by non-Lp metrics"
+    )
 
 
 def check_kde_zero_sign_cannot_leak() raises:
@@ -645,7 +737,7 @@ def check_kde_device_equals_oracle() raises:
                     + " produced identical scores on every query -- a branch is not reached"
                 )
     print(
-        "check_kde_device_equals_oracle " + ("OK" if IDENTICAL else "REPORT") + " [" + _mode_name() + "]: 6 kernels x 4 metrics, "
+        "check_kde_device_equals_oracle " + ("OK" if IDENTICAL else "REPORT") + " [" + _mode_name() + "]: 6 kernels x 6 metrics, "
         + String(n_equal_cells) + " score cells bit-equal to the oracle, " + String(n_diff_cells)
         + " differ" + ("" if IDENTICAL else " (FAST: the vendor exp/log/sqrt/product spellings are free to differ)")
         + "; six kernels pairwise distinct on every query"
@@ -1078,6 +1170,309 @@ def check_kde_nan_cannot_reach_a_stage() raises:
     )
 
 
+# ===========================================================================
+# THE TWO NEW METRICS, 2026-09-01. Two gates and three sabotage arms.
+#
+# Everything the shared distance module added is already covered by the
+# gates above through `_all_metrics()` -- device-vs-oracle bit equality
+# under IDENTICAL, launch invariance in `elem_tpb`, the weighted arm, the
+# card. What those cannot see is (a) whether the COSINE NORM is the sqrt'd
+# one, because a squared norm still produces plausible finite numbers, and
+# (b) whether `metric_arg` is read at all, because at the default p = 2
+# Minkowski and euclidean agree to the last few ulp and a kernel that
+# ignored p entirely would still pass. Both are seams with a value that
+# looks right when it is wrong, which is exactly the class
+# `mojotrees-verify-reach-not-output` names. Hence the arms below.
+# ===========================================================================
+
+
+def _cosine_oracle_with_squared_norms(
+    train: List[Float32],
+    query: List[Float32],
+    n_train: Int,
+    n_query: Int,
+    d: Int,
+) -> List[Float32]:
+    """THE SABOTAGE ORACLE. `oracle_distance` under `DIST_COSINE_EXPANDED`
+    with the SQUARED norms in place of the sqrt'd ones -- i.e. what the
+    lane would compute if `cosine_row_norm_kernel` had reused
+    `core/row_norms.mojo`'s `take_sqrt = 0` arm, or if
+    `metric_norm_takes_sqrt` returned False.
+
+    This is a whole distance matrix a reader would call "cosine" and which
+    is not cosine. It exists so `check_kde_cosine_norm_is_the_sqrt_norm`
+    can assert that the device does NOT produce it."""
+    var out = List[Float32](capacity=n_query * n_train)
+    var qn = List[Float32]()
+    var tn = List[Float32]()
+    for q in range(n_query):
+        qn.append(_host_row_norm_halving(query, q, d))
+    for j in range(n_train):
+        tn.append(_host_row_norm_halving(train, j, d))
+    for q in range(n_query):
+        for j in range(n_train):
+            out.append(
+                oracle_distance(
+                    query, train, q, j, d, DIST_COSINE_EXPANDED, qn[q], tn[j]
+                )
+            )
+    return out^
+
+
+def check_kde_cosine_norm_is_the_sqrt_norm() raises:
+    """COSINE'S NORM, AND THE SABOTAGE THAT MUST MOVE IT.
+
+    `knn_brute_force.cuh:122`: "cosine needs the l2norm, where as l2
+    distances needs the squared norm". Three clauses.
+
+    1. SELF-DISTANCE IS ZERO-ISH. A query row that IS a training row has
+       `dot == ||x|| ||y||` up to round-off, so cosine distance is 0 up to
+       round-off. Their epilogue has NO clamp (unlike `l2_exp.cuh:132-134`)
+       so the value may come out very slightly negative, and this gate
+       records what it actually is rather than asserting a sign. A SQUARED
+       norm would put it at `1 - 1/||x||^2`, nowhere near zero, on every
+       row whose norm is not 1.
+
+    2. THE SABOTAGE (PREDICTED: FAILS). Recompute the same matrix with the
+       squared norms and require that it DIFFERS from the device on at
+       least one cell. If a future edit made `metric_norm_takes_sqrt`
+       return False, or pointed the cosine branch at `row_norm_kernel`'s
+       `take_sqrt = 0` arm, this clause is the one that fires. PREDICTED
+       BEHAVIOUR when the seam is broken: every cell equal, so
+       `moved == 0`, so this raises. OBSERVED: filled in by the
+       orchestrator's run.
+
+    3. COSINE IS NOT ANY OTHER METRIC. Its distance matrix must differ
+       from euclidean's and from sqeuclidean's, which proves the new arm
+       is REACHED rather than falling through to a neighbour (the
+       `Reached but inert` rule).
+    """
+    var ctx = DeviceContext()
+    var d = 5
+    var n_train = 23
+    var n_query = 7
+    var train = _train_fixture(n_train, d, 3)
+    # clause 1: query row 0 IS train row 0.
+    var query = _query_fixture(train, n_train, n_query, d, 3)
+    for f in range(d):
+        query[f] = train[f]
+    var none = List[Float32]()
+
+    var st = _oracle(
+        train, query, none, False, n_train, n_query, d, BANDWIDTH,
+        KDE_KERNEL_GAUSSIAN, DIST_COSINE_EXPANDED,
+    )
+    var dev = _device_scores(
+        ctx, train, query, none, False, n_train, n_query, d, BANDWIDTH,
+        KDE_KERNEL_GAUSSIAN, DIST_COSINE_EXPANDED, IdentityTrace.disabled(),
+    )
+    var self_cell = st.dists[0 * n_train + 0]
+    if abs(self_cell) > Float32(1e-4):
+        raise Error(
+            "check_kde_cosine_norm_is_the_sqrt_norm clause 1: a query row"
+            " equal to train row 0 has cosine distance " + _hex32(self_cell)
+            + " (" + String(self_cell) + "), which is not zero-ish. With the"
+            " SQUARED norm it would be 1 - 1/||x||^2; that is the failure"
+            " this number detects."
+        )
+
+    var sab = _cosine_oracle_with_squared_norms(
+        train, query, n_train, n_query, d
+    )
+    var moved = 0
+    for i in range(n_query * n_train):
+        if bitcast[DType.uint32](sab[i]) != bitcast[DType.uint32](
+            st.dists[i]
+        ):
+            moved += 1
+    if moved == 0:
+        raise Error(
+            "check_kde_cosine_norm_is_the_sqrt_norm clause 2 SABOTAGE FAILED"
+            " TO REGISTER: the squared-norm cosine matrix is bit-equal to"
+            " the sqrt-norm one on all " + String(n_query * n_train)
+            + " cells, so nothing here can tell the two norms apart and the"
+            " fixture is degenerate (every row norm 1?)"
+        )
+
+    var euc = _device_scores(
+        ctx, train, query, none, False, n_train, n_query, d, BANDWIDTH,
+        KDE_KERNEL_GAUSSIAN, DIST_L2_SQRT_UNEXPANDED, IdentityTrace.disabled(),
+    )
+    var sqe = _device_scores(
+        ctx, train, query, none, False, n_train, n_query, d, BANDWIDTH,
+        KDE_KERNEL_GAUSSIAN, DIST_L2_EXPANDED, IdentityTrace.disabled(),
+    )
+    var same_e = 0
+    var same_s = 0
+    for q in range(n_query):
+        if bitcast[DType.uint32](dev[q]) == bitcast[DType.uint32](euc[q]):
+            same_e += 1
+        if bitcast[DType.uint32](dev[q]) == bitcast[DType.uint32](sqe[q]):
+            same_s += 1
+    if same_e == n_query or same_s == n_query:
+        raise Error(
+            "check_kde_cosine_norm_is_the_sqrt_norm clause 3: cosine scored"
+            " identically to euclidean on " + String(same_e) + "/"
+            + String(n_query) + " queries and to sqeuclidean on "
+            + String(same_s) + "/" + String(n_query)
+            + " -- the cosine arm is not reached"
+        )
+    print(
+        "check_kde_cosine_norm_is_the_sqrt_norm OK [" + _mode_name()
+        + "]: self-distance " + String(self_cell) + " (" + _hex32(self_cell)
+        + "), squared-norm sabotage moved " + String(moved) + " of "
+        + String(n_query * n_train) + " cells, cosine != euclidean on "
+        + String(n_query - same_e) + "/" + String(n_query)
+        + " and != sqeuclidean on " + String(n_query - same_s) + "/"
+        + String(n_query)
+    )
+    _ = ctx^
+
+
+def check_kde_minkowski_general_p() raises:
+    """MINKOWSKI AT GENERAL p, AND THE SABOTAGE THAT MUST MOVE IT.
+
+    `lp_unexp.cuh:56-57` and `:67,72`. Four clauses.
+
+    1. p = 1 IS L1 and p = 2 IS EUCLIDEAN, AS DISTANCES. Two independent
+       code paths -- `pairwise_unexpanded_kernel`'s `l1_core` / `l2_unexp
+       _core` against `metric_distance_kernel`'s `identical_pow` chain --
+       must agree to a float32 tolerance. They CANNOT agree bit for bit
+       and are not asked to: `pow(|x-y|, 1)` is `exp(1 * log|x-y|)` under
+       IDENTICAL, which is a few ulp away from `|x-y|` itself. That is the
+       cost of general p stated as a number rather than as a claim, and it
+       is the reason this clause is a tolerance and clause 3 is not.
+    2. THE FLOAT64 REFERENCE. Every cell within tolerance of
+       `reference_distance_f64`, which computes `(sum |x-y|^p)^(1/p)`
+       through the HOST libm `pow` -- a third arithmetic, agreeing with
+       neither the device nor the exp/log construction by accident.
+    3. REACH BY p (PREDICTED: FAILS IF p IS IGNORED). p = 1, 1.5, 3 and 4
+       must give four pairwise-different distance matrices. A kernel that
+       dropped `metric_arg` on the floor -- passed it and never read it,
+       or read the wrong argument slot -- returns FOUR IDENTICAL matrices
+       and this clause raises. That is the arm that makes the parameter's
+       reach visible; the p = 2 agreement in clause 1 would pass either
+       way, which is precisely why clause 1 alone is not enough.
+    4. THE TRIANGLE-ADJACENT ORDERING. For a fixed pair of points,
+       `Lp` is non-increasing in p (the p-norms are nested). Checked as a
+       weak monotone over the four values, which catches a `1/p` and `p`
+       swapped at the epilogue -- a transposition that keeps every value
+       finite and plausible.
+    """
+    var ctx = DeviceContext()
+    var d = 6
+    var n_train = 19
+    var n_query = 5
+    var train = _train_fixture(n_train, d, 11)
+    var query = _query_fixture(train, n_train, n_query, d, 11)
+    var none = List[Float32]()
+    var cells = n_query * n_train
+
+    # clause 1
+    var l1 = _oracle(train, query, none, False, n_train, n_query, d, BANDWIDTH, KDE_KERNEL_GAUSSIAN, DIST_L1)
+    var eu = _oracle(train, query, none, False, n_train, n_query, d, BANDWIDTH, KDE_KERNEL_GAUSSIAN, DIST_L2_SQRT_UNEXPANDED)
+    var p1 = _oracle(train, query, none, False, n_train, n_query, d, BANDWIDTH, KDE_KERNEL_GAUSSIAN, DIST_LP_UNEXPANDED, Float32(1.0))
+    var p2 = _oracle(train, query, none, False, n_train, n_query, d, BANDWIDTH, KDE_KERNEL_GAUSSIAN, DIST_LP_UNEXPANDED, Float32(2.0))
+    var worst1 = Float32(0.0)
+    var worst2 = Float32(0.0)
+    for i in range(cells):
+        var e1 = abs(p1.dists[i] - l1.dists[i]) / (abs(l1.dists[i]) + Float32(1e-6))
+        var e2 = abs(p2.dists[i] - eu.dists[i]) / (abs(eu.dists[i]) + Float32(1e-6))
+        if e1 > worst1:
+            worst1 = e1
+        if e2 > worst2:
+            worst2 = e2
+    if worst1 > Float32(1e-4) or worst2 > Float32(1e-4):
+        raise Error(
+            "check_kde_minkowski_general_p clause 1: Lp at p=1 differs from"
+            " L1 by " + String(worst1) + " relative and at p=2 from euclidean"
+            " by " + String(worst2) + "; the exp(p log) construction should"
+            " be a few ulp, not this"
+        )
+
+    # clause 2, against the float64 reference
+    var worst64 = 0.0
+    var pvals: List[Float32] = [
+        Float32(1.0), Float32(1.5), Float32(3.0), Float32(4.0)
+    ]
+    var mats = List[List[Float32]]()
+    for pv in pvals:
+        var st = _oracle(train, query, none, False, n_train, n_query, d, BANDWIDTH, KDE_KERNEL_GAUSSIAN, DIST_LP_UNEXPANDED, pv)
+        for q in range(n_query):
+            for j in range(n_train):
+                var r = reference_distance_f64(
+                    query, train, q, j, d, DIST_LP_UNEXPANDED, Float64(pv)
+                )
+                var got = Float64(st.dists[q * n_train + j])
+                var rel = abs(got - r) / (abs(r) + 1e-12)
+                if rel > worst64:
+                    worst64 = rel
+        mats.append(st.dists.copy())
+
+    if worst64 > 1e-3:
+        raise Error(
+            "check_kde_minkowski_general_p clause 2: worst relative error"
+            " against the float64 host-pow reference is " + String(worst64)
+        )
+
+    # clause 3: REACH BY p
+    for a in range(len(pvals)):
+        for b in range(a + 1, len(pvals)):
+            var same = 0
+            for i in range(cells):
+                if bitcast[DType.uint32](mats[a][i]) == bitcast[DType.uint32](mats[b][i]):
+                    same += 1
+            if same == cells:
+                raise Error(
+                    "check_kde_minkowski_general_p clause 3 SABOTAGE FAILED"
+                    " TO REGISTER: p=" + String(pvals[a]) + " and p="
+                    + String(pvals[b]) + " produced BIT-IDENTICAL distance"
+                    " matrices on all " + String(cells) + " cells --"
+                    " metric_arg is not being read"
+                )
+
+    # clause 4: Lp is non-increasing in p
+    var violations = 0
+    for a in range(len(pvals) - 1):
+        for i in range(cells):
+            if mats[a + 1][i] > mats[a][i] + Float32(1e-4):
+                violations += 1
+    if violations > 0:
+        raise Error(
+            "check_kde_minkowski_general_p clause 4: Lp increased with p on "
+            + String(violations) + " of " + String(cells * (len(pvals) - 1))
+            + " comparisons; p and 1/p are swapped somewhere"
+        )
+
+    # the device agrees with the oracle at a general p too
+    var devp = _device_scores(
+        ctx, train, query, none, False, n_train, n_query, d, BANDWIDTH,
+        KDE_KERNEL_GAUSSIAN, DIST_LP_UNEXPANDED, IdentityTrace.disabled(),
+        0, Float32(-987654.0), Float32(3.0),
+    )
+    var stp = _oracle(train, query, none, False, n_train, n_query, d, BANDWIDTH, KDE_KERNEL_GAUSSIAN, DIST_LP_UNEXPANDED, Float32(3.0))
+    var ndiff = 0
+    for q in range(n_query):
+        if bitcast[DType.uint32](devp[q]) != bitcast[DType.uint32](stp.scores[q]):
+            ndiff += 1
+    comptime if IDENTICAL:
+        if ndiff > 0:
+            raise Error(
+                "check_kde_minkowski_general_p: device and oracle differ on "
+                + String(ndiff) + " of " + String(n_query)
+                + " scores at p=3 under IDENTICAL"
+            )
+    print(
+        "check_kde_minkowski_general_p OK [" + _mode_name()
+        + "]: p=1 vs L1 rel " + String(worst1) + ", p=2 vs euclidean rel "
+        + String(worst2) + ", worst vs float64 host pow " + String(worst64)
+        + ", 4 p values pairwise distinct on every cell, 0 monotonicity"
+        " violations, device-vs-oracle diff at p=3 = " + String(ndiff)
+        + " of " + String(n_query)
+    )
+    _ = ctx^
+
+
 def main() raises:
     print("== kde/checks/kde_check.mojo [" + _mode_name() + "] ==")
     check_kde_refusals()
@@ -1091,3 +1486,5 @@ def main() raises:
     check_kde_card_is_emitted()
     check_kde_row39_signed_zero_rowmax()
     check_kde_nan_cannot_reach_a_stage()
+    check_kde_cosine_norm_is_the_sqrt_norm()
+    check_kde_minkowski_general_p()

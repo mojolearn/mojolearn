@@ -109,6 +109,54 @@ from neighbors.impl.neighbors.detail.fused_l2_knn import (
     fused_l2_knn,
     fused_l2_knn_grid,
 )
+from neighbors.impl.distance.detail.distance_ops import (
+    COSINE_NORM_TPB,
+    DIST_COSINE_EXPANDED,
+    DIST_L1,
+    DIST_L2_EXPANDED,
+    DIST_L2_SQRT_EXPANDED,
+    DIST_L2_SQRT_UNEXPANDED,
+    DIST_L2_UNEXPANDED,
+    DIST_LINF,
+    DIST_LP_UNEXPANDED,
+    METRIC_ELEM_TPB,
+    cosine_epilog_kernel,
+    cosine_row_norm_kernel,
+    metric_distance_kernel,
+    metric_is_known,
+    metric_norm_takes_sqrt,
+    metric_uses_norms,
+)
+
+
+#: THE SENTINEL `metric` EVERY PRE-2026-09-01 CALLER GETS.
+#:
+#: This lane had no `metric` parameter at all until the metric lane landed:
+#: `is_sqrt` chose between `L2Expanded` and `L2SqrtExpanded`, which are the
+#: two members of cuVS's set that cuML's `_build_metric_type` sends
+#: `euclidean`/`l2` and `sqeuclidean` to (`nearest_neighbors.pyx:522-525`).
+#: Nine call sites across `metrics/`, `spectral/`, `hdbscan/`, `ivf/`,
+#: `bench/` and five check files pass `is_sqrt` and know nothing about a
+#: metric. Defaulting `metric` to this sentinel means every one of them
+#: keeps computing exactly what it computed before, with no edit and no
+#: bit moved, and the derivation is written down once here instead of nine
+#: times at the call sites.
+comptime METRIC_FROM_IS_SQRT = -1
+
+
+def resolve_metric(metric: Int, is_sqrt: Bool) raises -> Int:
+    """`METRIC_FROM_IS_SQRT` -> the L2 expanded member `is_sqrt` names.
+    Anything else is passed through after a validity check by value."""
+    if metric == METRIC_FROM_IS_SQRT:
+        return DIST_L2_SQRT_EXPANDED if is_sqrt else DIST_L2_EXPANDED
+    if not metric_is_known(metric):
+        raise Error(
+            "brute_force_knn: DistanceType value "
+            + String(metric)
+            + " is not one of the eight this tree computes; see"
+            " neighbors/impl/distance/detail/distance_ops.mojo"
+        )
+    return metric
 
 
 def compute_norms(
@@ -123,6 +171,15 @@ def compute_norms(
 
     Cosine wants the L2 norm and L2 wants the SQUARED norm, which is their
     comment at `:117-118` and is the same flag `cluster/` carries.
+
+    **DO NOT PASS `take_sqrt = True` HERE FOR COSINE.** Use
+    `compute_norms_for_metric` below. `row_norm_kernel`'s sqrt arm ends in
+    the STDLIB sqrt (`core/row_norms.mojo:102`), which is approximate on
+    NVIDIA (DEVIATION 258), so an IDENTICAL cosine taken through it agrees
+    on Apple and AMD and differs on the third column. That defect is
+    `core/`'s to fix and fixing it moves `cluster/`'s cosine k-means bits;
+    it is a row in `neighbors/NOT_IMPLEMENTED.tsv`. The parameter is left
+    in place, unchanged, for the callers that already pass it.
     """
     ctx.enqueue_function[row_norm_kernel](
         a_norm.unsafe_ptr(),
@@ -132,6 +189,43 @@ def compute_norms(
         grid_dim=(n_rows, 1, 1),
         block_dim=(NORM_TPB, 1, 1),
     )
+
+
+def compute_norms_for_metric(
+    ctx: DeviceContext,
+    mut a: DeviceBuffer[DType.float32],
+    mut a_norm: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_features: Int,
+    metric: Int,
+) raises:
+    """`knn_brute_force.cuh:117-140`: WHICH norm, decided by the metric.
+
+    Their branch, statement for statement:
+
+        if (metric == L2Expanded || L2SqrtExpanded || CosineExpanded) {
+          if (metric == CosineExpanded) rowNorm<L2Norm,true>(..., sqrt_op{});
+          else                          rowNorm<L2Norm,true>(...);
+        }
+
+    Every other metric gets no norm at all, and this function writes
+    nothing for one -- the buffer stays whatever the caller made it, and
+    `metric_distance_kernel` never reads it. `metric_uses_norms` and
+    `metric_norm_takes_sqrt` are the two `static constexpr` flags of the
+    op structs, read by name so this branch cannot drift from them.
+    """
+    if not metric_uses_norms(metric):
+        return
+    if metric_norm_takes_sqrt(metric):
+        ctx.enqueue_function[cosine_row_norm_kernel](
+            a_norm.unsafe_ptr(),
+            a.unsafe_ptr(),
+            Int32(n_features),
+            grid_dim=(n_rows, 1, 1),
+            block_dim=(COSINE_NORM_TPB, 1, 1),
+        )
+        return
+    compute_norms(ctx, a, a_norm, n_rows, n_features, False)
 
 
 def _warpsort_select_tile[
@@ -247,6 +341,8 @@ def tiled_brute_force_knn(
     buf_len: Int,
     is_sqrt: Bool,
     use_vendor_topk: Bool = False,
+    metric: Int = METRIC_FROM_IS_SQRT,
+    metric_arg: Float32 = Float32(2.0),
 ) raises:
     """Tile the QUERIES, keep the whole index resident, top-k per query row.
 
@@ -260,7 +356,35 @@ def tiled_brute_force_knn(
     reading of their `num_col_tiles` / `temp_out_cols` machinery and what it
     would take. So `n_index` columns of one query tile must fit `dist_tile`,
     and `query_tile` is the knob that makes that true.
+
+    THE METRIC, 2026-09-01. `metric` follows their `pairwise_metric`
+    rewrite at `:112-142` exactly:
+
+      - `L2Expanded` / `L2SqrtExpanded` and `CosineExpanded` are computed
+        as an INNER PRODUCT plus an epilogue. Theirs sets
+        `pairwise_metric = InnerProduct` (`:141`) and applies
+        `l2_exp_cutlass_op` (`:206`) or the hand-inlined
+        `1 - dot/(nx*ny)` (`:221`) afterwards. Ours does the same, with
+        the product from `gemm_nt` under FAST and folded into
+        `pinned_distance_tile_kernel` / `metric_distance_kernel` under
+        IDENTICAL, because a vendor matmul's k-split is a summation order
+        nothing here can pin.
+      - Every other metric goes to `pairwise_distance` unrewritten
+        (`:181-190`) and needs no epilogue, which is their `else` at
+        `:224`. Here that is `metric_distance_kernel` in BOTH modes: the
+        feature axis is already walked in one thread, so there is nothing
+        for FAST to hand to a library.
+
+    `select_min` is theirs at `:170` and is TRUE for every metric this
+    tree computes (`is_min_close` returns false only for `InnerProduct`,
+    `distance.hpp:38-43`, which is not a metric we expose), so the
+    selectors below are unchanged: smallest-first, as they already were.
+
+    `metric = METRIC_FROM_IS_SQRT` (the default) is the pre-metric-lane
+    behaviour exactly, so every caller that does not name a metric gets
+    the bits it always got.
     """
+    var mtr = resolve_metric(metric, is_sqrt)
     var q = 0
     while q < n_queries:
         var rows = min(query_tile, n_queries - q)
@@ -270,47 +394,124 @@ def tiled_brute_force_knn(
         # MAX's matmul takes a TileTensor over a DeviceBuffer and there is no
         # offset form of that. Same bytes, no copy.
         var cells = rows * n_index
-        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-            # IDENTITY_PATHS row 24. The vendor matmul's k-split is a
-            # summation order nothing here can pin, so under IDENTICAL the
-            # product and the epilogue are ONE kernel with the feature axis
-            # walked ascending in a single thread. See
-            # `neighbors/checks/pinned_distance_tile.mojo` for the price
-            # and for why no faster shape was chosen.
-            ctx.enqueue_function[pinned_distance_tile_kernel](
+
+        if not metric_uses_norms(mtr):
+            # THEIR `else` AT `:224`: the op did the whole cell, there is
+            # no epilogue and no norm. One kernel, both modes.
+            ctx.enqueue_function[metric_distance_kernel](
                 dist_tile.unsafe_ptr(),
                 queries.unsafe_ptr().unsafe_offset(q * n_features),
                 index.unsafe_ptr(),
+                # OFFSET EVEN THOUGH THE KERNEL DOES NOT READ THEM on this
+                # arm (`use_norms` is false for every metric that reaches
+                # it): the two norm arguments are then correct at every
+                # call site, so adding a norm-using metric to this branch
+                # later cannot introduce an off-by-tile that only shows up
+                # past the first tile.
                 query_norm.unsafe_ptr().unsafe_offset(q),
                 index_norm.unsafe_ptr(),
                 Int32(rows),
                 Int32(n_index),
                 Int32(n_features),
-                Int32(1 if is_sqrt else 0),
+                Int32(mtr),
+                metric_arg,
                 grid_dim=(
-                    (cells + PINNED_TILE_TPB - 1) // PINNED_TILE_TPB, 1, 1
+                    (cells + METRIC_ELEM_TPB - 1) // METRIC_ELEM_TPB, 1, 1
                 ),
-                block_dim=(PINNED_TILE_TPB, 1, 1),
+                block_dim=(METRIC_ELEM_TPB, 1, 1),
             )
+        elif mtr == DIST_COSINE_EXPANDED:
+            comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+                # IDENTITY_PATHS row 24's argument, applied to cosine: the
+                # dot product and the epilogue in ONE thread over the whole
+                # feature axis. Same shape as `pinned_distance_tile_kernel`
+                # and for the same reason; the only difference is which
+                # epilogue runs on the accumulated product.
+                ctx.enqueue_function[metric_distance_kernel](
+                    dist_tile.unsafe_ptr(),
+                    queries.unsafe_ptr().unsafe_offset(q * n_features),
+                    index.unsafe_ptr(),
+                    query_norm.unsafe_ptr().unsafe_offset(q),
+                    index_norm.unsafe_ptr(),
+                    Int32(rows),
+                    Int32(n_index),
+                    Int32(n_features),
+                    Int32(mtr),
+                    metric_arg,
+                    grid_dim=(
+                        (cells + METRIC_ELEM_TPB - 1) // METRIC_ELEM_TPB, 1, 1
+                    ),
+                    block_dim=(METRIC_ELEM_TPB, 1, 1),
+                )
+            else:
+                # THEIR arm: `pairwise_metric = InnerProduct` (`:141`),
+                # the vendor product, then `1 - dot/(nx*ny)` by hand
+                # (`:215-223`).
+                var qc_tile = queries.create_sub_buffer[DType.float32](
+                    q * n_features, rows * n_features
+                )
+                gemm_nt(
+                    ctx, dist_tile, qc_tile, index, rows, n_index, n_features
+                )
+                ctx.enqueue_function[cosine_epilog_kernel](
+                    dist_tile.unsafe_ptr(),
+                    query_norm.unsafe_ptr().unsafe_offset(q),
+                    index_norm.unsafe_ptr(),
+                    Int32(rows),
+                    Int32(n_index),
+                    grid_dim=(
+                        (cells + METRIC_ELEM_TPB - 1) // METRIC_ELEM_TPB, 1, 1
+                    ),
+                    block_dim=(METRIC_ELEM_TPB, 1, 1),
+                )
         else:
-            var q_tile = queries.create_sub_buffer[DType.float32](
-                q * n_features, rows * n_features
-            )
-            gemm_nt(ctx, dist_tile, q_tile, index, rows, n_index, n_features)
+            comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+                # IDENTITY_PATHS row 24. The vendor matmul's k-split is a
+                # summation order nothing here can pin, so under IDENTICAL the
+                # product and the epilogue are ONE kernel with the feature axis
+                # walked ascending in a single thread. See
+                # `neighbors/checks/pinned_distance_tile.mojo` for the price
+                # and for why no faster shape was chosen.
+                ctx.enqueue_function[pinned_distance_tile_kernel](
+                    dist_tile.unsafe_ptr(),
+                    queries.unsafe_ptr().unsafe_offset(q * n_features),
+                    index.unsafe_ptr(),
+                    query_norm.unsafe_ptr().unsafe_offset(q),
+                    index_norm.unsafe_ptr(),
+                    Int32(rows),
+                    Int32(n_index),
+                    Int32(n_features),
+                    # `mtr`, not `is_sqrt`: an EXPLICIT `L2Expanded` must
+                    # skip the root even when a caller also passed
+                    # `is_sqrt = True` for the old signature's sake. The
+                    # sentinel path makes the two agree by construction.
+                    Int32(1 if mtr == DIST_L2_SQRT_EXPANDED else 0),
+                    grid_dim=(
+                        (cells + PINNED_TILE_TPB - 1) // PINNED_TILE_TPB, 1, 1
+                    ),
+                    block_dim=(PINNED_TILE_TPB, 1, 1),
+                )
+            else:
+                var q_tile = queries.create_sub_buffer[DType.float32](
+                    q * n_features, rows * n_features
+                )
+                gemm_nt(
+                    ctx, dist_tile, q_tile, index, rows, n_index, n_features
+                )
 
-            # The epilogue k-means fuses into its reduction has to be its
-            # own pass here, because the top-k needs every distance to
-            # survive.
-            ctx.enqueue_function[expand_distances_kernel](
-                dist_tile.unsafe_ptr(),
-                query_norm.unsafe_ptr().unsafe_offset(q),
-                index_norm.unsafe_ptr(),
-                Int32(rows),
-                Int32(n_index),
-                Int32(1 if is_sqrt else 0),
-                grid_dim=((cells + 255) // 256, 1, 1),
-                block_dim=(256, 1, 1),
-            )
+                # The epilogue k-means fuses into its reduction has to be its
+                # own pass here, because the top-k needs every distance to
+                # survive.
+                ctx.enqueue_function[expand_distances_kernel](
+                    dist_tile.unsafe_ptr(),
+                    query_norm.unsafe_ptr().unsafe_offset(q),
+                    index_norm.unsafe_ptr(),
+                    Int32(rows),
+                    Int32(n_index),
+                    Int32(1 if mtr == DIST_L2_SQRT_EXPANDED else 0),
+                    grid_dim=((cells + 255) // 256, 1, 1),
+                    block_dim=(256, 1, 1),
+                )
 
         # THE SELECTION. Three implementations, and which one runs is a
         # parameter or a kernel-matrix row, never a preference.
@@ -545,6 +746,8 @@ def brute_force_knn_impl(
     row_major_query: Bool = True,
     row_major_index: Bool = True,
     knn_method: Int = KNN_METHOD_AUTO,
+    metric: Int = METRIC_FROM_IS_SQRT,
+    metric_arg: Float32 = Float32(2.0),
 ) raises:
     """`brute_force_knn_impl`'s dispatch, `knn_brute_force.cuh:443-447`.
 
@@ -556,11 +759,30 @@ def brute_force_knn_impl(
         metric is one of L2Unexpanded / L2SqrtUnexpanded / L2Expanded /
                          L2SqrtExpanded
 
-    The metric test is not a runtime test here because this port carries only
-    the expanded-L2 arm, so it is satisfied by construction; `is_sqrt`
-    selects between L2Expanded and L2SqrtExpanded, both of which are in their
-    set. If a metric outside that set is ever ported, this is where it has to
-    become a switch, and the `Haversine` case at `:481-487` goes with it.
+    **THE METRIC TEST IS NOW A REAL RUNTIME TEST, 2026-09-01.** This
+    paragraph used to say "The metric test is not a runtime test here
+    because this port carries only the expanded-L2 arm, so it is satisfied
+    by construction ... If a metric outside that set is ever ported, this
+    is where it has to become a switch." A metric outside that set IS
+    ported -- `CosineExpanded`, `L1`, `Linf`, `L2SqrtUnexpanded`,
+    `LpUnexpanded` -- so the sentence is deleted and the switch is written.
+    `fused_l2_knn` is entered ONLY for the four members of their set, which
+    is exactly their `:444-447`; everything else takes their `else` and
+    goes to `tiled_brute_force_knn`, which is exactly their `:485-511`
+    default. Cosine is NEVER fusable upstream either, and it is worth
+    saying why rather than only that: `fusedL2Knn`'s whole trick is that
+    the expanded L2 epilogue `xn + yn - 2 dot` is MONOTONE in `-dot`, so
+    the register queue can rank on the raw accumulator and fix the value
+    up at the very end. Cosine's `1 - dot/(nx*ny)` is monotone in `-dot`
+    only for a FIXED pair of norms, and the queue compares across
+    different index rows with different `yn`, so the fusion is not merely
+    unported, it is unsound. Their `Haversine` case at `:478-484` is still
+    not ported and is a `NOT_IMPLEMENTED.tsv` row.
+
+    `metric = METRIC_FROM_IS_SQRT` (the default) reproduces the previous
+    behaviour exactly: `is_sqrt` picks L2SqrtExpanded or L2Expanded, both
+    in their fusable set, so every existing caller keeps its arm and its
+    bits.
 
     `k > n_index` is refused outright rather than dispatched, because their
     `n < k` fill at `:157-166` is not ported on either arm and the fallback's
@@ -611,6 +833,27 @@ def brute_force_knn_impl(
     # `knn_method = KNN_METHOD_FUSED` restores their dispatch exactly. The
     # AUTO default asks the launch computation itself which regime this shape
     # is in; see DEVIATION 36 above the constants for the measurements.
+    var mtr = resolve_metric(metric, is_sqrt)
+
+    # THEIR FOURTH CONDITION, `:444-447`, as a value test.
+    var metric_is_fusable = (
+        mtr == DIST_L2_UNEXPANDED
+        or mtr == DIST_L2_SQRT_UNEXPANDED
+        or mtr == DIST_L2_EXPANDED
+        or mtr == DIST_L2_SQRT_EXPANDED
+    )
+    # ...and OUR narrower one. `fused_l2_knn` carries only the EXPANDED
+    # half of their set (the file's own docstring says so: it is the
+    # `Policy2x8` expanded kernel), so an explicitly requested
+    # `L2Unexpanded` / `L2SqrtUnexpanded` takes the tiled arm here where
+    # cuVS would fuse it. That is a MISSING ARM, not a different answer:
+    # `metric_distance_kernel`'s `l2_unexp_core` is their unexpanded op,
+    # and it is the same distance their fused kernel would compute by the
+    # other identity. Recorded in `neighbors/NOT_IMPLEMENTED.tsv`.
+    var fused_arm_carries = (
+        mtr == DIST_L2_EXPANDED or mtr == DIST_L2_SQRT_EXPANDED
+    )
+
     var want_fused = knn_method == KNN_METHOD_FUSED
     if knn_method == KNN_METHOD_AUTO:
         comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
@@ -714,6 +957,25 @@ def brute_force_knn_impl(
         if knn_method == KNN_METHOD_AUTO:
             want_fused = False
 
+    # A METRIC OUTSIDE THE FUSABLE SET IS NOT AN ERROR, IT IS THEIR `else`.
+    # `KNN_METHOD_FUSED` asks for an arm; asking for it with cosine or Lp
+    # is asking for an arm that does not exist upstream either, so it is
+    # refused BY NAME rather than silently substituted -- the same rule
+    # DEVIATION 512 applies to a column whose lane width cannot express
+    # the FAISS queue.
+    if knn_method == KNN_METHOD_FUSED and not fused_arm_carries:
+        raise Error(
+            "brute_force_knn_impl: KNN_METHOD_FUSED was asked for with"
+            " metric "
+            + String(mtr)
+            + "; fusedL2Knn covers only the L2 expanded pair"
+            " (knn_brute_force.cuh:444-447 admits four L2 tags and cuVS"
+            " itself never fuses cosine or Lp). Use KNN_METHOD_AUTO or"
+            " KNN_METHOD_TILED."
+        )
+    if not metric_is_fusable or not fused_arm_carries:
+        want_fused = False
+
     var fused_ok = (
         k <= FKNN_MAX_NN
         and row_major_query == row_major_index
@@ -756,4 +1018,6 @@ def brute_force_knn_impl(
             buf_len,
             is_sqrt,
             use_vendor_topk,
+            mtr,
+            metric_arg,
         )

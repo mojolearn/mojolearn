@@ -78,6 +78,8 @@ def knn_classify(
     n_index_rows: Int,
     n_query_rows: Int,
     k: Int,
+    mut weights: DeviceBuffer[DType.float32],
+    has_weights: Bool = False,
 ) raises -> List[List[Int32]]:
     """`ML::knn_classify` (`knn.cu:328-350`). Returns the sorted unique
     label set per output, so the caller can check it against the class set
@@ -103,6 +105,8 @@ def knn_classify(
         k,
         uniq_labels,
         n_unique,
+        weights,
+        has_weights,
     )
     _ = uniq_labels^
     return uniq_host^
@@ -117,10 +121,17 @@ def knn_regress(
     n_index_rows: Int,
     n_query_rows: Int,
     k: Int,
+    mut weights: DeviceBuffer[DType.float32],
+    has_weights: Bool = False,
 ) raises:
-    """`ML::knn_regress` (`knn.cu:352-361`): one call through."""
+    """`ML::knn_regress` (`knn.cu:352-361`): one call through.
+
+    `weights` / `has_weights` are DEVIATION 556; see
+    `neighbors/impl/selection/knn.mojo`'s block and
+    `neighbors/impl/selection/distance_weights.mojo`."""
     selection_knn_regress(
-        ctx, trace, out_buf, knn_indices, y, n_index_rows, n_query_rows, k
+        ctx, trace, out_buf, knn_indices, y, n_index_rows, n_query_rows, k,
+        weights, has_weights,
     )
 
 
@@ -133,6 +144,8 @@ def knn_class_proba(
     n_index_rows: Int,
     n_query_rows: Int,
     k: Int,
+    mut weights: DeviceBuffer[DType.float32],
+    has_weights: Bool = False,
 ) raises -> List[List[Int32]]:
     """`ML::knn_class_proba` (`knn.cu:363-389`): the unique sets, then
     `class_probs` straight into the caller's per-output buffers. `out[i]`
@@ -160,6 +173,8 @@ def knn_class_proba(
         k,
         uniq_labels,
         n_unique,
+        weights,
+        has_weights,
     )
     if trace.enabled:
         for i in range(len(outs)):

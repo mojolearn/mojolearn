@@ -52,7 +52,7 @@ brute force and is what is ported.
 | `checks/kde_oracle.mojo` | none | the float32 serial oracle (every stage) and the float64 scikit-learn-semantics reference |
 | `checks/kde_fixture.mojo` | none | hashed fixtures assembled from BITS (no host arithmetic) |
 | `checks/kde_check.mojo` | none | the eleven gates |
-| `estimator.mojo` | none | the host-pointer entry for `bindings/` (not wired; HAND-OFF) |
+| `estimator.mojo` | none | the host-pointer entry `bindings/_mojolearn_estimators.mojo:367-426` CALLS. (It read "not wired; HAND-OFF" until 2026-09-01; the identity lane wired it and this row was stale.) `metric_arg` is the one parameter still unreachable from Python -- see the HAND-OFF at the end |
 | `kde_main.mojo` | none | one hashed fit, the seven-stage card |
 
 **Their default `metric='euclidean'` is UNEXPANDED** (`metrics/
@@ -84,12 +84,44 @@ Metrics, from cuML's dense `PAIRWISE_DISTANCE_METRICS` table:
 | `sqeuclidean` | `L2Expanded` | ported (norms + pinned tile / vendor GEMM) |
 | `l1`, `cityblock`, `manhattan` | `L1` | ported |
 | `chebyshev` | `Linf` | ported (a selection; `abs` clears every sign bit so row 13 does not arise) |
-| `cosine`, `canberra`, `minkowski`, `hellinger`, `correlation`, `jensenshannon`, `hamming`, `kldivergence`, `russellrao`, `nan_euclidean` | in their table | **REFUSED BY NAME**: "is in cuML's pairwise_distances table but is NOT PORTED" |
+| `cosine` | `CosineExpanded` | **PORTED 2026-09-01** (`cosine_row_norm_kernel` for the TRUE L2 norm + `metric_distance_kernel`) |
+| `minkowski` | `LpUnexpanded` | **PORTED 2026-09-01** at any finite positive normal `p` (`metric_arg`) |
+| `canberra`, `hellinger`, `correlation`, `jensenshannon`, `hamming`, `kldivergence`, `russellrao`, `nan_euclidean` | in their table | **REFUSED BY NAME**: "is in cuML's pairwise_distances table but is NOT PORTED" |
 | anything else | not in their table | `Unknown metric: <name>` (their wording) |
 
+**COSINE AND MINKOWSKI, 2026-09-01.** Both were in the refused row above.
+Both ops now live with every other op in `neighbors/impl/distance/detail/
+distance_ops.mojo` (cuVS's own layout: one `distance_ops/` directory, every
+consumer reaching it) and this lane's three older cores moved there too,
+body for body, so no existing bit moves. Two things about them are worth
+knowing before using them:
+
+- **cosine needs a DIFFERENT norm** from `sqeuclidean`: the TRUE L2 norm,
+  not the squared one (`knn_brute_force.cuh:122` says exactly that). It is
+  computed by `cosine_row_norm_kernel` rather than by
+  `core/row_norms.mojo`'s `take_sqrt` arm, because that arm ends in the
+  STDLIB `sqrt`, which is approximate on NVIDIA (DEVIATION 258) and would
+  make an IDENTICAL cosine agree on two columns and differ on the third.
+  That is a defect in another lane, recorded in
+  `neighbors/NOT_IMPLEMENTED.tsv`.
+- **the density NORMALIZATION is still the Euclidean one**, and that is
+  cuML's own caveat, not a gap this lane opened:
+  `kernel_density.py:168-170` says "the normalization of the density output
+  is correct only for the Euclidean distance metric". Under `l1`,
+  `chebyshev`, `cosine` or `minkowski` the distance and the kernel are
+  right and the constant is not that metric's unit-ball volume. Inventing
+  the right constant per metric would be improving them.
+
+Do not confuse `metric='cosine'` (this row) with `kernel='cosine'`
+(DEVIATION 602 below, about the cosine KERNEL's normalization for even
+`d`). They are unrelated and both words are theirs.
+
 Also refused by name: `bandwidth <= 0`; `bandwidth='scott'|'silverman'`
-(26.08-only strings, host `pow` -- HAND-OFF); `metric_params` /
-`metric_arg != 2.0` (only Minkowski reads it); a `sample_weight` that is
+(26.08-only strings, host `pow` -- HAND-OFF); a Minkowski `p` that is
+non-finite, `<= 0` or SUBNORMAL (DEVIATION 552 -- `1/p` and the vendor
+flush policy); an all-zero row in `X` or the query under `metric='cosine'`
+(DEVIATION 553 -- their epilogue divides by `||x||` with no guard); a
+`sample_weight` that is
 not positive or not of length `n_train`; `n_features` mismatch;
 `sample()` (cupy RNG; not ported); `float64` inputs (DEVIATION 600); and
 DEVIATION 604's four float32 rules: NaN/inf in `X` or the query, a
@@ -189,6 +221,21 @@ entry (`estimator.mojo`) and the gates' path both call
 trusts its caller exactly as cuML's C++ does.
 
 ## The gates (`kde/checks/kde_check.mojo`), as they printed on the M4
+
+**THE TRANSCRIPT BELOW IS THE 2026-08-23 RUN AND IS NOT RE-WRITTEN.** It is
+a record of what a specific commit printed and editing it would falsify the
+record. Two lines of it are STALE ARITHMETIC as of 2026-09-01 and are
+flagged here rather than in place: `_all_metrics()` now returns SIX metrics,
+not four, so `check_kde_oracle_vs_float64`, `check_kde_device_equals_oracle`
+and `check_kde_launch_invariance` will print 6 kernels x 6 metrics and
+larger cell counts, and TWO GATES ARE NEW
+(`check_kde_cosine_norm_is_the_sqrt_norm`,
+`check_kde_minkowski_general_p`), so the suite is THIRTEEN, not eleven.
+`check_kde_refusals`'s count changed too: two metric names moved out of the
+refusal list and six new refusals moved in (five bad Minkowski `p`, one
+cosine zero row). RUN OWED, on a box with a GPU:
+`pixi run check-kde` and the IDENTICAL arm; paste the new transcript BELOW
+this one, dated, rather than over it.
 
 IDENTICAL (`tools/with_identical_mode.sh ...`), 2026-08-23:
 
@@ -374,6 +421,33 @@ fixture.
 | n | path | what is vendor-dependent in their spelling | what we did | status |
 |---|---|---|---|---|
 | 42 | **kde/ -- KernelDensity end to end** (`kde/impl/neighbors/kernel_density.mojo`, `kde/impl/distance/*.mojo`): unexpanded pairwise distances, six log-kernels, per-row logsumexp, two host scalars | their distance is a `Policy4x4` Contractions tile (row 9's contraction, row 10's `sqrt`), the log-kernels are `cp.fuse` over `log`/`cos` (row 12) with a bool-times-float `-0.0` and a `FLOAT_MIN` sentinel, the logsumexp is a numba kernel that sums float32 `exp` into FLOAT64 (no float64 on Apple) and the norm is host `np.log`/`math.lgamma` (row 18's host-libm class); the row max sees both zeros (row 13) | one thread per cell with the feature axis ascending (`identical_mul_add`, `ftz`, `identical_sqrt`), `identical_log`/`identical_cos`/`identical_exp` at every transcendental, the logsumexp kept as THEIR serial per-row fold (a pure function of `n_train`; no block fold, no shuffle, no atomic), the norm as a float32 portable construction under IDENTICAL (DEVIATION 601), float32 throughout (DEVIATION 600), the upstream cosine-norm bug for even d FIXED (DEVIATION 602); row 13 answered: first zero in ascending j survives and cannot reach the score; row 39 audited 2026-08-23: the recorded row max is a positional strict `>` (no hardware max), no legal row mixes the zeros, the mixed rows are planted (both orders) and the lower-index zero asserted device and oracle; no legal input reaches a recorded stage as NaN (DEVIATION 604 refusals, DEVIATION 603's -inf row) | **CERTIFIED on three vendors at `a0a0eee` (E3 round 13, 2026-08-28)**: the 7-stage IDENTICAL card is byte-identical Apple M4, NVIDIA H100 and AMD MI325X, and the gates pass in both modes on all three (`bench/results/e1/2026-08-28_{130918-MacBook-Air-1-terrabyte,131651-runpod-nvidia,173933-mojolearn-e2-amd}/lanes/kde.*`). Device == serial oracle bit for bit at every stage, 24 kernel/metric pairs; launch-invariant across block sizes, grids, padding, poison and batch composition; nine sabotages recorded (one ftz sabotage inert on Apple and argued inert everywhere; one hardware-max sabotage inert on Apple and expected to fail on NVIDIA/AMD, which no leg has yet run) |
+
+## HAND-OFF: THE ONE BINDING SLOT MINKOWSKI'S `p` NEEDS
+
+`kde/estimator.mojo::kde_score_samples_host` takes `metric_arg` and the
+kernel computes any finite positive normal `p`.
+`bindings/_mojolearn_estimators.mojo::kde_score_samples_binding` length-
+checks its `params` list at exactly 5 entries (`:392-396`) and has no sixth
+slot, so `python/mojolearn/density.py` can only reach `p = 2` and refuses
+any other value BY NAME with exactly this reason. `bindings/` is not this
+lane's directory. The change is two lines there:
+
+    -    if len(params) != 5:
+    +    if len(params) != 5 and len(params) != 6:
+             raise Error(
+    -            "kde_score_samples: params must contain 5 values, got "
+    +            "kde_score_samples: params must contain 5 or 6 values, got "
+                 + String(len(params))
+             )
+    ...
+         var has_weights = Int(py=params[4]) != 0
+    +    var metric_arg = Float32(2.0)
+    +    if len(params) == 6:
+    +        metric_arg = Float32(Float64(py=params[5]))
+
+then pass `metric_arg` through to `kde_score_samples_host`, and in
+`python/mojolearn/density.py` append the resolved `p` to the params list
+and delete the `NotImplementedError` that names this paragraph.
 
 ## HAND-OFF TO THE IDENTITY LANE
 

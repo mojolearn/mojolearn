@@ -114,9 +114,87 @@ from neighbors.impl.knn.knn import (
 )
 from neighbors.impl.neighbors.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
+    METRIC_FROM_IS_SQRT,
     brute_force_knn_impl,
-    compute_norms,
+    compute_norms_for_metric,
+    resolve_metric,
 )
+from neighbors.impl.selection.distance_weights import (
+    WEIGHTS_DISTANCE,
+    WEIGHTS_UNIFORM,
+    host_distance_weights,
+)
+from neighbors.impl.distance.detail.distance_ops import (
+    DIST_COSINE_EXPANDED,
+    DIST_L1,
+    DIST_L2_EXPANDED,
+    DIST_L2_SQRT_EXPANDED,
+    DIST_LINF,
+    DIST_LP_UNEXPANDED,
+    cosine_zero_norm_row_ptr,
+    metric_uses_norms,
+    metric_value_name,
+    validate_metric_arg,
+)
+
+
+def knn_metric_from_name(name: String) raises -> Int:
+    """cuML's `NearestNeighbors._build_metric_type`
+    (`nearest_neighbors.pyx:520-553`), the rows this tree computes.
+
+    THIS TABLE IS NOT `kde/impl/neighbors/kernel_density.mojo::
+    metric_from_name` AND THE DIFFERENCE IS UPSTREAM'S, NOT OURS.
+    cuML has TWO metric tables and they disagree on one row:
+
+        `pairwise_distances.pyx:71`   "euclidean" -> L2SqrtUNexpanded
+        `nearest_neighbors.pyx:522`   "euclidean" -> L2SqrtEXpanded
+
+    KDE goes through the first (`kernel_density.py:315`) and k-NN through
+    the second, so the two lanes genuinely compute Euclidean by two
+    different identities and can differ in the last bits. That is THEIR
+    design and this port keeps it; a single shared table here would have
+    silently corrected one of their call sites.
+
+    `lp` is their alias for `minkowski` (`:532`) and `linf`/`taxicab` are
+    their aliases too (`:526`, `:534`). Every name in their
+    `VALID_METRICS["brute"]` set (`neighbors/__init__.py:27-48`) that this
+    tree does not compute is refused BY NAME, so a caller learns it is
+    unported rather than unknown.
+    """
+    if name == "euclidean" or name == "l2":
+        return DIST_L2_SQRT_EXPANDED
+    if name == "sqeuclidean":
+        return DIST_L2_EXPANDED
+    if (
+        name == "cityblock"
+        or name == "l1"
+        or name == "manhattan"
+        or name == "taxicab"
+    ):
+        return DIST_L1
+    if name == "chebyshev" or name == "linf":
+        return DIST_LINF
+    if name == "cosine":
+        return DIST_COSINE_EXPANDED
+    if name == "minkowski" or name == "lp":
+        return DIST_LP_UNEXPANDED
+    if (
+        name == "canberra"
+        or name == "jensenshannon"
+        or name == "correlation"
+        or name == "inner_product"
+        or name == "haversine"
+        or name == "braycurtis"
+    ):
+        raise Error(
+            "mojolearn k-NN: metric='"
+            + name
+            + "' is in cuML's VALID_METRICS['brute'] but is NOT PORTED"
+            " (neighbors/NOT_IMPLEMENTED.tsv); ported: euclidean, l2,"
+            " sqeuclidean, l1, cityblock, manhattan, taxicab, chebyshev,"
+            " linf, cosine, minkowski, lp"
+        )
+    raise Error("mojolearn k-NN: unknown metric '" + name + "'")
 from neighbors.checks.radius_distances import rbc_edge_distances
 from neighbors.impl.neighbors.ball_cover.ball_cover import (
     rbc_build_index,
@@ -196,6 +274,8 @@ def knn_search(
     return_sqrt: Bool = True,
     requested_query_tile: Int = DEFAULT_QUERY_TILE,
     knn_method: Int = KNN_METHOD_AUTO,
+    metric: Int = METRIC_FROM_IS_SQRT,
+    metric_arg: Float32 = Float32(2.0),
 ) raises -> Int:
     """Exact k nearest neighbours, index and queries row-major on the host.
 
@@ -223,6 +303,8 @@ def knn_search(
         return_sqrt,
         requested_query_tile,
         knn_method,
+        metric,
+        metric_arg,
     )
 
 
@@ -240,8 +322,22 @@ def knn_search_traced(
     return_sqrt: Bool = True,
     requested_query_tile: Int = DEFAULT_QUERY_TILE,
     knn_method: Int = KNN_METHOD_AUTO,
+    metric: Int = METRIC_FROM_IS_SQRT,
+    metric_arg: Float32 = Float32(2.0),
 ) raises -> Int:
     """Exact k nearest neighbours, index and queries row-major on the host.
+
+    THE METRIC, 2026-09-01. `metric` is a cuVS `DistanceType` value and
+    `metric_arg` is Minkowski's `p`, which is how cuML spells the pair all
+    the way down (`nearest_neighbors.pyx:852-854` passes
+    `<DistanceType>_metric` and `<float>self.p` to `brute_force_knn`
+    regardless of the metric, because every non-Lp op discards it). Use
+    `knn_metric_from_name` above for the string table. The DEFAULT is the
+    sentinel `METRIC_FROM_IS_SQRT`, which reproduces this function's
+    pre-metric behaviour exactly -- `return_sqrt` choosing between
+    `L2SqrtExpanded` and `L2Expanded` -- so the nine existing call sites
+    across `metrics/`, `spectral/`, `hdbscan/`, `ivf/`, `bench/` and the
+    check files keep their arm and their bits with no edit.
 
     Both inputs are read as `n x n_features` row-major Float32. Both outputs
     are written as `n_queries x k` row-major, distances and indices in the
@@ -280,6 +376,36 @@ def knn_search_traced(
             + "); the upstream's short-index fill is not ported"
         )
 
+    # THE METRIC, RESOLVED AND VALIDATED BEFORE ANY ALLOCATION.
+    var mtr = resolve_metric(metric, return_sqrt)
+    validate_metric_arg(mtr, metric_arg)  # DEVIATION 552
+    if mtr == DIST_COSINE_EXPANDED:
+        # DEVIATION 553: cosine divides by ||x||, and cuVS has no guard
+        # (`cosine.cuh:86`, `knn_brute_force.cuh:221`). A zero row would
+        # make a whole row of the distance matrix NaN, and the two
+        # selectors this lane ships sort a NaN to OPPOSITE ends -- radix's
+        # `twiddle_in` key puts it above every finite distance, the FAISS
+        # queue's `<` never admits it -- so the same query would lose a
+        # real neighbour differently on the two arms, with no error. The
+        # module docstring of `neighbors/impl/distance/detail/
+        # distance_ops.mojo` carries the full argument.
+        var zi = cosine_zero_norm_row_ptr(index_ptr, n_index, n_features)
+        if zi >= 0:
+            raise Error(
+                "knn_search: metric='cosine' but index row "
+                + String(zi)
+                + " is all zeros; cosine distance divides by ||x|| and is"
+                " undefined at the origin (DEVIATION 553)"
+            )
+        var zq = cosine_zero_norm_row_ptr(queries_ptr, n_queries, n_features)
+        if zq >= 0:
+            raise Error(
+                "knn_search: metric='cosine' but query row "
+                + String(zq)
+                + " is all zeros; cosine distance divides by ||x|| and is"
+                " undefined at the origin (DEVIATION 553)"
+            )
+
     var query_tile = plan_query_tile(n_index, n_queries, requested_query_tile)
 
     # `scaling_main.mojo`'s sizing. `buf_len` must clear `k` or the fallback
@@ -312,11 +438,22 @@ def knn_search_traced(
     ctx.enqueue_copy(dst_buf=queries, src_ptr=queries_ptr)
     ctx.synchronize()
 
-    # L2 wants the SQUARED norm on both sides; `take_sqrt` here is about the
-    # norm, not about the distances the caller gets back. That is the
-    # upstream's comment at `knn_brute_force.cuh:117-118`.
-    compute_norms(ctx, index, index_norm, n_index, n_features, False)
-    compute_norms(ctx, queries, query_norm, n_queries, n_features, False)
+    # `knn_brute_force.cuh:117-140`: WHICH norm, and whether one at all,
+    # is the metric's decision. L2 wants the SQUARED norm on both sides,
+    # cosine wants the TRUE L2 norm, and every unexpanded metric wants
+    # none -- their comment at `:122` says exactly that. This used to be
+    # two unconditional `compute_norms(..., False)` calls, which was right
+    # while `L2Expanded` was the only metric and is not right now.
+    #
+    # For a metric with no norm the two buffers are allocated (Mojo's
+    # launch refuses a null pointer argument) and NEVER WRITTEN, so they
+    # hold whatever the allocator left. `metric_distance_kernel` does not
+    # read them on those arms; the identity trace below records them only
+    # when they mean something, for the same reason.
+    compute_norms_for_metric(ctx, index, index_norm, n_index, n_features, mtr)
+    compute_norms_for_metric(
+        ctx, queries, query_norm, n_queries, n_features, mtr
+    )
     ctx.synchronize()
 
     # THE STAGE HASHES (`core/identity_trace.mojo`), off unless
@@ -339,10 +476,16 @@ def knn_search_traced(
             String("knn n_index=") + String(n_index) + " n_queries="
             + String(n_queries) + " d=" + String(n_features) + " k="
             + String(k) + " method=" + String(knn_method) + " sqrt="
-            + String(return_sqrt)
+            + String(return_sqrt) + " metric=" + metric_value_name(mtr)
+            + " metric_arg=" + String(metric_arg)
         )
-        trace.record_device(ctx, "knn.index_norm", index_norm, n_index)
-        trace.record_device(ctx, "knn.query_norm", query_norm, n_queries)
+        # ONLY WHEN THE METRIC HAS THEM. Hashing an unwritten buffer would
+        # put allocator garbage into a card and make two runs of the SAME
+        # call disagree at a stage the algorithm never reads -- the exact
+        # false positive an identity card exists to avoid.
+        if metric_uses_norms(mtr):
+            trace.record_device(ctx, "knn.index_norm", index_norm, n_index)
+            trace.record_device(ctx, "knn.query_norm", query_norm, n_queries)
 
     brute_force_knn_impl(
         ctx,
@@ -367,6 +510,8 @@ def knn_search_traced(
         True,
         True,
         knn_method,
+        mtr,
+        metric_arg,
     )
     ctx.synchronize()
 
@@ -517,9 +662,31 @@ def knn_classifier_predict(
     out_uniq_ptr: MutPointer[Int32, MutUntrackedOrigin],
     want_proba: Bool,
     requested_query_tile: Int = DEFAULT_QUERY_TILE,
+    metric: Int = METRIC_FROM_IS_SQRT,
+    metric_arg: Float32 = Float32(2.0),
+    weights: Int = WEIGHTS_UNIFORM,
 ) raises -> Int:
     """Search, then vote (`want_proba=False`: `predict`) or tally
     (`want_proba=True`: `predict_proba`). Returns the query tile that ran.
+
+    `metric` / `metric_arg` are cuVS `DistanceType` and Minkowski `p`,
+    exactly as `knn_search_traced` takes them; `knn_metric_from_name` is
+    the string table.
+
+    `weights` is `WEIGHTS_UNIFORM` (cuML's only arm) or `WEIGHTS_DISTANCE`
+    (DEVIATION 556, scikit-learn's semantics, `neighbors/impl/selection/
+    distance_weights.mojo`).
+
+    POLICY 8, NEW WITH THE WEIGHTED ARM: THE SEARCH'S `return_sqrt`
+    DEPENDS ON `weights`. A UNIFORM vote reads only the ORDER of the
+    distances and the squared distance is monotone in the distance, so
+    this function has always passed `return_sqrt = False` and saved a
+    root per cell. A DISTANCE weight reads the VALUE: `1/d^2` is not
+    `1/d`, and a weighted vote taken on squared distances is a different
+    estimator, not a rounding difference. So the weighted arm asks for the
+    rooted distance and the uniform arm does not, and BOTH ARE RIGHT.
+    Under a metric with no sqrt to skip (L1, Linf, cosine, Lp) the flag
+    is inert -- `resolve_metric` only consults it for the sentinel.
 
     `y_ptr`: `n_outputs` contiguous int32 columns of `n_index` (policy 6).
     `n_classes[i]`: the wrapper's class count for output `i` (policy 7).
@@ -553,6 +720,13 @@ def knn_classifier_predict(
     var h_dist = ctx.enqueue_create_host_buffer[DType.float32](n_queries * k)
     var h_idx = ctx.enqueue_create_host_buffer[DType.uint32](n_queries * k)
     ctx.synchronize()
+    var weighted = weights == WEIGHTS_DISTANCE
+    if weights != WEIGHTS_UNIFORM and not weighted:
+        raise Error(
+            "knn_classifier_predict: weights value "
+            + String(weights)
+            + " is neither WEIGHTS_UNIFORM nor WEIGHTS_DISTANCE"
+        )
     # `knn_search_traced` refuses k <= 0, k > n_index and the empty shapes
     # by name; nothing here re-derives those refusals.
     var used_tile = knn_search_traced(
@@ -566,10 +740,42 @@ def knn_classifier_predict(
         k,
         h_dist.unsafe_ptr(),
         h_idx.unsafe_ptr(),
-        False,
+        weighted,  # policy 8: the weighted arm needs the ROOTED distance
         requested_query_tile,
         KNN_METHOD_AUTO,
+        metric,
+        metric_arg,
     )
+
+    # DEVIATION 554: the weights are computed on the HOST, over the sorted
+    # distances the search just wrote, exactly as scikit-learn computes
+    # them in numpy over the same matrix. `distance_weights.mojo` carries
+    # the reason (the zero test is a per-row any-reduction and the
+    # replacement is row-level).
+    var d_w = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
+    if weighted:
+        # HOST LISTS ACROSS THE BOUNDARY, not pointers: `UNWIRED.md:31`
+        # records that a pointer from `enqueue_create_host_buffer` is not
+        # interchangeable with an arbitrary host pointer on this stack and
+        # that the failure is SILENT. The copy is `n_queries * k` floats,
+        # the size of the answer the caller is already receiving.
+        var d_in = List[Float32](capacity=n_queries * k)
+        for i in range(n_queries * k):
+            d_in.append(h_dist.unsafe_ptr().unsafe_load(i))
+        var wl = host_distance_weights(d_in, n_queries, k)
+        var h_w = ctx.enqueue_create_host_buffer[DType.float32](
+            n_queries * k
+        )
+        ctx.synchronize()
+        for i in range(n_queries * k):
+            h_w.unsafe_ptr().unsafe_store(i, wl[i])
+        ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
+        ctx.synchronize()
+        if trace.enabled:
+            trace.record_host(
+                "knn_clf.weights", h_w.unsafe_ptr(), n_queries * k
+            )
+        _ = h_w^
 
     # The sorted indices go back to the device, where cuML's kernels read
     # them (`knn_indices` in `class_probs_kernel`).
@@ -596,7 +802,8 @@ def knn_classifier_predict(
             )
         ctx.synchronize()
         uniq = knn_class_proba(
-            ctx, trace, probas, d_idx, y, n_index, n_queries, k
+            ctx, trace, probas, d_idx, y, n_index, n_queries, k, d_w,
+            weighted,
         )
         _check_class_counts(uniq, n_classes)
         var off = 0
@@ -618,7 +825,8 @@ def knn_classifier_predict(
         )
         ctx.synchronize()
         uniq = knn_classify(
-            ctx, trace, labels, d_idx, y, n_index, n_queries, k
+            ctx, trace, labels, d_idx, y, n_index, n_queries, k, d_w,
+            weighted,
         )
         _check_class_counts(uniq, n_classes)
         var h = ctx.enqueue_create_host_buffer[DType.int32](
@@ -643,6 +851,7 @@ def knn_classifier_predict(
     _ = h_dist^
     _ = h_idx^
     _ = d_idx^
+    _ = d_w^
     _ = y^
     return used_tile
 
@@ -675,12 +884,20 @@ def knn_regressor_predict(
     n_outputs: Int,
     out_ptr: MutPointer[Float32, MutUntrackedOrigin],
     requested_query_tile: Int = DEFAULT_QUERY_TILE,
+    metric: Int = METRIC_FROM_IS_SQRT,
+    metric_arg: Float32 = Float32(2.0),
+    weights: Int = WEIGHTS_UNIFORM,
 ) raises -> Int:
-    """Search, then the mean of the `k` neighbours' targets per output.
+    """Search, then the mean of the `k` neighbours' targets per output --
+    UNWEIGHTED (cuML's `regress_avg_kernel`) or DISTANCE-WEIGHTED
+    (DEVIATION 556, scikit-learn's `sum(y w)/sum(w)`).
     Returns the query tile that ran.
 
     `y_ptr`: `n_outputs` contiguous float32 columns of `n_index` (policy 6).
     `out_ptr`: `n_queries x n_outputs` float32 row-major.
+    `metric` / `metric_arg` / `weights`: as `knn_classifier_predict`,
+    including POLICY 8 -- the weighted arm asks the search for the ROOTED
+    distance because the weight reads the value and not only the order.
     """
     if n_outputs < 1:
         raise Error(
@@ -691,6 +908,13 @@ def knn_regressor_predict(
     var h_dist = ctx.enqueue_create_host_buffer[DType.float32](n_queries * k)
     var h_idx = ctx.enqueue_create_host_buffer[DType.uint32](n_queries * k)
     ctx.synchronize()
+    var weighted = weights == WEIGHTS_DISTANCE
+    if weights != WEIGHTS_UNIFORM and not weighted:
+        raise Error(
+            "knn_regressor_predict: weights value "
+            + String(weights)
+            + " is neither WEIGHTS_UNIFORM nor WEIGHTS_DISTANCE"
+        )
     var used_tile = knn_search_traced(
         ctx,
         trace,
@@ -702,10 +926,37 @@ def knn_regressor_predict(
         k,
         h_dist.unsafe_ptr(),
         h_idx.unsafe_ptr(),
-        False,
+        weighted,  # policy 8
         requested_query_tile,
         KNN_METHOD_AUTO,
+        metric,
+        metric_arg,
     )
+
+    var d_w = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
+    if weighted:
+        # HOST LISTS ACROSS THE BOUNDARY, not pointers: `UNWIRED.md:31`
+        # records that a pointer from `enqueue_create_host_buffer` is not
+        # interchangeable with an arbitrary host pointer on this stack and
+        # that the failure is SILENT. The copy is `n_queries * k` floats,
+        # the size of the answer the caller is already receiving.
+        var d_in = List[Float32](capacity=n_queries * k)
+        for i in range(n_queries * k):
+            d_in.append(h_dist.unsafe_ptr().unsafe_load(i))
+        var wl = host_distance_weights(d_in, n_queries, k)
+        var h_w = ctx.enqueue_create_host_buffer[DType.float32](
+            n_queries * k
+        )
+        ctx.synchronize()
+        for i in range(n_queries * k):
+            h_w.unsafe_ptr().unsafe_store(i, wl[i])
+        ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
+        ctx.synchronize()
+        if trace.enabled:
+            trace.record_host(
+                "knn_reg.weights", h_w.unsafe_ptr(), n_queries * k
+            )
+        _ = h_w^
 
     var d_idx = ctx.enqueue_create_buffer[DType.uint32](n_queries * k)
     var y = List[DeviceBuffer[DType.float32]]()
@@ -720,7 +971,9 @@ def knn_regressor_predict(
         )
     ctx.synchronize()
 
-    knn_regress(ctx, trace, out, d_idx, y, n_index, n_queries, k)
+    knn_regress(
+        ctx, trace, out, d_idx, y, n_index, n_queries, k, d_w, weighted
+    )
 
     var h = ctx.enqueue_create_host_buffer[DType.float32](n_queries * n_outputs)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=out)
@@ -730,6 +983,7 @@ def knn_regressor_predict(
 
     _ = h^
     _ = out^
+    _ = d_w^
     _ = h_dist^
     _ = h_idx^
     _ = d_idx^

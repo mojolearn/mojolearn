@@ -45,10 +45,12 @@ from std.memory import bitcast
 
 from core.row_norms import NORM_TPB
 from kde.impl.distance.distance_ops import (
+    DIST_COSINE_EXPANDED,
     DIST_L1,
     DIST_L2_EXPANDED,
     DIST_L2_SQRT_UNEXPANDED,
     DIST_LINF,
+    DIST_LP_UNEXPANDED,
 )
 from kde.impl.neighbors.kernel_density import (
     KDE_KERNEL_COSINE,
@@ -62,9 +64,12 @@ from kde.impl.neighbors.kernel_density import (
 from checks.numerics import (
     ftz,
     identical_cos,
+    identical_div,
     identical_exp,
     identical_log,
+    identical_mul,
     identical_mul_add,
+    identical_pow,
     identical_sqrt,
 )
 
@@ -107,6 +112,18 @@ def _host_row_norm_halving(a: List[Float32], row: Int, d: Int) -> Float32:
     return ftz(red[0])
 
 
+def _host_row_norm_halving_sqrt(a: List[Float32], row: Int, d: Int) -> Float32:
+    """`cosine_row_norm_kernel` replayed: the SAME halving fold as above,
+    then the zero clamp and `identical_sqrt`. The TRUE L2 norm, which is
+    what `rowNorm<L2Norm, true>(..., raft::sqrt_op{})` gives cosine
+    (`distance.cuh:215-216`) and NOT the squared norm the expanded L2 arm
+    takes."""
+    var total = _host_row_norm_halving(a, row, d)
+    if total <= Float32(0.0):
+        total = Float32(0.0)
+    return ftz(identical_sqrt(total))
+
+
 def oracle_distance(
     query: List[Float32],
     train: List[Float32],
@@ -116,11 +133,35 @@ def oracle_distance(
     metric: Int,
     q_norm: Float32,
     t_norm: Float32,
+    metric_arg: Float32 = Float32(2.0),
 ) -> Float32:
     """One cell of the distance matrix, the feature axis ascending in one
-    serial fold. The expanded arm takes the two norms from the caller (they
-    are per-row, computed once)."""
+    serial fold. The two expanded arms (sqeuclidean, cosine) take the two
+    norms from the caller (they are per-row, computed once); cosine's are
+    the SQRT'd norms, sqeuclidean's are the squared ones.
+
+    A SECOND SPELLING of `metric_distance_kernel`, not an import of it.
+    That is this file's whole contract (see its header): if the device
+    kernel and this function ever disagree, one of them is wrong and the
+    gate says which cell."""
     var acc = Float32(0.0)
+    if metric == DIST_COSINE_EXPANDED:
+        # `cosine.cuh:68` core, then `:86` epilog.
+        for f in range(d):
+            acc = ftz(
+                identical_mul_add(
+                    ftz(query[q * d + f]), ftz(train[j * d + f]), acc
+                )
+            )
+        var denom = ftz(identical_mul(q_norm, t_norm))
+        return ftz(Float32(1.0) - ftz(identical_div(acc, denom)))
+    if metric == DIST_LP_UNEXPANDED:
+        # `lp_unexp.cuh:56-57` core, then `:67` and `:72` epilog.
+        for f in range(d):
+            var diff = abs(ftz(ftz(query[q * d + f]) - ftz(train[j * d + f])))
+            acc = ftz(acc + ftz(identical_pow(diff, metric_arg)))
+        var one_over_p = ftz(identical_div(Float32(1.0), metric_arg))
+        return ftz(identical_pow(acc, one_over_p))
     if metric == DIST_L2_SQRT_UNEXPANDED:
         for f in range(d):
             var diff = ftz(ftz(query[q * d + f]) - ftz(train[j * d + f]))
@@ -223,6 +264,7 @@ def oracle_score_samples(
     h: Float32,
     kernel: Int,
     metric: Int,
+    metric_arg: Float32 = Float32(2.0),
 ) raises -> KdeOracleStages:
     """`score_samples` on the host, float32, every stage serial ascending."""
     var cells = n_query * n_train
@@ -239,6 +281,13 @@ def oracle_score_samples(
             q_norms.append(_host_row_norm_halving(query, q, d))
         for j in range(n_train):
             t_norms.append(_host_row_norm_halving(train, j, d))
+    elif metric == DIST_COSINE_EXPANDED:
+        # THE SQRT'D NORM, and getting this line wrong is the sabotage
+        # `check_cosine_norm_flag_is_load_bearing` performs on purpose.
+        for q in range(n_query):
+            q_norms.append(_host_row_norm_halving_sqrt(query, q, d))
+        for j in range(n_train):
+            t_norms.append(_host_row_norm_halving_sqrt(train, j, d))
 
     var logw = List[Float32]()
     if has_weights:
@@ -249,10 +298,12 @@ def oracle_score_samples(
         for j in range(n_train):
             var qn = Float32(0.0)
             var tn = Float32(0.0)
-            if metric == DIST_L2_EXPANDED:
+            if metric == DIST_L2_EXPANDED or metric == DIST_COSINE_EXPANDED:
                 qn = q_norms[q]
                 tn = t_norms[j]
-            var dist = oracle_distance(query, train, q, j, d, metric, qn, tn)
+            var dist = oracle_distance(
+                query, train, q, j, d, metric, qn, tn, metric_arg
+            )
             dists.append(dist)
             var v = oracle_log_kernel(ftz(dist), h, kernel)
             if has_weights:
@@ -356,11 +407,45 @@ def reference_log_kernel_norm_f64(kernel: Int, h: Float64, d: Int) raises -> Flo
 
 
 def reference_distance_f64(
-    query: List[Float32], train: List[Float32], q: Int, j: Int, d: Int, metric: Int
+    query: List[Float32],
+    train: List[Float32],
+    q: Int,
+    j: Int,
+    d: Int,
+    metric: Int,
+    metric_arg: Float64 = 2.0,
 ) -> Float64:
-    """The metric as mathematics in float64: `sqeuclidean` is the plain
-    sum of squared differences (no expansion), the others as named."""
+    """The metric as MATHEMATICS in float64, independently of how any
+    kernel computes it: `sqeuclidean` is the plain sum of squared
+    differences (no expansion), `cosine` is `1 - dot/(|x| |y|)` with the
+    norms taken directly (no expansion either), `minkowski` is
+    `(sum |x-y|^p)^(1/p)` through the HOST libm `pow`, not through
+    `exp(p log)`.
+
+    Independence is the point. The float32 path builds cosine out of an
+    expanded dot product and Minkowski out of `identical_pow`; if this
+    reference reused either construction it would agree with a wrong
+    kernel. The host `pow` here is a THIRD arithmetic and that is
+    deliberate."""
     var acc = 0.0
+    if metric == DIST_COSINE_EXPANDED:
+        var dot = 0.0
+        var qn = 0.0
+        var tn = 0.0
+        for f in range(d):
+            var a = Float64(query[q * d + f])
+            var b = Float64(train[j * d + f])
+            dot += a * b
+            qn += a * a
+            tn += b * b
+        return 1.0 - dot / (sqrt(qn) * sqrt(tn))
+    if metric == DIST_LP_UNEXPANDED:
+        for f in range(d):
+            var diff = abs(
+                Float64(query[q * d + f]) - Float64(train[j * d + f])
+            )
+            acc += diff**metric_arg
+        return acc ** (1.0 / metric_arg)
     for f in range(d):
         var diff = Float64(query[q * d + f]) - Float64(train[j * d + f])
         if metric == DIST_L1:
@@ -386,6 +471,7 @@ def reference_score_samples_f64(
     h: Float64,
     kernel: Int,
     metric: Int,
+    metric_arg: Float64 = 2.0,
 ) raises -> List[Float64]:
     """scikit-learn's `score_samples` semantics in float64: `logsumexp_j
     (log K(dist_qj) + log w_j) - log(sum w) + log_kernel_norm`. A query with
@@ -404,7 +490,11 @@ def reference_score_samples_f64(
         var mx = neg_inf
         for j in range(n_train):
             var v = reference_log_kernel_f64(
-                reference_distance_f64(query, train, q, j, d, metric), h, kernel
+                reference_distance_f64(
+                    query, train, q, j, d, metric, metric_arg
+                ),
+                h,
+                kernel,
             )
             if has_weights:
                 v += log(Float64(weights[j]))

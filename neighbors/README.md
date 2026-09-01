@@ -127,5 +127,119 @@ scikit-learn in both modes; E2U cells `knn_clf_k5`, `knn_clf_k15_3class`,
 (`tools/e2u_matrix_fit.py`, first passes under
 `bench/results/e2u/2026-08-23_knn_clf_reg/`).
 
-What is not ported is in `NOT_IMPLEMENTED.tsv` (the MNMG `precomp_lbls` arm,
-`weights='distance'`, which cuML refuses too).
+What is not ported is in `NOT_IMPLEMENTED.tsv` (the MNMG `precomp_lbls` arm;
+`weights='distance'` WAS in that list and is not any more, see below).
+
+## Six metrics, general-p Minkowski, and distance weights, 2026-09-01
+
+Four refusals closed and one kept for a stated reason.
+
+**The distance abstraction.** `impl/distance/detail/distance_ops.mojo` is
+cuVS's `distance_ops/` directory: one file holding the `core()` and
+`epilog()` of every op this tree computes, plus their `DistanceType`
+enumerators with THEIR values (`cuvs/distance/distance.h:22-69`). It was
+built rather than adding a branch per metric per lane because there were
+already two copies of the same three cores -- `kde/impl/distance/
+distance_ops.mojo` had `l2_unexp` / `l1` / `l_inf` and the k-NN tile had the
+expanded L2 identity inline -- and cosine plus Minkowski would have made
+four. The three cores MOVED there, body for body; no KDE bit moves.
+
+**Which metrics can use the expanded trick and which cannot**, because it
+decides the kernel shape:
+
+    L2Expanded / L2SqrtExpanded  EXPANDED.  ||x||^2 + ||y||^2 - 2 x.y
+    CosineExpanded               EXPANDED, DIFFERENTLY. Same inner product,
+                                 SQRT'd norms instead of squared, and a
+                                 `1 - dot/(nx*ny)` epilogue. cuVS's own
+                                 brute force says so out loud: it REWRITES
+                                 the metric to `InnerProduct`
+                                 (`knn_brute_force.cuh:141`) and fixes it
+                                 up by hand at `:221`.
+    L1 / Linf / L2SqrtUnexpanded UNEXPANDED. Nothing factors.
+    LpUnexpanded                 UNEXPANDED AT EVERY p, and that is not a
+                                 limitation of the port: `sum |x-y|^p` does
+                                 not factor into per-row terms for any p
+                                 but 2, which is why cuVS's own op is
+                                 called `lp_UNEXP`.
+
+So cosine rides the two arms the expanded L2 path already had (vendor
+matmul plus epilogue under FAST, the pinned per-cell fold under IDENTICAL)
+and Minkowski rides the per-cell fold in both.
+
+**The numeric tier: none of the three refuses anywhere.** Every primitive
+the new ops need was already pinned and gated before this lane started --
+`identical_mul_add` (row 9), `identical_div` and `identical_mul` (rows 49,
+9), `identical_pow` (row 12, which is `portable_expf(p * portable_logf(z))`
+built from operations that are correctly rounded on all three columns),
+`ftz` (row 10). `pow` being a transcendental is NOT an obstacle and bought
+no deviation of its own. What general p COSTS is ACCURACY, not sameness,
+and the cost is measured rather than asserted:
+`check_metric_matches_float64_reference` prints the worst relative error
+per metric against a float64 reference computed a THIRD way.
+
+**Three numbered deviations, each for a stated reason.**
+
+- **552** `metric_arg` (p) is refused non-finite, `<= 0`, and SUBNORMAL.
+  cuVS never checks, and their own default-constructed index has
+  `metric_arg_ = 0` (`brute_force.cu:35`), so their default Lp computes
+  `pow(diff, 0) == 1` per feature and returns garbage. The subnormal clause
+  is the identity one: a subnormal p flushes to zero on Metal and not on
+  CUDA, so the same call would return `z^0 = 1` on one column and `z^tiny`
+  on another.
+- **553** a ZERO-NORM ROW under cosine is refused by name. Their epilogue
+  divides by `||x|| ||y||` with no guard, so a zero row is `0/0 = NaN`, and
+  a NaN then enters a top-k where the two selectors this lane ships sort it
+  to OPPOSITE ends -- radix's `twiddle_in` key puts it above every finite
+  distance, the FAISS queue's `<` never admits it. Two arms, two different
+  wrong answers, no error either way.
+- **554/555/556** the distance weights: computed on the host (554, the zero
+  test is a per-row any-reduction), a row whose weights all underflow is
+  refused (555, the normalizer would be `+0` on an FTZ column and normal
+  elsewhere), and the optional parameter on the three ported cuML
+  functions (556).
+
+**`weights='distance'` is ORIGINAL WORK and nothing here credits an
+upstream for it.** cuML refuses it in the Python layer above the kernels,
+so there is no C++ entry and no kernel to transliterate.
+`NOT_IMPLEMENTED.tsv` used to give "there is no upstream GPU kernel to
+port" as the reason; that reason was withdrawn on 2026-09-01, because a
+refusal is legitimate only when the thing is genuinely impossible here or
+when refusing IS the right behaviour for the input. scikit-learn's
+`_base.py:74-114` is the SEMANTICS source and the definition is four lines.
+The one clause everybody gets wrong is the third: a row containing an exact
+zero distance is REPLACED WHOLESALE by its zero mask, so exact matches get
+1.0 and every other neighbour in that row gets 0.0. A per-element port
+agrees with sklearn on every fixture that has no duplicate point, which is
+why `check_knn_distance_weights` plants one.
+
+**`algorithm='kd_tree'` STAYS REFUSED, and the reason is engineering.**
+cuVS shipping no GPU kd-tree is NOT the reason and must not be given as
+one. A kd-tree query is a per-query stack walk with data-dependent
+branching and divergent memory access -- the shape a GPU is worst at -- and
+above roughly 15 dimensions the pruning bound stops firing and it
+degenerates to a full scan, so it would lose to the brute force in this
+directory on exactly the workloads it claims to help. The structure that
+DOES help in low dimensions is already here and is exact: cuVS's RANDOM
+BALL COVER, one level over sqrt(n) landmarks, no stack, no divergence,
+already serving `RadiusNeighbors`. What is actually owed is
+`rbc_knn_query`, not a tree, and that is the row in `NOT_IMPLEMENTED.tsv`.
+
+**The gates**: `pixi run check-metric` and `check-metric-identical`
+(`checks/metric_check.mojo`, with `checks/metric_oracle.mojo`'s three
+levels of truth). Eight gates and THREE sabotage arms, one per seam whose
+value looks right when it is wrong:
+
+    seam                        arm                          must move
+    --------------------------  ---------------------------  ---------
+    cosine's SQRT'd norm        swap the sqrt flag on the     >= 1 cell
+                                norm kernel
+    Minkowski's `metric_arg`    four p values, pairwise       every cell
+                                compared
+    the weight rule's           a per-ELEMENT zero rule       >= 1 entry
+    ROW-LEVEL replacement       beside the row-level one
+
+Each arm PREDICTS what happens when its seam is broken (recorded in the
+gate's own docstring); OBSERVED is filled in from the run.
+
+**Not measured.** No timing of any kind exists for the new metrics, as for
+the rest of this directory.

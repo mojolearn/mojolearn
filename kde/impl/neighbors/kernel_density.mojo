@@ -104,11 +104,16 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.identity_trace import IdentityTrace
 from kde.impl.distance.distance import pairwise_distance
 from kde.impl.distance.distance_ops import (
+    DIST_COSINE_EXPANDED,
     DIST_L1,
     DIST_L2_EXPANDED,
     DIST_L2_SQRT_UNEXPANDED,
     DIST_LINF,
+    DIST_LP_UNEXPANDED,
     PAIRWISE_ELEM_TPB,
+)
+from neighbors.impl.distance.detail.distance_ops import (
+    cosine_zero_norm_row,
 )
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -192,12 +197,29 @@ def kde_validate_data(
     """DEVIATION 604, rules (1) and (2): `x` (row-major `n_rows x
     n_features`, named `what` in the message) must be finite, and under
     `sqeuclidean` every |value| must be below `2^63 / sqrt(n_features)`.
-    Host-only; no device bit depends on it. A NaN is found by `v != v`."""
+    Host-only; no device bit depends on it. A NaN is found by `v != v`.
+
+    DEVIATION 553 (2026-09-01), rule (5), COSINE ONLY: no row may be all
+    zeros. `cosine.cuh:86` divides by `||x|| * ||y||` with no guard, so a
+    zero row makes the whole of that row's distances NaN, and a NaN then
+    enters a top-k or a log-kernel where nothing looks at it again. The
+    argument and the two different wrong answers the two selectors give
+    are in `neighbors/impl/distance/detail/distance_ops.mojo`'s module
+    docstring. Refusing is the correct behaviour for an undefined input,
+    which is the one case a refusal is still right."""
     if len(x) != n_rows * n_features:
         raise Error(
             "kde: " + what + " has " + String(len(x)) + " values, expected "
             + String(n_rows * n_features)
         )
+    if metric == DIST_COSINE_EXPANDED:
+        var zr = cosine_zero_norm_row(x, n_rows, n_features)
+        if zr >= 0:
+            raise Error(
+                "kde: metric='cosine' but " + what + " row " + String(zr)
+                + " is all zeros; cosine distance divides by ||x|| and is"
+                " undefined at the origin (DEVIATION 553)"
+            )
     var bound = Float32(0.0)
     var bounded = metric == DIST_L2_EXPANDED
     if bounded:
@@ -257,9 +279,15 @@ def kernel_name(kernel: Int) -> String:
 
 def metric_from_name(name: String) raises -> Int:
     """`cuml.metrics.pairwise_distances`'s dense table
-    (`metrics/pairwise_distances.pyx:68-86`), the four ported rows; every
+    (`metrics/pairwise_distances.pyx:68-86`), the SIX ported rows; every
     other row of THEIR table is refused BY NAME so a caller learns it is
-    unported rather than unknown."""
+    unported rather than unknown.
+
+    `cosine` (`:70`) and `minkowski` (`:78`) joined the table on
+    2026-09-01. They were refused here with the words "is in cuML's
+    pairwise_distances table but is NOT PORTED"; that sentence is now
+    false for those two and is deleted rather than annotated.
+    """
     if name == "euclidean" or name == "l2":
         return DIST_L2_SQRT_UNEXPANDED
     if name == "sqeuclidean":
@@ -268,10 +296,12 @@ def metric_from_name(name: String) raises -> Int:
         return DIST_L1
     if name == "chebyshev":
         return DIST_LINF
+    if name == "cosine":
+        return DIST_COSINE_EXPANDED
+    if name == "minkowski":
+        return DIST_LP_UNEXPANDED
     if (
-        name == "cosine"
-        or name == "canberra"
-        or name == "minkowski"
+        name == "canberra"
         or name == "hellinger"
         or name == "correlation"
         or name == "jensenshannon"
@@ -285,7 +315,7 @@ def metric_from_name(name: String) raises -> Int:
             + name
             + "' is in cuML's pairwise_distances table but is NOT PORTED"
             " (kde/NOT_IMPLEMENTED.tsv); ported: euclidean, l2, sqeuclidean, l1,"
-            " cityblock, manhattan, chebyshev"
+            " cityblock, manhattan, chebyshev, cosine, minkowski"
         )
     raise Error("Unknown metric: " + name)
 
@@ -299,6 +329,10 @@ def metric_name(metric: Int) -> String:
         return String("l1")
     if metric == DIST_LINF:
         return String("chebyshev")
+    if metric == DIST_COSINE_EXPANDED:
+        return String("cosine")
+    if metric == DIST_LP_UNEXPANDED:
+        return String("minkowski")
     return String("?")
 
 
@@ -813,6 +847,8 @@ def kde_fit_validate(
         and metric != DIST_L2_EXPANDED
         and metric != DIST_L1
         and metric != DIST_LINF
+        and metric != DIST_COSINE_EXPANDED
+        and metric != DIST_LP_UNEXPANDED
     ):
         raise Error("kde: metric value " + String(metric) + " is not ported")
     if n_train <= 0:
@@ -870,6 +906,7 @@ def kde_score_samples_device(
     mut trace: IdentityTrace,
     elem_tpb: Int = KDE_ELEM_TPB,
     lse_tpb: Int = KDE_LSE_TPB,
+    metric_arg: Float32 = Float32(2.0),
 ) raises:
     """`score_samples` (`:264-363`), stage by stage, with the card.
 
@@ -892,7 +929,8 @@ def kde_score_samples_device(
     var rowmax = ctx.enqueue_create_buffer[DType.float32](n_query)
     ctx.synchronize()
     pairwise_distance(
-        ctx, dist, query, train, n_query, n_train, n_features, metric, elem_tpb
+        ctx, dist, query, train, n_query, n_train, n_features, metric,
+        metric_arg, elem_tpb,
     )
     ctx.synchronize()
     trace.record_device[DType.float32](ctx, "kde.dists", dist, cells)

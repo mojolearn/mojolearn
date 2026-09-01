@@ -1013,6 +1013,14 @@ check-grow-policy = "mojo run -I . checks/grow_policy_check.mojo"
 check-cd = "mojo run -I . solver/checks/cd_check.mojo"
 cd-main = "mojo run -I . solver/cd_main.mojo"
 check-kde = "mojo run -I . kde/checks/kde_check.mojo"
+# THE METRIC LANE, 2026-09-01. `CosineExpanded`, `LpUnexpanded` and
+# `weights='distance'`: the eight ported DistanceType values against a
+# float32 second spelling and a float64 reference computed a third way,
+# the two norm/`metric_arg` reach sabotages, `knn_search` end to end
+# against a float64 brute force, and the weighted vote. The `-identical`
+# arm is the one that asserts BIT equality; the FAST arm reports.
+check-metric = "mojo run -I . neighbors/checks/metric_check.mojo"
+check-metric-identical = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . neighbors/checks/metric_check.mojo"
 check-linkage = "mojo run -I . hierarchy/checks/linkage_check.mojo"
 linkage-main = "mojo run -I . hierarchy/linkage_main.mojo"
 check-ivf = "mojo run -I . ivf/checks/ivf_check.mojo"

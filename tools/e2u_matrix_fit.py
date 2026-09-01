@@ -21,9 +21,11 @@ predictions, transforms, class probabilities, class sets.
 
 THREE VERDICTS PER CELL, ALL OF THEM RESULTS (the E2 set): identical /
 divergent-at-stage / refused. A REFUSED cell is a parameter the surface
-refuses BY NAME -- `whiten=True`, `metric='cosine'`, `k > 256` under
+refuses BY NAME -- `whiten=True`, `algorithm='kd_tree'`, `k > 256` under
 NUMERIC_IDENTICAL -- and two machines refusing with the same message is
-that cell's passing result.
+that cell's passing result. (This sentence named `metric='cosine'` as the
+k-NN example until 2026-09-01, when that metric was ported; DBSCAN still
+refuses it, for its own reason, and the k-NN example is now the kd-tree.)
 
 AND A FOURTH THING THIS DRIVER MEASURES THAT E2 DID NOT: REACH. `REACH`
 below declares pairs of cells that differ in exactly one parameter and
@@ -262,8 +264,32 @@ cell("knn_clf_ties", "knn_clf", n_neighbors=4, _y="y_clf2", _X="X_ties",
      _Xq="Xq_ties")
 cell("knn_reg_k5", "knn_reg", n_neighbors=5)
 cell("knn_reg_k50", "knn_reg", n_neighbors=50)
-cell("knn_clf_weights_distance_refused", "knn_clf", n_neighbors=5,
-     weights="distance", _y="y_clf3")  # REFUSED
+# WEIGHTS AND METRICS, 2026-09-01. `knn_clf_weights_distance_refused` was
+# a REFUSED cell here until the metric lane ported `weights='distance'`
+# (DEVIATION 556) and the cosine and Minkowski ops. It is renamed rather
+# than deleted so nobody looks for it in an old matrix and concludes it
+# was dropped, and the parameter it named is now an ORDINARY cell whose
+# two machines must agree on a hash rather than on a message.
+cell("knn_clf_weights_distance", "knn_clf", n_neighbors=5,
+     weights="distance", _y="y_clf3")
+cell("knn_clf_cosine", "knn_clf", n_neighbors=5, metric="cosine",
+     _y="y_clf3")
+cell("knn_clf_minkowski_p3", "knn_clf", n_neighbors=5, metric="minkowski",
+     p=3, _y="y_clf3")
+cell("knn_clf_l1", "knn_clf", n_neighbors=5, metric="l1", _y="y_clf3")
+cell("knn_clf_chebyshev", "knn_clf", n_neighbors=5, metric="chebyshev",
+     _y="y_clf3")
+cell("knn_reg_weights_distance", "knn_reg", n_neighbors=5,
+     weights="distance")
+# STILL REFUSED, and for an ENGINEERING reason rather than an attribution
+# one: a kd-tree is a per-query stack walk with data-dependent branching,
+# which is the shape a GPU is worst at, and the exact structure that DOES
+# help in low dimensions (the random ball cover) is already in this tree.
+# See neighbors/NOT_IMPLEMENTED.tsv.
+cell("knn_clf_kd_tree_refused", "knn_clf", n_neighbors=5,
+     algorithm="kd_tree", _y="y_clf3")  # REFUSED
+cell("knn_clf_minkowski_p0_refused", "knn_clf", n_neighbors=5,
+     metric="minkowski", p=0, _y="y_clf3")  # REFUSED (DEVIATION 552)
 
 # --- DBSCAN: X_blobs (6400 x 4; 8 blobs + 400 noise) ------------------------
 DB_BASE = dict(eps=0.3, min_samples=5)
@@ -292,12 +318,26 @@ cell("dbscan_chain_iter5000", "dbscan", _X="X_chain", eps=0.1875,
      min_samples=2, max_iterations=5000)
 cell("dbscan_chain_iter5000_brute", "dbscan", _X="X_chain", eps=0.1875,
      min_samples=2, max_iterations=5000, algorithm="brute")
+# metric='manhattan' is SERVED on the brute arm as of 2026-09-01
+# (DEVIATION 27) and REFUSED on the ball cover, whose landmark radii and
+# pruning bounds are Euclidean (neighbors/impl/neighbors/ball_cover/). Both
+# cells stay: the refusal is a behaviour and is compared across vendors like
+# any other.
 cell("dbscan_metric_manhattan", "dbscan", metric="manhattan",
-     **DB_BASE)  # REFUSED
+     **DB_BASE)  # REFUSED on the default rbc arm
+cell("dbscan_metric_manhattan_brute", "dbscan", metric="manhattan",
+     algorithm="brute", **DB_BASE)
 cell("dbscan_algorithm_bad", "dbscan", algorithm="kd_tree",
-     **DB_BASE)  # REFUSED
+     **DB_BASE)  # REFUSED: a kd-tree is a worse eps-search on a GPU than
+                 # the ball cover already here; see density.py's DBSCAN
+# sample_weight is SERVED on BOTH arms as of 2026-09-01. `sw_blobs` is
+# integer weights 1..5, which are exactly representable, so the two arms'
+# weighted degrees are bit-identical to each other as well as across
+# vendors (DEVIATION 28 states where that stops being true).
 cell("dbscan_sw", "dbscan", _fit=dict(sample_weight="sw_blobs"),
-     **DB_BASE)  # REFUSED
+     **DB_BASE)
+cell("dbscan_sw_brute", "dbscan", _fit=dict(sample_weight="sw_blobs"),
+     algorithm="brute", **DB_BASE)
 # a 24-feature uniform fixture: eps chosen so the core/border/noise arms
 # are all populated (the driver prints the noise fraction)
 cell("dbscan_uniform24", "dbscan", _X="X", eps=1.25, min_samples=5)
@@ -404,6 +444,22 @@ REACH = [
      "differ", None),
     ("KNeighborsRegressor.n_neighbors", "knn_reg_k5", "knn_reg_k50",
      "differ", None),
+    # THE METRIC AND THE WEIGHTING BOTH STEER THE ANSWER, so both pairs
+    # must DIFFER. A pair that came back "same" would mean the parameter
+    # never reached the kernel, which is the whole point of the REACH
+    # table (`Reached but inert`).
+    ("KNeighborsClassifier.metric (cosine)", "knn_clf_k5", "knn_clf_cosine",
+     "differ", None),
+    ("KNeighborsClassifier.metric (l1)", "knn_clf_k5", "knn_clf_l1",
+     "differ", None),
+    ("KNeighborsClassifier.metric (chebyshev)", "knn_clf_k5",
+     "knn_clf_chebyshev", "differ", None),
+    ("KNeighborsClassifier.p (minkowski 3)", "knn_clf_k5",
+     "knn_clf_minkowski_p3", "differ", None),
+    ("KNeighborsClassifier.weights", "knn_clf_k5",
+     "knn_clf_weights_distance", "differ", None),
+    ("KNeighborsRegressor.weights", "knn_reg_k5",
+     "knn_reg_weights_distance", "differ", None),
     ("DBSCAN.eps", "dbscan_rbc", "dbscan_eps1.0", "differ", None),
     ("DBSCAN.min_samples", "dbscan_rbc", "dbscan_min50", "differ", None),
     ("DBSCAN.algorithm", "dbscan_rbc", "dbscan_brute", "same", None),

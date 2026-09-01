@@ -78,6 +78,10 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.identity_trace import IdentityTrace
 from checks.numerics import ftz
 from neighbors.impl.label.classlabels import make_monotonic
+from neighbors.impl.selection.distance_weights import (
+    weighted_class_probs_kernel,
+    weighted_regress_avg_kernel,
+)
 
 
 comptime KNN_TPB_X = 32
@@ -229,6 +233,35 @@ def _clf_tag(stage: StringSlice, i: Int, n_outputs: Int) -> String:
     return String("knn_clf.o") + String(i) + "." + String(stage)
 
 
+# ===========================================================================
+# DEVIATION BLOCK 556 (2026-09-01): AN ARM cuML DOES NOT HAVE
+# THEIRS: `class_probs`, `knn_classify` and `knn_regress` weight every
+#   neighbour equally. `weights='distance'` is REFUSED in the Python layer
+#   above them (`kneighbors_classifier.pyx:191-193`, `kneighbors_regressor
+#   .pyx:188-190`, "Only uniform weighting strategy is supported
+#   currently"), so no C++ entry, no kernel and no template parameter for
+#   it exists anywhere in cuML or cuVS to transliterate.
+# OURS: the three functions below take an OPTIONAL per-(query, slot)
+#   weight buffer as trailing defaulted parameters. When `has_weights` is
+#   False -- which is every existing caller, unedited -- the enqueued
+#   kernel and every argument to it are unchanged, so cuML's arm is byte
+#   for byte what it was. When it is True the kernel is
+#   `neighbors/impl/selection/distance_weights.mojo`'s, whose semantics
+#   are scikit-learn's `_get_weights` / `_classification.py:404-410` /
+#   `_regression.py` and whose file says so at length.
+# REASON: "the upstream does not have it" stopped being a reason to refuse
+#   on 2026-09-01. A refusal is now legitimate only when the thing is
+#   genuinely impossible here (a closed vendor library with no portable
+#   path) or when refusing IS the right behaviour for the input. Neither
+#   applies: the definition is four lines of arithmetic and this library
+#   already goes beyond cuML in several directions.
+# WHERE IT LIVES: the KERNELS are in their own file because they have no
+#   upstream to sit beside; the PARAMETER is here because PORTING_RULES
+#   rule 4 wants a departure in the file it departs from, so a reader
+#   diffing this file against `knn.cuh` sees it.
+# ===========================================================================
+
+
 def class_probs(
     ctx: DeviceContext,
     mut trace: IdentityTrace,
@@ -240,8 +273,15 @@ def class_probs(
     k: Int,
     mut uniq_labels: List[DeviceBuffer[DType.int32]],
     n_unique: List[Int],
+    mut weights: DeviceBuffer[DType.float32],
+    has_weights: Bool = False,
 ) raises:
     """`class_probs<32, false>` (`:158-205`), one output column at a time.
+
+    `weights` / `has_weights`: DEVIATION 556 above. `weights` is
+    `n_query_rows * k` floats in the SAME slot order as `knn_indices` and
+    is read only when `has_weights`; pass any buffer otherwise (Mojo's
+    launch refuses a null pointer argument).
 
     `out[i]` is `n_query_rows * n_unique[i]` floats and is zeroed here.
     `uniq_labels[i]` holds `n_unique[i]` sorted labels (from
@@ -327,16 +367,29 @@ def class_probs(
         )
         ctx.synchronize()
 
-        ctx.enqueue_function[class_probs_kernel](
-            outs[i].unsafe_ptr(),
-            knn_indices.unsafe_ptr(),
-            y_normalized.unsafe_ptr(),
-            Int32(n_unique_labels),
-            Int32(n_query_rows),
-            Int32(k),
-            grid_dim=(grid, 1, 1),
-            block_dim=(KNN_TPB_X, 1, 1),
-        )
+        if has_weights:
+            ctx.enqueue_function[weighted_class_probs_kernel](
+                outs[i].unsafe_ptr(),
+                knn_indices.unsafe_ptr(),
+                y_normalized.unsafe_ptr(),
+                weights.unsafe_ptr(),
+                Int32(n_unique_labels),
+                Int32(n_query_rows),
+                Int32(k),
+                grid_dim=(grid, 1, 1),
+                block_dim=(KNN_TPB_X, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[class_probs_kernel](
+                outs[i].unsafe_ptr(),
+                knn_indices.unsafe_ptr(),
+                y_normalized.unsafe_ptr(),
+                Int32(n_unique_labels),
+                Int32(n_query_rows),
+                Int32(k),
+                grid_dim=(grid, 1, 1),
+                block_dim=(KNN_TPB_X, 1, 1),
+            )
         ctx.synchronize()
 
         if trace.enabled:
@@ -358,6 +411,8 @@ def knn_classify(
     k: Int,
     mut uniq_labels: List[DeviceBuffer[DType.int32]],
     n_unique: List[Int],
+    mut weights: DeviceBuffer[DType.float32],
+    has_weights: Bool = False,
 ) raises:
     """`knn_classify<32, false>` (`:233-284`): `class_probs` into temporary
     per-output tallies, then `class_vote_kernel` per output into `out`,
@@ -386,8 +441,15 @@ def knn_classify(
         k,
         uniq_labels,
         n_unique,
+        weights,
+        has_weights,
     )
 
+    # `class_vote_kernel` IS UNCHANGED ON BOTH ARMS. Its argmax with a
+    # strict `>` against `cur_max = -1.0` is scikit-learn's `weighted_mode`
+    # tie rule too -- lowest class index in the sorted unique set wins --
+    # so the weighted arm needs no second vote kernel, only a differently
+    # filled tally.
     var grid = (n_query_rows + KNN_TPB_X - 1) // KNN_TPB_X
     for i in range(len(y)):
         ctx.enqueue_function[class_vote_kernel](
@@ -419,25 +481,43 @@ def knn_regress(
     n_index_rows: Int,
     n_query_rows: Int,
     k: Int,
+    mut weights: DeviceBuffer[DType.float32],
+    has_weights: Bool = False,
 ) raises:
     """`knn_regress<float, 32, false>` (`:310-331`): one `regress_avg_kernel`
     per output column into `out`, `n_query_rows x y.size()` row-major.
 
     Records `knn_reg.pred` (the whole `out`) once, after the last output.
+
+    `weights` / `has_weights`: DEVIATION 556.
     """
     var grid = (n_query_rows + KNN_TPB_X - 1) // KNN_TPB_X
     for i in range(len(y)):
-        ctx.enqueue_function[regress_avg_kernel](
-            out_buf.unsafe_ptr(),
-            knn_indices.unsafe_ptr(),
-            y[i].unsafe_ptr(),
-            Int32(n_query_rows),
-            Int32(k),
-            Int32(len(y)),
-            Int32(i),
-            grid_dim=(grid, 1, 1),
-            block_dim=(KNN_TPB_X, 1, 1),
-        )
+        if has_weights:
+            ctx.enqueue_function[weighted_regress_avg_kernel](
+                out_buf.unsafe_ptr(),
+                knn_indices.unsafe_ptr(),
+                y[i].unsafe_ptr(),
+                weights.unsafe_ptr(),
+                Int32(n_query_rows),
+                Int32(k),
+                Int32(len(y)),
+                Int32(i),
+                grid_dim=(grid, 1, 1),
+                block_dim=(KNN_TPB_X, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[regress_avg_kernel](
+                out_buf.unsafe_ptr(),
+                knn_indices.unsafe_ptr(),
+                y[i].unsafe_ptr(),
+                Int32(n_query_rows),
+                Int32(k),
+                Int32(len(y)),
+                Int32(i),
+                grid_dim=(grid, 1, 1),
+                block_dim=(KNN_TPB_X, 1, 1),
+            )
         # `handle.sync_stream(stream)` at `:328`, theirs, per output.
         ctx.synchronize()
     if trace.enabled:

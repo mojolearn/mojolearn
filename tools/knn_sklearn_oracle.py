@@ -106,8 +106,59 @@ def main():
     mo_ok = np.array_equal(ours.predict(Xq), sk.predict(Xq))
     bad += 0 if mo_ok else 1
     lines.append(f"  clf multi-output (3-class, 2-class) predict {'==' if mo_ok else '!='} sklearn")
-    # the refusals, by name
-    for kw in (dict(weights="distance"), dict(metric="cosine"), dict(algorithm="kd_tree")):
+    # WEIGHTS AND METRICS, 2026-09-01. `weights='distance'` and
+    # `metric='cosine'` USED TO BE IN THE REFUSAL LOOP BELOW. They are
+    # ported, so they moved up here and became the strongest check either
+    # of them can have: the whole estimator against scikit-learn's, which
+    # is where the semantics came from (`_base.py:74-114`).
+    for kw in (
+        dict(weights="distance"),
+        dict(metric="cosine"),
+        dict(metric="cosine", weights="distance"),
+        dict(metric="minkowski", p=3),
+        dict(metric="minkowski", p=1.5, weights="distance"),
+        dict(metric="l1"),
+        dict(metric="chebyshev"),
+    ):
+        ours = mojolearn.KNeighborsClassifier(n_neighbors=5, **kw).fit(X, y3)
+        sk = SkClf(n_neighbors=5, algorithm="brute", **kw).fit(X, y3)
+        p_ours, p_sk = ours.predict(Xq), sk.predict(Xq)
+        n_wrong = int((p_ours != p_sk).sum())
+        ok = n_wrong == 0
+        bad += 0 if ok else 1
+        lines.append(
+            f"  clf {kw}: predict {'==' if ok else '!='} sklearn "
+            f"({n_wrong} wrong of {nq})"
+        )
+        oursr = mojolearn.KNeighborsRegressor(n_neighbors=5, **kw).fit(X, yreg)
+        skr = SkReg(n_neighbors=5, algorithm="brute", **kw).fit(X, yreg)
+        err = float(np.abs(oursr.predict(Xq).astype(np.float64)
+                           - skr.predict(Xq)).max())
+        # LOOSER THAN THE UNIFORM ARM'S 1e-5, AND THE REASON IS NAMED:
+        # Minkowski goes through `identical_pow` = exp(p log z), a few ulp
+        # where sklearn's is a native pow, and a distance weight then
+        # divides by it. The uniform arm above keeps 1e-5.
+        tol = 2e-4 if kw.get("metric") == "minkowski" else 5e-5
+        rok = err <= tol
+        bad += 0 if rok else 1
+        lines.append(
+            f"  reg {kw}: max|ours - sklearn| {err:.1e} "
+            f"{'OK' if rok else 'FAIL'} (tol {tol:.0e})"
+        )
+
+    # the refusals that REMAIN, by name. `algorithm='kd_tree'` stays
+    # refused for an ENGINEERING reason (a per-query stack walk is the
+    # shape a GPU is worst at, and the random ball cover already covers
+    # the low-dimensional case exactly); a CALLABLE weight stays refused
+    # because a Python function cannot run inside a GPU kernel. Neither is
+    # an attribution refusal. See neighbors/NOT_IMPLEMENTED.tsv.
+    for kw in (
+        dict(algorithm="kd_tree"),
+        dict(algorithm="ball_tree"),
+        dict(weights=lambda d: 1.0 / d),
+        dict(metric="canberra"),
+        dict(metric="minkowski", p=0),
+    ):
         try:
             mojolearn.KNeighborsClassifier(**kw).fit(X, y3)
             bad += 1
