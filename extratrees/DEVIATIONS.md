@@ -4495,9 +4495,17 @@ not this entry's; if it loses at the scoreboard shapes, 472 reverts.
 **Gate results, 2026-09-01 (orchestrator's box, at the A/B-split commit).**
 `device_batched_check` GREEN (45 cells, 0/0 diffs) and the full lane suite
 GREEN -- the shipped compare-and-skip is exercised by both. The
-skip-always sabotage arm HUNG in its first form (the finding above) and
-its redesigned form is UNRUN. Still OWED: the redesigned sabotage A/B, the
-IdentityTrace pre/post diff, and the timing A/B.
+skip-always sabotage arm HUNG in its first form (the finding above);
+its REDESIGNED form ran the same afternoon and terminated RED in the
+clean run's own time (nodes differ, assertion at device_batched_check
+:269) -- all three arms of 470-472 are now verified RED and
+terminating. Pre/post identity evidence taken the cheap way:
+bestfirst_fingerprint at HEAD and at e3b46e95 (detached worktree)
+prints the SAME host and device fingerprints (14675911462422329739,
+882 nodes, 6 trees), and the in-binary serial-vs-merged byte-compare
+covers breadth. Still OWED: the full IdentityTrace pre/post card diff
+(nice-to-have beside the fingerprints) and the cold-box timing A/B --
+472 reverts if the compare costs more than the skipped copies save.
 
 **Gate (the owed commands).**
 
