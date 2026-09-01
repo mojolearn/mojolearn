@@ -1,0 +1,56 @@
+et_profile: commit 32319f33 rows=1000000/0 trees=100 depth=16 arms=shipped
+et_profile: out /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/05eb9cee-fcb3-44fa-a878-64ca28302ed3/scratchpad/et_out/lanes/et_profile
+Darwin MacBook-Air-1-terrabyte.local 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:26:22 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T8132 arm64
+et_profile: rocprofv3 = NOT FOUND ; rocprof = NOT FOUND
+
+et_profile: dataset=higgs total_rows=1000000
+et_profile: build tpb=shipped 02:13:33
+--- ET-PROFILE dataset=higgs tpb=shipped rows=1000000 trees=100 depth=16 (phases) 02:13:41
+[fit_once] 100 trees, 1829804 nodes, 11145.245 ms
+[phases] clocked total 11613.441 ms vs unclocked 11145.245 ms -- serialization distortion 1.042008587518713 x; phase sum 11612.207 ms
+   setup (buffers, row fill, workspace) :  66.534 ms ( 0.5729660175709923 % )
+   stage + feature sampler :  554.117 ms ( 4.771849141166705 % )
+   range pass (init+range+decode+nonconst) :  3242.886 ms ( 27.92652593947042 % )
+   score pass (init+score+finalize) :  5527.278 ms ( 47.59885868379715 % )
+   candidate+reduce+splits readback :  260.514 ms ( 2.243449501029391 % )
+   host: split records :  77.57 ms ( 0.6680039375805134 % )
+   partition (4 kernels) :  1742.576 ms ( 15.006415231833191 % )
+   host: pop + batch assembly :  16.548 ms ( 0.14250521024986895 % )
+   leaf pass :  81.404 ms ( 0.7010209170401458 % )
+   host: queue push (children of the batch) :  42.78 ms ( 0.3684054202616264 % )
+et_profile: perf not available on this image, host profile skipped
+--- ET-PROFILE-BINDING dataset=higgs rows=1000000 trees=100 depth=16 (MOJOLEARN_STAGE_TIMES=1) 02:14:16
+MOJOLEARN_STAGE_TIMES [extratrees classification forest fit]
+  (serialized-by-measurement; compare total to an untimed run)
+   setup (buffers, row fill, workspace) -> 0.068277 s
+   stage + feature sampler -> 0.587036 s
+   range pass (init+range+decode+nonconst) -> 3.313286 s
+   score pass (init+score+finalize) -> 5.549429 s
+   candidate+reduce+splits readback -> 0.275109 s
+   host: split records -> 0.084643 s
+   partition (4 kernels) -> 1.776916 s
+   host: batch assembly + queue push -> 0.062008 s
+   leaf pass -> 0.091464 s
+  total -> 11.808168 s
+MOJOLEARN_STAGE_TIMES [extratrees classification forest fit]
+  (serialized-by-measurement; compare total to an untimed run)
+   setup (buffers, row fill, workspace) -> 0.068035 s
+   stage + feature sampler -> 0.573127 s
+   range pass (init+range+decode+nonconst) -> 3.288327 s
+   score pass (init+score+finalize) -> 5.530178 s
+   candidate+reduce+splits readback -> 0.263737 s
+   host: split records -> 0.079457 s
+   partition (4 kernels) -> 1.756287 s
+   host: batch assembly + queue push -> 0.04898 s
+   leaf pass -> 0.087353 s
+  total -> 11.695481 s
+[binding] fit 0: 13158.2 ms
+[binding] fit 1: 12998.5 ms
+--- identity_break et-clf,et-reg (identical) 02:14:43
+|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| et-clf           | 22334a0351e6ce65 | b23d563be1dcfa38 | 49420dd07b025bae | b27a85972e75b096 | 26affc1039ae729a | 26affc1039ae729a | 410ec72a72b14424 | 7370511549694aae | 10e38234095c04f9 |
+| et-reg           | 754d8c127ecfc04d | e7072e1c8fe0083c | 4e0a0d9a4670ed5f | b745e53515f59cac | 19a23f6fea44befd | 19a23f6fea44befd | 9a63fea590f79a67 | c9fe7c90673c2661 | 3fd3dff94cc79fc2 |
+
+cells=18 stable=18 moved=0 refused=0
+wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/05eb9cee-fcb3-44fa-a878-64ca28302ed3/scratchpad/et_out/lanes/et_profile/identity_break.et.identical.json
+et_profile: done 02:14:45
