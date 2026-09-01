@@ -168,7 +168,11 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from neighbors.impl.neighbors.ball_cover.common import (
     RBC_FLT_MAX,
+    RBC_METRIC_DEFAULT,
     eps_dist_sq,
+    rbc_cmp_dist,
+    rbc_true_dist,
+    rbc_validate_metric,
 )
 from neighbors.impl.neighbors.ball_cover.registers import (
     RBC_TPB,
@@ -272,6 +276,8 @@ def rbc_landmark_1nn_kernel(
     m_in: Int32,
     n_cols_in: Int32,
     n_landmarks_in: Int32,
+    metric_in: Int32,
+    metric_arg_in: Float32,
 ):
     """`k_closest_landmarks` at k = 1, fused. See DEVIATION 2.
 
@@ -286,6 +292,8 @@ def rbc_landmark_1nn_kernel(
     var m = Int(m_in)
     var n_cols = Int(n_cols_in)
     var n_landmarks = Int(n_landmarks_in)
+    var metric = Int(metric_in)  # DEVIATION 564
+    var metric_arg = metric_arg_in  # DEVIATION 564
     var i = Int(block_idx.x) * RBC_BUILD_TPB + Int(thread_idx.x)
     if i >= m:
         return
@@ -294,13 +302,20 @@ def rbc_landmark_1nn_kernel(
     var best_k = 0
     var x_base = i * n_cols
     for k in range(n_landmarks):
-        var d = eps_dist_sq(x, x_base, r, k * n_cols, n_cols)
+        var d = rbc_cmp_dist(
+            x, x_base, r, k * n_cols, n_cols, metric, metric_arg
+        )
         if d < best:
             best = d
             best_k = k
 
     nearest.unsafe_store(i, Int32(best_k))
-    nearest_dist.unsafe_store(i, sqrt(best))
+    # DEVIATION 564: the root belongs to the METRIC, not to this line. On
+    # the Euclidean arm `rbc_true_dist` is the same root this file has
+    # always taken (see the note above about the FAST/IDENTICAL split for
+    # `identical_sqrt`); on L1, Linf and Lp there is no root to take,
+    # because `rbc_cmp_dist` already returned the true distance.
+    nearest_dist.unsafe_store(i, rbc_true_dist(metric, best))
 
 
 def rbc_scatter_kernel(
@@ -427,6 +442,8 @@ def rbc_build_index(
     n_cols: Int,
     n_landmarks: Int,
     seed: UInt64 = UInt64(12345),
+    metric: Int = RBC_METRIC_DEFAULT,
+    metric_arg: Float32 = Float32(2.0),
 ) raises:
     """`rbc_build_index`, `ball_cover.cuh:330-378`. Their four steps, in order.
 
@@ -450,6 +467,13 @@ def rbc_build_index(
     Everything after the landmark draw is on the device, which is their split:
     `sample_landmarks` is the only step whose host side is more than a launch.
     """
+    # DEVIATION 564: the index is built under the SAME metric the query
+    # will use, and a non-metric is refused here, before a landmark is
+    # drawn. Building under one metric and querying under another is the
+    # one way to make the triangle-inequality prune unsound without any
+    # single line being wrong, so the tag travels with the index.
+    rbc_validate_metric(metric, metric_arg)
+
     var grid_m = (m + RBC_BUILD_TPB - 1) // RBC_BUILD_TPB
 
     # 1. Randomly sample sqrt(n) points from X. `:347-350`. See DEVIATION 1.
@@ -480,6 +504,8 @@ def rbc_build_index(
         Int32(m),
         Int32(n_cols),
         Int32(n_landmarks),
+        Int32(metric),
+        metric_arg,
         grid_dim=(grid_m, 1, 1),
         block_dim=(RBC_BUILD_TPB, 1, 1),
     )
@@ -576,6 +602,8 @@ def rbc_eps_nn_query_count(
     n_cols: Int,
     n_landmarks: Int,
     eps: Float32,
+    metric: Int = RBC_METRIC_DEFAULT,
+    metric_arg: Float32 = Float32(2.0),
 ) raises -> Int:
     """`eps_nn` with a null `ja`: fills `ia` and `vd`, returns the edge count.
 
@@ -597,6 +625,8 @@ def rbc_eps_nn_query_count(
         n_cols,
         n_landmarks,
         eps,
+        metric,
+        metric_arg,
     )
 
 
@@ -615,6 +645,8 @@ def rbc_eps_nn_query_fill(
     n_cols: Int,
     n_landmarks: Int,
     eps: Float32,
+    metric: Int = RBC_METRIC_DEFAULT,
+    metric_arg: Float32 = Float32(2.0),
 ) raises:
     """`eps_nn` with a sized `ja`, `algo.cuh:155-162`."""
     rbc_eps_pass_fill(
@@ -632,6 +664,8 @@ def rbc_eps_nn_query_fill(
         n_cols,
         n_landmarks,
         eps,
+        metric,
+        metric_arg,
     )
 
 
@@ -654,6 +688,8 @@ def rbc_eps_nn_query_max_k(
     n_landmarks: Int,
     eps: Float32,
     max_k: Int,
+    metric: Int = RBC_METRIC_DEFAULT,
+    metric_arg: Float32 = Float32(2.0),
 ) raises -> Int:
     """`eps_nn` with a host `max_k`, `algo.cuh:122-135`.
 
@@ -681,6 +717,8 @@ def rbc_eps_nn_query_max_k(
         n_landmarks,
         eps,
         max_k,
+        metric,
+        metric_arg,
     )
 
 
@@ -700,6 +738,8 @@ def rbc_eps_nn_query_dense(
     n_landmarks: Int,
     m: Int,
     eps: Float32,
+    metric: Int = RBC_METRIC_DEFAULT,
+    metric_arg: Float32 = Float32(2.0),
 ) raises:
     """`rbc_eps_nn_query`, the dense overload, `ball_cover.cuh:533-547`."""
     rbc_eps_pass_dense(
@@ -718,4 +758,6 @@ def rbc_eps_nn_query_dense(
         n_landmarks,
         m,
         eps,
+        metric,
+        metric_arg,
     )

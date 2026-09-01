@@ -39,6 +39,17 @@ matters more here than anywhere else in this repository: a neighborhood that
 is one point short changes which points are core, and DBSCAN's whole
 partition changes with it.
 
+**AND IT IS EXACT FOR EVERY METRIC, WHICH IS WHY THIS FILE IS NO LONGER
+EUCLIDEAN-ONLY.** Neither test uses anything but the triangle inequality, so
+the honest scope is "the metrics" and not "Euclidean". `metric_in` and
+`metric_arg_in` are threaded through all three kernels and all four
+launchers; the comparison space, what is still refused, and why each refusal
+holds are DEVIATION 564 in `common.mojo`. Every launcher DEFAULTS to
+`RBC_METRIC_DEFAULT`, so `dbscan/`'s call sites are unchanged and no
+Euclidean bit moves: on that arm `rbc_cmp_dist` IS `eps_dist_sq`,
+`rbc_cmp_bound(t)` IS `t * t`, and `rbc_true_dist(v)` IS DEVIATION 550's
+`identical_sqrt(v)`, in the same order and the same places.
+
 DEVIATION 1: THE BALLOT IS A `vote`, THE BIT WALK IS A `ctz`
 -------------------------------------------------------------
 Theirs is `raft::ballot` then `__brev` then `__clz`, at `:629-636`. The
@@ -113,7 +124,6 @@ from std.bit import count_trailing_zeros, pop_count
 from std.gpu import block_idx, thread_idx
 from std.gpu.primitives.warp import lane_id, shuffle_idx, vote
 from std.gpu.primitives.warp import sum as warp_sum
-from checks.numerics import identical_sqrt  # DEVIATION 550
 from checks.numerics import PIN_CROSS_VENDOR  # DEVIATION 551
 from neighbors.checks.ball_cover_canonical_order import (
     rbc_canonicalize_row_order,
@@ -124,7 +134,10 @@ from checks.kernel_matrix import TARGET_COLUMN, lib_lane_width_for
 
 from neighbors.impl.neighbors.ball_cover.common import (
     RBC_FLT_MAX,
-    eps_dist_sq,
+    RBC_METRIC_DEFAULT,
+    rbc_cmp_bound,
+    rbc_cmp_dist,
+    rbc_true_dist,
 )
 from neighbors.impl.neighbors.ball_cover.scan import (
     RBC_SCAN_TPB,
@@ -203,6 +216,8 @@ def block_rbc_kernel_eps_csr_pass(
     adj_ia: MutPointer[Int32, MutAnyOrigin],
     adj_ja: MutPointer[Int32, MutAnyOrigin],
     write_pass_in: Int32,
+    metric_in: Int32,
+    metric_arg_in: Float32,
 ):
     """`block_rbc_kernel_eps_csr_pass`, `registers.cuh:576-708`.
 
@@ -222,6 +237,8 @@ def block_rbc_kernel_eps_csr_pass(
     var n_landmarks = Int(n_landmarks_in)
     var write_pass = write_pass_in != Int32(0)
     var eps = eps_in
+    var metric = Int(metric_in)  # DEVIATION 564
+    var metric_arg = metric_arg_in  # DEVIATION 564
 
     var lid = Int(lane_id())
     var lid_mask = (Scalar[RBC_MASK_DT](1) << Scalar[RBC_MASK_DT](lid)) - Scalar[RBC_MASK_DT](1)
@@ -252,19 +269,19 @@ def block_rbc_kernel_eps_csr_pass(
     var x_base = n_cols * query_id
 
     # we omit the sqrt() in the inner distance compute
-    var eps2 = eps * eps
+    var eps_cmp = rbc_cmp_bound(metric, eps)
 
     for cur_k0 in range(0, n_landmarks, RBC_LANES):
         # Pre-compute landmark_dist & triangularization checks for 32 lanes.
         var lane_k = cur_k0 + lid
-        var lane_r_dist_sq = RBC_FLT_MAX
+        var lane_r_cmp = RBC_FLT_MAX
         var lane_check = False
         if lane_k < n_landmarks:
-            lane_r_dist_sq = eps_dist_sq(
-                x, x_base, r, lane_k * n_cols, n_cols
+            lane_r_cmp = rbc_cmp_dist(
+                x, x_base, r, lane_k * n_cols, n_cols, metric, metric_arg
             )
             var bound = eps + r_radius.unsafe_load(lane_k)
-            lane_check = lane_r_dist_sq <= bound * bound
+            lane_check = lane_r_cmp <= rbc_cmp_bound(metric, bound)
 
         var lane_mask = vote[RBC_MASK_DT](lane_check)
         if lane_mask == Scalar[RBC_MASK_DT](0):
@@ -283,8 +300,8 @@ def block_rbc_kernel_eps_csr_pass(
             var r_size = Int(r_indptr.unsafe_load(cur_k + 1)) - r_start
 
             # we have precomputed the query<->landmark distance
-            var cur_r_dist = identical_sqrt(  # DEVIATION 550: the bound's sqrt, pinned under IDENTICAL (FAST = stdlib, verbatim)
-                shuffle_idx(lane_r_dist_sq, UInt32(k_offset))
+            var cur_r_dist = rbc_true_dist(  # DEVIATION 550: the bound's sqrt, pinned under IDENTICAL (FAST = stdlib, verbatim). DEVIATION 564 routes the root through the metric.
+                metric, shuffle_idx(lane_r_cmp, UInt32(k_offset))
             )
 
             var limit = (r_size // RBC_LANES) * RBC_LANES
@@ -299,10 +316,16 @@ def block_rbc_kernel_eps_csr_pass(
 
             var dist = RBC_FLT_MAX
             if i < r_size:
-                dist = eps_dist_sq(
-                    x, x_base, x_reordered, (r_start + i) * n_cols, n_cols
+                dist = rbc_cmp_dist(
+                    x,
+                    x_base,
+                    x_reordered,
+                    (r_start + i) * n_cols,
+                    n_cols,
+                    metric,
+                    metric_arg,
                 )
-            var in_range = dist <= eps2
+            var in_range = dist <= eps_cmp
             if write_pass:
                 var mask = vote[RBC_MASK_DT](in_range)
                 if in_range:
@@ -323,14 +346,16 @@ def block_rbc_kernel_eps_csr_pass(
             while i0 >= RBC_LANES:
                 i0 -= RBC_LANES
                 var min_warp_dist2 = r_1nn_dists.unsafe_load(r_start + i0)
-                var dist2 = eps_dist_sq(
+                var dist2 = rbc_cmp_dist(
                     x,
                     x_base,
                     x_reordered,
                     (r_start + i0 + lid) * n_cols,
                     n_cols,
+                    metric,
+                    metric_arg,
                 )
-                var in_range2 = dist2 <= eps2
+                var in_range2 = dist2 <= eps_cmp
                 if write_pass:
                     var mask2 = vote[RBC_MASK_DT](in_range2)
                     if in_range2:
@@ -367,6 +392,8 @@ def block_rbc_kernel_eps_dense(
     r_radius: MutPointer[Float32, MutAnyOrigin],
     adj: MutPointer[UInt8, MutAnyOrigin],
     vd: MutPointer[Int32, MutAnyOrigin],
+    metric_in: Int32,
+    metric_arg_in: Float32,
 ):
     """`block_rbc_kernel_eps_dense`, `registers.cuh:458-570`.
 
@@ -384,6 +411,8 @@ def block_rbc_kernel_eps_dense(
     var n_landmarks = Int(n_landmarks_in)
     var m = Int(m_in)
     var eps = eps_in
+    var metric = Int(metric_in)  # DEVIATION 564
+    var metric_arg = metric_arg_in  # DEVIATION 564
 
     var lid = Int(lane_id())
 
@@ -401,18 +430,18 @@ def block_rbc_kernel_eps_dense(
     var column_count = 0
     var x_base = n_cols * query_id
     var adj_base = query_id * m
-    var eps2 = eps * eps
+    var eps_cmp = rbc_cmp_bound(metric, eps)
 
     for cur_k0 in range(0, n_landmarks, RBC_LANES):
         var lane_k = cur_k0 + lid
-        var lane_r_dist_sq = RBC_FLT_MAX
+        var lane_r_cmp = RBC_FLT_MAX
         var lane_check = False
         if lane_k < n_landmarks:
-            lane_r_dist_sq = eps_dist_sq(
-                x, x_base, r, lane_k * n_cols, n_cols
+            lane_r_cmp = rbc_cmp_dist(
+                x, x_base, r, lane_k * n_cols, n_cols, metric, metric_arg
             )
             var bound = eps + r_radius.unsafe_load(lane_k)
-            lane_check = lane_r_dist_sq <= bound * bound
+            lane_check = lane_r_cmp <= rbc_cmp_bound(metric, bound)
 
         var lane_mask = vote[RBC_MASK_DT](lane_check)
         if lane_mask == Scalar[RBC_MASK_DT](0):
@@ -425,8 +454,8 @@ def block_rbc_kernel_eps_dense(
             var cur_k = cur_k0 + k_offset
             var r_start = Int(r_indptr.unsafe_load(cur_k))
             var r_size = Int(r_indptr.unsafe_load(cur_k + 1)) - r_start
-            var cur_r_dist = identical_sqrt(  # DEVIATION 550: the bound's sqrt, pinned under IDENTICAL (FAST = stdlib, verbatim)
-                shuffle_idx(lane_r_dist_sq, UInt32(k_offset))
+            var cur_r_dist = rbc_true_dist(  # DEVIATION 550: the bound's sqrt, pinned under IDENTICAL (FAST = stdlib, verbatim). DEVIATION 564 routes the root through the metric.
+                metric, shuffle_idx(lane_r_cmp, UInt32(k_offset))
             )
 
             var limit = (r_size // RBC_LANES) * RBC_LANES
@@ -438,10 +467,16 @@ def block_rbc_kernel_eps_dense(
 
             var dist = RBC_FLT_MAX
             if i < r_size:
-                dist = eps_dist_sq(
-                    x, x_base, x_reordered, (r_start + i) * n_cols, n_cols
+                dist = rbc_cmp_dist(
+                    x,
+                    x_base,
+                    x_reordered,
+                    (r_start + i) * n_cols,
+                    n_cols,
+                    metric,
+                    metric_arg,
                 )
-            if dist <= eps2:
+            if dist <= eps_cmp:
                 var index = Int(r_1nn_cols.unsafe_load(r_start + i))
                 column_count += 1
                 adj.unsafe_store(adj_base + index, UInt8(1))
@@ -454,14 +489,16 @@ def block_rbc_kernel_eps_dense(
             while i0 >= RBC_LANES:
                 i0 -= RBC_LANES
                 var min_warp_dist2 = r_1nn_dists.unsafe_load(r_start + i0)
-                var dist2 = eps_dist_sq(
+                var dist2 = rbc_cmp_dist(
                     x,
                     x_base,
                     x_reordered,
                     (r_start + i0 + lid) * n_cols,
                     n_cols,
+                    metric,
+                    metric_arg,
                 )
-                if dist2 <= eps2:
+                if dist2 <= eps_cmp:
                     var index2 = Int(
                         r_1nn_cols.unsafe_load(r_start + i0 + lid)
                     )
@@ -490,6 +527,8 @@ def block_rbc_kernel_eps_max_k(
     vd: MutPointer[Int32, MutAnyOrigin],
     max_k_in: Int32,
     tmp: MutPointer[Int32, MutAnyOrigin],
+    metric_in: Int32,
+    metric_arg_in: Float32,
 ):
     """`block_rbc_kernel_eps_max_k`, `registers.cuh:859-980`.
 
@@ -508,6 +547,8 @@ def block_rbc_kernel_eps_max_k(
     var n_landmarks = Int(n_landmarks_in)
     var max_k = Int(max_k_in)
     var eps = eps_in
+    var metric = Int(metric_in)  # DEVIATION 564
+    var metric_arg = metric_arg_in  # DEVIATION 564
 
     var lid = Int(lane_id())
     var lid_mask = (Scalar[RBC_MASK_DT](1) << Scalar[RBC_MASK_DT](lid)) - Scalar[RBC_MASK_DT](1)
@@ -526,18 +567,18 @@ def block_rbc_kernel_eps_max_k(
     var column_count = 0
     var x_base = n_cols * query_id
     var tmp_base = query_id * max_k
-    var eps2 = eps * eps
+    var eps_cmp = rbc_cmp_bound(metric, eps)
 
     for cur_k0 in range(0, n_landmarks, RBC_LANES):
         var lane_k = cur_k0 + lid
-        var lane_r_dist_sq = RBC_FLT_MAX
+        var lane_r_cmp = RBC_FLT_MAX
         var lane_check = False
         if lane_k < n_landmarks:
-            lane_r_dist_sq = eps_dist_sq(
-                x, x_base, r, lane_k * n_cols, n_cols
+            lane_r_cmp = rbc_cmp_dist(
+                x, x_base, r, lane_k * n_cols, n_cols, metric, metric_arg
             )
             var bound = eps + r_radius.unsafe_load(lane_k)
-            lane_check = lane_r_dist_sq <= bound * bound
+            lane_check = lane_r_cmp <= rbc_cmp_bound(metric, bound)
 
         var lane_mask = vote[RBC_MASK_DT](lane_check)
         if lane_mask == Scalar[RBC_MASK_DT](0):
@@ -550,8 +591,8 @@ def block_rbc_kernel_eps_max_k(
             var cur_k = cur_k0 + k_offset
             var r_start = Int(r_indptr.unsafe_load(cur_k))
             var r_size = Int(r_indptr.unsafe_load(cur_k + 1)) - r_start
-            var cur_r_dist = identical_sqrt(  # DEVIATION 550: the bound's sqrt, pinned under IDENTICAL (FAST = stdlib, verbatim)
-                shuffle_idx(lane_r_dist_sq, UInt32(k_offset))
+            var cur_r_dist = rbc_true_dist(  # DEVIATION 550: the bound's sqrt, pinned under IDENTICAL (FAST = stdlib, verbatim). DEVIATION 564 routes the root through the metric.
+                metric, shuffle_idx(lane_r_cmp, UInt32(k_offset))
             )
 
             var limit = (r_size // RBC_LANES) * RBC_LANES
@@ -563,10 +604,16 @@ def block_rbc_kernel_eps_max_k(
 
             var dist = RBC_FLT_MAX
             if i < r_size:
-                dist = eps_dist_sq(
-                    x, x_base, x_reordered, (r_start + i) * n_cols, n_cols
+                dist = rbc_cmp_dist(
+                    x,
+                    x_base,
+                    x_reordered,
+                    (r_start + i) * n_cols,
+                    n_cols,
+                    metric,
+                    metric_arg,
                 )
-            var in_range = dist <= eps2
+            var in_range = dist <= eps_cmp
             var mask = vote[RBC_MASK_DT](in_range)
             if in_range:
                 var row_pos = column_count + Int(pop_count(mask & lid_mask))
@@ -585,14 +632,16 @@ def block_rbc_kernel_eps_max_k(
             while i0 >= RBC_LANES:
                 i0 -= RBC_LANES
                 var min_warp_dist2 = r_1nn_dists.unsafe_load(r_start + i0)
-                var dist2 = eps_dist_sq(
+                var dist2 = rbc_cmp_dist(
                     x,
                     x_base,
                     x_reordered,
                     (r_start + i0 + lid) * n_cols,
                     n_cols,
+                    metric,
+                    metric_arg,
                 )
-                var in_range2 = dist2 <= eps2
+                var in_range2 = dist2 <= eps_cmp
                 var mask2 = vote[RBC_MASK_DT](in_range2)
                 if in_range2:
                     var row_pos2 = column_count + Int(
@@ -654,6 +703,8 @@ def rbc_eps_pass_count(
     n_cols: Int,
     n_landmarks: Int,
     eps: Float32,
+    metric: Int = RBC_METRIC_DEFAULT,
+    metric_arg: Float32 = Float32(2.0),
 ) raises -> Int:
     """Pass one: `rbc_eps_pass` with `max_k == nullptr` and `adj_ja == nullptr`.
 
@@ -680,6 +731,8 @@ def rbc_eps_pass_count(
         vd.unsafe_ptr(),
         adj_ia.unsafe_ptr(),
         Int32(0),
+        Int32(metric),
+        metric_arg,
         grid_dim=((n_queries + RBC_QPB - 1) // RBC_QPB, 1, 1),
         block_dim=(RBC_TPB, 1, 1),
     )
@@ -723,6 +776,8 @@ def rbc_eps_pass_fill(
     n_cols: Int,
     n_landmarks: Int,
     eps: Float32,
+    metric: Int = RBC_METRIC_DEFAULT,
+    metric_arg: Float32 = Float32(2.0),
 ) raises:
     """Pass two: `rbc_eps_pass` with `adj_ja != nullptr`, `:1382-1426`."""
     ctx.enqueue_function[block_rbc_kernel_eps_csr_pass](
@@ -740,6 +795,8 @@ def rbc_eps_pass_fill(
         adj_ia.unsafe_ptr(),
         adj_ja.unsafe_ptr(),
         Int32(1),
+        Int32(metric),
+        metric_arg,
         grid_dim=((n_queries + RBC_QPB - 1) // RBC_QPB, 1, 1),
         block_dim=(RBC_TPB, 1, 1),
     )
@@ -788,6 +845,8 @@ def rbc_eps_pass_dense(
     n_landmarks: Int,
     m: Int,
     eps: Float32,
+    metric: Int = RBC_METRIC_DEFAULT,
+    metric_arg: Float32 = Float32(2.0),
 ) raises:
     """`rbc_eps_pass`, the dense overload, `registers.cuh:1271-1311`.
 
@@ -810,6 +869,8 @@ def rbc_eps_pass_dense(
         r_radius.unsafe_ptr(),
         adj.unsafe_ptr(),
         vd.unsafe_ptr(),
+        Int32(metric),
+        metric_arg,
         grid_dim=((n_queries + RBC_QPB - 1) // RBC_QPB, 1, 1),
         block_dim=(RBC_TPB, 1, 1),
     )
@@ -835,6 +896,8 @@ def rbc_eps_pass_max_k(
     n_landmarks: Int,
     eps: Float32,
     max_k: Int,
+    metric: Int = RBC_METRIC_DEFAULT,
+    metric_arg: Float32 = Float32(2.0),
 ) raises -> Int:
     """`rbc_eps_pass`, the max_k overload, `registers.cuh:1427-1482`.
 
@@ -861,6 +924,8 @@ def rbc_eps_pass_max_k(
         vd.unsafe_ptr(),
         Int32(max_k),
         tmp.unsafe_ptr(),
+        Int32(metric),
+        metric_arg,
         grid_dim=((n_queries + RBC_QPB - 1) // RBC_QPB, 1, 1),
         block_dim=(RBC_TPB, 1, 1),
     )

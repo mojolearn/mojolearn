@@ -68,8 +68,11 @@ them. That is the same reason IDENTITY_PATHS row 61 exempts the dense arm.
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_idx, thread_idx
 
-from checks.numerics import identical_sqrt
-from neighbors.impl.neighbors.ball_cover.common import eps_dist_sq
+from neighbors.impl.neighbors.ball_cover.common import (
+    RBC_METRIC_DEFAULT,
+    rbc_cmp_dist,
+    rbc_true_dist,
+)
 
 
 # A fixed literal, not a device query, for the reason
@@ -87,6 +90,8 @@ def rbc_edge_distance_kernel(
     out_dist: MutPointer[Float32, MutAnyOrigin],
     n_cols_in: Int32,
     want_sqrt_in: Int32,
+    metric_in: Int32,
+    metric_arg_in: Float32,
 ):
     """One block per query row; threads stride over that row's edges.
 
@@ -95,6 +100,8 @@ def rbc_edge_distance_kernel(
     before it in any other row.
     """
     var n_cols = Int(n_cols_in)
+    var metric = Int(metric_in)  # DEVIATION 564
+    var metric_arg = metric_arg_in  # DEVIATION 564
     var q = Int(block_idx.x)
     var start = Int(adj_ia.unsafe_load(q))
     var end = Int(adj_ia.unsafe_load(q + 1))
@@ -104,10 +111,17 @@ def rbc_edge_distance_kernel(
         # SAME ARGUMENT ORDER AS THE SEARCH (`registers.mojo:300`): query
         # first, dataset row second. The squared difference makes the order
         # arithmetically irrelevant, but the mirror is the point.
-        var d2 = eps_dist_sq(queries, q * n_cols, x, c * n_cols, n_cols)
+        var d2 = rbc_cmp_dist(
+            queries, q * n_cols, x, c * n_cols, n_cols, metric, metric_arg
+        )
         if want_sqrt_in != Int32(0):
-            out_dist.unsafe_store(p, identical_sqrt(d2))
+            out_dist.unsafe_store(p, rbc_true_dist(metric, d2))
         else:
+            # `return_sqrt=False` is a EUCLIDEAN policy: it hands back d^2
+            # with no root, which is `knn_search`'s policy 3. On L1, Linf
+            # and Lp there is no root to withhold -- `rbc_cmp_dist` already
+            # returned the true distance -- so the flag is a no-op there
+            # rather than an error, and the value is the same either way.
             out_dist.unsafe_store(p, d2)
         p += RBC_DIST_TPB
 
@@ -124,6 +138,8 @@ def rbc_edge_distances(
     nnz: Int,
     out_capacity: Int,
     return_sqrt: Bool,
+    metric: Int = RBC_METRIC_DEFAULT,
+    metric_arg: Float32 = Float32(2.0),
 ) raises:
     """Fill `out_dist[0, nnz)` with one distance per CSR edge.
 
@@ -153,6 +169,8 @@ def rbc_edge_distances(
         out_dist.unsafe_ptr(),
         Int32(n_cols),
         Int32(1) if return_sqrt else Int32(0),
+        Int32(metric),
+        metric_arg,
         grid_dim=(n_queries, 1, 1),
         block_dim=(RBC_DIST_TPB, 1, 1),
     )

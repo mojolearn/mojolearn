@@ -24,8 +24,45 @@ _DIST_L2_EXPANDED = 0
 _DIST_L2_SQRT_EXPANDED = 1
 _DIST_COSINE_EXPANDED = 2
 _DIST_L1 = 3
+_DIST_L2_SQRT_UNEXPANDED = 5
 _DIST_LINF = 7
 _DIST_LP_UNEXPANDED = 9
+
+#: THE BALL COVER'S OWN TABLE, and it is NOT `_METRIC_TABLE`.
+#:
+#: Two rows differ, both for reasons that are about the INDEX and not about
+#: the metric's name (`neighbors/impl/neighbors/ball_cover/common.mojo`,
+#: DEVIATION 564 and DEVIATION 565).
+#:
+#:   'euclidean' / 'l2'  goes to L2SqrtUNexpanded here where the brute-force
+#:                       table sends it to L2SqrtEXPanded. The cover's index
+#:                       stores `R_1nn_dists` and `R_radius` computed by
+#:                       summing differences directly, and the query compares
+#:                       against them; computing one side by the expanded
+#:                       identity `||a||^2 + ||b||^2 - 2ab` and the other
+#:                       directly permits a boundary case where a point is
+#:                       inside by one formula and outside by the other
+#:                       (DEVIATION 2 in `ball_cover.mojo`, and `PORTING.md
+#:                       21` for what the identity costs in float32).
+#:   'sqeuclidean'       is ABSENT. Squared Euclidean distance is not a
+#:                       metric even though Euclidean distance is: on three
+#:                       collinear points at unit spacing it gives 4 against
+#:                       1 + 1. The pruning here IS the triangle inequality,
+#:                       so admitting it would prune true neighbours
+#:                       silently. 'cosine' is absent for the same class of
+#:                       reason.
+_RBC_METRIC_TABLE = {
+    "euclidean": _DIST_L2_SQRT_UNEXPANDED,
+    "l2": _DIST_L2_SQRT_UNEXPANDED,
+    "cityblock": _DIST_L1,
+    "l1": _DIST_L1,
+    "manhattan": _DIST_L1,
+    "taxicab": _DIST_L1,
+    "chebyshev": _DIST_LINF,
+    "linf": _DIST_LINF,
+    "minkowski": _DIST_LP_UNEXPANDED,
+    "lp": _DIST_LP_UNEXPANDED,
+}
 
 #: cuML's `NearestNeighbors._build_metric_type` (`nearest_neighbors.pyx:
 #: 520-553`), the rows this tree computes. NOT the `pairwise_distances`
@@ -148,6 +185,111 @@ def _resolve_metric(cls_name, metric, p):
     return value, arg
 
 
+def _resolve_rbc_metric(cls_name, metric, p):
+    """`(metric_value, metric_arg)` for anything running on the BALL COVER.
+
+    THE REFUSAL HERE IS NARROWER THAN IT WAS, AND THE ARGUMENT DECIDES THE
+    WIDTH. Until 2026-09-01 this index admitted Euclidean and nothing else,
+    with the correct reason attached: the random ball cover's pruning IS the
+    triangle inequality on the landmark radii, so admitting a non-metric
+    would silently prune away true neighbours rather than return them
+    slowly. That argument is sound and it is kept. What it does NOT cover is
+    every metric it was refusing.
+
+    Minkowski at p >= 1 IS a true metric -- that is Minkowski's inequality,
+    which is what the name refers to -- so an Lp ball cover at p >= 1 is
+    sound, and p = 1 is Manhattan. Chebyshev is the p -> infinity limit and
+    is a metric too. So those are admitted, exactly and exhaustively gated
+    by `neighbors/checks/ball_cover_knn_check.mojo` against a host brute
+    force with no tolerance.
+
+    What stays refused is what genuinely fails the inequality:
+
+      cosine        `1 - cos` is not a metric. Three unit vectors at 0, 60
+                    and 120 degrees give 1.5 against 0.5 + 0.5. It also
+                    fails identity of indiscernibles: d(x, 2x) = 0, so two
+                    distinct points sit at distance zero and a landmark
+                    radius stops bounding its ball.
+      Lp at p < 1   |x|^p is not subadditive below p = 1. At p = 1/2 the
+                    points (0,0), (1,0), (1,1) give a direct distance of 4
+                    against a two-leg path of 1 + 1.
+      sqeuclidean   d^2 is not a metric even though d is: three collinear
+                    points at unit spacing give 4 against 1 + 1.
+
+    cuML draws its line in the same place from the same side and lands
+    somewhere narrower still (`VALID_METRICS["rbc"]` is
+    `{euclidean, haversine, l2}`), which is their scope choice and not an
+    argument about the inequality.
+    """
+    if not isinstance(metric, str):
+        raise ValueError(
+            f"mojolearn {cls_name}: metric must be a name, got {metric!r}"
+        )
+    key = metric.lower()
+    if key in ("sqeuclidean",):
+        raise ValueError(
+            f"mojolearn {cls_name}: metric='sqeuclidean' is REFUSED on the "
+            "random ball cover. The pruning here IS THE TRIANGLE "
+            "INEQUALITY on the landmark radii "
+            "(neighbors/impl/neighbors/ball_cover/common.mojo, DEVIATION "
+            "565), and SQUARED Euclidean distance does not satisfy it even "
+            "though Euclidean distance does: on three collinear points at "
+            "unit spacing it gives 4 against 1 + 1. A cover built on it "
+            "would prune away true neighbours silently. Ask for "
+            "metric='euclidean' and square the returned distances, which "
+            "is the same answer and is exact."
+        )
+    if key == "cosine":
+        raise ValueError(
+            f"mojolearn {cls_name}: metric='cosine' is REFUSED on the "
+            "random ball cover. The pruning here IS THE TRIANGLE "
+            "INEQUALITY on the landmark radii, and `1 - cos` does not "
+            "satisfy it: three unit vectors at 0, 60 and 120 degrees give "
+            "1.5 against 0.5 + 0.5. It also fails identity of "
+            "indiscernibles, d(x, 2x) = 0, so a landmark radius stops "
+            "bounding its ball. A cover built on it would prune away true "
+            "neighbours silently rather than return them slowly. Use "
+            "NearestNeighbors with algorithm='brute', which needs no "
+            "inequality and honors every ported metric."
+        )
+    if key in _UNPORTED_METRICS:
+        raise ValueError(
+            f"mojolearn {cls_name}: metric={metric!r} is in cuML's "
+            "VALID_METRICS['brute'] but is NOT PORTED "
+            "(neighbors/NOT_IMPLEMENTED.tsv)"
+        )
+    if key not in _RBC_METRIC_TABLE:
+        raise ValueError(
+            f"mojolearn {cls_name}: unknown metric {metric!r}. The random "
+            "ball cover admits: " + ", ".join(sorted(_RBC_METRIC_TABLE))
+        )
+    value = _RBC_METRIC_TABLE[key]
+    arg = 2.0
+    if value == _DIST_LP_UNEXPANDED:
+        arg = float(p)
+        if arg != arg or arg == float("inf"):
+            raise ValueError(
+                f"mojolearn {cls_name}: metric='minkowski' needs a finite "
+                f"p >= 1, got {p!r}. p = infinity is metric='chebyshev', "
+                "which IS admitted here."
+            )
+        if arg < 1.0:
+            raise ValueError(
+                f"mojolearn {cls_name}: metric='minkowski' with p={p!r} is "
+                "REFUSED on the random ball cover. The pruning here IS THE "
+                "TRIANGLE INEQUALITY on the landmark radii "
+                "(neighbors/impl/neighbors/ball_cover/common.mojo, "
+                "DEVIATION 564), and |x|^p is not subadditive below p = 1, "
+                "so Lp at p < 1 is not a metric at all: at p = 1/2 the "
+                "points (0,0), (1,0), (1,1) give a direct distance of 4 "
+                "against a two-leg path of 1 + 1. p >= 1 is admitted and "
+                "p = 1 is Manhattan. Use NearestNeighbors with "
+                "algorithm='brute' for p < 1, which is exact brute force "
+                "and needs no inequality."
+            )
+    return value, arg
+
+
 class NearestNeighbors(NumericModeMixin):
     """Exact k-NN by brute force, mirroring cuVS's fused L2 kernel.
 
@@ -194,9 +336,14 @@ class NearestNeighbors(NumericModeMixin):
                                 (nearest_neighbors.pyx:852-854 passes
                                 self.p for every metric and every non-Lp
                                 op discards it).
-        algorithm     refused   anything but 'brute' (and 'auto', which IS
-                                brute here). NOT an attribution refusal:
-                                see the note under `algorithm` below.
+        algorithm     honored   'brute' / 'auto' (exact brute force, the
+                                default) and 'rbc' (exact k-NN over a
+                                random ball cover, an INDEX -- added
+                                2026-09-01, DEVIATIONS 558 to 567).
+                                'kd_tree' and 'ball_tree' stay refused and
+                                it is an ENGINEERING refusal, not an
+                                attribution one; see the note under
+                                `algorithm` below.
 
     The ARM (fused vs tiled, `KNN_METHOD_AUTO`) is NOT a parameter of this
     class by design (POLICY CHOICE 4 above); under NUMERIC_IDENTICAL AUTO is
@@ -256,23 +403,55 @@ class NearestNeighbors(NumericModeMixin):
         # Resolving the metric IS the metric check: it raises by name for
         # an unported row of cuML's table, for an unknown name, and for a
         # p that cannot be one arithmetic. One table, one place.
-        _resolve_metric(type(self).__name__, self.metric, self.p)
-        if self.algorithm not in ("brute", "auto"):
+        if self.algorithm == "rbc" and type(self) is not NearestNeighbors:
+            # REFUSED RATHER THAN ACCEPTED AND IGNORED, which is the whole
+            # of `reached-but-inert`. The classifier and the regressor do
+            # not call `kneighbors`; they call cuML's `knn_classify` /
+            # `knn_regress`, which do their own brute-force search inside
+            # one Mojo entry point (`neighbors/impl/knn/knn.mojo`). Taking
+            # 'rbc' here would change nothing about what runs, and a
+            # parameter that is honored in the signature and inert in the
+            # kernel is worse than one that is refused.
+            raise ValueError(
+                f"mojolearn {type(self).__name__}: algorithm='rbc' is "
+                "refused. The ball cover's k-NN query is wired into "
+                "NearestNeighbors.kneighbors only; this class runs cuML's "
+                "knn_classify / knn_regress, which perform their own "
+                "brute-force search inside one call and have no seam to "
+                "hand an index to. Accepting 'rbc' here would be accepting "
+                "a parameter that changes nothing. Use "
+                "NearestNeighbors(algorithm='rbc').kneighbors and vote on "
+                "the result, or leave this at 'brute'."
+            )
+        if self.algorithm == "rbc":
+            # The INDEXED arm resolves against the cover's own table, which
+            # refuses two rows the brute-force table accepts. Resolving here
+            # means a caller who asks for an index under cosine learns at
+            # fit, not at the first query.
+            _resolve_rbc_metric(type(self).__name__, self.metric, self.p)
+        elif self.algorithm in ("brute", "auto"):
+            # Resolving the metric IS the metric check: it raises by name
+            # for an unported row of cuML's table, for an unknown name, and
+            # for a p that cannot be one arithmetic. One table, one place.
+            _resolve_metric(type(self).__name__, self.metric, self.p)
+        else:
             raise ValueError(
                 f"mojolearn NearestNeighbors: algorithm={self.algorithm!r} is "
-                "refused. This class is exact brute force ('brute', which "
-                "'auto' also means here). This is an ENGINEERING refusal, "
-                "not an attribution one: a kd-tree or a ball tree is a "
-                "per-query stack walk with data-dependent branching, which "
-                "is the shape a GPU is worst at, and above roughly 15 "
-                "dimensions it degenerates to a full scan anyway, so it "
-                "would lose to this class on the workloads it claims to "
-                "help. The structure that DOES help in low dimensions is "
-                "the random ball cover, which is exact, has no per-query "
-                "stack, and is already in this tree serving "
-                "`RadiusNeighbors` (neighbors/impl/neighbors/ball_cover/). "
-                "Wiring its k-NN query into this class is the open work; "
-                "see neighbors/NOT_IMPLEMENTED.tsv."
+                "refused. Three are accepted: 'brute' (exact brute force), "
+                "'auto' (which means 'brute' here), and 'rbc' (exact k-NN "
+                "over a RANDOM BALL COVER, an index). "
+                "'kd_tree' and 'ball_tree' are refused, and it is an "
+                "ENGINEERING refusal rather than an attribution one: a "
+                "kd-tree query is a per-query stack walk with "
+                "data-dependent branching and divergent memory access, "
+                "which is the shape a GPU is worst at, and above roughly "
+                "15 dimensions the pruning bound stops firing and it "
+                "degenerates to a full scan, so it would lose to 'brute' "
+                "on exactly the workloads it claims to help. If what you "
+                "want is an index instead of a full scan, that is 'rbc': "
+                "it is EXACT, not approximate, it has no per-query stack, "
+                "and it is the same structure RadiusNeighbors uses "
+                "(neighbors/impl/neighbors/ball_cover/knn.mojo)."
             )
 
     def fit(self, X, y=None):
@@ -317,6 +496,44 @@ class NearestNeighbors(NumericModeMixin):
             )
 
         nq = q.shape[0]
+
+        if self.algorithm == "rbc":
+            # THE INDEXED ARM. Same answer, computed by pruning instead of
+            # by comparing every pair: `neighbors/impl/neighbors/ball_cover/
+            # knn.mojo` proves each bound exact and
+            # `neighbors/checks/ball_cover_knn_check.mojo` gates it against
+            # a host brute force with no tolerance.
+            mvalue, marg = _resolve_rbc_metric(
+                type(self).__name__, self.metric, self.p
+            )
+            idx = self._index
+            rind = np.empty((nq, k), dtype=np.int32)
+            rdist = np.empty((nq, k), dtype=np.float32)
+            self.n_candidate_distances_ = self._bind(
+                "_mojolearn"
+            ).rbc_knn_search(
+                _addr_ro(idx), _addr_ro(q), _addr(rind), _addr(rdist),
+                # ORDER MATCHES bindings/_mojolearn.mojo::
+                # rbc_knn_search_binding. n_index, n_queries, n_features, k,
+                # metric, metric_arg
+                [idx.shape[0], nq, idx.shape[1], k, mvalue, marg],
+            )
+            # The index is built inside the call, so `used_query_tile_` has
+            # no meaning on this arm and is set to None rather than left
+            # holding a stale value from a previous brute-force call.
+            self.used_query_tile_ = None
+            if (rind < 0).any():
+                raise RuntimeError(
+                    "mojolearn NearestNeighbors(algorithm='rbc'): the query "
+                    "returned an unfilled neighbour slot, which can only "
+                    "happen when k exceeds the index size. The Mojo side "
+                    "refuses that before launching, so this means the "
+                    "arrays changed under the call."
+                )
+            if return_distance:
+                return rdist, rind.astype(np.int64)
+            return rind.astype(np.int64)
+
         dist = np.empty((nq, k), dtype=np.float32)
         ind = np.empty((nq, k), dtype=np.uint32)
 
@@ -377,8 +594,11 @@ class KNeighborsClassifier(NearestNeighbors):
                                 reads the VALUE and a vote reads only the
                                 ORDER (estimator.mojo policy 8).
         metric, p     honored   as NearestNeighbors
-        algorithm     refused   anything but 'brute' / 'auto', as
-                                NearestNeighbors
+        algorithm     refused   anything but 'brute' / 'auto'. 'rbc' is
+                                refused HERE though NearestNeighbors takes
+                                it: this class calls cuML's knn_classify,
+                                which searches inside its own entry point,
+                                so 'rbc' would be accepted and inert
         y             honored   int labels, ANY values (negative, gaps);
                                 1-D or 2-D (multi-output, one vote per
                                 column, as cuML's `vector<int*> y`)
@@ -665,6 +885,16 @@ class RadiusNeighbors(NumericModeMixin):
     approximation -- and `neighbors/checks/radius_check.mojo` asserts that
     against a host brute-force oracle per cell, not per total.
 
+    **Metrics: every one that satisfies the triangle inequality, which is
+    what the pruning rests on.** 'euclidean'/'l2', 'manhattan'/'l1'/
+    'cityblock'/'taxicab', 'chebyshev'/'linf' and 'minkowski'/'lp' at
+    p >= 1. Until 2026-09-01 this was Euclidean only; the reason given was
+    correct and is kept, and it turned out to be narrower than its own
+    argument, because Minkowski at p >= 1 IS a metric. 'cosine',
+    'sqeuclidean' and Lp at p < 1 stay refused BY NAME with the inequality
+    as the stated reason (`_resolve_rbc_metric`). The per-metric gate is
+    `pixi run check-ball-cover-knn-identical`.
+
     **The distances are recomputed, not stored by the search.** The search
     kernel knows every distance at the moment it decides membership and
     throws them away; a separate pass walks the finished neighbour list and
@@ -700,42 +930,30 @@ class RadiusNeighbors(NumericModeMixin):
         self.algorithm = algorithm
         self.p = p
         self._index = None
+        self._metric_value = None
+        self._metric_arg = None
 
     def _check_refusals(self):
-        """Every refusal is BY NAME with the reason, raised at fit."""
-        # NOT `_METRIC_TABLE`, ON PURPOSE. `NearestNeighbors` now honors
-        # six metrics because `metric_distance_kernel` computes them; the
-        # ball cover does NOT, and the reason is structural rather than
-        # missing work. Its pruning is the TRIANGLE INEQUALITY on
-        # `eps_dist_sq` (neighbors/impl/neighbors/ball_cover/common.mojo,
-        # cuVS `ball_cover.cuh`): a landmark's radius bounds every point
-        # in its cover, and that bound is a bound only for a metric. Lp at
-        # p < 1 is not a metric at all (the triangle inequality fails), and
-        # cosine distance is not one either (it fails it too -- the ANGLE
-        # is a metric, `1 - cos` is not), so admitting either here would
-        # give a plausible, WRONG, silently pruned answer rather than a
-        # slower one. cuML draws the same line from the same side:
-        # `VALID_METRICS["rbc"]` is `{euclidean, haversine, l2}` and
-        # nothing else (neighbors/__init__.py:49).
-        if self.metric not in ("euclidean", "l2", "minkowski"):
-            raise ValueError(
-                f"mojolearn RadiusNeighbors: metric={self.metric!r} is "
-                "refused. The index here is cuVS's RANDOM BALL COVER, and "
-                "its pruning IS the triangle inequality on the landmark "
-                "radii (neighbors/impl/neighbors/ball_cover/common.mojo). "
-                "Cosine distance and Lp at p < 1 do not satisfy it, so a "
-                "cover built for them would prune away true neighbours "
-                "silently. cuML restricts the same index the same way "
-                "(VALID_METRICS['rbc'] = {euclidean, haversine, l2}). Use "
-                "NearestNeighbors, which is exact brute force and honors "
-                "every ported metric."
-            )
-        if self.metric == "minkowski" and self.p != 2:
-            raise ValueError(
-                f"mojolearn RadiusNeighbors: metric='minkowski' with p="
-                f"{self.p!r} is refused; only p=2 (Euclidean) is ported"
-            )
-        if self.algorithm != "auto":
+        """Every refusal is BY NAME with the reason, raised at fit.
+
+        NOT `_METRIC_TABLE`, AND NOT THE OLD EUCLIDEAN-ONLY LIST EITHER.
+        Until 2026-09-01 this admitted `euclidean`, `l2` and
+        `minkowski` at p = 2 and refused everything else, with a correct
+        reason attached: the pruning here IS the triangle inequality on the
+        landmark radii, so admitting a non-metric returns a plausible,
+        WRONG, silently pruned answer rather than a slow one. That argument
+        is kept and it decides the width: it covers cosine and Lp at p < 1
+        and `sqeuclidean`, and it does NOT cover Minkowski at p >= 1, which
+        is a true metric (that is Minkowski's inequality). So Manhattan,
+        Chebyshev and every Lp at p >= 1 are admitted now, and
+        `neighbors/checks/ball_cover_knn_check.mojo` gates each of them
+        against a host brute force per row with no tolerance.
+        `_resolve_rbc_metric` holds the table and every refusal message.
+        """
+        self._metric_value, self._metric_arg = _resolve_rbc_metric(
+            type(self).__name__, self.metric, self.p
+        )
+        if self.algorithm not in ("auto", "rbc"):
             raise ValueError(
                 f"mojolearn RadiusNeighbors: algorithm={self.algorithm!r} is "
                 "refused. The index here is cuVS's RANDOM BALL COVER, which "
@@ -743,7 +961,8 @@ class RadiusNeighbors(NumericModeMixin):
                 "is an index and it prunes), and it is neither 'ball_tree' "
                 "nor 'kd_tree' (it is a one-level cover over sqrt(n) "
                 "landmarks, not a tree). Naming any of them would describe "
-                "the wrong algorithm, so only 'auto' is accepted. The "
+                "the wrong algorithm, so 'auto' and 'rbc' -- the "
+                "algorithm's own name -- are the two accepted. The "
                 "results are exact either way"
             )
         if not np.isfinite(self.radius) or self.radius <= 0:
@@ -820,8 +1039,9 @@ class RadiusNeighbors(NumericModeMixin):
             _addr_ro(idx), _addr_ro(q), _addr(indptr),
             # ORDER MATCHES bindings/_mojolearn.mojo::
             # radius_neighbors_count_binding. n_index, n_queries, n_features,
-            # radius
-            [idx.shape[0], nq, idx.shape[1], r],
+            # radius, metric, metric_arg
+            [idx.shape[0], nq, idx.shape[1], r,
+             self._metric_value, self._metric_arg],
         )
         cols = np.empty(nnz, dtype=np.int32)
         dists = np.empty(nnz, dtype=np.float32)
@@ -829,8 +1049,12 @@ class RadiusNeighbors(NumericModeMixin):
             _addr_ro(idx), _addr_ro(q), _addr(indptr), _addr(cols),
             _addr(dists),
             # n_index, n_queries, n_features, radius, nnz_capacity,
-            # return_sqrt
-            [idx.shape[0], nq, idx.shape[1], r, nnz, 1],
+            # return_sqrt, metric, metric_arg. The metric MUST be the same
+            # value both passes saw: the index is built inside each call, so
+            # a metric that differed between them would count under one
+            # cover and fill under another.
+            [idx.shape[0], nq, idx.shape[1], r, nnz, 1,
+             self._metric_value, self._metric_arg],
         )
         # The Mojo side already refuses `got > nnz`. This asserts the other
         # direction too, because a SHORT fill would leave the tail of `cols`

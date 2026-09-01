@@ -212,17 +212,73 @@ zero distance is REPLACED WHOLESALE by its zero mask, so exact matches get
 agrees with sklearn on every fixture that has no duplicate point, which is
 why `check_knn_distance_weights` plants one.
 
-**`algorithm='kd_tree'` STAYS REFUSED, and the reason is engineering.**
-cuVS shipping no GPU kd-tree is NOT the reason and must not be given as
-one. A kd-tree query is a per-query stack walk with data-dependent
-branching and divergent memory access -- the shape a GPU is worst at -- and
-above roughly 15 dimensions the pruning bound stops firing and it
-degenerates to a full scan, so it would lose to the brute force in this
-directory on exactly the workloads it claims to help. The structure that
-DOES help in low dimensions is already here and is exact: cuVS's RANDOM
-BALL COVER, one level over sqrt(n) landmarks, no stack, no divergence,
-already serving `RadiusNeighbors`. What is actually owed is
-`rbc_knn_query`, not a tree, and that is the row in `NOT_IMPLEMENTED.tsv`.
+**`algorithm='kd_tree'` STAYS REFUSED, and the reason is engineering. What
+the caller actually wanted now EXISTS: `algorithm='rbc'`.** cuVS shipping
+no GPU kd-tree is NOT the reason and must not be given as one. A kd-tree
+query is a per-query stack walk with data-dependent branching and divergent
+memory access -- the shape a GPU is worst at -- and above roughly 15
+dimensions the pruning bound stops firing and it degenerates to a full
+scan, so it would lose to the brute force in this directory on exactly the
+workloads it claims to help. The structure that DOES help in low dimensions
+was already here and is exact: cuVS's RANDOM BALL COVER, one level over
+sqrt(n) landmarks, no stack, no divergence, already serving
+`RadiusNeighbors`. The sentence that used to close this paragraph -- "what
+is actually owed is `rbc_knn_query`, not a tree" -- was true until
+2026-09-01 and is not any more. `impl/neighbors/ball_cover/knn.mojo` is
+that query, `NearestNeighbors(algorithm='rbc')` is its surface, and the
+answer is EXACT: gated per query row against a host brute force with no
+tolerance under IDENTICAL. DEVIATIONS 558 to 567 are in that file.
+
+**The ball cover is no longer Euclidean-only, and the refusal is now
+exactly as wide as its own argument.** Its pruning IS the triangle
+inequality on the landmark radii, so the honest scope is THE METRICS:
+Euclidean, L1/Manhattan, Linf/Chebyshev and Minkowski at p >= 1 (that is
+Minkowski's inequality, which is what the name refers to). What stays
+refused is what genuinely fails the inequality -- cosine, Lp at p < 1, and
+SQUARED Euclidean, which is not a metric even though Euclidean distance is
+-- and every refusal message now says the inequality is what the pruning
+rests on. The bounds could not simply be re-pointed at a new distance
+function: they were written in SQUARED Euclidean space and an Lp radius has
+no squared form, so they were restructured into a per-metric COMPARISON
+space (`impl/neighbors/ball_cover/common.mojo`, DEVIATIONS 564 and 565).
+On the Euclidean arm that is the same arithmetic in the same order, so no
+Euclidean bit moves and `check-ball-cover` / `check-radius` /
+`check-dbscan` are the proof.
+
+**The ball-cover gates**: `pixi run check-ball-cover-knn` and
+`check-ball-cover-knn-identical` (`checks/ball_cover_knn_check.mojo`).
+Eight gates. The exhaustive one is 6 metrics x 7 values of k x 2 fixtures,
+per query row, against a host brute force spelled a second time; the
+zero-tolerance claim is the IDENTICAL run, because under FAST
+`identical_mul_add` is a bare `a * b + c` and `identical_pow` is the
+stdlib `**` on both sides, so the FAST arm carries a stated 64-ulp
+tolerance and prints its tie flips. Four sabotage arms and one non-vacuity
+control:
+
+    seam                        arm                          must move
+    --------------------------  ---------------------------  ---------
+    the pruning threshold       `prune_scale` swept down     the answer
+                                                             BREAKS, and
+                                                             the largest
+                                                             breaking
+                                                             scale is
+                                                             PRINTED
+    the four-ulp slack          `prune_scale` above 1        NOTHING
+                                (DEVIATION 567)
+    `R_radius`                  scaled to 0.3x               LOSES
+                                                             neighbours,
+                                                             never gains
+    `metric` reaching the       judge an L1 run by the       they DIFFER
+    kernel                      EUCLIDEAN oracle
+    (non-vacuity) `dist_count`  candidate distances vs       < 90% of
+                                brute force's                brute force
+
+A ONE-ULP TIGHTENING CANNOT MOVE THIS KERNEL AND THE GATE SAYS SO. The
+shipped threshold carries a deliberate four-ulp slack precisely so that
+float rounding can only ADMIT a candidate and never drop one, so a one-ulp
+tightening lands inside it. The downward sweep replaces that arm, and the
+printed breaking scale is the honest measure of how much tightening the
+fixture can detect.
 
 **The gates**: `pixi run check-metric` and `check-metric-identical`
 (`checks/metric_check.mojo`, with `checks/metric_oracle.mojo`'s three

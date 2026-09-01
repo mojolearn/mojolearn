@@ -85,6 +85,7 @@ from neighbors.estimator import (
     knn_search,
     radius_neighbors_count,
     radius_neighbors_fill,
+    rbc_knn_search,
 )
 
 
@@ -433,15 +434,21 @@ def radius_neighbors_count_binding(
         1  n_queries
         2  n_features
         3  radius        (float)
+        4  metric        cuVS `DistanceType`, and only the four the ball
+                         cover admits (DEVIATION 564); a non-metric is
+                         refused BY NAME on the Mojo side with the triangle
+                         inequality as the reason
+        5  metric_arg    Minkowski's `p`, read only when metric is
+                         LpUnexpanded, and refused below p = 1
 
     A radius query's output size is not a function of its inputs, so the
     caller cannot allocate before this call tells it how much to allocate.
     That is why there are two of these and not one; the reasoning is in
     `neighbors/estimator.mojo`'s RADIUS NEIGHBOURS banner.
     """
-    if len(params) != 4:
+    if len(params) != 6:
         raise Error(
-            "radius_neighbors_count: params must hold 4 values, got "
+            "radius_neighbors_count: params must hold 6 values, got "
             + String(len(params))
         )
     var ip = _f32_ptr(Int(py=index_addr))
@@ -451,11 +458,15 @@ def radius_neighbors_count_binding(
     var nq = Int(py=params[1])
     var nf = Int(py=params[2])
     var rad = Float32(Float64(py=params[3]))
+    var mtr = Int(py=params[4])
+    var marg = Float32(Float64(py=params[5]))
 
     var nnz: Int
     with GILReleased(Python()):
         var ctx = DeviceContext()
-        nnz = radius_neighbors_count(ctx, ip, ni, qp, nq, nf, rad, ap)
+        nnz = radius_neighbors_count(
+            ctx, ip, ni, qp, nq, nf, rad, ap, mtr, marg
+        )
     return PythonObject(nnz)
 
 
@@ -476,15 +487,21 @@ def radius_neighbors_fill_binding(
         2  n_features
         3  radius          (float)
         4  nnz_capacity    what pass one returned and the caller allocated
-        5  return_sqrt     (0 or 1)
+        5  return_sqrt     (0 or 1); a EUCLIDEAN policy, a no-op on the
+                           metrics that never took a root
+        6  metric          as pass one, and it MUST be the same value: the
+                           index is built inside each call, so a metric that
+                           differed between the two passes would count under
+                           one and fill under another
+        7  metric_arg      as pass one
 
     The return value is checked against `nnz_capacity` on the Mojo side and
     refused rather than truncated; it is returned as well so the wrapper can
     assert the same thing rather than trust it.
     """
-    if len(params) != 6:
+    if len(params) != 8:
         raise Error(
-            "radius_neighbors_fill: params must hold 6 values, got "
+            "radius_neighbors_fill: params must hold 8 values, got "
             + String(len(params))
         )
     var ip = _f32_ptr(Int(py=index_addr))
@@ -498,14 +515,72 @@ def radius_neighbors_fill_binding(
     var rad = Float32(Float64(py=params[3]))
     var cap = Int(py=params[4])
     var sq = Int(py=params[5]) != 0
+    var mtr = Int(py=params[6])
+    var marg = Float32(Float64(py=params[7]))
 
     var nnz: Int
     with GILReleased(Python()):
         var ctx = DeviceContext()
         nnz = radius_neighbors_fill(
-            ctx, ip, ni, qp, nq, nf, rad, ap, xp, dp, cap, sq
+            ctx, ip, ni, qp, nq, nf, rad, ap, xp, dp, cap, sq, mtr, marg
         )
     return PythonObject(nnz)
+
+
+def rbc_knn_search_binding(
+    index_addr: PythonObject,
+    queries_addr: PythonObject,
+    out_idx_addr: PythonObject,
+    out_dist_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """EXACT k-NN over a random ball cover. Returns the number of candidate
+    distances the query computed, which is the pruning it achieved.
+
+    `params` is, in this exact order:
+
+        0  n_index
+        1  n_queries
+        2  n_features
+        3  k
+        4  metric        cuVS `DistanceType`, and only the four the ball
+                         cover admits (DEVIATION 564)
+        5  metric_arg    Minkowski's `p`, refused below 1
+
+    ONE call, not two, because a k-NN query's output size is
+    `n_queries * k` and is known before the call. `out_idx` is int32 and
+    holds `-1` in an unfilled slot; `out_dist` is float32 and holds TRUE
+    distances in `metric`.
+
+    The return value is the CANDIDATE COUNT and not a tile size: brute force
+    over the same shapes would compute `n_index * n_queries`, so the caller
+    can divide and see how much the index pruned instead of assuming it
+    pruned anything. `neighbors/impl/neighbors/ball_cover/knn.mojo` explains
+    why that number is the one worth returning.
+    """
+    if len(params) != 6:
+        raise Error(
+            "rbc_knn_search: params must hold 6 values, got "
+            + String(len(params))
+        )
+    var ip = _f32_ptr(Int(py=index_addr))
+    var qp = _f32_ptr(Int(py=queries_addr))
+    var xp = _i32_ptr(Int(py=out_idx_addr))
+    var dp = _f32_ptr(Int(py=out_dist_addr))
+    var ni = Int(py=params[0])
+    var nq = Int(py=params[1])
+    var nf = Int(py=params[2])
+    var kk = Int(py=params[3])
+    var mtr = Int(py=params[4])
+    var marg = Float32(Float64(py=params[5]))
+
+    var n_dists: Int
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        n_dists = rbc_knn_search(
+            ctx, ip, ni, qp, nq, nf, kk, xp, dp, mtr, marg
+        )
+    return PythonObject(n_dists)
 
 
 @export
@@ -521,6 +596,7 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
             "radius_neighbors_count"
         )
         m.def_function[radius_neighbors_fill_binding]("radius_neighbors_fill")
+        m.def_function[rbc_knn_search_binding]("rbc_knn_search")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn module: ", e))

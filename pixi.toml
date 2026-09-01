@@ -968,6 +968,8 @@ check-knn = "mojo run -I . neighbors/knn_main.mojo"
 check-dbscan = "mojo run -I . dbscan/dbscan_main.mojo"
 check-ball-cover = "mojo run -I . neighbors/ball_cover_main.mojo"
 check-radius = "mojo run -I . neighbors/radius_main.mojo"
+check-ball-cover-knn = "mojo run -I . neighbors/ball_cover_knn_main.mojo"
+check-ball-cover-knn-identical = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . neighbors/ball_cover_knn_main.mojo"
 
 # WHAT IDENTICAL COSTS, alternated process by process because the two modes
 # are two binaries and this box drifts up to 1.7x across twenty minutes.

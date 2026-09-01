@@ -64,9 +64,23 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
   is still owed is a FITTED DEVICE HANDLE, so the index is built once rather
   than once per boundary call; the RADIUS NEIGHBOURS banner below says where
   that cost is paid.
-- Metrics other than expanded L2. The ported kernel carries only that arm
-  (`knn_brute_force.mojo`'s dispatch note), so cosine and L1 are a port, not
-  a flag.
+- Metrics other than expanded L2 EXIST since 2026-09-01:
+  `impl/distance/detail/distance_ops.mojo::metric_distance_kernel` computes
+  L2Expanded, L2SqrtExpanded, CosineExpanded, L1, L2Unexpanded,
+  L2SqrtUnexpanded, Linf and LpUnexpanded, and `_METRIC_TABLE` in
+  `python/mojolearn/neighbors.py` routes twelve spellings onto them. This
+  bullet said cosine and L1 were "a port, not a flag" and that stopped being
+  true when the metric lane landed. What is still refused there is the six
+  names in cuML's `VALID_METRICS['brute']` that no kernel here computes;
+  `NOT_IMPLEMENTED.tsv` lists them.
+- k-NN OVER AN INDEX EXISTS since 2026-09-01: `rbc_knn_search` at the bottom
+  of this file, over the same random ball cover the radius surface uses. It
+  is EXACT, not approximate, and it is the honest answer to a request for
+  `algorithm='kd_tree'`; `neighbors/impl/neighbors/ball_cover/knn.mojo`
+  carries the bounds, their proofs and DEVIATIONS 558 to 567. What is still
+  owed there is the same fitted device handle the radius bullet owes, and a
+  `bench/` row: no arm of that lane has measured SPEED, only exactness and
+  the pruning ratio `rbc_knn_search` returns.
 - `KNeighborsClassifier` / `KNeighborsRegressor` EXIST since 2026-08-23:
   `knn_classifier_predict` / `knn_regressor_predict` below, over the cuML
   port in `neighbors/impl/knn/knn.mojo` and
@@ -196,6 +210,14 @@ def knn_metric_from_name(name: String) raises -> Int:
         )
     raise Error("mojolearn k-NN: unknown metric '" + name + "'")
 from neighbors.checks.radius_distances import rbc_edge_distances
+from neighbors.impl.neighbors.ball_cover.common import (
+    RBC_METRIC_DEFAULT,
+    rbc_validate_metric,
+)
+from neighbors.impl.neighbors.ball_cover.knn import (
+    RBC_KNN_MAX_K,
+    rbc_knn_query,
+)
 from neighbors.impl.neighbors.ball_cover.ball_cover import (
     rbc_build_index,
     rbc_eps_nn_query_count,
@@ -1046,6 +1068,8 @@ def _rbc_index_and_count(
     n_features: Int,
     n_landmarks: Int,
     radius: Float32,
+    metric: Int = RBC_METRIC_DEFAULT,
+    metric_arg: Float32 = Float32(2.0),
 ) raises -> Int:
     """Build the ball cover over `x`, then count `queries`' eps neighbours.
 
@@ -1078,6 +1102,9 @@ def _rbc_index_and_count(
         n_index,
         n_features,
         n_landmarks,
+        UInt64(12345),
+        metric,
+        metric_arg,
     )
 
     # `eps` IS THE RADIUS, NOT ITS SQUARE. The kernel squares it internally
@@ -1098,6 +1125,8 @@ def _rbc_index_and_count(
         n_features,
         n_landmarks,
         radius,
+        metric,
+        metric_arg,
     )
     _ = landmark_ids^
     _ = slot_cols^
@@ -1146,6 +1175,8 @@ def radius_neighbors_count(
     n_features: Int,
     radius: Float32,
     out_indptr_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    metric: Int = RBC_METRIC_DEFAULT,
+    metric_arg: Float32 = Float32(2.0),
 ) raises -> Int:
     """Pass one: how many neighbours, and where each query's row begins.
 
@@ -1156,6 +1187,10 @@ def radius_neighbors_count(
     _radius_check_shapes(
         n_index, n_queries, n_features, radius, "radius_neighbors_count"
     )
+    # DEVIATION 564: refuse a non-metric BEFORE anything is allocated or
+    # uploaded. The message names the triangle inequality, because a caller
+    # told only "refused" will reasonably read it as unported work.
+    rbc_validate_metric(metric, metric_arg)
     var n_landmarks = rbc_n_landmarks(n_index)
 
     var x = ctx.enqueue_create_buffer[DType.float32](n_index * n_features)
@@ -1194,6 +1229,8 @@ def radius_neighbors_count(
         n_features,
         n_landmarks,
         radius,
+        metric,
+        metric_arg,
     )
     ctx.enqueue_copy(dst_ptr=out_indptr_ptr, src_buf=adj_ia)
     ctx.synchronize()
@@ -1223,6 +1260,8 @@ def radius_neighbors_fill(
     out_dist_ptr: MutPointer[Float32, MutUntrackedOrigin],
     nnz_capacity: Int,
     return_sqrt: Bool = True,
+    metric: Int = RBC_METRIC_DEFAULT,
+    metric_arg: Float32 = Float32(2.0),
 ) raises -> Int:
     """Pass two: the columns and the distances, in CSR order.
 
@@ -1238,6 +1277,7 @@ def radius_neighbors_fill(
     _radius_check_shapes(
         n_index, n_queries, n_features, radius, "radius_neighbors_fill"
     )
+    rbc_validate_metric(metric, metric_arg)  # DEVIATION 564
     if nnz_capacity < 0:
         raise Error(
             "radius_neighbors_fill: nnz_capacity must not be negative, got "
@@ -1281,6 +1321,8 @@ def radius_neighbors_fill(
         n_features,
         n_landmarks,
         radius,
+        metric,
+        metric_arg,
     )
     if nnz > nnz_capacity:
         raise Error(
@@ -1316,7 +1358,13 @@ def radius_neighbors_fill(
             n_features,
             n_landmarks,
             radius,
+            metric,
+            metric_arg,
         )
+        # THE SAME METRIC THE SEARCH USED, and it is not optional: the
+        # returned distances have to be in the metric the caller asked for,
+        # and a mismatch here would hand back Euclidean numbers beside an L1
+        # neighbour list -- plausible, wrong, and invisible.
         rbc_edge_distances(
             ctx,
             adj_ia,
@@ -1329,6 +1377,8 @@ def radius_neighbors_fill(
             nnz,
             nnz,
             return_sqrt,
+            metric,
+            metric_arg,
         )
         ctx.enqueue_copy(dst_ptr=out_idx_ptr, src_buf=adj_ja)
         ctx.enqueue_copy(dst_ptr=out_dist_ptr, src_buf=out_dist)
@@ -1349,3 +1399,179 @@ def radius_neighbors_fill(
     _ = adj_ia^
     _ = vd^
     return nnz
+
+
+# ---------------------------------------------------------------------------
+# k-NEAREST NEIGHBOURS OVER THE BALL COVER
+#
+# The INDEXED k-NN entry point. `knn_search` above is exact brute force and
+# stays the default; this is the same answer computed by pruning instead of
+# by comparing every pair, and it is what a caller asking for a spatial index
+# actually wants. `neighbors/impl/neighbors/ball_cover/knn.mojo` carries the
+# bounds and their proofs, and `NOT_IMPLEMENTED.tsv`'s kd-tree row records why
+# a tree is not the structure that answers that request on a GPU.
+#
+# ONE CALL, NOT TWO. The radius surface above needs two boundary crossings
+# because a radius query's output size is discovered by running it. A k-NN
+# query's output size is `n_queries * k` and is known before the call, so
+# there is one entry point here and the caller allocates up front.
+#
+# THE INDEX IS STILL BUILT PER CALL, for the same reason the radius surface
+# gives: nothing in this library holds a fitted device handle yet. The build
+# is O(m * sqrt(m)) against a query that is the part this exists to make
+# sublinear, so a caller doing ONE query batch against a fresh index pays
+# roughly what brute force costs and gains nothing; the win is a large query
+# batch, and it is a large win only when the cover prunes. `out_n_dists` is
+# returned so the caller can SEE how much it pruned rather than assume.
+# ---------------------------------------------------------------------------
+
+
+def rbc_knn_search(
+    ctx: DeviceContext,
+    index_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_index: Int,
+    queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_queries: Int,
+    n_features: Int,
+    k: Int,
+    out_idx_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    out_dist_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    metric: Int = RBC_METRIC_DEFAULT,
+    metric_arg: Float32 = Float32(2.0),
+) raises -> Int:
+    """Exact k-NN over a random ball cover built on `index_ptr`.
+
+    Writes `n_queries * k` int32 into `out_idx_ptr` (original index-point
+    ids, `-1` for an unfilled slot) and `n_queries * k` float32 into
+    `out_dist_ptr` (TRUE distances in `metric`), both row-major and ordered
+    by `(comparison-space distance, index)` ascending, which is the total
+    order stated at the top of `impl/neighbors/ball_cover/knn.mojo`.
+
+    Returns the TOTAL number of candidate distances the query actually
+    computed. Brute force over the same shapes would compute
+    `n_queries * n_index`, so the ratio of the two is the pruning this call
+    achieved, and it is returned rather than printed because a caller and a
+    benchmark both want it.
+    """
+    _radius_check_shapes(
+        n_index, n_queries, n_features, Float32(1.0), "rbc_knn_search"
+    )
+    rbc_validate_metric(metric, metric_arg)  # DEVIATION 564
+    if k < 1:
+        raise Error("rbc_knn_search: k must be at least 1, got " + String(k))
+    if k > n_index:
+        raise Error(
+            "rbc_knn_search: k = "
+            + String(k)
+            + " exceeds the "
+            + String(n_index)
+            + " points in the index. Refused rather than padded: a padded"
+            " answer is indistinguishable from a complete one."
+        )
+    if k > RBC_KNN_MAX_K:
+        raise Error(
+            "rbc_knn_search: k = "
+            + String(k)
+            + " exceeds RBC_KNN_MAX_K = "
+            + String(RBC_KNN_MAX_K)
+            + ". Use knn_search, whose selector is sized per launch."
+        )
+    var n_landmarks = rbc_n_landmarks(n_index)
+
+    var x = ctx.enqueue_create_buffer[DType.float32](n_index * n_features)
+    var queries = ctx.enqueue_create_buffer[DType.float32](
+        n_queries * n_features
+    )
+    var r = ctx.enqueue_create_buffer[DType.float32](n_landmarks * n_features)
+    var x_reordered = ctx.enqueue_create_buffer[DType.float32](
+        n_index * n_features
+    )
+    var landmark_ids = ctx.enqueue_create_buffer[DType.int32](n_landmarks)
+    var slot_cols = ctx.enqueue_create_buffer[DType.int32](n_index)
+    var slot_dists = ctx.enqueue_create_buffer[DType.float32](n_index)
+    var nearest = ctx.enqueue_create_buffer[DType.int32](n_index)
+    var nearest_dist = ctx.enqueue_create_buffer[DType.float32](n_index)
+    var r_indptr = ctx.enqueue_create_buffer[DType.int32](n_landmarks + 1)
+    var r_1nn_cols = ctx.enqueue_create_buffer[DType.int32](n_index)
+    var r_1nn_dists = ctx.enqueue_create_buffer[DType.float32](n_index)
+    var r_radius = ctx.enqueue_create_buffer[DType.float32](n_landmarks)
+    var counts = ctx.enqueue_create_buffer[DType.int32](n_landmarks)
+    var out_inds = ctx.enqueue_create_buffer[DType.int32](n_queries * k)
+    var out_dists = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
+    var dist_count = ctx.enqueue_create_buffer[DType.int32](n_queries)
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_buf=x, src_ptr=index_ptr)
+    ctx.enqueue_copy(dst_buf=queries, src_ptr=queries_ptr)
+    ctx.synchronize()
+
+    rbc_build_index(
+        ctx,
+        x,
+        r,
+        x_reordered,
+        landmark_ids,
+        slot_cols,
+        slot_dists,
+        nearest,
+        nearest_dist,
+        r_indptr,
+        r_1nn_cols,
+        r_1nn_dists,
+        r_radius,
+        counts,
+        n_index,
+        n_features,
+        n_landmarks,
+        UInt64(12345),
+        metric,
+        metric_arg,
+    )
+    rbc_knn_query(
+        ctx,
+        x_reordered,
+        queries,
+        r,
+        r_indptr,
+        r_1nn_cols,
+        r_1nn_dists,
+        r_radius,
+        out_inds,
+        out_dists,
+        dist_count,
+        n_queries,
+        n_features,
+        n_landmarks,
+        k,
+        metric,
+        metric_arg,
+    )
+    ctx.enqueue_copy(dst_ptr=out_idx_ptr, src_buf=out_inds)
+    ctx.enqueue_copy(dst_ptr=out_dist_ptr, src_buf=out_dists)
+    ctx.synchronize()
+
+    var hc = ctx.enqueue_create_host_buffer[DType.int32](n_queries)
+    ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=dist_count)
+    ctx.synchronize()
+    var total = 0
+    for i in range(n_queries):
+        total += Int(hc.unsafe_ptr().unsafe_load(i))
+
+    _ = x^
+    _ = queries^
+    _ = r^
+    _ = x_reordered^
+    _ = landmark_ids^
+    _ = slot_cols^
+    _ = slot_dists^
+    _ = nearest^
+    _ = nearest_dist^
+    _ = r_indptr^
+    _ = r_1nn_cols^
+    _ = r_1nn_dists^
+    _ = r_radius^
+    _ = counts^
+    _ = out_inds^
+    _ = out_dists^
+    _ = dist_count^
+    _ = hc^
+    return total
