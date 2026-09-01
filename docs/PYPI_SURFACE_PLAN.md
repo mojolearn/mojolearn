@@ -80,3 +80,12 @@ bound how this gets done: **no heavy compute on the laptop** (builds go to the
 ephemeral runner, one at a time), and **publishing is outward-facing and needs
 Andrew's word each time** -- a version on PyPI cannot be recalled, only
 yanked.
+
+## GaussianProcessRegressor: NOT reachable, and NOT for the usual reason
+
+Every other entry on this page is absent because it lacks a binding. This one
+has everything it needs and is held back deliberately: its IDENTICAL card
+diverges Apple against AMD on 8 of 3494 stages, starting at `gp.kernel`. It
+was on the shortlist for exposure and was pulled after the cards were diffed,
+which no leg had done. See `bench/results/e1/GP_CROSS_VENDOR_DIVERGENCE.md`
+and the `_NOT_YET` entry in `python/mojolearn/__init__.py`.

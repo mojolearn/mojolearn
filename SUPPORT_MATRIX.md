@@ -18,6 +18,29 @@ Exact versions, commits and result status are recorded in
 [E1_RUNBOOK.md](E1_RUNBOOK.md). A check mark in source code is not a
 certificate; a released result card is.
 
+## Gaussian process: WITHHELD, cross-vendor identity broken
+
+`gaussian_process/` is complete and its own gates pass on the M4 in both
+tiers. It is NOT exposed through the Python surface and must not be claimed,
+because its IDENTICAL card DIVERGES between vendors.
+
+Apple md5 `6e638e82a73e` against AMD `6bdeb28d6c81`, 8 of 3494 stages,
+originating at `gp.kernel`, the RBF Gram and the first computed stage of that
+block. Twenty-nine sibling blocks with the same header and the same input
+agree across vendors, and the divergent block sits at the same card position
+on both boxes, so it is deterministic rather than flaky.
+
+Both legs printed `ALL PASSED [IDENTICAL]`. A per-vendor run checks a card
+against its own oracle, and cross-vendor identity is by construction a claim
+about TWO cards, so a green leg is not evidence for it.
+
+This package's headline promise is the same bits on every vendor. Shipping
+this estimator would ship a counterexample to that promise, so it is held
+back until the divergence is understood, not until the lane is finished. The
+lane is finished.
+
+Evidence: `bench/results/e1/GP_CROSS_VENDOR_DIVERGENCE.md`.
+
 ## The three tiers, and what each one promises
 
 The mode is a runtime parameter. `mojolearn.set_numeric_mode()` or

@@ -210,7 +210,32 @@ __all__ = [
 # sentence was to write the surface rather than to soften the sentence. Keep
 # the mechanism: the next lane that is finished underneath and unreachable
 # from Python belongs in here, by name, not left to an AttributeError.
-_NOT_YET = {}
+_NOT_YET = {
+    # GAUSSIAN PROCESS IS HELD BACK ON PURPOSE, AND NOT FOR LACK OF CODE.
+    # The lane is complete and its own gates pass. It is held back because
+    # its IDENTICAL card DIVERGES between vendors and nothing caught it for
+    # four days, which is a stronger reason to withhold an estimator than an
+    # unfinished one.
+    "GaussianProcessRegressor": (
+        "gaussian_process/ (6,922 lines, the RBF and Matern kernels, the "
+        "Cholesky factorization, the predictive mean and variance, gated on "
+        "the M4 in both tiers); CROSS-VENDOR IDENTITY IS BROKEN. The "
+        "IDENTICAL card diverges Apple against AMD, md5 6e638e82a73e against "
+        "6bdeb28d6c81, on 8 of 3494 stages, originating at gp.kernel, the "
+        "RBF Gram and the first computed stage of that block; gp.ridged, "
+        "chol.jittered, chol.panel000.factored, chol.factor, gp.factor, "
+        "gp.kcross and gp.v all inherit it. It is not flaky: 29 sibling "
+        "blocks with the same header and the same input agree across "
+        "vendors, and the divergent block sits at the same card position on "
+        "both boxes. BOTH LEGS PRINTED ALL PASSED, because a per-vendor run "
+        "checks a card against its own oracle and cross-vendor identity is a "
+        "claim about TWO cards. This package's headline promise is the same "
+        "bits on every vendor, so shipping this estimator would ship a "
+        "counterexample to it. See bench/results/e1/GP_CROSS_VENDOR_"
+        "DIVERGENCE.md. It returns when the divergence is understood, not "
+        "when the lane is finished, because the lane is finished"
+    ),
+}
 
 
 def __getattr__(name):
