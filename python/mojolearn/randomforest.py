@@ -21,6 +21,19 @@ will surprise an sklearn user, documented on the classes as well:
 EVERY sklearn-SHAPED PARAMETER IS EITHER HONOURED OR REFUSED BY NAME. None
 is accepted and ignored.
 
+`max_leaf_nodes` IS REFUSED, AND IT WAS SILENTLY ALIASED UNTIL 2026-09-01
+(DEVIATION 408). sklearn's `max_leaf_nodes=k` selects BEST-FIRST growth to
+exactly k leaves -- `tree/_classes.py:446-447` swaps in
+`BestFirstTreeBuilder` the moment the value is not None -- and there is no
+best-first grower in `ensemble/`. cuML's `max_leaves` is a CAP on a
+LEVEL-ORDER grower, which answers a different question and returns a
+different tree from the same data, so this wrapper now carries cuML's knob
+under cuML's own name, `max_leaves=`, and refuses sklearn's spelling by
+name. The best-first semantics DO exist in this library, on the
+`extratrees` surface, whose `max_leaf_nodes` IS sklearn's (`extratrees/`,
+DEVIATION BLOCKS 466 to 469). The two are deliberately not spelled alike on
+either surface and are never aliased onto each other.
+
 `random_state=None` is DETERMINISTIC here (seed 0), same deviation as the
 extratrees surface and for the same reason: this library's claim is
 bit-reproducibility, so a nondeterministic default entry point would be the
@@ -79,6 +92,46 @@ _NOT_PORTED_CRITERIA = {
 }
 
 
+# DEVIATION 408 (2026-09-01, RF lane). SKLEARN'S LEAF BUDGET IS REFUSED
+# RATHER THAN ALIASED.
+# WHAT WAS HERE: `max_leaves=(-1 if max_leaf_nodes is None else
+# int(max_leaf_nodes))`, a straight rename of one parameter onto another.
+# WHY THAT IS WRONG: sklearn's `max_leaf_nodes=k` is a GROWTH ORDER, not a
+# bound. `tree/_classes.py:446-447` reads "Use BestFirst if max_leaf_nodes
+# given; use DepthFirst otherwise" and constructs `BestFirstTreeBuilder`,
+# which expands the frontier node with the largest impurity improvement
+# until exactly k leaves exist. cuML's `max_leaves` bounds a LEVEL-ORDER
+# grower and reorders nothing: `NodeQueue::Pop` takes from the FRONT of a
+# FIFO and `Push` appends to the BACK (`builder.cuh:70-78`, `:117`,
+# transcribed at `ensemble/decisiontree/batched_levelalgo/builder.mojo`),
+# and the budget is spent by whichever nodes that order reaches first --
+# tested in `IsExpandable` (`builder.cuh:82-88`) and again inside `Push`
+# (`:101`). Same k, different tree, no error and no warning.
+# HOW LONG IT STOOD: the E2 cell `rf_clf_maxleaf` has scored IDENTICAL
+# (388 stages) in every recorded round on every column, which certifies
+# that the aliased answer is REPRODUCIBLE and says nothing about whether it
+# is the answer that was asked for.
+# THE FIX IS AT THIS BOUNDARY, not in the builder: cuML's knob is now
+# carried under cuML's own name (`max_leaves=`, slot 5, unchanged), and
+# sklearn's spelling is refused by name with a pointer at the surface that
+# does implement it.
+_MAX_LEAF_NODES_WHY = (
+    "sklearn's max_leaf_nodes=k is BEST-FIRST GROWTH to exactly k leaves"
+    " (tree/_classes.py:446-447 swaps in BestFirstTreeBuilder the moment"
+    " the value is not None), and ensemble/ has no best-first grower."
+    " cuML's nearest knob, max_leaves, is a CAP on a LEVEL-ORDER grower"
+    " that reorders nothing -- NodeQueue pops from the front of a FIFO and"
+    " pushes to the back (builder.cuh:70-78, :117) and the budget is spent"
+    " by whichever nodes that order reaches first (:82-88, :101) -- so the"
+    " same k gives a DIFFERENT TREE. This surface aliased one onto the"
+    " other until 2026-09-01 and returned that different tree without"
+    " saying so. Pass max_leaves= for cuML's cap, which these classes now"
+    " carry under its own name, or use mojolearn.ExtraTreesClassifier /"
+    " ExtraTreesRegressor, whose max_leaf_nodes IS sklearn's best-first"
+    " budget (extratrees/, DEVIATION BLOCKS 466 to 469)."
+)
+
+
 def _refuse(name, why):
     raise NotImplementedError(
         f"{name} is not ported: {why} Refused by name rather than accepted"
@@ -128,6 +181,37 @@ def _max_features_fraction(max_features, n_features):
     return f
 
 
+def _max_leaves_slot(max_leaves):
+    """cuML's `max_leaves` into slot 5 of the params list.
+
+    -1 is THEIR sentinel for unlimited, not ours (`decisiontree.hpp:83`,
+    `randomforest_common.pyx:318`, and the default table in
+    `ensemble/randomforest.mojo`); a positive int is a cap. `None` is
+    accepted as a spelling of -1 because a Python caller reaches for it.
+    Everything else is refused HERE rather than by
+    `DecisionTreeParams.check()` (`ensemble/decisiontree/decisiontree.mojo`
+    :257-258, which raises "Invalid max leaves"), so the message can name
+    the sentinel the caller was supposed to pass.
+    """
+    if max_leaves is None:
+        return -1
+    if isinstance(max_leaves, bool) or not isinstance(
+        max_leaves, (int, np.integer)
+    ):
+        raise ValueError(
+            f"max_leaves={max_leaves!r} must be None, -1 (cuML's sentinel"
+            " for unlimited) or a positive int count"
+        )
+    v = int(max_leaves)
+    if v == -1 or v > 0:
+        return v
+    raise ValueError(
+        f"max_leaves={v} is not a leaf cap: cuML accepts -1 (unlimited) or"
+        " a positive count, and ensemble/decisiontree/decisiontree.mojo"
+        ":257-258 raises on anything else"
+    )
+
+
 class _RandomForestBase(NumericModeMixin):
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_rf"
@@ -137,6 +221,7 @@ class _RandomForestBase(NumericModeMixin):
         n_estimators,
         max_depth,
         max_leaf_nodes,
+        max_leaves,
         max_features,
         n_bins,
         min_samples_leaf,
@@ -162,6 +247,8 @@ class _RandomForestBase(NumericModeMixin):
                 f"device must be 'gpu', got {device!r}: ensemble/ has no"
                 " host transcription of the forest builder"
             )
+        if max_leaf_nodes is not None:
+            _refuse("max_leaf_nodes", _MAX_LEAF_NODES_WHY)
         if oob_score:
             _refuse("oob_score=True", "the engine computes it"
                     " (`fit_forest(oob_score=True)`) but this boundary does"
@@ -196,7 +283,7 @@ class _RandomForestBase(NumericModeMixin):
                 _CUML_DEFAULT_MAX_DEPTH if max_depth is None
                 else int(max_depth)
             ),
-            max_leaves=(-1 if max_leaf_nodes is None else int(max_leaf_nodes)),
+            max_leaves=_max_leaves_slot(max_leaves),
             max_features=max_features,
             n_bins=int(n_bins),
             min_samples_leaf=int(min_samples_leaf),
@@ -348,6 +435,11 @@ class RandomForestClassifier(_RandomForestBase):
     `RandomForest::predict` argmaxes (`randomforest.cuh:417-427`).
     Entropy's `log` is DEVIATION 113/406's: it runs in both numeric modes
     and is bit-comparable to cuML's in neither.
+
+    `max_leaves` is cuML's leaf budget, -1 (unlimited) by default, and it
+    caps a LEVEL-ORDER grower. It is NOT sklearn's `max_leaf_nodes`, which
+    is best-first growth to exactly k leaves and is refused by name here
+    (DEVIATION 408); `mojolearn.ExtraTreesClassifier` is where that lives.
     """
 
     def __init__(
@@ -372,6 +464,7 @@ class RandomForestClassifier(_RandomForestBase):
         ccp_alpha=0.0,
         max_samples=None,
         monotonic_cst=None,
+        max_leaves=-1,
         n_bins=_CUML_DEFAULT_N_BINS,
         n_streams=_CUML_DEFAULT_N_STREAMS,
         max_batch_size=_CUML_DEFAULT_MAX_BATCH,
@@ -382,7 +475,8 @@ class RandomForestClassifier(_RandomForestBase):
             _refuse("min_weight_fraction_leaf",
                     "sample weights do not cross this boundary yet.")
         super().__init__(
-            n_estimators, max_depth, max_leaf_nodes, max_features, n_bins,
+            n_estimators, max_depth, max_leaf_nodes, max_leaves,
+            max_features, n_bins,
             min_samples_leaf, min_samples_split, min_impurity_decrease,
             bootstrap, max_samples, random_state, n_streams, max_batch_size,
             oob_score, warm_start, ccp_alpha, class_weight, monotonic_cst,
@@ -442,6 +536,11 @@ class RandomForestRegressor(_RandomForestBase):
     fits stumps. `fit` refuses instead: 'poisson' needs y >= 0 with a
     positive sum (sklearn's rule, which is the engine's per-node guard
     applied at the root); 'gamma' and 'inverse_gaussian' need y > 0.
+
+    `max_leaves` is cuML's leaf budget, -1 (unlimited) by default, and it
+    caps a LEVEL-ORDER grower. It is NOT sklearn's `max_leaf_nodes`, which
+    is best-first growth to exactly k leaves and is refused by name here
+    (DEVIATION 408); `mojolearn.ExtraTreesRegressor` is where that lives.
     """
 
     def __init__(
@@ -465,6 +564,7 @@ class RandomForestRegressor(_RandomForestBase):
         ccp_alpha=0.0,
         max_samples=None,
         monotonic_cst=None,
+        max_leaves=-1,
         n_bins=_CUML_DEFAULT_N_BINS,
         n_streams=_CUML_DEFAULT_N_STREAMS,
         max_batch_size=_CUML_DEFAULT_MAX_BATCH,
@@ -475,7 +575,8 @@ class RandomForestRegressor(_RandomForestBase):
             _refuse("min_weight_fraction_leaf",
                     "sample weights do not cross this boundary yet.")
         super().__init__(
-            n_estimators, max_depth, max_leaf_nodes, max_features, n_bins,
+            n_estimators, max_depth, max_leaf_nodes, max_leaves,
+            max_features, n_bins,
             min_samples_leaf, min_samples_split, min_impurity_decrease,
             bootstrap, max_samples, random_state, n_streams, max_batch_size,
             oob_score, warm_start, ccp_alpha, None, monotonic_cst,

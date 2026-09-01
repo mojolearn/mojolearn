@@ -863,8 +863,13 @@ def run_tree(
     h_sz.unsafe_ptr().unsafe_store(0, UInt32(n_rows))
     ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_off.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=hp_off, src_ptr=h_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=hp_sz, src_ptr=h_sz.unsafe_ptr())
+    # DEVIATION 2007b: the `hp_off`/`hp_sz` seed uploads that stood here
+    # are DELETED -- write-only in this driver as well (their only other
+    # reference is `update_partitions_after_split_kernel`'s output args,
+    # the unread `partsCpu` mirror). See the banner in
+    # `run_tree_layout_traced`; `checks/plan_fusion_check.mojo` POISON-
+    # seeds the pair on purpose. The buffers stay: the kernel still
+    # stores into them.
 
     var hist_cells = max_leaves * stat_count * n_features
     var hist = ctx.enqueue_create_buffer[DType.float32](hist_cells)
@@ -2701,6 +2706,21 @@ struct TTreeWorkspace(Movable):
     var max_leaves_key: Int
     var n_features_key: Int
     var hist_cells_per_leaf_key: Int
+    # ================= DEVIATION 2007a =================
+    # NOT a pool key: the device's SM count, cached here because ONE
+    # `ctx.get_attribute` costs 1.26 ms on this Metal device (measured,
+    # 100 calls in 126 ms -- the threading note in
+    # `gpu_util/partitions_reduce.mojo` and `kernel/split_points.mojo`
+    # carry the same price). Their `TArchProps::SMCount()` is a CACHED
+    # static read once at init; this port's drivers were re-querying it
+    # ONCE PER TREE. `__init__` already made this exact query for chunk
+    # sizing, so the field costs nothing new; a machine constant within a
+    # process, so every reader gets the identical integer the per-tree
+    # query returned. Bit-inert by construction. The workspace is bound
+    # to the `ctx` it was built on (its buffers already are), which is
+    # the same context every driver call hands back with the pool.
+    # ====================================================
+    var sm_count: Int
     var dblocks: List[DeviceBlock]
     var p_off: DeviceBuffer[DType.uint32]
     var p_sz: DeviceBuffer[DType.uint32]
@@ -2801,6 +2821,8 @@ struct TTreeWorkspace(Movable):
         self.max_leaves_key = max_leaves
         self.n_features_key = n_features
         self.hist_cells_per_leaf_key = hist_cells_per_leaf
+        # DEVIATION 2007a: the one query, kept for the fit's lifetime.
+        self.sm_count = sm_count
         self.hist_cells = hist_cells
         self.block_cells = block_cells
         self.acc_live_key = acc_live
@@ -3111,8 +3133,9 @@ def run_tree_layout_traced[
     var hist_cells_per_leaf = layout.hist_cells
 
     # their `TArchProps::SMCount()`, read from the device rather than
-    # guessed. `replication_for` turns it into their grid x factor.
-    var sm_count = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+    # guessed -- but read from the POOL below (DEVIATION 2007a), not
+    # re-queried per tree: the query stood here and cost 1.26 ms/call on
+    # Metal. `replication_for` turns it into their grid x factor.
 
     var wide = (n_rows + 255) // 256
     if wide > 256:
@@ -3139,6 +3162,9 @@ def run_tree_layout_traced[
             ctx, layout, blocks, n_rows, stat_count, max_depth,
             _ACC_LIVE,
         ))
+    # DEVIATION 2007a: the machine constant, off the pool. Same integer
+    # the deleted per-tree `get_attribute` returned, minus its 1.26 ms.
+    var sm_count = ws[0].sm_count
     ref hist = ws[0].hist
     ref block_hist = ws[0].block_hist
     ref acc_i32 = ws[0].acc_i32
@@ -3213,9 +3239,35 @@ def run_tree_layout_traced[
     h_sz.unsafe_ptr().unsafe_store(0, UInt32(n_rows))
     ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_off.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=hp_off, src_ptr=h_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=hp_sz, src_ptr=h_sz.unsafe_ptr())
-    ctx.enqueue_memset(hist, Float32(0.0))
+    # ================= DEVIATION 2007b =================
+    # The `hp_off`/`hp_sz` root seeds that stood here (two uploads per
+    # tree) are DELETED: both buffers are WRITE-ONLY in this driver.
+    # Their only other reference is `update_partitions_and_plan_kernel`'s
+    # output arguments -- the `partsCpu` mirror the kernel stores and
+    # nothing reads, because ours are ordinary device buffers instead of
+    # pinned host memory (the forced deviation in
+    # `gpu_util/gpu_data/partitions.mojo`'s block). The standing proof
+    # the seed is not load-bearing: `checks/plan_fusion_check.mojo` seeds
+    # this pair with POISON on purpose and compares every WRITTEN word
+    # per cell against a host oracle -- the check's own design treats the
+    # pre-kernel contents as meaningless.
+    # ====================================================
+    # ================= DEVIATION 2008b =================
+    # The per-tree `enqueue_memset(hist, 0)` that stood next is DELETED,
+    # the same argument class as 1892's `acc_i32` memset elision directly
+    # below. No cell of `hist` is read before it is written: the level
+    # loop's writeback kernels (`write_reduces_histograms_kernel`,
+    # `write_reduces_from_fixed_kernel[True/False]`,
+    # `kernel/histogram_utils.mojo`) STORE unconditionally over every
+    # (compute leaf, stat, bin) cell -- DEVIATION 2008a's coverage
+    # argument, spelled at the level loop -- so depth 0's only live slot
+    # is fully overwritten before `scan_histograms_kernel` reads it, and
+    # every deeper slot receives its parent from `copy_histograms_*` at
+    # split time before anything reads it. The identity trace hashes only
+    # the LIVE PREFIX at each depth (its rule 3), which is exactly the
+    # written set, so the traced hashes cannot see the deleted zeros
+    # either. `hist_cells` floats of zeroing per tree bought nothing.
+    # ====================================================
     # DEVIATION 1892: the accumulator memset is dead work under a float
     # flush -- `NUMERIC_FAST` on a float-atomics column with the
     # warp-private `hist2` arm never writes OR reads `acc_i32` (the file's
@@ -3410,10 +3462,13 @@ def run_tree_layout_traced[
         #   and their tie lands on the RIGHT child -- see
         #   `plan_level_kernel`'s docstring for the full correction.
         # * their `NonZeroLeaves`/`ZeroLeaves` split skipped empty
-        #   leaves' builds and zeroed their slots. The compute slots are
-        #   now zeroed UNCONDITIONALLY before the build (the builder
-        #   writes nothing for an empty range, so the zero IS the empty
-        #   leaf's histogram), which subsumes that logic without sizes.
+        #   leaves' builds and zeroed their slots. The compute slots were
+        #   first zeroed UNCONDITIONALLY before the build; DEVIATION 2008a
+        #   then retired that pass too, because the writeback kernels
+        #   STORE every compute cell unconditionally and an empty leaf's
+        #   zeros arrive through the zeroed block scratch (or the
+        #   self-zeroed accumulator) they store from -- the empty-leaf
+        #   logic is subsumed without sizes AND without a zero pass.
         # * grid sizing used the level's largest leaf; it now uses
         #   `n_rows`, a safe upper bound (kernels stride leaf ranges).
         # * the gates and the split record move to the post-loop walk,
@@ -3444,21 +3499,56 @@ def run_tree_layout_traced[
                 zero_ids.unsafe_ptr()
             )
 
-        # zero the compute slots (their `ZeroLeavesHistograms`, applied to
-        # every compute slot rather than the empty ones the host no longer
-        # knows about; a computed slot is overwritten either way, and an
-        # empty one's zeros ARE its histogram)
+        # ================= DEVIATION 2008a =================
+        # `zero_histograms_kernel` over the compute slots stood here --
+        # their `ZeroLeavesHistograms`, 1 launch per level, 6/tree at
+        # depth 6 -- and is DELETED from THIS driver only: every cell it
+        # zeroed is unconditionally overwritten before the next reader
+        # (`scan_histograms_kernel` below).
+        #
+        # THE COVERAGE ARGUMENT. `hist` is only ever written from
+        # `launch_histograms_for_blocks`' writeback kernels (the
+        # histogram kernels themselves touch `block_hist`/`acc_i32`, never
+        # `hist`). All three writeback arms
+        # (`write_reduces_histograms_kernel`,
+        # `write_reduces_from_fixed_kernel[True/False]`,
+        # `kernel/histogram_utils.mojo:600-756`) end in an UNGUARDED
+        # `dst_histogram.unsafe_store(dst, val)` for every thread with
+        # `bin_feature_id < bin_features_in_block`, on a grid of exactly
+        # (ceil(total_folds/128)*128, n_compute, stat_count) -- so each
+        # block stores its full [block_first_bin, +total_folds) span for
+        # every compute leaf and stat. The blocks partition the flat bins
+        # exactly: `build_layout` sets `hist_cells = sum(folds)` and
+        # `blocks_for` walks the same features in the same order
+        # (`gpu_data/feature_blocks.mojo:41-66`,
+        # `compressed_index_builder.mojo`), so the per-block spans tile
+        # [0, hist_cells_per_leaf) with no gap. An EMPTY leaf's stores
+        # are zeros, sourced from the per-block scratch memset (their
+        # `ZeroBuffer`, above the kernel dispatch) on the float and
+        # bridge arms.
+        #
+        # THE `scratch_dead` ARM, VERIFIED EXPLICITLY (POLICY_ONE_BYTE on
+        # the i32 routes, which SKIPS the scratch memset): its writeback
+        # is `write_reduces_from_fixed_kernel[False]`. Read the kernel:
+        # `val` starts at 0.0; `q != 0` converts and self-zeroes the
+        # accumulator cell; `q == 0` with `read_scratch == False` leaves
+        # `val` at 0.0; and the store at the bottom runs in EITHER case
+        # -- it sits outside the `q` branch. So no cell is left unwritten
+        # where q == 0: the cell is written WITH ZERO. The q-is-zero case
+        # is sound because `acc_i32` is all-zero between levels: the
+        # per-tree memset at the tree top establishes it and every nonzero cell a
+        # histogram kernel writes is visited and re-zeroed by this same
+        # writeback (`:738`), whose grid covers every span the histogram
+        # kernels can write.
+        #
+        # Derived slots never needed the zero: the right sibling's slot
+        # holds the parent via `copy_histograms_*` and is subtracted in
+        # place. `zero_histograms_kernel` itself STAYS -- `run_one_level`,
+        # `run_tree`, the depthwise driver and the checks still call it.
+        # Bit-inert: a store of X over 0 and a store of X over stale
+        # bytes are the same X.
+        # ====================================================
         times.begin(ctx)
-        ctx.enqueue_function[zero_histograms_kernel](
-            level_ids,
-            Int32(hist_cells_per_leaf),
-            hist.unsafe_ptr(),
-            grid_dim=(
-                (hist_cells_per_leaf + 255) // 256, n_compute, stat_count
-            ),
-            block_dim=(256, 1, 1),
-        )
-        mgr.stream_kernel()
 
         if planned:
             launch_histograms_for_blocks[hist2_smem_mode](
@@ -3923,6 +4013,26 @@ def run_tree_layout_traced[
         mgr.stream_kernel()
         times.end(ctx, "sym.leaves")
 
+    # ================= DEVIATION 2009 =================
+    # THE OFFSETS RIDE THE SAME DRAIN AS THE SIZES. The export tail below
+    # used to reuse `h_sz` for the offsets copy, which would race the
+    # sizes read the host does right after this drain, so it paid its own
+    # `ctx.synchronize()` -- a THIRD full drain per tree on every
+    # `need_estimation` fit. `h_off` is pool-owned and FREE at this
+    # point: its last use was the root-partition seed upload at the top
+    # of this tree (queue-ordered long behind us; the host never writes
+    # it again), so the offsets get their own host buffer and both d2h
+    # copies -- different device buffers into different host buffers on
+    # one in-order queue -- become readable at the ONE `wait_complete`
+    # below. Zero device arithmetic; two copies moved, one drain deleted.
+    # NO ALIASING HAZARD DOWNSTREAM: `out_leaf_offsets` is a `List[Int]`
+    # filled BY VALUE from `h_off` before this function returns
+    # (`doc_parallel_boosting.mojo` hands the values to
+    # `_estimate_and_apply` as host integers), so no caller holds a view
+    # into `h_off` when the next tree's seed upload rewrites it.
+    # ====================================================
+    if export_offsets:
+        ctx.enqueue_copy(dst_ptr=h_off.unsafe_ptr(), src_buf=p_off)
     ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
     mgr.wait_complete()
     if apply_to_cursor:
@@ -3949,19 +4059,20 @@ def run_tree_layout_traced[
     # partition half+i-1's. A caller that prefix-sums the sizes builds
     # segments for the WRONG leaves -- the Logloss estimator did exactly
     # that and trained a cursor its own model could not replay
-    # (logloss_train_check claim 2, 2026-08-20). Read AFTER the sizes,
-    # reusing h_sz, with a queue-ordered sync of its own: `wait_complete`
-    # does not order copies enqueued after it was armed, and an offsets
-    # copy slid in front of the sizes read handed the caller p_off twice
+    # (logloss_train_check claim 2, 2026-08-20). An earlier tail read the
+    # offsets AFTER the sizes, REUSING `h_sz`, and paid its own
+    # `ctx.synchronize()` to keep the two reads apart -- an offsets copy
+    # slid in front of the sizes read once handed the caller p_off twice
     # (caught by the same check's coverage going 34x over the row count).
-    # Guarded because it costs one copy and one drain per tree, which the
-    # RMSE arm has no reason to pay: its cursor update happened above.
+    # DEVIATION 2009 retired that drain: the copy went into `h_off`,
+    # enqueued before the tree's `wait_complete` above, so it is readable
+    # here with no further sync and the two host buffers cannot race.
+    # Guarded because it costs one d2h copy per tree, which the RMSE arm
+    # has no reason to pay: its cursor update happened above.
     if export_offsets:
-        ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_off)
-        ctx.synchronize()
         out_leaf_offsets.clear()
         for i in range(n_live):
-            out_leaf_offsets.append(Int(h_sz.unsafe_ptr().unsafe_load(i)))
+            out_leaf_offsets.append(Int(h_off.unsafe_ptr().unsafe_load(i)))
     return out^
 
 

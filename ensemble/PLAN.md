@@ -828,7 +828,27 @@ bit-identical.
 3. **float64 features are declined** (no float64 on device), so their
    `-double.cu` instantiations have no counterpart. Multi-GPU likewise.
 4. `max_leaves` and `max_batch_size` are honoured and unit-checked in
-   `builder_check`, but no end-to-end fit varies them. Cheap to add.
+   `builder_check`. The sentence that stood here said no end-to-end fit
+   varies either; that was half wrong on 2026-09-01. `max_leaves` HAS been
+   varied end to end since the E2 matrix was written, by the
+   `rf_clf_maxleaf` cell, and that cell scores IDENTICAL (388 stages) on
+   every column in every recorded round. It reached the parameter BY THE
+   WRONG NAME: the cell passes sklearn's `max_leaf_nodes=64` and the Python
+   wrapper aliased it onto slot 5. That alias is gone (DEVIATION 408, in
+   `python/mojolearn/randomforest.py`), the wrapper now carries
+   `max_leaves=` under cuML's own name and refuses `max_leaf_nodes` by
+   name, and the cell owes a one-line rename to match. `max_batch_size` is
+   still varied by no fit at all; cheap to add.
+
+   THE TWO ARE NOT INTERCHANGEABLE AND THE ALIAS WAS THE DEFECT, not the
+   spelling. cuML's `max_leaves` caps THIS grower, which is level-order:
+   `NodeQueue::Pop` takes from the front of a FIFO and `Push` appends to
+   the back (`builder.cuh:70-78`, `:117`), so the budget is spent by
+   whichever nodes that order reaches first. sklearn's `max_leaf_nodes`
+   selects a BEST-FIRST builder (`tree/_classes.py:446-447`) and grows to
+   exactly k leaves in improvement order. This lane has no best-first
+   grower; `extratrees/` has one (DEVIATION BLOCKS 466 to 469) and that is
+   where the refusal points.
 
 ## The gap that is not functional, and matters more than all of the above
 

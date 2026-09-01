@@ -116,11 +116,17 @@ one of the four still expected to refuse.
 
 `rf_clf_maxleaf` is NOT in this list and never was, because RandomForest
 accepted the name. It is scored `IDENTICAL (388 stages)` in every round.
-That cell is under review as an open defect: the RF surface maps sklearn's
-`max_leaf_nodes` onto cuML's `max_leaves`, which is a different algorithm, so
-what the cell certifies is that a wrong answer is reproducible. Its ET twin
-one row up is the comparison that makes this visible -- ET refused the name
-rather than aliasing it, and now implements it.
+That cell's defect is CLOSED as of 2026-09-01, DEVIATION 408:
+`max_leaf_nodes` is refused by name on both RandomForest classes, with a
+message naming best-first growth, `max_leaves` and the surface that has
+sklearn's semantics, and cuML's cap is carried under its own name,
+`max_leaves`, defaulting to -1. The cell is renamed to pass `max_leaves=64`,
+which sets the identical slot-5 value the alias set, so its hash does not
+move and the next round should still score it `IDENTICAL`; a `REFUSED=`
+there would be a regression. Its ET twin one row up is the comparison that
+made this visible -- ET refused the name rather than aliasing it, and now
+implements it -- so the two cells finally test two different algorithms
+under two different names instead of one algorithm under both.
 
 ## Method
 

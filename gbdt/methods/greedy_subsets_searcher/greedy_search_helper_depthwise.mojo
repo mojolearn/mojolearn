@@ -882,9 +882,12 @@ def fit_non_symmetric_tree[
     var layout = build_layout(fold_counts, one_hot)
     var blocks = blocks_for(layout, n_rows)
     var hist_cells_per_leaf = layout.hist_cells
-    var sm_count = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
-    if sm_count_override > 0:
-        sm_count = sm_count_override
+    # DEVIATION 2007a: the SM count is read off the symmetric pool below
+    # (one `ctx.get_attribute` per WORKSPACE build, not per tree -- the
+    # query is 1.26 ms/call on Metal, the price note in
+    # `gpu_util/partitions_reduce.mojo`). The override keeps its old
+    # meaning: positive replaces the machine constant, byte for byte.
+    var sm_count = sm_count_override
 
     # `argmaxBlockCount = Min(CeilDivide(binFeatureCountPerDevice, 256), 64)`
     # (`greedy_search_helper.cpp:439`).
@@ -920,6 +923,9 @@ def fit_non_symmetric_tree[
                 _ACC_LIVE,
             )
         )
+    # DEVIATION 2007a: no override, so the pool's cached machine constant.
+    if sm_count <= 0:
+        sm_count = ws[0].sm_count
     # ============ DEVIATION 1911/1912: is the quantized family running? ====
     # The vendor/mode half is COMPTIME (`QUANTIZED_HIST_LIVE`, the
     # `greedy_quantized_hist_for` row -- False under IDENTICAL, so that
@@ -1099,8 +1105,12 @@ def fit_non_symmetric_tree[
     h_sz.unsafe_ptr().unsafe_store(0, UInt32(n_rows))
     ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_off.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=hp_off, src_ptr=h_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=hp_sz, src_ptr=h_sz.unsafe_ptr())
+    # DEVIATION 2007b: the `hp_off`/`hp_sz` seed uploads that stood here
+    # are DELETED -- write-only buffers in this driver too; their only
+    # other reference is `update_partitions_after_split_kernel`'s output
+    # args (the unread `partsCpu` mirror,
+    # `gpu_util/gpu_data/partitions.mojo`). `checks/plan_fusion_check.mojo`
+    # POISON-seeds the pair by design; see the symmetric driver's banner.
     ctx.enqueue_memset(hist, Float32(0.0))
     # DEVIATION 1892: same gate as the symmetric driver's per-tree memset
     # -- under a float flush with the warp-private `hist2` arm nothing

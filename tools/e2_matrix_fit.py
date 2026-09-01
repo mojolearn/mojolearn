@@ -448,7 +448,15 @@ cell("rf_clf_deep", rf("clf", n_estimators=10, max_depth=None, random_state=7,
 cell("rf_reg_mid", rf("reg", min_impurity_decrease=0.001, _y="y_reg",
                       **RF_BASE))
 cell("rf_clf_3class", rf("clf", _y="y_mc", _proba=True, **RF_BASE))
-cell("rf_clf_maxleaf", rf("clf", max_leaf_nodes=64, _y="y_clf", **RF_BASE))
+# RENAMED 2026-09-01 (DEVIATION 408), and the fit does not move. This cell
+# passed sklearn's `max_leaf_nodes` while the wrapper aliased it onto cuML's
+# `max_leaves`, so it has always set slot 5 and has always measured cuML's
+# breadth-first cap. The alias is now refused by name and the cap is a
+# keyword under its own name, so the SAME value reaches the SAME slot and
+# the cell's hash is unchanged -- a `REFUSED=` here would be a regression.
+# Its extratrees twin above tests sklearn's semantics under sklearn's name;
+# the two cells finally exercise two algorithms rather than one twice.
+cell("rf_clf_maxleaf", rf("clf", max_leaves=64, _y="y_clf", **RF_BASE))
 cell("rf_reg_minleaf5", rf("reg", min_samples_leaf=5, _y="y_reg", **RF_BASE))
 cell("rf_clf_streams1", rf("clf", n_streams=1, _y="y_clf", **RF_BASE))
 

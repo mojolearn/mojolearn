@@ -1295,6 +1295,12 @@ def create_subsets(
     mut source: TL2Target,
     fold_count: Int = 0,
     fold_bits: Int = 0,
+    # DEVIATION 2007a: negative means query the device -- every existing
+    # call site's behavior byte for byte. A caller that already holds the
+    # machine constant passes it and skips a `get_attribute` priced at
+    # 1.26 ms on Metal (`partitions_reduce.mojo`'s threading note; same
+    # `-1` convention as `compute_partition_stats`).
+    sm_count: Int = -1,
 ) raises -> TOptimizationSubsets:
     """`TSubsetsHelper<TStripeMapping>::CreateSubsets`
     (`pointwise_optimization_subsets.cpp:4-24`), line for line.
@@ -1362,14 +1368,16 @@ def create_subsets(
     # `partition_stats_chunks` is exported for exactly this
     # (`partitions_reduce.mojo:214`), and sizing it any other way is how the
     # kernel walks off the end of its own row.
-    var sm_count = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+    var sm = sm_count
+    if sm < 0:
+        sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
     # `n_stats = 1`, because the reduce now runs once per column. The chunk
     # count is `CeilDivide(2 * SMCount, statCount)`, so this is DOUBLE what
     # it was at 2 and the partials buffer has to be sized from the same
     # formula the launch uses -- `partition_stats_chunks` is exported for
     # exactly that (`partitions_reduce.mojo:214`), and sizing it any other
     # way is how the kernel walks off the end of its own row.
-    var chunks = partition_stats_chunks(sm_count, 1)
+    var chunks = partition_stats_chunks(sm, 1)
     var stat_partials = ctx.enqueue_create_buffer[DType.float32](
         max_part_count * 1 * chunks
     )
@@ -1405,7 +1413,7 @@ def create_subsets(
         reduce_target^,
         doc_count,
         max_part_count,
-        sm_count,
+        sm,
     )
 
     reset_subsets(ctx, subsets, source, fold_count, fold_bits)

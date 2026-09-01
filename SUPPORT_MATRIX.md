@@ -18,28 +18,48 @@ Exact versions, commits and result status are recorded in
 [E1_RUNBOOK.md](E1_RUNBOOK.md). A check mark in source code is not a
 certificate; a released result card is.
 
-## Gaussian process: WITHHELD, cross-vendor identity broken
+## Gaussian process: still WITHHELD, but NOT for the reason written here
+## until 2026-09-01
 
-`gaussian_process/` is complete and its own gates pass on the M4 in both
-tiers. It is NOT exposed through the Python surface and must not be claimed,
-because its IDENTICAL card DIVERGES between vendors.
+**THE DIVERGENCE WAS A SABOTAGE ARM DOING ITS JOB.** This section said the
+IDENTICAL card diverged between vendors and that shipping the estimator would
+ship a counterexample to the package's headline promise. That reading is
+WITHDRAWN. It was wrong, it was wrong in the flattering direction for the
+person reporting a defect, and it is corrected here rather than deleted so
+the mistake is legible.
 
-Apple md5 `6e638e82a73e` against AMD `6bdeb28d6c81`, 8 of 3494 stages,
-originating at `gp.kernel`, the RBF Gram and the first computed stage of that
-block. Twenty-nine sibling blocks with the same header and the same input
-agree across vendors, and the divergent block sits at the same card position
-on both boxes, so it is deterministic rather than flaky.
+What the two cards actually show. All 8 differing lines, 2123 to 2147, fall
+inside ONE 32-line block beginning at card line 2119, and the block at 2119
+is the SABOTAGED half of a clean-then-sabotaged pair. `check_gp_sabotages`
+fits every fixture twice per arm, clean then sabotaged, and both fits write a
+block into the same card. The sweep runs 1959/1991 (planted), 2023/2055
+(duplicate), then 2087/2119 (planted) -- and 2087/2119 is the
+`GP_SAB_STD_EXP` pair. Both legs' logs independently record `MUST FAIL
+STD_EXP on planted: kernel[1] moved (0 earlier fixtures INERT to it)`, and
+`kernel` is exactly the stage the divergence was attributed to. That arm
+exists BECAUSE a device `exp` is a vendor's choice in its last bit.
 
-Both legs printed `ALL PASSED [IDENTICAL]`. A per-vendor run checks a card
-against its own oracle, and cross-vendor identity is by construction a claim
-about TWO cards, so a green leg is not evidence for it.
+So the shipped path is byte-identical Apple M4 against AMD MI325X on all
+3,486 other lines of a 3,494-line card, and the only place the two vendors
+disagree is the place an arm was built to make them disagree.
 
-This package's headline promise is the same bits on every vendor. Shipping
-this estimator would ship a counterexample to that promise, so it is held
-back until the divergence is understood, not until the lane is finished. The
-lane is finished.
+WHAT WAS REAL AND IS FIXED. The card header could not distinguish the
+sabotaged block from its twenty-nine siblings -- it carried n_train, d,
+kernel and alpha_bits, all identical across the thirty. That was a genuine
+CARD_GAPS-class defect and it is what made the misreading possible. The
+header now carries `sabotage=<ARM NAME>`, so a card that mixes sabotaged runs
+with shipped runs says which is which.
 
-Evidence: `bench/results/e1/GP_CROSS_VENDOR_DIVERGENCE.md`.
+**THE ESTIMATOR STAYS WITHHELD PENDING ANDREW'S WORD.** The stated blocker is
+gone, but exposing an estimator through the Python surface is a shipping
+decision and not a consequence of a card being read correctly. What is owed
+before it is exposed: the regenerated card confirming the header prints
+`sabotage=STD_EXP` on that block (run owed, Apple), and the AMD leg re-run to
+confirm the same eight lines land inside a block whose header now names the
+arm.
+
+Evidence: `bench/results/e1/GP_CROSS_VENDOR_DIVERGENCE.md`, corrected in
+place.
 
 ## The three tiers, and what each one promises
 
@@ -208,7 +228,7 @@ anywhere.
 | Surface | FAST | IDENTICAL (cross-vendor) | Public status |
 |---|---|---|---|
 | Gradient boosting | Available | Three-vendor matrix with named refusals and residuals recorded in E1/E2 | Supported beta |
-| Random forests | Available | Three-vendor E1/E2 cards for the recorded configurations | Supported beta |
+| Random forests | Available | Three-vendor E1/E2 cards for the recorded configurations. ONE of those configurations, the `rf_clf_maxleaf` cell, certified an ALIASED parameter and its green cells do not mean what they read as; see "Leaf budgets" below | Supported beta |
 | Extra Trees | Available | Three-vendor E1/E2 cards for the recorded configurations | Supported beta |
 | k-means, k-NN, DBSCAN | Available | Apple, NVIDIA and AMD cards recorded and IDENTICAL: E1U cards 3/3 on both vendor columns and 80/80 E2U cells at `fe00e8a` (E3 round 8), re-verified card-by-card at `144aa5b` on 2026-08-28 -- kmeans 77 stages, knn 6, dbscan 3, identical Apple<->H100 and Apple<->MI325X | Measured cross-vendor on three columns |
 | PCA, truncated SVD, OLS | Available | In the same 80/80 E2U result as the clustering row: `E3_RESULTS.md` round 8 at `fe00e8a` certifies k-means, k-NN, DBSCAN, PCA, tSVD, OLS, Ridge and logistic together, 80 cells identical on Apple<->H100 AND Apple<->MI325X (60 identical plus 20 refused with the same message on every column) | Measured cross-vendor on three columns |
@@ -216,6 +236,46 @@ anywhere.
 | Isolation forest | Available | **Apple<->NVIDIA<->AMD bit-identical, 123 card stages** at `a0a0eee` (E3 round 13, 2026-08-28, its first cross-vendor run; the lane had been writing this card to a scratch path since before it was in any round; NVIDIA card `bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/iforest.identical.card`). The NVIDIA card is an H100. On an RTX 4090 (sm_89, driver 580) the Python binding hung -- twice, for two different DeviceContext lifetime defects, DEVIATION 1944 (fixed and confirmed on the box) and DEVIATION 1946 (fixed in source, UNRUN on a 4090); no numeric claim rests on that box. **DEVIATION 1946 IS NOT AN ISOLATION-FOREST DEFECT AND THIS CELL USED TO READ AS THOUGH IT WERE.** It is a tree-wide class, and it took a second lane on 2026-08-31. The NVIDIA time-series leg hung in `holtwinters` on the same defect, in `check_hw_signed_zero_clamp`, where `ctx`'s last use is a `download_f32` at `holtwinters/checks/hw_check.mojo:1184` with 25 buffer releases after it; holtwinters carried `_ = ctx^` at none of its eleven `DeviceContext` sites, because the first 1946 sweep covered library entry points and skipped every check driver and `main`. FIXED tree-wide 2026-09-01, 81 functions in 57 files, VERIFIED ON APPLE to move no bit and NOT verified to cure the hang, which needs sm_89. `bench/results/e1/CERT_2026-08-31.md` | Measured on three columns |
 | Time series (`ExponentialSmoothing`, `kpss_test`, `select_d`, and the ARIMA kernels) | Available | **`arima` is byte-identical on THREE vendors**, Apple M4 against AMD MI325X against NVIDIA, 139 card stages, all at one commit `221aa141`. `holtwinters` (182 stages), `spectral` (171) and `tsa` (13) are byte-identical Apple against AMD at that same commit and their NVIDIA column did NOT RUN, which is not the same as failing. The NVIDIA leg hung in `holtwinters` on the DEVIATION 1946 context-lifetime defect and never reached the other two. `bench/results/e1/CERT_2026-08-31.md` | arima measured on three columns; the other three measured on two, NVIDIA owed |
 | Neural-network operators (mamba, transformer) | Available, not released | **Apple<->NVIDIA<->AMD bit-identical: mamba 17 card stages, transformer 30**, at `a0a0eee` (the NVIDIA cards are in `bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/`). Transformer's clause (a) passes on 262,634 cells and clause (d) -- decode == prefill -- passes under IDENTICAL and FAILS under FAST, which is the profile working as written. Mamba's FAST arm has never been built on any vendor | Measured on three columns; NOT part of the released surface |
+
+## Leaf budgets: two parameters, two algorithms, and one of them was aliased
+
+A leaf budget is not one capability. sklearn's `max_leaf_nodes=k` is a
+GROWTH ORDER: `tree/_classes.py:446-447` reads "Use BestFirst if
+max_leaf_nodes given; use DepthFirst otherwise" and swaps in
+`BestFirstTreeBuilder`, which expands the frontier node with the largest
+impurity improvement until exactly k leaves exist. cuML's `max_leaves` is a
+CAP on a LEVEL-ORDER grower that reorders nothing: their `NodeQueue` pops
+from the front of a FIFO and pushes to the back (`builder.cuh:70-78`,
+`:117`), and the budget is spent by whichever nodes that order reaches
+first. The same k gives a different tree.
+
+| Surface | `max_leaf_nodes` (sklearn's best-first) | `max_leaves` (cuML's level-order cap) |
+|---|---|---|
+| `ExtraTreesClassifier`, `ExtraTreesRegressor` | HONOURED since 2026-09-01: a second growth mode in the Mojo layer, `extratrees/` DEVIATION BLOCKS 466 to 469. Refused by name before that date | honoured in the Mojo layer under its own name; NOT a keyword on the Python classes, because the params list does not carry it |
+| `RandomForestClassifier`, `RandomForestRegressor` | REFUSED BY NAME since 2026-09-01, DEVIATION 408. `ensemble/` has no best-first grower and the refusal points at the extratrees surface | HONOURED, under cuML's own name, `max_leaves=-1` by default (their sentinel for unlimited) |
+
+**Until 2026-09-01 the RandomForest surface aliased the first onto the
+second**, at `python/mojolearn/randomforest.py:199`, and returned a
+different tree than the caller asked for with no error and no warning.
+
+**The recorded evidence made that harder to see, not easier.** The E2 cell
+`rf_clf_maxleaf` is defined as `max_leaf_nodes=64` and every recorded round
+scores it IDENTICAL, 388 stages, on every column
+(`bench/results/e1/e2_verdicts_round1.md`, `e2_verdicts_round2.md`, and the
+dated `e3_verdicts_trees.md` files). One row above it, its extratrees twin
+`et_clf_maxleaf` reads REFUSED=, because the ET port refused the parameter
+by name until the same day. A reader would conclude that RF had the
+capability and ET did not; the truth was the reverse. IDENTICAL in those
+tables is a cross-vendor and cross-mode statement about OUR OWN output, so
+what it certified is that the aliased answer was REPRODUCIBLE. It is not a
+comparison against sklearn and it cannot see that the answer is to a
+different question. **A reproducible wrong answer is still a wrong answer,
+and reproducibility is what let this one stand for months.**
+
+The gate is `python/mojolearn/tests/test_rf_leaf_budget.py`, whose REFUSAL
+arm goes red on the aliasing behaviour and whose LEVEL_ORDER arm measures
+the level-order property that makes the alias wrong rather than merely
+undocumented.
 
 ## Version rule
 
