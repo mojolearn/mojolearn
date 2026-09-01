@@ -755,9 +755,13 @@ def lane_config(lane, size):
     The forest knobs:
 
       n_estimators 100   cuML's, sklearn's and ours.
-      max_depth 16       cuML's default and ours. sklearn's default is None
-                         (grow until pure), which is a different and much
-                         more expensive tree, so sklearn is pinned to 16.
+      max_depth 16       Set explicitly on every arm, and as of 2026-09-01
+                         it is NOBODY's default. It was cuML's until
+                         v26.08.00 -- this repo's pin -- changed it to None
+                         (randomforestclassifier.py:68-74). sklearn's is
+                         also None. Both mean grow until pure, a different
+                         and much more expensive tree, so every arm is
+                         pinned to 16 rather than left to a library.
       max_features       'sqrt' for classification, 1.0 for regression -- the
                          RF definition and every library's own default for
                          that task. Set explicitly on all.

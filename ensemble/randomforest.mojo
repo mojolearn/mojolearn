@@ -63,6 +63,19 @@ resolved when DEVIATION 117 was ported):**
    fitted through `set_tree_params()`'s own default. Python never sends
    -1: `None` becomes `np.iinfo(np.int32).max`
    (`randomforest_common.pyx:480-481`). This port takes INT32_MAX.
+
+   THE PYTHON WRAPPER DOES NOT, and that is DEVIATION 409 rather than a
+   second reading of upstream. `python/mojolearn/randomforest.py`
+   substitutes 16 for an unspecified `max_depth`, which WAS cuML's
+   default until v26.08.00 -- THIS pin -- retired it for `None`
+   (`randomforestclassifier.py:68`, and the `.. versionchanged:: 26.08`
+   note at `:73-74` says so in as many words). The entry points below,
+   `default_rf_params_classifier` and `default_rf_params_regressor`,
+   follow the pin. That surface does not, and until it is flipped the two
+   disagree about what an unspecified depth means. The table above is
+   right; it is the wrapper that carries the deviation, and it now says
+   so in its own DEVIATION 409 block instead of claiming the number is
+   cuML's.
 2. `max_features`. 1.0f in the header; `'sqrt'` for the CLASSIFIER and
    `1.0` for the REGRESSOR in Python. The two estimators disagree with
    each other, so there is no single Python default -- the classifier
