@@ -850,8 +850,8 @@ def column_lane_width(column: Int) -> Int:
     **WHY THIS DOES NOT BREAK THE IDENTITY CLAIM, WHICH IS WORTH STATING
     PRECISELY BECAUSE IT LOOKS LIKE IT SHOULD.** `PINNED_REPLICATION_LANES`
     is a LOGICAL group width, not a hardware sync assumption. Every kernel in
-    this tree syncs at `SYNC_BLOCK` -- Mojo exposes no warp primitive on any
-    vendor (`sync_granularity_for`) -- so a pinned 32-lane replication group
+    this tree syncs at `SYNC_BLOCK` (`sync_granularity_for`), so a pinned
+    32-lane replication group
     is threadgroup-synchronized arithmetic that happens to be 32 wide, and it
     stays 32 wide whether the hardware runs 8, 16, 64 or 128 lanes in
     lockstep underneath. A variable hardware width would be fatal to a
@@ -893,8 +893,30 @@ def column_lane_width_is_fixed(column: Int) -> Bool:
     ("which lane am I") must read this first: on a variable-width column the
     only correct answers are to demand a width from the compiler where the
     API allows it (`intel_reqd_sub_group_size`, Metal-style attributes) or to
-    stop indexing by lane. Nothing in this tree indexes by hardware lane
-    today, because `SYNC_BLOCK` left it with no reason to.
+    stop indexing by lane.
+
+    CORRECTED 2026-09-01, AND THE CORRECTION NARROWS THIS FUNCTION'S
+    JUSTIFICATION. Two sentences stood here and above: that Mojo exposes no
+    warp primitive on any vendor, and that nothing in this tree indexes by
+    hardware lane. BOTH ARE FALSE. Thirteen files import `shuffle_xor` or
+    `lane_id` (see VENDOR_COLUMNS.md, which now names them), `split_warp_reduce`
+    sizes its butterfly by `WARP_SIZE`, and DEVIATION BLOCK 30 in
+    `dbscan/impl/dbscan/detail/epsilon_neighborhood.mojo` says in its own
+    source that its width-16 reduction is correct only at a lane width of 32.
+
+    WHAT SURVIVES, and it is what this function actually rests on: no
+    LANE-GROUP BARRIER exists, `sync_granularity_for` is `SYNC_BLOCK` on every
+    column, and `PINNED_REPLICATION_LANES` is a logical width. The identity
+    floor is therefore still width-independent, which is the claim that
+    matters here.
+
+    WHAT NO LONGER FOLLOWS: the refusal below cannot be justified by "nothing
+    indexes by lane", because things do. For `amd` the admission is carried by
+    MEASUREMENT instead, three-vendor DBSCAN, k-NN and forest cards, plus the
+    arithmetic fact that 16 divides 64. For `qualcomm` and `intel` the
+    argument is OWED: a width-16 group does not fit an 8-wide wave, and
+    neither column can be built for today, so nothing can settle it by
+    running. That is a debt, not a measured defect, and it is recorded as one.
     """
     return (
         column != COLUMN_QUALCOMM
