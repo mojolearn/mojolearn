@@ -1024,7 +1024,15 @@ def spec_for(kernel: Int, device: Int, mode: NumericMode) raises -> KernelSpec:
         block,
         floats_per_thread,
         per_int,
-        PINNED_REPLICATION_LANES if identical else column_lane_width(device),
+        # THE REPORT MUST SAY WHAT THE KERNELS COMPILE. This read
+        # `column_lane_width(device)` under FAST until 2026-09-01, which
+        # reported 64 for the CDNA column while every histogram kernel in
+        # the tree now stripes its private replicas by the LOGICAL
+        # `replication_lanes_for` in both modes (DEVIATION 1947). A report
+        # that disagrees with the kernel is the exact defect the flush row
+        # three lines up records; the hardware width is still available by
+        # name through `column_lane_width` and `lane_width_for`.
+        PINNED_REPLICATION_LANES,
         PINNED_REDUCE_WIDTH if identical else block,
         flush,
         vendor_forces_flush,
@@ -1193,10 +1201,77 @@ def block_size_for[kernel: Int, column: Int]() -> Int:
 
 def lane_width_for[column: Int, identical: Bool]() -> Int:
     """NUMERIC. Pinned to 32 under identity so AMD's 64-wide wavefront cannot
-    change the reduction geometry. See `column_lane_width`."""
+    change the reduction geometry. See `column_lane_width`.
+
+    NOT THE ROW A HISTOGRAM SLICE LAYOUT WANTS, and that is why this
+    docstring now carries a pointer. Under `FAST` this returns the HARDWARE
+    width, so a CDNA column got 64 and every constant derived from it moved
+    while the layout literals beside it stayed at 32 and 512. That is what
+    made the sub-byte and one-byte ladders refuse on a 64-wide wave. A
+    kernel whose slice geometry is a LOGICAL striping decision reads
+    `replication_lanes_for` instead; this row survives for anything that
+    genuinely needs to know how wide the hardware executes.
+    """
     if identical:
         return PINNED_REPLICATION_LANES
     return column_lane_width(column)
+
+
+def replication_lanes_for[column: Int, identical: Bool]() -> Int:
+    """NUMERIC, and it is the row the whole CatBoost histogram family's
+    layout actually rests on: the LOGICAL width of one private-replica
+    group. `PINNED_REPLICATION_LANES` in every cell of the table, in BOTH
+    modes, on every column, whatever the hardware executes underneath.
+
+    WHY THIS IS A DIFFERENT ROW FROM `lane_width_for`, and why splitting
+    them ADDS a capability rather than papering over one. CatBoost's
+    accumulators cut the block into groups of 32 consecutive `threadIdx.x`
+    and give each group a private slice: `512 * (tid / 32)` in the sub-byte
+    families, `1024 * (tid / 32)` in the one-byte ladder. Nothing in that
+    arithmetic asks how many lanes retire per cycle. It asks only that the
+    groups be DISJOINT and that the fold stride at the end match the slice
+    stride. Both hold for any block size that is a multiple of 32, on
+    hardware of any width.
+
+    What the 32 was doing in `lane_width_for` was two jobs at once: naming
+    the private-replica group AND naming the hardware wave. On Apple and
+    NVIDIA those are the same number and the conflation is invisible. On
+    CDNA they are 32 and 64, the derived `REDUCE_WIDTH` moved to 1024 while
+    the literal 512 in `slice_offset` did not, and stage 1 folded cells
+    belonging to different bins. The refusals (DEVIATIONS 1906 and 1910)
+    were placed against that inconsistency, not against the layout.
+
+    THE IDENTICAL PATH ALREADY HELD THE ANSWER. `lane_width_for` returns the
+    pinned 32 under `IDENTICAL` on every column, the asserts pass, and the
+    whole ladder including both sub-byte families elaborates on AMD today.
+    So the spelling that makes a 32-slot layout valid on a 64-wide wave was
+    already in the tree and was reachable from one mode only. This row is
+    that spelling, made unconditional. See DEVIATION 1947.
+
+    TWO PRECEDENTS, one of which has already RUN on a 64-wide wave:
+    `gbdt/methods/kernel/pointwise_hist2_half_byte_template.mojo` hardcodes
+    the same 32 as a logical constant, never consults this table, and
+    therefore compiles at any width; and
+    `gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo`
+    stripes its loads by a logical `H8_LANE = 32` and is the kernel the
+    MI325X has been running one-byte blocks through since 2026-08-27.
+
+    THE PARAMETERS ARE DELIBERATELY IGNORED. They are kept so a call site
+    reads like every other matrix accessor and so the answer's INDEPENDENCE
+    from column and mode is stated in the signature rather than assumed.
+    A build that wants the hardware number must say so by name.
+
+    WHAT THIS ROW DOES NOT BUY, stated here because it is the thing a reader
+    will over-read. A width-independent LAYOUT is not a width-independent
+    SYNC. The sub-byte accumulator's turn-taking sync is a separate row,
+    `sub_byte_lane_sync_for`, and it is what actually changes on a 64-wide
+    wave.
+    """
+    comptime assert PINNED_REPLICATION_LANES == IDENTITY_FLOOR_LANES, (
+        "the logical replication width and the identity floor's lane count"
+        " are one guarantee with two names; keep them equal"
+    )
+    return PINNED_REPLICATION_LANES
 
 
 def reduce_width_for[kernel: Int, column: Int, identical: Bool]() -> Int:
@@ -1274,6 +1349,81 @@ def requires_uniform_iteration_for[column: Int]() -> Bool:
     return sync_granularity_for[column]() == SYNC_BLOCK
 
 
+def sub_byte_lane_sync_for[column: Int]() -> Int:
+    """SCHEDULING row (DEVIATION 1947): which barrier the CatBoost
+    histogram accumulators use for their TURN-TAKING sync, the one that
+    stands where theirs writes `tiled_partition<8>::sync()` or
+    `tiled_partition<32>::sync()` between two writes to the same private
+    slice.
+
+    `SYNC_LANE` (`syncwarp`, 32 lanes) where the hardware wave is exactly
+    the logical replication group; `SYNC_BLOCK` (`barrier()`) everywhere
+    else.
+
+    WHAT THE SYNC IS FOR, because the answer follows from it. Inside one
+    8-lane tile the eight lanes hold eight distinct values of `tid & 7`, so
+    on a single iteration `i` they touch eight distinct slots and cannot
+    collide. ACROSS iterations they can: lane a at `i` and lane b at `i+1`
+    can land on the same slot of the same private slice. The sync makes the
+    store from iteration `i` visible to the tile before iteration `i+1`
+    reads it. It must therefore (a) order execution over AT LEAST the eight
+    lanes of the tile and (b) act as a memory barrier for the shared slice.
+
+    WHY 32 IS RIGHT ONLY WHEN THE WAVE IS 32. `syncwarp` orders one warp.
+    On a 32-wide machine that is a strict SUPERSET of the 8 lanes theirs
+    orders, which is why the port has always been correct on Apple and
+    NVIDIA and why swapping it in bought 21% (VENDOR_LIBS.md section 4).
+    Two directions break that:
+
+    - NARROWER THAN 32 (`qualcomm` 8, `intel` 8, the spec baseline 1, and
+      on the first two the width is a COMPILER decision, not a device
+      property -- `column_lane_width_is_fixed`). A logical 32-lane group
+      then spans several hardware waves and a wave-local sync does not
+      order the group at all. Nothing has ever built on those columns, so
+      this was latent, not observed.
+    - WIDER THAN 32 (`amd`, CDNA, 64). Here the SUPERSET argument still
+      holds arithmetically -- 64 lanes contain the 8 -- and every call in
+      this family is unconditional with a block-uniform trip count
+      (`requires_uniform_iteration_for`), so no lane can skip a sync its
+      neighbours reach. What CANNOT be established by reading is what
+      `max.gpu.sync.syncwarp` LOWERS TO on a 64-wide wave: whether it emits
+      a wave barrier with the fence, or is folded to nothing on the
+      assumption that a wavefront is already in lockstep, in which case the
+      compiler is free to keep a slice cell in a register across the
+      iteration boundary and the tile's other lanes never see the store.
+      That is a memory-model question about a toolchain, and the honest
+      answer is that the source is not in this tree to read.
+
+    So the row takes the conservative side on every column that is not
+    exactly 32 wide: `barrier()`, whose participation requirement is
+    already met and whose semantics are the same on every backend.
+
+    THIS IS A SCHEDULING ROW AND IT MOVES NO BITS, which is the reason it
+    may differ per column at all. Widening a sync changes WHICH threads
+    wait, never what is added to what: two lanes of one tile never write
+    one slot within an iteration, two tiles never share a slot (`tid & 24`
+    gives each its own eighth of the 32 slots a bin spans), and two logical
+    warps never share a slice. Per slot the add order is program order
+    inside one tile, whatever the barrier's width. The IDENTICAL column and
+    every 32-lane column keep `syncwarp` and are byte-for-byte untouched.
+
+    THE PRICE, on `amd` only among buildable columns: up to eight
+    threadgroup barriers per point in the sub-byte families instead of
+    eight warp syncs. That is the cost `pointwise_one_byte_fixed_for`
+    measured at 4-7x on APPLE for the pointwise ladder, and it is the
+    reason that row exists; a 64-lane column pays it here to get a
+    low-cardinality histogram AT ALL rather than a refusal. When someone
+    establishes what `syncwarp` emits on CDNA, or Mojo grows a documented
+    wave-width barrier, this row is the single place that flips, and the
+    A/B is a one-line change with the sub-byte gate already standing.
+    """
+    if not column_lane_width_is_fixed(column):
+        return SYNC_BLOCK
+    if column_lane_width(column) != PINNED_REPLICATION_LANES:
+        return SYNC_BLOCK
+    return SYNC_LANE
+
+
 def deterministic_flush_for[column: Int, identical: Bool]() -> Bool:
     """NUMERIC row, comptime, so a kernel can branch on it.
 
@@ -1347,8 +1497,20 @@ def pointwise_one_byte_fixed_for[column: Int, identical: Bool]() -> Bool:
     fixed-point kernel: `pw_bounds[8]` widens to (15, 256] and the
     5/6/7 launches are skipped. `IDENTICAL` takes the same route
     everywhere -- integer accumulation is the cross-device arithmetic.
-    NVIDIA and AMD under FAST keep CatBoost's dispatch: their warps ARE
-    in lockstep and their turn-taking is genuinely free.
+    NVIDIA and AMD under FAST keep CatBoost's dispatch, because on THEIR
+    hardware the turn-taking is what CatBoost designed it to be.
+
+    ONE SENTENCE THERE IS CORRECTED (2026-09-01). It read "their warps ARE
+    in lockstep and their turn-taking is genuinely free", which is true of
+    CatBoost's kernel and NOT of this port of it: the pointwise ladder
+    raises every turn to a threadgroup `barrier()`
+    (`pointwise_hist2_one_byte_templ.mojo`, `..._5bit.mojo`), as the
+    paragraph above says in as many words, so those columns pay the wide
+    sync too and simply have not been measured paying it. The greedy
+    family's equivalent row is `sub_byte_lane_sync_for`, which keeps
+    `syncwarp` where the hardware wave is 32 and takes `barrier()`
+    elsewhere; this row's A/B for NVIDIA and AMD is OWED and unrelated to
+    DEVIATION 1947.
 
     A NUMERIC row, not a scheduling one: float adds become quantized
     Int32 adds, the same trade DEVIATION 93 already made for 8-bit
@@ -1362,46 +1524,56 @@ def pointwise_one_byte_fixed_for[column: Int, identical: Bool]() -> Bool:
 
 
 def greedy_one_byte_fixed_for[column: Int, identical: Bool]() -> Bool:
-    """NUMERIC row (DEVIATION 1906): whether the GREEDY one-byte family
-    routes EVERY width through the fused 8-bit fixed-point kernel
-    (`hist_2_one_byte_8bit.mojo`) instead of CatBoost's maxBins ladder.
+    """SCHEDULING row (DEVIATION 1906, NARROWED by DEVIATION 1947): whether
+    the GREEDY one-byte family routes EVERY width through the fused 8-bit
+    fixed-point kernel (`hist_2_one_byte_8bit.mojo`) instead of CatBoost's
+    maxBins ladder.
 
-    The ladder's kernels are 32-LANE BY CONSTRUCTION: the hist_2 5/6/7-bit
-    slices and the PASS family's sub-copies are 1024 floats = 32 lanes x 32
-    floats per thread, and their own files refuse `LANE_WIDTH == 64` with a
-    comptime assert rather than let two wavefront halves share one private
-    copy (`hist_2_one_byte_base.mojo`, `hist_one_byte.mojo`). CatBoost never
-    wrote the 64-wide layout -- their HIP builds compile warp-32 semantics --
-    so a CDNA column (wavefront 64) under FAST had NO one-byte kernel at all.
+    THIS ROW USED TO BE A REFUSAL DRESSED AS A ROUTE, AND THAT PART IS
+    RETRACTED. What stood here was that the ladder's kernels are "32-LANE BY
+    CONSTRUCTION" and that a CDNA column under FAST therefore had NO one-byte
+    kernel at all, so this route was the only one available. The first half
+    was a conflation and the second no longer follows. The ladder's slice
+    arithmetic -- `1024 * (tid / 32)` and the sub-copy masks -- cuts the
+    block into DISJOINT groups of 32 consecutive threads, which is a LOGICAL
+    striping decision that holds at any hardware width; `Reduce`'s stage 1
+    folds at a LITERAL 1024 that never moved. The only thing that was truly
+    coupled to the wave was the constant those files read for the striping,
+    `lane_width_for`, which hands back the hardware 64 under FAST and left
+    the derived quantities disagreeing with the literals beside them. They
+    read `replication_lanes_for` now, the comptime asserts hold by
+    construction, and the ladder elaborates on a 64-wide wave exactly as it
+    already did under IDENTICAL.
 
-    The fused 8-bit kernel is LANE-AGNOSTIC where the ladder is not: its
-    shared-memory adds are Int32 atomics, its only syncs are threadgroup
-    barriers (`sync_granularity_for` is `SYNC_BLOCK` everywhere), its
-    iteration counts are uniform per block, and its `H8_LANE = 32` is a
-    LOGICAL striping constant with no lockstep assumption behind it -- the
-    same argument `column_lane_width`'s docstring makes for the pinned
-    identity lanes. Its slot arithmetic is bin-based with no `bits`
-    parameter, so any one-byte width lands correctly, and a narrow width's
-    skip mark (`1 << bits`, the one encodable value past a full feature)
-    lands in a cell the flush never reads -- `fold < folds` bounds every
-    write -- which is the same drop the ladder's `pass` guard performs.
+    So the ladder is AVAILABLE on a 64-lane column and this row is now what
+    it always should have been: a PERFORMANCE PREFERENCE with a price, not a
+    statement about what can be built.
 
-    So a 64-lane column under FAST routes ALL one-byte widths to the fused
-    kernel, the exact routing shape `pointwise_one_byte_fixed_for` already
-    took for Apple. `IDENTICAL` is UNTOUCHED and returns False: identity
-    pins `PINNED_REPLICATION_LANES = 32`, the ladder compiles as-is, and
-    the identical route must not move. 32-lane columns return False and
-    keep today's dispatch byte for byte; variable-width columns (qualcomm,
-    intel, spec-baseline) are NOT claimed here and still refuse at the
-    asserts.
+    WHAT THE PREFERENCE BUYS, and it is unchanged. The fused 8-bit kernel
+    accumulates Int32 in ONE shared histogram per warp pair with threadgroup
+    integer atomics, syncs only at block barriers, and walks the compressed
+    index ONCE for both stats where the PASS family walks it per stat. The
+    ladder's narrow kernels instead take CatBoost's turn-taking float adds,
+    and on any column that is not exactly 32 lanes wide those turns now cost
+    a THREADGROUP barrier each (`sub_byte_lane_sync_for`), which is the
+    4-7x that `pointwise_one_byte_fixed_for` measured on Apple. A 64-lane
+    column keeping the fused route is the same judgement Apple already
+    makes, on the same evidence.
 
-    THE PRICE: the ladder's narrow kernels exist because fewer bins buy
-    more private sub-copies and less shared-memory traffic; the fused
-    kernel gives a 64-lane column the general 256-bin layout for a 32-fold
-    feature until someone writes the wide-wavefront specialization. That
-    is a FAST-mode kernel choice on a column that previously refused to
-    build -- the A/B against a 64-lane ladder specialization does not
-    exist yet, and this row is where it will flip.
+    WHAT IT COSTS: the fused kernel gives a 64-lane column the general
+    256-bin layout for a 32-fold feature, where the ladder would buy more
+    private sub-copies and less shared traffic. That A/B is now RUNNABLE on
+    a 64-lane column for the first time, and it was not before; this row is
+    the one line that flips if the number disagrees. It is OWED, and the
+    orchestrator owns it.
+
+    `IDENTICAL` is UNTOUCHED and returns False: identity has always compiled
+    the ladder and the identical route must not move. 32-lane columns return
+    False and keep today's dispatch byte for byte. Variable-width columns
+    (qualcomm, intel, spec-baseline) are still NOT claimed here -- their
+    problem was never the slice layout, it is that a logical 32-lane group
+    does not fit an 8-wide wave, which `sub_byte_lane_sync_for` answers and
+    no column has yet built to confirm.
     """
     comptime if identical:
         return False
@@ -1409,49 +1581,69 @@ def greedy_one_byte_fixed_for[column: Int, identical: Bool]() -> Bool:
 
 
 def greedy_sub_byte_excluded_for[column: Int, identical: Bool]() -> Bool:
-    """ROUTING row (DEVIATION 1910), sibling of `greedy_one_byte_fixed_for`:
-    whether the GREEDY sub-byte histogram families -- BINARY (32 features
-    per word) and HALF-BYTE (8 per word) -- are comptime-EXCLUDED from the
-    build, their launch sites refusing at runtime BY NAME.
+    """ROUTING row, RETRACTED 2026-09-01 (DEVIATION 1947 supersedes
+    DEVIATION 1910): whether the GREEDY sub-byte histogram families --
+    BINARY (32 features per word) and HALF-BYTE (8 per word) -- are
+    comptime-EXCLUDED from the build, their launch sites refusing at runtime
+    BY NAME.
 
-    Both families accumulate through
-    `point_hist_half_byte_template.slice_offset`, whose 512-float slices
-    and 4 sub-copies are 32-lane by construction and whose comptime assert
-    refuses `LANE_WIDTH == 64` (its docstring carries the geometry). On the
-    first MI300X leg that ONE assert killed the whole gbdt binding: the
-    launch sites live in non-generic functions, so the kernels instantiate
-    whenever the module builds, reachable or not.
+    **False in every cell, and the row is kept rather than deleted because a
+    retraction that leaves no trace is how the same wrong conclusion gets
+    re-derived.** DEVIATION 1910 read like a fact about CatBoost's design
+    and it was a fact about ONE CONSTANT WE CHOSE.
 
-    THIS IS SHAPE (2) -- EXCLUDE AND REFUSE -- AND NOT SHAPE (1), ROUTING
-    TO THE FUSED 8-BIT KERNEL, BECAUSE THE SEMANTICS DO NOT MAP. The
-    mismatch is not the bin range (every sub-byte bin is trivially under
-    256); it is the COMPRESSED-INDEX PACKING. The fused kernel decodes
-    `(ci >> (24 - 8*f)) & 255` with `f = (tid + i) & 3` -- four one-byte
-    features per 32-bit word. A half-byte block packs EIGHT features per
-    word in nibbles and the binary block THIRTY-TWO single bits; handing
-    either cindex to the one-byte decode reads garbage bins from real
-    memory. Re-packing narrow features one-byte for 64-lane columns would
-    be a grid-creator layout change -- a different, larger deviation --
-    not a routing row.
+    WHAT 1910 SAID, in its own terms. Both families accumulate through
+    `point_hist_half_byte_template.slice_offset`, whose 512-float slices and
+    4 sub-copies are "32-lane by construction", so a 64-wide wavefront would
+    need eight sub-copies and two of them would collide on every bin;
+    CatBoost never wrote that layout; therefore a CDNA column under FAST
+    must build without the kernels and refuse at the dispatch.
 
-    So: a 64-lane column under FAST builds WITHOUT the binary and
-    half-byte kernels, and a dataset whose grid actually contains a
-    sub-byte block refuses at the dispatch with this deviation's name --
-    refusal over fallback, per the standing rule. 255-border float
-    datasets (the FAST lane's fixtures) produce only one-byte blocks and
-    never hit it. `IDENTICAL` returns False: identity pins the lanes to
-    32 and both families compile and run as today. 32-lane FAST columns
-    return False and are byte-for-byte untouched.
+    WHAT IS ACTUALLY TRUE. `slice_offset` is `512 * (tid // 32) + (tid & 24)`.
+    Every group of 32 CONSECUTIVE THREAD INDICES gets its own 512-float
+    replica and every group of 8 its own eighth of the 32 slots a bin spans.
+    That partition is disjoint and exhaustive for any block that is a
+    multiple of 32 -- 512 threads give 16 replicas of 512 floats, which is
+    exactly the `BlockSize * 16` of scratch the accumulator allocates -- and
+    it never asks how many lanes the hardware retires together. A 64-wide
+    wavefront does not need eight sub-copies; it runs two of the logical
+    32-groups at once, on two disjoint replicas, which is what a wide wave
+    is for. The thing that actually broke was `REDUCE_WIDTH`, derived from
+    `lane_width_for` and therefore 1024 on a FAST CDNA column while
+    `slice_offset`'s literal stayed 512: stage 1 then folded slices 0,2,4..
+    into the first half and 1,3,5.. into a second half that stage 2 never
+    reads, dropping half the histogram. One constant, in the wrong row.
 
-    THE PRICE: on 64-lane columns, low-cardinality features (<= 15 folds,
-    including one-hot and binary splits) cannot be histogrammed until the
-    wide-wavefront sub-byte layout is written or the grid creator learns
-    to promote them to one-byte packing on these columns. Stated rather
-    than papered over; the refusal names it at runtime.
+    AND THE IDENTICAL PATH ALREADY HELD THE FIX. `lane_width_for` returns
+    the pinned 32 under IDENTICAL on every column, so both families compile
+    and their asserts pass on AMD today. The layout was never mode-dependent;
+    only the constant feeding it was. `replication_lanes_for` is that
+    constant made unconditional, and with it the two families build and
+    dispatch on a 64-lane FAST column with no refusal anywhere.
+
+    THE GOVERNING RULE THIS ROW GOT WRONG: that CatBoost never wrote a
+    wide-wavefront layout is not a reason for us to refuse one. We did not
+    have to write one either -- theirs is width-independent once the
+    striping constant is read as logical, which is what the pointwise
+    family (`pointwise_hist2_half_byte_template.mojo`, a hardcoded logical
+    32 that has always compiled at any width) and the fused 8-bit kernel
+    (`H8_LANE`, running on the MI325X since 2026-08-27) already did.
+
+    WHAT DID NOT SURVIVE THE RETRACTION, and it is real: the turn-taking
+    sync. `syncwarp` orders one hardware wave, and what it lowers to on a
+    64-wide one cannot be established from this tree. That is
+    `sub_byte_lane_sync_for`, a SEPARATE row, which takes `barrier()` on
+    every column that is not exactly 32 lanes wide. The exclusion is gone;
+    the caution moved to the row that owns it.
+
+    WHAT IS NOT YET EVIDENCE. Nothing in this tree has ever EXECUTED a
+    sub-byte block on 64-wide hardware in either mode: IDENTICAL compiles
+    them on AMD, and every AMD fixture to date is 255-border float data
+    whose grid contains one-byte blocks only. This row makes the code
+    ELIGIBLE to run there. The verification that would settle it is named in
+    DEVIATION 1947 and is OWED.
     """
-    comptime if identical:
-        return False
-    return column_lane_width(column) == 64
+    return False
 
 
 def greedy_quantized_hist_for[column: Int, identical: Bool]() -> Bool:
@@ -1935,6 +2127,7 @@ comptime K_LIB_SELECT_WARPSORT = 111
 comptime K_LIB_BALL_COVER_EPS = 112
 comptime K_LIB_JACOBI_EIGH = 113
 comptime K_LIB_GRAM_SPLITK = 114
+comptime K_LIB_WEIGHTED_VERTEX_DEG = 115
 
 
 #: NUMERIC. The reduction width every cross-lane fold in these sections uses.
@@ -2201,6 +2394,23 @@ def lib_block_bounds_a_float_fold[kernel: Int]() -> Bool:
                             `decomposition/`, and a row's LANE is not a
                             reason for it to be classified differently.
 
+    - `K_LIB_WEIGHTED_VERTEX_DEG` `dbscan/impl/dbscan/vertexdeg/algo.mojo`,
+                            ADDED 2026-09-01 with `sample_weight`. Both
+                            `weighted_vertex_deg_dense_kernel` and
+                            `weighted_vertex_deg_csr_kernel` stride their
+                            per-thread partials by this number and then fold
+                            them with `core/pinned_reduce.pinned_block_sum`
+                            at this width, so it is simultaneously the fold
+                            width AND the stride -- DEVIATION 524's shape
+                            exactly, and the reason the pinned fold alone is
+                            not enough. The value it produces is thresholded
+                            against `min_pts` by `CorePoints::compute`
+                            (`runner.cuh:301`), so one bit here is one
+                            point's core status and from there one cluster
+                            against two. Bit-inert today (128 in every
+                            column), listed so that a landed vendor number
+                            is safe rather than silent.
+
     Every other library row here is either integer (`K_LIB_EPS_NEIGHBORHOOD`
     and `K_LIB_ADJ_SCAN` fold `Int32`, which is associative; so do
     `K_LIB_SELECT_RADIX`'s histogram scan and `K_LIB_BALL_COVER_EPS`'s
@@ -2248,6 +2458,7 @@ def lib_block_bounds_a_float_fold[kernel: Int]() -> Bool:
         or kernel == K_LIB_PLUS_PLUS
         or kernel == K_LIB_COLUMN_STATS
         or kernel == K_LIB_JACOBI_EIGH
+        or kernel == K_LIB_WEIGHTED_VERTEX_DEG
     )
 
 

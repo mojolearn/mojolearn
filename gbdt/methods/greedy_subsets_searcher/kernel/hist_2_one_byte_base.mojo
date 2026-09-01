@@ -100,7 +100,7 @@ from checks.kernel_matrix import (
     hist2_block_size_for,
     hist_floats_per_thread_for,
     hist_smem_mode_for,
-    lane_width_for,
+    replication_lanes_for,
     requires_uniform_iteration_for,
 )
 from checks.numerics import PIN_DETERMINISM
@@ -131,8 +131,29 @@ from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_7bit import (
 #: matrix.
 comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
 
-#: Lanes moving in lockstep. READ FROM THE MATRIX, not pinned here.
-comptime LANE_WIDTH = lane_width_for[
+#: The LOGICAL width of one private replica group. READ FROM THE MATRIX, not
+#: pinned here, and read from the row that means what this file needs.
+#:
+#: WAS `lane_width_for`, THE HARDWARE ROW, WHICH IS A DIFFERENT QUESTION
+#: (corrected 2026-09-01, DEVIATION 1947). Two uses here and neither asks how
+#: many lanes retire together:
+#:
+#: 1. `hist2_smem_slots` under `HIST_SMEM_SHARED2_I32`,
+#:    `(block // (2 * LANE_WIDTH)) * 1024`. The slice a thread lands in is
+#:    keyed by `tid // 64` in `hist2_slice_offset`, a LITERAL, so the block
+#:    needs `block // 64` slices; at the hardware 64 this expression sized it
+#:    for `block // 128` and the top half of the block would have written off
+#:    the end of the allocation. At the logical 32 the two agree, which is
+#:    the state every column that has ever run this arm is already in.
+#: 2. The LOAD side (`ALIGN_SIZE`, `warps_per_block`, `entries_per_warp`,
+#:    `local_idx`), a self-consistent partition of the row axis at any value.
+#:    See `hist_binary.mojo`'s note for the line-by-line reading and the
+#:    coalescing price on a 64-wide wave.
+#:
+#: The per-bit `SliceOffset`s in `hist_2_one_byte_{5,6,7}bit.mojo` write
+#: `tid // 32` as a literal and always did, so the replica geometry itself
+#: never moved with this constant; only the sizing and the striping did.
+comptime LANE_WIDTH = replication_lanes_for[
     TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
 ]()
 
@@ -223,14 +244,21 @@ comptime HIST2_MIN_DOCS_PER_BLOCK = hist2_min_docs[HIST2_SMEM_MODE]()
 def hist2_slice_offset[bits: Int, smem_mode: Int](tid: Int) -> Int:
     """`TImpl::SliceOffset()`, resolved by `bits` the way their CRTP does.
 
-    THE 1024 IS THEIRS AND IT IS 32-LANE: 32 lanes times the 32 floats per
-    thread this accumulator takes. A 64-lane wavefront needs a 2048-float
-    slice and CatBoost never wrote that layout, so the assert makes it a
-    compile error rather than two warps quietly sharing one private copy --
-    the same guard `hist_one_byte.mojo` carries. A 64-lane column never
-    instantiates this family: `greedy_one_byte_fixed_for` (DEVIATION 1906)
-    routes its one-byte work to the fused 8-bit kernel at the dispatch, and
-    the assert stays for whatever reaches this file some other way.
+    THE 1024 IS THEIRS AND IT IS LOGICAL: 32 THREAD INDICES times the 32
+    floats per thread this accumulator takes, and `ReduceToOneWarp` folds at
+    the same 1024 written as a literal (`hist_2_one_byte_base.cuh:92`).
+
+    THE SENTENCE THAT STOOD HERE -- that a 64-lane wavefront needs a
+    2048-float slice, which CatBoost never wrote -- IS RETRACTED
+    (2026-09-01, DEVIATION 1947). `tid // 32` partitions thread indices, not
+    waves, and stays disjoint at any hardware width; a wide wave covers two
+    of the groups on two disjoint replicas. What broke on CDNA was that
+    `LANE_WIDTH` read the HARDWARE row and mis-sized the shared allocation
+    while these offsets stayed literal. The assert is now the invariant that
+    it was not re-coupled, and `kernel/sub_byte_layout_gate.mojo` is the
+    runnable arm that shows it can fire. `greedy_one_byte_fixed_for` still
+    ROUTES a 64-lane column's one-byte work to the fused 8-bit kernel, but as
+    a performance preference with an owed A/B, not a refusal.
 
     ================= DEVIATION BLOCK =================
     Under `HIST_SMEM_SHARED2_I32` the slice a thread lands in is keyed by its
@@ -244,10 +272,11 @@ def hist2_slice_offset[bits: Int, smem_mode: Int](tid: Int) -> Int:
     ===================================================
     """
     comptime assert LANE_WIDTH == 32, (
-        "the hist_2 accumulator's slice layout is 32-lane by construction"
-        " (`hist_2_one_byte_{5,6,7}bit.cu` SliceOffset, and ReduceToOneWarp's"
-        " warpHistSize at `hist_2_one_byte_base.cuh:92`); write the"
-        " wide-wavefront layout before letting LANE_WIDTH be 64"
+        "the hist_2 accumulator's slice layout is written against a LOGICAL"
+        " 32-thread replica group (`hist_2_one_byte_{5,6,7}bit.cu`"
+        " SliceOffset, and ReduceToOneWarp's warpHistSize literal at"
+        " `hist_2_one_byte_base.cuh:92`); `LANE_WIDTH` must read"
+        " `replication_lanes_for`, never the hardware lane width"
     )
 
     var off: Int

@@ -50,16 +50,17 @@ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.gpu.intrinsics import ldg
 
 from checks.kernel_matrix import (
-    lane_width_for,
+    replication_lanes_for,
     TARGET_COLUMN,
     deterministic_flush_for,
     requires_uniform_iteration_for,
 )
+from gbdt.methods.greedy_subsets_searcher.kernel.lane_sync import turn_sync
 from checks.numerics import PIN_DETERMINISM
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
-from max.gpu.sync import barrier, syncwarp
+from max.gpu.sync import barrier
 
 from checks.kernel_matrix import (
     HIST_SMEM_SHARED2_I32,
@@ -83,17 +84,37 @@ from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
 #: Same build mode as `hist_binary.mojo`; the flush follows the matrix.
 comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
 
-#: Lanes moving in lockstep. READ FROM THE MATRIX, not pinned here.
+#: The LOGICAL width of one private replica group. READ FROM THE MATRIX, not
+#: pinned here, and read from the row that means what this file needs.
 #:
 #: This used to be a literal 32 in this file and in three others, with a
 #: comment pointing at `kernel_matrix.column_lane_width` for why AMD's 64
-#: must not reach it. That is a matrix row that EXISTS and was bypassed:
-#: `column_lane_width` had fifteen call sites and every one of them was
-#: inside the matrix itself or the table printer, so changing
-#: `TARGET_COLUMN` to AMD would have compiled and silently kept 32 while the
-#: replication geometry assumed a 32-wide slice on a 64-wide wavefront.
-#: One number now flows through, which is the point of having the table.
-comptime LANE_WIDTH = lane_width_for[
+#: must not reach it. That is a matrix row that EXISTS and was bypassed, and
+#: routing it through `lane_width_for` fixed the bypass while picking the
+#: WRONG ROW (corrected 2026-09-01, DEVIATION 1947): under FAST that row
+#: hands back the HARDWARE width, 64 on CDNA, and this file's slice
+#: arithmetic is not asking about hardware.
+#:
+#: TWO USES, AND NEITHER IS A LOCKSTEP CLAIM.
+#:
+#: 1. `warp_offset = 1024 * (tid // LANE_WIDTH)` in `one_byte_slice_offset`.
+#:    That partitions THREAD INDICES into groups of 32, each with a private
+#:    1024-float replica, and `Reduce`'s stage 1 folds at a LITERAL 1024
+#:    that never moved. At the hardware 64 the replicas halved in number
+#:    while the fold stride did not, which is the whole defect. At the
+#:    logical 32 the two agree on every column, exactly as they already do
+#:    under IDENTICAL, where this row has always returned 32 and this family
+#:    has always elaborated on AMD.
+#: 2. The LOAD side (`min_docs_per_block`, `ALIGN_SIZE`, `warps_per_block`,
+#:    `entries_per_warp`, `local_idx`). A self-consistent partition of the
+#:    row axis at any value; see the same note in `hist_binary.mojo` for the
+#:    line-by-line reading and for what a logical 32 costs a 64-wide wave in
+#:    coalescing.
+#:
+#: The write-turn sync is the one thing that does NOT follow from this, and
+#: it lives in its own row (`sub_byte_lane_sync_for`, via
+#: `lane_sync.turn_sync`).
+comptime LANE_WIDTH = replication_lanes_for[
     TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
 ]()
 
@@ -194,22 +215,35 @@ def one_byte_slice_offset[bits: Int, smem_mode: Int](tid: Int) -> Int:
     sub-copies per warp, an 8-bit feature gets 1. That is the same trade as
     the pass loop, seen from the memory side.
 
-    THE 1024 IS THEIRS AND IT IS 32-LANE. It is 32 lanes times the 32 floats
-    per thread this accumulator takes, and `blocks = 8 >> InnerHistBitsCount`
-    cuts that warp into up to eight 4-lane sub-copies, which is 32 lanes
-    again. `Reduce`'s stage 1 folds at the same 1024 (`hist_one_byte.cu:182`).
-    A 64-lane wavefront needs a 2048-float slice and sixteen sub-copies, and
-    CatBoost never wrote that layout, so the assert makes it a compile error
-    rather than two warps quietly sharing one private copy. A 64-lane
-    column never instantiates this family: `greedy_one_byte_fixed_for`
-    (DEVIATION 1906) routes its one-byte work to the fused 8-bit kernel at
-    the dispatch, and the assert stays for whatever reaches this file some
-    other way.
+    THE 1024 IS THEIRS AND IT IS LOGICAL. It is 32 THREAD INDICES times the
+    32 floats per thread this accumulator takes, and
+    `blocks = 8 >> InnerHistBitsCount` cuts that group into up to eight
+    4-thread sub-copies, which is 32 again. `Reduce`'s stage 1 folds at the
+    same 1024 (`hist_one_byte.cu:182`), written as a literal.
+
+    THE SENTENCE THAT STOOD HERE -- that a 64-lane wavefront needs a
+    2048-float slice and sixteen sub-copies, which CatBoost never wrote -- IS
+    RETRACTED (2026-09-01, DEVIATION 1947). A wide wave does not need a wider
+    slice; it needs the groups to stay disjoint, and `tid // 32` keeps them
+    disjoint however many threads retire together. What broke on CDNA was
+    that `LANE_WIDTH` read the HARDWARE row, so the replica count halved
+    while the fold stride stayed 1024 and two logical groups quietly shared
+    one private copy. Reading the LOGICAL row makes them agree by
+    construction, which is the state IDENTICAL has always been in.
+
+    THE ASSERT STAYS AND IT STILL BITES: it is now the invariant that
+    `LANE_WIDTH` was not re-coupled to the hardware width, and
+    `kernel/sub_byte_layout_gate.mojo` is the runnable arm that shows it can
+    fire. `greedy_one_byte_fixed_for` still ROUTES a 64-lane column's
+    one-byte work to the fused 8-bit kernel (DEVIATION 1906), but that is now
+    a performance preference with an owed A/B, not a refusal: this family
+    builds and runs there, and it is what a multi-stat shape falls back to.
     """
     comptime assert LANE_WIDTH == 32, (
-        "the one-byte accumulator's slice layout is 32-lane by construction"
-        " (`hist_one_byte.cu:55-59`, and `Reduce`'s warpHistSize at `:182`);"
-        " write the wide-wavefront layout before letting LANE_WIDTH be 64"
+        "the one-byte accumulator's slice layout is written against a LOGICAL"
+        " 32-thread replica group (`hist_one_byte.cu:55-59`, and `Reduce`'s"
+        " warpHistSize literal at `:182`); `LANE_WIDTH` must read"
+        " `replication_lanes_for`, never the hardware lane width"
     )
     comptime inner_bits = bits - 5
 
@@ -307,9 +341,20 @@ def add_one_byte_point[
     `max.gpu.sync`. Warp SHUFFLES really are missing in Mojo 1.0, and the two
     were conflated.
 
-    Because the sync is warp-local, callers no longer need a uniform trip
-    count across the BLOCK, only across each warp. The peel and the main loop
-    keep their uniform counts anyway, which is stricter than required and
+    OFF 32-WIDE HARDWARE THE SYNC IS THE THREADGROUP BARRIER AFTER ALL
+    (2026-09-01, DEVIATION 1947). The slice LAYOUT is a logical partition of
+    thread indices and travels to any wave width; what does not travel is
+    what `syncwarp` EMITS on a wave that is not 32 lanes, which nothing in
+    this tree can establish. `turn_sync` reads `sub_byte_lane_sync_for` and
+    hands `barrier()` to every column that is not exactly 32 wide, at the
+    cost this paragraph already prices. Apple, NVIDIA, RDNA and the identity
+    column keep `syncwarp` and are untouched.
+
+    Because the sync is warp-local WHERE IT IS A WARP SYNC, callers would not
+    strictly need a uniform trip count across the BLOCK, only across each
+    warp. The peel and the main loop keep their uniform counts anyway, which
+    is stricter than required, is what `requires_uniform_iteration_for`
+    demands, and is what makes the `barrier()` substitution legal at all. It
     costs nothing.
     """
 
@@ -338,7 +383,7 @@ def add_one_byte_point[
         # exactly as theirs: the passes exist to serialize lanes whose
         # PLAIN float adds would collide in the shared slice
         # (`hist_one_byte.cu:96-101`), and at 8 bits that is 8 gated
-        # passes with a syncwarp each, per point, per feature.
+        # passes with a `turn_sync` each, per point, per feature.
         #
         # ================= DEVIATION BLOCK =================
         # The Int32 arm SKIPS the pass loop: its add is an ATOMIC
@@ -357,7 +402,10 @@ def add_one_byte_point[
         if dt == DType.int32:
             hist2_smem_add[dt](smem, slot, stat_to_add, q_to_add)
         elif inner_bits == 0:
-            syncwarp()
+            # `tiled_partition<32>::sync()`. `turn_sync` is `syncwarp` on a
+            # 32-wide column and a threadgroup `barrier()` on any other
+            # width (DEVIATION 1947, `sub_byte_lane_sync_for`).
+            turn_sync()
             hist2_smem_add[dt](smem, slot, stat_to_add, q_to_add)
         else:
             var higher = one_byte_higher_bin[bits](ci, tid, i)
@@ -366,7 +414,11 @@ def add_one_byte_point[
             @parameter
             for kk in range(1 << inner_bits):
                 var p = ((tid >> 2) + kk) & mask
-                syncwarp()
+                # See the note above: `syncwarp` on a 32-wide column, a
+                # threadgroup `barrier()` on any other width. Unconditional
+                # here, with the conditional write after it, so every thread
+                # of the block takes every turn either way.
+                turn_sync()
                 if p == higher:
                     hist2_smem_add[dt](smem, slot, stat_to_add, q_to_add)
 

@@ -60,7 +60,9 @@ def quantized_hist_shape_ok(
     """Whether this fit's grid fits the quantized family: one-byte blocks
     only (the packed-pair kernels decode 4 one-byte features per cindex
     word; half-byte/binary words pack 8/32 and would read garbage bins --
-    DEVIATION 1910's own semantics argument) and exactly two stat planes
+    the packing argument DEVIATION 1910 made, which outlives 1910's own
+    refusal: 1947 retracted the exclusion, and a sub-byte block still
+    cannot be decoded by a one-byte kernel) and exactly two stat planes
     (the packed word holds two; multi-stat keeps the PASS route, the same
     refusal the fused 8-bit arm makes). Evaluated ONCE per fit, off the
     layout, before any launch."""

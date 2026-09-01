@@ -84,9 +84,15 @@ which is comptime False under IDENTICAL -- the IDENTICAL column never
 launches anything in this file and its schedule is byte-for-byte the
 pre-round one.
 
-LANE-AGNOSTIC BY CONSTRUCTION (contrast DEVIATIONS 1906/1910): Int32
-atomics, block barriers, uniform trip counts, no lane-indexed slices --
-32-lane and 64-lane columns compile this file unchanged.
+LANE-AGNOSTIC BY CONSTRUCTION: Int32 atomics, block barriers, uniform trip
+counts, no lane-indexed slices -- 32-lane and 64-lane columns compile this
+file unchanged. This used to read "contrast DEVIATIONS 1906/1910", and the
+contrast is gone (2026-09-01, DEVIATION 1947): the CatBoost families are
+lane-agnostic too once their striping constant is read as the LOGICAL
+`replication_lanes_for` rather than the hardware width. What still separates
+them is the SYNC, not the layout -- this file needs none finer than a block
+barrier, theirs takes CatBoost's write-turns and therefore pays a threadgroup
+barrier per turn off 32-wide hardware (`sub_byte_lane_sync_for`).
 
 TWO-STAT BY CONSTRUCTION: the packed word holds exactly two planes. The
 launcher refuses other shapes to the standing arms (multi-stat keeps the

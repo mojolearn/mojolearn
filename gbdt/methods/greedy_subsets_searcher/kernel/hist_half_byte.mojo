@@ -37,10 +37,10 @@ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.gpu.intrinsics import ldg
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
-from max.gpu.sync import barrier, syncwarp
+from max.gpu.sync import barrier
 
 from checks.kernel_matrix import (
-    lane_width_for,
+    replication_lanes_for,
     TARGET_COLUMN,
     deterministic_flush_for,
     requires_uniform_iteration_for,
@@ -52,6 +52,7 @@ from checks.numerics import (
     NUMERIC_IDENTICAL,
     ftz,
 )
+from gbdt.methods.greedy_subsets_searcher.kernel.lane_sync import turn_sync
 from gbdt.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
     BLOCK_SIZE,
     HIST_SIZE,
@@ -106,7 +107,33 @@ comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
 #: `TARGET_COLUMN` to AMD would have compiled and silently kept 32 while the
 #: replication geometry assumed a 32-wide slice on a 64-wide wavefront.
 #: One number now flows through, which is the point of having the table.
-comptime LANE_WIDTH = lane_width_for[
+#:
+#: AND IT IS THE LOGICAL ROW, NOT THE HARDWARE ONE (2026-09-01, DEVIATION
+#: 1947). IN THIS FILE THE CONSTANT IS LOAD-SIDE ONLY, which was checked
+#: line by line before it moved. Its four uses are `min_docs_per_block`,
+#: `ALIGN_SIZE`, the `warps_per_block` / `global_warp_id` /
+#: `entries_per_warp` / `stripe_size` striping, and
+#: `local_idx = (tid & (LANE_WIDTH - 1)) * LOAD_SIZE`. Every one of them is
+#: a PARTITION OF THE ROW AXIS among groups of threads, and the partition is
+#: self-consistent at any value: `ALIGN_SIZE` is one group's iteration, the
+#: head/tail peel leaves a whole number of them, `stripe_size` is the group
+#: count times that, and each group's lanes take disjoint `LOAD_SIZE`-wide
+#: runs. Nothing here indexes a histogram slot and nothing here assumes
+#: lockstep. So a logical 32 on a 64-wide wave covers exactly the same rows
+#: exactly once.
+#:
+#: WHAT IT COSTS, said rather than hidden: a 64-wide wave now issues its
+#: loads as TWO 32-lane runs of `LOAD_SIZE` elements each, one per logical
+#: group, and those two runs are `entries_per_warp` apart rather than
+#: contiguous. Each run is still 512 contiguous bytes, so it coalesces, but
+#: it is two streams where a wave-width partition would give one. The
+#: precedent says that price is small in practice: `hist_2_one_byte_8bit`
+#: stripes by exactly this logical 32 (`H8_LANE`) and is the kernel the
+#: MI325X has been running one-byte blocks through since 2026-08-27. A
+#: wave-width load partition over a logical slice layout is a legitimate
+#: follow-up and it is a SCHEDULING change; it is not what DEVIATION 1947
+#: claims, and it is unmeasured.
+comptime LANE_WIDTH = replication_lanes_for[
     TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
 ]()
 
@@ -396,10 +423,13 @@ def half_byte_hist_kernel(
                     # flushed -- see `add_half_byte_point`'s note.
                     # Comptime no-op under FAST.
                     smem[slot] = ftz(smem[slot] + t)
-                # `addToHistTile.sync()`, an 8-lane `tiled_partition<8>` in
-                # theirs. `syncwarp` is 32 lanes, so it orders a SUPERSET and
-                # is still correct; it is the narrowest sync Mojo exposes.
-                syncwarp()
+                # `addToHistTile.sync()`, an 8-lane `tiled_partition<8>`
+                # in theirs. `turn_sync` is `syncwarp` (32 lanes, a SUPERSET
+                # of the 8, the narrowest sync Mojo exposes) on a 32-wide
+                # column and a threadgroup `barrier()` on any other width --
+                # DEVIATION 1947, and the argument is in
+                # `add_half_byte_point`'s deviation block.
+                turn_sync()
 
         b_ptr += stripe_size
         s_ptr += stripe_size
@@ -879,10 +909,13 @@ def half_byte_hist_gather_kernel[ridx_stats: Bool = False](
                     # flushed -- see `add_half_byte_point`'s note.
                     # Comptime no-op under FAST.
                     smem[slot] = ftz(smem[slot] + t)
-                # `addToHistTile.sync()`, an 8-lane `tiled_partition<8>` in
-                # theirs. `syncwarp` is 32 lanes, so it orders a SUPERSET and
-                # is still correct; it is the narrowest sync Mojo exposes.
-                syncwarp()
+                # `addToHistTile.sync()`, an 8-lane `tiled_partition<8>`
+                # in theirs. `turn_sync` is `syncwarp` (32 lanes, a SUPERSET
+                # of the 8, the narrowest sync Mojo exposes) on a 32-wide
+                # column and a threadgroup `barrier()` on any other width --
+                # DEVIATION 1947, and the argument is in
+                # `add_half_byte_point`'s deviation block.
+                turn_sync()
 
         i_ptr += stripe_size
         s_ptr += stripe_size

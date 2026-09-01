@@ -36,7 +36,17 @@ serializing more lanes than necessary reorders nothing.
 """
 
 from max.gpu.memory import AddressSpace
-from max.gpu.sync import syncwarp
+from gbdt.methods.greedy_subsets_searcher.kernel.lane_sync import turn_sync
+
+#: DEVIATION 1947, 2026-09-01. `syncwarp()` stood at each of the write-turn
+#: sites below and is now `turn_sync()`, which IS `syncwarp()` on a column
+#: whose hardware wave is 32 lanes -- Apple, NVIDIA, RDNA and the identity
+#: column, byte for byte and instruction for instruction -- and a threadgroup
+#: `barrier()` on any other width. The reason is not the slice layout, which
+#: is a logical partition of thread indices and always travelled; it is that
+#: what `syncwarp` EMITS on a 64-wide wavefront cannot be established by
+#: reading anything in this tree, and these turns are what keeps two PLAIN
+#: float adds off one slot. See `sub_byte_lane_sync_for`.
 
 from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     hist2_smem_add,
@@ -124,7 +134,7 @@ def hist2_add_points_5[
 
         # syncTile.sync() -- tiled_partition<8>, widened to the warp. See
         # the DEVIATION note in the module docstring.
-        syncwarp()
+        turn_sync()
 
         @parameter
         for k in range(n):
@@ -136,7 +146,7 @@ def hist2_add_points_5[
                 qadd1 = qstat1[k]
             hist2_smem_add[dt](smem, offset1, add1, qadd1)
 
-        syncwarp()
+        turn_sync()
 
         @parameter
         for k in range(n):
