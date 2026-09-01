@@ -471,7 +471,12 @@ def km_kernel_matrix(
         # that is really an allocator.
         ctx.enqueue_memset(norm_a, Float32(0.0))
         ctx.enqueue_memset(norm_b, Float32(0.0))
-        pairwise_distance(ctx, out, a, b, m, n, k, DIST_L1, elem_tpb)
+        # elem_tpb BY KEYWORD. `pairwise_distance` gained a `metric_arg`
+        # parameter BEFORE `elem_tpb` when Minkowski landed, so this
+        # positional call started handing the thread count to metric_arg.
+        pairwise_distance(
+            ctx, out, a, b, m, n, k, DIST_L1, elem_tpb=elem_tpb
+        )
         if via_copy:
             ctx.enqueue_function[sabotage_laplacian_epilogue_kernel](
                 out.unsafe_ptr(),
