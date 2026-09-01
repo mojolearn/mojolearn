@@ -107,10 +107,16 @@ disagreements, 0 arm disagreements, one loss value per arm), and the
 REQUIRED-RED positive control (`-D MOJOLEARN_134_CONTROL=1`, the
 pre-a4aee262 ctor) was QUIET at a combined N=1200 -- so on a quiet box
 the lifetime mechanism ALONE does not reproduce the sighting, the 134b
-LOAD WINDOW IS A NECESSARY INGREDIENT, and 134 STAYS OPEN. The deciding
-experiment is the LOADED control, PARKED for Andrew's explicit slot (see
-134f); the IDENTICAL-mode soak (rebuild required) is the other owed half
-of the closing pair. The bit-inert holds themselves are verified:
+LOAD WINDOW IS A NECESSARY INGREDIENT, and 134 STAYS OPEN. The loaded
+control RAN 2026-09-01 midday under Andrew's delegation (bounded, 8+1
+processes, watchdog): ~3,000 clean under-load process-reps at load 4-8
+including the sabotaged arm — still no 134 signature — then a
+box-saturation event at load 18 turned every process's fits to silent
+garbage simultaneously (a DIFFERENT defect, recorded as DEVIATION 2002)
+and the watchdog tore the window down. A reduced sustained-load rerun
+(6 processes, cap 10) and the IDENTICAL-mode soak (rebuild required)
+remain the owed halves of the closing pair; full record PORTING.md 134f
+run record #2. The bit-inert holds themselves are verified:
 check-ordered-boosting and check-fit-pointwise both PASS at HEAD.
 
 MECHANISM HUNT, 2026-09-01 (write-only lane; the code-read claims below

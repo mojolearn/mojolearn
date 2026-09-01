@@ -5334,16 +5334,52 @@ entry's runs are no longer owed):**
   REPRODUCE THE SIGHTING AT ANYTHING NEAR THE OBSERVED RATE. The 134b
   load window is a NECESSARY INGREDIENT, not a contributing factor.
 
+**RUN RECORD #2, 2026-09-01 midday — THE LOADED WINDOW RAN (Andrew
+delegated the decision; bounded form: 8 load processes from a PREBUILT
+binary + the control binary, all nice -19, watchdog at 1-min load > 12
+or 25 min).** What happened, logs in `bench/results/soak134/`:
+
+* Load climbed 4 -> 8 over ~100 s while ~335 reps/process ran CLEAN —
+  including the SABOTAGED control. That is ~3,000 clean under-load
+  process-reps at load 4-8 with the pre-a4aee262 ctor live in one of
+  nine processes. THE 134 SIGNATURE WAS NOT OBSERVED, under sabotage
+  or without it, under genuine multi-process load.
+* At t~110-120 s load spiked to 18 and ALL NINE processes went to
+  garbage on the SAME rep (~336-337): "Context leak detected" spam,
+  then every subsequent fit returned an EMPTY model (greedy 0/0
+  splits, mse -0.0) — wrong-but-INCOHERENT, persistent after onset,
+  simultaneous across processes. That is a box-saturation event
+  (Metal context death), NOT 134's wrong-but-COHERENT model, and it
+  is recorded as its own defect: DEVIATION 2002 below. The watchdog
+  tore the window down at t=120 s as designed.
+* VERDICT: this window neither reproduces 134 nor closes it — the
+  informative regime is SUSTAINED load 4-10, and this attempt spent
+  only ~100 s there before saturating. NEXT ATTEMPT: 6 load
+  processes, watchdog at 10, longer cap, same prebuilt binaries
+  (`build/soak134_fast`, `build/soak134_control`).
+
 **STATUS: DEVIATION 134 STAYS OPEN and the no-speed-claim embargo
-stands. THE LOADED CONTROL (recipe above) IS NOW THE DECIDING
-EXPERIMENT, and it is PARKED: it is the load class that took this
-machine down on 2026-08-29, so it runs only on Andrew's explicit
-say-so, in a scheduled slot with him present, both sessions idle,
-8-12 background processes on the first attempt rather than 24. Its
-being the deciding experiment is a reason to schedule it properly,
-not a reason to proceed.** Still owed alongside it: the IDENTICAL-mode
-soak (`tools/with_identical_mode.sh pixi run soak-determinism` --
-needs a rebuild) as the second half of the closing pair.
+stands.** Still owed: the reduced sustained-load window above, and the
+IDENTICAL-mode soak (`tools/with_identical_mode.sh pixi run
+soak-determinism` — needs a rebuild) as the second half of the closing
+pair.
+
+## 2002. [OPEN, FIX OWED] Saturated-device fits return silent garbage instead of raising
+
+Found by 134's loaded window (record above): when the box saturates
+(nine concurrent GPU fit processes, 1-min load 18, Metal printing
+"Context leak detected, CoreAnalytics returned false"), a fit does not
+raise — it RETURNS an empty model: greedy searcher 0 splits, mse -0.0,
+and once a process enters this state EVERY subsequent fit in it is
+garbage. A training call that hands back a coherent-shaped but empty
+model under resource exhaustion is a correctness hazard for any caller
+that doesn't cross-check the loss. FIX SHAPE (owed): the fit paths
+should validate cheap invariants after the drain (root partition size
+== n_rows; at least one split OR a named refusal; loss finite and not
+negative-zero-everywhere) and RAISE on violation, naming the device
+state. The soak driver's per-rep print is the current only witness.
+RUN OWED to reproduce deliberately: the window recipe at 9+ processes
+until load > 15, then observe the onset rep in any log.
 
 ## 125. [CLOSED] `CreateSubsets`' fold arm pays ONE extra partition reduce, per TREE and not per level
 

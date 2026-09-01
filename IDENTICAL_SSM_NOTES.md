@@ -34,7 +34,9 @@ decision about the neural layer is made later against a written list.
    a transformer block.** The transformer path in `IDENTICAL_GEMM_PLAN.md`
    needs softmax (a pinned max with the row-13 signed-zero hazard, exp, a
    pinned sum, a pinned division), RoPE (portable sin AND cos with argument
-   reduction; only `portable_cosf` exists, domain |x| < 8192), and an
+   reduction; BOTH exist since DEVIATION 820's shared
+   `_cephes_sincosf_core`, domain |x| < 8192 — this line said only cos
+   existed and was stale, corrected 2026-09-01 by the M3 recon), and an
    attention kernel. Mamba-1 needs none of those. Roughly two new primitives
    (scan, RMSNorm) against four.
 4. **Nobody has published a bitwise or batch-invariant SSM scan.** Thinking
