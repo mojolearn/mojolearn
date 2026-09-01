@@ -91,6 +91,7 @@ def _fit_with_slots(cls, X, y, slot_overrides, **kw):
 
 SLOT_BOOTSTRAP = 11
 SLOT_MAX_SAMPLES = 18
+SLOT_MAX_LEAF_NODES = 19
 SLOT_CRITERION = 21
 
 
@@ -208,6 +209,89 @@ def check_criterion_and_bootstrap(X, y_clf4, y_reg):
     return failed
 
 
+def check_max_leaf_nodes(X, y_clf4):
+    """DEVIATION 466's table: sklearn's `max_leaf_nodes` REACHES the forest
+    from the Python side, and slot 19 is what carries it.
+
+    This knob is not like the others above. The rest tune one grower; this
+    one SELECTS A SECOND GROWER (best-first, `builder.mojo` DEVIATION BLOCKS
+    466 to 469), so a slot that silently failed to ride across would not
+    change a parameter, it would leave the caller on the depth-wise builder
+    while the wrapper reported success. That is the exact shape of the
+    defect this whole file exists for -- `max_features` on the regressor --
+    and it is the shape of the OPEN defect on RandomForest, whose surface
+    maps this same name onto cuML's `max_leaves`.
+
+    FOUR ARMS. (1) The budget is spent exactly: every tree has k leaves, so
+    the mode ran and did not merely get accepted. k = 9 on a 4096-row
+    depth-6 fixture, where the frontier cannot run dry, so "exactly k"
+    cannot pass because the budget was unreachable. (2) The forest DIFFERS
+    from the default, which is what says the grower changed rather than the
+    budget going unused. (3) SABOTAGE, the same shape as the three above:
+    force slot 19 to -1 after the wrapper builds the list and the digest
+    must COLLAPSE onto the default forest -- which proves slot 19 and
+    nothing else on the list carries it. (4) sklearn's own bound, `>= 2`,
+    must be refused HERE and not only in Mojo, because a bound enforced
+    below the boundary is a bound the Python caller meets as something else.
+    """
+    failed = False
+    kw = dict(n_estimators=4, max_depth=6, random_state=7)
+    k = 9
+
+    base = ExtraTreesClassifier(**kw).fit(X, y_clf4)
+    base_digest = forest_digest(base)
+    bf = ExtraTreesClassifier(max_leaf_nodes=k, **kw).fit(X, y_clf4)
+    bf_digest = forest_digest(bf)
+
+    offsets = np.asarray(bf._offsets)
+    left = np.asarray(bf._left_child)
+    for t in range(len(offsets) - 1):
+        leaves = int((left[offsets[t]:offsets[t + 1]] == -1).sum())
+        if leaves != k:
+            print(
+                f"FAIL max_leaf_nodes: tree {t} has {leaves} leaves,"
+                f" want exactly {k}"
+            )
+            failed = True
+
+    if bf_digest == base_digest:
+        print(
+            "FAIL max_leaf_nodes: the best-first forest is the DEFAULT"
+            f" forest ({bf_digest}); the knob crossed the boundary and"
+            " selected no second grower"
+        )
+        failed = True
+
+    sab = _fit_with_slots(
+        ExtraTreesClassifier, X, y_clf4, {SLOT_MAX_LEAF_NODES: -1},
+        max_leaf_nodes=k, **kw,
+    )
+    if forest_digest(sab) != base_digest:
+        print(
+            f"FAIL max_leaf_nodes: forcing slot {SLOT_MAX_LEAF_NODES} to -1"
+            " did NOT collapse the forest onto the depth-wise default, so"
+            " that slot is not what carries the growth mode"
+        )
+        failed = True
+
+    try:
+        ExtraTreesClassifier(max_leaf_nodes=1, **kw).fit(X, y_clf4)
+    except Exception as exc:
+        if "max_leaf_nodes" not in str(exc):
+            print(f"FAIL: the max_leaf_nodes=1 refusal does not name it: {exc}")
+            failed = True
+    else:
+        print("FAIL: max_leaf_nodes=1 was accepted; sklearn's bound is >= 2")
+        failed = True
+
+    print(
+        f"max_leaf_nodes: default={base_digest} k={k} -> {bf_digest},"
+        f" {k} leaves in every tree, slot {SLOT_MAX_LEAF_NODES} sabotage"
+        " collapses it"
+    )
+    return failed
+
+
 def main():
     # Hashed values, not a uniform grid: the standing rule that uniform data
     # hides a permutation applies to a column subset as much as to a row one.
@@ -252,6 +336,8 @@ def main():
                 + " ".join(f"{mf!r}={d}" for mf, d in digests.items())
             )
     if check_criterion_and_bootstrap(X, y_clf4, y_reg):
+        failed = True
+    if check_max_leaf_nodes(X, y_clf4):
         failed = True
     if failed:
         print("wrapper_reach_check: FAIL")
