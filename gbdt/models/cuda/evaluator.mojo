@@ -624,6 +624,17 @@ def pack_model_for_evaluator(
     ctx.enqueue_copy(dst_buf=bf_xor, src_ptr=h7.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=leaves, src_ptr=h6.unsafe_ptr())
     ctx.synchronize()
+    # past the drain, every staging buffer the pack enqueued from: their
+    # last uses were the seven enqueues above, which freed each of them
+    # with copies still queued (the step-33 race class -- h1 died with six
+    # copies not yet enqueued behind it)
+    _ = h1^
+    _ = h2^
+    _ = h3^
+    _ = h4^
+    _ = h5^
+    _ = h7^
+    _ = h6^
     return GpuEvaluatorModel(
         tree_sizes^, tree_starts^, first_leaf^, bf_idx^, bf_val^, bf_xor^,
         leaves^, n_trees, need_xor_mask, Float32(model.bias),

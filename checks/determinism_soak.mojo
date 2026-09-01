@@ -41,9 +41,19 @@ and run this again. Under IDENTICAL the greedy family's multi-block flush
 sums through a fixed-point integer accumulator instead of a float
 `atomicAdd`, so if the float atomic is the whole story the greedy arm goes
 silent. **If the pointwise arm still drifts under IDENTICAL, there is a
-second defect and it is not the histogram flush** -- which matters, because
-the pointwise arm's flush is a plain store at this row count and no
-mechanism for its half of that run is known.
+second defect and it is not the histogram flush.**
+
+THE MECHANISM, found after this file was written (PORTING.md 134c/134d):
+not arithmetic on either arm. The pointwise half was a host staging pair
+freed at its last use (`h_po`/`h_ps` in `_estimate_and_apply`), FIXED by
+DEVIATION 1890 and reproduced on demand with the recorded 8/12
+first-div-t8 signature. The greedy half's ranked candidate --
+`TTreeWorkspace.__init__`'s fourteen dead staging buffers -- was live at
+the sighting (2026-08-21) and was closed the next morning by a4aee262's
+holds-past-drain, so a clean soak at HEAD is EXPECTED; what this driver
+still buys is the run-to-run control and the IDENTICAL-build cross-check
+above. The greedy attribution itself remains untested (134d's
+positive-control technique is how to test it, not another soak).
 """
 
 from std.os import getenv

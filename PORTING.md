@@ -5119,6 +5119,16 @@ divergence at tree 2 only if a single bin-feature's descriptor moved. UNTESTED
 -- **and the positive-control technique above is how to test it**, not another
 soak.
 
+**[CORRECTED 2026-09-01, see 134e]** The paragraph above describes the ctor
+AS IT STOOD AT THE SIGHTING, and it stayed in this ledger unreconciled: the
+hazard it names was closed the MORNING AFTER it was written -- a4aee262
+(2026-08-22 10:41) put holds-past-drain on all fourteen of the ctor's staging
+buffers, and d638ecbb (10:57) swept 39 host-staging and 19 device holds
+across the tree. What "UNTESTED" still correctly names is the ATTRIBUTION:
+nobody has forced the pre-fix ctor corruption and reproduced the greedy 2/12
+first-div-t2 signature the way 134c's forced write reproduced the pointwise
+one. The candidate was LIVE at the sighting and is not live at HEAD.
+
 **Eight further sites carried the same pattern** on the training path, ranked
 in that audit, and the count is now smaller than eight: DEVIATIONS 1890 and
 1891 closed two of them structurally by giving the workspace ownership of the
@@ -5185,6 +5195,61 @@ the one fixture whose binary features are not the low-numbered ones
 4,096-row arm; the original 581,012-row arm has NOT been re-run and the A/B
 that would confirm the mechanism has not been run, so that defect is not
 closed.
+
+### 134e. THE RECOUNT 134d OWED, 2026-09-01: the soak cell's path is clean at HEAD, and six last sites of the class are fixed (UNVERIFIED, RUN OWED)
+
+A whole-of-`gbdt/` last-use sweep at HEAD: every locally created host or
+device buffer whose FINAL textual reference is an enqueue argument -- no
+`_ = buf^` hold, no field store, no transfer out -- is a member of the
+step-33 class, because destruction lands at that reference with the copy or
+launch still queued.
+
+**The path the soak exercises audits clean.** `fit_with_test`,
+`run_tree_layout_traced`, `TTreeWorkspace.__init__`, `upload_blocks`, the
+pointwise searcher and the estimation workspace: every staging pair is held
+past a drain or pool-owned (DEVIATIONS 1890/1891, a4aee262, d638ecbb). The
+sweep's flags in `run_one_level`/`run_tree` are the check-only drivers
+(`level_check`, `level_bench`), covered site by site by DEVIATION 1905's
+synchronize audit. Loop-scoped pairs (`ctr_calcers`' `dst`/`h_col`) look
+like the class but are not: a buffer used inside a loop lives to loop exit,
+past the per-iteration drain.
+
+**Six sites of the class remained, none on the soak cell's path, all fixed
+in this commit with the bit-inert hold-past-drain pattern** (same
+arithmetic, same order, lifetime only):
+
+* `gbdt/models/cuda/evaluator.mojo` `pack_model_for_evaluator` -- SEVEN
+  staging buffers, none held; `h1` died at its enqueue with six copies not
+  yet enqueued behind it. The device-evaluator apply path (`check-ctr-apply`,
+  `check-model-io`, multiclass train check), not the soak's mse, which
+  reads the fit's own loss track. a4aee262's "predict's six pack buffers"
+  was `train.mojo`'s pack, not this one -- this function never had holds.
+* `gbdt/gpu_util/kernel/bootstrap.mojo` `create_bootstrap_seeds` -- the
+  65536-seed upload's staging died at its enqueue. ON the fit path whenever
+  bootstrap is on; garbage seeds are a wrong-but-coherent model, exactly
+  134's signature class. (The soak fixture pins bootstrap off.)
+* `gbdt/ctrs/ctr_bins_builder.mojo` `TCtrBinBuilderGpu.__init__` (eight
+  device allocations between the staging fill and its copy) and
+  `add_cat_feature_bins`; `gbdt/ctrs/ctr_calcers.mojo`
+  `set_binarized_sample` and `TWeightedBinFreqCalcerGpu.trivial` -- the
+  categorical CTR path.
+
+Recorded not fixed: `fit_with_test`'s `h_mags`
+(`doc_parallel_boosting.mojo`) is allocated and never used -- dead since
+the `hm` readbacks took over; delete on the file's next real change.
+
+**EVERY CLAIM ABOVE THAT NEEDS A RUN IS UNVERIFIED, RUN OWED:**
+
+    pixi run soak-determinism
+    tools/with_identical_mode.sh pixi run soak-determinism
+    pixi run check-ordered-boosting && pixi run check-fit-pointwise
+
+(soak at the shipping `NUMERIC_FAST`, then the IDENTICAL build -- if the
+greedy arm goes silent under IDENTICAL and the pointwise arm still drifts,
+there is a second defect and it is not the histogram flush). A clean pair
+is now the EXPECTED outcome; what closes this entry is that pair PLUS
+134d's greedy positive control, ideally under 134b's synthetic load. The
+embargo above is unchanged by this addendum until those runs land.
 
 ## 125. [CLOSED] `CreateSubsets`' fold arm pays ONE extra partition reduce, per TREE and not per level
 

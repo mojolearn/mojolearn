@@ -686,6 +686,7 @@ struct THistoryBasedCtrCalcerGpu(Movable):
             dst_buf=self.binarized_sample, src_ptr=h.unsafe_ptr()
         )
         ctx.synchronize()
+        _ = h^  # past the drain (step-33 race class)
         self.has_sample = True
 
     def visit_cat_feature_ctr(
@@ -959,6 +960,7 @@ struct TWeightedBinFreqCalcerGpu(Movable):
             h.unsafe_ptr().unsafe_store(i, Float32(1.0))
         ctx.enqueue_copy(dst_buf=w, src_ptr=h.unsafe_ptr())
         ctx.synchronize()
+        _ = h^  # past the drain (step-33 race class)
         return Self(ctx, w^, Float32(n_rows), n_rows)
 
     def visit_equal_up_to_prior_freq_ctrs(

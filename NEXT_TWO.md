@@ -83,20 +83,86 @@ fail. Reproduce the split with the `covob`/`covbin` fixtures in
 One run in roughly a hundred of a 4096 x 8 depth-1 fit produced a WRONG BUT
 COHERENT model on BOTH searchers, **and the two searchers disagreed with each
 other** -- which is the one thing `check-fit-pointwise` exists to forbid. Not
-reproduced in ~100 further runs of that cell. Half a mechanism is known (an
-order-nondeterministic float atomic in the greedy family's multi-block flush,
-live at exactly that row count) and it does not cover the pointwise arm, whose
-flush is a plain store below 10k rows.
+reproduced in ~100 further runs of that cell.
 
-**NO SPEED NUMBER AND NO PARITY CLAIM SHOULD BE QUOTED UNTIL THIS CLOSES.** A
-learner that produces a different model one run in a hundred does not have a
-loss to compare.
+THE SENTENCE THAT STOOD HERE -- "half a mechanism is known (the greedy
+float-atomic flush) and it does not cover the pointwise arm" -- WAS STALE
+THE EVENING IT WAS WRITTEN and is deleted per [[fix-docs-on-discovery]].
+`PORTING.md` 134a-134d is the current record: 134a's 600 clean warm reps
+ruled the float atomic OUT for both arms (an atomic fires every fit; there
+was exactly one loss value per arm), and 134c found, fixed and reproduced
+ON DEMAND the pointwise half -- `_estimate_and_apply`'s `h_po`/`h_ps`
+staging pair freed at its last use, [[mojo-buffer-freed-at-last-use]],
+closed at the ownership level by DEVIATION 1890, forced corruption
+matching the recorded 8/12 first-div-t8 signature to five significant
+figures.
 
-`pixi run soak-determinism` is the driver. The two experiments, cheapest first:
-soak at the shipping `NUMERIC_FAST`, then rebuild with `GLOBAL_NUMERIC_MODE =
-NUMERIC_IDENTICAL` and soak again -- if the greedy arm goes silent and the
-pointwise arm still drifts, there is a SECOND defect and it is not the
-histogram flush.
+**NO SPEED NUMBER AND NO PARITY CLAIM SHOULD BE QUOTED UNTIL THIS CLOSES.**
+(PORTING.md's entry narrowed this embargo on 2026-09-01 to the claims
+134a-d actually support; this page keeps the blunt sentence until the owed
+soak below passes.) A learner that produces a different model one run in a
+hundred does not have a loss to compare.
+
+MECHANISM HUNT, 2026-09-01 (write-only lane; every run below is OWED, not
+made):
+
+* **The greedy half's ranked candidate was live at the sighting and has
+  been closed since the next morning.** The sighting is 3e6ead33
+  (2026-08-21 16:28); 134d's audit (written 16:56 the same day) ranked
+  `TTreeWorkspace.__init__`'s dead staging buffers as the greedy
+  candidate; a4aee262 (2026-08-22 10:41) then put holds-past-drain on
+  exactly those fourteen buffers -- plus `upload_blocks`, the estimator
+  and the oracle -- and d638ecbb (10:57) swept 39 host-staging and 19
+  device holds across the tree. 134d's "UNTESTED" was never reconciled
+  against that: the HAZARD it names is gone; only the ATTRIBUTION (force
+  the ctor corruption, reproduce greedy 2/12 first-div-t2 by 134c's
+  positive-control technique) is still owed. So BOTH halves of 134 are
+  the same mechanism class -- staging freed at last use under 134b's
+  20-30-process load window -- and no arithmetic account is needed for
+  either.
+* **The soak cell's fit path audits clean at HEAD.** A whole-of-`gbdt/`
+  last-use sweep (every locally created host/device buffer whose final
+  textual reference is an enqueue argument, no hold, no field, no
+  transfer) finds NOTHING on the path the soak exercises:
+  `fit_with_test`, `run_tree_layout_traced`, `TTreeWorkspace.__init__`,
+  `upload_blocks`, the pointwise searcher and the estimation workspace
+  are all held or pool-owned. The flags in `run_one_level`/`run_tree` are
+  check-driver-only paths covered by DEVIATION 1905's per-site audit.
+* **134d's "the rest have not been recounted" is now recounted, and six
+  unguarded sites of the class remained -- all OFF the soak cell's path,
+  all given the same bit-inert hold-past-drain fix in this commit:**
+  `gbdt/models/cuda/evaluator.mojo` `pack_model_for_evaluator` (seven
+  staging buffers, none held -- `h1` died with six copies not yet
+  enqueued behind it; the device-evaluator apply path, never on the
+  soak's mse, which reads the fit's own loss track);
+  `gbdt/gpu_util/kernel/bootstrap.mojo` `create_bootstrap_seeds` (the
+  65536-seed upload -- ON the fit path whenever bootstrap is on; garbage
+  seeds are a wrong-but-coherent model exactly in 134's signature);
+  `gbdt/ctrs/ctr_bins_builder.mojo` `__init__` and
+  `add_cat_feature_bins`; `gbdt/ctrs/ctr_calcers.mojo`
+  `set_binarized_sample` and `TWeightedBinFreqCalcerGpu.trivial` (the
+  CTR fit path, categorical fixtures only). ALL SIX FIXES ARE
+  UNVERIFIED, RUN OWED (commands below).
+* Two benign findings, recorded not fixed: `fit_with_test`'s `h_mags`
+  (`doc_parallel_boosting.mojo:1228`) is allocated and never used (dead
+  since the `hm` readbacks took over) -- delete when the file is next
+  open for real work; `ctr_calcers.mojo`'s `dst`/`h_col` loop pair look
+  like the class but are loop-scoped, so their lifetimes extend past the
+  per-iteration drain.
+
+`pixi run soak-determinism` is the driver, and the experiment it was built
+for is UNCHANGED AND STILL OWED: soak at the shipping `NUMERIC_FAST`, then
+rebuild with `GLOBAL_NUMERIC_MODE = NUMERIC_IDENTICAL` and soak again --
+if the greedy arm goes silent and the pointwise arm still drifts, there is
+a SECOND defect and it is not the histogram flush. A clean pair of soaks
+at HEAD is now the EXPECTED outcome (both known mechanisms are fixed);
+what closes 134 is that pair PLUS the greedy positive control, ideally
+under 134b's synthetic load. RUN OWED, exact commands:
+
+    pixi run soak-determinism
+    tools/with_identical_mode.sh pixi run soak-determinism
+    # and the CTR/bootstrap/evaluator holds' gates:
+    pixi run check-ordered-boosting && pixi run check-fit-pointwise
 
 ## WHAT IS LEFT
 

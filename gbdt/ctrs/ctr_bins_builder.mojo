@@ -504,6 +504,7 @@ struct TCtrBinBuilderGpu(Movable):
         ctx.enqueue_memset(self.bins, UInt32(0))
         ctx.enqueue_memset(self.current_bins, UInt32(0))
         ctx.synchronize()
+        _ = h^  # past the drain (step-33 race class)
 
     def compute_current_bins(mut self, ctx: DeviceContext) raises:
         """Their static `ComputeCurrentBins` (`:134-146`), launch for launch.
@@ -589,6 +590,7 @@ struct TCtrBinBuilderGpu(Movable):
             dst_buf=self.decompressed_temp_bins, src_ptr=h.unsafe_ptr()
         )
         ctx.synchronize()
+        _ = h^  # past the drain (step-33 race class)
 
         launch_gather_with_mask_u32(
             ctx,
