@@ -582,6 +582,128 @@ def sign_flip_kernel(
             f += SIGNFLIP_TPB
 
 
+def order_truncate_spectrum(
+    diag: List[Float64],
+    vecs: List[Float64],
+    n_cols: Int,
+    n_components: Int,
+    singular_scale: Int,
+) raises -> PCAResult:
+    """`colReverse` + `truncCompExpVars`: the HOST tail of a fit, shared.
+
+    SPLIT OUT 2026-09-01 (DEVIATION 591) and it is a move, not a rewrite.
+    Every line below stood inside `eig_and_truncate`; what changed is that
+    the eigenvalues arrive as a `diag` list instead of being read off the
+    diagonal of the matrix the eigensolver left behind, because the THIRD
+    caller does not have such a matrix.
+
+    That third caller is `svd_solver='full'`
+    (`decomposition/impl/linalg/detail/svd_full.mojo`), which reaches a
+    spectrum through an R-SVD and never forms a covariance at all. It hands
+    `diag[i] = S_i^2 / (n_rows - 1)` and the same `singular_scale` the
+    covariance arm passes, so `sqrt(lam * singular_scale)` returns `S_i`
+    and the two arms report the same five quantities by the same rules.
+
+    Sharing this rather than copying it is the point. The DESCENDING order,
+    the tie behaviour of the selection sort, the ratio denominator, and
+    `truncCompExpVars`' two-part noise guard are decisions with upstream
+    line numbers attached, and a second copy of them is how two arms of one
+    estimator start disagreeing about what `noise_variance_` means.
+
+    `vecs` is `n_cols x n_cols` row major with basis vector `i` in COLUMN
+    `i`, which is LAPACK's convention, cuSOLVER's, `jacobi_eigh_kernel`'s
+    and the one-sided Jacobi's. The SIGN convention is already applied by
+    `sign_flip_kernel` on the device before the copy back, in both callers.
+    """
+
+    # `calEig` + `colReverse`: order DESCENDING by eigenvalue.
+    #
+    # A SORT, WHERE RAFT ONLY REVERSES, AND WHY THAT IS NOT A REGRESSION.
+    # `calEig` calls cuSOLVER `syevj`, which returns eigenvalues ALREADY
+    # ASCENDING, so `tsvd.cuh:122` reverses with `raft::matrix::colReverse`
+    # and `tsvd.cuh:125` reverses the variances with `rowReverse`: O(n) on
+    # the device. **Cyclic Jacobi does not order anything.** Its output sits
+    # in whatever order the rotations left it, so a reverse here would return
+    # an arbitrary permutation, which for PCA is a DIFFERENT answer and not a
+    # worse one. The sort is not a slower way to do their reverse, it is the
+    # step their eigensolver already did for them.
+    #
+    # An O(n_cols^2) selection sort, ON THE HOST, and that is now a real
+    # cost rather than a rounding error. The note that used to sit here said
+    # it "cannot grow while that cap holds"; the cap is gone, so the sentence
+    # is deleted and the number is stated instead: 8128 index comparisons at
+    # n_cols = 128 and 32640 at 256, against an eigendecomposition that
+    # already cost O(n_cols^3) on the device. It is a permutation of INDICES
+    # with no arithmetic in it, so nothing here can move a number, and
+    # `HOST_AND_DEVICE.md`'s rule is about O(rows), which this is not.
+    #
+    # It stops being the right shape when `n_cols` reaches the low thousands.
+    #
+    # **`nn.argsort` IS NOT THE REPLACEMENT AND THIS COMMENT USED TO SAY IT
+    # WAS.** `nn.argsort[target="gpu"]` is correct at 256 elements and
+    # non-monotone at 257 and every larger size tried, with the first
+    # inversion always at output position 256; it raises nothing and returns a
+    # well-formed permutation, so it would silently reorder the components at
+    # exactly the sizes this note is about. VENDOR_LIBRARIES.md listed it as
+    # device-capable on the strength of its signature. OPEN, and it needs a
+    # device sort we can trust, not this one.
+    var order = List[Int]()
+    for i in range(n_cols):
+        order.append(i)
+    for i in range(n_cols):
+        for j in range(i + 1, n_cols):
+            if diag[order[j]] > diag[order[i]]:
+                var t = order[i]
+                order[i] = order[j]
+                order[j] = t
+
+    var total = 0.0
+    for i in range(n_cols):
+        total += diag[i]
+
+    var components = List[Float64]()
+    var explained_var = List[Float64]()
+    var explained_var_ratio = List[Float64]()
+    var singular_vals = List[Float64]()
+
+    for c in range(n_components):
+        var src = order[c]
+        var lam = diag[src]
+
+        # The sign convention is already applied: `sign_flip_kernel` fixed
+        # every column of `vec_buf` on the device before the copy back, so
+        # the host only reads. This is where a host `abs()` loop per selected
+        # component used to be.
+        for f in range(n_cols):
+            components.append(vecs[f * n_cols + src])
+        explained_var.append(lam)
+        explained_var_ratio.append(lam / total if total != 0.0 else 0.0)
+        # `weighted_sqrt(explained_var, n_rows - 1)`, `pca.cuh:136`.
+        singular_vals.append(sqrt(lam * Float64(singular_scale)))
+
+    # `noise_vars`: the mean of the DISCARDED eigenvalues, or zero if none
+    # were discarded (`truncCompExpVars`, `cuml/cpp/src/pca/pca.cuh:74-83`).
+    #
+    # THEIR GUARD IS `n_components < n_cols && n_components < n_rows`, and
+    # ours had only the first half. `n_rows` is not a parameter here because
+    # `eig_and_truncate` is shared with `tsvdFit`, so it arrives folded into
+    # `singular_scale`, which `pcaFit` passes as `n_rows - 1` and `tsvdFit`
+    # passes as 1. `n_components < n_rows` is therefore
+    # `n_components <= singular_scale` on the PCA path. The tSVD path has no
+    # noise variance in cuML at all (`tsvdFit` does not compute one), so
+    # passing 1 makes the guard reject every truncation there, which is the
+    # right answer for the wrong-looking reason and is why it is spelled out.
+    var noise = 0.0
+    if n_components < n_cols and n_components <= singular_scale:
+        for c in range(n_components, n_cols):
+            noise += diag[order[c]]
+        noise /= Float64(n_cols - n_components)
+
+    return PCAResult(
+        components^, explained_var^, explained_var_ratio^, singular_vals^, noise
+    )
+
+
 def eig_and_truncate(
     ctx: DeviceContext,
     mut cov: DeviceBuffer[DType.float32],
@@ -712,98 +834,18 @@ def eig_and_truncate(
             " produces this too; see check_covariance_is_symmetric."
         )
 
-    var a = List[Float64]()
-    for i in range(n_cols * n_cols):
-        a.append(Float64(h_cov.unsafe_ptr().unsafe_load(i)))
+    var diag = List[Float64]()
+    for i in range(n_cols):
+        diag.append(Float64(h_cov.unsafe_ptr().unsafe_load(i * n_cols + i)))
     var vecs = List[Float64]()
     for i in range(n_cols * n_cols):
         vecs.append(Float64(h_vec.unsafe_ptr().unsafe_load(i)))
 
-    # `calEig` + `colReverse`: order DESCENDING by eigenvalue.
-    #
-    # A SORT, WHERE RAFT ONLY REVERSES, AND WHY THAT IS NOT A REGRESSION.
-    # `calEig` calls cuSOLVER `syevj`, which returns eigenvalues ALREADY
-    # ASCENDING, so `tsvd.cuh:122` reverses with `raft::matrix::colReverse`
-    # and `tsvd.cuh:125` reverses the variances with `rowReverse`: O(n) on
-    # the device. **Cyclic Jacobi does not order anything.** Its output sits
-    # in whatever order the rotations left it, so a reverse here would return
-    # an arbitrary permutation, which for PCA is a DIFFERENT answer and not a
-    # worse one. The sort is not a slower way to do their reverse, it is the
-    # step their eigensolver already did for them.
-    #
-    # An O(n_cols^2) selection sort, ON THE HOST, and that is now a real
-    # cost rather than a rounding error. The note that used to sit here said
-    # it "cannot grow while that cap holds"; the cap is gone, so the sentence
-    # is deleted and the number is stated instead: 8128 index comparisons at
-    # n_cols = 128 and 32640 at 256, against an eigendecomposition that
-    # already cost O(n_cols^3) on the device. It is a permutation of INDICES
-    # with no arithmetic in it, so nothing here can move a number, and
-    # `HOST_AND_DEVICE.md`'s rule is about O(rows), which this is not.
-    #
-    # It stops being the right shape when `n_cols` reaches the low thousands.
-    #
-    # **`nn.argsort` IS NOT THE REPLACEMENT AND THIS COMMENT USED TO SAY IT
-    # WAS.** `nn.argsort[target="gpu"]` is correct at 256 elements and
-    # non-monotone at 257 and every larger size tried, with the first
-    # inversion always at output position 256; it raises nothing and returns a
-    # well-formed permutation, so it would silently reorder the components at
-    # exactly the sizes this note is about. VENDOR_LIBRARIES.md listed it as
-    # device-capable on the strength of its signature. OPEN, and it needs a
-    # device sort we can trust, not this one.
-    var order = List[Int]()
-    for i in range(n_cols):
-        order.append(i)
-    for i in range(n_cols):
-        for j in range(i + 1, n_cols):
-            if a[order[j] * n_cols + order[j]] > a[order[i] * n_cols + order[i]]:
-                var t = order[i]
-                order[i] = order[j]
-                order[j] = t
-
-    var total = 0.0
-    for i in range(n_cols):
-        total += a[i * n_cols + i]
-
-    var components = List[Float64]()
-    var explained_var = List[Float64]()
-    var explained_var_ratio = List[Float64]()
-    var singular_vals = List[Float64]()
-
-    for c in range(n_components):
-        var src = order[c]
-        var lam = a[src * n_cols + src]
-
-        # The sign convention is already applied: `sign_flip_kernel` fixed
-        # every column of `vec_buf` on the device before the copy back, so
-        # the host only reads. This is where a host `abs()` loop per selected
-        # component used to be.
-        for f in range(n_cols):
-            components.append(vecs[f * n_cols + src])
-        explained_var.append(lam)
-        explained_var_ratio.append(lam / total if total != 0.0 else 0.0)
-        # `weighted_sqrt(explained_var, n_rows - 1)`, `pca.cuh:136`.
-        singular_vals.append(sqrt(lam * Float64(singular_scale)))
-
-    # `noise_vars`: the mean of the DISCARDED eigenvalues, or zero if none
-    # were discarded (`truncCompExpVars`, `cuml/cpp/src/pca/pca.cuh:74-83`).
-    #
-    # THEIR GUARD IS `n_components < n_cols && n_components < n_rows`, and
-    # ours had only the first half. `n_rows` is not a parameter here because
-    # `eig_and_truncate` is shared with `tsvdFit`, so it arrives folded into
-    # `singular_scale`, which `pcaFit` passes as `n_rows - 1` and `tsvdFit`
-    # passes as 1. `n_components < n_rows` is therefore
-    # `n_components <= singular_scale` on the PCA path. The tSVD path has no
-    # noise variance in cuML at all (`tsvdFit` does not compute one), so
-    # passing 1 makes the guard reject every truncation there, which is the
-    # right answer for the wrong-looking reason and is why it is spelled out.
-    var noise = 0.0
-    if n_components < n_cols and n_components <= singular_scale:
-        for c in range(n_components, n_cols):
-            noise += a[order[c] * n_cols + order[c]]
-        noise /= Float64(n_cols - n_components)
-
-    return PCAResult(
-        components^, explained_var^, explained_var_ratio^, singular_vals^, noise
+    # THE ORDERING, THE TRUNCATION AND THE NOISE VARIANCE ARE
+    # `order_truncate_spectrum`'s, above, and are shared with the R-SVD
+    # arm rather than copied into it (DEVIATION 591).
+    return order_truncate_spectrum(
+        diag, vecs, n_cols, n_components, singular_scale
     )
 
 

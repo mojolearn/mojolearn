@@ -376,7 +376,11 @@ is rebuilt and no Python edit is needed then.
 
 ## svd_solver='full' and algorithm='randomized': the triage, 2026-09-01
 
-Both stay unimplemented, and the reason is NOT the one that used to be given.
+**`'full'` SHIPPED LATER THE SAME DAY. `'randomized'` did not.** The section
+below is the triage as it stood, kept because its reasoning is what the
+implementation followed; the sentence that used to open it -- "Both stay
+unimplemented" -- is deleted rather than qualified. See
+`## svd_solver='full': what shipped` after it.
 
 **The old reason was wrong on the facts.** The Python surface said `'full'`
 is "a different algorithm" in cuML. It is not: `pca.pyx:394-395` maps BOTH
@@ -413,6 +417,80 @@ against the pinned upstream on that basis and both are REACHABLE:
 Householder QR, bit-identical across three vendors (`raft::linalg::qrGetQ`,
 `rsvd.cuh:198, :218, :241`, which is cuSOLVER `geqrf` + `orgqr`). That is a
 lane the size of `cholesky/`'s `potrf`, not an afternoon, and it is the same
-primitive for both names. Until it exists, accepting either name and running
-the covariance arm would be a silent substitution, which is what the refusal
-is now for. The message says so and points here.
+primitive for both names.
+
+## svd_solver='full': what shipped, 2026-09-01
+
+**THE PRIMITIVE THE TRIAGE NAMED EXISTED BY THE END OF THE NIGHT**, because
+the arima lane wrote one for a different reason: `b_gels` is `cublasgelsBatched`
+and is closed, so DEVIATION 678 spelled a Householder QR with back
+substitution in `arima/impl/linalg/batched/least_squares.mojo` and gated it
+(`check_qr_device_equals_oracle` bitwise against a separately spelled host
+replay; `check_qr_beats_normal_equations_on_ill_conditioning` measuring worst
+QR error 7.4e-07 against 1.5e-04 for the normal equations, strictly better on
+6 of 6 series).
+
+**WHAT WAS ACTUALLY REUSABLE, stated precisely, because "we already have a
+QR" would have been too generous.** arima's routine is ONE THREAD PER SERIES,
+serial ascending in the row count, and sized by an `InlineArray` for at most
+17 columns. PCA's shape is ONE matrix at the shipped `n_samples`. Importing
+the loop where it sits would compile, run, and be unusable, which is a
+capability in name only.
+
+So the split is: the three SCALAR CHOICES that deviation wrote down -- the
+reflector sign `s = -sign(a_jj)`, `u1 = a_jj - r_jj`, and
+`tau = (-s*u1)/normx` -- are LIFTED into `core/householder_qr.mojo` and live
+in exactly one place in the tree (DEVIATION 586). The FOLD is not lifted: it
+is a `pinned_block_sum` halving tree here (DEVIATION 587), which is not
+arima's bits and is not meant to be, and which is the same bits on all three
+vendors. The GEOMETRY is TSQR over a slice count that is a pure function of
+`(n_rows, n_cols)` (DEVIATION 589), so no vendor can slice differently.
+
+**TWO DELIBERATE DIVERGENCES FROM DEVIATION 678**, both because this route
+feeds an SVD instead of a back substitution:
+
+- **NO RANK TEST** (DEVIATION 588). arima refuses a numerically rank-deficient
+  system, and is right to: it then divides by that diagonal. This file never
+  back substitutes, and a rank-deficient `R` is the correct representation of
+  a ZERO SINGULAR VALUE. Importing the refusal would make `'full'` raise on a
+  constant feature that `'jacobi'` accepts, which is a regression wearing a
+  safety check's clothes. `check_full_survives_a_constant_column` gates it and
+  its sabotage arm is arima's test reinstated, which must refuse.
+- **THE REFLECTOR'S DIVISION IS PINNED** through `identical_div`, where
+  arima's is a bare `/`. New code on the identity path pays the pinned
+  spelling; moving arima's means moving its host oracle in the same commit, so
+  that patch is written down in the lane report and is NOT applied here.
+
+**THE TAIL** is a ONE-SIDED cyclic Jacobi SVD of the `n_cols x n_cols` `R`
+(DEVIATION 590). One-sided and not the shipped two-sided solver, because
+feeding `R^T R` to the eigensolver would put back exactly the condition
+squaring the QR just removed. Its rotation is NOT a second copy:
+`jacobi_rotation_cs` was extracted from `jacobi_eigh_device.mojo` in the same
+commit and both solvers call it. The host ordering, truncation, ratios and
+`noise_variance_` are the SHARED `order_truncate_spectrum` (DEVIATION 591).
+
+**`Q` IS NEVER FORMED**, and that is why `'randomized'` did NOT close in the
+same pass. PCA's outputs and its `transform` mention only the right singular
+vectors and the singular values, so `orgqr` buys nothing here -- but RAFT's
+randomized route calls `qrGetQ` three times and genuinely needs the explicit
+`Q`. The refusal for `'randomized'` therefore stands with a NARROWER reason,
+and `NOT_IMPLEMENTED.tsv` names the three remaining pieces: the explicit thin
+`Q`, a Gaussian sketch with a bit-identical normal stream, and a seeded
+`random_state` on the Python surface, which is a reproducibility contract
+rather than one more keyword. Its headline gate -- oversampling monotonically
+improving the reconstruction error -- is a multi-run experiment and not a
+kernel check.
+
+**REFUSED BY NAME:** `n_samples < n_features` (DEVIATION 593). R-SVD needs a
+tall matrix; the wide route is an LQ factorization of the transpose and it is
+not written. `svd_solver='covariance_eigh'` handles that shape and the message
+says so, because silently substituting it would be the substitution this class
+refuses to make for the solver name itself.
+
+**GATES:** `decomposition/checks/svd_full_check.mojo`, run by
+`decomposition/svd_full_main.mojo`, with `decomposition/checks/svd_sabotage.mojo`
+(DEVIATION 592) carrying seven named arms. The two claims that are ARGUMENTS
+are MEASURED rather than asserted, both built like arima's:
+`check_full_reflector_sign_earns_its_place` and
+`check_full_beats_covariance_on_ill_conditioning`. WRITTEN AND UNRUN as of
+this edit.

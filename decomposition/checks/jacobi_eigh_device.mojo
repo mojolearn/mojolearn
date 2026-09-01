@@ -239,6 +239,72 @@ def _rot_add(s: Float32, x: Float32, c: Float32, y: Float32) -> Float32:
     return s * x + c * y
 
 
+@always_inline
+def jacobi_rotation_cs(
+    app_in: Float32, aqq_in: Float32, apq_in: Float32
+) -> SIMD[DType.float32, 2]:
+    """The Jacobi rotation `(c, s)` that annihilates `apq` in
+    `[[app, apq], [apq, aqq]]`. Lane 0 is `c`, lane 1 is `s`.
+
+    ONE SPELLING FOR TWO SOLVERS. The cyclic eigensolver below reads its
+    2x2 off the matrix it is diagonalizing; the one-sided Jacobi SVD in
+    `decomposition/impl/linalg/detail/svd_full.mojo` builds the same 2x2
+    from two COLUMN inner products of `R` and never forms a symmetric
+    matrix at all. The 2x2 problem is identical, so the arithmetic is here
+    once.
+
+    EVERY LINE IS A FLOAT SEAM AND THREE OF THEM DECIDE A BRANCH, which is
+    the shape that turns a last bit into a different rotation rather than a
+    differently-rounded one:
+
+      * `apq == 0` selects the IDENTITY rotation. A DENORMAL `apq` is zero
+        on Metal and nonzero on a CUDA default build, so without the flush
+        the two vendors apply different rotations. `ftz` aligns them
+        (IDENTITY_PATHS row 10).
+      * `theta >= 0` picks which of the two tan formulas runs. `theta` is a
+        quotient of flushed operands, so it is one value everywhere and the
+        branch follows it.
+      * `1 + theta*theta` and `1 + t*t` are multiply-adds and go through
+        `identical_mul_add` (row 9).
+
+    `1.0 / sqrt(x)` is written with the sqrt's result stored and flushed
+    FIRST, deliberately: an unpinned `1/sqrt` is exactly the expression a
+    backend is entitled to lower to a reciprocal-sqrt approximation, and
+    the flushed local makes that rewrite unavailable under IDENTICAL.
+
+    THE SQRT GOES THROUGH `identical_sqrt`, AND THAT IS NOT BELT AND
+    BRACES: `check-ieee-arith` on an H100 (E2, 2026-08-23) found Mojo's
+    `std.math.sqrt` lowering to an APPROXIMATE PTX sqrt, 180,714 of 2^20
+    hashed patterns off by one ulp and 176,577 of those on NORMAL inputs.
+    Two sqrts per rotation at one ulp is a different `t`, a different `c`,
+    a different `s`, and at a knife edge a different SWEEP COUNT.
+
+    The three arguments are taken UNFLUSHED and flushed here, so a caller
+    cannot forget one. Loads are not arithmetic, so moving the two
+    diagonal loads out of the `else` arm and into the call site moves no
+    bits.
+    """
+    var apq = ftz(apq_in)
+    if apq == Float32(0.0):
+        return SIMD[DType.float32, 2](Float32(1.0), Float32(0.0))
+    var aqq = ftz(aqq_in)
+    var app = ftz(app_in)
+    var theta = ftz(ftz(aqq - app) / ftz(Float32(2.0) * apq))
+    var root = ftz(
+        identical_sqrt(ftz(identical_mul_add(theta, theta, Float32(1.0))))
+    )
+    var t = Float32(0.0)
+    if theta >= Float32(0.0):
+        t = ftz(Float32(1.0) / ftz(theta + root))
+    else:
+        t = ftz(Float32(-1.0) / ftz(root - theta))
+    var croot = ftz(
+        identical_sqrt(ftz(identical_mul_add(t, t, Float32(1.0))))
+    )
+    var c = ftz(Float32(1.0) / croot)
+    return SIMD[DType.float32, 2](c, ftz(t * c))
+
+
 def jacobi_eigh_kernel(
     a_io: MutPointer[Float32, MutAnyOrigin],
     v_out: MutPointer[Float32, MutAnyOrigin],
@@ -454,38 +520,22 @@ def jacobi_eigh_kernel(
                 # by construction, so Metal and HIP bits do not move), the
                 # stdlib verbatim under FAST.
                 if tid == 0:
-                    var apq = ftz(a.unsafe_load(p * n + q))
-                    if apq == Float32(0.0):
-                        rot[0] = Float32(1.0)
-                        rot[1] = Float32(0.0)
-                    else:
-                        var aqq = ftz(a.unsafe_load(q * n + q))
-                        var app = ftz(a.unsafe_load(p * n + p))
-                        var theta = ftz(
-                            ftz(aqq - app) / ftz(Float32(2.0) * apq)
-                        )
-                        var root = ftz(
-                            identical_sqrt(
-                                ftz(
-                                    identical_mul_add(
-                                        theta, theta, Float32(1.0)
-                                    )
-                                )
-                            )
-                        )
-                        var t = Float32(0.0)
-                        if theta >= Float32(0.0):
-                            t = ftz(Float32(1.0) / ftz(theta + root))
-                        else:
-                            t = ftz(Float32(-1.0) / ftz(root - theta))
-                        var croot = ftz(
-                            identical_sqrt(
-                                ftz(identical_mul_add(t, t, Float32(1.0)))
-                            )
-                        )
-                        var c = ftz(Float32(1.0) / croot)
-                        rot[0] = c
-                        rot[1] = ftz(t * c)
+                    # EXTRACTED 2026-09-01, NOT REWRITTEN. Every operation
+                    # and every `ftz` that stood here is inside
+                    # `jacobi_rotation_cs`, in the same order, behind
+                    # `@always_inline`, so this kernel's bits and its sweep
+                    # counts are unmoved. The extraction exists because the
+                    # ONE-SIDED Jacobi that `svd_solver='full'` runs solves
+                    # the SAME 2x2 symmetric problem, and a second copy of a
+                    # rotation whose last bit decides a sweep count is the
+                    # drift this tree has a standing rule about.
+                    var cs = jacobi_rotation_cs(
+                        a.unsafe_load(p * n + p),
+                        a.unsafe_load(q * n + q),
+                        a.unsafe_load(p * n + q),
+                    )
+                    rot[0] = cs[0]
+                    rot[1] = cs[1]
                 barrier()
 
                 var c = rot[0]

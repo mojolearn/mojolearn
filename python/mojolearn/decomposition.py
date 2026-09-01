@@ -19,12 +19,23 @@ def _component_count(n_components, shape):
 
 
 class PCA(NumericModeMixin):
-    """Covariance-eigendecomposition PCA on the GPU: cuML's `pcaFit` route
-    (covariance, then an eigensolver) with the eigensolver being cuML's
-    JACOBI arm (`svd_solver='jacobi'`, cuSOLVER syevj there, a device
-    Jacobi here). cuML's own 'auto' reaches the divide-and-conquer `eigDC`
-    (syevd), which is NOT ported (decomposition/NOT_IMPLEMENTED.tsv); this class
-    accepts 'auto' and runs the Jacobi arm, and says so here.
+    """PCA on the GPU, in TWO ARMS as of 2026-09-01.
+
+    The default is cuML's `pcaFit` route (covariance, then an eigensolver)
+    with the eigensolver being cuML's JACOBI arm (`svd_solver='jacobi'`,
+    cuSOLVER syevj there, a device Jacobi here). cuML's own 'auto' reaches
+    the divide-and-conquer `eigDC` (syevd), which is NOT ported
+    (decomposition/NOT_IMPLEMENTED.tsv); this class accepts 'auto' and runs
+    the Jacobi arm, and says so here.
+
+    `svd_solver='full'` is the second arm and a genuinely different
+    algorithm: an R-SVD of the centered data that never forms the
+    covariance, so it never squares the condition number. That is
+    scikit-learn's meaning for the name and it is why scikit-learn keeps it
+    beside 'covariance_eigh'; cuML collapses the two and we deliberately do
+    not. THE SENTENCE THAT USED TO OPEN THIS DOCSTRING SAID THIS CLASS WAS A
+    COVARIANCE EIGENDECOMPOSITION FULL STOP, AND IT IS DELETED RATHER THAN
+    QUALIFIED.
 
     WHAT IS HONORED, WHAT IS REFUSED, AND WHY (measured row by row by
     `tools/e2u_matrix_fit.py`):
@@ -47,36 +58,64 @@ class PCA(NumericModeMixin):
                                 gated by decomposition/checks/pca_check.mojo
                                 (unit variance, round trip, row-subset
                                 agreement, and the planted-bit edges)
-        svd_solver    honored   'auto', 'covariance_eigh' and 'jacobi',
-                                which all name THE ONE ARM THIS CLASS RUNS:
-                                the covariance plus the device Jacobi.
-                                'jacobi' is cuML's own name for it
-                                (pca.pyx:398 maps it to COV_EIG_JACOBI).
-                                'auto' is accepted with the substitution
-                                stated: cuML maps 'auto' to COV_EIG_DQ and
-                                we run the Jacobi arm
-        svd_solver    refused   'full', 'randomized' and 'arpack' are NOT
-                                YET IMPLEMENTED, which is a different
-                                statement from the one this docstring used
-                                to make. They are not out of reach and they
-                                are not blocked by a closed vendor library
-                                being closed; each needs a portable
-                                tall-skinny QR this tree does not have yet.
-                                decomposition/NOT_IMPLEMENTED.tsv carries
-                                the route and what is missing. Accepting
-                                the name and running the covariance arm
-                                would be a silent substitution and is
-                                refused for that reason, not for the
-                                algorithm's sake
+        svd_solver    honored   'auto', 'covariance_eigh' and 'jacobi' all
+                                name THE COVARIANCE ARM: the covariance plus
+                                the device Jacobi. 'jacobi' is cuML's own
+                                name for it (pca.pyx:398 maps it to
+                                COV_EIG_JACOBI). 'auto' is accepted with the
+                                substitution stated: cuML maps 'auto' to
+                                COV_EIG_DQ and we run the Jacobi arm
+        svd_solver    honored   'full' is a SECOND ARM as of 2026-09-01, and
+                                it is a different algorithm rather than a
+                                second name: an R-SVD of the CENTERED data,
+                                which is what scikit-learn's 'full' means
+                                (_pca.py:539-540 sends it to _fit_full).
+                                Householder QR of X_c, then a one-sided
+                                Jacobi SVD of the small R; the covariance is
+                                never formed and the condition number is
+                                never squared, which is why scikit-learn
+                                keeps this name beside 'covariance_eigh'.
+                                DEVIATIONS 586-593 in
+                                core/householder_qr.mojo and
+                                decomposition/impl/linalg/detail/svd_full.mojo;
+                                gated by
+                                decomposition/checks/svd_full_check.mojo,
+                                whose ill-conditioning gate MEASURES the
+                                accuracy claim rather than asserting it.
+                                REFUSED for n_samples < n_features, by name:
+                                the wide route is an LQ factorization of the
+                                transpose and it is not written
+                                (DEVIATION 593)
+        svd_solver    refused   'randomized' and 'arpack' are NOT YET
+                                IMPLEMENTED. The tall-skinny QR that used to
+                                block both of them EXISTS now
+                                (core/householder_qr.mojo), so the reason has
+                                changed and is narrower: 'randomized' still
+                                needs the explicit thin Q (RAFT's rsvd calls
+                                qrGetQ at rsvd.cuh:198, :218 and :241, and
+                                the 'full' arm above deliberately never forms
+                                Q), a Gaussian sketch, and a seeded
+                                random_state on this surface, which is a
+                                reproducibility contract and not just a
+                                parameter. 'arpack' is Lanczos and is a third
+                                algorithm. decomposition/NOT_IMPLEMENTED.tsv
+                                carries both routes. Accepting either name
+                                and running an arm that is not it would be a
+                                silent substitution and is refused for that
+                                reason
         tol, iterated_power, random_state, n_oversamples -- not on this
-                                surface: the device Jacobi runs RAFT's own
+                                surface: both Jacobis run RAFT's own
                                 defaults (tol 1e-7, 15 sweeps; see
                                 decomposition/impl/linalg/detail/pca.mojo)
-        n_features > 128 refused UNDER NUMERIC_IDENTICAL ONLY: the pinned
+        n_features > 128 refused UNDER NUMERIC_IDENTICAL ONLY, and only on
+                                the COVARIANCE arm: the limit is the pinned
                                 split-K Gram kernel's capacity
                                 (IDENTITY_PATHS row 27; the refusal names
                                 the shape). FAST runs any width through
-                                the vendor matmul.
+                                the vendor matmul. svd_solver='full' builds
+                                no Gram and so does not meet that limit,
+                                which is UNRUN on every column and is
+                                recorded as owed rather than claimed
 
     Incremental fitting and sparse input are not implemented.
     """
@@ -84,12 +123,20 @@ class PCA(NumericModeMixin):
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_estimators"
 
-    #: The three names for the ONE arm this class runs. 'covariance_eigh' is
+    #: The three names for the COVARIANCE arm. 'covariance_eigh' is
     #: scikit-learn's name for it, 'jacobi' is cuML's (pca.pyx:398 ->
     #: Solver.COV_EIG_JACOBI), and 'auto' is accepted with the substitution
     #: stated in the class docstring: cuML's 'auto' is COV_EIG_DQ, ours is
     #: the Jacobi arm.
-    _SOLVERS = ("auto", "covariance_eigh", "jacobi")
+    _COV_SOLVERS = ("auto", "covariance_eigh", "jacobi")
+
+    #: The dense arm. ONE name and not a synonym set, because it is a
+    #: different algorithm from the three above and not a second word for
+    #: them. cuML maps 'full' onto COV_EIG_DQ, which is why this class does
+    #: not: scikit-learn's meaning is the one this signature copies.
+    _DENSE_SOLVERS = ("full",)
+
+    _SOLVERS = _COV_SOLVERS + _DENSE_SOLVERS
 
     def __init__(self, n_components=None, *, whiten=False, svd_solver="auto"):
         self.n_components = n_components
@@ -121,31 +168,83 @@ class PCA(NumericModeMixin):
             )
         return binding
 
+    def _dense_binding(self):
+        """The binding, checked for the dense arm.
+
+        `pca_fit_full` is an ADDITIVE export beside `pca_fit`, so an older
+        `_mojolearn_estimators` that predates it is a build that simply does
+        not carry the arm. That is a build state, not a user error, and it
+        says so rather than failing with an attribute error. Same shape and
+        same reason as `_whiten_binding`.
+        """
+        binding = self._bind("_mojolearn_estimators")
+        if not hasattr(binding, "pca_fit_full"):
+            raise NotImplementedError(
+                "mojolearn PCA: svd_solver='full' needs the dense arm and "
+                "this build of _mojolearn_estimators does not export it. The "
+                "kernels, the host surface and the gates are present "
+                "(core/householder_qr.mojo, "
+                "decomposition/impl/linalg/detail/svd_full.mojo, "
+                "decomposition/estimator.mojo::pca_fit_full_host, "
+                "decomposition/checks/svd_full_check.mojo); what is missing "
+                "is the def_function line in "
+                "bindings/_mojolearn_estimators.mojo and a rebuild via "
+                "bindings/build_estimators.sh"
+            )
+        return binding
+
     def fit(self, X, y=None):
         if self.svd_solver not in self._SOLVERS:
             raise NotImplementedError(
                 f"mojolearn PCA: svd_solver={self.svd_solver!r} is not "
-                "implemented. This class runs one arm, the covariance plus the "
-                "device Jacobi, named 'auto' / 'covariance_eigh' / 'jacobi'. "
-                "'full', 'randomized' and 'arpack' are a dense SVD of the data "
-                "matrix rather than of its covariance; the route is portable "
-                "and is written down in decomposition/NOT_IMPLEMENTED.tsv, and "
-                "what it waits on is a tall-skinny QR this tree does not have "
-                "yet. Accepting the name and running the covariance arm would "
-                "be a silent substitution, which is why this raises instead"
+                "implemented. This class runs two arms: the covariance plus "
+                "the device Jacobi, named 'auto' / 'covariance_eigh' / "
+                "'jacobi', and the R-SVD of the centered data, named 'full'. "
+                "'randomized' and 'arpack' are different algorithms again. "
+                "The tall-skinny QR that used to block both of them exists "
+                "now (core/householder_qr.mojo); what 'randomized' still "
+                "waits on is the explicit thin Q, a Gaussian sketch and a "
+                "seeded random_state on this surface, and 'arpack' is "
+                "Lanczos. decomposition/NOT_IMPLEMENTED.tsv carries both "
+                "routes. Accepting the name and running an arm that is not "
+                "it would be a silent substitution, which is why this raises "
+                "instead"
             )
         if self.whiten:
             self._whiten_binding()
+        dense = self.svd_solver in self._DENSE_SOLVERS
+        if dense:
+            binding = self._dense_binding()
+        else:
+            binding = self._bind("_mojolearn_estimators")
         x, self.input_copied_ = as_f32_c(X, "X")
         if x.shape[0] < 2 or x.shape[1] < 2:
             raise ValueError("mojolearn PCA requires at least 2 rows and 2 features")
+        if dense and x.shape[0] < x.shape[1]:
+            # DEVIATION 593, raised HERE as well as in the Mojo validator so
+            # the message names the estimator and the alternative rather than
+            # arriving from two layers down. R-SVD needs a tall matrix; the
+            # wide route is an LQ factorization of the transpose and it is
+            # not written.
+            raise NotImplementedError(
+                f"mojolearn PCA: svd_solver='full' needs at least as many "
+                f"samples as features and got {x.shape[0]} x {x.shape[1]}. "
+                "The dense route is an R-SVD, which needs a tall matrix; the "
+                "portable route for a wide one is an LQ factorization of the "
+                "transpose and it is not written "
+                "(decomposition/NOT_IMPLEMENTED.tsv, DEVIATION 593). "
+                "svd_solver='covariance_eigh' handles this shape. Silently "
+                "substituting it here would be the substitution this class "
+                "refuses to make for the solver name itself"
+            )
         nc = _component_count(self.n_components, x.shape)
         self.components_ = np.empty((nc, x.shape[1]), dtype=np.float32)
         self.mean_ = np.empty(x.shape[1], dtype=np.float32)
         self.explained_variance_ = np.empty(nc, dtype=np.float32)
         self.explained_variance_ratio_ = np.empty(nc, dtype=np.float32)
         self.singular_values_ = np.empty(nc, dtype=np.float32)
-        self.noise_variance_ = float(self._bind("_mojolearn_estimators").pca_fit(
+        fit_fn = binding.pca_fit_full if dense else binding.pca_fit
+        self.noise_variance_ = float(fit_fn(
             _addr_ro(x), _addr(self.components_), _addr(self.mean_),
             _addr(self.explained_variance_), _addr(self.explained_variance_ratio_),
             _addr(self.singular_values_), [x.shape[0], x.shape[1], nc],
@@ -224,9 +323,17 @@ class TruncatedSVD(NumericModeMixin):
                                 all, only a Gaussian sketch, a QR, and the
                                 eigendecomposition this class already ships
                                 (raft/linalg/detail/rsvd.cuh:364 reaches
-                                eigJacobi). The one primitive missing is a
-                                portable tall-skinny QR. NOTE the default is
-                                NOT scikit-learn's 'randomized', because
+                                eigJacobi). THE MISSING PRIMITIVE IS NO LONGER
+                                THE QR: core/householder_qr.mojo landed
+                                2026-09-01 with the R-SVD arm of PCA. Three
+                                pieces remain, all named: the explicit thin Q
+                                (qrGetQ, rsvd.cuh:198/:218/:241, which the
+                                PCA arm deliberately never forms), a Gaussian
+                                sketch over core/philox.mojo, and a seeded
+                                random_state on this surface, which is a
+                                reproducibility contract rather than one more
+                                parameter. NOTE the default is NOT
+                                scikit-learn's 'randomized', because
                                 accepting that name for a different algorithm
                                 would be a silent substitution
         n_iter, random_state, tol -- not on this surface (they belong to the
@@ -259,9 +366,11 @@ class TruncatedSVD(NumericModeMixin):
                 "the device Jacobi that cuML's tsvdFit takes, named "
                 "'covariance_eigh' or 'jacobi'. 'randomized' and 'arpack' are "
                 "different algorithms and the route to 'randomized' is "
-                "written down in decomposition/NOT_IMPLEMENTED.tsv; what it "
-                "waits on is a portable tall-skinny QR, not a closed vendor "
-                "library. Accepting the name and running this arm would be a "
+                "written down in decomposition/NOT_IMPLEMENTED.tsv. It no "
+                "longer waits on the tall-skinny QR, which landed 2026-09-01 "
+                "in core/householder_qr.mojo; it waits on the explicit thin "
+                "Q, a Gaussian sketch and a seeded random_state on this "
+                "surface. Accepting the name and running this arm would be a "
                 "silent substitution, which is why this raises instead"
             )
         x, self.input_copied_ = as_f32_c(X, "X")

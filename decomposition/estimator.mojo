@@ -44,6 +44,10 @@ from decomposition.impl.linalg.detail.pca import (
     whiten_components,
 )
 from core.gemm import gemm_tn
+from decomposition.impl.linalg.detail.svd_full import (
+    pca_fit_full,
+    pca_full_scratch_cells,
+)
 
 
 def pca_fit_host(
@@ -105,6 +109,82 @@ def pca_fit_host(
         trace.record_list_f32("pca.explained_var", expl32)
         trace.record_list_f32("pca.singular_vals", sing32)
         trace.record_scalar_f32("pca.noise_var", Float32(result.noise_var))
+    var hmu = ctx.enqueue_create_host_buffer[DType.float32](n_features)
+    ctx.enqueue_copy(dst_ptr=hmu.unsafe_ptr(), src_buf=mu)
+    ctx.synchronize()
+    for i in range(n_features):
+        mean_ptr.unsafe_store(i, hmu.unsafe_ptr().unsafe_load(i))
+    return result.noise_var
+
+
+def pca_fit_full_host(
+    ctx: DeviceContext,
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    components_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mean_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    explained_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    ratio_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    singular_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+) raises -> Float64:
+    """`PCA(svd_solver='full')`: the R-SVD arm, same five outputs.
+
+    The twin of `pca_fit_host` and deliberately the same shape, so a caller
+    switching solvers changes ONE name. What differs is inside: no
+    covariance is formed, so the identity card records `pca.full.r` (the QR's
+    factor, `n_features^2`) where the covariance arm records `pca.cov`, and
+    `pca.full.singular` where it records `pca.jacobi.a`.
+
+    THE CARD'S STAGES ARE THE DIAGNOSTIC. A divergence in `pca.mean` with
+    `pca.full.r` agreeing is impossible; `pca.mean` agreeing and
+    `pca.full.r` diverging is the QR (DEVIATIONS 586-589); both agreeing and
+    `pca.full.singular` diverging is the one-sided Jacobi (DEVIATION 590);
+    everything agreeing and `pca.full.components` diverging is the sign flip
+    or the host ordering, which are SHARED with the covariance arm and would
+    therefore diverge there too.
+    """
+    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    var scratch = ctx.enqueue_create_buffer[DType.float32](
+        pca_full_scratch_cells(n_rows, n_features)
+    )
+    var r = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
+    var v = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
+    var s = ctx.enqueue_create_buffer[DType.float32](n_features)
+    var mu = ctx.enqueue_create_buffer[DType.float32](n_features)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    ctx.synchronize()
+    var trace = IdentityTrace()
+    if trace.enabled:
+        trace.header(
+            String("pca-full n=") + String(n_rows) + " d=" + String(n_features)
+            + " n_components=" + String(n_components)
+        )
+    var result = pca_fit_full(
+        ctx, x, scratch, r, v, s, mu, n_rows, n_features, n_components
+    )
+    if trace.enabled:
+        trace.record_device(ctx, "pca.mean", mu, n_features)
+        trace.record_device(ctx, "pca.full.r", r, n_features * n_features)
+        trace.record_device(ctx, "pca.full.singular", s, n_features)
+    var comp32 = List[Float32]()
+    var expl32 = List[Float32]()
+    var sing32 = List[Float32]()
+    for i in range(n_components * n_features):
+        comp32.append(Float32(result.components[i]))
+        components_ptr.unsafe_store(i, Float32(result.components[i]))
+    for i in range(n_components):
+        expl32.append(Float32(result.explained_var[i]))
+        sing32.append(Float32(result.singular_vals[i]))
+        explained_ptr.unsafe_store(i, Float32(result.explained_var[i]))
+        ratio_ptr.unsafe_store(i, Float32(result.explained_var_ratio[i]))
+        singular_ptr.unsafe_store(i, Float32(result.singular_vals[i]))
+    if trace.enabled:
+        trace.record_list_f32("pca.full.components", comp32)
+        trace.record_list_f32("pca.full.explained_var", expl32)
+        trace.record_list_f32("pca.full.singular_vals", sing32)
+        trace.record_scalar_f32("pca.full.noise_var", Float32(result.noise_var))
     var hmu = ctx.enqueue_create_host_buffer[DType.float32](n_features)
     ctx.enqueue_copy(dst_ptr=hmu.unsafe_ptr(), src_buf=mu)
     ctx.synchronize()
