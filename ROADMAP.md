@@ -217,8 +217,14 @@ from and three of its claims corrected an earlier version of this document:
    and is already full. The real advantage over the oblivious learner is that
    the node batch is **4,096 wide where depth-6 oblivious is 64**.
 3. **RF is not cheaper than boosting, it is more parallel.** cuML grows to
-   purity by default (`max_depth = -1`). It does more total work. The GPU/CPU
-   *ratio* improves; the absolute time does not.
+   purity by default -- `max_depth=None` at the pin
+   (`randomforestclassifier.py:216`), marshalled to INT32_MAX
+   (`randomforest_common.pyx:480-481`). (This line used to cite the C++
+   header's `max_depth = -1`. That is the wrong route: -1 is
+   `set_tree_params`' default argument (`decisiontree.hpp:82`) and their own
+   validator refuses it, `ASSERT(params.max_depth >= 0)`,
+   `decisiontree.cu:19`, so no fit ever reaches the builder with it.) It does
+   more total work. The GPU/CPU *ratio* improves; the absolute time does not.
 
 **The determinism prize, and it is large.** `split.cuh:81-89` breaks ties on a
 total order -- metric, then `colid`, then `quesval` -- so the split choice is

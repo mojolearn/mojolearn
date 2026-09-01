@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Random Forest on the GPU: cuML's forest, cuML's defaults.
+"""Random Forest on the GPU: cuML's forest, and cuML's defaults but one.
 
 The learner is `ensemble/`: the port of cuML's `ML::RandomForest`
 (`randomforest.cuh`) with its batched-levelalgo tree builder, quantile
@@ -9,11 +9,14 @@ sampler's first Python caller (the `extratrees` surface refuses
 `bootstrap=True` by name because its copy has no caller).
 
 THE DEFAULTS ARE cuML's, NOT scikit-learn's, per the package rule
-("the defaults follow the upstream each algorithm mirrors"). The two that
-will surprise an sklearn user, documented on the classes as well:
+("the defaults follow the upstream each algorithm mirrors"), WITH ONE
+NAMED EXCEPTION -- `max_depth`, DEVIATION 409, stated in full at the
+constant below. The two that will surprise an sklearn user, documented
+on the classes as well:
 
-* `max_depth` defaults to 16 (cuML `randomforestclassifier.pyx`), not
-  sklearn's None/unbounded.
+* `max_depth` defaults to 16 here, which is NEITHER the pinned cuML's
+  default NOR sklearn's. It is the default cuML RETIRED in the very
+  release this port pins. DEVIATION 409.
 * splits are searched over at most `n_bins` (default 128) per-feature
   QUANTILES, cuML's design, not sklearn's exact thresholds. Faster, and a
   different algorithm -- a comparison against sklearn must say so.
@@ -54,7 +57,52 @@ from ._arrays import _addr, _addr_ro, as_f32_c
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-randomforest-1"
 
-_CUML_DEFAULT_MAX_DEPTH = 16
+# DEVIATION 409 (2026-09-01, RF lane). THIS SURFACE'S `max_depth` DEFAULT
+# IS NOT THE PINNED cuML'S, AND THE NAME IT USED TO CARRY SAID IT WAS.
+# WHAT WAS HERE: `_CUML_DEFAULT_MAX_DEPTH = 16`, and a module docstring
+# citing `randomforestclassifier.pyx` for it.
+# WHY THAT IS WRONG, read out of the pin
+# (`~/CascadeProjects/upstream/cuml-v26.08.00`, 265b9da6): 16 WAS cuML's
+# default, and cuML retired it in THE VERY RELEASE THIS PORT PINS. Both
+# estimators now default to `None` and both say so in their own words --
+# `randomforestclassifier.py:68-74` and `randomforestregressor.py:62-68`
+# read "max_depth : int or None (default = None)" followed by
+# ".. versionchanged:: 26.08  The default of `max_depth` changed from
+# `16` to `None`", and `randomforest_common.pyx:317` is `max_depth=None`
+# in the shared `__init__`. `None` is not passed through: it is
+# marshalled to `np.iinfo(np.int32).max` on the way to C++
+# (`randomforest_common.pyx:480-481`), because the C++ header's own -1
+# sentinel is a value their validator REFUSES (`ASSERT(params.max_depth
+# >= 0)`, `decisiontree.cu:19`). So the pinned cuML default is UNLIMITED
+# DEPTH, spelled INT32_MAX.
+# The citation was also unresolvable at the pin: there is no
+# `randomforestclassifier.pyx` in v26.08.00, only
+# `randomforestclassifier.py` -- the same stale-citation class that
+# `ensemble/randomforest.mojo:23-31` already names.
+# THE MOJO SURFACE OF THE SAME LEARNER FOLLOWED THE PIN AND THIS ONE DID
+# NOT: `ensemble/randomforest.mojo:1062` (`default_rf_params_classifier`)
+# and `:1091` (`default_rf_params_regressor`) both pass
+# `max_depth=INT32_MAX`, matching the table at
+# `ensemble/randomforest.mojo:43`. Two entry points into one forest
+# therefore disagree about what an unspecified depth means.
+# WHAT IS STILL TRUE: 16 is what THIS wrapper ships. The value below is
+# the shipped behaviour, so it is left where it is and renamed to stop
+# claiming an upstream that does not say it. Flipping it to INT32_MAX is
+# the alignment this deviation is owed and it is a BEHAVIOUR change --
+# unspecified depth would grow to purity, deeper and slower trees from
+# the same call -- so it is not made from a read. No recorded number
+# depends on the implicit default: every bench and probe arm passes
+# `max_depth` explicitly (`bench/speed/forest_speed_arm.py:230`,
+# `tools/repeat_run_stability.py:117`), and the one bare
+# `RandomForestClassifier()` construction in the tree
+# (`python/mojolearn/tests/test_rf_leaf_budget.py:372`) only reaches
+# `_bind` and never fits. The bare call in
+# `tools/preprocess_identity_probe.py:15` is illustrative prose inside a
+# docstring, not a call site.
+# The other three constants below WERE re-read against the pin in the
+# same pass and are correct: `randomforest_common.pyx:319` is
+# `n_bins=128`, `:324` is `max_batch_size=4096`, `:326` is `n_streams=4`.
+_PORT_DEFAULT_MAX_DEPTH = 16
 _CUML_DEFAULT_N_BINS = 128
 _CUML_DEFAULT_N_STREAMS = 4
 _CUML_DEFAULT_MAX_BATCH = 4096
@@ -280,7 +328,7 @@ class _RandomForestBase(NumericModeMixin):
             criterion=int(criterion_code),
             n_estimators=int(n_estimators),
             max_depth=(
-                _CUML_DEFAULT_MAX_DEPTH if max_depth is None
+                _PORT_DEFAULT_MAX_DEPTH if max_depth is None
                 else int(max_depth)
             ),
             max_leaves=_max_leaves_slot(max_leaves),
@@ -430,7 +478,9 @@ class RandomForestClassifier(_RandomForestBase):
 
     `criterion` is 'gini' (cuML's GINI, the default) or 'entropy' /
     'log_loss' (ENTROPY), split over per-feature quantiles (`n_bins`,
-    default 128); `max_depth` defaults to cuML's 16, not sklearn's None.
+    default 128); `max_depth` defaults to 16, which is neither the pinned
+    cuML's default nor sklearn's -- cuML changed its own from 16 to `None`
+    in v26.08.00, the release this port pins (DEVIATION 409).
     `predict` is the argmax of `predict_proba`, exactly as
     `RandomForest::predict` argmaxes (`randomforest.cuh:417-427`).
     Entropy's `log` is DEVIATION 113/406's: it runs in both numeric modes
@@ -526,9 +576,11 @@ class RandomForestRegressor(_RandomForestBase):
     accepted as cuML's spelling), 'poisson', 'gamma' or 'inverse_gaussian'
     -- the four arms of their `GainPerSplit` (`objectives.cuh:331-338`).
     'absolute_error' / 'mae' and 'friedman_mse' are refused by name
-    (DEVIATION 407). Same quantile-split and `max_depth=16` defaults as
-    the classifier; `max_features` defaults to 1.0, cuML's regressor
-    default.
+    (DEVIATION 407). Same quantile-split default as the classifier, and the
+    same `max_depth=16`, which is this surface's and NOT the pinned cuML's
+    -- theirs became `None` in v26.08.00 (DEVIATION 409). `max_features`
+    defaults to 1.0, which IS cuML's regressor default
+    (`randomforestregressor.py:162`).
 
     TARGET DOMAIN. The three deviance criteria return `-max()` for any
     candidate whose label sum is not positive (`objectives.cuh:251-253`,
