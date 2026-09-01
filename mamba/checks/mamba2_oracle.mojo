@@ -665,8 +665,13 @@ def mamba2_block_oracle(
                 ]
 
     # ---- the SSD core, S10-S19 + h_last, boundary h advanced through
-    #      completed chunks.
-    ssd_core_oracle(xbc_work, dt_work, st.a_out, b, t_work, dims, state.h, st)
+    #      completed chunks. `st.a_out` may not ride along in the same
+    #      argument list as the mutable `st` (the Sep 1 aliasing rule: one
+    #      value may not be passed immutably and mutably in one call), so
+    #      the core reads its OWN copy of A -- a copy of [H] values is not
+    #      a seam and moves no bits.
+    var a_vals = st.a_out.copy()
+    ssd_core_oracle(xbc_work, dt_work, a_vals, b, t_work, dims, state.h, st)
 
     # ---- slice the token-shaped SSD stages to the NEW tokens (DEVIATION
     #      790: a copy, not a seam). Working row of new token (bb, li) is
