@@ -8,7 +8,7 @@ those can reach. See NOTICE for the attribution each carries.
 
 WHAT IS IN THIS ALPHA, AND WHAT IS NOT
 ---------------------------------------
-Twenty-four estimators, two submodules and two functions: `NearestNeighbors`, `KNeighborsClassifier`,
+Twenty-five estimators, two submodules and two functions: `NearestNeighbors`, `KNeighborsClassifier`,
 `KNeighborsRegressor`, `RadiusNeighbors`, `KMeans`, `DBSCAN`, `PCA`, `TruncatedSVD`,
 `LinearRegression`, `Ridge`, `LogisticRegression` (binary, L-BFGS),
 `GradientBoosting`, `RandomForestClassifier`, `RandomForestRegressor`,
@@ -129,6 +129,11 @@ from .randomforest import RandomForestClassifier, RandomForestRegressor
 # `SpectralClustering` and `ExponentialSmoothing` do NOT and say so on the
 # class. Read the class, not this list.
 #
+# `SVR` joined them on 2026-09-01, on the same lane as `SVC` and through the
+# same compiled extension, but WITHOUT `SVC`'s three-vendor card: the
+# regression half was gated after leg 11 and has not been in a cross-vendor
+# round. Its class says so.
+#
 # `ARIMA` is deliberately absent and is named in `_NOT_YET` below. Its lane
 # has no `fit`: the optimizer that would produce the coefficients is unported,
 # so the class would have to demand its own answer as an argument.
@@ -143,7 +148,7 @@ from ._hierarchy_impl import AgglomerativeClustering
 from ._iforest_impl import IsolationForest
 from ._solver_impl import ElasticNet, Lasso
 from ._spectral_impl import SpectralClustering
-from ._svm_impl import SVC
+from ._svm_impl import SVC, SVR
 from ._tsa_impl import ExponentialSmoothing, kpss_test, select_d
 
 __all__ = [
@@ -163,6 +168,7 @@ __all__ = [
     "LinearRegression",
     "LogisticRegression",
     "SVC",
+    "SVR",
     "SpectralClustering",
     "NearestNeighbors",
     "PCA",
@@ -182,10 +188,13 @@ __all__ = [
 ]
 
 # Named absences. Importing one of these raises with a reason rather than an
-# AttributeError, because "why is SVR missing" is a question the answer to is
-# interesting and short. Each value names the thing that
+# AttributeError, because "why is ARIMA missing" is a question the answer to
+# is interesting and short. Each value names the thing that
 # EXISTS and where it stops. (`KNeighborsClassifier` / `KNeighborsRegressor`
-# were here until 2026-08-23; they are exported above now.)
+# were here until 2026-08-23, and `SVR` until 2026-09-01; they are exported
+# above now. `SVR`'s entry said the solver, the oracle and the gates were all
+# done and only the Python surface was missing, which was true, and the fix
+# for that sentence was to write the surface rather than to reword it.)
 _NOT_YET = {
     "ARIMA": (
         "arima/ (the batched Kalman filter likelihood, its gradient and "
@@ -194,15 +203,6 @@ _NOT_YET = {
         "NOT PORTED (arima/NOT_IMPLEMENTED.tsv), and those are exactly what produces "
         "the coefficients every existing entry point REQUIRES as input, so an "
         "`ARIMA` class would have to demand its own answer as an argument"
-    ),
-    "SVR": (
-        "svm/, where the solver, the oracle and the gates are ALL DONE as of "
-        "2026-08-31 -- 44 of 44 including an eps-insensitive dual, a KKT gap "
-        "and a tube bound derived from the formulation rather than from our "
-        "solver -- and what is missing is only this Python surface: an "
-        "`svr_fit_host` in svm/estimator.mojo, an `svr_fit` binding, and an "
-        "`SVR` class. This entry has said three different things today and "
-        "each was true when written"
     ),
 }
 

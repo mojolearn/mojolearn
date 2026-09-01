@@ -1,8 +1,8 @@
 #!/bin/sh
-# Build the C-SVC / Isolation Forest CPython extension into
+# Build the C-SVC / epsilon-SVR / Isolation Forest CPython extension into
 # python/mojolearn/_mojolearn_svm.so. Run from anywhere; requires pixi.
 #
-# THIS EXTENSION IS svm/ AND isolation_forest/. It is separate from
+# THIS EXTENSION IS svm/ (SVC AND SVR) AND isolation_forest/. It is separate from
 # `bindings/build.sh` (k-means, k-NN), `build_gbdt.sh`, `build_rf.sh`,
 # `build_trees.sh` and `build_estimators.sh` (DBSCAN, KDE, PCA, tSVD, OLS,
 # Ridge, logistic) for the reason the estimators binding's header gives:
@@ -130,12 +130,11 @@ COLUMN_DEFINE=""
 # under python/mojolearn/identical/. The build-time smoke gate imports the
 # FAST package, so it is skipped for an identical build.
 #
-# NOTE FOR THE OPERATOR: python/mojolearn/_backend.py's `_MODULES` tuple does
-# NOT list `_mojolearn_svm`, so the identical selector will not install this
-# module under the canonical name. `_svm_impl.py` loads it itself and
-# cross-checks `svm_numeric_mode()`, so an identical run cannot silently get
-# the FAST binary -- but adding `_mojolearn_svm` to `_MODULES` and
-# `_build_script` is the tidier fix and it belongs to whoever owns that file.
+# NOTE FOR THE OPERATOR: `_mojolearn_svm` IS listed in
+# python/mojolearn/_backend.py's `_MODULES` (DEVIATION 869). This comment
+# said it was NOT for as long as that was true. `_svm_impl.py` still loads
+# the module itself and cross-checks `svm_numeric_mode()`, so an identical
+# run cannot silently get the FAST binary either way.
 MODE_DEFINE=""
 OUTDIR="python/mojolearn"
 if [ "${MOJOLEARN_NUMERIC_MODE:-fast}" = "identical" ]; then
@@ -294,10 +293,10 @@ fi
 # packed params list, and a hand-rolled call here would encode that ABI a
 # second time and drift from it.
 #
-# `_svm_impl` and `_iforest_impl` are private modules and are NOT exported
-# from `mojolearn/__init__.py` yet, so they are imported as submodules. When
-# the operator re-exports `SVC` and `IsolationForest` into the public
-# namespace, this gate keeps working unchanged.
+# `_svm_impl` and `_iforest_impl` are imported as submodules here even
+# though `SVC`, `SVR` and `IsolationForest` ARE exported from
+# `mojolearn/__init__.py`, because the private names are stable and this
+# gate should not break on a re-export.
 #
 # THE SVM ROW IS SVM'S AND THE FOREST ROW IS THE FOREST'S. Copying a sibling
 # script's smoke rows would be a gate that cannot fail, since none of those
@@ -309,6 +308,10 @@ fi
 #                            reductions, gather_rows, decision_kernel
 #   SVC(kernel='rbf')     -> adds row_norm_l2sq and rbf_kernel_expanded, the
 #                            two kernels the linear arm never touches
+#   SVR(kernel='linear')  -> adds svr_init_kernel and combine_coefs_svr,
+#                            the only two kernels in this artifact that NO
+#                            classifier row can reach, plus UpdateF's second
+#                            launch on f + n_rows
 #   IsolationForest       -> xorwow init inside build_isolation_trees_global,
 #                            compute_path_lengths_global, anomaly_score
 #     .decision_function  -> the contamination quantile path (offset_ != -0.5)
@@ -348,6 +351,22 @@ assert rbf.predict(X[:8]).shape == (8,)
 # the linear kernel's coef_ is dual_coef_ @ support_vectors_
 assert lin.coef_.shape == (1, 4), lin.coef_.shape
 
+# THE REGRESSION ROW. svr_init_kernel and combine_coefs_svr_kernel are in
+# this artifact and no SVC row above reaches either. A continuous target,
+# not the labels: a regressor takes any float.
+yr = (X[:, 0] * 2.0 - X[:, 3]).astype(np.float32)
+svr = _svm_impl.SVR(kernel="linear", C=10.0, epsilon=0.05).fit(X, yr)
+assert svr.predict(X[:8]).shape == (8,)
+assert 1 <= svr.n_support_ <= X.shape[0], svr.n_support_
+# the model is n_support wide, NOT 2 * n_support: Results folds the two
+# alpha halves before it selects (svm/estimator.mojo::svr_fit_host)
+assert svr.dual_coef_.shape == (1, svr.n_support_), svr.dual_coef_.shape
+assert svr.support_vectors_.shape == (svr.n_support_, 4)
+assert svr.score(X, yr) > 0.9, svr.score(X, yr)
+# a wider tube cannot need MORE support vectors
+wide = _svm_impl.SVR(kernel="linear", C=10.0, epsilon=0.5).fit(X, yr)
+assert wide.n_support_ <= svr.n_support_, (wide.n_support_, svr.n_support_)
+
 f = _iforest_impl.IsolationForest(
     n_estimators=4, max_samples=64, random_state=0
 ).fit(X)
@@ -364,8 +383,8 @@ fc = _iforest_impl.IsolationForest(
 assert fc.offset_ != -0.5, fc.offset_
 assert fc.decision_function(X[:8]).shape == (8,)
 
-print("  smoke: SVC linear, SVC rbf, IsolationForest score/predict/quantile "
-      "each launched")
+print("  smoke: SVC linear, SVC rbf, SVR linear, IsolationForest "
+      "score/predict/quantile each launched")
 shutil.rmtree(tmp, ignore_errors=True)
 PY
 

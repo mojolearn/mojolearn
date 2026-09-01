@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CPython boundary for the C-SVC and Isolation Forest lanes.
+"""CPython boundary for the C-SVC, epsilon-SVR and Isolation Forest lanes.
 
 A THIRD extension module, and a separate one on purpose. The header of
 `bindings/_mojolearn_estimators.mojo` states the reason and it is the same
@@ -9,6 +9,13 @@ point. Two lanes share this module because they landed in one slot, not
 because they share code -- `svm/` is cuML's SMO solver and cuVS's kernel
 matrices, `isolation_forest/` is cuML's Isolation Forest and cuRAND's
 XORWOW, and nothing crosses between them.
+
+THE SVR PAIR RIDES THIS SAME MODULE AND NEEDED NO NEW EXTENSION (added
+2026-09-01). `svr_fit` and `svr_predict` call the same `SmoSolver` the
+classifier does, differing in the gradient initialization, the domain size
+and how the coefficients are combined, so `_backend.py`'s `_MODULES`,
+`pyproject.toml` and `build_release_wheel.sh`'s `EXT_NAMES` are unchanged.
+The whole cost of the regression surface is the two functions below.
 
 Arrays cross as borrowed NumPy addresses; all device buffers and contexts
 live for one call and no pointer is retained. The Python wrapper owns the
@@ -26,11 +33,13 @@ the only thing standing between a swapped pair and a plausible number.
 DEVIATIONS 870-879 are this surface's. 870-875 are used and each is named
 where it bites; 876-879 are unassigned.
 
-NOT WIRED into `python/mojolearn/__init__.py`, though `_mojolearn_svm` IS
-registered in `python/mojolearn/_backend.py`'s `_MODULES` (added with
-DEVIATION 869, when five bindings were found missing from that tuple and
-were therefore resolving to the FAST binary under the identical label).
-`_svm_impl.py` still loads this module itself, mode-aware, and cross-checks
+`SVC`, `SVR` and `IsolationForest` ARE wired into
+`python/mojolearn/__init__.py`; this header said "NOT WIRED" for a week
+after they were. `_mojolearn_svm` is also registered in
+`python/mojolearn/_backend.py`'s `_MODULES` (added with DEVIATION 869, when
+five bindings were found missing from that tuple and were therefore
+resolving to the FAST binary under the identical label). `_svm_impl.py`
+still loads this module itself, mode-aware, and cross-checks
 `svm_numeric_mode()` against the mode the package asked for; see the comment
 there.
 """
@@ -48,7 +57,14 @@ from isolation_forest.estimator import (
     iforest_run_host,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from svm.estimator import SvcFitOutputs, svc_fit_host, svc_predict_host
+from svm.estimator import (
+    SvcFitOutputs,
+    SvrFitOutputs,
+    svc_fit_host,
+    svc_predict_host,
+    svr_fit_host,
+    svr_predict_host,
+)
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -245,6 +261,182 @@ def svc_predict_binding(
     return PythonObject(n_rows)
 
 
+def svr_fit_binding(
+    x_addr: PythonObject,
+    y_addr: PythonObject,
+    dual_addr: PythonObject,
+    support_idx_addr: PythonObject,
+    support_matrix_addr: PythonObject,
+    info_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`SVR.fit` (svm/, DEVIATIONS 630-637 plus the SVR pieces gated at
+    `fea6becc`): epsilon-SVR, dense FP32, LINEAR or RBF. Returns
+    `n_support`.
+
+    `params` is, in this exact order (mirrored in
+    `python/mojolearn/_svm_impl.py`):
+
+        0  n_rows
+        1  n_features
+        2  kernel          (0 = LINEAR, 2 = RBF; cuML's KernelType values)
+        3  gamma           (float; read only by RBF)
+        4  C               (float)
+        5  epsilon         (float; the width of the insensitive tube)
+        6  tol             (float)
+        7  max_iter        (-1 = no limit, cuML's default)
+        8  nochange_steps
+
+    SLOT 5 IS THE ONE THIS LIST HAS THAT `svc_fit`'s DOES NOT, and it sits
+    between `C` and `tol` rather than at the end, so a reader comparing the
+    two lists sees one insertion instead of a reordering. `epsilon` crosses
+    UNCLAMPED: `check_rung1_scope` refuses a non-finite or negative value by
+    name and that refusal has to stay reachable from Python.
+
+    The OUTPUT buffers are worst-case sized by the caller, because
+    `n_support` is not known until the solve finishes (DEVIATION 873), and
+    they are the SAME SIZES the classifier uses: `dual_addr` and
+    `support_idx_addr` hold `n_rows` entries, `support_matrix_addr` holds
+    `n_rows * n_features` float32. NOT `2 * n_rows`. The solver's domain is
+    doubled but `Results` folds the two alpha halves before it selects, so
+    at most `n_rows` coefficients can ever be written
+    (`svm/estimator.mojo::svr_fit_host` spells the argument out).
+
+    `info_addr` is THREE float64, written in this order:
+
+        0  b            (the intercept; a float32 value widened exactly)
+        1  n_support
+        2  n_iter
+
+    THREE, NOT FIVE. `svc_fit`'s slots 3 and 4 are the class labels and a
+    regressor has none.
+
+    `cache_size`, `svmType`, `sample_weight`, POLYNOMIAL, TANH and
+    PRECOMPUTED are not on this surface at all: `svm/estimator.mojo` pins
+    the first two at the only values this rung accepts and refuses the rest
+    by name. `max_outer_iter` is pinned at -1, which is what cuML's own
+    Python layer does (`svm_base.pyx:371`), and -1 resolves over the DOUBLED
+    `n_train`.
+    """
+    if len(params) != 9:
+        raise Error(
+            "svr_fit: params must contain 9 values, got " + String(len(params))
+        )
+    var xp = _f32_ptr(Int(py=x_addr))
+    var yp = _f32_ptr(Int(py=y_addr))
+    var dp = _f32_ptr(Int(py=dual_addr))
+    var sip = _i32_ptr(Int(py=support_idx_addr))
+    var smp = _f32_ptr(Int(py=support_matrix_addr))
+    var ip = _f64_ptr(Int(py=info_addr))
+    var n_rows = Int(py=params[0])
+    var n_cols = Int(py=params[1])
+    var kernel = Int(py=params[2])
+    var gamma = Float64(py=params[3])
+    var c = Float64(py=params[4])
+    var epsilon = Float64(py=params[5])
+    var tol = Float64(py=params[6])
+    var max_iter = Int(py=params[7])
+    var nochange_steps = Int(py=params[8])
+    if n_rows <= 0 or n_cols <= 0:
+        raise Error("svr_fit: n_rows and n_features must both be positive")
+    var x = List[Float32]()
+    var y = List[Float32]()
+    for i in range(n_rows * n_cols):
+        x.append(xp.unsafe_load(i))
+    for i in range(n_rows):
+        y.append(yp.unsafe_load(i))
+    var res = SvrFitOutputs()
+    with GILReleased(Python()):
+        res = svr_fit_host(
+            x, y, n_rows, n_cols, kernel, gamma, c, epsilon, tol, max_iter,
+            nochange_steps,
+        )
+    for i in range(res.n_support):
+        dp.unsafe_store(i, res.dual_coefs[i])
+        sip.unsafe_store(i, res.support_idx[i])
+    for i in range(res.n_support * n_cols):
+        smp.unsafe_store(i, res.support_matrix[i])
+    ip.unsafe_store(0, Float64(res.b))
+    ip.unsafe_store(1, Float64(res.n_support))
+    ip.unsafe_store(2, Float64(res.n_iter))
+    return PythonObject(res.n_support)
+
+
+def svr_predict_binding(
+    x_addr: PythonObject,
+    dual_addr: PythonObject,
+    support_matrix_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`SVR.predict` on a model handed back in. Writes `n_rows` float32 to
+    `out_addr` and returns `n_rows`.
+
+    `params` is, in this exact order (mirrored in
+    `python/mojolearn/_svm_impl.py`):
+
+        0  n_rows
+        1  n_features
+        2  n_support
+        3  b               (float; the intercept from fit's info[0])
+        4  kernel          (0 = LINEAR, 2 = RBF)
+        5  gamma           (float; MUST be the gamma the fit resolved)
+        6  cache_size_mib  (float; their `param.cache_size` at the
+                            `SVM::predict` call site -- the prediction
+                            BATCH knob, launch-invariant by gate)
+
+    SEVEN SLOTS, NOT TEN. `svc_predict`'s `classes[0]`, `classes[1]` and
+    `predict_class` are all absent: there are no classes and there is no
+    epilogue to select, so the regression estimate is the only thing this
+    call can return.
+
+    Slot 5 is the trap in this list, exactly as slot 7 is in `svc_predict`'s.
+    `gamma` here must be the value the FIT resolved, not the constructor's,
+    or the kernel matrix at predict is not the one the dual coefficients
+    were solved against and the answer is quietly wrong. `_svm_impl.py`
+    stores it as `_gamma` at fit and passes that, which is what cuML does
+    (`svm_base.pyx:464, 532`).
+    """
+    if len(params) != 7:
+        raise Error(
+            "svr_predict: params must contain 7 values, got " + String(len(params))
+        )
+    var xp = _f32_ptr(Int(py=x_addr))
+    var op = _f32_ptr(Int(py=out_addr))
+    var n_rows = Int(py=params[0])
+    var n_cols = Int(py=params[1])
+    var n_support = Int(py=params[2])
+    var b = Float32(Float64(py=params[3]))
+    var kernel = Int(py=params[4])
+    var gamma = Float64(py=params[5])
+    var buffer_mib = Float64(py=params[6])
+    if n_rows <= 0 or n_cols <= 0:
+        raise Error("svr_predict: n_rows and n_features must both be positive")
+    if n_support < 0:
+        raise Error("svr_predict: n_support cannot be negative")
+    var x = List[Float32]()
+    for i in range(n_rows * n_cols):
+        x.append(xp.unsafe_load(i))
+    var dual = List[Float32]()
+    var support = List[Float32]()
+    if n_support > 0:
+        var dp = _f32_ptr(Int(py=dual_addr))
+        var smp = _f32_ptr(Int(py=support_matrix_addr))
+        for i in range(n_support):
+            dual.append(dp.unsafe_load(i))
+        for i in range(n_support * n_cols):
+            support.append(smp.unsafe_load(i))
+    var out = List[Float32]()
+    with GILReleased(Python()):
+        out = svr_predict_host(
+            x, n_rows, n_cols, support, dual, n_support, b, kernel, gamma,
+            buffer_mib,
+        )
+    for i in range(n_rows):
+        op.unsafe_store(i, out[i])
+    return PythonObject(n_rows)
+
+
 def iforest_run_binding(
     train_addr: PythonObject,
     query_addr: PythonObject,
@@ -367,6 +559,8 @@ def PyInit__mojolearn_svm() abi("C") -> PythonObject:
         m.def_function[svm_numeric_mode_binding]("svm_numeric_mode")
         m.def_function[svc_fit_binding]("svc_fit")
         m.def_function[svc_predict_binding]("svc_predict")
+        m.def_function[svr_fit_binding]("svr_fit")
+        m.def_function[svr_predict_binding]("svr_predict")
         m.def_function[iforest_run_binding]("iforest_run")
         return m.finalize()
     except e:

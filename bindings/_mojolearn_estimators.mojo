@@ -56,6 +56,7 @@ def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
 def dbscan_fit_binding(
     x_addr: PythonObject,
     labels_addr: PythonObject,
+    weight_addr: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
     """Fit DBSCAN. Returns the propagation pass count.
@@ -71,20 +72,29 @@ def dbscan_fit_binding(
         5  max_iter       (max_iterations of the label propagation; 0 =
                            run to the fixed point, DEVIATION 519)
         6  eps_nn_method  (0 = EPS_NN_BRUTE_FORCE, 1 = EPS_NN_RBC)
+        7  metric         (0 = DBSCAN_METRIC_L2, 1 = DBSCAN_METRIC_L1)
 
     Slot 6 was added 2026-08-23 (DEVIATION 516): the wrapper used to have
     no way to choose the eps-neighbourhood arm, so the ball cover -- the
     shipped DEFAULT, DEVIATION 35 -- was the only arm a Python caller
     could reach and the brute-force arm E1U certified was unreachable
     from Python. `dbscan/estimator.mojo` refuses any other value by name.
+
+    Slot 7 and `weight_addr` were added 2026-09-01 with the L1 arm
+    (DEVIATION 27) and `sample_weight`. `weight_addr` is a SEPARATE
+    ARGUMENT and not a params slot because it is an ARRAY ADDRESS and the
+    params list is scalars; `0` is their `sample_weight == nullptr` and is
+    what an unweighted fit passes. The array must be `n_rows` contiguous
+    float32, which `density.py` guarantees with `as_f32_c`.
     """
-    if len(params) != 7:
+    if len(params) != 8:
         raise Error(
-            "dbscan_fit: params must contain 7 values, got "
+            "dbscan_fit: params must contain 8 values, got "
             + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
     var lp = _i32_ptr(Int(py=labels_addr))
+    var wa = Int(py=weight_addr)
     var nr = Int(py=params[0])
     var nf = Int(py=params[1])
     var eps = Float64(py=params[2])
@@ -92,12 +102,13 @@ def dbscan_fit_binding(
     var budget = Int(py=params[4])
     var max_iter = Int(py=params[5])
     var eps_nn_method = Int(py=params[6])
+    var metric = Int(py=params[7])
     var passes = 0
     with GILReleased(Python()):
         var ctx = DeviceContext()
         passes = dbscan_fit(
             ctx, xp, nr, nf, eps, min_samples, lp, budget, max_iter,
-            eps_nn_method,
+            eps_nn_method, metric, wa,
         )
     return PythonObject(passes)
 

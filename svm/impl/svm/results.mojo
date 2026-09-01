@@ -5,10 +5,11 @@
 PORT OF `cuml/cpp/src/svm/results.cuh` at cuML v26.08.00: `Get`,
 `CombineCoefs`, `GetDualCoefs`, `GetSupportVectorIndices`,
 `CollectSupportVectorMatrix` (dense arm), `CalcB`, `SelectUnboundSV`,
-`SelectByCoef`, `SelectReduce`. The SVR `raft::linalg::add(coef, coef +
-n_rows)` arm and the sparse support-matrix arm are not ported (rung 1;
-`svm/NOT_IMPLEMENTED.tsv`). The PRECOMPUTED early return is not ported with its
-kernel.
+`SelectByCoef`, `SelectReduce`, and the SVR `raft::linalg::add(coef, coef +
+n_rows)` arm, which is `combine_coefs_svr_kernel` below and which this
+paragraph called unported until `fea6becc` (2026-08-31). The sparse
+support-matrix arm is not ported (`svm/NOT_IMPLEMENTED.tsv`). The
+PRECOMPUTED early return is not ported with its kernel.
 
     raft::linalg::binaryOp(coef = a * y)   -> combine_coefs_kernel
     set_flag / cub::DeviceSelect::Flagged   -> flag_* + SelectScratch.select_*

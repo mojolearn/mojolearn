@@ -10,10 +10,14 @@ in `check_rung1_scope` (called by `svcFit`), never silently ignored.
 What the record carries that the brief's rung 1 does not use, and what
 happens to it:
 
-    svmType != C_SVC       raised by name (SVR is rung 2, NU_* unported)
+    svmType                C_SVC and EPSILON_SVR are honored; NU_SVC and
+                           NU_SVR are raised by name, which is upstream's own
+                           boundary. This line read "SVR is rung 2" until
+                           `fea6becc` (2026-08-31)
     epsilon                honored only as SVR's parameter: raised if non-zero
                            with C_SVC, exactly because C_SVC ignores it and a
-                           silently ignored parameter is the failure mode
+                           silently ignored parameter is the failure mode;
+                           under EPSILON_SVR it must be finite and >= 0
     cache_size != 0        raised by name (the LRU cache; README "cache decision")
     verbosity              accepted and ignored: it selects LOG LINES in theirs
                            (`CUML_LOG_DEBUG`), we print none

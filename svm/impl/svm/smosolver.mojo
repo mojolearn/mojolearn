@@ -4,11 +4,14 @@
 
 PORT OF `cuml/cpp/src/svm/smosolver.h` + `smosolver.cuh` at cuML v26.08.00:
 `Solve`, `UpdateF`, `Initialize`, `InitPenalty` (unweighted arm), `SvcInit`,
+`SvrInit`, the `EPSILON_SVR` doubling and its second `UpdateF` gemv,
 `GetNonzeroDeltaAlpha`, `CheckStoppingCondition`, `GetDefaultMaxIter`,
-`ResizeBuffers`. NOT ported: `SvrInit` and the `EPSILON_SVR` doubling
-(rung 2), the weighted `InitPenalty` arm (`sample_weight` refused by name),
-the log lines (`CUML_LOG_DEBUG`/`ERROR`; the "not converging monotonically"
-advice is a message, the counter behind it is kept).
+`ResizeBuffers`. NOT ported: the weighted `InitPenalty` arm
+(`sample_weight` refused by name), the log lines
+(`CUML_LOG_DEBUG`/`ERROR`; the "not converging monotonically" advice is a
+message, the counter behind it is kept). This paragraph listed `SvrInit`
+and the doubling as unported until `fea6becc` (2026-08-31), when both were
+gated 44 of 44 and the refusal in `solve` came out.
 
     cudaMemsetAsync(delta_alpha, 0)          -> fill_f32_kernel
     thrust::fill(C_vec, C)                   -> fill_f32_kernel

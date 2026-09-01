@@ -22,19 +22,28 @@ worth making deliberately rather than defaulting past: on the industrial track
 
 Published on PyPI, macOS arm64 wheel, every numeric mode as its own compiled
 binary set in one wheel. **Read `python/mojolearn/__init__.py`'s `__all__`, not
-a table here** -- the count in this file went 11 -> 16 -> 24 in seven days and
-every written-down number was false the day after. At 2026-08-31 it is 24
-estimators plus the `metrics` and `linalg` submodules and the `kpss_test` /
-`select_d` functions.
+a table here** -- the count in this file went 11 -> 16 -> 24 -> 25 in eight
+days and every written-down number was false the day after. At 2026-09-01 it
+is 25 estimators plus the `metrics` and `linalg` submodules and the
+`kpss_test` / `select_d` functions.
+
+**`SVR` was the cheapest of these and is worth recording as a shape.** It
+needed NO new compiled extension: it rides `_mojolearn_svm.so`, which
+already carried `SVC` and the isolation forest, so `_backend.py`'s
+`_MODULES`, `pyproject.toml` and `build_release_wheel.sh`'s `EXT_NAMES` were
+all unchanged. The whole cost was two host entry points, two bindings, one
+class and one boundary gate, against a solver that was already 44 of 44. The
+ordering rule below is what found it: highest surface per unit of work over
+a lane that is already gated.
 
 ## What is built and still NOT reachable from Python
 
 This table had ten rows on 2026-08-24. Eight of them shipped: `holtwinters`
 (`ExponentialSmoothing`), `solver` (`Lasso`, `ElasticNet`), `hierarchy`
 (`AgglomerativeClustering`), `metrics`, `isolation_forest` (`IsolationForest`),
-`svm` (`SVC`), `gemm` (the `linalg` submodule) and spectral clustering
-(`SpectralClustering`). Those rows are deleted rather than annotated. What is
-left:
+`svm` (`SVC`, and `SVR` since 2026-09-01), `gemm` (the `linalg` submodule)
+and spectral clustering (`SpectralClustering`). Those rows are deleted
+rather than annotated. What is left:
 
 | family | what exists | what is missing | size |
 |---|---|---|---|

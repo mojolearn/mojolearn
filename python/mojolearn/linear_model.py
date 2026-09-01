@@ -12,13 +12,98 @@ from ._mode import NumericModeMixin
 from ._arrays import _addr, _addr_ro, as_f32_c
 
 
+
+def _check_sample_weight(sample_weight, n_rows, estimator):
+    """Validate `sample_weight` and return it as a C-order float32 vector,
+    or None when there are no weights.
+
+    cuML validates nothing here: `olsFit` takes a raw pointer and trusts it.
+    These three checks are OURS and they are input validation, which is the
+    one kind of refusal that is correct rather than a gap -- a length
+    mismatch would read past the end of the array on the device, and a
+    negative weight makes `sqrt(w)` a NaN that silently poisons the whole
+    fit. Non-finite weights are refused for the same reason.
+    """
+    if sample_weight is None:
+        return None
+    w = np.ascontiguousarray(np.asarray(sample_weight), dtype=np.float32)
+    if w.ndim != 1:
+        raise ValueError(
+            f"mojolearn {estimator}: sample_weight must be 1-D, got "
+            f"{w.ndim} dimensions"
+        )
+    if w.shape[0] != n_rows:
+        raise ValueError(
+            f"mojolearn {estimator}: sample_weight has {w.shape[0]} entries "
+            f"but X has {n_rows} rows"
+        )
+    if not np.all(np.isfinite(w)):
+        raise ValueError(
+            f"mojolearn {estimator}: sample_weight contains a non-finite "
+            "value; sqrt of it would poison every row of the fit"
+        )
+    if np.any(w < 0.0):
+        raise ValueError(
+            f"mojolearn {estimator}: sample_weight has a negative entry; "
+            "a weighted least squares scales rows by sqrt(w) (ols.cuh:100) "
+            "and sqrt of a negative is a NaN"
+        )
+    return w
+
+
+def _column_means(x, weights):
+    """Column means in float64, narrowed to float32 -- weighted when
+    `weights` is not None.
+
+    Unweighted this is `x.mean(axis=0, dtype=np.float64)`, the reduction
+    this file has always used (a sequential row accumulation in numpy's C
+    kernel, not BLAS, not libm). Weighted it is cuML's
+    `raft::stats::weightedMean`: `sum_i w_i x_ij / sum_i w_i`, one division
+    by the same scalar for every column (`raft/stats/detail/weighted_mean
+    .cuh:49-64`). Note that theirs divides by the SUM OF THE WEIGHTS and not
+    by the row count, so a uniform weight of 2 leaves the mean unchanged --
+    which is the property that makes duplicating a row equal doubling its
+    weight, and is what the gate checks.
+    """
+    if weights is None:
+        return x.mean(axis=0, dtype=np.float64).astype(np.float32)
+    w64 = weights.astype(np.float64)
+    total = float(w64.sum())
+    if total <= 0.0:
+        raise ValueError(
+            "mojolearn: sample_weight sums to zero, so the weighted mean "
+            "cuML's preProcessData forms is a division by zero"
+        )
+    return ((x.astype(np.float64) * w64[:, None]).sum(axis=0) / total).astype(
+        np.float32
+    )
+
+
+def _vector_mean(v, weights):
+    """The scalar mean of the target, weighted when `weights` is not None.
+    The 1-D half of `_column_means`; see that docstring."""
+    if weights is None:
+        return float(v.mean(dtype=np.float64))
+    w64 = weights.astype(np.float64)
+    total = float(w64.sum())
+    if total <= 0.0:
+        raise ValueError(
+            "mojolearn: sample_weight sums to zero, so the weighted mean "
+            "cuML's preProcessData forms is a division by zero"
+        )
+    return float((v.astype(np.float64) * w64).sum() / total)
+
+
 class LinearRegression(NumericModeMixin):
     """Ordinary least squares through normal equations on the GPU.
 
     This is cuML's `algorithm='eig'` arm (`lstsqEig`, RAFT), which forms
     ``X.T @ X`` and so squares the condition number. It is less robust than
     an SVD-based solver and should not be used for badly conditioned
-    designs; cuML's own SVD arms are not ported (glm/NOT_IMPLEMENTED.tsv).
+    designs; cuML's SVD and QR solvers (`lstsqSvdJacobi`, `lstsqSvdQR`,
+    `lstsqQR`) are not written here (glm/NOT_IMPLEMENTED.tsv). A design with
+    more features than samples takes a second Gram route instead of an SVD;
+    see the `n_features > n` row below.
 
     WHAT IS HONORED, WHAT IS REFUSED, AND WHY (measured row by row by
     `tools/e2u_matrix_fit.py`):
@@ -29,18 +114,51 @@ class LinearRegression(NumericModeMixin):
                                   REIMPLEMENTATION below. False sends the
                                   raw design to the device, which is the
                                   arm the ported `ols_fit` carries.
-        sample_weight   refused   not ported (ols.cuh:99-110, a
-                                  sqrt-scaling of both operands and its
-                                  inverse; glm/NOT_IMPLEMENTED.tsv)
-        n_features == 1 refused   cuML forces its SVD solver for one
-                                  column (linear_regression.pyx:390) and
-                                  that solver is not ported; the Mojo layer
-                                  raises BY NAME (glm/impl/glm/ols.mojo)
-        n_features > n  refused   A^T A is singular by construction;
-                                  cuML's dispatch switches to SVD
-                                  (ols.cuh:112-113), not ported; raised
-                                  BY NAME by the same file
+        sample_weight   honored   a weighted least squares IS an unweighted
+                                  one on rows rescaled by sqrt(w), which is
+                                  exactly what cuML does (ols.cuh:99-110)
+                                  before it dispatches; see SAMPLE WEIGHTS
+                                  below
+        n_features == 1 honored   a single column is scalar least squares
+                                  and the Gram is 1 x 1 with condition
+                                  number 1; cuML switches to its SVD solver
+                                  here because THEIR eigensolver does not
+                                  take one column (linear_regression.pyx:
+                                  390-394), a limitation the device Jacobi
+                                  does not share (DEVIATION 551)
+        n_features > n  honored   the minimum-norm solution
+                                  w = X.T (X X.T)^+ y, through the Gram of
+                                  the ROWS, which is n x n and nonsingular
+                                  at full row rank (DEVIATION 550,
+                                  glm/impl/linalg/detail/lstsq_min_norm.mojo).
+                                  It squares the condition number exactly as
+                                  the tall route does, so it is no more
+                                  accurate than this class already is and no
+                                  less; a true SVD or LQ route would be
+                                  better and is not written
         y 2-D           refused   one target only, at this boundary
+
+    SAMPLE WEIGHTS ARE A HOST RESCALE HERE, AND THAT IS A DEVIATION WITH A
+    REASON. `olsFit` takes `sqrt` of the weights, multiplies row `i` of X
+    and entry `i` of y by it, solves, and undoes the scaling
+    (ols.cuh:99-110, 129-141). Both halves of the scaling are ported and run
+    ON THE DEVICE in `glm/impl/glm/ols.mojo::ols_fit_weighted`; what is not
+    yet in place is a BINDING that can hand a weight pointer across
+    (`bindings/_mojolearn_estimators.mojo::ols_fit_binding` takes a fixed
+    `params` of length 2). Until it is, this class applies the same two
+    operations in numpy and calls the unweighted entry.
+
+    That is defensible where a host reimplementation usually is not, and the
+    reason is arithmetic rather than convenience: `np.sqrt` on float32 is
+    the IEEE correctly-rounded square root, the row multiply is one
+    float32 rounding, and both are the same operations the device kernels
+    perform. The two routes are therefore expected to agree BIT FOR BIT
+    except on denormals, where the device flushes and numpy does not, and
+    `check_ols_sample_weight_host_rescale_matches_device` in
+    `glm/checks/ols_check.mojo` is the gate on that rather than this
+    paragraph. `sample_weight` with `fit_intercept=True` uses WEIGHTED
+    column means, which is what cuML does too (`raft::stats::weightedMean`,
+    preprocess.cuh:95-97, 110-112).
 
     THE INTERCEPT IS A HOST REIMPLEMENTATION, NOT A PORT. cuML's Python
     default `fit_intercept=True` wraps the solver in `preProcessData`
@@ -67,11 +185,6 @@ class LinearRegression(NumericModeMixin):
         self.fit_intercept = fit_intercept
 
     def fit(self, X, y, sample_weight=None):
-        if sample_weight is not None:
-            raise NotImplementedError(
-                "mojolearn LinearRegression: sample_weight is not ported "
-                "(ols.cuh:99-110; glm/NOT_IMPLEMENTED.tsv)"
-            )
         x, self.input_copied_ = as_f32_c(X, "X")
         target = np.asarray(y)
         if target.ndim != 1:
@@ -79,6 +192,8 @@ class LinearRegression(NumericModeMixin):
         if target.shape[0] != x.shape[0]:
             raise ValueError("mojolearn LinearRegression X and y lengths differ")
         target = np.ascontiguousarray(target, dtype=np.float32)
+        weights = _check_sample_weight(sample_weight, x.shape[0],
+                                       "LinearRegression")
         if self.fit_intercept:
             # float64 column means -> float32, then a float32 subtraction.
             # numpy's axis-0 reduction over a C-order matrix is a sequential
@@ -86,14 +201,29 @@ class LinearRegression(NumericModeMixin):
             # kernel; neither goes through BLAS or libm. The dot below is
             # the one place a BLAS call would have slipped in, so it is an
             # exactly-rounded fsum instead.
-            self._x_mean = x.mean(axis=0, dtype=np.float64).astype(np.float32)
-            self._y_mean = float(target.mean(dtype=np.float64))
+            #
+            # WITH WEIGHTS THE MEANS ARE WEIGHTED, which is cuML's
+            # preProcessData (`raft::stats::weightedMean`, sum(w*x)/sum(w),
+            # preprocess.cuh:95-97 and 110-112) and NOT the unweighted mean
+            # applied to weighted rows. The two differ, and using the wrong
+            # one puts the intercept in the wrong place without moving any
+            # coefficient enough to notice.
+            self._x_mean = _column_means(x, weights)
+            self._y_mean = _vector_mean(target, weights)
             work_x = np.ascontiguousarray(x - self._x_mean, dtype=np.float32)
             work_y = np.ascontiguousarray(target - self._y_mean, dtype=np.float32)
         else:
             work_x, work_y = x, target
             self._x_mean = np.zeros(x.shape[1], dtype=np.float32)
             self._y_mean = 0.0
+        if weights is not None:
+            # `olsFit`, ols.cuh:99-110, on the host. See SAMPLE WEIGHTS in
+            # the class docstring for why this is here and not in the Mojo
+            # layer, and for the bit-for-bit claim the gate checks.
+            root = np.sqrt(weights, dtype=np.float32)
+            work_x = np.ascontiguousarray(work_x * root[:, None],
+                                          dtype=np.float32)
+            work_y = np.ascontiguousarray(work_y * root, dtype=np.float32)
         self.coef_ = np.empty(x.shape[1], dtype=np.float32)
         self._bind("_mojolearn_estimators").ols_fit(
             _addr_ro(work_x), _addr_ro(work_y), _addr(self.coef_),
@@ -278,19 +408,23 @@ class LogisticRegression(NumericModeMixin):
     (`penalty_normalized=True`: cuML divides the penalty by n so that its
     minimizer is scikit-learn's `LogisticRegression(C)` minimizer), the
     solver is L-BFGS (`lbfgs_memory=5`) with a backtracking Armijo line
-    search, and convergence is `max|grad| <= tol * max(loss, tol)` or an
-    objective change below `tol * 0.01 * max(loss, tol)` over 10 iterations
+    search -- or OWL-QN with a PROJECTED Armijo line search when the penalty
+    has an l1 part (`qn_solvers.cuh:420`, DEVIATION 552) -- and convergence
+    is `max|grad| <= tol * max(loss, tol)` or an objective change below
+    `tol * 0.01 * max(loss, tol)` over 10 iterations
     (`qn_util.cuh::check_convergence`).
 
     WHAT IS HONORED, WHAT IS REFUSED, AND WHY (measured row by row by
     `tools/e2u_matrix_fit.py`):
 
-        penalty         'l2' / None honored   'l2' is Tikhonov with
+        penalty         all four honored   'l2' is Tikhonov with
                                   l2 = 1/C (logistic_regression.py:640);
-                                  None is the unregularized arm (qn.cuh:61)
-                        'l1' / 'elasticnet' REFUSED  they select OWL-QN
-                                  (`min_owlqn`, qn_solvers.cuh:246), NOT
-                                  PORTED; glm/NOT_IMPLEMENTED.tsv
+                                  None is the unregularized arm (qn.cuh:61);
+                                  'l1' and 'elasticnet' set l1 != 0, which
+                                  selects OWL-QN (qn_solvers.cuh:420-445),
+                                  ported 2026-09-01 as
+                                  glm/impl/glm/qn/qn_solvers.mojo::min_owlqn
+                                  (DEVIATION 552)
         C               honored   inverse regularization strength, > 0
         tol             honored   grad_tol = tol, change_tol = tol * 0.01,
                                   ftol = change_tol * 0.1 (qn.pyx:504-506,
@@ -309,12 +443,29 @@ class LogisticRegression(NumericModeMixin):
                                   sample_weight is not ported
         sample_weight   refused   GLMBase::add_sample_weights and the
                                   weighted getLossAndDZ arm, not ported
-        l1_ratio        refused with penalty='elasticnet' (OWL-QN)
+        l1_ratio        honored, and REQUIRED with penalty='elasticnet'
+                                  (logistic_regression.py:310-316): the
+                                  split is l1 = l1_ratio / C,
+                                  l2 = (1 - l1_ratio) / C
         solver          'qn' only the only value cuML accepts either
         > 2 classes     refused   softmax (glm_softmax.cuh) is not ported;
                                   the Mojo layer raises by name
         warm_start      absent    cuML's QN has it, LogisticRegression
                                   does not expose it; w0 = 0 always
+
+    THE l1 ARM IS A DIFFERENT SOLVER, NOT A DIFFERENT PENALTY. `|w|` has no
+    gradient at zero, which is where an l1 solution sits, so cuML switches
+    from L-BFGS to OWL-QN whenever `l1 != 0` (`qn_solvers.cuh:420`) and so
+    does this port. OWL-QN keeps the L-BFGS history and replaces three
+    things: the objective carries `l1 * ||w||_1` in its VALUE, the direction
+    is built from a PSEUDO-gradient, and every step is projected back into
+    the orthant it started in. That projection is what produces coefficients
+    that are EXACTLY zero, which is the thing an l1 fit is asked for -- and
+    it means the identity claim on this arm is about the SPARSITY PATTERN as
+    well as about bits, because every branch that zeroes a coefficient is a
+    float comparison with a discrete output. The intercept is not
+    l1-penalized, exactly as it is not l2-penalized (`pg_limit = D * C`,
+    `qn_solvers.cuh:447`).
 
     OUTPUTS: `coef_` (1, n_features) float32, `intercept_` (1,) float32,
     `classes_` (the two labels, sorted), `n_iter_` array([k]), plus
@@ -345,13 +496,6 @@ class LogisticRegression(NumericModeMixin):
         if solver != "qn":
             raise ValueError(
                 "Only quasi-newton `qn` solver is supported, not %s" % solver)
-        if penalty in ("l1", "elasticnet"):
-            raise NotImplementedError(
-                f"mojolearn LogisticRegression: penalty={penalty!r} selects "
-                "OWL-QN (min_owlqn, qn_solvers.cuh:246), which is NOT PORTED; "
-                "penalty='l2' or None (L-BFGS) are the ported arms. See "
-                "glm/NOT_IMPLEMENTED.tsv"
-            )
         if class_weight is not None:
             raise NotImplementedError(
                 "mojolearn LogisticRegression: class_weight is not ported "
@@ -367,17 +511,40 @@ class LogisticRegression(NumericModeMixin):
         self.class_weight = None
         self.max_iter = max_iter
         self.linesearch_max_iter = linesearch_max_iter
+        # `logistic_regression.py:310-316`, copied including the two
+        # messages: `l1_ratio` is REQUIRED for elasticnet and IGNORED
+        # (set to None) for every other penalty.
         self.l1_ratio = None
+        if penalty == "elasticnet":
+            if l1_ratio is None:
+                raise ValueError(
+                    "l1_ratio has to be specified for loss='elasticnet'"
+                )
+            if l1_ratio < 0.0 or l1_ratio > 1.0:
+                raise ValueError(
+                    "l1_ratio value has to be between 0.0 and 1.0"
+                )
+            self.l1_ratio = l1_ratio
         self.solver = solver
         # QN(...) defaults the Python door does not expose
         self.lbfgs_memory = 5
         self.penalty_normalized = True
 
     def _get_qn_params(self):
-        """`_get_qn_params`, logistic_regression.py:631-648."""
+        """`_get_qn_params`, logistic_regression.py:632-649, all four arms.
+
+        Returns `(l1_strength, l2_strength)`. `qn_fit` then divides both by
+        `n` when `penalty_normalized` (qn.cuh:54-59), so what the solver sees
+        is `(1/C)/n`, and `l1 != 0` is what selects OWL-QN there.
+        """
         if self.penalty is None:
             return 0.0, 0.0
-        return 0.0, 1.0 / self.C
+        if self.penalty == "l1":
+            return 1.0 / self.C, 0.0
+        if self.penalty == "l2":
+            return 0.0, 1.0 / self.C
+        strength = 1.0 / self.C
+        return self.l1_ratio * strength, (1.0 - self.l1_ratio) * strength
 
     def fit(self, X, y, sample_weight=None):
         if sample_weight is not None:

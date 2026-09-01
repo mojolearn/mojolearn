@@ -1,5 +1,52 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **`mojolearn.SVR`**, epsilon-support vector regression, the scikit-learn
+  surface over cuML's `svrFit`. The solver has carried `EPSILON_SVR` since
+  `fea6becc` (2026-08-31), when the six rung-2 pieces were gated 44 of 44
+  with the device arm included; what landed on 2026-09-01 is only the path
+  from Python to it. **No new compiled extension was needed**: `SVR` rides
+  `_mojolearn_svm.so`, which already carried `SVC` and the isolation forest,
+  so `_backend.py`'s `_MODULES`, `pyproject.toml` and
+  `build_release_wheel.sh`'s `EXT_NAMES` are unchanged.
+
+  Files: `svm/impl/svm/svr_impl.mojo` (`svrFitX`, and `svrPredict` as the
+  named wrapper over `svcPredict` with the class epilogue off, which is
+  upstream's own arrangement), `svr_fit_host` / `svr_predict_host` in
+  `svm/estimator.mojo`, `svr_fit` / `svr_predict` in
+  `bindings/_mojolearn_svm.mojo`, and the class in
+  `python/mojolearn/_svm_impl.py`.
+
+  **The model is `n_support` wide, not `2 * n_support`.** The solver carries
+  `alpha+` and `alpha-` over a doubled `n_train`, but `Results` folds the
+  two halves before it selects, so the worst-case output buffers a caller
+  allocates are exactly the classifier's. That is the one thing about this
+  path that is easy to get wrong without an error, and it is written on the
+  entry point, on the binding and on the class.
+
+  **`SVR` MAKES NO CROSS-VENDOR CLAIM AND `SVC`'s CARD DOES NOT EXTEND TO
+  IT.** The regression half was gated after the 2026-08-28 three-vendor leg
+  and has not been in a round. What stands behind it is 44 of 44 on one box,
+  of which four are property gates derived from the epsilon-insensitive
+  formulation rather than from this solver, with their independence measured
+  at 1.5e-07. A three-vendor SVR card is owed.
+
+  Two defaults differ from scikit-learn's and both are named on the class.
+  `gamma` is `'auto'` and not `'scale'` (DEVIATION 870, the same refusal
+  `SVC` and `KernelDensity` carry: a host reduction's last bits cannot sit
+  inside an identity claim), and `cache_size` is 1024.0 MiB and not 200
+  because on this surface it is the PREDICT buffer only (DEVIATION 871).
+  `shrinking` is not a parameter at all, because cuML has no shrinking
+  heuristic for it to be a port of.
+
+  The boundary gate is `python/mojolearn/tests/test_svr_surface.py`, which
+  checks a planted linear recovery, the tube ladder, the model widths, batch
+  invariance and every refusal on the path, and which asserts its bitwise
+  arms only under `identical`.
+
 ## 0.3.2 (2026-08-31)
 
 A new estimator, and 1,138 lines of never-executed code taken back out of the

@@ -1,7 +1,10 @@
-# svm: C-SVC (binary, dense FP32), from cuML's SMO solver and cuVS's kernel matrices
+# svm: C-SVC and epsilon-SVR (binary, dense FP32), from cuML's SMO solver and cuVS's kernel matrices
 
-Rung 1. **COPY, DO NOT IMPROVE.** One estimator, the binary `SVC`
-(`svcFit` / `svcPredict` of `cpp/src/svm/svc_impl.cuh`): the two-level
+Rung 1, plus the rung-2 regressor since 2026-08-31. **COPY, DO NOT
+IMPROVE.** Two estimators over one solver, the binary `SVC`
+(`svcFit` / `svcPredict` of `cpp/src/svm/svc_impl.cuh`) and `SVR`
+(`svrFit` of `cpp/src/svm/svr_impl.cuh`, whose predict is `svcPredict`
+with the class epilogue off): the two-level
 decomposition SMO of `smosolver.cuh`, the block solver of
 `smoblocksolve.cuh`, the working-set selection of `workingset.cuh`, the
 results extraction of `results.cuh`, and the LINEAR and RBF kernel matrices
@@ -45,9 +48,14 @@ the scope check, the `n_train = 2 * n_rows` domain in `SmoSolver` and
 `Results`, `SvrInit` (`f = +-epsilon - y` and the `+-1` label vector),
 `UpdateF`'s second gemv on `f + n_rows`, `CombineCoefs`' fold of the two
 alpha halves, and `KernelCache`'s `ws_idx_mod_svr` with `GetVecIndices`, and
-a run now checks that they agree with each other. Only the Python surface is
-missing (`svr_fit_host` in `svm/estimator.mojo`, an `svr_fit` binding and an
-`SVR` class), which is what `mojolearn.SVR` raises about. The 44 is the whole
+a run now checks that they agree with each other. **The Python surface
+landed 2026-09-01** (`svr_fit_host` / `svr_predict_host` in
+`svm/estimator.mojo`, `svr_fit` / `svr_predict` in
+`bindings/_mojolearn_svm.mojo`, and `mojolearn.SVR`), so this paragraph no
+longer ends "only the Python surface is missing" and `mojolearn.SVR` no
+longer raises; its own gate is
+`python/mojolearn/tests/test_svr_surface.py`, which is a check of the
+BOUNDARY and not a second opinion about the arithmetic. The 44 is the whole
 default run, 11 C-SVC host gates plus 7 C-SVC device gates plus 24 SVR host
 gates plus 2 SVR device gates; `svc_main.mojo -- svr-oracle` runs the 24 on
 their own and reports 24 of 24, which is the number `smosolver.mojo`'s
@@ -106,7 +114,7 @@ negative one), and any non-finite cell of `X`, `labels` or the predict `X`
 their C++ surface. Full table: `svm/NOT_IMPLEMENTED.tsv`.
 
 Files: `svm/impl/svm/{svm_parameter,smo_sets,ws_util,workingset,
-kernelcache,smoblocksolve,smosolver,results,svc_impl}.mojo`,
+kernelcache,smoblocksolve,smosolver,results,svc_impl,svr_impl}.mojo`,
 `svm/impl/distance/kernel_matrices.mojo`, `svm/checks/
 {device_select,pinned_argreduce,smo_oracle,svc_check}.mojo`,
 `svm/svc_main.mojo`, `svm/DERIVATION_MAP.tsv`, `svm/NOT_IMPLEMENTED.tsv`.

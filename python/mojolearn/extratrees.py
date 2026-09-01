@@ -45,6 +45,17 @@ feeding RAFT's Philox `uniformInt`, reused from the RF lane), and
 resolves it (None = n_rows, int = that count, float f = max(int(f *
 n_rows), 1)). `oob_score` stays refused: the out-of-bag mask is not ported.
 
+`max_leaf_nodes` (2026-09-01): still refused, and now as a NAMED DEBT rather
+than a permanent no. sklearn's meaning is best-first growth
+(`_tree.pyx:374-508`), a different expansion ORDER and therefore a second
+growth mode here, not a parameter; the design and its cost are written down
+in `extratrees/NOT_IMPLEMENTED.tsv`. cuML's own leaf budget, `max_leaves`, is
+a WEAKER and DIFFERENT guarantee -- a cap on the breadth-first frontier that
+reorders nothing -- and it is now honoured in the Mojo layer under its own
+name. It is deliberately NOT a keyword on these classes yet, because the
+22-slot params list below does not carry it and a keyword that rode across
+and did nothing is precisely what this module refuses to do.
+
 X IS COPIED TWICE PER FIT: once by NumPy to column-major float32 (the
 builder's layout, cuML's own) and once across the boundary into Mojo. On
 large matrices that is the dominant cost of the CALL and is named here so

@@ -110,6 +110,7 @@ from svm.impl.svm.svc_impl import (
     svc_predict,
     unique_labels_sorted,
 )
+from svm.impl.svm.svr_impl import svr_fit, svr_predict
 from svm.impl.svm.svm_parameter import (
     EPSILON_SVR,
     KERNEL_LINEAR,
@@ -2037,56 +2038,26 @@ def _run_svr_device(
     mut card: IdentityTrace,
 ) raises -> DeviceRun:
     """`svrFitX` + `svrPredict`, dense FP32. `classes` comes back EMPTY:
-    there is no class arm on a regressor."""
-    if rfx.k <= 0:
-        raise Error("Parameter n_cols: number of columns cannot be less than one")
-    if rfx.n <= 0:
-        raise Error("Parameter n_rows: number of rows cannot be less than one")
-    if len(rfx.x) != rfx.n * rfx.k or len(rfx.yr) != rfx.n:
-        raise Error("svr fit: x / y sizes do not match n_rows x n_cols")
-    check_rung1_scope(rfx.param, rfx.kp, False)
-    # DEVIATION 636 applies to the regression path too: theirs validates
-    # nothing, ours refuses a non-finite target for the same reason it
-    # refuses a non-finite label -- a NaN would land in `svm.init.f` with a
-    # vendor-specific payload on the very first recorded stage.
-    check_finite_list(rfx.x, "X")
-    check_finite_list(rfx.yr, "labels")
+    there is no class arm on a regressor.
 
-    var model = SvmModel()
-    model.n_classes = 0
-    var dummy_labels: List[Float32] = [Float32(-1.0), Float32(1.0)]
-    model.unique_labels = dummy_labels^
-    card.header(
-        "svm.svr_fit n_rows=" + String(rfx.n) + " n_cols=" + String(rfx.k)
-        + " kernel=" + String(rfx.kp.kernel) + " C=" + String(rfx.param.C)
-        + " epsilon=" + String(rfx.param.epsilon)
-        + " tol=" + String(rfx.param.tol)
+    THIS CALLS THE SHIPPED FUNCTIONS AND DOES NOT REPRODUCE THEM. It held an
+    inlined copy of `svrFitX` until 2026-09-01, written before
+    `svm/impl/svm/svr_impl.mojo` existed, and every gate in this file was
+    therefore a statement about the copy rather than about the code a caller
+    reaches. `svr_fit` and `svr_predict` are that code; the two Python entry
+    points in `svm/estimator.mojo` call the same pair, so what these 26
+    gates measure and what `mojolearn.SVR` runs are now one thing.
+    """
+    var trace = SmoTrace()
+    var model = svr_fit(
+        ctx, rfx.x, rfx.yr, rfx.n, rfx.k, rfx.param, rfx.kp, card, trace,
+        False, kernel_tile_byte_limit, block_solve_threads, True,
+        scratch_pad, scratch_poison,
     )
-    var x = upload_f32(ctx, rfx.x)
-    var yv = upload_f32(ctx, rfx.yr)
-    ctx.synchronize()
-    card.record_device[DType.float32](ctx, "svm.input.x", x, rfx.n * rfx.k)
-    card.record_device[DType.float32](ctx, "svm.input.y", yv, rfx.n)
-
-    var smo = SmoSolver(
-        ctx, rfx.param, rfx.kp, rfx.n, rfx.k, kernel_tile_byte_limit,
-        block_solve_threads, True, scratch_pad, scratch_poison,
-    )
-    smo.solve(
-        ctx, x, yv, model, card, rfx.param.max_iter, rfx.param.max_outer_iter
-    )
-    model.n_cols = rfx.k
-    ctx.synchronize()
-    var trace = smo.trace^
-    smo.trace = SmoTrace()
-    _ = smo^
-    _ = x^
-    _ = yv^
-
     var q = _reg_queries(rfx)
     var nq = rfx.n + 37
-    var dec = svc_predict(
-        ctx, model, q, nq, rfx.k, rfx.kp, predict_buffer_mib, False, card
+    var dec = svr_predict(
+        ctx, model, q, nq, rfx.k, rfx.kp, predict_buffer_mib, card
     )
     return DeviceRun(model^, trace^, dec^, List[Float32]())
 

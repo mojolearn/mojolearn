@@ -203,7 +203,8 @@ that is an untested promise and is marked as one rather than assumed.
 | `LinearRegression` | RAFT | ordinary least squares (`lstsqEig`) | yes | yes (Apple + NVIDIA + AMD) | yes | Apple + NVIDIA + AMD |
 | `Ridge` | cuML | ridge regression, the `eig` arm (`svdEig` + `ridgeSolve`) | yes | yes (Apple + NVIDIA + AMD) | yes | Apple + NVIDIA + AMD |
 | `LogisticRegression` | cuML | binary L-BFGS with the Armijo line search (`qnFit`); l1, multiclass, sample and class weights refused by name | yes | yes (Apple + NVIDIA + AMD) | yes | Apple + NVIDIA + AMD |
-| `SVC` | cuML | binary C-SVC. There is no `SVR`, and `svmType != C_SVC` raises by name | yes | yes | yes | Apple + NVIDIA + AMD, 35 card stages |
+| `SVC` | cuML | binary C-SVC | yes | yes | yes | Apple + NVIDIA + AMD, 35 card stages |
+| `SVR` | cuML | epsilon-SVR over the same SMO solver (`SvrInit`, the `2 * n_rows` domain, `CombineCoefs`' fold); `NU_SVC` and `NU_SVR` raise by name, as they do upstream | yes | yes | yes | **Apple only.** Gated 44 of 44 at `fea6becc`, four property gates derived from the epsilon-insensitive formulation; NO cross-vendor round has carried it |
 | `Lasso`, `ElasticNet` | cuML | coordinate descent (`cd.cuh::cdFit`), cyclic and random selection | yes | yes | yes | Apple + NVIDIA + AMD, 23 stages |
 | `KernelDensity` | cuML | kernel density estimation; `bandwidth='scott'` and `'silverman'` refused by name | yes | yes | yes | Apple + NVIDIA + AMD, 9 stages |
 | `AgglomerativeClustering` | cuML, cuVS, RAFT | single linkage over RAFT's Boruvka MST | yes | yes | yes | Apple + NVIDIA + AMD, 10 stages |
@@ -232,11 +233,12 @@ probabilities included, in the E2 certificate below).
 Named rather than omitted, because "why is this missing" is a short and
 interesting question: `ARIMA` (the batched Kalman filter, its gradient and
 predict all exist; `estimate_x0` and the batched L-BFGS driver do not, so
-there is no `fit`), `SVR`, `MultiClassOneVsAll` from
+there is no `fit`), `MultiClassOneVsAll` from
 Python, Intel and Qualcomm GPU columns, and a CPU fallback of any kind.
-Importing one of the first two raises with the line where the thing that
+Importing `ARIMA` raises with the line where the thing that
 exists stops, rather than an `AttributeError`. `RadiusNeighbors` was on this
-list until 2026-08-31 and is now in the table above.
+list until 2026-08-31 and `SVR` until 2026-09-01; both are in the table
+above now.
 
 ## The numeric tiers
 
