@@ -22,9 +22,21 @@ DEVIATIONS 546-549. See `glm/README.md`. The checks:
                                        weight norm grows with C and the bits
                                        move; fit_intercept False zeroes the
                                        bias slot (it is not there)
-    check_logistic_refuses_by_name     l1, softmax (3 classes), sample_weight,
+    check_logistic_refuses_by_name     softmax (3 classes), sample_weight,
                                        an unknown loss: each RAISES with the
-                                       message naming the unported thing
+                                       message naming the unported thing --
+                                       and an l1 penalty does NOT, because
+                                       OWL-QN is ported (DEVIATION 552)
+    check_owlqn_is_a_minimizer         the l1 arm: SUBGRADIENT optimality in
+                                       float64 at the returned point, the
+                                       full objective below it at 8
+                                       perturbed points, and below the l2
+                                       solution's value under the same
+                                       objective
+    check_owlqn_sparsifies             a strong l1 penalty produces EXACTLY
+                                       zero coefficients and a strong l2
+                                       penalty at the same C produces none;
+                                       ||w||_1 is smaller under l1
     check_logistic_device_equals_host  ONE objective evaluation (loss +
                                        gradient) at a hashed `w`, replayed on
                                        the host through the same pinned
@@ -62,6 +74,36 @@ SABOTAGES PERFORMED (2026-08-23), each reverted:
         solution exceeds the solver's own bound 1.94e-05" -- the solver
         converged to the minimizer of the WRONG objective, and again only
         the oracle sees it.
+
+SABOTAGES OWED ON THE OWL-QN SEAMS (DEVIATION 552, added 2026-09-01, NOT
+YET PERFORMED -- each one names the check that must go red, and a green run
+that does not move is the finding):
+
+    (d) `projected_step_kernel` dropping the `project_orth` and storing
+        `xp + step * drt` raw, i.e. the plain `axpy` step. Must fail
+        `check_owlqn_sparsifies` with "produced NO exactly-zero
+        coefficient": without the clamp a coefficient passes THROUGH zero
+        and never lands on it. `check_owlqn_is_a_minimizer` may still pass,
+        which is the point of having both.
+    (e) `get_pseudo_grad` returning `dlossx` unchanged (the l1 term never
+        enters the direction). Must fail `check_owlqn_is_a_minimizer`'s
+        NEGATIVE CONTROL -- the l1 and l2 fits become the same point -- and
+        `check_owlqn_sparsifies` on the zero count.
+    (f) `update_pseudo` applying the operator over all `n` instead of the
+        first `pg_limit`, i.e. penalizing the INTERCEPT. Must fail
+        `check_owlqn_is_a_minimizer` at parameter `d` with the worst-kind
+        string "bias (unpenalized)": the bias settles where
+        `|g_D| = l1`, not where `g_D = 0`.
+    (g) `ls_backtrack_projected` using `dot(grad, drt)` for `dg_init`
+        instead of `dot(pseudo_grad, drt)`. The Armijo test then compares a
+        value carrying the l1 term against a slope that does not; the line
+        search accepts steps it should reject and
+        `check_owlqn_is_a_minimizer`'s subgradient bound is the check that
+        sees it.
+    (h) `owlqn_objective` returning `tmp` without the `l1 * nrm1` term.
+        Must fail the perturbation half of `check_owlqn_is_a_minimizer`:
+        the solver minimizes the smooth part alone and the full objective
+        is then lower somewhere nearby.
 """
 
 from std.math import exp, log, sqrt
@@ -397,11 +439,18 @@ def _fit_raises(ctx: DeviceContext, pams: QNParams, n_classes: Int, has_sw: Bool
 
 def check_logistic_refuses_by_name() raises:
     var ctx = DeviceContext()
+    # l1 USED TO RAISE HERE and must not any more (DEVIATION 552): `l1 != 0`
+    # selects OWL-QN (`qn_solvers.cuh:420`) and OWL-QN is ported. This arm
+    # is kept, inverted, so that a regression to the refusal is caught by
+    # the check that used to require it.
     var p1 = _params(1.0, True, True)
     p1.penalty_l1 = 0.5
     var m1 = _fit_raises(ctx, p1, 2, False)
-    if m1.find("min_owlqn") < 0:
-        raise Error("l1 did not raise by name; got: " + m1)
+    if m1 != "":
+        raise Error(
+            "check_logistic_refuses_by_name: an l1 penalty RAISED, and"
+            " min_owlqn is ported. Got: " + m1
+        )
     var p2 = _params(1.0, True, True)
     p2.loss = QN_LOSS_SOFTMAX
     var m2 = _fit_raises(ctx, p2, 3, False)
@@ -419,8 +468,9 @@ def check_logistic_refuses_by_name() raises:
     if m5.find("unknown loss function type") < 0:
         raise Error("loss 42 did not raise their text; got: " + m5)
     print(
-        "check_logistic_refuses_by_name OK: l1 (OWL-QN), softmax, 3 classes,"
-        " sample_weight and an unknown loss each RAISE by name"
+        "check_logistic_refuses_by_name OK: softmax, 3 classes,"
+        " sample_weight and an unknown loss each RAISE by name; an l1"
+        " penalty does NOT (it takes the ported OWL-QN arm)"
     )
 
 
@@ -664,12 +714,279 @@ def check_logistic_card_is_emitted() raises:
             print("check_logistic_card_is_emitted REPORT [FAST]: " + String(n1) + " stages; control differs first at " + diff)
 
 
+# ===========================================================================
+# OWL-QN, THE l1 ARM (DEVIATION 552)
+# ===========================================================================
+#
+# THERE IS NO ORACLE FOR AN OPTIMIZER, so these copy
+# `check_logistic_is_a_minimizer`'s method: replay the OBJECTIVE on the host
+# in Float64 -- a different program in a different precision -- and ask
+# whether the point the device returned is the minimizer OF THAT. What
+# changes for l1 is that the objective is not differentiable at the solution,
+# so "the gradient is small" is the wrong test and is replaced by
+# SUBGRADIENT OPTIMALITY, which is the correct statement of the same idea:
+#
+#     w_k != 0   ->  |g_k + l1 * sign(w_k)| ~ 0    (the kink is not active)
+#     w_k == 0   ->  |g_k| <= l1                   (0 is in the subgradient)
+#     the bias   ->  |g_D| ~ 0                     (it is not penalized)
+#
+# where `g` is the gradient of the SMOOTH part (mean logloss + l2/2 ||w||^2).
+# A solver that ignored the l1 term entirely satisfies none of the three at
+# a strong penalty; one that penalized the intercept fails the third; one
+# that applied l1 without the projection lands near zero without ever being
+# AT zero and fails the second by a wide margin.
+
+
+def _params_l1(
+    C: Float64, l1_ratio: Float64, fit_intercept: Bool, max_iter: Int = 1000
+) -> QNParams:
+    """cuML's Python door for `LogisticRegression(penalty=..., C, l1_ratio)`.
+
+    `_get_qn_params` (`logistic_regression.py:632-649`): 'l1' is
+    `l1_ratio = 1`, 'elasticnet' is a split, 'l2' is `l1_ratio = 0`. Written
+    as the ratio here so one helper serves all three and the check can walk
+    the family."""
+    var p = QNParams.default()
+    p.loss = QN_LOSS_LOGISTIC
+    var strength = 1.0 / C
+    p.penalty_l1 = l1_ratio * strength
+    p.penalty_l2 = (1.0 - l1_ratio) * strength
+    p.grad_tol = 1e-4
+    p.change_tol = 1e-4 * 0.01
+    p.max_iter = max_iter
+    p.linesearch_max_iter = 50
+    p.lbfgs_memory = 5
+    p.fit_intercept = fit_intercept
+    p.penalty_normalized = True
+    return p^
+
+
+def _count_exact_zeros(w: List[Float32], d: Int) -> Int:
+    """How many of the `d` WEIGHTS are exactly 0.0. The bias is excluded,
+    because it is not penalized and has no reason to be zero."""
+    var z = 0
+    for k in range(d):
+        if w[k] == Float32(0.0):
+            z += 1
+    return z
+
+
+def _l1_norm64(w: List[Float64], d: Int) -> Float64:
+    var s = 0.0
+    for k in range(d):
+        s += abs(w[k])
+    return s
+
+
+def check_owlqn_is_a_minimizer() raises:
+    """The l1 solution satisfies SUBGRADIENT optimality, in float64.
+
+    Three assertions and a negative control, all on the host:
+
+    1. the three subgradient conditions in the banner above;
+    2. the FULL objective (smooth part + `l1 * ||w||_1`) at the returned
+       point is below its value at 8 perturbed points;
+    3. **the negative control**: the objective at the L2 solution, evaluated
+       under the SAME l1 objective, is HIGHER. Without it, condition 2 could
+       be satisfied by any local dip and condition 1 by a small enough
+       `l1`; with it, the check knows the point it is testing is the one the
+       l1 objective picks and not merely a point the l2 solver reached.
+
+    THE SUBGRADIENT BOUND IS DELIBERATELY LOOSE and the MEASURED value is
+    printed. cuML's convergence test is on `max|grad|` of the LOSS gradient
+    (`qn_util.cuh::check_convergence` via `f.gradNorm`), not on the
+    subgradient, so nothing in the solver promises the subgradient reaches
+    any particular size; what it promises is that the iterate stops moving.
+    A bound tighter than the solver's own contract would be a check of the
+    fixture. Tighten it once a run has been seen, and read the printed
+    number rather than this sentence.
+    """
+    var n = LR_ROWS
+    var d = LR_COLS
+    var fx = _fixture(n, d, 1.0)
+    var ctx = DeviceContext()
+    var off = IdentityTrace.disabled()
+    var C = 0.05
+    var pams = _params_l1(C, 1.0, True)
+    var r = _fit(ctx, fx[0], fx[1], n, d, pams, off)
+    if r.retcode != OPT_SUCCESS:
+        raise Error(
+            "check_owlqn_is_a_minimizer: retcode " + String(r.retcode)
+            + " after " + String(r.n_iter) + " iterations"
+        )
+    # what the solver was actually handed, `qn.cuh:54-59`
+    var l1 = (1.0 / C) / Float64(n)
+    var l2 = 0.0
+
+    var w64 = List[Float64]()
+    for k in range(d + 1):
+        w64.append(Float64(r.w[k]))
+    var grad = List[Float64]()
+    var smooth = _host_objective64(fx[0], fx[1], n, d, w64, True, l2, grad)
+    var f0 = smooth + l1 * _l1_norm64(w64, d)
+
+    var bound = 5.0e-3 * (f0 if f0 > 1.0e-4 else 1.0e-4)
+    var worst = 0.0
+    var worst_k = 0
+    var worst_kind = String("")
+    for k in range(d):
+        var v = 0.0
+        if w64[k] != 0.0:
+            var sgn = 1.0 if w64[k] > 0.0 else -1.0
+            v = abs(grad[k] + l1 * sgn)
+        else:
+            # 0 is in the subgradient iff |g_k| <= l1; only the EXCESS is a
+            # violation, so a coefficient sitting at zero with a small
+            # gradient contributes nothing.
+            v = abs(grad[k]) - l1
+            if v < 0.0:
+                v = 0.0
+        if v > worst:
+            worst = v
+            worst_k = k
+            worst_kind = "nonzero" if w64[k] != 0.0 else "at zero"
+    var bias_v = abs(grad[d])
+    if bias_v > worst:
+        worst = bias_v
+        worst_k = d
+        worst_kind = "bias (unpenalized)"
+    if worst > bound:
+        raise Error(
+            "check_owlqn_is_a_minimizer: subgradient violation "
+            + String(worst) + " at parameter " + String(worst_k) + " ("
+            + worst_kind + ") exceeds " + String(bound) + ". The returned"
+            " point is not a minimizer of the l1 objective (l1 = "
+            + String(l1) + ", objective " + String(f0) + ", n_iter "
+            + String(r.n_iter) + ")"
+        )
+
+    for p in range(8):
+        var wp = List[Float64]()
+        for k in range(d + 1):
+            wp.append(w64[k] + 0.05 * (2.0 * _u01(p, k, 31) - 1.0))
+        var g2 = List[Float64]()
+        var sp = _host_objective64(fx[0], fx[1], n, d, wp, True, l2, g2)
+        var fp = sp + l1 * _l1_norm64(wp, d)
+        if not (fp > f0):
+            raise Error(
+                "check_owlqn_is_a_minimizer: perturbed objective "
+                + String(fp) + " <= " + String(f0) + " at perturbation "
+                + String(p)
+            )
+
+    # THE NEGATIVE CONTROL: the L2 solution at the same C, scored under the
+    # l1 objective, must be worse.
+    var r2 = _fit(ctx, fx[0], fx[1], n, d, _params_l1(C, 0.0, True), off)
+    var w2 = List[Float64]()
+    for k in range(d + 1):
+        w2.append(Float64(r2.w[k]))
+    var g3 = List[Float64]()
+    var s2 = _host_objective64(fx[0], fx[1], n, d, w2, True, l2, g3)
+    var f2 = s2 + l1 * _l1_norm64(w2, d)
+    if not (f2 > f0):
+        raise Error(
+            "check_owlqn_is_a_minimizer: the NEGATIVE CONTROL failed -- the"
+            " L2 solution scores " + String(f2) + " under the l1 objective,"
+            " no worse than the l1 solution's " + String(f0)
+            + ". Either the two solvers returned the same point, i.e. l1"
+            " never reached the solver, or the penalty is too weak for this"
+            " check to distinguish them."
+        )
+
+    print(
+        "check_owlqn_is_a_minimizer OK [" + _mode_name()
+        + "]: worst subgradient violation " + String(worst) + " <= "
+        + String(bound) + " (at parameter " + String(worst_k) + ", "
+        + worst_kind + "); objective " + String(f0) + " below 8"
+        " perturbations and below the L2 solution's " + String(f2)
+        + "; n_iter " + String(r.n_iter) + ", " 
+        + String(_count_exact_zeros(r.w, d)) + " of " + String(d)
+        + " weights exactly zero"
+    )
+
+
+def check_owlqn_sparsifies() raises:
+    """A strong l1 penalty produces coefficients that are EXACTLY zero, and
+    an l2 penalty of the same strength produces none.
+
+    THIS IS THE PROPERTY THAT SEPARATES OWL-QN FROM L-BFGS-WITH-AN-L1-TERM.
+    A solver that simply added `l1 * ||w||_1` to the objective and ran
+    L-BFGS would drive coefficients SMALL and never AT zero, because the
+    subgradient of `|w|` at zero is a set and a quasi-Newton step lands on
+    it with probability zero. The exact zeros come from
+    `ls_backtrack_projected`'s clamp (`qn_linesearch.mojo::
+    projected_step_kernel`), and this is the only check in the file that can
+    see whether that clamp runs.
+
+    THE NEGATIVE CONTROL IS THE L2 FIT at the same C: it must have NO exact
+    zeros. Without it, a fixture whose weights all happened to underflow
+    would pass.
+
+    IF THIS FAILS WITH "0 exact zeros", read the printed `l1` before
+    concluding the clamp is broken: the penalty reaching the solver is
+    `(1/C)/n` (`qn.cuh:54-59`), so it shrinks with the row count, and the
+    fixture may simply need a smaller `C`.
+    """
+    var n = LR_ROWS
+    var d = LR_COLS
+    var fx = _fixture(n, d, 1.0)
+    var ctx = DeviceContext()
+    var off = IdentityTrace.disabled()
+    var C = 0.005
+    var l1 = (1.0 / C) / Float64(n)
+
+    var r1 = _fit(ctx, fx[0], fx[1], n, d, _params_l1(C, 1.0, True), off)
+    var r2 = _fit(ctx, fx[0], fx[1], n, d, _params_l1(C, 0.0, True), off)
+    var z1 = _count_exact_zeros(r1.w, d)
+    var z2 = _count_exact_zeros(r2.w, d)
+
+    if z1 < 1:
+        raise Error(
+            "check_owlqn_sparsifies: the l1 fit at C = " + String(C)
+            + " (l1 = " + String(l1) + " after normalization) produced NO"
+            " exactly-zero coefficient in " + String(d) + " weights."
+            " OWL-QN's projected step is what makes a coefficient land"
+            " exactly on zero; either it is not running, or the penalty is"
+            " too weak for this fixture -- lower C and read the l1 above."
+        )
+    if z2 != 0:
+        raise Error(
+            "check_owlqn_sparsifies: the NEGATIVE CONTROL failed -- the L2"
+            " fit at the same C has " + String(z2) + " exactly-zero"
+            " coefficients. An l2 penalty shrinks and does not select, so"
+            " the zeros above are not evidence of the l1 arm."
+        )
+    var w1 = List[Float64]()
+    var w2 = List[Float64]()
+    for k in range(d):
+        w1.append(Float64(r1.w[k]))
+        w2.append(Float64(r2.w[k]))
+    var n1 = _l1_norm64(w1, d)
+    var n2 = _l1_norm64(w2, d)
+    if not (n1 < n2):
+        raise Error(
+            "check_owlqn_sparsifies: ||w||_1 is " + String(n1)
+            + " under l1 and " + String(n2) + " under l2 at the same C."
+            " The l1 penalty is the one that shrinks the l1 norm; this"
+            " ordering is backwards."
+        )
+    print(
+        "check_owlqn_sparsifies OK [" + _mode_name() + "]: at C = "
+        + String(C) + " (l1 = " + String(l1) + ") the l1 fit has "
+        + String(z1) + " of " + String(d) + " weights exactly zero and the"
+        " l2 control has 0; ||w||_1 " + String(n1) + " < " + String(n2)
+        + "; n_iter " + String(r1.n_iter) + " vs " + String(r2.n_iter)
+    )
+
+
 def main() raises:
     print("== glm/checks/logistic_check.mojo [" + _mode_name() + "] ==")
     check_logistic_planted_separable()
     check_logistic_is_a_minimizer()
     check_logistic_c_reaches()
     check_logistic_refuses_by_name()
+    check_owlqn_is_a_minimizer()
+    check_owlqn_sparsifies()
     check_logistic_device_equals_host()
     check_logistic_run_twice_identical()
     check_logistic_card_is_emitted()

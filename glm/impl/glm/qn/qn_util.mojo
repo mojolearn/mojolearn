@@ -2,9 +2,20 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`LBFGSParam`, the return codes, `check_convergence`, `lbfgs_search_dir`.
 
-PORT OF `cuml/cpp/src/glm/qn/qn_util.cuh` at cuML `00094f7`. Partial:
-`project_orth`, `get_pseudo_grad`, `op_project`, `op_pseudo_grad` (OWL-QN's
-operators) are not ported. Do not improve.
+PORT OF `cuml/cpp/src/glm/qn/qn_util.cuh` at cuML `00094f7`. WHOLE FILE
+since 2026-09-01: `project_orth`, `get_pseudo_grad`, `op_project` and
+`op_pseudo_grad` -- OWL-QN's four operators -- are ported at the bottom,
+with the two device kernels that apply them elementwise and their host
+wrappers. Do not improve.
+
+WHY THE KERNELS ARE HERE AND NOT IN `simple_mat/dense.mojo`. Upstream these
+are functors passed to `SimpleVec::assign_binary`, so the arithmetic lives
+in `qn_util.cuh` and the loop lives in `dense.hpp`. Here the loop is a
+launch, and a launch that calls `get_pseudo_grad` has to be in a module that
+can see it. `qn_util.mojo` already imports `simple_mat/dense.mojo`, so
+putting the kernels in `dense.mojo` would close an import cycle. They are
+placed beside the operator they apply, which is also where a reader looking
+for `op_pseudo_grad` will look.
 
 THE HOST SCALARS ARE FLOAT32 AND EVERY ONE OF THEM STEERS A BRANCH
 -----------------------------------------------------------------
@@ -26,14 +37,19 @@ literal below and not derived.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from std.gpu import block_dim, block_idx, thread_idx
+
 from glm.impl.glm.qn.simple_mat.dense import (
+    VEC_ELEM_TPB,
     ax,
     ax_inplace,
     axpy_inplace,
+    copy_vec,
     dot,
     squared_norm,
 )
 from glm.impl.linear_model.qn import QNParams
+from checks.numerics import ftz
 
 
 # `LINE_SEARCH_ALGORITHM`, `qn_util.cuh:30-35`
@@ -211,3 +227,156 @@ def lbfgs_search_dir(
         j = (j + 1) % param.m
 
     return end
+
+
+# ===========================================================================
+# OWL-QN'S OPERATORS (`qn_util.cuh:131-134`, `:237-261`)
+# ===========================================================================
+#
+# The l1 solver never differentiates `|w|`. It works with a PSEUDO-GRADIENT,
+# which is the subgradient of the l1 term chosen to point downhill, and it
+# keeps every step inside the orthant the current point is in by projecting.
+# Those are the two operators below and they are the whole of what makes
+# OWL-QN different from L-BFGS. DEVIATION 552.
+#
+# BOTH ARE DISCRETE FUNCTIONS OF A FLOAT, which is IDENTITY_PATHS row 32's
+# class and not a rounding: `project_orth` returns exactly 0 or exactly `x`
+# on a sign test, and `get_pseudo_grad` picks one of four expressions on
+# `x != 0`, `dmins > 0`, `dplus < 0`. A last-bit disagreement at one of
+# those boundaries does not move a coefficient's fifth decimal, it moves
+# WHICH ORTHANT the iterate is in and therefore how many entries of the
+# solution are exactly zero -- the sparsity pattern, which is the thing an
+# l1 fit is asked for. That is why every operand is flushed through `ftz`
+# before it is compared and why the l1 arm's identity claim is about a
+# SPARSITY PATTERN as well as about bits.
+
+
+@always_inline
+def project_orth(x: Float32, y: Float32) -> Float32:
+    """`project_orth(x, y)`, `qn_util.cuh:131-134`: `x * y <= 0 ? 0 : x`.
+
+    Note `<=`, so a product of exactly zero projects to zero, and note that
+    a NaN product fails the test and returns `x` unchanged, which is theirs.
+    """
+    return Float32(0.0) if ftz(x * y) <= Float32(0.0) else x
+
+
+@always_inline
+def get_pseudo_grad(x: Float32, dlossx: Float32, c: Float32) -> Float32:
+    """`get_pseudo_grad(x, dlossx, C)`, `qn_util.cuh:236-245`.
+
+        if (x != 0) return dlossx + sgn(x) * C;
+        dplus = dlossx + C; dmins = dlossx - C;
+        if (dmins > 0) return dmins;
+        if (dplus < 0) return dplus;
+        return 0;
+
+    `raft::sgn` returns an **int** (`raft/core/math.hpp:706-710`,
+    `(T(0) < val) - (val < T(0))`), so `sgn(x) * C` is an exact +C or -C and
+    the add is one rounding. It is written that way here rather than as a
+    copysign because `sgn` of a NaN is 0 on their side, which makes the
+    first branch `dlossx + 0`, and a copysign would not.
+    """
+    if x != Float32(0.0):
+        var sgn = (
+            Float32(1.0) if Float32(0.0) < x
+            else (Float32(-1.0) if x < Float32(0.0) else Float32(0.0))
+        )
+        return ftz(dlossx + ftz(sgn * c))
+    var dplus = ftz(dlossx + c)
+    var dmins = ftz(dlossx - c)
+    if dmins > Float32(0.0):
+        return dmins
+    if dplus < Float32(0.0):
+        return dplus
+    return Float32(0.0)
+
+
+def pseudo_grad_kernel(
+    pseudo: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    grad: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    l1: Float32,
+):
+    """`op_pseudo_grad` under `assign_binary` (`qn_util.cuh:255-261`,
+    `dense.hpp`): `pseudo[i] = get_pseudo_grad(x[i], grad[i], l1)`.
+
+    One thread per entry, no fold, so the block width is SCHEDULING."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        pseudo.unsafe_store(
+            i, ftz(get_pseudo_grad(x.unsafe_load(i), grad.unsafe_load(i), l1))
+        )
+
+
+def project_neg_kernel(
+    drt: MutPointer[Float32, MutAnyOrigin],
+    pseudo: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """`drt.assign_binary(drt, pseudo, op_project(-1.0))`
+    (`qn_solvers.cuh:393`, `qn_util.cuh:247-253`):
+    `drt[i] = project_orth(drt[i], -1 * pseudo[i])`.
+
+    In place on `drt`, which is what their call site is (`drt` is both the
+    first operand and the destination). The `-1 *` is exact."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        var y = ftz(Float32(-1.0) * pseudo.unsafe_load(i))
+        drt.unsafe_store(i, project_orth(drt.unsafe_load(i), y))
+
+
+def update_pseudo(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut grad: DeviceBuffer[DType.float32],
+    l1: Float32,
+    pg_limit: Int,
+    mut pseudo: DeviceBuffer[DType.float32],
+    n: Int,
+) raises:
+    """`update_pseudo`, `qn_solvers.cuh:245-259`.
+
+        if (grad.len > pg_limit) { pseudo = grad; mask(pg_limit) = op(x, grad) }
+        else                     { pseudo = op(x, grad) over all n }
+
+    THE BRANCH IS NOT AN OPTIMIZATION, IT IS WHERE THE BIAS ESCAPES THE
+    PENALTY. `pg_limit` is `loss.D * loss.C` (`qn_solvers.cuh:447`), the
+    weight block, while `n` is `n_param = (D + fit_intercept) * C`. With an
+    intercept the two differ by one entry per class, and that entry gets the
+    RAW loss gradient copied straight through rather than a pseudo-gradient
+    -- i.e. the intercept is not l1-penalized, matching
+    `glm_regularizer.cuh:45`, where it is not l2-penalized either.
+    """
+    if n > pg_limit:
+        copy_vec(ctx, pseudo, grad)
+        ctx.enqueue_function[pseudo_grad_kernel](
+            pseudo.unsafe_ptr(), x.unsafe_ptr(), grad.unsafe_ptr(),
+            Int32(pg_limit), l1,
+            grid_dim=((pg_limit + VEC_ELEM_TPB - 1) // VEC_ELEM_TPB, 1, 1),
+            block_dim=(VEC_ELEM_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[pseudo_grad_kernel](
+            pseudo.unsafe_ptr(), x.unsafe_ptr(), grad.unsafe_ptr(),
+            Int32(n), l1,
+            grid_dim=((n + VEC_ELEM_TPB - 1) // VEC_ELEM_TPB, 1, 1),
+            block_dim=(VEC_ELEM_TPB, 1, 1),
+        )
+    ctx.synchronize()
+
+
+def project_direction(
+    ctx: DeviceContext,
+    mut drt: DeviceBuffer[DType.float32],
+    mut pseudo: DeviceBuffer[DType.float32],
+    n: Int,
+) raises:
+    """"Project drt onto orthant of -pseudog", `qn_solvers.cuh:392-393`."""
+    ctx.enqueue_function[project_neg_kernel](
+        drt.unsafe_ptr(), pseudo.unsafe_ptr(), Int32(n),
+        grid_dim=((n + VEC_ELEM_TPB - 1) // VEC_ELEM_TPB, 1, 1),
+        block_dim=(VEC_ELEM_TPB, 1, 1),
+    )
+    ctx.synchronize()

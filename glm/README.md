@@ -37,7 +37,9 @@ ols_check.mojo`'s second half is the bitwise and discrete set:
                                        padding, or two scratch poisons
     check_ols_host_surface_takes_the_guard
                                        the Python-facing entry goes through
-                                       olsFit's dispatch (see below)
+                                       olsFit's dispatch (see below): its
+                                       6 x 16 fit INTERPOLATES, which a
+                                       bypass to lstsq_eig cannot do
     check_ols_rank_guard_is_absolute   the same design at two scales has two
                                        RANKS -- measured, not argued
     check_ols_card_hashes_raw_bytes    390 of 200,000 adjacent Float32 pairs
@@ -46,6 +48,67 @@ ols_check.mojo`'s second half is the bitwise and discrete set:
                                        one-ulp move
     check_ols_card_is_emitted          the certificate still emits its 11
                                        named stages and matches its control
+
+## The two special shapes and sample weights (2026-09-01)
+
+`ols.cuh:112-113` sends `n_cols > n_rows` and `n_cols == 1` to
+`lstsqSvdJacobi`, which is `cusolverDnGesvdj`. This port used to RAISE at
+both. Both are solved now and neither route is an SVD:
+
+    n_cols == 1      lstsq_eig. DEVIATION 551. Their switch is a limitation
+                     of THEIR eigensolver -- their own Python says so,
+                     "eig solver does not support training data with 1
+                     column currently" (linear_regression.pyx:390-394) --
+                     and at one column the Gram is 1 x 1 with condition
+                     number 1, so the normal-equations objection does not
+                     apply. The device Jacobi converges at sweep 0 there.
+    n_cols > n_rows  lstsq_min_norm, ORIGINAL to this library. DEVIATION
+                     550. `A^T A` is singular by construction, which was the
+                     old refusal's reason and is correct -- about the Gram of
+                     the COLUMNS. `A A^T` is n_rows x n_rows and nonsingular
+                     at full row rank, and `w = A^T (A A^T)^+ b` is the
+                     minimum-norm solution, the same vector an SVD
+                     pseudo-inverse returns. Six of its seven steps are
+                     lstsq_eig's own with n_rows where that writes n_cols.
+
+**The honest cost.** `lstsq_min_norm` forms a Gram matrix, so it squares the
+condition number exactly as `lstsq_eig` does on the tall side. It is not an
+SVD-quality route and is not claimed to be one; what would be better is an
+LQ factorization or a one-sided Jacobi SVD of `A^T`, and neither is written.
+That is an ENGINEERING statement about digits, not an attribution one.
+
+`sample_weight` is ported too (`ols.cuh:99-110`, `:129-141`): a `sqrt`, a
+ROW-indexed scaling of `A` and `b`, the solve, and the exact restore of all
+three buffers. A weighted least squares IS an unweighted one on rescaled
+rows, which is why it closes at the door and not in the solver. The Python
+surface applies the same two operations in numpy for now, because
+`bindings/` has no weight pointer;
+`check_ols_sample_weight_host_rescale_matches_device` is the gate on the
+two being the same fit.
+
+    check_ols_dispatch_routes_special_shapes    shapes only; an EXPLICIT
+                                       algo 0 still refuses by name
+    check_ols_wide_is_the_minimum_norm_solution
+                                       interpolates, shortest, and agrees
+                                       with a float64 Gaussian-elimination
+                                       oracle
+    check_ols_single_column_matches_the_closed_form
+                                       sum(ab)/sum(aa) in float64
+    check_ols_normal_equation_residual_is_zero
+                                       A^T (A w - b) ~ 0: a stationary
+                                       point, not merely a good vector
+    check_ols_duplicating_a_row_equals_doubling_its_weight
+                                       the weight property, one objective
+                                       written two ways
+    check_ols_sample_weight_restores_its_operands
+                                       A, b and w come back
+    check_ols_sample_weight_host_rescale_matches_device
+                                       IDENTICAL asserts byte equality,
+                                       FAST reports the distance
+
+Every one of the seven runs its own NEGATIVE CONTROL in the same process and
+fails if the control passes. Five hand sabotages are owed and named in
+`glm/checks/ols_check.mojo`'s header.
 
 Run both arms: `pixi run check-linalg-identity`, or
 
@@ -197,9 +260,27 @@ theirs:
     cuml/cpp/include/cuml/linear_model/qn.h  -> glm/impl/linear_model/qn.mojo
 
 NOT PORTED, each refused by name at the layer it would enter:
-`glm_softmax.cuh` (multinomial; > 2 classes), `min_owlqn` (penalty 'l1' /
-'elasticnet'), `add_sample_weights` (sample_weight, class_weight),
-`glm_linear.cuh` / `glm_svm.cuh` (the other losses), `qnFitSparse`.
+`glm_softmax.cuh` at the PYTHON door (> 2 classes; the loss itself runs),
+`add_sample_weights` (sample_weight, class_weight), `qnFitSparse`.
+`glm_linear.cuh` / `glm_svm.cuh` are ported (DEVIATIONS 707-708, 714) with
+no Python surface yet.
+
+**`min_owlqn` IS PORTED (DEVIATION 552, 2026-09-01)**, so `penalty='l1'` and
+`penalty='elasticnet'` work. It is not a different penalty, it is a
+different solver: `|w|` has no gradient at zero, which is where an l1
+solution sits, so cuML switches whenever `l1 != 0` (`qn_solvers.cuh:420`)
+and so does this port. Three things change and the L-BFGS history, the
+two-loop recursion, `update_and_check` and `check_convergence` do not: the
+objective carries `l1 * ||w||_1` in its VALUE (`owlqn_objective`), the
+direction is built from a PSEUDO-gradient (`get_pseudo_grad`), and every
+step is projected back into the orthant it started in
+(`ls_backtrack_projected`). That projection is where an l1 fit's EXACTLY
+zero coefficients come from, and it means the identity claim on this arm
+covers the SPARSITY PATTERN as well as the bits: every branch that zeroes a
+coefficient is a float comparison with a discrete output (IDENTITY_PATHS row
+32), so a last-bit disagreement changes how many features the model has, not
+its fifth decimal. The intercept is not l1-penalized (`pg_limit = D * C`,
+`qn_solvers.cuh:447`), exactly as it is not l2-penalized.
 
 **THEIR REDUCTIONS ARE FLOAT ATOMICS, AND THAT IS THE IDENTITY STORY
 (DEVIATION 547).** `dot`, `nrm2`, the loss sum and the regularizer sum all go
@@ -234,7 +315,15 @@ carry.
                                        objectives -- the oracle, no sklearn
     check_logistic_c_reaches           C 1 / 100 / none: ||w|| grows, bits move;
                                        fit_intercept=False has D parameters
-    check_logistic_refuses_by_name     l1, softmax, 3 classes, sample_weight,
+    check_owlqn_is_a_minimizer         the l1 arm: SUBGRADIENT optimality in
+                                       float64, the full objective below 8
+                                       perturbations, and below the L2
+                                       solution's value under the same
+                                       objective (the negative control)
+    check_owlqn_sparsifies             a strong l1 penalty gives EXACTLY zero
+                                       coefficients, l2 at the same C gives
+                                       none, ||w||_1 is smaller under l1
+    check_logistic_refuses_by_name     softmax, 3 classes, sample_weight,
                                        an unknown loss
     check_logistic_device_equals_host  ONE objective evaluation: loss and every
                                        gradient entry bit for bit (IDENTICAL)
@@ -244,7 +333,9 @@ carry.
 Three sabotages are recorded in `glm/checks/logistic_check.mojo`'s header;
 the first -- the gradient SIGN flipped -- is the one to read: the solver
 declares SUCCESS at the zero model in 10 iterations, and only the oracle sees
-it.
+it. Five more are OWED on the OWL-QN seams, named (d) through (h) in the
+same header with the check each must turn red; a green run that does not
+move under one of them is the finding, not a pass.
 
 The Python surface is `mojolearn.LogisticRegression(penalty='l2'|None, C,
 tol, fit_intercept, max_iter, linesearch_max_iter, solver='qn')` with

@@ -20,10 +20,18 @@ with a Python user on the other end, still went around it and returned a
 plausible vector of garbage from a singular inverse, with no error.
 
 It now goes through `ols_fit_traced` (the same guards and dispatch as
-`ols_fit`, carrying the identity card -- DEVIATION 517 below). The refusal
-is the same one every other caller already got, and
-`check_ols_host_surface_takes_the_guard` asserts it at both shapes rather
-than trusting this sentence.
+`ols_fit`, carrying the identity card -- DEVIATION 517 below), so the host
+surface takes the same dispatch every other caller does.
+
+CORRECTED 2026-09-01. The sentence that stood here said the host surface now
+gets "the same REFUSAL every other caller already got" at both shapes. There
+is no refusal at either shape any more: `n_cols == 1` takes `lstsq_eig`
+(DEVIATION 551) and `n_cols > n_rows` takes `lstsq_min_norm` (DEVIATION 550),
+and `glm/impl/glm/ols.mojo`'s docstring carries why. What the gate
+`check_ols_host_surface_takes_the_guard` asserts is therefore no longer that
+those shapes raise; it is that the host surface takes the same DISPATCH --
+that a wide fit through this door lands on the min-norm route and leaves the
+min-norm card, which a bypass to `lstsq_eig` cannot do.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
@@ -31,7 +39,11 @@ from max.gpu.host import DeviceContext
 
 from core.gemm import gemv_n
 from core.identity_trace import IdentityTrace
-from glm.impl.glm.ols import OLS_ALGO_EIG, ols_fit_traced
+from glm.impl.glm.ols import (
+    OLS_ALGO_EIG,
+    ols_fit_traced,
+    ols_fit_weighted_traced,
+)
 from glm.impl.glm.qn.qn import qn_decision_function, qn_fit_x
 from glm.impl.glm.ridge import RIDGE_ALGO_EIG, ridge_fit_traced
 from glm.impl.linear_model.qn import QN_LOSS_LOGISTIC, QNParams
@@ -112,6 +124,69 @@ def ols_fit_host(
     ctx.synchronize()
     for i in range(n_features):
         coef_ptr.unsafe_store(i, hw.unsafe_ptr().unsafe_load(i))
+
+
+def ols_fit_weighted_host(
+    ctx: DeviceContext,
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    y_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    weight_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    coef_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+) raises:
+    """`olsFit` with `sample_weight != nullptr` (`ols.cuh:99-110`, `:129-141`),
+    through the same dispatch `ols_fit_host` takes.
+
+    NOT YET REACHED FROM PYTHON, AND THAT IS RECORDED RATHER THAN HIDDEN.
+    `bindings/_mojolearn_estimators.mojo::ols_fit_binding` takes a fixed
+    four-argument shape with `len(params) == 2` and has no slot for a weight
+    pointer, and `bindings/` is not this lane's file. Until a weight
+    binding exists, `python/mojolearn/linear_model.py` applies the SAME two
+    operations on the host in numpy -- `sqrt` and a row multiply, both
+    single correctly-rounded float32 operations -- and calls the unweighted
+    entry, which it documents. `check_ols_sample_weight_host_rescale_matches
+    _device` in `glm/checks/ols_check.mojo` is the gate on those two being
+    the same fit, so the Python route is checked against THIS one rather
+    than asserted to match it.
+
+    The weights are copied into a device buffer this function owns, so
+    `olsFit`'s in-place mutation of them (their documented behaviour) is not
+    visible to the caller through this surface.
+    """
+    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    var y = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var sw = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var w = ctx.enqueue_create_buffer[DType.float32](n_features)
+    var cov = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
+    var q = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
+    var qs = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
+    var s = ctx.enqueue_create_buffer[DType.float32](n_features)
+    var ab = ctx.enqueue_create_buffer[DType.float32](n_features)
+    var inv = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
+    var xa = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    var xa2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
+    ctx.enqueue_copy(dst_buf=sw, src_ptr=weight_ptr)
+    ctx.synchronize()
+    var trace = IdentityTrace()
+    if trace.enabled:
+        trace.header(
+            String("ols n=") + String(n_rows) + " d=" + String(n_features)
+            + " algo=" + String(OLS_ALGO_EIG) + " weighted"
+        )
+    ols_fit_weighted_traced(
+        ctx, x, y, w, cov, q, qs, s, ab, inv, xa, xa2, sw, True,
+        n_rows, n_features, trace, OLS_ALGO_EIG,
+    )
+    var hw = ctx.enqueue_create_host_buffer[DType.float32](n_features)
+    ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)
+    ctx.synchronize()
+    for i in range(n_features):
+        coef_ptr.unsafe_store(i, hw.unsafe_ptr().unsafe_load(i))
+    _ = hw^
+    _ = sw^
 
 
 def ols_predict_host(
