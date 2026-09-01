@@ -1,0 +1,477 @@
+{
+ "B": 3,
+ "L": 4,
+ "chunk_size": 256,
+ "corpus": "mamba2-corpus-v1",
+ "d_conv": 4,
+ "d_inner": 128,
+ "d_model": 64,
+ "d_state": 128,
+ "dt_limit": [
+  {
+   "f32_hex": "0x00000000",
+   "value": 0.0
+  },
+  {
+   "f32_hex": "0x7F800000",
+   "value": "inf"
+  }
+ ],
+ "elided_stages": {
+  "reason": "size cap (contract section 7: the elision is stated, never silent); recorded on m2_base_b1_l1_d32 and m2_base_b2_l4_d32",
+  "stages": [
+   "seg.L",
+   "cb.G"
+  ]
+ },
+ "expand": 2,
+ "family": "mamba2",
+ "hash_spec": "mojolearn.mamba.corpus.hash.v1",
+ "headdim": 64,
+ "name": "m2_base_b3_l4_d64",
+ "nchunks": 1,
+ "ngroups": 1,
+ "nheads": 2,
+ "note": "d_model 64 (H=2, the first multi-head shape), odd batch, sub-chunk arm; full stages, seg.L/cb.G elided for size",
+ "profile": "mojolearn.identical.mamba2.fp32.v1",
+ "rms_eps": 1e-05,
+ "seed": "0x4D6D6232436F9270",
+ "seed_case_index": 2,
+ "softplus_threshold": 20.0,
+ "stage_definitions": "see ../manifest.json",
+ "stage_order": [
+  "input.x",
+  "norm.sumsq",
+  "norm.out",
+  "in_proj.out",
+  "A.out",
+  "conv.out",
+  "silu.out",
+  "conv.window",
+  "dt.out",
+  "xd.out",
+  "dacs.out",
+  "ydiag.out",
+  "decay.states",
+  "cstate.out",
+  "pass.states",
+  "yoff.out",
+  "scan.y",
+  "skip.out",
+  "gnorm.gate",
+  "gnorm.sumsq",
+  "gnorm.out",
+  "out_proj.out",
+  "residual.out",
+  "ssd.h_last"
+ ],
+ "stages": {
+  "A.out": {
+   "order": "row-major",
+   "ref32": "ref32/A.out.f32",
+   "ref64": "ref64/A.out.f64",
+   "sha256_ref32": "955adb9ea705227ba4a93af6c1b95c73d8dd494e01c6422e421690038072997d",
+   "sha256_ref64": "77c88de68bcefea8a9738c9ed3f22df79409fbe130e6f95dfed3099842c04c97",
+   "shape": [
+    2
+   ]
+  },
+  "conv.out": {
+   "order": "row-major",
+   "ref32": "ref32/conv.out.f32",
+   "ref64": "ref64/conv.out.f64",
+   "sha256_ref32": "708330cde3c0e15136f2780075d7110d454ddc0aec11ba8983831cf7b6015e04",
+   "sha256_ref64": "31c1af0460650e992e2bc353dd5cfc481d640494e0ee95c358d90e39461288a5",
+   "shape": [
+    12,
+    384
+   ]
+  },
+  "conv.window": {
+   "order": "row-major",
+   "ref32": "ref32/conv.window.f32",
+   "ref64": "ref64/conv.window.f64",
+   "sha256_ref32": "236752c62295c30619787e23182d2cefab493c01520d3a2c0245b6e672b9b33e",
+   "sha256_ref64": "5c649adfaa8b6925bc6ef99de1c8c57246751a44ffd79d3fffdc6394474f791e",
+   "shape": [
+    3,
+    384,
+    4
+   ]
+  },
+  "cstate.out": {
+   "order": "row-major",
+   "ref32": "ref32/cstate.out.f32",
+   "ref64": "ref64/cstate.out.f64",
+   "sha256_ref32": "e302c80851ac26be1edc0a3fc6324450e96af9e0e94b7358ccdac0b24c770720",
+   "sha256_ref64": "c5e72707c0b21beb8c8ae2e3c70ada6226378042c566deb88bafa55e179b158f",
+   "shape": [
+    3,
+    1,
+    2,
+    64,
+    128
+   ]
+  },
+  "dacs.out": {
+   "order": "row-major",
+   "ref32": "ref32/dacs.out.f32",
+   "ref64": "ref64/dacs.out.f64",
+   "sha256_ref32": "e962e468f254ae1ca2e5bb390485230dfbd5ad694088f052d6ba387359fdd442",
+   "sha256_ref64": "88e5792f29f6fd056bfb3e6f1efc32a692b39d5b2bc1aeb5b7ecfe2fd3949151",
+   "shape": [
+    3,
+    2,
+    1,
+    256
+   ]
+  },
+  "decay.states": {
+   "order": "row-major",
+   "ref32": "ref32/decay.states.f32",
+   "ref64": "ref64/decay.states.f64",
+   "sha256_ref32": "841c22795156a145bae3aa563e8f5a2b41deee2f87aa7e830937589a46bbd0b5",
+   "sha256_ref64": "9c0aed73e7cd87fc64c0bb59b8a3b25926f86397fddf3b280d13c3f2c9f8ccdc",
+   "shape": [
+    3,
+    2,
+    1,
+    256
+   ]
+  },
+  "dt.out": {
+   "order": "row-major",
+   "ref32": "ref32/dt.out.f32",
+   "ref64": "ref64/dt.out.f64",
+   "sha256_ref32": "9c117429d39fd8cc01e0557e12ead3660e705651af6a6c84ef31b57c58053387",
+   "sha256_ref64": "53a24c50b6ad37267e605f7bfb208c4620a39a4e8fc989584342b6c779fab282",
+   "shape": [
+    12,
+    2
+   ]
+  },
+  "gnorm.gate": {
+   "order": "row-major",
+   "ref32": "ref32/gnorm.gate.f32",
+   "ref64": "ref64/gnorm.gate.f64",
+   "sha256_ref32": "a5fca1763a16e28c1e67eb1e0effd06b265fa2d9a4de5c3043304415b1b950b7",
+   "sha256_ref64": "efb3c2ad845b1b3f4161303c12e6d13ccd84465e46926d5746726383885c9e91",
+   "shape": [
+    12,
+    128
+   ]
+  },
+  "gnorm.out": {
+   "order": "row-major",
+   "ref32": "ref32/gnorm.out.f32",
+   "ref64": "ref64/gnorm.out.f64",
+   "sha256_ref32": "490f43be70c5e965410036bdf110aec694d03c73a3ab4f76b481348e8668bcac",
+   "sha256_ref64": "40459881815a4c0a301306f91646410ce0c54b530e647a9016709a5b24e10d79",
+   "shape": [
+    12,
+    128
+   ]
+  },
+  "gnorm.sumsq": {
+   "order": "row-major",
+   "ref32": "ref32/gnorm.sumsq.f32",
+   "ref64": "ref64/gnorm.sumsq.f64",
+   "sha256_ref32": "9cbf2e9f2394e2318ef6bd2592edcc0927916fb7e0161a638f37a3d3ec1b5968",
+   "sha256_ref64": "652cb61c6aac34298959a6a303883380a4f1eb05a5c238110c6b9c0e23ead82c",
+   "shape": [
+    12
+   ]
+  },
+  "in_proj.out": {
+   "order": "row-major",
+   "ref32": "ref32/in_proj.out.f32",
+   "ref64": "ref64/in_proj.out.f64",
+   "sha256_ref32": "6d312dae2b1fd22500f2cdba2a04cb43eaf571413dfabfc476663d67a65a26d3",
+   "sha256_ref64": "631169e35924e677b6cab16c81bd949433b4c05689f1169324a99574de32ea33",
+   "shape": [
+    12,
+    514
+   ]
+  },
+  "input.x": {
+   "order": "row-major",
+   "ref32": "ref32/input.x.f32",
+   "ref64": "ref64/input.x.f64",
+   "sha256_ref32": "ef90edecdc19f8a88768acfe829e4d05d405439a18854b94dbf89906061ec50f",
+   "sha256_ref64": "8e53928637448332c01407480082151c71df9bfe97a64a2d48b4b164c6332c2d",
+   "shape": [
+    12,
+    64
+   ]
+  },
+  "norm.out": {
+   "order": "row-major",
+   "ref32": "ref32/norm.out.f32",
+   "ref64": "ref64/norm.out.f64",
+   "sha256_ref32": "66264f370b3a39cc5aa097dd298566c18e0327ea7adc38825cca6a89ab7bd75e",
+   "sha256_ref64": "74677a4623050adeee7d304f739f606e5bd35d3ba3f4dc2e25fe731d4cb41b13",
+   "shape": [
+    12,
+    64
+   ]
+  },
+  "norm.sumsq": {
+   "order": "row-major",
+   "ref32": "ref32/norm.sumsq.f32",
+   "ref64": "ref64/norm.sumsq.f64",
+   "sha256_ref32": "5ffc0f36aada90af392090e31bd17897c54c732d83407e3448da77e0ac820d8c",
+   "sha256_ref64": "19cbf37c54e1cc266c469085fca7ccb828cfa5f6f40f45c310a0f8e35dbab40a",
+   "shape": [
+    12
+   ]
+  },
+  "out_proj.out": {
+   "order": "row-major",
+   "ref32": "ref32/out_proj.out.f32",
+   "ref64": "ref64/out_proj.out.f64",
+   "sha256_ref32": "05caaf332b0dc0af5b57294c8ba011136ccd87fc8c108e7397249be6eb242e2f",
+   "sha256_ref64": "beaee391549ab5979f49f6071d43c768013efc26731f0d8802d308d4e04886b0",
+   "shape": [
+    12,
+    64
+   ]
+  },
+  "pass.states": {
+   "order": "row-major",
+   "ref32": "ref32/pass.states.f32",
+   "ref64": "ref64/pass.states.f64",
+   "sha256_ref32": "3381de4ca9f3a477f25989dfc8b744e7916046b7aa369f61a9a2f7dc0963ec9e",
+   "sha256_ref64": "a6619f482fee91a315f76cdcd8705d39b6ce11077c435ccc696142e130c27762",
+   "shape": [
+    3,
+    1,
+    2,
+    64,
+    128
+   ]
+  },
+  "residual.out": {
+   "order": "row-major",
+   "ref32": "ref32/residual.out.f32",
+   "ref64": "ref64/residual.out.f64",
+   "sha256_ref32": "2f3ce650654278aeb0bb3bb3a74689e6624918becf1327470781de4979229eb2",
+   "sha256_ref64": "ee2704b0ed647ce6b18b116f34410c0dc17000df28caf2011f91ba49c3e3ab4a",
+   "shape": [
+    12,
+    64
+   ]
+  },
+  "scan.y": {
+   "order": "row-major",
+   "ref32": "ref32/scan.y.f32",
+   "ref64": "ref64/scan.y.f64",
+   "sha256_ref32": "fcb2acead28b4355471ed3d4bb9af048422f61010bb940cf9b61d3aaa1a510ea",
+   "sha256_ref64": "781766db3d883535f251fdef2f775a1fdb0d0b025df5714ad32d0be30cba77d4",
+   "shape": [
+    12,
+    2,
+    64
+   ]
+  },
+  "silu.out": {
+   "order": "row-major",
+   "ref32": "ref32/silu.out.f32",
+   "ref64": "ref64/silu.out.f64",
+   "sha256_ref32": "b306fe1c01ff3e2963c6c9a41529099e9fea0e53b107bef6cb7b3bf4ecabb794",
+   "sha256_ref64": "7623785900b3fbc054ee008749df3f477b39c1a15406d6f3fc253dcf32438c2c",
+   "shape": [
+    12,
+    384
+   ]
+  },
+  "skip.out": {
+   "order": "row-major",
+   "ref32": "ref32/skip.out.f32",
+   "ref64": "ref64/skip.out.f64",
+   "sha256_ref32": "b6fa0b7c331bd01b4744e52e08a39e387fd26862eec4c4389080a886fb4146fc",
+   "sha256_ref64": "1ae21644451bc62d6fe976c2784a53a6725f756691e5b2909d7ce4edd1111c40",
+   "shape": [
+    12,
+    2,
+    64
+   ]
+  },
+  "ssd.h_last": {
+   "order": "row-major",
+   "ref32": "ref32/ssd.h_last.f32",
+   "ref64": "ref64/ssd.h_last.f64",
+   "sha256_ref32": "e302c80851ac26be1edc0a3fc6324450e96af9e0e94b7358ccdac0b24c770720",
+   "sha256_ref64": "c5e72707c0b21beb8c8ae2e3c70ada6226378042c566deb88bafa55e179b158f",
+   "shape": [
+    3,
+    2,
+    64,
+    128
+   ]
+  },
+  "xd.out": {
+   "order": "row-major",
+   "ref32": "ref32/xd.out.f32",
+   "ref64": "ref64/xd.out.f64",
+   "sha256_ref32": "7015787fd8eecc9bb6981b7f41369a2f004e553ba4522ee3da59ee0e84963e23",
+   "sha256_ref64": "40fbca05956bb78d474e0833588cb1cbdb3aa636c1c2f543202e5e45854267c0",
+   "shape": [
+    12,
+    2,
+    64
+   ]
+  },
+  "ydiag.out": {
+   "order": "row-major",
+   "ref32": "ref32/ydiag.out.f32",
+   "ref64": "ref64/ydiag.out.f64",
+   "sha256_ref32": "fcb2acead28b4355471ed3d4bb9af048422f61010bb940cf9b61d3aaa1a510ea",
+   "sha256_ref64": "781766db3d883535f251fdef2f775a1fdb0d0b025df5714ad32d0be30cba77d4",
+   "shape": [
+    12,
+    2,
+    64
+   ]
+  },
+  "yoff.out": {
+   "order": "row-major",
+   "ref32": "ref32/yoff.out.f32",
+   "ref64": "ref64/yoff.out.f64",
+   "sha256_ref32": "fd9243e1ba57263ed469c3bdbd7ade6ec5254e7ed924a9f5737fa44749933cc0",
+   "sha256_ref64": "f3cc103136423a57975750907ebc1d367e2985ac6338976d4d5a439f50323f4a",
+   "shape": [
+    12,
+    2,
+    64
+   ]
+  }
+ },
+ "tensors": {
+  "A_log": {
+   "dtype": "float32",
+   "file": "A_log.f32",
+   "hi": 2.75,
+   "lo": 0.0,
+   "order": "row-major",
+   "sha256": "86e83cb53f410d65b48dc9eab5e3c8b20344738c00862824da62fd7d15e1103e",
+   "shape": [
+    2
+   ],
+   "tensor_id": 27
+  },
+  "D": {
+   "dtype": "float32",
+   "file": "D.f32",
+   "hi": 1.5,
+   "lo": 0.5,
+   "order": "row-major",
+   "sha256": "b1d74b50a9b1c2bb1c260e55dae114f1bfe15d522c550c95f72aa0bad9c93202",
+   "shape": [
+    2
+   ],
+   "tensor_id": 28
+  },
+  "block_norm.weight": {
+   "dtype": "float32",
+   "file": "block_norm.weight.f32",
+   "hi": 1.5,
+   "lo": 0.5,
+   "order": "row-major",
+   "sha256": "fdc9e0c774fb447cdebba317b5f29b80f61514080b20ecb0131301e8075cf84e",
+   "shape": [
+    64
+   ],
+   "tensor_id": 22
+  },
+  "conv1d.bias": {
+   "dtype": "float32",
+   "file": "conv1d.bias.f32",
+   "hi": 0.125,
+   "lo": -0.125,
+   "order": "row-major",
+   "sha256": "06a2cca4361f0bacc3efc67764b18c1df5d197cb0e30c31b66395f8c63467c74",
+   "shape": [
+    384
+   ],
+   "tensor_id": 25
+  },
+  "conv1d.weight": {
+   "dtype": "float32",
+   "file": "conv1d.weight.f32",
+   "hi": 0.5,
+   "lo": -0.5,
+   "order": "row-major",
+   "sha256": "f02643ee3bcea2a4293f021afa8cdfe82940087aec98b4f1d878d7357f305d22",
+   "shape": [
+    384,
+    1,
+    4
+   ],
+   "tensor_id": 24
+  },
+  "dt_bias": {
+   "dtype": "float32",
+   "file": "dt_bias.f32",
+   "hi": -2.0,
+   "lo": -7.0,
+   "order": "row-major",
+   "sha256": "188a13639ae32ed44e34be1695082b550ef5ea4473b21f43392f4a775ede21a4",
+   "shape": [
+    2
+   ],
+   "tensor_id": 26
+  },
+  "in_proj.weight": {
+   "dtype": "float32",
+   "file": "in_proj.weight.f32",
+   "hi": 0.0625,
+   "lo": -0.0625,
+   "order": "row-major",
+   "sha256": "1cd3f6042a0d0999af2f26c17bfe7f9aa0d9f809890d3eec8bcfc70f83dcd117",
+   "shape": [
+    514,
+    64
+   ],
+   "tensor_id": 23
+  },
+  "norm.weight": {
+   "dtype": "float32",
+   "file": "norm.weight.f32",
+   "hi": 1.5,
+   "lo": 0.5,
+   "order": "row-major",
+   "sha256": "f4d32e48ef201cc3f19c52c9849afa17eefeb92797b4b6bda4514c7c5a25257d",
+   "shape": [
+    128
+   ],
+   "tensor_id": 29
+  },
+  "out_proj.weight": {
+   "dtype": "float32",
+   "file": "out_proj.weight.f32",
+   "hi": 0.03125,
+   "lo": -0.03125,
+   "order": "row-major",
+   "sha256": "3dc512bf53a91f214ba9dafe12c306f80ba28dab1502701a48123c35a5907607",
+   "shape": [
+    64,
+    128
+   ],
+   "tensor_id": 30
+  },
+  "x": {
+   "dtype": "float32",
+   "file": "x.f32",
+   "hi": 2.0,
+   "lo": -2.0,
+   "order": "row-major",
+   "sha256": "ef90edecdc19f8a88768acfe829e4d05d405439a18854b94dbf89906061ec50f",
+   "shape": [
+    3,
+    4,
+    64
+   ],
+   "tensor_id": 21
+  }
+ }
+}

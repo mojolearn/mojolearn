@@ -455,10 +455,19 @@ and witness intent reached (band counts, ulp distances, sign-bit counts,
 saturation counts, both-clamp-limits-bind counts, STATEPASS liveness);
 (6) the decode prefix property.
 
-After the run, record here: the printed `mamba2 corpus sha256`, the exact
-torch/numpy/python versions of the run, and the `--self-test` tolerance
-calibration once `tools/mamba_corpus_check.py` (or its sibling) grows mamba2
-support — that check tool lives outside `mamba/corpus/` and is a separate
+**RUN RECORD, 2026-09-01 (orchestrator's box, one process, nice -19):**
+`--family mamba2 --verify` GREEN — 17 cases, 41.424 MB written, every
+in-generator invariant held (prefix scan.y/residual.out/dt.out bit-equal
+in ref64 AND ref32; h_boundary prefill-vs-full bit-equal; h_boundary !=
+ssd.h_last as section 5 requires). `mamba2 corpus sha256 (files .f32
+.f64 .json)`:
+`c928478e7a28ab7400e1cc508bc54a514bd550b84e4bb79d3c7d615017bd7f62`.
+Versions: torch 2.14.0 (CPU wheel; README's pin said 2.13.0 — 2.14.0 is
+what the index served this day and the invariants held; a byte-level
+reproduction must match the recorded sha, not the version line), numpy
+2.5.2, python 3.14.6, scratch venv outside pixi. Still owed: the
+`--self-test` tolerance calibration once `tools/mamba_corpus_check.py`
+(or its sibling) grows mamba2 support — that check tool lives outside `mamba/corpus/` and is a separate
 lane item (`pixi run check-mamba2-corpus`, contract 8g). Expected corpus size
 is roughly 35-40 MB across the 17 cases (the REDUCED sets exist to keep the
 long-L cases small).
