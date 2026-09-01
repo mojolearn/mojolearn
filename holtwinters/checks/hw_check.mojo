@@ -879,6 +879,20 @@ def check_hw_device_equals_oracle() raises:
     _ = tv^
     _ = sv^
     _ = ev^
+
+    # DEVIATION 1946: THE CONTEXT DIES LAST, AFTER EVERY VALUE BUILT ON IT.
+    # Mojo frees at LAST USE. Above, ctx's last use is a download; the buffer
+    # releases that follow it therefore run against a context that is already
+    # gone, and on sm_89 the NEXT DeviceContext() in the process never returns
+    # -- GPU idle, every host thread in futex wait. That is what stopped the
+    # NVIDIA leg of 2026-08-31 dead after this gate's OK line, costing the
+    # holtwinters, spectral and tsa columns two whole leases.
+    #
+    # holtwinters was left out of the 1946 sweep: thirteen files across the
+    # tree carry this line and this lane had it at none of its eleven
+    # DeviceContext sites. Apple and AMD never showed it, which is why the
+    # gap survived until an sm_89 box ran the lane.
+    _ = ctx^
     print(
         "check_hw_device_equals_oracle " + ("OK" if IDENTICAL else "REPORT") + " [" + _mode_name() + "]: " + String(n_stages_ok)
         + " of 6 fixtures bit-identical at every stage and cell (cards through first_divergence); REACH: additive vs multiplicative params differ on "
@@ -1202,6 +1216,20 @@ def check_hw_signed_zero_clamp() raises:
     _ = zcr^
     _ = zni^
     _ = ztr^
+
+    # DEVIATION 1946: THE CONTEXT DIES LAST, AFTER EVERY VALUE BUILT ON IT.
+    # Mojo frees at LAST USE. Above, ctx's last use is a download; the buffer
+    # releases that follow it therefore run against a context that is already
+    # gone, and on sm_89 the NEXT DeviceContext() in the process never returns
+    # -- GPU idle, every host thread in futex wait. That is what stopped the
+    # NVIDIA leg of 2026-08-31 dead after this gate's OK line, costing the
+    # holtwinters, spectral and tsa columns two whole leases.
+    #
+    # holtwinters was left out of the 1946 sweep: thirteen files across the
+    # tree carry this line and this lane had it at none of its eleven
+    # DeviceContext sites. Apple and AMD never showed it, which is why the
+    # gap survived until an sm_89 box ran the lane.
+    _ = ctx^
     print("check_hw_signed_zero_clamp OK [" + _mode_name() + "]: host bound(-0.0)=" + hex32(b0) + ", bound(NaN)=+0.0, bound(inf)=1; device eval at alpha=beta=gamma=-0.0 == eval at +0.0 bit for bit (" + String(len(results[0])) + " cells), == oracle" + ("" if bad2 == "" else " (RECORDED)") + "; RECORDED clamp: start (-0.0, NaN, -0.0) on the zero series -> " + got)
 
 
@@ -1746,6 +1774,20 @@ def check_hw_decision_branches() raises:
     _ = ni^
     _ = de^
     _ = itr^
+
+    # DEVIATION 1946: THE CONTEXT DIES LAST, AFTER EVERY VALUE BUILT ON IT.
+    # Mojo frees at LAST USE. Above, ctx's last use is a download; the buffer
+    # releases that follow it therefore run against a context that is already
+    # gone, and on sm_89 the NEXT DeviceContext() in the process never returns
+    # -- GPU idle, every host thread in futex wait. That is what stopped the
+    # NVIDIA leg of 2026-08-31 dead after this gate's OK line, costing the
+    # holtwinters, spectral and tsa columns two whole leases.
+    #
+    # holtwinters was left out of the 1946 sweep: thirteen files across the
+    # tree carry this line and this lane had it at none of its eleven
+    # DeviceContext sites. Apple and AMD never showed it, which is why the
+    # gap survived until an sm_89 box ran the lane.
+    _ = ctx^
 
 
 # ---------------------------------------------------------------------------
@@ -2486,6 +2528,20 @@ def check_hw_pack_round_trip() raises:
     _ = hfc_in2^
     _ = hfc_out2^
     _ = fitted^
+
+    # DEVIATION 1946: THE CONTEXT DIES LAST, AFTER EVERY VALUE BUILT ON IT.
+    # Mojo frees at LAST USE. Above, ctx's last use is a download; the buffer
+    # releases that follow it therefore run against a context that is already
+    # gone, and on sm_89 the NEXT DeviceContext() in the process never returns
+    # -- GPU idle, every host thread in futex wait. That is what stopped the
+    # NVIDIA leg of 2026-08-31 dead after this gate's OK line, costing the
+    # holtwinters, spectral and tsa columns two whole leases.
+    #
+    # holtwinters was left out of the 1946 sweep: thirteen files across the
+    # tree carry this line and this lane had it at none of its eleven
+    # DeviceContext sites. Apple and AMD never showed it, which is why the
+    # gap survived until an sm_89 box ran the lane.
+    _ = ctx^
     if n_failed != 0:
         raise Error(
             "check_hw_pack_round_trip FAILED [" + _mode_name() + "] (pack sabotage "

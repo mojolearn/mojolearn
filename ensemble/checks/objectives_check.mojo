@@ -800,6 +800,13 @@ def main() raises:
     _ = dh^
     _ = dq^
 
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
+
     # Analytic, per thread. nLeft = 4, 10, 14, 18 and nRight = 14, 8, 4, 0,
     # so thread 3 is skipped entirely by `:170-171` and must come back
     # INVALID -- a different outcome per thread, not one repeated value.

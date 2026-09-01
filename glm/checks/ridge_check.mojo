@@ -483,6 +483,13 @@ def check_ridge_device_equals_host() raises:
                 w_first = "coefficient " + String(i) + " device " + _hex32(w_dev[i]) + " host " + _hex32(w_host[i])
     _ = ha^
     _ = hb^
+
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
     comptime if IDENTICAL:
         if u_bad != 0 or w_bad != 0:
             raise Error(

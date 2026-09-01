@@ -845,6 +845,13 @@ def check_cho_solve_residual() raises:
                 worst = d
         _ = rdl^
         _ = rdb^
+
+        # DEVIATION 1946: the context dies LAST, after every value built on it.
+        # Mojo frees at LAST USE, so without this the buffer releases above run
+        # against a context that is already gone. On sm_89 the next GPU call in
+        # the process then never returns (GPU idle, host threads in futex wait);
+        # Apple and AMD do not show it, which is how it stayed latent here.
+        _ = ctx^
     print(
         "check_cho_solve_residual OK ["
         + _mode_name()
@@ -1664,6 +1671,13 @@ def check_r1_update_equals_potrf() raises:
                 n_reported += 1
     _ = dl^
     _ = dws^
+
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
 
     # THE HOST ORACLE OF THE PORTED FILE, grown to half the panel width and
     # asserted against the oracle's own blocked factor. Without this arm

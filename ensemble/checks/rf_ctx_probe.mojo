@@ -118,6 +118,13 @@ def main() raises:
         var ctx1 = DeviceContext()
         var a = one_fit(ctx1, "fit1", t0)
         _ = ctx1^
+
+        # DEVIATION 1946: the context dies LAST, after every value built on it.
+        # Mojo frees at LAST USE, so without this the buffer releases above run
+        # against a context that is already gone. On sm_89 the next GPU call in
+        # the process then never returns (GPU idle, host threads in futex wait);
+        # Apple and AMD do not show it, which is how it stayed latent here.
+        _ = ctx^
         _say("TWO_CTX: ctx1 released, creating ctx2", t0)
         var ctx2 = DeviceContext()
         _say("TWO_CTX: ctx2 created", t0)

@@ -457,6 +457,13 @@ def check_nprobe_equals_nlists_is_brute_force() raises:
         )
     _ = index^
 
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
+
 
 # =====================================================================
 # REFUSALS
@@ -683,6 +690,13 @@ def check_ivf_refusals() raises:
     )
     _ = index^
 
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
+
 
 # =====================================================================
 # THE LAYOUT AND THE CARRY
@@ -872,6 +886,13 @@ def check_list_layout_and_index_carry() raises:
     )
     _ = index^
 
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
+
 
 # =====================================================================
 # THE DEGENERATE LIST
@@ -995,6 +1016,13 @@ def check_empty_list() raises:
             " FAST (see check_nprobe_equals_nlists_is_brute_force)"
         )
     _ = index^
+
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
 
 
 # =====================================================================
@@ -1235,6 +1263,13 @@ def check_quantizer_is_reproducible() raises:
     _ = a^
     _ = b^
 
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
+
 
 # =====================================================================
 # THE ORACLE
@@ -1377,6 +1412,13 @@ def check_search_vs_oracle() raises:
                 )
         _ = index^
 
+        # DEVIATION 1946: the context dies LAST, after every value built on it.
+        # Mojo frees at LAST USE, so without this the buffer releases above run
+        # against a context that is already gone. On sm_89 the next GPU call in
+        # the process then never returns (GPU idle, host threads in futex wait);
+        # Apple and AMD do not show it, which is how it stayed latent here.
+        _ = ctx^
+
     comptime if IDENTICAL:
         print(
             "check_search_vs_oracle OK [IDENTICAL]: "
@@ -1488,6 +1530,13 @@ def check_recall_is_reported() raises:
         " at n_probes == n_lists"
     )
     _ = index^
+
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
 
 
 # =====================================================================
@@ -1603,6 +1652,13 @@ def check_launch_invariance() raises:
         )
     _ = index^
 
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
+
 
 # =====================================================================
 # THE CARD
@@ -1642,6 +1698,13 @@ def check_card_is_emitted() raises:
         var index = ivf_flat_build(ctx, trace, params, x, 64, DIM)
         _ = ivf_flat_search_traced(ctx, trace, index, sp, q, 8, 4)
         _ = index^
+
+        # DEVIATION 1946: the context dies LAST, after every value built on it.
+        # Mojo frees at LAST USE, so without this the buffer releases above run
+        # against a context that is already gone. On sm_89 the next GPU call in
+        # the process then never returns (GPU idle, host threads in futex wait);
+        # Apple and AMD do not show it, which is how it stayed latent here.
+        _ = ctx^
 
     var lines = read_trace_lines(paths[0])
     var expected: List[String] = [

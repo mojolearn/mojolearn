@@ -553,6 +553,13 @@ def check_ball_cover() raises:
     # 'MISSED point 42' on the MI325X. See the note in `_run_one_eps`.
     _ = hx^
 
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
+
 
 def check_ball_cover_dense_and_max_k() raises:
     """The other two output shapes, against the CSR one.
@@ -703,6 +710,13 @@ def check_ball_cover_dense_and_max_k() raises:
     # 'MISSED point 42' on the MI325X. See the note in `_run_one_eps`.
     _ = hx^
 
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
+
 
 def check_ball_cover_reach_by_sabotage() raises:
     """Shrink the landmark radii; the answer must shrink in a known shape.
@@ -799,6 +813,13 @@ def check_ball_cover_reach_by_sabotage() raises:
     # unmaps and returns zero pages, which is what produced the false row-63
     # 'MISSED point 42' on the MI325X. See the note in `_run_one_eps`.
     _ = hx^
+
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
 
 
 def check_ball_cover_order_is_load_bearing() raises:
@@ -906,6 +927,13 @@ def check_ball_cover_order_is_load_bearing() raises:
     # unmaps and returns zero pages, which is what produced the false row-63
     # 'MISSED point 42' on the MI325X. See the note in `_run_one_eps`.
     _ = hx^
+
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
 
 
 def check_ball_cover_at_scale() raises:
@@ -1019,6 +1047,13 @@ def check_ball_cover_at_scale() raises:
     # unmaps and returns zero pages, which is what produced the false row-63
     # 'MISSED point 42' on the MI325X. See the note in `_run_one_eps`.
     _ = hx^
+
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
 
 
 def check_ball_cover_max_k_wiring() raises:
@@ -1404,3 +1439,10 @@ def check_ball_cover_max_k_wiring() raises:
     # unmaps and returns zero pages, which is what produced the false row-63
     # 'MISSED point 42' on the MI325X. See the note in `_run_one_eps`.
     _ = hx^
+
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^

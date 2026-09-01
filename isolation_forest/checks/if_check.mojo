@@ -1174,6 +1174,13 @@ def check_if_device_equals_oracle() raises:
             print("check_if_device_equals_oracle REPORT" + _tag() + ": " + String(n_ok) + " of " + String(len(fxs)) + " fixtures bit-equal; FAST differences:" + reports)
     _ = tables^
 
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
+
 
 # ---------------------------------------------------------------------------
 # 5. Launch invariance
@@ -1336,6 +1343,13 @@ def check_if_row39_signed_zero() raises:
         + " moves NO stored bit (the positional strict-compare fold is sign-inert here); a {-0,+0}-only column is never split"
     )
     _ = tables^
+
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
 
 
 # ---------------------------------------------------------------------------

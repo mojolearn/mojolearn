@@ -501,6 +501,13 @@ def check_cd_refuses_by_name() raises:
     _ = x^
     _ = y^
     _ = coef^
+
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
     print("check_cd_refuses_by_name OK [" + _mode_name() + "]: 12 parameter values refused by name (DEVIATION 613: the four NaN/inf ones)")
 
 
@@ -837,6 +844,13 @@ def check_cd_predict_matches_host() raises:
     _ = x^
     _ = coef^
     _ = preds^
+
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
     print("check_cd_predict_matches_host OK [" + _mode_name() + "]")
 
 

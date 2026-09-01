@@ -619,6 +619,13 @@ def check_linkage_entry_matches_stages() raises:
         _ = children^
         _ = labels^
 
+        # DEVIATION 1946: the context dies LAST, after every value built on it.
+        # Mojo frees at LAST USE, so without this the buffer releases above run
+        # against a context that is already gone. On sm_89 the next GPU call in
+        # the process then never returns (GPU idle, host threads in futex wait);
+        # Apple and AMD do not show it, which is how it stayed latent here.
+        _ = ctx^
+
 
 def check_linkage_union_find_matches_a_naive_one() raises:
     """DEVIATION 622. The ported `UnionFind` (textbook compression) and the
@@ -784,6 +791,13 @@ def check_linkage_batch_composition() raises:
     _ = dists^
     _ = norms^
 
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
+
 
 def check_linkage_float64_reference() raises:
     """Tolerance sanity: the device MST's total weight (summed in double)
@@ -886,6 +900,13 @@ def check_linkage_refusals() raises:
     _ = x^
     _ = children^
     _ = labels^
+
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
 
 
 def check_linkage_sabotages() raises:
@@ -1425,6 +1446,13 @@ def check_linkage_nan_distances_refused() raises:
     _ = mst_dst^
     _ = mst_w^
     _ = color^
+
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
 
 
 def main() raises:

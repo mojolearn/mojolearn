@@ -582,6 +582,13 @@ def measure_subtraction_blast_radius() raises:
     _ = derived^
     _ = base^
 
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
+
 
 def measure_fit(n_trees: Int, depth: Int, pointwise: Bool) raises:
     """A REAL FIT on the tie-forcing fixture, with the ties COUNTED.

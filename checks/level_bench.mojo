@@ -275,6 +275,13 @@ def bench_histogram_only(n_rows: Int, repeats: Int) raises:
             best = dt
     _ = scale_keep^
 
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
+
     var ms = Float64(best) / 1.0e6
     var cells = Float64(n_rows) * Float64(n_features)
     print("    histogram alone:", ms, "ms for", n_rows, "rows x", n_features)
@@ -879,6 +886,13 @@ def bench_wide_histogram_interleaved(n_rows: Int, repeats: Int) raises:
             else:
                 s16.append(dt)
     _ = scale_keep^
+
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
 
     var arms = List[ArmResult]()
     arms.append(summarize(String("1 block  "), s1))

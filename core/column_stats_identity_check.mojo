@@ -373,6 +373,13 @@ def check_column_stats_fold_shape() raises:
     _ = mu^
     _ = xty^
 
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
+
     var worst_mean_rel = Float32(0.0)
     var worst_xty_rel = Float32(0.0)
     var mean_off = 0
@@ -651,6 +658,13 @@ def check_xty_contraction_pin() raises:
     _ = ofma^
     _ = onaive^
 
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
+
     var separating = 0
     var off_fma = 0
     var off_naive = 0
@@ -865,6 +879,13 @@ def check_transpose_grid_stride() raises:
         _ = hdst^
     _ = src^
     _ = hsrc^
+
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
 
     if failures != 0:
         raise Error(

@@ -1204,6 +1204,13 @@ def check_spectral_signed_zero() raises:
         if _bits(h) != want[i]:
             raise Error("host clamp_down at " + String(i) + ": got " + _hex32(h))
     _ = buf^
+
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here.
+    _ = ctx^
     print(
         "check_spectral_signed_zero OK: planted -0.0, +0.0, +-5e-8 -> +0.0 (0x00000000) on"
         " device and host; -2e-7, +-1, 1e-7 untouched (the select is value-first, no max/min)"
