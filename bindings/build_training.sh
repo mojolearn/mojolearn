@@ -199,19 +199,38 @@ fi
 # MEASURED, BECAUSE THE AUTHOR OF THIS SCRIPT WAS NOT ALLOWED TO BUILD.
 # ============================================================================
 #
-# THE FLOOR IS 1 AND THAT IS DELIBERATE FOR A FIRST BUILD. `build.sh` learned
-# twice that presence-of-one is not a filter: the build that lost GBDT kept
-# exactly 1 of 85 gbdt_ blobs and passed. A floor of 1 therefore catches only
-# the TOTAL loss this script's MACOSX_DEPLOYMENT_TARGET paragraph is about,
-# and nothing subtler.
+# THE FLOOR WAS 1 UNTIL THE FIRST REAL BUILD, 2026-09-01, and it is now 3.
+# `build.sh` learned twice that presence-of-one is not a filter: the build
+# that lost GBDT kept exactly 1 of 85 gbdt_ blobs and passed. A floor of 1
+# caught only the TOTAL loss this script's MACOSX_DEPLOYMENT_TARGET
+# paragraph is about, and nothing subtler.
 #
-# **RAISE IT ON THE FIRST REAL BUILD.** The observed counts are printed
-# unconditionally below; take two thirds of the measured `training` count,
-# write it into the `for _pair in` line, and record the measured number in
-# this comment. That is the ratio `bindings/build.sh` uses against ITS
-# measured counts (22 measured -> floor 15, 8 -> 3). Setting a floor from a
-# SOURCE count instead is what failed a perfectly good svm artifact on its
-# first run.
+# MEASURED, Apple M4, FAST build, `MOJOLEARN_NUMERIC_MODE` unset:
+#
+#     training 5     gemm 8     core 0     total 13
+#
+# so the floor is two thirds of 5, which is 3. That is the ratio
+# `bindings/build.sh` uses against ITS measured counts (22 measured -> floor
+# 15, 8 -> 3). Setting a floor from a SOURCE count instead is what failed a
+# perfectly good svm artifact on its first run, and it is what the paragraph
+# below would have done: it counted 20 kernel FUNCTIONS in the source and
+# five blobs is what the artifact actually carries.
+#
+# WHY 5 AND NOT 20, since the gap is large enough to look like a loss and is
+# not one. `gemm` carries 8 blobs in the same artifact, and every reduction
+# in both contracts is delegated to `identical_gemm_into`, so the loss and
+# optimizer folds are compiled under that prefix rather than `training`.
+# Add the sabotage-only kernels the compiler drops from a clean build, and
+# 5 + 8 is the shape to expect. The gemm blobs stay UNFLOORED for the reason
+# given below -- under FAST that route can reach MAX's own matmul and need
+# not carry a `gemm` prefix at all -- so a floor over their sum would be a
+# floor that changes meaning with the numeric mode.
+#
+# THE FLOOR IS NOT KNOWN TO BE CAPABLE OF FAILING, and that is stated rather
+# than implied: showing it red would mean deliberately shipping a poisoned
+# build. What IS verified is the arithmetic against the real artifact --
+# 5 >= 3 -- and the total-loss case it is really aimed at, which
+# `build.sh` has observed twice in the wild.
 #
 # What is in here, counted by hand from the source rather than from an
 # artifact, so treat it as an expectation and not as the floor: `training/`
@@ -239,7 +258,7 @@ for _sub in training gemm core; do
 done
 
 _failed=0
-for _pair in training:1; do
+for _pair in training:3; do
     _s=${_pair%%:*}
     _min=${_pair#*:}
     _n=$(printf '%s\n' "$_air" | grep -c "^${_s}" || true)
