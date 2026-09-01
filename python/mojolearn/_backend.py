@@ -165,6 +165,13 @@ _MODULES = (
     "_mojolearn_linalg",
     "_mojolearn_arima",
     "_mojolearn_training",
+    # Added 2026-09-01 with the GaussianProcessRegressor exposure. The
+    # binding itself (bindings/_mojolearn_gp.mojo + build_gp.sh) is OWED at
+    # the time of this edit; listing the name FIRST is deliberate, because
+    # this tuple is the difference between an unbuilt extension raising BY
+    # NAME and a wrong-tier binary answering under the right label
+    # (DEVIATION 869, the header above).
+    "_mojolearn_gp",
 )
 _SELECTED = None
 
@@ -979,6 +986,7 @@ def _build_script(name):
         "_mojolearn_linalg": "build_linalg.sh",
         "_mojolearn_arima": "build_arima.sh",
         "_mojolearn_training": "build_training.sh",
+        "_mojolearn_gp": "build_gp.sh",
     }.get(name, "build" + name[len("_mojolearn"):] + ".sh")
 
 

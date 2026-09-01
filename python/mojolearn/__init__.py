@@ -8,7 +8,7 @@ those can reach. See NOTICE for the attribution each carries.
 
 WHAT IS IN THIS ALPHA, AND WHAT IS NOT
 ---------------------------------------
-Twenty-six estimators, two submodules and two functions: `NearestNeighbors`, `KNeighborsClassifier`,
+Twenty-seven estimators, two submodules and two functions: `NearestNeighbors`, `KNeighborsClassifier`,
 `KNeighborsRegressor`, `RadiusNeighbors`, `KMeans`, `DBSCAN`, `PCA`, `TruncatedSVD`,
 `LinearRegression`, `Ridge`, `LogisticRegression` (binary, L-BFGS),
 `GradientBoosting`, `RandomForestClassifier`, `RandomForestRegressor`,
@@ -43,6 +43,17 @@ to explain its absence, is now empty. It is the one estimator in this package
 whose `y` is 2-D: the lane is BATCHED, one series per row, each with its own
 parameters, and `_arima_impl.py` says on the class what else follows from
 that.
+**`GaussianProcessRegressor` IS here** (since 2026-09-01, later the same
+day), with its four kernel classes `RBF`, `Matern`, `ConstantKernel` and
+`WhiteKernel`. It was the one `_NOT_YET` entry ever held back for a reason
+OTHER than a missing surface: its IDENTICAL card was believed to diverge
+Apple against AMD on 8 of 3,494 stages. That reading was WITHDRAWN at
+`9835094e` -- the eight lines are the sabotaged half of one
+`GP_SAB_STD_EXP` clean-then-sabotaged pair, an arm built to make a device
+`exp` differ, and the shipped path is byte-identical on the other 3,486
+lines -- and with the sole blocker withdrawn the withholding text
+contradicted the evidence, so the surface was written (`_gp_impl.py`,
+whose header carries the history).
 
 WHAT THIS IS NOT
 ----------------
@@ -160,11 +171,34 @@ from ._svm_impl import SVC, SVR
 from ._arima_impl import ARIMA
 from ._tsa_impl import ExponentialSmoothing, kpss_test, select_d
 
+# `GaussianProcessRegressor` JOINED 2026-09-01, the last name ever held in
+# `_NOT_YET` below and the only one held for a reason other than a missing
+# surface. The blocker -- an IDENTICAL card believed to diverge Apple
+# against AMD -- was WITHDRAWN at `9835094e` (the divergent lines were a
+# sabotage arm's own block; see `_gp_impl.py`'s header), and the surface
+# was written that day. Its binding `_mojolearn_gp` resolves on FIRST USE
+# like every other: an unbuilt extension leaves the package importable and
+# raises BY NAME with the build command when touched (`_backend.py`'s
+# design). ORIGINAL WORK: no upstream GP exists in cuML/cuVS/RAFT at the
+# pinned commits; scikit-learn `_gpr.py` is the semantics oracle only.
+from ._gp_impl import (
+    ConstantKernel,
+    GaussianProcessRegressor,
+    Matern,
+    RBF,
+    WhiteKernel,
+)
+
 __all__ = [
     "ARIMA",
     "AgglomerativeClustering",
+    "ConstantKernel",
     "DBSCAN",
+    "GaussianProcessRegressor",
     "KernelDensity",
+    "Matern",
+    "RBF",
+    "WhiteKernel",
     "ExtraTreesClassifier",
     "ExtraTreesRegressor",
     "ElasticNet",
@@ -202,40 +236,28 @@ __all__ = [
 # interesting and short. Each value names the thing that EXISTS and where it
 # stops.
 #
-# IT IS EMPTY, AND THAT IS THE POINT. Three entries have been deleted from it
+# IT IS EMPTY, AND THAT IS THE POINT. Four entries have been deleted from it
 # and none was ever reworded: `KNeighborsClassifier` / `KNeighborsRegressor`
-# on 2026-08-23, `SVR` on 2026-09-01 and `ARIMA` the same day. Each said the
+# on 2026-08-23, `SVR` on 2026-09-01, `ARIMA` the same day, and
+# `GaussianProcessRegressor` the same day again. The first three said the
 # kernels, the oracle and the gates were done and only the Python surface was
 # missing, each was true when written, and in every case the fix for the
-# sentence was to write the surface rather than to soften the sentence. Keep
-# the mechanism: the next lane that is finished underneath and unreachable
-# from Python belongs in here, by name, not left to an AttributeError.
-_NOT_YET = {
-    # GAUSSIAN PROCESS IS HELD BACK ON PURPOSE, AND NOT FOR LACK OF CODE.
-    # The lane is complete and its own gates pass. It is held back because
-    # its IDENTICAL card DIVERGES between vendors and nothing caught it for
-    # four days, which is a stronger reason to withhold an estimator than an
-    # unfinished one.
-    "GaussianProcessRegressor": (
-        "gaussian_process/ (6,922 lines, the RBF and Matern kernels, the "
-        "Cholesky factorization, the predictive mean and variance, gated on "
-        "the M4 in both tiers); CROSS-VENDOR IDENTITY IS BROKEN. The "
-        "IDENTICAL card diverges Apple against AMD, md5 6e638e82a73e against "
-        "6bdeb28d6c81, on 8 of 3494 stages, originating at gp.kernel, the "
-        "RBF Gram and the first computed stage of that block; gp.ridged, "
-        "chol.jittered, chol.panel000.factored, chol.factor, gp.factor, "
-        "gp.kcross and gp.v all inherit it. It is not flaky: 29 sibling "
-        "blocks with the same header and the same input agree across "
-        "vendors, and the divergent block sits at the same card position on "
-        "both boxes. BOTH LEGS PRINTED ALL PASSED, because a per-vendor run "
-        "checks a card against its own oracle and cross-vendor identity is a "
-        "claim about TWO cards. This package's headline promise is the same "
-        "bits on every vendor, so shipping this estimator would ship a "
-        "counterexample to it. See bench/results/e1/GP_CROSS_VENDOR_"
-        "DIVERGENCE.md. It returns when the divergence is understood, not "
-        "when the lane is finished, because the lane is finished"
-    ),
-}
+# sentence was to write the surface rather than to soften the sentence. The
+# fourth was DIFFERENT and its difference is worth keeping: it was withheld
+# ON PURPOSE with the surface unwritten, because its IDENTICAL card was
+# believed to diverge Apple against AMD on 8 of 3,494 stages. That reading
+# was WITHDRAWN at `9835094e` (2026-09-01): the eight lines were the
+# SABOTAGED half of one GP_SAB_STD_EXP clean-then-sabotaged pair -- an arm
+# whose whole statement is that a device exp is a vendor choice in its last
+# bit -- and the shipped path is byte-identical on the other 3,486 lines
+# (bench/results/e1/GP_CROSS_VENDOR_DIVERGENCE.md, corrected in place). The
+# entry was deleted when the surface was written, not when the reading was
+# withdrawn, because exposing an estimator is a shipping decision and Andrew
+# delegated it. Keep the mechanism: the next lane that is finished underneath
+# and unreachable from Python belongs in here, by name, not left to an
+# AttributeError -- and so does the next lane withheld on purpose, with the
+# purpose written out the way the GP's was.
+_NOT_YET = {}
 
 
 def __getattr__(name):

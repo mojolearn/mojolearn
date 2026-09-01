@@ -180,10 +180,11 @@ standing memory is `verify-on-a-box-that-did-not-build-it`. An unattempted
 cell in the release matrix is that shape one step earlier, and it fails during
 a release cut rather than before one.
 
-## GaussianProcessRegressor: NOT reachable, and NOT for the usual reason
+## GaussianProcessRegressor: EXPOSED 2026-09-01 (was: NOT reachable, and NOT for the usual reason)
 
 Every other entry on this page is absent because it lacks a binding. This one
-has everything it needs and is held back deliberately.
+had everything it needed at the lane level and was held back deliberately;
+the history of that withholding is kept below because it is the record.
 
 THE STATED REASON WAS WRONG AND IS WITHDRAWN, 2026-09-01. This paragraph read
 "its IDENTICAL card diverges Apple against AMD on 8 of 3494 stages, starting
@@ -194,9 +195,24 @@ bit. The shipped path is byte-identical across the other 3,486 lines. The
 cards were diffed, which no leg had done, and then the diff was read without
 noticing that the sweep writes sabotaged fits into the same card.
 
-It remains NOT reachable, because exposing an estimator is Andrew's call and
-not a consequence of correcting a misreading. What is owed first is the
-regenerated card showing the new `sabotage=` header field naming that block,
-on Apple and then on AMD. See
-`bench/results/e1/GP_CROSS_VENDOR_DIVERGENCE.md` (corrected in place) and the
-`_NOT_YET` entry in `python/mojolearn/__init__.py`.
+SUPERSEDED, LATER THE SAME DAY: IT IS REACHABLE. The paragraph that stood
+here read "It remains NOT reachable, because exposing an estimator is
+Andrew's call and not a consequence of correcting a misreading." Andrew
+delegated the call and the orchestrator took it: with the sole blocker
+withdrawn at `9835094e`, the withholding text contradicted the evidence, so
+the surface was written -- `python/mojolearn/_gp_impl.py`
+(`GaussianProcessRegressor` plus the `RBF`, `Matern`, `ConstantKernel` and
+`WhiteKernel` spec classes), the `_NOT_YET` entry deleted the way its three
+predecessors were, `python/mojolearn/tests/test_gp_surface.py` as the
+surface gate, and `_mojolearn_gp` registered in `_backend.py`'s `_MODULES`
+and `_build_script` (DEVIATION 869's both-places rule).
+
+WHAT THIS ENTRY STILL LACKS, unlike every sibling above it: the binding
+itself. `bindings/_mojolearn_gp.mojo` and `bindings/build_gp.sh` do not
+exist yet -- the surface resolves its binding on first use and raises BY
+NAME with the build command until they do, which is `_backend.py`'s designed
+partial-build state. Also still owed: the regenerated card showing the new
+`sabotage=` header field naming that block, on Apple and then on AMD. See
+`bench/results/e1/GP_CROSS_VENDOR_DIVERGENCE.md` (corrected in place) and
+`_gp_impl.py`'s header, which carries the history the `_NOT_YET` entry used
+to.

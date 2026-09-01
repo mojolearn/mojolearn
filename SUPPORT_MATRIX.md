@@ -18,8 +18,7 @@ Exact versions, commits and result status are recorded in
 [E1_RUNBOOK.md](E1_RUNBOOK.md). A check mark in source code is not a
 certificate; a released result card is.
 
-## Gaussian process: still WITHHELD, but NOT for the reason written here
-## until 2026-09-01
+## Gaussian process: EXPOSED 2026-09-01; the withholding below is SUPERSEDED
 
 **THE DIVERGENCE WAS A SABOTAGE ARM DOING ITS JOB.** This section said the
 IDENTICAL card diverged between vendors and that shipping the estimator would
@@ -50,13 +49,30 @@ CARD_GAPS-class defect and it is what made the misreading possible. The
 header now carries `sabotage=<ARM NAME>`, so a card that mixes sabotaged runs
 with shipped runs says which is which.
 
-**THE ESTIMATOR STAYS WITHHELD PENDING ANDREW'S WORD.** The stated blocker is
-gone, but exposing an estimator through the Python surface is a shipping
-decision and not a consequence of a card being read correctly. What is owed
-before it is exposed: the regenerated card confirming the header prints
-`sabotage=STD_EXP` on that block (run owed, Apple), and the AMD leg re-run to
-confirm the same eight lines land inside a block whose header now names the
-arm.
+**SUPERSEDED 2026-09-01, LATER THE SAME DAY: THE ESTIMATOR IS EXPOSED.** The
+paragraph below stood while the decision was pending; it is kept, not
+deleted, because the withholding and its reason are part of this lane's
+record. It read: "THE ESTIMATOR STAYS WITHHELD PENDING ANDREW'S WORD. The
+stated blocker is gone, but exposing an estimator through the Python surface
+is a shipping decision and not a consequence of a card being read
+correctly." Andrew delegated that decision and the orchestrator took it:
+with the divergence reading withdrawn at `9835094e` (the eight differing
+lines are the sabotaged half of one `GP_SAB_STD_EXP` clean-then-sabotaged
+pair, above), the withholding text contradicted the evidence, and
+`mojolearn.GaussianProcessRegressor` plus its four kernel classes now stand
+on the Python surface (`python/mojolearn/_gp_impl.py`, which carries the
+full history). The claim exposure makes is CORRECTNESS on the vendors the
+cards cover -- Apple M4 and AMD MI325X under `identical`, two vendors, not
+three (the H100 leg was a FAST speed run) -- and no speed claim: the gp
+speed ladder is unrun (HANDOFF_2026-09-01.md section 5).
+
+STILL OWED, unchanged by the exposure: the regenerated Apple card confirming
+the header prints `sabotage=STD_EXP` on that block, and the AMD leg re-run
+to confirm the same eight lines land inside a block whose header now names
+the arm. Also owed, new with the exposure: `bindings/_mojolearn_gp.mojo` and
+`bindings/build_gp.sh` (the surface resolves its binding on first use and
+raises by name until they exist), then the surface gate
+`python/mojolearn/tests/test_gp_surface.py` in all three tiers.
 
 Evidence: `bench/results/e1/GP_CROSS_VENDOR_DIVERGENCE.md`, corrected in
 place.

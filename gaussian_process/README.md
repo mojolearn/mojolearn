@@ -28,9 +28,16 @@ carries so that nobody has to redo it, are in
 `bench/results/e1/GP_CROSS_VENDOR_DIVERGENCE.md`.
 
 The Python surface withheld this lane because its card was believed to
-diverge. That reason is gone; the decision to expose it is the
-orchestrator's, and `SUPPORT_MATRIX.md`, `docs/PYPI_SURFACE_PLAN.md` and
-`python/mojolearn/__init__.py`'s `_NOT_YET` still quote the withdrawn reading.
+diverge. That reason is gone, and the decision to expose was TAKEN on
+2026-09-01 (Andrew delegated it; the orchestrator exposed, citing
+`9835094e`): `python/mojolearn/_gp_impl.py` carries
+`GaussianProcessRegressor` and the four kernel classes, the `_NOT_YET`
+entry is deleted with its history preserved in that file's header, and
+`SUPPORT_MATRIX.md` and `docs/PYPI_SURFACE_PLAN.md` mark their withholding
+paragraphs superseded rather than deleting them. The BINDING is still owed
+-- `bindings/_mojolearn_gp.mojo` and `bindings/build_gp.sh` do not exist,
+so the estimator raises by name with the build command on first use until
+they do (WHAT THE ORCHESTRATOR MUST WIRE, item 4).
 
 An NVIDIA H100 compiled and ran this lane under FAST on 2026-08-26
 (`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`), which is
@@ -321,7 +328,8 @@ lane's file and the orchestrator assigns them.
 | **1769** | the sabotage arms are runtime-selectable through a `sabotage` argument, in a separate file, never reached by any driver |
 | **1770** | `kernel.diag(X)` is ONE HOST SCALAR for this kernel set, because no kernel here has a coordinate-dependent diagonal. Porting `DotProduct` turns it into a vector and turns the `gp.kss` stage into an array |
 | **1771** | the self-kernel `k(X, X)` uploads `X` TWICE, because Mojo cannot pass one `DeviceBuffer` as two `mut` arguments of one call. `PORTING_RULES` rule 4's shape: it changes HOW the call is spelled and not WHAT is computed |
-| 1772-1779 | RESERVED, unspent |
+| **1772** | the PYTHON SURFACE's default `alpha` is `gp_profile_alpha()` = `2^-20`, not scikit-learn's `1e-10` (2026-09-01, `python/mojolearn/_gp_impl.py`). Two facts force it: on this lane's unit-diagonal kernel matrices `1.0 + 1e-10` rounds to exactly `1.0` in float32 (DEVIATION 1752 measured the no-op), and under IDENTICAL the Cholesky profile refuses everything but `+0.0` and `2^-20` by name (DEVIATION 1637). The value goes down UNCLAMPED, so every `gp_validate_alpha` refusal stays reachable from Python |
+| 1773-1779 | RESERVED, unspent |
 
 ## WHAT THE ORCHESTRATOR MUST WIRE
 
@@ -352,6 +360,23 @@ Also owed by the orchestrator, and none of it is this lane's to do.
    `gaussian_process/checks/kernels.mojo`. Refuse `float64` inputs, any
    `optimizer` other than `None`, `normalize_y=True` and a two-dimensional
    `y`, by name, in Python.
+
+   **PARTLY DONE 2026-09-01.** The Python half is written
+   (`python/mojolearn/_gp_impl.py` + `python/mojolearn/tests/
+   test_gp_surface.py`), with two dispositions recorded against this item:
+   (a) `float64` X is CONVERTED with `input_copied_` set, not refused,
+   because that is the whole surface's convention (`_arrays.py::as_f32_c`;
+   every sibling estimator converts) and a one-class refusal would be the
+   surprise; `optimizer`, `normalize_y` and 2-D `y` are refused by name as
+   asked. (b) The surface's default `alpha` is `gp_profile_alpha()`
+   (`2^-20`), not sklearn's `1e-10`, which is DEVIATION 1772 below. The
+   Mojo half -- `bindings/_mojolearn_gp.mojo` and `bindings/build_gp.sh`
+   -- is STILL OWED; the surface names them and raises by name until they
+   exist. The binding MUST rebuild the kernel spec through this lane's
+   constructors (`gp_kernel_const/white/rbf/matern`, `gp_kernel_sum/prod`)
+   rather than constructing `GPKernelSpec` fields directly, so the
+   constructors' refusals (DEVIATIONS 1765, 1768) stay reachable from
+   Python; the offsets are recomputed by `_combine` on the way.
 5. **A file this lane's file list did not name.**
    `gaussian_process/checks/gp_sabotage.mojo` is not in the brief's list
    of files, and it exists because the brief ALSO requires the sabotages to
