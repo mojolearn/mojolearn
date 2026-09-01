@@ -2205,6 +2205,80 @@ def identical_fmax(a: Float32, b: Float32) -> Float32:
     return max(a, b)
 
 
+def portable_clampf(x_in: Float32, lo_in: Float32, hi_in: Float32) -> Float32:
+    """DEVIATION 788 (the mamba2 lane's dt seam,
+    `mamba/IDENTICAL_MAMBA2_CONTRACT.md` seam S9): a clamp whose result does
+    not depend on the vendor, the argument order of a hardware min/max, or a
+    compiler's constant-fold of one -- the ONE new primitive that profile
+    needs. Reference spelling: `tl.minimum(tl.maximum(dt, dt_min), dt_max)`
+    (mamba_ssm `ssd_chunk_state.py::_chunk_cumsum_fwd_kernel`:81, the
+    comment above it says it IS `tl.clamp`); HF spells the same thing as
+    `torch.clamp(dt, min=dt_limit[0], max=dt_limit[1])`
+    (`modeling_mamba2.py::mamba2_chunk_scan`:276). Both compose
+    MAX-WITH-LO FIRST, MIN-WITH-HI SECOND, so `lo > hi` answers `hi` --
+    preserved here and planted in the check below, because a reader
+    swapping the composition gets a different answer only on that case.
+
+    A VALUE-PICK FROM INTEGER COMPARES, NO ARITHMETIC AND NO FLOAT COMPARE.
+    The selection walks `_total_order_key` (DEVIATION 204's map, the same
+    one `portable_fmaxf` uses), which settles the two hazards row 13 and
+    DEVIATION 825 already paid for once:
+
+      (a) SIGNED ZERO. Under a float compare `+0.0 == -0.0`, so
+          `maximum(-0.0, +0.0)` returns whichever operand the vendor's
+          instruction favors -- row 39 MEASURED that split (`-0.0` on
+          Apple, `+0.0` on NVIDIA/AMD). Under the total order `-0.0 <
+          +0.0`, so `portable_clampf(-0.0, +0.0, hi)` is `+0.0` by
+          construction on every column. (In the mamba2 profile the input
+          is a softplus output, `>= +0.0` always, so this edge is defined
+          rather than exercised -- definedness is the requirement.)
+      (b) NaN. Canonical quiet NaN `0x7FC00000` if ANY operand is NaN,
+          BEFORE the key map (a negative-payload NaN keys below `-inf`
+          and would otherwise lose every max). The profile's refusal gate
+          means no NaN reaches this seam in a certified run; the answer
+          exists so the function has one meaning without that gate.
+      (c) DENORMALS. All three operands pass `_ftz_always` first (row
+          10's model), and the result is one of the flushed operands, so
+          no separate result flush is needed. `+-inf` LIMITS pass through
+          the flush unchanged: at the profile default `(0.0, +inf)` the
+          key of `+inf` exceeds every finite key and the min arm can
+          never fire -- the clamp is PRESENT AND INERT, which is DEVIATION
+          788's requirement (an active `dt_limit` changes inputs, not
+          code).
+    """
+    from std.memory import bitcast
+
+    if x_in != x_in or lo_in != lo_in or hi_in != hi_in:
+        return bitcast[DType.float32](UInt32(0x7FC00000))
+    var x = _ftz_always(x_in)
+    var lo = _ftz_always(lo_in)
+    var hi = _ftz_always(hi_in)
+    # maximum(x, lo) first ...
+    var v = x
+    if _total_order_key(lo) > _total_order_key(v):
+        v = lo
+    # ... then minimum(., hi): the reference's composition order, which is
+    # what makes lo > hi answer hi.
+    if _total_order_key(hi) < _total_order_key(v):
+        v = hi
+    return v
+
+
+def identical_clamp(x: Float32, lo: Float32, hi: Float32) -> Float32:
+    """DEVIATION 788's seam (mamba2 S9, `dt = clamp(softplus(dt_raw +
+    bias), lo, hi)`): IDENTICAL is `portable_clampf` (total-order
+    value-pick, NaN canonicalized, operands flushed); FAST is the
+    reference's own spelling `min(max(x, lo), hi)` through the stdlib
+    min/max, whose signed-zero and NaN answers are the vendor's own
+    choice -- FAST's contract is the vendor's spelling, never the portable
+    function."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return portable_clampf(x, lo, hi)
+    from std.math import max, min
+
+    return min(max(x, lo), hi)
+
+
 # ============ THE GATES DEVIATIONS 820-825 OWE ============================
 # Written here rather than in a plan file because the thing most likely to
 # go wrong with a new portable_* function is that its check exists, passes,
@@ -2427,3 +2501,42 @@ def identical_fmax(a: Float32, b: Float32) -> Float32:
 # `-0.0` BY SIGN BIT, and `identical_mul` must agree bit for bit with
 # `pinned_mul` in all three of the mamba files over a scattered fixture.
 # That is the assertion that catches the fourth copy drifting.
+#
+# ============ THE GATE DEVIATION 788 OWES (2026-09-01): identical_clamp ====
+# `checks/portable_nn_check.mojo` EXTENDED, `pixi run check-portable-nn`
+# (the mamba2 contract's phase 0 gate). The identity lane owns the check
+# file; this block is the specification the extension must satisfy, in the
+# same three-arm shape as the file's existing functions. RUN OWED -- nothing
+# below has run.
+#   `check_clamp_planted`:
+#     clamp(x, 0.0, +inf) == x BY BITS for planted x in {+0.0, 1.0, 20.0,
+#       FLT_MAX, a subnormal (which must come back as its FLUSHED value,
+#       +0.0 -- the operand flush is the assertion)} -- the profile-default
+#       inert arm, which is the arm mamba2's S9 runs on every ordinary call;
+#     clamp(-0.0, +0.0, +inf) == +0.0 BY SIGN BIT (total order; a vendor
+#       max would answer -0.0 on Apple, row 39's measured split -- this is
+#       the assertion that separates the value-pick from `std.math.max`);
+#     clamp(0.5, 0.001, 0.1) == 0.1 and clamp(0.0005, 0.001, 0.1) == 0.001
+#       BY BITS (the active-dt_limit arm, mamba2's (0.001, 0.1) fixture
+#       values exactly);
+#     clamp(5.0, 10.0, 2.0) == 2.0 BY BITS (lo > hi answers hi: the
+#       max-then-min COMPOSITION ORDER, torch.clamp's own answer -- a
+#       min-then-max spelling answers 10.0 and must fail here);
+#     clamp(NaN, lo, hi) == 0x7FC00000 exactly, for NaN payloads of BOTH
+#       signs and in every operand position (the negative-payload NaN is
+#       the one that separates canonicalization from the key map, exactly
+#       as check_fmax_nan says).
+#   `check_clamp_agrees_with_fmax`: clamp(x, lo, +inf) must equal
+#     portable_fmaxf(x, lo) BY BITS over the hashed sweep -- the two
+#     primitives share _total_order_key and this is what catches one of
+#     them growing its own selection.
+#   ARM 2 (device == host) applies verbatim: integer selection does not
+#     flush, so every lane including subnormal ones must agree.
+#   SABOTAGE ARM:
+#     CLAMP_SAB_VENDOR_MINMAX -- route the IDENTICAL arm through
+#       `min(max(x, lo), hi)` via std.math. Must fail the signed-zero
+#       plant on at least one column (row 39 predicts WHICH answer each
+#       column gives), and the DEVIATION 663 caveat applies: both zeros
+#       must be RUNTIME values or LLVM folds the max into a compare-select
+#       and the arm goes inert. Run it on more than the Apple column
+#       before concluding anything (the DEVIATION 258 lesson).
