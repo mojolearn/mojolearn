@@ -135,7 +135,9 @@ np.testing.assert_allclose(ols.coef_, coef, rtol=3e-3, atol=3e-3)
 # ==========================================================================
 # ONE ENTRY POINT PER REMAINING BINDING. Added 2026-09-01.
 # ==========================================================================
-# Everything above reaches FIVE of the twelve extensions this wheel ships:
+# Everything above reaches FIVE of the twelve extensions this wheel shipped
+# when this section was written (2026-09-01; `_mojolearn_gp` joined later
+# the same day as the THIRTEENTH, and its arm is below with the others):
 # _mojolearn, _mojolearn_estimators, _mojolearn_gbdt, _mojolearn_rf and
 # _mojolearn_trees. MEASURED by wrapping `_backend.binding` and recording
 # every name it was asked for, because guessing from estimator names gives
@@ -164,6 +166,23 @@ mojolearn.SVC().fit(xs, ys)                               # _mojolearn_svm
 mojolearn.kpss_test(series)                               # _mojolearn_tsa
 assert mojolearn.metrics.accuracy_score(ys, ys) == 1.0    # _mojolearn_metrics
 mojolearn.ARIMA(order=(1, 0, 0)).fit(series)              # _mojolearn_arima
+
+# _mojolearn_gp, the THIRTEENTH extension (2026-09-01). A 16x2 slice of xs,
+# SPREAD to [-2, 2) so a unit-length-scale RBF does not drive K + 2^-20 I
+# toward singular (points packed in [0, 1)^2 would make this launch gate a
+# conditioning test, which it is not). alpha is the surface default 2^-20
+# spelled explicitly -- the pinned ridge, accepted on every tier
+# (DEVIATIONS 1751/1772) -- and info_ is ASSERTED zero because a failed
+# factorization here is a RESULT, not an exception (DEVIATION 1634), so a
+# smoke that ignored it would pass on a fit that computed nothing.
+gpx = (xs[:16, :2] * np.float32(4.0) - np.float32(2.0))
+gpy = (np.sin(gpx[:, 0]) + 0.5 * gpx[:, 1]).astype(np.float32)
+gpm = mojolearn.GaussianProcessRegressor(
+    kernel=mojolearn.RBF(1.0), alpha=2.0 ** -20).fit(gpx, gpy)
+assert gpm.info_ == 0, f"gp factorization failed: info_={gpm.info_}"
+gpp = gpm.predict(gpx)
+assert gpp.shape == (16,), gpp.shape
+assert np.isfinite(gpp).all(), gpp
 
 from mojolearn import _training_impl as _T             # _mojolearn_training
 _ce = _T.cross_entropy(

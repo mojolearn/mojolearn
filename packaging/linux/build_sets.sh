@@ -44,8 +44,8 @@ mkdir -p "$DEST/build_logs" "$DEST/sets"
 PIXI_ENV="${MOJOLEARN_BUILD_PIXI_ENV:-gbmbench}"
 JOBS="${MOJOLEARN_BUILD_JOBS:-3}"
 TIERS="${MOJOLEARN_BUILD_TIERS:-fast deterministic identical}"
-SCRIPTS="${MOJOLEARN_BUILD_SCRIPTS:-build.sh build_gbdt.sh build_estimators.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_tsa.sh build_linalg.sh build_arima.sh build_training.sh}"
-EXT_NAMES="_mojolearn _mojolearn_gbdt _mojolearn_estimators _mojolearn_rf _mojolearn_trees _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_training"
+SCRIPTS="${MOJOLEARN_BUILD_SCRIPTS:-build.sh build_gbdt.sh build_estimators.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_tsa.sh build_linalg.sh build_arima.sh build_training.sh build_gp.sh}"
+EXT_NAMES="_mojolearn _mojolearn_gbdt _mojolearn_estimators _mojolearn_rf _mojolearn_trees _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_training _mojolearn_gp"
 say() { echo "[$(date +%T) build_sets] $*"; }
 
 say "repo $REPO, dest $DEST, tiers: $TIERS, jobs: $JOBS"

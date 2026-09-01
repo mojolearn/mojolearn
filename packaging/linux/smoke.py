@@ -85,12 +85,13 @@ PER_BINDING = {
     "_mojolearn_rf": lambda ml: ml.RandomForestClassifier(n_estimators=1),
     "_mojolearn_trees": lambda ml: ml.ExtraTreesRegressor(n_estimators=1),
     "_mojolearn_svm": lambda ml: ml.SVC(),
+    "_mojolearn_gp": lambda ml: ml.GaussianProcessRegressor(),
 }
 ALL_BINDINGS = (
     "_mojolearn", "_mojolearn_gbdt", "_mojolearn_estimators", "_mojolearn_rf",
     "_mojolearn_trees", "_mojolearn_svm", "_mojolearn_solver",
     "_mojolearn_metrics", "_mojolearn_tsa", "_mojolearn_linalg",
-    "_mojolearn_arima", "_mojolearn_training",
+    "_mojolearn_arima", "_mojolearn_training", "_mojolearn_gp",
 )
 
 

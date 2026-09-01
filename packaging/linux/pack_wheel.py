@@ -77,7 +77,7 @@ EXT_NAMES = (
     "_mojolearn", "_mojolearn_gbdt", "_mojolearn_estimators", "_mojolearn_rf",
     "_mojolearn_trees", "_mojolearn_svm", "_mojolearn_solver",
     "_mojolearn_metrics", "_mojolearn_tsa", "_mojolearn_linalg",
-    "_mojolearn_arima", "_mojolearn_training",
+    "_mojolearn_arima", "_mojolearn_training", "_mojolearn_gp",
 )
 TIERS = ("fast", "deterministic", "identical")
 ARCH_RE = re.compile(r"^(sm_[0-9]+a?|gfx[0-9a-f]+)$")

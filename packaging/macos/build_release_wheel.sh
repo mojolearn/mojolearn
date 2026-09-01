@@ -59,6 +59,9 @@ cp "$here/CITATION.cff" "$here/python/mojolearn/"
 # solver/hierarchy, metrics/spectral, holtwinters/tsa, and the linalg GEMM
 # surface). They are listed here because a build script that is not named
 # here does not ship, and python/mojolearn/_backend.py now knows all eleven.
+# 2026-09-01: `_mojolearn_gp` (gaussian_process) joined as the THIRTEENTH,
+# the day the estimator left `_NOT_YET` (commit 22a5b550), added to BOTH
+# lists below the same day its binding was written.
 #
 # DELIBERATELY NOT MIRRORED IN tools/e1_bootstrap.sh, AND THAT ASYMMETRY IS
 # THE POINT. That script builds bindings on a RENTED GPU under a work bound.
@@ -67,8 +70,8 @@ cp "$here/CITATION.cff" "$here/python/mojolearn/"
 # and would roughly double its binding-build time. A leg that spends its
 # lease compiling and comes home with an empty lanes/ has bought nothing at
 # all. Add a binding there only when a phase actually imports it.
-BUILD_SCRIPTS="build.sh build_gbdt.sh build_estimators.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_tsa.sh build_linalg.sh build_arima.sh build_training.sh"
-EXT_NAMES="_mojolearn _mojolearn_gbdt _mojolearn_estimators _mojolearn_rf _mojolearn_trees _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_training"
+BUILD_SCRIPTS="build.sh build_gbdt.sh build_estimators.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_tsa.sh build_linalg.sh build_arima.sh build_training.sh build_gp.sh"
+EXT_NAMES="_mojolearn _mojolearn_gbdt _mojolearn_estimators _mojolearn_rf _mojolearn_trees _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_training _mojolearn_gp"
 
 # THE PER-SCRIPT GATES ARE OFF HERE, AND THE REASON IS A CLEAN CHECKOUT.
 # Each bindings/build_*.sh ends by copying python/mojolearn/ aside and
@@ -77,8 +80,10 @@ EXT_NAMES="_mojolearn _mojolearn_gbdt _mojolearn_estimators _mojolearn_rf _mojol
 # exist already; in the shared working tree they always did, and in a clean
 # checkout of a tag (the only honest place to build a release from) the
 # first gate fails on the fourth missing .so before anything runs. Found
-# 2026-08-23 on the first clean-tree build. So this script builds all eleven
-# binaries gate-off and then runs THE release gate, verify_wheel.sh, which
+# 2026-08-23 on the first clean-tree build. So this script builds all
+# thirteen binaries gate-off (it said "eleven" until 2026-09-01, two
+# bindings after that count was true) and then runs THE release gate,
+# verify_wheel.sh, which
 # installs the finished wheel into a clean venv under every claimed
 # interpreter and fits every estimator family in EVERY SHIPPED numeric mode
 # (three since 2026-08-29; this line said BOTH when there were two). That
@@ -132,7 +137,9 @@ for mode in $MODES; do
     done
 done
 
-# THE FILES THE REST OF THIS SCRIPT GATES, eleven per tier. Built above or absent, never
+# THE FILES THE REST OF THIS SCRIPT GATES, thirteen per tier (thirty-nine
+# .so files on the default three-tier build; the count follows EXT_NAMES x
+# MODES and this sentence said "eleven" until 2026-09-01). Built above or absent, never
 # stale: every one is checked for existence and for being newer than this
 # script's start, so a build script that silently left the old file in place
 # fails here instead of shipping.
