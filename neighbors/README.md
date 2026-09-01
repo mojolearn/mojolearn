@@ -252,11 +252,14 @@ per query row, against a host brute force spelled a second time; the
 zero-tolerance claim is the IDENTICAL run, because under FAST
 `identical_mul_add` is a bare `a * b + c` and `identical_pow` is the
 stdlib `**` on both sides, so the FAST arm carries a stated 64-ulp
-tolerance and prints its tie flips. Four sabotage arms and one non-vacuity
-control:
+tolerance and prints its tie flips. Four sabotage arms and two non-vacuity
+counts -- one its own gate, one the precondition inside the sweep:
 
     seam                        arm                          must move
     --------------------------  ---------------------------  ---------
+    the pruning branch RAN      `dist_count` at the SHIPPED  PRUNED count
+    (non-vacuity, per fixture)  scale, on the sweep's own    STRICTLY > 0
+                                fixture at its own k
     the pruning threshold       `prune_scale` swept down     the answer
                                                              BREAKS, and
                                                              the largest
@@ -279,6 +282,33 @@ float rounding can only ADMIT a candidate and never drop one, so a one-ulp
 tightening lands inside it. The downward sweep replaces that arm, and the
 printed breaking scale is the honest measure of how much tightening the
 fixture can detect.
+
+**WAS RED, CLOSED 2026-09-01, and the cause was the FIXTURE.**
+`check_rbc_knn_prune_is_load_bearing` REFUSED: no `prune_scale` down to
+0.400 moved a single row. The two arms above it were the evidence that the
+kernel was not at fault -- `check_rbc_knn_prunes_work` passes, so
+`dist_count` is below 90% of brute force and the query is not a full scan,
+and `check_rbc_knn_radius_is_read` passes, so a perturbed landmark radius
+does lose neighbours on the SCATTERED fixture. The sweep was the ONLY arm
+running the LATTICE fixture, where a query at `(a + 0.5, b + 0.5)` has
+SIXTEEN index rows at exactly `sqrt(0.5)` competing for k = 8 slots, so a
+pruned neighbour is replaced by a row at a ZERO-ulp-identical distance and
+the FAST 64-ulp tie tolerance forgives it as a tie flip. **That fixture
+could not witness this sabotage at any scale.** The sweep now runs the
+tie-free SCATTERED fixture and asserts a strictly positive pruned count on
+that fixture first.
+
+MEASURED, Apple M4, both `pixi run check-ball-cover-knn` and
+`check-ball-cover-knn-identical`:
+
+    PRUNED 25141 of 36864 candidate distances (computed 11723)
+    survives a one-ulp tightening (the DEVIATION 567 slack)
+    BREAKS at prune_scale 0.95, on 1 of 96 query rows
+
+So the pruning branch runs, it is load bearing, and the arm is now shown
+capable of going red. The printed breaking scale is the honest measure of
+how much tightening this fixture can detect; a smaller number would mean a
+weaker gate. The exactness arms never rested on this one and are unchanged.
 
 **The gates**: `pixi run check-metric` and `check-metric-identical`
 (`checks/metric_check.mojo`, with `checks/metric_oracle.mojo`'s three

@@ -257,9 +257,13 @@ per landmark dominates the per-element one and the slack is paid once per
 landmark rather than once per candidate. The widening can only ADMIT a
 candidate the exact bound would have pruned, never drop one, so it costs
 work and cannot cost an answer. Two arms of
-`ball_cover_knn_check.mojo` measure exactly that: one runs with the slack
-removed and requires the answer to be UNCHANGED, and one sweeps
-`prune_scale` downward and requires the answer to BREAK.
+`ball_cover_knn_check.mojo` bracket exactly that, both on the SCATTERED
+fixture at k = 8: `check_rbc_knn_slack_costs_no_answer` runs at
+`prune_scale = 1.001`, WIDER than shipped, and requires the answer to be
+UNCHANGED (the earlier wording here, "runs with the slack removed", named
+an arm that does not exist and is deleted); and
+`check_rbc_knn_prune_is_load_bearing` sweeps `prune_scale` downward and
+requires the answer to BREAK.
 
 **THIS IS WHY A ONE-ULP SABOTAGE CANNOT MOVE THIS KERNEL, AND SAYING SO IS
 PART OF THE GATE.** The shipped bound is already four ulp looser than the
@@ -268,6 +272,26 @@ changes nothing. The gate therefore sweeps the tightening downward, asserts
 that the answer breaks, and PRINTS the largest `prune_scale` at which it
 breaks -- that number, not a one-ulp claim, is the honest measure of how
 close to vacuous the pruning gate is.
+
+A SWEEP THAT FINDS NOTHING HAS TWO READINGS AND THE GATE NOW SEPARATES
+THEM. On 2026-09-01 that sweep REFUSED, and the cause was its fixture: it
+ran the LATTICE, where a query at `(a + 0.5, b + 0.5)` has sixteen index
+rows at exactly `sqrt(0.5)` competing for eight slots, so a pruned
+neighbour returns as a distance-identical substitute and the FAST arm's
+tie tolerance forgives it. It now runs the tie-free SCATTERED fixture and
+asserts, first, that `dist_count` summed over the query rows is STRICTLY
+BELOW `n_queries * n_index` on that same fixture at that same `k`. That
+count is the direct statement that the pruning branch above ran at all --
+`verify reach, not output` -- and it is what makes a silent sweep readable
+as "the bounds have margin" rather than "this is a full scan".
+
+CLOSED THE SAME DAY, MEASURED on an Apple M4, on BOTH `pixi run
+check-ball-cover-knn` and `check-ball-cover-knn-identical`: the shipped
+query PRUNED 25141 of 36864 candidate distances, computing 11723; the
+answer survives a one-ulp tightening, which is DEVIATION 567's slack; and
+it BREAKS at `prune_scale` 0.95 on 1 of 96 query rows. The arm is shown
+capable of failing and the pruning claim is verified on Apple. NO SECOND
+VENDOR HAS RUN IT.
 
 NOT PORTED
 ----------

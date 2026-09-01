@@ -36,14 +36,28 @@ THE TWO FIXTURES, AND WHY THERE ARE TWO
 
   LATTICE    256 points in 2 dimensions on a 8x8 integer lattice with every
              position repeated FOUR times, plus 64 queries drawn from the
-             half-integer lattice. This one exists for the tie-break and for
-             the prune boundary: every distance is the root of a small
-             integer, exact ties are everywhere, and the k-th and (k+1)-th
-             neighbours are frequently equidistant, so the total order's
-             index tie-break is exercised on every row instead of never.
+             half-integer lattice. This one exists for the TIE-BREAK AND FOR
+             NOTHING ELSE: every distance is the root of a small integer,
+             exact ties are everywhere, and the k-th and (k+1)-th neighbours
+             are frequently equidistant, so the total order's index
+             tie-break is exercised on every row instead of never.
              `uniform-test-data-hides-permutation` is about the first
              fixture; this is the complementary trap, a fixture with NO ties
              never tests the tie-break.
+
+             **IT CANNOT WITNESS A PRUNING SABOTAGE AND THE LINE THAT SAID
+             IT COULD IS DELETED (2026-09-01).** A query sits at
+             `(a + 0.5, b + 0.5)`, so its four surrounding cells are all at
+             exactly `sqrt(0.5)` and each holds `BK_LAT_REPEAT = 4`
+             identical rows: SIXTEEN index rows at one exact distance, of
+             which k = 8 come back. Under FAST `_knn_compare` accepts a
+             differing index whenever the returned candidate is within
+             `BK_FAST_TIE_ULP` of the oracle's, and a substituted row here
+             is ZERO ulp away, so a prune could throw away up to EIGHT of
+             the sixteen and `bad_rows` would still be 0. That is why
+             `check_rbc_knn_prune_is_load_bearing` refused on it, and it
+             was the fixture and not the kernel: the arm now runs the
+             SCATTERED fixture, which has no ties to hide behind.
 
 THE ORACLE IS A SECOND SPELLING, NOT A SECOND CALL
 ---------------------------------------------------
@@ -61,16 +75,22 @@ A gate never shown capable of failing does not count, so every seam here has
 an arm that must fail when it is broken, and each one predicts the SHAPE of
 the failure rather than only its existence.
 
-  check_rbc_knn_prune_is_load_bearing   sweeps `prune_scale` downward,
-      tightening every bound past what the triangle inequality justifies, and
-      requires the exhaustive comparison to FAIL. It prints the LARGEST scale
-      at which it fails, which is the honest measure of how close to vacuous
-      the pruning gate is. **A ONE-ULP TIGHTENING CANNOT MOVE THIS KERNEL AND
-      THAT IS BY DESIGN**: DEVIATION 567 widens every threshold by four ulp
-      before comparing it, precisely so that float rounding can only admit a
-      candidate and never drop one, so a one-ulp tightening lands inside the
-      slack. The sweep is what replaces the one-ulp arm, and the printed
-      number is what makes it honest.
+  check_rbc_knn_prune_is_load_bearing   first asserts that the SHIPPED
+      query PRUNED something on this arm's own fixture -- `dist_count`
+      summed over the query rows, strictly below `n_queries * n_index` --
+      and then sweeps `prune_scale` downward, tightening every bound past
+      what the triangle inequality justifies, and requires the exhaustive
+      comparison to FAIL. It prints the pruned count and the LARGEST scale
+      at which the answer breaks, which is the honest measure of how close
+      to vacuous the pruning gate is. The count comes FIRST because it is
+      what separates the two ways a sweep can find nothing: a path that
+      never prunes, and bounds that prune with room to spare. **A ONE-ULP
+      TIGHTENING CANNOT MOVE THIS KERNEL AND THAT IS BY DESIGN**: DEVIATION
+      567 widens every threshold by four ulp before comparing it, precisely
+      so that float rounding can only admit a candidate and never drop one,
+      so a one-ulp tightening lands inside the slack. The sweep is what
+      replaces the one-ulp arm, and the printed number is what makes it
+      honest.
 
   check_rbc_knn_slack_costs_no_answer   widens the threshold FURTHER (scale
       above 1) and requires the answer to be UNCHANGED. Together with the arm
@@ -630,6 +650,72 @@ def _knn_compare(
     return bad_rows
 
 
+def _dist_total(
+    ctx: DeviceContext,
+    mut idx: _BcIndex,
+    hq: MutPointer[Float32, MutUntrackedOrigin],
+    nq: Int,
+    d: Int,
+    k: Int,
+    metric: Int,
+    metric_arg: Float32,
+    prune_scale: Float32,
+) raises -> Int:
+    """`dist_count` summed over every query row: how many candidate
+    distances the kernel ACTUALLY computed.
+
+    `_knn_compare` allocates the same counter and throws it away, because
+    what it judges is the ANSWER. This is the other question -- how much
+    WORK that answer took -- and `n_queries * n_index` minus this number is
+    the PRUNED count. The two questions have to be asked of the SAME fixture
+    at the SAME `k` before a sabotage sweep over that fixture means
+    anything: a sweep that moves nothing has two explanations, and only the
+    count tells them apart.
+    """
+    var out_inds = ctx.enqueue_create_buffer[DType.int32](nq * k)
+    var out_dists = ctx.enqueue_create_buffer[DType.float32](nq * k)
+    var dist_count = ctx.enqueue_create_buffer[DType.int32](nq)
+    var query = ctx.enqueue_create_buffer[DType.float32](nq * d)
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_buf=query, src_ptr=hq)
+    ctx.synchronize()
+
+    rbc_knn_query_scaled(
+        ctx,
+        idx.x_reordered,
+        query,
+        idx.r,
+        idx.r_indptr,
+        idx.r_1nn_cols,
+        idx.r_1nn_dists,
+        idx.r_radius,
+        out_inds,
+        out_dists,
+        dist_count,
+        nq,
+        d,
+        idx.n_landmarks,
+        k,
+        prune_scale,
+        metric,
+        metric_arg,
+    )
+
+    var hc = ctx.enqueue_create_host_buffer[DType.int32](nq)
+    ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=dist_count)
+    ctx.synchronize()
+    var total = 0
+    for i in range(nq):
+        total += Int(hc.unsafe_ptr().unsafe_load(i))
+
+    _ = out_inds^
+    _ = out_dists^
+    _ = dist_count^
+    _ = query^
+    _ = hc^
+    return total
+
+
 def _fill_scattered(
     mut hx: HostBuffer[DType.float32], mut hq: HostBuffer[DType.float32]
 ):
@@ -779,15 +865,57 @@ def check_rbc_knn_matches_brute_force() raises:
 
 
 def check_rbc_knn_prune_is_load_bearing() raises:
-    """SABOTAGE: tighten every bound and require the exhaustive comparison
-    to FAIL. Prints the LARGEST tightening that breaks it.
+    """SABOTAGE: prove the query prunes at all, then tighten every bound and
+    require the exhaustive comparison to FAIL. Prints the PRUNED count and
+    the LARGEST tightening that breaks the answer.
 
     `prune_scale` multiplies the threshold before DEVIATION 567's four-ulp
     widening is added, so a scale below 1 makes the bound tighter than the
-    triangle inequality justifies and pruning becomes unsound. If NO scale
-    in the sweep breaks the answer, the fixture cannot see the pruning at
-    all and every equality arm in this file is vacuous, so that case raises
-    with exactly that sentence.
+    triangle inequality justifies and pruning becomes unsound. Two things
+    have to hold for that sweep to say anything, and this arm asserts BOTH,
+    on ONE fixture, in this order:
+
+      1. the SHIPPED query pruned something here -- `dist_count` summed over
+         the query rows, strictly below `n_queries * n_index` -- so the
+         sweep is about a pruning path and not about a full scan wearing a
+         ball cover's name;
+      2. tightening then BREAKS the answer.
+
+    Asserting (1) here rather than leaning on `check_rbc_knn_prunes_work` is
+    half the repair. That arm runs the SCATTERED fixture at k = 4 and this
+    one at k = 8, and `one-box-verdict-is-not-three` is the same rule one
+    level down: a non-vacuity result about one fixture at one k is not a
+    non-vacuity result about another. Together the two numbers mean a sweep
+    that finds nothing can no longer be read as "maybe a full scan"; it
+    would have to be read as "the bounds have margin here", which is a
+    different defect with a different fix.
+
+    WHY THIS ARM NO LONGER RUNS THE LATTICE, IN NUMBERS
+    ----------------------------------------------------
+    It used to, and it REFUSED: no scale down to 0.400 moved a single one of
+    the 64 query rows. The FIXTURE was the reason, not the kernel, and the
+    arithmetic is exact enough to state. A lattice query sits at
+    `(a + 0.5, b + 0.5)`, so the four cells around it are all at exactly
+    `sqrt(0.5)` -- comparison-space `0.5`, which is exact in float32 -- and
+    each cell holds `BK_LAT_REPEAT = 4` identical rows. That is SIXTEEN
+    index rows at one exact distance, competing for k = 8 slots, with the
+    next ring out at `sqrt(2.5)`. Under FAST `_knn_compare` accepts a
+    differing index whenever the returned candidate's own host distance is
+    within `BK_FAST_TIE_ULP = 64` ulp of the oracle's, and a substituted row
+    from those sixteen is ZERO ulp away. So pruning could throw away up to
+    EIGHT of the sixteen and `bad_rows` would still come back 0. The lattice
+    could not witness this sabotage at any scale; it was never a statement
+    about the bounds.
+
+    The SCATTERED fixture can, and this file already proves that it can:
+    `check_rbc_knn_radius_is_read` shrinks every landmark radius to 0.3x on
+    that same fixture at that same k = 8 and the answer LOSES neighbours. Of
+    its 384 rows no two share a coordinate -- every one is a splitmix64 hash
+    of `(row, feature)` scaled into a box of side 10 -- and the query stream
+    is disjoint from the index stream, so a dropped true neighbour is
+    replaced by the (k+1)-th at a materially different distance. That fails
+    the DISTANCE test, which no tie tolerance forgives, and not merely the
+    index test.
 
     A ONE-ULP ARM IS NOT POSSIBLE HERE AND THAT IS NOT AN OVERSIGHT. The
     shipped threshold already carries four ulp of slack, deliberately, so
@@ -797,22 +925,52 @@ def check_rbc_knn_prune_is_load_bearing() raises:
     honest measure of how much tightening this fixture can detect.
     """
     var ctx = DeviceContext()
-    var lx = ctx.enqueue_create_host_buffer[DType.float32](
-        BK_LAT_N * BK_LAT_D
+    var sx = ctx.enqueue_create_host_buffer[DType.float32](
+        BK_SCAT_N * BK_SCAT_D
     )
-    var lq = ctx.enqueue_create_host_buffer[DType.float32](
-        BK_LAT_Q * BK_LAT_D
+    var sq = ctx.enqueue_create_host_buffer[DType.float32](
+        BK_SCAT_Q * BK_SCAT_D
     )
     ctx.synchronize()
-    _fill_lattice(lx, lq)
+    _fill_scattered(sx, sq)
     var idx = _build(
         ctx,
-        lx.unsafe_ptr(),
-        BK_LAT_N,
-        BK_LAT_D,
+        sx.unsafe_ptr(),
+        BK_SCAT_N,
+        BK_SCAT_D,
         DIST_L2_SQRT_UNEXPANDED,
         Float32(2.0),
     )
+
+    # (1) THE PRUNED COUNT, ON THIS ARM'S OWN FIXTURE AND AT ITS OWN k, AT
+    # THE SHIPPED SCALE. `verify reach, not output`: this is the assertion
+    # that the pruning branch RAN, and it is strictly stronger than any
+    # equality arm, which cannot tell a pruned walk from a full scan.
+    var brute = BK_SCAT_Q * BK_SCAT_N
+    var computed = _dist_total(
+        ctx,
+        idx,
+        sq.unsafe_ptr(),
+        BK_SCAT_Q,
+        BK_SCAT_D,
+        8,
+        DIST_L2_SQRT_UNEXPANDED,
+        Float32(2.0),
+        Float32(1.0),
+    )
+    var pruned = brute - computed
+    if pruned <= 0:
+        raise Error(
+            "check_rbc_knn_prune_is_load_bearing: the SHIPPED query computed"
+            " "
+            + String(computed)
+            + " candidate distances against brute force's "
+            + String(brute)
+            + ", so it pruned NOTHING at k = 8 on this fixture. Nothing"
+            " below this line is a statement about the bounds: sweep or no"
+            " sweep, this path is a full scan and every equality arm in"
+            " this file is comparing a full scan against a full scan."
+        )
 
     var scales = List[Float32]()
     scales.append(Float32(0.99999994))  # one ulp below 1, inside the slack
@@ -825,18 +983,24 @@ def check_rbc_knn_prune_is_load_bearing() raises:
     scales.append(Float32(0.900))
     scales.append(Float32(0.700))
     scales.append(Float32(0.400))
+    scales.append(Float32(0.250))
+    scales.append(Float32(0.100))
 
+    # The list DESCENDS, so the first scale that breaks the answer is the
+    # LARGEST one that breaks it and there is nothing left to learn below
+    # it. Exiting there is not a shortcut: it is the same number the old
+    # loop reported, for a tenth of the host brute forces.
     var first_break = Float32(-1.0)
     var first_break_rows = 0
     for si in range(len(scales)):
         var bad = _knn_compare(
             ctx,
             idx,
-            lx.unsafe_ptr(),
-            BK_LAT_N,
-            lq.unsafe_ptr(),
-            BK_LAT_Q,
-            BK_LAT_D,
+            sx.unsafe_ptr(),
+            BK_SCAT_N,
+            sq.unsafe_ptr(),
+            BK_SCAT_Q,
+            BK_SCAT_D,
             8,
             DIST_L2_SQRT_UNEXPANDED,
             Float32(2.0),
@@ -845,21 +1009,26 @@ def check_rbc_knn_prune_is_load_bearing() raises:
             False,
         )
         if bad > 0:
-            if first_break < Float32(0.0):
-                first_break = scales[si]
-                first_break_rows = bad
+            first_break = scales[si]
+            first_break_rows = bad
+            break
 
     if first_break < Float32(0.0):
         raise Error(
-            "sabotage: TIGHTENING EVERY PRUNING BOUND BY 60% DID NOT CHANGE"
-            " THE ANSWER. That is not evidence the kernel is right, it is"
-            " evidence THIS FIXTURE CANNOT SEE THE PRUNING: if no bound"
-            " ever decides anything, check_rbc_knn_matches_brute_force is"
-            " comparing a full scan against a full scan and proves nothing"
-            " about the ball cover. Build a fixture whose landmark groups"
-            " are large enough that the bounds fire -- more points per"
-            " landmark, or a smaller k -- before trusting any arm in this"
-            " file."
+            "sabotage: TIGHTENING EVERY PRUNING BOUND BY 90% DID NOT CHANGE"
+            " THE ANSWER, on a fixture where the shipped query PRUNED "
+            + String(pruned)
+            + " of "
+            + String(brute)
+            + " candidate distances. The count above excludes the"
+            " full-scan explanation, which leaves exactly two: the prunes"
+            " that do happen never come near a true neighbour on this"
+            " fixture, or `prune_scale` is not reaching the comparisons"
+            " inside rbc_knn_kernel. `verify reach, not output` says which"
+            " to settle first -- print the threshold the kernel compares"
+            " against and watch it move with the scale. Do NOT soften this"
+            " assertion, and do NOT read a silent sweep as a green"
+            " check_rbc_knn_matches_brute_force."
         )
 
     if first_break > Float32(0.99999995):
@@ -872,20 +1041,25 @@ def check_rbc_knn_prune_is_load_bearing() raises:
         )
 
     print(
-        "check_rbc_knn_prune_is_load_bearing OK: the answer survives a"
-        " one-ulp tightening (the DEVIATION 567 slack) and BREAKS at"
-        " prune_scale "
+        "check_rbc_knn_prune_is_load_bearing OK: the shipped query PRUNED "
+        + String(pruned)
+        + " of "
+        + String(brute)
+        + " candidate distances (computed "
+        + String(computed)
+        + "), so the pruning branch runs; the answer survives a one-ulp"
+        " tightening (the DEVIATION 567 slack) and BREAKS at prune_scale "
         + String(first_break)
         + " on "
         + String(first_break_rows)
         + " of "
-        + String(BK_LAT_Q)
+        + String(BK_SCAT_Q)
         + " query rows. That scale is how much tightening this fixture can"
         " detect; a smaller number would mean a weaker gate."
     )
     _ = idx^
-    _ = lx^
-    _ = lq^
+    _ = sx^
+    _ = sq^
 
 
 def check_rbc_knn_slack_costs_no_answer() raises:
@@ -895,7 +1069,11 @@ def check_rbc_knn_slack_costs_no_answer() raises:
     widening moved the answer, the widened bound would be admitting
     candidates that then WIN, which would mean the tight bound had been
     pruning real neighbours -- the exact silent failure this lane exists to
-    make impossible. It must not move, on either fixture.
+    make impossible. It runs the SCATTERED fixture, the same one the arm
+    above tightens, so the two numbers bracket ONE bound on ONE fixture
+    rather than two halves of a claim about different data. (The sentence
+    that used to close this line, "it must not move, on either fixture",
+    described a lattice pass this arm has never run; deleted 2026-09-01.)
     """
     var ctx = DeviceContext()
     var sx = ctx.enqueue_create_host_buffer[DType.float32](
@@ -1132,7 +1310,9 @@ def check_rbc_knn_prunes_work() raises:
             " them."
         )
     print(
-        "check_rbc_knn_prunes_work OK: "
+        "check_rbc_knn_prunes_work OK: PRUNED "
+        + String(brute - total)
+        + ", computed "
         + String(total)
         + " candidate distances against brute force's "
         + String(brute)
