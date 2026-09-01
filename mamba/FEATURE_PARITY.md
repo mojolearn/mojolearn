@@ -16,10 +16,14 @@ it ship now, ship later on a named trigger, or get refused for a named reason.
 **What ships today, in one sentence.** One Mamba-1 block, FP32, inference
 only, prefill and decode, under profile `mojolearn.identical.mamba1.fp32.v1`
 (`mamba/IDENTICAL_MAMBA_CONTRACT.md`), gated bit-identical on three vendors
-(IDENTITY_PATHS row 55, card md5 `f072dd22`). No Mamba-2, no training path
-built (the backward is planned in `mamba/IDENTICAL_BACKWARD_PLAN.md`, nothing
-compiled), no model level, no Python binding. `python/mojolearn/` exports no
-mamba symbol at all as of today.
+(IDENTITY_PATHS row 55, card md5 `f072dd22`). Mamba-2 code forms landed
+2026-09-01 (one-box gates green per the contract's RUN RECORD; the
+three-vendor E-leg still OWED, so no cross-vendor Mamba-2 sentence exists);
+Mamba-3 code forms landed the same day, NOTHING RUN (see the section 5 rows).
+No training path built (the backward is planned in
+`mamba/IDENTICAL_BACKWARD_PLAN.md`, nothing compiled), no model level, no
+Python binding. `python/mojolearn/` exports no mamba symbol at all as of
+today.
 
 **UPDATE, 2026-09-01 (later the same day), superseding the sentence above
 where they disagree.** Two of its clauses closed. (a) The Mamba-2 block
@@ -160,7 +164,8 @@ Upstream spellings are `mamba_ssm/modules/block.py` (blk),
 | MLP interleave (`d_intermediate` > 0, GatedMLP, norm2) | seq:73-78; blk:31-35, :69-86; modules/mlp.py | absent | SHIP LATER | trigger, a checkpoint with d_intermediate > 0; stock mamba/mamba2 LM checkpoints use 0 |
 | LayerNorm option (`rms_norm=False`) | seq:70-72, :177-179 | absent; RMSNorm only | SHIP LATER | trigger, a LayerNorm checkpoint; needs a mean-subtraction seam the contract does not have |
 | `from_pretrained`/`save_pretrained`, HF hub fetch, config json | seq:292-315; utils/hf.py | absent | SHIP LATER (hub fetch); raw-buffer weight intake SHIP NOW | the consumer requirement is "the same weights on both sides", which raw little-endian buffers plus a manifest already deliver (the corpus file format is the precedent). A checkpoint-format importer (torch .bin/safetensors -> our buffers) is a Python-side utility, trigger, first real-checkpoint cross-check |
-| Mamba-3 block | mamba_ssm/modules/mamba3.py:43-70 (rope_fraction :53, MIMO :59-60, heavy_tail_activation :27-41, per-token rotary on B/C, trapezoidal discretization inputs :106-108) | absent | SHIP LATER, at earliest | upstream capability, listed so nobody discovers it late; it is a 2026 addition with tilelang/cute kernel deps and no released checkpoint family the consumer has named. Trigger, a consumer request naming a Mamba-3 checkpoint, and it opens with its own contract sibling |
+| Mamba-3 block | mamba_ssm/modules/mamba3.py:43-70 (rope_fraction :53, MIMO :59-60, heavy_tail_activation :27-41, per-token rotary on B/C, trapezoidal discretization inputs :106-108) | BUILT, NOTHING RUN (2026-09-01): contract `IDENTICAL_MAMBA3_CONTRACT.md` + oracle/impl/check code forms landed (`checks/mamba3_*.mojo`, `impl/mamba_ssm/ops/mamba3_siso.mojo`, `impl/mamba_ssm/modules/mamba3.mojo`); every gate RUN OWED, no compile has happened, no claim exists | SHIP LATER, gate-first | the contract sibling now exists and the addendum row below scopes the surface knobs; the trigger for SHIPPING is unchanged (a consumer-named Mamba-3 checkpoint) and the completion claim still lives on the three-vendor E-leg |
+| Mamba-3 SURFACE KNOBS (the contract's deferred inventory, addendum to the row above) | mamba3.py:44-70 | pinned or refused, per profile `mojolearn.identical.mamba3.siso.fp32.v1` section 3 | one disposition per knob | PINNED AS PROFILE CONSTANTS: d_state 128, expand 2, headdim 64, ngroups 1, rope_fraction 0.5 (32 angles), A_floor 1e-4, chunk_size 64 (PART OF THE ARITHMETIC, mamba2 DEV 783's standing), B/C norm eps 1e-5. REFUSED BY NAME, structurally (no such knob exists on the surface): is_mimo/mimo_rank, is_outproj_norm, fuse_pregate_headwise_norm, rope_fraction 1.0, ngroups > 1, cu_seqlens/seq_idx varlen, non-Float32 (the shipped bf16 casts, mamba3_siso_combined.py:390-399, refused not reproduced). INITIALIZATION FACTS, out of scope (weights are inputs): dt_min/dt_max/dt_init_floor (:54-56, :111-115), the ones-init B/C biases (:121-122), D init (:140). ABSORBED-KWARG NO-OPS upstream, absent here: dropout, layer_idx, n_layer, device, dtype (:65-69). DEFERRED, not refused (contract section 5): varlen, MIMO, is_outproj_norm arms, multi-block caches |
 
 ## 6. Varlen and batching
 
