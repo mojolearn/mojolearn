@@ -91,6 +91,9 @@ PHASE8_EXPECTED_FINDINGS=(
   # start with this prefix -- `... failed (see <log>)` from run_lane_arm and
   # `... check FAILED: ...` from run_lane_check.
   "PHASE8-FINDING: mamba [fast]"
+  # mamba2 joined phase 8 on 2026-09-01 with the same FAST posture as mamba:
+  # that arm has never been recorded anywhere, so its finding is expected.
+  "PHASE8-FINDING: mamba2 [fast]"
 )
 
 # A lane whose FAST arm was never built has a FAST card that is ABSENT rather
@@ -104,6 +107,7 @@ PHASE8_EXPECTED_FINDINGS=(
 # of. Nothing below can excuse one.
 PHASE8_EXPECTED_MISSING_FAST=(
   mamba
+  mamba2
 )
 
 # An empty entry is a prefix of every line, so it would forgive the whole
@@ -282,7 +286,7 @@ echo "########## 7. the lanes' cards (phase 8): IDENTICAL judged, FAST recorded"
 # NOTHING EXCUSES A MISSING **IDENTICAL** CARD, mamba included. That card is
 # what the round is made of, so its absence is RC=1 for every lane in the
 # list below, exactly as it was before the allowlist existed.
-for lane in gemm cd kde linkage svm metrics mamba iforest transformer \
+for lane in gemm cd kde linkage svm metrics mamba mamba2 iforest transformer \
            arima cholesky embedding gp hdbscan holtwinters ivf \
            kernelmethods gmm resample spectral \
            training-loss training-optimizer training-step tsa; do

@@ -1066,6 +1066,7 @@ check-metrics-silhouette = "mojo run -I . metrics/checks/silhouette_check.mojo"
 check-metrics-trust = "mojo run -I . metrics/checks/trustworthiness_check.mojo"
 check-holtwinters = "mojo run -I . holtwinters/checks/hw_check.mojo"
 check-mamba-block = "mojo run -I . mamba/checks/mamba_check.mojo"
+check-mamba2-block = "mojo run -I . mamba/checks/mamba2_check.mojo"
 
 # BLOCK-LEVEL BATCH INVARIANCE (checks/batch_invariance_check.mojo). The
 # lift of `IDENTICAL_FP32_CONTRACT.md` section 6.1 -- "Why `L` may not depend
