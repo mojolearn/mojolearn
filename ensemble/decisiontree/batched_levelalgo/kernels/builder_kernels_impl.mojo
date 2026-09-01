@@ -1881,21 +1881,58 @@ def launch_build_histograms_kernel[
                 # `need_bytes > 0` guards the check-suite's don't-care
                 # config; a zero size means "not computed", never "fits".
                 if not launched and need_bytes > 0 and need_bytes <= TIER_BYTES:
-                    comptime kt = build_histograms_kernel[
-                        O, TPB, TIER_SLOTS, False, sabotage
-                    ]
-                    log_launch("histogram_shared_" + String(TIER_BYTES))
-                    ctx.enqueue_function[kt](
-                        argsp.unsafe_origin_cast[MutAnyOrigin](),
-                        histograms.unsafe_origin_cast[MutAnyOrigin](),
-                        Int32(max_n_bins),
-                        work_items.unsafe_origin_cast[MutAnyOrigin](),
-                        Int32(col_start),
-                        column_samples.unsafe_origin_cast[MutAnyOrigin](),
-                        workload_info.unsafe_origin_cast[MutAnyOrigin](),
-                        grid_dim=(histogram_grid_x, histogram_grid_y),
-                        block_dim=TPB,
-                    )
+                    # LATENT-DEFECT REPAIR (2026-09-01, disabled path, no
+                    # deviation number): this instantiation dropped
+                    # `USE_BINNED`, so a binned dataset reaching a tier
+                    # would silently run the SEARCHING kernel -- same
+                    # bins, but the 4-byte gather + binary search
+                    # DEVIATION 314 exists to remove. Unreachable today
+                    # twice over (the binned shared arm returns above,
+                    # and `HISTOGRAM_SMEM_TIERS_ENABLED` is False); the
+                    # dispatch below makes the kernel selection correct
+                    # if either guard is ever lifted.
+                    if dataset.has_bins:
+                        comptime ktb = build_histograms_kernel[
+                            O, TPB, TIER_SLOTS, False, sabotage, True
+                        ]
+                        log_launch(
+                            "histogram_binned_shared_" + String(TIER_BYTES)
+                        )
+                        ctx.enqueue_function[ktb](
+                            argsp.unsafe_origin_cast[MutAnyOrigin](),
+                            histograms.unsafe_origin_cast[MutAnyOrigin](),
+                            Int32(max_n_bins),
+                            work_items.unsafe_origin_cast[MutAnyOrigin](),
+                            Int32(col_start),
+                            column_samples.unsafe_origin_cast[
+                                MutAnyOrigin
+                            ](),
+                            workload_info.unsafe_origin_cast[
+                                MutAnyOrigin
+                            ](),
+                            grid_dim=(histogram_grid_x, histogram_grid_y),
+                            block_dim=TPB,
+                        )
+                    else:
+                        comptime kt = build_histograms_kernel[
+                            O, TPB, TIER_SLOTS, False, sabotage
+                        ]
+                        log_launch("histogram_shared_" + String(TIER_BYTES))
+                        ctx.enqueue_function[kt](
+                            argsp.unsafe_origin_cast[MutAnyOrigin](),
+                            histograms.unsafe_origin_cast[MutAnyOrigin](),
+                            Int32(max_n_bins),
+                            work_items.unsafe_origin_cast[MutAnyOrigin](),
+                            Int32(col_start),
+                            column_samples.unsafe_origin_cast[
+                                MutAnyOrigin
+                            ](),
+                            workload_info.unsafe_origin_cast[
+                                MutAnyOrigin
+                            ](),
+                            grid_dim=(histogram_grid_x, histogram_grid_y),
+                            block_dim=TPB,
+                        )
                     launched = True
         if not launched:
             # Above 8 KiB the full 103a blob remains; anything past
