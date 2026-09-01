@@ -398,16 +398,18 @@ comptime INT32_MAX: Int32 = 2147483647
 # move. The full argument and the sabotage hook live with the mechanism
 # in `builder_kernels_impl.mojo` (DEVIATION 2001 block).
 #
-# DEFAULT FALSE: every parameter downstream defaults off, so this build
-# is the pre-2001 code; the A/B pair is two builds of this ONE source
-# with this ONE line flipped, and the default flips only on a measured
-# bit-identical win (house rule 11). GATES OWED before any flip, in
-# order: fingerprint pair flag-off vs flag-on, equal on all five configs
-# + K1/K4 twins (`pixi run mojo run -I . ensemble/checks/
-# fingerprint_probe.mojo`); the ensemble check suite; the sabotage arm
-# (flag-on, gather sabotage=1: every line downstream of the first
-# histogram must MOVE); the A/B timing pair at the RF_BENCH shapes.
-comptime LABELS_SAMPLED_ORDER = False
+# DEFAULT TRUE SINCE 2026-09-01 EVENING (house rule 11's both halves
+# finally in hand). The identity half ran that morning: fingerprint
+# pair flag-off vs flag-on EQUAL on all five configs + K1/K4 twins,
+# gather sabotage moved every downstream line. The speed half ran that
+# evening at the 1M/2M floor (bench/results/ab_large_2026-09-01/,
+# interleaved rounds, canary-bracketed): flag-on won BOTH shapes BOTH
+# rounds — ~2.9% at rf@1000000, 6.7-8.9% at rf@2000000, the gather's
+# cost growing with rows exactly as the mechanism predicts. Sub-1M
+# shapes were not measured and do not vote (the 1M floor is policy).
+# The A/B pair remains two builds of this ONE source with this ONE
+# line flipped.
+comptime LABELS_SAMPLED_ORDER = True
 
 
 # ---------------------------------------------------------------------------

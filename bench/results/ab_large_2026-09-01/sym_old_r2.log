@@ -1,0 +1,32 @@
+depth 6 : rep arm ms/tree, (T 22 - T 2 )/ 20
+0   rmse   168.38415000000003
+0   ll10   253.3159
+0   ll1    201.92090000000002
+1   rmse   175.71620000000001
+1   ll10   310.75875
+1   ll1    182.52299999999997
+2   rmse   166.68725
+2   ll10   318.19925
+2   ll1    176.82135
+
+depth 6 median ms/tree   rmse 168.38415000000003   ll10 310.7587500000001   ll1 182.5229999999999
+  stage entry fee (ll1 - rmse):      14.138849999999877 ms/tree
+  per Newton iteration ((ll10-ll1)/9): 14.248416666666685 ms
+  full default bill (ll10 - rmse):   142.37460000000004 ms/tree
+
+depth 8 : rep arm ms/tree, (T 22 - T 2 )/ 20
+0   rmse   248.4291
+0   ll10   360.72015
+0   ll1    258.5507
+1   rmse   251.07239999999996
+1   ll10   368.9646
+1   ll1    265.92035
+2   rmse   249.96295
+2   ll10   384.39065
+2   ll1    271.01885
+
+depth 8 median ms/tree   rmse 249.96294999999998   ll10 368.96459999999996   ll1 265.92035000000004
+  stage entry fee (ll1 - rmse):      15.957400000000064 ms/tree
+  per Newton iteration ((ll10-ll1)/9): 11.449361111111102 ms
+  full default bill (ll10 - rmse):   119.00164999999998 ms/tree
+

@@ -1432,7 +1432,10 @@ def identical_softplus(x: Float32) -> Float32:
 # ============ pinned product `identical_mul` and lives with
 # ============ `identical_mul_add` at the top of this file rather than
 # ============ here, because that is where a reader looks for it;
-# ============ 827-829 are RESERVED for this lane and unused. Built for
+# ============ 827-829 were once reserved for this lane, NEVER USED
+# ============ here, and were RECLAIMED 2026-09-01 by the Mamba-3
+# ============ contract (mamba/IDENTICAL_MAMBA3_CONTRACT.md claims
+# ============ 827-831; the implementation added 832-834). Built for
 # ============ the Llama-shaped identity block (RMSNorm, RoPE, softmax
 # ============ attention, SwiGLU MLP); the
 # ============ transformer lane imports these, nothing else in the tree

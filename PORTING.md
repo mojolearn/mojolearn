@@ -5383,13 +5383,26 @@ the sustained window (sized reps), and the IDENTICAL-mode soak
 (`tools/with_identical_mode.sh pixi run soak-determinism` — needs a
 rebuild) as the second half of the closing pair.
 
-## 2002. [FIX LANDED 2026-09-01, UNVERIFIED — ALL RUNS OWED] Saturated-device fits return silent garbage instead of raising
+## 2002. [FIX GATED 2026-09-01 SAME EVENING; closing load-window rerun owed] Saturated-device fits return silent garbage instead of raising
 
 **VERDICT: a fit on a dead/saturated device now RAISES a named
-"DEVIATION 2002" error instead of returning an empty model. The fix is
-WRITTEN, not run: every gate below is OWED, and until the armed legs
-have been seen RED and the un-armed suite green, this entry does not
-close.**
+"DEVIATION 2002" error instead of returning an empty model, and the
+quiet-box gate set has RUN. Same evening as the fix landed: unarmed
+suite ALL GREEN (soak-determinism 1 rep, check-logloss-train,
+check-train-api, extratrees device_batched_check, ensemble
+forest_check, fingerprint_probe — the last two with DEVIATION 2001's
+flag freshly flipped on, doubling as that flip's sanity), and ALL
+THREE armed legs RED naming DEVIATION 2002 with their own witness
+(greedy per-tree canary: "read back 0 where 537043231 was required";
+extratrees and randomforest end-of-fit canaries likewise; each raise
+carries the [SABOTAGE ARM ... REQUIRED-RED] banner). The 2009 worry —
+that the canary d2h might outrun `mgr.wait_complete` on a healthy box
+— did NOT materialize: no spurious 2002 raise anywhere in the green
+suite. STILL OWED before this entry closes: the deliberate
+reproduction (window recipe at 9+ processes until load > 15 — the Aug
+29 crash load class, Andrew's slot, him present) where the onset must
+now be a raise, not a garbage rep; and the NVIDIA/AMD columns
+(one-box verdict is not three).**
 
 **THE INCIDENT (2026-09-01, preserved).** Found by 134's loaded window
 (record above): when the box saturates (nine concurrent GPU fit

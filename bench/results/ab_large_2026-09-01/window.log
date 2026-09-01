@@ -1,0 +1,18 @@
+window start Tue Sep  1 16:53:13 EDT 2026 commit 7ac1112e
+et_head_1m r1 rc=0 wall=6s
+et_old_1m r1 rc=0 wall=7s
+et_head_2m r1 rc=0 wall=13s
+et_old_2m r1 rc=0 wall=15s
+rf_off r1 rc=0 wall=394s
+rf_on r1 rc=0 wall=363s
+sym_head r1 rc=0 wall=176s
+sym_old r1 rc=0 wall=168s
+et_head_1m r2 rc=0 wall=6s
+et_old_1m r2 rc=0 wall=7s
+et_head_2m r2 rc=0 wall=13s
+et_old_2m r2 rc=0 wall=12s
+rf_off r2 rc=0 wall=358s
+rf_on r2 rc=0 wall=340s
+sym_head r2 rc=0 wall=164s
+sym_old r2 rc=0 wall=178s
+window end Tue Sep  1 17:30:14 EDT 2026
