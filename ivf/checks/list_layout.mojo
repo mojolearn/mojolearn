@@ -58,8 +58,9 @@ sort and a host k-way merge.
 
 The reason is that the deterministic device spelling needs a SEGMENTED RANK
 -- `rank[i] = |{j < i : label[j] == label[i]}|` -- which is a multi-block
-scan, and this lane has run nothing at all. Writing an unmeasured
-multi-block scan to replace an unmeasured host loop is inventing, which is
+scan, and neither spelling has ever been measured against the other.
+Writing an unmeasured multi-block scan to replace an unmeasured host loop
+is inventing, which is
 what `PORTING_RULES.md` 0c is about. Closure condition, stated so it is not
 mistaken for done: a segmented exclusive scan over the label histogram,
 plus a scatter that reads its rank rather than an atomic. It changes no
@@ -197,8 +198,8 @@ def merge_probed_lists(
 
     The linear scan over the `n_probes` heads is `O(n_candidates *
     n_probes)`. That is not the shape a fast implementation has and it is
-    not defended as one; this lane has measured nothing and
-    `ivf/README.md` says so in those words. A heap, or the device segmented
+    not defended as one; the alternatives have never been measured against
+    it and `ivf/README.md` says so. A heap, or the device segmented
     scan of DEVIATION 1800, is the same ORDER of output and therefore the
     same bits.
 

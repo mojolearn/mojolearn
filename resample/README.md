@@ -24,7 +24,10 @@ Stated as a design goal, not as a measurement. See Status.
 ## Status, honestly
 
 **BUILT AND GATED ON ONE APPLE M4, BOTH MODES, 2026-08-25. NO SECOND VENDOR
-HAS RUN THIS.**
+HAS RUN THIS UNDER IDENTICAL, so there is no identity card outside the M4.**
+An NVIDIA H100 compiled and ran the bootstrap under FAST on 2026-08-26
+(`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`), which is
+a speed leg and not an identity one.
 
 `pixi run check-resample` is green in FAST and green under
 `tools/with_identical_mode.sh`, fifteen checks in each mode. The headline
@@ -47,9 +50,14 @@ differing, because the FAST fold goes through `block.sum` whose cross-lane
 stage is the hardware's warp width. That contrast is what makes the
 IDENTICAL result evidence rather than a tautology.
 
-- **There is no performance number for this lane and none is claimed.**
-  Nothing here has been timed against anything.
-- **There is no cross-vendor claim.** One Apple M4, one process.
+- **One FAST timing exists.** On an NVIDIA H100 on 2026-08-26, fixture
+  `200x2r10000`, our median was 0.595 ms with NO OPPONENT ON THAT BOX,
+  because RAPIDS ships no bootstrap and the SciPy CPU arm is refused there
+  under GPU-PATH-ONLY
+  (`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`). So
+  there is a cost figure and still no comparison.
+- **There is no cross-vendor IDENTITY claim.** The identity card comes from
+  one Apple M4, one process.
 - **BCa is refused by name in BOTH modes** on the missing `ndtri`
   (DEVIATION 1699). The bias percentile, the jackknife and the acceleration
   are all built and gated; only the interval is refused.
@@ -320,21 +328,24 @@ repository-level files if that is how the orchestrator wants them.
 ## SABOTAGES TO PERFORM
 
 All nine arms are written, comptime-selectable, and driven by
-`check_resample_sabotages`. **The result column is empty because nothing has
-been run.** The pattern is `hierarchy/checks/sabotage_tile.mojo`'s and the
-driver is `hierarchy/checks/linkage_check.mojo`'s.
+`check_resample_sabotages`, and they were driven on the Apple M4 on
+2026-08-25 in both modes. **The result column below has not been
+transcribed from that run**, and the transcription is owed; the three
+results the lane did write up are under "Three arms that could not fire"
+above. The pattern is `hierarchy/checks/sabotage_tile.mojo`'s and the driver
+is `hierarchy/checks/linkage_check.mojo`'s.
 
 | arm | what it breaks | fixture | expected | result |
 |---|---|---|---|---|
-| `RSAB_BATCH_DEPENDENT` | **the headline.** The index map's subsequence is xored with `n_replicates`, so the map becomes a function of the batch size | `FIX_HASHED`, n = 200 | `check_batch_invariance` and `check_prefix_stability` MUST FAIL; every other gate stays green, because any single run is still self-consistent | (not run) |
-| `RSAB_MAP_IGNORES_POSITION` | the position is dropped from the subsequence, so every position of a replicate draws the same row | `FIX_HASHED` | `check_index_map_is_positional`'s separation clause MUST FAIL | (not run) |
-| `RSAB_LOW_HALF_SUBSEQUENCE` | the subsequence goes into the LOW counter half, the trap `core/philox.mojo::_incr_hi` names by hand | `FIX_HASHED` | `check_bootstrap_vs_oracle` MUST FAIL | (not run) |
-| `RSAB_SKIP_REJECTION` | Lemire's rejection loop dropped | `FIX_HASHED` (n = 200) **and** `FIX_ANALYTIC` (n = 8) | MUST FAIL at n = 200; **EXPECTED INERT at n = 8**, because `2^32 mod 8 == 0` and the loop is unreachable there. The per-branch demonstration | (not run) |
-| `RSAB_REVERSED_POSITIONS` | slot `s` of the fold holds position `n - 1 - s`. Same multiset, different tree pairing | `FIX_HASHED` | `check_bootstrap_vs_oracle` MUST FAIL | (not run) |
-| `RSAB_FOLD_DESCENDING` | the chunk chain folded the other way | a 600-row hashed sample (three chunks) **and** `FIX_HASHED` (n = 200, one chunk) | MUST FAIL at n = 600; **EXPECTED INERT at n = 200**, because reversing a one-element chain is the identity. The second per-branch demonstration | (not run) |
-| `RSAB_STD_SQRT` | `std.math.sqrt` instead of `identical_sqrt` at the `std` and `pearson` seams | `FIX_HASHED` | **REPORT.** Apple's `sqrt` is correctly rounded, so 0 cells are expected to move there; NVIDIA's lowers to an approximate PTX sqrt, 176,577 of 2^20 normals off by one ulp (IDENTITY_PATHS row 10), so it is expected to bite on the second vendor | (not run) |
-| `RSAB_NO_CANON_NAN` | `canonicalize_nan` dropped on the degenerate `pearson` path | `FIX_ANALYTIC` | **RECORDED.** Prints the vendor's NaN payload reaching `resample.theta` | (not run) |
-| `RSAB_PERM_KEY_ONLY` | the permutation key narrowed to 4 bits AND the index tie-break dropped | `FIX_SEPARABLE` | `check_permutation_separable`'s bijection assertion MUST FAIL. Two changes in one arm on purpose, because at 64 bits the tie-break is unreachable and an unreachable branch cannot be sabotaged | (not run) |
+| `RSAB_BATCH_DEPENDENT` | **the headline.** The index map's subsequence is xored with `n_replicates`, so the map becomes a function of the batch size | `FIX_HASHED`, n = 200 | `check_batch_invariance` and `check_prefix_stability` MUST FAIL; every other gate stays green, because any single run is still self-consistent | (driven 2026-08-25, not transcribed) |
+| `RSAB_MAP_IGNORES_POSITION` | the position is dropped from the subsequence, so every position of a replicate draws the same row | `FIX_HASHED` | `check_index_map_is_positional`'s separation clause MUST FAIL | (driven 2026-08-25, not transcribed) |
+| `RSAB_LOW_HALF_SUBSEQUENCE` | the subsequence goes into the LOW counter half, the trap `core/philox.mojo::_incr_hi` names by hand | `FIX_HASHED` | `check_bootstrap_vs_oracle` MUST FAIL | (driven 2026-08-25, not transcribed) |
+| `RSAB_SKIP_REJECTION` | Lemire's rejection loop dropped | `FIX_HASHED` (n = 200) **and** `FIX_ANALYTIC` (n = 8) | MUST FAIL at n = 200; **EXPECTED INERT at n = 8**, because `2^32 mod 8 == 0` and the loop is unreachable there. The per-branch demonstration | (driven 2026-08-25, not transcribed) |
+| `RSAB_REVERSED_POSITIONS` | slot `s` of the fold holds position `n - 1 - s`. Same multiset, different tree pairing | `FIX_HASHED` | `check_bootstrap_vs_oracle` MUST FAIL | (driven 2026-08-25, not transcribed) |
+| `RSAB_FOLD_DESCENDING` | the chunk chain folded the other way | a 600-row hashed sample (three chunks) **and** `FIX_HASHED` (n = 200, one chunk) | MUST FAIL at n = 600; **EXPECTED INERT at n = 200**, because reversing a one-element chain is the identity. The second per-branch demonstration | (driven 2026-08-25, not transcribed) |
+| `RSAB_STD_SQRT` | `std.math.sqrt` instead of `identical_sqrt` at the `std` and `pearson` seams | `FIX_HASHED` | **REPORT.** Apple's `sqrt` is correctly rounded, so 0 cells are expected to move there; NVIDIA's lowers to an approximate PTX sqrt, 176,577 of 2^20 normals off by one ulp (IDENTITY_PATHS row 10), so it is expected to bite on the second vendor | (driven 2026-08-25, not transcribed) |
+| `RSAB_NO_CANON_NAN` | `canonicalize_nan` dropped on the degenerate `pearson` path | `FIX_ANALYTIC` | **RECORDED.** Prints the vendor's NaN payload reaching `resample.theta` | (driven 2026-08-25, not transcribed) |
+| `RSAB_PERM_KEY_ONLY` | the permutation key narrowed to 4 bits AND the index tie-break dropped | `FIX_SEPARABLE` | `check_permutation_separable`'s bijection assertion MUST FAIL. Two changes in one arm on purpose, because at 64 bits the tie-break is unreachable and an unreachable branch cannot be sabotaged | (driven 2026-08-25, not transcribed) |
 
 Two sabotages considered and NOT written, with the reason, so nobody adds them
 thinking they were forgotten.
@@ -394,21 +405,21 @@ while `resample.theta` matches is a sort defect and nothing else.
 
 ## WHAT IS OWED
 
-1. **A FIRST BUILD.** Nothing here has been compiled. The most likely places
-   for a compile error are the comptime kernel bindings in
-   `estimator.mojo::_launch_*_at` (the `comptime kern = f[a, b]` form), the
-   `comptime for` lane loops writing SIMD lanes inside `_chunked_sum`, and the
-   `stack_allocation` of `Scalar[DType.uint64]` in threadgroup memory in
-   `perm_stat_kernel`.
-2. **A FIRST GATE RUN, in both modes,** and the sabotage table's result column
-   filled in from it. Until then every claim in this file is a design claim.
-3. **THE SECOND VENDOR (NVIDIA H100).** Two things are expected to move there
-   and are worth watching for by name. `RSAB_STD_SQRT` should stop being inert
+1. **THE SABOTAGE TABLE'S RESULT COLUMN,** transcribed from the Apple M4
+   run of 2026-08-25 rather than left as expectations.
+2. **THE SECOND VENDOR UNDER IDENTICAL.** An NVIDIA H100 compiled and ran
+   this lane under FAST on 2026-08-26, fixture `200x2r10000`, median
+   0.595 ms with no opponent on that box
+   (`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`). A
+   FAST leg is a speed leg and buys no identity, so there is still no
+   IDENTICAL-mode card from any vendor except the M4. Two things are
+   expected to move on the NVIDIA IDENTICAL leg and are worth watching for
+   by name. `RSAB_STD_SQRT` should stop being inert
    (row 10's approximate PTX sqrt). `ftz` should stop being bitwise inert
    (CUDA honors denormals), which is when a dropped-`ftz` sabotage becomes
    worth writing. The IDENTICAL card must be bit-identical to Apple's, stage
    for stage.
-4. **THE THIRD VENDOR (AMD MI325X).** The wavefront is 64 wide, which is
+3. **THE THIRD VENDOR (AMD MI325X).** The wavefront is 64 wide, which is
    exactly what `virtual_block_sum` exists to be independent of, so this leg is
    the one that tests the reuse decision rather than the arithmetic. Also
    check that no kernel here trips the block-primitive width constraint that
@@ -417,19 +428,19 @@ while `resample.theta` matches is a sort defect and nothing else.
    `virtual_block_sum`'s FAST arm and `core/segmented_sort.mojo`'s
    `prefix_sum`, and the latter runs at `SORT_BLOCK = 512`, above every warp
    width.
-5. **DEVIATION 1699's closure.** `portable_ndtri` / `identical_ndtri` in
+4. **DEVIATION 1699's closure.** `portable_ndtri` / `identical_ndtri` in
    `checks/numerics.mojo`, gated the way `check-division` gates
    `portable_divf`, then BCa ships.
-6. **A launch-log site per kernel.** `core/launch_log.mojo::log_launch` is
+5. **A launch-log site per kernel.** `core/launch_log.mojo::log_launch` is
    reached only through `segmented_sort_keys_f32` today, so a Metal trace
    cannot name this lane's own kernels. One line per `enqueue_function`.
-7. **Batching the sort path.** `RESAMPLE_MAX_SORT_CELLS` refuses a large
+6. **Batching the sort path.** `RESAMPLE_MAX_SORT_CELLS` refuses a large
    `quantile` or `trimmed_mean` bootstrap rather than tiling it. The refusal
    names `r_first` as the workaround and tiling as the closure.
-8. **`permutation_type='samples'` and `'pairings'`,** and `stratify` /
+7. **`permutation_type='samples'` and `'pairings'`,** and `stratify` /
    `sample_weight` on the resample. All four are in `NOT_IMPLEMENTED.tsv` with their
    reasons.
-9. **A SciPy cross-check as a REPORT.** Running `scipy.stats.bootstrap` on the
+8. **A SciPy cross-check as a REPORT.** Running `scipy.stats.bootstrap` on the
    same fixture cannot reproduce our numbers (different generator, DEVIATION
    1690) but SHOULD land within Monte Carlo error of them, and a tool that
    says so would be the only comparison in this lane whose other side is not

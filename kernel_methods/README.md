@@ -9,7 +9,12 @@ thirty are spent**; the next lane in this range needs its own block.
 ## Status
 
 **BUILT AND GATED ON ONE APPLE M4, BOTH MODES, 2026-08-25. NO SECOND VENDOR
-HAS RUN THIS.** `pixi run check-kernel-methods` is green in FAST and green
+HAS RUN THIS UNDER IDENTICAL, so there is no identity card outside the M4.**
+An NVIDIA H100 compiled and ran all three estimators under FAST on
+2026-08-26
+(`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`), which is
+a speed leg and not an identity one.
+`pixi run check-kernel-methods` is green in FAST and green
 under `tools/with_identical_mode.sh`, **18 checks each**, 13 sabotage arms
 driven at run time with no source edited and no rebuild.
 
@@ -24,7 +29,18 @@ driven at run time with no source edited and no rebuild.
       threads-per-block choices, and one query row transformed ALONE
       equals the same row inside a batch, for all three estimators
 
-**No performance number and none is claimed.** See WHAT THIS WILL COST.
+**The one measured win this lane has, and it is a FAST one.** On an NVIDIA
+H100 on 2026-08-26, kernel ridge at fixture `RBF.16x5` ran in 0.336 ms
+against cuML's GPU `KernelRidge` at 2.256 ms, which is **6.71x FASTER**;
+fit plus predict are inside the clock on both sides, with `kernel`, `gamma`
+and `alpha` passed explicitly
+(`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`). Nystroem
+ran at 0.424 ms (`RBF.16x5q8`) and RBFSampler at 0.295 ms (`3x5q8`), both
+with NO OPPONENT ON THIS BOX, because RAPIDS ships neither and the
+scikit-learn CPU arm is refused under GPU-PATH-ONLY. That artifact's header
+records that at these fixture sizes both arms are dominated by launch and
+dispatch cost, so the 6.71x is a fixed-cost figure and not a kernel verdict.
+See WHAT THIS WILL COST.
 
 ### FIVE ARMS THAT COULD NOT FIRE, and what each one settled
 
@@ -71,13 +87,15 @@ This lane refuses by name, and the check now asserts that refusal as the
 expected outcome rather than tuning the ridge until it goes away.
 
 
-**CONSTRUCTION ONLY. NOTHING HAS BEEN COMPILED AND NOTHING HAS BEEN RUN.**
+**BUILT AND GATED ON ONE APPLE M4 IN BOTH MODES, 2026-08-25, AND RUN ON AN
+NVIDIA H100 UNDER FAST ON 2026-08-26.**
 
-Eighteen checks and thirteen run-time sabotage arms are WRITTEN. Not one of
-them has executed on any device, in either mode, on any vendor. Every table
-below is a PREDICTION and is marked as one. There is no performance number in
-this directory and none is claimed. There is no cross-vendor claim of any
-kind, and there is not yet a single-vendor one either.
+Eighteen checks and thirteen run-time sabotage arms are written and green on
+the M4 in both modes. What does NOT exist is a cross-vendor identity claim:
+the NVIDIA leg was a FAST speed leg
+(`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`), so no
+card outside the M4 has ever been compared against another. Where a table
+below is an expectation rather than a transcript it is marked as one.
 
     pixi run check-kernel-methods                                              # FAST
     tools/with_build_lock.sh     pixi run mojo run -I . kernel_methods/checks/km_check.mojo
@@ -263,8 +281,9 @@ All thirteen are selected at RUN TIME through the `sabotage` argument
 (`kernel_methods/checks/km_sabotage.mojo`), copying
 `cholesky/checks/chol_sabotage.mojo`'s construction. **No source edit and
 no rebuild is required for any of them**; `check_km_sabotages` drives them in
-one run and prints a line per arm. Every classification below is a PREDICTION
-until it has run.
+one run and prints a line per arm. These arms were driven on the Apple M4 on
+2026-08-25 in both modes (Status). The classifications below are what each
+arm is expected to do rather than a transcript of what it did.
 
 | check it targets | sabotage | exactly what it corrupts | what must move |
 |---|---|---|---|
@@ -339,8 +358,10 @@ IDENTICAL, kernel ridge and Nystroem are EXPECTED TO BE SLOWER THAN
 scikit-learn ON A CPU until the GEMM gap closes.** scikit-learn's kernel
 ridge calls LAPACK `posv` through a tuned BLAS at a large fraction of a
 modern CPU's peak, and a GPU running its contractions at 2% of peak does not
-have thirty times the headroom to spend. No number has been taken here and
-none is predicted; what is predicted is the SIGN.
+have thirty times the headroom to spend. The only number taken so far is
+the FAST NVIDIA row above, which compares kernel ridge against cuML's GPU
+arm and not against scikit-learn on a CPU under IDENTICAL, so it does not
+test this prediction; what is predicted is the SIGN.
 
 Three things follow and all three are policy rather than opinion:
 
@@ -374,18 +395,26 @@ over four draws, which is roughly 8x the RNG arithmetic and ZERO extra memory
 traffic. **That is exactly the trade that turns a bandwidth-bound kernel into
 a compute-bound one, and it is why this arm is worth measuring first.**
 
-**IT HAS NOT BEEN MEASURED. There is no benchmark in this directory, no
-harness, and no number.** The hypothesis is written down so that it can be
-falsified rather than assumed, and the honest prior is that a feature map
-which spends 8x the RNG arithmetic to buy reproducibility may well be slower
-than numpy's ziggurat too.
+**THE HYPOTHESIS HAS NOT BEEN TESTED.** The one number RBFSampler has is
+0.295 ms at `3x5q8` on an NVIDIA H100 under FAST, 2026-08-26, with no
+opponent on that box
+(`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`), so
+nothing has compared the pinned per-position generator against a sequential
+stream. The hypothesis is written down so that it can be falsified rather
+than assumed, and the honest prior is that a feature map which spends 8x the
+RNG arithmetic to buy reproducibility may well be slower than numpy's
+ziggurat too.
 
 ## WHAT IS OWED
 
-1. **THE FIRST BUILD HAS NOT HAPPENED.** Not the first vendor leg -- the
-   first COMPILE. Nothing in this directory has been built or executed. The
-   Apple M4 pass, in both modes, with `check-kernel-methods` green and one
-   card emitted, is what turns this from source into construction.
+1. **THE IDENTICAL-MODE LEG ON A SECOND VENDOR.** This lane has been built
+   and executed. It is built and gated on one Apple M4 in both modes
+   (Status, 2026-08-25), and an NVIDIA H100 compiled and ran all three
+   estimators under FAST on 2026-08-26, kernel ridge 6.71x faster than
+   cuML's GPU arm at `RBF.16x5`
+   (`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`). A
+   FAST leg is a speed leg and buys no identity; there is still no
+   IDENTICAL-mode card from any vendor except the M4, which is item 2.
 2. **The second and third vendor legs.** An NVIDIA H100 and an AMD MI325X run
    of `kernel_methods_main.mojo` under `tools/with_identical_mode.sh`, and
    `tools/identity_trace_diff.py` over the three cards. Until then there is
@@ -408,8 +437,11 @@ than numpy's ziggurat too.
    that it moves nothing else. Showing it PREVENTING a divergence needs a
    second eigensolver -- the float64 host Jacobi at a different sweep budget
    is the cheapest candidate.
-5. **A NUMBER OF ANY KIND.** No timing, no throughput, no comparison. See
-   WHAT THIS WILL COST for what is expected and why it is expected.
+5. **A NUMBER UNDER IDENTICAL, AND A THROUGHPUT NUMBER OF ANY KIND.** The
+   FAST NVIDIA row in Status is the whole of this lane's timing evidence and
+   it is a fixed-cost row at 16 rows. Nothing measures what IDENTICAL costs
+   here, and nothing measures a shape large enough to be a throughput
+   statement. See WHAT THIS WILL COST for what is expected and why.
 6. **`sample_weight`, the per-target `alpha` arm, `gamma='scale'`, and the
    three remaining pairwise kernels** (`cosine`, `chi2`, `additive_chi2`).
    `NOT_IMPLEMENTED.tsv` carries a row for each with what it would take.

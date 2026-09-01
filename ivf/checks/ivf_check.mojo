@@ -67,8 +67,9 @@ SABOTAGES: `ivf/checks/sabotage_layout.mojo` carries five arms and
 `hierarchy/checks/sabotage_tile.mojo::sabotage_distance_tile_kernel` is
 IMPORTED for the sixth rather than copied a third time. The table of what
 each one did belongs in `ivf/README.md` and is filled in by whoever RUNS
-this file -- this lane has run nothing, and a sabotage table written from
-expectation instead of from output is the exact thing
+this file. The five layout arms were driven on the Apple M4 on 2026-08-25;
+their per-arm output is not yet transcribed into that table, and a sabotage
+table written from expectation instead of from output is the exact thing
 `[[reached-but-inert]]` is about.
 """
 
@@ -1208,9 +1209,9 @@ def check_quantizer_is_reproducible() raises:
     ONE process, in ONE mode. It cannot see contraction (IDENTITY_PATHS row
     9), the denormal policy (row 10) or the device transcendentals (row
     12), because those need a second backend. The cross-vendor statement
-    for this k-means is `UNSUPERVISED_IDENTITY.md`'s -- Apple and an
-    MI300X agree, NVIDIA is still owed -- and this lane inherits exactly
-    that and no more.
+    for this k-means is `UNSUPERVISED_IDENTITY.md`'s -- Apple, NVIDIA and
+    AMD produce one distinct answer under IDENTICAL -- and this lane
+    inherits exactly that and no more.
     """
     var ctx = DeviceContext()
     var x = ivf_index_fixture(N_ROWS, DIM, 17)

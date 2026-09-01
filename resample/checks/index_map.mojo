@@ -91,7 +91,8 @@ also the reason `monte_carlo_integrate` is the lane's arithmetic-intensity
 argument: the draws are the work, they are register-resident integer
 arithmetic, and they never touch memory.
 
-NO TIMING HAS BEEN TAKEN. Nothing in this lane has been run.
+THIS PRICE HAS NEVER BEEN MEASURED. The lane's only timing is the FAST
+NVIDIA row in `resample/README.md`, which compares nothing.
 
 DEVIATION 1691. THE DERIVED KEY IS FNV-1a64 OVER `(seed, kind)`, NOT THE SEED.
 cuML derives its per-tree Random Forest seed the same way -- `rs =

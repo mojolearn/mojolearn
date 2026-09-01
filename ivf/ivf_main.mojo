@@ -53,9 +53,11 @@ The fixture performs no host floating-point operation (see
 `ivf/checks/ivf_fixture.mojo`). Prints the first eight neighbours as
 decimal AND hex, because `String(Float32)` does not round-trip.
 
-NO NUMBER PRINTED HERE IS A PERFORMANCE NUMBER. This driver has never been
-timed, `ivf/README.md` says so in those words, and a traced run is not a
-measurement in any case (`core/identity_trace.mojo` rule 4).
+NO NUMBER PRINTED HERE IS A PERFORMANCE NUMBER. This traced driver has
+never been timed; the lane's only timing is the FAST NVIDIA row in
+`ivf/README.md`, taken through `ivf_flat_build_and_search_host` and not
+through this file, and a traced run is not a measurement in any case
+(`core/identity_trace.mojo` rule 4).
 """
 
 from std.memory import bitcast

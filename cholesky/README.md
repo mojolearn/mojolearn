@@ -13,7 +13,11 @@ discipline as `mojolearn.identical.gemm.fp32.v1`.
 ## Status
 
 **BUILT AND GATED ON ONE APPLE M4, BOTH MODES, 2026-08-25. NO SECOND
-VENDOR HAS RUN THIS.**
+VENDOR HAS RUN THIS UNDER IDENTICAL, so there is no identity card outside
+the M4.** An NVIDIA H100 compiled and ran this lane under FAST on
+2026-08-26; the row is in
+`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md` and it
+settles speed, not identity.
 
 `pixi run check-cholesky` is green in FAST and green under
 `tools/with_identical_mode.sh`, twelve checks in each mode, and all ten
@@ -38,8 +42,16 @@ away under FAST, so the host oracle keeps a subnormal at cell [3, 1]
 (0x00000200) that Metal flushes to zero. That is the documented denormal
 policy and it is exactly the divergence the IDENTICAL pin removes.
 
-**No performance number exists for this lane and none is claimed.** Nothing
-here has been timed against anything.
+**One timing exists and it is a FAST one.** On an NVIDIA H100 on
+2026-08-26, fixture `RBF.64x64r4`, our median was 0.316 ms against
+torch-gpu's 0.215 ms, so we are 1.47x SLOWER
+(`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`; the
+vendor arm is `torch.linalg.cholesky` plus `torch.cholesky_solve`, which is
+cuSOLVER `potrf` and `potrs`, with the ridge, the logdet and the solve
+inside the clock on both sides). That artifact's own header records that
+this fixture is small enough that both arms are dominated by launch and
+dispatch cost, so the ratio is a fixed-cost figure and not a kernel
+verdict. No IDENTICAL-mode timing exists on any vendor.
 
 ### Two corrections the gate forced, both worth keeping
 
@@ -238,7 +250,10 @@ All ten are selected at RUN TIME through the `sabotage` argument
 `hierarchy/checks/sabotage_tile.mojo`'s construction and how
 `linkage_check.mojo` drives it. **No source edit and no rebuild is required
 for any of them**; `check_cholesky_sabotages` drives all ten in one run and
-prints a line per arm. Every arm below is a PREDICTION until it has run.
+prints a line per arm. All ten were driven on the Apple M4 on 2026-08-25 in
+both modes. The column below is what each arm MUST move; it is not a
+transcript of what it did, and the two corrections that run forced are
+recorded above.
 
 | check it targets | sabotage | exactly what it corrupts | what must move |
 |---|---|---|---|
@@ -305,11 +320,14 @@ records, not a transcript.
 
 ## WHAT IS OWED
 
-1. **THE FIRST VENDOR LEG HAS NOT RUN.** Not the second and third -- the
-   FIRST. Nothing in this directory has been compiled or executed on any
-   device. Every table above is a prediction. The Apple M4 pass, in both
-   modes, with `check-cholesky` green and one card emitted, is what turns
-   this from source into construction.
+1. **THE IDENTICAL-MODE LEG ON A SECOND VENDOR.** This lane has been
+   compiled and executed. It is built and gated on one Apple M4 in both
+   modes (Status, 2026-08-25), and an NVIDIA H100 compiled and ran it under
+   FAST on 2026-08-26 at fixture `RBF.64x64r4`, median 0.316 ms against
+   torch-gpu's 0.215 ms
+   (`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`). A
+   FAST leg is a speed leg and buys no identity; there is still no
+   IDENTICAL-mode card from any vendor except the M4, which is item 2.
 2. **The second and third vendor legs.** An NVIDIA H100 and an AMD MI325X
    run of `cholesky_main.mojo` under `tools/with_identical_mode.sh`, and
    `tools/identity_trace_diff.py` over the three cards. Until then there is
@@ -325,8 +343,8 @@ records, not a transcript.
 4. **A blocked `trsm`.** Today each right-hand side reads `i` floats of `L`
    per row with no reuse: `O(n^2 nrhs)` global loads. A blocked solve turns
    it into GEMM work. It is a speed idea, it would introduce a second fold
-   to pin, and this lane has measured nothing, so it is named rather than
-   attempted.
+   to pin, and the blocked solve has never been measured against the
+   present one, so it is named rather than attempted.
 5. **A staged panel.** Same shape of debt (DEVIATION 1641).
 6. **A `syrk` shape in the gemm profile.** DEVIATION 1636 computes the whole
    symmetric product and throws half away. Closing it means a triangular

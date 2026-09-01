@@ -11,7 +11,11 @@ departures (DEVIATIONS 1780-1804, below).
 ## Status, honestly
 
 **BUILT AND GATED ON ONE APPLE M4, BOTH MODES, 2026-08-25. NO SECOND
-VENDOR HAS RUN THIS.**
+VENDOR HAS RUN THIS UNDER IDENTICAL, so there is no identity card outside
+the M4.** An NVIDIA H100 compiled and ran this lane under FAST on
+2026-08-26
+(`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`), which
+is a speed leg and not an identity one.
 
 `pixi run check-ivf` is green in FAST and green under
 `tools/with_identical_mode.sh`, eleven checks in each mode, and five
@@ -30,10 +34,17 @@ Under FAST both of those are REPORTS and both MOVE, 45 of 120 distances and
 matmul and the FAST selector resolves a tie by atomic arrival. That
 contrast is the evidence the pins are load bearing rather than decorative.
 
-**No performance number exists for this lane and none is claimed.** Nothing
-here has been timed against anything, on this vendor or any other. The
-recall lines the check prints are REPORTS and the candidate-cell counts
-beside them are not speedups.
+**This lane has one measured win and it is a FAST one.** On an NVIDIA H100
+on 2026-08-26, fixture `512x8q64L8p3k8`, our median was 8.755 ms against
+cuVS's GPU IVF-FLAT at 21.531 ms, which is **2.46x FASTER**; one build plus
+one search are inside the clock on both sides, with `metric`,
+`kmeans_trainset_fraction`, `n_probes` and `n_lists` passed explicitly
+(`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`). That
+artifact's header records that at this fixture size both arms are dominated
+by launch and dispatch cost, so the 2.46x is a fixed-cost figure and not a
+kernel verdict. There is no IDENTICAL-mode timing on any vendor. The recall
+lines the check prints are REPORTS and the candidate-cell counts beside
+them are not speedups.
 
 `ROADMAP.md:299` positions IVF as worth building **"only if brute force
 stops winning"**, and its own note says to *"measure where exact brute
@@ -44,8 +55,7 @@ is a construction against that day and not evidence that the day has come,
 and `ivf_main.mojo` prints the candidate cell count with a line saying in
 those words that the ratio is not a speedup.
 
-What a first run would have to establish, in order, is in
-WHAT IS OWED at the bottom.
+What is still owed, in order, is at the bottom under WHAT IS OWED.
 
 ## The upstream pin
 
@@ -109,8 +119,10 @@ restated here.** `UNSUPERVISED_IDENTITY.md` is the file. In summary, and
 only as a pointer to it: DEVIATION 503 pins the assignment's contraction
 and flush, DEVIATION 529 gates each assignment arm against a Float64 oracle
 with a magnitude-relative budget after an H100 leg found the unfused arm
-was TF32, the Apple and MI300X columns produce bit-identical k-means cards,
-and **NVIDIA is still owed**. Everything this lane computes is downstream
+was TF32, and the Apple, NVIDIA and AMD columns produce bit-identical k-means cards
+under IDENTICAL, three runs and one distinct answer
+(`UNSUPERVISED_IDENTITY.md`, the column-invariance table and its item 1).
+Everything this lane computes is downstream
 of that, so this lane's ceiling is that lane's ceiling.
 
 **The k-NN arm this lane's search calls is the TILED one on every column.**
@@ -184,7 +196,7 @@ Two things the identity table deliberately does **not** claim.
 | **1797** | signed zeros in the DATA are an exact duplicate pair (`+0.0 == -0.0`), ordered only by the index half of the key; a `-0.0` DISTANCE is unreachable because the distance tile clamps at `dist <= 0.0 -> +0.0`. `IDENTITY_PATHS` row 39 |
 | **1798** | their query batching heuristic (`:343-353`, `get_workspace_free_bytes`) is not ported. Threads per block and grid shape are SCHEDULING and free; block count, fold shape, replication factor, tile size, accumulator width, the candidate merge order and `n_probe` are NUMERIC and pinned |
 | **1799** | under FAST, the reduction gate and the oracle gates are REPORTS. The vendor matmul is called at `m = 1` here and at `m = n_queries` in `knn_search`, and a matmul is entitled to a different k-split per shape; the FAST selector resolves a tie by atomic arrival |
-| **1800** | the CSR build and the probe merge run on the HOST. A departure from `PORTING_RULES.md` rule 2. The deterministic device spelling needs a segmented rank (a multi-block scan) and this lane has measured nothing; the host sort already produces the ordering the device one would, so it changes no bit and belongs behind a measurement |
+| **1800** | the CSR build and the probe merge run on the HOST. A departure from `PORTING_RULES.md` rule 2. The deterministic device spelling needs a segmented rank (a multi-block scan) and the device spelling has never been measured against the host one; the host sort already produces the ordering the device one would, so it changes no bit and belongs behind a measurement |
 | **1801** | the centroid norms come from `core/row_norms.mojo`, not RAFT's `linalg::norm` plus `utils::outer_add`; the coarse distance is the same expanded form their `alpha=-2, beta=1` arm computes |
 | **1802** | `calc_chunk_indices` runs as one host integer scan rather than their `cub::BlockScan` per query block. Integer addition is associative, so the two are the same function and there is no float pathway to pin |
 | **1803** | the candidate norms are taken over the PERMUTED matrix and indexed by slot. `row_norm_kernel` is one block per row reading only that row, so permuting the rows permutes the outputs and changes no float -- which is what lets the reduction gate compare against a `knn_search` whose norms were taken over the unpermuted matrix |
@@ -227,30 +239,40 @@ that its tags carry no machine property.
 
 ## SABOTAGES TO PERFORM
 
-**THIS TABLE IS EMPTY AND STAYS EMPTY UNTIL SOMEONE RUNS IT.** A sabotage
-table filled in from expectation instead of from output is precisely what
-`[[reached-but-inert]]` is about, and this lane has run nothing. The arms
-exist, are wired, and each has a check that raises if the arm fails to move
-the thing it is supposed to move.
+**THE OBSERVED COLUMN CARRIES NO OUTPUT AND WILL NOT UNTIL SOMEONE
+TRANSCRIBES ONE.** A sabotage table filled in from expectation instead of
+from output is precisely what `[[reached-but-inert]]` is about. The five
+layout arms were driven on the Apple M4 on 2026-08-25 and each failed the
+gate it targets (Status); their per-arm output has not been transcribed
+into the column below and that transcription is owed. The two imported
+distance-tile arms are genuinely unrun, because no named check drives them
+yet.
 
 | arm | where | fixture | what MUST happen | observed |
 |---|---|---|---|---|
-| `IVF_SAB_CARRY_POSITION` | `sabotage_layout.mojo` | hashed, `n_probes = 2` | `check_list_layout_and_index_carry` sees the returned identities MOVE; the distances do not | *(not run)* |
-| `IVF_SAB_LIST_ARRIVAL_ORDER` | `sabotage_layout.mojo` | duplicate, planted round-robin labels | `check_ivf_sabotages` sees the candidate order stop ascending in the carried index | *(not run)* |
-| `IVF_SAB_MERGE_PROBE_ORDER` | `sabotage_layout.mojo` | duplicate, two interleaved lists | `check_ivf_sabotages` sees the candidate order stop ascending | *(not run)* |
-| `IVF_SAB_PROBE_TIE_HIGH` | `sabotage_layout.mojo` | two lists at an exactly equal coarse distance | `check_assignment_ties` sees probe slot 0 flip from list 0 to list 1 | *(not run)* |
-| `IVF_SAB_EMPTY_COUNTS_ONE` | `sabotage_layout.mojo` | planted empty list 2 | `check_empty_list` sees the chunk total overcount by exactly one | *(not run)* |
+| `IVF_SAB_CARRY_POSITION` | `sabotage_layout.mojo` | hashed, `n_probes = 2` | `check_list_layout_and_index_carry` sees the returned identities MOVE; the distances do not | *(driven on the Apple M4, 2026-08-25; failed its gate, per Status. Output not transcribed)* |
+| `IVF_SAB_LIST_ARRIVAL_ORDER` | `sabotage_layout.mojo` | duplicate, planted round-robin labels | `check_ivf_sabotages` sees the candidate order stop ascending in the carried index | *(driven on the Apple M4, 2026-08-25; failed its gate, per Status. Output not transcribed)* |
+| `IVF_SAB_MERGE_PROBE_ORDER` | `sabotage_layout.mojo` | duplicate, two interleaved lists | `check_ivf_sabotages` sees the candidate order stop ascending | *(driven on the Apple M4, 2026-08-25; failed its gate, per Status. Output not transcribed)* |
+| `IVF_SAB_PROBE_TIE_HIGH` | `sabotage_layout.mojo` | two lists at an exactly equal coarse distance | `check_assignment_ties` sees probe slot 0 flip from list 0 to list 1 | *(driven on the Apple M4, 2026-08-25; failed its gate, per Status. Output not transcribed)* |
+| `IVF_SAB_EMPTY_COUNTS_ONE` | `sabotage_layout.mojo` | planted empty list 2 | `check_empty_list` sees the chunk total overcount by exactly one | *(driven on the Apple M4, 2026-08-25; failed its gate, per Status. Output not transcribed)* |
 | `LINK_SAB_ROTATE_CONTRACTION` | `hierarchy/checks/sabotage_tile.mojo`, imported | hashed | the candidate distances MUST move under IDENTICAL (a per-block summation order where a pinned one is required); a REPORT under FAST | *(not run, and not yet wired into a named check -- see WHAT IS OWED)* |
 | `LINK_SAB_STD_SQRT` | same file | hashed, `L2SqrtExpanded` | a REPORT. Apple's `sqrt` is correctly rounded so the bits may not move here; on NVIDIA they should (DEVIATION 258) | *(not run, not yet wired)* |
 | the k-means entry point | manual | any | swap `kmeans_fit_main_traced` for `cluster/estimator.mojo::kmeans_fit` and the card must become UNREADABLE (two `seq 0` records), proving DEVIATION 1795 is load-bearing | *(not run)* |
 
 ## WHAT IS OWED
 
-1. **A FIRST RUN.** Nothing here has executed. Both modes, both task lines,
-   and the eleven checks. Expect the first run to find things -- every lane
-   in this repository that wrote its gates before running them did.
-2. **`check_nprobe_equals_nlists_is_brute_force` is the one to run first**,
-   and if it fails under IDENTICAL the diagnosis order is (a) does
+1. **THE IDENTICAL-MODE LEG ON A SECOND VENDOR.** This lane has executed.
+   It is built and gated on one Apple M4 in both modes (Status,
+   2026-08-25), and an NVIDIA H100 compiled and ran it under FAST on
+   2026-08-26 at fixture `512x8q64L8p3k8`, 2.46x faster than cuVS's GPU
+   IVF-FLAT
+   (`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`). A
+   FAST leg is a speed leg and buys no identity; there is still no
+   IDENTICAL-mode card from any vendor except the M4, and the
+   sabotage-result column above is still owed its transcript.
+2. **On a new vendor, `check_nprobe_equals_nlists_is_brute_force` is the
+   one to run first.** It passes on the M4 in both modes (Status). If it
+   fails under IDENTICAL elsewhere the diagnosis order is (a) does
    `ivf.cand_idx` at `n_probe == n_lists` equal `0, 1, 2, ...`, which tests
    DEVIATION 1786 alone, (b) do the candidate norms match `knn_search`'s
    index norms, which tests DEVIATION 1803 alone, (c) only then the

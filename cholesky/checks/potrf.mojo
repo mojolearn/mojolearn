@@ -291,7 +291,8 @@ does not cover.
 # panel factorization stages the panel in threadgroup memory; that would be
 # a page count to pin, and a second thing to pin is a second thing to get
 # wrong. The price is stated in `cholesky/README.md` under WHAT IS OWED and
-# no number is claimed, because nothing has been run.
+# no number is claimed for the staged shape, because nobody has measured it
+# against this one.
 # =========================================================================
 """
 

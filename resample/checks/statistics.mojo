@@ -81,7 +81,7 @@ observations -- and recomputing them costs one `PhiloxState.init` per value
 per pass. The map is a pure function of `(key, r, i)` (DEVIATION 1690), so the
 second pass provably sees the same values as the first; that is a property of
 the design rather than a hope about a cache. PRICE: ~20 Philox rounds per
-value per extra pass. No timing has been taken.
+value per extra pass. That price has never been measured.
 
 The ORDER statistics are the exception and they materialise, because a sort
 has nothing to recompute from. See `RESAMPLE_MAX_SORT_CELLS`.
@@ -863,7 +863,9 @@ def perm_stat_kernel[stat: Int, tpb: Int](
 # arithmetic (twenty Philox rounds per coordinate), and the only memory
 # traffic in the whole run is `ceil(n_samples / 256)` partial floats written
 # out. It is the case where the position map's price (DEVIATION 1690) buys
-# the most and costs the least. NO TIMING HAS BEEN TAKEN.
+# the most and costs the least. THE INTEGRATOR HAS NEVER BEEN TIMED; the
+# lane's one timing is the bootstrap's FAST NVIDIA row in
+# `resample/README.md`.
 #
 # THE TWO-STAGE FOLD IS `metrics/checks/pinned_sum.mojo`'S, WHOLE. Chunk
 # `c` is samples `[c*256, (c+1)*256)`, one `virtual_block_sum` tree per chunk,

@@ -14,7 +14,11 @@ those is a v2 of this one.
 ## Status
 
 **BUILT AND GATED ON ONE APPLE M4, BOTH MODES, 2026-08-25. NO SECOND VENDOR
-HAS RUN THIS.** `pixi run check-mixture` is green in FAST and green under
+HAS RUN THIS UNDER IDENTICAL, so there is no identity card outside the M4.**
+An NVIDIA H100 compiled and ran this lane under FAST on 2026-08-26
+(`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`), which is
+a speed leg and not an identity one.
+`pixi run check-mixture` is green in FAST and green under
 `tools/with_identical_mode.sh`, ten checks each, 13 sabotage arms driven at
 run time with no source edited.
 
@@ -30,7 +34,12 @@ run time with no source edited.
     check_collapse_is_identical OK: refuses on device and oracle at the
       same component, same LAPACK info, same iteration, identical cards
 
-**No performance number and none is claimed.** See WHAT THIS WILL COST.
+**One FAST timing exists.** On an NVIDIA H100 on 2026-08-26, fixture
+`SEPARATED.24x2K3`, our median was 2.390 ms with NO OPPONENT ON THAT BOX,
+because RAPIDS ships no `GaussianMixture` and the scikit-learn CPU arm is
+refused there under GPU-PATH-ONLY
+(`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`). So there
+is a cost figure and still no comparison. See WHAT THIS WILL COST.
 
 ## THE COVERAGE STORY, WHICH IS WORSE THAN THE PASS LINE SUGGESTS
 
@@ -80,13 +89,16 @@ or the two folds coincide at these magnitudes, and **neither has been
 established**. DEVIATION 1725's pinned fold is NOT gated by this arm.
 
 
-**CONSTRUCTION PLUS WRITTEN GATES, 2026-08-25. NOTHING HAS BEEN COMPILED.
-NOTHING HAS BEEN RUN. NO NUMBER IN THIS FILE IS A MEASUREMENT.**
+**BUILT AND GATED ON ONE APPLE M4 IN BOTH MODES, 2026-08-25, AND RUN ON AN
+NVIDIA H100 UNDER FAST ON 2026-08-26.**
 
-No build, no check, no card, no benchmark, no timing, and no cross-vendor
-claim of any kind. Every table below is a PREDICTION. Where a prediction
-could be wrong in an interesting way it is named rather than smoothed over,
-and there are three of those:
+What does NOT exist is a cross-vendor identity claim. The NVIDIA leg was a
+FAST speed leg
+(`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`), so no
+card outside the M4 has ever been compared against another. Where a table
+below is an expectation rather than a transcript it is marked as one, and
+where an expectation could be wrong in an interesting way it is named rather
+than smoothed over. There are three of those:
 
 1. whether `GMM_SAB_TOL_ULP` moves the ITERATION COUNT on any fixture in this
    lane, or only the parameters. It is the arm that demonstrates hazard 1 and
@@ -331,8 +343,9 @@ All thirteen are selected at RUN TIME through the `sabotage` argument
 (`mixture/checks/gmm_sabotage.mojo`), copying
 `cholesky/checks/chol_sabotage.mojo`'s construction. **No source edit and
 no rebuild is required for any of them**; `check_gmm_sabotages` drives all
-thirteen in one run and prints a line per arm. Every classification below is
-a PREDICTION until it has run.
+thirteen in one run and prints a line per arm. These arms were driven on the
+Apple M4 on 2026-08-25 in both modes (Status). The classifications below are
+what each arm is expected to do rather than a transcript of what it did.
 
 The arms are driven in three GROUPS and the reason is not tidiness. Group (A)
 sweeps every fixture, because `cholesky/README.md` records that lane shipping
@@ -466,16 +479,20 @@ two host drains per component per iteration (`potrf_lower` reads `info` back
 per panel; `chol_logdet` reads its scalar back). At `K = 8` and 40 iterations
 that is 640 drains. A batched per-component factorization would collapse it to
 two drains per iteration. It is named under WHAT IS OWED rather than
-attempted, because this lane has measured nothing and
-`PORTING_RULES.md` rule 2's corollary is about exactly this shape of debt.
+attempted, because the batched factorization has never been measured against
+the present one and `PORTING_RULES.md` rule 2's corollary is about exactly
+this shape of debt.
 
 ## WHAT IS OWED
 
-1. **THE FIRST LEG HAS NOT RUN.** Not the second and third -- the FIRST.
-   Nothing in this directory has been compiled or executed on any device.
-   Every table above is a prediction. The Apple M4 pass, in both modes, with
-   `check-mixture` green and one card emitted, is what turns this from source
-   into construction.
+1. **THE IDENTICAL-MODE LEG ON A SECOND VENDOR.** This lane has been
+   compiled and executed. It is built and gated on one Apple M4 in both
+   modes (Status, 2026-08-25), and an NVIDIA H100 compiled and ran it under
+   FAST on 2026-08-26 at fixture `SEPARATED.24x2K3`, median 2.390 ms with no
+   opponent on that box
+   (`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`). A
+   FAST leg is a speed leg and buys no identity; there is still no
+   IDENTICAL-mode card from any vendor except the M4, which is item 2.
 2. **The second and third vendor legs.** An NVIDIA H100 and an AMD MI325X run
    of `mixture_main.mojo` under `tools/with_identical_mode.sh`, and
    `tools/identity_trace_diff.py` over the three cards, with `gmm.niter`
@@ -503,7 +520,9 @@ attempted, because this lane has measured nothing and
    100,000 and `identical_gemm_into` will pick a SPLITK plan that no fixture
    in this lane reaches. `check_launch_invariance` at a shape that crosses
    that dispatch boundary is owed.
-7. **A benchmark, in FAST, against scikit-learn**, following
+7. **A benchmark, in FAST, against a GPU baseline.** The NVIDIA H100 row of
+   2026-08-26 has no opponent because RAPIDS ships no `GaussianMixture`, so
+   the comparison is owed on Apple, following
    `[[gpu-baseline-if-it-exists]]`: scikit-learn's own Array API path reaches
    MPS under `init_params="random"`, so **the GPU baseline exists and must be
    the comparison** -- with the caveat that

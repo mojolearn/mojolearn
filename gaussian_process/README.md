@@ -15,7 +15,11 @@ fitted under the other.
 ## Status
 
 **BUILT AND GATED ON ONE APPLE M4, BOTH MODES, 2026-08-25. NO SECOND VENDOR
-HAS RUN THIS.** `pixi run check-gaussian-process` is green in FAST and green
+HAS RUN THIS UNDER IDENTICAL, so there is no identity card outside the M4.**
+An NVIDIA H100 compiled and ran this lane under FAST on 2026-08-26
+(`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`), which is
+a speed leg and not an identity one.
+`pixi run check-gaussian-process` is green in FAST and green
 under `tools/with_identical_mode.sh`, eleven checks each, nine sabotage arms
 driven at run time with no source edited.
 
@@ -31,7 +35,12 @@ Under FAST `check_kernels_vs_oracle` REPORTS divergence on 43 of 55 cases,
 because the vendor `exp`, `sqrt` and `div` are free to differ from the host
 replay. That contrast is what makes the IDENTICAL result evidence.
 
-**No performance number and none is claimed.** See WHAT THIS WILL COST.
+**One FAST timing exists.** On an NVIDIA H100 on 2026-08-26, fixture
+`ard.12x3s6`, our median was 0.543 ms with NO OPPONENT ON THIS BOX,
+because RAPIDS ships no Gaussian process regressor and the scikit-learn CPU
+arm is refused here under GPU-PATH-ONLY
+(`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`). So there
+is a cost figure and still no comparison. See WHAT THIS WILL COST.
 
 ### The float32 ridge finding, confirmed by bits
 
@@ -78,13 +87,14 @@ demoted to a REPORT because `ftz` compiles away there while Metal flushes in
 hardware regardless.
 
 
-**CONSTRUCTION PLUS WRITTEN GATES, 2026-08-25. NOTHING HAS BEEN RUN.**
+**BUILT AND GATED ON ONE APPLE M4 IN BOTH MODES, 2026-08-25, AND RUN ON AN
+NVIDIA H100 UNDER FAST ON 2026-08-26.**
 
-Not one file in this directory has been compiled or executed on any device.
-There is no performance number, no accuracy number, no card, no cross-vendor
-claim, and no claim of any kind that rests on a measurement. Every table
-below is a PREDICTION until an orchestrator runs it. The three predictions
-that could be wrong in an interesting way are named in
+What does NOT exist is a cross-vendor identity claim. The NVIDIA leg was a
+FAST speed leg
+(`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`), so no
+card outside the M4 has ever been compared against another. The three
+predictions that could be wrong in an interesting way are named in
 `checks/gp_check.mojo`'s header rather than smoothed over, and the
 strongest of them is the first.
 
@@ -339,7 +349,9 @@ All eleven are selected at RUN TIME through the `sabotage` argument
 `cholesky/checks/chol_sabotage.mojo`'s construction and how
 `cholesky_check.mojo` drives it. **No source edit and no rebuild is required
 for any of them**; `check_gp_sabotages` drives all eleven in one run and
-prints a line per arm. Every arm below is a PREDICTION until it has run.
+prints a line per arm. These arms were driven on the Apple M4 on 2026-08-25
+in both modes (Status). The column below is what each arm MUST move; it is
+not a transcript of what it did.
 
 **Each arm SWEEPS the fixtures and never names one.** An arm inert on the
 fixture its author happened to pick is indistinguishable from an arm that is
@@ -458,10 +470,11 @@ So, plainly.
   costs has a number and the number is above.
 - **Any speed claim this lane ever makes lives in FAST**, and no FAST number
   exists yet either. FAST makes no cross-vendor claim, by construction.
-- **Do not read a win into this directory.** There is no benchmark here, no
-  timing harness, no comparison against scikit-learn, and no arm that could
-  produce one. A reader who infers a performance result from the presence of
-  a GPU kernel is inferring something the GEMM number says is not there.
+- **Do not read a win into this directory.** The one number this lane has
+  is the FAST NVIDIA row above, 0.543 ms at `ard.12x3s6` with NO OPPONENT ON
+  THIS BOX, so nothing here has been compared against anything. A reader who
+  infers a performance result from the presence of a GPU kernel is inferring
+  something the GEMM number says is not there.
 - **`IDENTITY IS NOT FREE`, and this lane does not claim otherwise.**
   Conforming costs on every vendor. The Apple column's 1.33-1.51x figure
   elsewhere in this tree compares two LAYOUTS and not FAST against
@@ -476,10 +489,14 @@ measures.
 
 ## WHAT IS OWED
 
-1. **THE FIRST VENDOR LEG HAS NOT RUN.** Not the second and third, the
-   FIRST. Nothing in this directory has been compiled or executed. The Apple
-   M4 pass, in both modes, with `check-gaussian-process` green and one card
-   emitted, is what turns this from source into construction.
+1. **THE IDENTICAL-MODE LEG ON A SECOND VENDOR.** This lane has been
+   compiled and executed. It is built and gated on one Apple M4 in both
+   modes (Status, 2026-08-25), and an NVIDIA H100 compiled and ran it under
+   FAST on 2026-08-26 at fixture `ard.12x3s6`, median 0.543 ms with no
+   opponent on that box
+   (`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`). A
+   FAST leg is a speed leg and buys no identity; there is still no
+   IDENTICAL-mode card from any vendor except the M4, which is item 2.
 2. **The second and third vendor legs.** An NVIDIA H100 and an AMD MI325X
    run of `gp_main.mojo` under `tools/with_identical_mode.sh`, and
    `tools/identity_trace_diff.py` over the three cards. Until then there is
@@ -517,7 +534,8 @@ measures.
    operand per output cell with no reuse. A Contractions tile
    (`dbscan/impl/neighbors/epsilon_neighborhood.mojo` transcribes one)
    would read each row once per tile. It is a speed idea, it would introduce
-   a staging shape to pin, and this lane has measured nothing.
+   a staging shape to pin, and the tile has never been measured against the
+   present loop.
 9. **An `n == 1` row in the gemm shape table.** The posterior mean is an
    `m x 1 x k` product at `OP_TN`, and `bench/gemm_shapes.mojo`'s 62 shapes
    should be checked for an `n == 1` entry with one added if there is none.

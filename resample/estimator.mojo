@@ -28,7 +28,8 @@ WHAT RUNS WHERE, once, so no reader has to work it out from the code:
     every host this runs on with NOT ONE LIBM CALL among them
     (`intervals.mojo`'s header).
 
-NOTHING HERE HAS BEEN RUN. No build, no gate, no timing.
+BUILT AND GATED ON ONE APPLE M4 IN BOTH MODES, 2026-08-25. NO SECOND VENDOR
+HAS RUN THIS UNDER IDENTICAL. See `resample/README.md` under Status.
 """
 
 from std.math import ceildiv

@@ -6,10 +6,11 @@
     tools/with_build_lock.sh     pixi run mojo run -I . gaussian_process/checks/gp_check.mojo
     tools/with_identical_mode.sh pixi run mojo run -I . gaussian_process/checks/gp_check.mojo
 
-**NOTHING IN THIS FILE HAS BEEN RUN.** It has not been compiled and it has
-not been executed on any device. Every classification below -- MUST FAIL,
-APPLE-INERT, REPORT -- is a PREDICTION, and the ones that could be wrong in
-an interesting way are named rather than smoothed over:
+**THIS FILE IS GREEN ON ONE APPLE M4 IN BOTH MODES, 2026-08-25, AND ON NO
+SECOND VENDOR UNDER IDENTICAL.** The classifications below -- MUST FAIL,
+APPLE-INERT, REPORT -- are what each arm is expected to do rather than a
+transcript of what it did, and the ones that could be wrong in an
+interesting way are named rather than smoothed over:
 
 1. whether the predictive-variance CLAMP fires at all on `GP_FIX_PLANTED`.
    The argument that it must is in `gp_fixture.mojo::gp_fixture_alpha`, and
