@@ -215,7 +215,7 @@ jobs:
             exit 1
           }
           for v in 3.10 3.11 3.12 3.13 3.14; do
-            for mode in fast identical; do
+            for mode in fast deterministic identical; do
               grep -q "^PASS python$v \[$mode\]" build.log || {
                 echo "::error::python$v [$mode] is claimed but did not pass"; exit 1; }
             done
@@ -278,6 +278,60 @@ jobs:
           echo "admitted $base ($got)"
           echo "staged=$base" >> "$GITHUB_OUTPUT"
 
+      # ==================================================================
+      # THE TWO GATES THAT WERE MISSING WHEN 0.3.0 AND 0.3.2 SHIPPED.
+      # Both run on the ARTIFACT that is about to be uploaded, not on a
+      # build directory on a box that no longer exists.
+      # ==================================================================
+
+      # 1. THE LINUX ISA BASELINE, ON THE WHEEL.
+      #
+      # `packaging/linux/isa_baseline_linux.py` exists because 0.3.0's Linux
+      # wheel carried unconditional AVX-512 and died with SIGILL inside
+      # `cluster::estimator::kmeans_fit` on every host without it. It is
+      # invoked in exactly ONE place: `packaging/linux/build_sets.sh`, on the
+      # rented box, against the set directory. Nothing between that box and
+      # PyPI looks again -- not pack_wheel.py, not audit.sh, not the
+      # admission step above, which checks the digest, the version, the
+      # manylinux tag and twine and never opens a single .so. A set that
+      # skipped its leg's gate, or was fetched from a leg that predates the
+      # gate, walks straight through. So the gate runs HERE, on the bytes
+      # that ship.
+      #
+      # In docker because the disassembler must be GNU objdump on x86-64
+      # ELF; `audit.sh` already runs this image on this machine.
+      - name: The staged Linux wheel meets the x86-64-v3 baseline
+        if: steps.linux.outputs.staged != 'none'
+        run: |
+          set -euo pipefail
+          WHL="python/dist/${{ steps.linux.outputs.staged }}"
+          rm -rf "${RUNNER_TEMP:-/tmp}/isa" && mkdir -p "${RUNNER_TEMP:-/tmp}/isa"
+          python3 -c 'import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' \
+            "$WHL" "${RUNNER_TEMP:-/tmp}/isa"
+          docker run --rm --cpus 2 --platform linux/amd64 \
+            -v "${RUNNER_TEMP:-/tmp}/isa:/w:ro" \
+            -v "$PWD/packaging/linux:/g:ro" \
+            "${MOJOLEARN_AUDIT_IMAGE:-quay.io/pypa/manylinux_2_28_x86_64}" \
+            python3 /g/isa_baseline_linux.py /w/mojolearn
+
+      # 2. NOTHING SHIPS THAT NOTHING IMPORTS.
+      #
+      # `mojolearn/torch_ops.py`, 49,809 bytes, was in the 0.2.x and 0.3.x
+      # wheels having never been imported, compiled or executed by anything
+      # (CHANGELOG.md, Removed, 2026-08-31). `packages = ["mojolearn"]`
+      # sweeps the directory, so no gate could have seen it. This walks the
+      # import graph of the package as it sits in the wheel.
+      - name: Nothing ships in the wheel that nothing imports
+        run: |
+          set -euo pipefail
+          WHL=$(ls python/dist/mojolearn-*-macosx_*.whl)
+          rm -rf "${RUNNER_TEMP:-/tmp}/inv" && mkdir -p "${RUNNER_TEMP:-/tmp}/inv"
+          python3 -c 'import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' \
+            "$WHL" "${RUNNER_TEMP:-/tmp}/inv"
+          python3 packaging/wheel_ci.py inventory \
+            "${RUNNER_TEMP:-/tmp}/inv/mojolearn" \
+            "${RUNNER_TEMP:-/tmp}/inv/mojolearn_diagnostics.py"
+          python3 packaging/wheel_ci.py versions .
       - name: Metadata check
         run: pixi run -e pkg twine check python/dist/*.whl
 

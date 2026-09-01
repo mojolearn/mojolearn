@@ -1,24 +1,63 @@
-# Build the wheel on a hosted runner and verify it across every interpreter
-# the package claims.
+# The packaging half of the release gate, on a runner that has no GPU and
+# does not pretend otherwise.
 #
-# WHY THIS RUNS IN CI AND NOT ON A LAPTOP. The development machine is an M4
-# with python3.12, 3.13 and 3.14 on PATH. It cannot verify the two claims that
-# matter most about breadth:
+# WHAT THIS FILE USED TO DO, AND WHY IT IS DELETED RATHER THAN REPAIRED.
+# It ran `packaging/macos/build_release_wheel.sh` on GitHub's hosted macOS
+# runner. `gh run list --workflow="Wheel CI" --limit 300` is 127 runs: 124
+# failures and three successes, all three on 2026-08-20, one of which is
+# titled "A green CI run in which all five interpreters had failed". The
+# workflow has never once been green on a wheel that could ship, and 0.3.0
+# and 0.3.1 were both cut past it. 0.3.0 SIGILLs on any x86-64 without
+# AVX-512. Shipping past a red gate is how that happened.
 #
-#   * `requires-python >=3.10`. 3.10 and 3.11 are not installed there, so
-#     verify_wheel.sh reports SKIP for exactly the versions at the floor.
-#   * `macosx_11_0_arm64` and `--target-cpu apple-m1`. Every local check runs
-#     on the newest Apple silicon, which is the one chip that cannot fail a
-#     backward-compatibility claim.
+# THE HOSTED RUNNER CANNOT BUILD THIS WHEEL, IN TWO INDEPENDENT WAYS, AND
+# BOTH ARE MEASURED IN THIS REPOSITORY'S OWN LOGS.
 #
-# GitHub's hosted macOS runner is an **Apple M1 (Virtual)** -- measured, see
-# probe-hosted-metal.yml -- which is the baseline chip itself, and
-# actions/setup-python supplies the whole 3.10-3.14 range. So this job tests
-# the floor on the floor, which is the thing a laptop cannot do at all.
+#   1. It no longer COMPILES. Since 2026-08-22 every run dies in
+#      `bindings/_mojolearn.mojo` at `knn_search_binding` with
+#      `std/gpu/host/info.mojo:2145: constraint failed: Unknown GPU
+#      architecture detected`. Mojo resolves the accelerator at COMPILE
+#      time; the runner's virtualized GPU is not one it recognizes, so the
+#      constraint fails before any code is emitted.
 #
-# It also proves the wheel is buildable somewhere other than one machine,
-# which is the precondition for releasing through the trusted publisher
-# already configured on PyPI and TestPyPI.
+#   2. Even when it DID compile, it emitted no kernels. Run 32409538916
+#      (2026-08-20) got past the build and was refused by
+#      `packaging/macos/check_gpu_embedded.py` with
+#      `0 AIR/metallib markers (need >= 10)`. That file's docstring is the
+#      full account: the same commit built on the M4 has 98 markers and on a
+#      hosted runner has 0, `mojo build` exits 0 either way, and TestPyPI
+#      0.1.0a2 was that wheel.
+#
+# AND NAMING THE ARCHITECTURE DOES NOT RESCUE IT. `--target-accelerator
+# metal:1` does make the compile succeed (probe-hosted-metal.yml measured
+# that), but `bindings/build.sh` measured on 2026-08-21 that passing the flag
+# AT ALL -- right value or wrong -- suppresses ahead-of-time Metal
+# compilation and yields ZERO kernels. So the two failure modes are the same
+# wall from two sides: the hosted runner produces either no wheel or an empty
+# one. There is no third setting.
+#
+# WHERE THE REAL WHEEL IS BUILT AND GATED: the M4, by
+# `packaging/macos/build_release_wheel.sh`, driven from
+# `.github/workflows/release-provenance.yml` on the ephemeral self-hosted
+# runner `tools/release_runner.sh` registers. That is the gate that decides
+# whether a wheel ships. This file is not that gate and must never be read as
+# one; the step summary says so on every run.
+#
+# WHAT THIS FILE IS FOR. Everything about the distribution that does not
+# require a GPU, on every push, in about a minute. Two of those checks exist
+# because two defects shipped:
+#
+#   * `wheel_ci.py inventory` walks the import graph of the package.
+#     `mojolearn/torch_ops.py`, 49,809 bytes, shipped in the 0.2.x and 0.3.x
+#     wheels having never been imported, compiled or run by anything
+#     (CHANGELOG.md, Removed, 2026-08-31). `packages = ["mojolearn"]` sweeps
+#     the directory, so nothing could have noticed. Now something does.
+#   * `wheel_ci.py pins` refuses a build script that does not pin BOTH cpu
+#     baselines. Linux pinned neither until 2026-08-31, which is the whole
+#     of the 0.3.0 AVX-512 defect. This is a regression gate on the SOURCE;
+#     the gate on the ARTIFACT is `packaging/linux/isa_baseline_linux.py`
+#     run against the staged wheel in release-provenance.yml, and the second
+#     job below proves that gate actually fires.
 
 name: Wheel CI
 
@@ -29,17 +68,16 @@ on:
       - "bindings/**"
       - "packaging/**"
       - "python/**"
-      - "pixi.toml"
-      - "pixi.lock"
+      - "CITATION.cff"
       - ".github/workflows/wheel-ci.yml"
 
 permissions: {}
 
 jobs:
-  wheel:
-    name: Build and verify on a hosted M1
+  packaging:
+    name: Packaging, metadata and interpreters
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -49,16 +87,13 @@ jobs:
         run: |
           echo "chip:  $(sysctl -n machdep.cpu.brand_string)"
           echo "macOS: $(sw_vers -productVersion)"
+          echo "arch:  $(uname -m)"
 
-      - name: Install pixi
-        uses: prefix-dev/setup-pixi@14c8aabd75893f83f4ab30c03e7cf853c8208961 # v0.8.10
-        with:
-          # Must match or exceed the pixi that wrote pixi.lock (version 7).
-          pixi-version: v0.76.2
-          cache: false
-
-      # Every interpreter the package claims, all on PATH at once, which is
-      # exactly the shape verify_wheel.sh already loops over.
+      # No pixi and no Mojo anywhere in this job. `python/setup.py` compiles
+      # nothing -- it only fixes the wheel's tags -- so the whole Python side
+      # of the distribution can be built and checked with setuptools alone.
+      # Dropping pixi is what takes this job from a five-minute failure to a
+      # one-minute pass.
       - name: Install python 3.10 through 3.14
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
@@ -69,80 +104,264 @@ jobs:
             3.13
             3.14
 
-      # Builds the extension at the portable baseline, stages the MAX runtime
-      # dylibs, re-signs, checks minos against the wheel tag, runs the ISA
-      # baseline disassembly, and packs.
-      - name: Build the wheel
-        run: ./packaging/macos/build_release_wheel.sh
+      # ------------------------------------------------------------------
+      # STATIC GATES. These read the tree, not a binary, so they are the
+      # only gates in this repository that run on every push.
+      # ------------------------------------------------------------------
+      - name: Version agreement across all three places
+        run: python3 packaging/wheel_ci.py versions .
 
-      # WHAT THIS RUNNER CAN AND CANNOT ANSWER, measured rather than assumed.
-      #
-      #   trivial elementwise kernel   RUNS   (tools/hosted_gpu_probe.mojo)
-      #   one block_sum               FAILS   (tools/hosted_block_probe.mojo)
-      #
-      # `block_sum` is the only structural difference between the library
-      # kernel that fails here and the probe that passes, so it is the line.
-      # Informational: the job does not depend on it, it records what the
-      # runner could do on the day.
-      - name: GPU capability of this runner
-        continue-on-error: true
+      - name: Every build script pins both CPU baselines
+        run: python3 packaging/wheel_ci.py pins .
+
+      - name: Nothing ships in the package that nothing imports
         run: |
-          pixi run mojo build -I . --target-cpu apple-m1 --target-accelerator metal:1 \
-            tools/hosted_gpu_probe.mojo -o hosted_gpu_probe
-          echo "--- trivial kernel ---"
-          ./hosted_gpu_probe || echo "TRIVIAL KERNEL FAILED"
-          echo "--- one block_sum ---"
-          pixi run mojo run -I . tools/hosted_block_probe.mojo || echo "BLOCK_SUM FAILED"
+          python3 packaging/wheel_ci.py inventory \
+            python/mojolearn python/mojolearn_diagnostics.py
 
-      # THE BLOCKING CHECK, and it is scoped to what this runner can honestly
-      # decide. Clean venv per interpreter, install from the wheel, import the
-      # extension, exercise the API and the validation paths. That covers the
-      # dylib staging, the wheel tag, requires-python and the macOS floor --
-      # every breadth claim except one.
-      #
-      # It does NOT run a fit, because this runner cannot. An earlier version
-      # ran the full smoke test under continue-on-error and produced a GREEN
-      # run in which all five interpreters had failed. A green badge that
-      # means nothing is worse than a red one; a check that cannot run must
-      # say so rather than be allowed to fail quietly.
-      - name: Install and verify on every claimed interpreter
-        run: ./packaging/macos/verify_wheel.sh --no-gpu
-
-      # A SKIP is not a pass. The script reports absent interpreters rather
-      # than failing, which is right on a laptop and wrong here: the entire
-      # point of this job is that the floor versions are present.
-      - name: No interpreter may be skipped here
+      # ------------------------------------------------------------------
+      # THE METADATA WHEEL. Same setup.py, same pyproject.toml, same tag
+      # computation as the shipped wheel, and NO EXTENSIONS, because this
+      # runner cannot make one. It is built to be inspected and thrown away;
+      # the step after it proves it is empty so that nobody, and no later
+      # step, can mistake it for a release artifact. It is deliberately NOT
+      # uploaded.
+      # ------------------------------------------------------------------
+      - name: The four files build_release_wheel.sh copies
         run: |
-          out=$(./packaging/macos/verify_wheel.sh --no-gpu)
-          echo "$out"
-          if echo "$out" | grep -q '^SKIP'; then
-            echo "::error::an interpreter the package claims was not tested"
+          set -euo pipefail
+          cp LICENSE NOTICE README.md python/
+          cp CITATION.cff python/mojolearn/
+
+      - name: Build the metadata-only wheel
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/pkgvenv"
+          "$RUNNER_TEMP/pkgvenv/bin/pip" install --quiet --upgrade \
+            "setuptools>=77" wheel build twine
+          ( cd python && rm -rf dist build ./*.egg-info \
+            && "$RUNNER_TEMP/pkgvenv/bin/python" -m build --wheel --no-isolation )
+          ls -la python/dist/*.whl
+
+      - name: It must contain NO extensions, and say so
+        run: |
+          set -euo pipefail
+          WHL=$(ls python/dist/*.whl)
+          n=$(unzip -l "$WHL" | grep -c '\.so$' || true)
+          if [ "$n" != 0 ]; then
+            echo "::error::this job built $n extension(s). It cannot have: the"
+            echo "::error::runner has no GPU. Something is very wrong."
             exit 1
           fi
-          for v in 3.10 3.11 3.12 3.13 3.14; do
-            echo "$out" | grep -q "PASS python$v" || {
-              echo "::error::python$v is claimed in pyproject.toml but did not pass"
-              exit 1
-            }
+          echo "0 extensions, as intended. THIS WHEEL IS NOT SHIPPABLE."
+
+      # The tag is the one claim a GPU-less runner can check completely, and
+      # it is a published lie in one of two directions when it is wrong: too
+      # low and pip installs onto Macs where the binary cannot load, too high
+      # and Macs that could have run it are turned away. `wheel_ci.py pins`
+      # above already tied every MACOS_FLOOR to DEFAULT_MACOS_TARGET; this
+      # ties DEFAULT_MACOS_TARGET to the filename pip actually compares.
+      - name: The wheel tag is macosx_11_0_arm64 and py3-none
+        run: |
+          set -euo pipefail
+          V=$(sed -n 's/^version = "\(.*\)"$/\1/p' python/pyproject.toml | head -1)
+          WANT="mojolearn-$V-py3-none-macosx_11_0_arm64.whl"
+          GOT=$(basename "$(ls python/dist/*.whl)")
+          test "$GOT" = "$WANT" || {
+            echo "::error::wheel is $GOT, expected $WANT"
+            echo "::error::DEFAULT_MACOS_TARGET in python/setup.py decides this"
+            exit 1
+          }
+          echo "tag: $GOT"
+
+      # twine check reads the METADATA the way PyPI does. A README that does
+      # not render is refused at upload, at the end of the release, after the
+      # M4 has spent an hour building.
+      - name: Metadata check
+        run: "$RUNNER_TEMP/pkgvenv/bin/twine check python/dist/*.whl"
+
+      - name: The citation ships inside the package
+        run: |
+          set -euo pipefail
+          unzip -l python/dist/*.whl | grep -q 'mojolearn/CITATION.cff' || {
+            echo "::error::CITATION.cff is not in the wheel. Attribution that"
+            echo "::error::lives only in the git repository does not travel"
+            echo "::error::with the artifact."
+            exit 1
+          }
+          for f in LICENSE NOTICE; do
+            unzip -l python/dist/*.whl | grep -q "licenses/$f" || {
+              echo "::error::$f is not in the wheel"; exit 1; }
           done
+
+      # ------------------------------------------------------------------
+      # THE INTERPRETER LOOP, which is the one breadth claim the M4 cannot
+      # make: 3.10 and 3.11 are the floor and are not installed there. Clean
+      # venv per interpreter, install from the wheel, and require the
+      # NO-EXTENSION REFUSAL to be mojolearn's own, by name.
+      #
+      # That refusal is not a technicality. Measured on a rented RTX 4090,
+      # 2026-08-29 (_backend.py, `select`): a partial build under `fast` used
+      # to raise at PACKAGE IMPORT with "cannot import name
+      # '_mojolearn_trees' ... most likely due to a circular import", which
+      # names the wrong cause and loses every lane that would have worked.
+      # The stub that fixed it has never been exercised by any automated
+      # test. This is that test, and this runner is the only place in the
+      # project where a zero-extension install happens naturally.
+      # ------------------------------------------------------------------
+      - name: Install and check the refusal on every claimed interpreter
+        run: |
+          set -euo pipefail
+          WHL=$(ls "$PWD"/python/dist/*.whl)
+          cat > "$RUNNER_TEMP/refusal.py" <<'PY'
+          import sys, traceback
+          want = sys.argv[1]
+          try:
+              import mojolearn
+          except ImportError as exc:
+              # Allowed, but only if mojolearn wrote the message.
+              if "mojolearn" not in str(exc) or "build" not in str(exc):
+                  print("BAD import refusal, not mojolearn's own:")
+                  traceback.print_exc()
+                  raise SystemExit(1)
+              print("import refused BY NAME:", str(exc).splitlines()[0])
+              raise SystemExit(0)
+          assert mojolearn.__version__ == want, (mojolearn.__version__, want)
+          # 1. THE STUB ITSELF, which is deterministic and does not depend on
+          #    any estimator's argument validation running first.
+          try:
+              mojolearn._mojolearn.kmeans_fit
+          except ImportError as exc:
+              msg = str(exc)
+              assert "is not built" in msg, msg
+              assert "bindings/build.sh" in msg, msg
+              print("stub refused BY NAME:", msg.splitlines()[0])
+          except Exception:
+              print("BAD: touching a missing binding must raise ImportError")
+              print("     naming the binary and the build script, not this:")
+              traceback.print_exc()
+              raise SystemExit(1)
+          else:
+              raise SystemExit("BAD: a missing binding answered an attribute")
+          # 2. THE USER PATH. Whatever an estimator does with a missing
+          #    binding, it must not be a bare importer traceback.
+          try:
+              mojolearn.KMeans(n_clusters=2).fit(
+                  [[0.0, 0.0], [1.0, 1.0], [0.1, 0.1], [1.1, 1.1]])
+          except ImportError as exc:
+              print("fit refused BY NAME:", str(exc).splitlines()[0])
+          except Exception:
+              print("BAD: fit on a missing extension raised something other")
+              print("     than ImportError:")
+              traceback.print_exc()
+              raise SystemExit(1)
+          else:
+              raise SystemExit("BAD: fit SUCCEEDED with no extension in the wheel")
+          PY
+          V=$(sed -n 's/^version = "\(.*\)"$/\1/p' python/pyproject.toml | head -1)
+          fails=0
+          for py in python3.10 python3.11 python3.12 python3.13 python3.14; do
+            if ! command -v "$py" >/dev/null 2>&1; then
+              echo "::error::$py is claimed in pyproject.toml and is not on PATH."
+              echo "::error::A SKIP is not a pass: this job exists to test the floor."
+              fails=$((fails+1)); continue
+            fi
+            tmp=$(mktemp -d)
+            "$py" -m venv "$tmp/venv"
+            # --no-cache-dir so a previously built wheel cannot be reused.
+            "$tmp/venv/bin/pip" install --quiet --no-cache-dir "$WHL"
+            # cd out of the checkout so ./python/mojolearn cannot shadow the
+            # installed package; without this the test can pass on source
+            # that is not in the wheel at all.
+            if ( cd "$tmp" && "$tmp/venv/bin/python" "$RUNNER_TEMP/refusal.py" "$V" ); then
+              echo "PASS $py"
+            else
+              echo "FAIL $py"; fails=$((fails+1))
+            fi
+            rm -rf "$tmp"
+          done
+          test "$fails" = 0 || { echo "::error::$fails interpreter(s) failed"; exit 1; }
+          echo "all five claimed interpreters passed"
 
       - name: Say plainly what was not verified
         run: |
           {
-            echo "### Wheel CI"
+            echo "### Wheel CI -- packaging only"
             echo ""
-            echo "Verified here: build at the portable baseline, ISA disassembly,"
-            echo "minos/tag agreement, install and import on python 3.10-3.14."
+            echo "Verified here, with no GPU and no Mojo: version agreement in"
+            echo "all three places, CPU-baseline pins in all ten build scripts,"
+            echo "import reachability of every shipped module, the wheel tag,"
+            echo "\`twine check\`, LICENSE/NOTICE/CITATION.cff presence, and"
+            echo "install plus refusal-by-name on python 3.10-3.14."
             echo ""
-            echo "**NOT verified here: that it computes.** This runner is a"
-            echo "virtualized M1 that cannot create a Metal function using"
-            echo "\`block_sum\`. GPU execution is verified on real Apple silicon"
-            echo "by \`packaging/macos/verify_wheel.sh\` with no flag."
+            echo "**NOT verified here: anything compiled.** No extension was"
+            echo "built, no kernel exists, nothing was fitted. A hosted macOS"
+            echo "runner cannot build this wheel -- see the header of"
+            echo "\`.github/workflows/wheel-ci.yml\`. The wheel that ships is"
+            echo "built and gated on the M4 by"
+            echo "\`packaging/macos/build_release_wheel.sh\` through"
+            echo "\`release-provenance.yml\`. A green run here is NOT a"
+            echo "releasable wheel and no artifact from this job may be"
+            echo "published."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload the wheel
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: mojolearn-wheel
-          path: python/dist/*.whl
-          if-no-files-found: error
+  # ------------------------------------------------------------------------
+  # THE LINUX ISA GATE MUST ACTUALLY FIRE.
+  #
+  # `packaging/linux/isa_baseline_linux.py` was written on 2026-08-31, after
+  # 0.3.0's AVX-512 defect, and has never been shown to refuse anything. A
+  # gate that has only ever been run on binaries that pass is a gate nobody
+  # has tested; this repository's own rule is to sabotage the path and watch
+  # it move. So: build one clean .so at the x86-64-v3 baseline and one dirty
+  # .so with zmm registers in it, and require the gate to pass the first and
+  # REFUSE the second. Both directions, because a gate that fails everything
+  # is as useless as one that fails nothing.
+  # ------------------------------------------------------------------------
+  isa-gate:
+    name: The Linux ISA gate refuses AVX-512
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Build a clean fixture and a dirty one
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/isa/clean /tmp/isa/dirty
+          cat > /tmp/isa/f.c <<'C'
+          #include <stddef.h>
+          /* An elementwise map, not a reduction: this vectorizes without
+             -ffast-math, so the dirty build really does get zmm registers. */
+          void mojolearn_fixture_scale(const float *x, float *y, size_t n) {
+              for (size_t i = 0; i < n; i++) y[i] = x[i] * 1.5f + 0.25f;
+          }
+          C
+          gcc -shared -fPIC -O3 -march=x86-64-v3 \
+              /tmp/isa/f.c -o /tmp/isa/clean/fixture.so
+          gcc -shared -fPIC -O3 -march=x86-64-v3 -mavx512f -mavx512dq \
+              -mprefer-vector-width=512 \
+              /tmp/isa/f.c -o /tmp/isa/dirty/fixture.so
+          echo "--- clean ---"; objdump -d /tmp/isa/clean/fixture.so | grep -c '%zmm' || true
+          echo "--- dirty ---"; objdump -d /tmp/isa/dirty/fixture.so | grep -c '%zmm' || true
+          objdump -d /tmp/isa/dirty/fixture.so | grep -q '%zmm' || {
+            echo "::error::the dirty fixture has no zmm registers, so this job"
+            echo "::error::would prove nothing. Adjust the flags."
+            exit 1
+          }
+
+      - name: The gate PASSES the clean fixture
+        run: python3 packaging/linux/isa_baseline_linux.py /tmp/isa/clean
+
+      - name: The gate REFUSES the dirty fixture
+        run: |
+          set -euo pipefail
+          if python3 packaging/linux/isa_baseline_linux.py /tmp/isa/dirty; then
+            echo "::error::isa_baseline_linux.py PASSED a binary full of zmm"
+            echo "::error::registers. This is the gate that was written after"
+            echo "::error::0.3.0 SIGILLed on every host without AVX-512, and it"
+            echo "::error::does not work."
+            exit 1
+          fi
+          echo "the gate refused it, as it must"
