@@ -162,14 +162,16 @@ include-package-data = false
 # It does not ship what is missing -- it ships whatever .so happens to be
 # sitting in the working tree, however old. `_mojolearn.so` shipped that way
 # once, predating eval_x/eval_y, and every user's fit raised "takes 6
-# positional arguments but 8 were given". As of 2026-08-24 the extensions are
-# TEN, not the five this comment used to name: `_mojolearn.so` (k-means,
+# positional arguments but 8 were given". As of 2026-09-01 the extensions are
+# TWELVE, not the five this comment used to name: `_mojolearn.so` (k-means,
 # k-NN), `_mojolearn_gbdt.so` (gradient boosting), `_mojolearn_estimators.so`
 # (DBSCAN, PCA, tSVD, OLS), `_mojolearn_rf.so` (random forest),
 # `_mojolearn_trees.so` (extra trees), `_mojolearn_svm.so` (SVC),
 # `_mojolearn_solver.so` (Lasso, ElasticNet, AgglomerativeClustering),
 # `_mojolearn_metrics.so` (metrics, SpectralClustering), `_mojolearn_tsa.so`
-# (Holt-Winters, KPSS) and `_mojolearn_linalg.so` (the identical GEMM).
+# (Holt-Winters, KPSS), `_mojolearn_linalg.so` (the identical GEMM) and
+# `_mojolearn_arima.so` (the batched ARIMA) and `_mojolearn_training.so`
+# (the optimizer step, the gradient-norm clip and the cross-entropy loss).
 #
 # THE GLOB CARRIES THREE TIERS, NOT TWO (2026-08-29): the FAST set here,
 # the IDENTICAL set under identical/, and the DETERMINISTIC set under

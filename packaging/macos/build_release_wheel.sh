@@ -58,7 +58,7 @@ cp "$here/CITATION.cff" "$here/python/mojolearn/"
 # 2026-08-24: five bindings were added at once (svm/isolation-forest,
 # solver/hierarchy, metrics/spectral, holtwinters/tsa, and the linalg GEMM
 # surface). They are listed here because a build script that is not named
-# here does not ship, and python/mojolearn/_backend.py now knows all ten.
+# here does not ship, and python/mojolearn/_backend.py now knows all eleven.
 #
 # DELIBERATELY NOT MIRRORED IN tools/e1_bootstrap.sh, AND THAT ASYMMETRY IS
 # THE POINT. That script builds bindings on a RENTED GPU under a work bound.
@@ -67,8 +67,8 @@ cp "$here/CITATION.cff" "$here/python/mojolearn/"
 # and would roughly double its binding-build time. A leg that spends its
 # lease compiling and comes home with an empty lanes/ has bought nothing at
 # all. Add a binding there only when a phase actually imports it.
-BUILD_SCRIPTS="build.sh build_gbdt.sh build_estimators.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_tsa.sh build_linalg.sh"
-EXT_NAMES="_mojolearn _mojolearn_gbdt _mojolearn_estimators _mojolearn_rf _mojolearn_trees _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_tsa _mojolearn_linalg"
+BUILD_SCRIPTS="build.sh build_gbdt.sh build_estimators.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_tsa.sh build_linalg.sh build_arima.sh build_training.sh"
+EXT_NAMES="_mojolearn _mojolearn_gbdt _mojolearn_estimators _mojolearn_rf _mojolearn_trees _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_training"
 
 # THE PER-SCRIPT GATES ARE OFF HERE, AND THE REASON IS A CLEAN CHECKOUT.
 # Each bindings/build_*.sh ends by copying python/mojolearn/ aside and
@@ -77,13 +77,19 @@ EXT_NAMES="_mojolearn _mojolearn_gbdt _mojolearn_estimators _mojolearn_rf _mojol
 # exist already; in the shared working tree they always did, and in a clean
 # checkout of a tag (the only honest place to build a release from) the
 # first gate fails on the fourth missing .so before anything runs. Found
-# 2026-08-23 on the first clean-tree build. So this script builds all ten
+# 2026-08-23 on the first clean-tree build. So this script builds all eleven
 # binaries gate-off and then runs THE release gate, verify_wheel.sh, which
 # installs the finished wheel into a clean venv under every claimed
 # interpreter and fits every estimator family in EVERY SHIPPED numeric mode
 # (three since 2026-08-29; this line said BOTH when there were two). That
 # is strictly more than the per-script gates check, and it runs on the
 # artifact that ships rather than on a copy of the tree.
+#
+# THE TWO LISTS ABOVE ARE NOT THE SAME LIST AND BOTH MUST NAME EVERY
+# EXTENSION. BUILD_SCRIPTS is what runs; EXT_NAMES is what is then CHECKED
+# for existence and for being newer than this script's start. An extension
+# built but not named in EXT_NAMES ships STALE rather than absent, silently,
+# which is how `_mojolearn.so` once shipped predating eval_x/eval_y.
 # THE TIERS THIS WHEEL CARRIES. `fast` lives at python/mojolearn/*.so and
 # every other tier one directory down under its own name, which is the layout
 # python/mojolearn/_backend.py loads from.
@@ -126,7 +132,7 @@ for mode in $MODES; do
     done
 done
 
-# THE FILES THE REST OF THIS SCRIPT GATES, ten per tier. Built above or absent, never
+# THE FILES THE REST OF THIS SCRIPT GATES, eleven per tier. Built above or absent, never
 # stale: every one is checked for existence and for being newer than this
 # script's start, so a build script that silently left the old file in place
 # fails here instead of shipping.

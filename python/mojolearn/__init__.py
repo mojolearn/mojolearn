@@ -8,7 +8,7 @@ those can reach. See NOTICE for the attribution each carries.
 
 WHAT IS IN THIS ALPHA, AND WHAT IS NOT
 ---------------------------------------
-Twenty-five estimators, two submodules and two functions: `NearestNeighbors`, `KNeighborsClassifier`,
+Twenty-six estimators, two submodules and two functions: `NearestNeighbors`, `KNeighborsClassifier`,
 `KNeighborsRegressor`, `RadiusNeighbors`, `KMeans`, `DBSCAN`, `PCA`, `TruncatedSVD`,
 `LinearRegression`, `Ridge`, `LogisticRegression` (binary, L-BFGS),
 `GradientBoosting`, `RandomForestClassifier`, `RandomForestRegressor`,
@@ -38,8 +38,11 @@ outlived the fact by a day: `density.py`, `decomposition.py` and
 `linear_model.py` had been bound through `_mojolearn_estimators` with the
 policy each needs stated on the class, and were reachable only as
 submodules while `__getattr__` still told a caller they had no surface.
-What is STILL absent is named in `_NOT_YET` below, with the line where
-the thing that exists stops.
+**`ARIMA` IS here** (since 2026-09-01), and `_NOT_YET` below, which existed
+to explain its absence, is now empty. It is the one estimator in this package
+whose `y` is 2-D: the lane is BATCHED, one series per row, each with its own
+parameters, and `_arima_impl.py` says on the class what else follows from
+that.
 
 WHAT THIS IS NOT
 ----------------
@@ -134,9 +137,14 @@ from .randomforest import RandomForestClassifier, RandomForestRegressor
 # regression half was gated after leg 11 and has not been in a cross-vendor
 # round. Its class says so.
 #
-# `ARIMA` is deliberately absent and is named in `_NOT_YET` below. Its lane
-# has no `fit`: the optimizer that would produce the coefficients is unported,
-# so the class would have to demand its own answer as an argument.
+# `ARIMA` JOINED THEM ON 2026-09-01 and this block said it could not. It read
+# that ARIMA was "deliberately absent" because its lane had no `fit`, so the
+# class would have to demand its own answer as an argument. True while it was
+# true: `estimate_x0` (over an own-written Householder QR) and an own-written
+# batched L-BFGS landed that day, gated in both numeric tiers, and what was
+# missing afterwards was only the Python door. `arima/` has a three-vendor
+# identity card for its KALMAN FILTER at `221aa141`; the FIT does not, and the
+# class says so rather than inheriting the lane's headline.
 #
 # Imported eagerly, like the block above, which is safe because every impl
 # module resolves its binding on FIRST USE rather than at import. A partial
@@ -149,9 +157,11 @@ from ._iforest_impl import IsolationForest
 from ._solver_impl import ElasticNet, Lasso
 from ._spectral_impl import SpectralClustering
 from ._svm_impl import SVC, SVR
+from ._arima_impl import ARIMA
 from ._tsa_impl import ExponentialSmoothing, kpss_test, select_d
 
 __all__ = [
+    "ARIMA",
     "AgglomerativeClustering",
     "DBSCAN",
     "KernelDensity",
@@ -188,23 +198,19 @@ __all__ = [
 ]
 
 # Named absences. Importing one of these raises with a reason rather than an
-# AttributeError, because "why is ARIMA missing" is a question the answer to
-# is interesting and short. Each value names the thing that
-# EXISTS and where it stops. (`KNeighborsClassifier` / `KNeighborsRegressor`
-# were here until 2026-08-23, and `SVR` until 2026-09-01; they are exported
-# above now. `SVR`'s entry said the solver, the oracle and the gates were all
-# done and only the Python surface was missing, which was true, and the fix
-# for that sentence was to write the surface rather than to reword it.)
-_NOT_YET = {
-    "ARIMA": (
-        "arima/ (the batched Kalman filter likelihood, its gradient and "
-        "predict all exist and are gated on one Apple M4); NO fit. "
-        "`estimate_x0`, the batched L-BFGS driver and the CSS likelihood are "
-        "NOT PORTED (arima/NOT_IMPLEMENTED.tsv), and those are exactly what produces "
-        "the coefficients every existing entry point REQUIRES as input, so an "
-        "`ARIMA` class would have to demand its own answer as an argument"
-    ),
-}
+# AttributeError, because "why is X missing" is a question the answer to is
+# interesting and short. Each value names the thing that EXISTS and where it
+# stops.
+#
+# IT IS EMPTY, AND THAT IS THE POINT. Three entries have been deleted from it
+# and none was ever reworded: `KNeighborsClassifier` / `KNeighborsRegressor`
+# on 2026-08-23, `SVR` on 2026-09-01 and `ARIMA` the same day. Each said the
+# kernels, the oracle and the gates were done and only the Python surface was
+# missing, each was true when written, and in every case the fix for the
+# sentence was to write the surface rather than to soften the sentence. Keep
+# the mechanism: the next lane that is finished underneath and unreachable
+# from Python belongs in here, by name, not left to an AttributeError.
+_NOT_YET = {}
 
 
 def __getattr__(name):

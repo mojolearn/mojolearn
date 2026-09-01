@@ -1300,20 +1300,43 @@ a file banner so it cannot quietly become a claim:**
   * **NOT `method="css"` or `"css-ml"`**, not exogenous regressors, not
     caller-supplied `start_params`, not confidence intervals, not missing
     observations. All refused by name.
-  * **NO PYTHON DOOR.** `batched_fit` is a Mojo entry point. The binding
-    module, its build script, `python/mojolearn/_arima_impl.py` and a wheel
-    packaging row are all shared files this lane does not own, and shipping
-    an ungated `ARIMA` class would be worse than shipping none.
+  * ~~**NO PYTHON DOOR.**~~ **THE DOOR LANDED 2026-09-01 AND THIS BULLET IS
+    STRUCK.** It read that `batched_fit` was a Mojo entry point and that the
+    binding module, its build script, `python/mojolearn/_arima_impl.py` and a
+    wheel packaging row were shared files this lane does not own. All four
+    exist: `arima/estimator.mojo` (the three pointer-shaped hosts),
+    `bindings/_mojolearn_arima.mojo`, `bindings/build_arima.sh`,
+    `python/mojolearn/_arima_impl.py::ARIMA`, `_mojolearn_arima` in
+    `_backend.py`'s `_MODULES` **and** its `_build_script`, and rows in both
+    the macOS and the Linux wheel packagers. The class is gated by
+    `python/mojolearn/tests/test_arima_surface.py`, whose bitwise arms are
+    ASSERTED under `identical` and RECORDED under `fast`, so it is not the
+    ungated `ARIMA` this bullet was written to prevent. **What is still true
+    is the bullet above it**: the fit has never run on a second vendor, and
+    the class says so in its own docstring rather than inheriting the
+    filter's card.
   * **The gates themselves are unvalidated.** Six sabotage arms are written
     and none is applied.
 
-## A hand-off this lane cannot make itself
+## A hand-off this lane cannot make itself, and it is now OVERDUE
 
-`python/mojolearn/_tsa_impl.py` lines 20-31 say, in the shipped package's
-own reference text, that `arima/` "does not port `estimate_x0`,
-`_start_params`, `_arma_least_squares`, nor `arima.pyx`'s batched L-BFGS",
-that "there is no `fit`", and that offering a class named `ARIMA` whose
-`fit` did not exist would be worse than offering none. **The first two
-clauses become false the day this compiles.** That file belongs to the `tsa`
-lane and is not edited here; the correction is owed at the same time the
-Python door lands, and until the door lands the third clause is still right.
+**ALL THREE CLAUSES ARE NOW FALSE AND TWO FILES IN THE `tsa` LANE STILL SAY
+THEM.** They belong to that lane's owner and are deliberately not edited
+from here; this is the request, with the exact text:
+
+  * `python/mojolearn/_tsa_impl.py`, the WHAT IS NOT HERE block (lines 20-31
+    at the time of writing), says `arima/` "does not port `estimate_x0` /
+    `_start_params` / `_arma_least_squares`, nor `arima.pyx`'s batched
+    L-BFGS", that "there is no `fit`", and that a class named `ARIMA` would
+    have to demand its own answer as an argument. `estimate_x0` landed
+    2026-09-01, `batched_fit` landed with it, and `mojolearn.ARIMA` is
+    exported from the package.
+  * `bindings/_mojolearn_tsa.mojo`, the paragraph beginning "`arima/` IS
+    DELIBERATELY ABSENT", says the same three things and adds "there is no
+    `ARIMA` class here", which stays literally true of THAT module and
+    misleads about the package: `ARIMA` is in `bindings/_mojolearn_arima.mojo`,
+    an eleventh extension.
+
+The correction is a deletion in both cases, not a rewording. Until it is
+made, the shipped package's own reference text contradicts the shipped
+package.

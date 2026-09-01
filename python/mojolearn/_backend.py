@@ -163,6 +163,8 @@ _MODULES = (
     "_mojolearn_metrics",
     "_mojolearn_tsa",
     "_mojolearn_linalg",
+    "_mojolearn_arima",
+    "_mojolearn_training",
 )
 _SELECTED = None
 
@@ -975,6 +977,8 @@ def _build_script(name):
         "_mojolearn_metrics": "build_metrics.sh",
         "_mojolearn_tsa": "build_tsa.sh",
         "_mojolearn_linalg": "build_linalg.sh",
+        "_mojolearn_arima": "build_arima.sh",
+        "_mojolearn_training": "build_training.sh",
     }.get(name, "build" + name[len("_mojolearn"):] + ".sh")
 
 
