@@ -489,6 +489,21 @@ ONE COLUMN. Nothing here is a cross-vendor claim; phase 6 owns that.
   cross-column reads, check-portable-nn's identical_clamp arm,
   `pixi run check-mamba2-corpus` (the tool's mamba2 support is a
   separate lane item), and PHASE 6 — the three-vendor E-series leg the
-  completion claim lives on (Apple reference column produced 2026-09-01;
-  rented legs launched the same evening, verdicts land here when the
-  judge reads the cards).
+  completion claim lives on.
+- **PHASE 6, TWO OF THREE VENDORS (2026-09-01 evening).** Apple
+  reference column (commit d7e4b3bc, stamp 2026-09-01_162529 rebuilt as
+  _162925) vs a rented RTX 4090 phase-8 column (stamp
+  2026-09-01_163217-runpod-nvidia, same pinned commit, archive
+  sha-verified): `tools/e3_round_judge.sh` section 7 says
+  **mamba2 IDENTICAL APPLE vs NVIDIA: IDENTICAL (26 stages)** and
+  mamba IDENTICAL (17 stages) beside it. Both boxes' FAST arms
+  diverge from the oracle as FAST must (Apple first at silu.out,
+  NVIDIA first at norm.out — recorded, no claim).
+- **THE AMD COLUMN IS OWED, NOT FAILED** ([[runpod-failure-is-not-invalidation]],
+  [[one-box-verdict-is-not-three]]): three MI300X rentals on 2026-09-01
+  evening never yielded a working ssh session (attempt 1: no ssh
+  endpoint in 600s; attempts 2 and 3: endpoint exposed on host
+  213.173.96.53 but never answered — likely one broken host). All three
+  pods were terminated by the leg and VERIFIED gone (HTTP 404); no
+  orphans, no cards. The completion claim REMAINS OPEN until an AMD
+  column lands; nothing here retracts the Apple↔NVIDIA identity above.
