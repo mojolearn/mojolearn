@@ -202,8 +202,17 @@ def main(out=sys.stdout):
                GaussianProcessRegressor(alpha=float("nan")).fit, x, y)
 
     # -- POSTERIOR: the planted recovery, the lane's own bound ------------
+    # FIXTURE CORRECTED 2026-09-01: at lengthscale 1.0 this fixture's
+    # kernel matrix has cond ~1.2e6 and the 2^-14 recovery bound was
+    # never achievable -- sklearn in FLOAT64 on the identical data reads
+    # worst |mean - y| = 0.0280 (ours read 0.0270, closer than the
+    # reference). The fixture was the defect, not the assertion (the
+    # fix-the-fixture rule). At lengthscale 0.25 the matrix conditions
+    # to ~253 and sklearn float64 recovers to 2.39e-05 against the
+    # 6.1e-05 bound -- honest with margin, and the off-diagonal
+    # coupling stays real (cond >> 1), so a broken kernel still fails.
     arm = "POSTERIOR"
-    k = ConstantKernel(1.0) * RBF([1.0, 1.0]) + WhiteKernel(0.0)
+    k = ConstantKernel(1.0) * RBF([0.25, 0.25]) + WhiteKernel(0.0)
     model = GaussianProcessRegressor(kernel=k).fit(x, y)
     rep.check(arm, model.info_ == 0, "the factorization succeeded",
               "info_=%d" % model.info_)

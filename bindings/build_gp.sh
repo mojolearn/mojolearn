@@ -217,7 +217,7 @@ for _sub in gaussian_process cholesky gemm kde core; do
 done
 
 _failed=0
-for _pair in gaussian_process:1; do
+for _pair in gaussian_process:15; do
     _s=${_pair%%:*}
     _min=${_pair#*:}
     _n=$(printf '%s\n' "$_air" | grep -c "^${_s}" || true)
