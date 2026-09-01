@@ -63,10 +63,14 @@ run picks the fixture the contract names and FIRST asserts the property
 that makes the arm falsifiable there -- STATEPASS arms: >= 3 working
 chunks (m2_statepass_b1_l513_d32) AND the nonzero-initial_states two-chunk
 case (m2_init_states_b1_l257_d32), both asserted (chunk count computed,
-initial h downloaded and counted nonzero); CLAMP_BEFORE_SOFTPLUS: the
-active-(0.001, 0.1) case with the check COUNTING cells the clamp actually
-moves (host-side, from the oracle's dt) and refusing a zero count as
-VACUOUS; SEGSUM_DESCENDING: two differing dt values inside one chunk,
+initial h downloaded and counted nonzero); CLAMP_BEFORE_SOFTPLUS: an
+IN-CHECK PLANTED fixture (`clamp_witness_weights`: two heads, dt_bias
+planted one head per limit, run under (0.001, 0.1)) with the check
+COUNTING lo-bound and hi-bound cells on the oracle's clean dt and
+refusing a zero count on EITHER limit as VACUOUS -- the corpus dt_limit
+case's own single-head hashed bias landed inside the band and bound zero
+cells, which that refusal caught at first arming, exactly as designed;
+SEGSUM_DESCENDING: two differing dt values inside one chunk,
 counted; CHUNK_SIZE_128 and FOLD_SERIAL_ZERO_SEED: L > 128 asserted;
 PAIR_DT_B / S6_* / GATE_NORM_BEFORE: hashed values, any shape;
 STEP_UPSTREAM_RECURRENCE: an L >= 2 decode. An armed run whose fixture
@@ -1319,24 +1323,69 @@ def count_dt_nonuniform(case_k: Int, b: Int, l: Int) raises -> Int:
     return n
 
 
-def count_clamp_active(case_k: Int) raises -> Int:
-    """Witness counter for CLAMP_BEFORE_SOFTPLUS: cells whose softplus
-    output the clamp MOVES under the case's dt_limit."""
-    var c = m2_corpus_case(case_k)
-    var w = m2_case_weights(case_k)
-    var state = Mamba2State(c.b, w.dims)
-    var x = m2_case_x(case_k)
-    var st = mamba2_block_oracle(w, x, c.b, c.l, c.dt_lo, c.dt_hi, state)
-    # dt_out is post-clamp; a cell AT a limit's bits that would otherwise
-    # exceed it was moved. Count cells exactly equal to either limit.
-    var n = 0
-    for i in range(len(st.dt_out)):
-        var u = bitcast[DType.uint32](st.dt_out[i])
-        if u == bitcast[DType.uint32](c.dt_lo) or u == bitcast[DType.uint32](
-            c.dt_hi
-        ):
-            n += 1
-    return n
+def clamp_witness_weights() raises -> Mamba2Weights:
+    """The armed CLAMP_BEFORE_SOFTPLUS run's PLANTED witnessing fixture,
+    deterministic BY CONSTRUCTION -- not by a lucky hashed draw. Found
+    necessary at first arming: the corpus dt_limit case has ONE head at
+    d_model 32, its single hashed dt_bias landed in the (0.001, 0.1)
+    INTERIOR, the clamp bound ZERO cells, and the vacuity refusal fired
+    exactly as designed (that refusal stays, below, guarding this plant
+    against regression too).
+
+    Construction: case 2's (m2_base_b3_l4_d64, TWO heads, benign hashed
+    weights) with dt_bias planted per head, one head per limit:
+    dt_bias[0] = -8.0 -> biased dt sits near -8 (dt_raw's fan-in-scaled
+    spread is ~0.3 sigma), softplus < 0.001 on every head-0 cell, the LO
+    limit binds; dt_bias[1] = -1.0 -> softplus ~0.31 > 0.1 on every
+    head-1 cell, the HI limit binds. Both margins are ~4 sigma, so both
+    limits bind on EVERY cell of their head under the (0.001, 0.1)
+    limits, and the order swap (clamping the biased value near -8/-1
+    FIRST, then softplus) cannot fail to move dt.out."""
+    var w = m2_case_weights(2)
+    if w.dims.nheads < 2:
+        raise Error(
+            "clamp_witness_weights: the witness needs two heads (one per"
+            " limit); case 2 is no longer d_model 64"
+        )
+    w.dt_bias[0] = -8.0
+    w.dt_bias[1] = -1.0
+    return w^
+
+
+def run_pair_custom(
+    ctx: DeviceContext,
+    w: Mamba2Weights,
+    x: List[Float32],
+    b: Int,
+    l: Int,
+    dt_lo: Float32,
+    dt_hi: Float32,
+) raises -> List[List[List[Float32]]]:
+    """`run_pair` on an EXPLICIT (weights, x, dt_limit) instead of a
+    corpus case -- the planted sabotage fixtures go through here. Fresh
+    zero state on both sides."""
+    var dims = w.dims.copy()
+    var dw = Mamba2DeviceWeights(ctx, w)
+    var dstate = allocate_inference_cache(ctx, b, dims)
+    var dstages = Mamba2DeviceStages(ctx, b, l, 0, dims)
+    var dx = mamba_upload(ctx, x)
+    var trace = IdentityTrace.disabled()
+    mamba2_block_forward(
+        ctx, dstages, dstate, dw, dx, b, l, dt_lo, dt_hi, trace,
+        String("m2cw"),
+    )
+    var ddump = device_dump(ctx, dstages, dstate, b, l, 0, dims)
+    var ostate = Mamba2State(b, dims)
+    var ost = mamba2_block_oracle(w, x, b, l, dt_lo, dt_hi, ostate)
+    var odump = oracle_dump(ost, ostate)
+    var out = List[List[List[Float32]]]()
+    out.append(ddump^)
+    out.append(odump^)
+    _ = dw^
+    _ = dstate^
+    _ = dstages^
+    _ = dx^
+    return out^
 
 
 def sabotage_main(ctx: DeviceContext) raises:
@@ -1470,18 +1519,64 @@ def sabotage_main(ctx: DeviceContext) raises:
     elif arm == "S6_BIAS_LAST" or arm == "S6_TAPS_REVERSED":
         expect_first = String("conv.out")
     elif arm == "CLAMP_BEFORE_SOFTPLUS":
-        case_k = 14
-        b = 2
-        l = 8
-        expect_first = String("dt.out")
-        var active = count_clamp_active(case_k)
-        if active == 0:
+        # The PLANTED fixture (clamp_witness_weights' docstring is the
+        # record of why): case 2's shape, dt_bias planted one head per
+        # limit, run under the (0.001, 0.1) limits. Verdict handled
+        # inline, like the STATEPASS branch.
+        var cw = m2_corpus_case(2)
+        var ww = clamp_witness_weights()
+        var xw = m2_case_x(2)
+        var lo = Float32(0.001)
+        var hi = Float32(0.1)
+        var pairw = run_pair_custom(ctx, ww, xw, cw.b, cw.l, lo, hi)
+        # Witnessing asserted, BOTH limits, counted on the ORACLE's clean
+        # dt.out (the vacuity refusal stays: a future fixture regression
+        # must fire it, exactly as the first hashed fixture did).
+        var lo_bind = 0
+        var hi_bind = 0
+        for i in range(len(pairw[1][STAGE_DT])):
+            var u = bitcast[DType.uint32](pairw[1][STAGE_DT][i])
+            if u == bitcast[DType.uint32](lo):
+                lo_bind += 1
+            if u == bitcast[DType.uint32](hi):
+                hi_bind += 1
+        if lo_bind == 0 or hi_bind == 0:
             raise Error(
-                "SABOTAGE VACUOUS: the dt_limit (0.001, 0.1) fixture"
-                " clamps ZERO cells; at an inert clamp the order swap"
-                " cannot move a bit"
+                String("SABOTAGE VACUOUS: the planted dt_limit fixture")
+                + " binds lo on "
+                + String(lo_bind)
+                + " and hi on "
+                + String(hi_bind)
+                + " cells; BOTH limits must bind or the order swap is not"
+                + " fully witnessed"
             )
-        print("  witness: clamp-moved cells =", active)
+        print(
+            "  witness: clamp binds lo on", lo_bind, "and hi on", hi_bind,
+            "cells (planted, by construction)",
+        )
+        var diffs_c = compare_dumps(pairw[0], pairw[1], False)
+        var n_c = total_moved(diffs_c)
+        if n_c == 0:
+            raise Error(
+                "SABOTAGE ARM REPORTED ZERO MISMATCHES on the planted"
+                " witness: the gate is blind, or the arm is not reached"
+                " ([[reached-but-inert]])."
+            )
+        var fm_c = first_moved(diffs_c)
+        if fm_c != "dt.out":
+            raise Error(
+                String("SABOTAGE ARM moved '")
+                + fm_c
+                + "' first; the S9 order swap writes dt.out and nothing"
+                + " earlier may move"
+            )
+        print(
+            "SABOTAGE ARM FAILS AS REQUIRED:",
+            n_c,
+            "cells moved, first stage dt.out (the stage the sabotaged"
+            " seam writes). The undone clause is load bearing.",
+        )
+        return
     elif arm == "GATE_NORM_BEFORE":
         expect_first = String("gnorm.gate")
     else:

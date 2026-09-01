@@ -1007,36 +1007,43 @@ def mamba2_block_forward(
         ctx, trace, prefix + ".dt.out", stages.dt_work, b, l, q0, nh
     )
 
+    # THE REQUIRED-RED ARM (DEVIATION 786): the upstream step's own
+    # per-token recurrence replaces the resumption for the new token --
+    # AND IT ENGAGES ONLY AT l == 1. A decode gate legitimately runs a
+    # PREFILL leg (l > 1) through this same entry point before its
+    # single-token steps, and the arm must leave those forwards untouched
+    # (found at first arming: an unconditional raise here killed the armed
+    # build inside its own reference prefill, before the arm's test was
+    # ever reached). At l > 1 the armed build runs the profile path below,
+    # clean; at l == 1 it substitutes the upstream spelling and gate (d)
+    # must FAIL on the decode token. `step_arm_engaged` is constant False
+    # in every unarmed build and the branch compiles away.
+    var step_arm_engaged = False
     comptime if SAB_STEP_UPSTREAM_RECURRENCE:
-        # THE REQUIRED-RED ARM (DEVIATION 786): the upstream step's own
-        # per-token recurrence replaces the resumption for the new token.
-        # Only meaningful at l == 1; gate (d) must FAIL against a prefill.
-        if l != 1:
-            raise Error(
-                "STEP_UPSTREAM_RECURRENCE is a decode arm; run it at l = 1"
+        if l == 1:
+            step_arm_engaged = True
+            ctx.enqueue_function[m2_step_upstream_kernel](
+                stages.skip_out.unsafe_ptr(),
+                state.h.unsafe_ptr(),
+                stages.silu_out.unsafe_ptr(),
+                stages.in_proj.unsafe_ptr(),
+                w.dt_bias.unsafe_ptr(),
+                stages.a_out.unsafe_ptr(),
+                w.d_skip.unsafe_ptr(),
+                Int32(b),
+                Int32(nh),
+                Int32(di),
+                Int32(cd),
+                Int32(dip),
+                grid_dim=(_grid(b * nh * p_dim), 1, 1),
+                block_dim=(MAMBA2_TPB, 1, 1),
             )
-        ctx.enqueue_function[m2_step_upstream_kernel](
-            stages.skip_out.unsafe_ptr(),
-            state.h.unsafe_ptr(),
-            stages.silu_out.unsafe_ptr(),
-            stages.in_proj.unsafe_ptr(),
-            w.dt_bias.unsafe_ptr(),
-            stages.a_out.unsafe_ptr(),
-            w.d_skip.unsafe_ptr(),
-            Int32(b),
-            Int32(nh),
-            Int32(di),
-            Int32(cd),
-            Int32(dip),
-            grid_dim=(_grid(b * nh * p_dim), 1, 1),
-            block_dim=(MAMBA2_TPB, 1, 1),
-        )
-        ctx.synchronize()
-        # The card's SSD stages are not produced by this spelling; record
-        # the working buffers as they stand (zeros) so the tag list stays
-        # section 7's -- the gate reads skip.out onward, which is where
-        # this arm must bite.
-    else:
+            ctx.synchronize()
+            # The card's SSD stages are not produced by this spelling;
+            # record the working buffers as they stand (zeros) so the tag
+            # list stays section 7's -- the gate reads skip.out onward,
+            # which is where this arm must bite.
+    if not step_arm_engaged:
         # ---- S10-S19 + h_last: the SSD core over the working sequence.
         ssd_forward(
             ctx,
@@ -1115,9 +1122,10 @@ def mamba2_block_forward(
     )
 
     # ---- the buffer update: keep the last r = T mod Q working rows
-    #      (copies; r == 0 empties the buffer). NOT run under the step
-    #      arm, whose spelling carries no buffer.
-    comptime if not SAB_STEP_UPSTREAM_RECURRENCE:
+    #      (copies; r == 0 empties the buffer). NOT run on an ENGAGED step
+    #      arm, whose spelling carries no buffer; an armed build's l > 1
+    #      prefill leg runs it normally.
+    if not step_arm_engaged:
         var r = t_work - (t_work // qv) * qv
         if r > 0:
             ctx.enqueue_function[m2_buffer_update_kernel](
@@ -1137,9 +1145,9 @@ def mamba2_block_forward(
             ctx.synchronize()
         state.buf_len = r
 
-    # ---- S20: the D residual (skipped by the step arm, which wrote
-    #      skip_out itself).
-    comptime if not SAB_STEP_UPSTREAM_RECURRENCE:
+    # ---- S20: the D residual (skipped by an ENGAGED step arm, which
+    #      wrote skip_out itself).
+    if not step_arm_engaged:
         ctx.enqueue_function[m2_skip_kernel](
             stages.skip_out.unsafe_ptr(),
             stages.y_work.unsafe_ptr(),
