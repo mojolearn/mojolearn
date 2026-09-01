@@ -4212,18 +4212,33 @@ is not supportable from this repository's evidence.
 
 ---
 
-## DEVIATION 470 [OPEN] -- the search cycle's six setup enqueues fused into ONE seeder launch
+## DEVIATION 470 [OPEN] -- the search cycle's six setup enqueues fused into TWO seeder launches (Metal's 31-binding cap forbids one)
 
 **Where.** `impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo`,
-`phase_setup_kernel` (+ `PHASE_SETUP_TPB`), enqueued from BOTH twins --
-`search_batch` and `search_batch_regression` in
+`phase_setup_a_kernel` + `phase_setup_b_kernel` (+ `PHASE_SETUP_TPB`),
+enqueued A then B from BOTH twins -- `search_batch` and
+`search_batch_regression` in
 `impl/decisiontree/batched_levelalgo/builder.mojo` -- immediately after
-`stage_batch` and before the feature sampler. The six it replaces, in their
-old queue order: `enqueue_memset(d_samp_report, SAMPLER_UNVISITED)`,
-`node_feature_range_init_kernel`, `enqueue_memset(d_nonconst, 0)`,
+`stage_batch` and before the feature sampler. The six they replace, in
+their old queue order: `enqueue_memset(d_samp_report, SAMPLER_UNVISITED)`,
+`node_feature_range_init_kernel`, `enqueue_memset(d_nonconst, 0)` (half A);
 `node_feature_score_init_kernel`, `enqueue_memset(r_mx, 0)`,
-`split_reduce_init_kernel`. Every enqueue is host-priced here (the covtype
-94-launch/tree tax), and this takes six per search cycle to one.
+`split_reduce_init_kernel` (half B). Every enqueue is host-priced here (the
+covtype 94-launch/tree tax), and this takes six per search cycle to two.
+
+**Why TWO kernels and not one -- a MEASURED Metal ABI wall, do not re-fuse.**
+The first cut WAS one kernel: 27 pointer arguments plus 7 scalars, 34
+bindings. It failed the very first gate attempt at compile time -- "Metal
+Compiler failed to compile metallib / failed to run the pass manager", no
+source diagnostic -- because Metal caps a kernel's buffer-binding table at
+31 entries and MAX's ABI binds scalar arguments too. The split is by phase
+half: A carries the report memset + range init + nonconst memset (8
+pointers + 3 scalars = 11 bindings), B the score init + mutex memset +
+reduce init (19 pointers + 4 scalars = 23 bindings), both comfortably under
+the cap. The split point changes NOTHING about the bit-inertness argument
+below: A and B are enqueued back to back at the same hoist point, on the
+same in-order queue, writing the same disjoint buffers with the same
+imported bodies.
 
 **Why the hoist is bit-inert, and it is an ORDER argument, not a values one.**
 All six are pure write-only seeders over DISJOINT buffers; every cell they
@@ -4248,7 +4263,7 @@ workspace's `max_batch` capacity) and `d_samp_report` over `cap_report`
 (`sampler_report_len(cap_nodes)`) -- exactly the full buffers the three
 `enqueue_memset`s covered. Seeding only the live `n_nodes` leaves stale
 cells a later LARGER batch reads; that is ensemble's DEVIATION 1916 lesson
-and it is restated in the kernel's docstring. (2) The fused kernel IMPORTS
+and it is restated in the kernels' docstrings. (2) The fused kernels IMPORT
 the seeder bodies -- `range_init_seed_at`, `score_init_seed_cell_at`,
 `score_init_seed_acc_at` (extracted in `builder_kernels_impl.mojo`) and
 `split_reduce_seed_at` (extracted in `split.mojo`) -- rather than
@@ -4258,11 +4273,11 @@ kernels STAY, delegating to the same helpers, because
 `range_kernel_check`, `score_kernel_check`, `regression_score_check` and
 `split_reduce_check` seed through them in isolation.
 
-**Zero extents reproduce the special cycles exactly.** The survey
-(`range_only`) passes 0 for the score/acc/mutex/reduce extents -- it never
-ran those seeders; the rescue (`use_sampler == False`) passes 0 for the
-report extent -- it never memset the report. No cycle seeds more or less
-than it did before.
+**Zero extents (and one skipped launch) reproduce the special cycles
+exactly.** The survey (`range_only`) skips half B outright -- every B
+extent would be zero, and it never ran those seeders; the rescue
+(`use_sampler == False`) passes 0 for half A's report extent -- it never
+memset the report. No cycle seeds more or less than it did before.
 
 **THE REFUSAL LIST, from the scoping pass.** No seeder is fused into its
 CONSUMER, and the reason is stated where the temptation will be felt:
@@ -4279,7 +4294,7 @@ one; per-phase comparisons across this commit must not read the stage/range
 /score/reduce split as a kernel change.
 
 **Sabotage, wired under `-D MOJOLEARN_ET_SAB_PHASE_SETUP=1` (a measurement
-arm, never a gate).** The fused kernel's class-accumulator seed is poisoned
+arm, never a gate).** Half B's class-accumulator seed is poisoned
 to the cell's BATCH-SLOT parity (`acc_left[idx] = idx & 1` instead of 0). A
 node's flat cell index depends on its slot in the batch, and the merged and
 serial arms batch differently, so corresponding cells receive different
@@ -4297,9 +4312,10 @@ deliberately constant poison (`= 1` everywhere) would be exactly such a
 blind arm -- both arms would move identically -- which is why the poison is
 slot-keyed.
 
-**Price.** One wider launch instead of six narrow ones; the survey cycle
-now runs one fused launch where it ran two seeders plus a memset (its
-zero-extent regions are dead threads, not writes). 34 kernel arguments.
+**Price.** Two wider launches instead of six narrow ones; the survey cycle
+runs one fused launch (half A) where it ran two seeders plus a memset (its
+zero report extent is dead threads, not writes). 11 + 23 kernel arguments,
+each half under Metal's 31-binding table.
 
 **Gate (RUN OWED, none run -- this Mac runs nothing).** In order:
 

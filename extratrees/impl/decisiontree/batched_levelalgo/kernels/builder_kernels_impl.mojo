@@ -976,7 +976,7 @@ def range_init_seed_at(
 ):
     """Seed ONE range cell: `node_feature_range_init_kernel`'s per-index body.
 
-    DEVIATION 470 extracts it so the fused `phase_setup_kernel` below can
+    DEVIATION 470 extracts it so the fused `phase_setup_a_kernel` below can
     IMPORT this logic rather than transcribe it -- a second spelling of the
     seed is a second answer. The standalone kernel runs the same call.
     """
@@ -1010,7 +1010,7 @@ def node_feature_range_init_kernel(
     (DEVIATION 163).
 
     The shipped level loop seeds through DEVIATION 470's fused
-    `phase_setup_kernel`, which calls the same `range_init_seed_at`; this
+    `phase_setup_a_kernel`, which calls the same `range_init_seed_at`; this
     standalone launch STAYS for `range_kernel_check`'s isolated arms.
     """
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -2469,7 +2469,7 @@ def score_init_seed_cell_at(
     """Seed ONE score cell: `node_feature_score_init_kernel`'s per-index body
     over the seven per-cell arrays.
 
-    DEVIATION 470 extracts it so the fused `phase_setup_kernel` below can
+    DEVIATION 470 extracts it so the fused `phase_setup_b_kernel` below can
     IMPORT this logic rather than transcribe it. The standalone kernel runs
     the same call.
     """
@@ -2521,7 +2521,7 @@ def node_feature_score_init_kernel(
     plausible-looking answer.
 
     The shipped level loop seeds through DEVIATION 470's fused
-    `phase_setup_kernel`, which calls the same two seed helpers; this
+    `phase_setup_b_kernel`, which calls the same two seed helpers; this
     standalone launch STAYS for `score_kernel_check`'s isolated arms.
     """
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -2546,18 +2546,30 @@ def node_feature_score_init_kernel(
 
 
 # ===========================================================================
-# DEVIATION 470 -- ONE fused seeder launch per search cycle.
+# DEVIATION 470 -- the search cycle's six setup enqueues, fused into TWO
+# seeder launches.
+#
+# TWO, NOT ONE, AND THE REASON IS A METAL ABI LIMIT -- DO NOT RE-FUSE THEM.
+# A single kernel carrying all six regions took 27 pointer arguments plus 7
+# scalars, and Metal caps a kernel's buffer-binding table at 31 entries with
+# MAX's ABI binding scalars too; the one-kernel form died in the Metal
+# backend ("failed to run the pass manager", no source location) on the
+# first gate attempt. The A half carries 8 pointers + 3 scalars and the B
+# half 19 pointers + 4 scalars, both comfortably under the cap. Everything
+# else about the fusion -- capacity extents, imported seed bodies,
+# zero-extent skips, the refusal list -- is unchanged from the one-kernel
+# design and is documented on the two kernels below.
 # ===========================================================================
 
 comptime PHASE_SETUP_TPB = 256
-"""The fused seeder's block width. The three standalone init kernels ran at
+"""The fused seeders' block width. The three standalone init kernels ran at
 64 and the three memsets at whatever the vendor picked; every write below is
 a pure function of its flat index and the arguments, so the width moves no
 value. 256 mirrors the ensemble lane's `PHASE_SETUP_TPB` (its DEVIATION
 1916)."""
 
 
-def phase_setup_kernel(
+def phase_setup_a_kernel(
     out_report: MutPointer[Int32, MutAnyOrigin],
     n_report: Int32,
     out_min: MutPointer[Float32, MutAnyOrigin],
@@ -2569,6 +2581,70 @@ def phase_setup_kernel(
     n_range_cells: Int32,
     out_nonconst: MutPointer[Int32, MutAnyOrigin],
     n_nonconst: Int32,
+):
+    """DEVIATION 470, half A: the range half of the search cycle's setup --
+    the `d_samp_report` memset, `node_feature_range_init_kernel` and the
+    `d_nonconst` memset -- as one launch, enqueued (with half B right
+    behind it) after `stage_batch` and before the feature sampler. Two
+    kernels rather than one because of Metal's 31-entry binding cap; see
+    the block comment above before re-fusing.
+
+    Fusing is pure orchestration and hoisting is bit-inert on the in-order
+    queue: all the seeders are pure write-only maps over DISJOINT buffers,
+    every cell a constant or a pure function of its flat index, and nothing
+    enqueued between each seeder's old position and its first reader writes
+    any of the seeded buffers -- so every reader sees the bytes it saw
+    before. The range body is IMPORTED (`range_init_seed_at`), not
+    transcribed; a memset has no body to import, so its FILL CONSTANT is
+    the imported thing (`SAMPLER_UNVISITED` by name, and the zero).
+
+    THE EXTENTS ARE THE CALLER'S OBLIGATION AND THEY ARE NOT ALL THE LIVE
+    BATCH. `n_report` and `n_nonconst` are FULL-CAPACITY extents
+    (`sampler_report_len` over capacity / `max_batch`) -- exactly what the
+    two memsets covered -- because seeding only the live `n_nodes` leaves
+    stale cells that a later larger batch reads (the ensemble lane's
+    DEVIATION 1916 lesson). `n_range_cells` is the same live extent the
+    standalone kernel was launched with. An extent of ZERO skips its
+    region, which is how the rescue cycle (no report seeding) is
+    reproduced exactly.
+
+    THE REFUSAL LIST, restated from the scoping pass: NO seeder is fused
+    into its CONSUMER. `node_nonconstant_flag_kernel` does cross-block
+    `Atomic.fetch_add` into `out_nonconst`, and the range kernel
+    accumulates GRID-wide into its seeded cells. A seed folded into either
+    would need every block to see the seed before any block accumulates,
+    and Metal has no grid-wide sync -- the seeders fuse with each other and
+    with nothing else.
+    """
+    var extent = Int(n_report)
+    if Int(n_range_cells) > extent:
+        extent = Int(n_range_cells)
+    if Int(n_nonconst) > extent:
+        extent = Int(n_nonconst)
+    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while idx < extent:
+        if idx < Int(n_report):
+            # The `d_samp_report` memset: a value no sampler kernel can
+            # produce, so the readback can name a reach failure.
+            out_report[unsafe_offset=idx] = SAMPLER_UNVISITED
+        if idx < Int(n_range_cells):
+            range_init_seed_at(
+                out_min,
+                out_max,
+                out_minkey,
+                out_maxkey,
+                out_n_missing,
+                out_n_merges,
+                idx,
+            )
+        if idx < Int(n_nonconst):
+            # The `d_nonconst` memset, over FULL capacity.
+            out_nonconst[unsafe_offset=idx] = Int32(0)
+        idx += stride
+
+
+def phase_setup_b_kernel(
     out_status: MutPointer[Int32, MutAnyOrigin],
     out_threshold: MutPointer[Float32, MutAnyOrigin],
     out_n_left: MutPointer[Int32, MutAnyOrigin],
@@ -2593,41 +2669,23 @@ def phase_setup_kernel(
     out_r_warps: MutPointer[Int32, MutAnyOrigin],
     n_reduce_nodes: Int32,
 ):
-    """DEVIATION 470: the search cycle's SIX setup enqueues -- the
-    `d_samp_report` memset, `node_feature_range_init_kernel`, the
-    `d_nonconst` memset, `node_feature_score_init_kernel`, the `r_mx` memset
-    and `split_reduce_init_kernel` -- as ONE launch, enqueued after
-    `stage_batch` and before the feature sampler.
+    """DEVIATION 470, half B: the score/reduce half of the search cycle's
+    setup -- `node_feature_score_init_kernel`, the `r_mx` memset and
+    `split_reduce_init_kernel` -- as one launch, enqueued immediately after
+    half A. Two kernels rather than one because of Metal's 31-entry binding
+    cap (19 pointers + 4 scalars here); see the block comment above before
+    re-fusing.
 
-    Fusing is pure orchestration and hoisting is bit-inert on the in-order
-    queue: all six are pure write-only seeders over DISJOINT buffers, every
-    cell a constant or a pure function of its flat index, none reads what
-    another (or any kernel between their old positions and this one) writes,
-    and nothing enqueued between each seeder's old position and its first
-    reader writes any of the seeded buffers. The three init bodies are
-    IMPORTED (`range_init_seed_at`, `score_init_seed_cell_at`,
-    `score_init_seed_acc_at`, `split_reduce_seed_at`), not transcribed; the
-    three memsets have no body to import, so their FILL CONSTANTS are the
-    imported thing (`SAMPLER_UNVISITED` by name, and the two zeroes).
+    The bit-inertness, capacity-extent and refusal arguments are half A's,
+    applied to this half's buffers: the score and reduce kernels accumulate
+    GRID-wide into these cells (no fusing into consumers; Metal has no grid
+    sync), `n_mutex` is the FULL-CAPACITY extent the `r_mx` memset covered,
+    and the seed bodies are IMPORTED (`score_init_seed_cell_at`,
+    `score_init_seed_acc_at`, `split_reduce_seed_at`), not transcribed.
 
-    THE EXTENTS ARE THE CALLER'S OBLIGATION AND THEY ARE NOT ALL THE LIVE
-    BATCH. `n_nonconst`, `n_mutex` and `n_report` are FULL-CAPACITY extents
-    (`max_batch` / `sampler_report_len` over capacity) -- exactly what the
-    three memsets covered -- because seeding only the live `n_nodes` leaves
-    stale cells that a later larger batch reads (the ensemble lane's
-    DEVIATION 1916 lesson). The range/score/reduce extents are the same live
-    extents the standalone kernels were launched with. An extent of ZERO
-    skips its region, which is how the caller reproduces the survey cycle
-    (no score/reduce seeding) and the rescue cycle (no report seeding)
-    exactly.
-
-    THE REFUSAL LIST, restated from the scoping pass: NO seeder is fused
-    into its CONSUMER. `node_nonconstant_flag_kernel` does cross-block
-    `Atomic.fetch_add` into `out_nonconst`; the range, score and reduce
-    kernels accumulate GRID-wide into their seeded cells. A seed folded into
-    any of them would need every block to see the seed before any block
-    accumulates, and Metal has no grid-wide sync -- so the seeders fuse with
-    each other and with nothing else.
+    THE CALLER SKIPS THIS LAUNCH ENTIRELY ON THE SURVEY (`range_only`):
+    every extent here would be zero, which is exactly the survey's old
+    behavior -- it never ran any of these three seeders.
 
     Under `-D MOJOLEARN_ET_SAB_PHASE_SETUP=1` (a measurement arm, never a
     gate) the class-accumulator seed is poisoned to the cell's batch-slot
@@ -2637,13 +2695,7 @@ def phase_setup_kernel(
     they seed through the standalone kernels -- which localizes the poison
     to this fused path.
     """
-    var extent = Int(n_report)
-    if Int(n_range_cells) > extent:
-        extent = Int(n_range_cells)
-    if Int(n_nonconst) > extent:
-        extent = Int(n_nonconst)
-    if Int(n_score_cells) > extent:
-        extent = Int(n_score_cells)
+    var extent = Int(n_score_cells)
     if Int(n_acc_cells) > extent:
         extent = Int(n_acc_cells)
     if Int(n_mutex) > extent:
@@ -2653,23 +2705,6 @@ def phase_setup_kernel(
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
     while idx < extent:
-        if idx < Int(n_report):
-            # The `d_samp_report` memset: a value no sampler kernel can
-            # produce, so the readback can name a reach failure.
-            out_report[unsafe_offset=idx] = SAMPLER_UNVISITED
-        if idx < Int(n_range_cells):
-            range_init_seed_at(
-                out_min,
-                out_max,
-                out_minkey,
-                out_maxkey,
-                out_n_missing,
-                out_n_merges,
-                idx,
-            )
-        if idx < Int(n_nonconst):
-            # The `d_nonconst` memset, over FULL capacity.
-            out_nonconst[unsafe_offset=idx] = Int32(0)
         if idx < Int(n_score_cells):
             score_init_seed_cell_at(
                 out_status,

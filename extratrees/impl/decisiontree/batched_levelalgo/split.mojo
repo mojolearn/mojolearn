@@ -837,7 +837,7 @@ def split_reduce_seed_at(
 ):
     """Seed ONE reduce cell: `split_reduce_init_kernel`'s per-index body.
 
-    DEVIATION 470 extracts it so the fused `phase_setup_kernel`
+    DEVIATION 470 extracts it so the fused `phase_setup_b_kernel`
     (`builder_kernels_impl.mojo`) can IMPORT this logic rather than
     transcribe it -- a second spelling of the seed is a second answer.
     The standalone kernel below runs the same call.
@@ -873,7 +873,7 @@ def split_reduce_init_kernel(
     the cell it updates, so an unseeded cell is read garbage.
 
     The shipped level loop seeds through DEVIATION 470's fused
-    `phase_setup_kernel`, which calls the same `split_reduce_seed_at`;
+    `phase_setup_b_kernel`, which calls the same `split_reduce_seed_at`;
     this standalone launch STAYS for `split_reduce_check`'s isolated arms.
     """
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
