@@ -84,7 +84,6 @@ order-independent by construction rather than by pinning:
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from max.gpu.host.device_attribute import DeviceAttribute
 
 from checks.fixed_point import choose_scale
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
