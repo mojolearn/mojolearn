@@ -14,24 +14,24 @@ the host gates only (no GPU), CLASSIFICATION AND REGRESSION; `svr-oracle`
 runs the regression half of that on its own, which is the cheap loop while
 the SVR lane is being worked; the default runs everything; `card` fits F2
 once with the stage recorder pointed at `MOJOLEARN_IDENTITY_TRACE` so a
-future cross-vendor leg can diff stage by stage with
-`tools/identity_trace_diff.py`.
+cross-vendor leg can diff stage by stage with
+`tools/identity_trace_diff.py`. That leg ran at `a0a0eee` on 2026-08-28 and
+the 32-stage card is byte-identical on Apple M4, NVIDIA H100 and AMD MI325X.
 
-THE REGRESSION GATES AND WHY THE DEFAULT RUN IS RED UNTIL A HAND EDIT
---------------------------------------------------------------------
-`SmoSolver.solve` still raises for EPSILON_SVR with UNGATED as the reason.
-The four HOST regression gates below (the eps-insensitive dual's monotone
-descent, the KKT gap off an independently recomputed gradient, the eps tube,
-and the two trap measurements) do not touch the device and pass with that
-clause in place -- they are what the clause was waiting for. The two DEVICE
-regression gates cannot run at all until it goes, and they report BLOCKED
-and FAIL rather than passing quietly, because a gate that goes green when
-nothing was compared is worse than no gate.
+THE REGRESSION GATES
+--------------------
+`SmoSolver.solve` no longer raises for EPSILON_SVR. The refusal came out on
+2026-08-31 (`fea6becc`) and the regression gates are what removed it. The
+four HOST gates below (the eps-insensitive dual's monotone descent, the KKT
+gap off an independently recomputed gradient, the eps tube, and the two trap
+measurements) do not touch the device and are the ones written from the
+FORMULATION rather than from this solver. The two DEVICE regression gates run
+beside them. Both device gates keep a BLOCKED branch that FAILS rather than
+passing quietly, so that putting the refusal back can never turn a gate green
+on a comparison that did not happen.
 
-So: run `-- svr-oracle` first, read the four host gates, then delete the
-`if self.svmType == EPSILON_SVR: raise` block in
-`svm/impl/svm/smosolver.mojo::solve` and run the default. Until that edit
-the default run reports exactly two failures, both named BLOCKED.
+`-- svr-oracle` runs the host half on its own, which is the cheap loop; the
+default run runs everything.
 """
 
 from std.sys import argv
@@ -245,7 +245,11 @@ def main() raises:
     if len(args) > 1:
         what = String(args[len(args) - 1])
     print("== svm/svc_main.mojo [" + _mode_name() + "] " + what + " ==")
-    print("CONSTRUCTION plus one Apple device's gates; no second vendor has run this.")
+    print(
+        "C-SVC certified Apple M4, NVIDIA H100 and AMD MI325X at a0a0eee"
+        " (E3 round 13, 2026-08-28); SVR gated 2026-08-31 (fea6becc, 44 of 44)"
+        " and not yet in a cross-vendor round."
+    )
     var ran = 0
     var failed = 0
     if what == "card":

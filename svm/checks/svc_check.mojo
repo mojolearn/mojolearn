@@ -766,10 +766,10 @@ def check_refusals(ctx: DeviceContext) raises:
     # `check_svr_sabotage_reach` -- so the clause is deleted rather than left
     # to pass on a message that happens to still match.
     #
-    # `SmoSolver.solve`'s raise is DELIBERATELY still in the tree and is not
-    # this file's to remove: until it goes, `check_svr_device_matches_oracle`
-    # reports BLOCKED and FAILS, which is the loud state a lane wants while
-    # its device arm cannot run. The three host gates pass without it.
+    # `SmoSolver.solve`'s raise came out in the same commit (`fea6becc`,
+    # 2026-08-31), so `check_svr_device_matches_oracle` runs its device arm
+    # rather than reporting BLOCKED. Its BLOCKED branch is kept as a guard
+    # that fails loudly if the refusal is ever put back.
     #
     # A NEGATIVE epsilon on a regressor is still refused below and still
     # comes out of `check_rung1_scope`, which is the boundary that has to
@@ -2192,11 +2192,10 @@ def check_svr_device_matches_oracle(
     the oracle over the 2n domain; under FAST the divergence count is
     reported.
 
-    WHILE `SmoSolver.solve`'s UNGATED clause IS STILL IN THE TREE THIS GATE
-    FAILS, and that is the honest state: nothing was compared. It prints
-    BLOCKED and names the clause. It is not this file's to remove; the three
-    host property gates above pass without the device, which is what makes
-    removing it safe to do by hand."""
+    `SmoSolver.solve`'s UNGATED clause is gone as of `fea6becc` (2026-08-31),
+    so this gate runs. The BLOCKED branch below is a guard, not the normal
+    path: if the refusal is ever put back, the gate prints BLOCKED, names the
+    clause and FAILS, because nothing would have been compared."""
     var card = IdentityTrace.disabled()
     var total = 0
     var blocked = 0

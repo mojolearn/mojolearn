@@ -11,7 +11,8 @@ first, then the integer products a metric rests on (the contingency matrix,
 the rand pair counts, the trustworthiness rank sum), then THE INTERMEDIATES
 A FINAL SCORE WOULD OTHERWISE ABSORB, then every returned value by its bits
 -- so a cross-vendor leg diffs stage by stage with `tools/identity_trace_
-diff.py` and a difference has an address: "the contingency matrices agree
+diff.py` (the leg ran at a0a0eee on 2026-08-28, three vendors, no divergence)
+and a difference has an address: "the contingency matrices agree
 and the MI bits do not" is a different finding from "the matrices differ".
 Tags are unique and carry no launch parameter.
 
@@ -33,8 +34,9 @@ an occupancy or a core count would differ between two legal launches BY
 CONSTRUCTION and would break the property the invariance gate exists to
 prove. That is `core/identity_trace.mojo` rule 3 read forwards.
 
-Not a port: cuML ships one backend and needs no card. This driver is a
-CONSTRUCTION plus one Apple device's run; no second vendor has run it.
+Not a port. cuML ships one backend and needs no card. This driver's
+61-stage card is byte-identical on Apple M4, NVIDIA H100 and AMD MI325X at
+commit a0a0eee (E3 round 13, 2026-08-28).
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext

@@ -6,8 +6,19 @@ IMPROVE**, with five numbered departures (DEVIATIONS 600-604, below).
 
 ## Status
 
-**CERTIFIED Apple M4 <-> NVIDIA H100 <-> AMD MI325X at leg 11 both halves (commit 144aa5b, judged by `tools/e3_round_judge.sh` section 7 on 2026-08-23): the IDENTICAL card is bit-identical across the three vendors, 7 stages; the FAST cards differ, recorded, the shipped arm makes no cross-vendor claim; AMD MI325X is OWED (that leg was not run).** Built and gated 2026-08-23 on one M4 in both modes. No
-performance number exists for it and none is claimed.
+**CERTIFIED Apple M4, NVIDIA H100 and AMD MI325X at E3 round 13, commit
+`a0a0eee`, judged by `tools/e3_round_judge.sh` on 2026-08-28. The IDENTICAL
+card is byte-identical on all three vendors over all 7 stages, and NVIDIA
+against AMD was diffed directly. The FAST cards differ, recorded, and the
+shipped arm makes no cross-vendor claim.** The three cards are
+`lanes/kde.identical.card` under
+`bench/results/e1/2026-08-28_130918-MacBook-Air-1-terrabyte`,
+`bench/results/e1/2026-08-28_131651-runpod-nvidia` and
+`bench/results/e1/2026-08-28_173933-mojolearn-e2-amd`, each run recording
+`a0a0eee` in its `commit.txt`; the round is written up in `E3_RESULTS.md` and
+`bench/results/BOARD_2026-08-28_three-vendor.md`. The gates pass in BOTH
+modes on all three vendors (`lanes/kde.{identical,fast}.check.log` in each of
+those runs). No performance number exists for it and none is claimed.
 
     pixi run check-kde                                                          # FAST (the task is `mojo run -I . kde/checks/kde_check.mojo`; needs the GPU: use the lock)
     tools/with_build_lock.sh     pixi run mojo run -I . kde/checks/kde_check.mojo
@@ -350,8 +361,10 @@ gaussian/euclidean, 1024 x 256 x 8, weighted:
     5 kde.lognorm   f32      1 2536ac00a8bb01a7  2536ac00a8bb01a7   (DEVIATION 601's construction lands on the float64 value's float32 rounding at d = 8)
     6 kde.scores    f32    256 3719b9e6a55377a7  110eb573543dcc0f
 
-A future cross-vendor leg diffs two IDENTICAL cards with
-`tools/identity_trace_diff.py`; the first differing tag is the address.
+The cross-vendor leg ran at `a0a0eee` on 2026-08-28 and the NVIDIA and AMD
+IDENTICAL cards are byte-identical to the Apple one above, all 7 stages;
+`tools/identity_trace_diff.py` is what diffs two cards, and the first
+differing tag is the address when they do differ.
 Re-emitted after the ROW 39 AUDIT (2026-08-23, IDENTICAL): the seven
 hashes above are unchanged -- DEVIATIONS 603/604 move no bit on a legal
 fixture.
@@ -360,7 +373,7 @@ fixture.
 
 | n | path | what is vendor-dependent in their spelling | what we did | status |
 |---|---|---|---|---|
-| 42 | **kde/ -- KernelDensity end to end** (`kde/impl/neighbors/kernel_density.mojo`, `kde/impl/distance/*.mojo`): unexpanded pairwise distances, six log-kernels, per-row logsumexp, two host scalars | their distance is a `Policy4x4` Contractions tile (row 9's contraction, row 10's `sqrt`), the log-kernels are `cp.fuse` over `log`/`cos` (row 12) with a bool-times-float `-0.0` and a `FLOAT_MIN` sentinel, the logsumexp is a numba kernel that sums float32 `exp` into FLOAT64 (no float64 on Apple) and the norm is host `np.log`/`math.lgamma` (row 18's host-libm class); the row max sees both zeros (row 13) | one thread per cell with the feature axis ascending (`identical_mul_add`, `ftz`, `identical_sqrt`), `identical_log`/`identical_cos`/`identical_exp` at every transcendental, the logsumexp kept as THEIR serial per-row fold (a pure function of `n_train`; no block fold, no shuffle, no atomic), the norm as a float32 portable construction under IDENTICAL (DEVIATION 601), float32 throughout (DEVIATION 600), the upstream cosine-norm bug for even d FIXED (DEVIATION 602); row 13 answered: first zero in ascending j survives and cannot reach the score; row 39 audited 2026-08-23: the recorded row max is a positional strict `>` (no hardware max), no legal row mixes the zeros, the mixed rows are planted (both orders) and the lower-index zero asserted device and oracle; no legal input reaches a recorded stage as NaN (DEVIATION 604 refusals, DEVIATION 603's -inf row) | **CONSTRUCTION 2026-08-23, Apple only**: device == serial oracle bit for bit at every stage, 24 kernel/metric pairs; launch-invariant across block sizes, grids, padding, poison and batch composition; nine sabotages recorded (one ftz sabotage inert on Apple and argued inert everywhere; one hardware-max sabotage inert on Apple and expected to fail on NVIDIA/AMD); no second vendor has run it |
+| 42 | **kde/ -- KernelDensity end to end** (`kde/impl/neighbors/kernel_density.mojo`, `kde/impl/distance/*.mojo`): unexpanded pairwise distances, six log-kernels, per-row logsumexp, two host scalars | their distance is a `Policy4x4` Contractions tile (row 9's contraction, row 10's `sqrt`), the log-kernels are `cp.fuse` over `log`/`cos` (row 12) with a bool-times-float `-0.0` and a `FLOAT_MIN` sentinel, the logsumexp is a numba kernel that sums float32 `exp` into FLOAT64 (no float64 on Apple) and the norm is host `np.log`/`math.lgamma` (row 18's host-libm class); the row max sees both zeros (row 13) | one thread per cell with the feature axis ascending (`identical_mul_add`, `ftz`, `identical_sqrt`), `identical_log`/`identical_cos`/`identical_exp` at every transcendental, the logsumexp kept as THEIR serial per-row fold (a pure function of `n_train`; no block fold, no shuffle, no atomic), the norm as a float32 portable construction under IDENTICAL (DEVIATION 601), float32 throughout (DEVIATION 600), the upstream cosine-norm bug for even d FIXED (DEVIATION 602); row 13 answered: first zero in ascending j survives and cannot reach the score; row 39 audited 2026-08-23: the recorded row max is a positional strict `>` (no hardware max), no legal row mixes the zeros, the mixed rows are planted (both orders) and the lower-index zero asserted device and oracle; no legal input reaches a recorded stage as NaN (DEVIATION 604 refusals, DEVIATION 603's -inf row) | **CERTIFIED on three vendors at `a0a0eee` (E3 round 13, 2026-08-28)**: the 7-stage IDENTICAL card is byte-identical Apple M4, NVIDIA H100 and AMD MI325X, and the gates pass in both modes on all three (`bench/results/e1/2026-08-28_{130918-MacBook-Air-1-terrabyte,131651-runpod-nvidia,173933-mojolearn-e2-amd}/lanes/kde.*`). Device == serial oracle bit for bit at every stage, 24 kernel/metric pairs; launch-invariant across block sizes, grids, padding, poison and batch composition; nine sabotages recorded (one ftz sabotage inert on Apple and argued inert everywhere; one hardware-max sabotage inert on Apple and expected to fail on NVIDIA/AMD, which no leg has yet run) |
 
 ## HAND-OFF TO THE IDENTITY LANE
 

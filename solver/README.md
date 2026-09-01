@@ -9,12 +9,25 @@ construction; 611 is reserved and NOT spent (see `shuffle` below); 612 is
 the card's NaN canonicalization and 613 the NaN/inf parameter refusals
 (the ROW 39 AUDIT section); 614-619 are unused.
 
-## Status: CERTIFIED Apple M4 <-> NVIDIA H100 <-> AMD MI325X at leg 11 both halves (commit 144aa5b, judged by tools/e3_round_judge.sh section 7 on 2026-08-23): the IDENTICAL card is bit-identical across the three vendors, 20 stages; the FAST cards differ, recorded, the shipped arm makes no cross-vendor claim; AMD MI325X is OWED (that leg was not run).
+## Status
 
-Built and gated 2026-08-23 on one M4. Nothing here has been compiled for
-or run on NVIDIA or AMD. No performance was measured and no timing is
-printed by any file in this directory; the cross-vendor leg and the
-benchmark arena are the identity lane's.
+**CERTIFIED Apple M4, NVIDIA H100 and AMD MI325X at E3 round 13, commit
+`a0a0eee`, judged by `tools/e3_round_judge.sh` on 2026-08-28. The IDENTICAL
+card is byte-identical on all three vendors over all 20 stages, and NVIDIA
+against AMD was diffed directly. The FAST cards differ, recorded, and the
+shipped arm makes no cross-vendor claim.** The three cards are
+`lanes/cd.identical.card` under
+`bench/results/e1/2026-08-28_130918-MacBook-Air-1-terrabyte`,
+`bench/results/e1/2026-08-28_131651-runpod-nvidia` and
+`bench/results/e1/2026-08-28_173933-mojolearn-e2-amd`, each run recording
+`a0a0eee` in its `commit.txt`; the round is written up in `E3_RESULTS.md` and
+`bench/results/BOARD_2026-08-28_three-vendor.md`.
+
+This directory is built and gated on all three vendors in both modes.
+`cd_check.mojo` prints `ALL PASSED` under IDENTICAL and under FAST in each of
+those runs (`lanes/cd.{identical,fast}.check.log`). No performance was
+measured and no timing is printed by any file in this directory; the
+benchmark arena is the identity lane's.
 
     == solver/checks/cd_check.mojo [IDENTICAL] ALL PASSED ==
     == solver/checks/cd_check.mojo [FAST] ALL PASSED ==
@@ -409,16 +422,16 @@ host-only computation.
    via `pixi run check-cd`, IDENTICAL via `tools/with_identical_mode.sh pixi
    run check-cd`.)
 
-4. **The cross-vendor leg**: `solver/cd_main.mojo` under
-   `MOJOLEARN_IDENTITY_TRACE` on the H100 and the MI300X/MI325X at the
-   default fixture, diffed against the Mac card with
-   `tools/identity_trace_diff.py`; and `cd_check.mojo` under IDENTICAL on
-   both. The expected first divergence, if any, is `cd.input.x` (a host
-   fixture is assembled in Float64 and rounded once per cell, so it should
-   not move) and then `cd.colnorm`.
+4. (done: the cross-vendor leg ran at `a0a0eee` on 2026-08-28.
+   `solver/cd_main.mojo` under `MOJOLEARN_IDENTITY_TRACE` on the H100 and the
+   MI325X produced cards byte-identical to the Mac's over all 20 stages, and
+   `cd_check.mojo` passed under IDENTICAL and FAST on both
+   (`bench/results/e1/2026-08-28_131651-runpod-nvidia` and
+   `bench/results/e1/2026-08-28_173933-mojolearn-e2-amd`). There was no
+   divergence at `cd.input.x` or anywhere else.)
 5. **`SUPPORT_MATRIX.md` / `IDENTITY_PATHS.md`**: the row below (row 41 in
    the ledger).
 
 ## ROW TEXT FOR THE IDENTITY LANE (row 41)
 
-| 41 | **coordinate descent (Lasso / ElasticNet): the row-length reductions and the epoch count** -- `solver/impl/solver/cd.mojo` (cuML `solver/cd.cuh`): `colNorm` and the means on RAFT `coalescedReduction`, whose kernel is CHOSEN BY SM COUNT (`-inl.cuh:497`) and compensates per thread then folds with CUB; `dot(X[:,ci], residual)` on cuBLAS `gemv`; `coef > l1_alpha` and `diffMax / coefMax < tol` branch on those bits, so `n_iter` is per card | yes: three fold shapes, one of them closed, one of them a device property | DEVIATION 610: all four reductions are the `gemm.fp32.v1` `OP_NT` cell at `1 x 1 x n_rows` (`solver/checks/profile_dot.mojo`, CALLED from the gemm lane; the means are the dot against ones); axpys `identical_mul_add` + `ftz` at the residual (store and load); `cdUpdateCoefKernel` flushes quotient, diff, |r|; card `cd.colnorm/squared/sweepNNN.coef/resid/conv/final.coef/intercept/n_iter` | **CONSTRUCTION plus one Apple device's gates, 2026-08-23**: device == host oracle bit for bit on every stage and cell of three fixtures incl. a denormal-residual one; launch-invariant across 4 plans / 2 block sizes / 2 grids / 3 paddings; FAST vs IDENTICAL differ in 2 of 16 coefficients on the planted fixture; three sabotages fail where predicted (FOLD_SERIAL everywhere, LEAF_ROTATE only at P = 157, NO_FTZ_RESID only on the denormal fixture); `shuffle=true` refused by name (611 reserved); ROW 39 AUDIT 2026-08-23: no float max/min/clamp in the section, the coefMax/diffMax folds are abs()-and-strict-`<` (proven at the site, -0.0 planted in both orders and card-compared), the card's NaN stages are canonicalized to 0x7FC00000 (DEVIATION 612, planted computed and propagated NaN), non-finite alpha / NaN l1_ratio / NaN tol refused by name (DEVIATION 613), vendor-shaped FAST claims RECORDED; CERTIFIED Apple M4 <-> NVIDIA H100 at leg 11 (commit 144aa5b, judged by tools/e3_round_judge.sh section 7 on 2026-08-23): the IDENTICAL card is bit-identical across the two vendors, 20 stages; the FAST cards differ, recorded, the shipped arm makes no cross-vendor claim; AMD MI325X is OWED (that leg was not run) |
+| 41 | **coordinate descent (Lasso / ElasticNet): the row-length reductions and the epoch count** -- `solver/impl/solver/cd.mojo` (cuML `solver/cd.cuh`): `colNorm` and the means on RAFT `coalescedReduction`, whose kernel is CHOSEN BY SM COUNT (`-inl.cuh:497`) and compensates per thread then folds with CUB; `dot(X[:,ci], residual)` on cuBLAS `gemv`; `coef > l1_alpha` and `diffMax / coefMax < tol` branch on those bits, so `n_iter` is per card | yes: three fold shapes, one of them closed, one of them a device property | DEVIATION 610: all four reductions are the `gemm.fp32.v1` `OP_NT` cell at `1 x 1 x n_rows` (`solver/checks/profile_dot.mojo`, CALLED from the gemm lane; the means are the dot against ones); axpys `identical_mul_add` + `ftz` at the residual (store and load); `cdUpdateCoefKernel` flushes quotient, diff, |r|; card `cd.colnorm/squared/sweepNNN.coef/resid/conv/final.coef/intercept/n_iter` | Device == host oracle bit for bit on every stage and cell of three fixtures incl. a denormal-residual one; launch-invariant across 4 plans / 2 block sizes / 2 grids / 3 paddings; FAST vs IDENTICAL differ in 2 of 16 coefficients on the planted fixture; three sabotages fail where predicted (FOLD_SERIAL everywhere, LEAF_ROTATE only at P = 157, NO_FTZ_RESID only on the denormal fixture); `shuffle=true` refused by name (611 reserved); ROW 39 AUDIT 2026-08-23: no float max/min/clamp in the section, the coefMax/diffMax folds are abs()-and-strict-`<` (proven at the site, -0.0 planted in both orders and card-compared), the card's NaN stages are canonicalized to 0x7FC00000 (DEVIATION 612, planted computed and propagated NaN), non-finite alpha / NaN l1_ratio / NaN tol refused by name (DEVIATION 613), vendor-shaped FAST claims RECORDED; **CERTIFIED on three vendors at `a0a0eee` (E3 round 13, 2026-08-28): the 20-stage IDENTICAL card is byte-identical Apple M4, NVIDIA H100 and AMD MI325X, and `cd_check.mojo` passes in both modes on all three** (`bench/results/e1/2026-08-28_{130918-MacBook-Air-1-terrabyte,131651-runpod-nvidia,173933-mojolearn-e2-amd}/lanes/cd.*`); the FAST cards differ, recorded, the shipped arm makes no cross-vendor claim |

@@ -10,8 +10,21 @@ are this lane's.
 
 ## Status
 
-**CONSTRUCTION plus one Apple device's gates; no second vendor has run
-this.** Rung 1 is complete and gated on one M4, 2026-08-23: binary C-SVC,
+**CERTIFIED Apple M4, NVIDIA H100 and AMD MI325X at E3 round 13, commit
+`a0a0eee`, judged by `tools/e3_round_judge.sh` on 2026-08-28. The IDENTICAL
+card is byte-identical on all three vendors over all 32 stages, and NVIDIA
+against AMD was diffed directly. The FAST cards differ, recorded, and the
+shipped arm makes no cross-vendor claim.** The three cards are
+`lanes/svm.identical.card` under
+`bench/results/e1/2026-08-28_130918-MacBook-Air-1-terrabyte`,
+`bench/results/e1/2026-08-28_131651-runpod-nvidia` and
+`bench/results/e1/2026-08-28_173933-mojolearn-e2-amd`, each run recording
+`a0a0eee` in its `commit.txt`, and each printing
+`svm/svc_main.mojo [IDENTICAL] 18/18 gates passed` and the same under FAST;
+the round is written up in `E3_RESULTS.md` and
+`bench/results/BOARD_2026-08-28_three-vendor.md`.
+
+Rung 1 is complete. Binary C-SVC,
 dense FP32, LINEAR and RBF, `C`, `gamma`, `tol`, `max_iter`,
 `max_outer_iter`, `nochange_steps` (their convergence rule transcribed),
 `predict` and `decision_function`, support vectors + dual coefficients +
@@ -25,38 +38,64 @@ REPORTS (see "Commands and outputs" at the foot). No timing was measured
 and none is published. The ROW 39 AUDIT section below (2026-08-23) is the
 signed-zero / NaN / FAST-assertion audit; DEVIATIONS 635-637 came out of it.
 
-**SVR, 2026-08-31: PORTED, UNGATED, AND STILL REFUSING.** All six pieces
-`NOT_IMPLEMENTED.tsv` rung 2 listed are in the tree: the scope check, the
-`n_train = 2 * n_rows` domain in `SmoSolver` and `Results`, `SvrInit`
-(`f = +-epsilon - y` and the `+-1` label vector), `UpdateF`'s second gemv on
-`f + n_rows`, `CombineCoefs`' fold of the two alpha halves, and
-`KernelCache`'s `ws_idx_mod_svr` with `GetVecIndices`. `solve` raises anyway,
-and the message says why: **no fixture, no sabotage arm and no
-eps-insensitive oracle exist**, so no run has ever checked that the six
-pieces agree with each other. A learner nobody has measured is not a learner.
+**SVR, 2026-08-31: PORTED AND GATED, 44 of 44 with the device arm
+included** (commit `fea6becc`). The refusal that stood in `SmoSolver.solve`
+is gone. All six pieces `NOT_IMPLEMENTED.tsv` rung 2 listed are in the tree,
+the scope check, the `n_train = 2 * n_rows` domain in `SmoSolver` and
+`Results`, `SvrInit` (`f = +-epsilon - y` and the `+-1` label vector),
+`UpdateF`'s second gemv on `f + n_rows`, `CombineCoefs`' fold of the two
+alpha halves, and `KernelCache`'s `ws_idx_mod_svr` with `GetVecIndices`, and
+a run now checks that they agree with each other. Only the Python surface is
+missing (`svr_fit_host` in `svm/estimator.mojo`, an `svr_fit` binding and an
+`SVR` class), which is what `mojolearn.SVR` raises about. The 44 is the whole
+default run, 11 C-SVC host gates plus 7 C-SVC device gates plus 24 SVR host
+gates plus 2 SVR device gates; `svc_main.mojo -- svr-oracle` runs the 24 on
+their own and reports 24 of 24, which is the number `smosolver.mojo`'s
+comment quotes.
 
-That last item is the load-bearing one and it is not paperwork. The device
-arm and `smo_oracle.mojo` are two implementations, but they are written from
-one reading of cuML, so a shared misreading of `SvrInit`'s signs or of
-`CombineCoefs`' direction would pass a device-versus-oracle gate silently.
-The two gates in this lane that test a PROPERTY rather than an agreement,
-the global KKT gap and the monotone dual objective, are both
-classification-shaped and have no SVR form. Either an independent arm on
-`tools/knn_sklearn_oracle.py`'s model, or the eps-insensitive dual and tube
-asserted directly, has to exist before the refusal comes out.
+What removed the refusal is that the property gates are DERIVED FROM THE
+FORMULATION rather than from this solver. The device arm and
+`smo_oracle.mojo` are two implementations written from one reading of cuML,
+so a shared misreading of `SvrInit`'s signs or of `CombineCoefs`' direction
+would pass a device-versus-oracle gate silently. The eps-insensitive dual
+`W`, the KKT gap and the eps-tube bound are written from the formulation
+instead, and the independence is MEASURED rather than asserted. The gradient
+recomputed from alpha alone matches this solver's own `f` to 1.5e-07, and
+that `f_ref` at `alpha = 0` reduces to `SvrInit` is a derived prediction.
+On R1, `kkt_gap` is 8.7e-4, `W` falls from -0.9806 to -1.0131 with worst
+relative rise 0.0, the tube holds on 195 of 200 rows with both multipliers
+zero, and R2 is 0.9969. Six regression fixtures, each for a named reason,
+including R5 at n=1030 so the 2n working set exceeds `SMO_WS_SIZE` and the
+FIFO and the radix sort actually run, R4 with every row duplicated, and R6 at
+`epsilon = 0`. Sabotage reach is reported per fixture with the arms that are
+INERT on regression data named inert rather than counted as passes.
 
-Two more things a regression fixture has to be built to catch.
+Two things the regression fixtures were built to catch, and did.
 `fold_order_for`'s docstring asserts that working-set indices are distinct
-within a set, which is TRUE for C_SVC and FALSE under SVR the moment row `i`
-and its twin `i + n_rows` are both selected and `ws_idx % n_rows` collides.
-And `f = +-epsilon - y` puts `+0.0` and `-0.0` into the SAME vector whenever
-`y == epsilon`, from ORDINARY input, where the signed-zero section below
-reached `f = -0.0` only through a planted negative subnormal.
+within a set, which is TRUE for C_SVC and FALSE under SVR; R1 holds 400
+domain points over 200 rows and every one appears TWICE. The docstring is
+wrong and the code is right, because the key is `(index << 32) | position`
+and position is unique, so the order is still total, and
+`check_svr_fold_order` asserts that rather than the docstring.
+And BOTH SIGNED ZEROS reach `f` from ORDINARY input at `epsilon = 0`, which
+under C_SVC was reachable only from a planted subnormal. The mechanism is
+`(-epsilon) - y`, the only line of `SvrInit` that can produce a `-0.0`, so
+every `-0.0` lies in the SECOND half; `epsilon - y` gives `+0.0` and never
+`-0.0`, so a positive `epsilon` does not put both signs in one vector, and
+fixture R6 sits at `epsilon = 0` for exactly that reason.
+`check_svr_signed_zero` asserts at least eight of each sign, that both are
+present and MAXIMAL in the lower set at `alpha = 0` (the `f_max` domain and
+DEVIATION 635's tie), and that the working set actually selected at outer
+iteration 0 holds both. It REPORTS, without asserting, the negative result.
+The signs do not reach the recorded `diff` bits, because `diff = f_max - f_u`
+and `(+-0.0) - c` is one float for every non-zero `c`. The planted Z fixture
+remains the only thing in this lane that moves `diff` by a zero's sign, and
+the signed-zero section below still holds for `diff`.
 
 REFUSED BY NAME (each raises with the parameter's name;
 `check_refusals` gates all of them): `svmType` NU_SVC and NU_SVR, which are
-unported upstream too; **EPSILON_SVR, which is now a different kind of
-refusal**, see below; `epsilon != 0` ON A CLASSIFIER, where upstream ignores
+unported upstream too (EPSILON_SVR is NO LONGER refused; it is gated, see
+the Status section); `epsilon != 0` ON A CLASSIFIER, where upstream ignores
 it (on a regressor it must be finite and non-negative instead);
 `cache_size != 0` (the LRU cache; see "the cache
 decision"), kernels `POLYNOMIAL` / `TANH` / `PRECOMPUTED`, `sample_weight`
@@ -235,7 +274,8 @@ Rung 1 PORTS THE STRUCTURE (`KernelCache` with `InitWorkingSet`,
 `cache_size > 0` is REFUSED BY NAME and recorded in `NOT_IMPLEMENTED.tsv`; it is
 not a silent substitute.
 
-## Commands and outputs (2026-08-23, one M4)
+## Commands and outputs (2026-08-23 on an M4; re-run on all three vendors at
+`a0a0eee`, 2026-08-28)
 
     pixi run mojo run -I . svm/svc_main.mojo -- oracle                # host only
     tools/with_build_lock.sh     pixi run mojo run -I . svm/svc_main.mojo
@@ -266,10 +306,11 @@ n=1500 k=8 linear overlapping (266 support vectors, selection + FIFO); F7
 wide_k n=96 k=200 (the v1 GEMM leaf + tree path).
 
 IDENTICAL, head of the output (the full run prints every fixture's
-`n_support`, `b` as decimal/hex, KKT gap and accuracy):
+`n_support`, `b` as decimal/hex, KKT gap and accuracy). The same output was
+produced on the H100 and the MI325X at `a0a0eee`, and the 32-stage card is
+byte-identical across the three.
 
     == svm/svc_main.mojo [IDENTICAL] all ==
-    CERTIFIED Apple M4 <-> NVIDIA H100 <-> AMD MI325X at leg 11 both halves (commit 144aa5b, judged by tools/e3_round_judge.sh section 7 on 2026-08-23): the IDENTICAL card is bit-identical across the three vendors, 32 stages; the FAST cards differ, recorded, the shipped arm makes no cross-vendor claim; AMD MI325X is OWED (that leg was not run).
       F1.blobs [IDENTICAL] oracle f32: n_support=5 outer=4 inner=11 b=0.09479656/0x3dc224b3 kkt_gap=0.00087659806/0x3a65cb80 acc=1.0
     PASS oracle_kkt_and_accuracy F1.blobs ... F7.wide_k            (7 gates)
     PASS oracle_objective_decreases F1.blobs, F2.xor                (worst relative rise 0.0)
@@ -441,7 +482,7 @@ under FAST (a fast-math build may fold `x != x`).
 
 | n | path | what is vendor-dependent in their spelling | what we did | status |
 |---|---|---|---|---|
-| 44 | `svm/` C-SVC (`svcFit`/`svcPredict`): SMO decomposition, block solve, working-set selection, kernel matrices, results | (1) kernel rows: cuBLAS GEMM + `rowNorm` block fold + RBF `exp` promoted to DOUBLE for float; (2) working-set order from cub radix-sort STABILITY, unstated; (3) `cub::BlockReduce<KVPair>` compares `val` only -- the winner among equal f is the fold shape's (their own `@todo`); (4) `UpdateF` is `cublasgemv`, fold unspecified, over cache-permuted columns; (5) `CalcB`'s mean is `cub::DeviceReduce::Sum` | (1) v1 identical GEMM + per-row serial norm + `identical_exp` in float32 (DEVIATION 630, measured 1 ulp from their double spelling); (2) total order `(twiddled f bits, index)` spelled, stable one-bit radix + device scan compaction (DEVIATION 631); (3) halving-tree argmin/argmax, all three reductions tie to the smaller TRAINING INDEX (DEVIATIONS 633/635; a +0.0/-0.0 tie is decided by the key, never a hardware max, row 39); (4) hand GEMV, fold in ascending training index (DEVIATION 634), so nothing numeric sees the cache permutation; (5) serial ascending chain (DEVIATION 632). Host oracle in Float32 through the same helpers; device == oracle bitwise on 7 fixtures; launch-invariant over 7 arms; non-finite inputs refused by name and a NaN in alpha/f raises before any record (DEVIATIONS 636/637); 8 sabotages recorded | Apple M4 only, 18/18 IDENTICAL; cache_size > 0 refused (LRU unported, proven bit-inert by construction); no second vendor |
+| 44 | `svm/` C-SVC (`svcFit`/`svcPredict`): SMO decomposition, block solve, working-set selection, kernel matrices, results | (1) kernel rows: cuBLAS GEMM + `rowNorm` block fold + RBF `exp` promoted to DOUBLE for float; (2) working-set order from cub radix-sort STABILITY, unstated; (3) `cub::BlockReduce<KVPair>` compares `val` only -- the winner among equal f is the fold shape's (their own `@todo`); (4) `UpdateF` is `cublasgemv`, fold unspecified, over cache-permuted columns; (5) `CalcB`'s mean is `cub::DeviceReduce::Sum` | (1) v1 identical GEMM + per-row serial norm + `identical_exp` in float32 (DEVIATION 630, measured 1 ulp from their double spelling); (2) total order `(twiddled f bits, index)` spelled, stable one-bit radix + device scan compaction (DEVIATION 631); (3) halving-tree argmin/argmax, all three reductions tie to the smaller TRAINING INDEX (DEVIATIONS 633/635; a +0.0/-0.0 tie is decided by the key, never a hardware max, row 39); (4) hand GEMV, fold in ascending training index (DEVIATION 634), so nothing numeric sees the cache permutation; (5) serial ascending chain (DEVIATION 632). Host oracle in Float32 through the same helpers; device == oracle bitwise on 7 fixtures; launch-invariant over 7 arms; non-finite inputs refused by name and a NaN in alpha/f raises before any record (DEVIATIONS 636/637); 8 sabotages recorded | **18/18 IDENTICAL and 18/18 FAST on Apple M4, NVIDIA H100 and AMD MI325X at `a0a0eee` (E3 round 13, 2026-08-28), with the 32-stage card byte-identical across the three** (`bench/results/e1/2026-08-28_{130918-MacBook-Air-1-terrabyte,131651-runpod-nvidia,173933-mojolearn-e2-amd}/lanes/svm.*`); cache_size > 0 refused (LRU unported, proven bit-inert by construction); the SVR gates (44 of 44, `fea6becc`, 2026-08-31) landed after this leg and have not been in a round |
 
 ## HAND-OFF TO THE IDENTITY LANE
 
@@ -469,6 +510,8 @@ under FAST (a fast-math build may fold `x != x`).
   class_weight/probability/decision_function_shape -> refused by name`.
   Labels may be any two floats; the larger is the +1 class, exactly as
   `getOvrlabels(idx = 1)`.
-- No second vendor has run `svm/`. The E-series leg for it is: build both
-  modes on the H100/MI325X and run `svc_main.mojo` plus the `card` form,
-  then `tools/identity_trace_diff.py` against `/tmp/svm_mac.card`.
+- The E-series leg for `svm/` ran at `a0a0eee` on 2026-08-28. Both modes
+  build on the H100 and the MI325X, `svc_main.mojo` reports 18/18 in each,
+  and the 32-stage card is byte-identical to the Mac's. What that leg
+  predates is the SVR half, gated 2026-08-31 (`fea6becc`, 44 of 44), which
+  no round has yet carried.

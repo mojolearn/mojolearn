@@ -11,11 +11,25 @@ and why, parameter by parameter, in `NOT_IMPLEMENTED.tsv`. DEVIATION numbers
 
 ## Status
 
-**CERTIFIED Apple M4 <-> NVIDIA H100 <-> AMD MI325X at leg 11 both halves (commit 144aa5b, judged by `tools/e3_round_judge.sh` section 7 on 2026-08-23): the IDENTICAL card is bit-identical across the three vendors, 8 stages; the FAST cards differ, recorded, the shipped arm makes no cross-vendor claim; AMD MI325X is OWED (that leg was not run).** Rung 1 -- `single_linkage` on dense Float32 with `L2SqrtExpanded`
+**CERTIFIED Apple M4, NVIDIA H100 and AMD MI325X at E3 round 13, commit
+`a0a0eee`, judged by `tools/e3_round_judge.sh` on 2026-08-28. The IDENTICAL
+card is byte-identical on all three vendors over all 8 stages, and NVIDIA
+against AMD was diffed directly. The FAST cards differ, recorded, and the
+shipped arm makes no cross-vendor claim.** The three cards are
+`lanes/linkage.identical.card` under
+`bench/results/e1/2026-08-28_130918-MacBook-Air-1-terrabyte`,
+`bench/results/e1/2026-08-28_131651-runpod-nvidia` and
+`bench/results/e1/2026-08-28_173933-mojolearn-e2-amd`, each run recording
+`a0a0eee` in its `commit.txt`, and `linkage_check` prints `mode=IDENTICAL ALL
+OK` on all three; the round is written up in `E3_RESULTS.md` and
+`bench/results/BOARD_2026-08-28_three-vendor.md`.
+
+Rung 1, `single_linkage` on dense Float32 with `L2SqrtExpanded`
 (cuML's `metric="euclidean"`), `connectivity="pairwise"`, `n_clusters`
-given, `children` + `labels` out -- is ported, wired from cuML's entry down
+given, `children` + `labels` out, is ported, wired from cuML's entry down
 to RAFT's kernels, and gated bit for bit against a host oracle in BOTH
-numeric modes on one M4 (2026-08-23). Rung 2 (`connectivity="knn"`, cuML's
+numeric modes on all three vendors (`linkage_check mode=IDENTICAL ALL OK`
+and `mode=FAST ALL OK` in each run's `lanes/linkage.{identical,fast}.check.log`). Rung 2 (`connectivity="knn"`, cuML's
 PYTHON default) is NOT ported and is refused by name; see UNPORTED. No
 timing was measured and none is published.
 
@@ -328,7 +342,7 @@ sequence, same counts, same hashes.` against the card above.
 
 ## ROW TEXT FOR THE IDENTITY LANE
 
-| 43 | **single-linkage agglomerative clustering, END TO END** -- `hierarchy/impl/hierarchy/linkage.mojo` (cuML `linkage.cu`) -> cuVS `single_linkage.cuh`/`connectivities.cuh`/`mst.cuh`/`agglomerative.cuh` -> RAFT Boruvka `mst_solver_inl.cuh`/`mst_kernels.cuh`: pairwise L2 distances, Boruvka MST, sort, host union-find dendrogram, device label extraction | the distance tile is row 24's (DEVIATION 505) and the row norm row 19's, unchanged; NEW and vendor-dependent in THEIR spelling: (a) RAFT breaks MST weight ties with a cuRAND per-vertex ALTERATION (`mst_solver_inl.cuh:212-238`), so on duplicate points or equal distances the edge SET is a function of the RNG stream, not the input; (b) `coo_sort_by_weight` is an unstable `thrust::sort_by_key` on weight alone (`sort.h:101`), so equal-weight MST edges reach the dendrogram in an implementation-chosen order; (c) the per-color min is `atomicMin` on a double (Metal has no 64-bit atomic) | (a) DEVIATION 620: the total order `(weight_order_key(w), min(u,v), max(u,v))` everywhere RAFT compared the altered weight, per-color min in three integer `atomicMin` phases; (b) DEVIATION 621: a host merge sort on the same triple; (c) folded into 620. A min over a total order and an integer count are the only reductions in the MST and both are order-free, so the edge set, the dendrogram and the labels are pure functions of the distance bytes; gated: edge set == serial Kruskal (unique MST under a total order), labels BITWISE == serial extract, launch invariance across tile/MST/extract block sizes and two paddings/poisons, 37x37 cells == the same cells of 203x203, two cards identical; sabotages 620 (38/47 slots moved) and 621 (47/47 rows moved) fail as required, rotate-contraction moves 4553/41209 cells, std-sqrt moves 0 (Apple limit); row-39 audit 2026-08-23: `-0.0` < `+0.0` by integer key (no hardware min/max on the path; planted both lane orders, key-on-abs sabotage fails order B), a NaN distance refused by name before any stage (DEVIATION 623), host key packing made to agree with the device on negative keys (DEVIATION 624) | **construction + Apple gates; no second vendor has run it.** Open: rung 2's `connect_knn_graph` host overload picks a RANDOM vertex per component (`std::mt19937(std::random_device())`, `mst.cuh:167-190`) and must be pinned when ported |
+| 43 | **single-linkage agglomerative clustering, END TO END** -- `hierarchy/impl/hierarchy/linkage.mojo` (cuML `linkage.cu`) -> cuVS `single_linkage.cuh`/`connectivities.cuh`/`mst.cuh`/`agglomerative.cuh` -> RAFT Boruvka `mst_solver_inl.cuh`/`mst_kernels.cuh`: pairwise L2 distances, Boruvka MST, sort, host union-find dendrogram, device label extraction | the distance tile is row 24's (DEVIATION 505) and the row norm row 19's, unchanged; NEW and vendor-dependent in THEIR spelling: (a) RAFT breaks MST weight ties with a cuRAND per-vertex ALTERATION (`mst_solver_inl.cuh:212-238`), so on duplicate points or equal distances the edge SET is a function of the RNG stream, not the input; (b) `coo_sort_by_weight` is an unstable `thrust::sort_by_key` on weight alone (`sort.h:101`), so equal-weight MST edges reach the dendrogram in an implementation-chosen order; (c) the per-color min is `atomicMin` on a double (Metal has no 64-bit atomic) | (a) DEVIATION 620: the total order `(weight_order_key(w), min(u,v), max(u,v))` everywhere RAFT compared the altered weight, per-color min in three integer `atomicMin` phases; (b) DEVIATION 621: a host merge sort on the same triple; (c) folded into 620. A min over a total order and an integer count are the only reductions in the MST and both are order-free, so the edge set, the dendrogram and the labels are pure functions of the distance bytes; gated: edge set == serial Kruskal (unique MST under a total order), labels BITWISE == serial extract, launch invariance across tile/MST/extract block sizes and two paddings/poisons, 37x37 cells == the same cells of 203x203, two cards identical; sabotages 620 (38/47 slots moved) and 621 (47/47 rows moved) fail as required, rotate-contraction moves 4553/41209 cells, std-sqrt moves 0 (Apple limit); row-39 audit 2026-08-23: `-0.0` < `+0.0` by integer key (no hardware min/max on the path; planted both lane orders, key-on-abs sabotage fails order B), a NaN distance refused by name before any stage (DEVIATION 623), host key packing made to agree with the device on negative keys (DEVIATION 624) | **CERTIFIED on three vendors at `a0a0eee` (E3 round 13, 2026-08-28): the 8-stage IDENTICAL card is byte-identical Apple M4, NVIDIA H100 and AMD MI325X, and `linkage_check` passes under IDENTICAL on all three** (`bench/results/e1/2026-08-28_{130918-MacBook-Air-1-terrabyte,131651-runpod-nvidia,173933-mojolearn-e2-amd}/lanes/`). Open: rung 2's `connect_knn_graph` host overload picks a RANDOM vertex per component (`std::mt19937(std::random_device())`, `mst.cuh:167-190`) and must be pinned when ported |
 
 ## HAND-OFF TO THE IDENTITY LANE
 
@@ -384,10 +398,13 @@ sequence, same counts, same hashes.` against the card above.
   overloads; pin the host overload's random vertex choice) + `merge_msts`
   + `cross_component_nn`. Everything it needs below it (the MST with
   `initialize_colors=false`, the loop shape) is here.
-- AMD MI325X (NVIDIA H100 is closed at leg 11); the NVIDIA risk
-  is the one the std-sqrt sabotage names (approximate sqrt at the distance
-  seam, routed through `identical_sqrt`, unverified there), and the
-  `atomicMin` phases are integer and should be inert.
+- (closed) NVIDIA H100 and AMD MI325X both ran this lane. The 8-stage card
+  is byte-identical to Apple's at `a0a0eee` (E3 round 13, 2026-08-28) and at
+  leg 11 (`144aa5b`, 2026-08-23). What the legs do NOT cover is the
+  std-sqrt sabotage arm (approximate sqrt at the distance seam, routed
+  through `identical_sqrt`), which moves 0 cells on Apple and has never been
+  fired on NVIDIA or AMD; the `atomicMin` phases are integer and should be
+  inert.
 - `distance_threshold` / `compute_distances` on the Python surface (cheap:
   `out_delta` exists).
 - A caller that feeds `build_sorted_mst` a precomputed graph (rung 2's
