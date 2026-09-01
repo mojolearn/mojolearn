@@ -45,16 +45,30 @@ feeding RAFT's Philox `uniformInt`, reused from the RF lane), and
 resolves it (None = n_rows, int = that count, float f = max(int(f *
 n_rows), 1)). `oob_score` stays refused: the out-of-bag mask is not ported.
 
-`max_leaf_nodes` (2026-09-01): still refused, and now as a NAMED DEBT rather
-than a permanent no. sklearn's meaning is best-first growth
-(`_tree.pyx:374-508`), a different expansion ORDER and therefore a second
-growth mode here, not a parameter; the design and its cost are written down
-in `extratrees/NOT_IMPLEMENTED.tsv`. cuML's own leaf budget, `max_leaves`, is
-a WEAKER and DIFFERENT guarantee -- a cap on the breadth-first frontier that
-reorders nothing -- and it is now honoured in the Mojo layer under its own
-name. It is deliberately NOT a keyword on these classes yet, because the
-22-slot params list below does not carry it and a keyword that rode across
-and did nothing is precisely what this module refuses to do.
+`max_leaf_nodes` (2026-09-01): HONOURED, and it was refused until that day.
+sklearn's meaning is best-first growth (`_tree.pyx:374-508`), which is a
+different expansion ORDER and therefore a second growth mode in the Mojo
+layer rather than a parameter on the existing one -- `extratrees/`
+DEVIATION BLOCKS 466 to 469 carry the design, the frontier key, the tie rule
+and what the mode costs in launches. Passing an int selects it and yields
+exactly that many leaves per tree; `None`, the default, keeps the
+depth-wise growth this library has always done, bit for bit. cuML's own leaf
+budget, `max_leaves`, is a WEAKER and DIFFERENT guarantee -- a cap on the
+breadth-first frontier that reorders nothing -- and the two are deliberately
+not spelled alike and are never aliased onto each other. `max_leaves` is
+honoured in the Mojo layer under its own name and is still NOT a keyword on
+these classes, because the 22-slot params list below does not carry it and a
+keyword that rode across and did nothing is precisely what this module
+refuses to do.
+
+TWO THINGS ABOUT BEST-FIRST THAT ARE NOT sklearn'S, stated here because a
+caller comparing forests will see them. (1) The frontier's TIE RULE is ours:
+on an equal improvement the smaller node id is expanded first. sklearn has
+no rule -- its heap surfaces whichever equal record its layout puts on top
+-- so there was nothing to inherit. (2) The improvement itself is computed
+from cuML's gain as `(node_rows / tree_rows) * gain`, which is sklearn's
+`impurity_improvement` rearranged, in pinned float32 rather than float64.
+Both are gated by `extratrees/checks/bestfirst_check.mojo`.
 
 X IS COPIED TWICE PER FIT: once by NumPy to column-major float32 (the
 builder's layout, cuML's own) and once across the boundary into Mojo. On

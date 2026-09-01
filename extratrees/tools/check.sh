@@ -45,6 +45,7 @@ extratrees/checks/device_regression_check.mojo
 extratrees/checks/partition_multiblock_check.mojo
 extratrees/checks/rescue_check.mojo
 extratrees/checks/device_batched_check.mojo
+extratrees/checks/bestfirst_check.mojo
 "
 
 failed=0

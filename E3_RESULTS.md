@@ -115,12 +115,19 @@ its adoption into `core/gemm.mojo` is one value wide at P == 1 (rows
   cross-infer both directions) and writes `e3_verdicts_trees.md` /
   `e3_verdicts_e2u.md` beside the Mac reference. Exit 0 only when every
   cell is IDENTICAL or REFUSED= and no gate FAILED.
-- The refusals are the same 4 tree cells (`et_clf_maxleaf`,
+- The refusals were the same 4 tree cells (`et_clf_maxleaf`,
   `gbdt_multiclass_lossguide`, `gbdt_quantile_newton`,
   `gbdt_rmse_depthwise_pointwise`) and 20 unsupervised cells
   (`knn_k300`, `pca_c8_wide`, `tsvd_c8_wide`, `ols_*_refused`,
   `dbscan_*`, `logreg_l1_refused`, ...) on every vendor, with the same
-  message — a refusal is a certified answer too.
+  message — a refusal is a certified answer too. **`et_clf_maxleaf` LEFT
+  THAT LIST on 2026-09-01**: DEVIATION 466 ported sklearn's
+  `max_leaf_nodes` as a second growth mode, so the cell now runs and a
+  `REFUSED=` from it would be a regression. The round tables below record
+  what each round measured and are not edited; this is the standing list,
+  and `E2_RESULTS.md`'s "What REFUSED= means here" carries the same
+  correction for `et_clf_bootstrap` and `et_clf_entropy`, which left on
+  2026-08-23.
 
 ## Round 8, commit `fe00e8a` (2026-08-23, same day): CLOSED on three vendors
 

@@ -57,6 +57,32 @@ with `#pragma omp parallel for num_threads(n_streams)` over CUDA streams
 (`randomforest.cuh:336-341`). Metal has no streams, so their mechanism could not
 be transcribed.
 
+A SECOND UPSTREAM, ADDED 2026-09-01: sklearn's `BestFirstTreeBuilder`
+------------------------------------------------------------------
+This file now holds TWO growth modes, and cuML is the upstream of only one of
+them. `DecisionTreeParams.max_leaf_nodes` selects sklearn's best-first
+builder (`sklearn/tree/_tree.pyx:341-508`), which is a different BUILDER and
+not a parameter of cuML's: a priority queue on impurity improvement, a budget
+spent one expansion at a time, and the split search moved from pop time to
+push time. DEVIATION BLOCKS 466 to 469 below carry it in full -- the mode,
+the frontier key, the tie rule, and what the launch shape costs.
+
+| ours | theirs (sklearn) |
+|---|---|
+| `FrontierRecord` | `_tree.pyx:341-357` |
+| `bestfirst_before` | `_compare_records`, `:359-363` (ours is a TOTAL order; theirs is not) |
+| `NodeQueue.bestfirst_admit` | `_add_to_frontier`, `:365-372` |
+| `NodeQueue.bestfirst_pop` | `pop_heap` + `back` + `pop_back`, `:451-453` |
+| `NodeQueue.bestfirst_budget_left` | `max_split_nodes`, `:424` and `:503` |
+| `NodeQueue.bestfirst_expand` | the else arm of `build`, `:464-500` |
+| `train_classification_bestfirst` / `train_regression_bestfirst` | `build`, `:392-508`, on the host |
+| the `bestfirst` arm of `train_forest_*_device_timed` | the same loop, driving the same kernels |
+| `frontier_key` | `Criterion.impurity_improvement`, `_criterion.pyx:165-199` |
+
+THE DEFAULT IS UNTOUCHED BY ALL OF IT. `max_leaf_nodes == -1` is cuML's loop,
+statement for statement, and every branch the mode added is written
+`if bestfirst:` with the depth-wise arm unchanged inside the `else`.
+
 THE ONE INVARIANT EVERYTHING DOWNSTREAM RESTS ON
 -------------------------------------------------
 Children are allocated as an ADJACENT PAIR and only the left index is stored
@@ -156,7 +182,7 @@ from std.math import ceildiv, fma
 from std.sys.compile import is_defined
 from std.sys.info import size_of
 
-from checks.numerics import ftz
+from checks.numerics import ftz, identical_div, identical_mul
 from core.philox import launch_uniform_int
 from extratrees.checks.pcg_rng import row_sample_seed
 
@@ -173,6 +199,323 @@ def max_nodes(max_depth: Int32) -> Int:
     if max_depth < 13:
         return (1 << Int(max_depth + 1)) - 1
     return 8191
+
+
+# ==========================================================================
+# DEVIATION BLOCK 466 -- BEST-FIRST GROWTH: a SECOND GROWTH MODE, selected by
+# sklearn's `max_leaf_nodes`, beside cuML's depth-wise default.
+#
+# THEIRS (sklearn, `_tree.pyx:374-508`, `BestFirstTreeBuilder`). Passing
+#   `max_leaf_nodes` does not tighten a parameter, it selects a DIFFERENT
+#   BUILDER. The frontier is a `vector[FrontierRecord]` kept as a heap
+#   (`push_heap` / `pop_heap` around `_compare_records`, `:359-363`), the
+#   budget is spent ONE POP AT A TIME (`max_split_nodes` at `:424`,
+#   decremented at `:503`), and a node is SEARCHED WHEN IT IS ADDED to the
+#   frontier (`_add_split_node`, `:562`, called at `:439`, `:509`, `:531`)
+#   because its own gain is what orders it.
+# THEIRS (cuML, `builder.cuh:72-134`). A FIFO deque popped `max_batch_size`
+#   at a time, searched in one launch, pushed. Every node at a level is
+#   expanded; nothing is ranked against anything.
+# OURS. BOTH, selected by one field. `params.max_leaf_nodes == -1` is
+#   cuML's loop, byte for byte the code that was here before this block was
+#   written; anything else runs the best-first loop below. There is no third
+#   behaviour and no blending: `max_leaf_nodes` NEVER maps onto cuML's
+#   `max_leaves`, which stays a separate field with a separate meaning
+#   (a cap on the breadth-first frontier that reorders nothing). Both may be
+#   set; the tighter binds.
+# WHY NOT REFUSE, which is what this lane did until 2026-09-01. The refusal
+#   argued that the two upstreams grow different trees and that accepting
+#   sklearn's name would be accepting cuML's algorithm under it. The first
+#   half is true and the second half does not follow: the answer to two
+#   upstreams disagreeing is to implement the one whose NAME the caller
+#   typed, which is what this block does.
+#
+# THE SHAPE, so the next reader does not have to re-derive it from the loop.
+# A depth-wise cycle is: pop a FIFO batch, search it, partition it, push it.
+# A best-first cycle is the SAME THREE DEVICE STEPS IN THE SAME ORDER over
+# two different memberships:
+#
+#     1. SEARCH  the nodes admitted since the last cycle -- the children the
+#                last cycle's expansions created, or the roots on cycle 0.
+#     2. ADMIT   each searched node whose split is VALID onto its own tree's
+#                priority queue, keyed by DEVIATION 467's improvement.
+#     3. POP     the single best node of each in-flight tree, if that tree's
+#                leaf budget is not spent.
+#     4. PARTITION those popped nodes -- their splits were computed in an
+#                earlier cycle and are still correct, because a node's rows
+#                are permuted only by its OWN partition or an ANCESTOR's,
+#                and neither has happened while it sat on the frontier.
+#     5. EXPAND  each popped node into a split node plus two leaf children,
+#                and hand the expandable children to the next cycle's step 1.
+#
+# So the launches are unchanged, the workspace is unchanged, the kernels are
+# unchanged, and DEVIATION 211's cross-tree batching survives intact. What
+# changes is who is in each batch, and that is DEVIATION 469's cost.
+#
+# WHAT IS NOT PORTED FROM THEIR BUILDER, stated rather than left to be
+# discovered. (a) Their frontier also carries records for nodes that are
+# ALREADY leaves (`is_leaf = 1`, `improvement = 0.0`, `_tree.pyx:641-647`),
+# popped later to be finalised. Ours does not, and the trees are the same:
+# in this representation a node is CREATED as a leaf (`CreateLeafNode`) and
+# only becomes a split node when it is expanded, so a leaf record on the
+# frontier would pop, do nothing, and consume no budget -- their `is_leaf`
+# arm at `:456-462` writes exactly the state ours never leaves. (b) Their
+# `lower_bound` / `upper_bound` / `middle_value` members exist only for
+# `monotonic_cst`, which is refused by name here (NOT_IMPLEMENTED.tsv).
+# (c) Their `_add_split_node` computes the node VALUE at add time; this lane
+# computes every leaf value in one launch at the end (`SetLeafPredictions`,
+# DEVIATION 214) and that is unchanged.
+#
+# NOT LIFTED FROM THE LOSSGUIDE LANE, checked rather than assumed:
+#   `gbdt/methods/greedy_subsets_searcher/greedy_search_helper_lossguide.mojo`
+#   argmins over `TPointsSubsets` leaf scores on a HISTOGRAM tree, a
+#   representation this histogram-free directory deliberately does not have.
+#   It is a different learner's frontier, not a component.
+# ==========================================================================
+
+
+# ==========================================================================
+# DEVIATION BLOCK 467 -- THE FRONTIER KEY is sklearn's `improvement`,
+# reconstructed from cuML's gain rather than recomputed from impurities.
+#
+# THEIRS. `_compare_records` (`_tree.pyx:359-363`) orders on
+#   `FrontierRecord.improvement`, which `_add_split_node` takes from
+#   `SplitRecord.improvement`, which is
+#   `Criterion.impurity_improvement` (`_criterion.pyx:165-199`):
+#
+#       (w_node / w_total) * (imp_parent - wR/w_node*imp_R - wL/w_node*imp_L)
+#
+#   The bracket is the node's own impurity DECREASE; the `w_node / w_total`
+#   factor in front is what makes a big mediocre node outrank a small
+#   excellent one, and it is therefore load bearing for the ORDER, not
+#   cosmetic scaling.
+# OURS. `Split.best_metric_val` is cuML's `GainPerSplit`, and this lane
+#   already records (`objectives.mojo:61-72`) that cuML's gain IS that
+#   bracket: `cuML_gain == parent_gini + sklearn_proxy / n`. So the whole
+#   improvement is one multiply away from a number the reduction already
+#   hands back, and the key is
+#
+#       key = ftz( identical_mul( ftz(count / total), ftz(gain) ) )
+#
+#   with `count` the node's row count and `total` the tree's sampled row
+#   count -- `weighted_n_samples` with `sample_weight=None`, which is the
+#   only case this port supports (NOT_IMPLEMENTED.tsv's `sample_weight`
+#   row).
+# WHY NOT RECOMPUTE THEIR EXPRESSION TERM FOR TERM: it needs
+#   `imp_parent`, `imp_left` and `imp_right` as three separate Float32s at
+#   the host, and the device reduction publishes none of them -- it
+#   publishes the winning candidate's gain and, for Gini, DEVIATION 145's
+#   exact rational. Adding three impurity fields to the readback to
+#   re-derive a quantity already in it would be three more seams to pin for
+#   no change in the order.
+# WHY NOT ORDER ON THE EXACT RATIONAL, which is what DEVIATION 144/145 do
+#   INSIDE a node. Their key is `num/den` with `-n` dropped, and `-n` is
+#   constant only WITHIN one node; across nodes it is not, and restoring it
+#   plus the `count/total` factor puts denominators at `n_total * n^2`,
+#   which is past what the Int128 cross-multiply survives at the row counts
+#   DEVIATION 218 admits. The exact rational stays what it always was, the
+#   WITHIN-NODE selector; the ACROSS-NODE order is this float. The
+#   consequence is stated and gated rather than hidden: two nodes whose true
+#   improvements differ can round to the same `key`, and DEVIATION 468 is
+#   what decides those.
+# THE PIN. Every operation is a pinned primitive -- `identical_div`,
+#   `identical_mul`, `ftz` -- so the key is bit-identical on Apple, NVIDIA
+#   and AMD under IDENTICAL, and so is `>` on it. It is computed on the
+#   HOST, and that is exactly why the pins are not optional: the host is a
+#   different CPU on each vendor's box, and a plain `a / b * c` there is as
+#   free to differ as a kernel is.
+# NO NaN CAN REACH IT: `GainPerSplit` clamps its result at zero
+#   (`objectives.mojo:555-556`, DEVIATION 217), `count` and `total` are
+#   positive integers, so `key >= +0.0` and the comparison is a total order
+#   on the floats that occur.
+# PRICE: `Float32(Int(count))` rounds above 2^24 rows. It rounds the same
+#   way on every vendor (IEEE round-to-nearest on an integer conversion is
+#   not implementation defined), so it costs ORDER RESOLUTION at huge row
+#   counts, never identity.
+# ==========================================================================
+
+
+# ==========================================================================
+# DEVIATION BLOCK 468 -- THE TIE RULE. A float key needs one, sklearn does
+# not have one, and we cannot inherit the one it does not have.
+#
+# THEIRS. `_compare_records` is `left.improvement < right.improvement` and
+#   nothing else, handed to `std::push_heap` / `std::pop_heap`. Equal
+#   improvements are therefore separated by the HEAP'S LAYOUT -- by the
+#   insertion history and the sift order of a particular libstdc++ -- which
+#   is not a rule, is not documented, and is not reproducible across a
+#   standard-library change. It is the same shape of non-order DEVIATION 133
+#   already recorded for their `>` on candidate splits.
+# OURS. A STRICT TOTAL ORDER on the record's own fields, so the heap's
+#   layout cannot be observed:
+#
+#       pop first the record with the GREATER `key`;
+#       on an equal `key`, the SMALLER `tree_id`;
+#       on an equal `tree_id`, the SMALLER `idx` (node id).
+#
+#   `(tree_id, idx)` is UNIQUE across the whole frontier -- one queue per
+#   tree, and a node id is allocated once -- so the relation never ties, and
+#   any correct heap yields one and only one pop sequence.
+# WHY SMALLER `idx` AND NOT LARGER. Node ids are allocated in expansion
+#   order, so "smaller id" is "admitted earlier": among equals the frontier
+#   degrades to FIFO, which is the depth-wise builder's own rule. That makes
+#   the two modes AGREE on a fixture where every improvement is equal, which
+#   is a checkable statement and is checked, and it avoids DEVIATION 463's
+#   scar -- "greater colid wins" was a systematic bias toward high column
+#   ids that was paid in accuracy on covtype, and "greater node id wins"
+#   would be the same mistake one level up, a systematic bias toward the
+#   RIGHT and DEEPER side of the tree.
+# WHY `tree_id` IS IN THE KEY AT ALL when each tree has its own frontier and
+#   the arm can never fire: because DEVIATION 211's batch spans trees, the
+#   ORDER OF THE MERGED BATCH is `(tree_id, idx)`, and writing the tie rule
+#   over the same pair means the batch order and the frontier order are one
+#   statement rather than two that can drift.
+# PRICE: on an exact `key` tie we expand a different node than sklearn
+#   would. That is unavoidable -- sklearn expands whichever one its heap
+#   happens to surface -- and it is the price of having a rule at all.
+# GATED, and the gate is shown capable of failing:
+#   `BESTFIRST_SAB_TIE_MAX_IDX` flips the third arm and the pop order must
+#   move; `BESTFIRST_SAB_FIFO` drops the key entirely and the tree must move.
+# ==========================================================================
+
+
+# ==========================================================================
+# DEVIATION BLOCK 469 -- WHAT SEARCHING AT PUSH TIME COSTS. Stated in
+# launches, because that is the currency this lane spends.
+#
+# DEPTH-WISE. One cycle covers a whole LEVEL of every in-flight tree. A
+#   tree of depth d costs d cycles; the search batch is up to
+#   `max_batch_size` nodes wide and, with DEVIATION 211, spans every tree in
+#   the group.
+# BEST-FIRST. One cycle expands AT MOST ONE NODE PER TREE, because the
+#   choice of the second node depends on the first node's children being on
+#   the frontier. A tree of L leaves costs L - 1 cycles. Per cycle the
+#   PARTITION batch is at most `g` nodes (one per in-flight tree) and the
+#   SEARCH batch is at most `2g` (the two children of each). `g` is the
+#   group's tree count, so the batch width collapses from
+#   `min(frontier, max_batch_size)` to `2g`.
+# SO THE PRICE IS: (leaves - 1) / depth times as many cycles, each of them
+#   `2g` nodes wide instead of up to `max_batch_size`. On a 100-tree forest
+#   grown to 32 leaves that is 31 cycles of at most 200 nodes against about
+#   6 cycles of up to 4096. DEVIATION 211 is what keeps this from being one
+#   launch per node -- without the cross-tree batch, `g` would be 1 and a
+#   best-first cycle would be a two-node launch. It is the reason this mode
+#   is affordable here at all, and it is why `g` is CAPPED rather than
+#   reduced: see the `max_batch_size / 2` clamp in the drivers.
+# NO TIMING NUMBER IS ATTACHED TO ANY OF THIS AND NONE WILL BE UNTIL A
+#   BENCH ARM MEASURES IT. The counts above are launch counts, which are
+#   arithmetic; the seconds are not, and this lane has been wrong before
+#   about which of the two it had.
+# ONE MORE COST, in synchronizations rather than launches: the search batch
+#   and the partition batch are DIFFERENT SETS in this mode, so `ws.h_items`
+#   is re-staged between them on every cycle and DEVIATION 455's drain runs
+#   every cycle rather than only on a rescue. Depth-wise pays it only when
+#   DEVIATION 205's rescue fires.
+# ==========================================================================
+
+
+comptime BESTFIRST_SAB_NONE: Int32 = 0
+"""No sabotage. The shipping value."""
+
+comptime BESTFIRST_SAB_FIFO: Int32 = 1
+"""Order the frontier by arrival instead of by improvement -- what a port
+that kept cuML's deque and only added the leaf budget would build. The mode
+becomes cuML's `max_leaves` under sklearn's name, so the TREE must move on
+any fixture where the best node is not the oldest. DEVIATION 466's gate."""
+
+comptime BESTFIRST_SAB_TIE_MAX_IDX: Int32 = 2
+"""Invert the third arm of the tie rule: on an equal key, the GREATER node
+id wins. DEVIATION 468's gate -- the pop order must move on a frontier
+carrying two equal keys, and it must NOT move on one that carries none."""
+
+comptime BESTFIRST_SAB_UNSCALED_KEY: Int32 = 3
+"""Key on the raw gain, dropping DEVIATION 467's `count / total` factor --
+which is what "just use best_metric_val" would build. The order must move
+whenever two frontier nodes of different sizes are ranked against each
+other. DEVIATION 467's gate."""
+
+comptime BESTFIRST_SAB_NO_BUDGET: Int32 = 4
+"""Ignore the leaf budget at pop time. The LEAF COUNT must move: this is the
+arm that proves `max_leaf_nodes` is spent one pop at a time rather than
+merely accepted."""
+
+
+def frontier_key(gain: Float32, count: Int32, total: Int32) -> Float32:
+    """sklearn's `improvement` for a split, as DEVIATION 467 derives it.
+
+    `(count / total) * gain`, every operation a pinned primitive so the
+    number and every comparison on it are bit-identical on Apple, NVIDIA and
+    AMD under IDENTICAL. Computed on the HOST, where the pins matter for the
+    same reason they matter in a kernel: the host CPU is a different CPU on
+    each vendor's box.
+
+    A degenerate node (`count <= 0`, or an empty tree) keys at `+0.0`; it
+    cannot reach the frontier anyway, because a split over no rows is never
+    valid.
+    """
+    if count <= 0 or total <= 0:
+        return Float32(0.0)
+    var q = identical_div(
+        ftz(Float32(Int(count))), ftz(Float32(Int(total)))
+    )
+    return ftz(identical_mul(ftz(q), ftz(gain)))
+
+
+@fieldwise_init
+struct FrontierRecord(ImplicitlyCopyable, Movable):
+    """One searched, splittable node waiting to be expanded.
+
+    `FrontierRecord` (`_tree.pyx:341-357`), minus the members this port does
+    not have a use for -- see DEVIATION BLOCK 466's "what is not ported".
+    Theirs carries `start`/`end`/`pos` where ours carries the
+    `NodeWorkItem`'s `InstanceRange` and the `Split`'s `n_left`, which are
+    the same two numbers under different names.
+    """
+
+    var item: NodeWorkItem
+    """The node, exactly as the search batch carried it."""
+
+    var split: Split
+    """Its split, found when it was ADMITTED. Still correct when it is
+    popped: a node's rows are permuted only by its own partition or an
+    ancestor's, and neither happens while it waits here."""
+
+    var key: Float32
+    """DEVIATION 467's improvement. The heap's first ordering arm."""
+
+    var tree_id: Int32
+    """The owning tree. DEVIATION 468's second arm, and DEVIATION 211's
+    per-item tree id, which are deliberately the same field."""
+
+
+def bestfirst_before(
+    a: FrontierRecord, b: FrontierRecord, sabotage: Int32
+) -> Bool:
+    """Whether `a` is popped before `b`. DEVIATION 468's total order.
+
+    Greater `key`; then smaller `tree_id`; then smaller `idx`. The last two
+    are unique across the frontier, so this never returns False both ways
+    for distinct records and the heap's layout is unobservable.
+    """
+    var ka = a.key
+    var kb = b.key
+    if sabotage == BESTFIRST_SAB_FIFO:
+        # No key at all: arrival order, which for node ids allocated in
+        # expansion order is exactly `idx` ascending.
+        ka = Float32(0.0)
+        kb = Float32(0.0)
+    elif sabotage == BESTFIRST_SAB_UNSCALED_KEY:
+        ka = a.split.best_metric_val
+        kb = b.split.best_metric_val
+    if ka > kb:
+        return True
+    if ka < kb:
+        return False
+    if a.tree_id != b.tree_id:
+        return a.tree_id < b.tree_id
+    if sabotage == BESTFIRST_SAB_TIE_MAX_IDX:
+        return a.item.idx > b.item.idx
+    return a.item.idx < b.item.idx
 
 
 struct NodeQueue[dtype: DType](Movable):
@@ -192,6 +535,21 @@ struct NodeQueue[dtype: DType](Movable):
     var work_items: List[NodeWorkItem]
     var head: Int
     """Index of the front of `work_items`; everything below it is popped."""
+
+    var frontier: List[FrontierRecord]
+    """DEVIATION 466's BEST-FIRST frontier, a binary max-heap under
+    `bestfirst_before`. EMPTY AND UNTOUCHED unless `params.max_leaf_nodes`
+    selects the mode, which is what makes the default fit bit-unchanged:
+    `pop`, `push` and `is_expandable` never read it."""
+
+    var total_rows: Int32
+    """The tree's sampled row count -- sklearn's `weighted_n_samples` with
+    `sample_weight=None`. DEVIATION 467's denominator. Recorded here because
+    the frontier key needs it and nothing else in the queue did."""
+
+    var bf_sabotage: Int32
+    """`BESTFIRST_SAB_*`. Rule 8: the switch that selects a behaviour is a
+    field a check can set, not a comment. `BESTFIRST_SAB_NONE` ships."""
 
     def __init__(
         out self,
@@ -232,6 +590,9 @@ struct NodeQueue[dtype: DType](Movable):
         self.node_instances.append(InstanceRange(row_base, sampled_rows))
         self.work_items = List[NodeWorkItem]()
         self.head = 0
+        self.frontier = List[FrontierRecord]()
+        self.total_rows = sampled_rows
+        self.bf_sabotage = BESTFIRST_SAB_NONE
         if self.is_expandable(self.tree.sparsetree[0], 0):
             self.work_items.append(
                 NodeWorkItem(0, 0, self.node_instances[0])
@@ -402,6 +763,236 @@ struct NodeQueue[dtype: DType](Movable):
             # `:135-136`
             if item.depth + 1 > self.tree.depth_counter:
                 self.tree.depth_counter = item.depth + 1
+
+    # ======================================================================
+    # DEVIATION 466's BEST-FIRST HALF. Everything below runs only when
+    # `params.max_leaf_nodes != -1`; `pop`, `push` and `is_expandable` above
+    # are untouched and are still the whole default fit.
+    # ======================================================================
+
+    def bestfirst_enabled(self) -> Bool:
+        """Whether this queue grows best-first. The ONE test, so a caller
+        cannot ask the question two slightly different ways."""
+        return self.params.max_leaf_nodes != -1
+
+    def bestfirst_budget_left(self) -> Bool:
+        """`max_split_nodes > 0` (`_tree.pyx:424`, `:454`), in this port's
+        counter.
+
+        `tree.leaf_counter` IS the leaf count here -- it starts at 1 for the
+        root and rises by exactly one per expansion (`push`, `:114` theirs)
+        -- and sklearn's `max_split_nodes = max_leaf_nodes - 1` counts the
+        same thing from the other end. So their `max_split_nodes <= 0` is
+        our `leaf_counter >= max_leaf_nodes`, and stopping there yields
+        EXACTLY `max_leaf_nodes` leaves whenever the frontier does not run
+        dry first.
+        """
+        if self.bf_sabotage == BESTFIRST_SAB_NO_BUDGET:
+            return True
+        return self.tree.leaf_counter < self.params.max_leaf_nodes
+
+    def bestfirst_can_pop(self) -> Bool:
+        """Whether this tree contributes a node to the next expansion."""
+        return len(self.frontier) > 0 and self.bestfirst_budget_left()
+
+    def bestfirst_seed(mut self) -> List[NodeWorkItem]:
+        """The root, as the first cycle's search batch.
+
+        `__init__` already put the root on `work_items` if it is expandable,
+        which is the depth-wise frontier; best-first takes it from there and
+        leaves that list drained, so no node can be reached twice through the
+        two frontiers.
+        """
+        var out = List[NodeWorkItem]()
+        while self.head < len(self.work_items):
+            out.append(self.work_items[self.head])
+            self.head += 1
+        return out^
+
+    def _heap_swap(mut self, a: Int, b: Int):
+        """One swap, through two LOCAL COPIES rather than two live element
+        references. `FrontierRecord` is a handful of scalars, so the copies
+        are free, and taking one mutable reference into a `List` at a time
+        is the rule this file follows everywhere else."""
+        var ra = self.frontier[a]
+        var rb = self.frontier[b]
+        self.frontier[a] = rb
+        self.frontier[b] = ra
+
+    def _heap_up(mut self, start: Int):
+        """Sift `start` toward the root. `std::push_heap`'s half."""
+        var i = start
+        while i > 0:
+            var parent = (i - 1) // 2
+            var ri = self.frontier[i]
+            var rp = self.frontier[parent]
+            if not bestfirst_before(ri, rp, self.bf_sabotage):
+                return
+            self._heap_swap(i, parent)
+            i = parent
+
+    def _heap_down(mut self, start: Int):
+        """Sift `start` toward the leaves. `std::pop_heap`'s half."""
+        var i = start
+        var n = len(self.frontier)
+        while True:
+            var l = 2 * i + 1
+            var r = l + 1
+            var best = i
+            if l < n:
+                var rl = self.frontier[l]
+                var rb = self.frontier[best]
+                if bestfirst_before(rl, rb, self.bf_sabotage):
+                    best = l
+            if r < n:
+                var rr = self.frontier[r]
+                var rb2 = self.frontier[best]
+                if bestfirst_before(rr, rb2, self.bf_sabotage):
+                    best = r
+            if best == i:
+                return
+            self._heap_swap(i, best)
+            i = best
+
+    def bestfirst_admit(
+        mut self, item: NodeWorkItem, split: Split, tree_id: Int32
+    ) -> Bool:
+        """`_add_to_frontier` (`_tree.pyx:365-372`), after the search.
+
+        Returns whether the node was admitted. An INVALID split is not
+        admitted, and that is where their `is_leaf` records go: in this
+        representation the node is already a leaf and staying off the heap
+        leaves it one (DEVIATION BLOCK 466, "what is not ported", (a)). The
+        validity test is `split_not_valid`, the same call `push` makes and
+        the same call `nodeSplitKernel` makes, so a node cannot be admitted
+        under one rule and expanded under another.
+        """
+        if split_not_valid(
+            split,
+            self.params.min_impurity_decrease,
+            self.params.min_samples_leaf,
+            item.instances.count,
+        ):
+            return False
+        self.frontier.append(
+            FrontierRecord(
+                item,
+                split,
+                frontier_key(
+                    split.best_metric_val,
+                    item.instances.count,
+                    self.total_rows,
+                ),
+                tree_id,
+            )
+        )
+        self._heap_up(len(self.frontier) - 1)
+        return True
+
+    def bestfirst_pop(mut self) raises -> FrontierRecord:
+        """`pop_heap` + `frontier.back()` + `pop_back()` (`_tree.pyx:451-453`).
+
+        The caller must have asked `bestfirst_can_pop` first; popping an
+        empty frontier or a spent budget is a programming error here rather
+        than a silently empty batch.
+        """
+        if len(self.frontier) == 0:
+            raise Error("bestfirst_pop on an empty frontier")
+        if not self.bestfirst_budget_left():
+            raise Error(
+                "bestfirst_pop with the leaf budget spent: "
+                + String(self.tree.leaf_counter)
+                + " leaves against max_leaf_nodes "
+                + String(self.params.max_leaf_nodes)
+            )
+        var best = self.frontier[0]
+        var last = len(self.frontier) - 1
+        var moved = self.frontier[last]
+        self.frontier[0] = moved
+        _ = self.frontier.pop()
+        if len(self.frontier) > 0:
+            self._heap_down(0)
+        return best
+
+    def bestfirst_expand(
+        mut self, item: NodeWorkItem, split: Split
+    ) raises -> List[NodeWorkItem]:
+        """ONE popped node into a split node plus two leaves.
+
+        `push`'s body for a single item, with its two `continue`/`break`
+        guards removed rather than duplicated: the validity test already ran
+        at `bestfirst_admit`, and cuML's `max_leaves` break is replaced by
+        `bestfirst_budget_left` at POP time, which is sklearn's placement
+        (`_tree.pyx:454`) and not cuML's. Everything else -- the adjacent
+        child pair, the left-index-only invariant, the `node_instances`
+        lockstep, the depth counter -- is `push`'s code and this file's ONE
+        INVARIANT paragraph applies to it unchanged.
+
+        Returns the children that need searching. A child that is not
+        expandable is left a leaf and never searched, exactly as in `push`.
+        A child of a tree whose budget just went to zero is also not
+        returned: that tree will never pop again, so searching it could not
+        change the tree. That is an unobservable saving, not a rule, and it
+        is written here rather than in the driver so both drivers get it.
+        """
+        var parent_range = self.node_instances[Int(item.idx)]
+        var out = List[NodeWorkItem]()
+
+        var left_child_id = Int64(len(self.tree.sparsetree))
+        self.tree.sparsetree[Int(item.idx)] = SparseTreeNode[
+            Self.dtype
+        ].CreateSplitNode(
+            split.colid,
+            Scalar[Self.dtype](split.quesval),
+            Scalar[Self.dtype](split.best_metric_val),
+            left_child_id,
+            parent_range.count,
+        )
+        self.tree.leaf_counter += 1
+
+        self.tree.sparsetree.append(
+            SparseTreeNode[Self.dtype].CreateLeafNode(split.n_left)
+        )
+        self.node_instances.append(
+            InstanceRange(parent_range.begin, split.n_left)
+        )
+        var left_ok = self.is_expandable(
+            self.tree.sparsetree[len(self.tree.sparsetree) - 1],
+            item.depth + 1,
+        )
+        var left_item = NodeWorkItem(
+            Int32(len(self.tree.sparsetree) - 1),
+            item.depth + 1,
+            self.node_instances[len(self.node_instances) - 1],
+        )
+
+        var n_right = parent_range.count - split.n_left
+        self.tree.sparsetree.append(
+            SparseTreeNode[Self.dtype].CreateLeafNode(n_right)
+        )
+        self.node_instances.append(
+            InstanceRange(parent_range.begin + split.n_left, n_right)
+        )
+        var right_ok = self.is_expandable(
+            self.tree.sparsetree[len(self.tree.sparsetree) - 1],
+            item.depth + 1,
+        )
+        var right_item = NodeWorkItem(
+            Int32(len(self.tree.sparsetree) - 1),
+            item.depth + 1,
+            self.node_instances[len(self.node_instances) - 1],
+        )
+
+        if item.depth + 1 > self.tree.depth_counter:
+            self.tree.depth_counter = item.depth + 1
+
+        if self.bestfirst_budget_left():
+            if left_ok:
+                out.append(left_item)
+            if right_ok:
+                out.append(right_item)
+        return out^
+
 
 
 def set_leaf_predictions_classification(
@@ -639,6 +1230,16 @@ def train_classification(
         )
     validity_check(params)
 
+    # DEVIATION 466: sklearn's `max_leaf_nodes` selects the OTHER BUILDER.
+    # The dispatch is the FIRST thing after validation and the LAST thing
+    # this function knows about the mode: everything below is cuML's loop,
+    # unchanged, and a caller who did not ask for best-first gets the same
+    # bits they got before this line existed.
+    if params.max_leaf_nodes != -1:
+        return train_classification_bestfirst(
+            dataset, params, tree_id, seed, n_classes, rescue
+        )
+
     var objective = GiniObjectiveFunction[DType.float32](
         n_classes, params.min_samples_leaf
     )
@@ -738,6 +1339,12 @@ def train_regression(
         )
     validity_check(params)
 
+    # DEVIATION 466, the regression half of the same dispatch.
+    if params.max_leaf_nodes != -1:
+        return train_regression_bestfirst(
+            dataset, params, tree_id, seed, rescue
+        )
+
     var objective = MSEObjectiveFunction[DType.float64](
         params.min_samples_leaf
     )
@@ -799,6 +1406,249 @@ def train_regression(
                 partition_samples(dataset, result.split, item)
 
         queue.push(work_items, splits)
+
+    var tree = queue.get_tree()
+    set_leaf_predictions_regression(dataset, tree, queue.node_instances)
+    return tree^
+
+
+# ==========================================================================
+# DEVIATION 466's HOST ARM. The oracles the device best-first driver is
+# checked against, in the same relation `train_classification` bears to
+# `train_classification_device` (`PORTING_RULES.md` 0b-ii: an oracle, not a
+# CPU fallback).
+# ==========================================================================
+
+
+def host_split_one_classification(
+    dataset: Dataset,
+    item: NodeWorkItem,
+    params: DecisionTreeParams,
+    objective: GiniObjectiveFunction[DType.float32],
+    criterion: Int32,
+    seed: UInt64,
+    tree_id: Int32,
+    k: Int32,
+    rescue: Bool,
+) raises -> Split:
+    """One node's split search, DEVIATION 205's rescue included.
+
+    Lifted verbatim out of `train_classification`'s inner loop so the two
+    growth modes run THE SAME SEARCH rather than two copies of it. The
+    sampler is keyed per work item (`sample_features_pertree`), so a
+    one-item batch draws exactly the columns the same item would draw as
+    member `i` of a wide batch; that is the property that lets best-first
+    call this one node at a time without moving a single bit.
+    """
+    var colids = List[Int32](length=Int(k), fill=Int32(0))
+    var one_item = List[NodeWorkItem]()
+    one_item.append(item)
+    _ = sample_features(
+        colids, one_item, tree_id, seed, Int(dataset.n), Int(k)
+    )
+    var result = node_split_random_gini[DType.float32](
+        dataset, item, colids, objective, seed, tree_id, criterion=criterion,
+    )
+    if rescue and _all_constant[DType.float32](result) and item.instances.count > 0:
+        var nonconst = rescue_columns(dataset, item)
+        if len(nonconst) > 0:
+            var u = rescue_pick(
+                rescue_key(seed, tree_id, UInt32(Int(item.idx))),
+                len(nonconst),
+            )
+            var one = List[Int32]()
+            one.append(nonconst[u])
+            result = node_split_random_gini[DType.float32](
+                dataset, item, one, objective, seed, tree_id,
+                criterion=criterion,
+            )
+    return result.split
+
+
+def host_split_one_regression(
+    dataset: Dataset,
+    item: NodeWorkItem,
+    params: DecisionTreeParams,
+    objective: MSEObjectiveFunction[DType.float64],
+    seed: UInt64,
+    tree_id: Int32,
+    k: Int32,
+    rescue: Bool,
+) raises -> Split:
+    """`host_split_one_classification`'s MSE twin, same argument."""
+    var colids = List[Int32](length=Int(k), fill=Int32(0))
+    var one_item = List[NodeWorkItem]()
+    one_item.append(item)
+    _ = sample_features(
+        colids, one_item, tree_id, seed, Int(dataset.n), Int(k)
+    )
+    var result = node_split_random_mse[DType.float64](
+        dataset, item, colids, objective, seed, tree_id
+    )
+    if (
+        rescue
+        and _all_constant[DType.float64](result)
+        and item.instances.count > 0
+    ):
+        var nonconst = rescue_columns(dataset, item)
+        if len(nonconst) > 0:
+            var u = rescue_pick(
+                rescue_key(seed, tree_id, UInt32(Int(item.idx))),
+                len(nonconst),
+            )
+            var one = List[Int32]()
+            one.append(nonconst[u])
+            result = node_split_random_mse[DType.float64](
+                dataset, item, one, objective, seed, tree_id
+            )
+    return result.split
+
+
+def train_classification_bestfirst(
+    dataset: Dataset,
+    params: DecisionTreeParams,
+    tree_id: Int32,
+    seed: UInt64,
+    n_classes: Int32,
+    rescue: Bool = True,
+    bf_sabotage: Int32 = BESTFIRST_SAB_NONE,
+) raises -> TreeMetaDataNode[DType.float32]:
+    """One ExtraTree grown BEST-FIRST. `BestFirstTreeBuilder::build`,
+    `_tree.pyx:392-508`.
+
+    Their loop, which this transcribes with the two structural changes
+    DEVIATION BLOCK 466 states::
+
+        rc = self._add_split_node(... root ...)
+        if rc >= 0: _add_to_frontier(split_node_left, frontier)
+        while not frontier.empty():
+            pop_heap(...); record = frontier.back(); frontier.pop_back()
+            is_leaf = (record.is_leaf or max_split_nodes <= 0)
+            if is_leaf: <write the leaf>
+            else:
+                max_split_nodes -= 1
+                self._add_split_node(... left ...)
+                self._add_split_node(... right ...)
+                _add_to_frontier(split_node_left, frontier)
+                _add_to_frontier(split_node_right, frontier)
+
+    THE ORDER INSIDE ONE EXPANSION IS LOAD BEARING AND IS NOT THEIRS'
+    ORDER, because this port partitions where they index. Theirs never
+    permutes anything: `_add_split_node` reads `samples[start:end]` and the
+    parent's `node_split` already wrote `split.pos`. Ours must partition the
+    parent's row range BEFORE either child's search reads it, so the
+    expansion is EXPAND (which only computes ranges from `split.n_left`),
+    then PARTITION, then SEARCH THE CHILDREN. Moving the partition after the
+    children's search would search two children over an unpartitioned range,
+    which is a silent wrong answer rather than a crash.
+
+    `dataset.row_ids` IS MUTATED, as it is in `train_classification`.
+    """
+    if dataset.num_outputs != n_classes:
+        raise Error(
+            "dataset.num_outputs is "
+            + String(dataset.num_outputs)
+            + " but n_classes is "
+            + String(n_classes)
+        )
+    validity_check(params)
+
+    var objective = GiniObjectiveFunction[DType.float32](
+        n_classes, params.min_samples_leaf
+    )
+    var criterion = params.split_criterion
+    if criterion == CRITERION_END:
+        criterion = CRITERION_GINI
+    var k = n_sampled_cols_for(params, dataset.n)
+    var queue = NodeQueue[DType.float32](
+        params, dataset.n_sampled_rows, n_classes, tree_id
+    )
+    queue.bf_sabotage = bf_sabotage
+
+    # `_tree.pyx:437-441`: the root is searched and admitted before the loop.
+    var roots = queue.bestfirst_seed()
+    for i in range(len(roots)):
+        _ = queue.bestfirst_admit(
+            roots[i],
+            host_split_one_classification(
+                dataset, roots[i], params, objective, criterion, seed,
+                tree_id, k, rescue,
+            ),
+            tree_id,
+        )
+
+    while queue.bestfirst_can_pop():
+        var rec = queue.bestfirst_pop()
+        var kids = queue.bestfirst_expand(rec.item, rec.split)
+        # `nodeSplitKernel`'s host form. The split was validated at admit,
+        # so the guard `train_classification` carries here is already
+        # discharged and is not repeated -- one rule, one place.
+        partition_samples(dataset, rec.split, rec.item)
+        for j in range(len(kids)):
+            _ = queue.bestfirst_admit(
+                kids[j],
+                host_split_one_classification(
+                    dataset, kids[j], params, objective, criterion, seed,
+                    tree_id, k, rescue,
+                ),
+                tree_id,
+            )
+
+    var tree = queue.get_tree()
+    set_leaf_predictions_classification(dataset, tree, queue.node_instances)
+    return tree^
+
+
+def train_regression_bestfirst(
+    dataset: Dataset,
+    params: DecisionTreeParams,
+    tree_id: Int32,
+    seed: UInt64,
+    rescue: Bool = True,
+    bf_sabotage: Int32 = BESTFIRST_SAB_NONE,
+) raises -> TreeMetaDataNode[DType.float32]:
+    """`train_classification_bestfirst` for MSE. Same loop, same order, same
+    reason the partition sits between the expansion and the children."""
+    if dataset.num_outputs != 1:
+        raise Error(
+            "regression wants one output; dataset.num_outputs is "
+            + String(dataset.num_outputs)
+        )
+    validity_check(params)
+
+    var objective = MSEObjectiveFunction[DType.float64](
+        params.min_samples_leaf
+    )
+    var k = n_sampled_cols_for(params, dataset.n)
+    var queue = NodeQueue[DType.float32](
+        params, dataset.n_sampled_rows, 1, tree_id
+    )
+    queue.bf_sabotage = bf_sabotage
+
+    var roots = queue.bestfirst_seed()
+    for i in range(len(roots)):
+        _ = queue.bestfirst_admit(
+            roots[i],
+            host_split_one_regression(
+                dataset, roots[i], params, objective, seed, tree_id, k,
+                rescue,
+            ),
+            tree_id,
+        )
+
+    while queue.bestfirst_can_pop():
+        var rec = queue.bestfirst_pop()
+        var kids = queue.bestfirst_expand(rec.item, rec.split)
+        partition_samples(dataset, rec.split, rec.item)
+        for j in range(len(kids)):
+            _ = queue.bestfirst_admit(
+                kids[j],
+                host_split_one_regression(
+                    dataset, kids[j], params, objective, seed, tree_id, k,
+                    rescue,
+                ),
+                tree_id,
+            )
 
     var tree = queue.get_tree()
     set_leaf_predictions_regression(dataset, tree, queue.node_instances)
@@ -1949,6 +2799,19 @@ def search_batch(
     comptime TPB = DEVICE_TPB
     comptime MAX_ACC = DEVICE_MAX_ACC
     var n_nodes = len(work_items)
+    if n_nodes == 0:
+        # DEVIATION 466: a best-first cycle can have NOTHING to search --
+        # every node popped last cycle had two unexpandable children -- and
+        # still have nodes left to pop. An empty batch is a well-formed
+        # request for no work, not an error. The depth-wise loop breaks
+        # before it can ever ask, so this arm belongs to best-first alone.
+        return (
+            List[Split](),
+            List[Int32](),
+            List[Float32](),
+            List[Float32](),
+            List[Int32](),
+        )
     # --- 2. the ragged-batch flattening ------------------------------
     var plan = build_workload_info(work_items, TPB)
     var n_cells = n_nodes * Int(k)
@@ -2373,6 +3236,7 @@ def train_forest_classification_device(
     row_slot_cap: Int = FOREST_ROW_SLOT_CAP,
     bootstrap: Bool = False,
     n_sampled_rows: Int32 = 0,
+    bf_sabotage: Int32 = BESTFIRST_SAB_NONE,
 ) raises -> List[TreeMetaDataNode[DType.float32]]:
     """The shipping entry point: an INERT clock, so no synchronize is ever
     added -- see `PhaseClock`. `_timed` below is the same function with the
@@ -2387,7 +3251,7 @@ def train_forest_classification_device(
     var clock = PhaseClock(stage_times_enabled())
     var out = train_forest_classification_device_timed(
         ctx, dataset, params, tree_ids, seed, sabotage, row_slot_cap, clock,
-        bootstrap, n_sampled_rows,
+        bootstrap, n_sampled_rows, bf_sabotage,
     )
     print_stage_times(clock, "extratrees classification forest fit")
     return out^
@@ -2404,6 +3268,7 @@ def train_forest_classification_device_timed(
     mut clock: PhaseClock,
     bootstrap: Bool = False,
     n_sampled_rows: Int32 = 0,
+    bf_sabotage: Int32 = BESTFIRST_SAB_NONE,
 ) raises -> List[TreeMetaDataNode[DType.float32]]:
     """Every requested ExtraTree, with ONE merged frontier driving the GPU.
 
@@ -2515,6 +3380,25 @@ def train_forest_classification_device_timed(
         trace.record_device(ctx, "dataset.labels", dataset.d_labels)
 
     var k = n_sampled_cols_for(params, n_cols)
+    # DEVIATION 466: the growth mode, read ONCE per fit. Every branch on it
+    # below is `if bestfirst:` with the depth-wise arm textually unchanged,
+    # so a fit that did not ask for best-first executes the same statements
+    # in the same order as it did before this mode existed.
+    var bestfirst = params.max_leaf_nodes != -1
+    if bestfirst and params.max_batch_size < 2:
+        # DEVIATION 469's one hard edge, refused BY NAME rather than
+        # silently overrunning the workspace. A best-first cycle searches
+        # the TWO children of each expanded node, so the narrowest batch the
+        # mode can run in is two; the group clamp below can cap `g` at one
+        # tree but it cannot cap it below that. `max_batch_size` defaults to
+        # 4096 and is a scheduling parameter, so this is reachable only by a
+        # caller who set it to 1 on purpose.
+        raise Error(
+            "max_leaf_nodes needs max_batch_size >= 2: a best-first cycle"
+            " searches both children of the node it expands, and a batch of"
+            " one cannot hold them (DEVIATION 469). Got max_batch_size "
+            + String(params.max_batch_size)
+        )
     var out = List[TreeMetaDataNode[DType.float32]]()
     # `row_slot_cap` defaults to FOREST_ROW_SLOT_CAP; the batched check
     # passes a tiny cap to REACH the multi-group path at fixture sizes.
@@ -2544,6 +3428,19 @@ def train_forest_classification_device_timed(
         var g = len(tree_ids) - first
         if g > group_cap:
             g = group_cap
+        if bestfirst:
+            # DEVIATION 469: a best-first cycle searches at most TWO nodes
+            # per in-flight tree (the children of the one node it expands),
+            # so `2 * g` is the search batch's width and the workspace is
+            # sized to `max_batch_size`. Capping `g` here is the only place
+            # `max_batch_size` bounds anything in this mode, and it keeps
+            # its contract: it is a SCHEDULING parameter, and lowering it
+            # runs the same trees through narrower launches.
+            var bf_cap = Int(params.max_batch_size) // 2
+            if bf_cap < 1:
+                bf_cap = 1
+            if g > bf_cap:
+                g = bf_cap
         var total_rows = g * Int(slot_rows)
 
         # ONE row-id buffer for the whole group, slot `s` holding tree
@@ -2587,6 +3484,7 @@ def train_forest_classification_device_timed(
                     params, slot_rows, n_classes, tree_ids[first + s], base
                 )
             )
+            queues[s].bf_sabotage = bf_sabotage
 
         clock.tick(ctx, PHASE_SETUP)
         # The trace's LEVEL-CYCLE counter: one merged frontier batch per
@@ -2594,6 +3492,17 @@ def train_forest_classification_device_timed(
         # trace (the differ's alignment invariant) while naming a position
         # in the ALGORITHM -- group N, cycle M -- never a machine property.
         var cyc = 0
+        # DEVIATION 466: the best-first carry between cycles -- the nodes
+        # admitted-but-unsearched, and which queue each belongs to. Empty
+        # and never read in depth-wise mode.
+        var bf_pending = List[NodeWorkItem]()
+        var bf_pending_q = List[Int]()
+        if bestfirst:
+            for s in range(g):
+                var seeds = queues[s].bestfirst_seed()
+                for i in range(len(seeds)):
+                    bf_pending.append(seeds[i])
+                    bf_pending_q.append(s)
         while True:
             # --- ONE merged batch across every queue with work ----------
             var work_items = List[NodeWorkItem]()
@@ -2601,25 +3510,47 @@ def train_forest_classification_device_timed(
             var seg_queue = List[Int]()
             var seg_start = List[Int]()
             var seg_count = List[Int]()
-            for s in range(g):
-                if len(work_items) >= Int(params.max_batch_size):
-                    break
-                if not queues[s].has_work():
-                    continue
-                var got = queues[s].pop_up_to(
-                    Int(params.max_batch_size) - len(work_items)
-                )
-                if len(got) == 0:
-                    continue
-                seg_queue.append(s)
-                seg_start.append(len(work_items))
-                seg_count.append(len(got))
-                for i in range(len(got)):
-                    work_items.append(got[i])
-                    item_trees.append(tree_ids[first + s])
+            # DEVIATION 466 step 1: the best-first SEARCH batch is the set
+            # of nodes admitted since the last cycle -- the children the
+            # last expansions created, or the roots on cycle 0 -- and not a
+            # FIFO pop. `seg_*` stays empty; the best-first expansion is per
+            # popped node and does not use it.
+            if bestfirst:
+                for i in range(len(bf_pending)):
+                    work_items.append(bf_pending[i])
+                    item_trees.append(tree_ids[first + bf_pending_q[i]])
+            else:
+                for s in range(g):
+                    if len(work_items) >= Int(params.max_batch_size):
+                        break
+                    if not queues[s].has_work():
+                        continue
+                    var got = queues[s].pop_up_to(
+                        Int(params.max_batch_size) - len(work_items)
+                    )
+                    if len(got) == 0:
+                        continue
+                    seg_queue.append(s)
+                    seg_start.append(len(work_items))
+                    seg_count.append(len(got))
+                    for i in range(len(got)):
+                        work_items.append(got[i])
+                        item_trees.append(tree_ids[first + s])
             if len(work_items) == 0:
-                clock.tick(ctx, PHASE_HOST_QUEUE)
-                break
+                # DEVIATION 466: an empty SEARCH batch does NOT end a
+                # best-first fit. Both children of every node popped last
+                # cycle can be unexpandable while frontiers still hold
+                # splittable nodes, so the fit ends only when no tree can
+                # pop -- `while not frontier.empty()` (`_tree.pyx:445`)
+                # plus the budget test at `:454`.
+                var bf_more = False
+                if bestfirst:
+                    for s in range(g):
+                        if queues[s].bestfirst_can_pop():
+                            bf_more = True
+                if not bf_more:
+                    clock.tick(ctx, PHASE_HOST_QUEUE)
+                    break
             if sabotage == FOREST_SAB_SCALAR_TREE:
                 for i in range(len(item_trees)):
                     item_trees[i] = item_trees[0]
@@ -2649,9 +3580,16 @@ def train_forest_classification_device_timed(
 
             var tag_pre = String("")
             if trace.enabled:
-                tag_pre = (
-                    String("g") + String(gi) + ".c" + String(cyc) + "."
-                )
+                # The tag is set whether or not there is anything to record
+                # under it: DEVIATION 466's empty search batch still runs a
+                # partition, and a cycle that fell back to the bare
+                # "partition.rowids" tag would collide with the next one and
+                # break the differ's uniqueness invariant.
+                tag_pre = String("g") + String(gi) + ".c" + String(cyc) + "."
+            # `n_nodes > 0`: an empty search batch has no cells to record,
+            # and a zero-length record would break the differ's alignment
+            # invariant rather than inform it.
+            if trace.enabled and n_nodes > 0:
                 # DEVIATION 454: the identity audit's hazard stages, in
                 # PIPELINE order, so the cross-vendor differ bisects by
                 # mechanism -- colids differ = the sampler (or its host
@@ -2759,9 +3697,12 @@ def train_forest_classification_device_timed(
                     for t in range(len(chosen_slot)):
                         splits[chosen_slot[t]] = rescued[t]
 
-            if trace.enabled:
-                # The SELECTED splits -- post-rescue, exactly what the
-                # partition and the queues consume.
+            if trace.enabled and n_nodes > 0:
+                # The SELECTED splits -- post-rescue. Under depth-wise
+                # growth this is exactly what the partition and the queues
+                # consume; under DEVIATION 466 it is what is ADMITTED to
+                # the frontiers, and the partition consumes `part_splits`,
+                # which are records admitted in an earlier cycle.
                 var t_q = List[Float32]()
                 var t_c = List[Int32]()
                 var t_l = List[Int32]()
@@ -2776,8 +3717,51 @@ def train_forest_classification_device_timed(
                 trace.record_list_i32(tag_pre + "split.nleft", t_l)
                 trace.record_list_f32(tag_pre + "split.gain", t_m)
 
-            var plan = build_workload_info(work_items, TPB)
-            if len(retry) > 0:
+            # --- DEVIATION 466 steps 2 and 3: ADMIT, then POP ------------
+            # `part_*` is the PARTITION batch. In depth-wise mode it is the
+            # search batch, item for item, which is what it always was; in
+            # best-first it is the ONE node each tree pops, whose split was
+            # found in an earlier cycle and is still correct because a
+            # node's rows are permuted only by its own partition or an
+            # ancestor's, and neither has happened while it waited.
+            var part_items = List[NodeWorkItem]()
+            var part_trees = List[Int32]()
+            var part_splits = List[Split]()
+            var part_queue = List[Int]()
+            if bestfirst:
+                for i in range(n_nodes):
+                    _ = queues[bf_pending_q[i]].bestfirst_admit(
+                        work_items[i], splits[i], item_trees[i]
+                    )
+                for s in range(g):
+                    if not queues[s].bestfirst_can_pop():
+                        continue
+                    var rec = queues[s].bestfirst_pop()
+                    part_items.append(rec.item)
+                    part_trees.append(tree_ids[first + s])
+                    part_splits.append(rec.split)
+                    part_queue.append(s)
+                if len(part_items) == 0:
+                    # Every frontier is empty or every budget is spent.
+                    clock.tick(ctx, PHASE_HOST_QUEUE)
+                    break
+            else:
+                for i in range(n_nodes):
+                    part_items.append(work_items[i])
+                    part_trees.append(item_trees[i])
+                    part_splits.append(splits[i])
+            var n_part = len(part_items)
+
+            var plan = build_workload_info(part_items, TPB)
+            if bestfirst:
+                # DEVIATION 469's synchronization price: the search batch
+                # and the partition batch are DIFFERENT SETS here, so
+                # `ws.h_items` is re-staged every cycle and DEVIATION 455's
+                # drain runs every cycle rather than only when DEVIATION
+                # 205's rescue fires.
+                stage_batch(ctx, ws, part_items, part_trees, plan, Int(k))
+                ctx.synchronize()
+            elif len(retry) > 0:
                 # The sub-batches left THEIR work items on the device. The
                 # partition below reads `d_items` and `d_wl`, so put this
                 # batch's back.
@@ -2805,8 +3789,8 @@ def train_forest_classification_device_timed(
             # below is queue-ordered ahead of the partition kernels that
             # read `d_splits`.
             var splits_ptr = ws.h_splits.unsafe_ptr().unsafe_bitcast[Split]()
-            for i in range(n_nodes):
-                splits_ptr[unsafe_offset=i] = splits[i]
+            for i in range(n_part):
+                splits_ptr[unsafe_offset=i] = part_splits[i]
             ctx.enqueue_copy(
                 dst_buf=ws.d_splits, src_ptr=ws.h_splits.unsafe_ptr()
             )
@@ -2833,7 +3817,7 @@ def train_forest_classification_device_timed(
                 params.min_impurity_decrease,
                 params.min_samples_leaf,
                 PART_MB_SAB_NONE,
-                grid_dim=(n_nodes, 1, 1),
+                grid_dim=(n_part, 1, 1),
                 block_dim=(TPB, 1, 1),
             )
             ctx.enqueue_function[partition_scatter_kernel[TPB]](
@@ -2880,13 +3864,25 @@ def train_forest_classification_device_timed(
             cyc += 1
 
             # --- the push, PER QUEUE, in the order each was popped --------
-            for t in range(len(seg_queue)):
-                var items_s = List[NodeWorkItem]()
-                var splits_s = List[Split]()
-                for j in range(seg_count[t]):
-                    items_s.append(work_items[seg_start[t] + j])
-                    splits_s.append(splits[seg_start[t] + j])
-                queues[seg_queue[t]].push(items_s, splits_s)
+            # --- DEVIATION 466 step 5, or cuML's Push --------------------
+            if bestfirst:
+                bf_pending.clear()
+                bf_pending_q.clear()
+                for t in range(n_part):
+                    var kids = queues[part_queue[t]].bestfirst_expand(
+                        part_items[t], part_splits[t]
+                    )
+                    for j in range(len(kids)):
+                        bf_pending.append(kids[j])
+                        bf_pending_q.append(part_queue[t])
+            else:
+                for t in range(len(seg_queue)):
+                    var items_s = List[NodeWorkItem]()
+                    var splits_s = List[Split]()
+                    for j in range(seg_count[t]):
+                        items_s.append(work_items[seg_start[t] + j])
+                        splits_s.append(splits[seg_start[t] + j])
+                    queues[seg_queue[t]].push(items_s, splits_s)
             clock.tick(ctx, PHASE_HOST_PUSH)
 
         # --- the LEAF VALUES, ONE launch for the whole group --------------
@@ -3065,6 +4061,19 @@ def search_batch_regression(
     comptime TPB = DEVICE_TPB
     comptime MAX_ACC = DEVICE_MAX_ACC
     var n_nodes = len(work_items)
+    if n_nodes == 0:
+        # DEVIATION 466: a best-first cycle can have NOTHING to search --
+        # every node popped last cycle had two unexpandable children -- and
+        # still have nodes left to pop. An empty batch is a well-formed
+        # request for no work, not an error. The depth-wise loop breaks
+        # before it can ever ask, so this arm belongs to best-first alone.
+        return (
+            List[Split](),
+            List[Int32](),
+            List[Float32](),
+            List[Float32](),
+            List[Int32](),
+        )
     var plan = build_workload_info(work_items, TPB)
     var n_cells = n_nodes * Int(k)
 
@@ -3488,6 +4497,7 @@ def train_forest_regression_device(
     row_slot_cap: Int = FOREST_ROW_SLOT_CAP,
     bootstrap: Bool = False,
     n_sampled_rows: Int32 = 0,
+    bf_sabotage: Int32 = BESTFIRST_SAB_NONE,
 ) raises -> List[TreeMetaDataNode[DType.float32]]:
     """The shipping entry point: an INERT clock -- see `PhaseClock` and the
     classification twin above. `MOJOLEARN_STAGE_TIMES=1` (read once, here)
@@ -3496,7 +4506,7 @@ def train_forest_regression_device(
     var clock = PhaseClock(stage_times_enabled())
     var out = train_forest_regression_device_timed(
         ctx, dataset, scale, params, tree_ids, seed, sabotage, row_slot_cap,
-        clock, bootstrap, n_sampled_rows,
+        clock, bootstrap, n_sampled_rows, bf_sabotage,
     )
     print_stage_times(clock, "extratrees regression forest fit")
     return out^
@@ -3514,6 +4524,7 @@ def train_forest_regression_device_timed(
     mut clock: PhaseClock,
     bootstrap: Bool = False,
     n_sampled_rows: Int32 = 0,
+    bf_sabotage: Int32 = BESTFIRST_SAB_NONE,
 ) raises -> List[TreeMetaDataNode[DType.float32]]:
     """`train_forest_classification_device`'s regression twin: the SAME
     merged-frontier forest loop (DEVIATION 211 -- read that block; it is not
@@ -3567,6 +4578,25 @@ def train_forest_regression_device_timed(
         _ = sc^
 
     var k = n_sampled_cols_for(params, n_cols)
+    # DEVIATION 466: the growth mode, read ONCE per fit. Every branch on it
+    # below is `if bestfirst:` with the depth-wise arm textually unchanged,
+    # so a fit that did not ask for best-first executes the same statements
+    # in the same order as it did before this mode existed.
+    var bestfirst = params.max_leaf_nodes != -1
+    if bestfirst and params.max_batch_size < 2:
+        # DEVIATION 469's one hard edge, refused BY NAME rather than
+        # silently overrunning the workspace. A best-first cycle searches
+        # the TWO children of each expanded node, so the narrowest batch the
+        # mode can run in is two; the group clamp below can cap `g` at one
+        # tree but it cannot cap it below that. `max_batch_size` defaults to
+        # 4096 and is a scheduling parameter, so this is reachable only by a
+        # caller who set it to 1 on purpose.
+        raise Error(
+            "max_leaf_nodes needs max_batch_size >= 2: a best-first cycle"
+            " searches both children of the node it expands, and a batch of"
+            " one cannot hold them (DEVIATION 469). Got max_batch_size "
+            + String(params.max_batch_size)
+        )
     var out = List[TreeMetaDataNode[DType.float32]]()
     # `row_slot_cap` defaults to FOREST_ROW_SLOT_CAP; the batched check
     # passes a tiny cap to REACH the multi-group path at fixture sizes.
@@ -3596,6 +4626,19 @@ def train_forest_regression_device_timed(
         var g = len(tree_ids) - first
         if g > group_cap:
             g = group_cap
+        if bestfirst:
+            # DEVIATION 469: a best-first cycle searches at most TWO nodes
+            # per in-flight tree (the children of the one node it expands),
+            # so `2 * g` is the search batch's width and the workspace is
+            # sized to `max_batch_size`. Capping `g` here is the only place
+            # `max_batch_size` bounds anything in this mode, and it keeps
+            # its contract: it is a SCHEDULING parameter, and lowering it
+            # runs the same trees through narrower launches.
+            var bf_cap = Int(params.max_batch_size) // 2
+            if bf_cap < 1:
+                bf_cap = 1
+            if g > bf_cap:
+                g = bf_cap
         var total_rows = g * Int(slot_rows)
 
         var d_row_ids = ctx.enqueue_create_buffer[DType.int32](total_rows)
@@ -3630,35 +4673,69 @@ def train_forest_regression_device_timed(
                     params, slot_rows, 1, tree_ids[first + s], base
                 )
             )
+            queues[s].bf_sabotage = bf_sabotage
 
         clock.tick(ctx, PHASE_SETUP)
         # The trace's level-cycle counter -- see the classification twin.
         var cyc = 0
+        # DEVIATION 466: the best-first carry between cycles -- the nodes
+        # admitted-but-unsearched, and which queue each belongs to. Empty
+        # and never read in depth-wise mode.
+        var bf_pending = List[NodeWorkItem]()
+        var bf_pending_q = List[Int]()
+        if bestfirst:
+            for s in range(g):
+                var seeds = queues[s].bestfirst_seed()
+                for i in range(len(seeds)):
+                    bf_pending.append(seeds[i])
+                    bf_pending_q.append(s)
         while True:
             var work_items = List[NodeWorkItem]()
             var item_trees = List[Int32]()
             var seg_queue = List[Int]()
             var seg_start = List[Int]()
             var seg_count = List[Int]()
-            for s in range(g):
-                if len(work_items) >= Int(params.max_batch_size):
-                    break
-                if not queues[s].has_work():
-                    continue
-                var got = queues[s].pop_up_to(
-                    Int(params.max_batch_size) - len(work_items)
-                )
-                if len(got) == 0:
-                    continue
-                seg_queue.append(s)
-                seg_start.append(len(work_items))
-                seg_count.append(len(got))
-                for i in range(len(got)):
-                    work_items.append(got[i])
-                    item_trees.append(tree_ids[first + s])
+            # DEVIATION 466 step 1: the best-first SEARCH batch is the set
+            # of nodes admitted since the last cycle -- the children the
+            # last expansions created, or the roots on cycle 0 -- and not a
+            # FIFO pop. `seg_*` stays empty; the best-first expansion is per
+            # popped node and does not use it.
+            if bestfirst:
+                for i in range(len(bf_pending)):
+                    work_items.append(bf_pending[i])
+                    item_trees.append(tree_ids[first + bf_pending_q[i]])
+            else:
+                for s in range(g):
+                    if len(work_items) >= Int(params.max_batch_size):
+                        break
+                    if not queues[s].has_work():
+                        continue
+                    var got = queues[s].pop_up_to(
+                        Int(params.max_batch_size) - len(work_items)
+                    )
+                    if len(got) == 0:
+                        continue
+                    seg_queue.append(s)
+                    seg_start.append(len(work_items))
+                    seg_count.append(len(got))
+                    for i in range(len(got)):
+                        work_items.append(got[i])
+                        item_trees.append(tree_ids[first + s])
             if len(work_items) == 0:
-                clock.tick(ctx, PHASE_HOST_QUEUE)
-                break
+                # DEVIATION 466: an empty SEARCH batch does NOT end a
+                # best-first fit. Both children of every node popped last
+                # cycle can be unexpandable while frontiers still hold
+                # splittable nodes, so the fit ends only when no tree can
+                # pop -- `while not frontier.empty()` (`_tree.pyx:445`)
+                # plus the budget test at `:454`.
+                var bf_more = False
+                if bestfirst:
+                    for s in range(g):
+                        if queues[s].bestfirst_can_pop():
+                            bf_more = True
+                if not bf_more:
+                    clock.tick(ctx, PHASE_HOST_QUEUE)
+                    break
             if sabotage == FOREST_SAB_SCALAR_TREE:
                 for i in range(len(item_trees)):
                     item_trees[i] = item_trees[0]
@@ -3687,9 +4764,16 @@ def train_forest_regression_device_timed(
 
             var tag_pre = String("")
             if trace.enabled:
-                tag_pre = (
-                    String("g") + String(gi) + ".c" + String(cyc) + "."
-                )
+                # The tag is set whether or not there is anything to record
+                # under it: DEVIATION 466's empty search batch still runs a
+                # partition, and a cycle that fell back to the bare
+                # "partition.rowids" tag would collide with the next one and
+                # break the differ's uniqueness invariant.
+                tag_pre = String("g") + String(gi) + ".c" + String(cyc) + "."
+            # `n_nodes > 0`: an empty search batch has no cells to record,
+            # and a zero-length record would break the differ's alignment
+            # invariant rather than inform it.
+            if trace.enabled and n_nodes > 0:
                 # DEVIATION 454: the hazard stages in pipeline order --
                 # see the classification twin for the bisection argument.
                 var n_cells_t = n_nodes * Int(k)
@@ -3781,8 +4865,10 @@ def train_forest_regression_device_timed(
                     for t in range(len(chosen_slot)):
                         splits[chosen_slot[t]] = rescued[t]
 
-            if trace.enabled:
-                # The SELECTED splits -- post-rescue; see the twin.
+            if trace.enabled and n_nodes > 0:
+                # The SELECTED splits -- post-rescue; see the twin, and
+                # DEVIATION 466's note there about what this is under
+                # best-first growth.
                 var t_q = List[Float32]()
                 var t_c = List[Int32]()
                 var t_l = List[Int32]()
@@ -3797,8 +4883,51 @@ def train_forest_regression_device_timed(
                 trace.record_list_i32(tag_pre + "split.nleft", t_l)
                 trace.record_list_f32(tag_pre + "split.gain", t_m)
 
-            var plan = build_workload_info(work_items, TPB)
-            if len(retry) > 0:
+            # --- DEVIATION 466 steps 2 and 3: ADMIT, then POP ------------
+            # `part_*` is the PARTITION batch. In depth-wise mode it is the
+            # search batch, item for item, which is what it always was; in
+            # best-first it is the ONE node each tree pops, whose split was
+            # found in an earlier cycle and is still correct because a
+            # node's rows are permuted only by its own partition or an
+            # ancestor's, and neither has happened while it waited.
+            var part_items = List[NodeWorkItem]()
+            var part_trees = List[Int32]()
+            var part_splits = List[Split]()
+            var part_queue = List[Int]()
+            if bestfirst:
+                for i in range(n_nodes):
+                    _ = queues[bf_pending_q[i]].bestfirst_admit(
+                        work_items[i], splits[i], item_trees[i]
+                    )
+                for s in range(g):
+                    if not queues[s].bestfirst_can_pop():
+                        continue
+                    var rec = queues[s].bestfirst_pop()
+                    part_items.append(rec.item)
+                    part_trees.append(tree_ids[first + s])
+                    part_splits.append(rec.split)
+                    part_queue.append(s)
+                if len(part_items) == 0:
+                    # Every frontier is empty or every budget is spent.
+                    clock.tick(ctx, PHASE_HOST_QUEUE)
+                    break
+            else:
+                for i in range(n_nodes):
+                    part_items.append(work_items[i])
+                    part_trees.append(item_trees[i])
+                    part_splits.append(splits[i])
+            var n_part = len(part_items)
+
+            var plan = build_workload_info(part_items, TPB)
+            if bestfirst:
+                # DEVIATION 469's synchronization price: the search batch
+                # and the partition batch are DIFFERENT SETS here, so
+                # `ws.h_items` is re-staged every cycle and DEVIATION 455's
+                # drain runs every cycle rather than only when DEVIATION
+                # 205's rescue fires.
+                stage_batch(ctx, ws, part_items, part_trees, plan, Int(k))
+                ctx.synchronize()
+            elif len(retry) > 0:
                 stage_batch(ctx, ws, work_items, item_trees, plan, Int(k))
                 # DEVIATION 455 -- see the classification twin: the
                 # re-stage's copies must be drained before the next cycle
@@ -3808,8 +4937,8 @@ def train_forest_regression_device_timed(
             # --- the PARTITION (deviation 203, the regression half) -------
             # DEVIATION 450: no pre-partition synchronize -- see the twin.
             var splits_ptr = ws.h_splits.unsafe_ptr().unsafe_bitcast[Split]()
-            for i in range(n_nodes):
-                splits_ptr[unsafe_offset=i] = splits[i]
+            for i in range(n_part):
+                splits_ptr[unsafe_offset=i] = part_splits[i]
             ctx.enqueue_copy(
                 dst_buf=ws.d_splits, src_ptr=ws.h_splits.unsafe_ptr()
             )
@@ -3836,7 +4965,7 @@ def train_forest_regression_device_timed(
                 params.min_impurity_decrease,
                 params.min_samples_leaf,
                 PART_MB_SAB_NONE,
-                grid_dim=(n_nodes, 1, 1),
+                grid_dim=(n_part, 1, 1),
                 block_dim=(TPB, 1, 1),
             )
             ctx.enqueue_function[partition_scatter_kernel[TPB]](
@@ -3876,13 +5005,25 @@ def train_forest_regression_device_timed(
                 )
             cyc += 1
 
-            for t in range(len(seg_queue)):
-                var items_s = List[NodeWorkItem]()
-                var splits_s = List[Split]()
-                for j in range(seg_count[t]):
-                    items_s.append(work_items[seg_start[t] + j])
-                    splits_s.append(splits[seg_start[t] + j])
-                queues[seg_queue[t]].push(items_s, splits_s)
+            # --- DEVIATION 466 step 5, or cuML's Push --------------------
+            if bestfirst:
+                bf_pending.clear()
+                bf_pending_q.clear()
+                for t in range(n_part):
+                    var kids = queues[part_queue[t]].bestfirst_expand(
+                        part_items[t], part_splits[t]
+                    )
+                    for j in range(len(kids)):
+                        bf_pending.append(kids[j])
+                        bf_pending_q.append(part_queue[t])
+            else:
+                for t in range(len(seg_queue)):
+                    var items_s = List[NodeWorkItem]()
+                    var splits_s = List[Split]()
+                    for j in range(seg_count[t]):
+                        items_s.append(work_items[seg_start[t] + j])
+                        splits_s.append(splits[seg_start[t] + j])
+                    queues[seg_queue[t]].push(items_s, splits_s)
             clock.tick(ctx, PHASE_HOST_PUSH)
 
         # --- the LEAF VALUES, ONE launch for the whole group --------------

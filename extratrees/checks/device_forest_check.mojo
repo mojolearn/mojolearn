@@ -840,7 +840,7 @@ def main() raises:
     cells += 5
 
     # Every refusal, on the DEVICE arm, one named case each. These are the
-    # same eleven `estimator_check` enumerates on the host arm; the point here
+    # same ten `estimator_check` enumerates on the host arm; the point here
     # is that the device arm applies them too, and applies them BEFORE it
     # reaches a device.
     var sx = column_major(hashed)
@@ -863,8 +863,14 @@ def main() raises:
     c7.warm_start = True
     var c8 = cfg.copy()
     c8.ccp_alpha = 0.01
-    var c9 = cfg.copy()
-    c9.max_leaf_nodes = 8
+    # c9 (max_leaf_nodes) WAS a refusal cell here until 2026-09-01, exactly
+    # as c4 and c11 were. DEVIATION 466 ported it -- best-first growth is a
+    # second growth mode in `builder.mojo` -- so it is now a REACH case in
+    # section 11 below, and it is REMOVED FROM THIS LOOP rather than left in
+    # it. THIS FILE WENT RED ON THAT REMOVAL BEING MISSED: `estimator_check`
+    # was updated for the host arm and this one was not, so the loop asserted
+    # 11 refusals and got 10. That is the whole argument for running the lane
+    # and not the file.
     var c10 = cfg.copy()
     c10.n_estimators = 0
     var c11 = cfg.copy()
@@ -872,7 +878,7 @@ def main() raises:
     var c12 = cfg.copy()
     c12.max_features_spec = Int(hashed.n_cols + 4)
 
-    for bad in [c1, c2, c3, c5, c6, c7, c8, c9, c10, c11, c12]:
+    for bad in [c1, c2, c3, c5, c6, c7, c8, c10, c11, c12]:
         tried += 1
         if device_refused(
             ctx,
@@ -1214,6 +1220,63 @@ def main() raises:
             "nodes differ -- reported, not asserted (DEVIATION 459)",
         )
     cells += 7
+
+    # ---- REACH: sklearn's `max_leaf_nodes` on the DEVICE arm (DEV 466) ----
+    # This replaces the refusal cell removed from the loop above, and it is
+    # the cell that makes the removal safe: a parameter that stops being
+    # refused and is not then shown to REACH the device path is a parameter
+    # that became silently inert, which is the one failure `estimator.mojo`
+    # exists to prevent.
+    #
+    # THREE ARMS, because each could pass while the others fail. (1) The
+    # device arm must ACCEPT it, where it refused before. (2) It must build a
+    # DIFFERENT device forest than the default, which is the statement that
+    # the device driver's level cycle actually took the best-first branch --
+    # `bestfirst_check` proves the branch is correct, this proves the
+    # ESTIMATOR-DEVICE entry point selects it. (3) The device forest must
+    # equal the HOST best-first forest bit for bit, which is this file's
+    # standing claim for every other parameter and there is no reason for
+    # this one to be exempt.
+    #
+    # The leaf count is asserted on the DEVICE forest rather than taken on
+    # faith from the host: 9 leaves per tree, on a 2048-row depth-6 fixture
+    # where the frontier cannot run dry, so "exactly k" cannot pass because
+    # the budget was unreachable.
+    print("[reach] max_leaf_nodes selects best-first on the device arm")
+    var cbf = cg.copy()
+    cbf.max_leaf_nodes = 9
+    var dbf = fit_extra_trees_classifier_device(
+        ctx, x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, cbf
+    )
+    var hbf = fit_extra_trees_classifier(
+        x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, cbf
+    )
+    assert_true(
+        not forests_equal(dg4.forest, dbf.forest),
+        "REACH: max_leaf_nodes=9 must build a different device forest than"
+        " the depth-wise default -- if it did not, the parameter stopped"
+        " being refused and became inert on this path",
+    )
+    assert_true(
+        forests_equal(dbf.forest, hbf.forest),
+        "the device best-first forest must equal the host best-first forest"
+        " bit for bit, like every other parameter in this file",
+    )
+    var bf_trees = 0
+    for t in range(len(dbf.forest.trees)):
+        var leaves = 0
+        for i in range(dbf.forest.trees[t].num_nodes()):
+            if dbf.forest.trees[t].sparsetree[i].left_child_id == -1:
+                leaves += 1
+        assert_equal(
+            leaves,
+            9,
+            "every DEVICE tree must stop at exactly max_leaf_nodes leaves",
+        )
+        bf_trees += 1
+    print("     ", bf_trees, "device trees, 9 leaves each, == host arm")
+    cells += 3
+
     _ = x4.unsafe_ptr()
     _ = y4.unsafe_ptr()
 

@@ -207,15 +207,46 @@ def main() raises:
     c8.ccp_alpha = 0.01
     assert_true(refused(c8), "ccp_alpha")
     n_refused += 1
+    # `max_leaf_nodes` WAS a refusal cell here until 2026-09-01. It is now
+    # HONOURED (DEVIATION 466: best-first growth is a second growth mode in
+    # `builder.mojo`), so the cell is the reach test that replaces it --
+    # the value must ride into `DecisionTreeParams`, which is what selects
+    # the mode, and the default must stay sklearn's `None`.
     var c9 = base.copy()
     c9.max_leaf_nodes = 8
     assert_true(
-        refused(c9),
-        "max_leaf_nodes -- sklearn's is a BEST-FIRST growth limit"
-        " (_tree.pyx:454-455) and cuML's max_leaves is a breadth-first cap;"
-        " accepting the name would accept a different algorithm",
+        not refused(c9), "max_leaf_nodes=8 is accepted, not refused"
     )
-    n_refused += 1
+    var plan_mln = resolve(c9, 1000, 8)
+    assert_equal(
+        Int(plan_mln.params.max_leaf_nodes), 8,
+        "REACH: max_leaf_nodes must ride into DecisionTreeParams; that"
+        " field is the growth-mode selector and a value that stopped at"
+        " the config would be a knob that did nothing",
+    )
+    assert_equal(
+        Int(resolve(base, 1000, 8).params.max_leaf_nodes), -1,
+        "the default stays sklearn's None, which is depth-wise growth",
+    )
+    # SABOTAGE ARM for that reach, and it is the bound rather than the
+    # plumbing: sklearn constrains max_leaf_nodes to >= 2
+    # (`_classes.py`'s Interval(Integral, 2, None, closed="left")), so 1
+    # must be refused. Like `max_leaves=0` below, the guard is
+    # `validity_check` inside `resolve`, not `refuse_unported`, so this
+    # arm cannot use `refused()`.
+    var c9a = base.copy()
+    c9a.max_leaf_nodes = 1
+    var one_leaf_refused = False
+    try:
+        _ = resolve(c9a, 1000, 8)
+    except:
+        one_leaf_refused = True
+    assert_true(
+        one_leaf_refused,
+        "max_leaf_nodes=1 must be refused: a one-leaf tree is a tree that"
+        " was never split and the best-first builder cannot express it",
+    )
+    cells += 4
     # cuML's OWN budget, under cuML's own name, is HONOURED and REACHES the
     # params (2026-09-01). `resolve` pinned `params.max_leaves = -1` until
     # then, so `builder.mojo:292-296` and `:341-345` were transcribed,
@@ -258,17 +289,28 @@ def main() raises:
         "max_leaves=0 must be refused by cuML's validity_check, not accepted"
         " as a silent unlimited",
     )
-    # ... and the two fields must stay INDEPENDENT: setting cuML's budget
-    # must not make sklearn's name suddenly acceptable.
+    # ... and the two fields must stay INDEPENDENT. They are different
+    # guarantees -- one selects best-first growth, the other caps a
+    # breadth-first frontier -- so setting either must not move the other,
+    # and both may be set at once with the tighter one binding.
     var c9d = base.copy()
     c9d.max_leaves = 8
-    c9d.max_leaf_nodes = 8
-    assert_true(
-        refused(c9d),
-        "max_leaf_nodes is still refused when max_leaves is set; the two are"
-        " different guarantees and one does not stand in for the other",
+    c9d.max_leaf_nodes = 6
+    var plan_both = resolve(c9d, 1000, 8)
+    assert_equal(
+        Int(plan_both.params.max_leaves), 8, "max_leaves rides untouched"
     )
-    cells += 5
+    assert_equal(
+        Int(plan_both.params.max_leaf_nodes), 6,
+        "max_leaf_nodes rides untouched; neither field is derived from the"
+        " other and neither is an alias for the other",
+    )
+    assert_equal(
+        Int(plan_ml.params.max_leaf_nodes), -1,
+        "setting cuML's max_leaves alone must NOT switch on best-first"
+        " growth: that would be the silent aliasing this lane refused for",
+    )
+    cells += 6
     var c10 = base.copy()
     c10.n_estimators = 0
     assert_true(refused(c10), "n_estimators=0")

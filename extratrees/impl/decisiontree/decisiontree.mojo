@@ -119,7 +119,32 @@ struct DecisionTreeParams(ImplicitlyCopyable, Movable):
     """Maximum nodes processed in one frontier batch. Their default: 4096.
     This is the width of the breadth-first frontier and it is a SCHEDULING
     parameter: it must not change the tree. That property is checkable and is
-    checked."""
+    checked.
+
+    UNDER BEST-FIRST GROWTH IT IS STILL A SCHEDULING PARAMETER AND STILL MUST
+    NOT CHANGE THE TREE, but it stops being the thing that sets the launch
+    width: DEVIATION 469 caps the in-flight tree count at `max_batch_size / 2`
+    because a best-first cycle searches at most two nodes per tree."""
+
+    var max_leaf_nodes: Int32
+    """OURS, and it is NOT in cuML's struct. sklearn's `max_leaf_nodes`,
+    -1 for sklearn's `None`. DEVIATION 466.
+
+    THIS IS A GROWTH MODE SELECTOR, NOT A CAP, and that is the whole reason
+    it is a separate field from `max_leaves` above. Anything other than -1
+    selects the BEST-FIRST builder (`_tree.pyx:374-508`): the frontier
+    becomes a priority queue on sklearn's impurity `improvement`, the budget
+    is spent one expansion at a time, and a node is searched when it is ADDED
+    to the frontier rather than when it is popped. `max_leaves` reorders
+    nothing and caps a breadth-first frontier; the two are independent and
+    both may be set, in which case the tighter one binds. See DEVIATION
+    BLOCKS 466 to 469 in `builder.mojo`.
+
+    `validity_check` below accepts -1 or `>= 2`. sklearn's own bound is
+    `max_leaf_nodes >= 2` (`_classes.py`'s `Interval(Integral, 2, None,
+    closed="left")`): one leaf is a tree that was never split, which its
+    builder cannot express because `max_split_nodes = max_leaf_nodes - 1`
+    would be zero and the root would be popped straight to a leaf."""
 
     def __init__(out self):
         """`set_tree_params`'s default arguments (`decisiontree.hpp:86-95`),
@@ -133,6 +158,9 @@ struct DecisionTreeParams(ImplicitlyCopyable, Movable):
         self.split_criterion = CRITERION_END
         self.min_impurity_decrease = 0.0
         self.max_batch_size = 4096
+        # sklearn's `None`: depth-wise growth, which is cuML's and is this
+        # lane's default. DEVIATION 466's mode is OFF unless asked for.
+        self.max_leaf_nodes = -1
 
 
 def validity_check(params: DecisionTreeParams) raises:
@@ -198,4 +226,17 @@ def validity_check(params: DecisionTreeParams) raises:
             "Invalid max_batch_size "
             + String(params.max_batch_size)
             + ". Should be >= 1."
+        )
+
+    # --- ours: sklearn's bound on sklearn's parameter (DEVIATION 466) -----
+    # `_classes.py` constrains `max_leaf_nodes` to `Interval(Integral, 2,
+    # None, closed="left")` or None. -1 is None here. The bound is sklearn's
+    # and is restated rather than inherited because cuML has no such field.
+    if not (params.max_leaf_nodes == -1 or params.max_leaf_nodes >= 2):
+        raise Error(
+            "Invalid max_leaf_nodes "
+            + String(params.max_leaf_nodes)
+            + ". Should be -1 (sklearn's None) or >= 2, which is sklearn's"
+            " own bound: a one-leaf tree is a tree that was never split and"
+            " the best-first builder cannot express it."
         )

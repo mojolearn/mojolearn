@@ -83,6 +83,33 @@ def main() raises:
         assert_true(not accepts(p), "max_leaves must be -1 or > 0")
         refused += 1
 
+    # --- max_leaf_nodes: -1 or >= 2, and NOTE WHOSE BOUND THAT IS ---------
+    # sklearn's, not cuML's: `_classes.py` constrains it to
+    # `Interval(Integral, 2, None, closed="left")` or None, and cuML has no
+    # such parameter at all. It is a GROWTH-MODE SELECTOR (DEVIATION 466),
+    # which is why 1 is refused where `max_leaves = 1` two blocks above is
+    # accepted: a one-leaf tree is a tree that was never split, and the
+    # best-first builder cannot express it, while cuML's cap can simply
+    # never be reached. The two adjacent arms are the pair that proves the
+    # bounds did not get copied from one field onto the other.
+    var mln_none = DecisionTreeParams()
+    mln_none.max_leaf_nodes = -1
+    assert_true(
+        accepts(mln_none), "max_leaf_nodes = -1 is sklearn's None"
+    )
+    accepted += 1
+    var mln_two = DecisionTreeParams()
+    mln_two.max_leaf_nodes = 2
+    assert_true(accepts(mln_two), "max_leaf_nodes = 2 is the lower bound")
+    accepted += 1
+    for bad_mln in [Int32(0), Int32(1), Int32(-2), Int32(-100)]:
+        var pm = DecisionTreeParams()
+        pm.max_leaf_nodes = bad_mln
+        assert_true(
+            not accepts(pm), "max_leaf_nodes must be -1 or >= 2"
+        )
+        refused += 1
+
     # --- max_features: the open-closed interval (0, 1] --------------------
     # Both ends, and both sides of both ends. An interval check written with
     # the wrong strictness passes every value except exactly these.

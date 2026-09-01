@@ -97,11 +97,30 @@ codes; all six knobs are distinct models).
 
 ## What REFUSED= means here
 
-Four cells refuse BY NAME with the same message on all three vendors and
-count as passes: `et_clf_bootstrap`, `et_clf_entropy`, `et_clf_maxleaf`
-(options the ET port does not carry, each with a cited reason) and
-`gbdt_quantile_newton` (CatBoost's own refusal). "This configuration does
-not claim identity" is a certified answer.
+Four cells refused BY NAME with the same message on all three vendors and
+counted as passes AT THE ROUNDS RECORDED ABOVE: `et_clf_bootstrap`,
+`et_clf_entropy`, `et_clf_maxleaf` (options the ET port did not carry, each
+with a cited reason) and `gbdt_quantile_newton` (CatBoost's own refusal).
+"This configuration does not claim identity" is a certified answer.
+
+THREE OF THOSE FOUR ARE NO LONGER REFUSALS, and the tense above is past for
+that reason. `et_clf_bootstrap` and `et_clf_entropy` stopped refusing on
+2026-08-23 (DEVIATIONS 460 and 459) and `et_clf_maxleaf` stopped refusing on
+2026-09-01 (DEVIATION 466, best-first growth). The verdict tables in
+`bench/results/e1/` are RECORDS OF THE ROUNDS THEY NAME and stay as they are;
+what is corrected here is the standing claim, which had been stale for two of
+the four cells since the day after it was written. **The next matrix run will
+score those three as running cells, and a `REFUSED=` for any of them would
+now be a REGRESSION rather than a pass.** `gbdt_quantile_newton` is the only
+one of the four still expected to refuse.
+
+`rf_clf_maxleaf` is NOT in this list and never was, because RandomForest
+accepted the name. It is scored `IDENTICAL (388 stages)` in every round.
+That cell is under review as an open defect: the RF surface maps sklearn's
+`max_leaf_nodes` onto cuML's `max_leaves`, which is a different algorithm, so
+what the cell certifies is that a wrong answer is reproducible. Its ET twin
+one row up is the comparison that makes this visible -- ET refused the name
+rather than aliasing it, and now implements it.
 
 ## Method
 

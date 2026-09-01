@@ -240,9 +240,17 @@ struct ExtraTreesConfig(ImplicitlyCopyable, Movable):
     var max_features_spec: Int
     var max_features_fraction: Float64
     var max_leaf_nodes: Int32
-    """-1 means sklearn's `None`. REFUSED BY NAME, see `refuse_unported`:
-    sklearn's meaning is best-first growth and this builder grows
-    breadth-first. Not the same field as `max_leaves` below."""
+    """sklearn's `max_leaf_nodes`; -1 means sklearn's `None`.
+
+    HONOURED SINCE 2026-09-01 (DEVIATION 466), and it was refused by name
+    before that. It is NOT the same field as `max_leaves` below and neither
+    is an alias for the other: this one SELECTS A GROWTH MODE. Anything but
+    -1 runs the best-first builder -- a priority queue on sklearn's impurity
+    improvement, the budget spent one expansion at a time, the search moved
+    from pop time to push time (`_tree.pyx:374-508`). `max_leaves` is cuML's
+    weaker cap on a breadth-first frontier and reorders nothing. Both may be
+    set; the tighter binds. sklearn's own bound, `>= 2`, is enforced by
+    `validity_check`."""
     var max_leaves: Int32
     """cuML's `DecisionTreeParams::max_leaves` (`decisiontree.hpp:37` AT
     THIS LANE'S 25.08 PIN -- `:83` is a doc comment there and `:29` is the
@@ -368,35 +376,16 @@ def refuse_unported(config: ExtraTreesConfig) raises:
             " post-processing pass over a fitted tree that neither cuML nor"
             " this port implements. Only the default 0.0 is accepted."
         )
-    if config.max_leaf_nodes != -1:
-        raise Error(
-            "max_leaf_nodes is not ported yet. It is a REAL DEBT, not a"
-            " permanent refusal, and it is refused by name rather than"
-            " silently mapped onto the nearest thing here, because the"
-            " nearest thing grows a different tree. sklearn's"
-            " max_leaf_nodes selects BestFirstTreeBuilder"
-            " (sklearn/tree/_tree.pyx:374-508): the frontier is a HEAP"
-            " popped by highest impurity improvement (:454-455 against"
-            " _compare_records at :359-363), and the budget itself is"
-            " spent one pop at a time (:424, :503), so it decides WHICH"
-            " nodes get expanded and in what ORDER. This builder is cuML's"
-            " batched level algorithm --"
-            " a FIFO frontier drained a level at a time, one device launch"
-            " per batch, and DEVIATION 211 makes one batch span several"
-            " trees. Best-first admits at most one expansion per tree per"
-            " launch and has to know a node's gain BEFORE choosing to"
-            " expand it, which means searching children at push time"
-            " instead of at pop time: a second growth mode, not a"
-            " parameter. See NOT_IMPLEMENTED.tsv for the design and its"
-            " cost. WHAT IS AVAILABLE TODAY is cuML's own budget,"
-            " max_leaves, which is a different guarantee and carries a"
-            " different name here for exactly that reason: it caps the"
-            " leaf COUNT on the breadth-first frontier without reordering"
-            " anything (builder.cuh:89 in IsExpandable, and the break at"
-            " builder.cuh:106 inside Push, over the counter set at :59 and"
-            " raised at :114). Set ExtraTreesConfig.max_leaves"
-            " to use it."
-        )
+    # `max_leaf_nodes` WAS REFUSED HERE UNTIL 2026-09-01 and is now
+    # honoured (DEVIATION 466). The refusal's own reasoning is what retired
+    # it: it argued only that sklearn's name cannot be mapped onto cuML's
+    # `max_leaves`, which is still true and is why the two are separate
+    # fields, and never that the capability was impossible. The best-first
+    # builder is `builder.mojo`'s second growth mode -- see DEVIATION
+    # BLOCKS 466 to 469 there and the closed row in NOT_IMPLEMENTED.tsv.
+    # The bound (-1, or >= 2, which is sklearn's) is `validity_check`'s,
+    # inside `resolve`, for the same reason `max_leaves`'s bound is cuML's:
+    # a restated constant is a constant that drifts.
     if config.n_estimators < 1:
         raise Error(
             "n_estimators must be >= 1; got " + String(config.n_estimators)
@@ -442,6 +431,10 @@ def resolve(
     # `validity_check` below is cuML's own test (`decisiontree.cu`, and
     # `decisiontree.mojo:138-139` here): -1 or strictly positive.
     params.max_leaves = config.max_leaves
+    # sklearn's OWN budget, which is a growth-mode selector rather than a
+    # cap (DEVIATION 466). It was refused by name until 2026-09-01 and is
+    # now carried; `validity_check` below applies sklearn's `>= 2` bound.
+    params.max_leaf_nodes = config.max_leaf_nodes
 
     var unlimited = config.max_depth < 0
     if unlimited:

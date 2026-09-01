@@ -41,6 +41,12 @@ formulation exists to delete), the bootstrap MASK behind `oob_score`,
 `sample_weight`, NaN/`missing_go_to_left`, three unported regression
 criteria, and cuML's dead `adaptive_sample_kernel`. (The bootstrap row
 sampler and Entropy left this list on 2026-08-23, DEVIATIONS 460 / 459.)
-sklearn's `max_leaf_nodes` joined it on 2026-09-01 as `not yet` -- a real
-debt with a named design, not a permanent refusal, and NOT the same thing as
-cuML's `max_leaves` in the row above.
+sklearn's `max_leaf_nodes` joined that file on 2026-09-01 as a `not yet` and
+LEFT IT THE SAME DAY as `IMPLEMENTED`. It is best-first growth, a second
+growth mode (DEVIATION 466-469), fully wired from the Python keyword through
+`bindings/_mojolearn_trees.mojo` slot 19 -- which already carried it -- to
+`DecisionTreeParams.max_leaf_nodes`, and gated by `bestfirst_check`. It is
+NOT the same thing as cuML's `max_leaves` in the row above and the two are
+never aliased; note the asymmetry that row leaves standing, which is that
+sklearn's budget reaches Python and cuML's does not, because the params list
+carries a slot for one and not the other.
