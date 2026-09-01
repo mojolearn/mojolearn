@@ -172,6 +172,15 @@ _MODULES = (
     # NAME and a wrong-tier binary answering under the right label
     # (DEVIATION 869, the header above).
     "_mojolearn_gp",
+    # Added 2026-09-01 with the Mamba block surface (Mamba1Block /
+    # Mamba2Block, `_mamba_impl.py`). The binding
+    # (bindings/_mojolearn_mamba.mojo + build_mamba.sh) landed in the
+    # same commit and has NOT yet been built anywhere; listing the name
+    # here and in `_build_script`, both, is what makes the unbuilt
+    # extension raise BY NAME with the build command instead of a
+    # wrong-tier binary answering under the right label (DEVIATION 869,
+    # the header above).
+    "_mojolearn_mamba",
 )
 _SELECTED = None
 
@@ -987,6 +996,7 @@ def _build_script(name):
         "_mojolearn_arima": "build_arima.sh",
         "_mojolearn_training": "build_training.sh",
         "_mojolearn_gp": "build_gp.sh",
+        "_mojolearn_mamba": "build_mamba.sh",
     }.get(name, "build" + name[len("_mojolearn"):] + ".sh")
 
 
