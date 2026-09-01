@@ -117,6 +117,27 @@
   invariance and every refusal on the path, and which asserts its bitwise
   arms only under `identical`.
 
+### Changed
+
+- **`RandomForestClassifier` / `RandomForestRegressor`: an unspecified
+  `max_depth` now means UNLIMITED depth, not 16.** BEHAVIOR CHANGE on the
+  Python surface. Through 0.3.2, `max_depth=None` (the default) substituted
+  16, cuML's pre-26.08 default; it now maps to `np.iinfo(np.int32).max`,
+  exactly as the pinned cuML marshals `None`
+  (`randomforest_common.pyx:480-481`). This mirrors cuML's OWN change --
+  v26.08.00, the release this port pins, changed its default from 16 to
+  `None` (`.. versionchanged:: 26.08` on both estimators) -- and closes
+  DEVIATION 409, which had recorded the divergence between the two surfaces
+  of one learner (the Mojo entry points already passed INT32_MAX). An
+  unspecified depth now grows to purity: deeper, slower, differently fitted
+  trees from the same bare call. **Migration: pass `max_depth=16`
+  explicitly to keep the old behavior.** No recorded benchmark number
+  moves; every bench and probe arm passes `max_depth` explicitly.
+  UNVERIFIED, RUN OWED: rebuild `_mojolearn_rf` on all tiers, then
+  `python -m pytest python/mojolearn/tests/ -k rf` and
+  `packaging/macos/smoke.py` on all tiers; the E2 RF identity cells re-run
+  at the next rented leg.
+
 ## 0.3.2 (2026-08-31)
 
 A new estimator, and 1,138 lines of never-executed code taken back out of the

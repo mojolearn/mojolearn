@@ -64,18 +64,21 @@ resolved when DEVIATION 117 was ported):**
    -1: `None` becomes `np.iinfo(np.int32).max`
    (`randomforest_common.pyx:480-481`). This port takes INT32_MAX.
 
-   THE PYTHON WRAPPER DOES NOT, and that is DEVIATION 409 rather than a
-   second reading of upstream. `python/mojolearn/randomforest.py`
-   substitutes 16 for an unspecified `max_depth`, which WAS cuML's
-   default until v26.08.00 -- THIS pin -- retired it for `None`
-   (`randomforestclassifier.py:68`, and the `.. versionchanged:: 26.08`
-   note at `:73-74` says so in as many words). The entry points below,
-   `default_rf_params_classifier` and `default_rf_params_regressor`,
-   follow the pin. That surface does not, and until it is flipped the two
-   disagree about what an unspecified depth means. The table above is
-   right; it is the wrapper that carries the deviation, and it now says
-   so in its own DEVIATION 409 block instead of claiming the number is
-   cuML's.
+   THE PYTHON WRAPPER NOW DOES TOO: DEVIATION 409, CLOSED -- ALIGNED on
+   Andrew's delegated decision 2026-09-01, orchestrator. Until that
+   alignment `python/mojolearn/randomforest.py` substituted 16 for an
+   unspecified `max_depth` -- cuML's own default until v26.08.00, THIS
+   pin, retired it for `None` (`randomforestclassifier.py:68`, and the
+   `.. versionchanged:: 26.08` note at `:73-74` says so in as many
+   words) -- so for part of one day the two surfaces knowingly disagreed
+   about what an unspecified depth means, and before that they disagreed
+   without saying so. The wrapper now maps `None` to
+   `np.iinfo(np.int32).max`, cuML's own marshalling
+   (`randomforest_common.pyx:480-481`), matching the table above and the
+   entry points below, `default_rf_params_classifier` and
+   `default_rf_params_regressor`. Full history, the known-inert fourth
+   spelling of 16 at `bindings/_mojolearn_rf.mojo:472`, and the owed
+   verification runs live in the wrapper's DEVIATION 409 block.
 2. `max_features`. 1.0f in the header; `'sqrt'` for the CLASSIFIER and
    `1.0` for the REGRESSOR in Python. The two estimators disagree with
    each other, so there is no single Python default -- the classifier
