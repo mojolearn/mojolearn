@@ -121,7 +121,6 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels impo
     InstanceRange,
     NodeWorkItem,
     SAMPLE_ALGO_L,
-    SAMPLER_UNVISITED,
     WorkloadInfo,
     device_has_float64,
     plan_feature_sampling,
@@ -145,16 +144,16 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
     PART_SAB_NONE,
     RANGE_SAB_NONE,
     SCORE_STATUS_SCORED,
+    PHASE_SETUP_TPB,
     build_workload_info,
     float_gain_key,
     leaf_kernel,
     node_split_kernel,
-    node_feature_range_init_kernel,
     node_feature_range_kernel,
     node_feature_score_finalize_kernel,
-    node_feature_score_init_kernel,
     node_feature_score_kernel,
     partition_samples,
+    phase_setup_kernel,
 )
 from std.time import perf_counter_ns
 from std.os import getenv
@@ -171,7 +170,6 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.partition_multiblock
     partition_writeback_kernel,
 )
 from extratrees.impl.decisiontree.batched_levelalgo.split import (
-    split_reduce_init_kernel,
     split_reduce_kernel,
     split_tie_count_kernel,
     split_tie_salt_for,
@@ -2256,9 +2254,11 @@ struct LevelWorkspace(Movable):
     IT WAS NEVER A WRONG ANSWER, and that is why it survived: every
     buffer is explicitly initialised before use -- by
     `node_feature_range_init_kernel`, `node_feature_score_init_kernel`,
-    `split_reduce_init_kernel`, or an `enqueue_memset` -- so a reused
-    buffer and a fresh one are indistinguishable to every kernel that
-    reads one. The identity checks could not see it and did not.
+    `split_reduce_init_kernel`, or an `enqueue_memset` (since DEVIATION
+    470, the shipped loop runs all six seeders as ONE fused
+    `phase_setup_kernel` launch that calls the same seed bodies) -- so a
+    reused buffer and a fresh one are indistinguishable to every kernel
+    that reads one. The identity checks could not see it and did not.
 
     WHAT IT COST, MEASURED. Time per level was flat in the amount of
     WORK: at 581,012 rows a level-iteration cost 24 ms at
@@ -2355,6 +2355,32 @@ struct LevelWorkspace(Movable):
     var o_nu: HostBuffer[DType.int64]
     var o_de: HostBuffer[DType.int64]
     var h_splits: HostBuffer[DType.uint8]
+    var cap_nodes: Int
+    """The workspace's node CAPACITY (`max_batch`), not any batch's live
+    count. DEVIATION 470's fused seeder covers `d_nonconst` and `r_mx` to
+    this extent -- exactly what the two `enqueue_memset`s it replaced
+    covered -- and DEVIATION 472's byte-compares run over it."""
+    var cap_blocks: Int
+    """The workload-info BLOCK capacity (`builder.cuh:230`'s bound), for
+    DEVIATION 472's `d_wl` byte-compare extent."""
+    var cap_report: Int
+    """`sampler_report_len(cap_nodes)`: the full extent of `d_samp_report`,
+    which DEVIATION 470's fused seeder covers on sampler cycles -- exactly
+    what the `enqueue_memset` it replaced covered."""
+    var s_items: HostBuffer[DType.uint8]
+    var s_tree: HostBuffer[DType.int32]
+    var s_tsalt: HostBuffer[DType.uint32]
+    var s_wl: HostBuffer[DType.uint8]
+    var s_nb: HostBuffer[DType.int32]
+    var s_nc: HostBuffer[DType.int32]
+    var s_blk_base: HostBuffer[DType.int32]
+    """DEVIATION 472: one shadow per staged slot, holding the bytes LAST
+    ENQUEUED to the slot's device buffer, over the FULL capacity extent the
+    copy sends. `stage_batch` byte-compares against these and skips the
+    `enqueue_copy` on equality; host-only, never read by the device."""
+    var stage_valid: Bool
+    """False until `stage_batch`'s first upload: pinned shadows arrive with
+    arbitrary bytes, so the first stage always copies and snapshots."""
 
 
 def make_level_workspace(
@@ -2456,6 +2482,17 @@ def make_level_workspace(
         o_nu=ctx.enqueue_create_host_buffer[DType.int64](nodes),
         o_de=ctx.enqueue_create_host_buffer[DType.int64](nodes),
         h_splits=ctx.enqueue_create_host_buffer[DType.uint8](nodes * size_of[Split]()),
+        cap_nodes=nodes,
+        cap_blocks=blocks,
+        cap_report=sampler_report_len(nodes),
+        s_items=ctx.enqueue_create_host_buffer[DType.uint8](nodes * size_of[NodeWorkItem]()),
+        s_tree=ctx.enqueue_create_host_buffer[DType.int32](nodes),
+        s_tsalt=ctx.enqueue_create_host_buffer[DType.uint32](nodes),
+        s_wl=ctx.enqueue_create_host_buffer[DType.uint8](blocks * size_of[WorkloadInfo]()),
+        s_nb=ctx.enqueue_create_host_buffer[DType.int32](nodes),
+        s_nc=ctx.enqueue_create_host_buffer[DType.int32](nodes),
+        s_blk_base=ctx.enqueue_create_host_buffer[DType.int32](nodes),
+        stage_valid=False,
     )
     # DEVIATION 450: the workspace's ONE materialization drain. Every host
     # buffer above is created by an ENQUEUED op, and the level loop writes
@@ -2674,6 +2711,57 @@ one group in both regimes. The bound also keeps every `InstanceRange.begin`
 comfortably inside `Int32`."""
 
 
+def _stage_upload_if_changed[
+    dt: DType, //
+](
+    ctx: DeviceContext,
+    mut dst: DeviceBuffer[dt],
+    src: HostBuffer[dt],
+    mut shadow: HostBuffer[dt],
+    n: Int,
+    seen_before: Bool,
+) raises:
+    """DEVIATION 472: enqueue one of `stage_batch`'s H2D copies ONLY when
+    its bytes moved since the last enqueue.
+
+    `shadow` holds the bytes last enqueued for this slot, over the SAME full
+    capacity extent `enqueue_copy(dst_buf=...)` sends; on equality the
+    device already holds this value (the queue is in-order and every kernel
+    reading the buffer is enqueued after the copy that staged it), so
+    re-sending is pure transfer waste. The comparison is over EXACT BYTES,
+    never a semantic summary, so any change -- the rescue's `k` flip from
+    `n_cols` to 1 included -- restages automatically with no bookkeeping.
+    The fail-safe direction is DEVIATION 1917's (ensemble): a spurious
+    mismatch (a stale pinned-tail byte, struct padding) costs one extra
+    copy; a skip happens only on bytewise equality, so a changed value is
+    never skipped. The snapshot taken here is faithful to what the copy will
+    send because DEVIATION 450's invariant keeps `src` unrewritten until
+    after the next required drain retires the copy.
+
+    `-D MOJOLEARN_ET_SAB_STAGE_SKIP_ALWAYS=1` (a measurement arm, never a
+    gate) skips every re-upload after the first: the merged forest freezes
+    its first batch's tree ids and items, so `device_batched_check`'s
+    merged-vs-serial arms must go RED -- the check's
+    `trees_mutually_differ >= 2` fixture guard exists precisely so a frozen
+    tree id cannot hide.
+    """
+    var sp = src.unsafe_ptr()
+    var hp = shadow.unsafe_ptr()
+    if seen_before:
+        comptime if is_defined["MOJOLEARN_ET_SAB_STAGE_SKIP_ALWAYS"]():
+            return
+        var same = True
+        for i in range(n):
+            if hp.unsafe_load(i) != sp.unsafe_load(i):
+                same = False
+                break
+        if same:
+            return
+    for i in range(n):
+        hp.unsafe_store(i, sp.unsafe_load(i))
+    ctx.enqueue_copy(dst_buf=dst, src_ptr=src.unsafe_ptr())
+
+
 def stage_batch(
     ctx: DeviceContext,
     mut ws: LevelWorkspace,
@@ -2697,10 +2785,6 @@ def stage_batch(
     ref h_wl = ws.h_wl
     ref h_nb = ws.h_nb
     ref h_nc = ws.h_nc
-    ref d_items = ws.d_items
-    ref d_wl = ws.d_wl
-    ref d_nb = ws.d_nb
-    ref d_nc = ws.d_nc
 
     if len(item_trees) != n_nodes:
         raise Error(
@@ -2740,15 +2824,51 @@ def stage_batch(
             nb_i = 1
         base_acc += nb_i
 
-    ctx.enqueue_copy(dst_buf=d_items, src_ptr=h_items.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=ws.d_tree, src_ptr=ws.h_tree.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=ws.d_tsalt, src_ptr=ws.h_tsalt.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_wl, src_ptr=h_wl.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_nb, src_ptr=h_nb.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_nc, src_ptr=h_nc.unsafe_ptr())
-    ctx.enqueue_copy(
-        dst_buf=ws.d_blk_base, src_ptr=ws.h_blk_base.unsafe_ptr()
+    # DEVIATION 472: each of the seven copies is byte-compared against the
+    # bytes LAST ENQUEUED for its slot and skipped on equality (fail-safe
+    # in DEVIATION 1917's direction: a spurious mismatch costs one copy, a
+    # changed value is never skipped -- see `_stage_upload_if_changed`).
+    # No slot is special-cased: `d_nb`/`d_nc` are byte-constant across a
+    # group at fixed `k` (staged as `i * k` and `k`, never reading the
+    # work items) and `d_tree` is constant while the frontier composition
+    # is stable, so those collapse to one copy per group BY the compare,
+    # not by bookkeeping; the rescue's `k` change restages them the same
+    # way. The no-retry restage skip at the level loop's retry check
+    # (DEVIATION 455's `elif len(retry) > 0`) is a different mechanism and
+    # stays where it is.
+    var seen = ws.stage_valid
+    _stage_upload_if_changed(
+        ctx,
+        ws.d_items,
+        ws.h_items,
+        ws.s_items,
+        ws.cap_nodes * size_of[NodeWorkItem](),
+        seen,
     )
+    _stage_upload_if_changed(
+        ctx, ws.d_tree, ws.h_tree, ws.s_tree, ws.cap_nodes, seen
+    )
+    _stage_upload_if_changed(
+        ctx, ws.d_tsalt, ws.h_tsalt, ws.s_tsalt, ws.cap_nodes, seen
+    )
+    _stage_upload_if_changed(
+        ctx,
+        ws.d_wl,
+        ws.h_wl,
+        ws.s_wl,
+        ws.cap_blocks * size_of[WorkloadInfo](),
+        seen,
+    )
+    _stage_upload_if_changed(
+        ctx, ws.d_nb, ws.h_nb, ws.s_nb, ws.cap_nodes, seen
+    )
+    _stage_upload_if_changed(
+        ctx, ws.d_nc, ws.h_nc, ws.s_nc, ws.cap_nodes, seen
+    )
+    _stage_upload_if_changed(
+        ctx, ws.d_blk_base, ws.h_blk_base, ws.s_blk_base, ws.cap_nodes, seen
+    )
+    ws.stage_valid = True
     # DEVIATION 450: no trailing synchronize. The copies above are queue-
     # ordered ahead of every kernel that reads their destinations, and the
     # `h_*` staging they read from is not rewritten until after the next
@@ -2871,6 +2991,84 @@ def search_batch(
 
     stage_batch(ctx, ws, work_items, item_trees, plan, Int(k))
 
+    # =================================================================
+    # DEVIATION 470 -- ONE fused seeder launch replaces this cycle's SIX
+    # setup enqueues: the `d_samp_report` memset, range init, the
+    # `d_nonconst` memset, score init, the `r_mx` memset and reduce
+    # init. Hoisted HERE, after `stage_batch` and before the sampler:
+    # all six are pure write-only seeders over disjoint buffers, and
+    # nothing enqueued between each one's old position and its first
+    # reader writes any of the seeded buffers, so on the in-order queue
+    # the two positions are equivalent to every reader (the hoist is
+    # bit-inert). The capacity extents (`cap_nodes`, `cap_report`) are
+    # exactly what the three memsets covered -- seeding only the live
+    # batch leaves stale cells a later larger batch reads (ensemble's
+    # 1916 lesson). A ZERO extent skips a region: the survey
+    # (`range_only`) seeds no score/reduce cells and the rescue
+    # (`not use_sampler`) seeds no report, exactly as before.
+    # THE REFUSALS, restated from the scoping pass: NO seeder fuses into
+    # its CONSUMER -- `node_nonconstant_flag_kernel` does cross-block
+    # `Atomic.fetch_add`, and the range/score/reduce kernels accumulate
+    # grid-wide into their seeded cells; Metal has no grid sync, so a
+    # seed folded into any consumer could be read before every block
+    # wrote it. The seeders fuse with each other and with nothing else.
+    # Under the clock, the six seeders now bill to PHASE_STAGE instead
+    # of their old phases; the timed program was always the serialized
+    # one, and no seeded value moves.
+    # =================================================================
+    var setup_report = Int32(ws.cap_report) if use_sampler else Int32(0)
+    var setup_score = Int32(0) if range_only else Int32(n_cells)
+    var setup_acc = (
+        Int32(0) if range_only else Int32(n_cells * Int(n_classes))
+    )
+    var setup_mutex = Int32(0) if range_only else Int32(ws.cap_nodes)
+    var setup_reduce = Int32(0) if range_only else Int32(n_nodes)
+    var setup_extent = n_cells
+    if Int(setup_report) > setup_extent:
+        setup_extent = Int(setup_report)
+    if ws.cap_nodes > setup_extent:
+        setup_extent = ws.cap_nodes
+    if Int(setup_acc) > setup_extent:
+        setup_extent = Int(setup_acc)
+    ctx.enqueue_function[phase_setup_kernel](
+        d_samp_report.unsafe_ptr(),
+        setup_report,
+        d_min.unsafe_ptr(),
+        d_max.unsafe_ptr(),
+        d_minkey.unsafe_ptr(),
+        d_maxkey.unsafe_ptr(),
+        d_missing.unsafe_ptr(),
+        d_merges.unsafe_ptr(),
+        Int32(n_cells),
+        ws.d_nonconst.unsafe_ptr(),
+        Int32(ws.cap_nodes),
+        d_status.unsafe_ptr(),
+        d_thresh.unsafe_ptr(),
+        d_nleft.unsafe_ptr(),
+        d_ntotal.unsafe_ptr(),
+        d_gnum.unsafe_ptr(),
+        d_gden.unsafe_ptr(),
+        d_nblocks.unsafe_ptr(),
+        d_accl.unsafe_ptr(),
+        d_acct.unsafe_ptr(),
+        setup_score,
+        setup_acc,
+        r_mx.unsafe_ptr(),
+        setup_mutex,
+        r_q.unsafe_ptr(),
+        r_c.unsafe_ptr(),
+        r_m.unsafe_ptr(),
+        r_l.unsafe_ptr(),
+        r_nu.unsafe_ptr(),
+        r_de.unsafe_ptr(),
+        r_v.unsafe_ptr(),
+        r_mg.unsafe_ptr(),
+        r_nw.unsafe_ptr(),
+        setup_reduce,
+        grid_dim=ceildiv(setup_extent, PHASE_SETUP_TPB),
+        block_dim=PHASE_SETUP_TPB,
+    )
+
     # --- 3. the range pass -------------------------------------------
     # --- feature sampling, WHERE cuML DOES IT (deviation 201), unless the
     # caller already chose the columns. DEVIATION 205's rescue does: its
@@ -2892,9 +3090,9 @@ def search_batch(
         ctx.enqueue_copy(dst_buf=d_colids, src_ptr=h_colids.unsafe_ptr())
     if use_sampler:
         # --- feature sampling, WHERE cuML DOES IT (deviation 201) --------
-        # `d_report` is the DEVICE's own statement of which kernel ran, so it
-        # is seeded with a value no kernel can produce.
-        ctx.enqueue_memset(d_samp_report, SAMPLER_UNVISITED)
+        # `d_report` is the DEVICE's own statement of which kernel ran;
+        # DEVIATION 470's fused seeder staged `SAMPLER_UNVISITED` into it
+        # above, a value no kernel can produce.
         _ = sample_features_for_device(
             ctx,
             d_colids,
@@ -2911,17 +3109,7 @@ def search_batch(
         )
 
     clock.tick(ctx, PHASE_STAGE)
-    ctx.enqueue_function[node_feature_range_init_kernel](
-        d_min.unsafe_ptr(),
-        d_max.unsafe_ptr(),
-        d_minkey.unsafe_ptr(),
-        d_maxkey.unsafe_ptr(),
-        d_missing.unsafe_ptr(),
-        d_merges.unsafe_ptr(),
-        Int32(n_cells),
-        grid_dim=ceildiv(n_cells, 64),
-        block_dim=64,
-    )
+    # DEVIATION 470: the range cells were seeded by the fused launch above.
     ctx.enqueue_function[node_feature_range_kernel[TPB]](
         d_minkey.unsafe_ptr(),
         d_maxkey.unsafe_ptr(),
@@ -2955,7 +3143,8 @@ def search_batch(
 
     # --- 3b. DID ANY SAMPLED COLUMN VARY? (DEVIATION 205) -------------
     # One Int32 per node, not the 3 * n_cells the range cells would cost.
-    ctx.enqueue_memset(ws.d_nonconst, Int32(0))
+    # DEVIATION 470: `d_nonconst` was zeroed (over full capacity) by the
+    # fused launch above.
     ctx.enqueue_function[node_nonconstant_flag_kernel](
         ws.d_nonconst.unsafe_ptr(),
         d_min.unsafe_ptr(),
@@ -2997,21 +3186,8 @@ def search_batch(
         return (List[Split](), any_nonconst^, rmin^, rmax^, rmiss^)
 
     # --- 4. the draw and score pass ----------------------------------
-    ctx.enqueue_function[node_feature_score_init_kernel](
-        d_status.unsafe_ptr(),
-        d_thresh.unsafe_ptr(),
-        d_nleft.unsafe_ptr(),
-        d_ntotal.unsafe_ptr(),
-        d_gnum.unsafe_ptr(),
-        d_gden.unsafe_ptr(),
-        d_nblocks.unsafe_ptr(),
-        d_accl.unsafe_ptr(),
-        d_acct.unsafe_ptr(),
-        Int32(n_cells),
-        Int32(n_cells * Int(n_classes)),
-        grid_dim=ceildiv(n_cells, 64),
-        block_dim=64,
-    )
+    # DEVIATION 470: the score cells and class accumulators were seeded by
+    # the fused launch above (skipped on the survey, which never gets here).
     ctx.enqueue_function[
         node_feature_score_kernel[TPB, MAX_ACC, True]
     ](
@@ -3093,24 +3269,11 @@ def search_batch(
     )
 
     # --- 6. evalBestSplit's reduction ---------------------------------
+    # DEVIATION 470: the reduce cells and the `r_mx` mutexes (over full
+    # capacity) were seeded by the fused launch above.
     var bpn = ceildiv(Int(k), TPB)
     if bpn < 1:
         bpn = 1
-    ctx.enqueue_memset(r_mx, Int32(0))
-    ctx.enqueue_function[split_reduce_init_kernel](
-        r_q.unsafe_ptr(),
-        r_c.unsafe_ptr(),
-        r_m.unsafe_ptr(),
-        r_l.unsafe_ptr(),
-        r_nu.unsafe_ptr(),
-        r_de.unsafe_ptr(),
-        r_v.unsafe_ptr(),
-        r_mg.unsafe_ptr(),
-        r_nw.unsafe_ptr(),
-        Int32(n_nodes),
-        grid_dim=ceildiv(n_nodes, 64),
-        block_dim=64,
-    )
     ctx.enqueue_function[split_reduce_kernel[TPB]](
         r_q.unsafe_ptr(),
         r_c.unsafe_ptr(),
@@ -3942,11 +4105,14 @@ def train_forest_classification_device_timed(
         ctx.enqueue_copy(dst_buf=d_nodes, src_ptr=h_nodes.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=d_ranges, src_ptr=h_ranges.unsafe_ptr())
         # `builder.cuh:582` memsets the leaf array before the launch, and an
-        # internal node's ZERO IS ITS VALUE.
-        ctx.enqueue_memset(d_leaves, Float32(0.0))
-        ctx.enqueue_memset(d_visit, Int32(0))
+        # internal node's ZERO IS ITS VALUE. DEVIATION 471: `zero_fill=True`
+        # folds that memset and `d_visit`'s into the launch itself -- each
+        # block zeroes its OWN node's `num_outputs` slot and visit cell
+        # before the IsLeaf early return, and the grid is one block per
+        # node over the whole concatenated buffer, so block-exclusive slot
+        # ownership covers exactly what the two memsets covered.
         ctx.enqueue_function[
-            leaf_kernel[TPB, LEAF_MAX_OUT_DEFAULT, True]
+            leaf_kernel[TPB, LEAF_MAX_OUT_DEFAULT, True, zero_fill=True]
         ](
             d_leaves.unsafe_ptr(),
             d_visit.unsafe_ptr(),
@@ -4120,6 +4286,63 @@ def search_batch_regression(
     ref h_colids = ws.h_colids
     stage_batch(ctx, ws, work_items, item_trees, plan, Int(k))
 
+    # DEVIATION 470: ONE fused seeder launch replaces this cycle's six
+    # setup enqueues -- the full argument (bit-inert hoist on the in-order
+    # queue, capacity extents for the three memset regions, zero extents
+    # for the survey's and the rescue's skipped regions, and the refusal
+    # list: no seeder fuses into its grid-accumulating consumer, Metal has
+    # no grid sync) is at the classification twin's launch. The one twin
+    # difference: the class-accumulator extent is `n_cells` (one output),
+    # exactly what the old score-init launch passed here.
+    var setup_report = Int32(ws.cap_report) if use_sampler else Int32(0)
+    var setup_score = Int32(0) if range_only else Int32(n_cells)
+    var setup_acc = Int32(0) if range_only else Int32(n_cells)
+    var setup_mutex = Int32(0) if range_only else Int32(ws.cap_nodes)
+    var setup_reduce = Int32(0) if range_only else Int32(n_nodes)
+    var setup_extent = n_cells
+    if Int(setup_report) > setup_extent:
+        setup_extent = Int(setup_report)
+    if ws.cap_nodes > setup_extent:
+        setup_extent = ws.cap_nodes
+    ctx.enqueue_function[phase_setup_kernel](
+        d_samp_report.unsafe_ptr(),
+        setup_report,
+        d_min.unsafe_ptr(),
+        d_max.unsafe_ptr(),
+        d_minkey.unsafe_ptr(),
+        d_maxkey.unsafe_ptr(),
+        d_missing.unsafe_ptr(),
+        d_merges.unsafe_ptr(),
+        Int32(n_cells),
+        ws.d_nonconst.unsafe_ptr(),
+        Int32(ws.cap_nodes),
+        d_status.unsafe_ptr(),
+        d_thresh.unsafe_ptr(),
+        d_nleft.unsafe_ptr(),
+        d_ntotal.unsafe_ptr(),
+        d_gnum.unsafe_ptr(),
+        d_gden.unsafe_ptr(),
+        d_nblocks.unsafe_ptr(),
+        d_accl.unsafe_ptr(),
+        d_acct.unsafe_ptr(),
+        setup_score,
+        setup_acc,
+        r_mx.unsafe_ptr(),
+        setup_mutex,
+        r_q.unsafe_ptr(),
+        r_c.unsafe_ptr(),
+        r_m.unsafe_ptr(),
+        r_l.unsafe_ptr(),
+        r_nu.unsafe_ptr(),
+        r_de.unsafe_ptr(),
+        r_v.unsafe_ptr(),
+        r_mg.unsafe_ptr(),
+        r_nw.unsafe_ptr(),
+        setup_reduce,
+        grid_dim=ceildiv(setup_extent, PHASE_SETUP_TPB),
+        block_dim=PHASE_SETUP_TPB,
+    )
+
     if not use_sampler:
         # DEVIATION 205's rescue chose these columns on the host, from the
         # survey's own cells. Nothing draws here.
@@ -4138,9 +4361,9 @@ def search_batch_regression(
         ctx.enqueue_copy(dst_buf=d_colids, src_ptr=h_colids.unsafe_ptr())
     else:
         # --- feature sampling, WHERE cuML DOES IT (deviation 201) --------
-        # `d_report` is the DEVICE's own statement of which kernel ran, so it
-        # is seeded with a value no kernel can produce.
-        ctx.enqueue_memset(d_samp_report, SAMPLER_UNVISITED)
+        # `d_report` is the DEVICE's own statement of which kernel ran;
+        # DEVIATION 470's fused seeder staged `SAMPLER_UNVISITED` into it
+        # above, a value no kernel can produce.
         _ = sample_features_for_device(
             ctx,
             d_colids,
@@ -4157,17 +4380,7 @@ def search_batch_regression(
         )
 
     clock.tick(ctx, PHASE_STAGE)
-    ctx.enqueue_function[node_feature_range_init_kernel](
-        d_min.unsafe_ptr(),
-        d_max.unsafe_ptr(),
-        d_minkey.unsafe_ptr(),
-        d_maxkey.unsafe_ptr(),
-        d_missing.unsafe_ptr(),
-        d_merges.unsafe_ptr(),
-        Int32(n_cells),
-        grid_dim=ceildiv(n_cells, 64),
-        block_dim=64,
-    )
+    # DEVIATION 470: the range cells were seeded by the fused launch above.
     ctx.enqueue_function[node_feature_range_kernel[TPB]](
         d_minkey.unsafe_ptr(),
         d_maxkey.unsafe_ptr(),
@@ -4200,7 +4413,8 @@ def search_batch_regression(
     )
 
     # --- DID ANY SAMPLED COLUMN VARY? (DEVIATION 205) -----------------
-    ctx.enqueue_memset(ws.d_nonconst, Int32(0))
+    # DEVIATION 470: `d_nonconst` was zeroed (over full capacity) by the
+    # fused launch above.
     ctx.enqueue_function[node_nonconstant_flag_kernel](
         ws.d_nonconst.unsafe_ptr(),
         d_min.unsafe_ptr(),
@@ -4234,21 +4448,9 @@ def search_batch_regression(
             rmax[i] = ws.o_rmax.unsafe_ptr()[unsafe_offset=i]
             rmiss[i] = ws.o_rmiss.unsafe_ptr()[unsafe_offset=i]
         return (List[Split](), any_nonconst^, rmin^, rmax^, rmiss^)
-    ctx.enqueue_function[node_feature_score_init_kernel](
-        d_status.unsafe_ptr(),
-        d_thresh.unsafe_ptr(),
-        d_nleft.unsafe_ptr(),
-        d_ntotal.unsafe_ptr(),
-        d_gnum.unsafe_ptr(),
-        d_gden.unsafe_ptr(),
-        d_nblocks.unsafe_ptr(),
-        d_accl.unsafe_ptr(),
-        d_acct.unsafe_ptr(),
-        Int32(n_cells),
-        Int32(n_cells),
-        grid_dim=ceildiv(n_cells, 64),
-        block_dim=64,
-    )
+    # DEVIATION 470: the score cells and the one-output accumulators were
+    # seeded by the fused launch above (skipped on the survey, which
+    # returned already).
     ctx.enqueue_function[
         node_feature_score_kernel[TPB, MAX_ACC, False]
     ](
@@ -4331,24 +4533,11 @@ def search_batch_regression(
         grid_dim=ceildiv(n_cells, 64),
         block_dim=64,
     )
+    # DEVIATION 470: the reduce cells and the `r_mx` mutexes (over full
+    # capacity) were seeded by the fused launch above.
     var bpn = ceildiv(Int(k), TPB)
     if bpn < 1:
         bpn = 1
-    ctx.enqueue_memset(r_mx, Int32(0))
-    ctx.enqueue_function[split_reduce_init_kernel](
-        r_q.unsafe_ptr(),
-        r_c.unsafe_ptr(),
-        r_m.unsafe_ptr(),
-        r_l.unsafe_ptr(),
-        r_nu.unsafe_ptr(),
-        r_de.unsafe_ptr(),
-        r_v.unsafe_ptr(),
-        r_mg.unsafe_ptr(),
-        r_nw.unsafe_ptr(),
-        Int32(n_nodes),
-        grid_dim=ceildiv(n_nodes, 64),
-        block_dim=64,
-    )
     ctx.enqueue_function[split_reduce_kernel[TPB]](
         r_q.unsafe_ptr(),
         r_c.unsafe_ptr(),
@@ -5083,11 +5272,11 @@ def train_forest_regression_device_timed(
         ctx.enqueue_copy(dst_buf=d_nodes, src_ptr=h_nodes.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=d_ranges, src_ptr=h_ranges.unsafe_ptr())
         # `builder.cuh:582` memsets the leaf array before the launch, and an
-        # internal node's ZERO IS ITS VALUE.
-        ctx.enqueue_memset(d_leaves, Float32(0.0))
-        ctx.enqueue_memset(d_visit, Int32(0))
+        # internal node's ZERO IS ITS VALUE. DEVIATION 471: `zero_fill=True`
+        # folds that memset and `d_visit`'s into the launch itself -- the
+        # block-exclusive-ownership argument is at the classification twin.
         ctx.enqueue_function[
-            leaf_kernel[TPB, LEAF_MAX_OUT_DEFAULT, False]
+            leaf_kernel[TPB, LEAF_MAX_OUT_DEFAULT, False, zero_fill=True]
         ](
             d_leaves.unsafe_ptr(),
             d_visit.unsafe_ptr(),

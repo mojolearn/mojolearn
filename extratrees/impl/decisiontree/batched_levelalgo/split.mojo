@@ -822,6 +822,37 @@ def split_reduce_shared_bytes(tpb: Int, warp_size: Int) -> Int:
     return (tpb // warp_size) * 36
 
 
+@always_inline
+def split_reduce_seed_at(
+    out_quesval: MutPointer[Float32, MutAnyOrigin],
+    out_colid: MutPointer[Int32, MutAnyOrigin],
+    out_metric: MutPointer[Float32, MutAnyOrigin],
+    out_nleft: MutPointer[Int32, MutAnyOrigin],
+    out_num: MutPointer[Int64, MutAnyOrigin],
+    out_den: MutPointer[Int64, MutAnyOrigin],
+    out_valid: MutPointer[Int32, MutAnyOrigin],
+    out_n_merges: MutPointer[Int32, MutAnyOrigin],
+    out_n_warps: MutPointer[Int32, MutAnyOrigin],
+    idx: Int,
+):
+    """Seed ONE reduce cell: `split_reduce_init_kernel`'s per-index body.
+
+    DEVIATION 470 extracts it so the fused `phase_setup_kernel`
+    (`builder_kernels_impl.mojo`) can IMPORT this logic rather than
+    transcribe it -- a second spelling of the seed is a second answer.
+    The standalone kernel below runs the same call.
+    """
+    out_quesval[unsafe_offset=idx] = Split.Min
+    out_colid[unsafe_offset=idx] = Int32(-1)
+    out_metric[unsafe_offset=idx] = Split.Min
+    out_nleft[unsafe_offset=idx] = Int32(0)
+    out_num[unsafe_offset=idx] = Int64(0)
+    out_den[unsafe_offset=idx] = Int64(0)
+    out_valid[unsafe_offset=idx] = Int32(0)
+    out_n_merges[unsafe_offset=idx] = Int32(0)
+    out_n_warps[unsafe_offset=idx] = Int32(0)
+
+
 def split_reduce_init_kernel(
     out_quesval: MutPointer[Float32, MutAnyOrigin],
     out_colid: MutPointer[Int32, MutAnyOrigin],
@@ -840,19 +871,26 @@ def split_reduce_init_kernel(
     `raft::linalg::writeOnlyUnaryOp`; ours writes the same four fields plus
     the absent key and zeroes the two path counters. The publish below READS
     the cell it updates, so an unseeded cell is read garbage.
+
+    The shipped level loop seeds through DEVIATION 470's fused
+    `phase_setup_kernel`, which calls the same `split_reduce_seed_at`;
+    this standalone launch STAYS for `split_reduce_check`'s isolated arms.
     """
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
     while idx < Int(len):
-        out_quesval[unsafe_offset=idx] = Split.Min
-        out_colid[unsafe_offset=idx] = Int32(-1)
-        out_metric[unsafe_offset=idx] = Split.Min
-        out_nleft[unsafe_offset=idx] = Int32(0)
-        out_num[unsafe_offset=idx] = Int64(0)
-        out_den[unsafe_offset=idx] = Int64(0)
-        out_valid[unsafe_offset=idx] = Int32(0)
-        out_n_merges[unsafe_offset=idx] = Int32(0)
-        out_n_warps[unsafe_offset=idx] = Int32(0)
+        split_reduce_seed_at(
+            out_quesval,
+            out_colid,
+            out_metric,
+            out_nleft,
+            out_num,
+            out_den,
+            out_valid,
+            out_n_merges,
+            out_n_warps,
+            idx,
+        )
         idx += stride
 
 

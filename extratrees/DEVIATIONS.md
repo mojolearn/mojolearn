@@ -4209,3 +4209,244 @@ is not supportable from this repository's evidence.
     ET_PROFILE_ARMS=shipped \
     ET_PROFILE_OLD_COMMIT=4f6a17a \
     nohup bash tools/e2_remote_leg.sh amd <token_file> &
+
+---
+
+## DEVIATION 470 [OPEN] -- the search cycle's six setup enqueues fused into ONE seeder launch
+
+**Where.** `impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo`,
+`phase_setup_kernel` (+ `PHASE_SETUP_TPB`), enqueued from BOTH twins --
+`search_batch` and `search_batch_regression` in
+`impl/decisiontree/batched_levelalgo/builder.mojo` -- immediately after
+`stage_batch` and before the feature sampler. The six it replaces, in their
+old queue order: `enqueue_memset(d_samp_report, SAMPLER_UNVISITED)`,
+`node_feature_range_init_kernel`, `enqueue_memset(d_nonconst, 0)`,
+`node_feature_score_init_kernel`, `enqueue_memset(r_mx, 0)`,
+`split_reduce_init_kernel`. Every enqueue is host-priced here (the covtype
+94-launch/tree tax), and this takes six per search cycle to one.
+
+**Why the hoist is bit-inert, and it is an ORDER argument, not a values one.**
+All six are pure write-only seeders over DISJOINT buffers; every cell they
+write is a constant or a pure function of its flat index, so fusing them
+changes no value and no accumulation order (there is none). Hoisting them to
+one point is then a queue-order question: on the in-order device queue, a
+write may move earlier past other enqueues iff nothing between its old
+position and its new one writes the same buffer, and nothing between its new
+position and its FIRST READER writes it either. Checked seeder by seeder:
+the sampler writes `d_colids`/`d_samp_scratch`/`d_samp_report` (its report
+seed is the one being hoisted TO it, still ahead of it); the range kernels
+write min/max/key/missing/merge cells (their seeds were already ahead of
+them and did not move relative to them); the flag kernel writes `d_nonconst`
+(its seed stays ahead); the score kernels write the score cells (seed stays
+ahead); `score_to_candidate_kernel` writes `c_*` only; the reduce kernel is
+the reduce seeds' first reader. No interleaved kernel writes any seeded
+buffer, so every reader sees exactly the bytes it saw before.
+
+**The two hard constraints, kept.** (1) CAPACITY extents where the memsets
+had them: `d_nonconst` and `r_mx` are seeded over `cap_nodes` (the
+workspace's `max_batch` capacity) and `d_samp_report` over `cap_report`
+(`sampler_report_len(cap_nodes)`) -- exactly the full buffers the three
+`enqueue_memset`s covered. Seeding only the live `n_nodes` leaves stale
+cells a later LARGER batch reads; that is ensemble's DEVIATION 1916 lesson
+and it is restated in the kernel's docstring. (2) The fused kernel IMPORTS
+the seeder bodies -- `range_init_seed_at`, `score_init_seed_cell_at`,
+`score_init_seed_acc_at` (extracted in `builder_kernels_impl.mojo`) and
+`split_reduce_seed_at` (extracted in `split.mojo`) -- rather than
+transcribing them; a memset has no body to import, so its FILL CONSTANT is
+the imported thing (`SAMPLER_UNVISITED` by name). The standalone init
+kernels STAY, delegating to the same helpers, because
+`range_kernel_check`, `score_kernel_check`, `regression_score_check` and
+`split_reduce_check` seed through them in isolation.
+
+**Zero extents reproduce the special cycles exactly.** The survey
+(`range_only`) passes 0 for the score/acc/mutex/reduce extents -- it never
+ran those seeders; the rescue (`use_sampler == False`) passes 0 for the
+report extent -- it never memset the report. No cycle seeds more or less
+than it did before.
+
+**THE REFUSAL LIST, from the scoping pass.** No seeder is fused into its
+CONSUMER, and the reason is stated where the temptation will be felt:
+`node_nonconstant_flag_kernel` does cross-block `Atomic.fetch_add` into
+`d_nonconst`, and the range/score/reduce kernels accumulate GRID-wide into
+their seeded cells. A seed folded into any consumer would need every block
+to observe the seed before any block accumulates, and Metal has no
+grid-wide sync. The seeders fuse with each other and with nothing else.
+
+**Phase-clock attribution moves; the bits do not.** The six seeders now
+bill to `PHASE_STAGE` instead of their old phases when
+`MOJOLEARN_STAGE_TIMES` is on. The timed program was always the serialized
+one; per-phase comparisons across this commit must not read the stage/range
+/score/reduce split as a kernel change.
+
+**Sabotage, wired under `-D MOJOLEARN_ET_SAB_PHASE_SETUP=1` (a measurement
+arm, never a gate).** The fused kernel's class-accumulator seed is poisoned
+to the cell's BATCH-SLOT parity (`acc_left[idx] = idx & 1` instead of 0). A
+node's flat cell index depends on its slot in the batch, and the merged and
+serial arms batch differently, so corresponding cells receive different
+poison and the two arms must DIVERGE: `device_batched_check`'s
+merged-vs-serial sections (classification defaults, narrow batch,
+max_leaves, groups, regression) must go RED with node diffs. The
+per-kernel checks must stay GREEN under the same define because they seed
+through the STANDALONE kernels -- which localizes the poison to the fused
+path and proves the fused acc region is the one the fit reaches. THE
+FIXTURE MUST BE SEEN TO WITNESS IT (three fixture-blind sabotages was the
+lesson of Sep 1): the sabotage run is only evidence if the RED is observed
+with nonzero diff counts; a green sabotage run means the poison is
+fixture-blind and must be strengthened, never waved through. A
+deliberately constant poison (`= 1` everywhere) would be exactly such a
+blind arm -- both arms would move identically -- which is why the poison is
+slot-keyed.
+
+**Price.** One wider launch instead of six narrow ones; the survey cycle
+now runs one fused launch where it ran two seeders plus a memset (its
+zero-extent regions are dead threads, not writes). 34 kernel arguments.
+
+**Gate (RUN OWED, none run -- this Mac runs nothing).** In order:
+
+    pixi run mojo run -I . extratrees/checks/device_batched_check.mojo
+    pixi run mojo run -I . extratrees/checks/range_kernel_check.mojo
+    pixi run mojo run -I . extratrees/checks/score_kernel_check.mojo
+    pixi run mojo run -I . extratrees/checks/regression_score_check.mojo
+    pixi run mojo run -I . extratrees/checks/split_reduce_check.mojo
+    pixi run mojo run -I . extratrees/checks/sampler_kernel_check.mojo
+    pixi run mojo run -I . extratrees/checks/rescue_check.mojo
+    sh extratrees/tools/check.sh
+
+the sabotage A/B (must be RED, then rebuilt clean and GREEN):
+
+    pixi run mojo run -I . -D MOJOLEARN_ET_SAB_PHASE_SETUP=1 extratrees/checks/device_batched_check.mojo
+
+the IdentityTrace pre/post diff (fit the same fixture at the parent commit
+and at this one under `MOJOLEARN_IDENTITY_TRACE=<dir>`, then
+`python3 tools/identity_trace_diff.py <pre> <post>` -- zero moved cells is
+the claim), and the timing A/B at the scoreboard shapes on a cold box, owed
+to the orchestrator's window.
+
+---
+
+## DEVIATION 471 [OPEN] -- the leaf tail's two memsets folded into `leaf_kernel[zero_fill=True]`
+
+**Where.** `leaf_kernel` in
+`impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo`
+gains a comptime `zero_fill: Bool = False`; the two shipped tails in
+`builder.mojo` (`train_forest_classification_device_timed`'s leaf tail and
+the regression twin's) pass `zero_fill=True` and drop their
+`enqueue_memset(d_leaves, 0.0)` + `enqueue_memset(d_visit, 0)` pair. Two
+enqueues per GROUP become zero.
+
+**Why it is bit-inert: block-exclusive slot ownership.** The launch is one
+block per node over the WHOLE concatenated group buffer
+(`grid_dim = total_nodes`, and `d_leaves`/`d_visit` are sized
+`total_nodes * num_outputs` / `total_nodes` exactly), so block `node_id`
+owns `out_visit[node_id]` and `out_leaves[node_id * k ..+ k]` outright --
+the caller-obligation note beside the kernel documents that ownership.
+Under `zero_fill` each block zeroes ITS OWN cells BEFORE the `MAX_OUT`
+refusal and the `IsLeaf` early return, because the memsets it replaces
+zeroed every slot regardless of either: an internal node's slots keep the
+zero that IS their value. ALL the zeroing runs on `tid == 0` -- the same
+thread that later publishes into the same cells -- so every cell has ONE
+writer in program order and nothing rests on a barrier's device-memory
+fencing; `k` is bounded by the class count, so the serial zero loop is
+noise. Every cell the memsets wrote is written once, with the same value,
+before any read.
+
+**The default keeps the pre-change contract.** `zero_fill` DEFAULTS False,
+so `leaf_check`, `partition_leaf_kernel_check` and every `LEAF_SAB_*` arm
+run the kernel exactly as before, with their own memsets discharging the
+caller obligation. Only the two shipped tails pass True.
+
+**Sabotage, wired under `-D MOJOLEARN_ET_SAB_LEAF_ZERO_FILL=1` (a
+measurement arm, never a gate).** The zero-fill's leaf fill is poisoned to
+the node's CONCATENATED-slot parity (`node_id & 1`) instead of 0.0. The
+merged group concatenates trees at `leaf_base[s]` offsets while the serial
+arm's one-tree tails all start at 0, so internal-node slots take different
+poison in the two arms and `device_batched_check`'s LEAF-BIT assertions
+must go RED. WITNESS CAVEAT (Sep 1's lesson): the divergence needs at
+least one tree whose `leaf_base` is odd in the merged group; the run is
+only evidence if nonzero leaf-bit diffs are OBSERVED, and a green run
+means fixture-blind -- strengthen (e.g. parity over `node_id % 3`), never
+wave through. `partition_leaf_kernel_check` must stay GREEN under the same
+define (it never passes `zero_fill=True`), which localizes the poison.
+
+**Price.** None measurable expected: the zeroing work moves from two
+driver memsets into threads the launch already runs.
+
+**Gate (RUN OWED, none run).**
+
+    pixi run mojo run -I . extratrees/checks/device_batched_check.mojo
+    pixi run mojo run -I . extratrees/checks/leaf_check.mojo
+    pixi run mojo run -I . extratrees/checks/partition_leaf_kernel_check.mojo
+    sh extratrees/tools/check.sh
+
+the sabotage A/B (RED observed, then clean GREEN):
+
+    pixi run mojo run -I . -D MOJOLEARN_ET_SAB_LEAF_ZERO_FILL=1 extratrees/checks/device_batched_check.mojo
+
+plus the shared IdentityTrace pre/post diff and timing A/B named in 470.
+
+---
+
+## DEVIATION 472 [OPEN] -- `stage_batch`'s seven H2D uploads skip on byte equality
+
+**Where.** `_stage_upload_if_changed` + the copy tail of `stage_batch` in
+`impl/decisiontree/batched_levelalgo/builder.mojo`; `LevelWorkspace` gains
+one shadow host buffer per staged slot (`s_items`, `s_tree`, `s_tsalt`,
+`s_wl`, `s_nb`, `s_nc`, `s_blk_base`), the capacity fields
+(`cap_nodes`, `cap_blocks`, `cap_report` -- the last for 470) and
+`stage_valid`. `stage_batch` stages seven slots and used to copy all seven
+every cycle; now each slot's bytes are compared against the bytes LAST
+ENQUEUED for it and the `enqueue_copy` is skipped on equality.
+
+**Why a skip is sound.** The seven device buffers are READ-ONLY on the
+device (audited: no kernel writes `d_items`, `d_tree`, `d_tsalt`, `d_wl`,
+`d_nb`, `d_nc` or `d_blk_base`; the partition's `blk_base` is a read), the
+queue is in-order, and every kernel reading a slot is enqueued after the
+copy that staged it -- so on byte equality the device already holds the
+value and the copy is pure transfer waste. The shadow snapshot taken at
+enqueue time is faithful to what the in-flight copy sends because
+DEVIATION 450's invariant keeps the `h_*` staging unrewritten until after
+the next required drain retires the copy (455's rescue drain and 469's
+best-first drain are the two extra drains that keep this true off the
+plain path).
+
+**EXACT bytes, no bookkeeping, and the fail-safe direction (DEV-1917's
+shape).** The compare is bytewise over the FULL capacity extent the copy
+sends -- never a semantic summary -- so the rescue's `k` changes (survey
+`k = n_cols`, rescue `k = 1`, back to the batch's `k`) restage `d_nb`/
+`d_nc` automatically with no flags to forget. A spurious mismatch (a
+first-cycle pinned-tail byte, struct padding) costs ONE extra copy; a skip
+happens only on bytewise equality, so a changed value is NEVER skipped.
+`d_nb`/`d_nc` are provably byte-constant across a group at fixed `k`
+(staged as `i * k` and `k`, never reading the work items) and `d_tree` is
+constant while the frontier composition is stable, so those collapse to
+one copy per group BY the compare, not by special-casing. The no-retry
+restage skip at the level loop's retry check (DEVIATION 455's
+`elif len(retry) > 0` -- 1919's shape) is a different mechanism, already
+present, and NOT duplicated here.
+
+**Sabotage, wired under `-D MOJOLEARN_ET_SAB_STAGE_SKIP_ALWAYS=1` (a
+measurement arm, never a gate).** Every re-upload after the first is
+skipped unconditionally, freezing the merged forest's first batch's items
+and tree ids on the device. `device_batched_check`'s merged-vs-serial
+sections must go RED -- the check's `trees_mutually_differ >= 2` fixture
+guard exists precisely so a frozen tree id cannot hide, so this poison is
+witnessable by construction; the RED must still be OBSERVED with nonzero
+diffs before the clean GREEN is trusted (Sep 1).
+
+**Price.** A host-side bytewise compare over the seven capacity extents
+per `stage_batch` call, traded against seven `enqueue_copy` calls plus
+their transfers. Whether the trade wins is the owed timing A/B's verdict,
+not this entry's; if it loses at the scoreboard shapes, 472 reverts.
+
+**Gate (RUN OWED, none run).**
+
+    pixi run mojo run -I . extratrees/checks/device_batched_check.mojo
+    pixi run mojo run -I . extratrees/checks/rescue_check.mojo
+    pixi run mojo run -I . extratrees/checks/bestfirst_check.mojo
+    sh extratrees/tools/check.sh
+
+the sabotage A/B (RED observed, then clean GREEN):
+
+    pixi run mojo run -I . -D MOJOLEARN_ET_SAB_STAGE_SKIP_ALWAYS=1 extratrees/checks/device_batched_check.mojo
+
+plus the shared IdentityTrace pre/post diff and timing A/B named in 470.

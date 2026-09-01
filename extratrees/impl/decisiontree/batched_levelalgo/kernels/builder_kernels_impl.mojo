@@ -93,11 +93,17 @@ their file lives IN THAT FILE, under a marked deviation block.
     ==================================================================
 """
 
+from std.sys.compile import is_defined
+
 from extratrees.checks.pcg_rng import SplitKey, key_for, uniform_float
 from extratrees.impl.decisiontree.batched_levelalgo.dataset import Dataset
-from extratrees.impl.decisiontree.batched_levelalgo.split import Split
+from extratrees.impl.decisiontree.batched_levelalgo.split import (
+    Split,
+    split_reduce_seed_at,
+)
 from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels import (
     NodeWorkItem,
+    SAMPLER_UNVISITED,
 )
 
 
@@ -958,6 +964,30 @@ def node_feature_range_kernel[
     _ = Atomic.fetch_add(out_n_merges.unsafe_offset(slot), Int32(1))
 
 
+@always_inline
+def range_init_seed_at(
+    out_min: MutPointer[Float32, MutAnyOrigin],
+    out_max: MutPointer[Float32, MutAnyOrigin],
+    out_minkey: MutPointer[UInt32, MutAnyOrigin],
+    out_maxkey: MutPointer[UInt32, MutAnyOrigin],
+    out_n_missing: MutPointer[Int32, MutAnyOrigin],
+    out_n_merges: MutPointer[Int32, MutAnyOrigin],
+    idx: Int,
+):
+    """Seed ONE range cell: `node_feature_range_init_kernel`'s per-index body.
+
+    DEVIATION 470 extracts it so the fused `phase_setup_kernel` below can
+    IMPORT this logic rather than transcribe it -- a second spelling of the
+    seed is a second answer. The standalone kernel runs the same call.
+    """
+    out_min[unsafe_offset=idx] = Float32(1.0)
+    out_max[unsafe_offset=idx] = Float32(-1.0)
+    out_minkey[unsafe_offset=idx] = RANGE_KEY_MIN_SEED
+    out_maxkey[unsafe_offset=idx] = RANGE_KEY_MAX_SEED
+    out_n_missing[unsafe_offset=idx] = Int32(0)
+    out_n_merges[unsafe_offset=idx] = Int32(0)
+
+
 def node_feature_range_init_kernel(
     out_min: MutPointer[Float32, MutAnyOrigin],
     out_max: MutPointer[Float32, MutAnyOrigin],
@@ -978,16 +1008,23 @@ def node_feature_range_init_kernel(
     NOT `(+inf, -inf)`: the invariant is that an output cell is a
     correctly-formed `FeatureRange` after EVERY merge including zero of them
     (DEVIATION 163).
+
+    The shipped level loop seeds through DEVIATION 470's fused
+    `phase_setup_kernel`, which calls the same `range_init_seed_at`; this
+    standalone launch STAYS for `range_kernel_check`'s isolated arms.
     """
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
     while idx < Int(len):
-        out_min[unsafe_offset=idx] = Float32(1.0)
-        out_max[unsafe_offset=idx] = Float32(-1.0)
-        out_minkey[unsafe_offset=idx] = RANGE_KEY_MIN_SEED
-        out_maxkey[unsafe_offset=idx] = RANGE_KEY_MAX_SEED
-        out_n_missing[unsafe_offset=idx] = Int32(0)
-        out_n_merges[unsafe_offset=idx] = Int32(0)
+        range_init_seed_at(
+            out_min,
+            out_max,
+            out_minkey,
+            out_maxkey,
+            out_n_missing,
+            out_n_merges,
+            idx,
+        )
         idx += stride
 
 
@@ -2418,6 +2455,46 @@ def scored_candidate_at(
 from std.memory import stack_allocation
 
 
+@always_inline
+def score_init_seed_cell_at(
+    out_status: MutPointer[Int32, MutAnyOrigin],
+    out_threshold: MutPointer[Float32, MutAnyOrigin],
+    out_n_left: MutPointer[Int32, MutAnyOrigin],
+    out_n_total: MutPointer[Int32, MutAnyOrigin],
+    out_gini_num: MutPointer[Int64, MutAnyOrigin],
+    out_gini_den: MutPointer[Int64, MutAnyOrigin],
+    out_n_blocks: MutPointer[Int32, MutAnyOrigin],
+    idx: Int,
+):
+    """Seed ONE score cell: `node_feature_score_init_kernel`'s per-index body
+    over the seven per-cell arrays.
+
+    DEVIATION 470 extracts it so the fused `phase_setup_kernel` below can
+    IMPORT this logic rather than transcribe it. The standalone kernel runs
+    the same call.
+    """
+    out_status[unsafe_offset=idx] = SCORE_STATUS_UNVISITED
+    out_threshold[unsafe_offset=idx] = Float32(0.0)
+    out_n_left[unsafe_offset=idx] = Int32(0)
+    out_n_total[unsafe_offset=idx] = Int32(0)
+    out_gini_num[unsafe_offset=idx] = Int64(0)
+    out_gini_den[unsafe_offset=idx] = Int64(0)
+    out_n_blocks[unsafe_offset=idx] = Int32(0)
+
+
+@always_inline
+def score_init_seed_acc_at(
+    out_acc_left: MutPointer[Int32, MutAnyOrigin],
+    out_acc_total: MutPointer[Int32, MutAnyOrigin],
+    idx: Int,
+):
+    """Seed ONE class-accumulator cell: the second loop of
+    `node_feature_score_init_kernel`, extracted for the same DEVIATION 470
+    reason as `score_init_seed_cell_at` above."""
+    out_acc_left[unsafe_offset=idx] = Int32(0)
+    out_acc_total[unsafe_offset=idx] = Int32(0)
+
+
 def node_feature_score_init_kernel(
     out_status: MutPointer[Int32, MutAnyOrigin],
     out_threshold: MutPointer[Float32, MutAnyOrigin],
@@ -2442,24 +2519,191 @@ def node_feature_score_init_kernel(
     -- the finalize kernel overwrites it in every cell it reaches, so a cell
     still holding it is a REACH failure the check can name rather than a
     plausible-looking answer.
+
+    The shipped level loop seeds through DEVIATION 470's fused
+    `phase_setup_kernel`, which calls the same two seed helpers; this
+    standalone launch STAYS for `score_kernel_check`'s isolated arms.
     """
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
     var i = idx
     while i < Int(n_cells):
-        out_status[unsafe_offset=i] = SCORE_STATUS_UNVISITED
-        out_threshold[unsafe_offset=i] = Float32(0.0)
-        out_n_left[unsafe_offset=i] = Int32(0)
-        out_n_total[unsafe_offset=i] = Int32(0)
-        out_gini_num[unsafe_offset=i] = Int64(0)
-        out_gini_den[unsafe_offset=i] = Int64(0)
-        out_n_blocks[unsafe_offset=i] = Int32(0)
+        score_init_seed_cell_at(
+            out_status,
+            out_threshold,
+            out_n_left,
+            out_n_total,
+            out_gini_num,
+            out_gini_den,
+            out_n_blocks,
+            i,
+        )
         i += stride
     var j = idx
     while j < Int(n_acc_cells):
-        out_acc_left[unsafe_offset=j] = Int32(0)
-        out_acc_total[unsafe_offset=j] = Int32(0)
+        score_init_seed_acc_at(out_acc_left, out_acc_total, j)
         j += stride
+
+
+# ===========================================================================
+# DEVIATION 470 -- ONE fused seeder launch per search cycle.
+# ===========================================================================
+
+comptime PHASE_SETUP_TPB = 256
+"""The fused seeder's block width. The three standalone init kernels ran at
+64 and the three memsets at whatever the vendor picked; every write below is
+a pure function of its flat index and the arguments, so the width moves no
+value. 256 mirrors the ensemble lane's `PHASE_SETUP_TPB` (its DEVIATION
+1916)."""
+
+
+def phase_setup_kernel(
+    out_report: MutPointer[Int32, MutAnyOrigin],
+    n_report: Int32,
+    out_min: MutPointer[Float32, MutAnyOrigin],
+    out_max: MutPointer[Float32, MutAnyOrigin],
+    out_minkey: MutPointer[UInt32, MutAnyOrigin],
+    out_maxkey: MutPointer[UInt32, MutAnyOrigin],
+    out_n_missing: MutPointer[Int32, MutAnyOrigin],
+    out_n_merges: MutPointer[Int32, MutAnyOrigin],
+    n_range_cells: Int32,
+    out_nonconst: MutPointer[Int32, MutAnyOrigin],
+    n_nonconst: Int32,
+    out_status: MutPointer[Int32, MutAnyOrigin],
+    out_threshold: MutPointer[Float32, MutAnyOrigin],
+    out_n_left: MutPointer[Int32, MutAnyOrigin],
+    out_n_total: MutPointer[Int32, MutAnyOrigin],
+    out_gini_num: MutPointer[Int64, MutAnyOrigin],
+    out_gini_den: MutPointer[Int64, MutAnyOrigin],
+    out_n_blocks: MutPointer[Int32, MutAnyOrigin],
+    out_acc_left: MutPointer[Int32, MutAnyOrigin],
+    out_acc_total: MutPointer[Int32, MutAnyOrigin],
+    n_score_cells: Int32,
+    n_acc_cells: Int32,
+    out_mutex: MutPointer[Int32, MutAnyOrigin],
+    n_mutex: Int32,
+    out_r_quesval: MutPointer[Float32, MutAnyOrigin],
+    out_r_colid: MutPointer[Int32, MutAnyOrigin],
+    out_r_metric: MutPointer[Float32, MutAnyOrigin],
+    out_r_nleft: MutPointer[Int32, MutAnyOrigin],
+    out_r_num: MutPointer[Int64, MutAnyOrigin],
+    out_r_den: MutPointer[Int64, MutAnyOrigin],
+    out_r_valid: MutPointer[Int32, MutAnyOrigin],
+    out_r_merges: MutPointer[Int32, MutAnyOrigin],
+    out_r_warps: MutPointer[Int32, MutAnyOrigin],
+    n_reduce_nodes: Int32,
+):
+    """DEVIATION 470: the search cycle's SIX setup enqueues -- the
+    `d_samp_report` memset, `node_feature_range_init_kernel`, the
+    `d_nonconst` memset, `node_feature_score_init_kernel`, the `r_mx` memset
+    and `split_reduce_init_kernel` -- as ONE launch, enqueued after
+    `stage_batch` and before the feature sampler.
+
+    Fusing is pure orchestration and hoisting is bit-inert on the in-order
+    queue: all six are pure write-only seeders over DISJOINT buffers, every
+    cell a constant or a pure function of its flat index, none reads what
+    another (or any kernel between their old positions and this one) writes,
+    and nothing enqueued between each seeder's old position and its first
+    reader writes any of the seeded buffers. The three init bodies are
+    IMPORTED (`range_init_seed_at`, `score_init_seed_cell_at`,
+    `score_init_seed_acc_at`, `split_reduce_seed_at`), not transcribed; the
+    three memsets have no body to import, so their FILL CONSTANTS are the
+    imported thing (`SAMPLER_UNVISITED` by name, and the two zeroes).
+
+    THE EXTENTS ARE THE CALLER'S OBLIGATION AND THEY ARE NOT ALL THE LIVE
+    BATCH. `n_nonconst`, `n_mutex` and `n_report` are FULL-CAPACITY extents
+    (`max_batch` / `sampler_report_len` over capacity) -- exactly what the
+    three memsets covered -- because seeding only the live `n_nodes` leaves
+    stale cells that a later larger batch reads (the ensemble lane's
+    DEVIATION 1916 lesson). The range/score/reduce extents are the same live
+    extents the standalone kernels were launched with. An extent of ZERO
+    skips its region, which is how the caller reproduces the survey cycle
+    (no score/reduce seeding) and the rescue cycle (no report seeding)
+    exactly.
+
+    THE REFUSAL LIST, restated from the scoping pass: NO seeder is fused
+    into its CONSUMER. `node_nonconstant_flag_kernel` does cross-block
+    `Atomic.fetch_add` into `out_nonconst`; the range, score and reduce
+    kernels accumulate GRID-wide into their seeded cells. A seed folded into
+    any of them would need every block to see the seed before any block
+    accumulates, and Metal has no grid-wide sync -- so the seeders fuse with
+    each other and with nothing else.
+
+    Under `-D MOJOLEARN_ET_SAB_PHASE_SETUP=1` (a measurement arm, never a
+    gate) the class-accumulator seed is poisoned to the cell's batch-slot
+    parity: `device_batched_check`'s merged-vs-serial arms must go RED,
+    because a node's flat cell index depends on its batch slot and the two
+    arms batch differently, while the per-kernel checks stay GREEN because
+    they seed through the standalone kernels -- which localizes the poison
+    to this fused path.
+    """
+    var extent = Int(n_report)
+    if Int(n_range_cells) > extent:
+        extent = Int(n_range_cells)
+    if Int(n_nonconst) > extent:
+        extent = Int(n_nonconst)
+    if Int(n_score_cells) > extent:
+        extent = Int(n_score_cells)
+    if Int(n_acc_cells) > extent:
+        extent = Int(n_acc_cells)
+    if Int(n_mutex) > extent:
+        extent = Int(n_mutex)
+    if Int(n_reduce_nodes) > extent:
+        extent = Int(n_reduce_nodes)
+    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while idx < extent:
+        if idx < Int(n_report):
+            # The `d_samp_report` memset: a value no sampler kernel can
+            # produce, so the readback can name a reach failure.
+            out_report[unsafe_offset=idx] = SAMPLER_UNVISITED
+        if idx < Int(n_range_cells):
+            range_init_seed_at(
+                out_min,
+                out_max,
+                out_minkey,
+                out_maxkey,
+                out_n_missing,
+                out_n_merges,
+                idx,
+            )
+        if idx < Int(n_nonconst):
+            # The `d_nonconst` memset, over FULL capacity.
+            out_nonconst[unsafe_offset=idx] = Int32(0)
+        if idx < Int(n_score_cells):
+            score_init_seed_cell_at(
+                out_status,
+                out_threshold,
+                out_n_left,
+                out_n_total,
+                out_gini_num,
+                out_gini_den,
+                out_n_blocks,
+                idx,
+            )
+        if idx < Int(n_acc_cells):
+            score_init_seed_acc_at(out_acc_left, out_acc_total, idx)
+            comptime if is_defined["MOJOLEARN_ET_SAB_PHASE_SETUP"]():
+                # DEVIATION 470's sabotage arm: batch-slot-parity poison on
+                # the left-accumulator seed. See the docstring.
+                out_acc_left[unsafe_offset=idx] = Int32(idx & 1)
+        if idx < Int(n_mutex):
+            # The `r_mx` memset, over FULL capacity.
+            out_mutex[unsafe_offset=idx] = Int32(0)
+        if idx < Int(n_reduce_nodes):
+            split_reduce_seed_at(
+                out_r_quesval,
+                out_r_colid,
+                out_r_metric,
+                out_r_nleft,
+                out_r_num,
+                out_r_den,
+                out_r_valid,
+                out_r_merges,
+                out_r_warps,
+                idx,
+            )
+        idx += stride
 
 
 def node_feature_score_kernel[
@@ -3811,7 +4055,7 @@ def leaf_values_host(
 
 
 def leaf_kernel[
-    TPB: Int, MAX_OUT: Int, CLASSIFICATION: Bool
+    TPB: Int, MAX_OUT: Int, CLASSIFICATION: Bool, zero_fill: Bool = False
 ](
     out_leaves: MutPointer[Float32, MutAnyOrigin],
     out_visit: MutPointer[Int32, MutAnyOrigin],
@@ -3845,11 +4089,33 @@ def leaf_kernel[
       kernel writes `LEAF_VISIT_INTERNAL` or `LEAF_VISIT_PUBLISHED` into
       every node it reaches, so a node still holding zero is a reach failure
       the check can NAME rather than a plausible-looking answer.
+
     * `labels_q` is an `Int32` array indexed by ROW ID, not by slot: the class
       id for classification, the fixed-point label for regression (DEVIATION
       179). The device performs no float-to-integer conversion at all.
     * `inv_scale` is `1 / scale` for regression and `1.0` for classification,
       which never reads it.
+
+    DEVIATION 471: under `zero_fill = True` the kernel DISCHARGES the two
+    zeroing obligations itself, folding the two `enqueue_memset`s the
+    shipped tails paid into this launch. Bit-inert by BLOCK-EXCLUSIVE SLOT
+    OWNERSHIP: the grid is one block per node over the WHOLE concatenated
+    buffer, block `node_id` alone writes `out_visit[node_id]` and
+    `out_leaves[node_id * num_outputs ..+ num_outputs]`, so every cell the
+    memsets covered is zeroed exactly once, by its owner, BEFORE the
+    `IsLeaf` early return -- an internal node's slots stay the zero that IS
+    their value. All the zeroing runs on `tid == 0`, the SAME thread that
+    later publishes into the same cells, so every cell has one writer in
+    program order and no barrier fencing is load-bearing. The zero-fill
+    runs before the `MAX_OUT` refusal too, because the memsets it replaces
+    did. The
+    parameter DEFAULTS False so `leaf_check`, `partition_leaf_kernel_check`
+    and the `LEAF_SAB_*` arms keep the pre-change contract (their own
+    memsets, this kernel untouched); only the two shipped tails pass True.
+    `-D MOJOLEARN_ET_SAB_LEAF_ZERO_FILL=1` (a measurement arm, never a
+    gate) poisons the fill to the node's CONCATENATED-slot parity, which
+    diverges between the merged group's concatenation and the serial
+    one-tree tails, so `device_batched_check`'s leaf-bit arms must go RED.
 
     `MAX_OUT` bounds `num_outputs`; a launch past it publishes NOTHING and the
     caller sees `LEAF_VISIT_NONE`. DEVIATION BLOCK 178.
@@ -3865,6 +4131,24 @@ def leaf_kernel[
     var tid = Int(thread_idx.x)
     var k = Int(num_outputs_in)
     var sabotage = sabotage_in
+
+    # DEVIATION 471: the caller's two memsets, discharged by the owner
+    # block. BEFORE the MAX_OUT refusal and the IsLeaf return, because the
+    # memsets this replaces zeroed every slot regardless of either. ALL of
+    # it from `tid == 0` -- the same thread that later publishes into the
+    # same cells -- so every cell has ONE writer in program order and
+    # nothing rests on a barrier's device-memory fencing; `k` is bounded
+    # by the class count, so the serial loop is noise.
+    comptime if zero_fill:
+        if tid == 0:
+            var zfill = Float32(0.0)
+            comptime if is_defined["MOJOLEARN_ET_SAB_LEAF_ZERO_FILL"]():
+                # Sabotage arm (see the docstring): concatenated-slot
+                # parity.
+                zfill = Float32(node_id & 1)
+            out_visit[unsafe_offset=node_id] = LEAF_VISIT_NONE
+            for z in range(k):
+                out_leaves[unsafe_offset = node_id * k + z] = zfill
 
     # DEVIATION 178: the private array is comptime-sized, so a request past
     # the bound publishes nothing rather than writing out of bounds.
