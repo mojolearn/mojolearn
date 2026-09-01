@@ -121,6 +121,59 @@ training-deterministic are compiled and unlaunched.
 imports the tier under test rather than the fast package. That is the gap in
 the build scripts, not in these artifacts.
 
+### The wheel smoke launches 5 of the 12 bindings, MEASURED
+
+Chasing the line above turned up a larger hole and it is not tier-specific.
+`verify_wheel.sh` installs the wheel into a clean venv under every interpreter
+and loops `packaging/macos/smoke.py` over all three tiers, which is the right
+shape. But `smoke.py` exercises nine ESTIMATORS that between them reach only
+FIVE BINDINGS. Measured 2026-09-01 by wrapping `_backend.binding` and
+recording every name it was asked for, rather than by reading estimator names
+and inferring:
+
+    LOADED (5)       _mojolearn, _mojolearn_estimators, _mojolearn_gbdt,
+                     _mojolearn_rf, _mojolearn_trees
+    NEVER LOADED (7) _mojolearn_arima, _mojolearn_linalg, _mojolearn_metrics,
+                     _mojolearn_solver, _mojolearn_svm, _mojolearn_training,
+                     _mojolearn_tsa
+
+**ALL TWELVE ARE USER-REACHABLE**, so this is untested shipped surface and not
+dead weight: `_arima_impl.py`, `_linalg_impl.py`, `_svm_impl.py`,
+`_training_impl.py` and `_tsa_impl.py` each own one, `_hierarchy_impl.py:291`
+calls `_mojolearn_solver.linkage_fit`, and `_metrics_impl.py` loads
+`_mojolearn_metrics` through a loader of its own.
+
+Across three tiers that is **21 of 36 shipped artifacts that wheel
+verification never launches**. A binding among those seven could fail to
+import, or import and die at its first kernel launch -- the exact
+`MACOSX_DEPLOYMENT_TARGET` failure this tree has already shipped once -- and
+`verify_wheel.sh` would pass the wheel.
+
+PCA and TruncatedSVD look like they should cover `_mojolearn_linalg` and do
+not: `decomposition.py:155` and `:382` both bind `_mojolearn_estimators`.
+`LinearRegression` likewise does not reach `_mojolearn_solver`. Guessing
+coverage from estimator names gives the wrong answer, which is why the number
+above was measured.
+
+TWO INSTRUMENT CAVEATS, stated so the number is not over-read. The probe
+watches `_backend.binding`, so (a) it cannot see `_metrics_impl.py`, which
+deliberately bypasses that function with its own loader and carries a
+standing note that the workaround should be deleted; and (b) a binding loaded
+at import time before the wrapper was installed would be missed, though all
+five recorded loads happened at fit time.
+
+**OWED**: extend `smoke.py` to touch at least one entry point per binding, so
+that "the wheel verifies" means all twelve. That is the single highest-value
+item in the release lane and it is cheap -- one fit or one call each.
+
+### `packaging/macos/smoke_estimators.py` IS NOT WIRED IN
+
+It is a strict subset of `smoke.py` -- PCA, TruncatedSVD, DBSCAN,
+LinearRegression -- and neither `verify_wheel.sh` nor
+`build_release_wheel.sh` references it. It sits in the packaging directory
+looking like coverage and contributes none. Either wire it or delete it; do
+not count it.
+
 **WHY THIS MATTERED ENOUGH TO CHECK.** 0.3.0 shipped broken because a build
 path was never exercised before publishing (`docs/LINUX_WHEEL.md`); the
 standing memory is `verify-on-a-box-that-did-not-build-it`. An unattempted
