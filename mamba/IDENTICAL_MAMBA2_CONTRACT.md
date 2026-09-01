@@ -475,9 +475,20 @@ ONE COLUMN. Nothing here is a cross-vendor claim; phase 6 owns that.
   gnorm.gate), STEP_UPSTREAM_RECURRENCE (58,774 on gate (d) — after
   its guard was re-gated to engage only at l == 1 so the armed build's
   prefill legs run clean).
+- **FAST RECORDING (2026-09-01 evening, closing an owed line the same
+  day):** the lane was wired into phase 8 (`tools/e1_bootstrap.sh`,
+  `check-mamba2-block`, judge lists — commit 4515b284) and the Apple
+  phase-8 column ran both arms. IDENTICAL: card 26 records, check OK.
+  FAST: card 26 records WRITTEN (recorded, as row policy requires), and
+  the bit-exact assertion fails as FAST must — "GATE A FAILED: 9575
+  cells differ … first stage: silu.out". That failure is the expected
+  PHASE8-FINDING named in the judge's allowlist; FAST makes no identity
+  claim ([[fast-is-not-identical]]).
 - **STILL OWED:** the shape sweep (L in {256, 257, 513, 770} beyond the
-  gates' own lengths at larger d_model), FAST recording, kernel-matrix
-  rows' cross-column reads, check-portable-nn's identical_clamp arm,
+  gates' own lengths at larger d_model), kernel-matrix rows'
+  cross-column reads, check-portable-nn's identical_clamp arm,
   `pixi run check-mamba2-corpus` (the tool's mamba2 support is a
   separate lane item), and PHASE 6 — the three-vendor E-series leg the
-  completion claim lives on.
+  completion claim lives on (Apple reference column produced 2026-09-01;
+  rented legs launched the same evening, verdicts land here when the
+  judge reads the cards).
