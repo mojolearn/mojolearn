@@ -6823,7 +6823,19 @@ until 2026-09-01, and they are cleared by the same `-O1` build level, so
 this deviation is GATED too as of that day. Both pass on the `rbc` arm on an
 Apple M4; a three-vendor leg is owed.
 
-## 2007. [OPEN, RUN OWED] The host floor: the per-tree SM-count query, and the dead `partsCpu` root seeds
+## 2007. [GATED 2026-09-01, timing owed] The host floor: the per-tree SM-count query, and the dead `partsCpu` root seeds
+
+**RUN RECORD, 2026-09-01 evening (Apple M4, nice -19, one process):**
+identity-card A/B c4af1f42-vs-HEAD via `pixi run oracle` under
+`MOJOLEARN_IDENTITY_TRACE` — the card holds 12 concatenated fits (split
+on the `# format:` header before `tools/identity_trace_diff.py`), **all
+12 IDENTICAL: same stage sequence, same counts, same hashes**;
+`check-plan-fusion` green (2007b's per-cell gate); oracle 48/48 both
+searchers; oracle-sweep 38/38 with its sabotage arm live;
+`check-logloss-train` all five claims green (the estimation arm's
+witness); searcher-parity-covtype `identical True` both reps. STILL
+OWED: the timing A/B, cold box, intra-window, LABELED over the open
+DEVIATION 134 embargo.
 
 Two per-tree host costs on the shipped symmetric driver
 (`run_tree_layout_traced`), both with no CatBoost counterpart, both
@@ -6891,7 +6903,21 @@ Gates, NONE RUN (this Mac runs nothing; every command owed as-is):
 - `pixi run check-searcher-parity-covtype` (read the greedy mse row; the
   pointwise flag is known red)
 
-## 2008. [OPEN, RUN OWED] Dead zero passes: the level loop's compute-slot zero and the per-tree histogram memset
+## 2008. [GATED 2026-09-01, timing owed] Dead zero passes: the level loop's compute-slot zero and the per-tree histogram memset
+
+**RUN RECORD, 2026-09-01 evening: the coverage argument is CERTIFIED,
+not just argued.** The retired zero launch was temporarily re-added
+storing 1e30 over exactly the compute slots it used to zero
+(`zero_histograms_kernel`'s constant temp-flipped): the identity card
+did NOT move — 12/12 fits IDENTICAL against the clean HEAD card — so
+every poisoned cell is overwritten before its reader. The required-red
+companion (same poison widened to ALL live slots, which parent-copy
+reads legitimately see) broke every fit and went DIVERGENT on the card,
+proving the poison reaches the plane and the quiet narrow arm is
+meaningful. `check-hist2` green (the class gate), oracle 48/48,
+oracle-sweep 38/38, `check-logloss-train` five/five (estimation arm).
+Temp sabotage stripped before commit. STILL OWED: the timing A/B, cold
+box, labeled over the 134 embargo.
 
 Same driver, same embargo discipline as 2007: bit-inert deletions only,
 no speed claim quotable while DEVIATION 134 is open.
