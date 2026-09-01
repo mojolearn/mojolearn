@@ -464,7 +464,7 @@ def compare_dumps(
 def first_moved(diffs: List[StageDiff]) -> String:
     for i in range(len(diffs)):
         if diffs[i].n_diff > 0:
-            return diffs[i].name
+            return diffs[i].name.copy()
     return String("")
 
 
@@ -887,10 +887,11 @@ def gate_d(
             ).n_diff
             var cstar = (l_total - 1) // qv
             var nh = dims.nheads
-            # dacs.out / decay.states [B, H, C, Q]: chunk cstar.
+            # dacs.out / decay.states [B, H, C, Q]: chunk cstar. `dec[idx]`
+            # is passed as a BORROW, never bound to a var -- List[Float32]
+            # is not implicitly copyable (the house trap).
             for si in range(2):
                 var idx = 9 if si == 0 else 13
-                var got = dec[idx]
                 var wantv = List[Float32]()
                 for hh in range(nh):
                     for j in range(qv):
@@ -898,34 +899,31 @@ def gate_d(
                             pre[idx][(hh * nc_pre + cstar) * qv + j]
                         )
                 fails += compare_stage(
-                    stage_name(idx) + " [final chunk]", got, wantv, False
+                    stage_name(idx) + " [final chunk]", dec[idx], wantv, False
                 ).n_diff
             # cstate.out / pass.states [B, C, H, P, N]: chunk cstar.
             for si in range(2):
                 var idx = 14 if si == 0 else 15
-                var got = dec[idx]
                 var wantv = List[Float32]()
                 for j in range(nh * p_dim * n_state):
                     wantv.append(
                         pre[idx][cstar * nh * p_dim * n_state + j]
                     )
                 fails += compare_stage(
-                    stage_name(idx) + " [final chunk]", got, wantv, False
+                    stage_name(idx) + " [final chunk]", dec[idx], wantv, False
                 ).n_diff
             # seg.L [B, C, H, Q, Q] and cb.G [B, C, Q, Q]: chunk cstar.
-            var gotL = dec[10]
             var wantL = List[Float32]()
             for j in range(nh * qv * qv):
                 wantL.append(pre[10][cstar * nh * qv * qv + j])
             fails += compare_stage(
-                String("seg.L [final chunk]"), gotL, wantL, False
+                String("seg.L [final chunk]"), dec[10], wantL, False
             ).n_diff
-            var gotG = dec[11]
             var wantG = List[Float32]()
             for j in range(qv * qv):
                 wantG.append(pre[11][cstar * qv * qv + j])
             fails += compare_stage(
-                String("cb.G [final chunk]"), gotG, wantG, False
+                String("cb.G [final chunk]"), dec[11], wantG, False
             ).n_diff
             # the resumption h.
             fails += compare_stage(
@@ -1235,7 +1233,7 @@ def gate_e_one_plant(
     _ = dstate^
     _ = dstages^
     _ = dx^
-    return names[name_idx]
+    return names[name_idx].copy()
 
 
 def gate_e(ctx: DeviceContext, case_k: Int, b: Int, l: Int) raises:
@@ -1452,7 +1450,6 @@ def sabotage_main(ctx: DeviceContext) raises:
                     + "' first; DEVIATION 785's seam writes pass.states"
                     + " and nothing earlier may move"
                 )
-            moved_names.append(String(cc.name))
             print("  ", cc.name, "-> moved, first stage pass.states")
         print(
             "SABOTAGE ARM FAILS AS REQUIRED on both witnessing fixtures."
