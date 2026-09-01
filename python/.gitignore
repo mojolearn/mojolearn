@@ -24,6 +24,11 @@ mojolearn/_mojolearn_linalg.so
 # forward in the commit that added these lines, not rewritten out of history.
 mojolearn/_mojolearn_arima.so
 mojolearn/_mojolearn_training.so
+# The gp binding (2026-09-01, the thirteenth). Third instance of the same
+# omission this file's comments predict: the binding shipped green and the
+# .so sat untracked until the phase-8 rent pre-flight refused the dirty
+# tree. Added the same day, forward.
+mojolearn/_mojolearn_gp.so
 # Build output copied in by packaging/macos/build_release_wheel.sh so that
 # `python -m mojolearn verify` has a comparator inside the wheel. The single
 # source stays tools/identity_trace_diff.py in git.
