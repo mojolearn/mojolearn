@@ -369,6 +369,29 @@ comptime CLASSIFICATION_MODEL: Int = 2
 # Python sends for `max_depth=None`.
 comptime INT32_MAX: Int32 = 2147483647
 
+# DEVIATION 2001 -- SAMPLED-ORDER LABELS, THE ONE FLAG (2026-09-01).
+# cuML's histogram/leaf inner loops gather `labels[row_ids[i]]` (and,
+# weighted, `sample_weight[row_ids[i]]`) per element per level; both GPU
+# competitors keep permuted stat streams instead. True keeps
+# `labels_s[i] = labels[row_ids[i]]` per tree (gathered by
+# `Builder.stage_sampled_order` below, re-permuted WITH `row_ids` at
+# every split) so those loops read sequentially at the loop index --
+# address-only, same value at the same iteration on the same thread,
+# accumulation integer-atomic either way, so the fingerprints must not
+# move. The full argument and the sabotage hook live with the mechanism
+# in `builder_kernels_impl.mojo` (DEVIATION 2001 block).
+#
+# DEFAULT FALSE: every parameter downstream defaults off, so this build
+# is the pre-2001 code; the A/B pair is two builds of this ONE source
+# with this ONE line flipped, and the default flips only on a measured
+# bit-identical win (house rule 11). GATES OWED before any flip, in
+# order: fingerprint pair flag-off vs flag-on, equal on all five configs
+# + K1/K4 twins (`pixi run mojo run -I . ensemble/checks/
+# fingerprint_probe.mojo`); the ensemble check suite; the sabotage arm
+# (flag-on, gather sabotage=1: every line downstream of the first
+# histogram must MOVE); the A/B timing pair at the RF_BENCH shapes.
+comptime LABELS_SAMPLED_ORDER = False
+
 
 # ---------------------------------------------------------------------------
 # RF_metrics -- `randomforest.hpp:29-39`, `randomforest.cu:588-641`
@@ -2668,10 +2691,12 @@ def fit_forest[
     )
     # Pool-of-K: one Builder per pipeline slot, their stream pool's
     # per-stream workspaces.
-    var builders = List[Builder[O]]()
+    # DEVIATION 2001: the one comptime flag rides the Builder parameter;
+    # False (the default everywhere else) keeps this the pre-2001 loop.
+    var builders = List[Builder[O, LABELS_SAMPLED_ORDER]]()
     for _ in range(k_streams):
         builders.append(
-            Builder[O](
+            Builder[O, LABELS_SAMPLED_ORDER](
                 ctx,
                 rf_params.tree_params,
                 Int32(0),
@@ -2758,6 +2783,12 @@ def fit_forest[
                 ](),
                 use_bins,
             )
+            # DEVIATION 2001 -- gather this tree's sampled-order stat
+            # streams and repoint the view at them; every args blob the
+            # builder stages from this view then carries them. Compiled
+            # out under the default.
+            comptime if LABELS_SAMPLED_ORDER:
+                builders[k].stage_sampled_order(ctx, dataset)
             var ts = builders[k].begin_tree(ctx, dataset, quantiles, instr)
             if ts.done:
                 forest.trees[next_tree] = ts.tree.copy()
@@ -2843,6 +2874,9 @@ def fit_forest[
                     ](),
                     use_bins,
                 )
+                # DEVIATION 2001 -- as in the prime loop above.
+                comptime if LABELS_SAMPLED_ORDER:
+                    builders[k].stage_sampled_order(ctx, dataset)
                 states[k] = builders[k].begin_tree(
                     ctx, dataset, quantiles, instr
                 )

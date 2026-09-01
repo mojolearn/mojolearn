@@ -1040,6 +1040,127 @@ struct NodeSplitPartitionOps[dtype: DType, TPB: Int, sabotage: Int = 0](
         self.partition_row_ids[unsafe_offset=out_idx] = row
 
 
+struct NodeSplitPartitionOpsSampled[
+    dtype: DType, label_dtype: DType, TPB: Int, sabotage: Int = 0
+](ScanByKeyOps):
+    """DEVIATION 2001's partition functor: `NodeSplitPartitionOps` plus
+    the sampled-order label (and weight) streams, moved WITH the row.
+
+    The mechanism keeps `labels_s[i] == labels[row_ids[i]]` at every
+    point, so the histogram and leaf kernels read labels sequentially at
+    the loop index instead of gathering `labels[row]`. That invariant
+    survives a split only if the label stream is re-permuted alongside
+    `row_ids` UNDER THE SAME GUARD IN THE SAME KERNEL -- two
+    independently guarded passes could desync on an invalid/leaf node
+    and the leaf pass would read garbage. `store` below therefore writes
+    `partition_labels[out_idx]` beside `partition_row_ids[out_idx]`,
+    behind the one `state.valid_row` early-return both share; the
+    copy-back twin (`node_split_copy_back_sampled_kernel`) moves both
+    behind the one `split.IsValid()` guard.
+
+    `key`/`load` are the base functor's, delegated; `store` recomputes
+    the base's placement (their `:97-114`) once and scatters all the
+    streams from it. `sabotage` forwards to the base semantics: 4 and 5
+    behave exactly as documented on `NodeSplitPartitionOps`, and the
+    label/weight writes sit behind the same (sabotaged) guard and rank,
+    so a sabotage that shifts the row shifts its label with it.
+    """
+
+    comptime Elem = NodeSplitPartitionState
+
+    var base: NodeSplitPartitionOps[Self.dtype, Self.TPB, Self.sabotage]
+    # DEVIATION 2001 -- the sampled-order stat streams. `labels_s` /
+    # `sample_weight_s` are what `dataset.labels` / `.sample_weight`
+    # already point at under the flag (the builder repointed them after
+    # the per-tree gather); they are carried by name so `store` reads
+    # them without a `DatasetView`.
+    var labels_s: MutPointer[Scalar[Self.label_dtype], MutUntrackedOrigin]
+    var sample_weight_s: MutPointer[Float32, MutUntrackedOrigin]
+    var partition_labels: MutPointer[
+        Scalar[Self.label_dtype], MutUntrackedOrigin
+    ]
+    var partition_sample_weight: MutPointer[Float32, MutUntrackedOrigin]
+    # Their `sample_weight == nullptr`, as in `DatasetView`: when False
+    # the weight stream is inert and only labels move.
+    var move_weights: Bool
+
+    @always_inline
+    def __init__(
+        out self,
+        dataset: DatasetView[Self.dtype, Self.label_dtype],
+        work_items: MutPointer[NodeWorkItem, MutUntrackedOrigin],
+        splits: MutPointer[Split[Self.dtype], MutUntrackedOrigin],
+        workload_info: MutPointer[WorkloadInfo, MutUntrackedOrigin],
+        partition_row_ids: MutPointer[Int32, MutUntrackedOrigin],
+        partition_labels: MutPointer[
+            Scalar[Self.label_dtype], MutUntrackedOrigin
+        ],
+        partition_sample_weight: MutPointer[Float32, MutUntrackedOrigin],
+    ):
+        self.base = NodeSplitPartitionOps[
+            Self.dtype, Self.TPB, Self.sabotage
+        ](dataset, work_items, splits, workload_info, partition_row_ids)
+        self.labels_s = dataset.labels
+        self.sample_weight_s = dataset.sample_weight
+        self.partition_labels = partition_labels
+        self.partition_sample_weight = partition_sample_weight
+        self.move_weights = dataset.has_sample_weight
+
+    @always_inline
+    def key(self, slot: Int) -> Int32:
+        return self.base.key(slot)
+
+    @always_inline
+    def load(self, slot: Int) -> Self.Elem:
+        return self.base.load(slot)
+
+    @always_inline
+    def store(self, slot: Int, state: Self.Elem):
+        """The base `store` (`:97-114`) with the label/weight scatter
+        added at the SAME `out_idx` behind the SAME guard."""
+        # `:99`
+        comptime if Self.sabotage != 5:
+            if not state.valid_row:
+                return
+
+        # `:101-105`
+        ref workload_info_cta = self.base.workload_info[
+            unsafe_offset = slot // Self.TPB
+        ]
+        var nid = workload_info_cta.nodeid
+        ref work_item = self.base.work_items[unsafe_offset = Int(nid)]
+        var split = self.base.splits[unsafe_offset = Int(nid)]
+
+        # `:107-108`
+        var range_start = work_item.instances.begin
+        var range_pos = (
+            Int(workload_info_cta.offset_blockid) * Self.TPB
+            + slot % Self.TPB
+        )
+
+        # `:110-114`
+        var src_idx = range_start + range_pos
+        var row = self.base.row_ids[unsafe_offset=src_idx]
+        comptime off = 0 if Self.sabotage == 4 else 1
+        var rank = (
+            Int(state.left_count) - off
+        ) if state.goes_left else range_pos - Int(state.left_count)
+        var local_left_count = Int(split.local_nLeft)
+        var out_idx = range_start + (
+            rank if state.goes_left else local_left_count + rank
+        )
+        self.base.partition_row_ids[unsafe_offset=out_idx] = row
+        # DEVIATION 2001 -- the row's label moves with it, keeping
+        # `labels_s[i] == labels[row_ids[i]]` through the split.
+        self.partition_labels[unsafe_offset=out_idx] = self.labels_s[
+            unsafe_offset=src_idx
+        ]
+        if self.move_weights:
+            self.partition_sample_weight[
+                unsafe_offset=out_idx
+            ] = self.sample_weight_s[unsafe_offset=src_idx]
+
+
 def node_split_copy_back_kernel[
     dtype: DType, label_dtype: DType, TPB: Int, sabotage: Int = 0
 ](
@@ -1086,7 +1207,70 @@ def node_split_copy_back_kernel[
         row_ids[unsafe_offset=idx] = partition_row_ids[unsafe_offset=idx]
 
 
-struct NodeSplitScratch[dtype: DType, TPB: Int](Movable):
+def node_split_copy_back_sampled_kernel[
+    dtype: DType, label_dtype: DType, TPB: Int, sabotage: Int = 0
+](
+    argsp: MutPointer[NodeSplitArgs[dtype, label_dtype], MutAnyOrigin],
+    work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    splits: MutPointer[Split[dtype], MutAnyOrigin],
+    workload_info: MutPointer[WorkloadInfo, MutAnyOrigin],
+    partition_row_ids: MutPointer[Int32, MutAnyOrigin],
+    partition_labels: MutPointer[Scalar[label_dtype], MutAnyOrigin],
+    partition_sample_weight: MutPointer[Float32, MutAnyOrigin],
+):
+    """DEVIATION 2001's copy-back: `node_split_copy_back_kernel` above
+    with the label (and weight) stream copied back BESIDE the row ids,
+    behind the SAME `split.IsValid()` guard and the SAME range test --
+    one kernel, one guard, no way for the streams to desync. Leaf and
+    invalid nodes keep their existing order in ALL streams, exactly as
+    the scan writer skipped them in all streams.
+
+    `dataset.labels` / `dataset.sample_weight` in the args blob already
+    point at the sampled-order copies (the builder repointed them after
+    the per-tree gather), so the destinations need no extra plumbing;
+    the two partition twins arrive as arguments, as `partition_row_ids`
+    does. `sabotage` 6 drops the `IsValid()` early return, exactly as on
+    the base kernel -- and corrupts all the streams together, which is
+    the point.
+    """
+    ref args = argsp[unsafe_offset=0]
+    var row_ids = args.dataset.row_ids
+    var labels_s = args.dataset.labels
+    var sample_weight_s = args.dataset.sample_weight
+    var move_weights = args.dataset.has_sample_weight
+
+    # `:123-127`
+    ref workload_info_cta = workload_info[unsafe_offset = Int(block_idx.x)]
+    var nid = workload_info_cta.nodeid
+    ref work_item = work_items[unsafe_offset = Int(nid)]
+    var split = splits[unsafe_offset = Int(nid)]
+    comptime if sabotage != 6:
+        if not split.IsValid():
+            return
+
+    # `:129-141`
+    var range_start = work_item.instances.begin
+    var range_len = work_item.instances.count
+    var range_pos = (
+        Int(workload_info_cta.offset_blockid) * Int(block_dim.x)
+        + Int(thread_idx.x)
+    )
+    if range_pos < range_len:
+        var idx = range_start + range_pos
+        row_ids[unsafe_offset=idx] = partition_row_ids[unsafe_offset=idx]
+        labels_s[unsafe_offset=idx] = partition_labels[unsafe_offset=idx]
+        if move_weights:
+            sample_weight_s[unsafe_offset=idx] = partition_sample_weight[
+                unsafe_offset=idx
+            ]
+
+
+struct NodeSplitScratch[
+    dtype: DType,
+    TPB: Int,
+    label_dtype: DType = DType.int32,
+    sampled_labels: Bool = False,
+](Movable):
     """The buffers `launch_node_split_kernel` needs and must not allocate.
 
     Theirs come from `rmm::exec_policy(builder_stream)`'s async resource
@@ -1095,9 +1279,23 @@ struct NodeSplitScratch[dtype: DType, TPB: Int](Movable):
     `core/scan_by_key`'s four scratch buffers plus DEVIATION 128a's two
     argument blobs; construct once per `Builder`, at the maxima the batch
     can reach, and pass every level.
+
+    DEVIATION 2001 (`sampled_labels`, default False = the pre-2001
+    scratch, byte for byte): when the builder keeps sampled-order
+    label/weight copies, the partition needs twins of
+    `partition_row_ids` for them -- they belong here by this struct's
+    own charter, and NOT in `WorkspaceLayout`, whose arena stays
+    byte-for-byte cuML's `assignWorkspace` sizing (builder_check
+    compares them). The twins are `Optional` so the default arm
+    allocates NOTHING; `label_dtype` types them and is otherwise inert.
+    The ops staging trio is sized off whichever functor the flag
+    selects, since the sampled functor is strictly larger.
     """
 
     comptime Ops = NodeSplitPartitionOps[Self.dtype, Self.TPB]
+    comptime OpsS = NodeSplitPartitionOpsSampled[
+        Self.dtype, Self.label_dtype, Self.TPB
+    ]
 
     var local_nleft: DeviceBuffer[DType.int32]
     var states: DeviceBuffer[DType.uint8]
@@ -1117,11 +1315,25 @@ struct NodeSplitScratch[dtype: DType, TPB: Int](Movable):
     var ops_cmp: HostBuffer[DType.uint8]
     var ops_staged: Bool
     var ops_dev: DeviceBuffer[DType.uint8]
+    # DEVIATION 2001 -- `partition_row_ids`' label/weight twins, present
+    # only under `sampled_labels` (None otherwise, zero allocation).
+    var partition_labels: Optional[DeviceBuffer[Self.label_dtype]]
+    var partition_sample_weight: Optional[DeviceBuffer[DType.float32]]
 
     def __init__(
-        out self, ctx: DeviceContext, max_slots: Int, max_work_items: Int
+        out self,
+        ctx: DeviceContext,
+        max_slots: Int,
+        max_work_items: Int,
+        max_rows: Int = 1,
     ) raises:
         var n_blocks = ceildiv(max_slots, Self.TPB)
+        # DEVIATION 2001: the staging trio holds whichever functor the
+        # flag selects. `OPS_BYTES == size_of[Ops]()` when the flag is
+        # off, so the default arm's sizes are untouched.
+        comptime OPS_BYTES = size_of[
+            Self.OpsS
+        ]() if Self.sampled_labels else size_of[Self.Ops]()
         self.local_nleft = ctx.enqueue_create_buffer[DType.int32](
             max_work_items if max_work_items > 0 else 1
         )
@@ -1136,25 +1348,71 @@ struct NodeSplitScratch[dtype: DType, TPB: Int](Movable):
             n_blocks + 1
         )
         self.ops_host = ctx.enqueue_create_host_buffer[DType.uint8](
-            size_of[Self.Ops]()
+            OPS_BYTES
         )
         self.ops_cmp = ctx.enqueue_create_host_buffer[DType.uint8](
-            size_of[Self.Ops]()
+            OPS_BYTES
         )
         self.ops_staged = False
-        self.ops_dev = ctx.enqueue_create_buffer[DType.uint8](
-            size_of[Self.Ops]()
-        )
+        self.ops_dev = ctx.enqueue_create_buffer[DType.uint8](OPS_BYTES)
+        comptime if Self.sampled_labels:
+            self.partition_labels = Optional(
+                ctx.enqueue_create_buffer[Self.label_dtype](
+                    max_rows if max_rows > 0 else 1
+                )
+            )
+            self.partition_sample_weight = Optional(
+                ctx.enqueue_create_buffer[DType.float32](
+                    max_rows if max_rows > 0 else 1
+                )
+            )
+        else:
+            self.partition_labels = Optional[
+                DeviceBuffer[Self.label_dtype]
+            ]()
+            self.partition_sample_weight = Optional[
+                DeviceBuffer[DType.float32]
+            ]()
         var hp = self.ops_host.unsafe_ptr()
         var cp = self.ops_cmp.unsafe_ptr()
-        for i in range(size_of[Self.Ops]()):
+        for i in range(OPS_BYTES):
             hp.unsafe_store(i, UInt8(0))
             cp.unsafe_store(i, UInt8(0))
+
+    @always_inline
+    def partition_labels_ptr(
+        mut self,
+    ) -> MutPointer[Scalar[Self.label_dtype], MutUntrackedOrigin]:
+        """DEVIATION 2001; meaningful only under `sampled_labels`."""
+        comptime assert Self.sampled_labels, (
+            "partition_labels_ptr requires sampled_labels"
+        )
+        return (
+            self.partition_labels.value()
+            .unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+        )
+
+    @always_inline
+    def partition_sample_weight_ptr(
+        mut self,
+    ) -> MutPointer[Float32, MutUntrackedOrigin]:
+        """DEVIATION 2001; meaningful only under `sampled_labels`."""
+        comptime assert Self.sampled_labels, (
+            "partition_sample_weight_ptr requires sampled_labels"
+        )
+        return (
+            self.partition_sample_weight.value()
+            .unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+        )
 
 
 def launch_node_split_kernel[
     dtype: DType,
-    label_dtype: DType, //,
+    label_dtype: DType,
+    scratch_label_dtype: DType,
+    sampled_labels: Bool, //,
     TPB: Int = TPB_DEFAULT,
     sabotage: Int = 0,
 ](
@@ -1166,7 +1424,9 @@ def launch_node_split_kernel[
     n_blocks_dimx: Int,
     n_work_items: Int,
     partition_row_ids: MutPointer[Int32, MutUntrackedOrigin],
-    mut scratch: NodeSplitScratch[dtype, TPB],
+    mut scratch: NodeSplitScratch[
+        dtype, TPB, scratch_label_dtype, sampled_labels
+    ],
     argsp: MutPointer[NodeSplitArgs[dtype, label_dtype], MutUntrackedOrigin],
 ) raises:
     """`launchNodeSplitKernel`, `:144-212`, in their order.
@@ -1179,6 +1439,15 @@ def launch_node_split_kernel[
     `sabotage` is a CHECK HOOK: 1, 2 and 3 are forwarded to
     `core/scan_by_key` (segment reset, inter-block carry, head flag);
     4 and 5 go to `NodeSplitPartitionOps`; 6 goes to the copy-back.
+
+    DEVIATION 2001: `scratch_label_dtype` and `sampled_labels` are
+    INFERRED from the scratch the caller holds, so no call site spells
+    them and every pre-2001 call site (scratch defaults int32/False)
+    compiles to the identical launcher. Under `sampled_labels` the scan
+    functor becomes `NodeSplitPartitionOpsSampled` and the copy-back its
+    twin, so the sampled-order label/weight streams move under the SAME
+    guards in the SAME kernels as `row_ids` -- never as separately
+    guarded passes. The sabotage forwarding is identical on both arms.
     """
     # `:153`
     if n_blocks_dimx == 0:
@@ -1230,63 +1499,259 @@ def launch_node_split_kernel[
     # grouped by node, so scan-by-key resets ranks at node boundaries."
     var n_slots = n_blocks_dimx * TPB
     comptime ops_sab = 4 if sabotage == 4 else (5 if sabotage == 5 else 0)
-    comptime OpsT = NodeSplitPartitionOps[dtype, TPB, ops_sab]
-    var ops = OpsT(
-        dataset, work_items, splits, workload_info, partition_row_ids
-    )
-    # DEVIATION 1917: stage the candidate, compare against the bytes the
-    # last enqueued copy sent, and skip the copy when they are equal --
-    # the in-order queue already delivered them, and this batch's kernels
-    # are enqueued after that copy. See `NodeSplitScratch.ops_cmp`.
-    scratch.ops_cmp.unsafe_ptr().unsafe_bitcast[OpsT]()[
-        unsafe_offset=0
-    ] = ops
-    var ops_hp = scratch.ops_host.unsafe_ptr()
-    var ops_cp = scratch.ops_cmp.unsafe_ptr()
-    var ops_same = scratch.ops_staged
-    if ops_same:
-        for i in range(size_of[OpsT]()):
-            if ops_hp.unsafe_load(i) != ops_cp.unsafe_load(i):
-                ops_same = False
-                break
-    if not ops_same:
-        for i in range(size_of[OpsT]()):
-            ops_hp.unsafe_store(i, ops_cp.unsafe_load(i))
-        log_launch("xfer_nodesplit_ops")
-        ctx.enqueue_copy(
-            dst_buf=scratch.ops_dev, src_ptr=scratch.ops_host.unsafe_ptr()
-        )
-        scratch.ops_staged = True
-    var ops_ptr = (
-        scratch.ops_dev.unsafe_ptr()
-        .unsafe_origin_cast[MutUntrackedOrigin]()
-        .unsafe_bitcast[OpsT]()
-    )
     comptime scan_sab = sabotage if sabotage >= 1 and sabotage <= 3 else 0
-    launch_inclusive_scan_by_key[OpsT, TPB, scan_sab](
-        ctx,
-        ops_ptr,
-        n_slots,
-        scratch.states,
-        scratch.heads,
-        scratch.block_agg,
-        scratch.block_head,
-    )
-
-    # `:208-212` -- "The original row_ids buffer remains the source during
-    # the scan, so copy back after it finishes."
     comptime copy_sab = 6 if sabotage == 6 else 0
-    comptime k_copy = node_split_copy_back_kernel[
-        dtype, label_dtype, TPB, copy_sab
-    ]
-    log_launch("nodesplit_copy_back")
-    ctx.enqueue_function[k_copy](
-        argsp.unsafe_origin_cast[MutAnyOrigin](),
-        work_items.unsafe_origin_cast[MutAnyOrigin](),
-        splits.unsafe_origin_cast[MutAnyOrigin](),
-        workload_info.unsafe_origin_cast[MutAnyOrigin](),
-        partition_row_ids.unsafe_origin_cast[MutAnyOrigin](),
-        grid_dim=n_blocks_dimx,
+    comptime if sampled_labels:
+        # DEVIATION 2001's arm: the sampled functor and its copy-back
+        # twin; everything else -- the 1917 staging, the scan, the
+        # launch shape -- is the flag-off arm's, byte for byte, with
+        # `OpsST` in `OpsT`'s place.
+        comptime assert scratch_label_dtype == label_dtype, (
+            "NodeSplitScratch label_dtype must match the dataset's under"
+            " sampled_labels (DEVIATION 2001)"
+        )
+        comptime OpsST = NodeSplitPartitionOpsSampled[
+            dtype, label_dtype, TPB, ops_sab
+        ]
+        var partition_labels = rebind[
+            MutPointer[Scalar[label_dtype], MutUntrackedOrigin]
+        ](scratch.partition_labels_ptr())
+        var partition_sample_weight = scratch.partition_sample_weight_ptr()
+        var ops = OpsST(
+            dataset,
+            work_items,
+            splits,
+            workload_info,
+            partition_row_ids,
+            partition_labels,
+            partition_sample_weight,
+        )
+        # DEVIATION 1917, unchanged in shape: stage, byte-compare, skip.
+        scratch.ops_cmp.unsafe_ptr().unsafe_bitcast[OpsST]()[
+            unsafe_offset=0
+        ] = ops
+        var ops_hp = scratch.ops_host.unsafe_ptr()
+        var ops_cp = scratch.ops_cmp.unsafe_ptr()
+        var ops_same = scratch.ops_staged
+        if ops_same:
+            for i in range(size_of[OpsST]()):
+                if ops_hp.unsafe_load(i) != ops_cp.unsafe_load(i):
+                    ops_same = False
+                    break
+        if not ops_same:
+            for i in range(size_of[OpsST]()):
+                ops_hp.unsafe_store(i, ops_cp.unsafe_load(i))
+            log_launch("xfer_nodesplit_ops")
+            ctx.enqueue_copy(
+                dst_buf=scratch.ops_dev,
+                src_ptr=scratch.ops_host.unsafe_ptr(),
+            )
+            scratch.ops_staged = True
+        var ops_ptr = (
+            scratch.ops_dev.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+            .unsafe_bitcast[OpsST]()
+        )
+        launch_inclusive_scan_by_key[OpsST, TPB, scan_sab](
+            ctx,
+            ops_ptr,
+            n_slots,
+            scratch.states,
+            scratch.heads,
+            scratch.block_agg,
+            scratch.block_head,
+        )
+
+        # `:208-212`, with the label/weight streams copied back beside
+        # the row ids IN THE SAME KERNEL (see the twin's docstring).
+        comptime k_copy_s = node_split_copy_back_sampled_kernel[
+            dtype, label_dtype, TPB, copy_sab
+        ]
+        log_launch("nodesplit_copy_back")
+        ctx.enqueue_function[k_copy_s](
+            argsp.unsafe_origin_cast[MutAnyOrigin](),
+            work_items.unsafe_origin_cast[MutAnyOrigin](),
+            splits.unsafe_origin_cast[MutAnyOrigin](),
+            workload_info.unsafe_origin_cast[MutAnyOrigin](),
+            partition_row_ids.unsafe_origin_cast[MutAnyOrigin](),
+            partition_labels.unsafe_origin_cast[MutAnyOrigin](),
+            partition_sample_weight.unsafe_origin_cast[MutAnyOrigin](),
+            grid_dim=n_blocks_dimx,
+            block_dim=TPB,
+        )
+    else:
+        comptime OpsT = NodeSplitPartitionOps[dtype, TPB, ops_sab]
+        var ops = OpsT(
+            dataset, work_items, splits, workload_info, partition_row_ids
+        )
+        # DEVIATION 1917: stage the candidate, compare against the bytes
+        # the last enqueued copy sent, and skip the copy when they are
+        # equal -- the in-order queue already delivered them, and this
+        # batch's kernels are enqueued after that copy. See
+        # `NodeSplitScratch.ops_cmp`.
+        scratch.ops_cmp.unsafe_ptr().unsafe_bitcast[OpsT]()[
+            unsafe_offset=0
+        ] = ops
+        var ops_hp = scratch.ops_host.unsafe_ptr()
+        var ops_cp = scratch.ops_cmp.unsafe_ptr()
+        var ops_same = scratch.ops_staged
+        if ops_same:
+            for i in range(size_of[OpsT]()):
+                if ops_hp.unsafe_load(i) != ops_cp.unsafe_load(i):
+                    ops_same = False
+                    break
+        if not ops_same:
+            for i in range(size_of[OpsT]()):
+                ops_hp.unsafe_store(i, ops_cp.unsafe_load(i))
+            log_launch("xfer_nodesplit_ops")
+            ctx.enqueue_copy(
+                dst_buf=scratch.ops_dev,
+                src_ptr=scratch.ops_host.unsafe_ptr(),
+            )
+            scratch.ops_staged = True
+        var ops_ptr = (
+            scratch.ops_dev.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+            .unsafe_bitcast[OpsT]()
+        )
+        launch_inclusive_scan_by_key[OpsT, TPB, scan_sab](
+            ctx,
+            ops_ptr,
+            n_slots,
+            scratch.states,
+            scratch.heads,
+            scratch.block_agg,
+            scratch.block_head,
+        )
+
+        # `:208-212` -- "The original row_ids buffer remains the source
+        # during the scan, so copy back after it finishes."
+        comptime k_copy = node_split_copy_back_kernel[
+            dtype, label_dtype, TPB, copy_sab
+        ]
+        log_launch("nodesplit_copy_back")
+        ctx.enqueue_function[k_copy](
+            argsp.unsafe_origin_cast[MutAnyOrigin](),
+            work_items.unsafe_origin_cast[MutAnyOrigin](),
+            splits.unsafe_origin_cast[MutAnyOrigin](),
+            workload_info.unsafe_origin_cast[MutAnyOrigin](),
+            partition_row_ids.unsafe_origin_cast[MutAnyOrigin](),
+            grid_dim=n_blocks_dimx,
+            block_dim=TPB,
+        )
+
+
+# ===========================================================================
+# DEVIATION 2001 -- SAMPLED-ORDER LABELS (NOT theirs; 2026-09-01).
+#
+# cuML's histogram inner loop (`builder_kernels_impl.cuh:336-342`) and leaf
+# kernel (`:233-238`) gather `labels[row_ids[i]]` -- and, weighted,
+# `sample_weight[row_ids[i]]` (`objectives.cuh:158`, `:359`) -- PER ELEMENT
+# PER LEVEL PER TREE: a 4-byte random gather beside the feature read the
+# binned path (DEVIATION 314) already made sequentialish. Both GPU
+# competitors keep PERMUTED STAT STREAMS instead of gathering: LightGBM and
+# XGBoost move/regather through a partition index their hist kernels
+# already hold, and CatBoost moves the stat columns themselves (the same
+# design DEVIATION 1902 priced on the gbdt side). This deviation keeps a
+# sampled-order copy: once per tree, after row sampling,
+#
+#     labels_s[i] = labels[row_ids[i]]        (sample_weight_s likewise)
+#
+# and at every split the copy is RE-PERMUTED ALONGSIDE `row_ids` -- by the
+# scan writer (`NodeSplitPartitionOpsSampled.store`) and the copy-back twin
+# (`node_split_copy_back_sampled_kernel`), under the SAME guards in the
+# SAME kernels, never as separately guarded passes. The histogram and leaf
+# loops then read labels sequentially at the loop index.
+#
+# BIT-IDENTITY ARGUMENT: `labels_s[i] == labels[row_ids[i]]` at every
+# point, and every switched read replaces `labels[row]` with `labels_s[i]`
+# at the SAME iteration `i` of the SAME loop on the SAME thread -- each
+# thread reads the same VALUE at the same step, nothing reorders. All
+# histogram accumulation is integer-atomic regardless (`bins.mojo`:
+# `ClassificationBin` UInt32 `fetch_add`, `RegressionBin` fixed-point
+# Int32), so the change is ADDRESS-ONLY. The fingerprint pair flag-off vs
+# flag-on must be EQUAL (UNVERIFIED, RUN OWED).
+#
+# THE ORIGINAL `labels` ARRAY STAYS: the host-side OOB path
+# (`compute_oob_score`, `randomforest.mojo`) reads original order and is
+# untouched; only the per-tree `DatasetView`'s POINTER is repointed at the
+# copy (`Builder.stage_sampled_order`).
+#
+# STAGED behind ONE comptime flag, `LABELS_SAMPLED_ORDER` in
+# `randomforest.mojo`, DEFAULT FALSE -- every kernel/struct parameter here
+# (`sampled_labels: Bool = False`, DEV 1902's defaulted-comptime pattern)
+# defaults off, so the shipped build compiles the pre-2001 code and the
+# default flips only on a measured bit-identical win (house rule 11).
+#
+# `sabotage` on the gather kernel is a CHECK HOOK and 0 is the only value
+# a caller may pass. 1 poisons the copy AT the gather: every label lands
+# as position 0's label (a broadcast, chosen over a multiplicative poison
+# because a label is an INDEX into the histogram -- multiplying it walks
+# out of the allocation instead of moving bins) and every gathered weight
+# is doubled (multiplicative, exact in fp32, never absorbed). Under
+# flag-on + sabotage=1 every fingerprint line downstream of the first
+# histogram must MOVE; if any holds, the sampled path is not reached.
+# ===========================================================================
+
+
+def gather_sampled_order_kernel[
+    label_dtype: DType, TPB: Int, sabotage: Int = 0
+](
+    labels: MutPointer[Scalar[label_dtype], MutAnyOrigin],
+    sample_weight: MutPointer[Float32, MutAnyOrigin],
+    row_ids: MutPointer[Int32, MutAnyOrigin],
+    labels_s: MutPointer[Scalar[label_dtype], MutAnyOrigin],
+    sample_weight_s: MutPointer[Float32, MutAnyOrigin],
+    n_sampled_rows: Int32,
+    gather_weights: Int32,
+):
+    """DEVIATION 2001's once-per-tree gather (see the block above). One
+    thread per sampled position; `gather_weights` is the runtime
+    `has_sample_weight` (Int32 per the kernel-scalar rule)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_sampled_rows):
+        return
+    var src = Int(row_ids[unsafe_offset=i])
+    comptime if sabotage == 1:
+        # SABOTAGE: broadcast position 0's row -- every label collapses.
+        src = Int(row_ids[unsafe_offset=0])
+    labels_s[unsafe_offset=i] = labels[unsafe_offset=src]
+    if gather_weights != Int32(0):
+        var w = sample_weight[unsafe_offset=src]
+        comptime if sabotage == 1:
+            # SABOTAGE: multiplicative, exact in fp32.
+            w = w * Float32(2.0)
+        sample_weight_s[unsafe_offset=i] = w
+
+
+def launch_gather_sampled_order_kernel[
+    label_dtype: DType, //, TPB: Int = TPB_DEFAULT, sabotage: Int = 0
+](
+    ctx: DeviceContext,
+    labels: MutPointer[Scalar[label_dtype], MutUntrackedOrigin],
+    sample_weight: MutPointer[Float32, MutUntrackedOrigin],
+    row_ids: MutPointer[Int32, MutUntrackedOrigin],
+    labels_s: MutPointer[Scalar[label_dtype], MutUntrackedOrigin],
+    sample_weight_s: MutPointer[Float32, MutUntrackedOrigin],
+    n_sampled_rows: Int,
+    gather_weights: Bool,
+) raises:
+    """DEVIATION 2001: one small launch per tree, between the row
+    sampler and the first batch. Loose pointer arguments rather than a
+    DEVIATION 128a blob: this launches ONCE per tree, not per level."""
+    if n_sampled_rows <= 0:
+        return
+    comptime k = gather_sampled_order_kernel[label_dtype, TPB, sabotage]
+    log_launch("gather_sampled_order")
+    ctx.enqueue_function[k](
+        labels.unsafe_origin_cast[MutAnyOrigin](),
+        sample_weight.unsafe_origin_cast[MutAnyOrigin](),
+        row_ids.unsafe_origin_cast[MutAnyOrigin](),
+        labels_s.unsafe_origin_cast[MutAnyOrigin](),
+        sample_weight_s.unsafe_origin_cast[MutAnyOrigin](),
+        Int32(n_sampled_rows),
+        Int32(1) if gather_weights else Int32(0),
+        grid_dim=ceildiv(n_sampled_rows, TPB),
         block_dim=TPB,
     )
 
@@ -1311,6 +1776,7 @@ def leaf_kernel[
     LEAF_SMEM_BIN_SLOTS: Int,
     sabotage: Int = 0,
     zero_fill: Bool = False,
+    sampled_labels: Bool = False,
 ](
     argsp: MutPointer[LeafArgs[O], MutAnyOrigin],
     tree: MutPointer[SparseTreeNode[O.DataT], MutAnyOrigin],
@@ -1385,13 +1851,25 @@ def leaf_kernel[
         i += Int(block_dim.x)
     barrier()
 
-    # `:233-238`
+    # `:233-238`. `sampled_labels` is DEVIATION 2001: `dataset.labels`
+    # then points at the sampled-order copy (`labels_s[j] ==
+    # labels[row_ids[j]]`, maintained through every split's
+    # re-permutation), so the label -- and the weight index inside
+    # `IncrementHistogram` -- reads sequentially at the position `j` and
+    # the `row_ids` gather goes entirely. Address-only, same values.
     var j = range.begin + tid
     while j < range.begin + range.count:
-        var row = dataset.row_ids[unsafe_offset=j]
-        var label = dataset.labels[unsafe_offset = Int(row)]
+        var label: Scalar[O.LabelT]
+        var stat_idx: Int32
+        comptime if sampled_labels:
+            label = dataset.labels[unsafe_offset=j]
+            stat_idx = Int32(j)
+        else:
+            var row = dataset.row_ids[unsafe_offset=j]
+            label = dataset.labels[unsafe_offset = Int(row)]
+            stat_idx = row
         objective.IncrementHistogram(
-            histogram, Int32(1), Int32(0), label, dataset, row
+            histogram, Int32(1), Int32(0), label, dataset, stat_idx
         )
         j += Int(block_dim.x)
     barrier()
@@ -1425,6 +1903,7 @@ def launch_leaf_kernel[
     LEAF_SMEM_BIN_SLOTS: Int = LEAF_SMEM_MAX_OUTPUTS,
     sabotage: Int = 0,
     zero_fill: Bool = False,
+    sampled_labels: Bool = False,
 ](
     ctx: DeviceContext,
     tree: MutPointer[SparseTreeNode[O.DataT], MutUntrackedOrigin],
@@ -1453,7 +1932,9 @@ def launch_leaf_kernel[
             + String(LEAF_SMEM_BIN_SLOTS * size_of[O.BinT]())
             + " (DEVIATION 103c/1894)"
         )
-    comptime k = leaf_kernel[O, TPB, LEAF_SMEM_BIN_SLOTS, sabotage, zero_fill]
+    comptime k = leaf_kernel[
+        O, TPB, LEAF_SMEM_BIN_SLOTS, sabotage, zero_fill, sampled_labels
+    ]
     log_launch("leaf")
     ctx.enqueue_function[k](
         argsp.unsafe_origin_cast[MutAnyOrigin](),
@@ -1484,6 +1965,7 @@ def _histogram_inner_loop[
     qo: MutOrigin,
     qa: AddressSpace, //,
     sabotage: Int = 0,
+    sampled_labels: Bool = False,
 ](
     objective: O,
     dataset: DatasetView[O.DataT, O.LabelT],
@@ -1515,25 +1997,47 @@ def _histogram_inner_loop[
 
     `sabotage` is a CHECK HOOK: 3 replaces the bin search with a constant
     0, so every instance lands in bin 0 of its class.
+
+    DEVIATION 2001 (`sampled_labels`, default False = their code): when
+    the caller keeps a sampled-order copy of the labels (and weights) --
+    `labels_s[i] == labels[row_ids[i]]` at every point, re-permuted
+    alongside `row_ids` at every split -- `dataset.labels` POINTS AT that
+    copy and the per-element label gather becomes a sequential read at
+    the loop index `i`. The stat index handed to `IncrementHistogram`
+    (whose only use of it is the `sample_weight` gather) is `i` for the
+    same reason. Same VALUE at the same iteration on every thread, so
+    the change is address-only; the accumulation is integer-atomic
+    either way (`bins.mojo`).
     """
     var i = range_start + tid
     while i < end:
         var row = dataset.row_ids[unsafe_offset=i]
         var data = dataset.value(row, col)
-        var label = dataset.labels[unsafe_offset = Int(row)]
+        var label: Scalar[O.LabelT]
+        var stat_idx: Int32
+        comptime if sampled_labels:
+            label = dataset.labels[unsafe_offset=i]
+            stat_idx = Int32(i)
+        else:
+            label = dataset.labels[unsafe_offset = Int(row)]
+            stat_idx = row
         var start = lower_bound_aspace(quantiles_for_split, n_bins, data)
         comptime if sabotage == 3:
             # SABOTAGE: the bin search never runs.
             start = Int32(0)
         objective.IncrementHistogram(
-            histogram, n_bins, start, label, dataset, row
+            histogram, n_bins, start, label, dataset, stat_idx
         )
         i += stride
 
 
 @always_inline
 def _histogram_inner_loop_binned[
-    O: ObjectiveLike, ho: MutOrigin, ha: AddressSpace, //, sabotage: Int = 0
+    O: ObjectiveLike,
+    ho: MutOrigin,
+    ha: AddressSpace, //,
+    sabotage: Int = 0,
+    sampled_labels: Bool = False,
 ](
     objective: O,
     dataset: DatasetView[O.DataT, O.LabelT],
@@ -1553,16 +2057,27 @@ def _histogram_inner_loop_binned[
 
     `sabotage=3` (constant bin 0) is honored here exactly as in the
     searching loop, so the check that proves the searching loop's reach
-    proves this one's too."""
+    proves this one's too.
+
+    `sampled_labels` is DEVIATION 2001, exactly as in the searching
+    loop above: the label (and the weight index) read sequentially at
+    `i` instead of gathering at `row`. Address-only."""
     var i = range_start + tid
     while i < end:
         var row = dataset.row_ids[unsafe_offset=i]
         var start = dataset.bin_of(row, col)
         comptime if sabotage == 3:
             start = Int32(0)
-        var label = dataset.labels[unsafe_offset = Int(row)]
+        var label: Scalar[O.LabelT]
+        var stat_idx: Int32
+        comptime if sampled_labels:
+            label = dataset.labels[unsafe_offset=i]
+            stat_idx = Int32(i)
+        else:
+            label = dataset.labels[unsafe_offset = Int(row)]
+            stat_idx = row
         objective.IncrementHistogram(
-            histogram, n_bins, start, label, dataset, row
+            histogram, n_bins, start, label, dataset, stat_idx
         )
         i += stride
 
@@ -1574,6 +2089,7 @@ def build_histograms_kernel[
     USE_GLOBAL_MEMORY_HISTOGRAM: Bool,
     sabotage: Int = 0,
     USE_BINNED: Bool = False,
+    sampled_labels: Bool = False,
 ](
     argsp: MutPointer[HistogramArgs[O], MutAnyOrigin],
     histograms: MutPointer[O.BinT, MutAnyOrigin],
@@ -1661,7 +2177,9 @@ def build_histograms_kernel[
         # `:294`, `:317-318` -- `histogram = global_histogram` and
         # `quantiles_for_split = quantiles.quantiles_array + max_n_bins * col`.
         comptime if USE_BINNED:
-            _histogram_inner_loop_binned[sabotage=sabotage](
+            _histogram_inner_loop_binned[
+                sabotage=sabotage, sampled_labels=sampled_labels
+            ](
                 objective,
                 dataset,
                 global_histogram,
@@ -1673,7 +2191,9 @@ def build_histograms_kernel[
                 stride,
             )
         else:
-            _histogram_inner_loop[sabotage=sabotage](
+            _histogram_inner_loop[
+                sabotage=sabotage, sampled_labels=sampled_labels
+            ](
                 objective,
                 dataset,
                 global_histogram,
@@ -1716,7 +2236,9 @@ def build_histograms_kernel[
 
         # `:336-342`
         comptime if USE_BINNED:
-            _histogram_inner_loop_binned[sabotage=sabotage](
+            _histogram_inner_loop_binned[
+                sabotage=sabotage, sampled_labels=sampled_labels
+            ](
                 objective,
                 dataset,
                 histogram,
@@ -1728,7 +2250,9 @@ def build_histograms_kernel[
                 stride,
             )
         else:
-            _histogram_inner_loop[sabotage=sabotage](
+            _histogram_inner_loop[
+                sabotage=sabotage, sampled_labels=sampled_labels
+            ](
                 objective,
                 dataset,
                 histogram,
@@ -1758,6 +2282,7 @@ def launch_build_histograms_kernel[
     TPB: Int = TPB_DEFAULT,
     SMEM_BIN_SLOTS: Int = default_smem_bin_slots[O.BinT](),
     sabotage: Int = 0,
+    sampled_labels: Bool = False,
 ](
     ctx: DeviceContext,
     histograms: MutPointer[O.BinT, MutUntrackedOrigin],
@@ -1792,7 +2317,7 @@ def launch_build_histograms_kernel[
         if dataset.has_bins:
             # DEVIATION 314: same launch, the binned loop body.
             comptime kgb = build_histograms_kernel[
-                O, TPB, 1, True, sabotage, True
+                O, TPB, 1, True, sabotage, True, sampled_labels
             ]
             log_launch("histogram_global_binned")
             ctx.enqueue_function[kgb](
@@ -1808,7 +2333,7 @@ def launch_build_histograms_kernel[
             )
             return
         comptime kg = build_histograms_kernel[
-            O, TPB, 1, True, sabotage
+            O, TPB, 1, True, sabotage, False, sampled_labels
         ]
         log_launch("histogram_global")
         ctx.enqueue_function[kg](
@@ -1827,7 +2352,7 @@ def launch_build_histograms_kernel[
             # DEVIATION 314, shared arm. Uses the default 103a blob; the
             # tier question below is orthogonal and pending its own A/B.
             comptime ksb = build_histograms_kernel[
-                O, TPB, SMEM_BIN_SLOTS, False, sabotage, True
+                O, TPB, SMEM_BIN_SLOTS, False, sabotage, True, sampled_labels
             ]
             log_launch("histogram_binned")
             ctx.enqueue_function[ksb](
@@ -1893,7 +2418,13 @@ def launch_build_histograms_kernel[
                     # if either guard is ever lifted.
                     if dataset.has_bins:
                         comptime ktb = build_histograms_kernel[
-                            O, TPB, TIER_SLOTS, False, sabotage, True
+                            O,
+                            TPB,
+                            TIER_SLOTS,
+                            False,
+                            sabotage,
+                            True,
+                            sampled_labels,
                         ]
                         log_launch(
                             "histogram_binned_shared_" + String(TIER_BYTES)
@@ -1915,7 +2446,13 @@ def launch_build_histograms_kernel[
                         )
                     else:
                         comptime kt = build_histograms_kernel[
-                            O, TPB, TIER_SLOTS, False, sabotage
+                            O,
+                            TPB,
+                            TIER_SLOTS,
+                            False,
+                            sabotage,
+                            False,
+                            sampled_labels,
                         ]
                         log_launch("histogram_shared_" + String(TIER_BYTES))
                         ctx.enqueue_function[kt](
@@ -1939,7 +2476,7 @@ def launch_build_histograms_kernel[
             # 16 KiB never reaches this arm because
             # `compute_shared_memory_config` already chose global.
             comptime ks = build_histograms_kernel[
-                O, TPB, SMEM_BIN_SLOTS, False, sabotage
+                O, TPB, SMEM_BIN_SLOTS, False, sabotage, False, sampled_labels
             ]
             log_launch("histogram_shared")
             ctx.enqueue_function[ks](

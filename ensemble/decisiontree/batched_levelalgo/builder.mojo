@@ -165,6 +165,7 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import
     TUNABLE_SPLIT_HISTOGRAM_DYNAMIC_SMEM_LIMIT_BYTES,
     launch_build_histograms_kernel,
     launch_find_best_splits_kernel,
+    launch_gather_sampled_order_kernel,
     launch_leaf_kernel,
     launch_node_split_kernel,
     launch_phase_setup_kernel,
@@ -1001,11 +1002,11 @@ struct SplitStaging(Movable):
 
 
 def flush_splits_downloads[
-    O: ObjectiveLike
+    O: ObjectiveLike, sampled_labels: Bool = False
 ](
     ctx: DeviceContext,
     mut staging: SplitStaging,
-    mut builders: List[Builder[O]],
+    mut builders: List[Builder[O, sampled_labels]],
 ) raises:
     """The cycle's ONE splits readback, DEVIATION 1908.
 
@@ -1037,8 +1038,18 @@ def flush_splits_downloads[
 # ===========================================================================
 
 
-struct Builder[O: ObjectiveLike](Movable):
+struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
     """`ML::DT::Builder<ObjectiveT>`, `builder.cuh:147-698`.
+
+    DEVIATION 2001 (`sampled_labels`, default False = the pre-2001
+    builder): when True, the builder keeps a sampled-order copy of the
+    labels (and sample weights) -- `labels_s[i] == labels[row_ids[i]]`,
+    gathered once per tree by `stage_sampled_order` and re-permuted
+    alongside `row_ids` at every split -- so the histogram and leaf
+    kernels read their stat streams sequentially instead of gathering
+    per element. The flag threads from ONE site
+    (`randomforest.mojo`'s `LABELS_SAMPLED_ORDER`); every check that
+    constructs `Builder[O]` gets the default and the old code.
 
     THE BUFFERS ARE FIELDS, AND THAT IS LOAD-BEARING RATHER THAN TIDY.
     Mojo destroys a value at its LAST USE, not at end of scope, so a
@@ -1177,7 +1188,22 @@ struct Builder[O: ObjectiveLike](Movable):
     var leaf_args: DeviceArgs[LeafArgs[Self.O]]
     var node_split_args: DeviceArgs[NodeSplitArgs[Self.O.DataT, Self.O.LabelT]]
     var node_split_args_ready: Bool
-    var node_split_scratch: NodeSplitScratch[Self.O.DataT, TPB_DEFAULT]
+    var node_split_scratch: NodeSplitScratch[
+        Self.O.DataT, TPB_DEFAULT, Self.O.LabelT, Self.sampled_labels
+    ]
+
+    # --- DEVIATION 2001's sampled-order stat streams ---------------------
+    # `labels_s[i] = labels[row_ids[i]]`, gathered once per tree
+    # (`stage_sampled_order`) and re-permuted with `row_ids` at every
+    # split; the partition-side twins live in `node_split_scratch` (that
+    # struct's charter). NOT in `WorkspaceLayout`: builder_check
+    # byte-compares that arena against cuML's `assignWorkspace`, and
+    # these buffers have no counterpart there. `Optional` so the default
+    # (flag-off) builder allocates NOTHING; held as fields so the
+    # buffers outlive every launch that reads them (this struct's
+    # last-use rule, see the docstring).
+    var labels_s: Optional[DeviceBuffer[Self.O.LabelT]]
+    var sample_weight_s: Optional[DeviceBuffer[DType.float32]]
 
     # --- the leaf pass's staging, DEVIATION 313's second half ------------
     # Theirs allocates `d_tree` / `d_instance_ranges` / `d_leaves` inside
@@ -1392,9 +1418,31 @@ struct Builder[O: ObjectiveLike](Movable):
             ctx
         )
         self.node_split_args_ready = False
-        self.node_split_scratch = NodeSplitScratch[Self.O.DataT, TPB_DEFAULT](
-            ctx, max_blocks * TPB_DEFAULT, max_batch
+        self.node_split_scratch = NodeSplitScratch[
+            Self.O.DataT, TPB_DEFAULT, Self.O.LabelT, Self.sampled_labels
+        ](
+            ctx,
+            max_blocks * TPB_DEFAULT,
+            max_batch,
+            n_sampled_rows,
         )
+        # DEVIATION 2001 -- the per-tree sampled-order streams, sized
+        # once at the workspace's row maximum (`reset_for_tree` raises on
+        # any tree that would disagree). Flag off: None, no allocation.
+        comptime if Self.sampled_labels:
+            self.labels_s = Optional(
+                ctx.enqueue_create_buffer[Self.O.LabelT](
+                    n_sampled_rows if n_sampled_rows > 0 else 1
+                )
+            )
+            self.sample_weight_s = Optional(
+                ctx.enqueue_create_buffer[DType.float32](
+                    n_sampled_rows if n_sampled_rows > 0 else 1
+                )
+            )
+        else:
+            self.labels_s = Optional[DeviceBuffer[Self.O.LabelT]]()
+            self.sample_weight_s = Optional[DeviceBuffer[DType.float32]]()
 
         # Leaf-pass staging, sized by their batching rule up front: a
         # depth < 13 tree can never exceed the dense bound, so for the
@@ -1466,6 +1514,66 @@ struct Builder[O: ObjectiveLike](Movable):
         # DEVIATION 401 -- per-tree batch numbering restarts with the tree.
         self.trace_batch = -1
         self._invalidate_args_cache()
+
+    def stage_sampled_order[
+        sabotage: Int = 0
+    ](
+        mut self,
+        ctx: DeviceContext,
+        mut dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
+    ) raises:
+        """DEVIATION 2001: gather this tree's sampled-order stat streams
+        and REPOINT the view at them.
+
+        Call between `reset_for_tree` and `begin_tree`, after the row
+        sampler has written this tree's `row_ids` (the in-order queue
+        sequences the gather after the sampler's kernels and before the
+        first batch's). On return `dataset.labels` -- and, when
+        `has_sample_weight`, `dataset.sample_weight` -- point at this
+        builder's `labels_s`/`sample_weight_s`, so every args blob staged
+        from this view (histogram, leaf, node split) carries the
+        sampled-order pointers with no further plumbing. The ORIGINAL
+        arrays are only read from, never written: the host OOB path keeps
+        original order untouched.
+
+        `sabotage` forwards to the gather kernel's CHECK HOOK (see the
+        DEVIATION 2001 block in `builder_kernels_impl.mojo`); 0 is the
+        only value a caller may pass.
+        """
+        comptime assert Self.sampled_labels, (
+            "stage_sampled_order requires Builder[..., sampled_labels=True]"
+            " (DEVIATION 2001)"
+        )
+        if Int(dataset.n_sampled_rows) != self.n_sampled_rows:
+            raise Error(
+                "stage_sampled_order: labels_s sized for "
+                + String(self.n_sampled_rows)
+                + " sampled rows; the view carries "
+                + String(Int(dataset.n_sampled_rows))
+            )
+        var labels_s_ptr = (
+            self.labels_s.value()
+            .unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+        )
+        var sample_weight_s_ptr = (
+            self.sample_weight_s.value()
+            .unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+        )
+        launch_gather_sampled_order_kernel[sabotage=sabotage](
+            ctx,
+            dataset.labels,
+            dataset.sample_weight,
+            dataset.row_ids,
+            labels_s_ptr,
+            sample_weight_s_ptr,
+            Int(dataset.n_sampled_rows),
+            dataset.has_sample_weight,
+        )
+        dataset.labels = labels_s_ptr
+        if dataset.has_sample_weight:
+            dataset.sample_weight = sample_weight_s_ptr
 
     def _invalidate_args_cache(mut self):
         """DEVIATION 1909: the cached args blobs embed the CURRENT
@@ -1798,7 +1906,9 @@ struct Builder[O: ObjectiveLike](Movable):
         # the launchers take the device pointers. The objective their
         # `:592-596` builds per column block is built at the staging
         # site -- same value, `params` still the only source.
-        launch_build_histograms_kernel[Self.O](
+        launch_build_histograms_kernel[
+            Self.O, sampled_labels = Self.sampled_labels
+        ](
             ctx,
             self._hist_ptr(),
             n_bins,
@@ -2523,7 +2633,9 @@ struct Builder[O: ObjectiveLike](Movable):
             # end 0 exactly as the memset left them and a leaf's zeros
             # are overwritten under the block's own barriers. One block
             # owns one slot; no cross-block order exists.
-            launch_leaf_kernel[Self.O, zero_fill=True](
+            launch_leaf_kernel[
+                Self.O, zero_fill=True, sampled_labels = Self.sampled_labels
+            ](
                 ctx,
                 self.leaf_d_tree.unsafe_ptr()
                 .unsafe_origin_cast[MutUntrackedOrigin]()
