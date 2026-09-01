@@ -55,6 +55,7 @@ from gbdt.methods.greedy_subsets_searcher.split_properties_helper import (
     non_zero_leaves,
     zero_leaves,
 )
+from std.sys.compile import is_defined
 from std.sys.info import size_of
 from core.identity_trace import IdentityTrace
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
@@ -323,6 +324,34 @@ comptime CFEATURE_BYTES = size_of[CFeature]()
 # `_ = staging^` destruction points, the file's named recurring bug
 # class, to save microseconds on paths no benchmark runs.
 comptime IDENTICAL_DRAIN_SCHEDULE = HIST_BUILD_MODE == NUMERIC_IDENTICAL
+
+# ================= DEVIATION 134f =================
+# THE GREEDY POSITIVE CONTROL, REQUIRED-RED. Build with
+#
+#     -D MOJOLEARN_134_CONTROL=1
+#
+# and `TTreeWorkspace.__init__`'s fourteen holds-past-drain (the exact
+# fix a4aee262 landed 2026-08-22) compile out, so every staging buffer's
+# lifetime ends at its last `enqueue_copy` again -- the PRE-FIX ctor,
+# recreated verbatim: thirteen intervening host allocations between the
+# first stager's death and the drain, two exact size-and-type matches
+# among the followers (PORTING.md 134d's ranked greedy candidate for the
+# 2/12 first-div-t2 sighting). A comptime define, not an env var, for
+# the same reason `GLOBAL_NUMERIC_MODE` is one: destruction points are
+# decided at compile time and no runtime branch can move them -- a
+# runtime `if` around a `^` transfer extends the lifetime TO the branch
+# and the sabotage silently stops sabotaging.
+#
+# SEMANTICS (the soak driver `checks/determinism_soak.mojo` prints the
+# same banner): RED under this control = the lifetime mechanism is
+# CONFIRMED for the greedy arm, and DEVIATION 134 CLOSES once the
+# un-sabotaged soak pair is quiet. QUIET under this control is NOT a
+# pass -- it is a finding: the 134b load window (20-30 concurrent GPU
+# processes), not the lifetime alone, was the missing ingredient, and
+# 134 STAYS OPEN. Run it quiet-box first, then under the synthetic load
+# recipe in PORTING.md 134f. This define must never reach a shipped
+# build; nothing but the soak invocation passes it.
+comptime SOAK_134_CONTROL = is_defined["MOJOLEARN_134_CONTROL"]()
 
 
 def make_split_features_buffers(
@@ -3036,21 +3065,28 @@ struct TTreeWorkspace(Movable):
         # their last uses were the enqueues above, which freed them under
         # queued copies (the step-33 race class -- freed host pages can
         # be reused before the queue drains, and the ctor allocates
-        # between enqueue and drain)
-        _ = h_dense^
-        _ = hsk^
-        _ = hff^
-        _ = hfd^
-        _ = hfoh^
-        _ = hbf^
-        _ = hfw^
-        _ = hbr1^
-        _ = hbr2^
-        _ = hbr3^
-        _ = hbr4^
-        _ = hbr5^
-        _ = hbr6^
-        _ = hbr7^
+        # between enqueue and drain).
+        #
+        # DEVIATION 134f: under `-D MOJOLEARN_134_CONTROL=1` these
+        # fourteen holds COMPILE OUT and each stager's lifetime ends at
+        # its enqueue again -- the pre-a4aee262 ctor, the greedy
+        # positive control. REQUIRED-RED; the full banner is at the
+        # comptime's definition and in `checks/determinism_soak.mojo`.
+        comptime if not SOAK_134_CONTROL:
+            _ = h_dense^
+            _ = hsk^
+            _ = hff^
+            _ = hfd^
+            _ = hfoh^
+            _ = hbf^
+            _ = hfw^
+            _ = hbr1^
+            _ = hbr2^
+            _ = hbr3^
+            _ = hbr4^
+            _ = hbr5^
+            _ = hbr6^
+            _ = hbr7^
 
 
 def _sym_dd2(n: Int) -> String:

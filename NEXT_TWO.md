@@ -157,8 +157,22 @@ if the greedy arm goes silent and the pointwise arm still drifts, there is
 a SECOND defect and it is not the histogram flush. A clean pair of soaks
 at HEAD is now the EXPECTED outcome (both known mechanisms are fixed);
 what closes 134 is that pair PLUS the greedy positive control, ideally
-under 134b's synthetic load. RUN OWED, exact commands:
+under 134b's synthetic load.
 
+THE POSITIVE CONTROL IS NOW WRITTEN (PORTING.md 134f, 2026-09-01):
+`-D MOJOLEARN_134_CONTROL=1` compiles out `TTreeWorkspace.__init__`'s
+fourteen holds, recreating the pre-a4aee262 ctor; the soak driver's
+verdict inverts under it (RED required = mechanism confirmed; QUIET
+raises and is a finding -- the 134b load window was the missing
+ingredient -- NOT a pass). The loaded-run recipe is in 134f and the soak
+docstring. RUN OWED, exact commands, cheapest first:
+
+    # the control (build included -- the comptime-if transfer corner is
+    # untested), quiet box first:
+    pixi run mojo run -D MOJOLEARN_134_CONTROL=1 -I . checks/determinism_soak.mojo
+    # if quiet: the loaded control -- PORTING.md 134f's 24-process recipe,
+    # in a scheduled window (it deliberately violates the quiet-box rule)
+    # the closing un-sabotaged pair, same box:
     pixi run soak-determinism
     tools/with_identical_mode.sh pixi run soak-determinism
     # and the CTR/bootstrap/evaluator holds' gates:

@@ -5251,6 +5251,79 @@ is now the EXPECTED outcome; what closes this entry is that pair PLUS
 134d's greedy positive control, ideally under 134b's synthetic load. The
 embargo above is unchanged by this addendum until those runs land.
 
+### 134f. THE GREEDY POSITIVE CONTROL IS WRITTEN, 2026-09-01: a build define that recreates the pre-a4aee262 ctor (REQUIRED-RED; UNVERIFIED, RUN OWED)
+
+134d named the technique -- force the corruption, compare the signature --
+and 134c proved it works. This entry is that control for the greedy half,
+wired so `checks/determinism_soak.mojo` drives it:
+
+    pixi run mojo run -D MOJOLEARN_134_CONTROL=1 -I . checks/determinism_soak.mojo
+
+`-D MOJOLEARN_134_CONTROL=1` sets the comptime `SOAK_134_CONTROL`
+(`greedy_search_helper.mojo`, beside DEVIATION 1905's
+`IDENTICAL_DRAIN_SCHEDULE`), and under it the FOURTEEN holds-past-drain
+that a4aee262 added to `TTreeWorkspace.__init__` COMPILE OUT -- each
+staging buffer's lifetime ends at its last `enqueue_copy` again, which is
+the pre-fix ctor verbatim: thirteen intervening host allocations between
+the first stager's death and the drain, two exact size-and-type matches
+among the followers, exactly 134d's ranked candidate. A COMPTIME define
+and not an env var because destruction points are decided at compile
+time: a runtime `if` around a `^` transfer extends the lifetime TO the
+branch, and the sabotage silently stops sabotaging (the same toolchain
+truth that made `GLOBAL_NUMERIC_MODE` a define).
+
+THE VERDICT INVERTS UNDER THE CONTROL, and the driver prints the banner
+both ways so nobody misreads it:
+
+* **RED (the soak reproduces divergence)** = the buffer-lifetime
+  mechanism is CONFIRMED for the greedy arm; the driver exits 0.
+  Expected signature from the sighting: greedy 2/12 splits, first
+  divergence tree 2, mse 4.679346084594727. DEVIATION 134 then CLOSES
+  once the UN-sabotaged pair (FAST, then IDENTICAL via
+  `tools/with_identical_mode.sh`) is quiet on the same box.
+* **QUIET under the control IS NOT A PASS -- the driver RAISES.** It is
+  a finding in itself: dropping the holds alone does not reproduce the
+  sighting on that box, so the 134b LOAD WINDOW, not the lifetime alone,
+  was the missing ingredient, and 134 STAYS OPEN pending the loaded run
+  below.
+
+THE 134b SYNTHETIC LOAD RECIPE, spelled here so the runner reproduces the
+original conditions (the sighting sat under 20-33 concurrent `mojo run`
+processes, 134b; every attempt since was quiet-box). This deliberately
+violates the quiet-box and one-heavy-process rules and therefore needs
+its own scheduled window, decided by the orchestrator, never run as a
+side effect:
+
+    mkdir -p bench/results/soak134
+    for i in $(seq 1 24); do \
+      (MOJOLEARN_SOAK_REPS=5000 pixi run soak-determinism \
+         > bench/results/soak134/load_$i.log 2>&1 &); \
+    done
+    MOJOLEARN_SOAK_REPS=2000 pixi run mojo run \
+      -D MOJOLEARN_134_CONTROL=1 -I . checks/determinism_soak.mojo \
+      2>&1 | tee bench/results/soak134/control_under_load.log
+    grep -l REPRODUCED bench/results/soak134/load_*.log
+    pkill -f determinism_soak
+
+A `REPRODUCED` in any background load log is 134b reproduced WITHOUT the
+sabotage -- keep that log; it is the sample the original sighting never
+left behind. The define must never reach a shipped build; nothing but
+the soak invocation passes it, and it lives in no pixi task.
+
+**EVERYTHING HERE IS UNVERIFIED, RUN OWED -- including that the control
+build COMPILES** (a `comptime if` that transfers in only one branch is
+the untested corner; if the checker refuses it, the fallback is two
+mirrored comptime branches, the control one empty). The owed sequence,
+cheapest first:
+
+    # 0. the control builds and banners:
+    pixi run mojo run -D MOJOLEARN_134_CONTROL=1 -I . checks/determinism_soak.mojo
+    # 1. quiet-box control (red = confirmed; quiet = raise, go to 2)
+    # 2. the loaded control, recipe above
+    # 3. the closing un-sabotaged pair on the same box:
+    pixi run soak-determinism
+    tools/with_identical_mode.sh pixi run soak-determinism
+
 ## 125. [CLOSED] `CreateSubsets`' fold arm pays ONE extra partition reduce, per TREE and not per level
 
 `gbdt/methods/oblivious_tree_fold_tasks.create_fold_based_subsets`.
