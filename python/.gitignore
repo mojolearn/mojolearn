@@ -16,6 +16,14 @@ mojolearn/_mojolearn_solver.so
 mojolearn/_mojolearn_metrics.so
 mojolearn/_mojolearn_tsa.so
 mojolearn/_mojolearn_linalg.so
+# The 2026-09-01 bindings. BOTH WERE MISSING and the older one had already
+# been COMMITTED as a 625K binary in `cc269dca` before anybody noticed --
+# which is this file's own comment above coming true. The explicit list makes
+# a forgotten binding show up as untracked; it only works if somebody adds
+# the line when the binding lands, and twice in a row nobody did. Untracked
+# forward in the commit that added these lines, not rewritten out of history.
+mojolearn/_mojolearn_arima.so
+mojolearn/_mojolearn_training.so
 # Build output copied in by packaging/macos/build_release_wheel.sh so that
 # `python -m mojolearn verify` has a comparator inside the wheel. The single
 # source stays tools/identity_trace_diff.py in git.
