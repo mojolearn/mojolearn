@@ -192,6 +192,25 @@ parent — report every commit as `%h parent %p`, never `git add -A`, and
 never let a subagent run the full suite: own checks only, one merge-time
 run.
 
+**THE INDEX IS SHARED TOO, AND `git add -A` IS NOT THE ONLY WAY TO LOSE
+IT.** A plain `git commit` takes whatever is in the index, including hunks
+another session staged seconds ago, and its message then describes only your
+half. Name the paths at COMMIT time, not just at `add` time:
+
+    git add -- <paths> && git commit -o <paths>
+
+**THE EXCEPTION THAT MAKES PEOPLE ABANDON `-o`, so it is written down
+instead of rediscovered.** `-o` builds its tree from HEAD plus the
+WORKING-TREE state of the named paths, so it does NOT carry a staged
+deletion: after `git rm --cached <f>` the file is still on disk, `-o` reads
+it back, and the commit reports "1 file changed" while `f` stays tracked.
+For a deletion, stage it and use a plain `git commit` with `git diff
+--cached` VERIFIED EMPTY of everything else first. Both failures happened in
+one session on 2026-09-01: the deletion was silently undone by `-o`, the
+wrong lesson was drawn ("stop using `-o`"), and the next commit swept three
+of a peer lane's gbdt files into a commit about RandomForest. Fixed forward
+in both directions; neither was rewritten.
+
 > **The scar.** ~1.88M tokens of five-lane work produced integration breaks
 > that existed ONLY BECAUSE of the parallelism — and also found defects a
 > single session would not have. The variable that separated the two
