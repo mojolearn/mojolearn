@@ -4317,7 +4317,15 @@ runs one fused launch (half A) where it ran two seeders plus a memset (its
 zero report extent is dead threads, not writes). 11 + 23 kernel arguments,
 each half under Metal's 31-binding table.
 
-**Gate (RUN OWED, none run -- this Mac runs nothing).** In order:
+**Gate results, 2026-09-01 (orchestrator's box, at the A/B-split commit).**
+`device_batched_check` GREEN: 45 cells, 0 node diffs, 0 leaf-bit diffs,
+both live FOREST_SAB sabotages held. The FULL lane suite GREEN (all
+extratrees lane checks pass). The `MOJOLEARN_ET_SAB_PHASE_SETUP` arm went
+RED correctly (nodes differ, assertion at device_batched_check:269) --
+the fixture witnessed it. Still OWED: the IdentityTrace pre/post fit diff
+and the timing A/B on a cold box.
+
+**Gate (the owed commands, in order -- this Mac runs nothing).**
 
     pixi run mojo run -I . extratrees/checks/device_batched_check.mojo
     pixi run mojo run -I . extratrees/checks/range_kernel_check.mojo
@@ -4387,7 +4395,14 @@ define (it never passes `zero_fill=True`), which localizes the poison.
 **Price.** None measurable expected: the zeroing work moves from two
 driver memsets into threads the launch already runs.
 
-**Gate (RUN OWED, none run).**
+**Gate results, 2026-09-01 (orchestrator's box, at the A/B-split commit).**
+`device_batched_check` GREEN (45 cells, 0/0 diffs) and the full lane suite
+GREEN. The `MOJOLEARN_ET_SAB_LEAF_ZERO_FILL` arm went RED correctly (leaf
+bits differ, assertion at device_batched_check:270) -- the concatenated-
+slot parity was witnessed. Still OWED: the IdentityTrace pre/post diff and
+the timing A/B.
+
+**Gate (the owed commands).**
 
     pixi run mojo run -I . extratrees/checks/device_batched_check.mojo
     pixi run mojo run -I . extratrees/checks/leaf_check.mojo
@@ -4441,20 +4456,50 @@ restage skip at the level loop's retry check (DEVIATION 455's
 present, and NOT duplicated here.
 
 **Sabotage, wired under `-D MOJOLEARN_ET_SAB_STAGE_SKIP_ALWAYS=1` (a
-measurement arm, never a gate).** Every re-upload after the first is
-skipped unconditionally, freezing the merged forest's first batch's items
-and tree ids on the device. `device_batched_check`'s merged-vs-serial
-sections must go RED -- the check's `trees_mutually_differ >= 2` fixture
-guard exists precisely so a frozen tree id cannot hide, so this poison is
-witnessable by construction; the RED must still be OBSERVED with nonzero
-diffs before the clean GREEN is trusted (Sep 1).
+measurement arm, never a gate) -- REDESIGNED 2026-09-01 after the first
+form HUNG, and the finding is a design rule.** A REQUIRED-RED ARM MUST
+PROVABLY TERMINATE: an arm that hangs is not a gate, it is an outage. The
+first form skipped every re-upload after the first for ALL SEVEN slots,
+and two of those slots are the level loop's CONTROL state: with `d_items`/
+`d_wl` frozen, a later cycle's plan can have MORE workload blocks than the
+frozen prefix, at which point the kernels read garbage `WorkloadInfo`
+entries (the first upload sends the pinned buffer's uninitialized tail)
+whose `node_id`s index `d_items` OUT OF BOUNDS -- undefined device
+behavior. The 2026-09-01 gate run compiled, entered section 1, and ground
+past 10 minutes with no output (a clean run takes ~3); two attempts, same
+hang. Frozen `d_blk_base` carries the same addressing hazard (stale bases
+plus live block counts can write `blk_off` out of bounds), so it is
+excluded too.
+
+The redesigned arm freezes ONLY the pure per-node PAYLOAD slots --
+`d_tree`, `d_tsalt`, `d_nb`, `d_nc` (a `payload_slot` flag on
+`_stage_upload_if_changed`, read only under the define) -- while
+`d_items`, `d_wl` and `d_blk_base` stay LIVE. Termination: every device
+loop bound and every address derives from the live control slots, so the
+arm terminates by the same argument as the clean run; frozen `d_nb`/
+`d_nc` reads are in-bounds by construction (`i * k_old + k_old <= nodes *
+k_cap`). Witness: the frozen tree ids and tie salts still give every tree
+after the batch-first one the WRONG draw keys in the merged arm while the
+serial arm re-stages per tree, so `device_batched_check`'s
+merged-vs-serial sections must go RED -- the check's
+`trees_mutually_differ >= 2` fixture guard exists precisely so a frozen
+tree id cannot hide. The RED must still be OBSERVED with nonzero diffs
+before the clean GREEN is trusted (Sep 1); this redesigned arm has NOT
+yet been run.
 
 **Price.** A host-side bytewise compare over the seven capacity extents
 per `stage_batch` call, traded against seven `enqueue_copy` calls plus
 their transfers. Whether the trade wins is the owed timing A/B's verdict,
 not this entry's; if it loses at the scoreboard shapes, 472 reverts.
 
-**Gate (RUN OWED, none run).**
+**Gate results, 2026-09-01 (orchestrator's box, at the A/B-split commit).**
+`device_batched_check` GREEN (45 cells, 0/0 diffs) and the full lane suite
+GREEN -- the shipped compare-and-skip is exercised by both. The
+skip-always sabotage arm HUNG in its first form (the finding above) and
+its redesigned form is UNRUN. Still OWED: the redesigned sabotage A/B, the
+IdentityTrace pre/post diff, and the timing A/B.
+
+**Gate (the owed commands).**
 
     pixi run mojo run -I . extratrees/checks/device_batched_check.mojo
     pixi run mojo run -I . extratrees/checks/rescue_check.mojo

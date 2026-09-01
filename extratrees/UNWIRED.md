@@ -23,7 +23,7 @@ The root `UNWIRED.md` covers `gbdt/`; this one covers `extratrees/` only.
 | `PCGenerator`, `key_for`, `uniform_float` | `draw_threshold`, `sample_features` | `pcg_rng_check` vs a C++ oracle |
 | `DecisionTreeParams`, `validity_check` | both `train_*`, both `fit_*` | `params_check` |
 | `fit_classification` / `fit_regression` / the vote | `forest_check`, `quality_band_check` | both |
-| `phase_setup_a_kernel` / `phase_setup_b_kernel` (DEVIATION 470), `leaf_kernel[zero_fill=True]` (471), `_stage_upload_if_changed` (472) | both `train_forest_*_device` twins, every search cycle / leaf tail / `stage_batch` call | `device_batched_check` A/B plus the per-kernel checks -- gates OWED, none run yet (see DEVIATIONS 470-472) |
+| `phase_setup_a_kernel` / `phase_setup_b_kernel` (DEVIATION 470), `leaf_kernel[zero_fill=True]` (471), `_stage_upload_if_changed` (472) | both `train_forest_*_device` twins, every search cycle / leaf tail / `stage_batch` call | `device_batched_check` A/B plus the per-kernel checks -- main gate + full lane suite GREEN 2026-09-01, sabotage arms for 470/471 verified RED; 472's redesigned sabotage arm, the identity-trace diff and the timing A/B still OWED (see DEVIATIONS 470-472) |
 
 Note on the three standalone init LAUNCHES after DEVIATION 470:
 `node_feature_range_init_kernel`, `node_feature_score_init_kernel` and

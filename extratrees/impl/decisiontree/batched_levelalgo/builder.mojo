@@ -2722,6 +2722,7 @@ def _stage_upload_if_changed[
     mut shadow: HostBuffer[dt],
     n: Int,
     seen_before: Bool,
+    payload_slot: Bool,
 ) raises:
     """DEVIATION 472: enqueue one of `stage_batch`'s H2D copies ONLY when
     its bytes moved since the last enqueue.
@@ -2740,18 +2741,39 @@ def _stage_upload_if_changed[
     send because DEVIATION 450's invariant keeps `src` unrewritten until
     after the next required drain retires the copy.
 
+    `payload_slot` marks the slots whose bytes are pure per-node DATA
+    (`d_tree`, `d_tsalt`, `d_nb`, `d_nc`) as opposed to the loop's CONTROL
+    and ADDRESSING state (`d_items`, `d_wl`, `d_blk_base`). It exists for
+    the sabotage arm alone -- the shipped compare-and-skip treats every
+    slot identically.
+
     `-D MOJOLEARN_ET_SAB_STAGE_SKIP_ALWAYS=1` (a measurement arm, never a
-    gate) skips every re-upload after the first: the merged forest freezes
-    its first batch's tree ids and items, so `device_batched_check`'s
-    merged-vs-serial arms must go RED -- the check's
-    `trees_mutually_differ >= 2` fixture guard exists precisely so a frozen
-    tree id cannot hide.
+    gate) skips every re-upload after the first FOR THE PAYLOAD SLOTS ONLY:
+    the merged forest freezes its first batch's tree ids and tie salts, so
+    `device_batched_check`'s merged-vs-serial arms must go RED -- the
+    check's `trees_mutually_differ >= 2` fixture guard exists precisely so
+    a frozen tree id cannot hide. A REQUIRED-RED ARM MUST PROVABLY
+    TERMINATE, and the first version of this arm did not: it froze all
+    seven slots, and frozen `d_items`/`d_wl` are the batch's control state
+    -- a later cycle's plan can have MORE workload blocks than the frozen
+    prefix, at which point `d_wl` hands the kernels garbage entries (the
+    first upload sends the pinned buffer's uninitialized tail) whose
+    `node_id`s index `d_items` out of bounds; the 2026-09-01 gate run hung
+    past 10 minutes with no output. Frozen `d_blk_base` has the same
+    addressing hazard (stale bases plus live block counts can write
+    `blk_off` out of bounds). So those three stay LIVE under the define:
+    every device loop bound and every address derives from live control
+    slots, and the arm terminates by the same argument as the clean run,
+    while the frozen draw keys still move every tree after the batch-first
+    one. Frozen `d_nb`/`d_nc` are in-bounds by construction (`i * k_old +
+    k_old <= nodes * k_cap`), so they may freeze safely.
     """
     var sp = src.unsafe_ptr()
     var hp = shadow.unsafe_ptr()
     if seen_before:
         comptime if is_defined["MOJOLEARN_ET_SAB_STAGE_SKIP_ALWAYS"]():
-            return
+            if payload_slot:
+                return
         var same = True
         for i in range(n):
             if hp.unsafe_load(i) != sp.unsafe_load(i):
@@ -2838,6 +2860,10 @@ def stage_batch(
     # way. The no-retry restage skip at the level loop's retry check
     # (DEVIATION 455's `elif len(retry) > 0`) is a different mechanism and
     # stays where it is.
+    # `payload_slot` (the last argument) feeds ONLY the skip-always
+    # sabotage arm: True for the pure per-node data slots, False for the
+    # control/addressing slots the arm must keep live to terminate -- see
+    # `_stage_upload_if_changed`. The shipped path ignores it.
     var seen = ws.stage_valid
     _stage_upload_if_changed(
         ctx,
@@ -2846,12 +2872,13 @@ def stage_batch(
         ws.s_items,
         ws.cap_nodes * size_of[NodeWorkItem](),
         seen,
+        False,
     )
     _stage_upload_if_changed(
-        ctx, ws.d_tree, ws.h_tree, ws.s_tree, ws.cap_nodes, seen
+        ctx, ws.d_tree, ws.h_tree, ws.s_tree, ws.cap_nodes, seen, True
     )
     _stage_upload_if_changed(
-        ctx, ws.d_tsalt, ws.h_tsalt, ws.s_tsalt, ws.cap_nodes, seen
+        ctx, ws.d_tsalt, ws.h_tsalt, ws.s_tsalt, ws.cap_nodes, seen, True
     )
     _stage_upload_if_changed(
         ctx,
@@ -2860,15 +2887,22 @@ def stage_batch(
         ws.s_wl,
         ws.cap_blocks * size_of[WorkloadInfo](),
         seen,
+        False,
     )
     _stage_upload_if_changed(
-        ctx, ws.d_nb, ws.h_nb, ws.s_nb, ws.cap_nodes, seen
+        ctx, ws.d_nb, ws.h_nb, ws.s_nb, ws.cap_nodes, seen, True
     )
     _stage_upload_if_changed(
-        ctx, ws.d_nc, ws.h_nc, ws.s_nc, ws.cap_nodes, seen
+        ctx, ws.d_nc, ws.h_nc, ws.s_nc, ws.cap_nodes, seen, True
     )
     _stage_upload_if_changed(
-        ctx, ws.d_blk_base, ws.h_blk_base, ws.s_blk_base, ws.cap_nodes, seen
+        ctx,
+        ws.d_blk_base,
+        ws.h_blk_base,
+        ws.s_blk_base,
+        ws.cap_nodes,
+        seen,
+        False,
     )
     ws.stage_valid = True
     # DEVIATION 450: no trailing synchronize. The copies above are queue-
