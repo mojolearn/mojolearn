@@ -60,8 +60,34 @@ comptime HDB_SAB_CONDENSE_DFS = 4
 of level by level (`condense.cuh:38-66` is a level-by-level BFS whose
 ORDER decides `next_label`). The condensed tree's SHAPE is the same; its
 NUMBERING is not, and every downstream array is indexed by that
-numbering. MUST FAIL the condensed-tree gate on any tree deeper than two
-levels."""
+numbering. MUST FAIL the condensed-tree gate on `nested_ladder48`.
+
+THE CONDITION THIS DOCSTRING USED TO STATE WAS WRONG AND THE ARM SAT
+INERT BEHIND IT. It said "any tree deeper than two levels", and depth is
+not the condition. Two things narrow it, both settled by reading
+`condense.mojo` and `condensed_hierarchy.mojo` rather than by running
+anything:
+
+1. `condense()` SORTS the four output arrays on `(parent, child)`
+   (DEVIATION 1611), so the order in which edges were APPENDED is erased.
+   `_collapse`'s leaf edges are a SET and survive any traversal
+   unchanged. The one channel from the traversal to the output is the
+   VALUE in `relabel`, written only in their case 1.
+2. Breadth first and depth first therefore disagree only about the order
+   of two case-1 nodes, and they disagree about that only when the two
+   are INCOMPARABLE and the one in the LEFT branch of their common
+   ancestor is STRICTLY DEEPER. On an ancestor/descendant pair both walks
+   take the ancestor first, always.
+
+A condensed cluster tree with k leaf clusters has k - 1 case-1 nodes, and
+at k <= 3 every pair of them is an ancestor/descendant pair. `blobs96`
+has 100 edges and 5 clusters -- 96 leaf edges and FOUR cluster edges, so
+`next_label` moved four times, so it has exactly TWO case-1 nodes. It
+could never have failed this arm, and neither could any other fixture in
+the lane, all of which are two- or three-cluster sets. That is a BAD
+FIXTURE, not a bad sabotage: `HFIX_NESTED` was added to carry it and
+`hdbscan/checks/hdbscan_fixture.mojo`'s header derives its five case-1
+nodes at three depths."""
 
 comptime HDB_SAB_STABILITY_DESCENDING = 5
 """The per-cluster stability fold walks its segment DESCENDING instead of

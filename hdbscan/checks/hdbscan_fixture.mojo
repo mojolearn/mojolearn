@@ -48,6 +48,87 @@ nothing is a fixture whose green line means nothing:
                      coordinate produces one (`(-0.0)*(-0.0)` is `+0.0`
                      and the distance clamp maps every negative residue to
                      `+0.0`).
+    HFIX_NESTED      SIX blobs of 8 on a designed distance ladder, 48 x 2,
+                     whose CONDENSED CLUSTER TREE BRANCHES TWICE ON BOTH
+                     SIDES OF ITS ROOT. It exists for exactly one arm,
+                     `HDB_SAB_CONDENSE_DFS`, and the next block says why
+                     the other five fixtures cannot host it.
+
+======================================================================
+WHY HFIX_NESTED HAD TO BE ADDED: THE OTHER FIVE CANNOT SEPARATE A
+TRAVERSAL ORDER, AND THAT IS ARITHMETIC, NOT A GUESS.
+======================================================================
+`condense.mojo` assigns `next_label` in `bfs_from_node`'s visit order,
+and `condensed_hierarchy.condense()` then SORTS the four output arrays on
+`(parent, child)` (DEVIATION 1611). The sort erases the order in which
+the edges were APPENDED, so the ONLY way a traversal order can reach the
+condensed tree is through the VALUES in `relabel`, and `relabel` is
+written at exactly one place: the `left_count >= min_cluster_size and
+right_count >= min_cluster_size` branch, their case 1. Call the
+dendrogram nodes that take that branch the SPLIT NODES; they are the
+internal nodes of the condensed CLUSTER tree, and the label a cluster
+gets is decided by the position of its parent split node in the walk.
+
+Breadth first and depth first order two split nodes DIFFERENTLY only when
+the pair is INCOMPARABLE -- neither an ancestor of the other -- and the
+one in the LEFT branch of their common ancestor is STRICTLY DEEPER.
+Depth first descends the left branch to the bottom first; breadth first
+takes the shallower node first whichever branch it is in. On an
+ancestor/descendant pair BOTH walks visit the ancestor first, always.
+
+A cluster tree with k leaf clusters has k - 1 split nodes, and with
+k <= 3 every pair of them is an ancestor/descendant pair. So a fixture
+with three or fewer clusters CANNOT MOVE `HDB_SAB_CONDENSE_DFS`, and
+`blobs96` is measured at 100 edges and 5 clusters -- 96 leaf edges plus
+FOUR cluster edges, so `next_label` was incremented four times, so it has
+exactly TWO split nodes, so they are nested. The arm was only ever
+pointed at `blobs96`, so that alone settles why it was inert; the other
+five fixtures are two-blob sets, a core-plus-halo and a lattice, and
+their condensed `n_clusters` has never been PRINTED, so this file does
+not claim a number for them -- what it claims is that none of them was
+BUILT to branch and that a fixture which is built to branch is the only
+honest way to gate a traversal.
+
+WHAT HFIX_NESTED PLANTS INSTEAD, in numbers. Six blobs of 8, centres on
+one line at x = 0, 20, 72, 320, 346, 406, jitter +-0.6 per coordinate.
+The five nearest-neighbour gaps between consecutive centres are 20, 52,
+248, 26 and 60, and no non-consecutive pair is closer than the
+consecutive ones between them, so the MST over the blobs is that path and
+Kruskal joins them in the order 20, 26, 52, 60, 248:
+
+    root {L, R};  L {L01, b2};  L01 {b0, b1};  R {R34, b5};  R34 {b3, b4}
+
+FIVE split nodes at three depths: root at 0, L and R at 1, L01 and R34 at
+2. Whichever of L and R the dendrogram puts on the left, that side's
+depth-2 split node is LEFT of the other side's depth-1 split node and
+deeper than it, so the violating pair exists in BOTH orientations and the
+fixture does not depend on DEVIATION 1614's choice coming out one way.
+Breadth first labels in the order root, L, R, L01, R34; depth first in
+the order root, L, L01, R, R34. With 48 points, `relabel[root] = 48` and
+the two walks disagree on FOUR of the ten cluster ids (the pair born at
+the other side's depth-1 node and the pair born at the first side's
+depth-2 node trade places), which moves every condensed edge naming one
+of them.
+
+THE MARGINS ARE WIDE ON PURPOSE. With jitter +-0.6 the closest pair
+across a gap `g` lies in `[g - 1.2, g]`, so the five merge heights fall
+in the disjoint intervals [18.8, 20], [24.8, 26], [50.8, 52], [58.8, 60]
+and [246.8, 248]: the ladder cannot reorder. Blob size 8 is at least
+`min_cluster_size` = 5, so every one of the five merges IS a split node;
+and 8 is BELOW `2 * min_cluster_size` = 10, so no blob can split into two
+children that are both large enough, which is what keeps the number of
+split nodes at exactly five rather than at "five and whatever the jitter
+adds". Feature 1 carries jitter only and no per-blob offset, because a
+second separating axis would turn every merge height into a square root
+this file cannot certify by hand, and a fixture whose shape is asserted
+rather than derived is the defect this fixture exists to repair.
+
+IT PLANTS NO LABELS. `hfixture_planted_label` returns `-2` here.
+Which of the ten clusters Excess of Mass selects is a modelling outcome
+of the stability arithmetic, and planting a guess would be planting an
+answer this file cannot derive; the label gate falls back to the oracle,
+as it already does on `gradient90` and `dups_lattice48`.
+======================================================================
 
 THE HASH IS `hierarchy/checks/linkage_oracle.mojo::_hash_unit`,
 IMPORTED. One fixture hash in the tree rather than two: a second
@@ -69,7 +150,8 @@ comptime HFIX_DUPS = 2
 comptime HFIX_OUTLIER = 3
 comptime HFIX_SIGNED_ZERO = 4
 comptime HFIX_POS_ZERO = 5
-comptime HFIX_COUNT = 6
+comptime HFIX_NESTED = 6
+comptime HFIX_COUNT = 7
 
 comptime NEG_ZERO_BITS: UInt32 = 0x80000000
 
@@ -85,6 +167,8 @@ def hfixture_name(fix: Int) -> String:
         return String("blob_plus_outlier41")
     if fix == HFIX_SIGNED_ZERO:
         return String("signed_zero48")
+    if fix == HFIX_NESTED:
+        return String("nested_ladder48")
     return String("pos_zero48")
 
 
@@ -97,6 +181,8 @@ def hfixture_n(fix: Int) -> Int:
         return 48
     if fix == HFIX_OUTLIER:
         return 41
+    if fix == HFIX_NESTED:
+        return 48
     return 48
 
 
@@ -109,6 +195,8 @@ def hfixture_d(fix: Int) -> Int:
         return 2
     if fix == HFIX_OUTLIER:
         return 2
+    if fix == HFIX_NESTED:
+        return 2
     return 3
 
 
@@ -120,6 +208,12 @@ def hfixture_min_samples(fix: Int) -> Int:
         return 4
     if fix == HFIX_OUTLIER:
         return 4
+    if fix == HFIX_NESTED:
+        # 5, so the 5 nearest neighbours of every row lie inside its own
+        # blob of 8; the next blob is at least 18.8 away and the whole
+        # blob fits in a 1.2 x 1.2 box, so the core distance is a LOCAL
+        # density on this fixture by construction.
+        return 5
     return 5
 
 
@@ -127,6 +221,12 @@ def hfixture_min_cluster_size(fix: Int) -> Int:
     if fix == HFIX_DUPS:
         return 4
     if fix == HFIX_OUTLIER:
+        return 5
+    if fix == HFIX_NESTED:
+        # 5 is the value the split-node count is DERIVED from, not a
+        # taste: 8 >= 5 makes every blob merge a split node, and
+        # 8 < 2 * 5 makes it impossible for a blob to contribute one of
+        # its own. Change it and this file's header stops being true.
         return 5
     return 5
 
@@ -214,6 +314,33 @@ def hfixture_value(fix: Int, i: Int, f: Int) -> Float32:
         if i >= 20:
             side = Float32(11.0)
         return side + (_hash_unit(i, f, 31) - Float32(0.5)) * Float32(1.0)
+
+    if fix == HFIX_NESTED:
+        # SIX blobs of 8 on one line, centres at 0, 20, 72, 320, 346, 406.
+        # Every centre is an integer and therefore exact in Float32, so
+        # the five gaps below are exact too: 20, 52, 248, 26, 60 between
+        # consecutive centres. Kruskal joins them 20, 26, 52, 60, 248,
+        # which is the two-sided nesting this file's header derives.
+        #
+        # Feature 1 is jitter and NOTHING ELSE, deliberately: a per-blob
+        # offset would make each merge height a square root and the
+        # ladder would stop being an arithmetic fact.
+        var nb = i % 6
+        var cx = Float32(0.0)
+        if nb == 1:
+            cx = Float32(20.0)
+        elif nb == 2:
+            cx = Float32(72.0)
+        elif nb == 3:
+            cx = Float32(320.0)
+        elif nb == 4:
+            cx = Float32(346.0)
+        elif nb == 5:
+            cx = Float32(406.0)
+        var jitter = (_hash_unit(i, f, 51) - Float32(0.5)) * Float32(1.2)
+        if f == 0:
+            return cx + jitter
+        return jitter
 
     # HFIX_SIGNED_ZERO / HFIX_POS_ZERO: two blobs in features 0 and 1,
     # feature 2 a planted zero of one sign or the other on EVERY row.

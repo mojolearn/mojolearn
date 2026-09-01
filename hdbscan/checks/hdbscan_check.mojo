@@ -61,7 +61,11 @@ SABOTAGE TABLE (results are copied into hdbscan/README.md)
   HDB_SAB_HW_MAX              planted  RECORDED: the stdlib max's answer
                                        on a (+0, -0) pair is the vendor's
   HDB_SAB_CORE_KTH_PLUS_ONE   blobs    MUST FAIL the core-distance gate
-  HDB_SAB_CONDENSE_DFS        blobs    MUST FAIL the condensed-tree gate
+  HDB_SAB_CONDENSE_DFS        nested   MUST FAIL the condensed-tree gate.
+                                       NOT `blobs`: that fixture has two
+                                       case-1 nodes and they are nested,
+                                       so both walks order them the same
+                                       way and the arm was INERT there
   HDB_SAB_STABILITY_DESCENDING blobs   RECORDED with the moved-cell count
   HDB_SAB_EOM_NO_UPDATE       gradient MUST FAIL the selection gate
   HDB_SAB_SKIP_GUARDS         planted  RECORDED: what the guard keeps out
@@ -79,6 +83,7 @@ from hdbscan.checks.hdbscan_fixture import (
     HFIX_COUNT,
     HFIX_DUPS,
     HFIX_GRADIENT,
+    HFIX_NESTED,
     HFIX_OUTLIER,
     HFIX_POS_ZERO,
     HFIX_SIGNED_ZERO,
@@ -1642,23 +1647,72 @@ def check_hdbscan_sabotages() raises:
         + String(mb) + " core distances moved"
     )
 
-    # HDB_SAB_CONDENSE_DFS: the condensed-tree gate.
+    # HDB_SAB_CONDENSE_DFS: the condensed-tree gate, ON HFIX_NESTED AND
+    # NOT ON blobs96, and the choice of fixture is the whole content of
+    # this block.
+    #
+    # `condense()` sorts the condensed arrays on (parent, child)
+    # (DEVIATION 1611), so the order in which edges were appended is
+    # erased and `_collapse`'s leaf edges are an order-free SET. The one
+    # channel from `bfs_from_node`'s order to the output is the VALUE
+    # written into `relabel` in their case 1. Two case-1 nodes are
+    # therefore ordered differently by the two walks only when neither is
+    # an ancestor of the other AND the one in the left branch is deeper.
+    #
+    # A cluster tree with k leaf clusters has k - 1 case-1 nodes, so at
+    # k <= 3 every pair is an ancestor/descendant pair and the arm CANNOT
+    # move. blobs96 is 100 edges and 5 clusters -- 96 leaf edges plus four
+    # cluster edges, so exactly two case-1 nodes -- and it held this arm
+    # inert for as long as it was pointed at it. HFIX_NESTED plants five
+    # case-1 nodes at three depths on both sides of its root, derived in
+    # `hdbscan/checks/hdbscan_fixture.mojo`'s header, and the counts below
+    # are asserted on it.
+    var fnest = HFIX_NESTED
     var base = _fit_plain(ctx, fb)
-    var dfs = _fit_plain(ctx, fb, HDB_SAB_CONDENSE_DFS)
-    var dfs_moved = _i32_differ(base.condensed.children, dfs.condensed.children)
-    if dfs_moved == 0 and base.condensed.n_edges == dfs.condensed.n_edges:
+    var dfs_base = _fit_plain(ctx, fnest)
+    var dfs = _fit_plain(ctx, fnest, HDB_SAB_CONDENSE_DFS)
+    var dfs_moved = _i32_differ(
+        dfs_base.condensed.children, dfs.condensed.children
+    )
+    if dfs_moved == 0 and dfs_base.condensed.n_edges == dfs.condensed.n_edges:
         raise Error(
             "check_hdbscan_sabotages: HDB_SAB_CONDENSE_DFS left the"
-            " condensed tree identical on " + hfixture_name(fb)
-            + ". A depth-first traversal assigns next_label in a"
-            " different order, so on any tree deeper than two levels the"
-            " numbering must move"
+            " condensed tree identical on " + hfixture_name(fnest)
+            + ", which is the fixture built to make it move. Its cluster"
+            " tree branches on BOTH sides of the root, so a depth-first"
+            " walk reaches the left side's depth-2 case-1 node before the"
+            " right side's depth-1 one and a level-by-level walk does not,"
+            " and next_label must land differently. Either the fixture's"
+            " merge ladder came out other than 20/26/52/60/248 -- check"
+            " the condensed n_clusters, it must be 11 over "
+            + String(hfixture_n(fnest)) + " points -- or the traversal is not"
+            " what decides the numbering after all"
         )
     print(
         "check_hdbscan_sabotages OK: HDB_SAB_CONDENSE_DFS FAILED the"
-        " condensed-tree gate as required: " + String(dfs_moved)
-        + " condensed children moved (device " + String(base.condensed.n_edges)
-        + " edges, sabotaged " + String(dfs.condensed.n_edges) + ")"
+        " condensed-tree gate as required on " + hfixture_name(fnest) + ": "
+        + String(dfs_moved) + " condensed children moved (device "
+        + String(dfs_base.condensed.n_edges) + " edges / "
+        + String(dfs_base.condensed.n_clusters) + " clusters, sabotaged "
+        + String(dfs.condensed.n_edges) + " edges / "
+        + String(dfs.condensed.n_clusters) + " clusters)"
+    )
+    # THE INERT FIXTURE, RECORDED RATHER THAN DROPPED. blobs96 is expected
+    # to move NOTHING here and the expectation is derived, not observed:
+    # printing it keeps the reason visible to the next reader who wonders
+    # why the arm is not simply pointed at the lane's main fixture.
+    var dfs_blobs = _fit_plain(ctx, fb, HDB_SAB_CONDENSE_DFS)
+    var dfs_blobs_moved = _i32_differ(
+        base.condensed.children, dfs_blobs.condensed.children
+    )
+    print(
+        "check_hdbscan_sabotages RECORDED: HDB_SAB_CONDENSE_DFS moved "
+        + String(dfs_blobs_moved) + " condensed children on "
+        + hfixture_name(fb) + " (" + String(base.condensed.n_edges)
+        + " edges, " + String(base.condensed.n_clusters) + " clusters). 0"
+        " is the DERIVED answer: 5 clusters means four cluster edges means"
+        " two case-1 nodes, and two case-1 nodes in one tree are ancestor"
+        " and descendant, an order both walks agree on"
     )
 
     # HDB_SAB_EOM_NO_UPDATE: the selection gate. SWEPT OVER EVERY FIXTURE

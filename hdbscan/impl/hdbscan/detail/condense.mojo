@@ -36,6 +36,21 @@ thing that could break it is a rewrite to a different traversal, which is
 why `HDB_SAB_CONDENSE_DFS` exists and why the gate is `check_condensed_
 tree_vs_oracle` comparing NODE FOR NODE rather than comparing a summary.
 
+WHERE THE TRAVERSAL DOES *NOT* REACH, because a reader is owed the
+narrower claim rather than the wide one. The traversal order also decides
+the order in which edges are APPENDED to `out_parent`/`out_child` below,
+and the order in which `_collapse` emits a subtree's leaves -- and
+NEITHER of those is observable, because `CondensedHierarchy.condense()`
+sorts the four arrays on `(parent, child)` (DEVIATION 1611) and a
+collapsed subtree's leaf set is the same set whichever way it is walked.
+The ONE channel from the walk to the output is the VALUE assigned to
+`relabel` in case 1. That is why `HDB_SAB_CONDENSE_DFS` needs a fixture
+whose condensed cluster tree has two case-1 nodes that are neither
+ancestor nor descendant, with the left one deeper -- `HFIX_NESTED`,
+derived in `hdbscan/checks/hdbscan_fixture.mojo`'s header -- and why it
+sat inert on `blobs96`, whose 100 edges and 5 clusters say it has exactly
+two case-1 nodes and they are nested.
+
 THE ONE FLOAT IN THIS FILE is `lambda_value = 1 / distance`, DEVIATION
 1606 below.
 ======================================================================
@@ -108,6 +123,17 @@ def bfs_from_node(
     `HDB_SAB_CONDENSE_DFS` replaces the level queue with a STACK, which
     visits the same nodes and produces a different ORDER -- the sabotage
     for the numbering claim above.
+
+    THE STACK IS A PREORDER, LEFT FIRST: the right child is pushed before
+    the left, so the left pops first. That matters, because it is what
+    makes the two walks agree on every ancestor/descendant pair and
+    disagree only where a LEFT-branch node is deeper than a RIGHT-branch
+    one. On a LEFT-LEANING CATERPILLAR -- which is what
+    `bfs_from_node(subtree_root, ...)` is handed inside `_collapse`, and
+    what a single-linkage dendrogram is where one growing cluster absorbs
+    one point at a time -- the two walks are IDENTICAL node for node, not
+    merely equivalent. `HDB_SAB_CONDENSE_DFS`'s docstring in
+    `hdbscan/checks/hdbscan_sabotage.mojo` carries the rest.
     """
     if sabotage == HDB_SAB_CONDENSE_DFS:
         # The sabotage arm: a depth-first stack. Same node SET, different
