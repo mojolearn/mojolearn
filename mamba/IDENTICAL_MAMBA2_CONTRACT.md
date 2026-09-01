@@ -435,3 +435,49 @@ file, not after (the 2026-08-31 lesson).
    shape, reach measured not inferred (the leg-14 lesson), FAST negative
    control read on every column. RUN OWED — this is the phase the
    completion claim lives or dies on.
+
+## RUN RECORD, 2026-09-01 evening (Apple M4, nice -19, one process at a time, with_identical_mode; orchestrator's box)
+
+Everything below ran the day the contract and its implementation landed.
+ONE COLUMN. Nothing here is a cross-vendor claim; phase 6 owns that.
+
+- **Gate (a) + card, (b), (c): PASS on the first clean compile.** Every
+  stage bit-identical to the oracle at the default shape; 8 repeated
+  launches identical; row bits independent of launch companions
+  (B in {1,2,3}) with the negative control moving 24,733 cells.
+- **Gate (d): PASS** — decode == prefill bitwise per token, all token
+  stages + final-token chunk/state stages, misalignment control differed.
+  **Gate (d) cross: PASS** — prefill 250 + decode through 262 == prefill
+  262 bitwise; the chain crossed Q = 256 and the resumption buffer
+  emptied and refilled. **Gate (d2): PASS** — prefill 512 +
+  initial_states = h_last continuation == prefill 520 bitwise.
+- **Gate (e): PASS** — 28 nonfinite plants (quiet NaN + inf per each of
+  14 names), each read back off the device first, each refused BY NAME
+  with 0 stages recorded; the clean control recorded all 26.
+- **Gate (g): PASS** — after the corpus generated (17 cases, 41.4 MB,
+  sha c928478e7a28ab7400e1cc508bc54a514bd550b84e4bb79d3c7d615017bd7f62,
+  generator's own six verify arms green, sha reproduced on a second run
+  byte for byte), all 17 cases' input tensors byte-identical between the
+  corpus files and the check's in-Mojo generator — two implementations
+  of the hash spec agreeing. Two defects found and fixed on the way:
+  the gate's text-mode read raised on binary bytes and a catch-all
+  renamed every failure MISSING FIXTURE (now binary-safe with
+  missing/unreadable/wrong-size/byte-mismatch each refusing by name).
+- **All ELEVEN sabotage arms: RED AS REQUIRED**, each naming its own
+  seam as the first-moved stage: SEGSUM_DESCENDING (22,785 cells,
+  dacs.out), CHUNK_SIZE_128 (78,879, ydiag.out), STATEPASS_MATRIX +
+  STATEPASS_UNFUSED (both witnessing fixtures), PAIR_DT_B (15,038,
+  xd.out), FOLD_SERIAL_ZERO_SEED (80,110, ydiag.out), S6_BIAS_LAST
+  (23,668, conv.out), S6_TAPS_REVERSED (22,970, conv.out),
+  CLAMP_BEFORE_SOFTPLUS (115,218, dt.out — after its first form
+  refused itself VACUOUS on a fixture that clamped zero cells and got
+  a by-construction two-sided witness), GATE_NORM_BEFORE (1,544,
+  gnorm.gate), STEP_UPSTREAM_RECURRENCE (58,774 on gate (d) — after
+  its guard was re-gated to engage only at l == 1 so the armed build's
+  prefill legs run clean).
+- **STILL OWED:** the shape sweep (L in {256, 257, 513, 770} beyond the
+  gates' own lengths at larger d_model), FAST recording, kernel-matrix
+  rows' cross-column reads, check-portable-nn's identical_clamp arm,
+  `pixi run check-mamba2-corpus` (the tool's mamba2 support is a
+  separate lane item), and PHASE 6 — the three-vendor E-series leg the
+  completion claim lives on.
