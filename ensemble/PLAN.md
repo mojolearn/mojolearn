@@ -1114,3 +1114,19 @@ site (1918); `xfer_phase_upload` 1,665 against 1,476 rounds + 720
 partition batches = 2,196 unskipped, so 531 no-retry batches took the
 1919 span reuse (reach by count arithmetic). Speed unmeasured here -- the
 measuring lane owns the covtype/higgs rows.
+
+DEV 2001 GATE RECORD (Sep 1, orchestrator; the ledger prose the builder's
+report owed this file). Sampled-order labels: `labels_s`/`sample_weight_s`
+gathered once per tree after row sampling, re-permuted WITH `row_ids` by
+the scan writer and copy-back twin under the same guards, histogram and
+leaf loops reading sequentially at the loop index. BUILT BEHIND
+`LABELS_SAMPLED_ORDER = False` (randomforest.mojo). GATED bit-identical
+2026-09-01: fingerprint pair flag-off vs flag-on EQUAL on all 5 configs
+plus the K4 twins, values matching the Aug 21 record exactly; the gather
+sabotage (broadcast label poison + doubled weights) moved every
+fingerprint line downstream of the first histogram, so the sampled path
+is reached, not inert. The full mechanism and bit-identity argument live
+at the DEVIATION 2001 banner in `builder_kernels_impl.mojo`. THE DEFAULT
+DOES NOT FLIP on identity alone (house rule 11): the cold-box timing A/B
+at the rf_bench shapes owns that decision, and until it lands the shipped
+build compiles the pre-2001 code.

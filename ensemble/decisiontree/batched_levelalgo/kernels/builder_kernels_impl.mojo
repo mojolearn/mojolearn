@@ -1669,8 +1669,11 @@ def launch_node_split_kernel[
 # thread reads the same VALUE at the same step, nothing reorders. All
 # histogram accumulation is integer-atomic regardless (`bins.mojo`:
 # `ClassificationBin` UInt32 `fetch_add`, `RegressionBin` fixed-point
-# Int32), so the change is ADDRESS-ONLY. The fingerprint pair flag-off vs
-# flag-on must be EQUAL (UNVERIFIED, RUN OWED).
+# Int32), so the change is ADDRESS-ONLY. GATED 2026-09-01: the
+# fingerprint pair flag-off vs flag-on was EQUAL on all 5 configs and the
+# K4 twins (values matching the Aug 21 record), and the gather sabotage
+# moved every downstream line (reach). Timing A/B still owed before the
+# default flips.
 #
 # THE ORIGINAL `labels` ARRAY STAYS: the host-side OOB path
 # (`compute_oob_score`, `randomforest.mojo`) reads original order and is
