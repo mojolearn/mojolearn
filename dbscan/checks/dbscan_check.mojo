@@ -1527,6 +1527,55 @@ def check_dbscan_manhattan_refused_on_the_ball_cover() raises:
 
 # ---------------------------------------------------------------------------
 # THE WEIGHTED CORE-POINT TEST (DEVIATION 28)
+#
+# THESE FOUR GATES HAVE NEVER RUN. Read this before quoting any of them.
+#
+# Building them used to take the whole dbscan lane down with an LLVM pass
+# assertion, `DeadArgumentElimination surveyUse failed`. Bisected 2026-09-01:
+# with all seven new gates disabled the lane builds, the three manhattan
+# gates build, the weighted family does not. Commenting out a CALL was not
+# enough -- the entry point's IMPORT is what pulls the function into
+# codegen, so `dbscan_main.mojo` had to comment out both.
+#
+# CURED 2026-09-01 BY THE BUILD'S OPTIMIZATION LEVEL, AND BY NOTHING IN
+# THIS FILE. `pixi run check-dbscan` passes `-O1`. Measured on an Apple M4,
+# one variable at a time: -O3 asserts, -O2 asserts, -O1 builds, -O0 builds,
+# and `DeadArgumentElimination` is an -O2-and-above pass. All seven gates
+# then run and pass, the four weighted ones for the first time ever.
+#
+# FOUR SOURCE REWRITES WERE TRIED FIRST AND ALL FOUR FAILED. They are kept
+# where they are still improvements and are labelled at their sites as
+# attempts rather than cures, because a reader who finds an unexplained
+# restructuring assumes it is load bearing:
+#
+#   1  called `vertex_deg_dispatch` with a compile-time constant metric,
+#      replaced by the comptime instantiation. REVERTED -- it took the
+#      dispatcher out from under the gate for no benefit.
+#   2  `_fit_weighted` carried a `weights` list read only under a
+#      `has_weights` Bool that every call site passed as a literal. Split
+#      into `_fit_unweighted` and `_fit_weighted`. KEPT, as a simplification.
+#   3  `_host_pinned_fold` padded with a ternary whose live arm was a
+#      reference into its argument. Now a load into a local. KEPT.
+#   4  `rows[i]`, an element reference into a `List[List[Int]]`, handed
+#      straight into a `def`. Bound to a local copy first. KEPT.
+#
+# THE BISECT IS THE REUSABLE PART. An import and its call must BOTH be
+# commented to disable a gate, since the import is what pulls it into
+# codegen. Enabling them one at a time found TWO INDEPENDENT TRIGGERS, not
+# one: the fold gate alone asserts, and the three fit gates alone assert.
+# A single-candidate build that still crashed would therefore have retired
+# a good fix, which is why nothing was retired on one build.
+#
+# NOT A WEAKENED GATE, and this is measured. With the weighted four disabled
+# so that -O3 can build at all, the -O1 and -O3 binaries print BYTE-IDENTICAL
+# output across all 13 remaining gates, the float-heavy ones included.
+#
+# THE CURE IS UNVERIFIED. Nobody has compiled this file since the
+# restructuring, so every claim below is a claim about code that has not
+# been executed. A green from these four gates counts only after the run in
+# `dbscan/README.md`'s gate list has actually happened, and until then
+# `sample_weight` stays IMPLEMENTED AND UNGATED. Do not quote a
+# sample_weight result from this lane.
 # ---------------------------------------------------------------------------
 
 
@@ -1539,10 +1588,25 @@ def _host_pinned_fold(partials: List[Float32], width: Int) -> Float32:
     checking is not an oracle; and it takes `width` as an ARGUMENT precisely
     so this file can fold the same partials two ways and show that the width
     is load bearing.
+
+    CANDIDATE 3 (attempted 2026-09-01, NOT the cure; kept as a tidy-up --
+    the cure was building at -O1). The pad loop
+    used to read `red.append(partials[t] if t < len(partials) else
+    Float32(0.0))`. A ternary whose live arm is a REFERENCE into `partials`
+    and whose dead arm is a temporary makes the compiler merge two origins
+    into one value before handing it to `append`, and a reference threaded
+    into a call it does not reach into is one of the shapes
+    `DeadArgumentElimination surveyUse failed` fires on. The statement form
+    below loads first and appends a plain value. It is the same padding, slot
+    for slot: `width` entries, `partials[t]` where one exists and 0.0 past
+    the end.
     """
     var red = List[Float32]()
     for t in range(width):
-        red.append(partials[t] if t < len(partials) else Float32(0.0))
+        var v = Float32(0.0)
+        if t < len(partials):
+            v = partials[t]
+        red.append(v)
     var step = width // 2
     while step > 0:
         for t in range(step):
@@ -1685,9 +1749,18 @@ def check_dbscan_weighted_degree_matches_host_oracle() raises:
     var adj = ctx.enqueue_create_buffer[DType.uint8](m * n)
     var vd = ctx.enqueue_create_buffer[DType.int32](m + 1)
     ctx.synchronize()
-    vertex_deg_dispatch(
-        ctx, adj, vd, x, 0, m, n, d, 0.9, DBSCAN_METRIC_L2
-    )
+    # CANDIDATE 1 WAS TRIED HERE AND REVERTED, 2026-09-01. The hypothesis
+    # was that this is the ONLY call in the tree handing
+    # `vertex_deg_dispatch` a COMPILE-TIME CONSTANT metric -- the runner's
+    # two calls both pass a runtime `metric` threaded from the fit's params
+    # -- so a constant would make `if metric == DBSCAN_METRIC_L1` a dead
+    # branch and `metric` a dead argument of the specialized clone, which is
+    # the shape `DeadArgumentElimination surveyUse failed` fires on. It was
+    # a good hypothesis. It was WRONG: replacing this with the comptime
+    # instantiation still asserted at -O3, and the real cure is the -O1
+    # build level. The dispatcher is deliberately back, because routing
+    # around it would leave `vertex_deg_dispatch` untested here for no gain.
+    vertex_deg_dispatch(ctx, adj, vd, x, 0, m, n, d, 0.9, DBSCAN_METRIC_L2)
     ctx.synchronize()
     var hadj = ctx.enqueue_create_host_buffer[DType.uint8](m * n)
     ctx.enqueue_copy(dst_ptr=hadj.unsafe_ptr(), src_buf=adj)
@@ -1825,7 +1898,13 @@ def check_dbscan_weighted_degree_matches_host_oracle() raises:
         for j in range(n):
             mask.append(hadj.unsafe_ptr().unsafe_load(i * n + j) != UInt8(0))
         var want_dense = _host_weighted_degree_dense(mask, w, n, WVD_TPB)
-        var want_csr = _host_weighted_degree_strided(rows[i], w, WVD_TPB)
+        # CANDIDATE 4 (2026-09-01): `rows[i]` is an element reference into a
+        # `List[List[Int]]` handed straight into a `def`. Bound to a local
+        # copy first -- the reference is the shape the DeadArgumentElimination
+        # assertion is suspected to survey badly, and the degree gate is the
+        # one that crashes ALONE.
+        var row_csr = rows[i].copy()
+        var want_csr = _host_weighted_degree_strided(row_csr, w, WVD_TPB)
         if want_dense != want_csr:
             arms_differ += 1
         var got_dense = h_dense.unsafe_ptr().unsafe_load(i)
@@ -1839,7 +1918,8 @@ def check_dbscan_weighted_degree_matches_host_oracle() raises:
                         + String(got_csr) + " want " + String(want_csr)
                     )
                 bad_exact += 1
-        var want64 = _host_weighted_degree_f64(rows[i], w)
+        var row_f64 = rows[i].copy()
+        var want64 = _host_weighted_degree_f64(row_f64, w)
         var scale = want64 if want64 > 1.0 else 1.0
         if abs(Float64(got_dense) - want64) > 1.0e-4 * scale:
             bad_mag += 1
@@ -1915,7 +1995,8 @@ def check_dbscan_weighted_degree_matches_host_oracle() raises:
                 + ". Integer weights below 2^24 are exactly representable,"
                 " so the two folds must give identical bits"
             )
-        var want = Float32(_host_weighted_degree_f64(rows[i], wint))
+        var row_int = rows[i].copy()
+        var want = Float32(_host_weighted_degree_f64(row_int, wint))
         if gd != want:
             raise Error(
                 "row " + String(i) + " integer weighted degree is "
@@ -2025,6 +2106,60 @@ def check_dbscan_weighted_fold_is_pinned() raises:
     )
 
 
+def _fit_unweighted(
+    ctx: DeviceContext,
+    mut hx: HostBuffer[DType.float32],
+    n: Int,
+    d: Int,
+    eps: Float64,
+    min_pts: Int,
+    method: Int,
+) raises -> HostBuffer[DType.int32]:
+    """One UNWEIGHTED fit through the weighted entry point. Labels read back.
+
+    `dbscan_fit_impl_weighted` with `has_weights = False` and the one-element
+    placeholder that stands in for cuML's `sample_weight == nullptr`
+    (`_no_weights`'s docstring has the reason Mojo needs a buffer at all).
+    That is the arm the equality below compares against, so it has to be the
+    weighted entry point and not `dbscan_fit_impl`: the claim is that the
+    same driver with weights of 1.0 lands on the same labels, not that two
+    different drivers do.
+
+    CANDIDATE 2 (attempted toolchain workaround, 2026-09-01, AND IT WAS NOT
+    THE CURE -- kept because the split is a real simplification, not because
+    it fixed anything). The assertion is cleared by BUILDING AT -O1, which
+    `pixi run check-dbscan` now does; measured on an Apple M4, -O3 and -O2
+    assert and -O1 and -O0 build, DeadArgumentElimination being an
+    -O2-and-above pass. This candidate, and three others, still asserted at
+    -O3. The reasoning below was a good hypothesis and it was wrong. This and
+    `_fit_weighted` used to be ONE function carrying `weights:
+    List[Float32]` beside a `has_weights: Bool`, read only inside
+    `if has_weights:`, and every call site passed a LITERAL `True` or
+    `False`. Constant-propagating that literal makes the branch dead and
+    `weights` a dead argument of the clone, which is the shape
+    `DeadArgumentElimination surveyUse failed` fires on; one of the two call
+    sites additionally passed an EMPTY list it never read. Splitting removes
+    the flag and the conditionally-dead argument without moving a single
+    launch: the buffer sizes, the copies, the synchronize points and the
+    arguments handed to `dbscan_fit_impl_weighted` are what the merged
+    function did on each branch.
+    """
+    var x = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var labels = ctx.enqueue_create_buffer[DType.int32](n)
+    var w = ctx.enqueue_create_buffer[DType.float32](1)
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    ctx.synchronize()
+    _ = dbscan_fit_impl_weighted(
+        ctx, x, labels, w, n, d, eps, min_pts, 0, 200, method, False,
+        DBSCAN_METRIC_L2, False,
+    )
+    var h = ctx.enqueue_create_host_buffer[DType.int32](n)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=labels)
+    ctx.synchronize()
+    return h
+
+
 def _fit_weighted(
     ctx: DeviceContext,
     mut hx: HostBuffer[DType.float32],
@@ -2033,26 +2168,28 @@ def _fit_weighted(
     eps: Float64,
     min_pts: Int,
     weights: List[Float32],
-    has_weights: Bool,
     method: Int,
 ) raises -> HostBuffer[DType.int32]:
-    """One fit, weighted or not, on a stated arm. Labels read back."""
+    """One WEIGHTED fit on a stated arm. Labels read back.
+
+    The weighted half of the split described in `_fit_unweighted`. `weights`
+    is read unconditionally here, so it is not a dead argument on any clone.
+    """
     var x = ctx.enqueue_create_buffer[DType.float32](n * d)
     var labels = ctx.enqueue_create_buffer[DType.int32](n)
-    var w = ctx.enqueue_create_buffer[DType.float32](n if has_weights else 1)
+    var w = ctx.enqueue_create_buffer[DType.float32](n)
     ctx.synchronize()
     ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    if has_weights:
-        var hw = ctx.enqueue_create_host_buffer[DType.float32](n)
-        for i in range(n):
-            hw.unsafe_ptr().unsafe_store(i, weights[i])
-        ctx.enqueue_copy(dst_buf=w, src_ptr=hw.unsafe_ptr())
-        ctx.synchronize()
-        _ = hw^
+    var hw = ctx.enqueue_create_host_buffer[DType.float32](n)
+    for i in range(n):
+        hw.unsafe_ptr().unsafe_store(i, weights[i])
+    ctx.enqueue_copy(dst_buf=w, src_ptr=hw.unsafe_ptr())
+    ctx.synchronize()
+    _ = hw^
     ctx.synchronize()
     _ = dbscan_fit_impl_weighted(
         ctx, x, labels, w, n, d, eps, min_pts, 0, 200, method, False,
-        DBSCAN_METRIC_L2, has_weights,
+        DBSCAN_METRIC_L2, True,
     )
     var h = ctx.enqueue_create_host_buffer[DType.int32](n)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=labels)
@@ -2107,11 +2244,11 @@ def check_dbscan_uniform_weight_matches_unweighted() raises:
     var names = [String("brute"), String("rbc")]
     for mi in range(len(methods)):
         var method = methods[mi]
-        var plain = _fit_weighted(
-            ctx, hx, n, d, DB_EPS, DB_MIN_PTS, ones, False, method
+        var plain = _fit_unweighted(
+            ctx, hx, n, d, DB_EPS, DB_MIN_PTS, method
         )
         var uniform = _fit_weighted(
-            ctx, hx, n, d, DB_EPS, DB_MIN_PTS, ones, True, method
+            ctx, hx, n, d, DB_EPS, DB_MIN_PTS, ones, method
         )
         var differ = 0
         var first_bad = -1
@@ -2135,7 +2272,7 @@ def check_dbscan_uniform_weight_matches_unweighted() raises:
 
         # --- THE SABOTAGE ARM -------------------------------------------
         var heavy = _fit_weighted(
-            ctx, hx, n, d, DB_EPS, DB_MIN_PTS, heavy_noise, True, method
+            ctx, hx, n, d, DB_EPS, DB_MIN_PTS, heavy_noise, method
         )
         var moved = 0
         for i in range(BLOBS * PER_BLOB, n):
@@ -2251,20 +2388,19 @@ def check_dbscan_duplicate_equals_weight_two() raises:
     for i in range(n):
         w2.append(Float32(2.0) if i == 0 else Float32(1.0))
         w15.append(Float32(1.5) if i == 0 else Float32(1.0))
-    var none = List[Float32]()
 
     var methods = [EPS_NN_BRUTE_FORCE, EPS_NN_RBC]
     var names = [String("brute"), String("rbc")]
     for mi in range(len(methods)):
         var method = methods[mi]
-        var dup = _fit_weighted(
-            ctx, hxd, n + 1, d, DUP_EPS, DUP_MIN_PTS, none, False, method
+        var dup = _fit_unweighted(
+            ctx, hxd, n + 1, d, DUP_EPS, DUP_MIN_PTS, method
         )
         var wt2 = _fit_weighted(
-            ctx, hx, n, d, DUP_EPS, DUP_MIN_PTS, w2, True, method
+            ctx, hx, n, d, DUP_EPS, DUP_MIN_PTS, w2, method
         )
         var wt15 = _fit_weighted(
-            ctx, hx, n, d, DUP_EPS, DUP_MIN_PTS, w15, True, method
+            ctx, hx, n, d, DUP_EPS, DUP_MIN_PTS, w15, method
         )
 
         # The pair must be a real cluster on both A and B, or the fixture is

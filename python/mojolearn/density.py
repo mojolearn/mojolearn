@@ -95,11 +95,18 @@ class DBSCAN(NumericModeMixin):
                                        _dbscan.py:451-455, which agree. A
                                        sample whose own weight reaches
                                        min_samples is by itself a core
-                                       sample. Uniform weights of 1.0
-                                       reproduce the unweighted labels
-                                       exactly and duplicating a point equals
-                                       giving it weight 2; both are gated
-                                       (dbscan/checks/dbscan_check.mojo)
+                                       sample. Uniform weights of 1.0 are
+                                       intended to reproduce the unweighted
+                                       labels exactly, and duplicating a
+                                       point to equal giving it weight 2.
+                                       BOTH ARE NOW GATED, 2026-09-01, and
+                                       neither was until that day: the checks
+                                       were written but had never compiled,
+                                       an LLVM pass assertion taking the lane
+                                       down, and the cure was the build's
+                                       optimization level rather than the
+                                       source. Measured on an Apple M4 only;
+                                       a three-vendor leg is owed
         core_sample_indices_ absent    not computed by the port
                                        (dbscan.cuh:171-173 notes cuML does
                                        not return theirs either)

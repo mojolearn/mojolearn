@@ -62,8 +62,13 @@ Int32 before the compare. For `min_pts >= 1` (enforced at the estimator) and
 a non-negative sum that is exactly the same predicate: `trunc(w) >= p` and
 `w >= p` agree for integer `p` when `w >= 0`, since `trunc` is monotone and
 `trunc(p) == p`. This port compares the FLOAT directly, which is the same
-answer without depending on that argument, and `check_dbscan_weighted_core_
-matches_host_oracle` gates the predicate rather than the spelling.
+answer without depending on that argument. The checks written to hold the
+PREDICATE rather than the spelling are
+`check_dbscan_uniform_weight_matches_unweighted` and
+`check_dbscan_duplicate_equals_weight_two`, end to end on both arms. (This
+sentence named a `check_dbscan_weighted_core_matches_host_oracle` until
+2026-09-01; there is no such function.) NEITHER HAS EVER RUN -- see
+DEVIATION 28 below.
 
 Two producers of the weighted degree, because the two arms of `launcher`
 produce two different data structures, and both are ported:
@@ -110,7 +115,13 @@ carrying two values would build two different multisets of partials and then
 fold each of them correctly). `checks/kernel_matrix.mojo` lists
 `K_LIB_WEIGHTED_VERTEX_DEG` in `lib_block_bounds_a_float_fold`, so under
 IDENTICAL it resolves to the identity floor on every vendor.
-`check_dbscan_weighted_fold_is_pinned` gates that from this side.
+`check_dbscan_weighted_fold_is_pinned` gates that from this side, and it
+RAN FOR THE FIRST TIME on 2026-09-01, having never compiled before that:
+building it raised `DeadArgumentElimination surveyUse failed`, an LLVM pass
+assertion. The cure was the build's optimization level and not this lane's
+source; `check-dbscan` runs at `-O1`. The width is now ASSERTED and shown to
+matter: 1.0000151 at 128, 1.000015 at 64, and exactly 1.0 summed left to
+right. Apple M4 only.
 
 WHAT THE TWO ARMS DO AND DO NOT PROMISE EACH OTHER. Each arm is a pure
 function of its inputs and is the same on every vendor. They are NOT
@@ -121,9 +132,15 @@ takes COLUMNS `t, t + B, ...` and the CSR arm's takes the row's `t`-th,
 every partial sum is exactly representable -- integer weights with a total
 below 2^24, which is the regime of "uniform weights of 1 reproduce the
 unweighted labels" and of "duplicating a point equals weight 2" -- because
-float addition is exact there and order stops mattering. That is what
-`check_dbscan_weighted_arms_agree` asserts, and it says so in its own
-docstring rather than pretending to a stronger claim.
+float addition is exact there and order stops mattering. That is what arm 4
+of `check_dbscan_weighted_degree_matches_host_oracle` asserts, and it says
+so in its own docstring rather than pretending to a stronger claim. (There
+is no `check_dbscan_weighted_arms_agree`; this sentence named one until
+2026-09-01.) THAT CHECK ALSO RAN FOR THE FIRST TIME on 2026-09-01, under
+the same `-O1` cure: 37 rows, 24 to 110 neighbours each, 2,231 edges, both
+arms bit-equal to their own pinned host folds, and the two arms bit-identical
+to each other on integer weights, which is the only regime this section
+promises.
 
 Under IDENTICAL the CSR arm's rows arrive in ASCENDING COLUMN ORDER, which
 is not luck: DEVIATION 551 (`neighbors/checks/ball_cover_canonical_order.

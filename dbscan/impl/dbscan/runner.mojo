@@ -82,7 +82,10 @@ CSR, `weak_cc`, `MergeLabels`, `final_relabel` and `relabelForSkl` are
 byte-for-byte the unweighted path, which is what makes "uniform weights of 1
 reproduce the unweighted labels" a real gate rather than a tautology: the
 two runs differ in one buffer and one kernel, and if the weighted degree is
-wrong that gate is what says so.
+wrong that gate is what would say so. IT HAS NOT SAID ANYTHING YET:
+`check_dbscan_uniform_weight_matches_unweighted` first compiled and passed on 2026-09-01, having never compiled before that (the cure was `-O1`, not this lane's source)
+(`DeadArgumentElimination surveyUse failed`, an LLVM pass assertion) and the
+gate-side workaround on top of `dfb47fc9` is unverified.
 
 NOT PORTED, and named in `dbscan/NOT_IMPLEMENTED.tsv`: the multi-GPU arms
 (`CorePoints::exchange`, `MergeLabels::tree_reduction`) and the

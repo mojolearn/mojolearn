@@ -27,7 +27,7 @@ code. `upstream/cuml`, `upstream/raft` and `upstream/cuvs` landed on disk on
 `sample_weight` and `metric='manhattan'` were both refused at the Python
 surface. Both are now served, and one refusal is DELIBERATELY KEPT.
 
-### `sample_weight` -- PORTED, both arms
+### `sample_weight` -- PORTED on both arms, and GATED SINCE 2026-09-01
 
 cuML has it and we did not. It enters in EXACTLY ONE PLACE: a point is core
 when the SUM OF WEIGHTS in its eps-neighborhood reaches `min_samples` rather
@@ -42,7 +42,9 @@ arm, and `accumulateWeights` over the CSR (`algo.cuh:62-91`) for the ball
 cover, with `need_ja_compute`'s `sample_weight` disjunct (`runner.cuh:257`)
 so loop 1 fills `ja` on every weighted RBC batch (DEVIATION 29).
 
-**THE NUMERIC RISK IS THE FOLD AND IT HAS ITS OWN GATE.** Both of their
+**THE NUMERIC RISK IS THE FOLD, AND ITS GATE IS WRITTEN BUT HAS NEVER
+RUN** (`check_dbscan_weighted_fold_is_pinned`; see the gate list below for
+why). Both of their
 reducers close on a CUB stage that folds at the HARDWARE warp width, 32 on
 Apple and NVIDIA and 64 on a CDNA wavefront. A weighted degree is a FLOAT
 sum, so a faithful port would put an AMD fit and a CUDA fit on opposite sides
@@ -104,10 +106,40 @@ hand a caller a slower answer under a familiar name.
 
 ### The gates, and the sabotage arm each carries
 
-    check_dbscan_weighted_fold_is_pinned          the matrix row is NUMERIC;
-      sabotage: the same values folded at WVD_TPB and at half it must differ
-      (1.0 and a run of 2^-24 -- exactly 1.0 left to right, strictly greater
-      through the tree)
+**ALL SEVEN RUN AND PASS as of 2026-09-01. FOUR OF THEM HAD NEVER RUN
+BEFORE THAT MORNING, and they are the four weighted ones.** Building them
+raised `DeadArgumentElimination surveyUse failed`, an LLVM pass assertion,
+and took the whole dbscan build down; the entry point had to comment out
+both their calls and their imports, because the import is what pulls a
+function into codegen. So `sample_weight` was IMPLEMENTED AND UNGATED from
+the day it landed.
+
+**THE CURE IS THE OPTIMIZATION LEVEL, NOT THIS LANE'S SOURCE.** `pixi run
+check-dbscan` passes `-O1`. Measured on an Apple M4, one variable: -O3 and
+-O2 both assert, -O1 and -O0 both build, and `DeadArgumentElimination` is an
+-O2-and-above pass. Four candidate source rewrites were tried FIRST, on the
+theory that some construct in the gate surveyed badly, and every one of them
+still asserted at -O3; one was reverted afterwards because it had taken
+`vertex_deg_dispatch` out from under the gate for no benefit.
+
+**IT IS NOT A WEAKENED GATE, and that is measured rather than argued.** With
+the weighted four disabled so that -O3 can build at all, the -O1 and the -O3
+binaries print BYTE-IDENTICAL output across all 13 remaining gates,
+including the float-heavy `check_fused_eps_agrees_with_materialized` (31,950
+cells against a float64 host oracle) and `check_dbscan_manhattan_
+neighborhood` (22,500). The level is also only the HOST binary's; the Metal
+kernels are compiled by their own path.
+
+The bisect is worth keeping because the handle is reusable: enabling the
+gates one at a time showed TWO independent triggers, the fold gate alone and
+the three fit gates alone. **Apple M4 only. A three-vendor leg is owed and
+nothing weighted has run on an H100 or an MI325X.**
+
+    check_dbscan_weighted_fold_is_pinned          the matrix row
+      is NUMERIC; MEASURED 1.0000151 at 128, 1.000015 at 64, 1.0 left to
+      right; sabotage: the same values folded at WVD_TPB and at half it
+      must differ (1.0 and a run of 2^-24 -- exactly 1.0 left to right,
+      strictly greater through the tree)
     check_dbscan_manhattan_neighborhood           every cell against a
       float64 host oracle; sabotage A: the L1 kernel run against a SQUARED
       threshold must give a different adjacency; sabotage B: the L2 kernel
@@ -117,17 +149,19 @@ hand a caller a slower answer under a familiar name.
       cross edge is a diagonal step at L2 0.98995 and L1 1.4, eps 1
     check_dbscan_manhattan_refused_on_the_ball_cover   rbc raises; sabotage:
       the same call on brute must SUCCEED
-    check_dbscan_weighted_degree_matches_host_oracle   both kernels against
-      their own pinned host folds, bit for bit under IDENTICAL; sabotage: a
-      planted mask on which the two arms' folds provably separate, and a
-      planted weight vector on which the pinned fold and a left-to-right sum
-      provably separate
-    check_dbscan_uniform_weight_matches_unweighted     weights of 1.0
-      reproduce the unweighted labels exactly on BOTH arms; sabotage: weight
-      `min_samples` on the twelve isolated points must turn all twelve core
-    check_dbscan_duplicate_equals_weight_two      duplicating a point equals
-      giving it weight 2, on both arms; sabotage: weight 1.5 must fall back
-      to noise (1.5 + 1 = 2.5 < 3)
+    check_dbscan_weighted_degree_matches_host_oracle   37 rows, 2231
+      edges, both
+      kernels against their own pinned host folds, bit for bit under
+      IDENTICAL; sabotage: a planted mask on which the two arms' folds
+      provably separate, and a planted weight vector on which the pinned
+      fold and a left-to-right sum provably separate
+    check_dbscan_uniform_weight_matches_unweighted     612 labels, weights of
+      1.0 reproduce the unweighted labels exactly on BOTH arms; sabotage:
+      weight `min_samples` on the twelve isolated points must turn all
+      twelve core
+    check_dbscan_duplicate_equals_weight_two      duplicating a
+      point equals giving it weight 2, on both arms; sabotage: weight 1.5
+      must fall back to noise (1.5 + 1 = 2.5 < 3)
 
 ## The one number that explains the rebuild
 

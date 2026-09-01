@@ -61,8 +61,16 @@ THE POLICY CHOICES
    an unpinned fold would put an AMD fit and a CUDA fit on opposite sides of
    `>= min_samples` for a point sitting on the threshold, which is a
    different MODEL and not a last-bit difference in a reported number.
-   Passing all-ones reproduces the unweighted labels exactly, and
-   `check_dbscan_uniform_weight_matches_unweighted` gates that.
+   Passing all-ones is INTENDED to reproduce the unweighted labels exactly.
+   `check_dbscan_uniform_weight_matches_unweighted` gates that, and it RAN
+   FOR THE FIRST TIME on 2026-09-01. Until that morning it had never
+   compiled: building the four weighted gates raised
+   `DeadArgumentElimination surveyUse failed`, an LLVM pass assertion, and
+   `sample_weight` here was IMPLEMENTED AND UNGATED for its whole life. The
+   cure was the build's optimization level, not this lane's source --
+   `check-dbscan` runs at `-O1`. It passes on both the brute and the ball
+   cover arms, and its sabotage moves: weight 5 turns all twelve noise
+   points core. Apple M4 only.
 
 6. **`metric` CARRIES AN L1 ARM AND IT IS ORIGINAL WORK** (added
    2026-09-01, DEVIATION 27). `metric = DBSCAN_METRIC_L2` is the ported

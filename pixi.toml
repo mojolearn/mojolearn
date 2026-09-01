@@ -965,7 +965,26 @@ check-dbscan-identity = "mojo run -I . dbscan/checks/dbscan_identity_check.mojo"
 # a check nobody can run by name is a check nobody runs.
 check-kmeans = "mojo run -I . cluster/kmeans_main.mojo"
 check-knn = "mojo run -I . neighbors/knn_main.mojo"
-check-dbscan = "mojo run -I . dbscan/dbscan_main.mojo"
+# -O1 IS LOAD BEARING AND IS NOT A PERFORMANCE CHOICE. At the default -O3
+# this file does not COMPILE: the four weighted gates hit an LLVM pass
+# assertion, `DeadArgumentElimination surveyUse failed`, and that is why
+# `sample_weight` was IMPLEMENTED AND UNGATED from the day it landed until
+# 2026-09-01. Measured, one variable, on an Apple M4: -O3 and -O2 both
+# assert, -O1 and -O0 both build, and DeadArgumentElimination is an -O2-and-
+# above pass. No source construct was the cause -- four candidate rewrites
+# were tried and every one still asserted at -O3.
+#
+# WHY THIS IS NOT A WEAKENED GATE. With the four weighted gates disabled so
+# that -O3 can build at all, the -O1 and -O3 binaries print BYTE-IDENTICAL
+# output across all 13 remaining gates, including the float-heavy ones
+# (`check_fused_eps_agrees_with_materialized`, 31,950 cells against a float64
+# host oracle, and `check_dbscan_manhattan_neighborhood`, 22,500). The level
+# changes no number this lane asserts on. It is also only the HOST binary;
+# the Metal kernels are compiled by their own path.
+#
+# NO OTHER LANE TAKES THIS FLAG. If a second lane ever needs it, that is the
+# signal to report the assertion upstream rather than to spread the flag.
+check-dbscan = "mojo run -O1 -I . dbscan/dbscan_main.mojo"
 check-ball-cover = "mojo run -I . neighbors/ball_cover_main.mojo"
 check-radius = "mojo run -I . neighbors/radius_main.mojo"
 check-ball-cover-knn = "mojo run -I . neighbors/ball_cover_knn_main.mojo"

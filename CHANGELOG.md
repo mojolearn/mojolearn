@@ -59,7 +59,20 @@
   `dbscan/estimator.mojo`, `bindings/_mojolearn_estimators.mojo` (params
   slot 7 plus a `weight_addr` argument) and `python/mojolearn/density.py`.
   Seven gates in `dbscan/checks/dbscan_check.mojo`, each with a sabotage arm
-  that must move. **Apple only; a three-vendor leg is owed.**
+  that must move. **ALL SEVEN RUN AND PASS as of 2026-09-01**, and the four
+  weighted ones had never compiled until that day: building them raised
+  `DeadArgumentElimination surveyUse failed`, an LLVM pass assertion, which
+  took the whole lane down and left `sample_weight` IMPLEMENTED AND UNGATED.
+  The cure is the OPTIMIZATION LEVEL and not the source -- `check-dbscan`
+  now builds at `-O1`, and MEASURED on an Apple M4, 2026-09-01: -O3 and -O2 both assert, -O1 and -O0 both build, and `DeadArgumentElimination` is an -O2-and-above pass.
+  Four candidate source rewrites were tried first and every one still
+  asserted at -O3. The level is not a weakened gate: with the weighted four
+  disabled so that -O3 can build at all, the -O1 and -O3 binaries print
+  byte-identical output across all 13 remaining gates, including the
+  float-heavy ones. Every weighted sabotage moved: the fold's width shifts
+  the sum 1.0000151 / 1.000015 / 1.0, the planted fold sabotage separates the
+  two summation orders, weight 5 turns all 12 noise points core, and weight
+  1.5 falls back to noise. **Apple only; a three-vendor leg is owed.**
 
 - **`mojolearn.SVR`**, epsilon-support vector regression, the scikit-learn
   surface over cuML's `svrFit`. The solver has carried `EPSILON_SVR` since

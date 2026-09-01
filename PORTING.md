@@ -6690,8 +6690,17 @@ THEIR `if (weight_sum > 0)` GUARD AT `:90` IS NOT COPIED. Theirs leaves
 pass to have zeroed the buffer, and scikit-learn documents negative weights
 as meaningful (`_dbscan.py:414-415`), so ours writes every row.
 
-Gates: `check_dbscan_weighted_fold_is_pinned`,
-`check_dbscan_weighted_degree_matches_host_oracle`.
+Gates, BOTH WRITTEN AND NEITHER EVER RUN:
+`check_dbscan_weighted_fold_is_pinned`,
+`check_dbscan_weighted_degree_matches_host_oracle`. Building them raised
+`DeadArgumentElimination surveyUse failed`, an LLVM pass assertion, which
+took the whole dbscan build down. CLEARED 2026-09-01 by the BUILD'S
+OPTIMIZATION LEVEL and not by any change here: `check-dbscan` runs at `-O1`,
+where -O3 and -O2 assert and -O1 and -O0 build, DeadArgumentElimination
+being an -O2-and-above pass. Four candidate source rewrites were tried first
+and all four still asserted at -O3. Both checks now pass on an Apple M4, the
+fold width demonstrably moving the sum (1.0000151 at 128, 1.000015 at 64,
+1.0 left to right). A three-vendor leg is owed.
 
 ## 29. [CLOSED] `need_ja_compute` on the weighted ball-cover arm, and batch 0's second fill
 
@@ -6711,6 +6720,11 @@ fit, where theirs reuses the first. `rbc_eps_nn_query_fill` is a pure
 function of the index and the query rows, so both fills write the same
 columns; it is a duplicated pass, not a duplicated answer.
 
-Gates: `check_dbscan_uniform_weight_matches_unweighted` and
-`check_dbscan_duplicate_equals_weight_two` both run the `rbc` arm, which is
-the only arm that reaches this path.
+Gates, BOTH WRITTEN AND NEITHER EVER RUN:
+`check_dbscan_uniform_weight_matches_unweighted` and
+`check_dbscan_duplicate_equals_weight_two` both exercise the `rbc` arm,
+which is the only arm that reaches this path. They were blocked by the same
+`DeadArgumentElimination surveyUse failed` assertion as DEVIATION 28's pair
+until 2026-09-01, and they are cleared by the same `-O1` build level, so
+this deviation is GATED too as of that day. Both pass on the `rbc` arm on an
+Apple M4; a three-vendor leg is owed.
