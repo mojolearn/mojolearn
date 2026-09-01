@@ -1775,6 +1775,28 @@ def m2_generate(out_root, verify=False):
 
 
 def m2_run_verify(m2_root, all_meta):
+    print("\n== m2 verify 0: root input tensors on disk (the mamba2_check corpus gate opens "
+          "mamba/corpus/mamba2/<case>/x.f32 RELATIVE TO THE REPO ROOT) ==")
+    # 2026-09-01 incident: the check's gate_corpus refused MISSING FIXTURE
+    # for a case whose x.f32 was present and committed at exactly that path.
+    # Its try/except reports EVERY open/read failure as "missing" -- a wrong
+    # working directory, or Mojo's TEXT-mode open("r") + read() over raw f32
+    # bytes (not UTF-8), both refuse with the file on disk. This arm is the
+    # corpus side's proof: every manifest-listed root tensor file exists and
+    # x.f32 is byte-identical to the hashed derivation the refs were
+    # computed from. HARD-asserted, not just printed.
+    for name, entry in all_meta.items():
+        cdir = os.path.join(m2_root, name)
+        missing = [tm["file"] for tm in entry["meta"]["tensors"].values()
+                   if not os.path.exists(os.path.join(cdir, tm["file"]))]
+        assert not missing, (name, "missing root tensor files", missing)
+        with open(os.path.join(cdir, "x.f32"), "rb") as fh:
+            got = fh.read()
+        want = np.ascontiguousarray(entry["x"].numpy().astype("<f4")).tobytes()
+        assert got == want, (name, "x.f32 bytes differ from the hashed derivation")
+        print(f"  {name:34s} {len(entry['meta']['tensors'])} root tensors present; "
+              f"x.f32 {len(got)} bytes == hashed derivation")
+
     print("\n== m2 verify 1: verbatim HF mamba2_chunk_scan vs the composed stages (expect BIT-equal) ==")
     print("== m2 verify 2: verbatim mamba_ssm ssd_minimal_discrete, discretize-first (independent spelling, roundoff-scale) ==")
     worst_ssd = 0.0
