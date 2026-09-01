@@ -21,6 +21,22 @@ built (the backward is planned in `mamba/IDENTICAL_BACKWARD_PLAN.md`, nothing
 compiled), no model level, no Python binding. `python/mojolearn/` exports no
 mamba symbol at all as of today.
 
+**UPDATE, 2026-09-01 (later the same day), superseding the sentence above
+where they disagree.** Two of its clauses closed. (a) The Mamba-2 block
+EXISTS: `impl/mamba_ssm/modules/mamba2.mojo` + `ssd_minimal.mojo` under
+`IDENTICAL_MAMBA2_CONTRACT.md`, gated on the Apple M4 in the identical
+tier (that contract's RUN RECORD; cross-vendor legs still OWED, so the
+three-vendor sentence remains Mamba-1's alone). (b) The Python surface is
+BUILT, RUNS OWED: `bindings/_mojolearn_mamba.mojo` (the fourteenth
+binding, two-list ABI) + `bindings/build_mamba.sh` +
+`python/mojolearn/_mamba_impl.py` / `mamba.py`, exporting `Mamba1Block`,
+`Mamba2Block` and the explicit state classes from `mojolearn` and
+`mojolearn.mamba`; gate `python/mojolearn/tests/test_mamba_surface.py`.
+Nothing of (b) has compiled or run anywhere -- every runnable claim is
+UNVERIFIED until the build and the gate print. The "Python surface"
+section at the end of this document carries the surface's deviations
+(791-793) and the owed commands.
+
 **House rules that bind the dispositions.**
 
 - IT IS OK TO ADD CAPABILITY. A feature with no upstream counterpart is
@@ -71,7 +87,11 @@ and `src/transformers/models/mamba/modeling_mamba.py` (mm) at `d56c55b`.
 Upstream spellings are `mamba_ssm/modules/mamba2.py` (m2) at `e9594ce` and
 HF `modeling_mamba2.py` (M2) / `configuration_mamba2.py` (cfg) at `d56c55b`.
 NOTHING of this section exists in mojolearn today; "mojolearn today" is
-absent for every row unless said otherwise. Every constant-freezing and seam
+absent for every row unless said otherwise. **(Stale as of 2026-09-01
+later the same day: the SHIP NOW rows of this table landed in
+`impl/mamba_ssm/modules/mamba2.mojo` + `ssd_minimal.mojo` and gated on
+Apple -- see the dated update at the top of this document; the SHIP LATER
+and REFUSE rows stand unchanged.)** Every constant-freezing and seam
 decision below BELONGS TO the sibling `IDENTICAL_MAMBA2_CONTRACT.md`; a row
 that says "contract decides" defers to it.
 
@@ -194,17 +214,25 @@ bitwise-identical tier. Mapping each need onto the dispositions above:
 | decode step | Mamba-1 step (ships); Mamba-2 step (to build) | same |
 | exact state handoff | explicit caller-owned state buffers (ships for Mamba-1); Mamba-2 state layout row; chunked-prefill continuation from a carried state | Mamba-2 rows; and the handoff must be BYTE-specified (layout, order, dtype) in the sibling contract so the consumer can round-trip it |
 | bitwise-identical tier | profile v1 gated three-vendor for Mamba-1; Mamba-2 inherits the same gate structure from its contract | Mamba-2 gates unbuilt |
-| PyPI surface | NONE EXISTS. `python/mojolearn/` exports no mamba symbol today | SHIP NOW, and it is the single largest gap. A `mojolearn.mamba` module (binding .so like the existing `_mojolearn_*.so` family) exposing block/model forward, step, state buffers in/out as numpy arrays, and the mode parameter, is required before ANY of the above is consumable from pip. UNVERIFIED, RUN OWED, and binding work follows the repository's existing binding conventions |
+| PyPI surface | BUILT 2026-09-01, RUNS OWED. `mojolearn.mamba` (`_mamba_impl.py` over the `_mojolearn_mamba` binding) exposes `Mamba1Block`/`Mamba2Block` forward + step with explicit numpy state in/out and the per-instance `numeric_mode=` parameter, exactly the shape this row asked for | was: "SHIP NOW, the single largest gap". The binding follows the repository's conventions (two-list ABI, DEVIATION 791); nothing has compiled or run -- `bash bindings/build_mamba.sh` per tier, then `tests/test_mamba_surface.py`, are the owed prints. Model-level (backbone/LM head) forward remains unbuilt (section 5's rows stand) |
 
 The SHIP NOW build list, in dependency order: (1) the Python binding for the
 existing Mamba-1 surface, since it makes the already-certified work
-consumable and de-risks the binding shape cheaply; (2) the Mamba-2 forward,
-step, and state handoff under the sibling contract, torch-fallback
+consumable and de-risks the binding shape cheaply -- **BUILT 2026-09-01,
+RUNS OWED** (`bindings/_mojolearn_mamba.mojo` / `build_mamba.sh`,
+`python/mojolearn/_mamba_impl.py`, gate `tests/test_mamba_surface.py`;
+deviations 791-793 in the "Python surface" section below); (2) the Mamba-2
+forward, step, and state handoff under the sibling contract, torch-fallback
 arithmetic as the reference, dt_limit included, constants frozen by that
-contract; (3) the Mamba-1/Mamba-2 backbone + LM head composition; (4) the
-Mamba-2 corpus (the Mamba-1 corpus generator and hash spec are the
-template). Every runnable claim in that list is UNVERIFIED, RUN OWED until
-its gate prints on a device.
+contract -- **BUILT: the Mojo lane landed and gated on Apple (the
+contract's RUN RECORD, 2026-09-01 evening; cross-vendor legs OWED), and
+its Python surface landed with item (1)'s** (`mamba2_forward` /
+`mamba2_decode_step`, the three-piece state as caller-owned buffers),
+RUNS OWED for the Python path; (3) the Mamba-1/Mamba-2 backbone + LM head
+composition -- still unbuilt; (4) the Mamba-2 corpus -- **DONE** (17 cases
+committed at f45fa796, `corpus/README.md`'s run record). Every runnable
+claim in that list is UNVERIFIED, RUN OWED until its gate prints on a
+device.
 
 ## Notable refusals, in one place
 
@@ -229,6 +257,75 @@ Every other absence is a deferral with a trigger, and per the house rule,
    xBC width vs split; h axis order). Owner, the sibling contract.
 4. Whether the Python binding exposes per-stage taps (the card stages) or
    only end-to-end outputs plus states. Consumer-facing API choice, owner
-   Andrew.
+   Andrew. **Interim (2026-09-01, the surface's build): end-to-end outputs
+   plus states only (plus the Mamba-2 `h_last` report the contract makes
+   part of the block's return). Per-stage taps remain OPEN and would be an
+   additive change to the addrs lists, not a rework.**
 5. Whether a generation loop is wanted at all, given logits-level checking
    covers the stated needs. Owner, Andrew.
+
+---
+
+## Python surface (built 2026-09-01, RUNS OWED)
+
+The consumable surface the consumer table's "PyPI surface" row demanded.
+Files: `bindings/_mojolearn_mamba.mojo` (the FOURTEENTH extension; entry
+points `mamba1_forward`, `mamba1_decode_step`, `mamba2_forward`,
+`mamba2_decode_step`, plus the `mamba_numeric_mode` / `mamba_vendor`
+read-backs), `bindings/build_mamba.sh` (three-tier build, sibling of
+`build_gp.sh`, AIR floor a placeholder 1 until the first cold build
+measures it), `python/mojolearn/_mamba_impl.py` (classes `Mamba1Block`,
+`Mamba2Block`, states `Mamba1State`, `Mamba2State`; float32-only with
+bf16/fp16/float64 refused BY NAME), `python/mojolearn/mamba.py` (the
+public module), exports from `mojolearn/__init__.py`, registration in
+`_backend.py` (`_MODULES` + `_build_script`, both, per its DEVIATION 869
+header), and the gate `python/mojolearn/tests/test_mamba_surface.py`
+(corpus-anchored: `base_b2_l4_d8` and `m2_base_b2_l4_d32` against their
+`ref64` at the corpus README's tolerance; decode==prefill and
+split-prefill resumption bitwise-ASSERTED under the identical tier,
+reported under fast).
+
+NOTHING of it has compiled or run. The owed prints, in dependency order,
+per tier (fast, then deterministic and identical with
+`MOJOLEARN_NUMERIC_MODE` set): `bash bindings/build_mamba.sh`, then
+`cd python && python3 -m mojolearn.tests.test_mamba_surface`. The .so
+artifacts carry NO freshness signal, so every tier's binding must be
+REBUILT before any Python-surface run is believed.
+
+Deviations 791-793, the surface's own (the 782-789 format; binding and
+wrapper headers carry the full text):
+
+- **DEVIATION 791 — the two-list ABI.** Every entry point takes exactly
+  two Python lists, `addrs` (buffer addresses, order written in the
+  binding docstring and mirrored at the `_mamba_impl.py` call site) and
+  `params` (scalars), because `PythonModuleBuilder.def_function` stops
+  elaborating above roughly nine arguments — MEASURED 2026-09-01 on the
+  gp binding's first ten-positional spelling — and `mamba1_forward`
+  carries fourteen addresses. The fold is the tree's own precedent (knn,
+  gp). Arrays addressed in the list are bound to Python locals for the
+  call's duration; an address in a list keeps nothing alive.
+- **DEVIATION 792 — caller-owned explicit state, updated in place.** The
+  recurrent state crosses as plain float32 NumPy buffers the caller
+  allocates (`allocate_state`), read at entry and written back before
+  return: two pieces for Mamba-1 (conv window, h), three for Mamba-2
+  (conv window, boundary h, the open-chunk xBC/dt buffer pair) with
+  `buffered_tokens` crossing as a params scalar in and the return value
+  out. Zeros in = `allocate_inference_cache`; nonzero h at
+  buffered_tokens 0 = `initial_states`. Mamba-2's `h_last` REPORT is a
+  separate always-written output (contract section 5's distinction). No
+  hidden cache object exists on either side — section 3's "explicit
+  arguments, not an object" row, made structural.
+- **DEVIATION 793 — the refusal split.** The binding refuses only
+  boundary disagreements (null address, wrong-length lists, buf_len
+  outside [0, 256)); the wrapper refuses dtypes BY NAME (float32 only;
+  bfloat16/float16 named as the SHIP LATER profile, float64 named rather
+  than downcast — deliberately UNLIKE the classical estimators'
+  convenience conversion, because this surface certifies bits), exact
+  weight/state shapes, and missing/unknown weight names; everything else
+  (non-finite values by flat index, B/L positivity, d_model rules) goes
+  down unjudged so the Mojo refusals stay reachable. One duplication is
+  accepted and named: the wrapper repeats `Mamba2Dims.of`'s
+  multiple-of-32 rule because it cannot size the state buffers without a
+  whole `nheads`; the Mojo constructor remains the authority. A binding
+  compiled with any sabotage define ABORTS at PyInit rather than serve
+  sabotaged bits under a green label.
