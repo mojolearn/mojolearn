@@ -20,7 +20,7 @@ on an M4 (Metal) and an MI300X (HIP/CDNA).
   for the whole session and NEVER commit the flip (`git diff` must show
   only that line; revert before ending). On AMD this is not optional:
   the hist-2 shared-slice layouts carry `comptime assert LANE_WIDTH ==
-  32`, so an AMD FAST build is a compile error by design, not a silent
+AMD FAST gradient boosting BUILDS AND RUNS since 2026-08-27 (DEVIATIONS 1906 and 1910); what remains is a RUNTIME refusal, and only for low-cardinality features. One-byte grids route to a lane-agnostic fused kernel and run fine on the MI325X, measured STABLE 6/6. Binary and half-byte blocks raise at the histogram dispatch because CatBoost's sub-byte accumulator lays out a 512-float slice as 16 bins times 8 features times 4 sub-copies of a 32-lane warp, a geometry with no 64-lane form.
   regroup.
 - Artifacts land in `bench/results/e1/<date>/{mac,amd}/` with the commit
   hash and `record_environment.sh` output beside them.

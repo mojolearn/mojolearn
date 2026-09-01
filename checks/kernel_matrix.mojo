@@ -1217,21 +1217,30 @@ def reduce_width_for[kernel: Int, column: Int, identical: Bool]() -> Int:
 comptime SYNC_BLOCK = 0
 
 #: A lane group can sync independently (CUDA `tiled_partition`, AMD wave ops).
-#: NOT REACHABLE FROM MOJO TODAY on any vendor.
+#: REACHABLE: `max.gpu.sync.syncwarp` is imported and called by four gbdt
+#: kernels. The row below stays SYNC_BLOCK because no kernel outside that
+#: family RELIES on lane-group sync, not because none is available.
 comptime SYNC_LANE = 1
 
 
 def sync_granularity_for[column: Int]() -> Int:
     """The finest sync a kernel may rely on. `SYNC_BLOCK` for EVERY column.
 
-    **This is a Mojo limitation and not an Apple one, which is worth stating
-    because the natural assumption is the opposite.** `max.gpu.primitives`
-    exposes `block` only: `block.prefix_sum`, `block.max`, `block.min`. There
-    is no warp, simdgroup or shuffle primitive for any vendor. NVIDIA and AMD
-    hardware both have them and CatBoost uses them heavily
-    (`tiled_partition<8>` in the half-byte accumulator, `tiled_partition<32>`
-    in the one-byte one, `cub::WarpScan` in the bin scan); we cannot emit any
-    of it from here.
+    CORRECTED 2026-09-01. THIS DOCSTRING SAID MOJO EXPOSES NO WARP PRIMITIVE
+    ON ANY VENDOR. THAT IS FALSE, and it is the third copy of a claim already
+    retracted elsewhere in this file and in VENDOR_COLUMNS.md; commit 858f9811
+    fixed two and missed this one. Twenty-four files import `shuffle_xor` from
+    `std.gpu.primitives.warp`, and four gbdt kernels import and call
+    `syncwarp` from `max.gpu.sync`, which is precisely a lane-group barrier.
+    CatBoost's `tiled_partition<8>` and `tiled_partition<32>` DO have a
+    counterpart we can emit.
+
+    WHAT IS ACTUALLY TRUE, and it is what this row rests on: no kernel in this
+    tree outside the gbdt sub-byte family RELIES on lane-group sync for
+    correctness, so `SYNC_BLOCK` is the finest granularity a kernel may
+    ASSUME. That is a statement about what our kernels depend on, not about
+    what the language offers, and the difference matters because three vendor
+    admissions were resting on the stronger, false version.
 
     So the row is `SYNC_BLOCK` across the board today. When Mojo exposes lane
     primitives this becomes a per-column value, the kernels follow it, and
