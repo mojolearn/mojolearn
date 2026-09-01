@@ -81,6 +81,52 @@ ephemeral runner, one at a time), and **publishing is outward-facing and needs
 Andrew's word each time** -- a version on PyPI cannot be recalled, only
 yanked.
 
+## The three-tier matrix: every binding now COMPILES in every tier, 2026-09-01
+
+`packaging/macos/build_release_wheel.sh` defaults to
+`MODES="fast deterministic identical"` and drives all twelve build scripts
+under each, so a release cut attempts **36 binding-tier combinations**. Until
+2026-09-01, **three of those thirty-six had never been attempted at all**:
+
+    _mojolearn_arima     identical        never built
+    _mojolearn_arima     deterministic    never built
+    _mojolearn_training  deterministic    never built
+
+On-disk evidence at the time: `python/mojolearn/` carried 12 `.so`,
+`identical/` carried 11 and `deterministic/` carried 10. All three now build.
+Coverage is **12 / 12 / 12**.
+
+**WHY A GREEN LANE DID NOT COVER THIS, because the asymmetry is the whole
+lesson.** arima's ARITHMETIC is certified identical on three vendors -- 139
+card stages byte-identical at `221aa141`, `bench/results/e1/CERT_2026-08-31.md`
+-- so every status line about that lane said identical was fine. But that
+certification ran the CHECK binary. A BINDING is a different compilation unit
+with a different entry point and its own build script, and nothing had ever
+compiled it under `-D MOJOLEARN_NUMERIC_IDENTICAL=1`. **A green card is not
+evidence that the `.so` builds.** The same distinction applies to every lane
+whose identity is certified: the card and the wheel are different artifacts.
+
+**WHAT IS PROVEN AND WHAT IS NOT.** These three COMPILE and produce a `.so`.
+They are NOT launch-verified, because `build_arima.sh` and `build_training.sh`
+both set `MOJOLEARN_SKIP_BUILD_GATE=1` for any non-fast mode -- the
+build-time smoke gate imports the FAST package, so it cannot run against an
+upper-tier artifact by construction. So the claim here is exactly "the release
+matrix has no unbuildable cell", and NOT "the upper-tier arima and training
+binaries have been launched". `python/mojolearn/tests/test_training_surface.py`
+does launch the IDENTICAL training binary and passes 69 checks, which covers
+one of the three; arima-identical, arima-deterministic and
+training-deterministic are compiled and unlaunched.
+
+**OWED**: a launch of each of those three, which needs a smoke path that
+imports the tier under test rather than the fast package. That is the gap in
+the build scripts, not in these artifacts.
+
+**WHY THIS MATTERED ENOUGH TO CHECK.** 0.3.0 shipped broken because a build
+path was never exercised before publishing (`docs/LINUX_WHEEL.md`); the
+standing memory is `verify-on-a-box-that-did-not-build-it`. An unattempted
+cell in the release matrix is that shape one step earlier, and it fails during
+a release cut rather than before one.
+
 ## GaussianProcessRegressor: NOT reachable, and NOT for the usual reason
 
 Every other entry on this page is absent because it lacks a binding. This one
