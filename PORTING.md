@@ -5310,19 +5310,40 @@ sabotage -- keep that log; it is the sample the original sighting never
 left behind. The define must never reach a shipped build; nothing but
 the soak invocation passes it, and it lives in no pixi task.
 
-**EVERYTHING HERE IS UNVERIFIED, RUN OWED -- including that the control
-build COMPILES** (a `comptime if` that transfers in only one branch is
-the untested corner; if the checker refuses it, the fallback is two
-mirrored comptime branches, the control one empty). The owed sequence,
-cheapest first:
+**RUN RECORD, 2026-09-01 (Apple M4, one process at nice -19, fixture
+`bench/oracle_d1_f8.txt`, runs by the peer session holding the box; this
+entry's runs are no longer owed):**
 
-    # 0. the control builds and banners:
-    pixi run mojo run -D MOJOLEARN_134_CONTROL=1 -I . checks/determinism_soak.mojo
-    # 1. quiet-box control (red = confirmed; quiet = raise, go to 2)
-    # 2. the loaded control, recipe above
-    # 3. the closing un-sabotaged pair on the same box:
-    pixi run soak-determinism
-    tools/with_identical_mode.sh pixi run soak-determinism
+* **The control COMPILED AND RAN on the first attempt.** The
+  one-branch-transfer `comptime if` corner flagged above is SETTLED and
+  the mirrored-branch fallback is NOT needed -- stated explicitly so
+  nobody re-pays an owed-compile note that is already paid.
+* **Un-sabotaged FAST soak, 1000 reps: CLEAN.** 0 runs disagreeing with
+  CatBoost, 0 runs where the arms disagreed. Distinct losses: greedy
+  4.1332526206970215 x1000, pointwise 4.1332526206970215 x1000, CatBoost
+  4.133252577078921.
+* **REQUIRED-RED control, `-D MOJOLEARN_134_CONTROL=1`, run TWICE --
+  200 reps (driver default) and 1000 reps (`MOJOLEARN_SOAK_REPS`):
+  QUIET BOTH TIMES, raising the intended exception both times.** Same
+  0 and 0, same single loss per arm, no trace of the historical
+  signature (greedy 2/12, first-div tree 2, mse 4.679346084594727).
+  Combined N = 1200 under sabotage.
+* **What N=1200 supports -- the STRONG claim, not the weak one:** at the
+  sighting's ~1-in-100 rate, 1200 sabotaged reps miss with probability
+  ~6e-6. So ON A QUIET BOX THE LIFETIME MECHANISM ALONE DOES NOT
+  REPRODUCE THE SIGHTING AT ANYTHING NEAR THE OBSERVED RATE. The 134b
+  load window is a NECESSARY INGREDIENT, not a contributing factor.
+
+**STATUS: DEVIATION 134 STAYS OPEN and the no-speed-claim embargo
+stands. THE LOADED CONTROL (recipe above) IS NOW THE DECIDING
+EXPERIMENT, and it is PARKED: it is the load class that took this
+machine down on 2026-08-29, so it runs only on Andrew's explicit
+say-so, in a scheduled slot with him present, both sessions idle,
+8-12 background processes on the first attempt rather than 24. Its
+being the deciding experiment is a reason to schedule it properly,
+not a reason to proceed.** Still owed alongside it: the IDENTICAL-mode
+soak (`tools/with_identical_mode.sh pixi run soak-determinism` --
+needs a rebuild) as the second half of the closing pair.
 
 ## 125. [CLOSED] `CreateSubsets`' fold arm pays ONE extra partition reduce, per TREE and not per level
 

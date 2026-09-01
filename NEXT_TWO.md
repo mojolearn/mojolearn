@@ -98,13 +98,23 @@ matching the recorded 8/12 first-div-t8 signature to five significant
 figures.
 
 **NO SPEED NUMBER AND NO PARITY CLAIM SHOULD BE QUOTED UNTIL THIS CLOSES.**
-(PORTING.md's entry narrowed this embargo on 2026-09-01 to the claims
-134a-d actually support; this page keeps the blunt sentence until the owed
-soak below passes.) A learner that produces a different model one run in a
-hundred does not have a loss to compare.
+A learner that produces a different model one run in a hundred does not
+have a loss to compare.
 
-MECHANISM HUNT, 2026-09-01 (write-only lane; every run below is OWED, not
-made):
+RUN RECORD, 2026-09-01 evening (PORTING.md 134f carries the full numbers):
+the un-sabotaged FAST soak was CLEAN at 1000 reps (0 CatBoost
+disagreements, 0 arm disagreements, one loss value per arm), and the
+REQUIRED-RED positive control (`-D MOJOLEARN_134_CONTROL=1`, the
+pre-a4aee262 ctor) was QUIET at a combined N=1200 -- so on a quiet box
+the lifetime mechanism ALONE does not reproduce the sighting, the 134b
+LOAD WINDOW IS A NECESSARY INGREDIENT, and 134 STAYS OPEN. The deciding
+experiment is the LOADED control, PARKED for Andrew's explicit slot (see
+134f); the IDENTICAL-mode soak (rebuild required) is the other owed half
+of the closing pair. The bit-inert holds themselves are verified:
+check-ordered-boosting and check-fit-pointwise both PASS at HEAD.
+
+MECHANISM HUNT, 2026-09-01 (write-only lane; the code-read claims below
+were written before the run record above):
 
 * **The greedy half's ranked candidate was live at the sighting and has
   been closed since the next morning.** The sighting is 3e6ead33
