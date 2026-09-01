@@ -1,8 +1,10 @@
-# Deviations in the `extratrees/` section — reserved range 130-159
+# Deviations in the `extratrees/` section
 
-Written 2026-08-21. This lane holds deviation numbers **130-159**, assigned up
-front per rule 3 (the root ledger stood at 90 when the range was reserved; the
-RF lane in `ensemble/` holds 100-129).
+Written 2026-08-21. This lane's FIRST reserved block was **130-159**, assigned
+up front per rule 3 (the root ledger stood at 90 when the range was reserved;
+the RF lane in `ensemble/` holds 100-129). That block filled, and the lane
+continued at 160; the blocks this file now holds are **130-218, 450-465, 1943
+and 1945**. See the INDEX below for every one of them.
 
 **Why this text lives here and not in the root `PORTING.md`.** `PORTING.md` is
 a file the RF lane is also appending to, concurrently, and rule 12 is explicit
@@ -23,9 +25,143 @@ from:
   the builder, the split record, the tie-break, the node layout and the RNG
   keying; RAFT `661a3b8` for the generator itself.
 
+## INDEX
+
+Every deviation in this file, by number. **STATUS** is CLOSED (decided, with
+the reason and any measurement recorded in the entry), OPEN (the entry names
+work that must land before the deviation is settled), or SUPERSEDED (a later
+entry replaced it; the text stays for the argument it makes).
+
+**OPEN today: 1945 only.** **SUPERSEDED: 151 by 205, 161 by 204.** Every other
+deviation here is decided. That is not the same as nothing being owed; several
+CLOSED entries carry a correction or a still-wanted measurement and say so in
+place.
+
+Line numbers are as of this revision and drift with any edit; the deviation
+number in the heading is the durable anchor, and every heading now carries its
+status in square brackets.
+
+```
+NUM   STATUS      LINE  SUMMARY
+130   CLOSED        164  sklearn's draw ORDER cannot be reproduced by a parallel builder
+131   CLOSED        196  The feature sampler is cuML's, not sklearn's
+132   CLOSED        217  Constant features are re-discovered per node, not inherited
+133   CLOSED        252  Tie-break is cuML's total order, not sklearn's first-wins
+134   CLOSED        277  NOT a deviation: the partition is cuML's swap partition, ported
+135   CLOSED        310  RULED: regression accumulates in FIXED POINT
+136   CLOSED        383  Missing values (NaN) are refused, not randomized
+137   CLOSED        402  computeSplitKernel has no histogram, the deviation this lane exists for
+138   CLOSED        437  max_n_bins is refused, not defaulted
+140   CLOSED        462  RAFT's wide 64-bit multiply has no PTX fast path here
+141   CLOSED        485  Only PCGenerator's three-argument constructor is ported; no half
+142   CLOSED        508  Thresholds are Float32, and the rescale is not allowed to fuse
+143   CLOSED        794  Histogram-free: the accumulators ARE the arguments
+144   CLOSED        820  Classification selects on an EXACT INTEGER proxy
+145   CLOSED        867  The exact comparator is the authority, not Split.best_metric_val
+146   CLOSED        566  TreeMetaDataNode is reduced: train_time is not ported
+147   CLOSED        589  predict_one accumulates and never zeroes; a zeroing entry point beside it
+148   CLOSED        617  Node template narrowed: LabelT dropped, IdxT fixed to Int32
+149   CLOSED        656  Fixtures are counter-based, not stream-based
+150   CLOSED        678  No fixture contains a missing value
+151   SUPERSEDED    894  The supplied column list IS the search (CLOSED by 205)
+152   CLOSED        931  The candidate scan COUNTS; only the winner is partitioned
+153   CLOSED        959  Regression selects on sklearn's MSE proxy, reports cuML's gain
+154   CLOSED        984  Two of sklearn's four rejection branches are absent; their inputs do not exist
+156   CLOSED       1016  The k == n guard moved into the sampler, and materializes an identity
+157   CLOSED       1045  Block collectives are explicit loops; the block width is a parameter
+158   CLOSED       1082  log, exp and ceil come from libm through FFI, not std.math
+159   CLOSED       1106  Index widths, and a bound on their unbounded loop
+160   CLOSED       1185  NOT a deviation: the range pass is bit-checkable, the histogram pass is not
+161   SUPERSEDED   1210  The cross-block combine is a MUTEX MERGE (CLOSED by 204)
+162   CLOSED       1248  The output is a STRUCT OF ARRAYS; Dataset passes as its components
+163   CLOSED       1275  The empty range is carried as min > max; NaN never reaches the reduction
+164   CLOSED       1320  FIXED cuML BUG: no head flag on the block minimum, so column 0 never sampled
+165   CLOSED       1358  FIXED cuML BUG: a slot that never drew voted anyway, as column n-1
+166   CLOSED       1387  The reduction carries the EXACT RATIONAL KEY beside the Split
+167   CLOSED       1429  The Int128 cross-multiply is HAND-WIDENED from 64-bit limbs
+168   CLOSED       1467  warpReduce is a shuffle_xor butterfly with NO ASSUMED WARP WIDTH
+169   CLOSED       1493  evalBestSplit's publish: portable mutex, SoA cell, device path report
+170   CLOSED       1533  The score pass is TWO launches, because no block can be elected last
+171   CLOSED       1554  NOT a deviation: this merge IS their atomicAdd
+172   CLOSED       1568  No dynamic shared memory: private accumulators plus a block reduction
+173   CLOSED       1587  The draw is an explicit fma, and it is why 142 was amended
+174   CLOSED       1603  The device sees only INTEGERS, and a refusal is a STATUS
+175   CLOSED       1623  The published width is Int64, TIGHTER than the host's Int128 bound
+176   CLOSED       1758  partitionSamples on device, with a BOUND on their unbounded loop
+177   CLOSED       1791  NOT a deviation: one block per node is kept
+178   CLOSED       1804  Leaf histogram is a comptime-bounded private array plus one block reduction
+179   CLOSED       1817  RULED: the device regression leaf is FIXED POINT; Float64 host form reports
+180   CLOSED       1844  One leaf launch over all nodes, and two device-written path reports
+181   CLOSED       1862  volatile IdxT* row_ids has no Mojo spelling; barrier() carries it
+182   CLOSED       1658  score_to_candidate_kernel exists because 170 split their kernel in two
+183   CLOSED       1683  The device applies cuML's zero-gain gate, from exact integers on the host
+184   CLOSED       1877  The dataset is uploaded once for the FOREST, not once per tree
+185   CLOSED       1910  The per-tree row_ids is a contract, not a necessity, and that is MEASURED
+186   CLOSED       1935  The class-id cast is hoisted, and carries a range guard the host lacks
+187   CLOSED       1951  The device is an ENTRY POINT, not a device=True field on the config
+188   CLOSED       1978  The estimator's device regressor: refused BY NAME, then closed
+189   CLOSED       2016  The regression key is cuML's OWN MSE gain, not sklearn's proxy
+190   CLOSED       2043  MEASURED: the alternatives lose orderings and this one does not
+191   CLOSED       2067  The shift is node-uniform and derived, so there is no row cap
+192   CLOSED       2079  What the key is NOT: order preservation, measured
+193   CLOSED       2095  The precondition is a refusal STATUS, and the gate is host-side
+194   CLOSED       2106  On an exact tie between two VALID rationals, the metric arm is skipped
+195   CLOSED       2191  cub::BlockRadixSort has no counterpart; a hand-written bitonic network
+196   CLOSED       2207  MEASURED: their sort's storage does not fit, so items lives in global scratch
+197   CLOSED       2218  The block scan is per-thread totals then one collective
+198   CLOSED       2225  The DISPATCH stays on the host, because it is on the host in cuML
+199   CLOSED       2235  MEASURED: Metal has no double, so cuML's algorithm L cannot be a kernel
+200   CLOSED       2150  row_ids is filled ON THE DEVICE, as thrust::sequence does
+201   CLOSED       2256  The algo-L arm runs on the HOST, a placement difference, not a refusal
+202   CLOSED       2276  The workspace is allocated once per tree, not once per level
+203   CLOSED       2317  The frontier partition is multi-block
+204   CLOSED       2360  The cross-block range merge is lock-free; CLOSES 161
+205   CLOSED       2409  sklearn's constant-draw rescue clause; CLOSES 151; regression via 206
+206   CLOSED       2507  Regression takes 184, 202, 203 and 205, which it never had
+208   CLOSED       2572  The label gather hoist, MEASURED AND DECLINED; holds the only gather probe
+211   CLOSED       2678  The batch spans TREES: cuML's stream pool as a wider grid
+212   CLOSED       2758  The materialized score pass, MEASURED AND DECLINED, at forest scale
+213   CLOSED       2820  The merged batch bound, MEASURED, NO EFFECT, with the Instruments profile
+214   CLOSED       2902  The phase clock, and the leaf tail batched
+215   CLOSED       2953  cuML's feature sampler is BIASED; k survivors now a uniform keyed-hash subset
+216   CLOSED       3019  The zero-gain gate: cuML's <= becomes sklearn's boundary
+217   CLOSED       3088  cuML's float gain goes NEGATIVE on non-negative splits; exact-sign clamp
+218   CLOSED       3142  The 2^21 classification row cap LIFTED, via 191's shift on the Gini pair
+450   CLOSED       3183  One drain per batch: five of the level cycle's six synchronizes removed
+452   CLOSED       3285  Under NUMERIC_IDENTICAL the range pass's block fold runs in KEY space
+453   CLOSED       3329  IDENTITY_PATHS row 10 applied to the ET device path's float seams
+454   CLOSED       3382  Identity-trace checkpoints at the audit's hazard stages
+455   CLOSED       3404  The rescue re-stage broke 450's invariant: a MEASURED race, one-drain fix
+456   CLOSED       3453  The algo-L device kernel's FLOAT seams route through row 12's portable pair
+457   CLOSED       3489  n_parallel_samples_for is mode-gated; cross-vendor is cross-HOST here
+458   CLOSED       3534  The regressor binding overwrote max_features after reading it
+459   CLOSED       3602  Entropy: cuML's float gain is the key, published as a FLOAT SEAM
+460   CLOSED       3707  bootstrap=True through the RF lane's Philox port; sklearn's max_samples
+461   CLOSED       3789  The Python boundary: 22 params slots, slot 18 a count, meta[5] the size
+463   CLOSED       3809  Exact ties resolve by a keyed pseudorandom rank, not the highest column id
+464   CLOSED       3924  excess_selection_hash runs through a full-avalanche finalizer
+465   CLOSED       3969  key_for gets its own salt link; no collision with the sampler's stream
+1943  CLOSED       4018  The frontier block is 512 threads on a 64-lane wavefront, 128 on 32
+1945  OPEN         4114  The MI325X phase timer bills 88% of a higgs ET fit to the host queue push;
+                       the same host loop on Apple is 0.53%, so the attribution is what is open
+```
+
+Two sections carry no deviation number:
+
+```
+              LINE  SUMMARY
+              2643  What was left after 208, and what each item turned into (211, 212, 450)
+              3272  AMENDMENT to commit d85c6ce's staleness note: the two compile
+                    graphs are DISJOINT, an extratrees edit stales _mojolearn_trees.so only
+```
+
+Numbers 139 and 155 have no entry here; 462 is reserved and unused (see the
+note inside DEVIATION 464). The blocks this file holds are 130-218, 450-465,
+1943 and 1945, and they are not contiguous because other lanes own the gaps.
+
 ---
 
-## 130. sklearn's draw ORDER cannot be reproduced by a parallel builder
+## 130. [CLOSED] sklearn's draw ORDER cannot be reproduced by a parallel builder
 
 **Theirs.** Every random number in `node_split_random` comes from one
 sequential 32-bit xorshift stream: `our_rand_r`
@@ -57,7 +193,7 @@ keyed draws — see `checks/host_splitter.mojo`.
 
 ---
 
-## 131. The feature sampler is cuML's, not sklearn's
+## 131. [CLOSED] The feature sampler is cuML's, not sklearn's
 
 **Theirs (sklearn).** Fisher-Yates without replacement over a persistent
 `features` array, interleaved with constant-feature bookkeeping, drawing
@@ -78,7 +214,7 @@ transcribes OUR sampler, not sklearn's.
 
 ---
 
-## 132. Constant features are re-discovered per node, not inherited
+## 132. [CLOSED] Constant features are re-discovered per node, not inherited
 
 **Theirs.** sklearn threads `n_constant_features` down the tree through
 `ParentInfo`, so a feature found constant at an ancestor is never re-examined
@@ -113,7 +249,7 @@ explaining is DEVIATION 463's tie-break bias, not this.
 
 ---
 
-## 133. Tie-break is cuML's total order, not sklearn's first-wins
+## 133. [CLOSED] Tie-break is cuML's total order, not sklearn's first-wins
 
 **Theirs (sklearn).** `if current_proxy_improvement > best_proxy_improvement`
 (`_splitter.pyx:693`) — strictly greater, so on a tie the FIRST candidate in
@@ -138,7 +274,7 @@ subject.
 
 ---
 
-## 134. NOT a deviation: the partition is cuML's swap partition, ported
+## 134. [CLOSED] NOT a deviation: the partition is cuML's swap partition, ported
 
 This entry started life as a deviation ("ours will be a stable partition") and
 is kept, rewritten, because reading the upstream killed it — which is the
@@ -171,7 +307,7 @@ misfits. It is not stable, and it does not need to be.
 against `max.gpu.primitives.block` — a language-level counterpart, explicitly
 allowed by `PORTING_RULES.md` 0b-i and not a vendor-library substitution.
 
-## 135. RULED — regression accumulates in FIXED POINT
+## 135. [CLOSED] RULED — regression accumulates in FIXED POINT
 
 **Theirs.** sklearn accumulates class counts and label sums in `float64`
 (`_criterion.pyx`; `sum_left`/`sum_right` are `float64_t[::1]`), and the MSE
@@ -244,7 +380,7 @@ compared the comparison is through the quantized values, not the floats.
 
 ---
 
-## 136. Missing values (NaN) are refused, not randomized
+## 136. [CLOSED] Missing values (NaN) are refused, not randomized
 
 **Theirs.** sklearn sends missing values left or right by a COIN FLIP per
 candidate (`_splitter.pyx:649`, `missing_go_to_left = rand_int(0, 2, ...)`),
@@ -263,7 +399,7 @@ Tracked in `NOT_IMPLEMENTED.tsv`.
 
 ---
 
-## 137. `computeSplitKernel` has no histogram — THE deviation this lane exists for
+## 137. [CLOSED] `computeSplitKernel` has no histogram — THE deviation this lane exists for
 
 **Theirs** (`kernels/builder_kernels_impl.cuh:216-340`), per (node, feature)
 block: load the feature's quantile borders into shared memory (`:265-266`); one
@@ -298,7 +434,7 @@ disappear entirely rather than being made cheaper: no global quantile array, no
 
 ---
 
-## 138. `max_n_bins` is refused, not defaulted
+## 138. [CLOSED] `max_n_bins` is refused, not defaulted
 
 **Theirs.** `DecisionTreeParams::max_n_bins` (`decisiontree.hpp:41`), default
 128, validated into `(0, 1024]` (`decisiontree.cu:36-38`). It sizes the
@@ -323,7 +459,7 @@ downgraded to MSE. `MAE` is refused by cuML itself (`decisiontree.cu:38`).
 
 ---
 
-## 140. RAFT's wide 64-bit multiply has no PTX fast path here
+## 140. [CLOSED] RAFT's wide 64-bit multiply has no PTX fast path here
 
 **Theirs.** `raft/util/integer_utils.hpp:207-237` (`wmul_64bit`) picks between
 two implementations on `__CUDA_ARCH__`: two inline-PTX instructions
@@ -346,7 +482,7 @@ edit.
 
 ---
 
-## 141. Only PCGenerator's three-argument constructor is ported, and there is no `half`
+## 141. [CLOSED] Only PCGenerator's three-argument constructor is ported, and there is no `half`
 
 **Theirs.** `PCGenerator` has a second constructor taking
 `DeviceState<PCGenerator>` (`rng_device.cuh:557-560`) which forms
@@ -369,7 +505,7 @@ takes the missing path.
 
 ---
 
-## 142. Thresholds are Float32, and the rescale is not allowed to fuse
+## 142. [CLOSED] Thresholds are Float32, and the rescale is not allowed to fuse
 
 **Theirs, twice over.** sklearn's `rand_uniform` (`_utils.pyx:57-61`) is
 `float64_t` throughout. RAFT's `custom_next` for `UniformDistParams<OutType>`
@@ -427,7 +563,7 @@ build flag are both deleted.
 
 ---
 
-## 146. `TreeMetaDataNode` is reduced: `train_time` is not ported
+## 146. [CLOSED] `TreeMetaDataNode` is reduced: `train_time` is not ported
 
 **Theirs.** `decisiontree.hpp:101-109` has seven members, including
 `double train_time`, a wall-clock figure the builder stamps and the text/JSON
@@ -450,7 +586,7 @@ the node array's own layout is untouched.
 
 ---
 
-## 147. `predict_one` accumulates and never zeroes; we mirror that and add a zeroing entry point beside it
+## 147. [CLOSED] `predict_one` accumulates and never zeroes; we mirror that and add a zeroing entry point beside it
 
 **Theirs.** `decisiontree.cuh:410-412` is
 `preds_out[i] += tree.vector_leaf[idx * num_outputs + i];` — `+=`, not `=` — and
@@ -478,7 +614,7 @@ overwrites, then confirms a second accumulating pass exactly doubles.
 
 ---
 
-## 148. The node's template shape is narrowed: `LabelT` dropped, `IdxT` fixed to Int32
+## 148. [CLOSED] The node's template shape is narrowed: `LabelT` dropped, `IdxT` fixed to Int32
 
 **Theirs.**
 `template <typename DataT, typename LabelT, typename IdxT = int> struct SparseTreeNode`
@@ -517,7 +653,7 @@ both cases are in the check.
 
 ---
 
-## 149. Fixtures are counter-based, not stream-based
+## 149. [CLOSED] Fixtures are counter-based, not stream-based
 
 **Theirs.** sklearn's own tests build data with `numpy.random.RandomState`, a
 sequential MT19937 stream: value *k* depends on every value drawn before it.
@@ -539,7 +675,7 @@ properties.
 
 ---
 
-## 150. No fixture contains a missing value
+## 150. [CLOSED] No fixture contains a missing value
 
 **Theirs.** `find_min_max` counts NaNs into `n_missing`
 (`_partitioner.pyx:152-155`); the constant test is `... and n_missing == 0`
@@ -655,7 +791,7 @@ of a value"), so an accessor that hands back an owned member returns `.copy()`.
 
 ---
 
-## 143. Histogram-free: the accumulators ARE the arguments
+## 143. [CLOSED] Histogram-free: the accumulators ARE the arguments
 
 **Theirs (cuML).** Every objective takes
 `(BinT* hist, IdxT i, IdxT n_bins, IdxT len, IdxT nLeft)`
@@ -681,7 +817,7 @@ counterpart at all, because it is the loop over the dimension we deleted.
 
 ---
 
-## 144. Classification selects on an EXACT INTEGER proxy
+## 144. [CLOSED] Classification selects on an EXACT INTEGER proxy
 
 **Theirs — and they are two different quantities, which is the part a
 from-memory port gets wrong.**
@@ -728,7 +864,7 @@ sklearn cannot reach the case — `min_samples_leaf >= 1` by validation.
 
 ---
 
-## 145. The exact comparator is the authority, not `Split.best_metric_val`
+## 145. [CLOSED] The exact comparator is the authority, not `Split.best_metric_val`
 
 **Theirs.** cuML reduces candidates through `Split::update`
 (`split.cuh:76-90`), whose first test is
@@ -755,7 +891,7 @@ comparator.** Cost unmeasured, deliberately.
 
 ---
 
-## 151. The supplied column list IS the search; sklearn's "keep drawing until one is non-constant" is gone -- **CLOSED by DEVIATION 205**
+## 151. [SUPERSEDED] The supplied column list IS the search; sklearn's "keep drawing until one is non-constant" is gone -- **CLOSED by DEVIATION 205**
 
 **Theirs.** `_splitter.pyx:573-577`, the loop guard, holds two separate facts:
 (a) it stops early when every remaining feature is known constant; (b) the
@@ -792,7 +928,7 @@ reported per node so a builder can count how often it bites.
 
 ---
 
-## 152. The candidate scan COUNTS; only the winner is partitioned
+## 152. [CLOSED] The candidate scan COUNTS; only the winner is partitioned
 
 **Theirs.** Every candidate calls `partition_samples` (`_splitter.pyx:656-659`),
 which reorders `samples[start:end]` and returns `pos`; `n_left = pos - start`;
@@ -820,7 +956,7 @@ oracle drives it at `Float64`.
 
 ---
 
-## 153. Regression selects on sklearn's MSE proxy and REPORTS cuML's gain
+## 153. [CLOSED] Regression selects on sklearn's MSE proxy and REPORTS cuML's gain
 
 **Theirs, and they are two different quantities.** sklearn selects on
 `sum_L^2/n_L + sum_R^2/n_R` (`_splitter.pyx:691` over `_criterion.pyx:944-973`).
@@ -845,7 +981,7 @@ is countable whenever someone wants it. Unmeasured, deliberately.
 
 ---
 
-## 154. Two of sklearn's four rejection branches are absent because their inputs do not exist
+## 154. [CLOSED] Two of sklearn's four rejection branches are absent because their inputs do not exist
 
 **Theirs.** Four rejections, in order: `min_samples_leaf` (`:664-666`),
 `min_weight_leaf` (`:674-677`), monotonicity (`:679-689`), and the `>` at
@@ -877,7 +1013,7 @@ than pretending the arm is exercised.
 
 ---
 
-## 156. The `k == n` guard moved into the sampler, and materializes an identity
+## 156. [CLOSED] The `k == n` guard moved into the sampler, and materializes an identity
 
 **Theirs.** The guard is in the CALLER: `builder.cuh:399`,
 `if (dataset.n_sampled_cols != dataset.N) { ...sample... }`. When they are
@@ -906,7 +1042,7 @@ consumer's `if`, reads an uninitialized `colids`.
 
 ---
 
-## 157. The block collectives are explicit loops, and the block width is a parameter
+## 157. [CLOSED] The block collectives are explicit loops, and the block width is a parameter
 
 **Theirs.** `excess_sample_with_replacement_kernel` is one CUDA block per node
 over a `BLOCK_THREADS x MAX_SAMPLES_PER_THREAD` register array, using three CUB
@@ -943,7 +1079,7 @@ which is a KERNEL MATRIX row.
 
 ---
 
-## 158. `log`, `exp` and `ceil` come from libm through FFI, not `std.math`
+## 158. [CLOSED] `log`, `exp` and `ceil` come from libm through FFI, not `std.math`
 
 **Theirs.** `raft::log` / `raft::exp` (`raft/core/math.hpp:324-331`) are
 `std::log` / `std::exp` on host and `::log` / `::exp` on device, plus
@@ -967,7 +1103,7 @@ line is the one to check.
 
 ---
 
-## 159. Index widths, and a bound on their unbounded loop
+## 159. [CLOSED] Index widths, and a bound on their unbounded loop
 
 **Theirs.** `IdxT` is `int` throughout the sampler. The retry loop
 `do { } while (n_uniques < k)` (`:188-241`) has NO iteration bound, and the
@@ -1046,7 +1182,7 @@ does"). Each is ASSERTED in `feature_sampler_check.mojo`, so a later
 
 The lane's reserved range 130-159 is full; the device work continues at 160.
 
-## 160. NOT a deviation: the range pass is bit-checkable and the histogram pass is not
+## 160. [CLOSED] NOT a deviation: the range pass is bit-checkable and the histogram pass is not
 
 **Theirs.** `computeSplitKernel` (`builder_kernels_impl.cuh:216-340`) makes one
 pass over a node's rows per (node, feature) block and accumulates a HISTOGRAM.
@@ -1071,7 +1207,7 @@ difference.
 
 ---
 
-## 161. The cross-block combine is a MUTEX MERGE, not their atomicAdd + signalDone
+## 161. [SUPERSEDED] The cross-block combine is a MUTEX MERGE, not their atomicAdd + signalDone
 
 **Theirs** (`builder_kernels_impl.cuh:295-317`): a large node's blocks each
 `BinT::AtomicAdd` their partial histogram into a global slot keyed by
@@ -1109,7 +1245,7 @@ is attached and none will be until the perf round.
 
 ---
 
-## 162. The output is a STRUCT OF ARRAYS, and `Dataset` is passed as its components
+## 162. [CLOSED] The output is a STRUCT OF ARRAYS, and `Dataset` is passed as its components
 
 **Theirs.** `computeSplitKernel` takes `const Dataset<...> dataset` BY VALUE
 (`:221`) and reads `work_items[nid]` and `workload_info[blockIdx.x]` as
@@ -1136,7 +1272,7 @@ binary from the one that ships proves nothing about the one that ships.**
 
 ---
 
-## 163. The empty range is carried IN the output as `min > max`, and NaN never reaches the reduction
+## 163. [CLOSED] The empty range is carried IN the output as `min > max`, and NaN never reaches the reduction
 
 **sklearn's.** `find_min_max` (`_partitioner.pyx:143-163`) initializes
 `min = INFINITY, max = -INFINITY`, seeds BOTH from the first non-missing value,
@@ -1181,7 +1317,7 @@ MEASUREMENT, not an opinion: both entries below carry the number that made the
 call, and both have a check asserting the fixed behaviour so the fix cannot
 silently rot.
 
-## 164. FIXED cuML BUG: the block minimum had no head flag, so column 0 was never sampled
+## 164. [CLOSED] FIXED cuML BUG: the block minimum had no head flag, so column 0 was never sampled
 
 **Theirs.** `builder_kernels.cuh:231-232` calls
 `SubtractLeft(items, mask, CustomDifference<IdxT>(), mask[0])`. CUB does
@@ -1219,7 +1355,7 @@ nobody re-derives them.
 
 ---
 
-## 165. FIXED cuML BUG: a slot that never drew voted anyway, as column n-1
+## 165. [CLOSED] FIXED cuML BUG: a slot that never drew voted anyway, as column n-1
 
 **Theirs.** `builder_kernels.cuh:201-203` fills every slot past
 `n_parallel_samples` with `n - 1` — a REAL column id — commented "indices that
@@ -1248,7 +1384,7 @@ column id survives it, sorts to the tail, and is identified by one comparison.
 
 # The device split reduction — deviations 166-169
 
-## 166. The reduction carries the EXACT RATIONAL KEY beside the `Split`, and `Split.update` becomes its tie-break
+## 166. [CLOSED] The reduction carries the EXACT RATIONAL KEY beside the `Split`, and `Split.update` becomes its tie-break
 
 **Theirs.** `warpReduce` (`split.cuh:92-105`) shuffles four fields and `update`
 decides on the first it can. The score IS the key: one `DataT`.
@@ -1290,7 +1426,7 @@ queried 32768 B budget); two 64x64->128 multiplies per keyed comparison;
 
 ---
 
-## 167. The Int128 cross-multiply is HAND-WIDENED from 64-bit limbs, because Int128 in a device kernel does not compile
+## 167. [CLOSED] The Int128 cross-multiply is HAND-WIDENED from 64-bit limbs, because Int128 in a device kernel does not compile
 
 **Theirs.** None — they compare one float.
 
@@ -1328,7 +1464,7 @@ node so the branch is not dead code.
 
 ---
 
-## 168. `warpReduce` is a `shuffle_xor` butterfly with NO ASSUMED WARP WIDTH
+## 168. [CLOSED] `warpReduce` is a `shuffle_xor` butterfly with NO ASSUMED WARP WIDTH
 
 **Theirs.** `for (int i = raft::WarpSize/2; i >= 1; i /= 2) { auto id = lane + i; ... }`
 with `WarpSize` a compile-time 32.
@@ -1354,7 +1490,7 @@ only the combine is ours, and the combine is `Split.update`.
 
 ---
 
-## 169. `evalBestSplit`'s publish: a portable mutex, a struct-of-arrays cell, and the device's own report of which path it ran
+## 169. [CLOSED] `evalBestSplit`'s publish: a portable mutex, a struct-of-arrays cell, and the device's own report of which path it ran
 
 Same six steps in the same order as `split.cuh:107-152`. Three things are
 spelled differently and each is forced:
@@ -1394,7 +1530,7 @@ float rational could have used anyway.
 
 # The device draw and score pass — deviations 170-175
 
-## 170. The score pass is TWO launches, because no block can be elected last
+## 170. [CLOSED] The score pass is TWO launches, because no block can be elected last
 
 **Theirs.** `computeSplitKernel` elects a last block with `signalDone` plus
 `__threadfence()` (`builder_kernels_impl.cuh:295-317`) and scores inside it.
@@ -1415,7 +1551,7 @@ No timing number attached.
 
 ---
 
-## 171. NOT a deviation: this merge IS their `atomicAdd`
+## 171. [CLOSED] NOT a deviation: this merge IS their `atomicAdd`
 
 Deviation 161 replaced their cross-block combine with a mutex because a RANGE
 has no portable float atomic. This merge is an INTEGER ADD, which does have
@@ -1429,7 +1565,7 @@ between an operation that has a portable atomic and one that does not.
 
 ---
 
-## 172. No dynamic shared memory: private accumulators plus a block reduction
+## 172. [CLOSED] No dynamic shared memory: private accumulators plus a block reduction
 
 **Theirs.** `extern __shared__` sized from `max_n_bins * num_outputs`
 (`builder.cuh:497-505`), incremented with shared-memory atomics.
@@ -1448,7 +1584,7 @@ and the cell stays `UNVISITED` — a refusal, not a truncation.
 
 ---
 
-## 173. The draw is an explicit `fma`, and it is why deviation 142 was amended
+## 173. [CLOSED] The draw is an explicit `fma`, and it is why deviation 142 was amended
 
 Every thread draws redundantly, because the key has nothing thread-local in it.
 
@@ -1464,7 +1600,7 @@ assuming the question is settled.
 
 ---
 
-## 174. The device sees only INTEGERS, and a refusal is a STATUS
+## 174. [CLOSED] The device sees only INTEGERS, and a refusal is a STATUS
 
 **Labels arrive pre-quantized.** Deviation 135 rules that regression
 accumulates in fixed point, so the host quantizes and the device receives
@@ -1484,7 +1620,7 @@ pair.**
 
 ---
 
-## 175. The published width is Int64, and it is TIGHTER than the host's Int128 bound
+## 175. [CLOSED] The published width is Int64, and it is TIGHTER than the host's Int128 bound
 
 **Classification publishes `GiniProxyExact`'s `Int64` pair** and does not
 compute cuML's float `GainPerSplit` on device: deviation 145 makes that a
@@ -1519,7 +1655,7 @@ cheaper than a three-file rename mid-round.
 
 # The device path, wired — deviations 182-183
 
-## 182. `score_to_candidate_kernel` exists because 170 split their kernel in two
+## 182. [CLOSED] `score_to_candidate_kernel` exists because 170 split their kernel in two
 
 **Theirs.** `computeSplitKernel`'s elected last block scores the bins and hands
 the result straight to `sp.evalBestSplit(...)` in the same function
@@ -1544,7 +1680,7 @@ outcome the host reaches by never producing a candidate.
 
 ---
 
-## 183. CLOSED — the device applies cuML's zero-gain gate, from exact integers on the host
+## 183. [CLOSED] The device applies cuML's zero-gain gate, from exact integers on the host
 
 **Theirs.** `split_not_valid` (`kernels/builder_kernels.cuh:59-67`) rejects a
 split whose `best_metric_val` is `<= min_impurity_decrease`. cuML's Gini gain
@@ -1619,7 +1755,7 @@ gone.
 
 # The device partition and leaf pass — deviations 176-181
 
-## 176. `partitionSamples` on device: their collectives, and a BOUND on their unbounded loop
+## 176. [CLOSED] `partitionSamples` on device: their collectives, and a BOUND on their unbounded loop
 
 **Theirs.** `builder_kernels_impl.cuh:43-88`, two `cub::BlockScan::ExclusiveSum`
 calls per iteration (each returning prefix AND aggregate), a `smem` carve of
@@ -1652,7 +1788,7 @@ differences** — the whole permutation, not an equivalent partition, with
 
 ---
 
-## 177. NOT a deviation: one block per node is kept
+## 177. [CLOSED] NOT a deviation: one block per node is kept
 
 Their header says so (`:39-41`) and `nodeSplitKernel` launches
 `<<<work_items_size, TPB>>>`. A multi-block partition needs a grid-wide barrier
@@ -1665,7 +1801,7 @@ launch, not as a time: 6 / 4 / 2 items ran more than one iteration at TPB
 
 ---
 
-## 178. The leaf histogram is a comptime-bounded private array plus one block reduction
+## 178. [CLOSED] The leaf histogram is a comptime-bounded private array plus one block reduction
 
 **Theirs.** `extern __shared__` sized `BinT[num_outputs]`, incremented with
 shared atomics (`:398-412`).
@@ -1678,7 +1814,7 @@ The answer is unchanged because every accumulator is an integer.
 
 ---
 
-## 179. RULED: the device regression leaf is FIXED POINT, and the Float64 host form is the reporting one
+## 179. [CLOSED] RULED: the device regression leaf is FIXED POINT, and the Float64 host form is the reporting one
 
 **The situation.** `builder.mojo::set_leaf_predictions_regression` accumulates
 in `Float64` to match sklearn. There is no `float64` on device, and a `Float32`
@@ -1705,7 +1841,7 @@ rounds.** The divisor was changed to 97 and the real number appeared.
 
 ---
 
-## 180. One leaf launch over all nodes, and two device-written path reports
+## 180. [CLOSED] One leaf launch over all nodes, and two device-written path reports
 
 **Theirs.** `SetLeafPredictions` batches launches at 100,000 nodes
 (`builder.cuh:559`), which is a HOST MEMORY-BUDGET policy, not an algorithm
@@ -1723,7 +1859,7 @@ node's zero IS its value because the kernel never writes those slots), and
 
 ---
 
-## 181. `volatile IdxT* row_ids` has no Mojo spelling; `barrier()` carries it
+## 181. [CLOSED] `volatile IdxT* row_ids` has no Mojo spelling; `barrier()` carries it
 
 **Theirs.** `partitionSamples` casts `row_ids` to `volatile IdxT*` (`:51`).
 
@@ -1738,7 +1874,7 @@ barrier away as redundant.
 
 # The forest and the estimator on device — deviations 184-188
 
-## 184. CLOSED — the dataset is uploaded once for the FOREST, not once per tree
+## 184. [CLOSED] The dataset is uploaded once for the FOREST, not once per tree
 
 **Theirs.** cuML's `Dataset` holds device pointers for the whole fit
 (`dataset.h:22-38`); every tree reads one resident copy.
@@ -1771,7 +1907,7 @@ nothing because the defect was traffic, not correctness.
 
 ---
 
-## 185. The per-tree `row_ids` is a contract, not a necessity, and that is MEASURED
+## 185. [CLOSED] The per-tree `row_ids` is a contract, not a necessity, and that is MEASURED
 
 `train_classification_device` declares `mut row_ids` and reads it once into a
 host staging buffer. `node_split_kernel` then mutates `d_row_ids` ON THE DEVICE
@@ -1796,7 +1932,7 @@ write-back proves the pin fires.
 
 ---
 
-## 186. The class-id cast is hoisted, and it carries a range guard the host path does not have
+## 186. [CLOSED] The class-id cast is hoisted, and it carries a range guard the host path does not have
 
 The device sees only integers (deviation 174), so the forest casts labels to
 `Int32` class ids ONCE rather than per tree — the cast depends on nothing that
@@ -1812,7 +1948,7 @@ trainer and is refused here.
 
 ---
 
-## 187. The device is an ENTRY POINT, not a `device=True` field on the config
+## 187. [CLOSED] The device is an ENTRY POINT, not a `device=True` field on the config
 
 A boolean field would be wrong twice. `ExtraTreesConfig` is documented as
 sklearn's constructor with sklearn's names and sklearn has no such parameter,
@@ -1839,7 +1975,7 @@ one cell.
 
 ---
 
-## 188. The estimator's device regressor: refused BY NAME, then CLOSED
+## 188. [CLOSED] The estimator's device regressor: refused BY NAME, then CLOSED
 
 **The refusal, as it stood.** When this entry was written there was no
 `train_regression_device`: every device kernel supported regression — range,
@@ -1877,7 +2013,7 @@ asserted through the device arm as well.
 
 # The regression key, and the tie-break — deviations 189-194
 
-## 189. The regression key is cuML's OWN MSE gain, not sklearn's proxy
+## 189. [CLOSED] The regression key is cuML's OWN MSE gain, not sklearn's proxy
 
 **The problem.** sklearn's proxy numerator `sum_L^2*n_R + sum_R^2*n_L` over
 sums bounded by the `2^30` slot needs `2b + log2(n) <= 63`, i.e. `log2(n) <= 3`
@@ -1904,7 +2040,7 @@ which can be shrunk by truncating ONE number ONCE instead of every label.
 
 ---
 
-## 190. MEASURED: the alternatives lose orderings and this one does not
+## 190. [CLOSED] MEASURED: the alternatives lose orderings and this one does not
 
 Against a `Float64` ground truth, 190 ordered pairs of one node at
 n = 1,048,576:
@@ -1928,7 +2064,7 @@ was never "exact or not", it was "which approximation", and it was measured.
 
 ---
 
-## 191. The shift is node-uniform and derived, so there is no row cap
+## 191. [CLOSED] The shift is node-uniform and derived, so there is no row cap
 
 `j = ceil_log2(n) + REGRESSION_SUM_BITS - 31` comes from the node's row count
 and the slot width alone — no caller argument, no extra pass, and **no row cap
@@ -1940,7 +2076,7 @@ An arithmetic shift floors and would not be.
 
 ---
 
-## 192. What the key is NOT: order preservation, measured
+## 192. [CLOSED] What the key is NOT: order preservation, measured
 
 Hashed candidates of one node: **0 of 1,128 inverted** at n = 1024 / 65,536 /
 1,048,576. Adversarial — adjacent `n_left`, with the second `A` solved into the
@@ -1956,7 +2092,7 @@ the fixture's fault, not the key's.
 
 ---
 
-## 193. The precondition is a refusal STATUS, and the gate is host-side
+## 193. [CLOSED] The precondition is a refusal STATUS, and the gate is host-side
 
 `SCORE_STATUS_REGRESSION_REFUSED = 5`. A kernel cannot raise, so a violated
 slot precondition is a status in the same position the host raise occupies —
@@ -1967,7 +2103,7 @@ on the host, which is deviation 183's shape applied to MSE.
 
 ---
 
-## 194. On an exact tie between two VALID rationals, the metric arm is skipped
+## 194. [CLOSED] On an exact tie between two VALID rationals, the metric arm is skipped
 
 **Theirs.** `Split::update` (`split.cuh:78-90`) tests `best_metric_val`, then
 `colid`, then `quesval`. For cuML that is right: the metric IS their key.
@@ -2011,7 +2147,7 @@ excluding it.
 
 ---
 
-## 200. `row_ids` is filled ON THE DEVICE, as `thrust::sequence` does
+## 200. [CLOSED] `row_ids` is filled ON THE DEVICE, as `thrust::sequence` does
 
 **Theirs.** `get_row_sample` (`randomforest.cuh:50-72`) writes into an
 `rmm::device_uvector`; the `bootstrap == false` arm is
@@ -2052,7 +2188,7 @@ should be closed the same way — in a round where `randomforest.mojo` and
 
 # The feature sampler on device — deviations 195-201
 
-## 195. `cub::BlockRadixSort` has no counterpart, so the sort is a hand-written bitonic network
+## 195. [CLOSED] `cub::BlockRadixSort` has no counterpart, so the sort is a hand-written bitonic network
 
 `max.gpu.primitives.block` offers `sum`, `min`, `max`, `broadcast` and
 `prefix_sum` and nothing else — checked this session. `PORTING_RULES.md` 0b-i's
@@ -2068,7 +2204,7 @@ The network covers `next_pow2(n_parallel_samples)` rather than the full slot
 count, because slots at or above `n_parallel_samples` hold a constant run of
 the array's maximum and are already in sorted place.
 
-## 196. MEASURED: their sort's storage does not fit, so `items` lives in global scratch
+## 196. [CLOSED] MEASURED: their sort's storage does not fit, so `items` lives in global scratch
 
 cuML's own `BLOCK_THREADS * MAX_SAMPLES_PER_THREAD * sizeof(IdxT)` is 36,864
 bytes and this box's threadgroup limit is 32,768: *"Threadgroup memory size
@@ -2079,14 +2215,14 @@ is the ceiling.
 `col_indices` is not stored at all. A comptime capacity ladder was considered
 and REJECTED, because its refusal would fire inside cuML's own supported range.
 
-## 197. The block scan is per-thread totals then one collective
+## 197. [CLOSED] The block scan is per-thread totals then one collective
 
 Mojo's `prefix_sum` has no `ITEMS_PER_THREAD`, and nothing returns prefix AND
 aggregate together, so it is two calls — the same finding deviation 176 records
 for the partition. The aggregate must be block-uniform because it drives the
 loop exit.
 
-## 198. The DISPATCH stays on the host, because it is on the host in cuML
+## 198. [CLOSED] The DISPATCH stays on the host, because it is on the host in cuML
 
 `builder.cuh:419-421` computes `n_parallel_samples` on the host and a C++ `if`
 picks between three launches. Rule 2 does not bite: nothing is being decided on
@@ -2096,7 +2232,7 @@ Deviation 159's raise becomes `SAMPLER_OVERRUN`, and `report` is added with no
 cuML counterpart — the device's own statement of which kernel ran and how many
 iterations it took, so a check does not infer the path from host arithmetic.
 
-## 199. MEASURED: Metal has no `double`, so cuML's algorithm L cannot be a kernel here
+## 199. [CLOSED] MEASURED: Metal has no `double`, so cuML's algorithm L cannot be a kernel here
 
 cuML's algorithm L is a `double` algorithm in four places
 (`builder_kernels.cuh:291`, `:306` twice, `:313`). Metal rejects `double` at
@@ -2117,7 +2253,7 @@ deviation 158 records that there is no libm through FFI on device, so
 kernel below `algo_l_sample_kernel` is a portable DRAFT for a CUDA/ROCm box,
 not a verified kernel, and it says so.
 
-## 201. The algo-L arm runs on the HOST, and that is a placement difference, not a refusal
+## 201. [CLOSED] The algo-L arm runs on the HOST, and that is a placement difference, not a refusal
 
 **The choice.** Refusing the arm would make the device path unusable whenever
 `k/n` is near 1 at large `n`. Running cuML's algorithm on the host is a
@@ -2137,7 +2273,7 @@ returned plan reports which arm ran, so it is visible rather than silent.
 
 ---
 
-## DEVIATION 202 -- the workspace is allocated once per tree, not once per level
+## DEVIATION 202 [CLOSED] -- the workspace is allocated once per tree, not once per level
 
 (Since DEVIATION 211: once per GROUP of in-flight trees, one step further in
 the same direction; the entry below records the per-level -> per-tree move as
@@ -2178,7 +2314,7 @@ it is faster, and this paragraph exists so nobody re-derives a speedup from it.
 
 ---
 
-## DEVIATION 203 -- the frontier partition is multi-block
+## DEVIATION 203 [CLOSED] -- the frontier partition is multi-block
 
 **THEIRS.** `launchNodeSplitKernel` is `<<<work_items_size, TPB>>>`
 (`builder_kernels_impl.cuh:109-134`): one block per node, walking two cursors
@@ -2221,7 +2357,7 @@ against leaves nothing to verify against tomorrow.
 
 ---
 
-## DEVIATION 204 -- the cross-block range merge is lock-free. THIS CLOSES 161
+## DEVIATION 204 [CLOSED] -- the cross-block range merge is lock-free. THIS CLOSES 161
 
 **WHAT 161 SAID, AND WHAT WAS WRONG WITH IT.** That Mojo has no portable float
 `atomicMin`/`atomicMax`, which is true, and that the cross-block min/max merge
@@ -2270,7 +2406,7 @@ check said so before a human did.
 
 ---
 
-## DEVIATION 205 -- sklearn's "keep drawing while every draw was constant". THIS CLOSES 151
+## DEVIATION 205 [CLOSED] -- sklearn's "keep drawing while every draw was constant". THIS CLOSES 151
 
 **WHAT 151 SAID.** That we stop splitting a node when every one of its
 `max_features` sampled columns is constant while sklearn keeps drawing, and
@@ -2327,10 +2463,16 @@ their 20,558-24,052 at 5, where we used to build 3,798.
 96-140 ms/tree to 354-455, and at 7 from 121-125 to 435-453. We are building
 four to six times more nodes, which is the point; per node we are no slower.
 The comparison against scikit-learn at a narrow sample is now apples to apples
-and we LOSE it against their ten cores (0.28-0.50x at 5, 0.35-0.45x at 7) where
-before we "won" it by building a smaller and worse tree. At `max_features=14`,
-where the node counts always matched, we are 1.02-1.75x faster than their ten
-cores.
+and at the time of this entry we LOST it against their ten cores (0.28-0.50x at
+5, 0.35-0.45x at 7) where before we "won" it by building a smaller and worse
+tree. At `max_features=14`, where the node counts always matched, we were
+1.02-1.75x faster than their ten cores. **THAT RATIO HAS SINCE INVERTED at
+`sqrt`**, after DEVIATIONS 211 and 450: covtype 522,911 x 54 reads 9,826.8 ms
+against `sklearn-et-cpu`'s 11,006.8, 1.12x faster
+(`bench/results/fast_speed/2026-08-28-APPLE-forest.md`; 1.06x on
+`2026-08-27-APPLE-covtype-et-flip.md`, and 2.46x at 581k in
+`bench/results/THREE_SUITE_2026-08-22.md`). The numbers above are this entry's
+own and stay as its cost accounting; they are not the lane's current position.
 
 **THE SURVEY IS THE COST AND IT IS THE OBVIOUS NEXT LEVER.** A rescued node
 pays a full `n_cols` range pass. The `k` cells it already computed are thrown
@@ -2345,10 +2487,12 @@ loop: the skipped features are constant at the child too and could never have
 been selected, so it changes the work and not the answer. Our scan tests every
 column afresh.
 
-**REGRESSION DOES NOT HAVE THIS YET.** `train_regression` and
-`train_regression_device` take the same clause and have not been changed. The
-gap is the same gap and it is OPEN, stated here rather than left for somebody
-to find by measuring a regression fixture.
+**REGRESSION HAS THIS, CLOSED BY DEVIATION 206.** `train_regression` and
+`train_regression_device` take the same clause and now take the same
+`rescue_columns`, `rescue_pick` and key. Measured on `shaped_constant_heavy`
+at `max_features=0.15`, MSE criterion: 11 to 805 nodes at seed 0, 1 to 681,
+1 to 671, 3 to 751, with 0 of 805 nodes differing host against device on every
+seed and no movement on `all_constant`.
 
 **THE REACH IS PROVED, NOT ASSUMED.** `rescue_check` fits the same fixture with
 the rescue on and off: `shaped_constant_heavy` goes from 1-11 nodes to 459-597
@@ -2360,7 +2504,7 @@ caught, because its fixtures never trigger the clause.
 
 ---
 
-## DEVIATION 206 -- regression takes 184, 202, 203 and 205, which it never had
+## DEVIATION 206 [CLOSED] -- regression takes 184, 202, 203 and 205, which it never had
 
 The previous rounds landed on the classification device path only. This one
 brings regression level, and the reason it is one entry rather than four is
@@ -2409,15 +2553,23 @@ At every setting the node counts match theirs within a few percent (60,518
 against 60,066 at `all`), and at `all` our MSE is LOWER than theirs. This is
 the widest margin against scikit-learn recorded in this lane.
 
-**AND THE SCALE STORY IS THE SAME ONE.** At 100,000 rows the same code is
-0.06-0.29x against their ten cores. That is not a regression-specific
-weakness: classification at 100,000 rows was also about 0.25x. The GPU is
-starved below a few hundred thousand rows for both objectives, and every
-winning number in this file is at 581,012.
+**AND THE SCALE STORY WAS THE SAME ONE, UNTIL DEVIATION 211.** At 100,000 rows
+this code read 0.06-0.29x against their ten cores, and classification at
+100,000 rows read about 0.25x. That was a starved grid, not a
+regression-specific weakness, and merging the frontier batch across trees
+(DEVIATION 211) moved the classification cell to 0.72-0.86x of ten cores and
+2.33-2.99x of one core (`bench/results/WINDOW_2026-08-22_extratrees-batched.md`).
+The 0.06-0.29x figure is this entry's own measurement and is kept as such; it
+is not the lane's current small-n position.
+
+**AND THE WINNING NUMBERS ARE NOT ALL AT 581,012.** DEVIATION 218's scoring
+fits the full 8.8M-row higgs train split at 36.94 s against `skl-et-cpu`'s
+170.73 s, 4.6x, with AUC 0.70922 against 0.69861
+(`bench/results/gbm_bench_higgs_2026-08-22_124301.json`).
 
 ---
 
-## DEVIATION 208 -- the label gather hoist, MEASURED AND DECLINED
+## DEVIATION 208 [CLOSED] -- the label gather hoist, MEASURED AND DECLINED
 
 (Renumbered from 207 on 2026-08-21 by the perf lane: two lanes claimed
 207 within the hour, and the gbdt blind level loop landed first
@@ -2467,11 +2619,20 @@ hides.**
   score 57.7% (3.41 ms/batch), range 13.3%, and the seven remaining phases
   0.08-0.32 ms/batch each. After DEVIATION 204 the range pass is no longer the
   problem; the SCORE pass is, and it is nearly all `data` gather.
-* the gather probe, 4M reads, real shuffled permutation, steady state:
-  sequential 46-62 GB/s, permuted gather ~1.74 G gathers/s and ~7 GB/s
+* the gather probe, Apple M4, 4M reads, real shuffled permutation, steady
+  state: sequential 46-62 GB/s, permuted gather ~1.74 G gathers/s and ~7 GB/s
   effective -- **scattered is 6.7-9.0x slower**. The score pass runs at ~1.19 G
   cell-visits/s, so it is already **within ~1.5x of this machine's pure-gather
   roofline**. It is memory-latency bound, not inefficient.
+
+  **READ THE AXIS OF THAT PROBE BEFORE QUOTING IT.** It compares GPU
+  SEQUENTIAL against GPU PERMUTED, both on the device, on one vendor. It is
+  NOT a GPU-versus-CPU achieved-bandwidth comparison, which is what the gate
+  that commissioned it asked for. **No GPU-versus-CPU gather number exists
+  anywhere in this repository**, and four documents have disagreed about
+  whether this probe ran because the two questions were not kept apart. This
+  is the only gather-probe measurement in the tree; anything stated about CPU
+  gather bandwidth is unmeasured.
 
 **WHICH MAKES THE CEILING A FORMULATION QUESTION, NOT A KERNEL ONE.** An exact
 ExtraTrees rereads real `Float32` feature values at every level; a histogram
@@ -2479,32 +2640,42 @@ method reads one-byte bins. DEVIATION 137 deleted the histogram deliberately --
 that is what makes this ExtraTrees rather than a binned learner -- and the
 traffic that follows is the price of that decision, not a defect to tune away.
 
-## What is left, and what it is worth
+## What was left after DEVIATION 208, and what each item turned into
 
-Named here so the next round starts from measurements rather than from
-intuition:
+The three candidates named here on 2026-08-21 have all since been taken. This
+section is kept for the estimates it made and how they landed, because two of
+the three were overestimates.
 
-* **Tree-level batching is NOT the 2x it looks like.** cuML parallelises trees
-  across CUDA streams (`randomforest.cuh:164`); `ctx.create_stream()` on this
-  device answers **"createStream is not supported on this device"**, so their
-  literal mechanism is unavailable. The batched-frontier equivalent IS
-  available -- nodes from different trees are just more nodes in the same
-  `WorkloadInfo` flattening -- but the per-batch fixed cost it would amortise
-  is only ~1.7 ms of an 8.7 ms batch, and **the grid was never starved**:
-  `n_blocks_dimx` is driven by ROW count, so the root level already launches
-  ~4,540 x k blocks. Estimated worth ~11%, not 2x.
-* **Materialising the sampled columns** the way the labels now are: the gather
-  still has to happen once, so it converts two scattered passes (range and
-  score) into one scattered gather plus sequential reads. Worth measuring;
-  estimated ~20%.
-* **The per-level non-constant flag readback** (DEVIATION 205) runs on every
-  level including those with nothing to rescue, and at `max_features=None` a
-  rescue can never fire at all. Folding it into a readback that already happens
-  is free.
+* **Tree-level batching.** Estimated here at ~11% and not the 2x it looked
+  like, on the reasoning that cuML parallelises trees across CUDA streams
+  (`randomforest.cuh:164`), `ctx.create_stream()` on this device answers
+  **"createStream is not supported on this device"**, the batched-frontier
+  equivalent was available because nodes from different trees are just more
+  nodes in the same `WorkloadInfo` flattening, the per-batch fixed cost it
+  would amortise was only ~1.7 ms of an 8.7 ms batch, and **the grid was never
+  starved** (`n_blocks_dimx` is driven by ROW count, so the root level already
+  launches ~4,540 x k blocks). **BUILT as DEVIATION 211, AND BOTH OF THOSE
+  READINGS WERE WRONG.** Measured merged against serial, forest digests
+  identical: **1.72-1.85x at 581,012 rows** and **4.06-5.37x at 100,000**
+  (`bench/results/WINDOW_2026-08-22_extratrees-batched.md`). The win is largest
+  exactly where the grid IS starved, so the ~11% understated it and "the grid
+  was never starved" was the wrong diagnosis.
+* **Materialising the sampled columns**, estimated here at ~20% on the argument
+  that the gather has to happen once anyway so it converts two scattered passes
+  into one gather plus sequential reads. **BUILT, MEASURED AND DECLINED, as
+  DEVIATION 212. The ~20% is FALSIFIED**, priced at 0.6-1.0x measured across
+  three regimes, wrong for the same reason 208's own 1.75x was wrong.
+* **The per-level non-constant flag readback** (DEVIATION 205), which ran on
+  every level including those with nothing to rescue, and which at
+  `max_features=None` can never fire. **HALF TAKEN, by DEVIATION 450**:
+  `h_nonconst` was the one host read before the reduce sync, its consumer runs
+  after `search_batch` returns, so the read moved past the reduce drain and the
+  range pass keeps only its enqueued copy. The DRAIN this bullet costed out is
+  gone; the copy itself still runs on every level.
 
 ---
 
-## DEVIATION 211 -- the batch spans TREES: cuML's stream pool, expressed as a wider grid
+## DEVIATION 211 [CLOSED] -- the batch spans TREES: cuML's stream pool, expressed as a wider grid
 
 (209 is the ensemble lane's handle-launches negative and 210 is the gbdt
 scheduling fold; both were verified claimed repo-wide before this number was
@@ -2584,7 +2755,7 @@ warning -- that a device-resident frontier would need per-tree row isolation
 
 ---
 
-## DEVIATION 212 -- the materialized score pass: MEASURED AND DECLINED, and it is 208's lesson at forest scale
+## DEVIATION 212 [CLOSED] -- the materialized score pass: MEASURED AND DECLINED, and it is 208's lesson at forest scale
 
 **WHAT WAS TRIED.** cuML reads the data matrix ONCE per level because their
 quantization turned it into bins up front; the histogram-free formulation
@@ -2646,7 +2817,7 @@ paragraph above in an hour, and the numbers are what they would get.
 
 ---
 
-## DEVIATION 213 -- the merged batch bound: MEASURED, NO EFFECT, and the Instruments profile that closes the schedule question
+## DEVIATION 213 [CLOSED] -- the merged batch bound: MEASURED, NO EFFECT, and the Instruments profile that closes the schedule question
 
 **WHAT WAS TRIED.** cuML pops frontier batches at `max_batch_size = 4096`, a
 bound tuned for ONE tree; DEVIATION 211's merged frontier holds tens of
@@ -2674,11 +2845,11 @@ dispatches:
 
 Three findings, each of which retires a hypothesis:
 
-1. **The schedule is DONE.** 93.8% busy means the host is not the cost and
-   no scheduling lever (wider batches, fewer syncs, pipelining) has
-   meaningful room -- which is exactly what this entry's wash and 212's
-   wash showed from the outside. DEVIATION 211 is what bought this; the
-   pre-211 sibling measurement on this repo was launch-bound.
+1. **The schedule is DONE, and that reading was too strong; see the note
+   below.** 93.8% busy means the host is not the cost on THIS trace, which
+   is what this entry's wash and 212's wash showed from the outside.
+   DEVIATION 211 is what bought it; the pre-211 sibling measurement on this
+   repo was launch-bound.
 2. **The cost is a handful of GIANT dispatches: the shallow levels' range
    and score passes, where every row of every tree is active.** Ten
    dispatches are half the fit. That is the formulation's own row traffic
@@ -2698,9 +2869,29 @@ Three findings, each of which retires a hypothesis:
    A cold-chassis window would be faster everywhere and possibly by a lot;
    taking one is a bench-hygiene action, not a code change.
 
-**WHAT THIS CLOSES AND WHAT IT LEAVES.** Closed: scheduling (211 finished
-it), read rearrangement (212), batch width (this entry). Left, priced by
-the profile: nothing inside the current formulation at the shipped size --
+**CORRECTED BY THREE LATER ENTRIES: SCHEDULING WAS NOT DONE AND THE
+FORMULATION WAS NOT THE FLOOR.** Three levers of exactly the kinds ruled out
+above were found afterward, all inside this formulation.
+
+* DEVIATION 214, a "fewer syncs" lever: the leaf tail batched, clocked leaf
+  phase 735 ms to 130 ms (8.3% to 3.5%), removing 99 allocation sets, launches
+  and synchronizes per 100-tree group. It was found by the very instrument
+  this entry motivated.
+* DEVIATION 450, another one: five of the level cycle's six synchronizes
+  removed, motivated by the small-n rows this profile could not see.
+* DEVIATION 1943, a pure block-width change with no algorithm change: on an
+  MI325X the range pass went 8107 ms to 2819 and the score pass 8799 to 3288,
+  the two hot kernels 17002 to 6207.
+
+Two of the three do not move on the box this profile was taken on, which is
+the honest reading of the discrepancy: **the finding held for this trace, on
+this box, and it was written as a formulation-level statement it could not
+support.** A one-box profile does not close a schedule.
+
+**WHAT THIS CLOSES AND WHAT IT LEAVES.** Closed on this box: read
+rearrangement (212), batch width (this entry). Left, priced by
+the profile: nothing else inside the current formulation at the shipped size
+on Apple --
 the next real large-data moves are a different formulation (bin-space ET,
 the other lane's product) or better silicon conditions. The small-n regime
 is a different story and its lever (the sampled-column sweep, `gridDim.y`)
@@ -2708,7 +2899,7 @@ is unchanged by any of this.
 
 ---
 
-## DEVIATION 214 -- the phase clock, and the first thing it paid for: the leaf tail batched
+## DEVIATION 214 [CLOSED] -- the phase clock, and the first thing it paid for: the leaf tail batched
 
 **THE INSTRUMENT.** DEVIATIONS 212 and 213 were both chosen from whole-fit
 inference and both measured out as washes; the lane had NO micro-step
@@ -2716,9 +2907,12 @@ timing, and Instruments cannot name kernels from the stock template. So
 `PhaseClock` (builder.mojo): threaded through `search_batch`, both twins,
 and the `train_forest_*_device_timed` variants; DISABLED it is inert -- the
 shipping entry points construct a disabled clock and add no synchronize --
-and ENABLED it syncs at every phase boundary and accumulates nine phases
+and ENABLED it syncs at every phase boundary and accumulates TEN phases
 (setup, stage+sampler, range, score, candidate+reduce+readback, host splits,
-partition, host queue, leaf). An enabled clock measures a SERIALIZED
+partition, host pop + batch assembly, leaf, host queue push). The tenth,
+`PHASE_HOST_PUSH`, was split off the host-queue phase at commit 9c8ffc23 and
+is what DEVIATION 1945 rests on; `builder.mojo` carries `PHASE_HOST_PUSH = 9`
+and `N_PHASES = 10`. An enabled clock measures a SERIALIZED
 program, so `bench/fit_once.mojo phases` prints the clocked total NEXT TO an
 unclocked warm run of the same config: the gap is the measurement's own
 distortion, stated beside the numbers it distorts (the RF lane's profiler
@@ -2756,7 +2950,7 @@ mechanism removes 99 allocations-sets, launches and synchronizes per
 
 ---
 
-## DEVIATION 215 -- cuML's feature sampler is BIASED, and higgs paid for it: the k survivors are now a uniform keyed-hash subset
+## DEVIATION 215 [CLOSED] -- cuML's feature sampler is BIASED, and higgs paid for it: the k survivors are now a uniform keyed-hash subset
 
 **Theirs, and it is a bug.** `excess_sample_with_replacement_kernel` draws
 `n_parallel_samples` columns with replacement, dedupes, and -- when more
@@ -2822,7 +3016,7 @@ and honesty requires re-measuring, not just the dataset that benefits.
 
 ---
 
-## DEVIATION 216 -- the zero-gain gate: cuML's `<=` becomes sklearn's boundary, because year's TEST set was paying for it
+## DEVIATION 216 [CLOSED] -- the zero-gain gate: cuML's `<=` becomes sklearn's boundary, because year's TEST set was paying for it
 
 **The trail, in order, because each step eliminated a suspect.** After 215,
 our-vs-sklearn accuracy was clean on higgs at `sqrt` AND at `all`, and on
@@ -2891,7 +3085,7 @@ higgs at parity, measured interleaved).
 
 ---
 
-## DEVIATION 217 -- cuML's float gain evaluates NEGATIVE on provably non-negative splits, and the gate was leafing them: the exact-sign clamp
+## DEVIATION 217 [CLOSED] -- cuML's float gain evaluates NEGATIVE on provably non-negative splits, and the gate was leafing them: the exact-sign clamp
 
 **The find, exactly as it happened, because the trail is the method.** After
 216 measured as a no-op, the depth probe showed our year trees collapsing
@@ -2934,12 +3128,18 @@ about a point, higgs at the post-215 parity, both at 2.3-3.8x sklearn's
 ten cores in this window's clock state. All 29 checks pass; the probe that
 caught it stays in `bench/node2_probe.mojo` as the exact repro.
 
-**What this closes.** The year accuracy row's our-vs-sklearn residual --
-the last open ET-behind accuracy item. The scoreboard's remaining year gap
-is model-family, shared with sklearn's own ET at this config.
+**What this closes.** The year accuracy row's our-vs-sklearn residual. The
+scoreboard's remaining year gap is model-family, shared with sklearn's own ET
+at this config.
+
+**IT WAS NOT THE LAST ET-BEHIND ACCURACY ITEM, and this entry used to say it
+was.** On 2026-08-26 covtype (522,911 x 54, depth 16, `max_features=sqrt`) read
+our ET 0.6701 against sklearn's 0.6768, the largest accuracy gap in any tree
+lane on any box (`bench/results/fast_speed/2026-08-26-APPLE-trees.md:27`,
+`:73`). DEVIATION 463 is what took it.
 ---
 
-## DEVIATION 218 -- the 2^21 classification row cap LIFTED: deviation 191's shift, applied to the Gini pair
+## DEVIATION 218 [CLOSED] -- the 2^21 classification row cap LIFTED: deviation 191's shift, applied to the Gini pair
 
 **What stood.** DEVIATION 175 published sklearn's proxy as an exact Int64
 rational and priced the exactness at a cap: the worst numerator is `n^3/4`,
@@ -2980,7 +3180,7 @@ untouched. Numbers land beside this entry when the bench lock clears.
 
 ---
 
-## DEVIATION 450 -- one drain per batch: five of the level cycle's six synchronizes removed
+## DEVIATION 450 [CLOSED] -- one drain per batch: five of the level cycle's six synchronizes removed
 
 **What stood.** One level cycle of the merged forest trainer drained the
 queue SIX times: the workspace-staging sync at `stage_batch`'s tail, the
@@ -3082,7 +3282,7 @@ correction, placed where the next reader of the ledger will find it.
 
 ---
 
-## DEVIATION 452 -- under NUMERIC_IDENTICAL the range pass's block fold runs in KEY space
+## DEVIATION 452 [CLOSED] -- under NUMERIC_IDENTICAL the range pass's block fold runs in KEY space
 
 **The pathway** (cross-vendor identity audit, 2026-08-22, IDENTITY_PATHS
 row 8's residue class surfacing in this lane). `node_feature_range_kernel`
@@ -3126,7 +3326,7 @@ default bits cannot move: the shipping branch is textually the old code.
 
 ---
 
-## DEVIATION 453 -- IDENTITY_PATHS row 10 applied to the ET device path's float seams
+## DEVIATION 453 [CLOSED] -- IDENTITY_PATHS row 10 applied to the ET device path's float seams
 
 **The pathway.** Row 10's measured model: Metal's arithmetic is IEEE
 correct-rounding on normals with FLUSH-TO-SIGNED-ZERO on denormal
@@ -3179,7 +3379,7 @@ seams exist to make bisectable.
 
 ---
 
-## DEVIATION 454 -- identity-trace checkpoints at the audit's hazard stages
+## DEVIATION 454 [CLOSED] -- identity-trace checkpoints at the audit's hazard stages
 
 The cross-vendor audit (this session) named the stages a bit can move at:
 the sampler's column draw (and its host-libm dispatch), the range fold
@@ -3201,7 +3401,7 @@ unchanged: every record returns on one boolean test.
 
 ---
 
-## DEVIATION 455 -- the rescue path's re-stage broke 450's invariant: a MEASURED device-fit race, and its one-drain fix
+## DEVIATION 455 [CLOSED] -- the rescue path's re-stage broke 450's invariant: a MEASURED device-fit race, and its one-drain fix
 
 **Found by the cross-vendor identity audit's Phase B run, 2026-08-22.**
 `rescue_check` was RED at clean HEAD, and worse than red: two runs of
@@ -3250,7 +3450,7 @@ behind one. 450's invariant is per-call-site, not ambient.
 
 ---
 
-## DEVIATION 456 -- the algo-L device kernel's FLOAT seams route through row 12's portable pair
+## DEVIATION 456 [CLOSED] -- the algo-L device kernel's FLOAT seams route through row 12's portable pair
 
 **The pathway** (IDENTITY_PATHS row 12, ET consumer, 2026-08-23).
 `algo_l_sample_kernel`'s float32 transcendentals (`_dev_logf32`,
@@ -3286,7 +3486,7 @@ orchestrator's consolidated pass.
 
 ---
 
-## DEVIATION 457 -- `n_parallel_samples_for` is mode-gated; cross-vendor is cross-HOST here
+## DEVIATION 457 [CLOSED] -- `n_parallel_samples_for` is mode-gated; cross-vendor is cross-HOST here
 
 **The pathway** (IDENTITY_PATHS rows 12 and 18, ET half). The sampler
 dispatch count `ceil(log(1 - k/n) / log(1 - 1/n))` ran through HOST libm
@@ -3331,7 +3531,7 @@ sweep tallies and the single ARM FLIP line above.
 
 ---
 
-## DEVIATION 458 -- the regressor binding overwrote `max_features` after reading it
+## DEVIATION 458 [CLOSED] -- the regressor binding overwrote `max_features` after reading it
 
 **What the port did.** `bindings/_mojolearn_trees.mojo` reads the 21-slot
 params list into an `ExtraTreesConfig` (`_config_from`, slots 3-19, with
@@ -3399,7 +3599,7 @@ full lane suite result is in the commit message.
 
 ---
 
-## DEVIATION 459 -- Entropy: cuML's float gain is the key, published as a FLOAT SEAM beside the integer Gini core (NOT_IMPLEMENTED.tsv row 11 retired)
+## DEVIATION 459 [CLOSED] -- Entropy: cuML's float gain is the key, published as a FLOAT SEAM beside the integer Gini core (NOT_IMPLEMENTED.tsv row 11 retired)
 
 **Theirs.** `EntropyObjectiveFunction` (`objectives.cuh:110-193` at
 `00094f7`): `GainPerSplit` (`:132-168`) is the information gain in `DataT`,
@@ -3504,7 +3704,7 @@ et_clf_3class `2ed393e4c6085e0e`, et_clf_deep `3d78c1ea6e3ba776`, et_reg_cpu
 
 ---
 
-## DEVIATION 460 -- bootstrap=True: cuML's `get_row_sample` bootstrap arm, through the RF lane's Philox port; `max_samples` as sklearn resolves it (NOT_IMPLEMENTED.tsv row 15 retired)
+## DEVIATION 460 [CLOSED] -- bootstrap=True: cuML's `get_row_sample` bootstrap arm, through the RF lane's Philox port; `max_samples` as sklearn resolves it (NOT_IMPLEMENTED.tsv row 15 retired)
 
 **Theirs.** `randomforest.cuh:50-72`: `rs = fnv1a32(fnv1a32(basis,
 seed), tree_id)` (`:59-62`), `raft::random::Rng rng(rs, GenPhilox)`, and
@@ -3586,7 +3786,7 @@ and 11, device_regression_check, wrapper_reach_check, the build smoke.
 
 ---
 
-## DEVIATION 461 -- the Python boundary: 22 params slots (criterion rides as slot 21), slot 18 is a count, `meta[5]` reports the sample size
+## DEVIATION 461 [CLOSED] -- the Python boundary: 22 params slots (criterion rides as slot 21), slot 18 is a count, `meta[5]` reports the sample size
 
 `N_FIT_PARAMS` 21 -> 22. While each entry point had exactly ONE criterion
 the criterion did not ride the params list -- it arrived in the `base`
@@ -3606,7 +3806,7 @@ DEVIATION 462 is reserved and unused by this round.
 
 ---
 
-## DEVIATION 463 -- exact ties resolve by a keyed pseudorandom rank, not by the highest column id
+## DEVIATION 463 [CLOSED] -- exact ties resolve by a keyed pseudorandom rank, not by the highest column id
 
 **MOTIVATION, measured before any fix.** covtype (522,911 x 54, depth 16,
 `max_features=sqrt` -> 7, seed pinned both arms): our ET 0.6701 accuracy
@@ -3721,7 +3921,7 @@ orders).
 
 ---
 
-## DEVIATION 464 -- `excess_selection_hash` runs through a full-avalanche finalizer
+## DEVIATION 464 [CLOSED] -- `excess_selection_hash` runs through a full-avalanche finalizer
 
 **The defect.** DEVIATION 215's fix ranked an overshoot's unique columns by
 `fnv1a32(fnv1a32(fnv1a32(fnv1a32(BASIS, SALT), tree), node), col)` and kept
@@ -3766,7 +3966,7 @@ bit-reproducible under the default build.
 
 ---
 
-## DEVIATION 465 -- `key_for` gets its own salt link; the threshold stream no longer collides with the sampler's
+## DEVIATION 465 [CLOSED] -- `key_for` gets its own salt link; the threshold stream no longer collides with the sampler's
 
 **The invariant violation, one line.** `key_for` (pcg_rng.mojo) chained
 `fnv1a32(fnv1a32(fnv1a32(BASIS, feature_id), tree_id), node_id)`;
@@ -3815,7 +4015,7 @@ host-vs-device parity (both sides move together), and the build smoke.
 
 ---
 
-## DEVIATION 1943 -- the frontier block is 512 threads on a 64-lane wavefront, 128 on a 32-lane warp
+## DEVIATION 1943 [CLOSED] -- the frontier block is 512 threads on a 64-lane wavefront, 128 on a 32-lane warp
 
 **Where.** `impl/decisiontree/batched_levelalgo/builder.mojo`, `_device_tpb()`
 (the one definition `DEVICE_TPB` reads); the measurement harness is
@@ -3902,100 +4102,110 @@ shipping path); `partition_iteration_bound` and the workspace's
 `1 + max_batch + n_rows // tpb` block bound take the same TPB.
 
 **Owed.** The NVIDIA and Apple ET timings are unchanged by construction
-(`WARP_SIZE == 32` selects the old 128) and were not re-measured. The
-`-D MOJOLEARN_ET_TPB_256` / `_512` arms on a 32-lane device have not been
-timed. AMD's `DEVICE_TPB` has not been swept past 512 (1024 is the CDNA
-maximum).
+(`WARP_SIZE == 32` selects the old 128). Apple has since been re-measured at
+HEAD on the shipped arm, 11.808168 s for the 1M x 28 higgs fit
+(`bench/results/et_profile/APPLE_M4_2026-09-01.md`, and see DEVIATION 1945);
+NVIDIA has not. The `-D MOJOLEARN_ET_TPB_256` / `_512` arms on a 32-lane
+device have not been timed on either. AMD's `DEVICE_TPB` has not been swept
+past 512 (1024 is the CDNA maximum).
 
 ---
 
-## DEVIATION 1945 -- OPEN: the host `NodeQueue.push` is 88% of a higgs ET fit, measured on the MI325X, and it is HOST code with no reason to be vendor-specific
+## DEVIATION 1945 [OPEN] -- the MI325X phase timer bills 88% of a higgs ET fit to the host `NodeQueue.push`, and the same host loop on Apple is 0.53%
 
-**READ THIS FIRST, BECAUSE THE HEADING NAMES ONE BOX AND THE DEFECT IS
-PROBABLY NOT THAT BOX'S.** `NodeQueue.push` is HOST code. Nothing in it is
-vendor-specific, it does not touch a device, and the MI325X is simply where
-`MOJOLEARN_STAGE_TIMES=1` was pointed first. **Apple and NVIDIA are owed the
-identical profile and until they run, nobody may read this entry as "AMD is
-slow at ExtraTrees".** The honest statement of this lane's position is the
-one in "What must happen next" below, that a whole-fit AMD ET speed claim, in
-either direction, is not supportable from this repository's evidence today,
-and neither is a claim that the other two vendors are clean.
+**READ THE TWO NUMBERS TOGETHER, BECAUSE NEITHER ONE STANDS ALONE.**
+`NodeQueue.push` is HOST code. Nothing in it is vendor-specific and it does
+not touch a device, so it cannot be 870x slower on one host than another. Both
+measurements below were taken and both are recorded. What does not survive
+them is the generalization that a host loop is 88% of an ExtraTrees fit.
 
 **Where.** `impl/decisiontree/batched_levelalgo/builder.mojo`,
 `NodeQueue.push` (`builder.cuh:91-134` transcribed) and the push loop in
 `train_forest_*_device_timed` (`queues[seg_queue[t]].push(items_s,
-splits_s)`), clocked on its own since commit 9c8ffc23 as
-`PHASE_HOST_PUSH` ("host: queue push (children of the batch)").
+splits_s)`), clocked on its own since commit 9c8ffc23 as `PHASE_HOST_PUSH`
+("host: queue push (children of the batch)").
 
-**Measured on the SHIPPING PYTHON SURFACE, MI325X, leg
-`2026-08-29_204736-mojolearn-e2-amd`, FAST.** This is not a micro-benchmark
-and not a check binary; it is the estimator a user calls.
-`mojolearn.ExtraTreesClassifier(n_estimators=100,
-max_depth=16, max_features="sqrt", device="gpu")` on the first 1M rows of
-HIGGS under `MOJOLEARN_STAGE_TIMES=1`
-(`lanes/et_profile/binding_higgs_1000000.txt`): total 60.5 s, of which
-`host: queue push` 53.87 s, range 2.83 s, score 3.31 s, everything else
-under 0.3 s; the untimed fit 61.8 s. At 2M
-(`binding_higgs_2000000.txt`): 87.0 s, push 74.8 s. `fit_once`, the same
-call without Python, shows the same 52.2-52.4 s push at 1M at BOTH TPB
-arms, so it is not the kernel change and not the driver. **53.87 of 60.5
-seconds is 89% of the fit spent in a host queue push**, and the two GPU
-passes together account for 6.1 s of it.
+**MEASUREMENT 1, MI325X, 2026-08-29, leg `2026-08-29_204736-mojolearn-e2-amd`,
+FAST.** The shipping Python surface, not a micro-benchmark:
+`mojolearn.ExtraTreesClassifier(n_estimators=100, max_depth=16,
+max_features="sqrt", device="gpu")` on the first 1M rows of HIGGS under
+`MOJOLEARN_STAGE_TIMES=1` (`lanes/et_profile/binding_higgs_1000000.txt`).
+Total 60.5 s, of which `host: queue push` **53.87 s**, range 2.83 s, score
+3.31 s, everything else under 0.3 s; the untimed fit 61.8 s. At 2M
+(`binding_higgs_2000000.txt`): 87.0 s, push 74.8 s. `fit_once`, the same call
+without Python, shows the same 52.2-52.4 s push at 1M at BOTH TPB arms, so it
+is neither the kernel change nor the driver. The cost grows faster than the
+node count (1.83M nodes to 52 s, 2.17M nodes to 75 s; 29 to 34 us per pushed
+node), on an EPYC 9575F on both legs. Nothing in the push body is written as
+O(tree) per item, and where that time goes has not been found; it is not
+guessed here.
 
-**Why it is OPEN and not a claim.** The 2026-08-28 speed arm on the same
-droplet type and dataset (`bench/results/fast_speed/2026-08-28-AMD-forest-higgs.md`,
-commit 4f6a17a) read 18294 ms at 1M, five rounds within 0.4%, and 18.3 s
-is what the two GPU passes cost at TPB 128 plus a few hundred ms; a 52 s
-push cannot have been inside it. `git diff 4f6a17a..9c8ffc23 --
-extratrees/impl/decisiontree/` touches only `_device_tpb` and the
-clock, so the push code is the same in both runs. The cost grows faster
-than the node count (1.83M nodes -> 52 s, 2.17M nodes -> 75 s; 29 -> 34 us
-per pushed node), which is the signature of a per-item cost proportional
-to the tree size, not of a slow CPU (an EPYC 9575F on both legs). Nothing
-in the push body is written as O(tree) per item; where the time goes has
-not been found and is not guessed here.
+**MEASUREMENT 2, APPLE M4, 2026-09-01, at HEAD**
+(`bench/results/et_profile/APPLE_M4_2026-09-01.md`). Same fixture, same shape,
+same instrument, same shipped binding arm.
 
-**Leg 3, `2026-08-29_211714-mojolearn-e2-amd`, MI325X, UNRESOLVED.** The
-push cost is the same again at both TPB arms (`fit_once` 1M: 52.23 s at
-the shipped 512, 52.35 s at 128; whole fit 58.9 s vs 69.9 s, the 11 s
-difference being the two GPU passes), so it is host-side and has nothing
-to do with DEVIATION 1943. The OLD-commit arm (4f6a17a) DID NOT RUN:
-`tools/e2_remote_leg.sh` forwarded only `ET_PROFILE_ARMS` over ssh, so
-`ET_PROFILE_OLD_COMMIT` never reached the box (fixed in the script, unrun).
-The host `perf record -g` of the shipped arm attributes 76% of samples to
-`core::identity_trace::IdentityTrace::_emit` with string bytes
-("partition") where return addresses should be; the trace was NOT enabled
-on that arm (`MOJOLEARN_IDENTITY_TRACE` unset), so that is perf resolving
-a stripped Mojo binary to its nearest exported symbol, not evidence.
-Nothing from leg 3 names the cause. The 4f6a17a-vs-HEAD arm on one box
-is still the next measurement.
+| phase | Apple M4 | share |
+|---|---|---|
+| score pass (init+score+finalize) | 5.549429 s | 47.0% |
+| range pass (init+range+decode+nonconst) | 3.313286 s | 28.1% |
+| partition (4 kernels) | 1.776916 s | 15.0% |
+| stage + feature sampler | 0.587036 s | 5.0% |
+| candidate+reduce+splits readback | 0.275109 s | 2.3% |
+| leaf pass | 0.091464 s | 0.8% |
+| host: split records | 0.084643 s | 0.7% |
+| setup | 0.068277 s | 0.6% |
+| **host: batch assembly + queue push** | **0.062008 s** | **0.53%** |
+| total | 11.808168 s | |
 
-**What must happen next.** Time `NodeQueue.push` on the MI325X with the
-push loop's three appends and the `sparsetree[idx] =` store separated
-(the same `PhaseClock` can carry them), then re-run the forest speed arm
-at 4f6a17a and at HEAD on one leg so the 18294 ms row is either
-reproduced or retracted with a cause. Until that lands the AMD ET column
-of the 2026-08-28 board carries BOTH numbers and the section says so; a
-whole-fit AMD ET speed claim in either direction is not supportable from
-this repository's evidence today. The Apple and NVIDIA columns are OWED a
-`MOJOLEARN_STAGE_TIMES=1` run of the same fit, because the push is host
-code and has no reason to be vendor-specific. **THAT PROFILE IS THE MORE
-IMPORTANT OF THE TWO OWED RUNS.** If Apple and NVIDIA show the same 88%,
-this is not an AMD defect at all but a defect in the shipped host path on
-every vendor, and every ET whole-fit number this repository publishes is
-measuring it. If they do not, then something about that box is implicated
-and the bisect below is the way in. Either answer is worth more than the
-old-versus-HEAD arm, and neither has been run.
+**WHAT THE PAIR ESTABLISHES.** 0.062008 s against 53.87 s is a factor of about
+870 in the same host code path, with the whole fit 11.81 s against 60.5 s.
+Since the code cannot carry that factor, the MI325X figure is measuring
+something the Apple figure is not.
 
-**RUN OWED, and it is one command.** The env pass-through is fixed, so the
-old-vs-HEAD arm is now a single MI325X leg, unrun as of 2026-08-29:
+**THE LEADING READING.** The phase timers are host wall clocks, so on a
+discrete-memory backend a region that ends in an implicit synchronization
+bills the device wait to whichever phase happens to contain it.
+`host: queue push` would then be a mislabeled device drain, and the fit would
+have no host bottleneck at all. The competing reading is that the MI325X host
+path really is pathological for this loop, for a reason nobody has found.
+
+**THE DISCRIMINATING LEG, and it is cheaper than the bisect.** Place an
+explicit synchronize BEFORE the push timer starts on the MI325X. Reading A
+predicts the push figure collapses, the same milliseconds move into the
+partition or score phase, and the total does not change.
+
+**WHAT IS RETRACTED AND WHAT IS NOT.** The MI325X measurement stands. The
+sentence "the host `NodeQueue.push` is 88% of a higgs ET fit" does not: it is
+a property of one box's phase attribution, not of the host code, and it may
+not be quoted as a whole-fit statement about ExtraTrees on any vendor.
+
+**Leg 3, `2026-08-29_211714-mojolearn-e2-amd`, MI325X, UNRESOLVED.** The push
+cost is the same again at both TPB arms (`fit_once` 1M: 52.23 s at the shipped
+512, 52.35 s at 128; whole fit 58.9 s against 69.9 s, the 11 s difference
+being the two GPU passes), so it is not DEVIATION 1943. The OLD-commit arm
+(4f6a17a) DID NOT RUN: `tools/e2_remote_leg.sh` forwarded only
+`ET_PROFILE_ARMS` over ssh, so `ET_PROFILE_OLD_COMMIT` never reached the box.
+Fixed in the script. The host `perf record -g` of the shipped arm attributes
+76% of samples to `core::identity_trace::IdentityTrace::_emit` with string
+bytes ("partition") where return addresses should be; the trace was NOT
+enabled on that arm (`MOJOLEARN_IDENTITY_TRACE` unset), so that is perf
+resolving a stripped Mojo binary to its nearest exported symbol, not evidence.
+
+**THE OPEN QUESTION, in order.** First, what is the MI325X timer attributing.
+Second, and only after that, does the 18294 ms row of
+`bench/results/fast_speed/2026-08-28-AMD-forest-higgs.md` (commit 4f6a17a, 1M,
+five rounds within 0.4%) reproduce at 4f6a17a on the SAME box as HEAD. 18.3 s
+is what the two GPU passes cost at TPB 128 plus a few hundred ms, so a 52 s
+push cannot have been inside it, and
+`git diff 4f6a17a..9c8ffc23 -- extratrees/impl/decisiontree/` touches only
+`_device_tpb` and the clock, so the push code is identical in both runs. Until
+the first question is answered, the AMD ET column of the 2026-08-28 board
+carries BOTH numbers, and a whole-fit AMD ET speed claim in either direction
+is not supportable from this repository's evidence.
+
+**RUN OWED, one MI325X leg.** The env pass-through is fixed:
 
     E2_LANE_WAVES=et-profile \
     ET_PROFILE_ARMS=shipped \
     ET_PROFILE_OLD_COMMIT=4f6a17a \
     nohup bash tools/e2_remote_leg.sh amd <token_file> &
-
-It answers one question and nothing else: does the 18294 ms row reproduce at
-4f6a17a on the SAME box as HEAD. Either it does, and the regression is real
-and bisectable, or it does not, and the row is retracted in this file and in
-every board that carries it, in that leg's commit.

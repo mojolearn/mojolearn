@@ -211,11 +211,64 @@ def main() raises:
     c9.max_leaf_nodes = 8
     assert_true(
         refused(c9),
-        "max_leaf_nodes -- sklearn's is a BEST-FIRST growth limit and cuML's"
-        " max_leaves is a breadth-first soft cap; accepting the name would"
-        " accept a different algorithm",
+        "max_leaf_nodes -- sklearn's is a BEST-FIRST growth limit"
+        " (_tree.pyx:454-455) and cuML's max_leaves is a breadth-first cap;"
+        " accepting the name would accept a different algorithm",
     )
     n_refused += 1
+    # cuML's OWN budget, under cuML's own name, is HONOURED and REACHES the
+    # params (2026-09-01). `resolve` pinned `params.max_leaves = -1` until
+    # then, so `builder.mojo:292-296` and `:341-345` were transcribed,
+    # checked by `builder_check`, and unreachable from any fit.
+    var c9b = base.copy()
+    c9b.max_leaves = 8
+    assert_true(not refused(c9b), "max_leaves=8 is accepted, not refused")
+    var plan_ml = resolve(c9b, 1000, 8)
+    assert_equal(
+        Int(plan_ml.params.max_leaves), 8,
+        "REACH: max_leaves must ride into DecisionTreeParams, not be pinned"
+        " at -1 the way it was until 2026-09-01",
+    )
+    var plan_ml_default = resolve(base, 1000, 8)
+    assert_equal(
+        Int(plan_ml_default.params.max_leaves), -1,
+        "the default stays cuML's unlimited",
+    )
+    # SABOTAGE ARM for that reach: if `resolve` goes back to pinning -1, the
+    # assert above goes red. The complement is that a value cuML itself
+    # rejects must still be rejected HERE, and not smuggled past because the
+    # field is new. max_leaves=0 is neither -1 nor positive.
+    #
+    # NOTE WHICH GUARD CATCHES IT: not `refuse_unported`, which is why this
+    # arm cannot use `refused()` like every other one above. `max_leaves` is
+    # cuML's parameter, so it is cuML's `validity_check` that rejects it
+    # (`decisiontree.mojo:138-139`, their `decisiontree.cu:30-32`), and that
+    # runs inside `resolve` AFTER the sklearn refusals. Restating the bound
+    # in `refuse_unported` would be a second copy of a constant, which is how
+    # a copy drifts, so the test goes through `resolve` instead.
+    var c9c = base.copy()
+    c9c.max_leaves = 0
+    var zero_leaves_refused = False
+    try:
+        _ = resolve(c9c, 1000, 8)
+    except:
+        zero_leaves_refused = True
+    assert_true(
+        zero_leaves_refused,
+        "max_leaves=0 must be refused by cuML's validity_check, not accepted"
+        " as a silent unlimited",
+    )
+    # ... and the two fields must stay INDEPENDENT: setting cuML's budget
+    # must not make sklearn's name suddenly acceptable.
+    var c9d = base.copy()
+    c9d.max_leaves = 8
+    c9d.max_leaf_nodes = 8
+    assert_true(
+        refused(c9d),
+        "max_leaf_nodes is still refused when max_leaves is set; the two are"
+        " different guarantees and one does not stand in for the other",
+    )
+    cells += 5
     var c10 = base.copy()
     c10.n_estimators = 0
     assert_true(refused(c10), "n_estimators=0")

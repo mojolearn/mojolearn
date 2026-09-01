@@ -32,6 +32,7 @@ The root `UNWIRED.md` covers `gbdt/`; this one covers `extratrees/` only.
 | ~~`build_workload_info`~~ | | **WIRED** by the same. It still sits in `builder_kernels_impl.mojo` rather than `builder.mojo` for lane-ownership reasons; moving it is a merge-time action |
 | ~~`fixed_point.mojo`~~ | DEVIATION 135's ruling | **WIRED** by the device regression score pass (deviation 206) and by the estimator's `quantize_labels` (deviation 188's closure); `fixed_point_check` and `device_regression_check` guard it |
 | ~~`ProxyImpurityExact` / `CompareProxyExact`~~ | DEVIATION 144-145 | **WIRED** on the host by `node_split_random_gini`; the device reduction this row was held open for exists (deviations 189-190) and `split_reduce_check` guards it |
+| cuML's `max_leaves` budget | `builder.cuh:89` (`IsExpandable`) and `:106` (the `break` in `Push`), transcribed at `builder.mojo:292-296` and `:341-345` | **HALF WIRED 2026-09-01.** It was FULLY UNREACHED until then and this file did not say so: `builder_check` set `params.max_leaves` directly, but `estimator.mojo`'s `resolve` pinned `params.max_leaves = -1`, so no fit on any arm could reach the budget. It now rides from `ExtraTreesConfig.max_leaves`, gated by `estimator_check`'s REACH assert on `plan.params.max_leaves` plus a `max_leaves=0` refusal arm. **The PYTHON half is still unreached** and deliberately so: the 22-slot params list is decoded in `bindings/_mojolearn_trees.mojo`, which this lane does not own, so `ExtraTreesClassifier` / `ExtraTreesRegressor` expose NO keyword for it rather than accepting one that would do nothing. What would reach it: one slot appended to that list, `config.max_leaves = Int32(Int(py=params[22]))` beside the `max_leaf_nodes` line at `:160`, and the matching kwarg in `python/mojolearn/extratrees.py`. |
 
 ## Deliberately not built
 
@@ -40,3 +41,6 @@ formulation exists to delete), the bootstrap MASK behind `oob_score`,
 `sample_weight`, NaN/`missing_go_to_left`, three unported regression
 criteria, and cuML's dead `adaptive_sample_kernel`. (The bootstrap row
 sampler and Entropy left this list on 2026-08-23, DEVIATIONS 460 / 459.)
+sklearn's `max_leaf_nodes` joined it on 2026-09-01 as `not yet` -- a real
+debt with a named design, not a permanent refusal, and NOT the same thing as
+cuML's `max_leaves` in the row above.

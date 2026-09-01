@@ -240,7 +240,29 @@ struct ExtraTreesConfig(ImplicitlyCopyable, Movable):
     var max_features_spec: Int
     var max_features_fraction: Float64
     var max_leaf_nodes: Int32
-    """-1 means sklearn's `None`."""
+    """-1 means sklearn's `None`. REFUSED BY NAME, see `refuse_unported`:
+    sklearn's meaning is best-first growth and this builder grows
+    breadth-first. Not the same field as `max_leaves` below."""
+    var max_leaves: Int32
+    """cuML's `DecisionTreeParams::max_leaves` (`decisiontree.hpp:37` AT
+    THIS LANE'S 25.08 PIN -- `:83` is a doc comment there and `:29` is the
+    struct brace; the field sits at `:29` only in the v26.08.00 checkout the
+    SIBLING lanes read, which is the exact pin-mixing the 2026-08-31 map
+    audit found), -1 for unlimited. Refused by cuML's own `validity_check`
+    (`decisiontree.cu:30-32`) unless -1 or strictly positive. NOT sklearn's `max_leaf_nodes` and deliberately not
+    spelled like it: this is a cap on the leaf COUNT of a breadth-first
+    frontier, honoured at `builder.cuh:89` (`IsExpandable`) and `:106` (the
+    `break` in `Push`), both of which this lane transcribes at
+    `builder.mojo:292-296` and `:341-345`.
+
+    ADDED TO THIS STRUCT 2026-09-01. The transcription was already here and
+    already checked by `builder_check`, but `resolve` hard-coded
+    `params.max_leaves = -1`, so NO FIT COULD REACH IT -- the lane's own
+    `UNWIRED.md` rule 3 state, which that file now records. This field is
+    the host-side half of the fix; the Python half needs a params slot in
+    `bindings/_mojolearn_trees.mojo`, which this lane does not own, and
+    until that lands the Python classes deliberately expose no keyword for
+    it rather than accepting one that does nothing."""
     var min_impurity_decrease: Float32
     var bootstrap: Bool
     var oob_score: Bool
@@ -267,6 +289,7 @@ struct ExtraTreesConfig(ImplicitlyCopyable, Movable):
         self.max_features_spec = MAX_FEATURES_SQRT
         self.max_features_fraction = 0.0
         self.max_leaf_nodes = -1
+        self.max_leaves = -1
         self.min_impurity_decrease = 0.0
         self.bootstrap = False
         self.oob_score = False
@@ -347,14 +370,32 @@ def refuse_unported(config: ExtraTreesConfig) raises:
         )
     if config.max_leaf_nodes != -1:
         raise Error(
-            "max_leaf_nodes is not ported under sklearn's semantics."
-            " sklearn's is a BEST-FIRST growth limit that changes the ORDER"
-            " nodes are expanded in; cuML's max_leaves is a soft cap on a"
-            " breadth-first frontier (builder.cuh:86-88) and stops pushing"
-            " work once the counter is reached. They are different"
-            " algorithms, so accepting the name would be accepting a"
-            " different model. Use cuML's max_leaves through"
-            " DecisionTreeParams if that is what you want."
+            "max_leaf_nodes is not ported yet. It is a REAL DEBT, not a"
+            " permanent refusal, and it is refused by name rather than"
+            " silently mapped onto the nearest thing here, because the"
+            " nearest thing grows a different tree. sklearn's"
+            " max_leaf_nodes selects BestFirstTreeBuilder"
+            " (sklearn/tree/_tree.pyx:374-508): the frontier is a HEAP"
+            " popped by highest impurity improvement (:454-455 against"
+            " _compare_records at :359-363), and the budget itself is"
+            " spent one pop at a time (:424, :503), so it decides WHICH"
+            " nodes get expanded and in what ORDER. This builder is cuML's"
+            " batched level algorithm --"
+            " a FIFO frontier drained a level at a time, one device launch"
+            " per batch, and DEVIATION 211 makes one batch span several"
+            " trees. Best-first admits at most one expansion per tree per"
+            " launch and has to know a node's gain BEFORE choosing to"
+            " expand it, which means searching children at push time"
+            " instead of at pop time: a second growth mode, not a"
+            " parameter. See NOT_IMPLEMENTED.tsv for the design and its"
+            " cost. WHAT IS AVAILABLE TODAY is cuML's own budget,"
+            " max_leaves, which is a different guarantee and carries a"
+            " different name here for exactly that reason: it caps the"
+            " leaf COUNT on the breadth-first frontier without reordering"
+            " anything (builder.cuh:89 in IsExpandable, and the break at"
+            " builder.cuh:106 inside Push, over the counter set at :59 and"
+            " raised at :114). Set ExtraTreesConfig.max_leaves"
+            " to use it."
         )
     if config.n_estimators < 1:
         raise Error(
@@ -397,7 +438,10 @@ def resolve(
     params.min_impurity_decrease = config.min_impurity_decrease
     params.split_criterion = config.criterion
     params.max_features = count_to_ratio(count, n_features)
-    params.max_leaves = -1
+    # cuML's leaf budget, carried from the config instead of pinned at -1.
+    # `validity_check` below is cuML's own test (`decisiontree.cu`, and
+    # `decisiontree.mojo:138-139` here): -1 or strictly positive.
+    params.max_leaves = config.max_leaves
 
     var unlimited = config.max_depth < 0
     if unlimited:

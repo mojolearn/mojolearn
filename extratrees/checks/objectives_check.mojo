@@ -55,6 +55,13 @@ not evidence. The six, with what they cost when broken:
 Sabotage 5 is the one that matters most for rule 8: swapping the cross terms
 leaves the TOTAL `sq_L + sq_R` and every symmetric fixture untouched, and only
 a per-cell comparison against scattered counts can see it.
+
+`check_entropy_analytic` (2026-09-01) carries three more, written INSIDE the
+run rather than as an edit-and-restore: each computes the broken value beside
+the shipped one and asserts the cells separate them, so they are shown capable
+of failing every time the check runs. See that function's block comment. Two
+further mutations are reasoned there and PREDICTED red; they are recorded as
+OWED A RUN and are not claimed as observed.
 """
 
 from extratrees.impl.decisiontree.batched_levelalgo.objectives import (
@@ -860,6 +867,258 @@ def check_analytic() -> Int:
 
 
 # ==========================================================================
+# ENTROPY, ANALYTIC. The three properties that make the criterion checkable
+# by hand rather than by agreement with a second implementation of itself.
+# Added 2026-09-01 with the base-2 correction in `objectives.mojo`.
+#
+# E1  a PURE node has impurity EXACTLY 0
+# E2  a BALANCED two-class node has impurity EXACTLY 1, which is ONE BIT --
+#     and 1 is a number only base 2 produces. Natural log gives 0.6931472.
+# E3  the split that perfectly separates a balanced two-class node has
+#     information gain EXACTLY 1 bit; the split that separates nothing has
+#     EXACTLY 0.
+# E4  on a PLANTED fixture, Gini and Entropy pick DIFFERENT candidates, and
+#     the disagreement survives into the reduction key the builder decides
+#     on. This is what makes the criterion LOAD BEARING rather than merely
+#     accepted: a build that ignored `criterion` and scored everything with
+#     Gini would pass every cell above and fail this one.
+#
+# Every equality here is `==` with no tolerance, and each is exact for a
+# stated reason, not by luck:
+#   * `log(1) == 0` on any implementation, so E1 is exact by definition.
+#   * the counts are 32/64 and 16/32, so every `count / w` and every
+#     `count * invLen` is a dyadic rational computed exactly.
+#   * `log(0.5) == -log(2)` BITWISE on every implementation that reduces
+#     `x = m * 2^e` and returns `e*ln2 + poly(m)`, because at both points
+#     `m == 1`, `poly(1) == 0` and the two results differ only in the sign
+#     of `e`. `portable_logf` (`checks/numerics.mojo`) has exactly that
+#     shape, and so does every libm. E5 asserts it directly so that if a
+#     backend ever breaks it, the failure NAMES ITSELF instead of showing
+#     up as an unexplained 0.9999999 in E2.
+#   Therefore `count_k * (log(count_k) / log(2))` is `0.5 * -1.0` exactly.
+#
+# SABOTAGE, in-check rather than by editing and re-running. Each arm below
+# COMPUTES the broken value and asserts the gate separates it from the
+# right one, so the cells are shown capable of failing inside the same run:
+#   S1  entropy in NATS (the defect this block was written to close):
+#       `nats_half` is what E2 returned before 2026-09-01. Asserted to be
+#       BOTH different from the shipped value AND different from 1.
+#   S2  the criterion ignored, i.e. entropy scored by the Gini proxy: the
+#       two orderings in E4 are asserted OPPOSITE, so any change that makes
+#       entropy a monotone function of the Gini proxy turns E4 red.
+#   S3  the log's base-point symmetry, E5, which is what E2 and E3 stand on.
+# Two further mutations were reasoned through and are PREDICTED red; they
+# are recorded as owed a run, not as observed:
+#   (i)  dropping `/ log(2)` from `NodeImpurity`/`ChildrenImpurity`
+#        -> E2 and S1 red, 4 cells
+#   (ii) returning cuML's `GainPerSplit` for both criteria -> E4 red,
+#        2 cells
+# ==========================================================================
+
+
+def check_entropy_analytic() -> Int:
+    print("[analytic] entropy -- exact bits, and Gini vs Entropy disagreeing")
+    var cell = Cell(String("entropy analytic"))
+
+    var h_buf = List[CountBin](length=N_CLASSES, fill=CountBin(0))
+    var hl_buf = List[CountBin](length=N_CLASSES, fill=CountBin(0))
+    var h = h_buf.unsafe_ptr()
+    var hl = hl_buf.unsafe_ptr()
+
+    var e64 = EntropyObjectiveFunction[F](Int32(N_CLASSES), 1)
+    var e32 = EntropyObjectiveFunction[DType.float32](Int32(N_CLASSES), 1)
+
+    # --- E5. The base point the exact equalities stand on. -----------------
+    # Asserted FIRST so that an E2/E3 failure on some future backend is read
+    # beside this line rather than guessed at.
+    cell.ok(
+        log(Float64(0.5)) == -log(Float64(2.0)),
+        String("E5 log(0.5) != -log(2) in float64; E2/E3 cannot be exact"),
+    )
+
+    # --- E1. PURE NODE, 64 rows all of class 3. ----------------------------
+    # H = -sum p log2 p = -(1 * log2(1)) = 0, EXACTLY: log(1) is 0 for any
+    # base and any implementation, so this cell is base-independent and is
+    # the one property that would still hold if the base were wrong.
+    for k in range(N_CLASSES):
+        h_buf[k].x = 0
+    h_buf[3].x = 64
+    cell.ok(
+        e64.NodeImpurity(h, 64.0) == 0.0,
+        String("E1 pure node entropy != 0: ")
+        + String(e64.NodeImpurity(h, 64.0)),
+    )
+    cell.ok(
+        e32.NodeImpurity(h, Float32(64.0)) == Float32(0.0),
+        String("E1 pure node entropy != 0 in float32: ")
+        + String(e32.NodeImpurity(h, Float32(64.0))),
+    )
+
+    # --- E2. BALANCED TWO-CLASS NODE, 32 + 32. ONE BIT. --------------------
+    # H = -(0.5*log2(0.5) + 0.5*log2(0.5)) = -(0.5*-1 + 0.5*-1) = 1, EXACTLY.
+    # BASE-SENSITIVE BY CONSTRUCTION: in nats this is 0.6931472, so this cell
+    # is the gate on `sklearn/tree/_utils.pyx:64-65` having been transcribed.
+    for k in range(N_CLASSES):
+        h_buf[k].x = 0
+    h_buf[0].x = 32
+    h_buf[1].x = 32
+    cell.ok(
+        e64.NodeImpurity(h, 64.0) == 1.0,
+        String("E2 50/50 entropy != 1 bit: ")
+        + String(e64.NodeImpurity(h, 64.0)),
+    )
+    cell.ok(
+        e32.NodeImpurity(h, Float32(64.0)) == Float32(1.0),
+        String("E2 50/50 entropy != 1 bit in float32: ")
+        + String(e32.NodeImpurity(h, Float32(64.0))),
+    )
+
+    # --- S1. THE SABOTAGE OF E2: the same quantity in NATS. ----------------
+    # This is exactly what `NodeImpurity` returned until 2026-09-01. If the
+    # `/ log(2)` is ever dropped again, the first of these two cells goes red
+    # because the shipped value becomes the broken one.
+    var nats_half = -(
+        Float64(0.5) * log(Float64(0.5)) + Float64(0.5) * log(Float64(0.5))
+    )
+    cell.ok(
+        e64.NodeImpurity(h, 64.0) != nats_half,
+        String("S1 the shipped 50/50 entropy IS the nats value ")
+        + String(nats_half)
+        + "; the base-2 division has been lost again",
+    )
+    cell.ok(
+        nats_half != 1.0,
+        String("S1 nats and bits agree at 50/50, so E2 proves nothing"),
+    )
+
+    # --- E3. PERFECT SPLIT of that node: left 32 of class 0, right 32 of 1.
+    # Both children pure, so both child impurities are 0 and the information
+    # gain is the parent's whole 1 bit. cuML's `GainPerSplit` computes it as
+    #   sum_c [ log2(l/nL)*l/n + log2(r/nR)*r/n ] - sum_c (v/n)*log2(v/n)
+    #     = [0 + 0] + [0 + 0] - (0.5*-1) - (0.5*-1) = 1
+    # every term of which is exact for the reasons in the block header.
+    for k in range(N_CLASSES):
+        hl_buf[k].x = 0
+    hl_buf[0].x = 32
+    var il = Scalar[F](0.0)
+    var ir = Scalar[F](0.0)
+    e64.ChildrenImpurity(hl, h, 32.0, 32.0, il, ir)
+    cell.ok(il == 0.0, String("E3 entropy_left != 0: ") + String(il))
+    cell.ok(ir == 0.0, String("E3 entropy_right != 0: ") + String(ir))
+    cell.ok(
+        e64.GainPerSplit(hl, h, 64, 32) == 1.0,
+        String("E3 perfect split gain != 1 bit: ")
+        + String(e64.GainPerSplit(hl, h, 64, 32)),
+    )
+    cell.ok(
+        e32.GainPerSplit(hl, h, 64, 32) == Float32(1.0),
+        String("E3 perfect split gain != 1 bit in float32: ")
+        + String(e32.GainPerSplit(hl, h, 64, 32)),
+    )
+
+    # --- E3b. THE SPLIT THAT SEPARATES NOTHING: 16+16 | 16+16. -------------
+    # Both children are the parent, so the gain is EXACTLY 0 -- and it must
+    # reach zero from above rather than through DEVIATION 217's clamp, which
+    # would hide a sign error. Each child term is -0.25 and the parent term
+    # is +0.5 per class, summing to 0 with no cancellation of unlike
+    # magnitudes.
+    for k in range(N_CLASSES):
+        hl_buf[k].x = 0
+    hl_buf[0].x = 16
+    hl_buf[1].x = 16
+    cell.ok(
+        e64.GainPerSplit(hl, h, 64, 32) == 0.0,
+        String("E3b null split gain != 0: ")
+        + String(e64.GainPerSplit(hl, h, 64, 32)),
+    )
+    cell.ok(
+        e32.GainPerSplit(hl, h, 64, 32) == Float32(0.0),
+        String("E3b null split gain != 0 in float32"),
+    )
+
+    # --- E4. THE PLANTED DISAGREEMENT. -------------------------------------
+    # A parent of 24 rows, 8 of class 0 and 16 of class 1, and TWO candidate
+    # splits chosen so that the two criteria rank them OPPOSITELY. The counts
+    # were searched exhaustively for the widest margin at this size.
+    #
+    #   A: left = (6, 1)   nL =  7   right = ( 2, 15)  nR = 17
+    #   B: left = (0, 12)  nL = 12   right = ( 8,  4)  nR = 12
+    #
+    # GINI, as DEVIATION 144's exact rational num/den = (sq_L*nR + sq_R*nL)
+    # over nL*nR, which is what the reduction actually compares:
+    #   A: sq_L = 36+1 = 37, sq_R = 4+225 = 229
+    #      num = 37*17 + 229*7 = 629 + 1603 = 2232 ; den = 7*17 = 119
+    #   B: sq_L = 144,        sq_R = 64+16 = 80
+    #      num = 144*12 + 80*12 = 1728 + 960 = 2688 ; den = 12*12 = 144
+    #   cross-multiply: 2232*144 = 321408  >  2688*119 = 319872, so GINI
+    #   PICKS A, by an exact integer margin of 1536 and not by a float hair.
+    #
+    # ENTROPY, in bits, H(1/3,2/3) = 0.9182958:
+    #   A: 0.9182958 - (7/24)*H(6/7,1/7) - (17/24)*H(2/17,15/17) = 0.3755784
+    #   B: 0.9182958 - (12/24)*0         - (12/24)*H(2/3,1/3)    = 0.4591479
+    #   so ENTROPY PICKS B, by 0.0835695 -- six orders of magnitude above
+    #   float32 resolution at that scale, so the cell is not a near-tie.
+    #
+    # S2 IS THIS PAIR: both assertions together say the criterion changes the
+    # ANSWER and not merely the arithmetic. Either one alone is satisfiable
+    # by a build that ignores `criterion`.
+    var gini = GiniObjectiveFunction[F](Int32(N_CLASSES), 1)
+    for k in range(N_CLASSES):
+        h_buf[k].x = 0
+    h_buf[0].x = 8
+    h_buf[1].x = 16
+
+    for k in range(N_CLASSES):
+        hl_buf[k].x = 0
+    hl_buf[0].x = 6
+    hl_buf[1].x = 1
+    var gini_a = gini.ProxyImpurityExact(hl, h, 24, 7)
+    var ent_a = e32.GainPerSplit(hl, h, 24, 7)
+    var key_a = e32.GainKeyExact(ent_a, 24)
+    cell.ok(gini_a.num == 2232, String("E4 A num != 2232: ") + String(gini_a.num))
+    cell.ok(gini_a.den == 119, String("E4 A den != 119: ") + String(gini_a.den))
+
+    for k in range(N_CLASSES):
+        hl_buf[k].x = 0
+    hl_buf[1].x = 12
+    var gini_b = gini.ProxyImpurityExact(hl, h, 24, 12)
+    var ent_b = e32.GainPerSplit(hl, h, 24, 12)
+    var key_b = e32.GainKeyExact(ent_b, 24)
+    cell.ok(gini_b.num == 2688, String("E4 B num != 2688: ") + String(gini_b.num))
+    cell.ok(gini_b.den == 144, String("E4 B den != 144: ") + String(gini_b.den))
+
+    # gini prefers A ...
+    cell.ok(
+        GiniObjectiveFunction[F].CompareProxyExact(gini_a, gini_b) == 1,
+        String("E4 gini did not pick A over B"),
+    )
+    # ... and entropy prefers B, on the same two candidates.
+    cell.ok(
+        ent_b > ent_a,
+        String("E4 entropy did not pick B over A: A=")
+        + String(ent_a)
+        + " B="
+        + String(ent_b),
+    )
+    # AND the disagreement survives into the pair the reduction compares, so
+    # it is the BUILDER's answer that changes and not just this struct's.
+    # Both keys have den == 1 (DEVIATION 459), so the reduction's
+    # cross-multiply is a bare integer compare of the numerators.
+    cell.ok(
+        key_a.valid and key_b.valid and key_a.den == 1 and key_b.den == 1,
+        String("E4 entropy keys are not the (key, 1, valid) pair"),
+    )
+    cell.ok(
+        key_b.num > key_a.num,
+        String("E4 the entropy reduction key does not rank B above A"),
+    )
+
+    _ = h_buf^
+    _ = hl_buf^
+    return cell.report()
+
+
+# ==========================================================================
 # Rejection paths: min_samples_leaf, and the empty child.
 # ==========================================================================
 
@@ -1100,7 +1359,13 @@ def check_entropy_scattered() -> Int:
         prev_key = key
         have_prev = True
 
-        # sklearn's impurities: -sum p log p per child, nats
+        # sklearn's impurities: -sum p log2(p) per child, in BITS.
+        # THIS REFERENCE SAID `nats` AND DIVIDED BY NOTHING UNTIL 2026-09-01,
+        # which is how the port's dropped `/ ln(2)` survived a green check:
+        # sklearn's `log` in `_criterion.pyx` is not libm's, it is
+        # `sklearn/tree/_utils.pyx:64-65`, `ln(x) / ln(2.0)`. Per term, where
+        # their inline `log` puts the division.
+        var ln2 = log(Float64(2.0))
         var il = Scalar[F](0)
         var ir = Scalar[F](0)
         obj64.ChildrenImpurity(
@@ -1116,11 +1381,11 @@ def check_entropy_scattered() -> Int:
         for k in range(N_CLASSES):
             if lft[k] > 0:
                 var pl = Float64(lft[k]) / Float64(n_left)
-                ref_il -= pl * log(pl)
+                ref_il -= pl * (log(pl) / ln2)
             var rk = tot[k] - lft[k]
             if rk > 0:
                 var pr = Float64(rk) / Float64(Int64(N_ROWS) - n_left)
-                ref_ir -= pr * log(pr)
+                ref_ir -= pr * (log(pr) / ln2)
         c_imp.close_f(il, ref_il, 1e-12, c)
         c_imp.close_f(ir, ref_ir, 1e-12, c)
         var proxy = obj64.ProxyImpurityImprovement(
@@ -1179,6 +1444,8 @@ def main() raises:
     failed += check_entropy_scattered()
     print("")
     failed += check_analytic()
+    print("")
+    failed += check_entropy_analytic()
     print("")
     failed += check_rejection()
     print("")

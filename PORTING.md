@@ -5,7 +5,215 @@ the closest thing and record it here, never to substitute a better idea, so
 that if this tree ends up slow we can tell their design from our
 interpretation of it.
 
-## 1. Threadgroup memory: 48 KB wanted, 32 KB available
+## INDEX
+
+Every numbered item in this file. **STATUS** is CLOSED (decided, with the
+reason and any measurement recorded in the entry), OPEN (the entry names work
+that must land before the item is settled), or SUPERSEDED (a later entry
+replaced it; the text stays for the argument it makes).
+
+**OPEN today: 65, 75, 134, 140.** **SUPERSEDED: 2, 5, 14, 15, 62 (by "62
+(CLOSED)"), 98 (by "98 (CLOSED 2026-08-21)"), 119 (by 120).** Every other item
+is decided AS A DEVIATION. That is not the same as nothing being owed; several
+CLOSED entries name a measurement they would still like and say so in place,
+and 134's narrowed embargo names what may not be claimed today.
+
+Line numbers are as of this revision and drift with any edit; the item number
+in the heading is the durable anchor, and every heading now carries its status
+in square brackets. The file is in append order, so the numbers below are NOT
+in file order.
+
+```
+NUM   STATUS       LINE  SUMMARY
+1     CLOSED        216  Threadgroup memory: 48 KB wanted, 32 KB available
+2     SUPERSEDED    251  CORRECTED: Mojo DOES have warp primitives
+3     CLOSED        281  float accumulation, not fixed point, now per column
+4     CLOSED        292  cub::DeviceRadixSort::SortPairs per leaf
+5     SUPERSEDED    303  Vector loads: PORTED; the residue is the alignment claim, a wash
+6     CLOSED        326  AlignMemoryAccess peel: PORTED with the loads of item 5
+7     CLOSED        335  The float atomic flush; the premise was wrong, it is now a choice
+8     CLOSED        366  The bin prefix scan replaces cub::WarpScan; re-measured a wash in 61
+9     CLOSED        395  Mojo kernel signature rules, learned the hard way
+11    CLOSED        419  CORRECTION to item 2: widening the tile sync is NOT merely expensive
+12    CLOSED        446  Async copies: one host staging buffer per copy
+13    CLOSED        458  Derive-by-copy does not propagate fixes; it already bit once
+14    SUPERSEDED    530  The key-value block reduce is now warp-based
+15    SUPERSEDED    563  Convergence: was a deviation, is now RESTORED
+16    CLOSED        612  The k-means++ candidate cost is FUSED
+17    CLOSED        624  Host RNG: std::mt19937 has no counterpart
+18    CLOSED        638  cuBLAS is not a file we can read
+19    CLOSED        652  A pointer conditional expression picked the WRONG BRANCH
+20    CLOSED        680  A reach sabotage has a WINDOW, at both ends
+21    CLOSED        702  L2Expanded in float32 cannot rank collinear points, at any scale
+22    CLOSED        724  x ** 0.5 is not sqrt(x) here, and two other Mojo import traps
+23    CLOSED        744  A transposed contraction shows up as non-convergence, not a wrong number
+24    CLOSED        767  Mojo refuses the same buffer as two mutable kernel arguments
+25    CLOSED        786  Read their file. Do not describe it.
+26    CLOSED        803  stack_allocation with no address space is MEMORY, not registers
+27-29 NEVER ISSUED  825  Never issued
+30    CLOSED        831  logicalWarpReduce<P::AccThCols> is a comptime-width shuffle group
+31    CLOSED        840  vd is memset once because the kernel ACCUMULATES
+32    CLOSED        848  Their device-wide scan is three launches here
+33    CLOSED        858  make_monotonic's unique-value step is replaced
+34    CLOSED        865  adj_to_csr: warp-aggregated atomic and multi-block rows unported, priced
+35    CLOSED        874  DBSCAN defaults to the ball cover; cuML defaults to brute force
+36    CLOSED        894  k-NN defaults to fused iff grid_x == 1; cuVS fuses everywhere
+37    CLOSED       1015  A tiny DBSCAN batch budget raises; theirs wraps size_t into a full batch
+38    CLOSED       1032  DBSCAN per-phase timing prints where cuML has nvtx ranges
+39    CLOSED       1052  Batch 0's RBC fill runs after the CSR buffer is sized, not inside loop 1
+40    CLOSED        940  The cross-block merge's __threadfence is spelled acquire/release
+41    CLOSED        983  hist_2's Apple accumulation: 2-warp-shared Int32 slices, dither-quantized
+42    CLOSED       1176  PCA's covariance is RAFT's stable=false; centering fused into the Gram read
+44    CLOSED       1078  The fused L2-NN kernel is SINGLE-buffered: Apple's 32 KB wall
+45    CLOSED       1109  sqrt at the row write, not per accumulator cell
+46    CLOSED       1216  The k-means accumulate reads X veclen-wide, not scalar
+47    CLOSED       1275  k-means|| uniforms are a splitmix64 counter hash, not Philox; f32 probability
+48    CLOSED       1303  cub::DeviceSelect::If becomes flags, f32 scan and a rank scatter
+49    CLOSED       1337  The segmented scan's block half is hand-written; prefix_sum takes no operator
+50    CLOSED       1397  ReorderBins is their one-bit reorder looped LSD, not CUB's multi-bit radix
+51    CLOSED       1443  Model serialization is OURS, in plain text, because theirs is flatbuffers
+52    CLOSED       1488  The FeatureFreq calcer runs on the HOST
+53    CLOSED       1559  model_size_reg stopped being a no-op the day CTR columns appeared
+54    CLOSED       1578  Mojo CONTRACTS the MinEntropy penalty into an FMA; clang does not
+55    CLOSED       1620  The GPU evaluator has a ONE-HOT arm; theirs refuses the case entirely
+56    CLOSED       1668  The CTR value table is keyed by the DENSE CODE; ctr_borders is not written
+57    CLOSED       1710  The CTR estimation permutation, which is never their id 0
+58    CLOSED       1822  One TCtrValueTable per model COLUMN: three priors, three histogram copies
+59    CLOSED       1907  The tree planes belong to the FIT, not the tree: a pool of one
+60    CLOSED       1944  Histogram copy and subtract move 16 bytes per thread, not 4
+61    CLOSED       1974  NOT a deviation: the serial scan is not costing us; closes item 8's re-measure
+62    SUPERSEDED   1996  Tweedie's variance_power reaches our kernel; on their GPU it reaches nothing
+62(C) CLOSED       2605  Tweedie's variance_power, now measured both ways; supersedes 62
+63    CLOSED       2032  The objective is a comptime parameter, not a host template switch
+64    CLOSED       2046  RMSE at Newton-1 skips the estimator their code runs
+65    OPEN         2089  SegmentedRadixSort batched over segments; the 5,632-launch variant is untimed
+66    CLOSED       2122  ComputeNeedWeights' early return moved below its barrier
+67    CLOSED       2147  The quantile search is bounded by the BIN count, not their object count
+68    NEVER ISSUED 2166  Never issued
+69    CLOSED       2180  Bernoulli and Poisson do not filter their zero-weight rows
+70    CLOSED       2222  FIXED: the extension emitted no Metal kernels; the cause was the build env
+71    CLOSED       2342  multilogit's functionValue is per-block partials
+72    CLOSED       2351  ElementsPerThread is comptime, and both of their launchers pass 1
+73    CLOSED       2360  __ldg is a plain load; the align sizes are still arguments
+74    CLOSED       2368  SolveLinearSystemCholesky is transcribed, not called
+75    OPEN         2417  The blocked Hessian reduces one row at a time; the extra copies are untimed
+76    CLOSED       2438  add_model_value_kernel gained an approx-dimension axis
+77-78 RESERVED     2452  Reserved for the parallel lanes
+79    CLOSED       2458  MultiClass's search magnitude is ONE bound for all class planes
+80    CLOSED       2500  NOT a deviation: the walker projects on the way out, this port did not
+81    CLOSED       2519  add_bin_values gained an approx-dimension axis; the two layouts differ
+82    CLOSED       2538  The text format wrote n_leaves values per tree, not n_leaves * dim
+83    CLOSED       2556  THE MAPE DEFECT: their estimator's alpha is a different float from the kernel's
+84    CLOSED       2629  Their Tweedie iteration count differs between their own arms; we take the GPU's
+85    CLOSED       2647  The device evaluator refuses a multi-output model, because THEIRS does
+86    CLOSED       2685  MultiClassOneVsAll: the same chassis, four differences that all matter
+87    CLOSED       2730  use_best_model without a test set: they warn, this refuses
+88    CLOSED       2766  Ordered boosting is not in the learner this port mirrors, and their file says so
+89    CLOSED       2874  A permutation costs a whole compressed index, not just its CTR columns
+90    CLOSED       2909  The per-permutation leaf partition is built on the HOST
+91    CLOSED       2948  At one device the two layouts ARE the same; which learner CatBoost runs
+92    CLOSED       3127  A divergent barrier is benign until it is load-bearing, then it drops points
+93    CLOSED       3226  Metal has no threadgroup float atomics; the 8-bit accumulator needs them
+94    CLOSED       3409  No float64 anywhere in the pointwise scorer; theirs accumulates in double
+95    CLOSED       3459  The pointwise scorer's struct pointers become flat typed arrays
+96    CLOSED       3485  StreamLoad and __ldg have no portable spelling
+97    CLOSED       3540  TOptimizationSubsets state layout
+97.2  CLOSED       3676  The weak target is TWO buffers, and why that was learned late
+98    SUPERSEDED   3603  Which partition reducer UpdateSubsetsStats calls
+98(C) CLOSED       3872  We now call THEIR reducer, measured; supersedes 98
+99    CLOSED       3642  methods/helpers.mojo, three non-arithmetic departures
+100   CLOSED       3309  Pointwise host launchers use the kernel matrix's block sizes, not their literals
+101   CLOSED       3337  exit(1) and CB_ENSURE_INTERNAL become raised errors
+102   CLOSED       3355  TComputeHist2Kernel becomes a function
+106   CLOSED       3763  fit's pointwise arm, and the three things that only wiring could find
+106a  CLOSED       3729  The use_pointwise_searcher default STAYS FALSE, for a priced reason
+107   CLOSED       3822  PolicyBlock.group_offset is not a group index; two gates read it as one
+108   CLOSED       3952  The pointwise searcher against CATBOOST'S OWN TREES: 144 of 144
+109   CLOSED       4011  CatBoost's GPU arm cannot run on this machine; the oracle is their CPU
+110   CLOSED       4124  IQueriesGrouping is a tagged union, not a virtual interface
+111   CLOSED       4147  ui32/ui64 widths become Int, and IntLog2 is reused
+112   CLOSED       4169  CreateFolds' growth loop carries an iteration bound theirs does not
+113   CLOSED       4221  The categorical oracle is ONE-HOT ONLY: their CPU learner's limit
+114   CLOSED       4261  The scorer's one-hot flag array was a hardcoded constant
+115   CLOSED       4300  A gate that builds the kernel's inputs cannot check the real caller
+116   CLOSED       4335  TFeatureTensor lives with the batch builder; its splits are Int32
+117   CLOSED       4410  RequestStream returns a batch width, not a stream
+118   CLOSED       4443  Dense cat codes and no currentBins cache in the batch builder
+119   SUPERSEDED   4055  RUNG 2 IS NOT A SECOND SEARCHER; corrected by 120
+120   CLOSED       4475  RUNG 2 IS A SECOND SEARCHER AFTER ALL; docBins is what it costs
+121   CLOSED       4660  TTreeUpdater has no test set
+122   CLOSED       4675  No TScopedCacheHolder, so nothing is cached; within one tree that is free
+123   CLOSED       4693  CompressBlock's four-register accumulator is one register
+124   CLOSED       4711  Three of their directories land in one file under gbdt/methods/
+125   CLOSED       5189  CreateSubsets' fold arm pays one extra partition reduce, per TREE
+126   CLOSED       5230  PolicyScoreHelper hard-codes foldCount = 1; the searcher REFUSES
+127   CLOSED       5268  The doc-parallel searcher is the wrong home for folds
+128   CLOSED       5304  Ordered boosting supports three of the seven score functions
+129   CLOSED       5326  The ordered document array is LONGER than the dataset
+130   CLOSED       4737  Their one-byte dispatch is in TWO places; two accumulators had no fixture
+131   CLOSED       4798  A GREEN DIFFERENTIAL IS NOT A REACH PROOF; four widths, one answer
+132   CLOSED       4839  The depth and feature-count sweep, and why the sabotage runs at EVERY cell
+133   CLOSED       4877  The one-byte accumulators at DEPTH 8, the cell both sweeps left empty
+134   OPEN         4911  An intermittent wrong model, one run in ~100, on BOTH searchers at once;
+                        the pointwise half is found and fixed, the greedy half is not
+135   CLOSED       5523  The border subsample copied a real function on the WRONG code path
+136   CLOSED       5373  The smaller-sibling tie-break was INVERTED; the subtraction is not exact
+137   CLOSED       5796  random_strength, and CatBoost's TWO standard deviations
+138   CLOSED       5877  ComputeTargetVariance in Float32, and the lane their host comments out
+139   CLOSED       5897  One RNG stream per fit becomes one per tree; a per-level seed that stalled
+140   OPEN         5587  Logloss's ten Newton iterations: neither arm runs ten, and they stop
+                        in different places; whether THEIR GPU stalls where ours does is unrun
+141   CLOSED       5774  leaf_estimation_backtracking is not an option here, it is a constant
+142   CLOSED       5926  The noise cancels on the greedy arm; three of eight sabotages move nothing
+144   CLOSED       6050  secondDerAsWeights LANDS: the Newton score functions stop being twins in name
+251   CLOSED       6301  pinned_block_sum's within-block float fold does not follow the wavefront
+252   CLOSED       6324  std_dev_blocks is pinned under IDENTICAL, as row 7 pinned partition_stats_chunks
+257   CLOSED       6343  EnsureNewtonIsAvailable was never ported; the hash coincidence is sha256 of zeros
+259   CLOSED       6405  grow_policy reaches train() and the Python surface
+260   CLOSED       6502  The non-symmetric arm runs at HIST2_SMEM_MODE; the first denial was a race
+261   CLOSED       6521  The non-symmetric driver staged three id lists through ONE host buffer
+350   CLOSED       6187  TTreeNode's ui16 fields narrow silently in theirs and raise here
+351   CLOSED       6201  TBinFeatureTable: their per-candidate walk becomes an O(1) lookup
+352   CLOSED       6223  Partition stats are recomputed per level, not updated inside the split
+353   CLOSED       6246  target_variance_blocks is pinned under IDENTICAL (row-7 class, twin of 252)
+354   CLOSED       6265  Histogram replication is pinned under IDENTICAL (row-7 class)
+```
+
+Two unnumbered hazards:
+
+```
+              LINE  SUMMARY
+              1123  linalg.matmul[transpose_b=True] at n == 1 does not write
+              1144  A col_major TileTensor view is honored by SOME matmul arms only
+```
+
+Sub-entries worth finding directly:
+
+```
+              LINE  SUB-ENTRY
+              1723  55a, 55b   the permutation_count datasets, and why permutation 0 is theirs
+              1851  58a-58c    what the Borders arm closed; apply does not reproduce its own fit
+              3388  102a       the host echo of the 15, verified from both sides
+              3443  94a        THE TWO SCORERS IN THIS TREE HAVE OPPOSITE SIGNS
+              3511  96a        four things in pointwise_scores.cu that are theirs and look wrong
+              3668  99a        their two ToSplit clamps are asymmetric
+              3736  98a        CLOSED by the measurement in "98 (CLOSED 2026-08-21)"
+              4191  112a,112b  three things in CreateFolds that look like something else
+              4253  113a       a one-hot split is compared per TYPE
+              4371  116a,116b  GetComplexity counts all splits as ONE; the hash has three traps
+              4468  118a       NCB::IsSubset reads backwards at the call site
+              4902  133a       still NOT covered: mixed-width feature groups
+              4979  134a-134d  600 warm reps clean; the load condition; the pointwise half fixed;
+                               the greedy half STILL OPEN, and the narrowed embargo
+              5213  125a       the fill's staging buffers must outlive the enqueue
+              5290  127a       the observation gather is NOT optional past depth 0
+              5347  129a,129b  their scorer is never told the depth
+              5415  136a-136c  the defence that said it could not matter, and why it is wrong
+```
+
+---
+
+## 1. [CLOSED] Threadgroup memory: 48 KB wanted, 32 KB available
 
 Every CatBoost histogram kernel sizes its shared buffer to **49,152 bytes**:
 
@@ -40,7 +248,7 @@ This is the first hazard the port has surfaced that is invisible in the
 original: a constant that is only correct in conjunction with a block size we
 cannot use.
 
-## 2. WRONG, CORRECTED 2026-08-19: Mojo DOES have warp primitives
+## 2. [SUPERSEDED] CORRECTED 2026-08-19: Mojo DOES have warp primitives
 
 **This item claimed Mojo 1.0 has no warp-level primitives, only `block` and
 `barrier()`. That is false and it has been load-bearing since the first
@@ -60,15 +268,17 @@ search could not find both.
 
 **Deleted rather than annotated**, per the standing rule, except for this
 note recording that the claim existed and what it cost. What follows from the
-correction is re-derived in `VENDOR_LIBRARIES.md` and is NOT yet done:
-`cub::WarpScan` and `cub::ShuffleIndex` may port directly, and
-`select_warpsort.cuh` may be translatable, which matters because RAFT's own
-dispatch prefers it for every k a k-NN user asks for.
+correction is re-derived in `VENDOR_LIBRARIES.md`. The `cub::WarpScan` half is
+DONE: item 61 measured their warp shape against our serial scan and it is a
+wash over a depth-6 tree, so the substitution stands on speed rather than on
+the false premise. Still undone: `select_warpsort.cuh`, which may be
+translatable and matters because RAFT's own dispatch prefers it for every k a
+k-NN user asks for.
 
 **Metal's missing float `atomicAdd` is a HARDWARE limit and is untouched by
 this.** `checks/fixed_point.mojo` and its overflow proof stand.
 
-## 3. `float` accumulation, not fixed point -- NOW PER COLUMN
+## 3. [CLOSED] `float` accumulation, not fixed point -- NOW PER COLUMN
 
 CatBoost accumulates in `float` in shared memory and flushes with a
 non-deterministic global `atomicAdd` guarded by `abs(val) > 1e-20f`. Copied
@@ -79,7 +289,7 @@ measurement, per item 41 below; the sentence that stood here forbidding
 exactly that was written before Metal's 32 KB ceiling was priced and is
 deleted rather than annotated.
 
-## 4. `cub::DeviceRadixSort::SortPairs` per leaf
+## 4. [CLOSED] `cub::DeviceRadixSort::SortPairs` per leaf
 
 `split_points.cu:658-689` sorts each leaf's index range on the host loop, one
 CUB call per leaf, 255 of them for a depth-8 tree. CatBoost's own comments
@@ -90,8 +300,7 @@ Mojo. Port writes a stable 1-bit partition per leaf range, which is what the
 sort is being used for.
 
 
-## 5. Vector loads: PORTED (this entry was stale). The one residue is the
-## alignment CLAIM, measured a wash 2026-08-21
+## 5. [SUPERSEDED] Vector loads: PORTED (this entry was stale); the one residue is the alignment CLAIM, measured a wash 2026-08-21
 
 This entry used to say the port takes the `OneElement` specialization only.
 That was falsified by the code long before it was falsified in this file:
@@ -114,7 +323,7 @@ of a tree. **Porting `AlignedColumnSize()` padding to buy the claim is
 therefore DECLINED, priced here.** The width was the money; the claim is
 noise on this box.
 
-## 6. `AlignMemoryAccess` peel: PORTED with the loads of item 5
+## 6. [CLOSED] `AlignMemoryAccess` peel: PORTED with the loads of item 5
 
 The original entry recorded the peel as omitted because at one element per
 load there was nothing to align. The `FourElements` port brought it across:
@@ -123,7 +332,7 @@ striped loop sees the aligned middle only, which is what makes the 4-wide
 load legal (no per-element bounds test in the body). Their two-macro shape
 (`ALIGN_MEMORY` / `ALIGN_MEMORY_GATHER`) is mirrored in each kernel file.
 
-## 7. THE FLOAT ATOMIC FLUSH (THE PREMISE WAS WRONG)
+## 7. [CLOSED] THE FLOAT ATOMIC FLUSH (THE PREMISE WAS WRONG)
 
 CatBoost flushes every histogram with `atomicAdd(dst + fold, val)` on
 `float`. This section used to assert that Metal has no floating-point atomic
@@ -154,13 +363,15 @@ Two things survive the correction:
    unrecorded.
 
 
-## 8. The bin prefix scan: `cub::WarpScan` (SEE ITEM 2, THE PREMISE WAS WRONG)
+## 8. [CLOSED] The bin prefix scan: `cub::WarpScan` (SEE ITEM 2, THE PREMISE WAS WRONG)
 
 **The justification below rests on item 2's claim that Mojo has no warp
 primitives. That claim was false.** `std.gpu.primitives.warp.prefix_sum` and
-`shuffle_idx` are both available, so this substitution may be unnecessary and
-the fidelity loss it describes may be avoidable. Not yet re-measured; the
-block scan is still what runs. Tracked in `VENDOR_LIBRARIES.md`.
+`shuffle_idx` are both available. **RE-MEASURED, and the serial scan stays**;
+item 61 carries the numbers. Their 32-lane shape wins at shallow levels and
+loses at deep ones, a wash over a depth-6 tree (0.68 ms against 0.72 ms). What
+does NOT close is the fidelity gap: their accumulator is `double` and ours is
+float32, and this target has no float64.
 
 ### The original entry, kept because the deviation is still in the code
 
@@ -181,7 +392,7 @@ dominate covtype, 255 at the very most) while features are many, and the leaf
 and stat axes fill the machine anyway. It would need revisiting on a dataset
 of few, very high-cardinality features.
 
-## 9. Mojo kernel signature rules, learned the hard way
+## 9. [CLOSED] Mojo kernel signature rules, learned the hard way
 
 Every "it compiles" claim before the first launch probe was
 `mojo build --emit=object`, which targets the HOST. A kernel body that
@@ -205,7 +416,7 @@ rules, each one found by a failure:
 Compiling is not evidence. `src/launch_probe.mojo` is the smallest harness
 that produces the evidence and every new kernel gets added to it.
 
-## 11. CORRECTION to item 2: widening the tile sync is NOT merely expensive
+## 11. [CLOSED] CORRECTION to item 2: widening the tile sync is NOT merely expensive
 
 Item 2 says CatBoost's 8-lane `addToHistTile.sync()` becomes a threadgroup
 `barrier()` and calls that "correct and strictly more expensive". **That was
@@ -232,7 +443,7 @@ them heavily. So the row is `SYNC_BLOCK` on all four columns today, and the
 kernel refuses rather than running an unwritten lane-sync path if it ever
 says otherwise.
 
-## 12. Async copies: one host staging buffer per copy
+## 12. [CLOSED] Async copies: one host staging buffer per copy
 
 Not a port issue, a harness one, recorded because it cost an hour and
 presented as a broken kernel. `enqueue_copy` is asynchronous. Reusing one
@@ -244,7 +455,7 @@ Every histogram cell read 0.0 with nothing wrong in the kernel.
 
 One staging buffer per copy, or synchronize between them.
 
-## 13. Derive-by-copy does not propagate fixes. It already bit once.
+## 13. [CLOSED] Derive-by-copy does not propagate fixes. It already bit once.
 
 `hist_half_byte.mojo` was derived from `hist_binary.mojo` by textual copy,
 because the two differ in only `GroupSize` and the writeback. Then item 11's
@@ -316,7 +527,7 @@ Items 14 and up belong to the k-means port. Same numbering, same file, on
 purpose: these are all one tree and a reader should not have to know which
 upstream a constraint came from to find it.
 
-## 14. SUPERSEDED 2026-08-19: the key-value block reduce is now warp-based
+## 14. [SUPERSEDED] 2026-08-19: the key-value block reduce is now warp-based
 
 **The justification below rested on item 2's false claim that Mojo has no
 warp primitives.** `std.gpu.primitives.warp.shuffle_xor` exists, and both
@@ -349,7 +560,7 @@ unbroken, block shape would decide the winner and the assignment would become
 backend-dependent. Their comparator breaks ties on the lower key and that is
 load-bearing, not tidiness.
 
-## 15. Convergence: was a deviation, is now RESTORED
+## 15. [SUPERSEDED] Convergence: was a deviation, is now RESTORED
 
 **This item used to describe a deviation. The deviation is gone and the
 entry is rewritten rather than annotated**, per the standing rule that a
@@ -398,7 +609,7 @@ accepted centroid (`detail/kmeans.cuh:224`).
 The whole fit now moves nothing that scales with rows across the bus. Every
 remaining device-to-host read is one flag, one scalar, or `n_trials` floats.
 
-## 16. The k-means++ candidate cost is FUSED
+## 16. [CLOSED] The k-means++ candidate cost is FUSED
 
 `detail/kmeans.cuh:196-215` writes an `n_trials x n_samples` matrix with
 `matrix_vector_op(min_op)` and then reduces it with `reduce<ALONG_ROWS>`.
@@ -410,7 +621,7 @@ summation ORDER over samples. Two candidates that tie to the last bit would
 be resolved differently and the fit would diverge from there. Recorded rather
 than waved off.
 
-## 17. Host RNG: `std::mt19937` has no counterpart
+## 17. [CLOSED] Host RNG: `std::mt19937` has no counterpart
 
 cuVS picks the first k-means++ centroid and each restart's seed with
 `std::mt19937` on the host, and draws k-means|| candidates with
@@ -424,7 +635,7 @@ iteration by iteration, which is why `cluster/tools/sklearn_reference.py`
 compares INERTIA OVER SEVERAL SEEDS and prints the seed-to-seed spread of the
 oracle itself before any tolerance is chosen.
 
-## 18. cuBLAS is not a file we can read
+## 18. [CLOSED] cuBLAS is not a file we can read
 
 `cublasGemmEx` (`unfused_distance_nn.cuh:205`) is closed source, so
 `cluster/checks/gemm.mojo` is a plain tiled product and is not pretending
@@ -438,7 +649,7 @@ shipped float32 k-means does not compute float32 distances on NVIDIA. See
 
 # Deviations and hazards in the `neighbors/` section (cuVS + RAFT)
 
-## 19. A pointer conditional expression picked the WRONG BRANCH
+## 19. [CLOSED] A pointer conditional expression picked the WRONG BRANCH
 
 This one cost a debugging session and is the most important entry in this
 file for anyone writing Mojo kernels here.
@@ -466,7 +677,7 @@ conditional expression selected the wrong operand while a plain `if` did not.
 expression. Use `if`.** It costs three lines and this failure mode is
 invisible, because the wrong pointer is still a valid pointer to zeros.
 
-## 20. A reach sabotage has a WINDOW, at both ends
+## 20. [CLOSED] A reach sabotage has a WINDOW, at both ends
 
 Three checks in this session failed on sabotage magnitude while the kernel
 under test was correct. The pattern is worth naming because a failed reach
@@ -488,7 +699,7 @@ small enough that it does not destroy the property being asserted**. When a
 sabotage fails, check its magnitude against the precision of the quantity
 before believing the kernel is wrong.
 
-## 21. `L2Expanded` in float32 cannot rank collinear points, at any scale
+## 21. [CLOSED] `L2Expanded` in float32 cannot rank collinear points, at any scale
 
 Not a deviation, a property of the metric cuVS defaults to, found by a
 fixture that assumed otherwise.
@@ -510,7 +721,7 @@ this is where our answer differs from theirs.
 
 # Deviations and hazards in the `decomposition/` section (RAFT)
 
-## 22. `x ** 0.5` is not `sqrt(x)` here, and two other Mojo import traps
+## 22. [CLOSED] `x ** 0.5` is not `sqrt(x)` here, and two other Mojo import traps
 
 `jacobi_eigh` failed to converge and the first suspect was the rotation
 formula. It was `(1.0 + theta * theta) ** 0.5`. Replaced with
@@ -530,7 +741,7 @@ cuSOLVER runs it on device because it already has a tuned batched kernel;
 we do not, and the honest first version says so. The condition that would
 change it is `n_cols` approaching `n_rows`, which no real PCA is near.
 
-## 23. A TRANSPOSED CONTRACTION SHOWS UP AS NON-CONVERGENCE, NOT AS A WRONG NUMBER
+## 23. [CLOSED] A TRANSPOSED CONTRACTION SHOWS UP AS NON-CONVERGENCE, NOT AS A WRONG NUMBER
 
 The most useful debugging lesson in this section.
 
@@ -553,7 +764,7 @@ that structure and not only for plausible magnitudes.
 
 # `dbscan/` (cuML + RAFT)
 
-## 24. Mojo refuses the same buffer as two mutable kernel arguments
+## 24. [CLOSED] Mojo refuses the same buffer as two mutable kernel arguments
 
 DBSCAN's distance matrix is the dataset against ITSELF, so both GEMM operands
 are `x` and both norm operands are `x_norm`. `enqueue_function` rejects that:
@@ -572,7 +783,7 @@ then `runner.mojo` makes one aliased copy of `x` and of `x_norm`. That is
 already exists, so the cost is small, but it is a real allocation that their
 code does not make.
 
-## 25. Read their file. Do not describe it.
+## 25. [CLOSED] Read their file. Do not describe it.
 
 I wrote a core-point filter into DBSCAN's scan and compaction and documented
 it as "not an optimization, it is the definition". Their
@@ -589,7 +800,7 @@ This is the same failure the repository's founding note describes: our code,
 and our description of their code, are not evidence about their code. Read
 the file.
 
-## 26. `stack_allocation` with no address space is MEMORY, not registers
+## 26. [CLOSED] `stack_allocation` with no address space is MEMORY, not registers
 
 The register-tiling port of `core/gemm.mojo` was SLOWER than the naive kernel
 it replaced, on every arm.
@@ -611,13 +822,13 @@ silently spills what the whole optimization was about.
 
 # Deviations added 2026-08-19, late round
 
-## 27-29. Never issued
+## 27-29. [NEVER ISSUED] Never issued
 
 The deviation counter jumped from 26 to 30 during the 2026-08-19 lane
 fan-out; no code, lane file, or doc references 27, 28 or 29. Recorded so
 nobody hunts for them.
 
-## 30. `logicalWarpReduce<P::AccThCols>` is a comptime-width shuffle group
+## 30. [CLOSED] `logicalWarpReduce<P::AccThCols>` is a comptime-width shuffle group
 
 Lives at `dbscan/impl/neighbors/epsilon_neighborhood.mojo` (the
 `updateVertexDegree` section): the sub-warp reduction's width is a comptime
@@ -626,7 +837,7 @@ that skips a full-mask shuffle hangs the lanes that reach it. Its block-size
 sweep (cited by LANE_rbc-maxk: 142.10 against 129.08 ms at 200k) is the bar
 any K_LIB wiring of this kernel has to clear.
 
-## 31. `vd` is memset once because the kernel ACCUMULATES
+## 31. [CLOSED] `vd` is memset once because the kernel ACCUMULATES
 
 Lives at `dbscan/impl/neighbors/epsilon_neighborhood.mojo`. Their contract
 is `cudaMemsetAsync(vd, 0, (m + 1) * sizeof(IdxT))` before
@@ -634,7 +845,7 @@ is `cudaMemsetAsync(vd, 0, (m + 1) * sizeof(IdxT))` before
 is `ctx.enqueue_memset` in the same position. Dropping the zero looks fine on
 the first batch and corrupts every later one.
 
-## 32. Their device-wide scan is three launches here
+## 32. [CLOSED] Their device-wide scan is three launches here
 
 `adjgraph/algo.cuh:65` runs `thrust::exclusive_scan` (CUB decoupled
 lookback, single pass). One threadgroup cannot do that shape on Metal, and
@@ -644,14 +855,14 @@ serially, twice per fit. Now a three-launch scan-then-propagate at
 entries across 977 blocks (LANE_dbscan-brute D3;
 `check_exclusive_scan_beyond_the_old_cap`).
 
-## 33. `make_monotonic`'s unique-value step is replaced
+## 33. [CLOSED] `make_monotonic`'s unique-value step is replaced
 
 Lives at `dbscan/impl/label/classlabels.mojo`, which also records why the
 relabel is NOT optional (cuML runs `final_relabel` + `relabelForSkl` on every
 fit -- `runner.cuh:412` -- so label VALUES are API, not just the partition).
 The header says "do not improve"; read it before touching the file.
 
-## 34. `adj_to_csr`: the warp-aggregated atomic and multi-block rows are unported, priced
+## 34. [CLOSED] `adj_to_csr`: the warp-aggregated atomic and multi-block rows are unported, priced
 
 Lives at `dbscan/impl/dbscan/adjgraph/algo.mojo` (module docstring). The
 shared per-row cursor, chunked 16-bool loads and unordered output are theirs;
@@ -660,7 +871,7 @@ the multi-block-per-row grid are not, and the docstring prices both. Label
 propagation converges to the same fixed point either way, so this moves a
 wait, never an answer.
 
-## 35. DBSCAN defaults to the ball cover; cuML defaults to brute force
+## 35. [CLOSED] DBSCAN defaults to the ball cover; cuML defaults to brute force
 
 Lives in full at `dbscan/impl/dbscan/runner.mojo`, above `EPS_NN_BRUTE_FORCE`.
 Short form: RBC beats our own brute force 2.70x to 27.53x from 16,000 points
@@ -680,7 +891,7 @@ overflow rather than wrapping, mirroring their brute-arm assertion at
 `:180-184`. Without it the offsets wrap, the CSR is garbage, and `weak_cc`
 still returns a plausible labelling -- silently.
 
-## 36. k-NN defaults to fused-iff-`grid_x == 1`; cuVS defaults to fused everywhere
+## 36. [CLOSED] k-NN defaults to fused-iff-`grid_x == 1`; cuVS defaults to fused everywhere
 
 Lives in full at `neighbors/impl/neighbors/detail/knn_brute_force.mojo`,
 above `KNN_METHOD_FUSED`. This is entry 35 pointed the other way, and it is
@@ -726,7 +937,7 @@ tables live above `KNN_METHOD_FUSED` in `knn_brute_force.mojo`;
 `check_dispatch_takes_fused` asserts the AUTO default on both sides of the
 boundary by which output buffer comes back written.
 
-## 40. The cross-block merge's `__threadfence` is SPELLED as acquire/release, because Apple legalizes nothing else
+## 40. [CLOSED] The cross-block merge's `__threadfence` is SPELLED as acquire/release, because Apple legalizes nothing else
 
 `fusedL2kNN`'s `gridDim.x > 1` arm serializes per-row merges with a mutex
 array: producer blocks hand their per-row top-k to consumer block 0 through
@@ -769,7 +980,7 @@ family-9 threadgroup memory is dynamically cached -- the measured query
 sweep (entry 36) is only possible with many 18.5 KB blocks per core. The
 grid shape and every hardware input live in that ONE file.
 
-## 41. hist_2's Apple accumulation: 2-warp-shared Int32 slices, dither-quantized
+## 41. [CLOSED] hist_2's Apple accumulation: 2-warp-shared Int32 slices, dither-quantized
 
 CatBoost's `TPointHist2OneByte` gives every warp a PRIVATE 1024-float
 shared-memory slice, 32 floats per thread (`hist_2_one_byte_base.cuh:20-22`).
@@ -801,7 +1012,7 @@ exact on integer-valued stats, which is what keeps `hist2_check` an exact
 associative, so the Apple arm's histogram is deterministic run to run,
 which CatBoost's own float path is not.
 
-## 37. A tiny DBSCAN batch budget raises here; theirs wraps `size_t` into a full batch
+## 37. [CLOSED] A tiny DBSCAN batch budget raises here; theirs wraps `size_t` into a full batch
 
 `dbscan.cuh:66` computes `max_mbytes_per_batch * 1000000 - est_mem_fixed` in
 `size_t`. Hand it a nonzero budget smaller than the fixed cost and the
@@ -818,7 +1029,7 @@ Copying the wrap would make `max_mbytes_per_batch = 1` MEAN "unbatched", and
 `check_dbscan_tiny_budget_agrees` uses exactly that value to force many
 batches, so the wrap is not merely unhelpful, it is untestable.
 
-## 38. DBSCAN per-phase timing prints where cuML has nvtx ranges
+## 38. [CLOSED] DBSCAN per-phase timing prints where cuML has nvtx ranges
 
 cuML wraps every DBSCAN phase in an nvtx range (`runner.cuh:255`, `:299`,
 `:330`, `:355`, `:373`, `:397`, `:411`) and logs per-batch progress through
@@ -838,7 +1049,7 @@ host wall clock, which on one queue with a sync at each boundary is the
 phase's device time plus its enqueue overhead -- the same thing their nvtx
 range brackets.
 
-## 39. Batch 0's RBC fill runs after the CSR buffer is sized, not inside loop 1
+## 39. [CLOSED] Batch 0's RBC fill runs after the CSR buffer is sized, not inside loop 1
 
 `dbscan/impl/dbscan/runner.mojo`. cuML's first batch loop fills batch 0's
 CSR columns as it counts it (`need_ja_compute`, `runner.cuh:257`, taking the
@@ -864,7 +1075,7 @@ did three.
 
 # Deviations added 2026-08-20 (fused L2-NN policy diff)
 
-## 44. The fused L2-NN kernel is SINGLE-buffered: Apple's 32 KB wall
+## 44. [CLOSED] The fused L2-NN kernel is SINGLE-buffered: Apple's 32 KB wall
 
 `Contractions_NT`'s smem budget is `P::SmemSize = 2 * SmemPage`
 (`raft/linalg/contractions.cuh:104`): TWO page pairs, written and read in
@@ -895,7 +1106,7 @@ each call describes the kernel it launches. `grid.x` is pinned to 1 there;
 that is the PRE-existing `updateReducedVal` replacement (`DERIVATION_MAP.tsv`
 `replaced` row), not part of this entry.
 
-## 45. `sqrt` at the row write, not per accumulator cell
+## 45. [CLOSED] `sqrt` at the row write, not per accumulator cell
 
 `l2_exp_distance_op::epilog` takes the square root of every accumulator
 cell before the min reduce when `sqrt` is requested
@@ -962,7 +1173,7 @@ uses cannot be guarded, because the guard would encode a closed
 implementation's internals. `check_matmul_colmajor` keeps four sentinel
 shapes in the vendor table so a toolchain that fixes this announces itself.
 
-## 42. PCA's covariance implements RAFT's `stable=false` @todo: the centering is FUSED into the split-K Gram read
+## 42. [CLOSED] PCA's covariance implements RAFT's `stable=false` @todo: the centering is FUSED into the split-K Gram read
 
 `raft::stats::detail::cov` has two arms
 (`raft/cpp/include/raft/stats/detail/cov.cuh`): the shipped `stable=true`
@@ -1002,7 +1213,7 @@ proving the fallback arm's center + restore pair still runs by sentinel
 bit-for-bit untouched (ols_main 4/4 unchanged; plain-arm bit dump identical
 across the change).
 
-## 46. The k-means accumulate reads X `veclen`-wide: upstream's scalar-read premise is NVIDIA's, not Apple's
+## 46. [CLOSED] The k-means accumulate reads X `veclen`-wide: upstream's scalar-read premise is NVIDIA's, not Apple's
 
 RAFT's `reduce_rows_by_key` accumulate reads ONE element per thread:
 `SumsT val = d_A[j + lda * i];`
@@ -1061,7 +1272,7 @@ and stays scalar; the direct scatter-add fallback arm is the
 upstream-faithful kernel and stays verbatim -- it is also the oracle the
 checks compare against, which it can only be while it stays scalar.
 
-## 47. k-means||'s per-sample uniforms are a splitmix64 counter hash, not Philox, and its probability is formed in f32
+## 47. [CLOSED] k-means||'s per-sample uniforms are a splitmix64 counter hash, not Philox, and its probability is formed in f32
 
 `initScalableKMeansPlusPlus` draws one uniform PER SAMPLE per round with
 `raft::random::uniform` (`cuvs/src/cluster/detail/kmeans.cuh:689-690`) -- a
@@ -1089,7 +1300,7 @@ and the check does not depend on that never happening, because
 `check_scalable_sampling_selection`'s host replay runs the SAME f32
 expression, not their double one.
 
-## 48. `cub::DeviceSelect::If` becomes flags + the f32 scan + a rank scatter, exact below 2^24 rows
+## 48. [CLOSED] `cub::DeviceSelect::If` becomes flags + the f32 scan + a rank scatter, exact below 2^24 rows
 
 `sampleCentroids` compacts the selected samples with `cub::DeviceSelect::If`
 over an `ArgIndexInputIterator` and reads back the count
@@ -1123,7 +1334,7 @@ fixed-point scheme every fit here uses).
 
 # Deviations added 2026-08-20 (the CTR block's two device primitives)
 
-## 49. The segmented scan's BLOCK-level half is hand-written: `prefix_sum` takes no operator
+## 49. [CLOSED] The segmented scan's BLOCK-level half is hand-written: `prefix_sum` takes no operator
 
 `gbdt/gpu_util/kernel/segmented_scan.mojo`. Theirs is
 `cub::DeviceScan::InclusiveScan` under a CUSTOM ASSOCIATIVE OPERATOR --
@@ -1183,7 +1394,7 @@ Apple/NVIDIA/AMD, and CatBoost's own `GetScanBlockSize()` of 768
 (`cuda_util/kernel/scan.cuh:7`) is below all three -- so the cap binds
 everywhere and the geometry is identical across the three columns.
 
-## 50. `ReorderBins` is their own one-bit reorder looped LSD, not CUB's multi-bit radix
+## 50. [CLOSED] `ReorderBins` is their own one-bit reorder looped LSD, not CUB's multi-bit radix
 
 `gbdt/gpu_util/kernel/radix_sort.mojo`. The CTR bin builder sorts with
 `ReorderBins(Bins, Indices, 0, newBits, Tmp, DecompressedTempBins)`
@@ -1229,7 +1440,7 @@ With that fixed the copy-back sabotage prints 685 descending steps and
 3966/4001 keys wrong on the odd arms while the even arm stays green, which
 is reach per branch (`PORTING_RULES.md:8`) shown rather than claimed.
 
-## 51. Model serialization is OURS, in plain text, because theirs is flatbuffers
+## 51. [CLOSED] Model serialization is OURS, in plain text, because theirs is flatbuffers
 
 CatBoost persists a model with flatbuffers
 (`catboost/libs/model/flatbuffers/model.fbs`, written and read by
@@ -1274,7 +1485,7 @@ measurement that pays for the format.
 
 # Deviations added 2026-08-20 (the CTR block)
 
-## 52. The FeatureFreq calcer runs on the HOST (the rest of this landed on the device 2026-08-21)
+## 52. [CLOSED] The FeatureFreq calcer runs on the HOST (the rest of this landed on the device 2026-08-21)
 
 **MOSTLY RETIRED.** This entry used to cover three things: the CTR bin
 ordering, the segmented scan, and the frequency calcer. The first two are
@@ -1345,7 +1556,7 @@ Two consequences that were stated here in advance and both held:
   counts and an independent O(n^2) tally is what gave the device version a
   reference to match rather than a claim to inherit.
 
-## 53. `model_size_reg` STOPPED being a no-op the day CTR columns appeared
+## 53. [CLOSED] `model_size_reg` STOPPED being a no-op the day CTR columns appeared
 
 `UpdateFeatureWeightsForBestSplits` fills the feature-weight vector with
 1.0 and RETURNS EARLY when `GetCtrsCount() == 0`
@@ -1364,7 +1575,7 @@ that factor.
 Live divergence, not a dormant one. The docstring in
 `gbdt/options/catboost_options.mojo` was rewritten rather than annotated.
 
-## 54. Mojo CONTRACTS the MinEntropy penalty into an FMA; clang does not
+## 54. [CLOSED] Mojo CONTRACTS the MinEntropy penalty into an FMA; clang does not
 
 Found while gating CTR target binarization, and it is the same defect class
 as the `std.math.log` one already recorded in
@@ -1406,7 +1617,7 @@ and the last match is the only comparison in the algorithm.
 
 # Deviations added 2026-08-20 (the CTR apply seam)
 
-## 55. The GPU evaluator has a ONE-HOT arm. Theirs REFUSES the case entirely
+## 55. [CLOSED] The GPU evaluator has a ONE-HOT arm. Theirs REFUSES the case entirely
 
 `TGPURepackedBin` carries three members and their kernel reads two.
 `FeatureXorMask` (`libs/model/cuda/evaluator.cuh:14`) is never touched by
@@ -1454,7 +1665,7 @@ one-hot split's type to `TakeGreater` in a LOADED model and re-runs the
 evaluator, which has no layout to cross-check against: 405 of 512
 predictions move. A no-op arm would have been bit-identical and green.
 
-## 56. The CTR value table is keyed by the DENSE CODE, and `ctr_borders` is not written
+## 56. [CLOSED] The CTR value table is keyed by the DENSE CODE, and `ctr_borders` is not written
 
 Their `TCtrValueTable` is keyed by a 64-bit hash of the raw categorical
 value and read through `TDenseIndexHashView::GetIndex` with a
@@ -1496,7 +1707,7 @@ one-hot splits alone, which is what buys that.
 
 # Deviations added 2026-08-21 (the CTR estimation permutation)
 
-## 57. The CTR estimation permutation, which is never their id 0
+## 57. [CLOSED] The CTR estimation permutation, which is never their id 0
 
 `gbdt/data/permutation.mojo` ports `TDataPermutation`
 (`cuda/data/permutation.{h,cpp}`) and everything under it -- their
@@ -1608,7 +1819,7 @@ and reordering the caller's rows would change what `predict` returns.
 
 # Deviation added 2026-08-20 (the Borders apply-time table)
 
-## 58. One `TCtrValueTable` per model COLUMN, so three priors carry three copies of one histogram
+## 58. [CLOSED] One `TCtrValueTable` per model COLUMN, so three priors carry three copies of one histogram
 
 Their `ctr_data` is a map keyed by `TModelCtrBase`
 (`libs/model/ctr_provider.h`, walked by `TStaticCtrProvider::CalcCtrs`
@@ -1693,7 +1904,7 @@ list was the same LENGTH (a two-class histogram read as twice as many
 one-count categories), so field-by-field equality passed. Both fields are
 compared now.
 
-## 59. The tree planes belong to the FIT, not the tree: a pool of one
+## 59. [CLOSED] The tree planes belong to the FIT, not the tree: a pool of one
 
 Their `TCudaManager` hands every device buffer out of a per-device memory
 pool (`cuda_lib/memory_pool.h`), so `CreateInitialSubsets`
@@ -1730,7 +1941,7 @@ the reach proof that no tree is reading a stale plane -- staleness would
 change tree 2 onward. Sabotage: forcing the rebuild branch on every tree
 puts 12.06 ms back on the clock.
 
-## 60. Histogram copy and subtract move 16 bytes per thread, not 4
+## 60. [CLOSED] Histogram copy and subtract move 16 bytes per thread, not 4
 
 Their `CopyHistogramsImpl` and `SubstractHistogramsImpl`
 (`greedy_subsets_searcher/kernel/histogram_utils.cu:15-34` and the
@@ -1760,7 +1971,7 @@ End to end this is worth 2.7% at 50k rows, measured by alternating the
 two builds in one window -- small, and worth stating plainly beside the
 isolated 5.9x, because the copy is not the tree's bottleneck.
 
-## 61. NOT a deviation: the serial scan is not costing us
+## 61. [CLOSED] NOT a deviation: the serial scan is not costing us
 
 `PORTING.md 8` records that `scan_histograms_kernel` replaced CatBoost's
 `cub::WarpScan<double>` with one thread per feature scanning serially,
@@ -1782,7 +1993,7 @@ this cost.
 Their accumulator is `double` and ours is `float32`, which is a real
 fidelity gap and is NOT closable here: this target has no float64.
 
-## 62. Tweedie's `variance_power` reaches our kernel; on their GPU it reaches nothing
+## 62. [SUPERSEDED] Tweedie's `variance_power` reaches our kernel; on their GPU it reaches nothing
 
 `TPointwiseTargetsImpl::Init` reads the parameter into the member
 `VariancePower` (`pointwise_target_impl.h:288-291`) and **nothing ever reads
@@ -1818,7 +2029,7 @@ would produce. **IT IS NO LONGER AN OPEN ITEM**: section "62 (CLOSED)" below
 carries the measurement -- 0 of 48 splits wrong against their CPU, and their
 GPU's own `variance_power = 0` refusing to train at all.
 
-## 63. The objective is a comptime parameter, not a host template switch
+## 63. [CLOSED] The objective is a comptime parameter, not a host template switch
 
 `PointwiseTargetKernel` (`pointwise_targets.cu:447-519`) is a host switch on
 `ELossFunction` that constructs one of nine objective structs and passes it BY
@@ -1832,7 +2043,7 @@ instantiation on the host at run time, ours picks it at compile time. The host
 switch itself is still ported, as `launch_pointwise_target_kernel`, in their
 case order, so a reader can diff it arm for arm. No arithmetic difference.
 
-## 64. RMSE at Newton-1 skips the estimator their code runs
+## 64. [CLOSED] RMSE at Newton-1 skips the estimator their code runs
 
 Their `NeedEstimation()` is `LeavesEstimationMethod != Simple`
 (`greedy_subsets_searcher.h:67-69`), which is TRUE for RMSE, so their boosting
@@ -1875,7 +2086,7 @@ one run longer. **That is exactly why the skip is conditioned on
 `iterations == 1` and not on the objective alone**, and before 2026-08-21 it
 was conditioned on the objective alone.
 
-## 65. `SegmentedRadixSort` is CatBoost's own one-bit reorder, batched over segments
+## 65. [OPEN] `SegmentedRadixSort` is CatBoost's own one-bit reorder, batched over segments
 
 `ComputeWeightedQuantile` calls
 `SegmentedRadixSort(orderedTargets, orderedWeights, tmpTargets, tmpWeights,
@@ -1908,7 +2119,7 @@ Two details of theirs that are copied and that a reader will want flagged:
   explicitly here as `float_to_sortable`, because passing a float key to CUB
   applies it invisibly and their call site says nothing about it.
 
-## 66. `ComputeNeedWeights`' early return moved below its barrier
+## 66. [CLOSED] `ComputeNeedWeights`' early return moved below its barrier
 
 Theirs (`exact_estimation.cu:51-73`):
 
@@ -1933,7 +2144,7 @@ tail, and their own idiom in their own file (`pointwise_targets.cu:255-257`).
 **The sum is unchanged**: the threads that returned early in theirs had nothing
 to add.
 
-## 67. The quantile search is bounded by the BIN count, not their object count
+## 67. [CLOSED] The quantile search is bounded by the BIN count, not their object count
 
 `ComputeWeightedQuantileWithBinarySearchImpl` guards with
 
@@ -1952,7 +2163,7 @@ It cannot be copied: `point` here is the leaf-value buffer, so the overrun
 would be into live data. Ours bounds by `bin_count`. Every in-range thread
 computes exactly their arithmetic.
 
-## 68. Never issued
+## 68. [NEVER ISSUED] Never issued
 
 Withdrawn before it landed. It claimed their GPU MAPE exact estimator divides
 by `max(1, |residual|)` where `TMAPETarget::Der` divides by
@@ -1966,7 +2177,7 @@ the raw column. Reading their CPU killed it: `CalcExactLeafDeltas` fills
 of their arms agree**, so ours does too, and the number is retired rather than
 reused.
 
-## 69. Bernoulli and Poisson do not filter their zero-weight rows
+## 69. [CLOSED] Bernoulli and Poisson do not filter their zero-weight rows
 
 `AreZeroWeightsAfterBootstrap` is true for exactly those two
 (`enum_helpers.cpp:849-856`), so their `BootstrapAndFilter` runs
@@ -2008,7 +2219,7 @@ it is NOT WIRED in this port's searcher — grep `greedy_search_helper.mojo` and
 there is nothing. **If `min_data_in_leaf` is ever wired, this deviation stops
 being output-identical and the filter becomes required.**
 
-## 70. FIXED: the extension emitted no Metal kernels, and the cause was not what this section said twice
+## 70. [CLOSED] FIXED: the extension emitted no Metal kernels, and the cause was not what this section said twice
 
 **THIS SECTION HAS BEEN WRONG TWICE AND IS REWRITTEN, NOT ANNOTATED.** The
 first version blamed GBDT's kernel count and named five dead hypotheses. The
@@ -2113,18 +2324,22 @@ have to be unpacked in two files that could silently disagree about the order
 of a flat list, which is a wrong answer rather than a failure. Now there is
 one.
 
-### Still broken the same way, and not ours to fix
+### The estimators binding, FIXED 2026-08-22
 
-`bindings/build_estimators.sh:8,11` does BOTH things at once -- it exports
-`MACOSX_DEPLOYMENT_TARGET="11.0"` and passes `--target-accelerator metal:1` --
-and `python/mojolearn/_mojolearn_estimators.so` has **0 AIR blobs**. Verified
-2026-08-21 from a clean-venv install of the built wheel: DBSCAN, PCA and
-LinearRegression all fail with "Failed to create Metal function" while
-GradientBoosting, KMeans and NearestNeighbors all pass. It has been that way
-since the artifact was built, independent of any cache. The fix is two lines,
-both above. That file belongs to another session; flagged, not touched.
+`bindings/build_estimators.sh` used to export `MACOSX_DEPLOYMENT_TARGET="11.0"`
+and its artifact carried **0 AIR blobs**, so DBSCAN, PCA and LinearRegression
+all failed with "Failed to create Metal function" from a clean-venv install of
+the built wheel while GradientBoosting, KMeans and NearestNeighbors passed.
+That was the natural experiment that corroborated cause 2: it was the last
+script in the tree still exporting the variable and its artifact was the only
+one with zero blobs. The script now does `unset MACOSX_DEPLOYMENT_TARGET`
+(`:45`) and gates on a blob floor of 10 plus a launch smoke test; the shipped
+`python/mojolearn/_mojolearn_estimators.so` carries **42 AIR blobs**. The
+script still passes `--target-accelerator metal:1` (`:91`), which cause 1 says
+should give zero, and the artifact is not zero, so that flag's effect is
+narrower than cause 1 states and the discrepancy is unexplained.
 
-## 71. `multilogit`'s `functionValue` is per-block partials
+## 71. [CLOSED] `multilogit`'s `functionValue` is per-block partials
 
 Same substitution `pointwise_targets.mojo` and `bootstrap.mojo` record, for
 the same reason: theirs ends in a block reduce plus a float `atomicAdd`
@@ -2133,7 +2348,7 @@ Their `FillBuffer(functionValue, 0.0f, 1, stream)` prologue (`:186-188`)
 exists only because that atomic accumulates and is not ported -- each block
 writes its own slot.
 
-## 72. `ElementsPerThread` is comptime, and both of their launchers pass 1
+## 72. [CLOSED] `ElementsPerThread` is comptime, and both of their launchers pass 1
 
 Theirs is a template parameter (`multilogit.cu:9`, `:103`) and both
 `MultiLogitValueAndDer` and `MultiLogitSecondDer` instantiate it at 1
@@ -2142,7 +2357,7 @@ registers at that size. The unrolled shape is kept rather than collapsed to
 a scalar because their `#pragma unroll` loops are the file's structure and a
 reader diffing against `:59-92` has to find them.
 
-## 73. `__ldg` is a plain load; the align sizes are still arguments
+## 73. [CLOSED] `__ldg` is a plain load; the align sizes are still arguments
 
 Mojo 1.0 ships no read-only-cache or non-temporal load hint, the deviation
 `transform.mojo` and `fill.mojo` already record.
@@ -2150,7 +2365,7 @@ Mojo 1.0 ships no read-only-cache or non-temporal load hint, the deviation
 as theirs are, so a caller that pads its planes still works; every caller in
 this port passes `size`.
 
-## 74. `SolveLinearSystemCholesky` is transcribed, not called
+## 74. [CLOSED] `SolveLinearSystemCholesky` is transcribed, not called
 
 Theirs is LAPACK's `dposv_` (`private/libs/lapack/linear_system.cpp:46-47`)
 through the clapack vendored at `contrib/libs/clapack`. clapack is OPEN, so
@@ -2199,7 +2414,7 @@ rather than as a tuning choice**, and it is CatBoost's position too: their
 `CB_ENSURE(info >= 0)` passing on failure means their own fit would diverge
 the same way, silently. Ours at least says so.
 
-## 75. The blocked Hessian is reduced one row at a time, into its own buffer
+## 75. [OPEN] The blocked Hessian is reduced one row at a time, into its own buffer
 
 Theirs reduces every Hessian row into disjoint SLICES of one
 `reducedHessianGpu` and reads the whole thing back once
@@ -2220,7 +2435,7 @@ likely to be transcribed wrong.
 cheap one to close: the alternative is their single-buffer form, which is
 maybe thirty lines.
 
-## 76. `add_model_value_kernel` gained an approx-dimension axis
+## 76. [CLOSED] `add_model_value_kernel` gained an approx-dimension axis
 
 Their `AddBinModelValues` takes a `TCudaBuffer` whose column count carries
 the approx dimension; ours takes `dim_count` and `cursor_stride` and puts the
@@ -2234,13 +2449,13 @@ cursor is PLANE-MAJOR, one contiguous column per class. Reading both as the
 same layout would train a model with the classes rotated and nothing would
 assert.
 
-## 77-78. Reserved for the parallel lanes
+## 77-78. [RESERVED] Reserved for the parallel lanes
 
 77 is the CPython shared-lib loader lane, 78 the CatBoost-oracle lane. Both
 were assigned before those lanes started, per PORTING_RULES 3: a five-lane
 round once produced a three-way number collision because they were not.
 
-## 79. MultiClass's search magnitude is ONE bound for all class planes
+## 79. [CLOSED] MultiClass's search magnitude is ONE bound for all class planes
 
 NO CATBOOST COUNTERPART, like the fixed-point accumulator it feeds: their
 histograms flush with a float `atomicAdd` and need no bound at all.
@@ -2282,7 +2497,7 @@ buy back under two bits of a twenty-bit margin.
 class plane's own sum of absolute values is checked against the reported
 magnitude, at 2, 3 and 7 classes.
 
-## 80. NOT a deviation: the walker projects on the way out, and this port did not
+## 80. [CLOSED] NOT a deviation: the walker projects on the way out, and this port did not
 
 Recorded because it was a real defect for a day and the shape of it will
 recur.
@@ -2301,7 +2516,7 @@ every path a test exercises is invisible until the day it is not. It was
 found by reading their file for a different reason, which is rule 1 doing
 what it is for.
 
-## 81. `add_bin_values` gained an approx-dimension axis, and the two layouts differ
+## 81. [CLOSED] `add_bin_values` gained an approx-dimension axis, and the two layouts differ
 
 Their `AddObliviousTree` takes a `TCudaBuffer` cursor whose COLUMN COUNT
 carries the dimension and adds every column (`models/add_bin_values.h`,
@@ -2320,7 +2535,7 @@ THE LEAF INDEX IS COMPUTED ONCE PER ROW and shared by every dimension,
 because an oblivious tree's structure does not depend on the approx: all
 `dim` values of a row come out of the same leaf.
 
-## 82. The text format wrote `n_leaves` values per tree, not `n_leaves * dim`
+## 82. [CLOSED] The text format wrote `n_leaves` values per tree, not `n_leaves * dim`
 
 Found by `check-multiclass-train`'s round-trip gate on the day MultiClass
 first trained. `model_text` already carried `dim` in its `tree` record --
@@ -2338,7 +2553,7 @@ A one-dimensional model's bytes are unchanged: the record index is the flat
 `leaf * dim + d`, which is `leaf` when `dim == 1`. `check-model-io` stayed
 green through the change, which is the evidence for that sentence.
 
-## 83. THE MAPE DEFECT: their estimator's alpha is a DIFFERENT FLOAT from their kernel's
+## 83. [CLOSED] THE MAPE DEFECT: their estimator's alpha is a DIFFERENT FLOAT from their kernel's
 
 Found 2026-08-21 by `check-loss-oracle`, against CatBoost's own CPU output.
 It is the most expensive kind of defect this port can have -- a wrong number
@@ -2387,7 +2602,7 @@ WHY NOTHING CAUGHT IT, and this is the part worth keeping:
 (`loss_description.cpp:95-102`), the same accessor with the same 0.5
 default.
 
-## 62 (CLOSED). Tweedie's `variance_power`, now measured both ways
+## 62 (CLOSED). [CLOSED] Tweedie's `variance_power`, now measured both ways; this entry supersedes item 62 above
 
 The entry above records the argument. `check-loss-oracle` measured it,
 2026-08-21, our GPU against their CPU on a 3,000 x 8 constructed fixture,
@@ -2411,7 +2626,7 @@ So their GPU's dropped parameter is not a variant of Tweedie; on this
 fixture it is not a model at all. Threading it is what makes a Tweedie fit
 exist. **DEVIATION 62 IS CLOSED.**
 
-## 84. Their Tweedie iteration count differs BETWEEN THEIR OWN ARMS, and we take the GPU's
+## 84. [CLOSED] Their Tweedie iteration count differs BETWEEN THEIR OWN ARMS, and we take the GPU's
 
 `GetEstimationMethodDefaults` keys Tweedie on task type
 (`catboost_options.cpp:221-231`): the CPU takes **1** Newton iteration, the
@@ -2429,7 +2644,7 @@ between their arms in a way that only shows up in a comparison, and because
 STANDING_ORDERS rule 5 -- same everything except the device -- is what makes
 it matter.
 
-## 85. The device evaluator refuses a multi-output model, because THEIRS does
+## 85. [CLOSED] The device evaluator refuses a multi-output model, because THEIRS does
 
 `gbdt/models/cuda/evaluator.mojo` was one-dimensional and would have
 silently predicted the FIRST class's approxes from a MultiClass model,
@@ -2467,7 +2682,7 @@ which expected every MultiClass model to be refused -- failed at two
 classes, correctly.
 
 
-## 86. MultiClassOneVsAll: the same chassis, four differences that all matter
+## 86. [CLOSED] MultiClassOneVsAll: the same chassis, four differences that all matter
 
 PORT OF `MultiClassOneVsAllValAndFirstDerImpl` (`multilogit.cu:613-673`) and
 `MultiClassOneVsAllSecondDerImpl` (`:675-704`), plus the `StochasticDer` arm
@@ -2512,7 +2727,7 @@ ONE host staging buffer three times between three `enqueue_copy` calls.
 An enqueue is a promise, not a read; the copies raced the refills. Three
 buffers now.
 
-## 87. `use_best_model` without a test set: they warn, this refuses
+## 87. [CLOSED] `use_best_model` without a test set: they warn, this refuses
 
 `UpdateUseBestModel` (`libs/train_lib/options_helper.cpp:109-112`):
 
@@ -2548,7 +2763,7 @@ this.
 the same gate for `od_type` without an eval set, which this port already
 refused for the same reason.
 
-## 88. Ordered boosting is not in the learner this port mirrors, and their file says so
+## 88. [CLOSED] Ordered boosting is not in the learner this port mirrors, and their file says so
 
 Scoping, 2026-08-21, before any code. **`boosting_type=Ordered` cannot be
 added to `gbdt/methods/doc_parallel_boosting.mojo`, because CatBoost does not
@@ -2656,7 +2871,7 @@ Ordered boosting is not refused here yet; nothing in this port accepts a
 `boosting_type` at all. It should stay that way until either the option
 exists and refuses Ordered by name, or the learner behind it does.
 
-## 89. A permutation costs a whole compressed index here, not just its CTR columns
+## 89. [CLOSED] A permutation costs a whole compressed index here, not just its CTR columns
 
 Their builder splits the features by permutation dependence and gives each
 permutation a compressed-index dataset holding ONLY the dependent ones
@@ -2691,7 +2906,7 @@ measurement showing the memory actually binds before it is made -- and the
 measurement is available: a categorical fit that fits at
 `permutation_count=1` and OOMs at 4 is the whole argument.
 
-## 90. The per-permutation leaf partition is built on the HOST
+## 90. [CLOSED] The per-permutation leaf partition is built on the HOST
 
 Their leaves estimator hands the oracle a `bins` buffer -- one leaf index
 per row, computed on the device by `ComputeBinsForModel`
@@ -2730,7 +2945,7 @@ and the LSD radix sort behind the searcher), so this is a wiring job, not a
 new kernel -- held until a measurement shows the host sort costing something
 that matters.
 
-## 91. The device-count answer: at one device the two layouts ARE the same, and the searcher this port mirrors is CatBoost's MULTICLASS symmetric learner
+## 91. [CLOSED] The device-count answer: at one device the two layouts ARE the same, and the searcher this port mirrors is CatBoost's MULTICLASS symmetric learner
 
 Scoping, 2026-08-21, no code. `NEXT_TWO.md` staged item 1 asked one question --
 how much of `TFeatureParallelDataSet` survives at device count 1 -- and said to
@@ -2909,74 +3124,41 @@ statement is therefore:
 Rung 1 above is what closes that, and it is the reason to do it.
 
 
-## 92. A divergent barrier is benign until the barrier is load-bearing, and then it silently drops points
+## 92. [CLOSED] A divergent barrier is benign until the barrier is load-bearing, and then it silently drops points
 
-Measured 2026-08-21 while porting the pointwise histogram loop, and it puts a
-question mark over `PORTING.md` 11 without answering it.
+Measured 2026-08-21 while porting the pointwise histogram loop.
 
-### What was expected
-
-Item 11 is why two histogram families here run ONE iteration count for the
+**THE DEVIATION.** Two histogram families here run ONE iteration count for the
 whole block instead of CatBoost's per-thread counts. CatBoost syncs a
 `tiled_partition<8>` inside `AddPoint`
 (`pointwise_hist2_one_byte_5bit.cu:79`, `:108`, `:147`); Mojo exposes only a
 threadgroup `barrier()`; so a thread that runs out of points early walks past
-a barrier its neighbours are still waiting on. Item 11 states this was
-OBSERVED:
+a barrier its neighbours are still waiting on. Item 11 records the shape: a
+64-row partition over a 512-thread block gives warp 0 one iteration and warps
+1 to 15 zero, and every feature's histogram read 0.0.
+`compute_point_hist2_loop.mojo` therefore carries a per-block `max_iters`,
+with threads past their own count contributing `(bin 0, 0.0, 0.0)`. Adding 0.0
+changes no sum, so it is a scheduling change.
 
-    "It is not an edge case: a 64-row partition over a 512-thread block gives
-     warp 0 one iteration and warps 1 to 15 zero. The measured symptom was
-     every feature's histogram reading 0.0."
-
-`compute_point_hist2_loop.mojo` therefore got the same treatment: a per-block
-`max_iters`, with threads past their own count contributing `(bin 0, 0.0,
-0.0)`. Adding 0.0 changes no sum, so it is a scheduling change.
-
-### What actually happened
-
-**The gate written to catch a divergent barrier cannot catch one, because a
-divergent barrier does not fail on this device.**
+### The two probes that said the mechanism does not reproduce, and were both too simple
 
 `checks/pointwise_loop_check.mojo` L6 runs the whole sweep through an
 accumulator that barriers inside `add_point`. Reverting `compute_histogram_2`
-to CatBoost's per-thread count -- which genuinely diverges, 8 iterations on
-the thread at `i == 0` against 7 at `i == 254` -- leaves **all 160 cases
-exact**.
+to CatBoost's per-thread count, which genuinely diverges (8 iterations on the
+thread at `i == 0` against 7 at `i == 254`), leaves **all 160 cases exact**.
 
-`checks/divergent_barrier_probe.mojo` then tested it directly, at item
-11's own shape: a 512-thread block, a barrier inside a loop whose count is
+`checks/divergent_barrier_probe.mojo` tested it directly at item 11's own
+shape: a 512-thread block, a barrier inside a loop whose count is
 `(n - tid + block - 1) / block`, so warp 0 runs one iteration and warps 1-15
-run zero. All 512 slots correct, at n = 64, 100, 511, 512, 513, 1000, 2000.
-No hang, no zeros. `pixi run check-divergent-barrier`.
+run zero. All 512 slots correct, at n = 64, 100, 511, 512, 513, 1000, 2000. No
+hang, no zeros. `pixi run check-divergent-barrier`.
 
-### What that does and does not mean
+Both readings were true and the conclusion drawn from them, that item 11's
+mechanism would not reproduce, was wrong. It reproduced three hours later.
 
-It does NOT mean divergent barriers are safe. CUDA's `__syncthreads` and
-Metal's `threadgroup_barrier` both require uniform execution, and "undefined
-happens to work on one M4 today" is not something a port builds on. **The
-uniform path stays**, justified by the specification and priced at one
-predicate per point.
+### IT REPRODUCED, in the 5-bit accumulator
 
-It does NOT mean item 11's observation was invented. But it is no longer
-supported by anything reproducible, and there is a better-fitting suspect.
-**Twice while writing these checks, a RACING per-thread tally produced
-exactly the reported symptom** -- cells reading zero or a fraction of what
-they should, with nothing wrong in the loop -- and the second time it turned
-every gate red against a loop that was correct. `PORTING.md` 12 records a
-third instance of the same symptom from a completely different cause (a
-reused async staging buffer). "Every histogram cell read 0.0" has now been
-produced by three mechanisms in this repository and by a divergent barrier
-zero times.
-
-That is a hypothesis about item 11, not a finding, and it is written down so
-someone can test it rather than inherit it. What is a finding: **item 11's
-stated mechanism is currently unreproducible, and the checks that appear to
-cover it do not.**
-
-### AND THEN IT REPRODUCED, three hours later, in the 5-bit accumulator
-
-Everything above stands as written and its CONCLUSION was wrong. Landing
-`TPointHist<0,0,BlockSize>` produced the failure on the first run:
+Landing `TPointHist<0,0,BlockSize>` produced the failure on the first run:
 
     scalar n=1   256 cells exact
     scalar n=4   256 cells exact
@@ -2999,7 +3181,7 @@ four entry points exact and identical.
 
 Coverage was never wrong. Both versions read columns 0-127 exactly once.
 
-### The refined mechanism, which is what should have been written first
+### The refined mechanism
 
 A divergent threadgroup barrier is benign when nothing depends on the
 synchronisation, and corrupts when the barrier is LOAD-BEARING for ordering
@@ -3011,13 +3193,19 @@ shared writes.
                               the barrier is the ONLY thing holding their two
                               half-writes apart; points vanish
 
-Both observations are real and neither generalises without the other. Item
-11's mechanism is correct. This entry's earlier conclusion -- that it "will
-not reproduce" -- was drawn from a probe too simple to contain the thing it
-was probing for, which is the same mistake as gating a histogram with uniform
-data.
+One symptom, three causes, so do not diagnose from the symptom: cells reading
+zero or a fraction of what they should has been produced in this repository by
+a divergent load-bearing barrier (here), by a racing per-thread tally (twice
+while writing these checks), and by a reused async staging buffer (item 12).
 
-### The rule this leaves behind, and it is not the one drafted first
+Both observations are real and neither generalises without the other. Item
+11's mechanism is correct, and the probe that appeared to refute it was too
+simple to contain the thing it was probing for, which is the same mistake as
+gating a histogram with uniform data. **The uniform path stays**, justified by
+the specification (CUDA's `__syncthreads` and Metal's `threadgroup_barrier`
+both require uniform execution) and priced at one predicate per point.
+
+### The rule this leaves behind
 
 **Gate a kernel against a REAL accumulator, not a convenient one.**
 `checks/pointwise_loop_check.mojo` gives every thread a private tally, so
@@ -3035,7 +3223,7 @@ The secondary rule still holds: a gate whose sabotage does not move it is not
 coverage, and the check should say so rather than let a green tick imply
 otherwise.
 
-## 93. Metal has no THREADGROUP float atomics, and the 8-bit accumulator is the file that needs them
+## 93. [CLOSED] Metal has no THREADGROUP float atomics, and the 8-bit accumulator is the file that needs them
 
 Probed 2026-08-21, porting `TPointHist<2,1,BlockSize>`.
 
@@ -3118,7 +3306,7 @@ The second is the one to remember. Net zero: the mass moved rather than
 vanished, and every total in the histogram is correct. A check that summed
 would have passed it.
 
-## 100. The pointwise host launchers use the kernel matrix's block sizes, not CatBoost's literals
+## 100. [CLOSED] The pointwise host launchers use the kernel matrix's block sizes, not CatBoost's literals
 
 THEIRS: `const int blockSize = 384;` for the one-byte family
 (`pointwise_hist2_one_byte_templ.cuh:238`) and `const int blockSize = 768;`
@@ -3146,7 +3334,7 @@ DOES change how many blocks the scan launch needs
 accumulator folds, which is a float summation order already recorded at the
 accumulators.
 
-## 101. `exit(1)` and `CB_ENSURE_INTERNAL` become raised errors
+## 101. [CLOSED] `exit(1)` and `CB_ENSURE_INTERNAL` become raised errors
 
 THEIRS: the multiplier ladder ends `} else { exit(1); }`
 (`pointwise_hist2_one_byte_templ.cuh:266`, `_binary.cu:174`,
@@ -3164,7 +3352,7 @@ caller. `checks/pointwise_dispatch_check.mojo` F7 sweeps 245
 configurations, finds 12 that return 128 BEFORE the clamp, and asserts every
 clamped value is one of the seven -- so the clamp is live and the raise is not.
 
-## 102. `TComputeHist2Kernel` becomes a function
+## 102. [CLOSED] `TComputeHist2Kernel` becomes a function
 
 THEIRS: `TComputeHist2Kernel : TStatelessKernel` holds thirteen members,
 declares `Y_SAVELOAD_DEFINE` over all of them, registers in a global table as
@@ -3218,7 +3406,7 @@ driver, the host range while porting the launcher -- and they corroborate.
 PORTING.md 91 F's fixture group 2 exists for the device half;
 `pointwise_dispatch_check.mojo` F6 exists for this one.
 
-## 94. No float64 anywhere in the pointwise scorer; theirs accumulates in double
+## 94. [CLOSED] No float64 anywhere in the pointwise scorer; theirs accumulates in double
 
 `gbdt/methods/kernel/pointwise_scores.mojo`, port of
 `catboost/cuda/methods/kernel/pointwise_scores.cu` + `score_calcers.cuh`.
@@ -3268,7 +3456,7 @@ that reads a best-split record from one and compares it with the other's
 convention picks the WORST split at every level and still returns a
 well-formed tree.
 
-## 95. The pointwise scorer's struct pointers become flat typed arrays
+## 95. [CLOSED] The pointwise scorer's struct pointers become flat typed arrays
 
 A Mojo kernel argument cannot be a pointer to a non-trivial struct, and
 PORTING_RULES 4 already records that `enqueue_function` refuses derived
@@ -3294,7 +3482,7 @@ The five calcer CLASSES become one comptime-tagged `ScoreCalcer[
 score_function]` -- PORTING_RULES 4's "tagged union, which is what their
 worker switches on anyway", and their host does switch on it at `:483`.
 
-## 96. `StreamLoad` and `__ldg` have no portable spelling
+## 96. [CLOSED] `StreamLoad` and `__ldg` have no portable spelling
 
 `ComputeSum` loads through `NKernel::StreamLoad` (`pointwise_scores.cu:27`),
 which is `cub::ThreadLoad<cub::LOAD_CS>` -- PTX `ld.global.cs`, a
@@ -3349,7 +3537,7 @@ Also: `FindOptimalSplitDynamic` supports only 3 of the 7 score functions
 the moment `foldCount > 1`, and `find_optimal_split_dynamic` raises in the
 same place.
 
-## 97. `TOptimizationSubsets` state layout
+## 97. [CLOSED] `TOptimizationSubsets` state layout
 
 `gbdt/methods/pointwise_optimization_subsets.mojo`.
 
@@ -3412,7 +3600,7 @@ check spelled the layout with this file's own constants, and a swap of
 self-consistency, which a swap preserves perfectly. The contract now fails at
 BUILD time and names the call site it contradicts.
 
-## 98. Which partition reducer `UpdateSubsetsStats` calls
+## 98. [SUPERSEDED] Which partition reducer `UpdateSubsetsStats` calls
 
 CatBoost has two similarly-named, different kernels:
 
@@ -3451,7 +3639,7 @@ true of their own code too (`UpdatePartitionsProps` sizes its grid from
 `TArchProps::SMCount()`), and `partition_stats_chunks` is pinned under
 `NUMERIC_IDENTICAL` for exactly that reason.
 
-## 99. `methods/helpers.mojo`, three non-arithmetic departures
+## 99. [CLOSED] `methods/helpers.mojo`, three non-arithmetic departures
 
 1. **`GetBinsForModel` and `CacheBinsForModel` are NOT PORTED**
    (`helpers.cpp:3-58`). They need `TScopedCacheHolder`, `TTreeUpdater` and
@@ -3485,7 +3673,7 @@ exists at all, not why the two differ by one. Transcribed as written; gated
 both ways.
 
 
-## 97.2 (CORRECTED at the wiring step) -- the weak target is TWO buffers, and why that was learned late
+## 97.2 (CORRECTED at the wiring step) [CLOSED] -- the weak target is TWO buffers, and why that was learned late
 
 An earlier draft merged `WeightedTarget` and `Weights` into one two-column
 buffer, and this file defended the merge. **It is reversed.** Both are two
@@ -3545,11 +3733,11 @@ and the `Current() != keys` arm fires every level.
     ----------------------------------------------
     total                             ~9       17
 
-### 98a. OPEN, and the number that justified DEVIATION 98 has moved
+### 98a. CLOSED by the measurement in "98 (CLOSED 2026-08-21)" below: the number that justified DEVIATION 98 had moved
 
 DEVIATION 98 declined `update_partition_props` -- the reducer their dispatch
 actually names, ported and sitting unused in
-`gbdt/methods/kernel/pointwise_scores.mojo:1800` -- on the grounds that one
+`gbdt/methods/kernel/pointwise_scores.mojo:1836` -- on the grounds that one
 block per partition starves the device at depth 0.
 
 After the interleaved record, the stride-3 stats and now the two-buffer
@@ -3562,16 +3750,17 @@ removing the chunk-count change recorded above.
 
 The trade was six launches to avoid one when the buffers were merged. It is
 now six launches AND two scratch buffers to avoid one, against a reducer
-that is also the faithful one. What is still bought is depth-0 occupancy,
-and **that remains UNMEASURED**: at depth 0 there is exactly one partition,
-so their form puts the whole dataset through a single threadgroup, a shape
-this repo has lost to twice on the greedy path.
+that is also the faithful one. What was still bought was depth-0 occupancy:
+at depth 0 there is exactly one partition, so their form puts the whole
+dataset through a single threadgroup, a shape this repo had lost to twice on
+the greedy path.
 
-Not acted on, because the decision needs a measurement rather than an
-argument and no benchmark is authorised. The swap is one call in
-`update_subsets_stats` and the kernel is already written.
+**MEASURED AND ACTED ON.** `pixi run probe-partition-reducer` found a TIE at
+one partition and up to 4.6x in their favor everywhere else, so
+`update_subsets_stats` now calls `update_partition_props`. The table and the
+gate results are in "98 (CLOSED 2026-08-21 by measurement)" below.
 
-## 106. `fit`'s pointwise arm, and the three things that only wiring could find
+## 106. [CLOSED] `fit`'s pointwise arm, and the three things that only wiring could find
 
 `gbdt/methods/doc_parallel_boosting.fit` and `fit_with_test` take
 `use_pointwise_searcher`, defaulting to False. True selects
@@ -3630,7 +3819,7 @@ offset while this tree's layout stores a COLUMN index. The multiply by
 the split read column 0's bits with another feature's shift, every document
 went one way, and `HasSplit` stopped the tree at depth 1.
 
-## 107. `PolicyBlock.group_offset` is not a group index, and two gates passed while it was read as one
+## 107. [CLOSED] `PolicyBlock.group_offset` is not a group index, and two gates passed while it was read as one
 
 Found 2026-08-21 by a measurement, not by a check.
 
@@ -3662,12 +3851,11 @@ It was caught by `checks/pointwise_default_probe.mojo` -- a TIMING probe
 reports a ratio. The fixture it happened to use put the signal on the fifth
 one-byte feature.
 
-Localisation took three steps, each cheap: a depth-and-rows sweep showed the
-disagreement at EVERY shape, which cleared scale; a threshold sweep cleared
-split balance; and a per-bit-width sweep showed all ten widths failing, which
-cleared the bit dispatch and left the fixture shape itself. Dumping the
-layout then showed `group_offset` flat at 0 with the real column in
-`cf.offset`.
+Three sweeps cleared three suspects. Depth and rows showed the disagreement at
+EVERY shape, which cleared scale; a threshold sweep cleared split balance; all
+ten bit widths failed, which cleared the bit dispatch. What was left was the
+fixture shape, and dumping the layout showed `group_offset` flat at 0 with the
+real column in `cf.offset`.
 
 ### Both gates now carry a feature past the first group
 
@@ -3681,7 +3869,7 @@ code groups -- the second word, the second block, the second group -- because
 the first is where every off-by-a-base-address is invisible. Same family as
 [[reached-but-inert]].
 
-## 98 (CLOSED 2026-08-21 by measurement): we now call THEIR reducer
+## 98 (CLOSED 2026-08-21 by measurement). [CLOSED] We now call THEIR reducer; this entry supersedes item 98 above
 
 DEVIATION 98 declined `UpdatePartitionProps` -- the reducer
 `UpdateSubsetsStats` actually dispatches -- on occupancy grounds: at depth 0
@@ -3718,7 +3906,7 @@ is still exact per cell, and **`check-fit-pointwise` still requires the two
 so the different summation order changed nothing observable at this fixture's
 magnitudes.
 
-## 106a. The `use_pointwise_searcher` default STAYS FALSE, and now for a priced reason
+## 106a. [CLOSED] The `use_pointwise_searcher` default STAYS FALSE, and now for a priced reason
 
 `PORTING.md` 106 shipped it defaulting to False and said the flip was a
 measurement's job.
@@ -3739,13 +3927,19 @@ session is running GPU work on this machine -- the greedy baseline itself
 moved 221 to 308 ms between runs -- so the direction is solid and the
 magnitude is not. **A tighter number needs a quiet box.**
 
-The known cost inside that gap is `split_stat_planes`: a host round trip of
-`2 * n_rows` floats per tree, because this tree carries the weak target as
-one two-plane buffer and the pointwise kernels cannot take two views of one
-buffer (97.2). Removing it means the boosting loop carrying the weak target
-as two buffers throughout, which `stats`'s other three readers make a real
-change rather than a rename. That is the first thing to try before measuring
-again.
+The known cost inside that gap was `split_stat_planes`: a host round trip of
+`2 * n_rows` floats per tree (6.4 MB down and back at 800k rows, plus two
+drains the greedy arm never makes), because this tree carries the weak target
+as one two-plane buffer and the pointwise kernels cannot take two views of one
+buffer (97.2). **THAT ROUND TRIP IS GONE.** `split_planes_f32_kernel` does the
+same split in one device launch with no host copy and no drain
+(`gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo`,
+`launch_split_planes_f32`). **So the 1.34-1.68x above was measured against an
+overhead that no longer exists and is not a current ratio.** What remains is
+two `n_rows` allocations per tree, which the pool does not own because
+`TL2Target` consumes these buffers; that disappears when the boosting loop
+carries the weak target as two buffers throughout, which `stats`'s other three
+readers make a real change rather than a rename.
 
 ### And the probe found a correctness bug, which is why it is kept
 
@@ -3755,7 +3949,7 @@ is how `PORTING.md` 107 was found, with two gates green. A timing probe that
 does not check what it is timing measures two different computations and
 reports their ratio as if it meant something.
 
-## 108. The pointwise searcher against CATBOOST'S OWN TREES: 144 of 144, and the one that was not
+## 108. [CLOSED] The pointwise searcher against CATBOOST'S OWN TREES: 144 of 144, and the one that was not
 
 Until 2026-08-21 every gate on the pointwise family compared it against a
 HOST RECOMPUTATION of CatBoost's formula, or differentially against this
@@ -3807,10 +4001,14 @@ pointer is the fix and is not attempted here.
 Every "the pointwise family is gated" statement before this one meant gated
 against our own arithmetic. This is the first that means gated against
 CatBoost. The gap was named in `NEXT_TWO.md` rung 5 and in `PORTING.md` 91 F
-the whole time; it is now closed for the CPU oracle, and `task_type="GPU"`
-remains unrun.
+the whole time; it is now closed for the CPU oracle. **THE GPU ORACLE, not
+the GPU benchmark, is what remains unrun.** CatBoost's `task_type="GPU"` has
+since been timed against ours on NVIDIA
+(`bench/results/fast_speed/2026-08-28-NVIDIA-forest-A.md`, gbdt-symmetric on
+higgs 1M and 2M), so speed against their GPU exists; no split-for-split
+differential against their GPU's dumped decisions does.
 
-## 109. CatBoost's GPU arm cannot run on this machine, and the oracle is not weaker for it
+## 109. [CLOSED] CatBoost's GPU arm cannot run on this machine, and the oracle is not weaker for it
 
 Probed 2026-08-21:
 
@@ -3840,16 +4038,21 @@ correctness AND for speed -- is
     OUR arm, on this Mac's GPU     against     THEIR arm, on this Mac's CPU
 
 `PORTING.md` 108's 144 of 144 is exactly that comparison on the correctness
-side, and it is the strongest evidence in this repository: our GPU searcher
-reproducing, split for split, the trees their CPU learner chose on the same
-data and the same grid.
+side: our GPU searcher reproducing, split for split, the trees their CPU
+learner chose on the same data and the same grid. It was the strongest
+differential in this repository when it was written; items 130 (288 of 288
+across six fixtures on both searchers) and 133 (2,856 splits over ten
+fixtures) are wider.
 
-The speed side of the same comparison is a BENCHMARK and is not run here.
+The speed side of the same comparison is a BENCHMARK, and it HAS since run:
+`bench/results/fast_speed/2026-08-26-APPLE-trees.md` is this exact pairing,
+gbdt-symmetric on year 463,715 x 90, ours 2061.0 ms against catboost-cpu's
+2273.4, RMSE 9.2159 against 9.2301. It is not run in THIS entry.
 
 Whether CatBoost's own two arms agree with each other is a question about
 CatBoost, is unanswerable on this hardware, and is not this port's business.
 
-## 119. RUNG 2 IS NOT A SECOND SEARCHER, and the fold layout is what it actually costs
+## 119. [SUPERSEDED] RUNG 2 IS NOT A SECOND SEARCHER, and the fold layout is what it actually costs
 
 `NEXT_TWO.md` priced rung 2 as porting `TFeatureParallelObliviousTreeSearcher`
 -- 713 lines beside the doc-parallel searcher already here. Reading it says
@@ -3918,7 +4121,7 @@ wiring it: a `create_subsets` that takes a `FoldLayout` instead of assuming
 one task, and a searcher loop that carries `fold_count > 1` through to the
 dynamic scorer. Both are small; neither is a second searcher.
 
-## 110. `IQueriesGrouping` is a tagged union, not a virtual interface
+## 110. [CLOSED] `IQueriesGrouping` is a tagged union, not a virtual interface
 
 `gbdt/methods/dynamic_boosting_folds.mojo`.
 
@@ -3941,7 +4144,7 @@ Both arms are gated separately (F3 ungrouped, F6 grouped); sabotaging the
 grouped accessor leaves F3 green, which is rule 8's reach-is-per-branch in one
 measurement.
 
-## 111. `ui32`/`ui64` widths become `Int`, and `IntLog2` is reused
+## 111. [CLOSED] `ui32`/`ui64` widths become `Int`, and `IntLog2` is reused
 
 THEIRS: `ui32` throughout `MinEstimationSize` and `CreateFolds`, and one
 narrowing cast -- `static_cast<ui32>(minEstimationSize * growthRate)`
@@ -3963,7 +4166,7 @@ that threshold is exactly where a float `ceil(log2)` lands a hair off. It is a
 DIFFERENT function from the `1 << (ui32)ceil(log2((float)FoldCount))` inside
 `PointwisePartOffsetsHelper`, which is a DEVICE expression in `float`.
 
-## 112. `CreateFolds`' growth loop carries an iteration bound theirs does not
+## 112. [CLOSED] `CreateFolds`' growth loop carries an iteration bound theirs does not
 
 THEIRS: the loop (`dynamic_boosting.h:215-222`) has no bound. It terminates
 because `NextQueryOffsetForLine` is strictly increasing below `sampleCount` in
@@ -4015,7 +4218,7 @@ on it (`dynamic_boosting.h:378-396`) and the model added back to it
 would train a different model on the default config. Gated: over 1,000 draws
 the structure search reaches rows 0 and 1 and never 2.
 
-## 113. The categorical oracle is ONE-HOT ONLY, and that is their CPU learner's limit rather than a fixture chosen to pass
+## 113. [CLOSED] The categorical oracle is ONE-HOT ONLY, and that is their CPU learner's limit rather than a fixture chosen to pass
 
 `bench/oracle_cat.txt` puts three categorical columns (k = 3, 5, 8) beside
 eight numeric ones so the searcher has to weigh EQUALITY candidates against
@@ -4055,7 +4258,7 @@ axis to be worth running: `> code` and `== code` name the SAME (feature,
 bin) pair and partition the rows differently. A checker that matched on
 (feature, bin) alone would have called 114 a pass.
 
-## 114. The scorer's one-hot flag array was a hardcoded constant, and both gates on that kernel handed the array in by hand
+## 114. [CLOSED] The scorer's one-hot flag array was a hardcoded constant, and both gates on that kernel handed the array in by hand
 
 `scan_pointwise_histograms_kernel` skips the bin prefix scan when a feature
 is one-hot, mirroring `split_properties_helpers.cuh:126`
@@ -4094,7 +4297,7 @@ computed the wrong thing, and no gate had ever asked it to compute anything
 branch the product ran. Sixth instance of **"reached but inert"** in this
 port.
 
-## 115. A gate that builds the kernel's inputs cannot check the caller that normally builds them
+## 115. [CLOSED] A gate that builds the kernel's inputs cannot check the caller that normally builds them
 
 The general shape behind 114, worth its own number because it recurs and
 because the fix is mechanical.
@@ -4129,7 +4332,7 @@ what builds that input in the product, and whether anything reads it back
 from there. If nothing does, the constructor is unchecked no matter how
 green the kernel is.
 
-## 116. `TFeatureTensor` lives with the batch builder, and its splits are `Int32`
+## 116. [CLOSED] `TFeatureTensor` lives with the batch builder, and its splits are `Int32`
 
 THEIRS: `TFeatureTensor` and `TBinarySplit` are both in
 `catboost/cuda/data/feature.h`, and all three members of `TBinarySplit` are
@@ -4204,7 +4407,7 @@ Two sabotages moved NOTHING and are recorded as honest zeroes: accumulating
 `*`/`+` fold -- it is the same function), and merging the two inner loops of
 `VisitCtrBinBuilders` (see 117).
 
-## 117. `RequestStream` returns a batch width, not a stream
+## 117. [CLOSED] `RequestStream` returns a batch width, not a stream
 
 THEIRS: `TBatchFeatureTensorBuilder::RequestStream`
 (`batch_feature_tensor_builder.cpp:67-77`) calls
@@ -4237,7 +4440,7 @@ smaller than the pool, and builders keep the previous batch's state until
 `SetIndices` -- which is what makes the first of those three sabotages a
 silent wrong answer rather than a crash.
 
-## 118. Dense cat codes and no `currentBins` cache in the batch builder
+## 118. [CLOSED] Dense cat codes and no `currentBins` cache in the batch builder
 
 THEIRS: `VisitCtrBinBuilders` reads `TCompressedCatFeatureDataSet` (packed
 `ui64` blocks, GPU- or CPU-resident) and calls
@@ -4269,7 +4472,7 @@ THEIRS -- two `std::includes`, subset first. Reversing it turns gates 4 and 5
 red, and it is the kind of argument order a port gets wrong silently because
 both arguments have the same type.
 
-## 120. RUNG 2 IS A SECOND SEARCHER AFTER ALL: `PORTING.md` 91 B's "three lines" was wrong, and `docBins` is what it costs
+## 120. [CLOSED] RUNG 2 IS A SECOND SEARCHER AFTER ALL: `PORTING.md` 91 B's "three lines" was wrong, and `docBins` is what it costs
 
 Ported 2026-08-21, `gbdt/methods/oblivious_tree_structure_searcher.mojo` +
 `gbdt/methods/oblivious_tree_bin_builder.mojo`, gated by
@@ -4454,7 +4657,7 @@ revert.
   why `Fit` ends in `CacheBinsForModel` and why the doc-parallel searcher
   never needs one.
 
-## 121. DEVIATION: `TTreeUpdater` has no test set
+## 121. [CLOSED] DEVIATION: `TTreeUpdater` has no test set
 
 `TTreeUpdater` takes `LinkedTest` and `TestBins`
 (`gpu_data/oblivious_tree_bin_builder.h:103-104`) and `AddSplit` mirrors
@@ -4469,7 +4672,7 @@ arithmetic, it changes no split, and it costs one
 is what the wiring will have to pay when the feature-parallel boosting loop
 lands.
 
-## 122. DEVIATION: no `TScopedCacheHolder`, so nothing is cached, and within one tree that is free
+## 122. [CLOSED] DEVIATION: no `TScopedCacheHolder`, so nothing is cached, and within one tree that is free
 
 `TSplitHelper::GetCompressedBits` caches the packed split bits keyed by
 `(dataset scope, split)` (`gpu_data/oblivious_tree_bin_builder.cpp:84-87`,
@@ -4487,7 +4690,7 @@ no reachable branch, which this repository has been bitten by four times in
 one day ([[reached-but-inert]]). It becomes worth having when the test set
 (121) or tree CTRs (rung 4) give it a second reader.
 
-## 123. DEVIATION: `CompressBlock`'s four-register accumulator is one register
+## 123. [CLOSED] DEVIATION: `CompressBlock`'s four-register accumulator is one register
 
 `TCompressionHelper::CompressBlock` (`compression_helper.cuh:78-103`) keeps
 `TStorageType compressedEntries[4]`, fills them from a `#pragma unroll 4`
@@ -4505,7 +4708,7 @@ The other half of that function is NOT a deviation and is transcribed:
 `DecompressBlock`'s `tid < dstSize` (`:118`) exactly. Sabotage 8 above is
 what happens when the sizing rule that guard depends on is loosened.
 
-## 124. DEVIATION: three of their directories land in one file under `gbdt/methods/`
+## 124. [CLOSED] DEVIATION: three of their directories land in one file under `gbdt/methods/`
 
 `PORTING_RULES.md` 6 keeps their names and records renames. This rung breaks
 the DIRECTORY correspondence and the reason is lane ownership, not design:
@@ -4531,7 +4734,7 @@ specialization.** Moving them is a pure rename plus the `DERIVATION_MAP.tsv` row
 and is not attempted while three lanes are writing this directory. **This
 paragraph is the debt; a later round that moves them deletes it.**
 
-## 130. THEIR one-byte dispatch is in TWO places, and two of the four accumulators had no fixture
+## 130. [CLOSED] THEIR one-byte dispatch is in TWO places, and two of the four accumulators had no fixture
 
 `PORTING.md` 108 shipped three fixtures and named the 8-bit accumulator as
 "the only one that reaches it at all". The same sentence is a statement about
@@ -4592,7 +4795,7 @@ result (`PORTING_RULES` 8), and refuses to continue if any one-byte
 4-feature group falls outside every range -- a group nobody claims has no
 histogram written, and every split below it is a decision taken on zeros.
 
-## 131. A GREEN DIFFERENTIAL IS NOT A REACH PROOF, and the four widths compute the same answer
+## 131. [CLOSED] A GREEN DIFFERENTIAL IS NOT A REACH PROOF, and the four widths compute the same answer
 
 The fixture built for the 6-bit accumulator that silently lands on the 5-bit
 one still matches CatBoost split for split, because **both accumulators
@@ -4633,7 +4836,7 @@ The claim walks 5 -> 6 -> 7 -> 8 as only the declared fold count moves. (800
 is `2 * 16 * 25` occupied bins, so the arithmetic is right as well as the
 dispatch.)
 
-## 132. The depth and feature-count sweep, and why the sabotage runs at EVERY cell
+## 132. [CLOSED] The depth and feature-count sweep, and why the sabotage runs at EVERY cell
 
 `NEXT_TWO.md` rung 5's second item. `pixi run oracle` varies the border
 budget and nothing else: one depth (4) and one feature count (16). Both are
@@ -4671,7 +4874,7 @@ earns it: a comparison that is REACHED but not POSITIONED -- one that tallies
 totals, or compares the tree as a SET of splits -- passes the green run and
 passes a loose sabotage too.
 
-## 133. The one-byte accumulators at DEPTH 8, the cell both sweeps left empty
+## 133. [CLOSED] The one-byte accumulators at DEPTH 8, the cell both sweeps left empty
 
 The four bit-width fixtures (DEVIATION 130) are all at depth 4. The
 depth-by-features matrix (DEVIATION 132) is all at 15 borders. So after both,
@@ -4705,7 +4908,7 @@ differentially checked. It needs an oracle whose columns get DIFFERENT border
 budgets, which `pool.quantize(border_count=)` does not express directly.
 Recorded as a hole, not as coverage.
 
-## 134. OPEN, AND THE MOST IMPORTANT RESULT OF THIS ROUND: an intermittent, one run in ~100, on BOTH searchers at once
+## 134. [OPEN] THE MOST IMPORTANT RESULT OF THIS ROUND: an intermittent, one run in ~100, on BOTH searchers at once; the pointwise half is fixed, the greedy half is not
 
 While building DEVIATION 132's matrix, one sweep run came back with its FIRST
 cell wrong, and it has not come back since:
@@ -4734,9 +4937,11 @@ bit-identical in all ninety), and six FORCED COLD-RECOMPILE single-cell runs.
 
 WHAT IS ESTABLISHED ABOUT THE MECHANISM, and it is half an answer.
 
-`GLOBAL_NUMERIC_MODE = NUMERIC_FAST` is the shipping default
-(`checks/numerics.mojo:74`). Under FAST on a column that HAS float atomics
--- Apple does -- `deterministic_flush_for` (`checks/kernel_matrix.mojo:1003`)
+`GLOBAL_NUMERIC_MODE` resolves to `NUMERIC_FAST` as the shipping default
+(`checks/numerics.mojo:89`; it is a BUILD DEFINE since 2026-08-23, keyed on
+`MOJOLEARN_NUMERIC_IDENTICAL`, and used to be an edited line). Under FAST on a
+column that HAS float atomics
+-- Apple does -- `deterministic_flush_for` (`checks/kernel_matrix.mojo:1419`)
 returns False and the GREEDY family's multi-block histogram flush takes
 CatBoost's float `atomicAdd` (`hist_half_byte.mojo:527-528`, same shape at
 `hist_binary.mojo:524` and `hist_2_one_byte_base.mojo:484-521`). The file says
@@ -4844,7 +5049,7 @@ never returns quiet, the trigger is identified even before the site is.
 
 **A buffer freed at its last use. Not the float atomic.**
 
-`_estimate_and_apply` (`gbdt/methods/doc_parallel_boosting.mojo:542`) stages the
+`_estimate_and_apply` (`gbdt/methods/doc_parallel_boosting.mojo:590`) stages the
 leaf offsets and sizes in two host buffers and copies them to the device:
 
     ctx.enqueue_copy(dst_buf=d_p_off, src_ptr=h_po.unsafe_ptr())
@@ -4877,12 +5082,21 @@ EVERY tree instead gives 15.14, worse than the mean baseline, which is why the
 single-tree shape is the one that matters: the observation was coherent and
 wrong, and only a single-tree corruption is coherent and wrong.
 
-THE FIX, and why it is not a `synchronize()`. Holding the two buffers past the
-`ctx.synchronize()` this function already runs before applying the estimate
-costs NOTHING: the copies are certainly complete there, so the blocks cannot be
-recycled in between. A `synchronize()` at the copy would also work and would
-cost one full device drain PER TREE, which is the wrong price for a lifetime
-bug (`mojotrees-speed-mandate`: blow up the control plane, not the kernels).
+THE FIRST FIX, and why it was not a `synchronize()`. Holding the two buffers
+past the `ctx.synchronize()` this function already runs before applying the
+estimate costs NOTHING: the copies are certainly complete there, so the blocks
+cannot be recycled in between. A `synchronize()` at the copy would also work
+and would cost one full device drain PER TREE, which is the wrong price for a
+lifetime bug (`mojotrees-speed-mandate`, blow up the control plane, not the
+kernels).
+
+**THAT IS NOT WHAT SHIPS NOW.** The mid-function hold was replaced at the
+OWNERSHIP level. `h_po` and `h_ps` are workspace fields owned across trees, so
+no copy in `_estimate_and_apply` can outlive its source at all (DEVIATION 1890,
+`gbdt/methods/doc_parallel_boosting.mojo`); the sibling site in
+`leaves_estimation/pointwise_oracle.mojo` took the same treatment and dropped
+its drain (DEVIATION 1891). Both files carry the reasoning in comments at the
+call sites.
 
 Verified after the fix: the differential holds at 288 of 288 across six
 fixtures on both searchers, and `check-fit-pointwise` passes.
@@ -4905,11 +5119,14 @@ divergence at tree 2 only if a single bin-feature's descriptor moved. UNTESTED
 -- **and the positive-control technique above is how to test it**, not another
 soak.
 
-**Eight further sites carry the same pattern** on the training path, ranked in
-that audit. None is a false positive: the allocator was measured
+**Eight further sites carried the same pattern** on the training path, ranked
+in that audit, and the count is now smaller than eight: DEVIATIONS 1890 and
+1891 closed two of them structurally by giving the workspace ownership of the
+staging, so no copy in either function can outlive its source. The rest have
+not been recounted here. None was a false positive: the allocator was measured
 returning a freed block after ONE intervening allocation while a copy was
 outstanding. They are hazards of the same class, and this class cannot be gated
-by re-running -- only by not writing it.
+by re-running, only by not writing it.
 
 **The load condition (134b) is still uncontrolled.** 750 clean runs on a quiet
 box do not speak to a box carrying thirty concurrent GPU processes, which is
@@ -4923,12 +5140,53 @@ is a second defect and it is not the histogram flush. **Nothing was tuned,
 dropped or deferred to make the cell green; it stays in the matrix at full
 strength.**
 
-**NO SPEED NUMBER AND NO PARITY CLAIM SHOULD BE QUOTED PAST THIS ENTRY UNTIL
-IT IS CLOSED.** A learner that produces a different model one run in a hundred
-does not have a loss to compare, and the two searchers disagreeing with each
-other is the specific thing `check-fit-pointwise` exists to forbid.
+### The embargo this entry used to carry, narrowed 2026-09-01
 
-## 125. `CreateSubsets`' fold arm pays ONE extra partition reduce, per TREE and not per level
+This entry used to read **"NO SPEED NUMBER AND NO PARITY CLAIM SHOULD BE
+QUOTED PAST THIS ENTRY UNTIL IT IS CLOSED."** State it plainly: that sentence
+was never honored. `README.md` quotes a seven-row speed and accuracy
+scoreboard, per-vendor forest numbers and an AUC parity discussion, and so do
+the boards under `bench/results/`. A rule the whole repository ignores is
+worse than no rule, because it lets a reader believe an embargo is in force
+when nothing is enforcing it.
+
+It is narrowed to what 134a through 134d actually support, and the narrowing
+is not a softening.
+
+* **The pointwise half is FIXED** (134c), reconstructed on demand at the
+  predicted site, and verified 288 of 288 across six fixtures on both
+  searchers. Nothing about it embargoes anything today.
+* **Speed numbers were never in scope.** The defect changes which model comes
+  out, not how long the fit takes, and it has never been observed to change a
+  timing. A blanket ban on quoting speed did not follow from the evidence.
+* **What IS embargoed, and stays embargoed:** any claim that the GREEDY arm is
+  free of the buffer-lifetime class, and any bit-identity or two-searcher
+  agreement claim made from runs on a box under heavy concurrent GPU load.
+  134d's 2 of 12 on the greedy arm is unexplained, `TTreeWorkspace.__init__`
+  is the ranked candidate and is UNTESTED, further sites of the same class sit
+  on the training path (two of the original eight closed by DEVIATIONS 1890
+  and 1891, the rest not recounted), and the load condition of 134b has never
+  been reproduced.
+* **What an accuracy claim must carry:** the measurements behind it were made
+  on a quiet box. 750 clean runs on a quiet box do not speak to a box carrying
+  thirty concurrent GPU processes. A number quoted from a quiet box is a
+  number about a quiet box.
+
+The two searchers disagreeing with each other remains the specific thing
+`check-fit-pointwise` exists to forbid, and that gate still passes. **A
+DIFFERENT two-searcher divergence is open, and it is not this defect.** On the
+MIXED-policy covtype fixture the two arms read greedy 0.9486324077643835
+against pointwise 1.1843180519507341 while each policy alone was
+bit-identical; the cause is an out-of-bounds read, `PolicyScoreHelper` sizing
+`d_cat_w` and `d_bin_w` by BIN-FEATURE count while `pointwise_scores.mojo`
+indexes them by GLOBAL FEATURE id, which only covtype exposes because it is
+the one fixture whose binary features are not the low-numbered ones
+(`bench/results/COVTYPE_POLICY_MIX_2026-08-31.md`). The fix is in at the
+4,096-row arm; the original 581,012-row arm has NOT been re-run and the A/B
+that would confirm the mechanism has not been run, so that defect is not
+closed.
+
+## 125. [CLOSED] `CreateSubsets`' fold arm pays ONE extra partition reduce, per TREE and not per level
 
 `gbdt/methods/oblivious_tree_fold_tasks.create_fold_based_subsets`.
 
@@ -4969,7 +5227,7 @@ the point -- this class of defect cannot be gated by re-running, only by not
 writing it. Sibling of DEVIATION 134's open intermittent, and the reason that
 one deserves a real hunt rather than another hundred green runs.
 
-## 126. `PolicyScoreHelper` hard-codes `foldCount = 1` at three sites, and the searcher REFUSES rather than growing a tree a fold axis short
+## 126. [CLOSED] `PolicyScoreHelper` hard-codes `foldCount = 1` at three sites, and the searcher REFUSES rather than growing a tree a fold axis short
 
 `TScoreHelper` takes `foldCount` and hands it to BOTH halves
 (`histograms_helper.h:361-365`): the first sizing the histogram
@@ -5007,7 +5265,7 @@ with folds and does NOT fire without them.
 Verified after the change: the CatBoost differential holds at 288 of 288
 across six fixtures on both searchers, and O7 still fires.
 
-## 127. THE DOC-PARALLEL SEARCHER IS THE WRONG HOME FOR FOLDS, and its fold arm is a deviation scheduled for deletion
+## 127. [CLOSED] THE DOC-PARALLEL SEARCHER IS THE WRONG HOME FOR FOLDS, and its fold arm is a deviation scheduled for deletion
 
 Upstream's doc-parallel `CreateSubsets` hard-codes `FoldCount = 0;
 FoldBits = 0;` (`pointwise_optimization_subsets.cpp:12-14`) and nothing can
@@ -5043,7 +5301,7 @@ be empty; reading the wrong document makes them disagree, and **every partition
 offset still tiles the array perfectly.** The gate found it as 1,463 of 1,463
 positions with the wrong (bin, index) pair while every size looked plausible.
 
-## 128. Ordered boosting supports THREE of the seven score functions, and it does not touch the shipped default
+## 128. [CLOSED] Ordered boosting supports THREE of the seven score functions, and it does not touch the shipped default
 
 `FindOptimalSplitDynamic` (`pointwise_scores.cu:443-473`) has two arms and a
 `default: throw std::exception()`:
@@ -5065,7 +5323,7 @@ is never half-grown before it fires. Both halves gated: O6 runs all seven at
 fold count 12 AND all four refused ones at fold count 1, because a score
 function that was simply broken would pass the first half.
 
-## 129. The ordered document array is LONGER than the dataset, and `size` stops being the row stride
+## 129. [CLOSED] The ordered document array is LONGER than the dataset, and `size` stops being the row stride
 
 `CreateFolds` builds fold `k`'s `EstimateSamples` as `[0, R_{k-1})` -- nested
 prefixes, not a partition -- so `GetTotalIndicesSize()`
@@ -5112,7 +5370,7 @@ the same function it was validating. `create_fold_based_subsets` now carries a
 shift-only `fold_count <= 1 << fold_bits` check and O1 asserts ceil-ness
 without calling `int_log2_ceil`.
 
-## 136. THE SMALLER-SIBLING TIE-BREAK WAS INVERTED, and "the subtraction is exact" was never true
+## 136. [CLOSED] THE SMALLER-SIBLING TIE-BREAK WAS INVERTED, and "the subtraction is exact" was never true
 
 At every level one sibling's histogram is COMPUTED and the other is derived as
 `parent - sibling`. Which one gets computed is `BuildNecessaryHistograms`'
@@ -5148,7 +5406,7 @@ longer. Both are fixed here; the host copy is off the shipped path (only
 anyway so the two cannot drift.
 
 The pointwise family's own smaller-sibling choice was ALREADY right and is
-untouched: `split_properties_helpers.mojo:200` is
+untouched: `split_properties_helpers.mojo:202-203` is
 `left if left_part_size < right_part_size else right`, which is their
 `(leftPartSize < rightPartSize) ? leftPartOffset : rightPartOffset`
 (`kernel/split_properties_helpers.cuh:102`) exactly. That is why the pointwise
@@ -5262,7 +5520,7 @@ The file also refuses a fixture that forced NO tie, because a tie-break gate on
 a fixture with no ties is decorative in the way 131 describes.
 
 
-## 135. The border subsample copied a real function on the WRONG CODE PATH: 100k with replacement per feature, where theirs is 200k without replacement shared
+## 135. [CLOSED] The border subsample copied a real function on the WRONG CODE PATH: 100k with replacement per feature, where theirs is 200k without replacement shared
 
 Found 2026-08-22 by a symbol-by-symbol read of their host quantizer against
 ours, not by a failing check -- nothing here was red, because nothing here
@@ -5326,7 +5584,7 @@ still wrong, because the function it named is not the function the pipeline
 calls. A citation proves someone read A line. Only following the call chain
 from the entry point proves they read THE line.
 
-## 140. LOGLOSS'S TEN NEWTON ITERATIONS: neither arm runs ten, and the two stop at different places
+## 140. [OPEN] LOGLOSS'S TEN NEWTON ITERATIONS: neither arm runs ten, and the two stop at different places
 
 **Found 2026-08-21 by `checks/logloss_leaf_oracle_check.mojo`, the first
 comparison of this port's leaf ESTIMATOR against CatBoost's own leaf values.**
@@ -5460,13 +5718,62 @@ not our target; where a float32-valued walk stalls is legitimately
 different from where a FastLogf-valued walk stalls, and the entry above
 already ruled that matching their CPU is not the goal. `oracle` 48/48 and
 `check-loss-oracle` (nine objectives) unmoved. What this changes at higgs
-scale -- the walk now stops where their GPU's value resolution stops --
-is the orchestrator's timing/accuracy run to take.
+scale -- the walk now stops where their GPU's value resolution stops -- is
+measured in the addendum below.
+
+### ADDENDUM 2026-09-01: the depth prediction is CONFIRMED, and boosting iterations dominate it
+
+`bench/results/HIGGS_GAP_2026-09-01.md`. Four matched cells on the full
+8,800,000 x 28 HIGGS train split against 2,200,000 test, both arms matched
+(`bootstrap_type='No'`, `random_strength=0`, `boosting_type='Plain'`), one
+process, M4.
+
+| trees | depth | ours | CatBoost CPU | delta |
+|---|---|---|---|---|
+| 100 | 6 | 0.80027628 | 0.80093602 | -0.00066 |
+| 100 | 8 | 0.80786443 | 0.80884582 | -0.00098 |
+| 500 | 6 | 0.81722528 | 0.82210075 | -0.00488 |
+| 500 | 8 | 0.82160984 | 0.83046108 | -0.00885 |
+
+    depth 6 -> 8   at 100 trees:  x1.48
+    depth 6 -> 8   at 500 trees:  x1.81
+    100 -> 500 trees at depth 6:  x7.4
+    100 -> 500 trees at depth 8:  x9.0
+
+**THIS ENTRY'S BLAST-RADIUS PREDICTION HOLDS.** The gap does grow with depth
+at both tree counts, which is what "leaves still moving at step six, extreme
+leaves, which are exactly the ones a deep tree makes many of" predicts.
+
+**IT IS NOT THE WHOLE STORY.** Boosting iterations dominate by roughly 5x, and
+the two effects are very nearly separable: 0.00066 x 7.4 = 0.00488 observed,
+0.00488 x 1.81 = 0.00885 observed, 0.00066 x 1.48 = 0.00098 observed,
+0.00098 x 9.0 = 0.00885 observed. A gap that multiplies cleanly in each factor
+independently is the signature of a small per-tree error accumulating down the
+boosting sequence, with depth setting how large each tree's contribution is.
+It is not a threshold, a single bad split, or a shape-specific artifact; any
+of those would show as a jump rather than a clean product.
+
+**THE CONFIGURATION HYPOTHESIS IS DEAD.** Matching CatBoost's regularization
+moved CatBoost UP and WIDENED the gap
+(`bench/results/higgs_matched_config_2026-08-31.json`); `boosting_type`
+resolved to Plain by itself.
+
+**NOT ESTABLISHED: that this entry is the whole gap.** The +0.00037 the
+Float32 acceptance-width fix is known to be worth is 4% of the 500x8 gap. The
+sweep establishes the SHAPE of the residual, and the shape is consistent with
+this mechanism.
+
+**The next experiment needs no rented box.** Set
+`leaf_estimation_iterations=6` on our arm, which is where CatBoost CPU
+actually freezes, and re-run the four cells. If this entry is the driver the
+gap should collapse most at 500x8 and barely move at 100x6. If it is flat, the
+next suspect is DEVIATION 135's border subsample, which draws a different
+200,000 rows than theirs at the same seed.
 
 
-## 141. `leaf_estimation_backtracking` is not an option here, it is a constant
+## 141. [CLOSED] `leaf_estimation_backtracking` is not an option here, it is a constant
 
-`doc_parallel_boosting.mojo:601` calls `newton_like_walker_estimate` with a
+`doc_parallel_boosting.mojo:761` calls `newton_like_walker_estimate` with a
 literal `BACKTRACKING_ANY_IMPROVEMENT`. Their
 `ELeavesEstimationStepBacktracking` has three values and all three are legal
 on their GPU -- `No`, `AnyImprovement`, `Armijo` -- with `Armijo` supported on
@@ -5486,7 +5793,7 @@ threading `leaf_estimation_backtracking` from `TCatBoostOptions` through
 did not hold.
 
 
-## 137. `random_strength`, and CatBoost's TWO standard deviations that are not the same number
+## 137. [CLOSED] `random_strength`, and CatBoost's TWO standard deviations that are not the same number
 
 `random_strength` was refused by `CatBoostOptions.check()` and the kernel
 path for it was already written and INERT: `pointwise_scores.mojo`'s
@@ -5562,11 +5869,12 @@ against two library calls.
 Second half of the same deviation: the weak target reaches that kernel as
 ONE two-plane buffer (`stats`, plane 0 the weight and plane 1 the
 gradient), not as `TL2Target`'s two buffers. That is this repository's
-convention, the one `split_stat_planes` bridges with a host round trip; the
-kernel reads both planes through one pointer, so the round trip is not paid
-here.
+convention, the one `split_stat_planes` bridges; the kernel reads both planes
+through one pointer, so nothing is paid here. (`split_stat_planes` cost a host
+round trip when this was written and no longer does; it is one device launch,
+`split_planes_f32_kernel`. See 106a.)
 
-## 138. `ComputeTargetVariance` in Float32, and the lane their host comments out
+## 138. [CLOSED] `ComputeTargetVariance` in Float32, and the lane their host comments out
 
 Theirs reduces `(weightedSum, weightedSum2, totalWeight)` in
 `cub::BlockReduce<double>` and ends in three `TAtomicAdd<double>`
@@ -5586,7 +5894,7 @@ their host has `//        double sum = l2StatsCpu[0];`
 because a lane dropped for being unread is a lane that silently changes
 nothing until someone reads it.
 
-## 139. One RNG stream per fit becomes one per tree, and a per-level seed that was not advancing
+## 139. [CLOSED] One RNG stream per fit becomes one per tree, and a per-level seed that was not advancing
 
 CatBoost has ONE `TGpuAwareRandom` for the whole fit and draws
 `NextUniformL()` from it once per `ComputeOptimalSplits` call -- i.e. once
@@ -5615,7 +5923,7 @@ That is PORTING_RULES 8 in its purest form: the wiring was checked, the
 VALUE was never non-zero, and the one line that depended on the value being
 non-zero was wrong.
 
-## 142. THE NOISE CANCELS ON THE GREEDY ARM, and three of the eight sabotages move nothing
+## 142. [CLOSED] THE NOISE CANCELS ON THE GREEDY ARM, and three of the eight sabotages move nothing
 
 `checks/random_strength_check.mojo`, `pixi run check-random-strength`.
 Six gates, all driven through a real `fit`; nothing hands a kernel its
@@ -5739,14 +6047,17 @@ builds one. `gbdt/train.mojo` is where real callers arrive and it takes
 Closing that is a `train()`-signature lane, not this one; it is named here
 so the next reader does not mistake `check()` for a guard.
 
-## 144. `secondDerAsWeights` LANDS: the Newton score functions stop being their twins in name only
+## 144. [CLOSED] `secondDerAsWeights` LANDS: the Newton score functions stop being their twins in name only
 
 (143 is claimed in-source by the pointwise searcher's cross-tree pool --
 `oblivious_tree_doc_parallel_structure_searcher.mojo:134` -- whose entry
 belongs to that lane; this one takes the next number after it.)
 
-`checks/second_der_weights_check.mojo`, `pixi run
-check-second-der-weights`.
+`checks/second_der_weights_check.mojo`. **IT HAS NO `pixi` TASK AND NOTHING
+INVOKES IT.** There is no `check-second-der-weights` in `pixi.toml`, and the
+file is not run from CI, the bindings or `tools/`; it is the only check named
+in this file that no runner reaches. The gates below were run by hand on
+2026-08-21 and there is nothing keeping them green.
 
 CatBoost decides what the histogram's WEIGHT plane holds FROM THE SCORE
 FUNCTION: `secondDerAsWeights = IsSecondOrderScoreFunction(scoreFunction)`
@@ -5873,7 +6184,7 @@ rule: the working tree is a moving target).
 # 2026-08-20 when two lanes both claimed DEVIATION 42 concurrently and
 # the entries had to be renumbered after the fact.
 
-## 350. `TTreeNode`'s `ui16` fields narrow silently in theirs and raise here
+## 350. [CLOSED] `TTreeNode`'s `ui16` fields narrow silently in theirs and raise here
 
 `TTreeNode` is four `ui16` (`gpu_data/gpu_structures.h:167-171`), and their
 flat model builder assigns a `ui32` `FeatureId` straight into it
@@ -5887,7 +6198,7 @@ their code would have built correctly. It is the cheapest class of deviation
 there is: it converts an unrepresentable state into an error and has no
 effect on any representable one.
 
-## 351. `TBinFeatureTable`: their per-candidate walk becomes an O(1) lookup
+## 351. [CLOSED] `TBinFeatureTable`: their per-candidate walk becomes an O(1) lookup
 
 `ToSplit(FeaturesManager, props)` (`methods/helpers.cpp:164-170`) resolves one
 candidate at a time out of the features manager, and `resolve_split` in this
@@ -5909,7 +6220,7 @@ because every fixture happened to be binary-first).
 Bit-inert. HOST_AND_DEVICE.md rule one holds: the table is sized by the total
 BIN count, which scales with features times borders and never with rows.
 
-## 352. Partition stats are recomputed per level, not updated inside the split
+## 352. [CLOSED] Partition stats are recomputed per level, not updated inside the split
 
 Their `TSplitPointsKernel` updates `subsets->PartitionStats` as one of its five
 steps ("Update part stats", `split_properties_helper.cpp:918`), so their
@@ -5932,7 +6243,7 @@ Priced and deferred: closing it means porting the stats update into the split
 chain, which is a change to a file the symmetric lane owns, and it is worth
 doing only once this lane has a number that says how much of a level it is.
 
-## 353. `target_variance_blocks` is pinned under IDENTICAL (row-7 class; twin of 252)
+## 353. [CLOSED] `target_variance_blocks` is pinned under IDENTICAL (row-7 class; twin of 252)
 
 Their `min(4 * TArchProps::SMCount(), CeilDivide(size, blockSize))`
 (`compute_scores.cu:291`) sizes the greedy arm's target-variance reduce from
@@ -5951,7 +6262,7 @@ The same commit routes `compute_target_variance_kernel`'s within-block fold
 through `pinned_block_sum` (DEVIATION 251's family -- this kernel was a
 producer site row 8's checklist had not listed).
 
-## 354. Histogram replication is pinned under IDENTICAL (row-7 class)
+## 354. [CLOSED] Histogram replication is pinned under IDENTICAL (row-7 class)
 
 `replication_for` (`greedy_search_helper.mojo`) is their
 `CeilDivide(blocksPerSm * SMCount(), x*y*z)` (`hist_binary.cu:95` and twins),
@@ -5967,13 +6278,17 @@ Under IDENTICAL the formula is fed `partition_chunks_sm_for`'s pin (32
 everywhere); under FAST the device's count, unchanged. One pin for all three
 policies, because a pin only some policies read cannot be audited.
 
-**KNOWN RESIDUE, not closed by this entry:** `kernel_matrix.block_size_for`
-is not identical-gated, so the float families' BLOCK SIZE (hence
-`min_docs_per_block`, replica count and `HIST_SIZE`) still follows the
-vendor's shared-memory budget under IDENTICAL -- NVIDIA's 48 KB yields 768
-where the identity floor's 32 KB yields 512. The comptime accessor needs the
-same identical-gating `spec_for` (the runtime report) already has. That edit
-is the kernel matrix owner's; reported 2026-08-22.
+**THE RESIDUE THIS ENTRY REPORTED IS CLOSED, 2026-08-22, at `501d000`.**
+`kernel_matrix.block_size_for` was not identical-gated, so the float families'
+BLOCK SIZE (hence `min_docs_per_block`, replica count and `HIST_SIZE`)
+followed the vendor's shared-memory budget under IDENTICAL: NVIDIA's 48 KB
+yielded 768 where the identity floor's 32 KB yields 512. The comptime
+accessor now reads `GLOBAL_NUMERIC_MODE` itself and takes
+`IDENTITY_FLOOR_SHARED_BYTES` with a cap of `IDENTITY_FLOOR_BLOCK` under
+IDENTICAL, so every caller inherits the gate with no call-site wiring; the
+NVIDIA column's 768 becomes 512 and the one-byte family's 384 becomes 256
+(`checks/kernel_matrix.mojo`, the `block_size_for` docstring).
+`IDENTITY_PATHS.md` row 3 records it as re-opened and re-closed the same day.
 
 
 # =====================================================================
@@ -5983,7 +6298,7 @@ is the kernel matrix owner's; reported 2026-08-22.
 # Assigned by the orchestrator 2026-08-22. 250 is held for the parked
 # partitions-reduce patch and is NOT claimed by either entry below.
 
-## 251. `pinned_block_sum`: the within-block float fold does not follow the wavefront under IDENTICAL
+## 251. [CLOSED] `pinned_block_sum`: the within-block float fold does not follow the wavefront under IDENTICAL
 
 IDENTITY_PATHS row 8's remainder. Every fv/magnitude producer
 (`pointwise_target_kernel`, `cross_entropy_kernel`, both multilogit value
@@ -6006,7 +6321,7 @@ replaced (DEVIATION 71 and the pointwise determinism fix), so the IDENTICAL
 arm is, if anything, closer to their in-block shape than the library call
 was.
 
-## 252. `std_dev_blocks` is pinned under IDENTICAL, the way row 7 pinned `partition_stats_chunks`
+## 252. [CLOSED] `std_dev_blocks` is pinned under IDENTICAL, the way row 7 pinned `partition_stats_chunks`
 
 `min(4 * SMCount(), CeilDivide(size, blockSize))` (`compute_scores.cu:291`)
 sizes the score-noise std-dev reduce (`random_score_helper.mojo`), and a
@@ -6020,10 +6335,12 @@ the launch, the `partials` sizing and the fold count alike -- through the
 SAME `kernel_matrix.partition_chunks_sm_for` row 7 uses (32 every vendor,
 deliberately no real device's own number, mode-gated exactly as row 7 is:
 device count under FAST). The greedy arm's twin, `target_variance_blocks`
-(`compute_scores.mojo:663`), has the identical hazard and is the greedy
-lane's file; reported, not touched.
+(`gbdt/methods/greedy_subsets_searcher/kernel/compute_scores.mojo:807`), had
+the identical hazard. It is **PINNED, by DEVIATION 353**, through the same
+`partition_chunks_sm_for[_identical]`; `IDENTITY_PATHS.md` row 7 lists it as
+closed and live on every `random_strength != 0` fit.
 
-## 257. `EnsureNewtonIsAvailable` was never ported; the Huber / Quantile+Newton / MAE+Newton hash coincidence is sha256 of zeros
+## 257. [CLOSED] `EnsureNewtonIsAvailable` was never ported; the Huber / Quantile+Newton / MAE+Newton hash coincidence is sha256 of zeros
 
 Found 2026-08-23 explaining an E2-matrix oddity: `Huber delta=1.0`,
 `Quantile leaf_estimation_method=Newton` and `MAE ... Newton` all hashed
@@ -6085,7 +6402,7 @@ matches E1_RESULTS.md, so the rebuilt .so is the recorded one).
 `check-options` green.
 
 
-## 259. `grow_policy` reaches `train()` and the Python surface: Depthwise and Lossguide boost non-symmetric trees
+## 259. [CLOSED] `grow_policy` reaches `train()` and the Python surface: Depthwise and Lossguide boost non-symmetric trees
 
 Landed 2026-08-23. Until this entry `doc_parallel_boosting.fit_with_test`
 grew oblivious trees only and `catboost_options.check()` refused
@@ -6182,7 +6499,7 @@ their message, the passing verdict); their cards carry `treeNNN.dN.*`
 tags only (the non-symmetric driver took a `tag_prefix`, empty for the
 single-tree gates so their cards are byte-identical).
 
-## 260. The non-symmetric arm runs at the kernel matrix's `HIST2_SMEM_MODE`, and the first measurement that said it could not was a race
+## 260. [CLOSED] The non-symmetric arm runs at the kernel matrix's `HIST2_SMEM_MODE`, and the first measurement that said it could not was a race
 
 The lane gates (`check-depthwise`, `check-lossguide`, the E2 growth cards)
 drive `fit_non_symmetric_tree` at accumulation mode 0 (CatBoost's
@@ -6201,7 +6518,7 @@ stands for this arm; pinning mode 0 here would have been an inline
 vendor/arm fork hiding a race. Recorded because the wrong reading lasted
 an hour and the table is the evidence either way.
 
-## 261. The non-symmetric driver staged three id lists per level through ONE host buffer under queued copies
+## 261. [CLOSED] The non-symmetric driver staged three id lists per level through ONE host buffer under queued copies
 
 `TDepthwiseWorkspace` had one `h_ids`/`d_ids` pair, and a level wrote three
 host-built lists into it before its first drain -- `plan.compute_ids` for

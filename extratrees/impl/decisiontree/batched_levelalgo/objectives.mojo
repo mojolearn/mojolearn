@@ -886,6 +886,23 @@ struct GiniObjectiveFunction[dtype: DType](Copyable, Movable):
 #   behaviour and sklearn's (float64) is not bit-comparable to either. The
 #   exact-argmax guarantee DEVIATION 144 gives Gini is NOT extended to
 #   entropy and is not claimed for it.
+# THE BASE, CORRECTED 2026-09-01. Two upstream quantities live in this
+#   struct and they are BOTH BASE 2, which this block did not say and half
+#   the code did not do. cuML's `GainPerSplit` divides by `raft::log(2)` at
+#   every term and always did. sklearn's REPORTED impurities
+#   (`NodeImpurity`, `ChildrenImpurity`, and `ProxyImpurityImprovement`
+#   through them) do too, and that is the one that was wrong here: their
+#   `log` inside `_criterion.pyx` is NOT `libc.math.log`. It is
+#   `sklearn/tree/_utils.pxd:51`, defined at `sklearn/tree/_utils.pyx:64-65`
+#   as `ln(x) / ln(2.0)`. This port dropped the `/ ln(2)` and reported NATS,
+#   and `objectives_check` had written `nats` into its own reference, so the
+#   gate agreed with the defect. Both were fixed in one edit. The scale is
+#   uniform and positive and those three functions are REPORTING-ONLY --
+#   grep says nothing outside this file and `checks/` calls them, and the
+#   split path takes `GainPerSplit` -- so the correction moves NO TREE on
+#   any arm. `checks/objectives_check.mojo::check_entropy_analytic` now pins
+#   the base by exact value: a pure node is 0 and a balanced two-class node
+#   is 1, and 1 is a number only base 2 produces.
 # ==========================================================================
 
 
@@ -1051,16 +1068,38 @@ struct EntropyObjectiveFunction[dtype: DType](
                    if count_k > 0.0: count_k /= w; entropy -= count_k * log(count_k)
             return entropy / n_outputs
 
-        Their `log` is libm's double; here it is `_log_seam` on `dtype`
-        (DEVIATION 459), because this value is reporting and the report
-        must be one arithmetic everywhere under IDENTICAL."""
+        THEIR `log` IS BASE 2, NOT libm's NATURAL LOG. `_criterion.pyx` does
+        not take `log` from `libc.math`; it takes it from
+        `sklearn/tree/_utils.pxd:51`, whose body is
+        `sklearn/tree/_utils.pyx:64-65`:
+
+            cdef inline float64_t log(float64_t x) noexcept nogil:
+                return ln(x) / ln(2.0)
+
+        so sklearn's reported entropy is in BITS. This function returned NATS
+        until 2026-09-01 -- the `/ ln(2)` was dropped in transcription, and
+        `objectives_check` had codified the wrong reference beside it. Fixed
+        in the same edit as the check. THE SCALE IS UNIFORM AND THIS
+        FUNCTION IS REPORTING-ONLY (grep: its only callers are
+        `ProxyImpurityImprovement` below and `checks/objectives_check.mojo`;
+        the split path takes cuML's `GainPerSplit`, which already divides by
+        `log(2)` at every term), so NO TREE MOVES. What moves is the number
+        a caller reads; it was 0.693 times sklearn's and it is now
+        sklearn's.
+
+        The division is PER TERM and not once at the end, because that is
+        where sklearn's inline `log` puts it and the two orders are not the
+        same float. `_log_seam` is `identical_log` on `dtype` (DEVIATION
+        459), because this value is reporting and the report must be one
+        arithmetic everywhere under IDENTICAL."""
+        comptime Two = Scalar[Self.dtype](2.0)
         var entropy = Scalar[Self.dtype](0.0)
         var count_k: Scalar[Self.dtype]
         for c in range(Int(self.nclasses)):
             count_k = Scalar[Self.dtype](Int(hist_total[unsafe_offset=c].x))
             if count_k > 0.0:
                 count_k /= weighted_n_node_samples
-                entropy -= count_k * _log_seam(count_k)
+                entropy -= count_k * (_log_seam(count_k) / _log_seam(Two))
         return entropy
 
     def ChildrenImpurity[
@@ -1079,7 +1118,12 @@ struct EntropyObjectiveFunction[dtype: DType](
     ):
         """sklearn `Entropy.children_impurity`, `_criterion.pyx:569-602`,
         with `sum_right` recovered as `total - left` the way
-        `GiniObjectiveFunction.ChildrenImpurity` recovers it."""
+        `GiniObjectiveFunction.ChildrenImpurity` recovers it.
+
+        BASE 2, for the reason `NodeImpurity` above states at length:
+        sklearn's `log` here is `_utils.pyx:64-65`'s `ln(x) / ln(2.0)`, not
+        libm's. Same 2026-09-01 fix, same per-term division."""
+        comptime Two = Scalar[Self.dtype](2.0)
         var entropy_left = Scalar[Self.dtype](0.0)
         var entropy_right = Scalar[Self.dtype](0.0)
         var count_k: Scalar[Self.dtype]
@@ -1087,7 +1131,7 @@ struct EntropyObjectiveFunction[dtype: DType](
             count_k = Scalar[Self.dtype](Int(hist_left[unsafe_offset=c].x))
             if count_k > 0.0:
                 count_k /= weighted_n_left
-                entropy_left -= count_k * _log_seam(count_k)
+                entropy_left -= count_k * (_log_seam(count_k) / _log_seam(Two))
 
             count_k = Scalar[Self.dtype](
                 Int(
@@ -1097,7 +1141,9 @@ struct EntropyObjectiveFunction[dtype: DType](
             )
             if count_k > 0.0:
                 count_k /= weighted_n_right
-                entropy_right -= count_k * _log_seam(count_k)
+                entropy_right -= count_k * (
+                    _log_seam(count_k) / _log_seam(Two)
+                )
 
         impurity_left = entropy_left
         impurity_right = entropy_right

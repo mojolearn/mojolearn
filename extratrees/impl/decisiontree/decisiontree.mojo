@@ -78,9 +78,19 @@ struct DecisionTreeParams(ImplicitlyCopyable, Movable):
     `validity_check` rejects; see the module docstring."""
 
     var max_leaves: Int32
-    """Maximum leaf nodes per tree, a SOFT constraint in their code
-    (`builder.cuh:86-88` stops pushing work items once the counter is reached,
-    it does not prune). Unlimited if -1. Their default: -1."""
+    """Maximum leaf nodes per tree, a SOFT constraint in their code: it
+    stops pushing work items once the counter is reached, it does not prune.
+    Unlimited if -1. Their default: -1. `decisiontree.hpp:37` at this lane's
+    25.08 pin.
+
+    CITATION CORRECTED 2026-09-01. This said `builder.cuh:86-88`, which at
+    that pin is the opening brace of `IsExpandable` plus its `max_depth` and
+    `min_samples_split` tests -- three lines that do not mention
+    `max_leaves`. The budget is tested at `builder.cuh:89` inside
+    `IsExpandable` and again at `:106` as the `break` in `Push`, over
+    `leaf_counter` initialised at `:59` and raised at `:114`. The wrong span
+    had been copied on into `estimator.mojo`'s refusal message, and both
+    were fixed together."""
 
     var max_features: Float32
     """Ratio of columns to consider per node split. Their default: 1.0.

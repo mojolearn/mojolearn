@@ -299,14 +299,16 @@ struct NodeQueue[dtype: DType](Movable):
     def push(
         mut self, work_items: List[NodeWorkItem], splits: List[Split]
     ) raises:
-        """`builder.cuh:91-134`: turn a batch of splits into nodes and work.
+        """`builder.cuh:93-140`: turn a batch of splits into nodes and work.
 
         Transcribed in their order. ONE HALF of that order is load-bearing and
         the other half is not, and the difference was MEASURED rather than
-        argued: the `max_leaves` test at `:105` sits AFTER the validity
-        `continue` at `:99`, so an invalid split does not consume leaf budget
-        -- sabotaging that turns `builder_check` red. But their `break` at
-        `:106` is EQUIVALENT to a `continue` here, because `leaf_counter` only
+        argued: the `max_leaves` test at `:106` sits AFTER the validity
+        `continue` at `:101-104`, so an invalid split does not consume leaf
+        budget -- sabotaging that turns `builder_check` red. The test and the
+        `break` are ONE STATEMENT on `:106`; this paragraph said `:105` and
+        `:106` as though they were two, and `:105` is blank. That `break` is
+        EQUIVALENT to a `continue` here, because `leaf_counter` only
         ever increases inside this loop, so once the budget test is true it
         stays true for every remaining item in the batch. Replacing the break
         with a continue leaves the check green, and that is not a hole in the
@@ -328,7 +330,7 @@ struct NodeQueue[dtype: DType](Movable):
             var item = work_items[i]
             var parent_range = self.node_instances[Int(item.idx)]
 
-            # `:99-103`
+            # `:101-104`
             if split_not_valid(
                 split,
                 self.params.min_impurity_decrease,
@@ -337,7 +339,7 @@ struct NodeQueue[dtype: DType](Movable):
             ):
                 continue
 
-            # `:105-106` -- a BREAK, not a continue.
+            # `:106` -- a BREAK, not a continue.
             if (
                 self.params.max_leaves != -1
                 and self.tree.leaf_counter >= self.params.max_leaves
