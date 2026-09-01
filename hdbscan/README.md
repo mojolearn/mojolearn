@@ -248,12 +248,20 @@ no file outside `hdbscan/`, since `hierarchy`'s own linkage keeps
 Boruvka's orientation, which that lane documents as inert for its output and
 compares as an unordered pair
 (`hierarchy/checks/linkage_check.mojo::_children_pairs_equal`, line 352).
-The arm is `HDB_SAB_MST_ORIENT_RAW` and its MUST FAIL is already
-measured, because the un-canonicalized run is the failure recorded above.
-**That arm is WIRED (`impl/cluster/detail/single_linkage.mojo:245`) and
-still NOT DRIVEN by any check: `hdbscan_check.mojo` neither imports nor
-selects it.** It is the one arm of the nine that no gate exercises, and
-it is item 11 under WHAT IS OWED.
+The arm is `HDB_SAB_MST_ORIENT_RAW`, and it is DRIVEN AND GREEN as of
+2026-09-01. Until that day it was WIRED
+(`impl/cluster/detail/single_linkage.mojo:245`) AND NEVER DRIVEN --
+`hdbscan_check.mojo` neither imported nor selected the name -- so it was
+the one arm of the nine that no gate exercised, while this file called
+its movement "already measured". A wired arm nobody drives is the same
+nothing as an inert one; it only reads better.
+
+Now driven, it REPRODUCES THE HISTORICAL FAILURE EXACTLY: 30 parents, 34
+children and 6 sizes moved on `blobs96`, in BOTH modes, which is the same
+30/34/6 the 2026-08-25 pre-pin run raised with. The sabotage therefore
+undoes precisely what DEVIATION 1614 pinned and nothing else. The counts
+are PRINTED, not pinned, because they are a property of one fixture on one
+day and pinning them would make a fixture edit look like a defect.
 
 Everything ahead of this stage passes. Refusals, core distances, the mutual
 reachability matrix and its symmetry, and the signed-zero max all gate green
@@ -483,10 +491,10 @@ Boruvka stored** (`impl/cluster/detail/single_linkage.mojo`, the block
 between `build_sorted_mst` and `build_dendrogram_host`). **LANDED 2026-09-01 -- this entry used to read "OPEN: the block and the
 code are NOT WRITTEN, the gate is RED, and this entry is the design, not
 a description of the tree."** The code and the block are written and
-`check_condensed_tree_vs_oracle` passes; what is still open is its ARM,
-`HDB_SAB_MST_ORIENT_RAW`, which no check drives (item 11 under WHAT IS
-OWED). Row H3a and the Status section carry the full argument, and it
-compresses to this.
+`check_condensed_tree_vs_oracle` passes, and its ARM,
+`HDB_SAB_MST_ORIENT_RAW`, is DRIVEN AND GREEN since 2026-09-01 -- it had
+been wired and undriven until then. Row H3a and the Status section carry
+the full argument, and it compresses to this.
 `build_dendrogram_host` (`agglomerative.cuh:134-150`) puts `find(src)` in the left slot and
 `find(dst)` in the right, `coo_sort_by_weight` (`sort.h:94-102`) reorders
 rows and reorients none, and `min_edge_per_supervertex`
@@ -500,9 +508,11 @@ min/max pairs on the host copy this lane already downloads, and it is not
 free of consequence, because the recorded stage `hdbscan.mst.edges`
 changes value. The
 arm is `HDB_SAB_MST_ORIENT_RAW`, which skips the canonicalization and
-MUST FAIL `check_condensed_tree_vs_oracle` on `blobs96` -- the one arm in
-this table whose movement is already measured, since the current red
-gate IS that arm's output. `hierarchy` is NOT touched, because its own
+MUST FAIL `check_condensed_tree_vs_oracle` on `blobs96`. DRIVEN 2026-09-01
+and it moves 30 parents / 34 children / 6 sizes in both modes, the same
+signature the 2026-08-25 pre-pin gate raised with -- so the arm reproduces
+the exact failure the pin removed. It had been wired and undriven for a
+week, and this table described its movement as measured throughout. `hierarchy` is NOT touched, because its own
 dendrogram keeps Boruvka's orientation, which it documents as inert for its labels
 and compares as an unordered pair.
 
@@ -625,8 +635,8 @@ executed; what has never happened is a green correctness run on any column.
 0. **DEVIATION 1614. DONE, landed 2026-09-01** -- this item used to read
    "the thing blocking everything below. Write the canonicalization and
    its arm, then re-run." The canonicalization is written and
-   `check_condensed_tree_vs_oracle` passes; what its arm still owes is
-   item 11.
+   `check_condensed_tree_vs_oracle` passes, and its arm is driven and
+   green too -- item 11 CLOSED the same day.
 1. **Apple M4, both modes.** The suite has been run twice and has never
    finished. What is owed is a run that reaches the last line. Build
    `check-hdbscan` under FAST and under `tools/with_identical_mode.sh`,
@@ -719,11 +729,24 @@ executed; what has never happened is a green correctness run on any column.
     condensed `n_clusters` comes back other than 11 over 48 points, the
     merge ladder is not the one derived at the top of this file and the
     derivation, not the run, is what is wrong.
-11. **`HDB_SAB_MST_ORIENT_RAW` IS WIRED AND NOT DRIVEN.** The arm exists
-    at `impl/cluster/detail/single_linkage.mojo:245` and
-    `hdbscan_check.mojo` neither imports nor selects it, so the arm that
-    guards DEVIATION 1614 -- the deviation this lane just landed -- has
-    no gate calling it. Its expected movement is the only one in the
-    sabotage table that is already MEASURED (30 parents, 34 children, 6
-    sizes on `blobs96`, the 2026-08-25 run), which makes it the cheapest
-    arm in the lane to close and the most embarrassing one to leave open.
+11. **`HDB_SAB_MST_ORIENT_RAW` WAS WIRED AND NOT DRIVEN. CLOSED
+    2026-09-01.** The arm existed at
+    `impl/cluster/detail/single_linkage.mojo:245` and `hdbscan_check.mojo`
+    neither imported nor selected it, so the arm guarding DEVIATION 1614 --
+    the deviation this lane had just landed -- had no gate calling it,
+    while this file described its movement as already measured. It is now
+    imported, driven on `blobs96`, and green in BOTH modes.
+
+    **IT REPRODUCES THE HISTORICAL FAILURE EXACTLY**: 30 parents, 34
+    children, 6 sizes, which is the same 30/34/6 the 2026-08-25 pre-pin run
+    raised with. That is the strongest form this arm could take -- the
+    sabotage undoes precisely what the pin does and nothing else -- and it
+    is why the counts are printed rather than asserted: they belong to one
+    fixture on one day, and pinning them would turn a fixture edit into a
+    reported defect.
+
+    THE LESSON, since it is the second of its kind in this lane in one day:
+    `HDB_SAB_CONDENSE_DFS` was driven against a fixture that could not
+    witness it, and this arm was not driven at all. Both read as covered
+    from the sabotage table. When a table lists an arm, the thing to check
+    is that some check IMPORTS the name.

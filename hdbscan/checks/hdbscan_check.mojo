@@ -66,6 +66,12 @@ SABOTAGE TABLE (results are copied into hdbscan/README.md)
                                        case-1 nodes and they are nested,
                                        so both walks order them the same
                                        way and the arm was INERT there
+  HDB_SAB_MST_ORIENT_RAW      blobs    MUST FAIL the condensed-tree gate.
+                                       DEVIATION 1614's arm. It was WIRED
+                                       AND NEVER DRIVEN until 2026-09-01 --
+                                       no check imported it -- so the pin
+                                       that closes H3a's other half had no
+                                       gate calling it
   HDB_SAB_STABILITY_DESCENDING blobs   RECORDED with the moved-cell count
   HDB_SAB_EOM_NO_UPDATE       gradient MUST FAIL the selection gate
   HDB_SAB_SKIP_GUARDS         planted  RECORDED: what the guard keeps out
@@ -111,6 +117,7 @@ from hdbscan.checks.hdbscan_sabotage import (
     HDB_SAB_HW_MAX,
     HDB_SAB_LAMBDA_STD_DIV,
     HDB_SAB_MR_TWO_WAY,
+    HDB_SAB_MST_ORIENT_RAW,
     HDB_SAB_NONE,
     HDB_SAB_SKIP_GUARDS,
     HDB_SAB_STABILITY_DESCENDING,
@@ -1713,6 +1720,70 @@ def check_hdbscan_sabotages() raises:
         " is the DERIVED answer: 5 clusters means four cluster edges means"
         " two case-1 nodes, and two case-1 nodes in one tree are ancestor"
         " and descendant, an order both walks agree on"
+    )
+
+    # HDB_SAB_MST_ORIENT_RAW: DEVIATION 1614's arm, and it is the OTHER
+    # HALF of H3a. ADDED 2026-09-01, and until that day it was WIRED AND
+    # NEVER DRIVEN -- the constant existed at `hdbscan_sabotage.mojo:113`,
+    # the branch existed at `single_linkage.mojo:245`, and no check
+    # imported the name. So the pin that closes H3a had no gate calling
+    # it, while `hdbscan/README.md` called it "the only arm in this table
+    # whose movement is already measured". A wired arm nobody drives is
+    # the same nothing as an inert one; it just reads better.
+    #
+    # WHAT IT SABOTAGES. The MST comes out of Boruvka with each edge
+    # oriented by `temp_src[tid] = tid`, which is a function of the
+    # COLORS, and `coo_sort_by_weight` reorients nothing. DEVIATION 1614
+    # rewrites every edge to `(min(u,v), max(u,v))` before the dendrogram
+    # is built. The arm skips that loop. It is load bearing HERE and inert
+    # in `hierarchy/`, whose gate compares children as an UNORDERED pair,
+    # because HDBSCAN's `condense` READS the stored orientation: the BFS
+    # visits `children[2i]` before `children[2i+1]`, so `next_label` is a
+    # function of the child order as well as of the traversal.
+    #
+    # ON blobs96, and this arm's fixture choice is the OPPOSITE of
+    # CONDENSE_DFS's just above. That one needed a tree whose case-1 nodes
+    # are not all nested. This one does not care about case-1 structure at
+    # all -- it changes which child sits in slot 0 for edges the oracle
+    # would have flipped -- so the lane's main fixture is the right place
+    # and no new fixture is owed.
+    #
+    # THE EXPECTED MOVEMENT IS ALREADY MEASURED, which is what makes this
+    # a cheap arm to close: the 2026-08-25 run RAISED here with 30 parents,
+    # 34 children and 6 sizes differing on blobs96 in both modes, and that
+    # failure IS this arm's signature. The assertion below is that it moves
+    # at all; the counts are PRINTED rather than pinned, because they are a
+    # property of one fixture on one day and pinning them would make a
+    # fixture edit look like a defect.
+    var orient = _fit_plain(ctx, fb, HDB_SAB_MST_ORIENT_RAW)
+    var orient_parents = _i32_differ(
+        base.condensed.parents, orient.condensed.parents
+    )
+    var orient_children = _i32_differ(
+        base.condensed.children, orient.condensed.children
+    )
+    var orient_sizes = _i32_differ(
+        base.condensed.sizes, orient.condensed.sizes
+    )
+    var orient_moved = orient_parents + orient_children + orient_sizes
+    if orient_moved == 0 and base.condensed.n_edges == orient.condensed.n_edges:
+        raise Error(
+            "check_hdbscan_sabotages: HDB_SAB_MST_ORIENT_RAW left the"
+            " condensed tree identical on " + hfixture_name(fb) + ". That"
+            " arm skips DEVIATION 1614's min/max rewrite, so either the"
+            " rewrite is not reaching the dendrogram the condense reads --"
+            " check that `single_linkage.mojo`'s canonicalization loop runs"
+            " before the host copy back, not after -- or Boruvka already"
+            " emits every edge low-first on this fixture, in which case the"
+            " pin is real but this fixture cannot witness it and the arm"
+            " needs one whose MST has an edge the oracle would flip"
+        )
+    print(
+        "check_hdbscan_sabotages OK: HDB_SAB_MST_ORIENT_RAW FAILED the"
+        " condensed-tree gate as required on " + hfixture_name(fb) + ": "
+        + String(orient_parents) + " parents, " + String(orient_children)
+        + " children and " + String(orient_sizes) + " sizes moved"
+        " (DEVIATION 1614; the 2026-08-25 pre-pin failure was 30/34/6)"
     )
 
     # HDB_SAB_EOM_NO_UPDATE: the selection gate. SWEPT OVER EVERY FIXTURE
