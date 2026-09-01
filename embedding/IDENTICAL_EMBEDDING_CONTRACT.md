@@ -2,23 +2,47 @@
 
 # PROFILE `mojolearn.identical.embedding.fp32.v1`
 
-**NOTHING IN THIS DOCUMENT HAS BEEN COMPILED AND NOTHING HAS BEEN RUN.**
-Written 2026-08-25 by the embedding lane, DEVIATIONS 1300 through 1339. No
-GPU has executed a kernel from `embedding/`, no gate has ever failed against
-it, no sabotage arm has ever been built, no card has ever been emitted, and
-every number below was derived on paper or read out of source on the same
-day. Three files exist in this directory and none of them has been through a
-compiler. Read section 13 before quoting anything here.
+**COMPILED, RUN AND CARDED ON TWO COLUMNS, APPLE AND AMD, 2026-08-28.
+CLAUSE (a) ONLY. NO NVIDIA LEG.** Written 2026-08-25 by the embedding lane,
+DEVIATIONS 1300 through 1339. The sentence that used to open this document,
+that nothing here had been compiled and nothing run, is deleted as false.
+What actually happened, with its artifacts:
 
-The three companion files are
+    bench/results/e1/2026-08-28_161700-MacBook-Air-1-terrabyte/lanes/embedding.identical.card
+    bench/results/e1/2026-08-28_203552-mojolearn-e2-amd/lanes/embedding.identical.card
+
+Both are 9 records and both have md5 `c7f824c35336bef2a3d0f672a172ef29`, so
+the Apple M-series and the AMD MI325X produced the same bytes. **Clause (a)
+PASSED on both, over 17 fixture cases, 9 of 9 stages bit-identical to the
+host oracle on all 6,887 cells, 9 of 9 card tags in section 10's order.**
+This lane also produced DEVIATION 1938, recorded at `IDENTITY_PATHS.md`
+row 10. Its `f_subw` is the only fixture in the whole repository that plants a
+subnormal on a copy path, and it is what exposed `numerics.ftz` as inert on device, a cross-vendor
+hole every other lane's fixtures had hidden.
+
+**Two columns are not three, and clause (a) is not the contract.** Still
+absent, and the run's own SCOPE line names each of these. NO NVIDIA LEG;
+clauses (b), (c), (d), (e) and (f) all SKIPPED on both columns; `PLAN_SORT`
+still not written, so clause (d) is a host shadow at best and plan invariance
+has never run and cannot; the SHIPPED shape V=128256 d=4096 T=4096 that
+section 11.2 calls mandatory, which is 2.10 GB of `dW` and belongs on a
+rented GPU; FAST mode; all fifteen sabotage builds; and any INDEPENDENT
+reference, because there is no embedding table in cuML, cuVS or RAFT and no
+PyTorch checkout, so both sides of every comparison here are ours. Read
+section 13 before quoting anything.
+
+The companion files, all five present on disk, are
 
     embedding/IDENTICAL_EMBEDDING_CONTRACT.md   this file, the specification
-    embedding/checks/embedding_oracle.mojo   the NORMATIVE host answer
-    embedding/checks/embedding_identical.mojo          the device spelling
+    embedding/checks/embedding_oracle.mojo      the NORMATIVE host answer
+    embedding/checks/embedding_identical.mojo   the device spelling
+    embedding/checks/embedding_fixture.mojo     the fixture set, 1,946 lines
+    embedding/checks/embedding_check.mojo       the gate, 3,287 lines, `def main` at :2961
 
-and the two that do not exist and are owed are `embedding_fixture.mojo` and
-`embedding_check.mojo`. **Section 11 is a specification for gates, not a
-report of any.**
+Two real gaps remain around them. There is **no `pixi.toml` task for this
+lane**, so the gate runs by path only, and **`embedding/README.md` is still
+owed**. **And section 11 records only clause (a); its other five clauses are
+still specification rather than report.**
 
 ---
 
@@ -1030,9 +1054,14 @@ UNALIGNED split points, with `EMB_ACCUM_BY_ADD` shown to fail the same gate;
 NAMED sabotage that fails a gate, **with its predicted INERT set asserted as
 a mask** rather than merely observed to have moved something.
 
-`embedding/checks/embedding_check.mojo` will be the gate file. **It does
-not exist.** FAST arms of (a) are RECORDED, not asserted, where they are
-vendor shaped -- the metrics lane's leg-11 lesson.
+`embedding/checks/embedding_check.mojo` IS the gate file. It exists, 3,287
+lines with `def main` at :2961, and it ran on Apple and on the AMD MI325X on
+2026-08-28. **Clause (a) is the ONLY clause either leg ran, and it PASSED on
+both, 17 cases,
+9 of 9 stages, 6,887 cells, on both columns, cards byte-identical.** Clauses
+(b), (c), (e) and (f) are opt-in and were SKIPPED on both; clause (d) cannot
+run at all because `PLAN_SORT` is not written. FAST arms of (a) are RECORDED,
+not asserted, where they are vendor shaped, the metrics lane's leg-11 lesson.
 
 Clause (e) is asserted in BOTH modes. On an exactly-representable fixture a
 flushed add and an unflushed one produce the same bits, so a FAST failure
@@ -1258,14 +1287,23 @@ number until it is measured, alternated inside one thermal window.**
   which means **the plan-invariance gate -- the strongest evidence that the
   arithmetic does not read the plan -- has never been run and cannot be.**
 - **No performance number.** Section 12 is derivation. None has been taken.
-- **Nothing cross-vendor until a leg runs.** Everything here is
-  CONSTRUCTION. The GEMM lane's own history is the standing reason to say so
-  -- Apple and AMD agreed bit for bit through 302 stages while NVIDIA
-  diverged at `tree001.winners.scores` -- so two backends agreeing closes
-  nothing.
-- **Nothing here has been compiled.** No file in `embedding/` has been
-  through a compiler, `embedding_check.mojo` and `embedding_fixture.mojo` do
-  not exist, and not one clause above has been falsified by a sabotage.
+- **TWO columns is not a cross-vendor claim, and this lane's two are exactly
+  the pair that has fooled this repository before.** Apple and the AMD MI325X
+  produced the same `embedding.identical.card` bytes on 2026-08-28, and the
+  GEMM lane's own history is why that closes nothing, because Apple and AMD agreed
+  bit for bit through 302 stages while NVIDIA diverged at
+  `tree001.winners.scores`. **NVIDIA is the missing column and it is the one
+  that has broken every other lane.** Until an NVIDIA leg runs, this profile
+  makes no cross-vendor claim.
+- **Compiled, run and carded on TWO columns, Apple and AMD, clause (a) only.**
+  `embedding_check.mojo` (3,287 lines, `def main` at :2961) and
+  `embedding_fixture.mojo` (1,946 lines) both exist and both ran on
+  2026-08-28; the two `embedding.identical.card` files share md5
+  `c7f824c35336bef2a3d0f672a172ef29`. The claim that nothing here had been
+  compiled is deleted. What is still absent is NVIDIA, clauses (b) through
+  (f) on either column, the shipped shape, FAST mode, and every one of the
+  fifteen sabotage builds; not one clause of this document has yet been
+  falsified by an arm that was actually built.
 
 ---
 
@@ -1276,9 +1314,12 @@ number until it is measured, alternated inside one thermal window.**
     embedding/checks/__init__.mojo           empty
     embedding/checks/embedding_oracle.mojo   the NORMATIVE host answer
     embedding/checks/embedding_identical.mojo          the device spelling
-    embedding/checks/embedding_fixture.mojo  OWED, does not exist
-    embedding/checks/embedding_check.mojo    OWED, does not exist
-    embedding/README.md                         OWED, does not exist
+    embedding/checks/embedding_fixture.mojo  PRESENT, 1,946 lines
+    embedding/checks/embedding_check.mojo    PRESENT, 3,287 lines, `def main` at :2961
+    embedding/README.md                      OWED, does not exist (checked on disk)
+    a `pixi.toml` task for this lane         OWED, none exists (checked); the
+                                             2026-08-28 legs drove the gate by
+                                             path through tools/e1_bootstrap.sh
 
 The oracle carries TWO spellings of the permutation on purpose --
 `emb_perm_by_scan`, which is `PLAN_SCAN`'s order and is NORMATIVE, and
@@ -1327,13 +1368,21 @@ This lane was permitted to create exactly five paths and to edit none. Every
 item below is a change to a file this lane does not own, or a file it was not
 permitted to create. Nothing on this list has been done.
 
-1. **`embedding/checks/embedding_check.mojo` and
-   `embedding/checks/embedding_fixture.mojo` DO NOT EXIST.** Not one
-   clause of this document has been falsified by a sabotage; section 11 is a
-   specification for gates and not a report of any. **Every sabotage switch in
-   `embedding.mojo` has never been compiled, let alone shown to fail a gate.
-   A switch that has never fired is a comment.** This is the largest debt in
-   the lane and everything else is smaller than it.
+1. **NOT ONE SABOTAGE ARM HAS BEEN BUILT. THAT, AND NOT A MISSING FILE, IS
+   THE LARGEST DEBT IN THE LANE.** `embedding/checks/embedding_check.mojo`
+   (3,287 lines) and `embedding/checks/embedding_fixture.mojo` (1,946 lines)
+   both exist, and both ran on Apple and on the AMD MI325X on 2026-08-28, so
+   the sentence that used to stand here, that neither file existed and that no
+   switch had ever been compiled, is deleted as false. The run's own ledger
+   line reports the binary as CLEAN, meaning no arm was compiled in, and both
+   legs left all fifteen buildable arms unrun. The switches live in
+   `embedding/checks/embedding_identical.mojo`, not in an `embedding.mojo`,
+   which is a file that has never existed. Two of section 11.1's eighteen arms
+   cannot be built at all: `EMB_SORT_KEY_ID_ONLY_UNSTABLE` because it is a
+   `PLAN_SORT` arm and `PLAN_SORT` is not written, and
+   `EMB_FOLD_VIA_GEMM_ONEHOT` because no switch for it exists anywhere
+   (DEVIATION 1505). A sixteenth, `EMB_ACCUM_BY_ADD`, is falsifiable only
+   under clause (e), which neither leg ran.
 
 2. **`PLAN_SORT` is specified in section 6.2 and NOT WRITTEN.** It should be
    `gbdt/gpu_util/kernel/radix_sort.mojo::launch_radix_sort_bins`, keyed on
@@ -1382,10 +1431,13 @@ permitted to create. Nothing on this list has been done.
    any future embedding-adjacent reduction would want it too. It is that
    file's owner's call.
 
-7. **`IDENTITY_PATHS.md` has no row for this profile.** DEVIATION 1300 names
-   one and this lane may not write it. The row should record the construction,
-   the two negative-control fixtures, and -- because IDENTITY_PATHS rows are
-   read as claims -- that **nothing here has been compiled or run**.
+7. **`IDENTITY_PATHS.md` STILL has no row for this profile.** Checked:
+   `mojolearn.identical.embedding.fp32.v1` appears nowhere in that file.
+   DEVIATION 1300 names one and this lane may not write it. The row should
+   record the construction, the two negative-control fixtures, and, because
+   IDENTITY_PATHS rows are read as claims, exactly what the 2026-08-28 round
+   did and did not close, which is clause (a) only, on Apple and AMD, cards
+   byte-identical, NO NVIDIA, no sabotage arm built, no clause (b) through (f).
 
 8. **`gemm/IDENTICAL_BACKWARD_PLAN.md` section 4.3 (T10) recommends "sort by
    index, then a segmented v1 fold"**, which is candidate 5.2(b), and this
@@ -1396,9 +1448,11 @@ permitted to create. Nothing on this list has been done.
    data and a `k` is a shape.
 
 9. **`SUPPORT_MATRIX.md`, `CARD_GAPS.md` and `UNWIRED.md` all enumerate lanes
-   and none of them mentions `embedding/`.** Three entries owed, all in files
-   this lane may not edit. `UNWIRED.md` in particular is where "specified,
-   never compiled" belongs.
+   and none of them mentions `embedding/`.** Re-checked on disk, the string
+   "embedding" does not occur in any of the three. Three entries owed, all in
+   files this lane may not edit. What they should now say is not "specified,
+   never compiled", which is false, but "carded on Apple and AMD at clause (a),
+   NVIDIA owed, no sabotage arm ever built".
 
 10. **`R2`'s prefix scan is a single-threaded serial scan over `V`.** It is
     exact and associative and therefore free to replace, and

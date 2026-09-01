@@ -71,8 +71,19 @@ a 64-lane wavefront that is a two-wave workgroup doing one compare per lane
 and the MI325X is dispatch-bound (range + score passes 17.0 s of a higgs 1M
 fit). `DEVICE_TPB` in `builder.mojo` is therefore `128 if WARP_SIZE <= 32
 else 512` (DEVIATION 1943), a no-op on NVIDIA and Apple, 2.7x on the two
-hot kernels on AMD, tree bits unchanged on every tier. The whole-fit AMD
-time is a separate open question, DEVIATION 1945.
+hot kernels on AMD, tree bits unchanged on every tier.
+
+**THE WHOLE-FIT TIME IS A SEPARATE, OPEN AND LARGER DEFECT: DEVIATION 1945.**
+Profiled on the shipping Python surface with `MOJOLEARN_STAGE_TIMES=1`, a
+100-tree depth-16 `sqrt` fit on the first 1M rows of HIGGS took 60.5 s, of
+which **53.87 s was the HOST `NodeQueue.push`**, against 2.83 s of range and
+3.31 s of score. That is 89% of the fit in a host queue push. It was measured
+on the MI325X because that is where the profile was pointed first, **and the
+push is host code with nothing vendor-specific in it, so Apple and NVIDIA are
+owed the identical profile before anyone concludes this is an AMD problem.**
+Until those run, **no whole-fit ExtraTrees speed claim on any vendor is
+supportable from this repository's evidence**, in either direction. Read
+DEVIATION 1945 before quoting any ET fit time.
 
 ## Why this is a sibling directory and not part of `ensemble/`
 

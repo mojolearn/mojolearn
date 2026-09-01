@@ -48,7 +48,7 @@ softmax and nothing else.** Everything below was read in the tree on
 | deterministic block folds | **BOTH REFUSED** | `core/pinned_reduce.mojo::pinned_block_sum` (:73), `::pinned_block_max` (:159), `::pinned_block_min` (:193). `pinned_block_sum` may not be the softmax denominator (section 5.3) and `pinned_block_max` may not be the softmax row max (section 5.1). Neither refusal is about determinism; both helpers are perfectly deterministic. They compute different answers. |
 | the stage card and the differ | **REUSED** | `core/identity_trace.mojo` (`IdentityTrace.record_device` :313, `::record_host` :369), `tools/identity_trace_diff.py`. |
 | the refusal of a nonfinite input | **REUSED** | `mamba/checks/mamba_oracle.mojo::refuse_nonfinite` (:57), tested by BITS because Metal flushes compare operands (IDENTITY_PATHS row 49). |
-| the independent reference corpus pattern | **REUSED** | `mamba/corpus/`, generator and `tools/mamba_corpus_check.py`. A transformer corpus is a later phase and does not exist. |
+| the independent reference corpus pattern | **REUSED** | `mamba/corpus/`, generator and `tools/mamba_corpus_check.py`. The transformer sibling `transformer/corpus/` now EXISTS (`gen_corpus.py` plus `tools/transformer_corpus_check.py`, committed `82173423`), and has never been run. No case data is on disk and no `pixi.toml` task invokes it. |
 | **RoPE, the angle table and the rotation** | **NEW** | nothing in this repository computes a sine. Section 4 seams S6 through S10. |
 | **softmax** | **NEW** | there is no device softmax anywhere in the tree. The four `softmax` hits under `gbdt/` and `checks/` are CatBoost's HOST float64 multiclass probability, a different arithmetic in a different lane. Section 5. |
 | **the attention-weighted value sum** | **NEW**, and deliberately NOT routed through the GEMM | section 4 seam S19 and section 7.2. This is the least obvious decision in the document. |
@@ -715,7 +715,8 @@ clause (d) when they are written, they will look inert and be deleted.
 - **Not agreement with HuggingFace, PyTorch or MAX.** This profile's fold
   orders, transcendentals and division are OURS. The claim is that our
   arithmetic gives the same bits on three vendors, plus agreement with a
-  float64 reference to a stated tolerance once a corpus exists. A reader who
+  float64 reference to a stated tolerance once the corpus in
+  `transformer/corpus/` is actually run; it is on disk and unrun. A reader who
   takes "identical" to mean "equal to torch" has taken more than is offered.
 - **Not FlashAttention, not SDPA, not paged attention, not chunked
   prefill.** Section 6.

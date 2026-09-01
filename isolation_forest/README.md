@@ -51,8 +51,11 @@ seed. Not a rounding difference: a different tree.
 
 This port takes the first draw as the high word, by name, in two locals so
 that nothing is left to a compiler. Whether that is what nvcc does has
-**not been checked against a cuML binary**. Until it is, every gate in this
-lane is us agreeing with us.
+**not been checked against a cuML binary. THIS IS DEVIATION 750 AND IT IS
+OPEN.** Until it is checked, every gate in this lane is us agreeing with us,
+and that is not a figure of speech. The device is compared to our oracle, the
+oracle is compared to our transcription, and no number on any side of any of
+those comparisons came from cuML.
 
 Closing it needs one number off a real GPU. Fit cuML with `seed = 42`,
 `n_estimators = 1`, `bootstrap = true`, `max_samples = 1` on 1000 rows and
@@ -70,14 +73,20 @@ The swapped reading is built in as `-D MOJOLEARN_IF_SABOTAGE_U64_SWAP=1`.
 One build at a time.
 
 ```sh
-tools/with_build_lock.sh     pixi run mojo run -I . isolation_forest/checks/if_check.mojo
-tools/with_identical_mode.sh pixi run mojo run -I . isolation_forest/checks/if_check.mojo
+pixi run check-if
+tools/with_build_lock.sh     pixi run check-if
+tools/with_identical_mode.sh pixi run check-if
 ```
+
+`check-if` is registered at `pixi.toml:1114` and expands to
+`mojo run -I . isolation_forest/checks/if_check.mojo`.
 
 Nine checks: the two xorwow gates, refusals, oracle semantics, device vs
 oracle, launch invariance, signed zero, predict thresholds, the card. Under
-`IDENTICAL` on an Apple M4 all nine are green and device equals the host
-oracle on **37,496 structure / path-length / score cells, bit for bit**.
+`IDENTICAL` all nine are green **on Apple, on NVIDIA and on the AMD MI325X**
+(2026-08-28), and device equals the host oracle on **37,496 structure /
+path-length / score cells, bit for bit** on each. The card is 123 records and
+is the same bytes on all three, md5 `ff82a3b3ac5844bb5f8e5f6ef47ccafe`.
 
 Under `FAST` `check_if_device_equals_oracle` is a REPORT, not a gate: the
 device and the host disagree in the last ulp of some scores, which is what
@@ -267,16 +276,44 @@ where `mn = max_nodes_per_tree`. Stride per tree is `mn * 10 + 6`.
 
 ## What is owed
 
-- The DEVIATION 750 probe above, on an NVIDIA box.
-- NVIDIA and AMD legs. Everything here is Apple M4 only.
-- **A gate run for the card stages added 2026-08-24. THEY HAVE NEVER BEEN
-  COMPILED.** They were written in a read-only slot, so `if_check.mojo` has
-  not been built since. Three things must be checked the moment a slot
-  opens: that it compiles; that `check_if_device_equals_oracle` still shows
-  37,496 cells bit-equal (recording already-computed locals must not move a
-  single bit, and if it does, the instrument is itself an identity hazard
-  and must come back out); and that `check_if_card_is_emitted` sees the new
-  stage count.
+- **The DEVIATION 750 probe above, on an NVIDIA box. THIS IS THE LANE'S
+  LARGEST DEBT AND IT IS STILL OPEN.** Until it runs, every gate in this lane
+  is us agreeing with us, because nothing on either side of any comparison comes
+  from outside this repository. It is one cuML fit, `seed = 42`,
+  `n_estimators = 1`, `bootstrap = true`, `max_samples = 1`, 1000 rows, and
+  one number read out of `tree_sample_indices[0]`. `408` confirms this port's
+  reading; `23` says flip `curand_u64`. The two readings give DIFFERENT
+  FORESTS from one seed, so this is not a rounding question.
+  `IDENTITY_PATHS.md` row 56 carries the same debt in the same words.
+- **NOT OWED ANY MORE, AND THIS IS THE LANE'S ONE STRONG RESULT.** The
+  sentence that used to stand here, "NVIDIA and AMD legs. Everything here is
+  Apple M4 only", is deleted as false. `if_check.mojo` ran under IDENTICAL on
+  Apple, on NVIDIA and on the AMD MI325X on 2026-08-28, and all nine
+  `iforest.identical.card` files in `bench/results/e1/` are the same 123
+  records with md5 `ff82a3b3ac5844bb5f8e5f6ef47ccafe`. Separately,
+  `tools/identity_break.py` at commit `97f7507b` ran the SHIPPING surface
+  Apple against AMD and found `score_samples` DIVERGING on the `denormal`
+  fixture, because AMD read subnormal features raw where Apple's hardware
+  flushed them; that is DEVIATION 1942 and its fix is in `_upload_f32`. What
+  remains owed is the RE-measurement of that probe on AMD and NVIDIA after the
+  fix, which `IDENTITY_PATHS.md` rows 56 and 60 both record, and which is a
+  narrower debt than a leg.
+- **CLOSED, and the answers are all three green.** The card stages added
+  2026-08-24 were compiled and run on 2026-08-28. `if_check.mojo` built; the
+  card came out at **123 stages** (`if.rng.probe`, 12 x {rows, features, meta,
+  structure.feat/thr/left/right, split.bounds, split.choice, rng.final},
+  `if.pathlen`, `if.scores`), so `check_if_card_is_emitted` sees the new
+  count; and `check_if_device_equals_oracle` still reports **37,496
+  structure/pathlen/score cells bit-equal** across 6 fixtures, so recording
+  already-computed locals moved no bit and the instrument is not itself an
+  identity hazard. Artifacts: `lanes/iforest.identical.log` under
+  `bench/results/e1/2026-08-28_161700-MacBook-Air-1-terrabyte/`,
+  `bench/results/e1/2026-08-28_131651-runpod-nvidia/` and
+  `bench/results/e1/2026-08-28_203552-mojolearn-e2-amd/`. **All nine
+  `iforest.identical.card` files in `bench/results/e1/` have md5
+  `ff82a3b3ac5844bb5f8e5f6ef47ccafe`, so Apple, NVIDIA and AMD produced the
+  same 123-record card.** The sentence that used to stand here, that these
+  stages had never been compiled, is deleted as false.
 - The oracle half of those stages. `if_oracle.mojo` has every one of these
   values as a local (`min_val`, `max_val`, `frac`, `feature_start`,
   `local_feature`, and the repartition test at its `if left_end == start or
@@ -287,5 +324,6 @@ where `mn = max_nodes_per_tree`. Stride per tree is `mn * 10 + 6`.
   rebuild; only one was run).
 - The shape sweep and the repeat-launch gate beyond what
   `check_if_launch_invariance` already covers.
-- A `pixi.toml` task line and an `IDENTITY_PATHS.md` row; this lane does not
-  edit those files.
+- Both of these LANDED and are no longer owed. The task line is
+  `check-if = "mojo run -I . isolation_forest/checks/if_check.mojo"` at
+  `pixi.toml:1114`, and `IDENTITY_PATHS.md` row 56 is this lane's row.

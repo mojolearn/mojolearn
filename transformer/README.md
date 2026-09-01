@@ -15,13 +15,21 @@ constant or the stage list creates a v2; it does not amend v1.
 `transformer_fixture.mojo` and the backward triple; the lane has thirteen
 sabotage arms and a 30-stage identity card in contract section 9's order.
 
-Measured on the M4:
+**Measured on ALL THREE COLUMNS on 2026-08-28, and the three cards are the
+same bytes.** `transformer.identical.card` has md5
+`8ce661b469681b18fb5cf4d566ad78ff` in all of
+`bench/results/e1/2026-08-28_161700-MacBook-Air-1-terrabyte/lanes/`,
+`bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/` and
+`bench/results/e1/2026-08-28_203552-mojolearn-e2-amd/lanes/`, 30 records
+each. The NVIDIA leg's `bootstrap.log` resolves the nvidia hardware column
+(108 SMs, TF32 tensor-core products), so the column is read back and not
+taken from the directory name.
 
-- clause (a) PASS -- 13 fixture cases, 30/30 stages bit-identical to the host
-  oracle on all 262,634 cells, 30/30 card tags.
-- clause (d) PASS under IDENTICAL -- 4 decode steps bit-identical to the
-  prefill on all 11,632 compared cells, with a control showing 57 misaligned
-  stage comparisons that DO differ. **It FAILS under FAST** (91 stage-tokens,
+- clause (a) PASS on each of the three -- 13 fixture cases, 30/30 stages
+  bit-identical to the host oracle on all 262,634 cells, 30/30 card tags.
+- clause (d) PASS under IDENTICAL on each of the three -- 4 decode steps
+  bit-identical to the prefill on all 11,632 compared cells, with a control
+  showing 57 misaligned stage comparisons that DO differ. **It FAILS under FAST** (91 stage-tokens,
   first at token 0 `q_proj.out` on 26 of 32 cells), which is not a defect:
   contract section 7.2 makes decode == prefill true by construction for the
   IDENTICAL profile and FAST promises none of it. `tools/e1_bootstrap.sh`
@@ -68,53 +76,73 @@ attention-weighted value sum. Nothing else.**
 | 4 | the device gates, clause (a) and clause (b), against the oracle at every gate shape | moderate | yes |
 | 5 | the KV cache and the decode path, then clauses (c) and (d) with their negative controls. **Clause (d) is what makes two of the sabotages non-inert; writing it late makes them look pointless** | moderate | yes |
 | 6 | the identity card and the sabotage ladder, all thirteen arms, one build each | moderate | yes |
-| 7 | `transformer/corpus/`, the independent torch float64 per-stage reference, on the `mamba/corpus/` pattern. The only comparison in this lane whose other side is not our own code | moderate | no |
+| 7 | `transformer/corpus/`, the independent torch float64 per-stage reference, on the `mamba/corpus/` pattern. The only comparison in this lane whose other side is not our own code. **The directory EXISTS** (committed `82173423`, 2026-08-25): `gen_corpus.py`, a README, and the checker `tools/transformer_corpus_check.py`. What is missing is a RUN and the `ref64/` case data it would write, plus a `pixi.toml` task | moderate | no |
 | 8 | the price harness. Wiring, not a published number | small | yes |
-| 9 | the three-vendor leg, on `gemm/E1G_RUNBOOK.md`'s pattern. **Until this runs, "bit-identical across GPUs" is not a sentence this lane may write** | operator | three |
+| 9 | the three-vendor leg, on `gemm/E1G_RUNBOOK.md`'s pattern. **RUN 2026-08-28 FOR THE FORWARD, and the three cards are the same bytes** (see the status block). Still owed for the BACKWARD profile, and for forward clauses (b), (c), (e) and the sabotage ladder, none of which was in that round | operator | three |
 
 Phases 1 and 2 are host-only and are the whole of the contract's falsifiable
 content, so they come before a line of phase 3, exactly as the GEMM lane's
 charter clause 5 requires. A kernel written against an unreviewed oracle is
 what that charter forbids.
 
-## The commands, once the files exist
+## The commands
 
-None of these run today. They are written down so the lane lands on the same
-shape every other identity lane uses.
+The forward gate has run on three columns; these are the commands that ran it.
 
-    # Phases 1-2, host only, no GPU:
-    pixi run mojo run -I . transformer/checks/transformer_check.mojo
+    # the forward gate, registered 2026-08-31 at `pixi.toml:1091`:
+    pixi run check-transformer
+
+    # the backward gate, registered 2026-08-31 at `pixi.toml:1092`. The file
+    # exists and carries `def main` at :3787. NO RUN OF IT IS RECORDED anywhere
+    # in `bench/results/`, so this command is owed, not reported:
+    pixi run check-transformer-backward
 
     # both modes, the way the other identity gates do it:
-    tools/with_build_lock.sh     pixi run mojo run -I . transformer/checks/transformer_check.mojo
-    tools/with_identical_mode.sh pixi run mojo run -I . transformer/checks/transformer_check.mojo
+    tools/with_build_lock.sh     pixi run check-transformer
+    tools/with_identical_mode.sh pixi run check-transformer
 
-    # Phases 4-6, the device gates and the card. Needs a GPU and the build lock:
-    tools/with_identical_mode.sh pixi run mojo run -I . transformer/checks/transformer_check.mojo
+**The two tasks above were registered on 2026-08-31.** Until that day the
+transformer gates had no `pixi.toml` task at all, and both files carried
+their own `def main` the whole time, so the three-column round of 2026-08-28
+was driven by path through `tools/e1_bootstrap.sh` phase 8. The sentence that
+stood here, that no pixi task was registered and that the intended names were
+`check-transformer-block` and `check-transformer-corpus`, is deleted. Those
+two names do not exist in `pixi.toml` and never did.
 
-    # Phase 7, the independent cross-check, two steps as the mamba lane does it:
-    MOJOLEARN_TRANSFORMER_CORPUS_CASE=1 MOJOLEARN_TRANSFORMER_CORPUS_DUMP=<dir> \
-        pixi run check-transformer-block
-    MOJOLEARN_TRANSFORMER_CORPUS_DUMP=<dir> pixi run check-transformer-corpus
-
-No pixi task is registered. The orchestrator registers it, and the intended
-names are `check-transformer-block` and `check-transformer-corpus`, beside
-`check-mamba-block` and `check-mamba-corpus` in `pixi.toml`.
+**There is still NO corpus task.** `transformer/corpus/` exists (see the phase
+7 row) and `tools/transformer_corpus_check.py` exists, but no `pixi.toml` line
+invokes either, and the mamba sibling's `check-mamba-corpus` at `pixi.toml:1103`
+is the shape one would take. Registering it is owed.
 
 ## What is here
 
 | file | what |
 |---|---|
 | `IDENTICAL_TRANSFORMER_CONTRACT.md` | **the deliverable.** Twelve sections. The reuse inventory, the pinned reference, what one block call is, the profile constants, all twenty-three seams with their fused-or-unfused decisions, the softmax reduction order, why FlashAttention and SDPA are out of scope, decode equals prefill, the NaN and signed-zero audit, the thirty card stages, the six gated clauses with thirteen named sabotages, what is not claimed, and where this departs from the plan's sketch. |
+| `IDENTICAL_BACKWARD_PLAN.md` | the backward profile's specification. Its gate has not run. |
+| `checks/transformer_check.mojo` | the forward gate, 3,172 lines, `def main` at :2860. This is what produced the three cards above. |
+| `checks/transformer_oracle.mojo` | the NORMATIVE host forward oracle, 1,502 lines. |
+| `checks/transformer_fixture.mojo` | the fixture set, 1,169 lines, shared by the forward and backward gates. |
+| `checks/transformer_backward.mojo` | the device backward, 3,042 lines. |
+| `checks/transformer_backward_oracle.mojo` | the host backward oracle, 1,584 lines. |
+| `checks/transformer_backward_check.mojo` | the backward gate, 4,173 lines, `def main` at :3787. Present and registered; NO RECORDED RUN. |
+| `corpus/` | `gen_corpus.py` (85 KB) and its README. The generator is written and, per its own README, has not been executed by its author; no case data is on disk. Its checker is `tools/transformer_corpus_check.py`. |
 | `__init__.mojo`, `checks/__init__.mojo`, `impl/__init__.mojo` | empty package markers. |
 
 ## Two things a reader should not take from this directory
 
 **"Bit-identical across GPUs" is a measured sentence only for paths that have
-run on a second vendor.** No path in this lane has run on a first one.
+run on a second vendor.** The FORWARD path has now run on three, and the three
+`transformer.identical.card` files are byte-for-byte the same, so for the
+forward the sentence is earned and its artifacts are named at the top of this
+file. **It is NOT earned for anything else in this directory.** The BACKWARD
+lane has no recorded run on any column, clauses (b), (c) and (e) of the
+forward are still skipped on all three, and no sabotage arm was built in the
+2026-08-28 round, so what is closed is clause (a) and clause (d) of the
+forward profile and nothing wider.
 
 **Identical does not mean equal to PyTorch.** The profile's fold orders,
 transcendentals and division are this repository's. What is claimed is that
 they give the same bits on Apple, NVIDIA and AMD, and that they agree with a
-float64 reference to a stated tolerance once a corpus exists. Contract
-section 11.
+float64 reference to a stated tolerance once the corpus in `corpus/` is
+actually run. Contract section 11.

@@ -3909,7 +3909,17 @@ maximum).
 
 ---
 
-## DEVIATION 1945 -- OPEN: the host `NodeQueue.push` is 88% of a higgs ET fit on the MI325X, and the 2026-08-28 speed arm did not show it
+## DEVIATION 1945 -- OPEN: the host `NodeQueue.push` is 88% of a higgs ET fit, measured on the MI325X, and it is HOST code with no reason to be vendor-specific
+
+**READ THIS FIRST, BECAUSE THE HEADING NAMES ONE BOX AND THE DEFECT IS
+PROBABLY NOT THAT BOX'S.** `NodeQueue.push` is HOST code. Nothing in it is
+vendor-specific, it does not touch a device, and the MI325X is simply where
+`MOJOLEARN_STAGE_TIMES=1` was pointed first. **Apple and NVIDIA are owed the
+identical profile and until they run, nobody may read this entry as "AMD is
+slow at ExtraTrees".** The honest statement of this lane's position is the
+one in "What must happen next" below, that a whole-fit AMD ET speed claim, in
+either direction, is not supportable from this repository's evidence today,
+and neither is a claim that the other two vendors are clean.
 
 **Where.** `impl/decisiontree/batched_levelalgo/builder.mojo`,
 `NodeQueue.push` (`builder.cuh:91-134` transcribed) and the push loop in
@@ -3917,8 +3927,10 @@ maximum).
 splits_s)`), clocked on its own since commit 9c8ffc23 as
 `PHASE_HOST_PUSH` ("host: queue push (children of the batch)").
 
-**Measured, MI325X, leg `2026-08-29_204736-mojolearn-e2-amd`, FAST.** The
-SHIPPING surface, `mojolearn.ExtraTreesClassifier(n_estimators=100,
+**Measured on the SHIPPING PYTHON SURFACE, MI325X, leg
+`2026-08-29_204736-mojolearn-e2-amd`, FAST.** This is not a micro-benchmark
+and not a check binary; it is the estimator a user calls.
+`mojolearn.ExtraTreesClassifier(n_estimators=100,
 max_depth=16, max_features="sqrt", device="gpu")` on the first 1M rows of
 HIGGS under `MOJOLEARN_STAGE_TIMES=1`
 (`lanes/et_profile/binding_higgs_1000000.txt`): total 60.5 s, of which
@@ -3926,7 +3938,9 @@ HIGGS under `MOJOLEARN_STAGE_TIMES=1`
 under 0.3 s; the untimed fit 61.8 s. At 2M
 (`binding_higgs_2000000.txt`): 87.0 s, push 74.8 s. `fit_once`, the same
 call without Python, shows the same 52.2-52.4 s push at 1M at BOTH TPB
-arms, so it is not the kernel change and not the driver.
+arms, so it is not the kernel change and not the driver. **53.87 of 60.5
+seconds is 89% of the fit spent in a host queue push**, and the two GPU
+passes together account for 6.1 s of it.
 
 **Why it is OPEN and not a claim.** The 2026-08-28 speed arm on the same
 droplet type and dataset (`bench/results/fast_speed/2026-08-28-AMD-forest-higgs.md`,
@@ -3965,7 +3979,13 @@ of the 2026-08-28 board carries BOTH numbers and the section says so; a
 whole-fit AMD ET speed claim in either direction is not supportable from
 this repository's evidence today. The Apple and NVIDIA columns are OWED a
 `MOJOLEARN_STAGE_TIMES=1` run of the same fit, because the push is host
-code and has no reason to be vendor-specific.
+code and has no reason to be vendor-specific. **THAT PROFILE IS THE MORE
+IMPORTANT OF THE TWO OWED RUNS.** If Apple and NVIDIA show the same 88%,
+this is not an AMD defect at all but a defect in the shipped host path on
+every vendor, and every ET whole-fit number this repository publishes is
+measuring it. If they do not, then something about that box is implicated
+and the bisect below is the way in. Either answer is worth more than the
+old-versus-HEAD arm, and neither has been run.
 
 **RUN OWED, and it is one command.** The env pass-through is fixed, so the
 old-vs-HEAD arm is now a single MI325X leg, unrun as of 2026-08-29:

@@ -27,9 +27,24 @@ The three files this lane produced are
     transformer/checks/transformer_backward_oracle.mojo   the host oracle
     transformer/checks/transformer_backward.mojo          the device spelling
 
-and **none of the three has been compiled, run, or had a single bit of its
-output observed.** No gate file exists. No fixture exists. No card has been
-emitted on any vendor. Section 11 lists what is owed.
+and the gate file is `transformer/checks/transformer_backward_check.mojo`,
+4,173 lines with `def main` at :3787, registered as `check-transformer-backward`
+at `pixi.toml:1092` since 2026-08-31. The fixture set is
+`transformer/checks/transformer_fixture.mojo`, 1,169 lines, shared with the
+forward gate and imported by this gate at :310.
+
+**What is true is narrower and it is the thing that matters. NO RUN OF THIS
+GATE IS RECORDED.** No `transformer.backward.*` card appears anywhere under
+`bench/results/`, on any column, so not a single bit of this profile's output
+has been observed. The sentence that used to stand here, that no gate file
+and no fixture existed, is deleted as false; the sentence that survives is
+that nothing has been RUN. Section 11 lists what is owed.
+
+For contrast, the FORWARD profile in this same directory ran on three columns
+on 2026-08-28 and its three cards are byte-identical
+(`bench/results/e1/2026-08-28_161700-MacBook-Air-1-terrabyte/lanes/transformer.identical.card`
+and its NVIDIA and AMD siblings, md5 `8ce661b469681b18fb5cf4d566ad78ff`).
+None of that is evidence about the backward.
 
 ---
 
@@ -863,8 +878,10 @@ rather than a bigger diff.
 
 ### 6.2 What "identical" is gated to mean, mirroring contract section 10
 
-**No gate file exists. Every clause below is a specification for a file
-nobody has written.**
+**The gate file EXISTS** (`transformer/checks/transformer_backward_check.mojo`,
+4,173 lines, `def main` at :3787, `pixi run check-transformer-backward`).
+**No result from it is recorded on any column**, so every clause below is
+still a specification and not a report.
 
 **(a)** device backward card equals host backward oracle card, bitwise, at
 every stage and every shape. FAST arms RECORDED, not asserted, where they
@@ -909,12 +926,14 @@ vendors.** This lane's answer, and its limit:
 - **The nonlinear seams do not.** `silu'`, the `rsqrt` tail and the softmax
   closed form carry transcendentals, so exact integers do not survive them.
   Gating those needs a FLOAT64 DIRECTIONAL-DERIVATIVE reference at a stated
-  tolerance. **It does not exist.** `transformer_oracle.mojo` deliberately
-  carries no float64 reference (its header says why), `transformer/corpus/`
-  does not exist, and a float64 backward written now would be a second
-  unreviewed implementation of a gradient whose first implementation has
-  not been compiled. **IT IS OWED**, it is section 11's largest item, and
-  until it lands **clause (f) covers the routing and not the calculus.**
+  tolerance. **No such reference exists for the BACKWARD.**
+  `transformer_oracle.mojo` deliberately carries no float64 reference (its
+  header says why). `transformer/corpus/` DOES exist, committed `82173423` on
+  2026-08-25, but it is a FORWARD per-stage corpus: `gen_corpus.py` generates
+  forward stage references only, it has never been executed, and no case data
+  is on disk. So a float64 backward reference is owed from scratch, it is
+  section 11's largest item, and until it lands **clause (f) covers the
+  routing and not the calculus.**
 
 **(g)** every clause above falsifiable by a NAMED sabotage that fails a
 gate.
@@ -1042,8 +1061,8 @@ change and never a different leaf rule.
 | 1427 | the device backward reuses `LlamaDims`, `LlamaDeviceWeights`, `LlamaKVCache` and `LlamaDeviceStages` from the forward device module, and restates the four private plumbing helpers locally rather than importing underscore-prefixed symbols | SPENT, device |
 | 1428 | the device backward calls the synchronizing `identical_gemm` rather than `identical_gemm_backward_*_into`, so it carries no caller-owned workspace; the cost is that gemm gate G7's workspace-sizing coverage is NOT inherited | SPENT, device |
 | 1429 | reserved | |
-| 1430-1439 | RESERVED for the gate file `transformer_backward_check.mojo`, which does not exist | |
-| 1440-1449 | RESERVED for the float64 directional-derivative reference and the backward corpus, neither of which exists | |
+| 1430-1439 | RESERVED for the gate file `transformer_backward_check.mojo`. **The file EXISTS**, 4,173 lines, `def main` at :3787; these numbers are unspent because no run of it is recorded | |
+| 1440-1449 | RESERVED for the float64 directional-derivative reference and the backward corpus, neither of which exists. `transformer/corpus/` is a FORWARD corpus and does not cover this | |
 
 Read the block with the pattern that answers the question, since the
 singular form has bitten this repository before:
@@ -1117,14 +1136,21 @@ the eager one.
 
 ## 11. Not claimed, and what is owed
 
-- **NOTHING HERE HAS BEEN COMPILED, RUN, OR OBSERVED.** No gate file exists.
-  No fixture exists. No card has been emitted. Every predicted count in
-  section 6.3 is on paper.
+- **NOTHING HERE HAS BEEN RUN OR OBSERVED.** The gate file
+  `transformer/checks/transformer_backward_check.mojo` exists (4,173 lines,
+  `def main` at :3787) and so does its fixture set
+  `transformer/checks/transformer_fixture.mojo` (1,169 lines), and
+  `pixi run check-transformer-backward` has been registered since 2026-08-31.
+  **No card has been emitted on any column**; `bench/results/` holds no
+  backward card at all. Every predicted count in section 6.3 is still on
+  paper. The claim that the files did not exist is deleted; the claim that
+  no output has been observed stands.
 - **Not identical training.** Not identical models. Not "bit-identical AI
   inference", which the GEMM charter forbids, and not its training
   equivalent. Section 10.
-- **Not a cross-vendor claim.** Not one line of this has run on one device,
-  let alone three, and the standing lesson is that two backends agreeing
+- **Not a cross-vendor claim.** Not one line of THIS profile has run on one
+  device, let alone three. The forward profile's three-column result of
+  2026-08-28 is not evidence about the backward, and the standing lesson is that two backends agreeing
   closes nothing: Apple and AMD agreed bit for bit through 302 stages while
   NVIDIA diverged at `tree001.winners.scores`.
 - **Not agreement with PyTorch.** The fold orders, the transcendentals, the

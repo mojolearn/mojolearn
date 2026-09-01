@@ -152,8 +152,11 @@ Reading their partition also killed a deviation outright — see `DEVIATIONS.md`
 
 The brief says: write no kernel until `bench/results/GATHER_PROBE_*.md` exists,
 and stop if it reports the GPU below ~2x CPU gather bandwidth. **That file does
-not exist** (checked; the RF lane owns the probe and this lane must not run
-it). Andrew then said, mid-session: *"DO NOT DO NOT check for time in
+not exist** (re-checked 2026-09-01; the RF lane owned the probe and this lane
+was told not to run it). **This lane later measured a gather probe of its own
+anyway, and the numbers are in `DEVIATIONS.md` at about :2470; see "Still
+open" item 2 below for what they say and for the two ways they fall short of
+the gate as written.** Andrew then said, mid-session: *"DO NOT DO NOT check for time in
 subagents or in your flow... I will optimize time later. But you should be
 mirroring what cuml does."*
 
@@ -227,9 +230,25 @@ sampled column is constant, which neither upstream does for a mixed draw.
    (`n_estimators=100`, `bootstrap=False`, `max_features='sqrt'` for
    classification and `1.0` for regression) are recorded as the target, and the
    forest wrapper is downstream of the tree working.
-2. **The gather probe.** `bench/results/GATHER_PROBE_*.md` still does not exist.
-   The reasoning that supersedes it as a gate is above; it remains true that
-   nobody has measured gather bandwidth on this box for this access pattern.
+2. **The gather probe. IT RAN, AND THE WRITE-UP FILE IS WHAT IS MISSING.**
+   `bench/results/GATHER_PROBE_*.md` still does not exist, checked on disk.
+   **But the clause that used to follow it, that nobody had measured gather
+   bandwidth on this box for this access pattern, is deleted as false.** THIS
+   LANE MEASURED IT. `extratrees/DEVIATIONS.md` at about :2470 records the
+   probe: 4M reads, a real shuffled permutation, steady state, on the M4.
+   Sequential 46-62 GB/s; permuted gather about 1.74 G gathers/s and about
+   7 GB/s effective; **scattered is 6.7 to 9.0 times slower than sequential.**
+   The same entry prices this lane's score pass at about 1.19 G cell-visits
+   per second, within about 1.5x of that machine's pure-gather roofline, and
+   concludes it is memory-latency bound rather than inefficient. That is the
+   number the gate was for, and it is the reason DEVIATION 137's histogram-free
+   formulation, not the kernel, is where the remaining ceiling lives.
+   **Two caveats a reader needs.** The numbers live in a deviation ledger
+   rather than in the file the brief named, which is why other documents in
+   this repository still say the probe never ran. And what was measured is GPU
+   sequential against GPU permuted, whereas the gate as written in
+   `ROADMAP.md` asked for GPU against CPU; no GPU-versus-CPU gather bandwidth
+   number for this access pattern exists anywhere in this repository.
 
 ## Where this stands against the plan above
 

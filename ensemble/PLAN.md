@@ -31,17 +31,42 @@ mirroring the incumbent's own written design, and possibly their code if the
 PR lands before we get there. **Check #8133 for a linked PR before starting
 Step 2.**
 
-## Step 0 — the gate, DEFERRED by Andrew on 2026-08-21
+## Step 0, the gate. DEFERRED on 2026-08-21, then RUN, and it gates nothing now
 
-The gather probe (ROADMAP.md, "The open gate"): random-index gather of
-4M x 32 floats, GPU vs CPU, achieved GB/s. It prices RF, ET and all future
-histogram work at once, and it has still never run.
+The gather probe as specified in `ROADMAP.md`, "The open gate": random-index
+gather of 4M x 32 floats, GPU vs CPU, achieved GB/s. It was meant to price
+RF, ET and all future histogram work at once.
 
-**It no longer gates the port.** Andrew's instruction on 2026-08-21 was to
-get the basics mirroring cuML first and to take no timing measurement at
-all this round. The probe moves to the first timing round; nothing below
-waits on it, and no number from this directory may be quoted until it has
-run. See the session log at the end of this file.
+**A GATHER PROBE HAS RUN. THE SENTENCE "IT HAS STILL NEVER RUN" IS DELETED
+AS FALSE.** The measurement is written down in
+`extratrees/DEVIATIONS.md` at about :2470, on the Apple M4, 4M reads with a
+real shuffled permutation at steady state: **sequential 46-62 GB/s, permuted
+gather about 1.74 G gathers/s and about 7 GB/s effective, so scattered is
+6.7 to 9.0 times slower than sequential.** The same entry then prices the ET
+score pass against it at about 1.19 G cell-visits per second, within about
+1.5x of that machine's pure-gather roofline, and concludes the pass is
+memory-latency bound rather than inefficient. `RESUME.md:190` cites the same
+probe a second time, where it "priced the kernels right (~4 ms)" and thereby
+corrected a wrong reorder-is-at-the-ceiling conclusion.
+
+**Three things are still true and a reader needs all three.**
+
+1. **`bench/results/GATHER_PROBE_*.md` DOES NOT EXIST.** Checked on disk. The
+   numbers were never written up in the file the brief named; they live in
+   the ExtraTrees deviation ledger instead. That is why three documents in
+   this repository disagree about whether the probe ran.
+2. **What ran is NOT the comparison the gate asked for.** The gate asked for
+   GPU against CPU. What was measured is GPU sequential against GPU permuted.
+   Those answer different questions, and no GPU-versus-CPU gather bandwidth
+   number for this access pattern exists anywhere in this repository.
+3. **It gates nothing, and in practice it never did.** RF and ExtraTrees both
+   shipped, and both carry published timing numbers, so the clause that used
+   to stand here, that no number from this directory may be quoted until the
+   probe has run, has been overtaken by every board in `bench/results/`.
+   `bench/results/SPEED_SUMMARY_2026-08-29.md` carries higgs RF rows against
+   `cuml-rf-gpu` on an H100 at 1M, 2M and 5M rows.
+
+See the session log at the end of this file for why it was deferred.
 
 Their gather shape, now read rather than assumed, is
 `kernels/builder_kernels_impl.cuh:336-341`: per sampled instance, TWO
@@ -275,13 +300,15 @@ your flow. this should be getting the basics. I will optimize time later.
 but you should be mirroring what cuml does."* So no timing number was taken
 this round, by this lane or by any subagent it launched, and
 `bench/results/GATHER_PROBE_2026-08-XX.md` **does not exist and was not
-written**. The ET lane was told this file would gate its kernel work; it
-does not, this round. Nothing in this session may be quoted as a
-performance result, because nothing in this session measured one.
+written**. That file has still not been written, checked on 2026-09-01. The
+ET lane was told this file would gate its kernel work; it does not.
 
-The gate itself is not cancelled, only deferred — it still prices RF, ET
-and all future histogram work at once, and it still has to run before any
-number from this directory is quoted. It moves to the first timing round.
+**What that paragraph got wrong, read later.** It says the gate has to run
+before any number from this directory is quoted. A gather probe DID
+subsequently run, its numbers are in `extratrees/DEVIATIONS.md` at about
+:2470 rather than in the file named above, and RF and ET both shipped with
+published timings regardless. The gate was never enforced. See the corrected
+Step 0 section at the top of this file.
 
 ## The pin, and why it is not where the brief said to put it
 
@@ -581,9 +608,13 @@ merge-time item.**
   `ensemble/` must not import `gbdt/`. Collapse at merge.
 - **`Split` should reconcile with the ET lane's**, which is writing its own
   under `extratrees/`.
-- No `pixi.toml` task exists for any check in this directory; all of them
-  run by path. Adding them is a single-file edit nobody could make safely
-  while five sessions were open.
+- No `pixi.toml` task exists for any check in this directory; re-checked on
+  2026-09-01 and `pixi.toml` still contains no line naming `ensemble/`, so all
+  22 checks that carry `main()` run by path. Adding them is a single-file edit
+  nobody could make safely while five sessions were open. For contrast the
+  isolation forest lane got `check-if` at `pixi.toml:1114` and the transformer
+  lane got `check-transformer` and `check-transformer-backward` at :1091-1092,
+  so the edit is one the orchestrator does make when a slot opens.
 
 ## Corrections to this file, made in the same round that falsified them
 
@@ -613,8 +644,17 @@ partition, leaf. All **ten** checks in this directory pass together:
 are BIT-IDENTICAL. That is the property the classification path was chosen
 for — an integer counter under an integer atomic, so the histogram cannot
 depend on block arrival order, plus `Split::update`'s total-order tie-break.
-It is evidence about THIS port on THIS backend; bit-identity across
-Metal/CUDA/HIP, and against cuML itself, still needs the NVIDIA column.
+It was evidence about THIS port on THIS backend when it was written.
+**BIT-IDENTITY ACROSS METAL, CUDA AND HIP IS NOW MEASURED AND THE CLAUSE
+SAYING IT STILL NEEDS THE NVIDIA COLUMN IS DELETED.** On 2026-08-28 the same
+`rf_clf.card` (580 records) came out of the Apple leg, the NVIDIA leg
+(`bench/results/e1/2026-08-28_131651-runpod-nvidia/`) and the AMD leg with
+md5 `8b97ff7359efaf2e20dbf5c19531047a`, and `rf_reg.card` matched across the
+same three at `89e605bf0dff3be1bc7bf342be1c4b31`. The `rf_clf` hash has been
+stable across 27 legs on all three vendors since 2026-08-23. **What still
+needs the NVIDIA column is the OTHER half of that sentence, agreement with
+cuML itself.** No dump of cuML's own per-node histograms, chosen splits or
+leaf values exists, so nothing here has been checked against their numbers.
 
 ## What is NOT done
 
@@ -660,17 +700,35 @@ Metal/CUDA/HIP, and against cuML itself, still needs the NVIDIA column.
 2. **Weighted bootstrap and zero-weight row removal** are not ported; both
    need `sample_weight`, which this port does not accept, and the first also
    needs a float64 prefix scan. Both raise by name.
-3. **NOTHING HAS EVER BEEN COMPARED AGAINST cuML.** Every check here is
-   either an ANALYTIC fixture or a diff against a LIBRARY PRIMITIVE's
-   compiled output (CCCL's `shuffle_iterator`, RAFT's Philox). That
-   establishes a faithful, self-consistent port. **It is not parity.**
-   Parity needs cuML's own per-node histograms, chosen splits and leaf
-   values, dumped on the NVIDIA column via `tools/remote_gpu.sh`, and that
-   has never been run. `bench/results/` still contains no RF file.
-4. **No accuracy comparison** against sklearn as a quality band.
-5. **No timing measurement of any kind exists**, by instruction. The Step 0
-   gather probe still has not run. Nothing here may be quoted as a
-   performance result, in either direction.
+3. **NUMERIC PARITY WITH cuML HAS NEVER BEEN RUN, AND THAT IS STILL TRUE.**
+   Every correctness check here is either an ANALYTIC fixture or a diff
+   against a LIBRARY PRIMITIVE's compiled output (CCCL's `shuffle_iterator`,
+   RAFT's Philox, plus `ensemble/bench/cuml_oracle.txt` generated from cuML
+   v26.08.00 headers by `ensemble/tools/cuml_oracle/oracle.cpp`). That
+   establishes a faithful, self-consistent port. **It is not parity.** Parity
+   needs cuML's own per-node histograms, chosen splits and leaf values,
+   dumped on the NVIDIA column, and no such dump exists.
+   **What HAS been compared against cuML is SPEED, not bits.**
+   `bench/results/SPEED_SUMMARY_2026-08-29.md` carries higgs RF rows against
+   `cuml-rf-gpu` on an H100, 1.67x / 1.64x / 1.68x slower at 1M / 2M / 5M
+   rows, and `bench/results/BOARD_2026-08-28_three-vendor.md` carries the
+   same pair. A timing comparison is not a numeric one and neither substitutes
+   for the other.
+   **`bench/results/` DOES contain RF files. The sentence that it contained
+   none is deleted as false.** Five are on disk:
+   `RF_2026-08-21_accuracy-and-profile.md`, `RF_2026-08-21_control-plane.md`,
+   `RF_2026-08-21_pipelined-forest.md`, `RF_2026-08-22_attribution.md` and
+   `RF_ET_2026-08-22_lightgbm-pairs.md`.
+4. **No accuracy comparison against cuML as a quality band.** There IS one
+   against scikit-learn: `bench/results/RF_2026-08-21_accuracy-and-profile.md`
+   section 1 sweeps `max_n_bins` on 100,000 x 50 and attributes the 0.47pp
+   held-out gap to cuML's 128-bin default rather than to the port.
+5. **Timing measurements EXIST and are published.** The clause that no timing
+   measurement of any kind existed was true of the 2026-08-21 round only and
+   is false of this repository. See item 3 for the boards, and the Step 0
+   section above for the gather probe, which has run. What may still not be
+   quoted is a NUMERIC parity claim against cuML, because none has been
+   measured.
 
 ## Merge-time items still open
 
@@ -687,7 +745,10 @@ Metal/CUDA/HIP, and against cuML itself, still needs the NVIDIA column.
   `gbdt/gpu_util/kernel/segmented_sort.mojo`.
 - `ensemble/checks/` can never be `mojo precompile`d while its checks
   carry `main()`.
-- No `pixi.toml` task exists for any check here; all ten run by path.
+- No `pixi.toml` task exists for any check here; checked, `pixi.toml` contains
+  no line naming `ensemble/`. They run by path. **The count "all ten" is
+  stale**: `ensemble/checks/` now holds 24 `.mojo` files, 22 of which carry
+  their own `main()`.
 
 
 ---
@@ -780,12 +841,22 @@ this repository says otherwise.**
 What would change that, and it is one specific piece of work: run cuML on
 the NVIDIA column via `tools/remote_gpu.sh` at `n_streams=1` with a fixed
 seed, dump quantiles, per-node histograms, chosen splits and leaf values on
-4096-row hashed fixtures, and diff per cell. `bench/results/` still contains
-no RF file. It also settles the DEVIATION 105 tie-class question, which
-bounds what bit-identity can even mean.
+4096-row hashed fixtures, and diff per cell. No such dump exists, on any leg.
+It also settles the DEVIATION 105 tie-class question, which bounds what
+bit-identity can even mean.
 
-Below that: sklearn as a quality band, then timing -- the Step 0 gather
-probe first, since it prices everything downstream.
+**The sentence "`bench/results/` still contains no RF file" stood here and is
+deleted as false.** Five RF files are on disk:
+`RF_2026-08-21_accuracy-and-profile.md`, `RF_2026-08-21_control-plane.md`,
+`RF_2026-08-21_pipelined-forest.md`, `RF_2026-08-22_attribution.md` and
+`RF_ET_2026-08-22_lightgbm-pairs.md`. None of them contains a cuML numeric
+dump, which is the thing this section actually wants, so the requirement
+survives; the claim about the directory does not.
+
+Below that came sklearn as a quality band, which
+`RF_2026-08-21_accuracy-and-profile.md` section 1 has since supplied, then
+timing, which the boards in `bench/results/` have since supplied. The Step 0
+gather probe was to come first and did not; it ran later and gated nothing.
 
 # Session log: 2026-08-21 late evening, the control-plane round
 
@@ -923,6 +994,12 @@ trading MSE (we win MSE). PARITY_NOTES["lgbm-rf-features"].
 
 Pairs table + NVIDIA runner: bench/results/RF_ET_2026-08-22_lightgbm-
 pairs.md (387dd81, 5e0c788); NVIDIA leg blocked on a rented box.
+**CORRECTION, 2026-09-01: the NVIDIA block cleared.** NVIDIA forest legs
+ran on 2026-08-26, 2026-08-27 and 2026-08-28 under
+bench/results/e1g/*-nvidia-speed-forest/, and an NVIDIA identity leg ran at
+bench/results/e1/2026-08-28_131651-runpod-nvidia/. What those legs carry is
+the cuml-rf-gpu SPEED pair, not the LightGBM pairs table, so the pairs
+table's NVIDIA row is still owed; the box is not what is blocking it.
 Shared-checkout: commit with PATHSPECS (git commit -- paths); two sweep
 incidents today, both repaired (805653e note, 6570665 note).
 
