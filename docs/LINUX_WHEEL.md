@@ -1,19 +1,31 @@
 # The Linux wheel: one name, two vendors, six binary sets
 
-Design note, 2026-08-29. Decided by Andrew the same day. ONE PyPI name,
-`mojolearn`, with the vendor -- and, since 2026-08-30, the GPU architecture
--- detected at import. Two wheels per release.
+**STATUS, 2026-09-01. THIS IS NO LONGER A DESIGN NOTE. THE WHEEL SHIPPED.**
+Written 2026-08-29 as a design note and decided by Andrew the same day, it
+described a plan. The plan ran. The Linux wheel was published in 0.3.0 on
+2026-08-30, shipped a defect (AVX-512 in the host code, `SIGILL` on any
+x86-64 host without it), and 0.3.1 on 2026-08-31 is the fix; 0.3.2 followed.
+Every claim below that begins "nothing here has run" is retracted at the top
+of section 1 and again in the STILL OWED list, and the sections that were
+confirmed by a run are marked where they stand.
+
+ONE PyPI name, `mojolearn`, with the vendor and, since 2026-08-30, the GPU
+architecture detected at import. Two wheels per release.
 
 | wheel | tag | carries |
 |---|---|---|
 | macOS (shipping since 0.1.0) | `py3-none-macosx_11_0_arm64` | Metal, three tiers, ten extensions each |
 | Linux (this note) | `py3-none-manylinux_<measured>_x86_64` | CUDA AND HIP, one set per GPU ARCHITECTURE, three tiers each (thirty extensions per architecture) |
 
-Nothing in this note has run. Every script it names was written under the
-no-run order of 2026-08-29 and is committed UNRUN; the commands in section 8
-are what runs them, and section 9 lists every assumption a run has to
-confirm. Any sentence here that a run contradicts is fixed in the commit that
-records the run.
+**CORRECTED 2026-09-01. This paragraph used to say "Nothing in this note has
+run" and that is false.** It was true on 2026-08-29, when every script here
+was written under that day's no-run order and committed UNRUN. It stopped
+being true on 2026-08-30. Both vendor legs ran green end to end
+(`bench/results/wheels/LEGS_2026-08-30.md`), the wheel was published to PyPI
+as 0.3.0, and 0.3.1 and 0.3.2 followed. The commands in section 8 are what
+ran, section 9's assumptions were tested rather than merely listed, and the
+run contradicted two of them, which is recorded in the CHANGELOG's 0.3.1
+entry and in the correction at the end of `LEGS_2026-08-30.md`.
 
 ## 1. Why one name and not `mojolearn-cu12` and `mojolearn-rocm`
 
@@ -421,18 +433,24 @@ re-derive it.
 
 **STILL OWED:**
 
-* **The cross-architecture question is now ANSWERED for the exact case and
-  OWED for the family case.** Same-architecture-only was measured on the
-  A40 (27 of 29 lanes down, LEGS_2026-08-30.md), which is what forced the
-  architecture axis. What remains owed is the WITHIN-FAMILY measurement the
-  selector's cuda fallback relies on: a set built `sm_80` (via
-  `MOJOLEARN_GPU_ARCHS=sm_80`) install-smoked green on an sm_86 or sm_89
-  box. NVIDIA documents that compatibility; this tree does not ship a claim
-  on documentation alone, so until that leg is green the wheel's claim is
-  "runs on the architectures it carries", and the family fallback is an
-  escape hatch rather than a promise. The per-architecture build legs
-  themselves (one leg per carried architecture, both vendors) are owed the
-  same way. **The host CPU IS part of this question and this sentence used
+* **The cross-architecture question is ANSWERED for BOTH cases, and this
+  entry used to say the family case was owed.** Same-architecture-only was
+  measured on the A40 (27 of 29 lanes down, `LEGS_2026-08-30.md`), which is
+  what forced the architecture axis. The WITHIN-FAMILY measurement the
+  selector's cuda fallback relies on has since been taken twice. A set built
+  `sm_80` via `MOJOLEARN_GPU_ARCHS=sm_80` ON AN A40, which is `sm_86`, at
+  commit `c526e58b`, read back `sm_80` on all thirty binaries and smoked 29
+  of 29 lanes green in all three tiers. And the published 0.3.1 wheel,
+  installed from real PyPI onto an L40, which is `sm_89`, selected `sm_80`
+  by the family rule and smoked 29 of 29 lanes green in all three tiers
+  (`bench/results/wheels/2026-08-31_124809-nvidia`, host an AMD EPYC 7773X
+  with no AVX-512, which is also the box that proved the 0.3.1 ISA fix). The
+  family fallback is a measurement now, not documentation, and the wheel's
+  claim is no longer limited to the architectures it carries. The
+  per-architecture build legs themselves have run for all six sets; what is
+  still owed is EXECUTION for two of them, `hip/gfx1100` and `hip/gfx90a`,
+  which ship build-verified because neither RunPod nor DigitalOcean rents
+  RDNA3 or MI200 hardware to run them on. **The host CPU IS part of this question and this sentence used
   to say it was not.** 0.3.0's Linux wheel carried AVX-512 in its host code
   and died with SIGILL on an L40 whose host was an AMD EPYC 7773X. Fixed in
   `cfb665d2` by pinning `--target-cpu x86-64-v3` and gating with

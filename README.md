@@ -208,11 +208,22 @@ that is an untested promise and is marked as one rather than assumed.
 | `KernelDensity` | cuML | kernel density estimation; `bandwidth='scott'` and `'silverman'` refused by name | yes | yes | yes | Apple + NVIDIA + AMD, 9 stages |
 | `AgglomerativeClustering` | cuML, cuVS, RAFT | single linkage over RAFT's Boruvka MST | yes | yes | yes | Apple + NVIDIA + AMD, 10 stages |
 | `IsolationForest` | cuML | isolation forest, anomaly scores | yes | yes (Apple + AMD) | yes | Apple + NVIDIA + AMD, 124 card stages |
-| `SpectralClustering` | cuML, cuVS, RAFT | kNN connectivity graph, normalized Laplacian, thick-restart Lanczos | yes | yes | yes | Apple + AMD cards (not at one commit); NVIDIA owed |
-| `ExponentialSmoothing` | cuML `tsa` | Holt-Winters, additive and multiplicative | yes | yes | yes | Apple + AMD cards (not at one commit); NVIDIA owed |
-| `kpss_test`, `select_d` | cuML `tsa` | stationarity test and auto_arima's choice of d | yes | yes | yes | Apple only, leg owed |
+| `SpectralClustering` | cuML, cuVS, RAFT | kNN connectivity graph, normalized Laplacian, thick-restart Lanczos | yes | yes | yes | Apple + AMD byte-identical at one commit, `221aa141`, 171 stages; NVIDIA owed |
+| `ExponentialSmoothing` | cuML `tsa` | Holt-Winters, additive and multiplicative | yes | yes | yes | Apple + AMD byte-identical at one commit, `221aa141`, 182 stages; NVIDIA owed |
+| `kpss_test`, `select_d` | cuML `tsa` | stationarity test and auto_arima's choice of d | yes | yes | yes | Apple + AMD byte-identical at one commit, `221aa141`, 13 stages; NVIDIA owed |
 | `mojolearn.metrics` | cuML, RAFT | fourteen scoring functions, scikit-learn's names with cuML's defaults and semantics | yes | yes | yes | Apple + NVIDIA + AMD, 64 stages |
 | `mojolearn.linalg.matmul` | -- | FP32 matrix product, profile `mojolearn.identical.gemm.fp32.v1` | yes | yes (Apple + NVIDIA + AMD) | yes | Apple + NVIDIA + AMD, 61 stages |
+
+The last three rows moved up on 2026-08-31. `spectral`, `holtwinters` and
+`tsa` now have Apple and AMD cards at ONE commit, `221aa141`, and they are
+byte-identical: 171, 182 and 13 stages, 0 records differing. Their NVIDIA
+column did not fail; it never ran, which is a different statement. The
+certificate is `bench/results/e1/CERT_2026-08-31.md`.
+
+Beside them, and not in the table because it has no `fit` and therefore no
+estimator, `arima` is byte-identical on THREE vendors at that same commit,
+Apple M4 against AMD MI325X against NVIDIA, 139 stages. It is the first lane
+in this repository whose time-series card is closed on all three columns.
 
 Estimators save to and load from `.npz` files, and a model fitted on a Mac
 loads and predicts identically on an NVIDIA or AMD box (95 of 95 models,
@@ -434,9 +445,19 @@ leaf-estimation walk of PORTING.md item 140, where their CPU freezes at six
 accepted steps and ours stalls later. Narrowing our host fold to Float32
 moved AUC +0.00037 there, which is 4% of the gap and confirms the mechanism
 is live without explaining the size. Depth 8 over 500 trees is where that
-divergence has the most iterations to compound, and the falsifiable
-prediction is that the gap grows with depth; a matched two-point sweep at
-(100, 6) and (500, 8) separates it and needs no rented box.
+divergence has the most iterations to compound.
+
+That sweep has now run (`bench/results/HIGGS_GAP_2026-09-01.md`, four
+matched points on the full 8.8M split, one process, M4). The gap grows with
+BOTH depth and tree count, and the two effects are very nearly separable:
+depth 6 to 8 multiplies it by 1.48 at 100 trees and 1.81 at 500, while 100
+to 500 trees multiplies it by 7.4 at depth 6 and 9.0 at depth 8. Boosting
+iterations dominate by roughly 5x. A gap that multiplies cleanly in each
+factor independently is the signature of a small per-tree error accumulating
+down the boosting sequence, with depth setting how large each tree's
+contribution is; it is not a threshold, a single bad split, or a
+shape-specific artifact, any of which would show as a jump rather than a
+clean product.
 
 Set against that, the same learner at a matched config on a SMALLER shape
 (100 trees, depth 6, 1M rows) is at parity or slightly ahead on this
@@ -462,9 +483,17 @@ and nothing yet explains which way it cuts.
   at import from the device. It is `manylinux_2_35`, so glibc 2.35 or later,
   which puts Ubuntu 22.04 and Debian 12 in and leaves RHEL 9 out by one minor
   version. **There is no Windows wheel and none is possible today**, because
-  the Mojo toolchain has no Windows target; WSL2 works, being Linux. Three of
-  the six sets ran on real silicon and three ship build-verified only, which
-  `bench/results/wheels/LEGS_2026-08-30.md` states set by set.
+  the Mojo toolchain has no Windows target; WSL2 works, being Linux. FOUR of
+  the six sets have run on real silicon and two ship build-verified only,
+  which `bench/results/wheels/LEGS_2026-08-30.md` states set by set:
+  `cuda/sm_80` on an A40 (`sm_86`) and again on an L40 (`sm_89`) from real
+  PyPI, `cuda/sm_90a` on an H100, `cuda/sm_120a` on an RTX 5090 from real
+  PyPI, and `hip/gfx942` on an MI325X. `hip/gfx1100` and `hip/gfx90a` have
+  no box to run on, because neither RunPod nor DigitalOcean rents RDNA3 or
+  MI200 hardware. The within-family fallback is measured, not documented:
+  the `sm_80` set ran 29 of 29 lanes in all three tiers on `sm_86` silicon
+  (`c526e58b`) and again on `sm_89` from the published 0.3.1 wheel
+  (`bench/results/wheels/2026-08-31_124809-nvidia`).
 - The benchmark table is from one M4; FAST timings on an H100 and an MI325X
   are in `bench/results/BOARD_2026-08-28_three-vendor.md`. Correctness and
   identity are validated on the M4, an H100, an MI325X and an MI300X through

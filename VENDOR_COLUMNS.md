@@ -96,15 +96,73 @@ unless a kernel demands one. **A design that read the hardware width would not
 merely disagree across vendors on these two — it could disagree between two
 builds of the same kernel for the same device.**
 
-That this does not break us is a real property and not luck, but it is
-narrow, so state it precisely: `PINNED_REPLICATION_LANES` is a **logical**
-group width. Every kernel here syncs at `SYNC_BLOCK`, because Mojo exposes no
-warp primitive on any vendor, so a 32-lane replication group is
-threadgroup-synchronized arithmetic that happens to be 32 wide, and it stays
-32 wide whether 8, 16, 64 or 128 lanes run in lockstep underneath. **The day
-Mojo exposes lane primitives and `sync_granularity_for` stops returning
-`SYNC_BLOCK`, that paragraph expires and these columns are unsafe until
-re-argued.**
+**CORRECTED 2026-09-01. This paragraph used to say "Mojo exposes no warp
+primitive on any vendor" and that sentence was false when it was written.**
+`std.gpu.primitives.warp` exposes `shuffle_xor`, `shuffle_idx`,
+`shuffle_down`, `vote`, `sum`, `max`, `min`, `broadcast`, `prefix_sum` and
+`lane_group_min`, and `lane_id` sits beside them under
+`std.gpu.primitives.id`. **Thirteen files in this tree import `shuffle_xor`
+or `lane_id`**, among them the two `cluster/impl/distance` reducers
+(`fused_distance_nn/simt_kernel.mojo`, `unfused_distance_nn.mojo`),
+`dbscan/impl/neighbors/epsilon_neighborhood.mojo`,
+`extratrees/impl/decisiontree/batched_levelalgo/split.mojo`,
+`ensemble/decisiontree/batched_levelalgo/split.mojo`, `core/block_reduce.mojo`,
+`core/block_scan.mojo`, `neighbors/impl/matrix/detail/select_warpsort.mojo`,
+`neighbors/impl/neighbors/ball_cover/registers.mojo`,
+`neighbors/impl/neighbors/topk/bitonic.mojo`,
+`neighbors/impl/neighbors/topk/warp_topk.mojo` and
+`checks/vendor_correctness_check.mojo`, which does not merely use them but
+PROBES each one against its RAFT or CUB counterpart and emits a row per
+primitive.
+`UNWIRED.md` had already retracted the same claim for `select_warpsort`, the
+RAFT family this repository once ruled untranslatable on it; that retraction
+and this one are the same finding, reached twice.
+
+What Mojo does not expose is a lane-group **barrier**. `SYNC_LANE` is
+unreachable on every vendor, so `sync_granularity_for` returns `SYNC_BLOCK`
+for every column and no kernel here relies on a subset of a block syncing
+independently. That is the narrower true statement, and the half of the old
+argument that survives rests on it plus one more fact:
+`PINNED_REPLICATION_LANES` is a **logical** group width that is never read
+from the device, so a 32-lane replication group is threadgroup-synchronized
+arithmetic that happens to be 32 wide and stays 32 wide whether 8, 16, 64 or
+128 lanes run in lockstep underneath. **The identity floor is therefore still
+independent of hardware lane width, and that part of the claim is unchanged.**
+
+**What does NOT survive is the companion claim that nothing here indexes by
+hardware lane.** It does.
+`extratrees/impl/decisiontree/batched_levelalgo/split.mojo::split_warp_reduce`
+runs a butterfly over `WARP_SIZE // 2 ... 1`, which is the TARGET's width, 32
+on Apple and NVIDIA and 64 on AMD CDNA. DEVIATION BLOCK 30 in
+`dbscan/impl/neighbors/epsilon_neighborhood.mojo` goes further and says so in
+its own source. Its width-16 logical reduction is correct only because
+`AccThCols` is 16, `acccolid` is `tid % 16` and the lane width is 32, so the
+sixteen threads sharing a row are aligned and never straddle a wave boundary.
+Change the width and that reduction silently reduces the wrong set.
+
+So the admissions of `amd`, `qualcomm` and `intel` no longer follow from this
+paragraph alone, and they are not all in the same position:
+
+- **`amd` (CDNA, wave64) is carried by measurement, not by this argument.**
+  DBSCAN, k-NN, the forest family and the rest of the identity matrix are
+  byte-identical Apple to NVIDIA to AMD on recorded cards, which is a
+  measured answer for the lane-width-reading kernels on a 64-wide column.
+  Sixteen also divides 64, so the alignment DEVIATION BLOCK 30 depends on
+  holds there.
+- **`qualcomm` and `intel` are OWED a re-argument, per lane-width-reading
+  kernel.** Both columns can report a width of 8 or 16 chosen by the
+  compiler, and a width-16 logical group does not fit inside an 8-wide wave.
+  Neither column can be built for today, so nothing is shipping on a bad
+  answer; what is wrong is claiming the question was settled. It is not
+  settled, and this file is where it has to be settled before either column
+  is built for.
+
+**`checks/kernel_matrix.mojo` still carries the retracted sentence** at its
+`column_lane_width` docstring and again at `column_lane_width_is_fixed`
+("nothing in this tree indexes by hardware lane today"). That file is another
+lane's to edit. Where it and this file disagree, the row is normally the
+truth; on this one point it is not, and the disagreement is recorded here
+rather than left for someone to discover from the kernels.
 
 **AMD is two columns because AMD is two architectures.** CDNA (MI300X,
 MI355X — the parts Mojo tests continuously) runs **wave64**. RDNA (RX 9070,

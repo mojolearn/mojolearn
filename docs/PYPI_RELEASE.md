@@ -29,11 +29,14 @@ pasted as written, with `X.Y.Z` replaced.
   the oldest spelling, not the only one (`python/mojolearn/_mode.py`,
   `python/mojolearn/_backend.py`). There is one distribution,
   `pip install mojolearn`, with no extras.
-* The source targets Metal, CUDA and HIP from one tree, but only the macOS
-  wheel is published so far. The Linux wheel (one wheel, CUDA and HIP sets,
-  vendor picked at import) is designed and tooled in `docs/LINUX_WHEEL.md`
-  and section 9 below is its flow; until it has run, no Linux wheel, and no
-  sdist ever (section 8).
+* The source targets Metal, CUDA and HIP from one tree, and **TWO wheels are
+  published, not one.** This bullet used to say "only the macOS wheel is
+  published so far" and that stopped being true on 2026-08-30. The Linux
+  wheel (one wheel, CUDA and HIP sets, vendor and GPU architecture picked at
+  import) shipped in 0.3.0, shipped an AVX-512 host-code defect with it, and
+  0.3.1 on 2026-08-31 is the fix; 0.3.2 followed. `docs/LINUX_WHEEL.md` is
+  its design and its evidence and section 9 below is its flow. Still no sdist
+  ever (section 8).
 * The version is written in THREE places and all three must be bumped
   together, in one commit: `python/pyproject.toml` (`version = "X.Y.Z"`),
   `python/mojolearn/_version.py` (`__version__ = "X.Y.Z"`) and `CITATION.cff`

@@ -101,14 +101,27 @@ k-NN kernel was predicted 6-10x faster from a traffic argument and measured
 `ceil(n_queries / Mblk)` and ~125 blocks each stream the whole index. Any
 estimate that counts bytes without counting blocks is worthless.
 
-**The open gate.** Every histogram-shaped candidate below (RF, ExtraTrees, and
-any future tree work) is bandwidth-bound on a scattered gather. Whether the
-GPU beats the CPU there depends on **achieved gather bandwidth**, not peak: a
-GPU hides random-access latency across thousands of threads where 10 CPU cores
-are limited by outstanding misses. **This has not been measured.** One
-half-day experiment -- random-index gather of 4M x 32 floats, GPU vs CPU,
-achieved GB/s -- prices RF, ExtraTrees and all future histogram work at once.
-Nothing in that family should be started before it runs.
+**The gate that was opened, then WAIVED, and never formally closed.** Every
+histogram-shaped candidate below (RF, ExtraTrees, and any future tree work) is
+bandwidth-bound on a scattered gather. Whether the GPU beats the CPU there
+depends on **achieved gather bandwidth**, not peak, because a GPU hides
+random-access latency across thousands of threads where 10 CPU cores are limited by
+outstanding misses. The experiment this document asked for was a random-index
+gather of 4M x 32 floats, GPU vs CPU, achieved GB/s, to price RF, ExtraTrees
+and all future histogram work at once.
+
+**It was never run as specified, and it stopped gating on 2026-08-21, when
+Andrew waived it mid-session** (`ensemble/PLAN.md`, Step 0). RF and ExtraTrees
+were both built and shipped without it. `bench/results/GATHER_PROBE_*.md` does
+not exist. What DOES exist is a narrower standalone measurement taken later
+inside the ExtraTrees lane, on Apple only
+(`extratrees/DEVIATIONS.md`, the gather-probe bullet): 4M reads over a real
+shuffled permutation at steady state, sequential 46 to 62 GB/s against a
+permuted gather of about 1.74 G gathers/s and about 7 GB/s effective, so
+scattered is 6.7 to 9.0x slower, and the ExtraTrees score pass at about 1.19 G
+cell-visits/s is already within about 1.5x of that machine's pure-gather
+roofline. That prices the Apple column and no other. This document must not
+be read as holding a live gate over work that has already landed.
 
 ---
 
@@ -181,8 +194,10 @@ paying for it.
 ## Phase 2. Random Forest, from cuML. LANDED.
 
 `RandomForestClassifier` and `RandomForestRegressor` ship. The gate this phase
-carried (do not start before the gather measurement) is discharged. What is
-kept below is the design reasoning, because it is what the port was built
+carried (do not start before the gather measurement) was WAIVED by Andrew on
+2026-08-21, not discharged by a measurement; the phase proceeded without it
+and the section above records what has and has not been measured since. What
+is kept below is the design reasoning, because it is what the port was built
 from and three of its claims corrected an earlier version of this document:
 
 1. **It is not "nearly free" and it reuses nothing from `gbdt/`.**

@@ -121,14 +121,38 @@ written to reproduce. It is the same class as DEVIATION 1944 -- a buffer
 freed against a context that is not the live one -- which is why one fix
 moved the first fit and not the second call.
 
-The fix is that the context dies LAST: an explicit `_ = ctx^` after every
+The fix is that the context dies LAST, an explicit `_ = ctx^` after every
 release, at both sites above and at the 33 other library entry points that
 had the same ordering (`metrics`, `kde`, `tsa`, `svm`, `mixture`,
 `resample`, `cholesky`, `gaussian_process`, `kernel_methods`). It cannot
-move a number: nothing is computed after the last `synchronize()`.
-`ensemble/mojo_only/rf_ctx_order_probe.mojo` is the ordering alone, both
-arms, in 60 lines with no forest and no Python -- that is the on-box
+move a number, because nothing is computed after the last `synchronize()`.
+`ensemble/checks/rf_ctx_order_probe.mojo` is the ordering alone, both
+arms, in 60 lines with no forest and no Python; that is the on-box
 discriminator the next leg should run FIRST.
+
+**CORRECTED 2026-09-01. THAT LIST IS NOT THE SWEEP, AND THIS SECTION READ AS
+THOUGH IT WERE.** The nine directories named above are LIBRARY ENTRY POINTS.
+The sweep touched no check driver and no `main`, and that is where the defect
+was still live. On 2026-08-31 the NVIDIA time-series leg hung in
+`holtwinters`, which carried `_ = ctx^` at NONE of its eleven `DeviceContext`
+sites: in `check_hw_signed_zero_clamp`, `ctx`'s last use is a `download_f32`
+at `holtwinters/checks/hw_check.mojo:1184` and 25 buffer releases follow it.
+The gate still prints its OK line and returns; the NEXT `DeviceContext()` in
+the process is the call that never comes back, which is the recorded symptom
+exactly, futex wait with the GPU at 0%.
+
+A mechanical audit on 2026-09-01 found **81 functions in 57 files** that free
+device buffers after their context's last use, none of them previously swept.
+All 81 now carry `_ = ctx^`. VERIFIED ON APPLE that this moves no bit:
+`holtwinters` compiles, all 11 gates pass, and the output is byte-identical
+to the pre-fix reference log; a 16-file compile sample spanning 12 lanes is
+clean. NOT VERIFIED that it cures the hang, which only an sm_89 leg can
+establish. See `bench/results/e1/CERT_2026-08-31.md`.
+
+The lesson this file should carry forward is that a sweep is described by
+what it SEARCHED, never by what it FOUND. "Every library entry point" is a
+scope. "Fixed in this tree" is a claim about the tree, and the tree contains
+check drivers and `main` functions that create contexts too.
 
 VERIFIED so far, all on Apple M4: every touched file compiles, the five
 rebuilt bindings (`rf`, `svm`, `metrics`, `tsa`, `estimators`) pass their
@@ -140,9 +164,10 @@ it, and none has run since the fix. See RUN OWED below.
 
 The probe fits every cell twice, so on a pre-1946 4090 the `rf-clf` cell
 cannot complete and the lanes after it are ABSENT, not clean. The probes
-are `tools/diag/rtx4090_hang.sh`, `ensemble/mojo_only/rf_ctx_probe.mojo`,
-`ensemble/mojo_only/rf_ctx_order_probe.mojo` and
-`isolation_forest/mojo_only/if_ctx_probe.mojo`; the verdict file is
+are `tools/diag/rtx4090_hang.sh`, `ensemble/checks/rf_ctx_probe.mojo`,
+`ensemble/checks/rf_ctx_order_probe.mojo` and
+`isolation_forest/checks/if_ctx_probe.mojo` (this file named all three under
+a `mojo_only/` directory that does not exist, corrected 2026-09-01); the verdict file is
 `diag/verdicts.txt` in that leg.
 
 The NVIDIA silicon ledger, per column, is therefore: H100 (driver
@@ -177,9 +202,9 @@ Nothing below has run. Each line names the box it needs and the command.
    anything else, and it needs no Python and no built bindings:
 
        mojo build -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D ORDER_BAD=1 \
-           ensemble/mojo_only/rf_ctx_order_probe.mojo -o /tmp/order_bad
+           ensemble/checks/rf_ctx_order_probe.mojo -o /tmp/order_bad
        mojo build -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D ORDER_GOOD=1 \
-           ensemble/mojo_only/rf_ctx_order_probe.mojo -o /tmp/order_good
+           ensemble/checks/rf_ctx_order_probe.mojo -o /tmp/order_good
        timeout 300 /tmp/order_bad ; echo "bad rc=$?"
        timeout 300 /tmp/order_good ; echo "good rc=$?"
 

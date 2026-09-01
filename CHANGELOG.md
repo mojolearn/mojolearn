@@ -377,16 +377,20 @@ three lanes now emit identity cards and are listed in the round: `spectral`
 and `holtwinters` joined phase 8 in `241aed6`, and `tsa` in `f081b7f`, whose
 message records that `tsa/tsa_main.mojo` had built a complete eleven-stage
 card since it was written and that the comment claiming otherwise was the
-only thing keeping it out. `spectral` and `holtwinters` have an Apple card
-and an AMD card; `tsa` has an Apple card.
+only thing keeping it out.
 
-What is missing is a SHARED COMMIT. The Apple cards for `spectral` and
-`holtwinters` were taken at `5fd95b3` and `241aed6`, the AMD cards at
-`26eb8ba`, and `tsa`'s Apple card at `869d416`, so no two of them are
-comparable and no NVIDIA leg has run any of the three. Their pins come from
-the same source as the lanes above, so they are expected to match, but the
-comparison has not been performed and each class says so rather than
-inheriting a neighbor's certificate.
+**CORRECTED 2026-09-01, and the correction goes upward. The shared commit
+this section said was missing exists.** At `221aa141` all three lanes have
+an Apple card and an AMD card taken at that one commit, and each pair is
+byte-identical, `spectral` at 171 stages, `holtwinters` at 182 and `tsa` at
+13, with 0 records differing. `arima`, which has no Python estimator and so no row in
+the README table, is byte-identical at the same commit on THREE vendors,
+Apple against AMD against NVIDIA, 139 stages. The NVIDIA column for the
+other three did not fail; it never reached them, because the leg hung in
+`holtwinters` on the DEVIATION 1946 context-lifetime defect above. The
+certificate, lane by lane and vendor by vendor, is
+`bench/results/e1/CERT_2026-08-31.md`. Two vendors is not three, so those
+three lanes stay open rather than inheriting arima's third column.
 
 **The FAST arm, which is the default, makes no cross-vendor claim at all.**
 Unchanged from 0.1.0, and the FAST cards do differ between vendors for
@@ -556,11 +560,22 @@ matrix and do not touch this wheel at all.
   device buffers AFTER its last use, so Mojo destroyed the context first and
   the buffers -- pinned host allocations among them -- were freed behind it;
   the first binding call returned and the NEXT GPU call in the process never
-  did, GPU idle, every host thread in futex wait. Both are fixed in this
-  tree; 1944 is confirmed on the box, **1946 is UNRUN on a 4090** (the fix
-  cannot be exercised on Apple, AMD or the H100, none of which ever showed
-  the defect). Apple is the only platform this wheel targets and it was
-  never affected. `bench/results/identity_break/RESULTS.md` carries the
+  did, GPU idle, every host thread in futex wait. 1944 is confirmed on the
+  box. **1946 is UNRUN on a 4090** (the fix cannot be exercised on Apple,
+  AMD or the H100, none of which ever showed the defect). Apple is the only
+  platform this wheel targets and it was never affected.
+
+  **CORRECTED 2026-09-01: the 1946 sweep described here was NOT complete.**
+  It covered the library entry points and skipped every check driver and
+  every `main`. `holtwinters` carried `_ = ctx^` at none of its eleven
+  `DeviceContext` sites, and that is where the NVIDIA time-series leg hung
+  on 2026-08-31. A mechanical audit on 2026-09-01 found **81 further
+  functions in 57 files** freeing device buffers after their context's last
+  use, none of them previously swept; all 81 now carry `_ = ctx^`. Verified
+  on Apple that the sweep moves no bit. `holtwinters` compiles, its 11 gates
+  pass, and the output is byte-identical to the pre-fix reference log. NOT
+  verified to cure the hang, which only an sm_89 leg can establish.
+  `bench/results/e1/CERT_2026-08-31.md`. `bench/results/identity_break/RESULTS.md` carries the
   evidence, the discriminator
   (`ensemble/checks/rf_ctx_order_probe.mojo`) and the RUN OWED list.
 

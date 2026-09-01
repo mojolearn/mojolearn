@@ -101,7 +101,7 @@ returned nothing. That gap looks real; it is not yet proven.
 | 1 | **Close pathway 8: the scale magnitude reduce** | it is a device float reduction through a float atomic, so the scale that quantises every gradient is order-dependent. Until it is closed the enumeration claim is FALSE | the accumulator already exists |
 | 2 | **Finish the row 9 and 10 application checklists** | the helpers landed; every multiply-add seam and every cross-kernel float seam still has to be routed through them | mechanical, per-site, must cite the row |
 | 3 | **Build `check_identity_paths`** | `IDENTITY_PATHS.md` is a markdown ledger, so it rots. The guard has to FAIL when a new float reduction appears without a row. Ideally taint hardware-query rows and refuse when one reaches a float reduction unpinned | this is also Paper 2's tool contribution |
-| 4 | **RUN E1** | build IDENTICAL on NVIDIA and AMD, train the same configuration, compare SHA-256 of the SERIALIZED MODEL over >= 5 datasets and >= 5 configurations. **The paper does not exist without this** | two rented boxes, correctness only |
+| 4 | ~~**RUN E1**~~ **CLOSED 2026-08-23, and extended since.** E1 ran on Apple M4, an AMD MI325X and an NVIDIA H100 from one tree at one commit (`39a0d888`) and is written up in `E1_RESULTS.md`, superseded by `E2_RESULTS.md` round 2 and `E3_RESULTS.md`. Cross-device portability is 95/95 in E2 round 2 and 111/111 both directions in E3 round 9. What is still owed is not E1 but individual lane columns, which `bench/results/e1/CERT_2026-08-31.md` names lane by lane | done |
 | 5 | **Measure identity's cost off Apple** | the thesis says "cheap elsewhere" and that half has never been measured. On 48 KB and 64 KB the integer path buys no occupancy and is expected to COST | interleaved, on rented boxes |
 | 6 | **Re-run `check-ieee-arith` on CUDA and ROCm** | the FTZ model is measured on ONE vendor. The claim "CUDA honours denormals" is currently read from documentation, not measured | one run per box |
 | 7 | Model file carries `IDENTITY_PROFILE` | profile 1 and a future profile 2 are otherwise told apart only by provenance | an hour |
@@ -141,11 +141,16 @@ system.** Not before.
   demonstrated by active developer count, stars, or similar. Review criteria
   include freedom from proprietary dependence.
 
-  Two of those block today. There is **no user community**: no non-author has
+  ONE of those blocks today. There is **no user community**, since no non-author has
   used this, which is the same reason JOSS was deferred and it has not
-  changed. And the **Python extension does not build at HEAD**, so a reviewer
-  who tries to install it fails --- for a track that reviews the software as
-  much as the paper, that is disqualifying rather than embarrassing.
+  changed.
+
+  The second blocker is GONE and this paragraph used to say otherwise. The
+  Python extension builds and ships. `pip install mojolearn` gets a wheel
+  carrying every numeric mode as its own compiled binary set, on macOS arm64
+  since 0.1.0 and on Linux x86_64 since 0.3.0. See item 7 of the work-
+  outstanding table above, which recorded that closure while this paragraph
+  still contradicted it.
 
   The proprietary-dependence criterion may have just stopped applying:
   Qualcomm open-sourced Mojo under Apache-2.0 in August 2026. **Verify exactly
