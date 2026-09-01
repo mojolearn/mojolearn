@@ -3,12 +3,24 @@
 """The batch-size policy and the workspace allocation.
 
 PORT OF `cuml/cpp/src/dbscan/dbscan.cuh::compute_batch_size` and
-`dbscanFitImpl` at cuML `00094f7`. Partial (single node, L2, no
-`sample_weight`, no `core_sample_indices`). Do not improve.
+`dbscanFitImpl` at cuML `00094f7`. Partial (single node, no
+`core_sample_indices`). Do not improve.
+
+`sample_weight` is plumbed since 2026-09-01 and `metric` carries an L1 arm
+that has no upstream (DEVIATION 27, `dbscan/impl/neighbors/
+epsilon_neighborhood.mojo`). Neither changes the batch-size estimate:
+`compute_batch_size` is `dbscan.cuh:34` and their `est_mem_per_row` and
+`est_mem_fixed` count neither the weight array nor `wght_sum`, which is
+theirs -- `runner.cuh:176-177` sizes `wght_sum` INSIDE the workspace but
+`dbscan.cuh:55-60` does not count it in the per-row estimate. Copying that
+gap rather than closing it keeps the batch count a pure function of
+`(n_rows, budget)`, which is what
+`check_dbscan_batch_count_invariance` and `check_dbscan_max_mbytes_moves_
+the_batch` rest on.
 
 `eps_nn_method` defaults to RBC here and to BRUTE_FORCE in theirs; that
 DEVIATION and its measurement live at the top of
-`dbscan/gbdt/dbscan/runner.mojo`, not here.
+`dbscan/impl/dbscan/runner.mojo`, not here.
 
 THEIR FIXED ALGORITHM CODES, WHICH ARE NOT USER-VISIBLE (`dbscan.cuh:118-122`)
 
@@ -33,6 +45,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from dbscan.impl.dbscan.adjgraph.algo import scan_blocks_needed
 from dbscan.impl.dbscan.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC, dbscan_fit
+from dbscan.impl.neighbors.epsilon_neighborhood import DBSCAN_METRIC_L2
 
 
 def compute_batch_size(
@@ -143,6 +156,52 @@ def dbscan_fit_impl(
     max_iterations: Int = 200,
     eps_nn_method: Int = EPS_NN_RBC,
     phase_timing: Bool = False,
+    metric: Int = DBSCAN_METRIC_L2,
+) raises -> Int:
+    """The UNWEIGHTED fit. Signature preserved; `metric` appended.
+
+    This is `dbscan_fit_impl_weighted` with `sample_weight == nullptr`, which
+    is their `Dbscan::run(..., sample_weight = nullptr, ...)`. It is kept as
+    its own entry point rather than folded into the weighted one because
+    every existing caller in `bench/` and in this lane's checks passes these
+    arguments positionally, and because an unweighted fit should not have to
+    build a weight buffer to say it has none.
+    """
+    var no_weight = ctx.enqueue_create_buffer[DType.float32](1)
+    ctx.synchronize()
+    return dbscan_fit_impl_weighted(
+        ctx,
+        x,
+        labels,
+        no_weight,
+        n_rows,
+        n_features,
+        eps,
+        min_pts,
+        max_mbytes_per_batch,
+        max_iterations,
+        eps_nn_method,
+        phase_timing,
+        metric,
+        False,
+    )
+
+
+def dbscan_fit_impl_weighted(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut labels: DeviceBuffer[DType.int32],
+    mut sample_weight: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_features: Int,
+    eps: Float64,
+    min_pts: Int,
+    max_mbytes_per_batch: Int = 0,
+    max_iterations: Int = 200,
+    eps_nn_method: Int = EPS_NN_RBC,
+    phase_timing: Bool = False,
+    metric: Int = DBSCAN_METRIC_L2,
+    has_weights: Bool = False,
 ) raises -> Int:
     """`dbscanFitImpl` (`dbscan.cuh:101`): size the batch, allocate, run.
 
@@ -200,6 +259,13 @@ def dbscan_fit_impl(
     var block_sums = ctx.enqueue_create_buffer[DType.int32](
         scan_blocks_needed(n_rows) + 1
     )
+    # `runner.cuh:176-177`: `sample_weight != nullptr ? alignTo(sizeof(Type_f)
+    # * batch_size) : 0`. Mojo has no null `DeviceBuffer`, so an unweighted
+    # fit gets a one-element placeholder that nothing reads; `has_weights` is
+    # their `sample_weight != nullptr`.
+    var wght_sum = ctx.enqueue_create_buffer[DType.float32](
+        batch if has_weights else 1
+    )
     ctx.synchronize()
 
     return dbscan_fit(
@@ -213,6 +279,8 @@ def dbscan_fit_impl(
         labels_temp,
         work_buffer,
         block_sums,
+        sample_weight,
+        wght_sum,
         n_rows,
         n_features,
         eps,
@@ -221,4 +289,6 @@ def dbscan_fit_impl(
         max_iterations,
         eps_nn_method,
         phase_timing,
+        metric,
+        has_weights,
     )

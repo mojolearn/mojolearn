@@ -1692,6 +1692,747 @@ def check_sign_flip_reaches_the_fit() raises:
     )
 
 
+# ==========================================================================
+# WHITENING (DEVIATIONS 580-585)
+# ==========================================================================
+#
+# FOUR GATES, CATCHING FOUR DIFFERENT THINGS. A whitening bug has several
+# quite separate shapes and no single check sees them all.
+#
+#   check_whiten_unit_variance      the PROPERTY, independent of how the
+#                                   rescale is spelled: whitened score
+#                                   columns have sample variance 1. Catches a
+#                                   missing or wrong FACTOR.
+#   check_whiten_round_trip         `inverse_transform(transform(X))` returns
+#                                   `X` at full rank. Catches an inverse that
+#                                   is not the forward pass inverted, which
+#                                   the variance gate cannot see because it
+#                                   never calls the inverse.
+#   check_whiten_row_subset_agrees  transforming 256 rows must agree with
+#                                   transforming 8192 for those 256. Catches
+#                                   DEVIATION 580's failure mode, which is
+#                                   cuML's dense path, and which both gates
+#                                   above pass happily because each of them
+#                                   only ever transforms one shape.
+#   check_whiten_edges              the kernel driven directly on PLANTED BIT
+#                                   PATTERNS against a fold-free host scan.
+#                                   Catches the rounding, the skip threshold
+#                                   and the denormal decisions, none of which
+#                                   a property gate can see.
+#
+# The first three are properties of PCA rather than transcriptions of our own
+# reading of cuML, which is what makes them worth more than the fourth; the
+# fourth is the only one that can see a last-bit decision, which is why all
+# four are here.
+
+from core.gemm import gemm_nt
+from core.column_stats import (
+    TRANSPOSE_TILE,
+    shift_columns_kernel,
+    transpose_kernel,
+)
+from checks.numerics import ftz, identical_div, identical_mul
+from decomposition.impl.linalg.detail.pca import (
+    WHITEN_SKIP_ZERO,
+    pca_transform,
+    whiten_components,
+    whiten_scalar,
+)
+from decomposition.checks.pca_sabotage import (
+    PCA_SAB_NONE,
+    PCA_SAB_WHITEN_NO_DIV,
+    PCA_SAB_WHITEN_NO_FTZ,
+    PCA_SAB_WHITEN_NO_SCALE,
+    PCA_SAB_WHITEN_NO_SKIP,
+    PCA_SAB_WHITEN_RECIPROCAL,
+    PCA_SAB_WHITEN_STD_DIV,
+    PCA_SAB_WHITEN_TRANSFORM_ROWS,
+    pca_sabotage_name,
+    sabotage_whiten_scale_kernel,
+)
+
+
+comptime WHITEN_SUBSET_ROWS = 256
+
+
+def _whiten_launch(
+    ctx: DeviceContext,
+    mut src: DeviceBuffer[DType.float32],
+    mut dst: DeviceBuffer[DType.float32],
+    mut singular: DeviceBuffer[DType.float32],
+    n_components: Int,
+    n_cols: Int,
+    n_fit_rows: Int,
+    inverse: Bool,
+    arm: Int,
+) raises:
+    """The shipped kernel at `PCA_SAB_NONE`, a sabotage copy otherwise.
+
+    `whiten_components` is called BY NAME on the un-sabotaged arm rather than
+    the check re-launching `whiten_scale_kernel` itself, so every gate below
+    exercises the shipped driver -- its grid arithmetic and its scalar -- and
+    not a second copy of it that could drift away from what ships.
+    """
+    if arm == PCA_SAB_NONE:
+        whiten_components(
+            ctx, src, dst, singular, n_components, n_cols, n_fit_rows, inverse
+        )
+        return
+    var cells = n_components * n_cols
+    var scalar = whiten_scalar(n_fit_rows, inverse)
+    var divide = Int32(1)
+    if inverse:
+        divide = Int32(0)
+    ctx.enqueue_function[sabotage_whiten_scale_kernel](
+        dst.unsafe_ptr(),
+        src.unsafe_ptr(),
+        singular.unsafe_ptr(),
+        Int32(cells),
+        Int32(n_cols),
+        scalar,
+        divide,
+        Int32(arm),
+        grid_dim=((cells + 255) // 256, 1, 1),
+        block_dim=(256, 1, 1),
+    )
+    ctx.synchronize()
+
+
+def _whiten_scores(
+    ctx: DeviceContext,
+    rows: Int,
+    n_fit_rows_override: Int,
+    arm: Int,
+) raises -> List[Float64]:
+    """Fit on the whole 8192-row fixture, then whiten-transform its first
+    `rows` rows.
+
+    `n_fit_rows_override == 0` means "the fit's own row count", which is what
+    DEVIATION 580 requires; `check_whiten_row_subset_agrees` passes
+    `WHITEN_SUBSET_ROWS` instead to reproduce cuML's dense behavior.
+
+    The fixture restores `x` twice over -- `pca_fit` adds the mean back on
+    the fallback arm and `pca_transform` does the same around the projection
+    -- so one filled buffer serves both, which is also a standing check that
+    those restores happen.
+    """
+    var x = ctx.enqueue_create_buffer[DType.float32](PCA_ROWS * PCA_COLS)
+    var xa = ctx.enqueue_create_buffer[DType.float32](PCA_ROWS * PCA_COLS)
+    var xa2 = ctx.enqueue_create_buffer[DType.float32](PCA_ROWS * PCA_COLS)
+    var mu = ctx.enqueue_create_buffer[DType.float32](PCA_COLS)
+    var cov = ctx.enqueue_create_buffer[DType.float32](PCA_COLS * PCA_COLS)
+    ctx.synchronize()
+    _fill(ctx, x, 1.0, 0.0)
+    var r = pca_fit(
+        ctx, x, xa, xa2, mu, cov, PCA_ROWS, PCA_COLS, PCA_COMPONENTS
+    )
+
+    var comps = ctx.enqueue_create_buffer[DType.float32](
+        PCA_COMPONENTS * PCA_COLS
+    )
+    var comps_w = ctx.enqueue_create_buffer[DType.float32](
+        PCA_COMPONENTS * PCA_COLS
+    )
+    var sing = ctx.enqueue_create_buffer[DType.float32](PCA_COMPONENTS)
+    var h_comps = ctx.enqueue_create_host_buffer[DType.float32](
+        PCA_COMPONENTS * PCA_COLS
+    )
+    var h_sing = ctx.enqueue_create_host_buffer[DType.float32](PCA_COMPONENTS)
+    ctx.synchronize()
+    for i in range(PCA_COMPONENTS * PCA_COLS):
+        h_comps.unsafe_ptr().unsafe_store(i, Float32(r.components[i]))
+    for i in range(PCA_COMPONENTS):
+        h_sing.unsafe_ptr().unsafe_store(i, Float32(r.singular_vals[i]))
+    ctx.enqueue_copy(dst_buf=comps, src_ptr=h_comps.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=sing, src_ptr=h_sing.unsafe_ptr())
+    ctx.synchronize()
+
+    # The TRANSFORM_ROWS arm is a DRIVER arm: it breaks nothing inside the
+    # kernel, it hands the kernel the wrong row count, so the kernel launched
+    # is the shipped one.
+    var kernel_arm = PCA_SAB_NONE
+    if arm != PCA_SAB_WHITEN_TRANSFORM_ROWS:
+        kernel_arm = arm
+    var n_fit = PCA_ROWS
+    if n_fit_rows_override != 0:
+        n_fit = n_fit_rows_override
+    _whiten_launch(
+        ctx, comps, comps_w, sing, PCA_COMPONENTS, PCA_COLS, n_fit, False,
+        kernel_arm,
+    )
+
+    var out = ctx.enqueue_create_buffer[DType.float32](rows * PCA_COMPONENTS)
+    ctx.synchronize()
+    pca_transform(ctx, x, mu, comps_w, out, rows, PCA_COLS, PCA_COMPONENTS)
+    var h_out = ctx.enqueue_create_host_buffer[DType.float32](
+        rows * PCA_COMPONENTS
+    )
+    ctx.enqueue_copy(dst_ptr=h_out.unsafe_ptr(), src_buf=out)
+    ctx.synchronize()
+    var scores = List[Float64]()
+    for i in range(rows * PCA_COMPONENTS):
+        scores.append(Float64(h_out.unsafe_ptr().unsafe_load(i)))
+    return scores^
+
+
+def _column_variance(
+    scores: List[Float64], rows: Int, cols: Int, c: Int
+) -> Float64:
+    """Sample variance with `ddof = 1`, the definition `explained_variance_`
+    uses, computed in Float64 on the host so the gate's own arithmetic is
+    never the thing under test."""
+    var mean = 0.0
+    for i in range(rows):
+        mean += scores[i * cols + c]
+    mean /= Float64(rows)
+    var ss = 0.0
+    for i in range(rows):
+        var d = scores[i * cols + c] - mean
+        ss += d * d
+    return ss / Float64(rows - 1)
+
+
+def check_whiten_unit_variance() raises:
+    """THE PROPERTY GATE: whitened score columns have unit variance.
+
+    Stated without reference to how the rescale is spelled. Whatever
+    `whiten_components` does, if the result is whitening then every column of
+    `transform(X_fit)` has sample variance 1. A gate written as "the device
+    matched our host transcription of cuML's two passes" would also pass for
+    a transcription of a MISREADING of cuML; this one would not.
+
+    THE SABOTAGE. Two arms are factor errors and both must fail this gate.
+    `PCA_SAB_WHITEN_NO_SCALE` is the shape of reading scikit-learn's
+    `X /= sqrt(explained_variance_)` and dividing by the SINGULAR VALUE
+    instead, off by `sqrt(n_fit_rows - 1)`; `PCA_SAB_WHITEN_NO_DIV` never
+    divides at all. The predicted and the observed deviation are both
+    printed, so a pass here is a pass with numbers attached.
+
+    The three remaining kernel arms are LAST-BIT changes and this gate cannot
+    see them by construction; `check_whiten_edges` is where they are caught,
+    and the split is deliberate rather than an omission.
+    """
+    var ctx = DeviceContext()
+    var good = _whiten_scores(ctx, PCA_ROWS, 0, PCA_SAB_NONE)
+    for c in range(PCA_COMPONENTS):
+        var v = _column_variance(good, PCA_ROWS, PCA_COMPONENTS, c)
+        if abs(v - 1.0) > 5.0e-3:
+            raise Error(
+                "whitened score column " + String(c) + " has sample variance "
+                + String(v) + ", expected 1 within 5e-3. Whitening does not"
+                " whiten."
+            )
+
+    var arms = List[Int]()
+    arms.append(PCA_SAB_WHITEN_NO_SCALE)
+    arms.append(PCA_SAB_WHITEN_NO_DIV)
+    var report = String("")
+    for ai in range(len(arms)):
+        var arm = arms[ai]
+        var bad = _whiten_scores(ctx, PCA_ROWS, 0, arm)
+        var worst = 0.0
+        for c in range(PCA_COMPONENTS):
+            var v = _column_variance(bad, PCA_ROWS, PCA_COMPONENTS, c)
+            if abs(v - 1.0) > worst:
+                worst = abs(v - 1.0)
+        if worst <= 5.0e-3:
+            raise Error(
+                "SABOTAGE FAILED TO MOVE THE ANSWER: " + pca_sabotage_name(arm)
+                + " still produced unit-variance columns (worst |var - 1| = "
+                + String(worst) + "). The gate cannot see the factor it is"
+                " supposed to be checking, so the pass above means nothing."
+            )
+        report += (
+            "  " + pca_sabotage_name(arm) + ": worst |var - 1| = "
+            + String(worst) + "\n"
+        )
+
+    print(
+        "check_whiten_unit_variance OK: 4/4 whitened columns have sample"
+        " variance 1 within 5e-3, and both factor sabotages moved it:\n"
+        + report
+    )
+
+
+def check_whiten_round_trip() raises:
+    """`inverse_transform(transform(X))` must return `X`, at full rank.
+
+    The second property, and the one that gates the INVERSE direction: the
+    variance gate never calls the inverse, so an inverse carrying the wrong
+    power of `n_fit_rows - 1`, or carrying cuML's asymmetric skip threshold
+    (DEVIATION 581), passes that gate and fails this one.
+
+    `n_components == n_cols`, so the reconstruction is exact in exact
+    arithmetic and the tolerance is float32 noise rather than truncation.
+    The inverse is spelled here exactly as
+    `decomposition/estimator.mojo::pca_whiten_inverse_transform_host` spells
+    it -- inverse-whiten the components, transpose, project, add the mean --
+    so this gate covers that surface and not a simplification of it.
+    """
+    var ctx = DeviceContext()
+    var x = ctx.enqueue_create_buffer[DType.float32](PCA_ROWS * PCA_COLS)
+    var xa = ctx.enqueue_create_buffer[DType.float32](PCA_ROWS * PCA_COLS)
+    var xa2 = ctx.enqueue_create_buffer[DType.float32](PCA_ROWS * PCA_COLS)
+    var mu = ctx.enqueue_create_buffer[DType.float32](PCA_COLS)
+    var cov = ctx.enqueue_create_buffer[DType.float32](PCA_COLS * PCA_COLS)
+    ctx.synchronize()
+    _fill(ctx, x, 1.0, 0.0)
+    var h_x = ctx.enqueue_create_host_buffer[DType.float32](
+        PCA_ROWS * PCA_COLS
+    )
+    ctx.enqueue_copy(dst_ptr=h_x.unsafe_ptr(), src_buf=x)
+    ctx.synchronize()
+    var r = pca_fit(
+        ctx, x, xa, xa2, mu, cov, PCA_ROWS, PCA_COLS, PCA_COMPONENTS
+    )
+
+    var comps = ctx.enqueue_create_buffer[DType.float32](
+        PCA_COMPONENTS * PCA_COLS
+    )
+    var comps_f = ctx.enqueue_create_buffer[DType.float32](
+        PCA_COMPONENTS * PCA_COLS
+    )
+    var comps_i = ctx.enqueue_create_buffer[DType.float32](
+        PCA_COMPONENTS * PCA_COLS
+    )
+    var sing = ctx.enqueue_create_buffer[DType.float32](PCA_COMPONENTS)
+    var h_c = ctx.enqueue_create_host_buffer[DType.float32](
+        PCA_COMPONENTS * PCA_COLS
+    )
+    var h_s = ctx.enqueue_create_host_buffer[DType.float32](PCA_COMPONENTS)
+    ctx.synchronize()
+    for i in range(PCA_COMPONENTS * PCA_COLS):
+        h_c.unsafe_ptr().unsafe_store(i, Float32(r.components[i]))
+    for i in range(PCA_COMPONENTS):
+        h_s.unsafe_ptr().unsafe_store(i, Float32(r.singular_vals[i]))
+    ctx.enqueue_copy(dst_buf=comps, src_ptr=h_c.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=sing, src_ptr=h_s.unsafe_ptr())
+    ctx.synchronize()
+
+    whiten_components(
+        ctx, comps, comps_f, sing, PCA_COMPONENTS, PCA_COLS, PCA_ROWS, False
+    )
+    whiten_components(
+        ctx, comps, comps_i, sing, PCA_COMPONENTS, PCA_COLS, PCA_ROWS, True
+    )
+
+    var z = ctx.enqueue_create_buffer[DType.float32](
+        PCA_ROWS * PCA_COMPONENTS
+    )
+    ctx.synchronize()
+    pca_transform(ctx, x, mu, comps_f, z, PCA_ROWS, PCA_COLS, PCA_COMPONENTS)
+
+    var comps_t = ctx.enqueue_create_buffer[DType.float32](
+        PCA_COLS * PCA_COMPONENTS
+    )
+    var back = ctx.enqueue_create_buffer[DType.float32](PCA_ROWS * PCA_COLS)
+    ctx.synchronize()
+    ctx.enqueue_function[transpose_kernel](
+        comps_t.unsafe_ptr(), comps_i.unsafe_ptr(),
+        Int32(PCA_COMPONENTS), Int32(PCA_COLS),
+        grid_dim=((PCA_COLS + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE,
+                  (PCA_COMPONENTS + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE, 1),
+        block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
+    )
+    ctx.synchronize()
+    gemm_nt(ctx, back, z, comps_t, PCA_ROWS, PCA_COLS, PCA_COMPONENTS)
+    ctx.enqueue_function[shift_columns_kernel](
+        back.unsafe_ptr(), mu.unsafe_ptr(), Int32(PCA_ROWS), Int32(PCA_COLS),
+        Float32(1.0),
+        grid_dim=((PCA_ROWS * PCA_COLS + 255) // 256, 1, 1),
+        block_dim=(256, 1, 1),
+    )
+    var h_back = ctx.enqueue_create_host_buffer[DType.float32](
+        PCA_ROWS * PCA_COLS
+    )
+    ctx.enqueue_copy(dst_ptr=h_back.unsafe_ptr(), src_buf=back)
+    ctx.synchronize()
+
+    var worst = 0.0
+    var scale = 0.0
+    for i in range(PCA_ROWS * PCA_COLS):
+        var want = Float64(h_x.unsafe_ptr().unsafe_load(i))
+        var got = Float64(h_back.unsafe_ptr().unsafe_load(i))
+        if abs(want) > scale:
+            scale = abs(want)
+        if abs(got - want) > worst:
+            worst = abs(got - want)
+    var rel = worst / scale
+    if rel > 2.0e-4:
+        raise Error(
+            "WHITENED ROUND TRIP FAILED: the worst reconstruction error is "
+            + String(worst) + " against a data scale of " + String(scale)
+            + " (relative " + String(rel) + "). The inverse rescale is not"
+            " the forward rescale inverted."
+        )
+    print(
+        "check_whiten_round_trip OK: inverse_transform(transform(X)) matches"
+        " X to a relative " + String(rel) + " at full rank over "
+        + String(PCA_ROWS * PCA_COLS) + " cells"
+    )
+
+
+def check_whiten_row_subset_agrees() raises:
+    """DEVIATION 580's gate, whose sabotage arm is cuML's own dense code.
+
+    Transforming 256 rows must give, for those rows, what transforming all
+    8192 gives. That is true of scikit-learn, true of cuML's SPARSE path
+    (`pca.pyx:716-718` uses `self.n_samples_`) and FALSE of cuML's dense path
+    (`pca.pyx:770` sets `params.n_rows` to the row count of THIS CALL, which
+    `pca.cuh:250` then square-roots into the scale).
+    `PCA_SAB_WHITEN_TRANSFORM_ROWS` is that behavior exactly. The factor it
+    introduces is `sqrt(255 / 8191) = 0.1765`, so the two answers are 5.7x
+    apart and no tolerance question arises.
+    """
+    var ctx = DeviceContext()
+    var full = _whiten_scores(ctx, PCA_ROWS, 0, PCA_SAB_NONE)
+    var part = _whiten_scores(ctx, WHITEN_SUBSET_ROWS, 0, PCA_SAB_NONE)
+
+    var worst = 0.0
+    for i in range(WHITEN_SUBSET_ROWS):
+        for c in range(PCA_COMPONENTS):
+            var d = abs(
+                full[i * PCA_COMPONENTS + c] - part[i * PCA_COMPONENTS + c]
+            )
+            if d > worst:
+                worst = d
+    if worst > 1.0e-3:
+        raise Error(
+            "transforming " + String(WHITEN_SUBSET_ROWS) + " rows disagrees"
+            " with transforming " + String(PCA_ROWS) + " rows on the same"
+            " rows by " + String(worst) + ". The whitening scale depends on"
+            " the size of the call, which is DEVIATION 580's failure."
+        )
+
+    var bad = _whiten_scores(
+        ctx, WHITEN_SUBSET_ROWS, WHITEN_SUBSET_ROWS,
+        PCA_SAB_WHITEN_TRANSFORM_ROWS,
+    )
+    var moved = 0.0
+    for i in range(WHITEN_SUBSET_ROWS):
+        for c in range(PCA_COMPONENTS):
+            var d = abs(
+                full[i * PCA_COMPONENTS + c] - bad[i * PCA_COMPONENTS + c]
+            )
+            if d > moved:
+                moved = d
+    if moved <= 1.0e-3:
+        raise Error(
+            "SABOTAGE FAILED TO MOVE THE ANSWER: "
+            + pca_sabotage_name(PCA_SAB_WHITEN_TRANSFORM_ROWS)
+            + " changed the whitened scores by at most " + String(moved)
+            + ", so the row count is not reaching the scale and the gate"
+            " above is not testing DEVIATION 580."
+        )
+    print(
+        "check_whiten_row_subset_agrees OK: 256 rows agree with the same 256"
+        " rows of an 8192-row transform to " + String(worst)
+        + "; cuML's dense rule moves them by " + String(moved)
+    )
+def _is_subnormal_or_zero(b: UInt32) -> Bool:
+    """Exponent field all zero: a zero of either sign, or a subnormal. The
+    class the flush model moves and the class a FAST build leaves to the
+    hardware."""
+    return (b & UInt32(0x7F800000)) == UInt32(0)
+
+
+def _is_nan_bits(b: UInt32) -> Bool:
+    return (b & UInt32(0x7F800000)) == UInt32(0x7F800000) and (
+        b & UInt32(0x007FFFFF)
+    ) != UInt32(0)
+
+
+def _is_inf_bits(b: UInt32) -> Bool:
+    return (b & UInt32(0x7F800000)) == UInt32(0x7F800000) and (
+        b & UInt32(0x007FFFFF)
+    ) == UInt32(0)
+
+
+def _whiten_edge_oracle(
+    n_components: Int,
+    n_cols: Int,
+    comp_bits: List[UInt32],
+    sing_bits: List[UInt32],
+    scalar: Float32,
+    inverse: Bool,
+) -> List[UInt32]:
+    """The SAME rule as a sequential host scan: one cell at a time, no
+    device, no launch geometry, no fold.
+
+    Deliberately written out rather than calling the kernel, for the reason
+    `_sign_flip_host_oracle` gives. It does call the same `ftz` /
+    `identical_mul` / `identical_div` seams, because those ARE the rule --
+    the pin is "this exact function of the input bits" -- and a fourth
+    hand-written copy of the flush model is a fourth chance for it to drift.
+    """
+    var out = List[UInt32]()
+    for i in range(n_components * n_cols):
+        var c = i // n_cols
+        var s = _float_of(sing_bits[c])
+        var v = ftz(identical_mul(_float_of(comp_bits[i]), scalar))
+        if abs(s) < Float32(WHITEN_SKIP_ZERO):
+            out.append(_bits_of(v))
+        elif inverse:
+            out.append(_bits_of(ftz(identical_mul(v, s))))
+        else:
+            out.append(_bits_of(ftz(identical_div(v, s))))
+    return out^
+
+
+def _whiten_edge_run(
+    ctx: DeviceContext,
+    n_components: Int,
+    n_cols: Int,
+    comp_bits: List[UInt32],
+    sing_bits: List[UInt32],
+    n_fit_rows: Int,
+    inverse: Bool,
+    arm: Int,
+) raises -> List[UInt32]:
+    """Run the kernel on planted BIT PATTERNS and return the bits it wrote."""
+    var cells = n_components * n_cols
+    var src = ctx.enqueue_create_buffer[DType.float32](cells)
+    var dst = ctx.enqueue_create_buffer[DType.float32](cells)
+    var sing = ctx.enqueue_create_buffer[DType.float32](n_components)
+    var h_src = ctx.enqueue_create_host_buffer[DType.float32](cells)
+    var h_sing = ctx.enqueue_create_host_buffer[DType.float32](n_components)
+    var h_dst = ctx.enqueue_create_host_buffer[DType.float32](cells)
+    ctx.synchronize()
+    var p_src = h_src.unsafe_ptr().unsafe_bitcast[UInt32]()
+    for i in range(cells):
+        p_src.unsafe_store(i, comp_bits[i])
+    var p_sing = h_sing.unsafe_ptr().unsafe_bitcast[UInt32]()
+    for i in range(n_components):
+        p_sing.unsafe_store(i, sing_bits[i])
+    ctx.enqueue_copy(dst_buf=src, src_ptr=h_src.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=sing, src_ptr=h_sing.unsafe_ptr())
+    ctx.synchronize()
+
+    _whiten_launch(
+        ctx, src, dst, sing, n_components, n_cols, n_fit_rows, inverse, arm
+    )
+
+    # `dst` is READ here, after the launch and after the drain: taking
+    # `.unsafe_ptr()` above would otherwise be its last use and Mojo frees a
+    # buffer at its last use (the same trap `_sign_flip_roundtrip` names).
+    ctx.enqueue_copy(dst_ptr=h_dst.unsafe_ptr(), src_buf=dst)
+    ctx.synchronize()
+    var p_dst = h_dst.unsafe_ptr().unsafe_bitcast[UInt32]()
+    var out = List[UInt32]()
+    for i in range(cells):
+        out.append(p_dst.unsafe_load(i))
+    return out^
+
+
+def check_whiten_edges() raises:
+    """The kernel on PLANTED BIT PATTERNS, against a fold-free host scan.
+
+    THE FIXTURE IS 8 COMPONENTS x 10 COLUMNS AND EVERY ROW IS A CASE, so the
+    singular value lands on each side of every decision the kernel makes:
+
+      row 0  s = 10.0, far above the skip threshold: the ordinary divide
+      row 1  s = +0.0 exactly, the case cuML's skip-zero pair is named for
+      row 2  s = 0x2EDBE6FE, one ulp BELOW 1e-10: must SKIP
+      row 3  s = 0x2EDBE700, one ulp ABOVE 1e-10: must DIVIDE. Rows 2 and 3
+             are adjacent floats, so a threshold written `<=` instead of `<`,
+             or written against a different constant, separates here and
+             nowhere else in this tree.
+      row 4  s subnormal: below the threshold, so it SKIPS and the division
+             never sees a subnormal divisor. This is what makes DEVIATION
+             581's "1e-10 is far above the largest subnormal" a tested claim
+             rather than an asserted one.
+      row 5  s = NaN. `abs(NaN) < t` is FALSE, so the divide arm is taken and
+             the cells become NaN. Written down because the other spelling of
+             the same guard -- test `>=` and negate -- sends NaN down the SKIP
+             arm and returns an unwhitened component, which is a silently
+             wrong answer where this is a visibly wrong one.
+      rows 6, 7  two more ordinary singular values, 3.0 and 7.3. They test no
+             new branch and they are not decoration:
+             `PCA_SAB_WHITEN_RECIPROCAL` separates `v / s` from `v * (1 / s)`
+             on only some (v, s) pairs, so with one ordinary `s` row its
+             "must move a bit" assertion would be close to a coin flip, and a
+             gate that fails at random is worse than no gate. Four ordinary
+             `s` rows crossed with four ordinary `v` cells make it sixteen
+             trials.
+
+    The COMPONENT cells carry the other axis: both signed zeros, both signed
+    subnormals, the smallest normal, four ordinary values and a NaN, so every
+    singular-value row crosses every one of them.
+
+    WHAT IS ASSERTED BITWISE AND WHAT IS NOT. Under `NUMERIC_IDENTICAL` every
+    cell is asserted bitwise: that is the mode's whole claim. Under
+    `NUMERIC_FAST` the flush is the hardware's business and `ftz` compiles
+    away, so a cell whose operands or result are in the subnormal class is
+    RECORDED as a divergence rather than failed -- FAST does not promise
+    those bits and a gate that demanded them would be asserting something
+    this repository explicitly does not claim. NaN payloads are compared as
+    "is a NaN" in both modes, because payload propagation on a division is a
+    per-vendor choice that no mode here pins.
+    """
+    var ctx = DeviceContext()
+    var nc = 8
+    var nk = 10
+
+    var cell = List[UInt32]()
+    cell.append(_POS_ZERO_BITS)          # +0.0
+    cell.append(_NEG_ZERO_BITS)          # -0.0
+    cell.append(UInt32(0x00000001))      # smallest positive subnormal
+    cell.append(UInt32(0x80000001))      # smallest negative subnormal
+    cell.append(UInt32(0x00800000))      # smallest positive normal
+    cell.append(UInt32(0x3F4CCCCD))      # 0.8
+    cell.append(UInt32(0xBEB33333))      # -0.35
+    cell.append(UInt32(0x3F800001))      # 1.0000001, one ulp above one
+    cell.append(UInt32(0x40490FDB))      # pi
+    cell.append(_QNAN_BITS)              # NaN
+
+    var sing = List[UInt32]()
+    sing.append(UInt32(0x41200000))      # 10.0
+    sing.append(_POS_ZERO_BITS)          # +0.0
+    sing.append(UInt32(0x2EDBE6FE))      # one ulp below 1e-10: SKIP
+    sing.append(UInt32(0x2EDBE700))      # one ulp above 1e-10: DIVIDE
+    sing.append(UInt32(0x00000400))      # a subnormal singular value: SKIP
+    sing.append(_QNAN_BITS)              # NaN
+    sing.append(UInt32(0x40400000))      # 3.0
+    sing.append(UInt32(0x40E9999A))      # 7.3
+
+    var comp = List[UInt32]()
+    for c in range(nc):
+        for j in range(nk):
+            comp.append(cell[j])
+
+    var n_fit = 8192
+    var tolerated = 0
+    # `_IDENTICAL` is a comptime constant; materialized once as a plain
+    # runtime Bool so the two uses below are ordinary boolean expressions and
+    # not comptime ones in a runtime position.
+    var identical_mode = _IDENTICAL
+    for direction in range(2):
+        var inverse = direction == 1
+        var scalar = whiten_scalar(n_fit, inverse)
+        var got = _whiten_edge_run(
+            ctx, nc, nk, comp, sing, n_fit, inverse, PCA_SAB_NONE
+        )
+        var want = _whiten_edge_oracle(nc, nk, comp, sing, scalar, inverse)
+        for i in range(nc * nk):
+            if got[i] == want[i]:
+                continue
+            if _is_nan_bits(want[i]) and _is_nan_bits(got[i]):
+                continue
+            var flush_sensitive = (
+                _is_subnormal_or_zero(comp[i])
+                or _is_subnormal_or_zero(want[i])
+                or _is_subnormal_or_zero(got[i])
+            )
+            if flush_sensitive and not identical_mode:
+                tolerated += 1
+                continue
+            raise Error(
+                "whiten cell (" + String(i // nk) + ", " + String(i % nk)
+                + ") " + ("inverse" if inverse else "forward")
+                + ": device " + _hex8(got[i]) + ", host " + _hex8(want[i])
+                + ", from component " + _hex8(comp[i]) + " and singular "
+                + _hex8(sing[i // nk])
+            )
+
+    # --- the SKIP rows are an exact round trip (DEVIATION 581) -----------
+    # Asserted only on the cells the two scalars cannot move: `sqrt(n-1)`
+    # then `1 / sqrt(n-1)` is two roundings, so an ordinary value need not
+    # return bit for bit and that is not claimed. A signed zero must, and it
+    # is the case cuML's asymmetric pair gets wrong.
+    var fwd = _whiten_edge_run(
+        ctx, nc, nk, comp, sing, n_fit, False, PCA_SAB_NONE
+    )
+    var rt = _whiten_edge_run(
+        ctx, nc, nk, fwd, sing, n_fit, True, PCA_SAB_NONE
+    )
+    var round_tripped = 0
+    for c in range(nc):
+        if not (abs(_float_of(sing[c])) < Float32(WHITEN_SKIP_ZERO)):
+            continue
+        for j in range(nk):
+            var i = c * nk + j
+            if (comp[i] & UInt32(0x7FFFFFFF)) != UInt32(0):
+                continue
+            if rt[i] != comp[i]:
+                raise Error(
+                    "the skip arm is not an exact inverse at cell ("
+                    + String(c) + ", " + String(j) + "): planted "
+                    + _hex8(comp[i]) + " came back " + _hex8(rt[i])
+                    + ". DEVIATION 581's single threshold is what makes this"
+                    " hold, and cuML's asymmetric pair does not have it."
+                )
+            round_tripped += 1
+
+    # --- SABOTAGE, arm by arm --------------------------------------------
+    var arms = List[Int]()
+    arms.append(PCA_SAB_WHITEN_NO_SCALE)
+    arms.append(PCA_SAB_WHITEN_NO_DIV)
+    arms.append(PCA_SAB_WHITEN_NO_SKIP)
+    arms.append(PCA_SAB_WHITEN_RECIPROCAL)
+    arms.append(PCA_SAB_WHITEN_STD_DIV)
+    arms.append(PCA_SAB_WHITEN_NO_FTZ)
+    var report = String("")
+    for ai in range(len(arms)):
+        var arm = arms[ai]
+        var bad = _whiten_edge_run(
+            ctx, nc, nk, comp, sing, n_fit, False, arm
+        )
+        var moved = 0
+        for i in range(nc * nk):
+            if bad[i] != fwd[i]:
+                moved += 1
+        # `STD_DIV` and `NO_FTZ` are EXPECTED INERT on a column whose
+        # hardware already flushes: `portable_divf` is bit-inert there by
+        # construction (DEVIATION 740) and so is `ftz`. They are RECORDED,
+        # not asserted, and they move on a denormal-honoring column, which is
+        # the column those two pins exist for. Every other arm changes the
+        # arithmetic on every column and must move at least one cell.
+        var must_move = (
+            arm != PCA_SAB_WHITEN_STD_DIV and arm != PCA_SAB_WHITEN_NO_FTZ
+        )
+        if must_move and moved == 0:
+            raise Error(
+                "SABOTAGE FAILED TO MOVE THE ANSWER: "
+                + pca_sabotage_name(arm) + " changed 0 of " + String(nc * nk)
+                + " cells, so this fixture cannot see that decision and the"
+                " pass above is not gating it."
+            )
+        report += (
+            "  " + pca_sabotage_name(arm) + ": " + String(moved) + "/"
+            + String(nc * nk) + " cells"
+            + ("" if must_move else " (RECORDED, expected inert on a column"
+               " that flushes in hardware)") + "\n"
+        )
+
+    # `NO_SKIP` must not merely move bits, it must produce an INFINITY on the
+    # `s = +0.0` row. That is the whole reason the guard is there, and "some
+    # bits moved" would also be true of a harmless change.
+    var no_skip = _whiten_edge_run(
+        ctx, nc, nk, comp, sing, n_fit, False, PCA_SAB_WHITEN_NO_SKIP
+    )
+    var infs = 0
+    for j in range(nk):
+        if _is_inf_bits(no_skip[1 * nk + j]):
+            infs += 1
+    if infs == 0:
+        raise Error(
+            "SABOTAGE FAILED: removing the skip test produced no infinity on"
+            " the s = +0.0 row, so the divide by zero the guard exists to"
+            " prevent is not reachable through this kernel and the guard is"
+            " untested."
+        )
+
+    print(
+        "check_whiten_edges OK [" + ("IDENTICAL" if identical_mode else "FAST")
+        + "]: " + String(nc * nk) + " planted cells x 2 directions against"
+        " the host scan (" + String(tolerated) + " subnormal-class cells"
+        " recorded rather than asserted), " + String(round_tripped)
+        + " signed-zero cells round trip exactly through the skip arm, "
+        + String(infs) + "/" + String(nk) + " cells go to infinity when the"
+        " guard is removed.\n" + report
+    )
+
+
 def main() raises:
     """Everything in this file, so it runs as one process in one numeric mode.
 
@@ -1709,3 +2450,7 @@ def main() raises:
     check_sign_flip_rule_and_ties()
     check_sign_flip_matches_host_rule()
     check_sign_flip_reaches_the_fit()
+    check_whiten_unit_variance()
+    check_whiten_round_trip()
+    check_whiten_row_subset_agrees()
+    check_whiten_edges()

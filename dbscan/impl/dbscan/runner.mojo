@@ -52,10 +52,43 @@ and it never relabelled, so its output did not match cuML's or sklearn's.
 Those were three separate departures from `runner.cuh` and all three are
 gone.
 
+DEVIATION BLOCK 29: `need_ja_compute` ON THE WEIGHTED BALL-COVER ARM
+--------------------------------------------------------------------
+`runner.cuh:257` is
+
+    bool need_ja_compute = sparse_rbc_mode && ((i == 0) || (sample_weight != nullptr));
+
+and the second disjunct is the entire reason the weighted ball-cover arm
+works. Loop 1 normally asks the ball cover only to COUNT: it fills `ia` and
+`vd` and emits no columns, because the integer degree is all the core-point
+test needs. A WEIGHTED degree needs the neighbour IDS, so with weights on,
+every batch of loop 1 must also FILL `ja`. That is their line, ported.
+
+WHERE OURS DIFFERS, AND IT IS THE SAME PLACE DEVIATION 39 ALREADY DIFFERS.
+Theirs fills into the resizable `adj_graph` and grows it later
+(`rmm::device_uvector::resize` preserves contents); `DeviceBuffer` has no
+growing resize, so ours fills into a per-batch scratch sized to that batch's
+own edge count, accumulates the weights out of it, and drops it. The cost is
+ONE extra fill of batch 0 per fit -- batch 0 is filled here for its weights
+and again into `col_ind` once `col_ind` is sized, where theirs reuses the
+first fill. It is a duplicated pass over one batch, not a duplicated answer:
+`rbc_eps_nn_query_fill` is a pure function of the index and the query rows,
+so both fills write the same columns. Named rather than hidden because it is
+a real per-fit cost that only the weighted arm pays.
+
+THE OTHER PLACE THE WEIGHT COULD HAVE GONE, AND WHY IT DID NOT. Nothing but
+the core-point test reads the weight. The neighborhood, the adjacency, the
+CSR, `weak_cc`, `MergeLabels`, `final_relabel` and `relabelForSkl` are
+byte-for-byte the unweighted path, which is what makes "uniform weights of 1
+reproduce the unweighted labels" a real gate rather than a tautology: the
+two runs differ in one buffer and one kernel, and if the weighted degree is
+wrong that gate is what says so.
+
 NOT PORTED, and named in `dbscan/NOT_IMPLEMENTED.tsv`: the multi-GPU arms
-(`CorePoints::exchange`, `MergeLabels::tree_reduction`), the `core_indices`
-output (`runner.cuh:419-442`, a `thrust::copy_if` stream compaction of the
-core mask), and `sample_weight`. The two-loop `max_k` dispatch
+(`CorePoints::exchange`, `MergeLabels::tree_reduction`) and the
+`core_indices` output (`runner.cuh:419-442`, a `thrust::copy_if` stream
+compaction of the core mask). `sample_weight` sat on this list until
+2026-09-01 and is now above. The two-loop `max_k` dispatch
 (`runner.cuh:257`, `:289`, `:327`, `:335`) briefly sat on this list and is
 now PORTED below: loop 2 reuses batch 0's CSR from loop 1 and takes the
 one-pass arm for the rest whenever `algo.cuh:119`'s spare guard admits it.
@@ -70,9 +103,20 @@ from dbscan.impl.dbscan.adjgraph.algo import (
     scan_blocks_needed,
 )
 from core.identity_trace import IdentityTrace
-from dbscan.impl.dbscan.corepoints.compute import core_points_compute
+from dbscan.impl.dbscan.corepoints.compute import (
+    core_points_compute,
+    core_points_compute_weighted,
+)
 from dbscan.impl.dbscan.mergelabels.runner import merge_labels_run
-from dbscan.impl.dbscan.vertexdeg.algo import vertex_deg_run
+from dbscan.impl.dbscan.vertexdeg.algo import (
+    vertex_deg_dispatch,
+    weighted_vertex_deg_csr,
+    weighted_vertex_deg_dense,
+)
+from dbscan.impl.neighbors.epsilon_neighborhood import (
+    DBSCAN_METRIC_L2,
+    dbscan_metric_name,
+)
 from dbscan.impl.label.classlabels import make_monotonic
 from dbscan.impl.sparse.detail.csr import (
     MAX_LABEL,
@@ -237,6 +281,8 @@ def dbscan_fit(
     mut labels_temp: DeviceBuffer[DType.int32],
     mut work_buffer: DeviceBuffer[DType.int32],
     mut block_sums: DeviceBuffer[DType.int32],
+    mut sample_weight: DeviceBuffer[DType.float32],
+    mut wght_sum: DeviceBuffer[DType.float32],
     n_rows: Int,
     n_features: Int,
     eps: Float64,
@@ -245,6 +291,8 @@ def dbscan_fit(
     max_iterations: Int = 200,
     eps_nn_method: Int = EPS_NN_RBC,
     phase_timing: Bool = False,
+    metric: Int = DBSCAN_METRIC_L2,
+    has_weights: Bool = False,
 ) raises -> Int:
     """`Dbscan::run`, single node. Returns the total propagation passes.
 
@@ -258,6 +306,15 @@ def dbscan_fit(
         labels_temp  Index [N]
         work_buffer  Index [N]
         block_sums   Index [scan_blocks_needed(N) + 1]
+        wght_sum     Type_f [batch_size]   ONLY when `has_weights`
+
+`wght_sum` is theirs and is sized exactly as `runner.cuh:176-177` sizes it
+(`sample_weight != nullptr ? alignTo(sizeof(Type_f) * batch_size) : 0`).
+`sample_weight` is N long and is the CALLER'S array, not workspace, which is
+also theirs (it is a `const Type_f*` parameter of `Dbscan::run`, `:120`).
+When `has_weights` is False both are one-element placeholders and neither is
+read: Mojo has no null `DeviceBuffer`, so the `sample_weight != nullptr`
+their code branches on is this Bool.
 
     `block_sums` is OURS and replaces two things of theirs: thrust's internal
     scan scratch, and `row_counters` (`runner.cuh:218`), which their
@@ -330,6 +387,35 @@ def dbscan_fit(
     if sparse_rbc_mode and n_features > Int(MAX_LABEL) // n_rows:
         sparse_rbc_mode = False
 
+    # THE L1 ARM IS BRUTE FORCE ONLY, AND THIS RAISES RATHER THAN
+    # DOWNGRADING. `runner.cuh:152-156` DOWNGRADES an unsupported metric to
+    # L2Sqrt and logs a warning; copying that here would answer a Manhattan
+    # query with Euclidean neighborhoods, which is the "accepted and
+    # ignored" failure this repository refuses by house rule.
+    #
+    # THE REASON IS SCOPE, NOT IMPOSSIBILITY, and the distinction matters
+    # because a refusal that hides a doable feature is how a library stops
+    # growing. The ball cover's pruning is metric-generic in principle: it
+    # rests on the triangle inequality, which L1 satisfies. What is L2 in
+    # this tree is the IMPLEMENTATION -- `neighbors/impl/neighbors/
+    # ball_cover/common.mojo::eps_dist_sq` and the three landmark bounds at
+    # `ball_cover/registers.mojo:280`, `:422`, `:547` all compute Euclidean
+    # distance, and the index's radii are built from it. An L1 ball cover is
+    # a real and reachable piece of work; it belongs to the `neighbors/`
+    # lane, not to this one, and until it lands the honest answer to
+    # `metric='manhattan', algorithm='rbc'` is a refusal that says which arm
+    # does serve it.
+    if sparse_rbc_mode and metric != DBSCAN_METRIC_L2:
+        raise Error(
+            "dbscan: metric='" + dbscan_metric_name(metric) + "' is served by"
+            " the BRUTE_FORCE arm only. The ball cover's landmark radii and"
+            " its triangle-inequality bounds are computed as Euclidean"
+            " distances in neighbors/impl/neighbors/ball_cover/ (common.mojo"
+            " eps_dist_sq; registers.mojo:280, :422, :547), so an L1 query"
+            " needs an L1 index that lane has not built yet. Pass"
+            " algorithm='brute'."
+        )
+
     # `runner.cuh:181-186`: `ASSERT(N * batch_size <
     # static_cast<std::size_t>(MAX_LABEL), "An overflow occurred with the
     # current choice of precision ...")`. Theirs is unconditional and cannot
@@ -357,6 +443,8 @@ def dbscan_fit(
         print(
             "PHASE plan n_rows " + String(n_rows) + " batch " + String(batch)
             + " n_batches " + String(n_batches) + " method " + method_name
+            + " metric " + dbscan_metric_name(metric)
+            + " weighted " + String(has_weights)
         )
 
     # `runner.cuh:231-241`: build the index ONCE, before the batch loop, not
@@ -452,11 +540,44 @@ def dbscan_fit(
                     " (runner.cuh:143-150) for exactly this reason. Use a"
                     " smaller eps, a smaller batch, or the BRUTE_FORCE arm."
                 )
+            # DEVIATION 29: `need_ja_compute = sparse_rbc_mode && ((i == 0)
+            # || (sample_weight != nullptr))`, `runner.cuh:257`. The count
+            # pass above emitted `ia` and `vd` and NO columns, and a
+            # weighted degree needs the neighbour ids, so with weights on
+            # every batch of loop 1 fills too. The scratch is this batch's
+            # own edge count; see the deviation block for why it is not
+            # `col_ind` (which is not sized until loop 1 has finished).
+            if has_weights:
+                var ja_len1 = nnz1 if nnz1 > 0 else 1
+                var ja1 = ctx.enqueue_create_buffer[DType.int32](ja_len1)
+                ctx.synchronize()
+                var qbw = x.create_sub_buffer[DType.float32](
+                    start_vertex_id * n_features, n_points * n_features
+                )
+                rbc_eps_nn_query_fill(
+                    ctx, rbc_xr, qbw, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
+                    ex_scan, ja1, n_points, n_features, n_landmarks,
+                    eps_radius,
+                )
+                ctx.synchronize()
+                weighted_vertex_deg_csr(
+                    ctx, wght_sum, ex_scan, ja1, sample_weight, n_points
+                )
+                ctx.synchronize()
+                _ = ja1^
         else:
-            vertex_deg_run(
+            vertex_deg_dispatch(
                 ctx, adj, vd, x, start_vertex_id, n_points, n_rows,
-                n_features, eps,
+                n_features, eps, metric,
             )
+            ctx.synchronize()
+            # `algo.cuh:243-254`, the dense half of their sample-weight arm.
+            # It reads the `adj` the neighborhood kernel just wrote, so it
+            # sits after the synchronize and before the degree readback.
+            if has_weights:
+                weighted_vertex_deg_dense(
+                    ctx, wght_sum, adj, sample_weight, n_points, n_rows
+                )
         ctx.synchronize()
 
         # `raft::update_host(&curradjlen, vd + n_points, 1, stream)`
@@ -494,10 +615,18 @@ def dbscan_fit(
                 + String(Float64(perf_counter_ns() - t_vd1) / 1.0e6)
             )
 
+        # `runner.cuh:300-306`: the ONE place `sample_weight` changes the
+        # answer. Their ternary is two instantiations of one template; ours
+        # is two functions in the file that template lives in.
         var t_cp = perf_counter_ns()
-        core_points_compute(
-            ctx, vd, core, min_pts, start_vertex_id, n_points
-        )
+        if has_weights:
+            core_points_compute_weighted(
+                ctx, wght_sum, core, min_pts, start_vertex_id, n_points
+            )
+        else:
+            core_points_compute(
+                ctx, vd, core, min_pts, start_vertex_id, n_points
+            )
         ctx.synchronize()
         if phase_timing:
             print(
@@ -644,9 +773,14 @@ def dbscan_fit(
                     )
         else:
             if b2 > 0:
-                vertex_deg_run(
+                # No weighted pass here: loop 2 rebuilds `adj` only to build
+                # the CSR the labeller walks, and the core mask it consults
+                # was finished by loop 1 over every batch. Recomputing
+                # `wght_sum` would write the same numbers and be read by
+                # nothing.
+                vertex_deg_dispatch(
                     ctx, adj, vd, x, start2, n_points2, n_rows, n_features,
-                    eps,
+                    eps, metric,
                 )
                 ctx.synchronize()
                 if phase_timing:
@@ -744,7 +878,8 @@ def dbscan_fit(
             String("dbscan n=") + String(n_rows) + " d="
             + String(n_features) + " eps=" + String(eps)
             + " min_pts=" + String(min_pts) + " batches="
-            + String(n_batches)
+            + String(n_batches) + " metric=" + dbscan_metric_name(metric)
+            + " weighted=" + String(has_weights)
         )
         trace.record_device(ctx, "dbscan.core", core, n_rows)
         trace.record_device(ctx, "dbscan.labels.merged", labels, n_rows)

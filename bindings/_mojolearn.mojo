@@ -78,6 +78,7 @@ from checks.vendor import COMPILED_VENDOR
 from max.gpu.host import DeviceContext
 
 from cluster.estimator import kmeans_fit
+from neighbors.impl.neighbors.detail.knn_brute_force import KNN_METHOD_AUTO
 from neighbors.estimator import (
     knn_classifier_predict,
     knn_regressor_predict,
@@ -111,14 +112,59 @@ def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
     return MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr)
 
 
+# ===========================================================================
+# THE METRIC / WEIGHTING TRIPLE, ADDED 2026-09-01.
+#
+# The three k-NN bindings below each grew ONE trailing argument,
+# `dist_params`, rather than three more slots in `params`. Two reasons, and
+# the first is not style: `knn_classify_binding`'s `params` is variable
+# length -- `7 + n_outputs`, with the class counts at the TAIL (`:196-206`)
+# -- so anything appended there would collide with `n_classes` and the
+# arity check would have to guess. A separate list cannot. The second is
+# that `bindings/_mojolearn_estimators.mojo::kde_score_samples_binding`
+# already passes `kernel` and `metric` as their own arguments beside
+# `params`, so this is the shape this file's sibling already uses.
+#
+# `dist_params` is, in this exact order (mirrored in
+# `python/mojolearn/neighbors.py::NearestNeighbors._dist_params`):
+#
+#     0  metric      a cuVS DistanceType value, or METRIC_FROM_IS_SQRT (-1)
+#     1  metric_arg  Minkowski's p (float); discarded by every other metric
+#     2  weights     WEIGHTS_UNIFORM (0) or WEIGHTS_DISTANCE (1)
+#
+# `weights` is read only by the classifier and the regressor;
+# `knn_search_binding` takes the triple anyway so the three signatures
+# stay parallel and the wrapper builds ONE list for all three.
+# ===========================================================================
+
+
+def _dist_triple(dist_params: PythonObject) raises -> Tuple[Int, Float32, Int]:
+    """`dist_params` -> `(metric, metric_arg, weights)`, length-checked."""
+    if len(dist_params) != 3:
+        raise Error(
+            "knn: dist_params must hold 3 values (metric, metric_arg,"
+            " weights), got " + String(len(dist_params))
+        )
+    return (
+        Int(py=dist_params[0]),
+        Float32(Float64(py=dist_params[1])),
+        Int(py=dist_params[2]),
+    )
+
+
 def knn_search_binding(
     index_addr: PythonObject,
     queries_addr: PythonObject,
     out_dist_addr: PythonObject,
     out_idx_addr: PythonObject,
     params: PythonObject,
+    dist_params: PythonObject,
 ) raises -> PythonObject:
     """Exact k-NN. Returns the query tile that actually ran.
+
+    `dist_params` is `(metric, metric_arg, weights)`; see the block above.
+    `weights` is unread here (a search returns distances, it does not
+    vote) and is present so the wrapper can pass one list to all three.
 
     `params` is, in this exact order:
 
@@ -149,11 +195,15 @@ def knn_search_binding(
     var kk = Int(py=params[3])
     var sq = Int(py=params[4]) != 0
     var qt = Int(py=params[5])
+    var dt = _dist_triple(dist_params)
 
     var used: Int
     with GILReleased(Python()):
         var ctx = DeviceContext()
-        used = knn_search(ctx, ip, ni, qp, nq, nf, kk, dp, xp, sq, qt)
+        used = knn_search(
+            ctx, ip, ni, qp, nq, nf, kk, dp, xp, sq, qt, KNN_METHOD_AUTO,
+            dt[0], dt[1],
+        )
     return PythonObject(used)
 
 
@@ -165,6 +215,7 @@ def knn_classify_binding(
     out_proba_addr: PythonObject,
     out_uniq_addr: PythonObject,
     params: PythonObject,
+    dist_params: PythonObject,
 ) raises -> PythonObject:
     """The k-NN classifier: search, then vote or tally. Returns the query tile
     that ran (the same number `knn_search` returns, for the same reason).
@@ -218,13 +269,14 @@ def knn_classify_binding(
     var lp = _i32_ptr(Int(py=out_labels_addr))
     var pp = _f32_ptr(Int(py=out_proba_addr))
     var up = _i32_ptr(Int(py=out_uniq_addr))
+    var dt = _dist_triple(dist_params)
 
     var used: Int
     with GILReleased(Python()):
         var ctx = DeviceContext()
         used = knn_classifier_predict(
             ctx, ip, ni, qp, nq, nf, kk, yp, no, n_classes, lp, pp, up,
-            want_proba, qt,
+            want_proba, qt, dt[0], dt[1], dt[2],
         )
     return PythonObject(used)
 
@@ -235,8 +287,10 @@ def knn_regress_binding(
     y_addr: PythonObject,
     out_addr: PythonObject,
     params: PythonObject,
+    dist_params: PythonObject,
 ) raises -> PythonObject:
-    """The k-NN regressor: search, then the mean of the neighbours' targets.
+    """The k-NN regressor: search, then the mean (uniform) or the
+    distance-weighted mean (DEVIATION 556) of the neighbours' targets.
     Returns the query tile that ran.
 
     `params` is, in this exact order (mirrored in
@@ -267,11 +321,14 @@ def knn_regress_binding(
     var kk = Int(py=params[3])
     var qt = Int(py=params[4])
     var no = Int(py=params[5])
+    var dt = _dist_triple(dist_params)
 
     var used: Int
     with GILReleased(Python()):
         var ctx = DeviceContext()
-        used = knn_regressor_predict(ctx, ip, ni, qp, nq, nf, kk, yp, no, op, qt)
+        used = knn_regressor_predict(
+            ctx, ip, ni, qp, nq, nf, kk, yp, no, op, qt, dt[0], dt[1], dt[2]
+        )
     return PythonObject(used)
 
 

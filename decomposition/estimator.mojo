@@ -41,6 +41,7 @@ from decomposition.impl.linalg.detail.pca import (
     eig_and_truncate,
     pca_transform,
     pca_validate,
+    whiten_components,
 )
 from core.gemm import gemm_tn
 
@@ -236,5 +237,141 @@ def inverse_transform_host(
             Float32(1.0), grid_dim=((n_rows * n_features + 255) // 256, 1, 1),
             block_dim=(256, 1, 1),
         )
+    ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out)
+    ctx.synchronize()
+
+
+# --------------------------------------------------------------------------
+# THE WHITENED PAIR (DEVIATIONS 580-584; the arithmetic lives in
+# `decomposition/impl/linalg/detail/pca.mojo`).
+#
+# TWO NEW SURFACES RATHER THAN TWO CHANGED ONES, DELIBERATELY. Whitening
+# needs two things the unwhitened surfaces do not take -- the fit's singular
+# values and the fit's row count -- and widening `pca_transform_host` /
+# `inverse_transform_host` would change the arity of two functions that
+# `bindings/_mojolearn_estimators.mojo` already exports. Adding beside them
+# keeps every existing call site and every shipped binding byte for byte
+# where it was, and makes the Python layer's capability test a plain
+# `hasattr` on the new name.
+# --------------------------------------------------------------------------
+
+
+def pca_whiten_transform_host(
+    ctx: DeviceContext,
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mean_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    components_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    singular_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+    n_fit_rows: Int,
+) raises:
+    """`pcaTransform` with `prms.whiten = true`.
+
+    `n_fit_rows` is the row count of the matrix the model was FITTED on, not
+    of `x`. That is DEVIATION 580 and it is the one place this surface
+    disagrees with cuML's dense path on purpose; the deviation note in
+    `pca.mojo` carries the three-way evidence.
+    """
+    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    var mu = ctx.enqueue_create_buffer[DType.float32](n_features)
+    var components = ctx.enqueue_create_buffer[DType.float32](
+        n_components * n_features
+    )
+    var components_w = ctx.enqueue_create_buffer[DType.float32](
+        n_components * n_features
+    )
+    var singular = ctx.enqueue_create_buffer[DType.float32](n_components)
+    var out = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    ctx.enqueue_copy(dst_buf=mu, src_ptr=mean_ptr)
+    ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
+    ctx.enqueue_copy(dst_buf=singular, src_ptr=singular_ptr)
+    ctx.synchronize()
+    var trace = IdentityTrace()
+    whiten_components(
+        ctx, components, components_w, singular,
+        n_components, n_features, n_fit_rows, False,
+    )
+    if trace.enabled:
+        trace.header(
+            String("pca.whiten n=") + String(n_rows) + " d="
+            + String(n_features) + " n_components=" + String(n_components)
+            + " n_fit_rows=" + String(n_fit_rows)
+        )
+        trace.record_device(
+            ctx, "pca.whiten.components", components_w,
+            n_components * n_features,
+        )
+    pca_transform(
+        ctx, x, mu, components_w, out, n_rows, n_features, n_components
+    )
+    if trace.enabled:
+        trace.record_device(
+            ctx, "pca.whiten.scores", out, n_rows * n_components
+        )
+    ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out)
+    ctx.synchronize()
+
+
+def pca_whiten_inverse_transform_host(
+    ctx: DeviceContext,
+    scores_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    components_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    singular_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mean_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+    n_fit_rows: Int,
+) raises:
+    """`pcaInverseTransform` with `prms.whiten = true`.
+
+    The mean is ALWAYS added back here, because there is no whitened
+    truncated SVD: `TruncatedSVD` does not center and does not take a
+    `whiten` argument in cuML or in scikit-learn, so the `add_mean` flag the
+    unwhitened surface carries has nothing to select between on this one.
+    """
+    var scores = ctx.enqueue_create_buffer[DType.float32](
+        n_rows * n_components
+    )
+    var components = ctx.enqueue_create_buffer[DType.float32](
+        n_components * n_features
+    )
+    var components_w = ctx.enqueue_create_buffer[DType.float32](
+        n_components * n_features
+    )
+    var components_t = ctx.enqueue_create_buffer[DType.float32](
+        n_features * n_components
+    )
+    var singular = ctx.enqueue_create_buffer[DType.float32](n_components)
+    var mean = ctx.enqueue_create_buffer[DType.float32](n_features)
+    var out = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    ctx.enqueue_copy(dst_buf=scores, src_ptr=scores_ptr)
+    ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
+    ctx.enqueue_copy(dst_buf=singular, src_ptr=singular_ptr)
+    ctx.enqueue_copy(dst_buf=mean, src_ptr=mean_ptr)
+    ctx.synchronize()
+    whiten_components(
+        ctx, components, components_w, singular,
+        n_components, n_features, n_fit_rows, True,
+    )
+    ctx.enqueue_function[transpose_kernel](
+        components_t.unsafe_ptr(), components_w.unsafe_ptr(),
+        Int32(n_components), Int32(n_features),
+        grid_dim=((n_features + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE,
+                  (n_components + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE, 1),
+        block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
+    )
+    ctx.synchronize()
+    gemm_nt(ctx, out, scores, components_t, n_rows, n_features, n_components)
+    ctx.enqueue_function[shift_columns_kernel](
+        out.unsafe_ptr(), mean.unsafe_ptr(), Int32(n_rows), Int32(n_features),
+        Float32(1.0), grid_dim=((n_rows * n_features + 255) // 256, 1, 1),
+        block_dim=(256, 1, 1),
+    )
     ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out)
     ctx.synchronize()

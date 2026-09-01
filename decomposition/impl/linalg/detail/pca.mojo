@@ -223,7 +223,11 @@ because a cross-vendor comparison that finds a flipped component should look
 at the eigensolver first.
 """
 
-from std.gpu import block_idx, thread_idx
+# `block_dim` joined this import for `whiten_scale_kernel`, which is the
+# only kernel in this file that strides by the launch's own block size
+# rather than by a pinned comptime constant; it has no fold, so the block
+# size is scheduling and reading it back is safe here.
+from std.gpu import block_dim, block_idx, thread_idx
 from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -242,6 +246,10 @@ from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
 from core.gemm import gemm_nt, gemm_tn
+# The whitening rescale at the bottom of this file is the FIRST mode-gated
+# arithmetic this lane owns: everything above it inherits its identity from
+# `core/gram_splitk.mojo` and `core/gemm.mojo`. DEVIATION 584.
+from checks.numerics import ftz, identical_div, identical_mul
 from core.gram_splitk import gram_centered_splitk_into, gram_splitk_applies
 from core.column_stats import (
     STATS_TPB,
@@ -840,6 +848,231 @@ def pca_transform(
         Int32(n_rows),
         Int32(n_cols),
         Float32(1.0),
+        grid_dim=((cells + 255) // 256, 1, 1),
+        block_dim=(256, 1, 1),
+    )
+    ctx.synchronize()
+
+
+# ==========================================================================
+# WHITENING. DEVIATIONS 580, 581, 582, 583, 584 (and 585 for the sabotage
+# file). NUMBERED 580-585 AND NOT 552-557, which is where they started:
+# this lane's own 500-550 band was already full, and 552-557 were taken by
+# the glm, kde and neighbors lanes DURING this session. 580-585 was verified
+# unused across the whole tree at the moment of writing; a merge that finds
+# a collision should renumber here rather than there, because nothing
+# outside `decomposition/` and `python/mojolearn/decomposition.py` cites
+# these six.
+# ==========================================================================
+#
+# WHAT IT IS. `whiten=True` asks that the transformed columns come out with
+# UNIT VARIANCE instead of with the variances the fit found. Component `c`
+# carries variance `explained_var[c] = s_c^2 / (n_fit_rows - 1)`, so dividing
+# score column `c` by `sqrt(explained_var[c])` normalizes it, and that is the
+# whole operation. It is a rescale, not a second decomposition: `components_`,
+# `explained_variance_` and `singular_values_` are what the fit produced and
+# whitening never touches them, in cuML, in scikit-learn or here.
+#
+# WHERE THE RESCALE IS APPLIED, AND WHY NOT ON THE OUTPUT. cuML folds it into
+# a COPY OF THE COMPONENTS before the projection: multiply the copy by
+# `sqrt(n_rows - 1)`, then divide row `c` by `singular_vals[c]`
+# (`cuml/cpp/src/pca/pca.cuh:292-302` forward and `:232-243` inverse at the
+# 25.08 pin; the same two calls moved into `raft/linalg/detail/pca.cuh:233-243`
+# and `:301-311` at 26.08, and the two texts were diffed). scikit-learn
+# instead divides the OUTPUT by `sqrt(explained_variance_)`
+# (`sklearn/decomposition/_base.py:160-168`). The two agree in exact
+# arithmetic and differ in the last bits, and this port takes cuML's, for two
+# reasons that both matter here: it is the design source this file mirrors,
+# and it is `O(n_components * n_cols)` where scikit-learn's is
+# `O(n_rows * n_components)` -- the components matrix is the small one, and
+# `HOST_AND_DEVICE.md`'s rule is about what scales with rows.
+#
+# SO THE PROJECTION KERNEL IS UNCHANGED. `pca_transform` still calls
+# `gemm_nt` on a components buffer; whitening only decides WHICH components
+# buffer. Nothing on the unwhitened path moves in any numeric mode, and that
+# is true BY CONSTRUCTION rather than by a gate: not one line of
+# `pca_transform`, `pca_fit`, `eig_and_truncate` or `compute_covariance`
+# changed for this, so `whiten=False` executes the same instructions it
+# executed before whitening existed. A gate asserting it would be asserting
+# that an unedited function is unedited.
+#
+# DEVIATION 580 -- THE ROW COUNT IS THE FIT'S, NOT THE TRANSFORM'S, AND THIS
+# IS A DELIBERATE DIVERGENCE FROM cuML's DENSE PATH. Their scalar is
+# `sqrt(prms.n_rows - 1)` (`pca.cuh:293` forward, `:233` inverse) and `pca.pyx` sets
+# `params.n_rows = _n_rows`, THE ROW COUNT OF THE MATRIX BEING TRANSFORMED
+# (`pca.pyx:770` for transform, `:672` for inverse_transform). So cuML's
+# dense `transform` returns a DIFFERENT whitened answer for the same rows
+# depending on how many other rows were handed in with them, and
+# `pca.transform(X[:100])` does not agree with `pca.transform(X)[:100]`.
+# cuML's OWN SPARSE path does not do this -- `_sparse_transform` uses
+# `self.n_samples_`, the fit's count (`pca.pyx:716-718`), and so does
+# `_sparse_inverse_transform` (`:598-604`) -- and neither does scikit-learn,
+# whose `explained_variance_` is a fit-time quantity. Two of the three agree
+# and the third disagrees with itself, so this is their bug and not their
+# design; `PORTING_RULES.md`'s "do not port their bugs" applies and we take
+# the fit's `n_rows`. Held by `check_whiten_row_subset_agrees`, which is also
+# the sabotage gate for it.
+#
+# DEVIATION 581 -- ONE SKIP THRESHOLD FOR BOTH DIRECTIONS. Their forward pass
+# skips the division when `abs(s) < 1e-10`
+# (`raft/matrix/detail/math.cuh:265-266`, `matrixVectorBinaryDivSkipZero`
+# with `return_zero = false`, which returns the entry UNCHANGED); their
+# inverse pass skips the multiplication only when `s == 0` exactly
+# (`:219-220`, `matrixVectorBinaryMultSkipZero`). For a singular value in
+# `(0, 1e-10)` the forward pass therefore does not divide while the inverse
+# pass does multiply, and `inverse_transform(transform(X))` comes back scaled
+# by `s` in that direction. One threshold in both directions makes the pair
+# exact inverses on the skipped rows, which is the property
+# `check_whiten_round_trip` can actually state. `1e-10` is theirs and is kept
+# (float32 `0x2EDBE6FF`); it is far above the largest subnormal, so the
+# division below never sees a subnormal divisor.
+#
+# DEVIATION 582 -- NOT scikit-learn's CLAMP. They clip the scale up to
+# `finfo(dtype).eps` instead of skipping (`_base.py:164-168`), which turns a
+# null direction's near-zero score into a number of order `1/eps`. cuML's
+# skip leaves that direction scaled by `sqrt(n - 1)` alone, so a score that
+# was near zero stays near zero. Both are arbitrary in a rank-deficient
+# direction; the skip is the one that does not amplify, and it is the design
+# source's. Named because scikit-learn's comment at `_base.py:161` calls out
+# `covariance_eigh` BY NAME as the solver that produces those directions, and
+# `covariance_eigh` is the only solver this class has.
+#
+# DEVIATION 583 -- THE SCALAR IS COMPUTED ON THE HOST IN FLOAT64 AND ROUNDED
+# ONCE, which is what `math_t(sqrt(prms.n_rows - 1))` does in C++ (an integer
+# widened to double, `std::sqrt` on a double, one narrowing conversion). It
+# is not a device seam and not a per-vendor quantity: IEEE-754 requires
+# float64 `sqrt` and float64 division to be correctly rounded, so every host
+# this library builds on produces the same 32 bits from the same `n_rows`.
+#
+# DEVIATION 584 -- THE ARITHMETIC IS PINNED AT THE SEAM. The rescale is one
+# multiply and one divide per cell, and both go through the mode-gated
+# spellings: `identical_mul` (row 9's contraction pin, so no codegen may fuse
+# the scalar multiply into the neighbouring divide's operand) and
+# `identical_div` (row 49's division seam, `portable_divf` under IDENTICAL).
+# The intermediate is stored through `ftz` before the second operation, which
+# is row 10's requirement for a pinned expression, and the result is stored
+# through `ftz` because the components buffer is a seam `gemm_nt` reads.
+# NOTE that a division is NOT a tier cost here: `identical_div` is bit-inert
+# on Apple (DEVIATION 740) and exists so a denormal-honoring column can be
+# aligned to the flushing ones. Whitening runs in all three tiers.
+
+
+#: cuML's skip-zero threshold, `Type(1e-10)` in
+#: `raft/matrix/detail/math.cuh:251` and `:265`. Float32 `0x2EDBE6FF`.
+comptime WHITEN_SKIP_ZERO = 1.0e-10
+
+
+def whiten_scalar(n_fit_rows: Int, inverse: Bool) -> Float32:
+    """`sqrt(n_fit_rows - 1)` forward, `1 / sqrt(n_fit_rows - 1)` inverse.
+
+    `pca.cuh:293` and `:233-234` respectively, including their guard
+    `prms.n_rows - 1 > 0 ? ... : 0` on the inverse. `pca_validate` already
+    refuses `n_rows <= 1` so the guard cannot fire on a fitted model; it is
+    kept because dropping a guard that upstream wrote is a silent change of
+    behavior on the one input it was written for.
+
+    DEVIATION 583: float64 on the host, one narrowing at the end.
+    """
+    var d = Float64(n_fit_rows - 1)
+    if d <= 0.0:
+        return Float32(0.0)
+    var r = sqrt(d)
+    if inverse:
+        return Float32(1.0 / r)
+    return Float32(r)
+
+
+def whiten_scale_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    src: MutPointer[Float32, MutAnyOrigin],
+    singular: MutPointer[Float32, MutAnyOrigin],
+    n_cells_in: Int32,
+    n_cols_in: Int32,
+    scalar_in: Float32,
+    divide_in: Int32,
+):
+    """`dst = whiten(src)`: cuML's two passes over the components copy, fused.
+
+    `src` and `dst` are `n_components x n_cols` ROW MAJOR, the layout
+    `PCAResult.components` documents and `gemm_nt` reads, so row `c` is the
+    component whose singular value is `singular[c]`. Theirs is column major
+    and broadcasts along columns; the operation is the same one.
+
+    THEIRS IS TWO KERNELS AND THIS IS ONE, which is a launch-count deviation
+    and NOT an arithmetic one: `scalarMultiply` writes the scaled copy to
+    memory and `matrixVectorBinaryDivSkipZero` reads it back, so their
+    intermediate is a float32 round trip through DRAM. `ftz(identical_mul(
+    ...))` below is the same value with the same rounding -- a float32 store
+    followed by a float32 load is the identity -- with the store elided. The
+    flush is what makes that exact rather than nearly exact, because a
+    denormal intermediate would be flushed by the store on an FTZ column and
+    kept in a register on a column that honors denormals; `ftz` removes that
+    difference, which is precisely IDENTITY_PATHS row 10's argument for
+    storing intermediates through it.
+
+    `divide_in != 0` is the forward direction (transform); `0` is the inverse
+    (`inverse_transform`), where theirs multiplies by the singular value
+    instead. DEVIATION 581 gives both directions the same skip test.
+
+    NO FOLD, NO SHARED MEMORY, ONE CELL PER THREAD. The block size is a
+    scheduling number here, not a numeric one, so it is not read from
+    `kernel_matrix.mojo`: there is nothing in this kernel whose value could
+    depend on how the cells were partitioned across threads or blocks.
+    """
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_cells_in):
+        var c = i // Int(n_cols_in)
+        var s = singular.unsafe_load(c)
+        # Pass 1, `scalarMultiply`. `identical_mul` and not `*` because the
+        # divide (or the second multiply) is the very next operation on this
+        # value and row 9's contraction pin is about exactly that adjacency.
+        var v = ftz(identical_mul(src.unsafe_load(i), scalar_in))
+        # Pass 2, `matrixVector{Div,Mult}SkipZero`, with DEVIATION 581's one
+        # threshold. `abs` because theirs is `raft::abs(b)`; a singular value
+        # out of `eig_and_truncate` is a square root and cannot be negative,
+        # so this can only ever fire on the non-negative side, and the test
+        # is written their way rather than narrowed to it.
+        if abs(s) < Float32(WHITEN_SKIP_ZERO):
+            dst.unsafe_store(i, v)
+        elif divide_in != Int32(0):
+            dst.unsafe_store(i, ftz(identical_div(v, s)))
+        else:
+            dst.unsafe_store(i, ftz(identical_mul(v, s)))
+
+
+def whiten_components(
+    ctx: DeviceContext,
+    mut src: DeviceBuffer[DType.float32],
+    mut dst: DeviceBuffer[DType.float32],
+    mut singular: DeviceBuffer[DType.float32],
+    n_components: Int,
+    n_cols: Int,
+    n_fit_rows: Int,
+    inverse: Bool,
+) raises:
+    """Launch `whiten_scale_kernel` over the whole components matrix.
+
+    `dst` is a separate buffer because cuML makes a copy too
+    (`rmm::device_uvector<math_t> components_copy` at `pca.cuh:229` and
+    `:289`): the caller's `components_` must survive the transform unchanged,
+    the same contract `check_input_restored` holds the fit to. Their Python
+    layer's sparse arm instead scales `self.components_` in place and scales
+    it back afterwards (`pca.pyx:716-724`), which is not round-trip exact in
+    float32; the copy is the version that is.
+    """
+    var cells = n_components * n_cols
+    var scalar = whiten_scalar(n_fit_rows, inverse)
+    var divide = Int32(1)
+    if inverse:
+        divide = Int32(0)
+    ctx.enqueue_function[whiten_scale_kernel](
+        dst.unsafe_ptr(),
+        src.unsafe_ptr(),
+        singular.unsafe_ptr(),
+        Int32(cells),
+        Int32(n_cols),
+        scalar,
+        divide,
         grid_dim=((cells + 255) // 256, 1, 1),
         block_dim=(256, 1, 1),
     )

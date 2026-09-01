@@ -6540,3 +6540,112 @@ separate one level's writes from the next's. `check-depthwise` (7 claims),
 `check-lossguide`, `check-lossguide-policy` and the growth cards are
 unchanged and green; `check-grow-policy` claim 7 is the control that
 fails without this fix.
+
+# Deviations added 2026-09-01 (the DBSCAN lane closes two refused
+# configurations). 27, 28 and 29 were free gaps in the 1-144 block and sit
+# directly below the dbscan lane's own 30-39. Registered here so the next
+# lane does not claim them; the BLOCKS themselves live in the files they
+# change, as PORTING_RULES.md rule 4 requires.
+
+## 27. [CLOSED] The L1 eps neighborhood, and the squared threshold that could not carry it
+
+`dbscan/impl/neighbors/epsilon_neighborhood.mojo`.
+
+ORIGINAL WORK, NOT A PORT, and the map says so rather than crediting
+something. cuML's DBSCAN offers `euclidean`, `cosine` and `precomputed`
+(`python/cuml/cuml/cluster/dbscan.pyx:110-115`) and RAFT has no L1
+eps-neighborhood kernel, so there is nothing upstream to be faithful to. The
+one borrowed line is the per-pair op, RAFT
+`cpp/include/raft/distance/detail/distance_ops/l1.cuh:49`,
+`acc += raft::abs(x - y)` with `use_norms = false` (`:36`) and an empty
+epilog (`:51-59`); this tree already spells it once, as
+`kde/impl/distance/distance_ops.mojo::l1_core`.
+
+THE STRUCTURAL FINDING. `epsUnexpL2SqNeighKernel` never takes a square root:
+it accumulates `sum (x-y)^2` and compares against `eps * eps`, squared once
+on the host at `vertexdeg/algo.cuh:225`, because squaring one threshold is
+cheaper than rooting a million distances and, being monotone on
+non-negatives, decides the same neighborhoods. **An L1 sum has no squared
+form.** `sum |x-y|` is already the distance and no monotone rewriting of the
+comparison lets it meet an `eps^2`; comparing an L1 sum against `eps * eps`
+is a DIFFERENT radius, not a slower route to the same one. So the kernel's
+threshold argument stopped being "eps squared" and became `thresh`, whose
+meaning a comptime `metric` parameter chooses, with `dbscan_metric_threshold`
+the single function the host launcher and the checks both call.
+
+ONE KERNEL, COMPILED TWICE. The tile geometry, the shared-memory staging, the
+boundary guards, the `adj` write, the Int32 degree count and DEVIATION 30's
+row reduction are one copy; the only comptime-varying statement is the
+accumulate helper. A runtime metric flag was rejected because it would put a
+branch in the innermost loop AND leave the host's squaring a separate
+decision from the kernel's arithmetic.
+
+REFUSED ON THE BALL COVER, by name, not downgraded as `runner.cuh:152-156`
+downgrades. That is a SCOPE boundary: ball-cover pruning rests on the
+triangle inequality, which L1 satisfies, but
+`neighbors/impl/neighbors/ball_cover/` computes Euclidean distances for its
+landmark radii and its three bounds and is another lane's file.
+
+Gates: `check_dbscan_manhattan_neighborhood` (every cell against a float64
+host oracle; sabotage A runs the L1 kernel against a SQUARED threshold,
+sabotage B runs the L2 kernel against the L1 threshold, and both must move),
+`check_dbscan_manhattan_changes_the_labels`,
+`check_dbscan_manhattan_refused_on_the_ball_cover`.
+
+## 28. [CLOSED] The weighted vertex degree's fold replaces both of cuML's reducers
+
+`dbscan/impl/dbscan/vertexdeg/algo.mojo`. IDENTITY_PATHS row 64.
+
+THEIRS: `raft::linalg::coalescedReduction` over the dense `adj`
+(`vertexdeg/algo.cuh:243-254`) on the brute arm, and one warp per row closed
+by `cub::WarpReduce<math_t>::Sum` (`:62-91`) on the ball-cover arm.
+
+OURS: one block per row in both, threads striding the row ascending, closed
+by `core/pinned_reduce.pinned_block_sum[WVD_TPB]`.
+
+REASON. The weighted degree is a FLOAT sum and `CorePoints::compute`
+thresholds it against `min_pts` (`runner.cuh:301`), so the fold's last bits
+decide a point's CORE STATUS and from there the number of clusters. Both of
+their reducers close on a stage that folds at the hardware warp width, 32 on
+Apple and NVIDIA and 64 on a CDNA wavefront, so a faithful port would put an
+AMD fit and a CUDA fit on opposite sides of `>= min_pts` for any point
+sitting on it. `WVD_TPB` is read from `checks/kernel_matrix.mojo`'s new
+`K_LIB_WEIGHTED_VERTEX_DEG` row, which is listed in
+`lib_block_bounds_a_float_fold` because the number is simultaneously the
+fold's width and the stride the partials are taken at (DEVIATION 524's
+shape). Bit-inert today at a flat 128 in every column.
+
+WHAT THE TWO ARMS PROMISE EACH OTHER: nothing in general. They sum one
+multiset in two assignments (dense walks COLUMNS, CSR walks NEIGHBOURS) and
+agree exactly only where every partial is exactly representable, which is
+integer weights below 2^24.
+
+THEIR `if (weight_sum > 0)` GUARD AT `:90` IS NOT COPIED. Theirs leaves
+`weight_sums[idx]` unwritten for a non-positive row; ours has no preceding
+pass to have zeroed the buffer, and scikit-learn documents negative weights
+as meaningful (`_dbscan.py:414-415`), so ours writes every row.
+
+Gates: `check_dbscan_weighted_fold_is_pinned`,
+`check_dbscan_weighted_degree_matches_host_oracle`.
+
+## 29. [CLOSED] `need_ja_compute` on the weighted ball-cover arm, and batch 0's second fill
+
+`dbscan/impl/dbscan/runner.mojo`.
+
+`runner.cuh:257` is
+`bool need_ja_compute = sparse_rbc_mode && ((i == 0) || (sample_weight != nullptr));`
+and the second disjunct is why the weighted ball-cover arm works at all:
+loop 1 normally asks the ball cover only to COUNT, and a weighted degree
+needs the neighbour ids.
+
+WHERE OURS DIFFERS, in the same place DEVIATION 39 already differs. Theirs
+fills into the resizable `adj_graph` and grows it later; `DeviceBuffer` has
+no growing resize, so ours fills into a per-batch scratch sized to that
+batch's own edge count. The cost is ONE extra fill of batch 0 per weighted
+fit, where theirs reuses the first. `rbc_eps_nn_query_fill` is a pure
+function of the index and the query rows, so both fills write the same
+columns; it is a duplicated pass, not a duplicated answer.
+
+Gates: `check_dbscan_uniform_weight_matches_unweighted` and
+`check_dbscan_duplicate_equals_weight_two` both run the `rbc` arm, which is
+the only arm that reaches this path.

@@ -22,6 +22,113 @@ code. `upstream/cuml`, `upstream/raft` and `upstream/cuvs` landed on disk on
       labels identical to one batch, in an adj buffer 4x smaller than the
       unbatched run needs
 
+## Two refused configurations closed, 2026-09-01
+
+`sample_weight` and `metric='manhattan'` were both refused at the Python
+surface. Both are now served, and one refusal is DELIBERATELY KEPT.
+
+### `sample_weight` -- PORTED, both arms
+
+cuML has it and we did not. It enters in EXACTLY ONE PLACE: a point is core
+when the SUM OF WEIGHTS in its eps-neighborhood reaches `min_samples` rather
+than when the COUNT does. `runner.cuh:300-306` is the whole change and
+scikit-learn's `_dbscan.py:451-455` is the same sentence. The neighborhood,
+the adjacency, the CSR, `weak_cc`, `MergeLabels` and both relabels are
+byte-for-byte the unweighted path.
+
+Both producers of the weighted degree are ported, because `launcher` has two:
+`coalescedReduction` over the dense `adj` (`algo.cuh:243-254`) for the brute
+arm, and `accumulateWeights` over the CSR (`algo.cuh:62-91`) for the ball
+cover, with `need_ja_compute`'s `sample_weight` disjunct (`runner.cuh:257`)
+so loop 1 fills `ja` on every weighted RBC batch (DEVIATION 29).
+
+**THE NUMERIC RISK IS THE FOLD AND IT HAS ITS OWN GATE.** Both of their
+reducers close on a CUB stage that folds at the HARDWARE warp width, 32 on
+Apple and NVIDIA and 64 on a CDNA wavefront. A weighted degree is a FLOAT
+sum, so a faithful port would put an AMD fit and a CUDA fit on opposite sides
+of `>= min_samples` for any point sitting on the threshold, which is a
+different MODEL and not a last-bit difference in a reported number. Both
+kernels therefore close on `core/pinned_reduce.pinned_block_sum` at
+`K_LIB_WEIGHTED_VERTEX_DEG`'s width, which the kernel matrix now lists in
+`lib_block_bounds_a_float_fold` (DEVIATION 28).
+
+### `metric='manhattan'` -- ADDED, brute arm, and it is ORIGINAL WORK
+
+There is no upstream to port. cuML's DBSCAN offers euclidean, cosine and
+precomputed (`dbscan.pyx:110-115`) and RAFT has no L1 eps-neighborhood
+kernel, so no `DERIVATION_MAP.tsv` row points anywhere for this arm. The one
+borrowed line is the per-pair op, RAFT's
+`distance/detail/distance_ops/l1.cuh:49`, cited in the kernel.
+
+**THE EPS COMPARISON IS SQUARED AND THAT FORCED THE DESIGN.** The ported arm
+never takes a square root: it accumulates `sum (x-y)^2` and compares against
+`eps * eps`, squared once on the host at `algo.cuh:225`. **An L1 sum has no
+squared form.** `sum |x-y|` is already the distance and there is no monotone
+rewriting that lets it meet an `eps^2`; comparing against `eps * eps` is not
+a slower answer, it is a different radius. So the kernel's threshold argument
+stopped being "eps squared" and became `thresh`, whose meaning the comptime
+`metric` parameter chooses, and `dbscan_metric_threshold` is the single
+function both the host launcher and the checks call. The alternative -- a
+runtime metric flag -- was rejected because it would put a branch in the
+innermost accumulate loop AND leave the host's squaring a separate decision
+from the kernel's arithmetic. DEVIATION 27.
+
+On the BALL COVER the metric is refused by name rather than downgraded, and
+that is a scope boundary rather than a property of the algorithm: ball-cover
+pruning rests on the triangle inequality, which L1 satisfies, but
+`neighbors/impl/neighbors/ball_cover/` computes Euclidean distances for its
+landmark radii and its three bounds and is another lane's file.
+
+### `algorithm='kd_tree'` -- STILL REFUSED, on the merits
+
+`algorithm` names the eps-neighborhood SEARCH. A kd-tree eps query is a
+recursive, data-dependent descent with a per-thread stack: on a GPU the lanes
+of a warp diverge at every node, the traversal serializes, and the loads are
+pointer chases rather than coalesced reads -- a structure whose whole
+advantage is skipping work, on hardware where a warp only skips work every
+lane agrees to skip. Its pruning also decays with dimension and degenerates
+into a scan with overhead past roughly ten features, which is why
+scikit-learn's own `'auto'` abandons it there.
+
+The RANDOM BALL COVER is the structure that does work on this hardware for
+this query: two flat arrays and a triangle-inequality bound, `sqrt(n)`
+landmark distances per query in one coalesced pass, whole landmark groups
+pruned arithmetically, survivors scanned contiguously. No stack, no divergent
+descent. It measured 2.7x-27x over brute force at 16k-200k rows (DEVIATION
+35) and `check_dbscan_rbc_matches_brute` holds the two labellings identical
+point for point.
+
+So `'kd_tree'` is refused because it is a WORSE STRUCTURE for this query on
+this hardware, not because anything upstream lacks one. Offering it would
+hand a caller a slower answer under a familiar name.
+
+### The gates, and the sabotage arm each carries
+
+    check_dbscan_weighted_fold_is_pinned          the matrix row is NUMERIC;
+      sabotage: the same values folded at WVD_TPB and at half it must differ
+      (1.0 and a run of 2^-24 -- exactly 1.0 left to right, strictly greater
+      through the tree)
+    check_dbscan_manhattan_neighborhood           every cell against a
+      float64 host oracle; sabotage A: the L1 kernel run against a SQUARED
+      threshold must give a different adjacency; sabotage B: the L2 kernel
+      run against the L1 threshold likewise
+    check_dbscan_manhattan_changes_the_labels     one cluster under euclidean
+      and two under manhattan on a planted axis-aligned fixture whose only
+      cross edge is a diagonal step at L2 0.98995 and L1 1.4, eps 1
+    check_dbscan_manhattan_refused_on_the_ball_cover   rbc raises; sabotage:
+      the same call on brute must SUCCEED
+    check_dbscan_weighted_degree_matches_host_oracle   both kernels against
+      their own pinned host folds, bit for bit under IDENTICAL; sabotage: a
+      planted mask on which the two arms' folds provably separate, and a
+      planted weight vector on which the pinned fold and a left-to-right sum
+      provably separate
+    check_dbscan_uniform_weight_matches_unweighted     weights of 1.0
+      reproduce the unweighted labels exactly on BOTH arms; sabotage: weight
+      `min_samples` on the twelve isolated points must turn all twelve core
+    check_dbscan_duplicate_equals_weight_two      duplicating a point equals
+      giving it weight 2, on both arms; sabotage: weight 1.5 must fall back
+      to noise (1.5 + 1 = 2.5 < 3)
+
 ## The one number that explains the rebuild
 
 At 8 features and `eps = 0.30`, measured 2026-08-19 against scikit-learn:
@@ -54,7 +161,7 @@ GEMM, no distance matrix, no norms. Reusing the k-NN pipeline turned one
 kernel and one byte per pair into three kernels and sixteen.
 
 The fused kernel is now at
-`dbscan/gbdt/neighbors/epsilon_neighborhood.mojo`. The materialized path
+`dbscan/impl/neighbors/epsilon_neighborhood.mojo`. The materialized path
 survives ONLY as `vertexdeg/algo.mojo::eps_neighborhood_kernel`, which
 nothing in `gbdt/` calls: it is the reference the fused kernel is diffed
 against, cell by cell, the same role `gemm_nt_kernel` used to play for the

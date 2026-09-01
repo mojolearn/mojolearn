@@ -11,10 +11,10 @@ device work owned here, results read back.
 **This one is thinner than the k-means surface, and the reason is worth
 stating.** k-means needed the estimator to choose fixed-point accumulator
 scales, which is a real policy decision with a wrong answer. DBSCAN has no
-such knob: its labels are integers and its only tunables are eps and
-min_samples, which the caller states. So there is less here, and the small
-amount that IS here is listed below rather than being spread through the
-code.
+such knob: its labels are integers and its tunables are eps, min_samples,
+the metric and the per-sample weights, all of which the caller states. So
+there is less here, and the small amount that IS here is listed below rather
+than being spread through the code.
 
 THE POLICY CHOICES
 ------------------
@@ -51,22 +51,60 @@ THE POLICY CHOICES
    surfaced because a pass count far above the batch count is a long
    label chain, and DEVIATION 519 is about exactly that.
 
+5. **`sample_weight` IS HONORED AND ENTERS IN EXACTLY ONE PLACE** (added
+   2026-09-01). A point is core when the SUM OF THE WEIGHTS in its
+   eps-neighbourhood reaches `min_samples`, not when the COUNT does; that is
+   cuML's `runner.cuh:300-306` and scikit-learn's `_dbscan.py:451-455`, and
+   they agree. Nothing else in the fit reads it. The weight sum is a FLOAT
+   reduction, so its fold is pinned exactly like every other reduction in
+   this tree (DEVIATION 28, `dbscan/impl/dbscan/vertexdeg/algo.mojo`);
+   an unpinned fold would put an AMD fit and a CUDA fit on opposite sides of
+   `>= min_samples` for a point sitting on the threshold, which is a
+   different MODEL and not a last-bit difference in a reported number.
+   Passing all-ones reproduces the unweighted labels exactly, and
+   `check_dbscan_uniform_weight_matches_unweighted` gates that.
+
+6. **`metric` CARRIES AN L1 ARM AND IT IS ORIGINAL WORK** (added
+   2026-09-01, DEVIATION 27). `metric = DBSCAN_METRIC_L2` is the ported
+   arm. `DBSCAN_METRIC_L1` is not a port of anything: cuML's DBSCAN offers
+   euclidean, cosine and precomputed and no Manhattan
+   (`dbscan.pyx:110-115`), so there is no upstream eps-neighbourhood kernel
+   to be faithful to and no `DERIVATION_MAP.tsv` row points anywhere for it.
+   The per-pair arithmetic IS credited, to RAFT's `l1.cuh:49`. The one thing
+   a reader must know before touching it: the L2 arm compares a SQUARED
+   distance against `eps * eps`, and an L1 sum has no squared form, so the
+   threshold is not squared on that arm. `dbscan_metric_threshold` is the
+   only place that decides which.
+
 WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
 ----------------------------------------------------------
 
-- `sample_weight`. cuML supports it; nothing in this repository exercises it.
-- Metrics other than L2. The ported kernels carry only that arm.
+- The L1 arm on the BALL COVER. `neighbors/impl/neighbors/ball_cover/`
+  computes Euclidean distances for its landmark radii and its three pruning
+  bounds, so `metric='manhattan'` is served by `algorithm='brute'` and
+  refused by name on `'rbc'`. The ball cover's pruning rests on the triangle
+  inequality, which L1 satisfies, so this is reachable work in that lane and
+  not a property of the algorithm.
+- `metric='cosine'` and `metric='precomputed'`, cuML's other two
+  (`dbscan.pyx:110-115`); the Cosine arm is two `matrixVectorOp` passes plus
+  `eps2 = 2 * eps` around the same kernel (`algo.cuh:186-223`).
 - `core_sample_indices_`. scikit-learn exposes it; the port does not compute
   it separately (`dbscan.cuh:171-173` notes theirs is not returned either).
 - `eps_nn_method` and `max_iterations` cross the CPython binding since
   2026-08-23 (`bindings/_mojolearn_estimators.mojo`, slots 5 and 6;
   `python/mojolearn/density.py` `algorithm=` / `max_iterations=`).
+  `metric` and `sample_weight` cross it since 2026-09-01 (slot 7 and the
+  `weight_addr` argument).
 """
 
 from max.gpu.host import DeviceContext
 
-from dbscan.impl.dbscan.dbscan import dbscan_fit_impl
+from dbscan.impl.dbscan.dbscan import dbscan_fit_impl_weighted
 from dbscan.impl.dbscan.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC
+from dbscan.impl.neighbors.epsilon_neighborhood import (
+    DBSCAN_METRIC_L1,
+    DBSCAN_METRIC_L2,
+)
 
 
 def dbscan_fit(
@@ -80,6 +118,8 @@ def dbscan_fit(
     max_mbytes_per_batch: Int = 0,
     max_iterations: Int = 0,
     eps_nn_method: Int = EPS_NN_RBC,
+    metric: Int = DBSCAN_METRIC_L2,
+    sample_weight_addr: Int = 0,
 ) raises -> Int:
     """Cluster host-resident row-major data. Returns the PROPAGATION PASSES.
 
@@ -139,6 +179,11 @@ def dbscan_fit(
             "dbscan_fit: eps_nn_method must be EPS_NN_RBC (1) or"
             " EPS_NN_BRUTE_FORCE (0), got " + String(eps_nn_method)
         )
+    if metric != DBSCAN_METRIC_L2 and metric != DBSCAN_METRIC_L1:
+        raise Error(
+            "dbscan_fit: metric must be DBSCAN_METRIC_L2 (0) or"
+            " DBSCAN_METRIC_L1 (1), got " + String(metric)
+        )
 
     # DEVIATION 519: the fixed point, bounded by the path length.
     var cap = max_iterations
@@ -147,15 +192,32 @@ def dbscan_fit(
 
     var x = ctx.enqueue_create_buffer[DType.float32](n_samples * n_features)
     var labels = ctx.enqueue_create_buffer[DType.int32](n_samples)
+    # `sample_weight_addr == 0` IS THEIR `sample_weight == nullptr`. Mojo
+    # has no null `DeviceBuffer`, so the address arrives as an Int, the
+    # decision is made once, here, and everything downstream carries a
+    # `has_weights` Bool beside a buffer that is a one-element placeholder
+    # when there are none.
+    var has_weights = sample_weight_addr != 0
+    var w = ctx.enqueue_create_buffer[DType.float32](
+        n_samples if has_weights else 1
+    )
     ctx.synchronize()
 
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    if has_weights:
+        ctx.enqueue_copy(
+            dst_buf=w,
+            src_ptr=MutPointer[Float32, MutUntrackedOrigin](
+                unsafe_from_address=sample_weight_addr
+            ),
+        )
     ctx.synchronize()
 
-    var passes = dbscan_fit_impl(
+    var passes = dbscan_fit_impl_weighted(
         ctx,
         x,
         labels,
+        w,
         n_samples,
         n_features,
         eps,
@@ -164,6 +226,8 @@ def dbscan_fit(
         cap,
         eps_nn_method,
         False,
+        metric,
+        has_weights,
     )
 
     var hl = ctx.enqueue_create_host_buffer[DType.int32](n_samples)

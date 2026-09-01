@@ -307,3 +307,112 @@ formula holds only if the eight loading vectors are ORTHOGONAL and they are
 hashed, so they are not. The check now asserts the SHAPE of the spectrum -- a
 rank-8 cliff over a noise floor of 1 -- which is what the fixture actually
 plants, and sklearn checks the numbers.
+
+## whiten=True is implemented (2026-09-01), and one binding line is OWED
+
+`PCA(whiten=True)` used to raise. It now rescales, in all three numeric
+modes, and the arithmetic is pinned at the seam.
+
+**What it is.** Component `c` carries variance `explained_var[c] =
+s_c^2 / (n_fit_rows - 1)`, so dividing score column `c` by
+`sqrt(explained_var[c])` gives it unit variance. cuML folds that into a COPY
+of the components before the projection rather than dividing the output
+(`pca.cuh:292-302` forward, `:232-243` inverse; the same two calls at the
+26.08 pin are `raft/linalg/detail/pca.cuh:233-243` and `:301-311`), and this
+port takes their shape: it is the small matrix, so the pass is
+`O(n_components * n_cols)` where scikit-learn's is `O(n_rows * n_components)`,
+and the projection kernel does not change at all.
+
+**Five deviations, and the first one is a bug of theirs.** cuML's DENSE
+transform scales by `sqrt(n_rows - 1)` where `n_rows` is the row count of the
+matrix handed to `transform`, not of the matrix the model was fitted on
+(`pca.pyx:770` sets `params.n_rows = _n_rows`, `pca.cuh:293` square-roots it).
+So `pca.transform(X[:100])` does not agree with `pca.transform(X)[:100]`.
+Their own SPARSE path uses `self.n_samples_` (`pca.pyx:716-718`), and so does
+scikit-learn, whose `explained_variance_` is a fit-time quantity. Two of the
+three agree and the third disagrees with itself, so DEVIATION 580 takes the
+fit's count. 581 gives both directions one skip threshold, where theirs skips
+below `1e-10` forward and only at exactly zero inverse and is therefore not
+round-trip exact. 582 keeps cuML's skip rather than scikit-learn's clamp to
+`eps`, which amplifies a null direction instead of leaving it alone. 583 puts
+the scalar on the host in float64, rounded once, which is what
+`math_t(sqrt(prms.n_rows - 1))` does in C++. 584 pins the arithmetic:
+`identical_mul` for the scalar multiply so no codegen fuses it into the
+divide, `identical_div` for the divide, `ftz` on the intermediate and on the
+store. **A division is not a tier cost here** -- `identical_div` is bit-inert
+on a column that flushes in hardware and exists to align one that does not --
+so whitening runs identically in FAST, DETERMINISTIC and IDENTICAL.
+
+**Four gates, and they catch four different things.** `check_whiten_unit_variance`
+is the property and is independent of how we spelled the rescale.
+`check_whiten_round_trip` is the only one that reaches the inverse direction.
+`check_whiten_row_subset_agrees` is DEVIATION 580's gate and its sabotage arm
+is cuML's own dense behavior. `check_whiten_edges` drives the kernel on
+planted bit patterns -- both signed zeros, both signed subnormals, the
+smallest normal, NaN, and a singular value one ulp either side of the
+threshold -- against a fold-free host scan. Seven sabotage arms live in
+`decomposition/checks/pca_sabotage.mojo` (DEVIATION 585); two of them
+(`STD_DIV`, `NO_FTZ`) are RECORDED rather than asserted because they are
+expected inert on a column that flushes in hardware, which is the honest
+statement rather than an assertion that would pass for the wrong reason.
+
+**RUN OWED.** Nothing here has been compiled or run; this lane does not run
+anything. The gate is:
+
+    pixi run mojo run -I . decomposition/checks/pca_check.mojo
+    pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . \
+        decomposition/checks/pca_check.mojo
+    bash tools/check_linalg_identity.sh
+
+**ONE LINE OWED IN A FILE THIS LANE DOES NOT OWN.**
+`decomposition/estimator.mojo` exports `pca_whiten_transform_host` and
+`pca_whiten_inverse_transform_host` beside the unwhitened pair, deliberately
+ADDITIVE so no existing signature moves. Until
+`bindings/_mojolearn_estimators.mojo` wraps and registers them and
+`bindings/build_estimators.sh` reruns, `PCA(whiten=True)` raises a
+`NotImplementedError` that names exactly that and nothing else; the Python
+side tests for it with `hasattr`, so it starts working the moment the binding
+is rebuilt and no Python edit is needed then.
+
+## svd_solver='full' and algorithm='randomized': the triage, 2026-09-01
+
+Both stay unimplemented, and the reason is NOT the one that used to be given.
+
+**The old reason was wrong on the facts.** The Python surface said `'full'`
+is "a different algorithm" in cuML. It is not: `pca.pyx:394-395` maps BOTH
+`'auto'` AND `'full'` to `Solver.COV_EIG_DQ`, so for cuML the two names are
+one solver on the covariance matrix. The name means a dense SVD of the data
+matrix only in scikit-learn (`_pca.py:539-540` sends it to `_fit_full`, which
+calls `scipy.linalg.svd` on the centered `X`), and scikit-learn's is the
+signature this class copies, so `'full'` must mean the dense route or mean
+nothing.
+
+**The other old reason is no longer admissible.** "cuSOLVER `gesvd` is
+closed" is a reason to write it ourselves, not a reason to refuse; this tree
+already hand-wrote `potrf` and `trsm` for exactly that reason
+(`cholesky/DERIVATION_MAP.tsv` rows 18-19). Both routes were re-assessed
+against the pinned upstream on that basis and both are REACHABLE:
+
+- `'full'` is R-SVD, which is what LAPACK does for a tall matrix anyway:
+  Householder QR of the centered `X`, then a one-sided Jacobi SVD of the
+  `n_cols x n_cols` `R`. The second half is a small in-block kernel close in
+  shape to `checks/jacobi_eigh_device.mojo`. Its value over the shipped arm
+  is real and worth stating: forming `X^T X` squares the condition number and
+  the dense route does not, which is why scikit-learn keeps `'full'` beside
+  `'covariance_eigh'`.
+- `'randomized'` is easier than it looks, because RAFT's own `randomized_svd`
+  has two tails and the second calls NO dense SVD:
+  `raft/linalg/detail/rsvd.cuh:243` picks between "QR of B^T" and
+  "eigendecompose BB^T", and the second reaches `raft::linalg::eigJacobi`
+  (`:364`) -- the solver this lane already substitutes for -- plus
+  `raft::matrix::sqrt`. The Gaussian sketch (`raft::random::normal`, `:180`)
+  has `core/philox.mojo` and the portable `log`/`sqrt`/`sin` in
+  `checks/numerics.mojo` behind it.
+
+**So the honest blocker is one missing primitive, named:** a tall-skinny
+Householder QR, bit-identical across three vendors (`raft::linalg::qrGetQ`,
+`rsvd.cuh:198, :218, :241`, which is cuSOLVER `geqrf` + `orgqr`). That is a
+lane the size of `cholesky/`'s `potrf`, not an afternoon, and it is the same
+primitive for both names. Until it exists, accepting either name and running
+the covariance arm would be a silent substitution, which is what the refusal
+is now for. The message says so and points here.

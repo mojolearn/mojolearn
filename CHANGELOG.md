@@ -4,6 +4,63 @@
 
 ### Added
 
+- **`mojolearn.DBSCAN(sample_weight=)`** and **`metric='manhattan'`**, two
+  configurations the surface used to refuse. A third,
+  `algorithm='kd_tree'`, is still refused and now says why on the merits.
+
+  **`sample_weight` enters in exactly one place.** A point is core when the
+  SUM OF WEIGHTS in its eps-neighborhood reaches `min_samples`, not when the
+  COUNT does (cuML `runner.cuh:300-306`, scikit-learn `_dbscan.py:451-455`,
+  which agree). The neighborhood, the adjacency, the CSR, the propagation,
+  the merge and both relabels are byte-for-byte the unweighted path. Both of
+  cuML's producers are ported: `coalescedReduction` over the dense adjacency
+  for `algorithm='brute'` and `accumulateWeights` over the CSR for
+  `'rbc'`, with `need_ja_compute`'s `sample_weight` disjunct so loop 1 fills
+  the columns on every weighted ball-cover batch (DEVIATION 29).
+
+  **THE WEIGHTED DEGREE IS A FLOAT SUM AND ITS FOLD IS PINNED** (DEVIATION
+  28, IDENTITY_PATHS row 64). Both upstream reducers close on a CUB stage
+  that folds at the hardware warp width, 32 on Apple and NVIDIA and 64 on a
+  CDNA wavefront; since the result is then thresholded against
+  `min_samples`, a faithful port would put an AMD fit and a CUDA fit on
+  opposite sides of that comparison for any point sitting on it, which is a
+  different MODEL rather than a last-bit difference in a reported number.
+  Both kernels close on `pinned_block_sum` at the kernel matrix's new
+  `K_LIB_WEIGHTED_VERTEX_DEG` width, which is listed in
+  `lib_block_bounds_a_float_fold`.
+
+  **`metric='manhattan'` (also `'l1'`, `'cityblock'`) IS ORIGINAL WORK, not
+  a port.** cuML's DBSCAN offers euclidean, cosine and precomputed and RAFT
+  has no L1 eps-neighborhood kernel, so nothing is credited for the arm
+  beyond the per-pair op, RAFT's `distance_ops/l1.cuh:49`. The structural
+  point, and the reason it is one kernel with a compile-time metric rather
+  than a branch: the ported arm compares a SQUARED distance against
+  `eps * eps` and never takes a square root, and **an L1 sum has no squared
+  form**, so the threshold is not squared on that arm (DEVIATION 27). It is
+  served on `algorithm='brute'` and REFUSED BY NAME on `'rbc'`, whose
+  landmark radii and pruning bounds are Euclidean; that is a scope boundary
+  in `neighbors/`, not a property of the algorithm, since ball-cover pruning
+  rests on the triangle inequality and L1 satisfies it.
+
+  **`algorithm='kd_tree'` stays refused, on engineering grounds.** A
+  kd-tree eps query is a recursive, data-dependent descent with a per-thread
+  stack, so on a GPU the lanes of a warp diverge at every node and the loads
+  are pointer chases; its pruning also degenerates into a scan with overhead
+  past roughly ten features. The random ball cover already here prunes
+  arithmetically over two flat arrays with coalesced reads and measured
+  2.7x-27x over brute force at 16k-200k rows. Offering a kd-tree would hand
+  a caller a slower answer under a familiar name.
+
+  Files: `dbscan/impl/neighbors/epsilon_neighborhood.mojo` (the kernel is
+  now comptime-parameterized on the metric; ONE tile, ONE reduction, one
+  varying accumulate op), `dbscan/impl/dbscan/vertexdeg/algo.mojo`,
+  `dbscan/impl/dbscan/corepoints/compute.mojo`,
+  `dbscan/impl/dbscan/runner.mojo`, `dbscan/impl/dbscan/dbscan.mojo`,
+  `dbscan/estimator.mojo`, `bindings/_mojolearn_estimators.mojo` (params
+  slot 7 plus a `weight_addr` argument) and `python/mojolearn/density.py`.
+  Seven gates in `dbscan/checks/dbscan_check.mojo`, each with a sabotage arm
+  that must move. **Apple only; a three-vendor leg is owed.**
+
 - **`mojolearn.SVR`**, epsilon-support vector regression, the scikit-learn
   surface over cuML's `svrFit`. The solver has carried `EPSILON_SVR` since
   `fea6becc` (2026-08-31), when the six rung-2 pieces were gated 44 of 44
