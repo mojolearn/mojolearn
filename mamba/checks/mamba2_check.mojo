@@ -39,8 +39,10 @@ not this lane's editable set -- so the raw commands are spelled:
     tools/with_identical_mode.sh pixi run mojo run -I . \\
         mamba/checks/mamba2_check.mojo refusal
 
-    # gate (g)'s byte gate: REFUSES BY NAME while the corpus lane has not
-    # generated the mamba2 cases (missing-fixture refusal, never a skip):
+    # gate (g)'s byte gate (corpus generated at f45fa796): every input
+    # tensor of all 17 cases byte-compared against this check's own
+    # generator, binary-safe reads; missing / unreadable / wrong-size
+    # each refuse under their OWN name, never a skip:
     tools/with_identical_mode.sh pixi run mojo run -I . \\
         mamba/checks/mamba2_check.mojo corpus
 
@@ -1277,25 +1279,130 @@ def gate_e(ctx: DeviceContext, case_k: Int, b: Int, l: Int) raises:
 # ===========================================================================
 
 
-def gate_corpus(case_k: Int) raises:
-    var dir = m2_corpus_dir(case_k)
-    var path = dir + "/x.f32"
+def _read_fixture_bytes(path: String, case_name: String) raises -> List[UInt8]:
+    """BINARY-SAFE fixture read: the bench lanes' `read_bytes()` pattern
+    (rf_bench.mojo::_read_all). The first spelling here used text-mode
+    `fh.read()`, which raises on raw float32 bytes WITH THE FILE PRESENT,
+    and a catch-all then renamed that failure "MISSING FIXTURE" -- the
+    smoke-arm defect class (every failure wearing one name). Each failure
+    kind now refuses under its OWN name; refuse-not-skip stands."""
+    var opened = False
+    var bytes = List[UInt8]()
     try:
-        with open(path, "r") as fh:
-            _ = fh.read()
+        var f = open(path, "r")
+        opened = True
+        bytes = f.read_bytes()
+        f.close()
     except e:
+        if not opened:
+            raise Error(
+                String("MISSING FIXTURE: cannot open ")
+                + path
+                + " (case '"
+                + case_name
+                + "'). Either the corpus generator has not emitted it, or"
+                + " the working directory is not the repo root -- the path"
+                + " is repo-root-relative. This arm REFUSES rather than"
+                + " skips (contract 8g)."
+            )
         raise Error(
-            String("MISSING FIXTURE: ")
+            String("UNREADABLE FIXTURE: ")
             + path
-            + " does not exist. The corpus lane has not generated case '"
-            + String(m2_corpus_case(case_k).name)
-            + "'; this arm REFUSES rather than skips (contract 8g). When"
-            + " gen_corpus.py lands its mamba2 cases, this gate's first"
-            + " assertion is file bytes == the fixture generator's bytes."
+            + " opened but read_bytes failed: "
+            + String(e)
         )
-    # When the file exists, the byte-compare gate goes here (fixture
-    # generator vs file, element by element) -- OWED with the corpus lane.
-    print("corpus fixture present for", m2_corpus_case(case_k).name)
+    return bytes^
+
+
+def _compare_fixture_file(
+    dir_path: String, fname: String, expected: List[Float32], case_name: String
+) raises:
+    """THE FIRST ASSERTION of gate (g): file bytes == this check's own
+    generator's bytes, element by element, little-endian float32. Two
+    independently written implementations of `mojolearn.mamba.corpus.
+    hash.v1` agreeing bit for bit is itself a gate (the Mamba-1 fixture's
+    rule); a disagreement means one of the two tables is wrong ON THE
+    RECORD, never silently."""
+    var path = dir_path + "/" + fname
+    var bytes = _read_fixture_bytes(path, case_name)
+    if len(bytes) != 4 * len(expected):
+        raise Error(
+            String("WRONG-SIZE FIXTURE: ")
+            + path
+            + " holds "
+            + String(len(bytes))
+            + " bytes; the generator's tensor is "
+            + String(len(expected))
+            + " float32 values ("
+            + String(4 * len(expected))
+            + " bytes)"
+        )
+    var n_diff = 0
+    var first = -1
+    var first_file = UInt32(0)
+    for i in range(len(expected)):
+        var u = (
+            UInt32(bytes[4 * i])
+            | (UInt32(bytes[4 * i + 1]) << 8)
+            | (UInt32(bytes[4 * i + 2]) << 16)
+            | (UInt32(bytes[4 * i + 3]) << 24)
+        )
+        if u != bitcast[DType.uint32](expected[i]):
+            n_diff += 1
+            if first < 0:
+                first = i
+                first_file = u
+    if n_diff != 0:
+        raise Error(
+            String("FIXTURE BYTE MISMATCH: ")
+            + path
+            + ": "
+            + String(n_diff)
+            + " of "
+            + String(len(expected))
+            + " cells differ from the in-check generator, first cell "
+            + String(first)
+            + " file "
+            + bits32_hex(f32_from_bits(first_file))
+            + " generator "
+            + bits32_hex(expected[first])
+            + ". Two implementations of mojolearn.mamba.corpus.hash.v1"
+            + " disagree; one of the two tables is wrong ON THE RECORD."
+        )
+
+
+def gate_corpus(case_k: Int) raises:
+    """Gate (g)'s byte gate: EVERY input tensor of the case (x, the ten
+    parameters, initial_states where the case carries one) byte-compared
+    against this check's reimplementation of the generator."""
+    var c = m2_corpus_case(case_k)
+    var nm = String(c.name)
+    var dir_path = m2_corpus_dir(case_k)
+    var w = m2_case_weights(case_k)
+    _compare_fixture_file(dir_path, String("x.f32"), m2_case_x(case_k), nm)
+    _compare_fixture_file(
+        dir_path, String("block_norm.weight.f32"), w.norm_w, nm
+    )
+    _compare_fixture_file(dir_path, String("in_proj.weight.f32"), w.w_in, nm)
+    _compare_fixture_file(dir_path, String("conv1d.weight.f32"), w.conv_w, nm)
+    _compare_fixture_file(dir_path, String("conv1d.bias.f32"), w.conv_b, nm)
+    _compare_fixture_file(dir_path, String("dt_bias.f32"), w.dt_bias, nm)
+    _compare_fixture_file(dir_path, String("A_log.f32"), w.a_log, nm)
+    _compare_fixture_file(dir_path, String("D.f32"), w.d_skip, nm)
+    _compare_fixture_file(dir_path, String("norm.weight.f32"), w.gnorm_w, nm)
+    _compare_fixture_file(dir_path, String("out_proj.weight.f32"), w.w_out, nm)
+    if c.has_init_states:
+        _compare_fixture_file(
+            dir_path,
+            String("initial_states.f32"),
+            m2_case_init_states(case_k),
+            nm,
+        )
+    print(
+        "corpus case",
+        c.name,
+        ": every input tensor byte-identical to the in-check generator",
+    )
 
 
 # ===========================================================================
@@ -1656,9 +1763,16 @@ def main() raises:
     var ctx = DeviceContext()
 
     if mode == "corpus":
-        # walk every case; the FIRST missing fixture refuses by name.
+        # walk every case, every input tensor, byte-compared; the FIRST
+        # missing/unreadable/wrong-size/mismatching file refuses under its
+        # own name.
         for k in range(17):
             gate_corpus(k)
+        print(
+            "GATE (g) BYTE GATE PASS: all 17 cases' input tensors are"
+            " byte-identical between the corpus files and this check's"
+            " generator (two implementations of the hash spec agree)."
+        )
         return
 
     if mode == "refusal":
