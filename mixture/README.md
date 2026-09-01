@@ -13,7 +13,7 @@ those is a v2 of this one.
 
 ## Status
 
-**BUILT AND GATED ON ONE APPLE M4, BOTH MODES, 2026-08-25. NO SECOND VENDOR
+CORRECTED 2026-09-01, by diffing the cards rather than reading a status block: TWO VENDORS. The gmm card is byte-identical Apple and AMD at md5 0b1fbc2e91b5, 9832 stages, on the 2026-08-28 legs.  The sentence that stood here said no second vendor had run this lane, and commit 89c1920c fixed the adjacent false sentence in the same paragraph while leaving this one standing.
 HAS RUN THIS UNDER IDENTICAL, so there is no identity card outside the M4.**
 An NVIDIA H100 compiled and ran this lane under FAST on 2026-08-26
 (`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`), which is

@@ -14,7 +14,7 @@ fitted under the other.
 
 ## Status
 
-**BUILT AND GATED ON ONE APPLE M4, BOTH MODES, 2026-08-25. NO SECOND VENDOR
+CORRECTED 2026-09-01, by diffing the cards rather than reading a status block: **RED ACROSS VENDORS.** The gp card DIVERGES Apple against AMD, md5 6e638e82a73e against 6bdeb28d6c81, on 8 of 3494 stages, originating at gp.kernel. Both legs printed ALL PASSED because neither compares against the other. DO NOT expose this lane through the Python surface until it is understood. See bench/results/e1/GP_CROSS_VENDOR_DIVERGENCE.md.  The sentence that stood here said no second vendor had run this lane, and commit 89c1920c fixed the adjacent false sentence in the same paragraph while leaving this one standing.
 HAS RUN THIS UNDER IDENTICAL, so there is no identity card outside the M4.**
 An NVIDIA H100 compiled and ran this lane under FAST on 2026-08-26
 (`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`), which is

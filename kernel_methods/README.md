@@ -8,7 +8,7 @@ thirty are spent**; the next lane in this range needs its own block.
 
 ## Status
 
-**BUILT AND GATED ON ONE APPLE M4, BOTH MODES, 2026-08-25. NO SECOND VENDOR
+CORRECTED 2026-09-01, by diffing the cards rather than reading a status block: RAN ON AMD under IDENTICAL on the 2026-08-28 leg, 18 checks OK. Two cards exist on Apple at md5 18f2892e926f0d1b, 29 stages; no card was emitted on AMD, so there is no byte comparison yet.  The sentence that stood here said no second vendor had run this lane, and commit 89c1920c fixed the adjacent false sentence in the same paragraph while leaving this one standing.
 HAS RUN THIS UNDER IDENTICAL, so there is no identity card outside the M4.**
 An NVIDIA H100 compiled and ran all three estimators under FAST on
 2026-08-26

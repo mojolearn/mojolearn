@@ -12,7 +12,7 @@ discipline as `mojolearn.identical.gemm.fp32.v1`.
 
 ## Status
 
-**BUILT AND GATED ON ONE APPLE M4, BOTH MODES, 2026-08-25. NO SECOND
+CORRECTED 2026-09-01, by diffing the cards rather than reading a status block: RAN ON AMD under IDENTICAL on the 2026-08-28 leg, which reported ALL PASSED. NO CARD was emitted on either box, so there is no byte comparison for this lane on its own; the only cross-vendor evidence for chol.* is inside gaussian_process's card, and IT DIVERGES. See bench/results/e1/GP_CROSS_VENDOR_DIVERGENCE.md.  The sentence that stood here said no second vendor had run this lane, and commit 89c1920c fixed the adjacent false sentence in the same paragraph while leaving this one standing.
 VENDOR HAS RUN THIS UNDER IDENTICAL, so there is no identity card outside
 the M4.** An NVIDIA H100 compiled and ran this lane under FAST on
 2026-08-26; the row is in

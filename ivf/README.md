@@ -10,7 +10,7 @@ departures (DEVIATIONS 1780-1804, below).
 
 ## Status, honestly
 
-**BUILT AND GATED ON ONE APPLE M4, BOTH MODES, 2026-08-25. NO SECOND
+CORRECTED 2026-09-01, by diffing the cards rather than reading a status block: TWO VENDORS. The ivf card is byte-identical Apple and AMD at md5 b2dd280571b7, 16 stages, on the 2026-08-28 legs.  The sentence that stood here said no second vendor had run this lane, and commit 89c1920c fixed the adjacent false sentence in the same paragraph while leaving this one standing.
 VENDOR HAS RUN THIS UNDER IDENTICAL, so there is no identity card outside
 the M4.** An NVIDIA H100 compiled and ran this lane under FAST on
 2026-08-26
