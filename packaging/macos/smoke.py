@@ -132,6 +132,70 @@ coef = np.array([1.5, -2.0, 0.25, 4.0, -1.0, 0.5], dtype=np.float32)
 ols = LinearRegression().fit(xc, xc @ coef + np.float32(3.25))
 np.testing.assert_allclose(ols.coef_, coef, rtol=3e-3, atol=3e-3)
 
+# ==========================================================================
+# ONE ENTRY POINT PER REMAINING BINDING. Added 2026-09-01.
+# ==========================================================================
+# Everything above reaches FIVE of the twelve extensions this wheel ships:
+# _mojolearn, _mojolearn_estimators, _mojolearn_gbdt, _mojolearn_rf and
+# _mojolearn_trees. MEASURED by wrapping `_backend.binding` and recording
+# every name it was asked for, because guessing from estimator names gives
+# the wrong answer -- PCA and TruncatedSVD look like they cover
+# `_mojolearn_linalg` and do not (`decomposition.py:155`, `:382` both bind
+# `_mojolearn_estimators`), and LinearRegression does not reach
+# `_mojolearn_solver`.
+#
+# So SEVEN extensions shipped in every wheel, across all three tiers, had
+# never been launched by wheel verification: 21 of 36 artifacts. Each is
+# user-reachable, so that was untested shipped surface, not dead weight. Any
+# one of them could import cleanly and die at its first kernel launch, which
+# is precisely the MACOSX_DEPLOYMENT_TARGET failure this project has already
+# shipped once, and verify_wheel.sh would have passed the wheel.
+#
+# These are LAUNCH gates, not accuracy gates. The arithmetic belongs to each
+# lane's own checks; what is asserted here is that the extension loads and a
+# kernel runs. They are kept to the smallest fixture that reaches a launch,
+# because this file runs once per interpreter per tier.
+series = (np.sin(np.arange(64, dtype=np.float64) / 3.0) + 1.0)
+xs = rng.random((48, 3)).astype(np.float32)
+ys = (xs[:, 0] > 0.5).astype(np.int64)
+
+mojolearn.AgglomerativeClustering(n_clusters=2).fit(xs)   # _mojolearn_solver
+mojolearn.SVC().fit(xs, ys)                               # _mojolearn_svm
+mojolearn.kpss_test(series)                               # _mojolearn_tsa
+assert mojolearn.metrics.accuracy_score(ys, ys) == 1.0    # _mojolearn_metrics
+mojolearn.ARIMA(order=(1, 0, 0)).fit(series)              # _mojolearn_arima
+
+from mojolearn import _training_impl as _T             # _mojolearn_training
+_ce = _T.cross_entropy(
+    rng.standard_normal((4, 3)).astype(np.float32),
+    np.array([0, 1, 2, 0], dtype=np.int32),
+)
+assert np.isfinite(_ce) and _ce > 0.0, _ce
+
+# _mojolearn_linalg IS IDENTITY-ONLY BY DESIGN, so BOTH ARMS are asserted
+# here rather than the call being skipped outside the identical tier.
+# `mojolearn.linalg` publishes a cross-vendor identity profile and REFUSES
+# by name on any tier that does not make that claim (`_linalg_impl.py:269`),
+# a refusal added after a mislabeled deterministic build on the 2026-08-29
+# Apple stability run. A skip here would leave the refusal itself ungated,
+# and this extension is only ever launched on the identical arm.
+_mode_now = os.environ.get("MOJOLEARN_NUMERIC_MODE", "fast")
+if _mode_now == "identical":
+    _a = rng.random((8, 4)).astype(np.float32)
+    _p = mojolearn.linalg.matmul(_a, _a.T)
+    assert _p.shape == (8, 8), _p.shape
+else:
+    try:
+        mojolearn.linalg.matmul(xs, xs.T)
+    except RuntimeError as _e:
+        assert "identity claim" in str(_e), str(_e)
+    else:
+        raise AssertionError(
+            f"mojolearn.linalg.matmul did NOT refuse on the {_mode_now} tier;"
+            " it publishes a cross-vendor identity profile and only the"
+            " identical build may serve it"
+        )
+
 # THE MODE THAT ACTUALLY LOADED, read back from the binary where it can be.
 # verify_wheel.sh runs this file once per mode and checks the word.
 mode = mojolearn.numeric_mode()
