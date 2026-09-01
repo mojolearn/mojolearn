@@ -4,6 +4,64 @@
 
 ### Added
 
+- **`mojolearn.GaussianProcessRegressor`**, with its kernel classes `RBF`,
+  `Matern` (nu in {0.5, 1.5, 2.5}), `ConstantKernel` and `WhiteKernel`,
+  composable with `+` and `*`. Exact dense GP regression on the GPU --
+  ORIGINAL WORK (cuML/cuVS/RAFT carry no GP at the pinned commits;
+  scikit-learn `_gpr.py` is the semantics oracle only), backed by
+  `gaussian_process/` (DEVIATIONS 1750-1771) over the Cholesky and gemm
+  identity profiles.
+
+  **Why it was held, and why that is resolved.** This was the only
+  `_NOT_YET` entry ever placed for a reason other than a missing surface:
+  its IDENTICAL card was believed to diverge Apple against AMD on 8 of
+  3,494 stages. That reading was WITHDRAWN at `9835094e` (2026-09-01) --
+  the eight lines are the sabotaged half of one `GP_SAB_STD_EXP`
+  clean-then-sabotaged pair, and the shipped path is byte-identical on the
+  other 3,486 lines (`bench/results/e1/GP_CROSS_VENDOR_DIVERGENCE.md`,
+  corrected in place) -- so the sole blocker was gone and the withholding
+  text contradicted the evidence. Exposure is a CORRECTNESS claim on the
+  vendors the cards cover (Apple M4 and AMD MI325X under `identical`; two
+  vendors, not three), NOT a speed claim: the gp speed ladder is unrun.
+
+  No optimizer (`optimizer=None` only, DEVIATION 1761), `return_std` but
+  not `return_cov` (DEVIATION 1759), single-target `y`, and the default
+  ridge is `alpha=2**-20` rather than sklearn's float32-no-op `1e-10`
+  (DEVIATION 1772); every unported parameter is refused by name. A failed
+  factorization is a RESULT in `info_`, and `predict` /
+  `log_marginal_likelihood` on it are refused by name (DEVIATION 1634).
+
+  Files: `python/mojolearn/_gp_impl.py`,
+  `python/mojolearn/tests/test_gp_surface.py`, `python/mojolearn/
+  __init__.py` (`_NOT_YET` is empty again), `python/mojolearn/_backend.py`
+  (`_mojolearn_gp` in `_MODULES` and `_build_script`, DEVIATION 869).
+  **The binding is owed**: `bindings/_mojolearn_gp.mojo` and
+  `bindings/build_gp.sh` do not exist yet, and the estimator raises by
+  name with the build command until they do.
+
+- **`python -m mojolearn conformance {export,validate,diff}`**, the identity
+  claim as a portable artifact (bundle format v1, `docs/CONFORMANCE.md`). A
+  bundle freezes the pinned k-means fixture's inputs, expected stage bytes,
+  and identity-trace card under a SHA-256 manifest so an external
+  implementation can check itself against IDENTICAL-mode results without
+  running Mojo or Python, and write back an `implementation-report.json`
+  that `validate` grades and `diff` localizes through
+  `tools/identity_trace_diff.py`, the one comparator. SHA-256 is the audit
+  layer; FNV-1a64 stays the in-kernel localization checksum (DEVIATION
+  928). Manifests hash every loaded binding `.so` with
+  `artifact_source_commit: "unverified"` stated outright, because nothing
+  yet ties a binary to the commit that built it (DEVIATION 929). Built
+  write-only 2026-09-01; every run is owed, and the ordered list is in
+  `docs/CONFORMANCE.md`.
+- **`verify --confirm-reference`** and **`install-reference`** complete the
+  reference-card path as three one-command steps, produce / confirm /
+  install; the install is refusal-first (FILL-IN token, profile mismatch,
+  missing provenance, differing or unknown commits, a divergent pair,
+  DEVIATION 927) and prints the filled `docs/VERIFY.md` provenance block
+  for a human to paste. Candidate cards now also record per-binding
+  artifact hashes. The reference card itself is still not produced;
+  `verify` keeps exiting 5.
+
 - **`mojolearn.DBSCAN(sample_weight=)`** and **`metric='manhattan'`**, two
   configurations the surface used to refuse. A third,
   `algorithm='kd_tree'`, is still refused and now says why on the merits.
@@ -643,7 +701,9 @@ caught them was running what the documentation claimed.
   `--json` for machine-readable output. Exit codes, because people put this
   in continuous integration: 0 VERIFIED, 1 MISMATCH (a diverging stage is
   named), 2 USAGE, 3 REFUSED (the process loaded the FAST binaries, which
-  make no identity claim, so nothing was judged), 4 CANNOT RUN.
+  make no identity claim, so nothing was judged), 4 CANNOT RUN, 5 NO
+  REFERENCE (this entry originally stopped at 4; exit 5 shipped in 0.2.0
+  from the start, and the omission was corrected 2026-09-01 on discovery).
 - `python -m mojolearn env` reports what the process loaded without
   touching the GPU; `python -m mojolearn check-fixture` rebuilds and hashes
   the pinned fixture without a GPU and without an extension call.

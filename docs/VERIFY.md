@@ -265,10 +265,17 @@ have produced that address. Prefer the stage card every time.
 > generated and installed, `verify` exits 5 (NO REFERENCE) and prints the
 > procedure. It will not pass. DEVIATION 925.
 >
+> The whole path is now three one-command steps, produce / confirm /
+> install (`verify --emit-reference`, `verify --confirm-reference`,
+> `install-reference`), in **Regenerating the reference card** below; the
+> install command refuses a FILL-IN card, a profile mismatch, missing
+> provenance and a divergent pair (DEVIATION 927), and prints the filled
+> block for this section.
+>
 > Fill this section in when the card is installed. It must name the two runs
 > that produced and confirmed it, at minimum: the commit, the hardware, the
 > operating system, the driver or toolchain version, and the date, for each
-> vendor.
+> vendor. `install-reference` prints this block filled in; paste it here.
 
 Template, to be replaced with the real thing.
 
@@ -300,11 +307,31 @@ fixed-point scale policy, or to the trace's checkpoint set will move this
 card. That is not a failure, but the new card is only a reference once it has
 been produced on two vendors and they agree.
 
-1. On the reference machine, with a clean checkout at a known commit and the
-   IDENTICAL extensions built.
+One command per box, one command to install. Each stage refuses rather than
+proceeding when its inputs are dishonest, which is what makes the three
+commands a procedure rather than a convenience.
+
+0. **Rebuild the identical extensions first, on both boxes.** The on-disk
+   `.so` artifacts carry no freshness signal and nothing ties one to the
+   commit that built it (docs/CONFORMANCE.md, "Artifact provenance"), so a
+   card emitted over stale binaries would stamp today's commit onto
+   yesterday's arithmetic. The candidate card hashes every loaded binding
+   (`# artifact:` lines, `source-commit unverified`) so the mistake is at
+   least diagnosable, but the rebuild is what prevents it.
 
    ```
    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build.sh
+   MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_gbdt.sh
+   ```
+
+   (`_mojolearn` runs the fixture; `_mojolearn_gbdt` is the mode
+   cross-check leg. The other ten load at import and are hashed into the
+   card's artifact lines; rebuild them too when in doubt.)
+
+1. **Produce**, on the reference machine, with a clean checkout at a known
+   commit.
+
+   ```
    MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=python \
      pixi run python3 -m mojolearn verify \
      --emit-reference /tmp/kmeans.apple.card
@@ -312,33 +339,49 @@ been produced on two vendors and they agree.
 
    `--emit-reference` refuses on a FAST build for the same reason `verify`
    does. It stamps the candidate with the full provenance block that the
-   reader will later be asked to trust, as `#` comment lines. The differ
-   skips comments, so provenance costs the comparison nothing.
+   reader will later be asked to trust, as `#` comment lines, including the
+   per-binding artifact hashes. The differ skips comments, so provenance
+   costs the comparison nothing.
 
-2. On a second vendor, at the **same commit**, run the same command, then
-   compare the two candidates.
+2. **Confirm**, on a second vendor, at the **same commit**, with the first
+   card copied over. One command runs the fixture there, stamps a local
+   candidate, and compares the pair through the one comparator.
 
    ```
-   python3 tools/identity_trace_diff.py --labels APPLE,NVIDIA \
+   MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=python \
+     pixi run python3 -m mojolearn verify \
+     --confirm-reference kmeans.apple.card \
+     --emit-reference kmeans.nvidia.card
+   ```
+
+   Exit 0 prints `CONFIRMED` and the exact install command. Anything else
+   means there is no reference to install and there is a finding to chase
+   instead; the first diverging stage is named. Do not install either card.
+
+3. **Install** the agreed pair, host-side, no GPU. DEVIATION 927.
+
+   ```
+   PYTHONPATH=python pixi run python3 -m mojolearn install-reference \
      /tmp/kmeans.apple.card /tmp/kmeans.nvidia.card
    ```
 
-   If that does not print `RESULT: IDENTICAL`, there is no reference to
-   install and there is a finding to chase instead. Do not install either
-   card.
+   It refuses a card still carrying the `FILL-IN` token, a card whose
+   profile line is absent or mismatched, missing provenance keys, commits
+   that differ or read `unknown`, a numeric-mode line that is not
+   `identical`, and a pair the differ does not call `RESULT: IDENTICAL`. On
+   success it writes the produced card into
+   `python/mojolearn/reference_cards/` with the confirmation's provenance
+   appended as comments, removes the placeholder, and prints the filled
+   provenance block for **Where the reference card came from** above.
 
-3. Install the agreed card.
+4. Paste that printed block into this file by hand and record the change in
+   `CHANGELOG.md`. The command deliberately does not edit this document: a
+   doc written by a tool is exactly as trustworthy as the tool's inputs,
+   unreviewed, while a human pasting a printed block reads it on the way in.
+   The installed card carries both runs' provenance either way, so the
+   shipped artifact does not depend on the paste.
 
-   ```
-   cp /tmp/kmeans.apple.card \
-     python/mojolearn/reference_cards/kmeans.identical.fp32.v1.card
-   rm python/mojolearn/reference_cards/kmeans.identical.fp32.v1.card.PLACEHOLDER
-   ```
-
-4. Fill in **Where the reference card came from** above with both runs, and
-   record the change in `CHANGELOG.md`.
-
-5. Confirm the round trip on the reference machine itself.
+5. Close the loop on the reference machine itself.
 
    ```
    MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=python \
@@ -348,6 +391,10 @@ been produced on two vendors and they agree.
    It must print `RESULT: VERIFIED`. If it does not, the machine that emitted
    the card cannot reproduce it, which is a much more interesting problem
    than a version bump.
+
+**Status 2026-09-01: none of these have run yet.** The commands exist and
+are UNVERIFIED, RUN OWED, in the order above; docs/CONFORMANCE.md carries
+the full owed-run list including the bundle round trip.
 
 ### Versioning
 
@@ -406,6 +453,15 @@ python -m mojolearn verify --json   one JSON object instead of the report,
                                     for continuous integration. The
                                     comparator's own text is carried inside
                                     it under comparator_report.
+python -m mojolearn install-reference PRODUCED CONFIRMED
+                                    install an agreed pair of candidate
+                                    cards; refusal-first, host-side.
+                                    "Regenerating the reference card" above.
+python -m mojolearn conformance ... export/validate/diff conformance
+                                    bundles, the identity claim as a
+                                    portable artifact an external
+                                    implementation can check itself
+                                    against. docs/CONFORMANCE.md.
 ```
 
 `python -m mojolearn` with no subcommand prints help and exits 2. There is no
@@ -437,9 +493,22 @@ comparator it loaded is how that gets noticed.
 Named rather than left to be discovered.
 
 1. **The fixture binary does not self-report its arm.** DEVIATION 920 above.
-   Three indirect legs where there should be one direct read.
+   Three indirect legs where there should be one direct read. This is a
+   NAMED DEPENDENCY on the bindings lane: a `kmeans_numeric_mode` readback
+   in `bindings/_mojolearn.mojo`, built the way `_mojolearn_gbdt` already
+   builds `gbdt_numeric_mode`. Bindings are not the verify lane's to edit,
+   so until that lands, `verify` runs on the three-leg inference and this
+   paragraph is the honest description of the mode line.
 2. **There is no reference card yet.** DEVIATION 925 above. The command
-   cannot pass until one is produced on two vendors.
+   cannot pass until one is produced on two vendors; the produce / confirm /
+   install commands exist and are themselves RUN OWED.
+2b. **Nothing ties a `.so` to the commit that built it.** DEVIATION 929.
+   The candidate cards and conformance bundles hash every loaded binding
+   and say `source-commit unverified`; the compile-time build stamp that
+   closes this is specced in docs/CONFORMANCE.md ("Artifact provenance")
+   and owned by the bindings lane. Until it lands, rebuild the identical
+   set before any verify or export run, because a stale binary raises only
+   when a signature happens to have drifted.
 3. **One fixture, one algorithm.** k-means only. The coverage claim is one
    fit wide and the command says so in its output.
 4. **`python -m mojolearn` imports the package**, so a machine where the

@@ -19,26 +19,34 @@
 # ------------------------------------------------------------------------
 #
 #   1. On the reference machine, with a clean checkout at a known commit and
-#      the IDENTICAL extensions built:
+#      the IDENTICAL extensions FRESHLY REBUILT (a stale .so carries no
+#      freshness signal -- docs/CONFORMANCE.md, "Artifact provenance"):
 #
 #        MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=python \
 #          pixi run python3 -m mojolearn verify \
 #          --emit-reference /tmp/kmeans.apple.card
 #
-#   2. Do the same on a SECOND vendor, at the SAME commit, and compare:
+#   2. On a SECOND vendor, at the SAME commit, with that card copied over,
+#      ONE command runs the fixture there and compares the pair through the
+#      one comparator:
 #
-#        python3 tools/identity_trace_diff.py --labels APPLE,NVIDIA \
+#        MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=python \
+#          pixi run python3 -m mojolearn verify \
+#          --confirm-reference kmeans.apple.card \
+#          --emit-reference kmeans.nvidia.card
+#
+#      If that does not print CONFIRMED, there is no reference to install
+#      and there is a finding to chase instead. A card from one machine
+#      claims nothing across vendors, and installing one anyway is how the
+#      whole feature becomes a number with no evidence behind it.
+#
+#   3. Install the agreed pair (DEVIATION 927; it refuses this file's
+#      FILL-IN token, a profile mismatch, missing provenance, and a
+#      divergent pair, deletes this placeholder, and prints the filled
+#      provenance block to paste into docs/VERIFY.md):
+#
+#        PYTHONPATH=python pixi run python3 -m mojolearn install-reference \
 #          /tmp/kmeans.apple.card /tmp/kmeans.nvidia.card
-#
-#      If that does not print RESULT: IDENTICAL, there is no reference to
-#      install and there is a finding to chase instead. A card from one
-#      machine claims nothing across vendors, and installing one anyway is
-#      how the whole feature becomes a number with no evidence behind it.
-#
-#   3. Install the agreed card as
-#      python/mojolearn/reference_cards/kmeans.identical.fp32.v1.card,
-#      delete this placeholder, and record BOTH runs in docs/VERIFY.md under
-#      "Where the reference card came from".
 #
 # The full procedure, including what to do after a legitimate change moves
 # the bits, is in docs/VERIFY.md.

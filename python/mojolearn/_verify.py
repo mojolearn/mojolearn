@@ -66,10 +66,29 @@ DEVIATIONS RECORDED BY THIS FILE
        the exact class of defect this repository exists to avoid.
   925  A shipped placeholder reference exits NO-REFERENCE, never
        VERIFIED. A placeholder that silently passed would be worse than
-       shipping nothing.
+       shipping nothing. The whole produce/confirm/install path is now
+       three one-command steps -- `verify --emit-reference` on the
+       producing box, `verify --confirm-reference` on the second box,
+       `install-reference` for the pair -- and the install refuses the
+       FILL-IN token, a profile mismatch, missing provenance, and a
+       divergent pair (DEVIATION 927). docs/VERIFY.md, 'Regenerating the
+       reference card'.
   926  `sample_weight` is pinned to None rather than an array of ones, so
        the weight bound is exactly `n_samples` and no host float
        reduction over caller weights enters the fixed-point scale.
+  927  `install-reference` is refusal-first; see `cmd_install_reference`.
+       The docs/VERIFY.md provenance block is PRINTED for a human to
+       paste, never written by the command, so the doc stays audited by a
+       reader rather than trusted to a tool.
+  929  The compiled `.so` binding artifacts carry no build stamp, so
+       nothing ties a binary to the commit that built it. Candidate cards
+       and conformance bundles hash the loaded artifacts and say
+       `source-commit unverified` outright (`binding_artifacts`). The
+       closing mechanism is specced in docs/CONFORMANCE.md and owned by
+       the bindings lane.
+
+`_conformance.py` (DEVIATIONS 928 and 930) packages this fixture as a
+portable conformance bundle; docs/CONFORMANCE.md is its document.
 """
 
 import hashlib
@@ -633,6 +652,75 @@ class _NoReference(Exception):
     pass
 
 
+def parse_card_comments(path):
+    """Return (kv, comment_lines, n_records) for a card file.
+
+    `kv` maps `key` -> `value` for every `# key: value` comment line (first
+    colon splits; later lines with a repeated key win, which cannot happen
+    in cards this package emits). Free-form comment lines are carried in
+    `comment_lines` untouched. Used by `install-reference` and by
+    `conformance export --from-card`, both of which have to READ a card's
+    stated provenance before trusting its records.
+    """
+    with open(path, "r", encoding="utf-8") as fh:
+        text = fh.read()
+    kv = {}
+    comments = []
+    n_records = 0
+    for ln in text.split("\n"):
+        if ln.startswith("#"):
+            body = ln[1:].strip()
+            comments.append(body)
+            if ":" in body:
+                key, _, value = body.partition(":")
+                key = key.strip()
+                # Only plausible keys, so prose containing a colon does not
+                # pollute the map ("READ THIS BEFORE..." lines).
+                if key and " " not in key:
+                    kv[key] = value.strip()
+        elif ln.strip():
+            n_records += 1
+    return kv, comments, n_records
+
+
+def binding_artifacts():
+    """Every loaded mojolearn binding extension, hashed. DEVIATION 929.
+
+    The compiled `.so` artifacts carry NO freshness signal: nothing ties one
+    to the commit that built it, and a stale binary raises only when a
+    signature happens to have drifted. So provenance records what CAN be
+    established honestly -- the file's SHA-256, size and mtime at run time --
+    and states `artifact_source_commit: "unverified"` outright rather than
+    implying the repo commit covers the binaries. The closing mechanism (a
+    compile-time commit+mode stamp read back at import, the way the vendor
+    read-back already works) belongs to the bindings lane; see
+    docs/CONFORMANCE.md, 'Artifact provenance'.
+    """
+    pkg = __name__.rsplit(".", 1)[0]
+    out = []
+    for name in sorted(sys.modules):
+        if not name.startswith(pkg + "._mojolearn"):
+            continue
+        mod = sys.modules[name]
+        path = getattr(mod, "__file__", None)
+        if not path or not path.endswith(".so"):
+            continue        # missing-binary stubs have no file; skip honestly
+        try:
+            st = os.stat(path)
+        except OSError:
+            continue
+        out.append({
+            "module": name.rsplit(".", 1)[1],
+            "file": path,
+            "sha256": _sha256(path),
+            "size": st.st_size,
+            "mtime": time.strftime("%Y-%m-%dT%H:%M:%SZ",
+                                   time.gmtime(st.st_mtime)),
+            "artifact_source_commit": "unverified",
+        })
+    return out
+
+
 # --------------------------------------------------------------------------
 # RUNNING THE FIXTURE
 # --------------------------------------------------------------------------
@@ -642,8 +730,14 @@ class FixtureError(Exception):
     """The fit could not be run or produced no card. Maps to CANNOT RUN."""
 
 
-def run_fixture(card_path):
+def run_fixture(card_path, dump=None):
     """Fit the pinned k-means with the trace pointed at `card_path`.
+
+    `dump` is a tag substring for MOJOLEARN_IDENTITY_TRACE_DUMP; None (the
+    default, and what `verify` passes) clears it, keeping this function's
+    original behavior. `conformance export` passes "." -- every tag this
+    fixture emits contains a dot -- because a bundle needs the raw stage
+    bytes, not only their hashes.
 
     ONE TRACED FIT PER PROCESS, which is the differ's contract and not a
     convenience: the tags carry `restartNN.iterMM.` prefixes that repeat
@@ -679,11 +773,15 @@ def run_fixture(card_path):
     saved_trace = os.environ.get("MOJOLEARN_IDENTITY_TRACE")
     saved_dump = os.environ.get("MOJOLEARN_IDENTITY_TRACE_DUMP")
     os.environ["MOJOLEARN_IDENTITY_TRACE"] = card_path
-    # NO .bin DUMPS. Cell-level diagnosis needs dumps on BOTH sides and the
-    # reference ships without them (they would be megabytes per card). A
-    # dump here would only slow the fit down and mislead the differ's
-    # integrity step into checking one side of a pair.
-    os.environ.pop("MOJOLEARN_IDENTITY_TRACE_DUMP", None)
+    if dump is None:
+        # NO .bin DUMPS on the verify path. Cell-level diagnosis needs dumps
+        # on BOTH sides and the reference ships without them (they would be
+        # megabytes per card). A dump here would only slow the fit down and
+        # mislead the differ's integrity step into checking one side of a
+        # pair.
+        os.environ.pop("MOJOLEARN_IDENTITY_TRACE_DUMP", None)
+    else:
+        os.environ["MOJOLEARN_IDENTITY_TRACE_DUMP"] = dump
     try:
         est = pkg.KMeans(
             n_clusters=KM_K,
@@ -985,6 +1083,11 @@ def cmd_verify(args):
         return _fail(args, env, EXIT_CANNOT_RUN, "No comparator.", str(exc))
     comparator = (differ_path + "  (%s)" % differ_how, _sha256(differ_path))
 
+    if getattr(args, "confirm_reference", None):
+        # BEFORE --emit-reference: on the second box the two flags combine,
+        # --emit-reference naming where the local candidate lands.
+        return _confirm_reference(args, env, comparator)
+
     if args.emit_reference:
         return _emit_reference(args, env, comparator)
 
@@ -1159,33 +1262,19 @@ def _json_verdict(env, code, ref=None, comparator=None, elapsed=None,
 # --------------------------------------------------------------------------
 
 
-def _emit_reference(args, env, comparator):
-    """`verify --emit-reference PATH`. The regeneration procedure, in code.
+def _write_candidate(out_path, env, comparator):
+    """Run the fixture once and write a provenance-stamped candidate card.
 
-    A reference hash nobody knows how to reproduce becomes untouchable and
-    then wrong, so the procedure is a subcommand rather than a paragraph.
-    It refuses on a FAST build for the same reason `verify` does, and it
-    stamps the provenance the reader is going to be asked to trust.
+    The shared engine of `--emit-reference` (the producing box) and
+    `--confirm-reference` (the second box): both need exactly the same
+    artifact, a card whose comment head carries everything the eventual
+    reader will be asked to trust. Returns (stages, elapsed). Raises
+    FixtureError. The caller has already gated the numeric mode.
     """
     mode = env["mode"]
-    if mode.loaded != "identical":
-        _emit(_env_lines(env) + [
-            _THIN,
-            "REFUSED. A reference card cannot be emitted from a FAST build.",
-            "  The reference is the thing the claim rests on. Set",
-            "  MOJOLEARN_NUMERIC_MODE=identical and run this again.",
-            _RULE,
-        ])
-        return EXIT_REFUSED_FAST
-
-    out = args.emit_reference
     tmpdir = tempfile.mkdtemp(prefix="mojolearn-emit-ref-")
     card = os.path.join(tmpdir, "candidate.card")
-    try:
-        _est, elapsed, xh, ch = run_fixture(card)
-    except FixtureError as exc:
-        _emit(["CANNOT RUN. %s" % exc])
-        return EXIT_CANNOT_RUN
+    _est, elapsed, xh, ch = run_fixture(card)
 
     with open(card, "r", encoding="utf-8") as fh:
         body = fh.read()
@@ -1212,6 +1301,17 @@ def _emit_reference(args, env, comparator):
         "# stages: %d" % stages,
         "# fit-seconds: %.2f" % elapsed,
         "# comparator-at-emit: %s sha256 %s" % comparator,
+    ]
+    # DEVIATION 929. The card certifies runs made through whatever .so
+    # artifacts sat on disk, and nothing ties those to a commit. Hash them
+    # into the head, with the gap stated, so a stale-binary card is at
+    # least a DIAGNOSABLE stale-binary card.
+    for art in binding_artifacts():
+        head.append("# artifact: %s sha256 %s size %d mtime %s "
+                    "source-commit unverified"
+                    % (os.path.basename(art["file"]), art["sha256"],
+                       art["size"], art["mtime"]))
+    head += [
         "#",
         "# READ THIS BEFORE TRUSTING THE NUMBERS BELOW. This card is one",
         "# machine's output. It becomes evidence for a CROSS-VENDOR claim",
@@ -1219,24 +1319,318 @@ def _emit_reference(args, env, comparator):
         "# vendor and the three agree, which is E3_RESULTS.md's job. Record",
         "# the peer runs in docs/VERIFY.md when you install this file.",
     ]
-    with open(out, "w", encoding="utf-8") as fh:
+    with open(out_path, "w", encoding="utf-8") as fh:
         fh.write("\n".join(head) + "\n" + body)
     _cleanup(tmpdir, card, keep=False)
+    return stages, elapsed
+
+
+def _emit_reference(args, env, comparator):
+    """`verify --emit-reference PATH`. The regeneration procedure, in code.
+
+    A reference hash nobody knows how to reproduce becomes untouchable and
+    then wrong, so the procedure is a subcommand rather than a paragraph.
+    It refuses on a FAST build for the same reason `verify` does, and it
+    stamps the provenance the reader is going to be asked to trust.
+    """
+    mode = env["mode"]
+    if mode.loaded != "identical":
+        _emit(_env_lines(env) + [
+            _THIN,
+            "REFUSED. A reference card cannot be emitted from a FAST build.",
+            "  The reference is the thing the claim rests on. Set",
+            "  MOJOLEARN_NUMERIC_MODE=identical and run this again.",
+            _RULE,
+        ])
+        return EXIT_REFUSED_FAST
+
+    out = args.emit_reference
+    try:
+        stages, elapsed = _write_candidate(out, env, comparator)
+    except FixtureError as exc:
+        _emit(["CANNOT RUN. %s" % exc])
+        return EXIT_CANNOT_RUN
 
     _emit(_env_lines(env, comparator=comparator) + [
         _THIN,
         "  wrote %s" % out,
         "  %d stages, fit %.2f s" % (stages, elapsed),
         "",
-        "  THIS IS A CANDIDATE, NOT YET A REFERENCE. Before installing it",
-        "  into mojolearn/reference_cards/, produce the same card on a",
-        "  second vendor and compare the two with",
+        "  THIS IS A CANDIDATE, NOT YET A REFERENCE. On a second vendor, at",
+        "  the SAME commit, confirm it with ONE command:",
         "",
-        "      python3 tools/identity_trace_diff.py --labels APPLE,OTHER \\",
-        "          apple.card other.card",
+        "      MOJOLEARN_NUMERIC_MODE=identical python -m mojolearn verify \\",
+        "          --confirm-reference %s \\" % out,
+        "          --emit-reference <local candidate path>",
         "",
-        "  and record both runs in docs/VERIFY.md. A reference installed",
-        "  from one machine claims nothing across vendors.",
+        "  then install the agreed pair with",
+        "",
+        "      python -m mojolearn install-reference <produced> <confirmed>",
+        "",
+        "  A reference installed from one machine claims nothing across",
+        "  vendors.",
         _RULE,
     ])
+    return EXIT_VERIFIED
+
+
+def _confirm_reference(args, env, comparator):
+    """`verify --confirm-reference PEER.card [--emit-reference LOCAL.card]`.
+
+    The second box's ONE command: run the fixture here, stamp a local
+    candidate, and hand both cards to the one comparator. Exit 0 means the
+    two vendors agree stage for stage and the pair is ready for
+    `install-reference`; exit 1 means there is a finding to chase and
+    NOTHING to install.
+    """
+    mode = env["mode"]
+    if mode.loaded != "identical":
+        _emit(_env_lines(env) + [
+            _THIN,
+            "REFUSED. A confirmation run must come from an IDENTICAL build,",
+            "  for the same reason the producing run must.",
+            _RULE,
+        ])
+        return EXIT_REFUSED_FAST
+
+    peer = args.confirm_reference
+    if not os.path.isfile(peer):
+        _emit(["USAGE: --confirm-reference %s: not a file" % peer])
+        return EXIT_USAGE
+    kv, _comments, _n = parse_card_comments(peer)
+    if PLACEHOLDER_TOKEN in open(peer, encoding="utf-8").read():
+        _emit(["REFUSED: %s still carries the %r token. It is a placeholder,"
+               % (peer, PLACEHOLDER_TOKEN),
+               "not a produced card; there is nothing to confirm against."])
+        return EXIT_USAGE
+    if kv.get("profile") != PROFILE:
+        _emit(["REFUSED: the peer card's profile line is %r; this build's "
+               "profile is %r." % (kv.get("profile"), PROFILE),
+               "Confirming across that mismatch would compare two different "
+               "computations."])
+        return EXIT_USAGE
+
+    local = args.emit_reference or os.path.join(
+        tempfile.mkdtemp(prefix="mojolearn-confirm-"), "local.candidate.card")
+    try:
+        stages, elapsed = _write_candidate(local, env, comparator)
+    except FixtureError as exc:
+        _emit(["CANNOT RUN. %s" % exc])
+        return EXIT_CANNOT_RUN
+
+    differ, _p, _h = load_differ()
+    _emit(_env_lines(env, comparator=comparator) + [
+        _THIN,
+        "  local candidate %s (%d stages, fit %.2f s)" % (local, stages,
+                                                          elapsed),
+        "  peer card       %s" % peer,
+        "",
+    ])
+    rc = differ.run([peer, local, "--labels", "PEER,LOCAL",
+                     "--no-verify-dumps"])
+    if rc == 0:
+        _emit([
+            _RULE,
+            "CONFIRMED. The two vendors' cards agree stage for stage.",
+            "  Install the pair (produced first, this confirmation second):",
+            "",
+            "      python -m mojolearn install-reference \\",
+            "          %s \\" % peer,
+            "          %s" % local,
+            _RULE,
+        ])
+        return EXIT_VERIFIED
+    _emit([
+        _RULE,
+        "NOT CONFIRMED (differ exit %d). There is NO reference to install;"
+        % rc,
+        "there is a finding to chase. The first diverging stage is named",
+        "above. Local candidate kept at",
+        "    %s" % local,
+        _RULE,
+    ])
+    return EXIT_MISMATCH if rc == 1 else EXIT_CANNOT_RUN
+
+
+# --------------------------------------------------------------------------
+# INSTALLING THE REFERENCE (DEVIATION 927)
+# --------------------------------------------------------------------------
+
+_INSTALL_REQUIRED_KEYS = ("profile", "produced-at", "commit", "numeric-mode",
+                          "host", "device", "mojolearn-version")
+
+
+def cmd_install_reference(args):
+    """`python -m mojolearn install-reference PRODUCED.card CONFIRMED.card`.
+
+    Host-side only; no GPU, no extension import. Takes the two candidate
+    cards -- the producing vendor's first, the confirming vendor's second --
+    and, ONLY if every gate passes, installs the first into
+    `reference_cards/` with the confirmation's provenance appended, removes
+    the placeholder, and prints the filled docs/VERIFY.md template for a
+    human to paste.
+
+    DEVIATION 927, the refusals, each one a way a dishonest reference could
+    otherwise come into being:
+
+      - a card carrying the FILL-IN token (a placeholder wearing a real name)
+      - a profile line that is absent or mismatched on either card
+      - missing provenance keys (a hash with no provenance is a number)
+      - the two cards' commits differing, or either being unknown -- the
+        procedure REQUIRES the same commit on both boxes, and 'unknown'
+        cannot be shown to satisfy that
+      - a numeric-mode line that is not 'identical'
+      - the two cards not comparing IDENTICAL under the one comparator
+
+    WHY THE DOC IS PASTED BY A HAND AND NOT WRITTEN BY THIS COMMAND. The
+    template block in docs/VERIFY.md is the human-audited statement of where
+    the reference came from. A command that edits it would make the doc
+    exactly as trustworthy as the command's inputs, unreviewed; a human
+    pasting a printed block reads it on the way in. The card itself carries
+    both runs' provenance either way, so the shipped artifact does not
+    depend on the paste.
+
+    Exit codes: 0 installed; 1 the two cards diverge; 2 refused (any gate
+    above); 4 no comparator.
+    """
+    lines = []
+    cards = {}
+    for role, path in (("produced", args.produced),
+                       ("confirmed", args.confirmed)):
+        if not os.path.isfile(path):
+            _emit(["USAGE: %s card %s: not a file" % (role, path)])
+            return EXIT_USAGE
+        text = open(path, encoding="utf-8").read()
+        if PLACEHOLDER_TOKEN in text:
+            _emit(["REFUSED: the %s card %s still carries the %r token."
+                   % (role, path, PLACEHOLDER_TOKEN),
+                   "A placeholder copied under a real name is exactly what "
+                   "this gate exists for (DEVIATION 925)."])
+            return EXIT_USAGE
+        kv, comments, n_records = parse_card_comments(path)
+        missing = [k for k in _INSTALL_REQUIRED_KEYS if not kv.get(k)]
+        if missing:
+            _emit(["REFUSED: the %s card %s carries no provenance for: %s."
+                   % (role, path, ", ".join(missing)),
+                   "A reference hash with no provenance is a number, not "
+                   "evidence."])
+            return EXIT_USAGE
+        if kv["profile"] != PROFILE:
+            _emit(["REFUSED: the %s card's profile line is %r; this package "
+                   "verifies %r." % (role, kv["profile"], PROFILE),
+                   "Installing across that mismatch would label one "
+                   "computation with another's name."])
+            return EXIT_USAGE
+        if kv["numeric-mode"] != "identical":
+            _emit(["REFUSED: the %s card states numeric-mode %r. Only an "
+                   "identical-arm card can back the identity claim."
+                   % (role, kv["numeric-mode"])])
+            return EXIT_USAGE
+        if n_records == 0:
+            _emit(["REFUSED: the %s card holds no records." % role])
+            return EXIT_USAGE
+        cards[role] = {"path": path, "kv": kv, "comments": comments,
+                       "records": n_records}
+
+    pc = cards["produced"]["kv"]["commit"]
+    cc = cards["confirmed"]["kv"]["commit"]
+    if pc.startswith("unknown") or cc.startswith("unknown") or pc != cc:
+        _emit(["REFUSED: the two cards must come from the SAME KNOWN commit.",
+               "  produced   %s" % pc,
+               "  confirmed  %s" % cc,
+               "'Same commit' is the thing that makes their agreement a",
+               "cross-vendor statement about one program; unknown cannot be",
+               "shown to satisfy it. Re-emit from clean checkouts."])
+        return EXIT_USAGE
+
+    try:
+        differ, differ_path, differ_how = load_differ()
+    except RuntimeError as exc:
+        _emit(["CANNOT RUN. No comparator.", str(exc)])
+        return EXIT_CANNOT_RUN
+
+    rc = differ.run([args.produced, args.confirmed,
+                     "--labels", "PRODUCED,CONFIRMED", "--no-verify-dumps"])
+    if rc != 0:
+        _emit([
+            _RULE,
+            "NOT INSTALLED (differ exit %d). The two cards do not agree;" % rc,
+            "there is no reference, there is a finding. The first diverging",
+            "stage is named above.",
+            _RULE,
+        ])
+        return EXIT_MISMATCH if rc == 1 else EXIT_CANNOT_RUN
+
+    # Install: the produced card's bytes, with the confirmation's provenance
+    # appended as comments (the differ skips comments, so `verify`'s
+    # comparison is untouched). The shipped artifact then carries BOTH runs.
+    name = args.reference_name
+    dest = reference_path(name)
+    os.makedirs(reference_dir(), exist_ok=True)
+    produced_text = open(args.produced, encoding="utf-8").read()
+    ckv = cards["confirmed"]["kv"]
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    footer = [
+        "#",
+        "# confirmed-at: %s" % ckv["produced-at"],
+        "# confirmed-on-device: %s" % ckv["device"],
+        "# confirmed-on-host: %s" % ckv["host"],
+        "# confirmed-commit: %s" % ckv["commit"],
+        "# confirmed-with: tools/identity_trace_diff.py (%s, sha256 %s)"
+        % (differ_how, _sha256(differ_path)),
+        "# confirmed-result: IDENTICAL over %d stages"
+        % cards["produced"]["records"],
+        "# installed-by: python -m mojolearn install-reference, %s" % stamp,
+    ]
+    if not produced_text.endswith("\n"):
+        produced_text += "\n"
+    with open(dest, "w", encoding="utf-8") as fh:
+        fh.write(produced_text + "\n".join(footer) + "\n")
+
+    placeholder = dest + ".PLACEHOLDER"
+    removed = False
+    if os.path.isfile(placeholder):
+        os.remove(placeholder)
+        removed = True
+
+    pkv = cards["produced"]["kv"]
+    template = [
+        "```",
+        "reference   %s.card" % name,
+        "profile     %s" % PROFILE,
+        "produced    %s on %s, %s, mojolearn %s, commit %s"
+        % (pkv["produced-at"], pkv["device"], pkv["host"],
+           pkv["mojolearn-version"], pkv["commit"]),
+        "confirmed   %s on %s, %s, same commit, cards compared with"
+        % (ckv["produced-at"], ckv["device"], ckv["host"]),
+        "            tools/identity_trace_diff.py, RESULT: IDENTICAL over "
+        "%d stages" % cards["produced"]["records"],
+        "stages      %d" % cards["produced"]["records"],
+        "```",
+    ]
+    lines += [
+        _RULE,
+        "INSTALLED %s" % dest,
+        "  sha256 %s" % _sha256(dest),
+        ("  placeholder removed" if removed
+         else "  (no placeholder was present)"),
+        _THIN,
+        "NOW DO THESE TWO THINGS, in this order.",
+        "",
+        "1. Paste this filled block into docs/VERIFY.md under 'Where the",
+        "   reference card came from', replacing the placeholder note and",
+        "   template there, and record the change in CHANGELOG.md:",
+        "",
+    ] + ["   " + t for t in template] + [
+        "",
+        "2. Close the loop on the machine that produced the card:",
+        "",
+        "       MOJOLEARN_NUMERIC_MODE=identical python -m mojolearn verify",
+        "",
+        "   It must print RESULT: VERIFIED. A producer that cannot reproduce",
+        "   its own card is a much more interesting problem than a version",
+        "   bump.",
+        _RULE,
+    ]
+    _emit(lines)
     return EXIT_VERIFIED
