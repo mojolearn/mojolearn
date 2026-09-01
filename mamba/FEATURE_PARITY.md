@@ -29,17 +29,21 @@ today.
 where they disagree.** Two of its clauses closed. (a) The Mamba-2 block
 EXISTS: `impl/mamba_ssm/modules/mamba2.mojo` + `ssd_minimal.mojo` under
 `IDENTICAL_MAMBA2_CONTRACT.md`, gated on the Apple M4 in the identical
-tier (that contract's RUN RECORD; cross-vendor legs still OWED, so the
-three-vendor sentence remains Mamba-1's alone). (b) The Python surface is
-BUILT, RUNS OWED: `bindings/_mojolearn_mamba.mojo` (the fourteenth
-binding, two-list ABI) + `bindings/build_mamba.sh` +
-`python/mojolearn/_mamba_impl.py` / `mamba.py`, exporting `Mamba1Block`,
-`Mamba2Block` and the explicit state classes from `mojolearn` and
-`mojolearn.mamba`; gate `python/mojolearn/tests/test_mamba_surface.py`.
-Nothing of (b) has compiled or run anywhere -- every runnable claim is
-UNVERIFIED until the build and the gate print. The "Python surface"
-section at the end of this document carries the surface's deviations
-(791-793) and the owed commands.
+tier, and since the evening of 2026-09-01 **bit-identical Apple vs a
+rented RTX 4090 (judge: 26 of 26 stages IDENTICAL, that contract's
+PHASE 6 record); the AMD column is OWED after three dead rentals, so
+the THREE-vendor sentence remains Mamba-1's alone.** (b) The Python
+surface is BUILT AND GATED ON APPLE, SAME DAY (2026-09-01 evening):
+`bindings/_mojolearn_mamba.mojo` (the fourteenth binding, two-list ABI)
+built green in ALL THREE TIERS via `bindings/build_mamba.sh` (first
+cold build measured 16 mamba AIR blobs; floor raised 1→10), and
+`python/mojolearn/tests/test_mamba_surface.py` printed green in all
+three — under IDENTICAL the bitwise arms are ASSERTED: decode equals
+prefill bit for bit per token through the Python path, and a split
+Mamba-2 prefill resumes bit for bit through the three-piece state. One
+box, one vendor; the cross-vendor statement belongs to the lanes'
+cards. The "Python surface" section at the end of this document
+carries the surface's deviations (791-793).
 
 **House rules that bind the dispositions.**
 
@@ -164,7 +168,7 @@ Upstream spellings are `mamba_ssm/modules/block.py` (blk),
 | MLP interleave (`d_intermediate` > 0, GatedMLP, norm2) | seq:73-78; blk:31-35, :69-86; modules/mlp.py | absent | SHIP LATER | trigger, a checkpoint with d_intermediate > 0; stock mamba/mamba2 LM checkpoints use 0 |
 | LayerNorm option (`rms_norm=False`) | seq:70-72, :177-179 | absent; RMSNorm only | SHIP LATER | trigger, a LayerNorm checkpoint; needs a mean-subtraction seam the contract does not have |
 | `from_pretrained`/`save_pretrained`, HF hub fetch, config json | seq:292-315; utils/hf.py | absent | SHIP LATER (hub fetch); raw-buffer weight intake SHIP NOW | the consumer requirement is "the same weights on both sides", which raw little-endian buffers plus a manifest already deliver (the corpus file format is the precedent). A checkpoint-format importer (torch .bin/safetensors -> our buffers) is a Python-side utility, trigger, first real-checkpoint cross-check |
-| Mamba-3 block | mamba_ssm/modules/mamba3.py:43-70 (rope_fraction :53, MIMO :59-60, heavy_tail_activation :27-41, per-token rotary on B/C, trapezoidal discretization inputs :106-108) | BUILT, NOTHING RUN (2026-09-01): contract `IDENTICAL_MAMBA3_CONTRACT.md` + oracle/impl/check code forms landed (`checks/mamba3_*.mojo`, `impl/mamba_ssm/ops/mamba3_siso.mojo`, `impl/mamba_ssm/modules/mamba3.mojo`); every gate RUN OWED, no compile has happened, no claim exists | SHIP LATER, gate-first | the contract sibling now exists and the addendum row below scopes the surface knobs; the trigger for SHIPPING is unchanged (a consumer-named Mamba-3 checkpoint) and the completion claim still lives on the three-vendor E-leg |
+| Mamba-3 block | mamba_ssm/modules/mamba3.py:43-70 (rope_fraction :53, MIMO :59-60, heavy_tail_activation :27-41, per-token rotary on B/C, trapezoidal discretization inputs :106-108) | BUILT AND GATED ON APPLE THE SAME DAY (2026-09-01 evening, contract RUN RECORD): gates a/b/c/d/d-cross/continuation/e ALL PASS on the FIRST compile, 11/11 witnessable sabotage arms RED naming their own stage, FOLD refused VACUOUS per DEV 834, shape sweep 42/42. One column, one vendor; corpus family + FAST recording + the E-leg OWED | SHIP LATER, gate-first | the contract sibling now exists and the addendum row below scopes the surface knobs; the trigger for SHIPPING is unchanged (a consumer-named Mamba-3 checkpoint) and the completion claim still lives on the three-vendor E-leg |
 | Mamba-3 SURFACE KNOBS (the contract's deferred inventory, addendum to the row above) | mamba3.py:44-70 | pinned or refused, per profile `mojolearn.identical.mamba3.siso.fp32.v1` section 3 | one disposition per knob | PINNED AS PROFILE CONSTANTS: d_state 128, expand 2, headdim 64, ngroups 1, rope_fraction 0.5 (32 angles), A_floor 1e-4, chunk_size 64 (PART OF THE ARITHMETIC, mamba2 DEV 783's standing), B/C norm eps 1e-5. REFUSED BY NAME, structurally (no such knob exists on the surface): is_mimo/mimo_rank, is_outproj_norm, fuse_pregate_headwise_norm, rope_fraction 1.0, ngroups > 1, cu_seqlens/seq_idx varlen, non-Float32 (the shipped bf16 casts, mamba3_siso_combined.py:390-399, refused not reproduced). INITIALIZATION FACTS, out of scope (weights are inputs): dt_min/dt_max/dt_init_floor (:54-56, :111-115), the ones-init B/C biases (:121-122), D init (:140). ABSORBED-KWARG NO-OPS upstream, absent here: dropout, layer_idx, n_layer, device, dtype (:65-69). DEFERRED, not refused (contract section 5): varlen, MIMO, is_outproj_norm arms, multi-block caches |
 
 ## 6. Varlen and batching
@@ -219,7 +223,7 @@ bitwise-identical tier. Mapping each need onto the dispositions above:
 | decode step | Mamba-1 step (ships); Mamba-2 step (to build) | same |
 | exact state handoff | explicit caller-owned state buffers (ships for Mamba-1); Mamba-2 state layout row; chunked-prefill continuation from a carried state | Mamba-2 rows; and the handoff must be BYTE-specified (layout, order, dtype) in the sibling contract so the consumer can round-trip it |
 | bitwise-identical tier | profile v1 gated three-vendor for Mamba-1; Mamba-2 inherits the same gate structure from its contract | Mamba-2 gates unbuilt |
-| PyPI surface | BUILT 2026-09-01, RUNS OWED. `mojolearn.mamba` (`_mamba_impl.py` over the `_mojolearn_mamba` binding) exposes `Mamba1Block`/`Mamba2Block` forward + step with explicit numpy state in/out and the per-instance `numeric_mode=` parameter, exactly the shape this row asked for | was: "SHIP NOW, the single largest gap". The binding follows the repository's conventions (two-list ABI, DEVIATION 791); nothing has compiled or run -- `bash bindings/build_mamba.sh` per tier, then `tests/test_mamba_surface.py`, are the owed prints. Model-level (backbone/LM head) forward remains unbuilt (section 5's rows stand) |
+| PyPI surface | BUILT AND GATED 2026-09-01 (same evening). `mojolearn.mamba` (`_mamba_impl.py` over the `_mojolearn_mamba` binding) exposes `Mamba1Block`/`Mamba2Block` forward + step with explicit numpy state in/out; built green in all three tiers and `tests/test_mamba_surface.py` printed green in each — bitwise arms ASSERTED under identical (decode==prefill and split-prefill resumption, bit for bit, through Python) | was: "SHIP NOW, the single largest gap". Closed on Apple; one box, one vendor. Model-level (backbone/LM head) forward remains unbuilt (section 5's rows stand) |
 
 The SHIP NOW build list, in dependency order: (1) the Python binding for the
 existing Mamba-1 surface, since it makes the already-certified work

@@ -178,12 +178,12 @@ if [ -n "${MOJOLEARN_SKIP_BUILD_GATE:-}" ] || [ "$(uname)" != "Darwin" ]; then
 fi
 
 # ============================================================================
-# A FLOOR, NOT A PROOF, AND THIS NUMBER IS A PLACEHOLDER SET TO 1.
+# A FLOOR, NOT A PROOF. RAISED FROM THE PLACEHOLDER ON THE FIRST COLD BUILD.
 # ============================================================================
 #
-# THE FLOOR BELOW IS 1 BECAUSE THIS SCRIPT HAS NEVER BEEN BUILT. IT MUST BE
-# RAISED, ON THE FIRST COLD BUILD, TO TWO THIRDS OF WHAT THAT BUILD
-# ACTUALLY MEASURES, and the measured number written into this comment --
+# THE FIRST COLD BUILD (2026-09-01, fast tier) MEASURED 16 mamba-prefix AIR
+# blobs (24 total with gemm's 8); the floor below is two thirds of that,
+# rounded down: 10. The placeholder-then-raise discipline is --
 # exactly what build_training.sh's history teaches: its floor was 1 until
 # its first real build on 2026-09-01 measured 5 and it became 3, the ratio
 # bindings/build.sh uses against ITS measured counts (22 measured -> floor
@@ -220,7 +220,7 @@ for _sub in mamba gemm core checks; do
 done
 
 _failed=0
-for _pair in mamba:1; do
+for _pair in mamba:10; do
     _s=${_pair%%:*}
     _min=${_pair#*:}
     _n=$(printf '%s\n' "$_air" | grep -c "^${_s}" || true)

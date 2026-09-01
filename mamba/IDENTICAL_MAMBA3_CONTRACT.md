@@ -491,3 +491,42 @@ arithmetic lands on it. Then, smallest first, one gate per phase:
    the completion claim lives or dies here.
 
 DERIVATION_MAP.tsv rows land WITH each file, not after.
+
+---
+
+## RUN RECORD — 2026-09-01 evening, Apple column (orchestrator runs; the implementation lane wrote, never ran)
+
+Commit at run: 979302e7 (implementation commits 7ac1112e / 99a620d8 /
+0eac05ed). Build `-D MOJOLEARN_NUMERIC_IDENTICAL=1`, M4, one process at a
+time, niced.
+
+- **Gates (a)+(b)+(c): PASS on the FIRST compile** — zero fix iterations
+  (the M2 lane took three): every stage bit-identical to the host oracle,
+  8 repeated launches identical, batch composition independent with the
+  negative control moving 14,178 cells.
+- **Gate (d): PASS** — decode == prefill bitwise per token
+  (prefix-stable stages) plus the final-token trap.scale/kscale/chunk/
+  state/report stages per DEV 832's comparability clause.
+- **Gate (d) crossing: PASS** — prefill 60 + decode through 70 ==
+  prefill 70 across the Q=64 boundary; the sealed buffer folded and
+  refilled exactly as DEV 832 constructs.
+- **Continuation: PASS** — four-piece Input_States bit-identical to the
+  oracle on 8,192 nonzero incoming h cells, S22 correction included.
+- **Gate (e): PASS** — 36 plants, each refused BY NAME with 0 stages.
+- **Sabotage ladder: 11 of 11 witnessable arms RED naming their own
+  first stage** (SEGSUM_DESCENDING→dacs.out, CHUNK_SIZE_32→yintra.out,
+  TRAP_LEFT_ONLY→kscale.out, ANGLE_MOD_PER_CHUNK and _AT_END→
+  angle.theta, ROTATE_HALF_SPLIT→rot.q, DIAG_INCLUDE_SUBTRACT→skip.out,
+  STATE_TERM_SCALE_FIRST→ystate.out, A_FLOOR_UNCLAMPED→A.out,
+  RESUME_KERNEL_ASSOC→pass.states, STEP_UPSTREAM_RECURRENCE→20,719
+  cells on gate (d)). **FOLD_SERIAL_ZERO_SEED refused VACUOUS BY
+  CONSTRUCTION naming DEVIATION 834** — the required outcome, not a
+  pass and not a skip.
+- **Shape sweep: 42/42 PASS** — B ∈ {1,2,3} × L ∈ {1,4,63,64,65,129,257}
+  × d_model ∈ {32,64}, gate (a) asserted at every combination.
+
+**STILL OWED:** the corpus family (gen_corpus.py has no mamba3 family;
+the fixture table in mamba3_fixture.mojo is normative and the byte gate
+is the arbiter), FAST recording, kernel-matrix rows, and PHASE M3-6 —
+the three-vendor E-series leg the completion claim lives on. ONE
+COLUMN, ONE VENDOR: nothing above is a cross-vendor claim.
