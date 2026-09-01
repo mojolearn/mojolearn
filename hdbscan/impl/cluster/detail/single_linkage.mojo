@@ -48,7 +48,7 @@ show.
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
-from hdbscan.checks.hdbscan_sabotage import HDB_SAB_NONE
+from hdbscan.checks.hdbscan_sabotage import HDB_SAB_MST_ORIENT_RAW, HDB_SAB_NONE
 from hdbscan.checks.mutual_reachability_dense import (
     MR_TPB,
     mutual_reachability_dense,
@@ -58,7 +58,7 @@ from hdbscan.impl.hdbscan.detail.reachability import (
     CORE_TPB,
     compute_core_dists,
 )
-from hierarchy.checks.edge_order import LINK_SAB_NONE
+from hierarchy.checks.edge_order import LINK_SAB_NONE, edge_hi, edge_lo
 from hierarchy.impl.cluster.detail.agglomerative import build_dendrogram_host
 from hierarchy.impl.cluster.detail.connectivities import (
     DISTANCE_L2_SQRT_EXPANDED,
@@ -200,6 +200,58 @@ def build_mr_linkage(
     ctx.enqueue_copy(dst_ptr=h_src.unsafe_ptr(), src_buf=v_src)
     ctx.enqueue_copy(dst_ptr=h_dst.unsafe_ptr(), src_buf=v_dst)
     ctx.synchronize()
+    # ==================================================================
+    # DEVIATION 1614. THE MST EDGE ORIENTATION IS CANONICALIZED TO
+    # (min(u, v), max(u, v)). THEIRS IS BORUVKA'S, AND IS NOT A RULE.
+    # ==================================================================
+    # THEIRS. agglomerative.cuh:134-150 puts find(src) in the left slot and
+    # find(dst) in the right. The only stage between the solver and that loop
+    # is coo_sort_by_weight (mst.cuh:337-338, sort.h:94-102, a
+    # thrust::sort_by_key on the weights), which reorders rows and reorients
+    # nothing. So `src` is whatever min_edge_per_supervertex stored, and that
+    # kernel writes temp_src[tid] = tid with the mutual-add tie broken on a
+    # COLOR comparison, not a vertex one.
+    #
+    # THERE IS NOTHING TO PORT HERE. Their colors come from a round whose
+    # min-edge tie is a cuRAND draw (DEVIATION 620) feeding a sort documented
+    # unstable (DEVIATION 621), so their condensed-tree numbering varies run
+    # to run on one GPU. An artifact is not a rule, and we cannot transcribe
+    # one. We therefore CHOOSE, and record the choice here.
+    #
+    # OURS. Left is the lower vertex index. condense.cuh:156-160 numbers with
+    # next_label++ in left-then-right order, so this makes the condensed
+    # tree's numbering, and therefore the cluster NUMBERS in labels_, a pure
+    # function of the MST edge SET, exactly as DEVIATION 621 made the edge
+    # LIST a pure function of the graph.
+    #
+    # THE PARTITION IS UNCHANGED EITHER WAY. condense.cuh:137-197 case 1 only
+    # swaps which sibling takes the smaller next_label; case 2 emits the same
+    # leaf edges with the same parent, lambda and size, reordered, which
+    # DEVIATION 1611's (parent, child) sort restores; cases 3 and 4 select on
+    # which count is small, never on a slot. Downstream, select.mojo's
+    # reverse loop needs only child id > parent id, true under either order,
+    # and its subtree fold has two terms, so commuting them is bit-exact.
+    # What changes is that the numbering stops depending on Boruvka's colors.
+    #
+    # SCOPE. hierarchy/ is NOT touched. Its dendrogram keeps Boruvka's
+    # orientation, which it documents as inert for its own labels and which
+    # its gate compares as an UNORDERED pair
+    # (linkage_check.mojo::_children_pairs_equal). HDBSCAN's condense READS
+    # the orientation, so it is inert there and load bearing here.
+    #
+    # MEASUREMENT. HDB_SAB_MST_ORIENT_RAW skips this loop and MUST FAIL
+    # check_condensed_tree_vs_oracle on blobs96.
+    # ==================================================================
+    if sabotage != HDB_SAB_MST_ORIENT_RAW:
+        for i in range(n_edges):
+            var cu = h_src.unsafe_ptr().unsafe_load(i)
+            var cv = h_dst.unsafe_ptr().unsafe_load(i)
+            h_src.unsafe_ptr().unsafe_store(i, edge_lo(cu, cv))
+            h_dst.unsafe_ptr().unsafe_store(i, edge_hi(cu, cv))
+        ctx.enqueue_copy(dst_buf=v_src, src_ptr=h_src.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=v_dst, src_ptr=h_dst.unsafe_ptr())
+        ctx.synchronize()
+
     var edges = List[Int32](capacity=n_edges * 2)
     for i in range(n_edges):
         edges.append(h_src.unsafe_ptr().unsafe_load(i))

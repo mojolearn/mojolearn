@@ -84,6 +84,12 @@ reaches a recorded stage without them (a vendor-payload NaN, an infinite
 lambda). RECORDED, never asserted: this arm exists to print the byte the
 guard keeps out."""
 
+comptime HDB_SAB_MST_ORIENT_RAW = 9
+"""Skip DEVIATION 1614's canonicalization, so `build_dendrogram_host` takes
+its child order from Boruvka's stored orientation again. MUST FAIL the
+condensed-tree gate on `blobs96`; this arm's output is the failure that stood
+recorded in README.md's Status section (30 parents, 34 children, 6 sizes)."""
+
 comptime HDB_SAB_LAMBDA_STD_DIV = 8
 """`lambda = 1 / distance` through the hardware divide instead of
 `identical_div` (DEVIATION 1606). Apple's divide is correctly rounded, so

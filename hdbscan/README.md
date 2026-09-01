@@ -6,8 +6,75 @@ back into `cuml/cpp/src/hdbscan/detail/{condense,stabilities,select,
 extract}.cuh`, whose MST and dendrogram are the ones `hierarchy/` already
 ports. **COPY, DO NOT IMPROVE**, with the deviations listed below.
 File-for-file map in `DERIVATION_MAP.tsv`; what is not here and why,
-parameter by parameter, in `NOT_IMPLEMENTED.tsv`. DEVIATION numbers 1600-1613
-spent; 1614-1629 free.
+parameter by parameter, in `NOT_IMPLEMENTED.tsv`. DEVIATION numbers 1600-1614
+spent; 1615-1629 free.
+
+## DEVIATION 1614 landed 2026-09-01: the condensed-tree gate is GREEN, and the lane is still not
+
+`check_condensed_tree_vs_oracle` passes on all six fixtures in BOTH modes.
+Under IDENTICAL it reports "node for node, lambdas bitwise" on blobs96 (100
+edges, 5 clusters), gradient90, dups_lattice48, blob_plus_outlier41,
+signed_zero48 and pos_zero48. `check_labels_vs_oracle`, which compares the
+shipped `labels_` element for element and would have failed one gate later,
+passes on all six as well.
+
+THE CAUSE was that the dendrogram's left and right child slots came from two
+different rules, and upstream has NO rule. Their left slot is
+`find(mst_src)`, and `src` is whatever Boruvka's `min_edge_per_supervertex`
+stored, with the tie broken on a COLOR comparison whose colors come from a
+cuRAND draw feeding a sort documented unstable. Their condensed-tree
+numbering therefore varies run to run on one GPU. There was nothing to
+transcribe, so DEVIATION 1614 CHOOSES: left is the lower vertex index, which
+makes the numbering a pure function of the MST edge SET.
+
+The partition was never wrong. Only the cluster NUMBERS moved, and they are
+shipped output, which is why it had to close.
+
+## STILL RED, and it is a different defect: HDB_SAB_CONDENSE_DFS is INERT
+
+The run now reaches `check_hdbscan_sabotages`, which it never did before
+(the raise at the condensed-tree gate stopped it three gates earlier), and
+the first thing it finds there is that `HDB_SAB_CONDENSE_DFS` MOVES NO BIT:
+
+    check_hdbscan_sabotages: HDB_SAB_CONDENSE_DFS left the condensed
+    tree identical on blobs96.
+
+This is NOT a regression from 1614 and it is not evidence 1614 is wrong. It
+could not have been observed at all until the earlier gate stopped raising.
+Two arms before it, `HDB_SAB_MR_TWO_WAY` and `HDB_SAB_CORE_KTH_PLUS_ONE`,
+bite exactly as specified.
+
+The arm is correctly WIRED: the flag reaches `condense.mojo:112` and swaps
+the level queue for a stack. So this is `[[reached-but-inert]]`, and by this
+tree's own rule the numbering claim H3a is NOT gated until an arm can fail
+it.
+
+THE LEADING HYPOTHESIS, and it is a hypothesis, not a measurement: the arm's
+docstring says it "MUST FAIL on any tree deeper than two levels", and that
+is the wrong condition. Depth first and breadth first coincide whenever
+every level holds at most one node still to expand, that is, on a CHAIN.
+Single-linkage dendrograms chain heavily, which is the whole reason HDBSCAN
+condenses them, so every fixture in this lane may be a caterpillar on which
+no traversal order is observable. If that is right, the fix is a fixture
+with a genuinely BRANCHING dendrogram, not a change to the arm.
+
+WHAT IS OWED, in order:
+0. Decide the DFS arm: measure whether the six dendrograms branch. If they
+   do not, build a fixture that does. If they do, the arm is broken and the
+   reason is not yet known.
+1. Only then is this lane green, and only then may a speed number be quoted
+   from it.
+
+## THE 4.20x MUST NOT BE QUOTED YET
+
+`bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md:122` records
+hdbscan at 4.20x faster than cuml-gpu. It was taken while this lane was red.
+It also sits in a file whose own header says no arm declared `scale=`, that
+the fixture is 96 rows, and that such a ratio "is not wrong, it is
+UNCLAIMABLE: it does not tell you whose kernel is faster". Two independent
+reasons not to quote it. The aggregations in
+`bench/results/BOARD_2026-08-28_three-vendor.md` and
+`bench/results/SPEED_SUMMARY_2026-08-29.md` carry it too.
 
 ## Status
 
@@ -42,30 +109,113 @@ fed by the device MST, which carries the edge in the orientation Boruvka
 stored it. At any edge where the MST stored the higher index first, left and
 right swap.
 
-**Which one is right is a question for their source and has not been
-answered.** `agglomerative.cuh:104-155` is what decides it, together with
-what `mst_solver` actually stores in `src` and `dst`. Do not "fix" the
-oracle to match the device or the device to match the oracle without reading
-that, because the two are equally easy to change and only one of them is
-faithful. `hierarchy`'s DEVIATION 621 replaced their sort with one keyed on
-`(weight_order_key, min(u,v), max(u,v))`, and whether that canonicalization
-was meant to reach the stored ORIENTATION or only the sort ORDER is the
-crux.
+**READ 2026-09-01, AND THE ANSWER IS THAT NEITHER SIDE IS FAITHFUL,
+BECAUSE UPSTREAM HAS NO RULE TO BE FAITHFUL TO.** Four reads settle it.
+
+1. `cuvs/cpp/src/cluster/detail/agglomerative.cuh:134-150`, cuVS
+   `94c2819`, is `children_h[2i] = U.find(mst_src_h[i])` and
+   `children_h[2i + 1] = U.find(mst_dst_h[i])`. Left is `src`. There is
+   no comparison, no sort and no canonicalization in the loop, so the
+   child order IS the stored orientation of the sorted MST edge and
+   nothing else.
+2. `cuvs/cpp/src/cluster/detail/mst.cuh:337-338` is the only thing
+   between the solver and that loop, and it is
+   `raft::sparse::op::coo_sort_by_weight`. `raft/.../op/detail/sort.h:94-102`
+   is `thrust::sort_by_key` over the weights carrying the `(row, col)`
+   pair as a zipped payload. It REORDERS rows and REORIENTS nothing.
+3. So the orientation is the solver's. `mst_kernels.cuh:99-156`
+   (`min_edge_per_supervertex`) writes `temp_src[tid] = tid` and
+   `temp_dst[tid] = dst`, so `src` is whichever endpoint had that edge as
+   its color's minimum, with the mutual-add tie broken on
+   `vertex_color > dst_color`. That is a COLOR comparison, not a vertex
+   comparison, and the colors are the supervertex representatives the
+   previous Boruvka round happened to leave behind.
+4. Upstream's colors are not reproducible. Their min-edge tie is a cuRAND
+   draw (`hierarchy`'s DEVIATION 620) and their sort is
+   `thrust::sort_by_key`, which is documented unstable (`hierarchy`'s
+   DEVIATION 621). Their condensed-tree numbering therefore varies run to
+   run on one GPU, before any vendor question is asked.
+
+**So the device is a faithful transcription of a numbering upstream does
+not itself pin, and the oracle applies a rule upstream does not have.**
+There is no upstream fact "the left child is X" to port. The choice is
+ours and it has to be numbered, which is DEVIATION 1614.
+
+**IT IS A DEVIATION AND NOT A BUG, AND THE PROOF IS THAT THE PARTITION
+SURVIVES IT.** A sibling swap at one dendrogram node
+does exactly three things in `condense.cuh:137-197`. Case 1 (both
+children big) swaps which sibling takes the smaller `next_label++`. Case
+2 (both small) emits the same leaf edges with the same parent, lambda and
+size 1 in the other order, and DEVIATION 1611's `(parent, child)` sort
+puts them back. Cases 3 and 4 are selected by WHICH COUNT is small, not
+by which slot it sits in. Nothing reads a slot to decide membership. The
+condensed trees are therefore isomorphic as labeled trees, with the
+cluster ids permuted inside each BFS level; every cluster holds the same
+leaves either way. `excess_of_mass` inherits the permutation without
+being changed by it, because its reverse loop only needs a child's id to exceed
+its parent's, which BFS numbering gives under either order, and its
+per-node subtree fold has exactly two terms, so commuting them is
+bit-exact. `extract_clusters`'s `label_map[i] = n_selected++` then
+numbers the SELECTED clusters in ascending id order, so what actually
+reaches a caller is the same partition under permuted label NUMBERS.
+
+**That is why it still has to close rather than be waived.** `labels_` is
+a shipped array and its numbers are part of it;
+`check_labels_vs_oracle` compares it element for element under IDENTICAL;
+and a numbering that depends on Boruvka's colors is exactly the class of
+dependency DEVIATIONS 620 and 621 exist to remove. 621 removed half of
+it, the sort ORDER, and left the stored ORIENTATION alone, correctly,
+because their `coo_sort_by_weight` reorients nothing and 621 is a port of
+that function. Reaching the orientation is a SECOND deviation in a
+DIFFERENT function, not a correction to 621.
+
+**The fix, and it is not written yet.** Canonicalize the MST edge
+orientation to `(min(u, v), max(u, v))` in
+`hdbscan/impl/cluster/detail/single_linkage.mojo::build_mr_linkage`,
+between `build_sorted_mst` and `build_dendrogram_host`, at the download
+this lane already performs. That makes the dendrogram a pure function of
+the edge SET, which is what `hierarchy`'s
+`check_linkage_mst_matches_kruskal` has already established the device
+and the oracle share, so the oracle becomes right as written. It touches
+no file outside `hdbscan/`, since `hierarchy`'s own linkage keeps
+Boruvka's orientation, which that lane documents as inert for its output and
+compares as an unordered pair
+(`hierarchy/checks/linkage_check.mojo::_children_pairs_equal`, line 352).
+The arm is `HDB_SAB_MST_ORIENT_RAW` and its MUST FAIL is already
+measured, because the un-canonicalized run is the failure recorded above.
 
 Everything ahead of this stage passes. Refusals, core distances, the mutual
 reachability matrix and its symmetry, and the signed-zero max all gate green
 in both modes.
 
 
-**CONSTRUCTION PLUS WRITTEN GATES. NOTHING HAS BEEN RUN.** No build, no
-check, no driver and no benchmark has been executed against this
-directory. **There is no performance number in this lane and there is no
-cross-vendor claim in this lane, because nothing has been run.** The
-thirteen checks below are written, not passed; the sabotage table states
-what each arm MUST move, not what it did move. The orchestrator builds,
-runs and records; every "OK" line in this file is a line the code is
-written to print, and until a run prints it the honest reading of this
-lane is "a port and a suite exist".
+**WHAT HAS ACTUALLY RUN, corrected 2026-09-01.** This paragraph used to
+read "NOTHING HAS BEEN RUN. No build, no check, no driver and no
+benchmark has been executed against this directory. There is no
+performance number in this lane." Both halves were false when written or
+were falsified within a day, and the false sentence is deleted rather
+than softened.
+
+- **The suite HAS been run**, by the orchestrator on 2026-08-25, which is
+  where the `condense diff` lines above come from. It reached
+  `check_condensed_tree_vs_oracle` and RAISED there, in both modes. The
+  checks ahead of it printed OK; the checks behind it did not run at all.
+- **There IS a performance number, and it was taken from this RED lane.**
+  `bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md:122`
+  records `hdbscan | blobs96.96x4 | 1.311 ms | cuml-gpu 5.503 ms | 4.20x
+  FASTER` on NVIDIA, with the per-arm rows at `:25-26` and the pairing at
+  `:64`. **A benchmark taken from a lane whose correctness gate is red is
+  not a result.** The timing is a timing; what is unestablished is that
+  the thing timed computes the right condensed tree. That number must
+  carry the caveat until the gate closes, and the file that holds it is
+  outside this directory, so the caveat is owed there and is item 9 under
+  WHAT IS OWED.
+
+The rest still holds. The thirteen checks below are written and only the
+first few are passed; the sabotage table states what each arm MUST move,
+not what it did move, because no arm has been swept. Every "OK" line in
+this file is a line the code is written to print, and until a run prints
+it the honest reading of that line is "a gate exists".
 
 Rung 1 is `HDBSCAN.fit` on dense Float32 with `L2SqrtExpanded`
 (cuML's `metric="euclidean"`), the DENSE mutual reachability graph
@@ -75,6 +225,11 @@ cuML's own dispatch -- is NOT ported and is refused by name; see
 `NOT_IMPLEMENTED.tsv` for the two walls.
 
 ## Commands
+
+The `check-hdbscan` and `hdbscan-main` pixi tasks exist as of
+`pixi.toml:1024-1025`, so `tools/with_build_lock.sh pixi run check-hdbscan`
+and `tools/with_identical_mode.sh pixi run check-hdbscan` are the short
+forms of the first two lines below.
 
     tools/with_build_lock.sh     pixi run mojo run -I . hdbscan/checks/hdbscan_check.mojo
     tools/with_identical_mode.sh pixi run mojo run -I . hdbscan/checks/hdbscan_check.mojo
@@ -165,7 +320,7 @@ names are H1, H2 and H3.
 |---|---|---|---|---|
 | **H1** | **the core distance, a k-TH ORDER STATISTIC** -- `reachability.cuh:60-62`, `knn_dists[row * n_neighbors + (min_samples - 1)]` over `knn_search`'s result | **the VALUE is not; the NEIGHBOUR IDENTITY is.** The k-th smallest element of a multiset is a pure function of the multiset, so it does not depend on which of several equal elements the selector picked. WHICH neighbour supplied it does: upstream's `select_k` comparator is the distance only (IDENTITY_PATHS row 11) and their tie is arrival order | **PIN, and the pin is one directory over.** The value inherits `neighbors/`: DEVIATION 505 pins the distances, DEVIATION 500 ranks on the composite `(distance, index)` key so the SET is the lowest-index one, DEVIATION 509 pins the ARM to tiled on every column, and `knn_search`'s host sort on `(distance, index)` makes slot `k-1` the k-th smallest rather than an arbitrary member of the top-k set. This lane adds DEVIATION 1602: it READS from the sorted result and states the two claims apart, and it never reads the index at all. **`check_core_distances_vs_oracle` asserts the value per cell, bit for bit, against a host oracle that takes the k-th order statistic by FULLY SORTING each row rather than by a top-k, and prints how many rows have a TIED k-th neighbour so a green line cannot be mistaken for a claim about the neighbour** | construction; gate written, not run |
 | **H2** | **mutual reachability, a THREE-WAY MAX** of `core[row]`, `core[col]` and `alpha * d(row,col)` -- `reachability.cuh:127-130`, the CUDA `max` | **yes, at the zeros and at NaN.** IDENTITY_PATHS row 39, measured on three columns: `max(+0.0, -0.0)` is `-0.0` on Apple (the second operand) and `+0.0` on NVIDIA and AMD; `min(-0,+0)` splits the same way; a computed NaN's payload is `0x7fc00000` / `0x7fffffff` / `0xffc00000`. A three-way max is a two-level fold, so the operand ORDER decides a zero's sign, and that sign lands in the graph as a WEIGHT | **PIN — DEVIATION 1601.** `identical_fmax` (`numerics.mojo`, DEVIATION 825's primitive, imported not re-derived): NaN canonicalized BEFORE the compare, operands flushed, selection on `_total_order_key`, an INTEGER map with `-0.0` strictly below `+0.0`. No hardware max and no float compare on the path. Being a total order, the max is commutative and associative, so `mr(a,b) == mr(b,a)` BIT FOR BIT -- which is what makes `hierarchy`'s undirected edge order well defined on this graph and is asserted first in the gate. **Reachable?** Not through the distances (both arms clamp `if dist <= 0.0: dist = 0.0`, an IEEE compare that maps every negative residue and `-0.0` to `+0.0` on every vendor), so the pin is INERT on the default path and `check_mutual_reachability_ties` PLANTS `-0.0` into a core-distance array and a distance cell and drives the kernel with them. `HDB_SAB_HW_MAX` is the arm | construction; gate written, not run |
-| **H3a** | **the condensed tree: a TRAVERSAL that is a NUMBERING** -- `condense.cuh:37-66` BFS, `:156-160` `next_label++` in visit order | **not a float order, but a total one, and everything downstream is indexed by it.** `stabilities[c]`, `is_cluster[c]`, `births[c]`, the CSR segment boundaries and the final label numbering are all keyed on `relabel`, which is assigned in BFS order | **PINNED BY BEING THEIRS, AND SAID SO.** The traversal is transcribed level by level from `:46-64`; there is no atomic, no thread and no float in it, so it is reproducible for the reason a `for` loop is. What could break it is a rewrite to a different traversal, so `HDB_SAB_CONDENSE_DFS` swaps the queue for a stack and `check_condensed_tree_vs_oracle` compares NODE FOR NODE (parents, children, sizes exactly; lambdas bitwise) rather than comparing a summary | construction; gate written, not run |
+| **H3a** | **the condensed tree: a TRAVERSAL that is a NUMBERING** -- `condense.cuh:37-66` BFS, `:156-160` `next_label++` in visit order | **not a float order, but a total one, and everything downstream is indexed by it.** `stabilities[c]`, `is_cluster[c]`, `births[c]`, the CSR segment boundaries and the final label numbering are all keyed on `relabel`, which is assigned in BFS order. **AND THE BFS IS NOT THE WHOLE INPUT TO IT.** The traversal reads `children[2i]` before `children[2i+1]`, so the numbering is a function of the TRAVERSAL AND of the dendrogram's CHILD ORDER, and the child order is the MST edge's stored orientation | **HALF PINNED, AND THE OTHER HALF IS THE OPEN DEFECT.** The traversal itself is transcribed level by level from `:46-64`; there is no atomic, no thread and no float in it, so it is reproducible for the reason a `for` loop is, and `HDB_SAB_CONDENSE_DFS` is the arm that guards it. The CHILD ORDER is NOT pinned, and it comes from Boruvka's `temp_src[tid] = tid` through a `coo_sort_by_weight` that reorients nothing, and the oracle instead applies `min(u, v)`. DEVIATION 1614 is the pin that closes it and it is NOT WRITTEN. `check_condensed_tree_vs_oracle` compares NODE FOR NODE (parents, children, sizes exactly; lambdas bitwise) rather than comparing a summary, which is why it caught this at all | **RED. RUN 2026-08-25, RAISED: 30 parents, 34 children and 6 sizes differ on `blobs96` in both modes** |
 | **H3b** | **the stability sum, a FLOAT SUM OVER A TREE TRAVERSAL** -- `kernels/stabilities.cuh:39-44`, a float `atomicAdd` per condensed edge into a per-cluster cell | **yes, and run to run rather than merely vendor to vendor.** Rows 1, 8 and 36's defect. Two more folds sit beside it: the per-parent minimum lambda (`cub::DeviceSegmentedReduce::Min`, a library fold shape, with row 39's `min(+0,-0)` split inside it) and Excess of Mass's per-node subtree sum (`thrust::transform_reduce`, a device tree reduction whose result decides a BOOLEAN and therefore a CLUSTER -- row 7's class) | **REPLACE, three times.** DEVIATION 1603: one thread per CLUSTER, walking that cluster's contiguous CSR segment ASCENDING through `ftz`/`identical_mul_add`; no atomic, no lane primitive, no block fold, no cross-thread communication. DEVIATION 1604: the segment minimum is a serial ascending scan comparing `weight_order_key`, with `FLT_MAX` written explicitly as the empty-segment identity where theirs leaves index 0 uninitialized. DEVIATION 1605: the Excess-of-Mass loop runs on the host over ONE download, its subtree sum serial and ascending, and the `stability[node] = subtree_stability` write-back kept IN PLACE because the loop runs leaves-to-root and an ancestor reads the updated children. **WHICH ORDER IS PINNED: the condensed tree's `(parent, child)` order, which is a TOTAL order because every node of a tree has exactly one parent, so `child` is unique across the array and no tie is possible inside a segment.** Gates: `check_stabilities_vs_oracle` per cluster bit for bit; arms `HDB_SAB_STABILITY_DESCENDING` and `HDB_SAB_EOM_NO_UPDATE` | construction; gates written, not run |
 | H4 | the dense mutual reachability graph itself | one thread per cell, three loads, one store; no fold | PIN by construction; `check_launch_invariance` holds the cells fixed across two block sizes and across a 37x37 launch versus the same cells of the full one | construction |
 | H5 | `lambda = 1 / distance` (`condense.cuh:149`), on the host | a host divide; IDENTITY_PATHS row 18's class (a host libm difference is a cross-HOST difference) | DEVIATION 1606: `identical_div` (row 49's seam). Their `distance > 0.0` guard and `FLT_MAX` sentinel kept unchanged. Arm `HDB_SAB_LAMBDA_STD_DIV` | construction |
@@ -248,8 +403,35 @@ ids.
 a serial fold in ours** (`impl/hdbscan/detail/select.mojo`, second
 block). Row H6.
 
+**DEVIATION 1614 -- the MST edge ORIENTATION is canonicalized to
+`(min(u, v), max(u, v))` before the dendrogram; theirs is whatever
+Boruvka stored** (`impl/cluster/detail/single_linkage.mojo`, the block
+between `build_sorted_mst` and `build_dendrogram_host`). **OPEN: the
+block and the code are NOT WRITTEN, the gate is RED, and this entry is
+the design, not a description of the tree.** Row H3a and the Status
+section carry the full argument, and it compresses to this.
+`build_dendrogram_host` (`agglomerative.cuh:134-150`) puts `find(src)` in the left slot and
+`find(dst)` in the right, `coo_sort_by_weight` (`sort.h:94-102`) reorders
+rows and reorients none, and `min_edge_per_supervertex`
+(`mst_kernels.cuh:99-156`) sets `src` from a COLOR comparison whose
+colors come from a round upstream tie-breaks with cuRAND. So upstream's
+condensed-tree numbering is not a rule, it is an artifact, and it is not
+reproducible on their own hardware. Ours canonicalizes, which makes the
+dendrogram, the condensed numbering and therefore `labels_`'s cluster
+NUMBERS a pure function of the MST edge SET. It costs `m - 1` integer
+min/max pairs on the host copy this lane already downloads, and it is not
+free of consequence, because the recorded stage `hdbscan.mst.edges`
+changes value. The
+arm is `HDB_SAB_MST_ORIENT_RAW`, which skips the canonicalization and
+MUST FAIL `check_condensed_tree_vs_oracle` on `blobs96` -- the one arm in
+this table whose movement is already measured, since the current red
+gate IS that arm's output. `hierarchy` is NOT touched, because its own
+dendrogram keeps Boruvka's orientation, which it documents as inert for its labels
+and compares as an unordered pair.
+
 (1608 and 1612 were reserved during drafting and released; they are not
-used. 1614-1629 are free.)
+used. 1614 is SPENT on the MST edge orientation, above. 1615-1629 are
+free.)
 
 ## The checks
 
@@ -284,6 +466,7 @@ NOT move.
 | `check_mutual_reachability_ties` | `HDB_SAB_MR_TWO_WAY` | drops `core_dists[col]` from the three-way max, so `mr(a,b)` becomes `max(core[a], alpha*d)` | **MUST FAIL**: `mr` stops being symmetric. Raises if 0 of the `m(m-1)/2` pairs became asymmetric on `dups_lattice48` |
 | `check_mutual_reachability_ties` | `HDB_SAB_HW_MAX` | the three-way max becomes the STDLIB `max` on a PLANTED `(+0.0, -0.0)` core-distance and distance array | **RECORDED with the moved-cell count and the first `bits -> bits` pair.** Row 39: the stdlib max returns the second operand on Apple and the IEEE-2019 maximum on NVIDIA and AMD, so 0 here would be a fact about LLVM folding `maxnum` into a compare-select (the `HW_MAX_CLAMP` lesson), not about the pin |
 | `check_core_distances_vs_oracle` | `HDB_SAB_CORE_KTH_PLUS_ONE` | `core_distances` reads column `min_samples` instead of `min_samples - 1` | **MUST FAIL**: raises if 0 of the 96 core distances moved on `blobs96` |
+| `check_condensed_tree_vs_oracle` | `HDB_SAB_MST_ORIENT_RAW` | skips DEVIATION 1614's canonicalization, so the dendrogram takes its child order from Boruvka's stored orientation again | **MUST FAIL**: raises if the condensed `parents`, `children` and `sizes` all match the oracle on `blobs96`. **THE ONLY ARM IN THIS TABLE WHOSE MOVEMENT IS ALREADY MEASURED**, since the 2026-08-25 run is this arm's output, 30 parents / 34 children / 6 sizes moved. NOT WRITTEN YET, together with the deviation it guards |
 | `check_condensed_tree_vs_oracle` | `HDB_SAB_CONDENSE_DFS` | `bfs_from_node`'s level queue becomes a DEPTH-FIRST stack: same node set, different `next_label` assignment | **MUST FAIL**: raises if the condensed `children` array and the edge count are both unchanged on `blobs96` |
 | `check_stabilities_vs_oracle` | `HDB_SAB_STABILITY_DESCENDING` | the per-cluster fold walks its segment DESCENDING | **RECORDED with the moved count.** A summation order; a fixture whose segments are all one or two terms cannot separate the two directions, and that is a property of the fixture, not of the pin |
 | `check_labels_vs_oracle` (via the selection) | `HDB_SAB_EOM_NO_UPDATE` | drops `stability[node] = subtree_stability` on a deselected node (`select.cuh:227`) | **MUST FAIL**: SWEPT over all six fixtures, raises if the selection flags, the labels and the stabilities are ALL unchanged on every one of them. A per-fixture assertion would be an assertion about the fixture (whether its tree deselects a node at all); the sweep is an assertion about the pin |
@@ -293,9 +476,8 @@ NOT move.
 
 ## WHAT THE ORCHESTRATOR MUST WIRE
 
-**`pixi.toml`.** Two lines, in the file's existing format, to be added in
-the alphabetical block that currently runs from `check-kde` to
-`check-metrics-trust` (around line 978):
+**`pixi.toml`. DONE, verified 2026-09-01 at `pixi.toml:1024-1025`.** The
+two lines asked for are present and read:
 
     check-hdbscan = "mojo run -I . hdbscan/checks/hdbscan_check.mojo"
     hdbscan-main = "mojo run -I . hdbscan/hdbscan_main.mojo"
@@ -304,7 +486,8 @@ FAST is `pixi run check-hdbscan`; IDENTICAL is
 `tools/with_identical_mode.sh pixi run check-hdbscan`. No `*-identity`
 task, by the same design decision `hierarchy/README.md` records.
 
-**`UNWIRED.md`**, NOT wired table, two rows:
+**`UNWIRED.md`. STILL OWED, verified 2026-09-01: `UNWIRED.md` contains no
+`hdbscan` row.** NOT wired table, two rows:
 
     hdbscan/estimator.mojo::hdbscan_fit_host | nothing | bindings/ and a
       python/mojolearn HDBSCAN class; see HAND-OFF below
@@ -312,7 +495,8 @@ task, by the same design decision `hierarchy/README.md` records.
       allow_single_cluster branch | nothing | a fixture with
       allow_single_cluster=True; see WHAT IS OWED
 
-**`IDENTITY_PATHS.md`**: this lane's rows are H1-H8 above and want a
+**`IDENTITY_PATHS.md`. STILL OWED, verified 2026-09-01: that file
+contains no `hdbscan` row.** This lane's rows are H1-H8 above and want a
 ledger row of their own (the next free number after 51). The row text is
 the H2/H3b pair plus DEVIATION 1600's refusal, and it should be written
 from this README rather than beside it, as `hierarchy/README.md`'s
@@ -320,6 +504,9 @@ hand-off item 1 asks.
 
 **Nothing else.** No file outside `hdbscan/` was created or edited by
 this lane, including `hierarchy/` and `neighbors/`, which it depends on.
+`pixi.toml`'s two task lines were added by the orchestrator, not by this
+lane. The one thing this lane cannot do for itself is item 9 under WHAT
+IS OWED, the caveat on the published NVIDIA speed number.
 The two changes those lanes MIGHT want are named under WHAT IS OWED and
 were deliberately not made.
 
@@ -351,15 +538,23 @@ For whoever owns `python/` and `bindings/`. The target is
 
 ## WHAT IS OWED
 
-**The second and third vendor legs. Neither has been run, and neither has
-the first.** Nothing in this directory has been built or executed.
+**The second and third vendor legs, and a first leg that gets past check
+4.** The suite has been run once on Apple (2026-08-25, raised at
+`check_condensed_tree_vs_oracle`) and the SPEED harness has been run once
+on NVIDIA (2026-08-26), so this directory has been built and executed;
+what has never happened is a green correctness run on any column.
 
-1. **Apple M4, both modes.** The first thing owed is the FIRST leg: build
-   `check-hdbscan` under FAST and under
+0. **DEVIATION 1614, which is the thing blocking everything below.**
+   Write the canonicalization and its arm, then re-run. Until it closes,
+   `check_condensed_tree_vs_oracle` raises and the six checks behind it
+   have never executed on any box.
+1. **Apple M4, both modes.** The suite has been run once, on 2026-08-25,
+   and it RAISED at check 4. What is owed is a run that gets past it.
+   Build `check-hdbscan` under FAST and under
    `tools/with_identical_mode.sh`, record every printed line, and fill
    the sabotage table's "what actually moved" column, which is currently
-   empty by design. Until that runs, the "MUST FAIL" claims are
-   predictions.
+   empty for every arm but `HDB_SAB_MST_ORIENT_RAW`. Until that runs, the
+   "MUST FAIL" claims are predictions.
 2. **NVIDIA H100.** The named risks, in the order a card diff would meet
    them: (a) `sqrt` at the distance seam -- NVIDIA's is APPROXIMATE
    (DEVIATION 258) and the path is routed through `identical_sqrt`, but
@@ -414,3 +609,16 @@ the first.** Nothing in this directory has been built or executed.
    `hdbscan/impl/hdbscan/detail/utils.mojo`, and RAFT's original); if
    `core/` ever grows a container-free CSR scan, all of them should call
    it. This lane did not touch `hierarchy/`.
+
+9. **A CAVEAT OWED ON A NUMBER THAT IS NOT IN THIS DIRECTORY.**
+   `bench/results/fast_speed/2026-08-26_040100-nvidia-classical.md`
+   publishes this lane at 4.20x faster than `cuml-gpu` on
+   `blobs96.96x4` (`:25-26`, `:64`, `:122`). It was measured while
+   `check_condensed_tree_vs_oracle` was red, so it is a timing of a
+   pipeline whose condensed tree is unverified past the dendrogram.
+   Either DEVIATION 1614 closes the gate and the number is re-taken on a
+   green build, or that row carries the caveat. This lane cannot edit
+   that file and does not; the item is recorded here so it is not lost.
+   The same caveat is owed wherever that row is aggregated, including
+   `bench/results/BOARD_2026-08-28_three-vendor.md` and
+   `bench/results/SPEED_SUMMARY_2026-08-29.md`.
