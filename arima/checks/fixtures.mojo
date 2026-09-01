@@ -466,3 +466,177 @@ def count_cells_differ_i32(a: List[Int32], b: List[Int32]) -> Int:
         if a[i] != b[i]:
             n += 1
     return n
+
+
+# ---------------------------------------------------------------------------
+# FIT FIXTURES (added 2026-09-01 with `batched_fit`)
+# ---------------------------------------------------------------------------
+#
+# THE EXISTING FIXTURES ARE TOO SHORT FOR A FIT, AND ONLY JUST. `arima_
+# fixture` is built at `N_OBS = 24`, chosen as the smallest shape that
+# reaches every branch of the FILTER. `_arma_least_squares`
+# (`batched_arima.cu:685`) refuses outright when
+#
+#     (q and p_ar >= n_obs - p_ar)   or   p + q + k >= n_obs - r
+#
+# where `p_ar = max(p*s, 2*q*s)` and `r = max(p_ar + q*s, p*s)`. On
+# `arma44` (p = q = 4, s = 1) that is `p_ar = 8`, `r = 12`, and the second
+# clause reads `8 >= 12`: it passes with a margin of FOUR OBSERVATIONS. One
+# more MA lag and every fit fixture would have silently taken the
+# zero-fill arm and every recovery gate would have been measuring a memset.
+# The fit gates therefore run at `FIT_N_OBS`, and the refusal arm is
+# reached DELIBERATELY by `check_x0_refusal_is_reached` with a fixture built
+# short on purpose, rather than being met by accident.
+#
+# 512 is also what PLANTED-PARAMETER RECOVERY needs. The standard error of
+# an AR(1) coefficient is `sqrt((1 - phi^2) / n)`, which at `phi = 0.7` is
+# 0.16 at n = 24 and 0.032 at n = 512. A recovery gate at n = 24 could only
+# assert a tolerance so wide that a broken optimizer would pass it.
+
+comptime FIT_N_OBS = 512
+comptime FIT_SHORT_N_OBS = 10
+
+
+@fieldwise_init
+struct FitOrderCase(Movable, Copyable):
+    """An order for the `fit` gates, and whether the Float64 reference
+    system `build_ls_system_f64` rebuilds is EXACT for it.
+
+    `exact_ls` is true exactly when `q == 0 and Q == 0`, because then the
+    design matrix is an intercept column and lags of `y`, every entry a
+    Float32 value widened without loss, so the reference matrix equals the
+    device's bit for bit. With any MA term the last columns are lags of an
+    AR pre-fit's residual, which the reference computes in Float64 and the
+    device in Float32, and the residual bound has to admit the difference."""
+
+    var order: ARIMAOrder
+    var name: String
+    var exact_ls: Bool
+
+
+def fit_order_table() -> List[FitOrderCase]:
+    """Five orders, chosen for the branches of `estimate_x0` and of the
+    optimizer, NOT for the branches of the filter -- `order_table()` already
+    covers those and the fit gates do not need to re-cover them at 21 times
+    the length.
+
+        f_ar2       (2,0,0)        q = 0, so the least-squares reference is
+                                   EXACT and the residual bound is tight.
+                                   `p_ar = 2`, no AR pre-fit at all
+        f_ar1_k     (1,0,0) k=1    the INTERCEPT COLUMN of ones
+                                   (`batched_arima.cu:736-746`), still exact
+        f_arma11_k  (1,0,1) k=1    `q > 0`: the AR pre-fit, its residual, the
+                                   residual lags, and the second `b_gels`.
+                                   Intercept as well, so the copy-out
+                                   offsets `+k` and `+p+k` both move
+        f_arima111  (1,1,1)        `n_diff = 1`, so `estimate_x0` differences
+                                   before it estimates and `batched_fit`
+                                   optimizes on the differenced series with
+                                   `order.without_diff()`
+        f_sarma     (1,0,1)(1,0,0)[2]  BOTH `_arma_least_squares` calls run:
+                                   the non-seasonal one with `s = 1` and
+                                   `estimate_sigma2 = true`, the seasonal one
+                                   with `s = 2`, `k = 0` and
+                                   `estimate_sigma2 = false`. `n_phi = 3`,
+                                   `n_theta = 1`, `r = 3`, `rd = 3`, so
+                                   `validate_order` accepts it
+
+    EVERY ROW WAS CHECKED AGAINST `validate_order` BEFORE IT WAS WRITTEN,
+    because that is how the seasonal row of `order_table()` was caught
+    (`(1,1,1)(1,1,1)[4]` has `r = 6` and would have been refused). The one
+    that nearly went in here was `(1,0,1)(1,0,1)[4]`: `n_phi = 1 + 4 = 5`,
+    `n_theta = 1 + 4 = 5`, so `r = max(5, 6) = 6 > 5` and it would have
+    raised on the last order of the sweep."""
+    var out = List[FitOrderCase]()
+    out.append(FitOrderCase(ARIMAOrder(2, 0, 0, 0, 0, 0, 0, 0, 0), String("f_ar2"), True))
+    out.append(FitOrderCase(ARIMAOrder(1, 0, 0, 0, 0, 0, 0, 1, 0), String("f_ar1_k"), True))
+    out.append(FitOrderCase(ARIMAOrder(1, 0, 1, 0, 0, 0, 0, 1, 0), String("f_arma11_k"), False))
+    out.append(FitOrderCase(ARIMAOrder(1, 1, 1, 0, 0, 0, 0, 0, 0), String("f_arima111"), False))
+    out.append(FitOrderCase(ARIMAOrder(1, 0, 1, 1, 0, 0, 2, 0, 0), String("f_sarma"), False))
+    return out^
+
+
+# ---------------------------------------------------------------------------
+# PLANTED-PARAMETER RECOVERY
+# ---------------------------------------------------------------------------
+#
+# `arima/SABOTAGES.md` opens by saying this lane's expected values are OUR
+# OWN TALLY. A fit can do better: every series in `tsa/checks/fixtures.mojo`
+# is generated FROM KNOWN COEFFICIENTS, so the right answer is known before
+# the fit runs and does not come from us. A fit that recovers the planted
+# `phi` to within a few standard errors is right for a reason that has
+# nothing to do with how any of it is spelled.
+#
+# THE TOLERANCES ARE STATISTICS, NOT SLACK, and each is written with its
+# standard error so a later reader can see whether it was chosen or fitted:
+#
+#     AR(1),   phi = 0.7    SE = sqrt((1 - phi^2)/n)          = 0.032
+#     MA(1),   theta = 0.5  SE ~ sqrt((1 - theta^2)/n)        = 0.038
+#     ARMA(1,1) phi = 0.6, theta = 0.3: the two estimates are strongly
+#                           correlated and the SEs are larger than the pure
+#                           cases; 0.25 is about six of them
+#
+# The tolerance below each is at least four SE, so a correct fit passes with
+# room and a fit that has, say, lost a sign or dropped a term does not.
+
+
+@fieldwise_init
+struct PlantedCase(Movable, Copyable):
+    """Six series generated from ONE known parameter pair, and that pair."""
+
+    var y: List[Float32]
+    var batch_size: Int
+    var n_obs: Int
+    var order: ARIMAOrder
+    var name: String
+    var phi: Float64
+    var theta: Float64
+    var tol: Float64
+
+
+def planted_cases(n_obs: Int, salt: Int) -> List[PlantedCase]:
+    """Three recovery fixtures. Each is SIX series from the same planted
+    coefficients with different innovation seeds, so the gate can require
+    the recovery on every one and not on a lucky one."""
+    var out = List[PlantedCase]()
+    var batch = 6
+
+    var y_ar = List[Float32]()
+    for b in range(batch):
+        var s = to_f32(ar1_series(n_obs, 0.7, 1.0, 100 + b, salt))
+        for t in range(n_obs):
+            y_ar.append(s[t])
+    out.append(
+        PlantedCase(
+            y=y_ar^, batch_size=batch, n_obs=n_obs,
+            order=ARIMAOrder(1, 0, 0, 0, 0, 0, 0, 0, 0),
+            name=String("planted_ar1"), phi=0.7, theta=0.0, tol=0.15,
+        )
+    )
+
+    var y_ma = List[Float32]()
+    for b in range(batch):
+        var s = to_f32(ma1_series(n_obs, 0.5, 1.0, 200 + b, salt))
+        for t in range(n_obs):
+            y_ma.append(s[t])
+    out.append(
+        PlantedCase(
+            y=y_ma^, batch_size=batch, n_obs=n_obs,
+            order=ARIMAOrder(0, 0, 1, 0, 0, 0, 0, 0, 0),
+            name=String("planted_ma1"), phi=0.0, theta=0.5, tol=0.20,
+        )
+    )
+
+    var y_arma = List[Float32]()
+    for b in range(batch):
+        var s = to_f32(arma11_series(n_obs, 0.6, 0.3, 1.0, 300 + b, salt))
+        for t in range(n_obs):
+            y_arma.append(s[t])
+    out.append(
+        PlantedCase(
+            y=y_arma^, batch_size=batch, n_obs=n_obs,
+            order=ARIMAOrder(1, 0, 1, 0, 0, 0, 0, 0, 0),
+            name=String("planted_arma11"), phi=0.6, theta=0.3, tol=0.25,
+        )
+    )
+    return out^

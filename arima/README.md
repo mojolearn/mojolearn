@@ -510,16 +510,23 @@ of `e^x`, but for small `|x|` the subtraction `e^x - 1` is about `x`, so the
 numerator's relative error is roughly `ulp(1)/|x|`. At `|x| ~ 0.03` that is
 2e-6, which is what the gate reports.
 
-**FINDING: only HALF of that spelling is on the ported path, and it is the
-half that cannot be fixed here.** `batched_jones_transform` is called from
-exactly one place, `batched_arima.mojo:111`, with `is_inv = false`. Nothing
-in this lane ever calls the inverse: `two_atanh` is reached only by
+**FINDING (2026-08-24): only HALF of that spelling was on the ported path.**
+`batched_jones_transform` was called from exactly one place,
+`batched_arima.mojo:111`, with `is_inv = false`, and nothing in this lane
+called the inverse: `two_atanh` was reached only by
 `check_jones_device_equals_oracle`. The inverse transform belongs to the
-optimizer, which maps fitted parameters back to unconstrained coordinates,
-and the optimizer is NOT PORTED. So:
+optimizer, which maps fitted parameters back to unconstrained coordinates.
 
     tanh half  (identical_exp)   ON the ported path, runs every fit
     atanh half (identical_log)   OFF it, gate-only, optimizer's rung
+
+**SUPERSEDED 2026-09-01: THE OPTIMIZER HAS LANDED AND BOTH HALVES ARE ON THE
+PATH.** `batched_fit` step 2 is `x0 = inverse(estimate_x0's parameters)`
+(`arima.pyx:940`). The paragraph above is left standing rather than deleted
+because the decision it justified was made on it, and because the sentence
+"the optimizer is NOT PORTED" is exactly the kind of sentence this tree gets
+wrong by leaving in place. The decision is REVISITED below, under "DEVIATION
+675, SECOND DECISION".
 
 **The options, and what each costs.**
 
@@ -531,7 +538,15 @@ and the optimizer is NOT PORTED. So:
   C. Fix the tanh half with `expm1`: `tanh(x/2) = expm1(x)/(expm1(x)+2)`.
      `identical_expm1` DOES NOT EXIST and `checks/numerics.mojo` is not
      this lane's file, so this is a HAND-OFF to the numerics lane, not
-     something that can be done here.
+     something that can be done here. **THAT SENTENCE IS OUT OF DATE AS OF
+     2026-09-01 and is corrected rather than deleted, because the
+     correction is the finding: `identical_tanh` NOW EXISTS
+     (`checks/numerics.mojo`, DEVIATION 821, `portable_tanhf`) and landed
+     after this section was written. C's stated blocker is gone. That does
+     not make C right -- it moves every `arima.jones.*` stage on every card
+     and retires the three-vendor baseline at `221aa141` -- but the
+     hand-off in OWED item 12 is no longer "needs a new primitive", it is
+     "needs the measurement in OWED item 5 first".**
   D. Refuse small `|x|`. Not sensible: small coefficients are the normal
      case, not an edge.
 
@@ -568,7 +583,13 @@ reports the end-to-end cost of DEVIATION 675 directly.
     Float32 error (1.5e-7 undifferenced, 1.8e-3 differenced), ACCEPT
     permanently and delete this section's OWED entry. If it is comparable or
     larger, raise the `identical_expm1` hand-off with the numerics lane and
-    spend DEVIATION 678 on option C.
+    spend a deviation number on option C. ~~DEVIATION 678~~ **CORRECTED
+    2026-09-01: 678 IS NOW TAKEN** by the batched least squares that
+    replaces the closed `cublasgelsBatched` (see "THE FIT" below), because
+    it was reserved here and never spent. Option C, if item 5's measurement
+    ever calls for it, takes 688. And its stated blocker is gone anyway:
+    `identical_tanh` exists now, so the hand-off is no longer
+    `identical_expm1`.
 
 ## DEVIATION 676: the undefined predictions are the canonical NaN, by constant
 
@@ -864,6 +885,435 @@ is worth keeping.
     now cover it; check when (b) is re-run.
 12. **Hand-off: `identical_expm1`** to whoever owns
     `checks/numerics.mojo`, needed only if item 5's measurement says
-    DEVIATION 675's tanh half matters. And `identical_log1p` for the atanh
+    DEVIATION 675's tanh half matters. ~~And `identical_log1p` for the atanh
     half the day the optimizer is ported, not before: that half is off the
-    ported path today.
+    ported path today.~~ **BOTH CLAUSES REWRITTEN 2026-09-01.** The
+    optimizer has landed, so the atanh half IS on the ported path; the
+    `identical_log1p` option was reconsidered on that basis and is STILL
+    REFUSED, for a quantitative reason rather than a reachability one (see
+    "DEVIATION 675, SECOND DECISION" below and the gate
+    `check_jones_inverse_is_below_the_fd_step`, which carries the rule that
+    would overturn it). And `identical_expm1` is no longer the hand-off C
+    needs: `identical_tanh` already exists.
+
+13. **THE WHOLE `fit` HALF IS WRITTEN AND UNRUN.** Nine new files or file
+    sections, thirteen gates and six sabotage arms, none of them compiled,
+    run or applied. See "THE FIT, 2026-09-01" below for exactly what is
+    owed and in what order.
+
+---
+
+# THE FIT, 2026-09-01
+
+## Status: WRITTEN AND UNRUN
+
+    the fit half builds                        NOT ATTEMPTED
+    check-arima-fit, IDENTICAL                 NEVER RUN
+    check-arima-fit, FAST                      NEVER RUN
+    sabotage arms (j) through (o)              0 of 6 applied
+    a second vendor                            NO
+    a third vendor                             NO
+
+**Nothing below this line has been compiled.** Read every claim in this
+section as a design and an intention, not as a result. The status block at
+the top of this file is about the FILTER and is unaffected: the fit uses a
+separate driver (`arima/checks/fit_check.mojo`) and a separate card
+(`arima.fit.identical.card`) precisely so that adding a capability retires
+nothing that has been earned. The 139-line three-vendor
+`arima.identical.card` at commit `221aa141` is untouched by design, and
+whoever compiles this must confirm that by diffing it, not by assuming it.
+
+## What was missing, and what closed it
+
+The lane had a bit-identical Kalman filter, log-likelihood, `predict`, Jones
+transform and finite-difference gradient on three vendors, and no way to turn
+any of that into a fitted model. Two pieces were missing and both were
+blocked on a closed vendor library rather than on anything hard:
+
+    estimate_x0 and its chain    cuBLAS gelsBatched is CLOSED
+    the optimizer                cuML has NO L-BFGS here; it calls scipy
+
+**THE GOVERNING RULE, set by the project owner on 2026-09-01, is that a
+closed vendor library or a third-party dependency is a reason to WRITE THE
+ROUTINE, never a reason to refuse the capability.** This tree already
+hand-wrote LU, `potrf` and `trsm` for exactly that reason. Both pieces are
+now written out.
+
+| what | where | deviation |
+|---|---|---|
+| batched overdetermined least squares | `arima/impl/linalg/batched/least_squares.mojo` | 678 |
+| `estimate_x0` / `_start_params` / `_arma_least_squares` / `test_invparams` | `arima/impl/arima/estimate_x0.mojo` | -- |
+| the L-BFGS decision rules, per series | `arima/impl/arima/lbfgs_host.mojo` | 679 |
+| the batched optimizer and `batched_fit` | `arima/impl/arima/batched_fit.mojo` | 679, 687 |
+| the Float64 and bitwise references | `arima/checks/fit_oracle.mojo` | -- |
+| thirteen gates | `arima/checks/fit_check.mojo` | -- |
+| the fit fixtures | `arima/checks/fixtures.mojo` (appended) | -- |
+| `check_finite` on the three loglike entry points | `arima/impl/arima/batched_arima.mojo` | -- |
+
+DEVIATION numbers 678, 679 and 687 were checked against a repo-wide grep for
+both the singular and the plural spelling, which is the collision this
+file's own hand-off warns about; 679 and 687 were free and 678 was named but
+unspent (this file reserved it for DEVIATION 675 option C, which is not
+being taken).
+
+## DEVIATION 678: the least squares, and why QR and not the normal equations
+
+Full reasoning is in `arima/impl/linalg/batched/least_squares.mojo`'s
+banner. The short form, because it is the one engineering objection that
+survives the governing rule and it deserves an answer rather than a
+dismissal:
+
+**The objection is real.** Forming `A'A` squares the condition number, and a
+design matrix of LAGS OF ONE SERIES is near-collinear exactly when the
+series has a root near the unit circle -- which is the regime `ar2_unit`
+exists for and the regime an ARIMA user is most often in. Float32 carries
+7.2 decimal digits and `1/eps = 8.4e6`; a design with `kappa(A) = 3e3`,
+unremarkable for lagged columns, gives `kappa(A'A) = 9e6`, past the Float32
+limit, and a Cholesky can meet a non-positive pivot on a problem that is not
+remotely singular.
+
+**So the answer is QR, and there are two independent reasons for it.** The
+accuracy one above, and the design one: `cublasgelsBatched` is itself a
+QR-based solver, so porting the DESIGN means QR. `assume-our-code-is-broken`
+says theirs is right about design; substituting a normal-equations route
+because this tree happens to own one (`cholesky/potrf_lower` + `trsm`, and
+`glm/impl/linalg/detail/lstsq.mojo::lstsq_eig`) would be the "improvement"
+this repository bans. Both were assessed:
+
+    cholesky/potrf_lower + trsm    a normal-equations route. Squares kappa.
+                                   Also needs the Gram formed first, which
+                                   is the expensive half anyway
+    glm lstsq_eig                  ALSO a normal-equations route -- its own
+                                   header says "Forming A^T A SQUARES the
+                                   condition number" -- and it is NOT
+                                   BATCHED: a multi-kernel pipeline over
+                                   gemm_tn, a Jacobi eigensolver and a MAX
+                                   gemv, for a 10 x 10 problem, B times over
+    decomposition's Jacobi         an eigensolver, not a least squares. The
+                                   only thing worth taking from lstsq_eig is
+                                   its DivideByNonZero idea, and the QR's
+                                   analogue is the diagonal rank test
+
+**And the cost argument does not survive contact with where the time goes.**
+QR is about four times the Gram's work at these shapes, on a step that runs
+ONCE per fit, against the hundreds of batched Kalman passes the optimizer
+then spends. `n` is at most 17 by construction and at most 10 once
+`validate_order`'s `r <= 5` has run.
+
+`check_qr_beats_normal_equations_on_ill_conditioning` MEASURES this rather
+than arguing it: both Float32 routes solve a unit-root lag system and both
+are compared against the Float64 answer. If the normal equations ever win,
+DEVIATION 678 is wrong and should be rewritten, not the gate.
+
+**What is chosen and therefore ours to gate** (the DEVIATION 674 pattern):
+the reflector sign `s = -sign(a_jj)`, every fold order, and the rank test.
+A rank-deficient system sets `info` and the caller takes cuML's OWN
+degenerate arm (`ar = ma = mu = 0`, `sigma2 = 1`, `batched_arima.cu:687-697`)
+rather than returning the garbage theirs returns with
+`devInfoArray = nullptr`. `info` is a recorded decision stage.
+
+`LS_RANK_TOL = 1e-5` is DERIVED, not observed, and the compile slot must
+replace it with what `check_x0_solves_the_normal_equations` measures.
+
+## DEVIATION 679: the optimizer, and the recommendation behind it
+
+**THE QUESTION.** `glm/impl/glm/qn/qn_solvers.mojo::min_lbfgs` is a
+DIRECT-CALL solver for ONE problem: it calls the objective itself, from
+inside `ls_backtrack`'s inner loop. cuML's ARIMA driver is
+REVERSE-COMMUNICATION -- one host state machine per series, ONE BATCHED
+device evaluation per candidate point -- which is the entire reason
+`batched_loglike_grad` exists. Restructure the one, or run the other B
+times?
+
+**THE RECOMMENDATION AND WHAT WAS BUILT: (i), one batched evaluation serving
+B optimizers. But NOT by restructuring `min_lbfgs`.** Three obstacles, and
+the third is decisive:
+
+  1. Mojo has no generator, so a reverse-communication `min_lbfgs` cannot be
+     a yield. It would have to become an explicit state machine with a saved
+     program counter across the line-search inner loop: a rewrite of a
+     shared file, not a restructure. `glm/` was under active change by
+     another lane on the day this was written (OWL-QN landed in
+     `qn_solvers.mojo` and `qn_linesearch.mojo` that same session).
+  2. `min_lbfgs`'s working set is DEVICE buffers with pinned block
+     reductions, sized for `n = (D + fit_intercept) * C` in the millions.
+     ARIMA's `n` is `p + q + P + Q + k + 1`, at most about twenty. Every
+     `dot`, `axpy` and `nrm2` would be a kernel launch over twenty floats.
+  3. **THE CONCRETE OBSTACLE.** `min_lbfgs` is typed on a CONCRETE STRUCT,
+     `mut f: GLMWithData`, not on a trait. There is no interface for ARIMA
+     to implement. Presenting the ARIMA objective to it means adding a trait
+     to `glm/` and re-typing every caller, which is a far larger patch than
+     the extraction described below.
+
+**Option (ii), running the existing solver B times, is rejected** because it
+evaluates the Kalman filter on a batch of ONE, B times over, and throws away
+the batching the whole port is built on. It is not wrong; it is the wrong
+shape.
+
+**What was built instead.** `arima/impl/arima/batched_fit.mojo::batched_min_lbfgs`
+is a host-side driver in which the OUTER loop is the L-BFGS iteration and
+the LINE SEARCH is also a shared loop: at each line-search step every
+still-searching series proposes a candidate at its OWN step length, all B
+candidates go into one `d_x`, and ONE `batched_loglike_grad` evaluates them
+together. This is cuML's split exactly -- `batched_lbfgs.py` runs the state
+machine in Python and evaluates the batch on the GPU -- and it is a
+STRONGER identity story than `glm`'s, not a weaker one: there is no device
+reduction anywhere in the solver, so the branch sequence, and therefore the
+iteration count, is a function of the log-likelihood bits alone.
+
+**A series that has finished still proposes its current `x`, and its result
+is discarded.** That is deliberate: it keeps the batch composition and the
+launch geometry a function of the fixture ALONE, never of how many series
+have converged, so a fit's identity claim is true by construction rather
+than resting on `check_kalman_launch_invariant`'s batch-composition arm.
+Sabotage arm (o) is the shortcut somebody will propose, written down so the
+answer is a measurement.
+
+**WHAT IS NOT CLAIMED.** cuML's optimizer is scipy's L-BFGS-B -- a
+More-Thuente line search, a different history update, different stopping
+constants. Ours is cuML's OWN L-BFGS, already ported in `glm/`. The ITERATE
+SEQUENCE IS NOT cuML's and neither is the iteration count. What is claimed
+is a converged maximum-likelihood fit this repository can reproduce bit for
+bit on every vendor and can gate against planted coefficients.
+
+### THE `glm/` PATCH, specified rather than applied
+
+`arima/impl/arima/lbfgs_host.mojo` RE-SPELLS two decision rules `glm/`
+already owns, because glm's take device buffers and cannot be called per
+series. A duplicated rule drifts, so `check_lbfgs_rules_match_glm` sweeps
+both spellings over a grid and asserts they agree bitwise. That is a gate,
+not a promise, and it is what makes the duplication survivable in the
+meantime.
+
+The patch below would delete the duplication. **It moves no bit** -- each
+part is an extraction with the same expression, called from the same place
+-- and each part must be verified with `check-glm` (or the qn checks) green
+and the `qn.*` card unchanged before it is believed.
+
+    P1  glm/impl/glm/qn/qn_util.mojo
+        Generalize `check_convergence` to carry a history base offset:
+
+            def check_convergence_at(param, k, fx, gnorm,
+                                     mut fx_hist, hist_base) -> Bool:
+                <the existing body, with fx_hist[hist_base + k % param.past]>
+
+            def check_convergence(param, k, fx, gnorm, mut fx_hist) -> Bool:
+                return check_convergence_at(param, k, fx, gnorm, fx_hist, 0)
+
+        arima then imports `check_convergence_at` and deletes its copy.
+
+    P2  glm/impl/glm/qn/qn_linesearch.mojo
+        Extract the Armijo test out of `ls_success`:
+
+            @always_inline
+            def armijo_ok(fx: Float32, fx_init: Float32,
+                          step: Float32, dg_test: Float32) -> Bool:
+                return not (fx > identical_mul_add(step, dg_test, fx_init))
+
+        and make `ls_success`'s first line `if not armijo_ok(...):
+        width = param.ls_dec` with the rest unchanged. arima imports
+        `armijo_ok` and deletes its copy.
+
+    P3  glm/impl/glm/qn/qn_solvers.mojo
+        Split the VERDICT out of `update_and_check`, leaving the buffer
+        restore in the caller:
+
+            def lbfgs_verdict(param, iter, lsret, fx, fxp, gnorm,
+                              mut fx_hist, hist_base,
+                              mut outcode, mut restore) -> Bool
+
+        `update_and_check` becomes: call `lbfgs_verdict`, then
+        `if restore: fx = fxp; copy_vec(ctx, x, xp); copy_vec(ctx, grad, gradp)`.
+        arima imports `lbfgs_verdict` and deletes its copy.
+
+None of the three changes an expression. If any of them moves a `qn.*` card
+tag, the extraction was not faithful and should be reverted rather than
+argued about.
+
+## DEVIATION 687: the finite-difference step is 2^-10
+
+cuML uses `h = 1e-8` in float64, which is the textbook forward-difference
+optimum there (`sqrt(eps_f64) = 1.49e-8`). **In Float32 `1e-8` is BELOW eps
+(`1.19e-7`), so `x + h == x` for every `|x| > 0.1` and the gradient is
+exactly zero.** DEVIATION 670 breaks the inherited value and there is no
+upstream answer to take.
+
+**This lane's gate had quietly been using `h = 1e-3` since 2026-08-23**
+(`arima/checks/arima_check.mojo:567` and `:630`) and nothing recorded that
+as a decision, because the gate only ever asked whether the device equalled
+the oracle and never whether the gradient was ACCURATE. A `fit` makes it
+load bearing, so it gets a number.
+
+    ARIMA_FIT_H = 2^-10 = 0.0009765625
+
+**The derivation.** Forward differences carry truncation `~ (h/2)|f''|` and
+roundoff `~ 2*delta_f/h`. The objective is `-loglike/(n_obs - 1)`, O(1), and
+`check_kalman_matches_float64` MEASURED the log-likelihood's Float32 gap at
+4.7e-8 to 1.5e-7 relative with `n_diff = 0` and up to 1.8e-3 with
+`n_diff > 0`. With `delta_f ~ 1e-7` and `|f''| ~ 1` the optimum is near
+`sqrt(2e-7) = 4.5e-4`; the error is flat around it and at `9.8e-4` the two
+terms are 2e-4 and 4.9e-4.
+
+**Why a power of two, which is the part that is not in a textbook.** The
+gradient is `(f(x+h) - f(x)) / h`, and a divide by a power of two is EXACT
+in IEEE-754. Choosing `1e-3`, which is not representable, puts a rounding on
+every gradient cell for nothing. `arima/SEAMS.tsv`'s `gradient` row is
+amended to say so, and to record that the GATE still passes `1e-3` and
+therefore differs from the fit path by exactly one rounding per cell.
+
+**What gates it.** `check_grad_matches_float64` compares the Float32 device
+gradient against a FLOAT64 CENTRAL DIFFERENCE taken through a Float64 Jones
+transform, sweeps `h` over `2^-6 ... 2^-26`, prints the whole error curve,
+asserts the shipped step is within a factor of three of the measured best,
+and asserts that cuML's `1e-8` collapses to an EXACTLY ZERO gradient on
+cells whose true gradient exceeds 1e-3. The last one is the mechanism rather
+than a ratio, which is what makes 687 a finding and not a preference.
+
+### The convergence tolerance is not scipy's either, and cannot be
+
+Easy to carry `pgtol = 1e-5` across by reflex. With `h = 2^-10` and an
+objective whose own Float32 noise floor is `~1e-7`, the gradient carries
+roughly `1e-3` of absolute error on an O(1) objective. **`pgtol = 1e-5` is
+two orders of magnitude below the gradient's own noise**: it can never be
+satisfied, so a solver asked for it runs to `maxiter` on every series and
+reports failure on a converged fit. scipy's other test, `factr * eps_mach =
+2.2e-13`, is equally unreachable.
+
+`arima_fit_params` therefore sets `epsilon = 1e-3` (the noise floor) and
+`delta = 1e-6` with `past = 10` (about sixteen times the Float32 resolution
+of an O(1) objective). `m = 10`, `maxls = 20` and `maxiter = 1000` ARE
+theirs. Both new constants are DERIVED, not observed, and
+`check_fit_is_a_minimizer` prints the Float64 gradient norm actually
+achieved so a compile slot can replace them, exactly as the four bounds in
+the table near the top of this file are owed.
+
+## DEVIATION 675, SECOND DECISION: `identical_log1p` is STILL not taken
+
+`fit` calls the INVERSE transform (`batched_fit` step 2), so the atanh half
+is on the ported path and the 2026-08-24 decision has to be re-made. It is
+re-made the same way, for a different and better reason.
+
+  * The measured 2.73e-6 is a RELATIVE error at a coordinate of magnitude
+    about 0.03, so it is an ABSOLUTE error of about 8e-8 in `x`. The
+    cancellation is inside `log(1 + small)`, whose output error is bounded
+    by about one ulp of 1.0 HOWEVER SMALL the argument gets, so the absolute
+    error does not grow as the coordinate shrinks.
+  * `x` is the coordinate the optimizer moves, by O(1) per fit, and the
+    finest thing it can resolve there is `ARIMA_FIT_H = 2^-10 = 9.8e-4`.
+    The inverse transform's error is four orders of magnitude below the step
+    used to differentiate the objective.
+  * `identical_log1p` fixes only the INVERSE half. The FORWARD half's
+    `(e^x - 1)` cancellation costs about the same, one ulp of 1.0 expressed
+    in `x`, and `log1p` does not touch it. Option B fixes one of two
+    comparable halves.
+
+Taking B would move every `arima.jones.inv.*` stage on every card and retire
+the three-vendor baseline at `221aa141` for accuracy a thousand times below
+the step size.
+
+**THE DECISION RULE, fixed in advance and gated rather than argued:** if the
+inverse half's absolute error in `x` ever exceeds `ARIMA_FIT_H / 100`, land
+`identical_log1p`. `check_jones_inverse_is_below_the_fd_step` asserts that
+bound on every run, and it MEASURES both halves side by side and prints
+them, because an earlier draft of this section asserted a dominance it had
+not measured.
+
+## Commands
+
+Three new ones. The two existing tasks are unchanged and their card is
+unchanged.
+
+    tools/with_build_lock.sh     pixi run mojo run -I . arima/checks/fit_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -I . arima/checks/fit_check.mojo
+    MOJOLEARN_IDENTITY_TRACE=/tmp/arima_fit.card tools/with_identical_mode.sh \
+        pixi run mojo run -I . arima/checks/fit_check.mojo
+
+A pixi task line is OWED and is a hand-off; `pixi.toml` is shared and this
+lane does not edit it:
+
+    check-arima-fit = "mojo run -I . arima/checks/fit_check.mojo"
+
+## THE ORDER TO WORK THIS IN
+
+The whole half is unrun, so the order matters. Do not skip to the fit gates.
+
+  1. **Build it.** `pixi run mojo build -I . arima/checks/fit_check.mojo`
+     or the run above. Expect signature and ownership errors; the Mojo
+     traps this tree records (`mojo-buffer-freed-at-last-use`,
+     `mojo-string-not-indexable`) were all written for, but nothing here has
+     seen a compiler.
+  2. **Confirm the FILTER card did not move.** Run `arima-card` and
+     `check-arima` and diff the resulting `arima.identical.card` against the
+     139-line one from `221aa141`. It must be byte-identical. If it is not,
+     something in `batched_arima.mojo`'s `check_finite` edit changed a bit
+     and that has to be found before anything else is believed.
+  3. **The cheap gates, in the order `main()` runs them.** The QR ones need
+     no fit at all and will find most compile-level mistakes.
+  4. **`check_grad_matches_float64` and the DEVIATION 675 gate.** These are
+     the two that could overturn a decision written above. If the h sweep's
+     minimum is not near `2^-10`, change the step; if the inverse half is
+     above `h/100`, land `identical_log1p`. Both rules are recorded in
+     advance so the answer is not chosen after seeing it.
+  5. **The fit gates.** Expect these to be slow and expect the first run to
+     fail on tolerances rather than on correctness. Replace the DERIVED
+     bounds with what they print, in the same commit, and say in the message
+     that they were derived before.
+  6. **The six sabotage arms.** `SABOTAGES.md` (j) through (o). Until these
+     run, every gate above is a green check nobody has shown can go red, and
+     this lane's own SABOTAGES.md opens by saying that is worth nothing.
+     Two of them, (j) and (m), are likely REACH FAILURES and the file says
+     what to do about that rather than what to conclude from it.
+  7. **A second and third vendor**, on the fit card. The filter's three-vendor
+     row is not evidence for the fit; the fit card starts empty.
+
+## What is claimable when this lands, and what is NOT
+
+**Claimable, once step 1 through 6 are green:**
+
+  * mojolearn has an ARIMA `fit`: maximum-likelihood estimation of a batched
+    ARIMA model, from a starting point estimated by least squares, on the
+    GPU.
+  * It takes NO scipy dependency, where cuML's does. The whole optimizer is
+    ours and the wheel still depends on numpy alone.
+  * The least squares underneath is ours too, where cuML's is closed cuBLAS,
+    and it is a QR rather than a normal-equations route for a measured
+    reason.
+  * The fitted coefficients recover planted parameters within four standard
+    errors on AR(1), MA(1) and ARMA(1,1), and the returned point passes a
+    Float64 stationarity test and beats eight perturbations of itself.
+  * The whole fit is invariant to batch composition, bitwise, including the
+    iteration count.
+
+**NOT claimable, and each of these has been written into a gate's message or
+a file banner so it cannot quietly become a claim:**
+
+  * **NOT bit-identical across vendors.** No vendor has run this. The
+    filter's three-vendor result at `221aa141` is about the filter.
+  * **NOT the same fit as cuML's.** DEVIATION 679: the optimizer is cuML's
+    own L-BFGS, not the scipy L-BFGS-B their ARIMA actually calls. Different
+    line search, different history update, different stopping constants.
+    Iterates and iteration counts differ, not just last bits.
+  * **NOT faster than anything.** No timing was taken, at any point, for any
+    reason. The optimizer's inner loop reallocates a full `KalmanWorkspace`
+    on every evaluation, which is inherited from `batched_loglike`'s shape
+    and is a real throughput hand-off, unmeasured.
+  * **NOT `method="css"` or `"css-ml"`**, not exogenous regressors, not
+    caller-supplied `start_params`, not confidence intervals, not missing
+    observations. All refused by name.
+  * **NO PYTHON DOOR.** `batched_fit` is a Mojo entry point. The binding
+    module, its build script, `python/mojolearn/_arima_impl.py` and a wheel
+    packaging row are all shared files this lane does not own, and shipping
+    an ungated `ARIMA` class would be worse than shipping none.
+  * **The gates themselves are unvalidated.** Six sabotage arms are written
+    and none is applied.
+
+## A hand-off this lane cannot make itself
+
+`python/mojolearn/_tsa_impl.py` lines 20-31 say, in the shipped package's
+own reference text, that `arima/` "does not port `estimate_x0`,
+`_start_params`, `_arma_least_squares`, nor `arima.pyx`'s batched L-BFGS",
+that "there is no `fit`", and that offering a class named `ARIMA` whose
+`fit` did not exist would be worse than offering none. **The first two
+clauses become false the day this compiles.** That file belongs to the `tsa`
+lane and is not edited here; the correction is owed at the same time the
+Python door lands, and until the door lands the third clause is still right.

@@ -10,10 +10,19 @@ PORT OF `cuml/cpp/src/arima/batched_arima.cu` at cuML 265b9da6 (v26.08.00):
 
 NOT PORTED, refused by name: `method == CSS` (`conditional_sum_of_squares`,
 `sum_of_squares_kernel` :270-391; only `MLE` is offered, `truncate` must
-be 0), `information_criterion` (:592-625), `estimate_x0` / `_start_params`
-/ `_arma_least_squares` (:627-1010: cuBLAS `b_gels`, `b_lagged_mat`),
-`detect_missing` (NaN is refused, not detected), exogenous regressors,
-`level > 0` (confidence intervals). See `arima/NOT_IMPLEMENTED.tsv`.
+be 0), `information_criterion` (:592-625), `detect_missing` (NaN is
+refused, not detected), exogenous regressors, `level > 0` (confidence
+intervals). See `arima/NOT_IMPLEMENTED.tsv`.
+
+CORRECTED 2026-09-01. This header used to list `estimate_x0` /
+`_start_params` / `_arma_least_squares` (`:627-1010`) as unported because
+they reach cuBLAS `b_gels`, and to say "there is no `fit`". Both sentences
+are now false. That chain is ported in `arima/impl/arima/estimate_x0.mojo`,
+the closed `b_gels` is written out as a Householder QR (DEVIATION 678,
+`arima/impl/linalg/batched/least_squares.mojo`), the optimizer is
+DEVIATION 679 in `arima/impl/arima/batched_fit.mojo`, and `batched_fit` is
+the public entry point. A closed vendor library is a reason to write the
+routine, not a reason to refuse the capability.
 
 PREDICT (`:86-267`) with `simple_differencing` (`pre_diff`), their default:
 the series is differenced (`prepare_data`), the filter runs on the
@@ -102,11 +111,23 @@ def batched_loglike(
     trans: Bool,
     fc_steps: Int = 0,
     kalman_tpb: Int = 32,
+    check_finite: Bool = True,
 ) raises -> LoglikeResult:
     """`:393-469`, the `MLE` arm with `host_loglike = true`: the Jones
     transform when `trans`, the Kalman filter, the host copy of the
-    log-likelihood. `method = CSS` is refused by name by the caller."""
-    _refuse_non_finite(ctx, d_y, batch_size * n_obs, "y")
+    log-likelihood. `method = CSS` is refused by name by the caller.
+
+    `check_finite` is OURS and defaults to theirs' behaviour (see
+    `_refuse_non_finite`). It exists for ONE caller,
+    `batched_fit`/`eval_batch`, which checks the series once before the
+    optimizer starts and then evaluates this function `(N + 1)` times per
+    candidate point, hundreds of times over, on a buffer nothing has
+    written in between. The check is a full device-to-host copy and a
+    synchronize; leaving it on inside the optimizer's inner loop is the
+    dominant cost of a fit and answers a question whose answer cannot have
+    changed. No other caller passes it and no bit moves either way."""
+    if check_finite:
+        _refuse_non_finite(ctx, d_y, batch_size * n_obs, "y")
     validate_order(order)
     var t_params = ARIMAParams(ctx, order, batch_size)
     if trans:
@@ -171,12 +192,15 @@ def batched_loglike_packed(
     mut d_params: DeviceBuffer[DType.float32],
     trans: Bool,
     mut params: ARIMAParams,
+    check_finite: Bool = True,
 ) raises -> LoglikeResult:
     """`:471-513`: unpack the packed vector into `params`, then the overload
     above (`fc_steps = 0`). `params` is the caller's scratch (their
     `arima_mem.params_*`)."""
     unpack(ctx, params, order, batch_size, d_params)
-    return batched_loglike(ctx, d_y, batch_size, n_obs, order, params, trans, 0)
+    return batched_loglike(
+        ctx, d_y, batch_size, n_obs, order, params, trans, 0, 32, check_finite
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -398,6 +422,7 @@ def batched_loglike_grad(
     trans: Bool,
     mut params: ARIMAParams,
     mut d_x_pert: DeviceBuffer[DType.float32],
+    check_finite: Bool = True,
 ) raises -> List[Float32]:
     """`:515-591`. Returns the base log-likelihood (host) beside the device
     gradient, because the L-BFGS caller needs both and theirs evaluates the
@@ -414,7 +439,9 @@ def batched_loglike_grad(
     `check_grad_reset_preserves_negative_zero`."""
     var N = order.complexity()
     ctx.enqueue_copy(dst_buf=d_x_pert.create_sub_buffer[DType.float32](0, N * batch_size), src_buf=d_x.create_sub_buffer[DType.float32](0, N * batch_size))
-    var base = batched_loglike_packed(ctx, d_y, batch_size, n_obs, order, d_x, trans, params)
+    var base = batched_loglike_packed(
+        ctx, d_y, batch_size, n_obs, order, d_x, trans, params, check_finite
+    )
     comptime TPB = 128
     var grid = (batch_size + TPB - 1) // TPB
     for i in range(N):
@@ -422,7 +449,9 @@ def batched_loglike_grad(
             d_x_pert.unsafe_ptr(), d_x.unsafe_ptr(), Int32(batch_size), Int32(N), Int32(i), h,
             grid_dim=(grid, 1, 1), block_dim=(TPB, 1, 1),
         )
-        var pert = batched_loglike_packed(ctx, d_y, batch_size, n_obs, order, d_x_pert, trans, params)
+        var pert = batched_loglike_packed(
+            ctx, d_y, batch_size, n_obs, order, d_x_pert, trans, params, check_finite
+        )
         ctx.enqueue_function[grad_kernel](
             d_grad.unsafe_ptr(), pert.ws.loglike.unsafe_ptr(), base.ws.loglike.unsafe_ptr(),
             Int32(batch_size), Int32(N), Int32(i), h,

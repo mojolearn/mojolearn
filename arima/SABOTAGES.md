@@ -33,6 +33,25 @@ ADDED AND RUN 2026-08-24:
                                                     ZERO float stages: the
                                                     decision-only shape
 
+ADDED 2026-09-01 WITH `fit`, **NONE OF THEM RUN**. These six arms are
+WRITTEN AND UNRUN, and that is stated here first because this file's own
+opening rule is that a gate never shown capable of failing does not count.
+Every `fit` gate is therefore UNVALIDATED until the orchestrator works down
+this list. Do not read the fit gates' green as evidence before then.
+
+    (j)  test_invparams association         OWED    the seam SEAMS.tsv says
+                                                    this lane would get wrong
+                                                    by copying its own code
+    (k)  the QR back substitution, fold     OWED    DEVIATION 678's chosen
+         order reversed                             association
+    (l)  the Householder reflector sign     OWED    the real defect, not a
+                                                    cosmetic one
+    (m)  the rank test disarmed             OWED    the refusal path
+    (n)  the Armijo test's contraction      OWED    a HOST fma that decides
+                                                    whether a step is taken
+    (o)  the batch shrunk to the active     OWED    the shortcut the driver
+         series                                     deliberately does not take
+
 EVERY ARM IN THIS FILE HAS ONLY EVER BEEN RUN ON APPLE. The clean gate has
 run on three vendors at commit `221aa141` and the three cards are
 byte-identical (`bench/results/e1/CERT_2026-08-31.md`), but that is the
@@ -513,6 +532,198 @@ value-comparing gate anywhere can notice.
   It is the evidence that `guards` is load-bearing rather than decorative,
   and it is the answer to whether the four decision stages were worth
   adding.
+
+---
+
+# THE `fit` ARMS (2026-09-01, DEVIATIONS 678, 679, 687)
+
+All six are WRITTEN AND UNRUN. Each names the file, the literal old and new
+text, the gate that must fail, and the gate that must NOT fail, so a compile
+slot can work straight down them. Run them against
+`arima/checks/fit_check.mojo`, not `arima_check.mojo`; the fit gates and the
+fit card are a separate driver on purpose (see that file's header).
+
+    MOJOLEARN_ARIMA_SURVEY=1 tools/with_identical_mode.sh \
+        pixi run mojo run -I . arima/checks/fit_check.mojo
+
+## (j) test_invparams takes invtransform's association
+
+`arima/impl/arima/estimate_x0.mojo`, in `test_invparams`. Replace
+
+```
+            var num = ftz(
+                identical_mul_add(coef_a, new_params[j - k - 1], new_params[k])
+            )
+```
+
+with the spelling `invtransform` uses one file over, which is the obvious
+thing to write and is wrong:
+
+```
+            var sign = Float32(1.0) if is_ar else Float32(-1.0)
+            var prod = ftz(a * new_params[j - k - 1])
+            var num = ftz(identical_mul_add(sign, prod, new_params[k]))
+```
+
+THE POINT. `coef * a * x` is `(coef*a) * x` with `coef` an exact +-1: ONE
+rounding. `sign * (a * x)` rounds `a * x` first: TWO. This is the exact
+defect the 2026-08-23 audit found in four places, and the two functions are
+otherwise character for character identical, so this is the single most
+likely regression in the new code.
+
+- MUST FAIL: `check_invparams_contraction_is_visible` proves the two
+  spellings differ on the fixture, so the arm must move at least one
+  `fit.x0.*.invparams` byte on the card, or `fit.x0.ar` / `fit.x0.ma` on a
+  series whose verdict flips.
+- WATCH FOR A NULL, AND DO NOT ACCEPT IT AS A PASS. The output of
+  `test_invparams` is a BOOLEAN. A one-ulp difference is invisible unless a
+  value lands within an ulp of +-1, so this arm may well move NOTHING on
+  the current fixture. That is a REACH FAILURE of the same kind arm (e) had,
+  and the discharge is the same one arm (h) used: construct a fixture whose
+  recursion lands a value on the boundary, the way `PLANT_PIVOT_TIE` was
+  constructed. Record it as a reach failure, not as evidence.
+
+## (k) the QR back substitution's fold order
+
+`arima/impl/linalg/batched/least_squares.mojo`, in `householder_qr_solve`.
+Change the back substitution's inner loop from ascending to descending:
+
+```
+        for c in range(i + 1, n):
+```
+becomes
+```
+        var c = n - 1
+        while c > i:
+            ...
+            c -= 1
+```
+
+DEVIATION 678's association is CHOSEN, exactly as DEVIATION 674's was,
+because `cublasgelsBatched` does not expose its own. An arm that moves
+nothing means the fixture cannot see the fold and the choice is ungated.
+
+- MUST FAIL: `check_qr_device_equals_oracle` (the oracle keeps the ascending
+  spelling and is re-spelled separately for this reason), and the
+  `fit.qr.n*` card tags.
+- MUST NOT FAIL: nothing else; this function is reached only through the QR.
+- EXPECT IT TO BE THIN AT SMALL `n`. At `n = 1` the inner loop is empty and
+  at `n = 2` it has one term, so neither can move. The gate sweeps
+  `n = 1..5`; the arm should bite from `n = 3` up. If it bites nowhere,
+  widen the sweep before believing it.
+
+## (l) the Householder reflector's sign
+
+`arima/impl/linalg/batched/least_squares.mojo`, in `householder_qr_solve`.
+Change
+
+```
+        var s = Float32(-1.0) if ajj >= Float32(0.0) else Float32(1.0)
+```
+to
+```
+        var s = Float32(1.0) if ajj >= Float32(0.0) else Float32(-1.0)
+```
+
+**THIS IS THE ONE ARM IN THIS FILE THAT RESTORES A REAL DEFECT RATHER THAN
+A COSMETIC ONE.** With the sign flipped, `u1 = a_jj - s*normx` subtracts two
+near-equal quantities whenever the column is already nearly axis-aligned,
+which is the classical Householder cancellation the standard formulation
+exists to avoid. The factorization still runs and still returns numbers; the
+numbers are just wrong by a growing amount.
+
+- MUST FAIL: `check_qr_beats_normal_equations_on_ill_conditioning`, which
+  compares against a Float64 answer and is the only gate here that would
+  notice a solver that is merely INACCURATE rather than differently spelled.
+  `check_x0_solves_the_normal_equations` should also fail on the exact arm.
+  `check_qr_device_equals_oracle` will ALSO fail, because the oracle keeps
+  the right sign, but that failure is the weak one: it says the two
+  spellings differ, not that one is wrong.
+- THE THING TO WATCH: whether the RESIDUAL gate fails and not only the
+  bitwise one. If only the bitwise gate fails, this lane has no gate that can
+  tell a wrong answer from a different one, and that is a finding about the
+  gates, not about the arm.
+
+## (m) the rank test disarmed
+
+`arima/impl/linalg/batched/least_squares.mojo`. Delete the diagonal rank
+test entirely:
+
+```
+    for j in range(n):
+        if abs(rdiag[j]) <= ftz(LS_RANK_TOL * rmax):
+            return Int32(j + 1)
+```
+
+so a numerically rank-deficient system divides by a near-zero diagonal and
+returns whatever comes out, which is what cuML does today
+(`devInfoArray = nullptr` at both call sites).
+
+- MUST FAIL: nothing on the current fixture, PROBABLY. `check_x0_solves_the_
+  normal_equations` skips series with `info != 0`, and if no fixture is rank
+  deficient the test never fires.
+- SO THE ARM IS ALSO A REACH QUESTION, and it is the one to answer first:
+  run it and see whether ANY series in `check_invparams_verdict_is_reached`'s
+  short-fixture sweep has `info != 0` on the clean tree. If none does, the
+  rank test is UNREACHED, `LS_RANK_TOL` is gated by nothing, and a fixture
+  must be constructed for it -- a series with a repeated column, or a
+  constant series, whose lag matrix is exactly singular. Record the answer
+  here either way.
+
+## (n) the Armijo test's contraction
+
+`arima/impl/arima/lbfgs_host.mojo`, in `armijo_ok`. Change
+
+```
+    return not (fx > identical_mul_add(step, dg_test, fx_init))
+```
+to
+```
+    return not (fx > ftz(fx_init + ftz(step * dg_test)))
+```
+
+TWO roundings instead of one, on a HOST multiply-add that decides whether a
+line-search step is accepted. This is the seam `qn_linesearch.mojo`'s header
+warns about: `-ffp-contract` is the host compiler's default, not nvcc's, and
+Mojo's host codegen has been seen contracting across expressions.
+
+- MUST FAIL: `check_lbfgs_rules_match_glm`, immediately and on many cases,
+  because glm's `ls_success` keeps the fma.
+- MAY ALSO MOVE: `fit.iterNNNN.ls`, `fit.n_iter`, and every `fit.*` stage
+  after the first iteration where the two disagree. If it moves the RULES
+  gate but no fit stage, the disagreement never changes an accept/reject
+  decision on this fixture, which is worth recording: it means the iteration
+  count is not as sensitive as `qn_util.mojo`'s header claims and the claim
+  should be softened.
+
+## (o) the batch shrunk to the active series
+
+`arima/impl/arima/batched_fit.mojo`, in `batched_min_lbfgs`'s shared line
+search. Replace the `else` branch that keeps a finished series in the batch:
+
+```
+                else:
+                    for i in range(n):
+                        cand[b * n + i] = x[b * n + i]
+```
+
+with code that packs only the still-searching series into a smaller `d_x`
+and evaluates a batch of that size.
+
+**THIS IS THE OPTIMIZATION SOMEONE WILL PROPOSE**, and the arm exists so
+that the answer is a measurement rather than an argument. The driver
+deliberately keeps every series in every launch and discards the results it
+does not need, so the launch geometry is a function of the fixture alone and
+never of how many series have converged.
+
+- MUST FAIL: `check_fit_is_batch_composition_invariant`, on the iteration
+  counts if not on the parameters.
+- IF IT DOES NOT FAIL, that is the interesting outcome and it should be
+  written down: it would mean the Kalman filter really is batch-composition
+  invariant to the last bit through hundreds of chained evaluations, which
+  is a stronger claim than `check_kalman_launch_invariant` makes for one
+  pass, and it would make the shortcut safe to take. Do not take it on the
+  strength of one fixture.
 
 ---
 
