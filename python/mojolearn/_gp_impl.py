@@ -27,17 +27,26 @@ scikit-learn's `sklearn/gaussian_process/_gpr.py` is the SEMANTICS
 reference and the oracle, never the design source; every name this surface
 shares with scikit-learn means what scikit-learn means by it.
 
-THE BINDING THIS FILE CALLS IS `_mojolearn_gp`, WHICH IS OWED. As of this
-file's landing, `bindings/_mojolearn_gp.mojo` and `bindings/build_gp.sh`
-do not exist yet: the Mojo lane's host entries (`gaussian_process/
-estimator.mojo::gpr_fit_host` / `gpr_predict_host`) have no caller in
-`bindings/`. That is `_backend.py`'s designed-for state -- the package
-imports fine and this class raises BY NAME with the build command on
-first use -- and it is the same state `KNeighbors*`, `SVR` and `ARIMA`
-each passed through on their exposure day. The binding contract (function
-names, argument order, and that the kernel spec MUST be rebuilt through
-`gaussian_process/checks/kernels.mojo`'s constructors so their refusals
-stay reachable) is written at each call site below.
+THE BINDING THIS FILE CALLS IS `_mojolearn_gp`, AND ITS ABI WAS
+RENEGOTIATED ONCE, ON MEASUREMENT. This file landed (22a5b550) with the
+binding OWED and a contract at each call site in which every buffer
+address was its own positional argument -- ten arguments for `gpr_fit`,
+thirteen for `gpr_predict`. The binding was written to that spelling
+verbatim (8c449b70) and the first `bash bindings/build_gp.sh` FAILED AT
+def_function ELABORATION (2026-09-01, log /tmp/build_gp_fast.log),
+exactly as `bindings/_mojolearn.mojo`'s header predicts above roughly
+nine arguments. The orchestrator renegotiated BOTH sides the same day to
+the tree's own fold -- the one `knn_search` took when its ten arguments
+hit the same wall: each entry point takes exactly TWO Python lists,
+`addrs` (every buffer address, order written in the binding docstring
+and at the call site below in the same words) and `params` (the scalar
+list 22a5b550 spelled, unchanged to the word). EVERY ARRAY WHOSE ADDRESS
+GOES INTO `addrs` MUST BE BOUND TO A LOCAL for the duration of the call:
+an address inside a list keeps nothing alive (`_arrays.py`). The rest of
+the contract is unchanged: function names, and that the kernel spec MUST
+be rebuilt through `gaussian_process/checks/kernels.mojo`'s constructors
+so their refusals stay reachable. The three-tier build is still RUN
+OWED.
 
 WHAT THE KERNEL CLASSES ARE. A covariance function here is a POSTFIX node
 list over five flat arrays (`GPKernelSpec`, DEVIATION 1756), which is
@@ -500,16 +509,25 @@ class GaussianProcessRegressor(NumericModeMixin):
         dual = np.empty(n_rows, dtype=np.float32)
         # info, nb, logdet, ydotalpha, lml -- in that order.
         scalars = np.empty(5, dtype=np.float64)
+        # TWO LISTS, NOT FOURTEEN ARGUMENTS (the module header's ABI note:
+        # the positional spelling failed def_function elaboration, measured
+        # 2026-09-01). Every array addressed below is bound to a local in
+        # this frame -- x, targets, kinds, kparams, ls_len, ls, l_out,
+        # dual, scalars -- which is what keeps the addresses alive.
         info = self._extension().gpr_fit(
-            _addr_ro(x),
-            _addr_ro(targets),
-            _addr_ro(kinds),
-            _addr_ro(kparams),
-            _addr_ro(ls_len),
-            _addr_ro(ls),
-            _addr(l_out),
-            _addr(dual),
-            _addr(scalars),
+            # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_fit_binding.
+            # x, y, kinds, kparams, ls_len, ls, l_out, dual_out, scalars_out
+            [
+                _addr_ro(x),
+                _addr_ro(targets),
+                _addr_ro(kinds),
+                _addr_ro(kparams),
+                _addr_ro(ls_len),
+                _addr_ro(ls),
+                _addr(l_out),
+                _addr(dual),
+                _addr(scalars),
+            ],
             # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_fit_binding.
             # n_train, n_features, n_nodes, n_ls, alpha
             [n_rows, n_cols, int(kinds.shape[0]), n_ls, self.alpha],
@@ -567,23 +585,30 @@ class GaussianProcessRegressor(NumericModeMixin):
         std = np.empty(n_star, dtype=np.float32)
         clamped = np.empty(n_star, dtype=np.int32)
         # Kept in locals so the arrays outlive the call; the Mojo side
-        # borrows these addresses and owns nothing (_arrays.py).
+        # borrows these addresses and owns nothing, and an address inside
+        # the list below keeps nothing alive on its own (_arrays.py). Two
+        # lists, not fifteen arguments -- the module header's ABI note.
         xt = self.X_train_
         lf = self.L_
         dual = self.alpha_
         n_clamped = self._extension().gpr_predict(
-            _addr_ro(xt),
-            _addr_ro(lf),
-            _addr_ro(dual),
-            _addr_ro(q),
-            _addr_ro(kinds),
-            _addr_ro(kparams),
-            _addr_ro(ls_len),
-            _addr_ro(ls),
-            _addr(mean),
-            _addr(var),
-            _addr(std),
-            _addr(clamped),
+            # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_predict_binding.
+            # xtrain, l, dual, xstar, kinds, kparams, ls_len, ls,
+            # mean_out, var_out, std_out, clamped_out
+            [
+                _addr_ro(xt),
+                _addr_ro(lf),
+                _addr_ro(dual),
+                _addr_ro(q),
+                _addr_ro(kinds),
+                _addr_ro(kparams),
+                _addr_ro(ls_len),
+                _addr_ro(ls),
+                _addr(mean),
+                _addr(var),
+                _addr(std),
+                _addr(clamped),
+            ],
             # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_predict_binding.
             # n_train, n_features, n_star, n_nodes, n_ls, return_std, info
             [n_train, self.n_features_in_, n_star, int(kinds.shape[0]),

@@ -11,34 +11,49 @@ DERIVATION_MAP.tsv` carries the grep) over the Cholesky lane's factor/solve
 and the identical GEMM, and it shares no binding-level code with any
 sibling. All thirteen binaries land in one wheel.
 
-THIS FILE CLOSES THE "OWED" HALF OF COMMIT 22a5b550. That commit landed
-`python/mojolearn/_gp_impl.py` with `_mojolearn_gp` already registered in
-`_backend.py`'s `_MODULES` and `_build_script` (both places, DEVIATION 869)
-and the binding contract written at each call site. The function names, the
-positional order of the buffer addresses and the words of each `params`
-list below are THAT contract, copied rather than paraphrased.
+THIS FILE CLOSES THE "OWED" HALF OF COMMIT 22a5b550 -- UNDER A RENEGOTIATED
+ABI, AND THE RENEGOTIATION IS A MEASURED RESULT, NOT A PREFERENCE. That
+commit landed `python/mojolearn/_gp_impl.py` with `_mojolearn_gp` already
+registered in `_backend.py`'s `_MODULES` and `_build_script` (both places,
+DEVIATION 869) and a binding contract written at each call site in which
+every buffer address was its own positional argument: TEN arguments for
+`gpr_fit`, THIRTEEN for `gpr_predict`. This file's first version (8c449b70)
+honored that spelling verbatim and flagged the risk: `bindings/
+_mojolearn.mojo`'s header records that `PythonModuleBuilder.def_function`
+infers its signature from arity "and stops being able to above roughly nine
+arguments; mojotrees' widest binding takes nine and that is not a
+coincidence". THE FIRST BUILD CONFIRMED IT: `bash bindings/build_gp.sh`
+failed AT def_function ELABORATION on 2026-09-01 (log
+/tmp/build_gp_fast.log, the stdlib error pointing at def_function's
+signature), before any artifact existed. The orchestrator renegotiated BOTH
+sides the same day.
+
+THE FOLD IS THE TREE'S OWN PRECEDENT, NOT A NEW MECHANISM. When
+`knn_search` needed ten arguments and `knn_classify` fourteen-plus, they
+did not grow arity: every scalar folded into ONE length-checked Python
+list whose order is written out in the same words on both sides
+(`_mojolearn.mojo`'s SCALARS ARRIVE AS ONE LIST banner). Here the
+overflowing axis is the ADDRESSES, so they get the same treatment: each
+entry point below takes exactly TWO arguments,
+
+    gpr_fit(addrs, params)         len(addrs) == 9,  len(params) == 5
+    gpr_predict(addrs, params)     len(addrs) == 12, len(params) == 7
+
+where `addrs` is a plain Python list of the NumPy buffer addresses, in an
+exact order written in each docstring and mirrored at the `_gp_impl.py`
+call site, and `params` is the scalar list 22a5b550's contract already
+spelled, unchanged to the word. A Python LIST, deliberately not a packed
+int64 array: `Int(py=addrs[i])` is the same read every sibling does on
+`params`, an int needs no dtype contract and no bit-cast, and the length
+check is what stands between a swapped pair and a believable address --
+where a swapped pair of ADDRESSES is a crash or a wrong answer, which is
+why the order comment exists twice.
 
 Arrays cross as borrowed NumPy addresses; all device buffers and contexts
 live for one call and no pointer is retained. The Python wrapper owns the
-arrays and keeps them alive for the duration of the call
+arrays and keeps every one of them alive for the duration of the call BY
+BINDING THEM TO LOCALS -- an address inside a list keeps nothing alive
 (`python/mojolearn/_arrays.py` is where that contract is written down).
-
-SCALARS ARRIVE AS ONE LIST, NOT AS SEPARATE ARGUMENTS -- AND THIS MODULE IS
-THE WIDEST TEST OF THAT MECHANISM THIS TREE HAS EVER BUILT. **READ THIS
-BEFORE BELIEVING THE FIRST BUILD.** `bindings/_mojolearn.mojo`'s header
-records that `PythonModuleBuilder.def_function` infers its signature from
-arity "and stops being able to above roughly nine arguments; mojotrees'
-widest binding takes nine and that is not a coincidence". The widest
-binding in this tree today takes EIGHT. The contract `_gp_impl.py` spells
-gives `gpr_fit` TEN arguments (nine buffer addresses plus the params list)
-and `gpr_predict` THIRTEEN (twelve plus the list), both above that measured
-ceiling. This file honors the contract as spelled, because the surface is
-already committed and calls it this way; if the first `bash
-bindings/build_gp.sh` fails inside `def_function` (or the registered
-function fails at call time), THE ARITY IS THE FIRST SUSPECT, the fix is a
-renegotiation of BOTH sides of the boundary (fold the model/output
-addresses into arrays), and the failure belongs to the orchestrator, not to
-a quiet local workaround. UNVERIFIED, RUN OWED: `bash bindings/build_gp.sh`.
 
 THE KERNEL SPEC IS REBUILT THROUGH THE CONSTRUCTORS, NOT ASSEMBLED BY HAND.
 `_gp_impl.py::_kernel_arrays` sends four flat postfix arrays (kinds,
@@ -53,8 +68,8 @@ reachable from Python, which is the reason the Python side judges none of
 those values (its `_as_length_scale` docstring says so in the same words).
 
 WHAT IS REFUSED, AND WHERE. Nothing is refused in this file except a null
-address, a params list of the wrong length and a malformed postfix
-expression (a stack underflow, a leftover operand, an unknown kind code, a
+address, an `addrs` or `params` list of the wrong length and a malformed
+postfix expression (a stack underflow, a leftover operand, an unknown kind code, a
 length-scale table the two sides disagree about -- each of which means the
 two sides of THIS boundary disagree and no lane refusal exists for it).
 Every model refusal lives one or two layers down and is raised there by
@@ -304,15 +319,7 @@ def _gpr_fit_run(
 
 
 def gpr_fit_binding(
-    x_addr: PythonObject,
-    y_addr: PythonObject,
-    kinds_addr: PythonObject,
-    kparams_addr: PythonObject,
-    ls_len_addr: PythonObject,
-    ls_addr: PythonObject,
-    l_out_addr: PythonObject,
-    dual_out_addr: PythonObject,
-    scalars_out_addr: PythonObject,
+    addrs: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
     """`GaussianProcessRegressor(kernel, alpha).fit(X, y)`
@@ -321,13 +328,28 @@ def gpr_fit_binding(
     factor is complete, `k > 0` that the leading minor of order `k` was not
     positive definite.
 
+    `addrs` is the NINE buffer addresses, in this exact order (mirrored in
+    `python/mojolearn/_gp_impl.py`; the module header says why they are a
+    list and not nine arguments):
+
+        0  x               n_train * n_features float32, row-major, read
+        1  y               n_train float32, read
+        2  kinds           n_nodes int32, read
+        3  kparams         n_nodes float32, read
+        4  ls_len          n_nodes int32, read
+        5  ls              max(n_ls, 1) float32, read
+        6  l_out           n_train * n_train float32, WRITTEN
+        7  dual_out        n_train float32, WRITTEN
+        8  scalars_out     5 float64, WRITTEN
+
     `params` is, in this exact order (mirrored in
     `python/mojolearn/_gp_impl.py`):
 
         0  n_train
         1  n_features
         2  n_nodes         postfix nodes in the kernel spec
-        3  n_ls            floats the spec's leaves consume from ls_addr
+        3  n_ls            floats the spec's leaves consume from `ls`
+                            (addrs slot 5)
         4  alpha           (float; the RIDGE, which is the Cholesky
                             profile's jitter, DEVIATION 1751. Crosses
                             UNCLAMPED so gp_validate_alpha's refusals --
@@ -335,22 +357,19 @@ def gpr_fit_binding(
                             two-value pin -- fire by name, DEVIATIONS
                             1768/1637)
 
-    `x_addr` reads `n_train * n_features` float32 row-major, `y_addr`
-    `n_train` float32. `kinds_addr`/`ls_len_addr` read `n_nodes` int32
-    each, `kparams_addr` `n_nodes` float32, and `ls_addr` holds
-    `max(n_ls, 1)` float32 -- one unused `1.0` stands in when the kernel
-    has no length scale at all, exactly as `estimator.mojo::
-    _length_scale_table` spells it, and `n_ls` says which case this is.
+    `ls` (slot 5) holds `max(n_ls, 1)` float32 -- one unused `1.0` stands
+    in when the kernel has no length scale at all, exactly as
+    `estimator.mojo::_length_scale_table` spells it, and `n_ls` says which
+    case this is.
 
-    `l_out_addr` is written with `n_train * n_train` float32 (the lower
-    Cholesky factor of `K + alpha I`, sklearn's `L_`), `dual_out_addr`
-    with `n_train` float32 (`(K + alpha I)^-1 y`, sklearn's `alpha_`,
-    which is NOT the ridge -- the collision is scikit-learn's and both
-    sides name it). On a failed fit both still cross: the partial factor
-    and the zero dual are what `gpr_fit_host` hands back beside a nonzero
-    `info`.
+    `l_out` (slot 6) receives the lower Cholesky factor of `K + alpha I`,
+    sklearn's `L_`; `dual_out` (slot 7) receives `(K + alpha I)^-1 y`,
+    sklearn's `alpha_`, which is NOT the ridge -- the collision is
+    scikit-learn's and both sides name it. On a failed fit both still
+    cross: the partial factor and the zero dual are what `gpr_fit_host`
+    hands back beside a nonzero `info`.
 
-    `scalars_out_addr` is FIVE float64, written in this exact order:
+    `scalars_out` (slot 8) is FIVE float64, written in this exact order:
 
         0  info
         1  nb              the Cholesky panel width that ran
@@ -358,17 +377,23 @@ def gpr_fit_binding(
         3  ydotalpha
         4  lml
     """
+    if len(addrs) != 9:
+        raise Error(
+            "gpr_fit: addrs must contain 9 addresses (x, y, kinds, kparams,"
+            " ls_len, ls, l_out, dual_out, scalars_out), got "
+            + String(len(addrs))
+        )
     if len(params) != 5:
         raise Error(
             "gpr_fit: params must contain 5 values (n_train, n_features,"
             " n_nodes, n_ls, alpha), got "
             + String(len(params))
         )
-    var xp = _f32_ptr(Int(py=x_addr))
-    var yp = _f32_ptr(Int(py=y_addr))
-    var lp = _f32_ptr(Int(py=l_out_addr))
-    var dp = _f32_ptr(Int(py=dual_out_addr))
-    var sp = _f64_ptr(Int(py=scalars_out_addr))
+    var xp = _f32_ptr(Int(py=addrs[0]))
+    var yp = _f32_ptr(Int(py=addrs[1]))
+    var lp = _f32_ptr(Int(py=addrs[6]))
+    var dp = _f32_ptr(Int(py=addrs[7]))
+    var sp = _f64_ptr(Int(py=addrs[8]))
     var n_train = Int(py=params[0])
     var n_features = Int(py=params[1])
     var n_nodes = Int(py=params[2])
@@ -379,10 +404,10 @@ def gpr_fit_binding(
     # negative range below reads nothing), and a duplicate here would make
     # that refusal unreachable from Python.
     var spec = _rebuild_kernel_spec(
-        Int(py=kinds_addr),
-        Int(py=kparams_addr),
-        Int(py=ls_len_addr),
-        Int(py=ls_addr),
+        Int(py=addrs[2]),
+        Int(py=addrs[3]),
+        Int(py=addrs[4]),
+        Int(py=addrs[5]),
         n_nodes,
         n_ls,
         String("gpr_fit"),
@@ -432,24 +457,30 @@ def _gpr_predict_run(
 
 
 def gpr_predict_binding(
-    xtrain_addr: PythonObject,
-    l_addr: PythonObject,
-    dual_addr: PythonObject,
-    xstar_addr: PythonObject,
-    kinds_addr: PythonObject,
-    kparams_addr: PythonObject,
-    ls_len_addr: PythonObject,
-    ls_addr: PythonObject,
-    mean_out_addr: PythonObject,
-    var_out_addr: PythonObject,
-    std_out_addr: PythonObject,
-    clamped_out_addr: PythonObject,
+    addrs: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
     """`predict(X_star, return_std)` on a model handed back in
     (gaussian_process/, DEVIATIONS 1758-1760). Returns `n_clamped`, the
     count of test points whose predictive variance was clamped at zero
-    (DEVIATION 1760); the per-point flags are in `clamped_out_addr`.
+    (DEVIATION 1760); the per-point flags are in `addrs[11]`.
+
+    `addrs` is the TWELVE buffer addresses, in this exact order (mirrored
+    in `python/mojolearn/_gp_impl.py`; the module header says why they are
+    a list and not twelve arguments):
+
+        0  xtrain          n_train * n_features float32, read
+        1  l               n_train * n_train float32, read
+        2  dual            n_train float32, read
+        3  xstar           n_star * n_features float32, read
+        4  kinds           n_nodes int32, read
+        5  kparams         n_nodes float32, read
+        6  ls_len          n_nodes int32, read
+        7  ls              max(n_ls, 1) float32, read
+        8  mean_out        n_star float32, WRITTEN on every call
+        9  var_out         n_star float32, WRITTEN when return_std != 0
+       10  std_out         n_star float32, WRITTEN when return_std != 0
+       11  clamped_out     n_star int32, WRITTEN when return_std != 0
 
     `params` is, in this exact order (mirrored in
     `python/mojolearn/_gp_impl.py`):
@@ -472,32 +503,34 @@ def gpr_predict_binding(
     would make that refusal unreachable, which is the accepted-and-ignored
     failure this surface's tables exist to prevent.
 
-    `xtrain_addr` reads `n_train * n_features` float32 (the training rows
-    the fit saw), `l_addr` `n_train * n_train` float32 (the factor from
-    `gpr_fit`'s `l_out`), `dual_addr` `n_train` float32 (its `dual_out`),
-    `xstar_addr` `n_star * n_features` float32. The kernel arrays are
-    `gpr_fit`'s, rebuilt through the constructors for the same reason.
-
-    `mean_out_addr` is written with `n_star` float32 on every call. With
-    `return_std` nonzero, `var_out_addr` and `std_out_addr` are written
-    with `n_star` float32 each and `clamped_out_addr` with `n_star` int32;
-    with it zero those three are NOT TOUCHED (their addresses are never
-    dereferenced), and the return value is 0.
+    The training-side arrays are the fit's own: `l` is `gpr_fit`'s
+    `l_out`, `dual` its `dual_out`, and the kernel arrays are `gpr_fit`'s,
+    rebuilt through the constructors for the same reason. The mean is
+    written on every call; with `return_std` zero the var/std/clamp
+    addresses are NOT TOUCHED (never dereferenced), and the return value
+    is 0.
     """
+    if len(addrs) != 12:
+        raise Error(
+            "gpr_predict: addrs must contain 12 addresses (xtrain, l,"
+            " dual, xstar, kinds, kparams, ls_len, ls, mean_out, var_out,"
+            " std_out, clamped_out), got "
+            + String(len(addrs))
+        )
     if len(params) != 7:
         raise Error(
             "gpr_predict: params must contain 7 values (n_train,"
             " n_features, n_star, n_nodes, n_ls, return_std, info), got "
             + String(len(params))
         )
-    var xtp = _f32_ptr(Int(py=xtrain_addr))
-    var lp = _f32_ptr(Int(py=l_addr))
-    var dp = _f32_ptr(Int(py=dual_addr))
-    var xsp = _f32_ptr(Int(py=xstar_addr))
-    var mean_addr = Int(py=mean_out_addr)
-    var var_addr = Int(py=var_out_addr)
-    var std_addr = Int(py=std_out_addr)
-    var clamped_addr = Int(py=clamped_out_addr)
+    var xtp = _f32_ptr(Int(py=addrs[0]))
+    var lp = _f32_ptr(Int(py=addrs[1]))
+    var dp = _f32_ptr(Int(py=addrs[2]))
+    var xsp = _f32_ptr(Int(py=addrs[3]))
+    var mean_addr = Int(py=addrs[8])
+    var var_addr = Int(py=addrs[9])
+    var std_addr = Int(py=addrs[10])
+    var clamped_addr = Int(py=addrs[11])
     var n_train = Int(py=params[0])
     var n_features = Int(py=params[1])
     var n_star = Int(py=params[2])
@@ -508,10 +541,10 @@ def gpr_predict_binding(
     # No positivity check on n_star here: `gpr_predict_host` refuses it by
     # name, after the failed-fit refusal, and both must stay reachable.
     var spec = _rebuild_kernel_spec(
-        Int(py=kinds_addr),
-        Int(py=kparams_addr),
-        Int(py=ls_len_addr),
-        Int(py=ls_addr),
+        Int(py=addrs[4]),
+        Int(py=addrs[5]),
+        Int(py=addrs[6]),
+        Int(py=addrs[7]),
         n_nodes,
         n_ls,
         String("gpr_predict"),
