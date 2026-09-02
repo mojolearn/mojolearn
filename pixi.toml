@@ -1132,6 +1132,20 @@ check-transformer-backward = "mojo run -I . transformer/checks/transformer_backw
 # smaller b1_l1 case: at L=1 token-major and channel-major are the same bytes,
 # so the smaller case cannot certify the reindexing at all.
 check-mamba-corpus = "python tools/mamba_corpus_check.py mamba/corpus/base_b2_l4_d8 $MOJOLEARN_MAMBA_CORPUS_DUMP --rtol 1e-7 --atol 1e-6"
+# The mamba2 and mamba3 corpus gates (contracts' section 8g;
+# tools/mamba_corpus_check.py is family-agnostic -- it reads each case's own
+# manifest.json/ref64, so the SAME tool serves all three families). Both use
+# the B=2 L=4 case for the same reason mamba1 does: at L=1 token-major and
+# channel-major are the same bytes, so the smaller case cannot certify the
+# reindexing at all. Tolerances are the tool's defaults (1e-5/1e-6) until a
+# `--self-test` calibration run lands per family, exactly how mamba1 earned
+# its tighter 1e-7 -- that calibration is RUN OWED (README.md, "Tolerance
+# calibration"), and tightening these lines is that run's deliverable.
+# The mamba3 corpus FILES are RUN OWED too (gen_corpus.py --family mamba3);
+# until they exist this task refuses on the missing manifest, which is the
+# correct refusal, not a defect.
+check-mamba2-corpus = "python tools/mamba_corpus_check.py mamba/corpus/mamba2/m2_base_b2_l4_d32 $MOJOLEARN_MAMBA_CORPUS_DUMP --rtol 1e-5 --atol 1e-6"
+check-mamba3-corpus = "python tools/mamba_corpus_check.py mamba/corpus/mamba3/m3_base_b2_l4_d32 $MOJOLEARN_MAMBA_CORPUS_DUMP --rtol 1e-5 --atol 1e-6"
 # arima: BUILT AND GATED. This comment read "SOURCE ONLY, never built, expected
 # to FAIL" from 2026-08-23 and was overtaken the next day, then by four E1 cards
 # on two vendors. The lane is bit-identical Apple <-> AMD MI325X as of 2026-08-28
