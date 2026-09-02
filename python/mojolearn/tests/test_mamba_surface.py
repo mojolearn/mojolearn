@@ -186,8 +186,11 @@ M2_CASE, M2_B, M2_L, M2_DM = "m2_base_b2_l4_d32", 2, 4, 32
 #: Mamba-3 shapes, mirroring the check's own cases: the sub-chunk case
 #: (m3_base_b2_l4_d32's shape) and the decode-cross construction
 #: (contract 8d: prefill 60, decode through token 70; crosses Q = 64).
-#: NO committed corpus exists yet (header), so the inputs are
-#: fixture-scale hashed-style draws, not corpus files.
+#: THE CORPUS LANDED 2026-09-02, so the forward arm below now runs the
+#: committed case against its ref64 stages, exactly as Mamba-1 and -2 do;
+#: the fixture-scale draws stay for the state, decode and refusal arms,
+#: which compare the surface against ITSELF and need no reference.
+M3_CASE = "m3_base_b2_l4_d32"
 M3_B, M3_L, M3_DM = 2, 4, 32
 M3_CROSS_L, M3_CROSS_SPLIT = 70, 60
 M3_Q = 64  # the Mamba-3 chunk size (PART OF THE ARITHMETIC, DEV 827/783)
@@ -265,6 +268,37 @@ def m3_weights(rng, dm):
         "C_bias": m3_uniform(rng, (h, 128), 0.9, 1.1),
         "D": m3_uniform(rng, (h,), 0.5, 1.5),
         "out_proj.weight": m3_uniform(rng, (dm, di), -s_out, s_out),
+    }
+
+
+def m3_weights_corpus(case_dir, dm):
+    """The committed case's weights, the Mamba-3 mirror of `m2_weights`.
+
+    The nine tensors and their shapes are the ones `m3_weights` draws,
+    read from the corpus instead of a generator: `dip` is
+    `2*d_inner + 256 + 3*nheads + num_rope_angles`, which is 419 at
+    d_model 32, and the file sizes agree with that (in_proj.weight is
+    13,408 floats = 419 x 32). A wrong shape here is caught by
+    `f32`'s own count check rather than by silently reinterpreting the
+    bytes, which is the mamba1 reindexing lesson."""
+    di = 2 * dm
+    h = di // 64
+    dip = 2 * di + 256 + 3 * h + 32
+    return {
+        "block_norm.weight": f32(
+            os.path.join(case_dir, "block_norm.weight.f32"), (dm,)),
+        "in_proj.weight": f32(
+            os.path.join(case_dir, "in_proj.weight.f32"), (dip, dm)),
+        "dt_bias": f32(os.path.join(case_dir, "dt_bias.f32"), (h,)),
+        "B_norm.weight": f32(
+            os.path.join(case_dir, "B_norm.weight.f32"), (128,)),
+        "C_norm.weight": f32(
+            os.path.join(case_dir, "C_norm.weight.f32"), (128,)),
+        "B_bias": f32(os.path.join(case_dir, "B_bias.f32"), (h, 128)),
+        "C_bias": f32(os.path.join(case_dir, "C_bias.f32"), (h, 128)),
+        "D": f32(os.path.join(case_dir, "D.f32"), (h,)),
+        "out_proj.weight": f32(
+            os.path.join(case_dir, "out_proj.weight.f32"), (dm, di)),
     }
 
 
@@ -542,26 +576,43 @@ def main(out=sys.stdout):
               "v_last_ report shape")
     rep.check(arm, blk3.theta_last_.shape == (M3_B, h3n, 32),
               "theta_last_ report shape")
-    # The corpus tolerance arm is a RECORDED DEBT, not a skip (header):
-    # it passes as [OWED] only while mamba/corpus/mamba3 does not exist,
-    # and FAILS the moment the corpus lands without this comparison
-    # being wired, so the debt cannot rot.
-    c3 = os.path.join(root, "mamba3")
-    if os.path.isdir(c3):
+    # -- MAMBA-3 FORWARD vs the committed reference ----------------------
+    #
+    # THE DEBT THIS REPLACES. Until 2026-09-02 the block above ended in a
+    # tripwire: while `mamba/corpus/mamba3` did not exist the row passed as
+    # [OWED], and the moment the directory appeared without this comparison
+    # being wired the row FAILED, so the debt could not rot. The corpus
+    # landed, the tripwire fired on all three vendors at once, and this is
+    # the arm it was holding the place for. It is the Mamba-2 arm above with
+    # Mamba-3's tensors, at the same corpus tolerance.
+    arm = "MAMBA-3 forward (corpus %s, ref64 tolerance)" % M3_CASE
+    c3 = os.path.join(root, "mamba3", M3_CASE)
+    if not os.path.isdir(c3):
         rep.check(arm, False,
-                  "mamba/corpus/mamba3 EXISTS but this gate has no "
-                  "ref64 comparison wired",
-                  "wire the mamba3 corpus arm (mirror the mamba2 arm) "
-                  "in the change that lands the corpus "
-                  "[[fix-docs-on-discovery]]")
+                  "the committed Mamba-3 corpus case is present",
+                  "expected %s; a missing corpus FAILS here, it never "
+                  "skips (header)" % c3)
     else:
-        rep.check(arm, True,
-                  "[OWED, recorded debt -- no comparison ran] corpus "
-                  "tolerance arm: mamba/corpus/mamba3 is not generated "
-                  "yet (the fixture table landed first; "
-                  "mamba3_check.mojo gate (g) refuses by name until the "
-                  "corpus lane generates it). This row FAILS once the "
-                  "directory appears, until the ref64 arm is wired")
+        w3c = m3_weights_corpus(c3, M3_DM)
+        x3c = f32(os.path.join(c3, "x.f32"), (M3_B, M3_L, M3_DM))
+        blk3c = Mamba3Block(w3c)
+        st3c = blk3c.allocate_state(M3_B)
+        y3c = blk3c.forward(x3c, st3c)
+        rep.check(arm, y3c.shape == (M3_B, M3_L, M3_DM),
+                  "y has x's shape")
+        rep.close(arm, y3c,
+                  f64(os.path.join(c3, "ref64", "residual.out.f64"),
+                      (M3_B * M3_L, M3_DM)).reshape(M3_B, M3_L, M3_DM),
+                  "block output matches ref64 residual.out at the corpus "
+                  "tolerance")
+        rep.close(arm, blk3c.h_last_,
+                  f64(os.path.join(c3, "ref64", "ssd.h_last.f64"),
+                      (M3_B, h3n, 64, 128)),
+                  "h_last_ (the REPORT state) matches ref64 ssd.h_last")
+        rep.close(arm, blk3c.k_last_,
+                  f64(os.path.join(c3, "ref64", "ssd.k_last.f64"),
+                      (M3_B, h3n, 128)),
+                  "k_last_ matches ref64 ssd.k_last")
 
     # -- MAMBA-3 DECODE == PREFILL, through the Python surface -----------
     arm = "MAMBA-3 decode (bitwise %s)" % (
