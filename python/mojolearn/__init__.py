@@ -51,8 +51,9 @@ for prefill, continuation and single-token decode. They are NOT
 estimators -- no `fit` -- and they exist for cross-checking:
 `_mamba_impl.py` carries the contracts. The Mamba-1/2 surface gate
 printed green in all three tiers on 2026-09-01 (one box, one vendor);
-the Mamba-3 path, added later the same day, is UNVERIFIED, RUN OWED
-until the gate prints with its arms in.
+the Mamba-3 arms printed green the same evening at `08a38a13` in all
+three tiers, identical bitwise-asserted (`mamba/FEATURE_PARITY.md`'s
+RUN LEDGER; still one box, one vendor).
 **`GaussianProcessRegressor` IS here** (since 2026-09-01, later the same
 day), with its four kernel classes `RBF`, `Matern`, `ConstantKernel` and
 `WhiteKernel`. It was the one `_NOT_YET` entry ever held back for a reason
@@ -209,10 +210,11 @@ from ._gp_impl import (
 # every other, so an unbuilt extension leaves the package importable and
 # raises BY NAME with the build command when touched (`_backend.py`'s
 # design). The Mamba-1/2 surface gate printed green in all three tiers
-# on 2026-09-01; `Mamba3Block` joined later the same day (the Mamba-3
-# kernel lane's own gates ran green that evening) and ITS Python path is
-# UNVERIFIED, RUN OWED until `tests/test_mamba_surface.py` prints with
-# the mamba3 arms in (`_mamba_impl.py`'s run ledger).
+# on 2026-09-01; `Mamba3Block` joined later the same day and its
+# `tests/test_mamba_surface.py` arms printed green that evening at
+# `08a38a13`, all three tiers, identical bitwise-asserted
+# (`mamba/FEATURE_PARITY.md` RUN LEDGER -- one box, one vendor; the
+# NVIDIA/AMD columns stay OWED there).
 from . import mamba
 from ._mamba_impl import (
     Mamba1Block,
