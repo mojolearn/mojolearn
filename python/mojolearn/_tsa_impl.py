@@ -17,22 +17,21 @@ WHAT IS HERE
 
 WHAT IS NOT HERE, AND WHY IT IS NOT
 
-    ARIMA / AutoARIMA      `arima/` ports cuML's batched Kalman filter and
-                           does it well: given ARIMA coefficients it
-                           computes the log-likelihood, the finite-
-                           difference gradient, the in-sample predictions
-                           and the forecast. It does NOT port
-                           `estimate_x0` / `_start_params` /
-                           `_arma_least_squares`, nor `arima.pyx`'s batched
-                           L-BFGS driver; both are listed NOT PORTED in
-                           `arima/NOT_IMPLEMENTED.tsv`. There is no `fit`, and the
-                           coefficients its entry points require are the
-                           output of the optimizer that is missing. A class
-                           named `ARIMA` whose `fit` did not exist, or
-                           whose `fit` demanded the answer as an argument,
-                           would be a published lie about a lane that is
-                           honestly unfinished at the surface. It stays
-                           unreachable until the optimizer lands.
+    ARIMA                  NOT IN THIS MODULE, and no longer absent from
+                           the package: `mojolearn.ARIMA` exists (since
+                           2026-09-01), lives in `_arima_impl.py` over its
+                           own extension `_mojolearn_arima`, and has `fit`,
+                           `predict` and `forecast`. This entry used to say
+                           the lane had no `fit` because `estimate_x0` and
+                           the batched L-BFGS were unported; both landed
+                           2026-09-01 and the false paragraph is DELETED
+                           (the deletion `arima/README.md`'s hand-off
+                           section requested), not reworded.
+    AutoARIMA              its `p / q / P / Q / k` search and the
+                           information-criterion arms are NOT PORTED
+                           (`arima/NOT_IMPLEMENTED.tsv`). The differencing
+                           half of that search IS here, as `kpss_test` and
+                           `select_d`.
 
 THESE ESTIMATORS ARE NOT sklearn-SHAPED, AND THAT IS DELIBERATE. The rest
 of `mojolearn` promises `fit(X, y)` over a design matrix and `predict(X)`.
@@ -239,9 +238,13 @@ def select_d(y, D=0, s=0, d_max=None, pval_threshold=0.05):
                                   is cuML's `d_options = range(0, 2 - D + 1)`
         pval_threshold  honored   default 0.05, cuML's
         the p/q/P/Q/k   REFUSED   auto_arima's information-criterion grid
-        search                    over ARIMA fits is not ported, because
-                                  the ARIMA fit it searches over is not
-                                  ported. There is no `AutoARIMA` class.
+        search                    is not ported
+                                  (`arima/NOT_IMPLEMENTED.tsv`). The ARIMA
+                                  fit it searches over EXISTS since
+                                  2026-09-01 (`mojolearn.ARIMA`, backed by
+                                  `arima/`), so this refusal is now about
+                                  the SEARCH only. There is no `AutoARIMA`
+                                  class.
 
     Returns an int32 array of length `n_series`.
 

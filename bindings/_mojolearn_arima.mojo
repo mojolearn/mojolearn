@@ -17,10 +17,10 @@ STOPPED BEING TRUE when `arima/impl/arima/batched_fit.mojo` landed
 (2026-09-01) with `estimate_x0`, the Householder QR least squares and the
 batched L-BFGS, all gated by `arima/checks/fit_check.mojo` in both numeric
 tiers. What was missing after that was only the Python door, and this file
-is the middle third of it. THAT PARAGRAPH IN `_mojolearn_tsa.mojo` AND THE
-MATCHING ONE IN `python/mojolearn/_tsa_impl.py` ARE NOW FALSE AND ARE OWED A
-DELETION; they are not edited here only because those files belong to
-another lane's owner.
+is the middle third of it. THE STALE PARAGRAPH IN `_mojolearn_tsa.mojo` AND
+THE MATCHING ONE IN `python/mojolearn/_tsa_impl.py` WERE DELETED 2026-09-02
+(the deletion `arima/README.md`'s hand-off section requested); this
+sentence used to say they were owed and edited by another lane's owner.
 
 Arrays cross as borrowed NumPy addresses; all device buffers and contexts
 live for one call and no pointer is retained. The Python wrapper owns the

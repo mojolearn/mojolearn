@@ -1318,25 +1318,86 @@ a file banner so it cannot quietly become a claim:**
   * **The gates themselves are unvalidated.** Six sabotage arms are written
     and none is applied.
 
-## A hand-off this lane cannot make itself, and it is now OVERDUE
+## A hand-off this lane could not make itself -- MADE, 2026-09-02
 
-**ALL THREE CLAUSES ARE NOW FALSE AND TWO FILES IN THE `tsa` LANE STILL SAY
-THEM.** They belong to that lane's owner and are deliberately not edited
-from here; this is the request, with the exact text:
+**CLOSED.** The two stale paragraphs in the `tsa` lane were DELETED on
+2026-09-02, which is the correction this section requested (a deletion, not
+a rewording):
 
-  * `python/mojolearn/_tsa_impl.py`, the WHAT IS NOT HERE block (lines 20-31
-    at the time of writing), says `arima/` "does not port `estimate_x0` /
-    `_start_params` / `_arma_least_squares`, nor `arima.pyx`'s batched
-    L-BFGS", that "there is no `fit`", and that a class named `ARIMA` would
-    have to demand its own answer as an argument. `estimate_x0` landed
-    2026-09-01, `batched_fit` landed with it, and `mojolearn.ARIMA` is
-    exported from the package.
+  * `python/mojolearn/_tsa_impl.py`, the WHAT IS NOT HERE block: the entry
+    claiming `arima/` "does not port `estimate_x0` ... nor `arima.pyx`'s
+    batched L-BFGS" and "there is no `fit`" is gone. What stands in its
+    place is a pointer to `mojolearn.ARIMA` and a truthful `AutoARIMA`
+    entry (the search really is unported). The `select_d` docstring's
+    "because the ARIMA fit it searches over is not ported" clause was
+    corrected in the same pass: the refusal is now about the SEARCH only.
   * `bindings/_mojolearn_tsa.mojo`, the paragraph beginning "`arima/` IS
-    DELIBERATELY ABSENT", says the same three things and adds "there is no
-    `ARIMA` class here", which stays literally true of THAT module and
-    misleads about the package: `ARIMA` is in `bindings/_mojolearn_arima.mojo`,
-    an eleventh extension.
+    DELIBERATELY ABSENT": gone, replaced by the true statement that
+    `arima/` is served by its own extension,
+    `bindings/_mojolearn_arima.mojo`.
 
-The correction is a deletion in both cases, not a rewording. Until it is
-made, the shipped package's own reference text contradicts the shipped
-package.
+The matching "OWED A DELETION" sentence in `bindings/_mojolearn_arima.mojo`'s
+header was updated in the same commit, so no shipped reference text
+contradicts the shipped package on this point any more.
+
+## Public estimator surface (2026-09-01, wired 2026-09-02)
+
+`mojolearn.ARIMA` -- `fit(y)` batched, `predict(start, end)` (`end`
+EXCLUDED, cuML's convention), `forecast(steps)` -- landed at `cc269dca`:
+`arima/estimator.mojo` (the three pointer-shaped hosts),
+`bindings/_mojolearn_arima.mojo`, `bindings/build_arima.sh`,
+`python/mojolearn/_arima_impl.py`, registration in
+`python/mojolearn/__init__.py` and `_backend.py`, wheel rows in both
+packagers, and the gate `python/mojolearn/tests/test_arima_surface.py`.
+The surface's behavioral deviations are 990-993 and are recorded in the
+binding header and on the class.
+
+WHAT THE SURFACE CARRIES, AND WHAT IT NAMES AS ABSENT. Prediction and
+forecasting are CARRIED (both binding entry points exist and re-run the
+filter over the retained series, DEVIATION 990). Exogenous regressors are a
+NAMED ABSENCE: unported end to end (`ARIMAParams` has no `beta`,
+`NOT_IMPLEMENTED.tsv`), so `exog=` on `fit`, `predict` and `forecast` is
+COUNTED on the Python side and refused BY NAME by `validate_order`
+(`n_exog != 0`), which keeps the refusal reachable from every caller.
+Confidence intervals (`level`), CSS likelihoods, missing observations,
+`start_params` and `AutoARIMA`'s search are likewise refused or absent by
+name; the class docstring carries the full per-parameter table.
+
+DEVIATION 796 -- THE SURFACE GATE IS WIRED AS ONE PIXI TASK PER PROCESS,
+NOT ONE TASK FOR BOTH TIERS. `pixi run check-arima-surface` runs
+`python3 -m mojolearn.tests.test_arima_surface` from `python/`. Unlike the
+lane's Mojo gates (`check-arima`, `check-fit`), which exercise both numeric
+tiers inside one process, the Python surface FREEZES its tier at import
+(`_backend.py` loads one binary set), so the two tiers are two invocations
+of the same task under different `MOJOLEARN_NUMERIC_MODE` values, and the
+task deliberately does not loop them itself: a task that flipped the mode
+between halves would report the second half against the first half's
+binary. The test's own verdict says which tier ran and whether any bit was
+asserted. This deviation numbers the wiring decision only; it changes no
+numeric behavior anywhere.
+
+RUN OWED -- THE LEDGER, IN ORDER. Everything below is UNVERIFIED, RUN OWED;
+nothing on this surface may be called green until the orchestrator runs it
+and the verdict prints. One box (the M4) satisfies the first four; the
+three-vendor line stays open after them.
+
+    # 1. build both extensions (the identical one is the gated one)
+    bash bindings/build_arima.sh
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_arima.sh
+
+    # 2. the surface gate, IDENTICAL tier (bitwise arms ASSERTED)
+    MOJOLEARN_NUMERIC_MODE=identical pixi run check-arima-surface
+
+    # 3. the FAST tier, its own process (bitwise arms RECORDED, not asserted)
+    pixi run check-arima-surface
+
+    # 4. the lane's own gates, unchanged, to confirm nothing here moved them
+    pixi run check-arima
+
+    # 5. OPEN AFTER 1-4: a second and third vendor THROUGH THIS SURFACE.
+    #    The filter's three-vendor card at 221aa141 does not transfer to
+    #    the fit; steps 1-3 on an NVIDIA and an AMD box are what would.
+
+The `__init__.py` registration and the `.so` are in `cc269dca` and needed
+no second commit; the pixi task, this section, and the hand-off deletion
+above are the 2026-09-02 closure.

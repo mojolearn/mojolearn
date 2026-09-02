@@ -19,17 +19,15 @@ WHAT IS BEHIND EACH ENTRY, AND WHAT IS NOT
     select_d              the same lane's port of auto_arima's "Choose the
                           hyper-parameter d" block.
 
-`arima/` IS DELIBERATELY ABSENT. That lane ports cuML's batched Kalman
-filter, and it is finished as far as it goes: given ARIMA coefficients it
-computes the log-likelihood, the finite-difference gradient, the in-sample
-predictions and the forecast, all bit-identical against a host oracle on
-one Apple M4. What it does NOT port is `estimate_x0` / `_start_params` /
-`_arma_least_squares` (the initial guess) and `arima.pyx`'s batched L-BFGS
-driver, both listed NOT PORTED in `arima/NOT_IMPLEMENTED.tsv`. There is therefore
-no `fit`, and the coefficients its entry points require are exactly what
-the unported optimizer would have produced. An `ARIMA` class here would
-have to ask the caller for the answer before computing it, so there is no
-`ARIMA` class here. See the report that landed this file.
+`arima/` IS SERVED BY ITS OWN EXTENSION, `bindings/_mojolearn_arima.mojo`
+(the eleventh), not by this one, so that two independently changing
+bindings never become a merge point. A paragraph here used to say `arima/`
+was "deliberately absent" from the package because the lane had no `fit`;
+`estimate_x0` and the batched L-BFGS landed 2026-09-01, `mojolearn.ARIMA`
+is exported from the package (`python/mojolearn/_arima_impl.py`), and the
+false paragraph is DELETED, which is the correction `arima/README.md`'s
+hand-off section asked for. There is still no `ARIMA` entry point in THIS
+module, and there is not supposed to be.
 
 THE ARGUMENT-COUNT RULE. `PythonModuleBuilder.def_function` infers its
 signature from arity and stops working somewhere above nine arguments, so

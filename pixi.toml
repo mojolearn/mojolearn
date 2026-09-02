@@ -1152,6 +1152,17 @@ check-mamba3-corpus = "python tools/mamba_corpus_check.py mamba/corpus/mamba3/m3
 # (137 card records, 0 differing). NVIDIA is owed and is a lane-selection gap.
 check-arima = "mojo run -I . arima/checks/arima_check.mojo"
 arima-card = "mojo run -I . arima/arima_main.mojo"
+# The PYTHON surface gate for `mojolearn.ARIMA` (fit/predict/forecast,
+# `python/mojolearn/tests/test_arima_surface.py`). DEVIATION 796
+# (arima/README.md, "Public estimator surface"): ONE TIER PER PROCESS --
+# the Python side freezes its numeric tier at import, so unlike
+# `check-arima` this task cannot cover both tiers in one run. Run it once
+# plain (FAST: bitwise arms RECORDED, not asserted) and once under
+# `MOJOLEARN_NUMERIC_MODE=identical` (bitwise arms ASSERTED), after
+# `bash bindings/build_arima.sh` in each mode. UNVERIFIED, RUN OWED as of
+# 2026-09-02: this task has never been executed; the ordered ledger is in
+# arima/README.md.
+check-arima-surface = "cd python && python3 -m mojolearn.tests.test_arima_surface"
 # spectral: SOURCE ONLY, no gate and no sabotage has ever run. The five sabotage arms written
 # 2026-08-23 have NEVER BEEN COMPILED, so a syntax error in them would break this build.
 check-spectral = "mojo run -I . spectral/checks/spectral_check.mojo"
