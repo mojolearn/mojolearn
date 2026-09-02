@@ -525,8 +525,41 @@ time, niced.
 - **Shape sweep: 42/42 PASS** — B ∈ {1,2,3} × L ∈ {1,4,63,64,65,129,257}
   × d_model ∈ {32,64}, gate (a) asserted at every combination.
 
-**STILL OWED:** the corpus family (gen_corpus.py has no mamba3 family;
-the fixture table in mamba3_fixture.mojo is normative and the byte gate
-is the arbiter), FAST recording, kernel-matrix rows, and PHASE M3-6 —
-the three-vendor E-series leg the completion claim lives on. ONE
-COLUMN, ONE VENDOR: nothing above is a cross-vendor claim.
+**STILL OWED — updated 2026-09-01 (write-side lane; every claim below is
+UNVERIFIED, RUN OWED with its command):**
+
+- **Corpus family: BUILT, runs owed.** `mamba/corpus/gen_corpus.py` now
+  carries the mamba3 family MIRRORING `mamba3_fixture.mojo`'s normative
+  table index for index (ids 41-54, seed base "Mmb3Corp", the four plants;
+  verbatim `mamba3_siso_fwd_ref`/`step_ref`/`_segsum` copies cited by
+  line; staged reference on the profile's chunked schedule per DEVIATIONS
+  827/829/830), `tools/mamba_corpus_check.py` is documented
+  family-agnostic, and `pixi run check-mamba3-corpus` exists
+  (`mamba/corpus/mamba3/m3_base_b2_l4_d32`, tool-default tolerances until
+  `--self-test` calibrates them). RUNS OWED, in order:
+  1. generation (scratch venv per `mamba/corpus/README.md`):
+     `python mamba/corpus/gen_corpus.py --family mamba3 --verify`
+  2. the byte gate (two hash-spec implementations agreeing):
+     `tools/with_identical_mode.sh pixi run mojo run -I . mamba/checks/mamba3_check.mojo corpus`
+  3. the tolerance read, once the check grows a stage-dump path (the
+     mamba1 `MOJOLEARN_MAMBA_CORPUS_DUMP` shape — a CHECK-LANE item, not
+     the corpus lane's): `pixi run check-mamba3-corpus` with the dump dir
+     in `MOJOLEARN_MAMBA_CORPUS_DUMP`, then `--self-test` calibration.
+- **FAST recording: STILL OWED, and now WIRED.** The phase-8 pair exists
+  (`tools/e1_bootstrap.sh`: `run_lane_arm mamba3` + `check-mamba3-block`;
+  `tools/e3_round_judge.sh` expects and forgives
+  `PHASE8-FINDING: mamba3 [fast]` and lists mamba3's FAST card as
+  expected-missing until first recorded). The recording run is
+  `MOJOLEARN_E1_LANES=mamba3 bash tools/e1_bootstrap.sh` (or any full
+  leg) — a run, not a write.
+- **Kernel-matrix rows: WRITTEN.** `IDENTITY_PATHS.md` rows 92 (mamba2)
+  and 93 (this profile) carry the column-by-column ledger — Apple
+  RECORDED, NVIDIA and AMD OWED for this profile; the block's kernels
+  read no vendor-varying tunable, so `checks/kernel_matrix.mojo` gains no
+  knob row (stated in row 93, not silently omitted). The cross-column
+  READS are the E-leg's.
+- **PHASE M3-6 — the three-vendor E-series leg** the completion claim
+  lives on: `gemm/E1G_RUNBOOK.md` shape, reach measured not inferred.
+  RUN OWED.
+
+ONE COLUMN, ONE VENDOR: nothing above is a cross-vendor claim.

@@ -484,12 +484,23 @@ ONE COLUMN. Nothing here is a cross-vendor claim; phase 6 owns that.
   cells differ … first stage: silu.out". That failure is the expected
   PHASE8-FINDING named in the judge's allowlist; FAST makes no identity
   claim ([[fast-is-not-identical]]).
-- **STILL OWED:** the shape sweep (L in {256, 257, 513, 770} beyond the
-  gates' own lengths at larger d_model), kernel-matrix rows'
-  cross-column reads, check-portable-nn's identical_clamp arm,
-  `pixi run check-mamba2-corpus` (the tool's mamba2 support is a
-  separate lane item), and PHASE 6 — the three-vendor E-series leg the
-  completion claim lives on.
+- **STILL OWED (write-sides closed 2026-09-01 where marked; runs stay
+  owed):** the shape sweep (L in {256, 257, 513, 770} beyond the gates'
+  own lengths at larger d_model); check-portable-nn's identical_clamp
+  arm; `pixi run check-mamba2-corpus` — the TOOL side is CLOSED
+  (`tools/mamba_corpus_check.py` is family-agnostic by construction, it
+  reads only the case's own manifest, and the pixi task now exists at
+  `mamba/corpus/mamba2/m2_base_b2_l4_d32` with tool-default tolerances),
+  what remains is a RUN plus its prerequisites: a stage-dump path in
+  `mamba2_check.mojo` (the mamba1 `MOJOLEARN_MAMBA_CORPUS_DUMP` shape, a
+  check-lane item), then the compare and the `--self-test` calibration
+  that tightens the task's tolerances; kernel-matrix rows — WRITTEN as
+  `IDENTITY_PATHS.md` row 92 (Apple RECORDED, NVIDIA RECORDED, AMD OWED;
+  the block's kernels read no vendor-varying tunable so
+  `checks/kernel_matrix.mojo` gains no knob row, said there rather than
+  omitted), with the cross-column READS owed to the E-leg; and PHASE 6's
+  AMD column — the three-vendor E-series leg the completion claim lives
+  on.
 - **PHASE 6, TWO OF THREE VENDORS (2026-09-01 evening).** Apple
   reference column (commit d7e4b3bc, stamp 2026-09-01_162529 rebuilt as
   _162925) vs a rented RTX 4090 phase-8 column (stamp
