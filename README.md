@@ -403,17 +403,28 @@ Six interleaved year runs over the day ranged from 1.14x to 1.68x as the
 laptop warmed; the table shows the last one, not the best one. The CatBoost
 pair compares symmetric trees only, because LightGBM has no symmetric mode.
 
-**CAVEAT (2026-09-02): the higgs symmetric row does not reproduce at
-current HEAD.** A same-harness rerun at `27ae6c82`
-(`bench/results/mac_m4_higgs_latest_27ae6c82_experiment.md`) measured
-586.4 s at 8.0M train rows against CatBoost CPU's 270.3 s — roughly 4.5x
-slower per row than this table's 131.5 s at 8.8M, with CatBoost only 1.5x
-slower under the same conditions, so box conditions do not explain it.
-Its AUC moved 0.8217 → 0.8229, so either a real time regression landed
-between 2026-08-22 and `27ae6c82` or the 2026-08-22 fit did less work
-than believed; a commit bisect on this harness is owed and this row
-should not be quoted until it lands. The forest rows are unaffected
-(the same rerun holds RF at 2.4x and ET at 1.2x over sklearn at 8M rows).
+**INVESTIGATED AND CLOSED (2026-09-02): the higgs symmetric row is
+valid; full-scale reruns on a loaded box are not.** A 2026-09-02 rerun at
+`27ae6c82` measured 586.4 s at 8.0M train rows and prompted a full
+investigation. Findings, in order: (1) the engine did not regress —
+stage-timed walls at `dfa41bb` (this table's commit) and current HEAD are
+equal to within noise on the same fixture; (2) the shipped Python
+extension did not regress — an interleaved A/B at 2M rows, old extension
+built at `dfa41bb` in a worktree versus HEAD's, gave 75.8/82.2 s vs
+74.3/80.8 s over two rounds with the CatBoost canary stable; (3) the
+decisive run: the `dfa41bb` extension at this table's exact shape (full
+higgs, 500 trees) took 745.4 s on 2026-09-02 with AUC 0.82167 matching
+this row's record exactly — same commit, same computation, same output,
+5.7x the recorded time, and CatBoost itself ran 388.3 s against the
+177.8 s recorded here (2.2x). Both arms slower with identical outputs is
+a box condition, not a code change: the 2026-09-02 box carried ~11 GB of
+used swap from days of uptime, where this table's runs were taken under
+the quiet-box protocol. The row stands as recorded at `dfa41bb`;
+full-scale (8M+) numbers taken on a swap-loaded box, including the
+2026-09-02 overnight experiment's symmetric rows, must not be compared
+against it. The overnight forest rows' internal ordering (RF 2.4x, ET
+1.2x over sklearn at 8M) is a same-window comparison and survives its
+own conditions.
 
 THE YEAR ROW IS QUOTED ON BOTH METRICS AND THE DIRECTION REVERSES BETWEEN
 THEM. Until 2026-08-31 it quoted MAE only, which is the one of the two we

@@ -10,7 +10,19 @@
 - Dataset: NVIDIA `gbm-bench` HIGGS data; deterministic 80/20 train/test split
 - Shared `gbm-bench` tree depth: 8
 - Generated Python extension binaries were rebuilt from this commit immediately before measurement.
-- This commit is known to contain a symmetric-tree performance regression. These results are retained as an experiment/baseline, not as a claim of optimized performance.
+- ~~This commit is known to contain a symmetric-tree performance regression.~~
+  **DISPROVEN 2026-09-02 (same day):** the orchestrator's investigation found
+  no code regression at any layer. Stage-timed walls match `dfa41bb` (the
+  2026-08-22 record's commit) to within noise; an interleaved old-vs-HEAD
+  extension A/B at 2M rows is equal within noise; and the `dfa41bb` extension
+  itself, rerun at the full 8.8M/500-tree shape on 2026-09-02, took 745.4 s
+  (AUC 0.82167, byte-matching its own 2026-08-22 record) against 131.5 s
+  recorded then, with CatBoost also 2.2x slower. The slowdown in these
+  results is the BOX: ~11 GB of used swap at measurement time, versus the
+  quiet-box protocol of the 2026-08-22 record. These results are retained as
+  an experiment record of that loaded-box condition; their symmetric rows
+  must not be compared against quiet-box records. See README.md's caveat
+  under the training table.
 
 ## Completed results
 
