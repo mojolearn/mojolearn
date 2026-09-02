@@ -182,6 +182,16 @@ _MODULES = (
     # NAME with the build command instead of a wrong-tier binary
     # answering under the right label (DEVIATION 869, the header above).
     "_mojolearn_mamba",
+    # Added 2026-09-02 with the transformer block surface
+    # (TransformerBlock, `_transformer_impl.py`). The binding
+    # (bindings/_mojolearn_transformer.mojo + build_transformer.sh, the
+    # FIFTEENTH) landed in the same commit and has NEVER been compiled:
+    # the whole Python path is RUN OWED per tier
+    # (`tests/test_transformer_surface.py`). Listing the name here and in
+    # `_build_script`, both, is what makes an unbuilt extension raise BY
+    # NAME with the build command instead of a wrong-tier binary
+    # answering under the right label (DEVIATION 869, the header above).
+    "_mojolearn_transformer",
 )
 _SELECTED = None
 
@@ -998,6 +1008,7 @@ def _build_script(name):
         "_mojolearn_training": "build_training.sh",
         "_mojolearn_gp": "build_gp.sh",
         "_mojolearn_mamba": "build_mamba.sh",
+        "_mojolearn_transformer": "build_transformer.sh",
     }.get(name, "build" + name[len("_mojolearn"):] + ".sh")
 
 

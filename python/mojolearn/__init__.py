@@ -54,6 +54,15 @@ printed green in all three tiers on 2026-09-01 (one box, one vendor);
 the Mamba-3 arms printed green the same evening at `08a38a13` in all
 three tiers, identical bitwise-asserted (`mamba/FEATURE_PARITY.md`'s
 RUN LEDGER; still one box, one vendor).
+**THE TRANSFORMER BLOCK IS here** (since 2026-09-02): `TransformerBlock`
+(also as the `mojolearn.transformer` submodule), the reference-pinned
+Llama-shaped decoder layer with an explicit caller-owned KV cache
+(`TransformerState`) for prefill, continuation and single-token decode.
+Not an estimator -- no `fit` -- and it exists for cross-checking:
+`_transformer_impl.py` carries the contract on the class. Its Python
+path is UNVERIFIED, RUN OWED (the binding has never been compiled); the
+LANE underneath is recorded byte-identical Apple/NVIDIA/AMD for the
+forward's clauses (a) and (d) (transformer/README.md).
 **`GaussianProcessRegressor` IS here** (since 2026-09-01, later the same
 day), with its four kernel classes `RBF`, `Matern`, `ConstantKernel` and
 `WhiteKernel`. It was the one `_NOT_YET` entry ever held back for a reason
@@ -225,6 +234,26 @@ from ._mamba_impl import (
     Mamba3State,
 )
 
+# `TransformerBlock` JOINED 2026-09-02, giving profile
+# `mojolearn.identical.transformer.fp32.v1` its first Python symbol: the
+# lane's forward is CERTIFIED at the kernel level with a recorded
+# three-column round (2026-08-28, clauses (a) and (d), the same
+# 30-record card bytes on Apple, NVIDIA and AMD -- transformer/README.md
+# is the authority and its OWED list is real: clauses (b), (c), (e), the
+# sabotage ladder and the whole BACKWARD profile are not in that record)
+# and exported no Python symbol at all before this. Not an estimator --
+# no `fit` -- so it also lives in the `mojolearn.transformer` submodule;
+# its binding `_mojolearn_transformer` (the FIFTEENTH) resolves on FIRST
+# USE like every other, so an unbuilt extension leaves the package
+# importable and raises BY NAME with the build command when touched
+# (`_backend.py`'s design). THE PYTHON PATH IS UNVERIFIED, RUN OWED, per
+# tier -- the binding has NEVER been compiled -- until
+# `tests/test_transformer_surface.py` prints green, one box
+# (`bash bindings/build_transformer.sh` per tier first; the run-owed
+# ledger is transformer/README.md's "PyPI surface" section).
+from . import transformer
+from ._transformer_impl import TransformerBlock, TransformerState
+
 __all__ = [
     "ARIMA",
     "AgglomerativeClustering",
@@ -256,6 +285,8 @@ __all__ = [
     "SVC",
     "SVR",
     "SpectralClustering",
+    "TransformerBlock",
+    "TransformerState",
     "NearestNeighbors",
     "PCA",
     "RadiusNeighbors",
@@ -267,6 +298,7 @@ __all__ = [
     "linalg",
     "mamba",
     "metrics",
+    "transformer",
     "select_d",
     "__version__",
     "numeric_mode",
