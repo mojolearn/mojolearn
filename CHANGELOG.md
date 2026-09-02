@@ -1,6 +1,29 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-09-02)
+
+### Added
+
+- **`mojolearn.TransformerBlock` / `TransformerState`**, the certified
+  transformer block's first Python surface -- a pre-norm LLaMA-shaped block
+  (RMSNorm, RoPE, grouped-query attention with a KV cache, SwiGLU MLP) with
+  `forward` for prefill and `step` for stepwise decode over explicit state.
+  The FIFTEENTH extension, `_mojolearn_transformer`, compiled for the first
+  time on 2026-09-02 and its surface gate is green in all three numeric
+  tiers, with `identical` asserting that a decode step carries the same
+  BITS as the corresponding prefill token and that a split prefill equals a
+  whole one. **ONE APPLE M4.** No NVIDIA or AMD box has built or run this
+  binding; the block's own three-vendor stage card (30 stages at `a0a0eee`)
+  is the LANE's, measured below the Python surface. This is an inference
+  building block, not a training API, and the corpus cross-check is owed.
+
+- **`mojolearn.Mamba1Block` / `Mamba2Block` / `Mamba3Block`** and their
+  `State` types, the selective state-space blocks' Python surface (added
+  2026-09-01, recorded here because the 0.3.2 section shipped without it).
+  Same shape of promise and the same narrowness: the binding's gate is green
+  in three tiers on ONE APPLE M4, while the lane cards behind them cover
+  three vendors for Mamba-1 (17 stages at `a0a0eee`), Apple and NVIDIA for
+  Mamba-2 (26 stages) and Apple alone for Mamba-3.
 
 ### Added
 
