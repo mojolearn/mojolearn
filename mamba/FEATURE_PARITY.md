@@ -282,7 +282,7 @@ Every other absence is a deferral with a trigger, and per the house rule,
 
 ---
 
-## Python surface (built 2026-09-01; Mamba-1/2 GATED same day, Mamba-3 RUNS OWED)
+## Python surface (built 2026-09-01; ALL THREE BLOCKS GATED same day, three tiers, one box)
 
 The consumable surface the consumer table's "PyPI surface" row demanded.
 Files: `bindings/_mojolearn_mamba.mojo` (the FOURTEENTH extension; entry
@@ -291,9 +291,8 @@ points `mamba1_forward`, `mamba1_decode_step`, `mamba2_forward`,
 `mamba_numeric_mode` / `mamba_vendor` read-backs),
 `bindings/build_mamba.sh` (three-tier build, sibling of `build_gp.sh`;
 AIR floor RAISED 1→10 after the first cold build measured 16 mamba
-blobs on 2026-09-01 — a measurement that PREDATES the mamba3 entries,
-so the count is expected to grow and the floor's next raise is RUN OWED
-with the first post-mamba3 build), `python/mojolearn/_mamba_impl.py`
+blobs on 2026-09-01, then 10→16 the same evening when the first
+post-mamba3 build measured 24 — the growth the 10-comment predicted), `python/mojolearn/_mamba_impl.py`
 (classes `Mamba1Block`, `Mamba2Block`, `Mamba3Block`, states
 `Mamba1State`, `Mamba2State`, `Mamba3State`; float32-only with
 bf16/fp16/float64 refused BY NAME), `python/mojolearn/mamba.py` (the
@@ -312,13 +311,15 @@ RECORDED DEBT row that flips to FAILURE the moment
 
 RUN LEDGER. The Mamba-1/2 surface COMPILED AND RAN GREEN in all three
 tiers on 2026-09-01 (the UPDATE paragraph at the top; one box, one
-vendor). The MAMBA-3 surface pieces have NOT: their owed prints, in
-dependency order, per tier (fast, then deterministic and identical with
-`MOJOLEARN_NUMERIC_MODE` set for BOTH commands):
-`bash bindings/build_mamba.sh`, then
-`cd python && python3 -m mojolearn.tests.test_mamba_surface`. The .so
-artifacts carry NO freshness signal, so every tier's binding must be
-REBUILT before any Python-surface run is believed.
+vendor). The MAMBA-3 surface ran the same evening at `08a38a13`: build
++ test per tier (rebuild before each run — the .so carries no freshness
+signal), fast "the fast arms passed", deterministic "the deterministic
+arms passed", identical **GREEN with the bitwise arms ASSERTED**
+(decode==prefill for all three blocks, the Q=64 chunk-seal crossing,
+byte-identical consumed Input_States continuation, every guard by
+name). First post-mamba3 cold build measured 24 mamba AIR blobs; floor
+raised 10→16. One box, one vendor; the mamba3 corpus tolerance arm
+stays a RECORDED DEBT until `mamba/corpus/mamba3/` lands.
 
 Deviations 791-794, the surface's own (the 782-789 format; binding and
 wrapper headers carry the full text):

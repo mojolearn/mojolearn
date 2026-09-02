@@ -187,12 +187,10 @@ fi
 # rounded down: 10. THAT MEASUREMENT PREDATES THE MAMBA-3 ENTRY POINTS
 # (added later on 2026-09-01: mamba3_forward / mamba3_decode_step pull in
 # the m3_* kernel set of mamba3.mojo + mamba3_siso.mojo), so the observed
-# count is expected to GROW well past 16 on the next cold build. The floor
-# 10 stays valid AS A FLOOR, but it should be RAISED to two thirds of the
-# new measured count on the first post-mamba3 build -- that measurement is
-# RUN OWED (the counts print unconditionally below; the orchestrator reads
-# the real number back and raises the floor). The placeholder-then-raise
-# discipline is --
+# count grew exactly as predicted: THE FIRST POST-MAMBA3 BUILD (2026-09-01
+# evening, fast tier) MEASURED 24 mamba-prefix AIR blobs (32 total with
+# gemm's 8), and the floor below is two thirds of that, rounded down: 16.
+# The placeholder-then-raise discipline is --
 # exactly what build_training.sh's history teaches: its floor was 1 until
 # its first real build on 2026-09-01 measured 5 and it became 3, the ratio
 # bindings/build.sh uses against ITS measured counts (22 measured -> floor
@@ -232,7 +230,7 @@ for _sub in mamba gemm core checks; do
 done
 
 _failed=0
-for _pair in mamba:10; do
+for _pair in mamba:16; do
     _s=${_pair%%:*}
     _min=${_pair#*:}
     _n=$(printf '%s\n' "$_air" | grep -c "^${_s}" || true)
