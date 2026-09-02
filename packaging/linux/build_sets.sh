@@ -44,8 +44,17 @@ mkdir -p "$DEST/build_logs" "$DEST/sets"
 PIXI_ENV="${MOJOLEARN_BUILD_PIXI_ENV:-gbmbench}"
 JOBS="${MOJOLEARN_BUILD_JOBS:-3}"
 TIERS="${MOJOLEARN_BUILD_TIERS:-fast deterministic identical}"
-SCRIPTS="${MOJOLEARN_BUILD_SCRIPTS:-build.sh build_gbdt.sh build_estimators.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_tsa.sh build_linalg.sh build_arima.sh build_training.sh build_gp.sh}"
-EXT_NAMES="_mojolearn _mojolearn_gbdt _mojolearn_estimators _mojolearn_rf _mojolearn_trees _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_training _mojolearn_gp"
+# THE TWO LISTS BELOW ARE THE LINUX WHEEL'S CONTENTS AND THEY GO STALE
+# SILENTLY. A binding missing from them is not a build error -- it is a wheel
+# that ships without that extension and imports fine until the user touches
+# the missing surface. Fifteen bindings as of 2026-09-02: `build_mamba.sh`
+# (fourteenth) and `build_transformer.sh` (fifteenth) were added here the day
+# the macOS release script was found to have the same gap, one commit after
+# both of those scripts turned out to be non-executable. When a binding is
+# added, THREE lists move together: this one, EXT_NAMES below, and
+# `packaging/macos/build_release_wheel.sh`'s pair.
+SCRIPTS="${MOJOLEARN_BUILD_SCRIPTS:-build.sh build_gbdt.sh build_estimators.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_tsa.sh build_linalg.sh build_arima.sh build_training.sh build_gp.sh build_mamba.sh build_transformer.sh}"
+EXT_NAMES="_mojolearn _mojolearn_gbdt _mojolearn_estimators _mojolearn_rf _mojolearn_trees _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_training _mojolearn_gp _mojolearn_mamba _mojolearn_transformer"
 say() { echo "[$(date +%T) build_sets] $*"; }
 
 say "repo $REPO, dest $DEST, tiers: $TIERS, jobs: $JOBS"
