@@ -111,6 +111,54 @@ comptime TPB_DEFAULT = 128
 """`builder_kernels_impl.cuh:33`, `static constexpr int TPB_DEFAULT = 128`."""
 
 
+comptime SEARCH_ROWS_PER_THREAD = _search_rows_per_thread()
+"""Rows each thread of the range and score passes folds -- DEVIATION 2020.
+
+1 (the default, and the shipped value) is cuML's shape exactly: their
+`updateWorkloadInfo` gives every block `TPB` rows and the strided row loop
+degenerates to at most one iteration per thread (`builder.cuh:365-385`;
+re-read at v26.08.00 `builder.cuh:393-408`, STILL one row per thread). The
+measurement arms tile `ceildiv(count, TPB * R)` blocks per node instead, so
+each thread folds up to R rows and the workgroup count of the two hot
+launches divides by R -- LightGBM's histogram kernel is the incumbent GPU
+precedent for multi-row threads (`cuda_histogram_constructor.cu:30-32`
+derives its per-thread count from the grid; `NUM_DATA_PER_THREAD = 400`
+sizes the grid at `cuda_histogram_constructor.hpp:22`). The full block
+lives beside `build_workload_info`'s call sites in `builder.mojo`; the
+kernels themselves need no coverage change because their row loop was
+ALREADY block-strided -- only the per-thread range fold gains a key-space
+leg (see the DEVIATION 2020 fold leg in `node_feature_range_kernel`).
+"""
+
+
+def _search_rows_per_thread() -> Int:
+    """DEVIATION 2020's measurement arms. None is set by any build script;
+    the default is 1, which compiles the exact pre-2020 program."""
+    if is_defined["MOJOLEARN_ET_SEARCH_RPT_16"]():
+        return 16
+    if is_defined["MOJOLEARN_ET_SEARCH_RPT_8"]():
+        return 8
+    if is_defined["MOJOLEARN_ET_SEARCH_RPT_4"]():
+        return 4
+    if is_defined["MOJOLEARN_ET_SEARCH_RPT_2"]():
+        return 2
+    return 1
+
+
+comptime SEARCH_SAB_RPT_TAIL_DROP = is_defined[
+    "MOJOLEARN_ET_SAB_RPT_TAIL_DROP"
+]()
+"""DEVIATION 2020's required-RED arm (a measurement arm, never a gate; it
+must never reach a shipped build). Each thread of the range and score row
+loops drops every row after its FIRST -- at `SEARCH_ROWS_PER_THREAD = 1`
+this is a no-op by construction (the strided loop body runs at most once
+per thread), so the arm witnesses the TILING itself: it is invisible
+exactly when there is nothing to witness, and at R > 1 it starves the
+folds of (R-1)/R of their rows, which `device_batched_check`'s
+device-vs-host sections must see as nonzero node diffs. Terminating by
+the same argument as the clean run -- it deletes work and adds none."""
+
+
 def partition_samples(
     dataset: Dataset,
     split: Split,
@@ -873,11 +921,55 @@ def node_feature_range_kernel[
             # a thread sees is below `+inf` AND above `-inf`, so it lands in
             # both, which is precisely what the host's "seed both from the
             # first non-missing value" does in one branch.
-            if v < local_min:
-                local_min = v
-            if v > local_max:
-                local_max = v
+            #
+            # ==========================================================
+            # DEVIATION BLOCK 2020 (fold leg) -- when a thread folds MORE
+            # THAN ONE row, the fold's ORDER exists, so it runs in KEY
+            # order.
+            #
+            # At the shipped `SEARCH_ROWS_PER_THREAD = 1` a thread's loop
+            # body executes at most once (the tile equals TPB, cuML's
+            # shape), so there is no per-thread fold at all -- which is
+            # the unstated fact DEVIATION 1943's "the bits do not depend
+            # on TPB" argument rests on. At R > 1 the fold is real, and a
+            # FLOAT fold resolves the one order-visible pair, -0.0
+            # against +0.0 (they compare EQUAL, so which survives is
+            # decided by encounter order -- DEVIATION 452's finding, one
+            # level down). The strided assignment is a pure function of
+            # (count, TPB, num_blocks) and num_blocks now depends on R,
+            # so a float fold would let the FLAG move a published sign
+            # bit, and the sign bit reaches `quesval` through the
+            # `== max -> min` draw guard -- a bit in the MODEL, in BOTH
+            # numeric modes. `range_key` is a strict TOTAL order (-0.0
+            # below +0.0, DEVIATION 204), so ordering the update by keys
+            # makes the per-thread fold grouping-free: any R, any tiling,
+            # same surviving bits -- and therefore bit-identical to the
+            # R = 1 program, whose block fold already runs in key space
+            # under IDENTICAL (452) and whose cross-block merge always
+            # has (204). Everywhere except that zero tie the key order IS
+            # the float order, so this leg is value-for-value the two
+            # `if`s above. Sabotage note: under RANGE_SAB_NAN_AS_VALUE a
+            # NaN's key sorts above +inf, so the key leg lets the NaN
+            # win the max where the float leg's always-false compares
+            # dropped it -- MORE red on a required-RED arm, recorded in
+            # the ledger entry rather than special-cased here.
+            # ==========================================================
+            comptime if SEARCH_ROWS_PER_THREAD > 1:
+                if range_key(v) < range_key(local_min):
+                    local_min = v
+                if range_key(v) > range_key(local_max):
+                    local_max = v
+            else:
+                if v < local_min:
+                    local_min = v
+                if v > local_max:
+                    local_max = v
         i += stride
+        comptime if SEARCH_SAB_RPT_TAIL_DROP:
+            # DEVIATION 2020's required-RED arm: drop every row after the
+            # thread's first. A no-op at R = 1 (the loop body runs at most
+            # once); at R > 1 the range pass sees 1/R of each tile.
+            break
 
     # Their `__syncthreads()` at `:293` before the merge. The block
     # collectives replace their shared histogram; every thread must reach all
@@ -2953,6 +3045,14 @@ def node_feature_score_kernel[
         if goes_left:
             n_left += 1
         i += stride
+        comptime if SEARCH_SAB_RPT_TAIL_DROP:
+            # DEVIATION 2020's required-RED arm, the score-pass half: drop
+            # every row after the thread's first. A no-op at R = 1; at
+            # R > 1 the accumulators see 1/R of each tile. The collectives
+            # sit AFTER the loop, where the clean program's threads already
+            # arrive with unequal trip counts, so the break changes nothing
+            # about who reaches them.
+            break
 
     # Their `__syncthreads()` at `:293`. `max.gpu.primitives.block.sum` is the
     # Mojo spelling of a CUB block reduce (PORTING_RULES 0b-i explicitly

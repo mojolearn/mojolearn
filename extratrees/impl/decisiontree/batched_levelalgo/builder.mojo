@@ -145,6 +145,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
     RANGE_SAB_NONE,
     SCORE_STATUS_SCORED,
     PHASE_SETUP_TPB,
+    SEARCH_ROWS_PER_THREAD,
     build_workload_info,
     float_gain_key,
     leaf_kernel,
@@ -2552,12 +2553,24 @@ def _device_tpb() -> Int:
     phase 9's et-clf/et-reg stability lanes on the AMD leg are the gate
     that the identical hashes did not move.
 
-    The three defines are the measurement arms: `-D MOJOLEARN_ET_TPB_128`
+    The defines are the measurement arms: `-D MOJOLEARN_ET_TPB_128`
     forces cuML's width on a 64-lane device for the A/B,
-    `MOJOLEARN_ET_TPB_256` / `_512` widen a 32-lane device. None of them
-    is set by any build script.
+    `MOJOLEARN_ET_TPB_256` / `_512` widen a 32-lane device, and
+    `MOJOLEARN_ET_TPB_1024` (added 2026-09-01 with DEVIATION 2020, and
+    it is the sweep this entry's "Owed" paragraph already names: CDNA's
+    maximum, never yet timed) widens either. 1024 is
+    `MAX_THREADS_PER_BLOCK` on both Metal and CDNA (the traps register
+    measured Apple's), and every static carve keyed on TPB stays under
+    the 32 KiB shared floor at 1024: the partition's `2 * TPB` Int32
+    carve is 8 KiB, `split_reduce_shared_bytes(1024, 64)` is 576 bytes.
+    None of the defines is set by any build script. Note the interplay
+    with DEVIATION 2020's `SEARCH_ROWS_PER_THREAD`: the search tile is
+    `TPB * R`, so the two families multiply and an A/B sweeping both
+    must alternate arms inside one window, not assume independence.
     ==================================================================
     """
+    if is_defined["MOJOLEARN_ET_TPB_1024"]():
+        return 1024
     if is_defined["MOJOLEARN_ET_TPB_512"]():
         return 512
     if is_defined["MOJOLEARN_ET_TPB_256"]():
@@ -2566,9 +2579,72 @@ def _device_tpb() -> Int:
         return 128
     return 128 if WARP_SIZE <= 32 else 512
 
-comptime DEVICE_MAX_ACC = 32
+comptime DEVICE_MAX_ACC = _device_max_acc()
 """Widest per-cell class accumulator the score kernel's shared memory admits
-(DEVIATION 172). One definition, for the same reason DEVICE_TPB is one."""
+(DEVIATION 172). One definition, for the same reason DEVICE_TPB is one.
+32 unless a DEVIATION 2021 measurement arm narrows it -- see
+`_device_max_acc()`."""
+
+
+def _device_max_acc() -> Int:
+    """The score pass's private-accumulator width, chosen at compile time.
+
+    ==================================================================
+    DEVIATION 2021 -- the per-thread accumulator arrays are sized by a
+    comptime arm, because 32 slots price every fit for the widest fit
+
+    WHERE THE 32 COMES FROM. DEVIATION 172 replaced cuML's dynamic
+    shared-memory histogram with per-thread private arrays plus a block
+    reduction, and sized them at a comptime 32 because
+    `stack_allocation`'s slot count must be comptime (the same wall,
+    from the other side, as the partition's static carve in DEVIATION
+    176). cuML has no counterpart decision: their accumulator is the
+    shared histogram, sized at runtime per launch
+    (`builder_kernels_impl.cuh:235`, `extern __shared__`), so a binary
+    fit never carries a 32-wide anything.
+
+    WHAT THE 32 COSTS AT n_classes = 2. `node_feature_score_kernel`
+    allocates TWO `stack_allocation[MAX_ACC, Int32]` arrays and zeroes
+    all 2 * MAX_ACC slots per thread per block -- and because the row
+    loop indexes them by the RUNTIME class id, the backend cannot keep a
+    runtime-indexed array in registers: it lands in per-thread scratch
+    (local memory on CUDA/HIP, thread stack on Metal), 256 bytes per
+    thread, 128 KiB per 512-thread workgroup, ALL of it sized for 32
+    classes when higgs has 2 and every regression fit has 1. Per-thread
+    footprint is an OCCUPANCY divisor on every vendor, and the standing
+    diagnosis of the Apple score pass is memory-LATENCY bound (DEVIATION
+    208's probe) -- the regime where occupancy is the lever, because
+    more resident blocks are what hide gather latency.
+
+    THE ARMS. `-D MOJOLEARN_ET_MAX_ACC_4` / `_8` / `_16` narrow the
+    comptime width; the default stays 32 and compiles the exact
+    pre-2021 program. None is set by any build script. The bits cannot
+    move: the arrays hold the SAME integers in the same slots and the
+    unused tail was all zeros folded through integer sums -- removing a
+    zero from an integer sum is the identity. The guard is already
+    LOUD, not silent: the classification forest trainer raises by name
+    when `n_classes > DEVICE_MAX_ACC` ("the device score kernel is built
+    for at most ..."), so an arm too narrow for its dataset refuses
+    the fit rather than mis-scoring it -- gate arms accordingly (the
+    lane's fixtures fit `_8`; higgs2m and every regression fit `_4`).
+
+    NOT taken instead: making the width a runtime kernel argument
+    (impossible -- comptime slot count), or shrinking the DEFAULT
+    (a default flips only on the orchestrator's measured bit-identical
+    win, and a narrowed default would newly refuse legal 17-32-class
+    fits; if the win is real the shipping shape is a small dispatch
+    over two or three instantiations, which is a follow-up decision,
+    not this arm). UNVERIFIED, RUN OWED: the A/B commands live in
+    DEVIATIONS.md 2021 and PLAN.md.
+    ==================================================================
+    """
+    if is_defined["MOJOLEARN_ET_MAX_ACC_4"]():
+        return 4
+    if is_defined["MOJOLEARN_ET_MAX_ACC_8"]():
+        return 8
+    if is_defined["MOJOLEARN_ET_MAX_ACC_16"]():
+        return 16
+    return 32
 
 comptime FOREST_SAB_NONE = Int32(0)
 comptime FOREST_SAB_SCALAR_TREE = Int32(1)
@@ -2970,7 +3046,60 @@ def search_batch(
             List[Int32](),
         )
     # --- 2. the ragged-batch flattening ------------------------------
-    var plan = build_workload_info(work_items, TPB)
+    #
+    # ==================================================================
+    # DEVIATION BLOCK 2020 -- the search passes' tile is
+    # `TPB * SEARCH_ROWS_PER_THREAD` rows per block, cuML's exact shape at
+    # the shipped R = 1 and LightGBM's multi-row threads under the arms
+    #
+    # THEIRS (cuML). `updateWorkloadInfo` gives every block exactly TPB
+    # rows (`builder.cuh:365-385` at the pin; v26.08.00 `builder.cuh:
+    # 393-408` is unchanged), so the kernels' block-strided row loop
+    # degenerates to at most ONE iteration per thread, and the two hot
+    # passes launch `sum_i ceildiv(count_i, TPB) * k` workgroups per
+    # cycle. DEVIATION 1943 measured what that costs where dispatch rate
+    # is the bound: on a 64-lane device, halving the workgroup count
+    # halved each pass, twice.
+    #
+    # THEIRS (LightGBM, the incumbent GPU precedent for the arm). Their
+    # histogram kernel derives a REAL per-thread row count from the grid
+    # (`cuda_histogram_constructor.cu:30-32`), sized by
+    # `NUM_DATA_PER_THREAD = 400` (`cuda_histogram_constructor.hpp:22`)
+    # with an occupancy FLOOR of 160 y-blocks so small leaves cannot
+    # starve the device. Ours keeps its floor by construction: a node
+    # never drops below one block per (node, feature), so R only merges
+    # blocks that were siblings of the SAME node.
+    #
+    # OURS. The tile passed to `build_workload_info` -- and ONLY here and
+    # in the regression twin; the partition keeps its own TPB tiling,
+    # which DEVIATION 203's scatter assumes -- is widened by the comptime
+    # `SEARCH_ROWS_PER_THREAD` (default 1: this line compiles the exact
+    # pre-2020 program). The kernels need no coverage change: their loop
+    # was ALREADY `for i in tid, tid + TPB*num_blocks, ...`, complete and
+    # disjoint at any block count. The BITS do not move because nothing
+    # order-bearing is regrouped: the score pass sums integers through
+    # atomics (135/171), the cross-block range merge is integer min/max
+    # (204), the block fold is in key space under IDENTICAL (452), and
+    # the one place a real per-thread fold appears at R > 1 -- the range
+    # kernel's local min/max -- runs in key order under the flag (the
+    # DEVIATION 2020 fold leg in `node_feature_range_kernel`), which is
+    # grouping-free by total order and value-identical to R = 1.
+    # Required-RED arm: `-D MOJOLEARN_ET_SAB_RPT_TAIL_DROP` (see
+    # `SEARCH_SAB_RPT_TAIL_DROP`); it is a no-op at R = 1, which is
+    # itself the witness that the arm targets the tiling.
+    #
+    # WHAT IT BUYS AND WHERE: workgroup count of the two hot launches
+    # divides by R at the shallow levels (where DEVIATION 1943's
+    # measured bound lives), and each surviving block amortizes its six
+    # collectives and 3-7 publish atomics over R times the rows. The
+    # gathers themselves do not shrink -- DEVIATION 212's lesson says to
+    # presume the Apple column a wash and let the A/B say otherwise.
+    # UNVERIFIED, RUN OWED: the A/B commands live in DEVIATIONS.md 2020
+    # and PLAN.md.
+    # ==================================================================
+    var plan = build_workload_info(
+        work_items, TPB * SEARCH_ROWS_PER_THREAD
+    )
     var n_cells = n_nodes * Int(k)
 
     # --- per-batch device buffers ------------------------------------
@@ -4290,7 +4419,14 @@ def search_batch_regression(
             List[Float32](),
             List[Int32](),
         )
-    var plan = build_workload_info(work_items, TPB)
+    # DEVIATION 2020: the search tile is `TPB * SEARCH_ROWS_PER_THREAD`
+    # (default 1 = the exact pre-2020 program). The full block, with the
+    # bit argument and the required-RED arm, is at the classification
+    # twin's call site; the two twins must widen together or the two
+    # objectives would launch different grids for the same frontier.
+    var plan = build_workload_info(
+        work_items, TPB * SEARCH_ROWS_PER_THREAD
+    )
     var n_cells = n_nodes * Int(k)
 
     ref d_min = ws.d_min

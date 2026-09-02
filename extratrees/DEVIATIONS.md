@@ -3,8 +3,12 @@
 Written 2026-08-21. This lane's FIRST reserved block was **130-159**, assigned
 up front per rule 3 (the root ledger stood at 90 when the range was reserved;
 the RF lane in `ensemble/` holds 100-129). That block filled, and the lane
-continued at 160; the blocks this file now holds are **130-218, 450-465, 1943
-and 1945**. See the INDEX below for every one of them.
+continued at 160; the blocks this file now holds are **130-218, 450-465,
+470-472, 1943, 1945 and 2020-2021**. (466-469, the best-first growth mode,
+are in-code DEVIATION BLOCKS in `builder.mojo` with their record in
+`NOT_IMPLEMENTED.tsv`'s BestFirstTreeBuilder row; this header used to omit
+470-472, which was stale the day they landed -- fixed 2026-09-01.) See the
+INDEX below for every entry this file holds.
 
 **Why this text lives here and not in the root `PORTING.md`.** `PORTING.md` is
 a file the RF lane is also appending to, concurrently, and rule 12 is explicit
@@ -32,10 +36,13 @@ the reason and any measurement recorded in the entry), OPEN (the entry names
 work that must land before the deviation is settled), or SUPERSEDED (a later
 entry replaced it; the text stays for the argument it makes).
 
-**OPEN today: 1945 only.** **SUPERSEDED: 151 by 205, 161 by 204.** Every other
-deviation here is decided. That is not the same as nothing being owed; several
-CLOSED entries carry a correction or a still-wanted measurement and say so in
-place.
+**OPEN today: 1945, 470, 471, 472, 2020, 2021** (the last five all with their
+timing runs owed; 470-472 have their gates green on the orchestrator's box and
+owe the cold-box A/B, 2020-2021 are UNVERIFIED end to end -- this line said
+"1945 only" until 2026-09-01, stale since 470 landed). **SUPERSEDED: 151 by
+205, 161 by 204.** Every other deviation here is decided. That is not the same
+as nothing being owed; several CLOSED entries carry a correction or a
+still-wanted measurement and say so in place.
 
 Line numbers are as of this revision and drift with any edit; the deviation
 number in the heading is the durable anchor, and every heading now carries its
@@ -142,8 +149,17 @@ NUM   STATUS      LINE  SUMMARY
 464   CLOSED       3924  excess_selection_hash runs through a full-avalanche finalizer
 465   CLOSED       3969  key_for gets its own salt link; no collision with the sampler's stream
 1943  CLOSED       4018  The frontier block is 512 threads on a 64-lane wavefront, 128 on 32
+                       (AMENDED 2026-09-01: a `MOJOLEARN_ET_TPB_1024` arm now exists for the
+                       owed CDNA sweep past 512)
 1945  OPEN         4114  The MI325X phase timer bills 88% of a higgs ET fit to the host queue push;
                        the same host loop on Apple is 0.53%, so the attribution is what is open
+470   OPEN         4215  The search cycle's six setup enqueues fused into TWO seeder launches
+471   OPEN         4351  The leaf tail's two memsets folded into leaf_kernel[zero_fill=True]
+472   OPEN         4420  stage_batch's seven H2D uploads skip on byte equality
+2020  OPEN          end  The search tile is TPB * SEARCH_ROWS_PER_THREAD: LightGBM's multi-row
+                       threads as comptime arms over cuML's one-row-per-thread shape
+2021  OPEN          end  The score pass's private accumulator width gets comptime arms, because
+                       32 slots price every fit for the widest fit
 ```
 
 Two sections carry no deviation number:
@@ -157,7 +173,10 @@ Two sections carry no deviation number:
 
 Numbers 139 and 155 have no entry here; 462 is reserved and unused (see the
 note inside DEVIATION 464). The blocks this file holds are 130-218, 450-465,
-1943 and 1945, and they are not contiguous because other lanes own the gaps.
+470-472, 1943, 1945 and 2020-2021 (466-469 are in-code blocks in
+`builder.mojo`; 2020-2029 is this lane's perf-round band, claimed 2026-09-01
+after a repo-wide grep found it unclaimed), and they are not contiguous
+because other lanes own the gaps.
 
 ---
 
@@ -4107,7 +4126,12 @@ HEAD on the shipped arm, 11.808168 s for the 1M x 28 higgs fit
 (`bench/results/et_profile/APPLE_M4_2026-09-01.md`, and see DEVIATION 1945);
 NVIDIA has not. The `-D MOJOLEARN_ET_TPB_256` / `_512` arms on a 32-lane
 device have not been timed on either. AMD's `DEVICE_TPB` has not been swept
-past 512 (1024 is the CDNA maximum).
+past 512 (1024 is the CDNA maximum). AMENDED 2026-09-01: that last sweep now
+has its arm -- `-D MOJOLEARN_ET_TPB_1024=1` in `_device_tpb()`, added with
+DEVIATION 2020's round (its docstring carries the shared-memory arithmetic:
+every TPB-keyed carve stays under the 32 KiB floor at 1024). Still UNRUN;
+note DEVIATION 2020's tile is `TPB * R`, so a leg sweeping both families
+must alternate the arms inside one window rather than assume independence.
 
 ---
 
@@ -4549,3 +4573,227 @@ The define compiles out the canary kernel inside `assert_device_alive`
 (the only writer of the checked word), so the armed RED is
 deterministic and the arm terminates -- it deletes work, adds none. It
 must never reach a shipped build.
+
+---
+
+## DEVIATION 2020 [OPEN -- UNVERIFIED, RUNS OWED] -- the search tile is `TPB * SEARCH_ROWS_PER_THREAD`: LightGBM's multi-row threads as comptime arms over cuML's one-row-per-thread shape
+
+**Where.** `builder.mojo`: the two `build_workload_info` call sites in
+`search_batch` / `search_batch_regression` (the full in-code block is at the
+classification site); `builder_kernels_impl.mojo`: `SEARCH_ROWS_PER_THREAD` +
+`_search_rows_per_thread()` beside `TPB_DEFAULT`, the DEVIATION 2020 fold leg
+in `node_feature_range_kernel`, and `SEARCH_SAB_RPT_TAIL_DROP` in both hot row
+loops. The partition's own `build_workload_info(part_items, TPB)` sites are
+deliberately NOT widened -- DEVIATION 203's scatter assumes the TPB tiling.
+
+**Theirs (cuML), and it is one row per thread at BOTH pins.**
+`updateWorkloadInfo` gives every block exactly `TPB` rows
+(`builder.cuh:365-385` at 00094f7), so `stride = TPB * num_blocks >=
+range_len` and the kernels' "grid-stride" row loop executes AT MOST ONCE per
+thread. Re-read 2026-09-01 at the v26.08.00 mirror
+(`~/CascadeProjects/upstream/cuml-v26.08.00/cpp/src/decisiontree/
+batched-levelalgo/builder.cuh:393-408`, kernel loop at
+`kernels/builder_kernels_impl.cuh:320-343`): STILL one row per thread, still
+`TPB_DEFAULT = 128`, no node packing, no register tiling. Their current
+release did not take this lever.
+
+**Theirs (LightGBM), the incumbent GPU precedent for the arms.** The CUDA
+histogram kernel derives a REAL per-thread row count from the grid --
+`num_data_per_thread = (num_data_in_smaller_leaf + dim_y - 1) / dim_y`
+(`src/treelearner/cuda/cuda_histogram_constructor.cu:30-32` at 3d1cf30),
+with `NUM_DATA_PER_THREAD (400)` sizing the grid
+(`cuda_histogram_constructor.hpp:22`) and a `min_grid_dim_y_ = 160` floor so
+small leaves cannot starve the device (`cuda_histogram_constructor.hpp:155`).
+Ours keeps its floor structurally: a node never drops below one block per
+(node, feature), so R only merges sibling blocks of the SAME node and the
+deep-frontier grid (one block per small node already) is unchanged.
+
+**Ours.** `build_workload_info(work_items, TPB * SEARCH_ROWS_PER_THREAD)` at
+the two search sites. `SEARCH_ROWS_PER_THREAD` defaults to 1 -- the exact
+pre-2020 program, cuML's shape -- and the measurement arms are
+`-D MOJOLEARN_ET_SEARCH_RPT_2` / `_4` / `_8` / `_16`. No kernel coverage
+change: the row loop was already block-strided over `TPB * num_blocks`,
+which is complete and disjoint at any block count.
+
+**Why the bits cannot move, mechanism by mechanism.** The score pass
+accumulates INTEGERS through per-thread privates, block sums and atomics
+(DEVIATIONS 135, 171) -- integer addition is associative and exact, so any
+regrouping is the identity. The cross-block range merge is integer key-space
+min/max (204); the block-level range fold is in key space under IDENTICAL
+(452). The ONE new order-bearing site is the per-thread range fold: at R = 1
+it does not exist (each thread holds at most one row -- the unstated fact
+DEVIATION 1943's TPB-freedom argument rests on), at R > 1 it is real, and a
+float fold would resolve the -0.0/+0.0 tie by encounter order, which is a
+function of the tiling -- the flag would move a model bit through the
+`== max -> min` draw guard, in BOTH numeric modes. So the fold leg orders
+per-thread updates by `range_key` (a strict total order, -0.0 below +0.0),
+making the per-thread fold grouping-free and therefore bit-identical to the
+R = 1 program in FAST and IDENTICAL alike. Everywhere but the zero tie the
+key order IS the float order. (Sabotage-arm residue, recorded not
+special-cased: under `RANGE_SAB_NAN_AS_VALUE` a NaN's key sorts above
++inf's, so the key leg lets NaN win the max where the float compares dropped
+it -- a required-RED arm getting redder.)
+
+**What it buys, and where the presumption of a wash stands.** Workgroup
+count of the two hot launches divides by R at the shallow levels, where
+every row of every tree is active -- exactly where DEVIATION 1943 MEASURED
+the MI325X to be bound by workgroup dispatch rate (halving the workgroups
+halved each pass, twice: range 8107 -> 2819 ms, score 8799 -> 3288 ms over
+128 -> 512 TPB). At higgs 1M x 100 trees, TPB 512, the root-level score
+launch is ~195k x 5 workgroups; RPT_8 makes it ~24k x 5. Each surviving
+block also amortizes its six block collectives and 3-7 publish atomics over
+R times the rows. The GATHERS DO NOT SHRINK: per DEVIATION 212's standing
+rule the Apple column is PRESUMED A WASH until the alternating A/B says
+otherwise -- the claim this entry makes is for the dispatch-bound vendors,
+and the Apple leg is run to bound the price, not to claim the win. H100
+headroom is real but unmeasured: 4160 ms whole-fit at 1M against a
+bandwidth budget that prices the row traffic far lower, so the NVIDIA arm
+is worth the leg.
+
+**Required-RED arm.** `-D MOJOLEARN_ET_SAB_RPT_TAIL_DROP=1` (a measurement
+arm, never a gate; never in a shipped build): each thread of both row loops
+drops every row after its first. At R = 1 it is a NO-OP BY CONSTRUCTION --
+which is the witness that the sabotage targets the tiling itself -- and at
+R > 1 the folds see 1/R of each tile, so `device_batched_check`'s
+device-vs-host sections must go RED with OBSERVED nonzero node diffs (Sep
+1's rule: a green sabotage run is a fixture-blind arm, strengthen it, never
+wave it through). Terminating trivially: it deletes work.
+
+**Price.** At R > 1 a thread's registers hold the fold across R rows (the
+same registers), and the per-thread key conversion costs ~3 ALU ops per row
+against a scattered gather. Workspace: NONE -- `cap_blocks` bounds the R = 1
+block count and R only shrinks it. Partition, reduce, sampler, leaf: all
+untouched by construction.
+
+**GATE (the orchestrator runs everything; this lane ran nothing).**
+
+Correctness + identity, flag off then on (all GREEN):
+
+    pixi run mojo run -I . extratrees/checks/device_batched_check.mojo
+    sh extratrees/tools/check.sh
+    pixi run mojo run -I . -D MOJOLEARN_ET_SEARCH_RPT_4=1 extratrees/checks/device_batched_check.mojo
+    pixi run mojo run -I . -D MOJOLEARN_ET_SEARCH_RPT_8=1 extratrees/checks/device_batched_check.mojo
+    pixi run mojo run -I . -D MOJOLEARN_ET_SEARCH_RPT_4=1 extratrees/checks/device_forest_check.mojo
+    pixi run mojo run -I . -D MOJOLEARN_ET_SEARCH_RPT_4=1 extratrees/checks/device_regression_check.mojo
+    pixi run mojo run -I . -D MOJOLEARN_ET_SEARCH_RPT_4=1 extratrees/checks/device_tree_check.mojo
+    pixi run mojo run -I . -D MOJOLEARN_ET_SEARCH_RPT_4=1 extratrees/checks/bestfirst_check.mojo
+
+the required-RED pair (RED must be OBSERVED with nonzero diffs, then the
+no-op witness GREEN):
+
+    pixi run mojo run -I . -D MOJOLEARN_ET_SEARCH_RPT_4=1 -D MOJOLEARN_ET_SAB_RPT_TAIL_DROP=1 extratrees/checks/device_batched_check.mojo
+    pixi run mojo run -I . -D MOJOLEARN_ET_SAB_RPT_TAIL_DROP=1 extratrees/checks/device_batched_check.mojo
+
+the timing A/B (208's discipline: a build-level change cannot alternate in
+one process, so ALTERNATE THE BUILDS, three rounds minimum, one window,
+higgs2m at 1M AND 2M -- never below the 1M floor):
+
+    pixi run mojo build -I . extratrees/bench/fit_once.mojo -o build/et_fit_once_rpt1
+    pixi run mojo build -I . -D MOJOLEARN_ET_SEARCH_RPT_4=1 extratrees/bench/fit_once.mojo -o build/et_fit_once_rpt4
+    pixi run mojo build -I . -D MOJOLEARN_ET_SEARCH_RPT_8=1 extratrees/bench/fit_once.mojo -o build/et_fit_once_rpt8
+    for r in 1 2 3; do
+      build/et_fit_once_rpt1 ~/.cache/mojolearn higgs2m 1000000 28 2 100 16 sqrt
+      build/et_fit_once_rpt4 ~/.cache/mojolearn higgs2m 1000000 28 2 100 16 sqrt
+      build/et_fit_once_rpt8 ~/.cache/mojolearn higgs2m 1000000 28 2 100 16 sqrt
+    done
+    for r in 1 2 3; do
+      build/et_fit_once_rpt1 ~/.cache/mojolearn higgs2m 2097152 28 2 100 16 sqrt
+      build/et_fit_once_rpt4 ~/.cache/mojolearn higgs2m 2097152 28 2 100 16 sqrt
+      build/et_fit_once_rpt8 ~/.cache/mojolearn higgs2m 2097152 28 2 100 16 sqrt
+    done
+
+(`[fit_once]` prints the node count: it MUST be identical across every arm
+of a rung -- 1,829,804 at 1M and 2,173,962 at 2M per DEVIATION 1943 -- or
+the timing is void and the identity claim is broken.) The AMD/NVIDIA legs
+run the same arms through `tools/et_profile_leg.sh` with
+`DEF="-D MOJOLEARN_ET_SEARCH_RPT_4=1"` etc.; on the MI325X read the phase
+table, not the whole-fit wall, until DEVIATION 1945's attribution is
+settled. Default flip: only on the orchestrator's measured bit-identical
+win at 1M AND 2M, same session (switches must flip); vendor-divergent
+verdicts become a keyed row beside `_device_tpb`'s, never an inline vendor
+branch.
+
+---
+
+## DEVIATION 2021 [OPEN -- UNVERIFIED, RUNS OWED] -- the score pass's private accumulator width gets comptime arms, because 32 slots price every fit for the widest fit
+
+**Where.** `builder.mojo`: `DEVICE_MAX_ACC = _device_max_acc()` (the full
+in-code block is its docstring); consumed by the `node_feature_score_kernel`
+/ `node_feature_score_finalize_kernel` instantiations in both twins. The
+checks pin their own widths and are untouched.
+
+**Theirs.** cuML has no counterpart decision: their accumulator is the
+dynamic shared histogram (`extern __shared__`, `builder_kernels_impl.cuh:
+235`), sized per launch at runtime, so a binary-classification fit never
+carries a 32-wide anything. DEVIATION 172 replaced that histogram with
+per-thread private arrays plus a block reduction -- Mojo's
+`stack_allocation` takes a COMPTIME slot count, and 32 was chosen as "the
+widest the shared budget admits". This entry does not revisit 172; it makes
+172's constant an arm.
+
+**The cost being attacked, stated as arithmetic (this lane measures
+nothing).** The kernel allocates `2 * MAX_ACC` Int32 slots per thread and
+zeroes them per block; the row loop indexes them by the RUNTIME class id,
+and a runtime-indexed private array cannot live in registers -- it lands in
+per-thread scratch (local memory on CUDA/HIP, thread stack on Metal). At
+MAX_ACC 32 that is 256 bytes/thread, 128 KiB per 512-thread workgroup, all
+sized for 32 classes while higgs has 2 and EVERY regression fit has 1.
+Per-thread footprint divides occupancy on every vendor, and the standing
+Apple diagnosis is memory-LATENCY bound (DEVIATION 208's probe: the score
+pass within ~1.5x of the pure-gather roofline) -- the regime where resident
+blocks are what hide latency. DEVIATION 1943 noted the arrays are "not
+scratch-bound" ON THE MI325X, where dispatch rate is the bound; that note
+is one box's, and the Apple/NVIDIA occupancy question has never been asked.
+
+**Ours.** `-D MOJOLEARN_ET_MAX_ACC_4` / `_8` / `_16` narrow the comptime
+width; the default stays 32 and compiles the exact pre-2021 program. The
+bits cannot move: the same integers land in the same slots, and the removed
+tail was zeros folded through integer sums -- removing a zero from an
+integer sum is the identity. The guard is already loud: the classification
+forest trainer raises "the device score kernel is built for at most N
+classes" when `n_classes > DEVICE_MAX_ACC`, so an arm too narrow for its
+dataset REFUSES the fit rather than mis-scoring it (DEVIATION 174's rule: a
+refusal is a status, a wrong answer is not). `device_batched_check`'s
+classification fixture is 3-class, so the `_4` arm gates green; a fixture
+that outgrows an arm fails LOUDLY with that named error, which is a finding
+about the arm choice, not a defect.
+
+**No required-RED arm, and why that is not a hole.** The change is a
+comptime width whose reach is by instantiation -- there is no new branch to
+witness. What could rot is the GUARD, and its witness already exists in the
+shipped error path; the gate below exercises the narrow arm against real
+fixtures, where an under-width publish would move nodes.
+
+**NOT taken instead.** A runtime width (impossible: comptime slot count); a
+narrowed DEFAULT (a default flips only on a measured bit-identical win, and
+a narrowed default would newly refuse legal 17-32-class fits -- if the arm
+wins, the shipping shape is a small host dispatch over two or three
+instantiations, a follow-up decision with its own number).
+
+**GATE (orchestrator's; this lane ran nothing).**
+
+    pixi run mojo run -I . -D MOJOLEARN_ET_MAX_ACC_4=1 extratrees/checks/device_batched_check.mojo
+    pixi run mojo run -I . -D MOJOLEARN_ET_MAX_ACC_4=1 extratrees/checks/device_regression_check.mojo
+    pixi run mojo run -I . -D MOJOLEARN_ET_MAX_ACC_4=1 extratrees/checks/device_forest_check.mojo
+    sh extratrees/tools/check.sh
+
+the timing A/B (alternate the BUILDS, three rounds, one window, 1M and 2M;
+node counts must match across arms or the run is void):
+
+    pixi run mojo build -I . extratrees/bench/fit_once.mojo -o build/et_fit_once_acc32
+    pixi run mojo build -I . -D MOJOLEARN_ET_MAX_ACC_4=1 extratrees/bench/fit_once.mojo -o build/et_fit_once_acc4
+    for r in 1 2 3; do
+      build/et_fit_once_acc32 ~/.cache/mojolearn higgs2m 1000000 28 2 100 16 sqrt
+      build/et_fit_once_acc4  ~/.cache/mojolearn higgs2m 1000000 28 2 100 16 sqrt
+    done
+    for r in 1 2 3; do
+      build/et_fit_once_acc32 ~/.cache/mojolearn higgs2m 2097152 28 2 100 16 sqrt
+      build/et_fit_once_acc4  ~/.cache/mojolearn higgs2m 2097152 28 2 100 16 sqrt
+    done
+    # regression arm (n_acc = 1, the narrowest legal fit): same pair with
+    # `regression` appended to each run line.
+
+Composes with DEVIATION 2020: a combined arm
+(`-D MOJOLEARN_ET_SEARCH_RPT_4=1 -D MOJOLEARN_ET_MAX_ACC_4=1`) is worth one
+extra build in the same window IF both singles move, since the two attack
+different divisors (workgroup count against per-thread footprint).

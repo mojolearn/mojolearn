@@ -343,3 +343,95 @@ rule 17.)
   `NodeQueue.push`, that partitioning before `Push` is load-bearing, and that
   the validity guard around the partition is observable. All three are
   measured equivalences now, kept as the upstream has them.
+
+---
+
+# Session 2026-09-01 (perf-research lane, band 2020-2029): the upstream survey, and two flagged candidates
+
+Appended by the write-only perf-research lane. THIS LANE RAN NOTHING: every
+claim below is either a citation, arithmetic, or marked RUN OWED. The survey
+is `UPSTREAM_SURVEY_2026-09.md` (the technique table, verdicts per numeric
+tier, and the ranked candidates that were NOT taken). The ledger entries are
+DEVIATIONS.md 2020 and 2021, plus an AMENDMENT to 1943 (the owed
+`MOJOLEARN_ET_TPB_1024` arm now exists).
+
+## What landed, all flag-guarded, ALL OFF BY DEFAULT
+
+1. **DEVIATION 2020 -- `SEARCH_ROWS_PER_THREAD`** (`MOJOLEARN_ET_SEARCH_RPT_
+   {2,4,8,16}`): the range/score tile becomes `TPB * R` rows per block, so
+   each thread's already-strided loop folds R rows and the hot launches'
+   workgroup count divides by R at the shallow levels. cuML is one row per
+   thread at BOTH pins (re-read at v26.08.00 this session); LightGBM's
+   histogram kernel is the incumbent precedent for real items-per-thread.
+   Bit-identical in both tiers: integer/key-space accumulation throughout,
+   and the one new order-bearing site (the per-thread range fold, which
+   does not exist at R = 1) runs in `range_key` order under the flag.
+   Required-RED arm `MOJOLEARN_ET_SAB_RPT_TAIL_DROP` (a no-op at R = 1 by
+   construction, which is the witness it targets the tiling).
+2. **DEVIATION 2021 -- `_device_max_acc()`** (`MOJOLEARN_ET_MAX_ACC_
+   {4,8,16}`): the score pass's runtime-indexed private arrays stop being
+   sized 2 x 32 Int32 per thread for every fit; higgs is 2-class and every
+   regression fit is 1-wide. Occupancy lever for the latency-bound (Apple)
+   column. Bit-free; the existing "built for at most N classes" refusal
+   stays loud under any arm.
+3. **1943 amendment -- `MOJOLEARN_ET_TPB_1024`**: the CDNA sweep past 512
+   that 1943's Owed paragraph names. The shared-memory arithmetic is in
+   `_device_tpb()`'s docstring.
+
+## RUN OWED -- the orchestrator's batch, in order
+
+Gates first (flag off must stay green, arms must gate green, the sabotage
+must be SEEN red then green):
+
+    pixi run mojo run -I . extratrees/checks/device_batched_check.mojo
+    sh extratrees/tools/check.sh
+    pixi run mojo run -I . -D MOJOLEARN_ET_SEARCH_RPT_4=1 extratrees/checks/device_batched_check.mojo
+    pixi run mojo run -I . -D MOJOLEARN_ET_SEARCH_RPT_8=1 extratrees/checks/device_batched_check.mojo
+    pixi run mojo run -I . -D MOJOLEARN_ET_SEARCH_RPT_4=1 extratrees/checks/device_forest_check.mojo
+    pixi run mojo run -I . -D MOJOLEARN_ET_SEARCH_RPT_4=1 extratrees/checks/device_regression_check.mojo
+    pixi run mojo run -I . -D MOJOLEARN_ET_SEARCH_RPT_4=1 extratrees/checks/device_tree_check.mojo
+    pixi run mojo run -I . -D MOJOLEARN_ET_SEARCH_RPT_4=1 extratrees/checks/bestfirst_check.mojo
+    pixi run mojo run -I . -D MOJOLEARN_ET_SEARCH_RPT_4=1 -D MOJOLEARN_ET_SAB_RPT_TAIL_DROP=1 extratrees/checks/device_batched_check.mojo   # required RED, observed
+    pixi run mojo run -I . -D MOJOLEARN_ET_SAB_RPT_TAIL_DROP=1 extratrees/checks/device_batched_check.mojo   # the R=1 no-op witness, GREEN
+    pixi run mojo run -I . -D MOJOLEARN_ET_MAX_ACC_4=1 extratrees/checks/device_batched_check.mojo
+    pixi run mojo run -I . -D MOJOLEARN_ET_MAX_ACC_4=1 extratrees/checks/device_regression_check.mojo
+    pixi run mojo run -I . -D MOJOLEARN_ET_MAX_ACC_4=1 extratrees/checks/device_forest_check.mojo
+
+Then the timing A/Bs -- 1M AND 2M, NEVER below the floor, builds alternated
+inside one window (208's discipline), three rounds, node counts asserted
+identical across arms (1,829,804 at 1M / 2,173,962 at 2M per 1943):
+
+    pixi run mojo build -I . extratrees/bench/fit_once.mojo -o build/et_fit_once_rpt1
+    pixi run mojo build -I . -D MOJOLEARN_ET_SEARCH_RPT_4=1 extratrees/bench/fit_once.mojo -o build/et_fit_once_rpt4
+    pixi run mojo build -I . -D MOJOLEARN_ET_SEARCH_RPT_8=1 extratrees/bench/fit_once.mojo -o build/et_fit_once_rpt8
+    pixi run mojo build -I . -D MOJOLEARN_ET_MAX_ACC_4=1 extratrees/bench/fit_once.mojo -o build/et_fit_once_acc4
+    for r in 1 2 3; do for arm in rpt1 rpt4 rpt8 acc4; do
+      build/et_fit_once_$arm ~/.cache/mojolearn higgs2m 1000000 28 2 100 16 sqrt
+    done; done
+    for r in 1 2 3; do for arm in rpt1 rpt4 rpt8 acc4; do
+      build/et_fit_once_$arm ~/.cache/mojolearn higgs2m 2097152 28 2 100 16 sqrt
+    done; done
+    # regression arms: same builds, `regression` appended to each run line.
+
+AMD/NVIDIA legs: `tools/et_profile_leg.sh` with the new defines (the script
+needs the arm vocabulary -- a PROPOSAL in the survey doc, tools/ is not this
+lane's to edit); on the MI325X read the PHASE table, not whole-fit wall,
+until DEVIATION 1945 settles. Expected signs, committed before any run:
+2020 moves the AMD/NVIDIA columns (dispatch-bound per 1943) and is presumed
+a WASH on Apple (212's rule -- the gathers don't shrink); 2021's sign lives
+on Apple (occupancy against latency) and is presumed small on AMD (1943's
+"not scratch-bound" note). A default flips only on a measured bit-identical
+win at both rungs, same session; a vendor-split verdict becomes a keyed
+comptime row beside `_device_tpb()`'s, never an inline vendor branch.
+
+## Not taken this round, ranked, with the reasons in the survey doc
+
+Small-node packing (rank 3: nobody upstream has it, deep-frontier dispatch,
+needs sub-block collectives and a compiling session), fslot-0 totals dedup
+(rank 4: overlaps 2020's win, wide check surface), partition
+predicate-recovery audit (rank 5: bounded by 15%/185 ms, audit before
+diff), root-range dedup (rank 6: ~2% bound). The formulation-level answer
+to "are we exhausting ET" is at the survey's tail: on Apple the remaining
+headroom inside this formulation is occupancy then the roofline; on the
+dispatch-bound vendors it is NOT exhausted and 2020/1024/packing all aim at
+the same measured bound.
