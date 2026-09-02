@@ -206,6 +206,71 @@ comptime N_BLKS_FOR_COLS = 10
 # `builder.cuh:205` -- "Memory alignment value"
 comptime ALIGN_VALUE = 512
 
+# ================= DEVIATION BLOCK 2011 =================
+# HISTOGRAM ITEMS-PER-THREAD -- NOT theirs (2026-09-01). OFF BY DEFAULT
+# (1 compiles cuML's mapping byte-for-byte).
+#
+# WHAT UPSTREAM DOES. cuML tiles a node at ONE CTA PER 128 ROWS:
+# `updateWorkloadInfo` gives each node `max(ceildiv(count, TPB), 1)`
+# blocks (`builder.cuh:398-399`), and the histogram kernel's grid-stride
+# loop (`builder_kernels_impl.cuh:336`) therefore runs ~ONE iteration
+# per thread -- the "loop" is a remainder guard, not a loop. Every
+# competitor blocks rows per thread instead: LightGBM's CUDA histogram
+# gives each thread ~400 rows (`NUM_DATA_PER_THREAD=400`,
+# `cuda_histogram_constructor.hpp:22`, grid_dim_y from
+# `ceil(num_data/400)`), and CatBoost's hist kernels run unroll-traits
+# loops over per-block row ranges. cuML has no ITEMS_PER_THREAD anywhere
+# (verified at the pin: grep zero hits).
+#
+# WHY IT COSTS THEM (and us) AT 1M-2M ROWS. Blocks-per-node scales with
+# rows, and EVERY block of a node pays the full per-block overheads of
+# the shared arm: zero-init of the whole `histogram_len` slot, and --
+# the expensive half -- the shared->global flush of `histogram_len`
+# integer ATOMICS (`:344-351`). At rf@1000000 the root gets ~7.8k
+# blocks; at 4 classes x 128 bins that is ~4M global flush atomics for
+# ONE column of ONE level. Fewer, fatter blocks divide both overheads
+# and finally give the grid-stride loop real iterations to overlap
+# gather latency across.
+#
+# WHAT THIS DEVIATION DOES. `HIST_ITEMS_PER_THREAD = R` builds the
+# SPLIT-PHASE workload table at granularity `TPB * R` (one block per
+# `TPB*R` rows), so each histogram thread strides R times. THE KERNEL
+# IS UNTOUCHED: its `stride = block_dim * num_blocks` / `tid = thread +
+# offset_blockid * block_dim` arithmetic covers the node's range exactly
+# once for ANY block count (each thread owns `{tid + k*stride}`), which
+# is why the change is a TABLE change, not a kernel change.
+#
+# BIT-IDENTITY ARGUMENT. The (element -> thread) assignment moves; the
+# multiset of increments per (node, column, bin, class) cell does not,
+# and every histogram accumulator is an integer (`ClassificationBin`
+# UInt32) or fixed-point Int32 (`RegressionBin`, weighted bins --
+# DEVIATION 101) atomic: commutative and associative EXACTLY. The flush
+# is the same integer atomics in different-sized pieces. Downstream
+# (find_best_splits, partition, leaves) reads only the summed cells.
+# Fingerprints must be UNCHANGED flag-on vs flag-off.
+#
+# THE ONE INTERACTION, PRICED: DEVIATION 1919's no-retry partition
+# reuses the SPLIT phase's staged workload table, whose granularity this
+# flag coarsens -- and the partition scan's slot math REQUIRES TPB
+# granularity (`range_pos = offset_blockid * TPB + slot % TPB`). Under
+# R > 1 the reuse is therefore DISABLED (`advance_batch` below) and
+# every batch restages the partition's own TPB-granularity table:
+# +1 `xfer_phase_upload` per no-retry batch, the exact launch 1919
+# removed. The A/B pair carries that price inside it, so the measured
+# verdict is on the NET.
+#
+# `find_best_splits` (grid = nodes x columns), `phase_setup`
+# (element-indexed) and the partition kernels (own staging) never read
+# the split-phase table's granularity; the histogram launch is its only
+# reader under this flag. `max_blocks_dimx_for`'s bound holds a fortiori
+# (coarser granularity emits fewer entries).
+#
+# UNVERIFIED, RUN OWED (orchestrator; ensemble/PLAN.md "2026-09-01
+# candidate round"). The candidate arm is R = 4.
+# =========================================================
+comptime HIST_ITEMS_PER_THREAD = 1
+comptime HIST_WORKLOAD_GRANULARITY = TPB_DEFAULT * HIST_ITEMS_PER_THREAD
+
 
 @always_inline
 def align_to(value: Int, alignment: Int) -> Int:
@@ -572,6 +637,7 @@ def update_workload_info[
 ](
     work_items: List[NodeWorkItem],
     h_workload_info: MutPointer[WorkloadInfo, o],
+    granularity: Int = TPB_DEFAULT,
 ) -> Int:
     """`Builder::updateWorkloadInfo`, `builder.cuh:393-407`.
 
@@ -600,18 +666,24 @@ def update_workload_info[
     The device copy their `raft::update_device` at `:405` performs is the
     caller's, so this stays a pure host function and can be checked
     without a GPU (hand it any host array's pointer).
+
+    `granularity` is DEVIATION 2011: rows per block. `TPB_DEFAULT` (the
+    default, and the only value the partition may ever use -- the scan's
+    slot math is TPB-granular) reproduces their arithmetic exactly;
+    `enqueue_best_splits` passes `HIST_WORKLOAD_GRANULARITY`, which is
+    the same value until the flag is flipped.
     """
     var n_blocks_dimx = 0
     for i in range(len(work_items)):
         var item = work_items[i]
         var n_blocks_per_node = max(
-            ceildiv(item.instances.count, TPB_DEFAULT), 1
+            ceildiv(item.instances.count, granularity), 1
         )
         comptime if sabotage == 4:
             # Drop their `max(..., 1)`. Predicted movement: an EMPTY node
             # gets zero blocks, so the grid is short and that node is never
             # visited by any kernel.
-            n_blocks_per_node = ceildiv(item.instances.count, TPB_DEFAULT)
+            n_blocks_per_node = ceildiv(item.instances.count, granularity)
         for b in range(n_blocks_per_node):
             h_workload_info[unsafe_offset = n_blocks_dimx + b] = (
                 WorkloadInfo(Int32(i), Int32(b), Int32(n_blocks_per_node))
@@ -626,7 +698,12 @@ def workload_blocks_for(work_items: List[NodeWorkItem]) -> Int:
     the staged map is already on the device (DEVIATION 1919) can size the
     grid without restaging. Any edit to `update_workload_info`'s block
     arithmetic must land here in the same commit; the two must agree or
-    the partition grid is short."""
+    the partition grid is short.
+
+    DEVIATION 2011 note: this function is TPB-granular ON PURPOSE and
+    grew no granularity argument -- its one caller is the 1919 reuse
+    path, which exists only when the staged map is also TPB-granular
+    (the reuse is disabled under `HIST_ITEMS_PER_THREAD > 1`)."""
     var n_blocks_dimx = 0
     for i in range(len(work_items)):
         n_blocks_dimx += max(
@@ -1984,8 +2061,13 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # DEVIATION 1908: stage both, then ONE packed upload.
         self._stage_work_items(work_items)
         # `:393-407` -- straight into the pinned array, as theirs.
+        # DEVIATION 2011: the granularity constant folds to TPB_DEFAULT
+        # under the default flag, i.e. this line IS theirs until the
+        # flag flips; under R > 1 the table is coarser and its only
+        # reader on this phase is the histogram launch (see the
+        # deviation block by the flag).
         var n_blocks_dimx = update_workload_info(
-            work_items, self._h_workload_ptr()
+            work_items, self._h_workload_ptr(), HIST_WORKLOAD_GRANULARITY
         )
         self._enqueue_phase_upload(ctx, n_blocks_dimx)
 
@@ -2324,12 +2406,17 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # DEVIATION 1919 -- at round 0 the device span already holds this
         # batch's items and block map (round zero staged `active_items`,
         # a copy of `work_items`, and no retry restaged a subset).
+        # DEVIATION 2011: under R > 1 the staged map is HISTOGRAM
+        # granularity, which the partition scan's TPB-granular slot math
+        # must never read -- the reuse is off and every batch restages
+        # (priced in the 2011 block). Comptime-folds to `st.round == 0`
+        # under the default flag.
         self.enqueue_node_split(
             ctx,
             dataset,
             st.work_items,
             st.final_splits,
-            reuse_phase_span=(st.round == 0),
+            reuse_phase_span=(st.round == 0 and HIST_ITEMS_PER_THREAD == 1),
         )
         st.phase = 1
         return False

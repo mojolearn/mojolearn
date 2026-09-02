@@ -356,6 +356,17 @@ from core.philox import (
     launch_uniform_int,
     uniform_double_host,
 )
+
+# DEVIATION 2010 -- the LSD one-bit radix passes are `core/`'s, already on
+# the shipping path for quantiles (`quantiles.mojo` DEVIATION 111). Driven
+# here with ONE segment; no core/ file is edited.
+from core.segmented_sort import (
+    SORT_BLOCK,
+    seg_add_block_carry_kernel,
+    seg_reorder_one_bit_kernel,
+    seg_scan_block_sums_kernel,
+    seg_scan_key_bit_kernel,
+)
 from std.ffi import external_call
 from std.math import isfinite, isinf, sqrt
 
@@ -410,6 +421,79 @@ comptime INT32_MAX: Int32 = 2147483647
 # The A/B pair remains two builds of this ONE source with this ONE
 # line flipped.
 comptime LABELS_SAMPLED_ORDER = True
+
+# ================= DEVIATION BLOCK 2010 =================
+# SORTED SAMPLED ROWS -- NOT theirs (2026-09-01). OFF BY DEFAULT.
+#
+# WHAT UPSTREAM DOES. cuML's bootstrap draws are raw `uniformInt` output
+# (`randomforest.cuh:140-143`): unsorted, with duplicates. `row_ids` is
+# never re-sorted anywhere in their tree (`grep sort` over
+# `cpp/src/decisiontree/` finds only the quantile sort), and their node
+# partition is a STABLE segmented scan (`builder_kernels_impl.cuh:
+# 111-115`), so the root's random draw order is PRESERVED into every
+# node's instance range at every depth. Every per-element read the
+# histogram, count and partition kernels make through `row_ids[i]` --
+# `bin_of(row, col)` / `value(row, col)`, and pre-2001 `labels[row]` --
+# is therefore a RANDOM-INDEX gather for the whole life of the tree.
+# The gather probe (extratrees/DEVIATIONS.md ~:2470) priced exactly this
+# access on this device: permuted gather 6.7-9.0x slower than
+# sequential, and the launch-log attribution puts the gathering kernel
+# (histogram) at 85.3% of device time at the large bench shape.
+#
+# WHAT THE COMPETITORS DO. LightGBM's leaf index array starts ascending
+# (bagging preserves index order) and its partition is stable, so its
+# histogram gathers walk ASCENDING row ids at every depth
+# (cuda_data_partition.cu:917-943 -- stable within block, left then
+# right contiguous). CatBoost goes further and pre-gathers the
+# compressed index into contiguous per-leaf buffers when profitable
+# (greedy_subsets_searcher/kernel/gather_bins.cu). cuML alone pays the
+# random order.
+#
+# WHAT THIS DEVIATION DOES. Under `ROWS_SORTED_SAMPLE = True`, the
+# bootstrap arms' `selected_rows_` buffer is sorted ASCENDING on the
+# device, once per tree, immediately after `sample()`'s dispatch+mask
+# (sort_selected_rows below: LSD one-bit radix over just enough bits to
+# cover `n_rows`, reusing `core/segmented_sort`'s four pass kernels
+# with ONE segment). The stable partition then keeps every node's range
+# ascending at EVERY depth, so the dominant gather becomes an
+# ascending, gapped walk instead of a random one -- for the whole tree.
+# The non-bootstrap arms are already ascending (`thrust::sequence`;
+# `copy_if` keeps order) and are not touched.
+#
+# BIT-IDENTITY ARGUMENT (the forest, not the buffer). Sorting permutes
+# the MULTISET of drawn rows and changes nothing else:
+#   * histograms: every (bin, class) cell is an integer (or fixed-point
+#     Int32) atomic sum over the node's row multiset -- commutative and
+#     associative EXACTLY, so cell values cannot move (same argument as
+#     DEVIATION 2001's, and the same reason cuML's own histogram is
+#     order-free);
+#   * split choice: reads only histograms -> identical;
+#   * counts/ranges: `local_nLeft` and instance counts are integer sums
+#     over the same multiset -> identical begins and counts;
+#   * leaves: integer/fixed-point accumulation over the same multiset;
+#   * OOB mask: an idempotent scatter of a constant over the same set;
+#   * predict / importances: read only the tree.
+# What DOES change: the byte ORDER inside `row_ids` (and, under
+# DEVIATION 2001, inside `labels_s`), and therefore the identity-trace
+# `treeT.rows` record -- a diagnostic divergence from cuML's transcribed
+# draw order, stated here so a trace diff against a flag-off build is
+# read as the flag, not as a defect. The forest fingerprints must be
+# UNCHANGED flag-on vs flag-off; that equality is the identity gate.
+#
+# PRICE. One `n_selected`-element device sort per tree: ~2*ceil(log2
+# n_rows) even passes x 4 launches (~80-90 launches/tree at 1M-2M) plus
+# ~8 bytes/element of traffic per pass, and 12 bytes/element of
+# once-per-fit scratch (keys + offsets + one block_sums row). The
+# block-sums scan is one serial thread over ceil(n/512) entries per
+# pass, the same shape `core/segmented_sort` already ships. Whether the
+# gather locality buys more than the sort costs at rf@1000000 /
+# rf@2000000 is exactly what the A/B decides; sub-1M behavior does not
+# vote.
+#
+# UNVERIFIED, RUN OWED (orchestrator; see ensemble/PLAN.md, "2026-09-01
+# candidate round" for the full gate plan and exact commands).
+# =========================================================
+comptime ROWS_SORTED_SAMPLE = False
 
 
 # ---------------------------------------------------------------------------
@@ -1944,6 +2028,127 @@ def compute_feature_importances[
 # ===========================================================================
 
 
+def sort_passes_for(n_rows_bound: Int) -> Int:
+    """DEVIATION 2010: the pass count, a pure host function so the check
+    can hold it. Just enough bits to cover keys in `[0, n_rows_bound)`,
+    rounded UP TO EVEN so the ping-pong parity leaves the answer in the
+    caller's buffer (the same argument `core/segmented_sort` records for
+    its fixed 32). Passes beyond the top live bit are stable identity
+    partitions (every key's bit is 0), so rounding up is correct by
+    construction, never just convenient."""
+    var nb = 1
+    while (1 << nb) < n_rows_bound:
+        nb += 1
+    if nb % 2 == 1:
+        nb += 1
+    return nb
+
+
+def sort_selected_rows[
+    sabotage: Int = 0
+](
+    ctx: DeviceContext,
+    mut rows: DeviceBuffer[DType.int32],
+    n: Int,
+    n_rows_bound: Int,
+    mut keys_scratch: DeviceBuffer[DType.uint32],
+    mut offsets: DeviceBuffer[DType.int32],
+    mut block_sums: DeviceBuffer[DType.int32],
+) raises:
+    """DEVIATION 2010's sort: LSD one-bit radix, ascending, on the first
+    `n` Int32 entries of `rows` (all in `[0, n_rows_bound)`, so no
+    twiddle: non-negative Int32 order raw-bit unsigned order).
+
+    The four pass kernels are `core/segmented_sort`'s, launched with ONE
+    segment -- the driver is duplicated here rather than calling
+    `segmented_sort_keys_f32` because that entry twiddles float keys and
+    runs all 32 bits; the kernels themselves are imported, not copied.
+    STABILITY per pass is what makes the LSD loop a sort (their
+    `seg_reorder_one_bit_kernel` docstring); the pass count is
+    `sort_passes_for` (even), so the sorted keys end in `rows` itself.
+
+    `sabotage` is a CHECK HOOK and 0 is the only value a caller may
+    pass; 1 drops the LAST TWO passes (parity kept even), so any two
+    keys differing in the top live bits keep their input order -- the
+    output is provably NOT ascending on a fixture that spans those bits,
+    which is how the check proves the sort is reached (the FOREST cannot
+    prove it: any row order yields the same forest, which is the whole
+    identity argument)."""
+    if n <= 1:
+        return
+    var n_passes = sort_passes_for(n_rows_bound)
+    comptime if sabotage == 1:
+        n_passes -= 2
+        if n_passes < 0:
+            n_passes = 0
+    var blocks_wide = _ceildiv(n, SORT_BLOCK)
+    # One origin type on both ping-pong sides, so the per-pass ternary
+    # below is well-typed; the kernels take MutAnyOrigin.
+    var rows_u32 = (
+        rows.unsafe_ptr()
+        .unsafe_origin_cast[MutAnyOrigin]()
+        .unsafe_bitcast[UInt32]()
+    )
+    var keys_u32 = keys_scratch.unsafe_ptr().unsafe_origin_cast[
+        MutAnyOrigin
+    ]()
+    var offsets_p = offsets.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var block_sums_p = block_sums.unsafe_ptr().unsafe_origin_cast[
+        MutAnyOrigin
+    ]()
+    var bit = 0
+    while bit < n_passes:
+        # Ping-pong: even bit reads `rows`, writes scratch; odd bit
+        # reads scratch, writes `rows`. Even pass count -> `rows` holds
+        # the answer.
+        var src = rows_u32 if bit % 2 == 0 else keys_u32
+        var dst = keys_u32 if bit % 2 == 0 else rows_u32
+        log_launch("rows_sort_scan_bit")
+        ctx.enqueue_function[seg_scan_key_bit_kernel](
+            src,
+            Int32(bit),
+            Int32(n),
+            Int32(blocks_wide),
+            offsets_p,
+            block_sums_p,
+            grid_dim=(blocks_wide, 1, 1),
+            block_dim=(SORT_BLOCK, 1, 1),
+        )
+        log_launch("rows_sort_block_sums")
+        ctx.enqueue_function[seg_scan_block_sums_kernel](
+            block_sums_p,
+            Int32(n),
+            Int32(blocks_wide),
+            grid_dim=(1, 1, 1),
+            block_dim=(1, 1, 1),
+        )
+        log_launch("rows_sort_carry")
+        ctx.enqueue_function[seg_add_block_carry_kernel](
+            offsets_p,
+            block_sums_p,
+            Int32(n),
+            Int32(blocks_wide),
+            grid_dim=(blocks_wide, 1, 1),
+            block_dim=(SORT_BLOCK, 1, 1),
+        )
+        log_launch("rows_sort_reorder")
+        ctx.enqueue_function[seg_reorder_one_bit_kernel](
+            src,
+            offsets_p,
+            Int32(bit),
+            Int32(n),
+            dst,
+            grid_dim=(blocks_wide, 1, 1),
+            block_dim=(SORT_BLOCK, 1, 1),
+        )
+        bit += 1
+    # NO synchronize -- the pass kernels ride the in-order queue exactly
+    # as the sampler's own launches do, and every reader of
+    # `selected_rows_` is enqueued after this on the same queue. Mojo
+    # frees at LAST USE: the buffers are the CALLER's struct fields
+    # (RowSampler), alive past every launch by construction.
+
+
 struct RowSampler(Movable):
     """`ML::DT::detail::RowSampler`, `randomforest.cuh:62-226`.
 
@@ -2021,6 +2226,14 @@ struct RowSampler(Movable):
     # substitution DEVIATION 100 made for `sample_weight`.
     var bootstrap_masks: DeviceBuffer[DType.uint8]
     var has_masks: Bool
+    # DEVIATION 2010 -- the sort's scratch (keys ping buffer, per-element
+    # offsets, one row of block sums), allocated ONCE per sampler and
+    # None under the default flag (the 2001 Optional pattern: the off arm
+    # allocates NOTHING). One set serves all K slots: every launch rides
+    # the ONE in-order queue, so two slots' sorts cannot interleave.
+    var sort_keys: Optional[DeviceBuffer[DType.uint32]]
+    var sort_offsets: Optional[DeviceBuffer[DType.int32]]
+    var sort_block_sums: Optional[DeviceBuffer[DType.int32]]
 
     def __init__(
         out self,
@@ -2061,6 +2274,29 @@ struct RowSampler(Movable):
         self.has_masks = n_trees_for_masks > 0
         var m = n_trees_for_masks * n_rows if self.has_masks else 1
         self.bootstrap_masks = ctx.enqueue_create_buffer[DType.uint8](m)
+        # DEVIATION 2010 -- scratch only under the flag, and only when a
+        # bootstrap arm can produce an unsorted draw.
+        comptime if ROWS_SORTED_SAMPLE:
+            if bootstrap and n > 1:
+                self.sort_keys = Optional(
+                    ctx.enqueue_create_buffer[DType.uint32](n)
+                )
+                self.sort_offsets = Optional(
+                    ctx.enqueue_create_buffer[DType.int32](n)
+                )
+                self.sort_block_sums = Optional(
+                    ctx.enqueue_create_buffer[DType.int32](
+                        _ceildiv(n, SORT_BLOCK)
+                    )
+                )
+            else:
+                self.sort_keys = Optional[DeviceBuffer[DType.uint32]]()
+                self.sort_offsets = Optional[DeviceBuffer[DType.int32]]()
+                self.sort_block_sums = Optional[DeviceBuffer[DType.int32]]()
+        else:
+            self.sort_keys = Optional[DeviceBuffer[DType.uint32]]()
+            self.sort_offsets = Optional[DeviceBuffer[DType.int32]]()
+            self.sort_block_sums = Optional[DeviceBuffer[DType.int32]]()
         ctx.synchronize()
 
     def prepare_weights(
@@ -2154,6 +2390,22 @@ struct RowSampler(Movable):
         self._sample_rows(ctx, tree_id, slot)
         # `:163`
         self.store_bootstrap_mask(ctx, tree_id, slot)
+        # DEVIATION 2010 -- AFTER the transcription (dispatch + mask), so
+        # their body above diffs untouched. The mask is an idempotent
+        # scatter over the same set, so sorting before or after it is
+        # equivalent; after keeps the appendix in one place. Bootstrap
+        # arms only: the two non-bootstrap arms are already ascending.
+        comptime if ROWS_SORTED_SAMPLE:
+            if self.bootstrap and self.n_selected > 1:
+                sort_selected_rows(
+                    ctx,
+                    self.selected_rows_[slot],
+                    self.n_selected,
+                    self.n_rows,
+                    self.sort_keys.value(),
+                    self.sort_offsets.value(),
+                    self.sort_block_sums.value(),
+                )
 
     def store_bootstrap_mask(
         mut self, ctx: DeviceContext, tree_id: Int32, slot: Int = 0

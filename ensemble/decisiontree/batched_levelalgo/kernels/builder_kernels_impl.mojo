@@ -452,6 +452,65 @@ comptime SPLIT_REDUCE_PINNED_DEFAULT = BUILD_MODE == NUMERIC_IDENTICAL
 # slowdown measured locally."
 comptime TUNABLE_SPLIT_HISTOGRAM_DYNAMIC_SMEM_LIMIT_BYTES = 16 * 1024
 
+# ================= DEVIATION BLOCK 2012 =================
+# PRIVATIZED SHARED SUB-HISTOGRAMS -- NOT theirs (2026-09-01). OFF BY
+# DEFAULT (1 compiles cuML's single shared histogram byte-for-byte).
+#
+# WHAT UPSTREAM DOES. cuML's shared arm keeps ONE histogram per block
+# (`builder_kernels_impl.cuh:322-333`); all TPB threads contend on the
+# same shared cells with atomics. Both GPU competitors split that copy
+# to cut intra-SIMD-group atomic serialization: CatBoost replicates each
+# warp's histogram into `8 >> InnerHistBits` sub-warp copies
+# (`hist_one_byte.cu:56-61`, `innerHistStart` from the low lane bits)
+# and rotates the write pattern per lane; LightGBM's OpenCL learner
+# keeps `NUM_BANKS = 8` replicated sub-histograms per workgroup
+# (`ocl/histogram16.cl:26-32`, bank from the lane bits) for the same
+# reason. cuML has neither (verified at the pin).
+#
+# WHY IT MATTERS HERE. When the rows of one SIMD group land in the same
+# (bin, class) cell -- a skewed class, a dominant bin -- their shared
+# atomics serialize the whole group. With P copies indexed by
+# CONSECUTIVE LANE GROUPS (CatBoost's assignment: lanes [0, W/P) ->
+# copy 0, etc.), a fully-conflicting group serializes at depth W/P per
+# copy instead of W. DEVIATION 2011 raises per-block row counts by R,
+# which raises exactly this contention -- the two candidates compound.
+#
+# WHAT THIS DEVIATION DOES. `SMEM_COPIES = P > 1` (binned shared arm
+# ONLY -- the searching arm carves its quantiles at `histogram_len` and
+# is left byte-identical): the blob holds P copies of the live
+# `histogram_len` cells when they fit (`p_live = P` if
+# `histogram_len * P <= SMEM_BIN_SLOTS`, else 1 -- runtime, uniform
+# across the block since `histogram_len` is), each thread accumulates
+# into copy `(lane % WARP_SIZE) // (WARP_SIZE // p_live)`, and the
+# flush sums the copies per cell before its ONE global AtomicAdd -- so
+# global traffic is UNCHANGED and only the shared-memory contention
+# shape moves. Zero-init covers `p_live * histogram_len`.
+#
+# BIT-IDENTITY ARGUMENT. Every cell's value is an integer (or
+# fixed-point Int32) sum over the same increment multiset; splitting
+# the sum into P partial sums and adding them in the flush is the same
+# integer arithmetic in a different association -- exact, per the same
+# argument DEVIATION 101/2001/2011 rest on. `WARP_SIZE % P == 0` is a
+# comptime assert (P = 4 divides 32 and 64: GPU-agnostic, no vendor
+# branch).
+#
+# PRICE. P x the shared footprint of the LIVE cells (2 KiB -> 8 KiB at
+# 4 classes x 128 bins x UInt32; the 16 KiB blob is RESERVED either way
+# under DEVIATION 103a, so occupancy does not move), P-1 extra shared
+# reads per cell at flush, and a fallback to P = 1 exactly when the
+# copies do not fit (the check pins both arms of that dispatch).
+#
+# `sabotage == 4` is a CHECK HOOK, live only in the P > 1 flush: it
+# sums copy 0 alone, so every cell fed by lanes of copies 1..P-1
+# UNDERCOUNTS (moved cells must satisfy got <= want, never got > want)
+# -- the reach proof, since the forest cannot move under the flag by
+# construction. 0 is the only value a shipping caller may pass.
+#
+# UNVERIFIED, RUN OWED (orchestrator; ensemble/PLAN.md "2026-09-01
+# candidate round"). The candidate arm is P = 4.
+# =========================================================
+comptime HIST_SMEM_COPIES_DEFAULT = 1
+
 
 def default_smem_bin_slots[B: Bin]() -> Int:
     """DEVIATION 103a's default blob size, in whole `BinT` slots."""
@@ -2093,6 +2152,7 @@ def build_histograms_kernel[
     sabotage: Int = 0,
     USE_BINNED: Bool = False,
     sampled_labels: Bool = False,
+    SMEM_COPIES: Int = 1,
 ](
     argsp: MutPointer[HistogramArgs[O], MutAnyOrigin],
     histograms: MutPointer[O.BinT, MutAnyOrigin],
@@ -2220,8 +2280,26 @@ def build_histograms_kernel[
             histogram_len
         ).unsafe_bitcast[Scalar[O.DataT]]()
 
+        # DEVIATION 2012 -- P privatized copies of the LIVE cells, binned
+        # arm only; `p_live` is uniform across the block (`histogram_len`
+        # is), so every thread agrees on the layout. SMEM_COPIES == 1
+        # compiles the original code exactly.
+        comptime assert SMEM_COPIES >= 1, "SMEM_COPIES must be >= 1"
+        comptime assert SMEM_COPIES == 1 or USE_BINNED, (
+            "DEVIATION 2012 is scoped to the binned shared arm; the"
+            " searching arm's quantile carve sits at histogram_len"
+        )
+        comptime assert (
+            SMEM_COPIES == 1 or WARP_SIZE % SMEM_COPIES == 0
+        ), "DEVIATION 2012 needs SMEM_COPIES to divide the SIMD width"
+        var p_live = 1
+        comptime if SMEM_COPIES > 1:
+            p_live = SMEM_COPIES
+            if histogram_len * SMEM_COPIES > SMEM_BIN_SLOTS:
+                p_live = 1
+
         var i = Int(thread_idx.x)
-        while i < histogram_len:
+        while i < histogram_len * p_live:
             histogram[unsafe_offset=i] = O.BinT()
             i += Int(block_dim.x)
         comptime if not USE_BINNED:
@@ -2239,12 +2317,24 @@ def build_histograms_kernel[
 
         # `:336-342`
         comptime if USE_BINNED:
+            # DEVIATION 2012 -- consecutive lane groups own consecutive
+            # copies (CatBoost's `innerHistStart` assignment); copy 0 is
+            # the whole histogram when p_live == 1.
+            var my_histogram = histogram
+            comptime if SMEM_COPIES > 1:
+                if p_live > 1:
+                    var copy_idx = (Int(thread_idx.x) % WARP_SIZE) // (
+                        WARP_SIZE // p_live
+                    )
+                    my_histogram = histogram.unsafe_offset(
+                        copy_idx * histogram_len
+                    )
             _histogram_inner_loop_binned[
                 sabotage=sabotage, sampled_labels=sampled_labels
             ](
                 objective,
                 dataset,
-                histogram,
+                my_histogram,
                 col,
                 n_bins,
                 range_start,
@@ -2273,10 +2363,32 @@ def build_histograms_kernel[
         var k = Int(thread_idx.x)
         while k < histogram_len:
             comptime dst = 0 if sabotage == 2 else 1
-            O.BinT.AtomicAdd(
-                global_histogram.unsafe_offset(k * dst),
-                histogram[unsafe_offset=k],
-            )
+            comptime if SMEM_COPIES > 1:
+                # DEVIATION 2012 -- sum the copies per cell (integer /
+                # fixed-point adds: exact in any association), then the
+                # SAME single global AtomicAdd as the original. The
+                # accumulator starts at the Bin ZERO (`BinT()`, cuML's
+                # default-construct) and every load stays an inline
+                # operand -- never bound to a `var` -- per this file's
+                # measured Metal trap.
+                comptime p_flush_full = sabotage != 4
+                var p_flush = p_live
+                comptime if not p_flush_full:
+                    # SABOTAGE: copy 0 alone reaches the flush; every
+                    # cell fed by lanes of copies 1..p-1 undercounts.
+                    p_flush = 1
+                var acc = O.BinT()
+                for c in range(p_flush):
+                    acc = (
+                        acc
+                        + histogram[unsafe_offset = c * histogram_len + k]
+                    )
+                O.BinT.AtomicAdd(global_histogram.unsafe_offset(k * dst), acc)
+            else:
+                O.BinT.AtomicAdd(
+                    global_histogram.unsafe_offset(k * dst),
+                    histogram[unsafe_offset=k],
+                )
             k += Int(block_dim.x)
 
 
@@ -2286,6 +2398,7 @@ def launch_build_histograms_kernel[
     SMEM_BIN_SLOTS: Int = default_smem_bin_slots[O.BinT](),
     sabotage: Int = 0,
     sampled_labels: Bool = False,
+    SMEM_COPIES: Int = HIST_SMEM_COPIES_DEFAULT,
 ](
     ctx: DeviceContext,
     histograms: MutPointer[O.BinT, MutUntrackedOrigin],
@@ -2354,8 +2467,18 @@ def launch_build_histograms_kernel[
         if dataset.has_bins:
             # DEVIATION 314, shared arm. Uses the default 103a blob; the
             # tier question below is orthogonal and pending its own A/B.
+            # DEVIATION 2012 rides only here -- the one arm the flag
+            # names (binned + shared); every other instantiation keeps
+            # the parameter's default 1.
             comptime ksb = build_histograms_kernel[
-                O, TPB, SMEM_BIN_SLOTS, False, sabotage, True, sampled_labels
+                O,
+                TPB,
+                SMEM_BIN_SLOTS,
+                False,
+                sabotage,
+                True,
+                sampled_labels,
+                SMEM_COPIES,
             ]
             log_launch("histogram_binned")
             ctx.enqueue_function[ksb](

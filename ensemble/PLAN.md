@@ -1130,3 +1130,108 @@ at the DEVIATION 2001 banner in `builder_kernels_impl.mojo`. THE DEFAULT
 DOES NOT FLIP on identity alone (house rule 11): the cold-box timing A/B
 at the rf_bench shapes owns that decision, and until it lands the shipped
 build compiles the pre-2001 code.
+
+---
+
+# 2026-09-01 candidate round: the survey and DEVIATIONS 2010-2012
+
+**The deliverable Andrew asked for** ("what does lightgbm do? what does
+cuml do? are we exhausting what we can do?") is
+`ensemble/UPSTREAM_SURVEY_2026-09.md` — a technique inventory over cuML
+v26.08.00, LightGBM @3d1cf30 and CatBoost @7055d33d with per-tier
+verdicts, a ranked candidate list, and the direct answer (short form:
+NO — histogram subtraction is the one big technique every competitor
+has and cuML lacks, and it is EXACT for our integer bins; the smaller
+levers are now implemented behind flags and owe their A/Bs).
+
+**Deviation numbers**: band 2010-2019 grepped clean before claiming.
+CLAIMED: 2010, 2011, 2012 (code landed, flags OFF). RESERVED, not
+claimed in code: 2013 (histogram subtraction — design in the survey §3,
+a dedicated session). 2014-2019 free.
+
+**This lane is write-only. NOTHING below has been run. Every gate and
+every timing is RUN OWED to the orchestrator, in this order.**
+
+## The three candidates (all OFF by default; one source, flag flipped between builds)
+
+| DEV | flag (file) | candidate arm | mechanism | expected win at 1M-2M |
+|---|---|---|---|---|
+| 2010 | `ROWS_SORTED_SAMPLE` (`ensemble/randomforest.mojo`) | `True` | device-sort the bootstrap `row_ids` ascending once per tree; the stable partition then keeps every node's gather ascending at every depth | attacks the 6.7-9.0x random-gather penalty inside the 85.3% histogram kernel |
+| 2011 | `HIST_ITEMS_PER_THREAD` (`.../batched_levelalgo/builder.mojo`) | `4` | split-phase workload table at granularity TPB*4 (kernel untouched); 4x fewer histogram blocks per node => 4x fewer per-block zero-inits and global flush atomics; disables the 1919 reuse (priced) | LightGBM runs ~400 rows/thread; cuML runs ~1 |
+| 2012 | `HIST_SMEM_COPIES_DEFAULT` (`.../kernels/builder_kernels_impl.mojo`) | `4` | P privatized copies of the live shared histogram (binned arm), lane-group indexed, summed at flush | divides hot-cell shared-atomic serialization by P; compounds with 2011 |
+
+All three are ADDRESS/SCHEDULING-ONLY: every histogram accumulator is an
+integer or fixed-point Int32 atomic, so the summed cells — and therefore
+the forest — cannot move in either numeric mode. No reordered float
+accumulation enters the identical arm. Fingerprint EQUALITY (not
+movement) is each flag's identity gate; reach comes from the mechanism
+check below, because a candidate whose output cannot move can never
+prove reach through the forest ([[reached-but-inert]], solved per arm).
+
+## Gate plan, in order (orchestrator; one light thing at a time)
+
+1. **Compile + existing suite on the DEFAULT build** (flags off — must
+   be a no-op build: 2010 compiles out via Optional-None scratch, 2011
+   folds to `granularity=TPB_DEFAULT`, 2012 folds to the original
+   flush):
+
+       tools/with_build_lock.sh pixi run mojo run -I . ensemble/checks/builder_check.mojo
+       tools/with_build_lock.sh pixi run mojo run -I . ensemble/checks/builder_kernels_check.mojo
+       tools/with_build_lock.sh pixi run mojo run -I . ensemble/checks/train_check.mojo
+       tools/with_build_lock.sh pixi run mojo run -I . ensemble/checks/forest_check.mojo
+       tools/with_build_lock.sh pixi run mojo run -I . ensemble/checks/fingerprint_probe.mojo
+
+2. **The new mechanism check** (exercises the candidate arms by explicit
+   instantiation — no flag flips needed; arms G0-G2 = 2011, H1-H3 =
+   2012 incl. the undercount-only sabotage, S1-S2 = 2010 incl. the
+   dropped-passes sabotage):
+
+       tools/with_build_lock.sh pixi run mojo run -I . ensemble/checks/rf_perf_candidates_check.mojo
+
+3. **Fingerprint EQUALITY pairs, one per flag** (the DEV 2001 gate
+   shape): build `ensemble/checks/fingerprint_probe.mojo` from HEAD as
+   `build/fp_off`; per candidate, flip ONE line in a worktree (2010:
+   `ROWS_SORTED_SAMPLE = True`; 2011: `HIST_ITEMS_PER_THREAD = 4`;
+   2012: `HIST_SMEM_COPIES_DEFAULT = 4`), build `build/fp_2010` etc.,
+   run both, and require ALL hash lines EQUAL on all five configs and
+   the K4 twins. A moved hash is a FAILED gate (these are equality
+   gates, unlike 2001's sabotage arm). Then run the step-1 suite once
+   on each flag-on build.
+
+4. **Timing A/B at the 1M floor, per candidate, then the composite.**
+   The recipe is bench/results/ab_large_2026-09-01/'s, exactly: timed
+   path re-pinned to `rf@1000000` + `rf@2000000` in BOTH arms
+   (harness-only edit of `ensemble/bench/rf_bench.mojo`'s main, applied
+   identically to both checkouts, restored after the builds), builds
+   `build/rfb_base` (HEAD) and `build/rfb_2010` / `rfb_2011` /
+   `rfb_2012` (one flag each) plus `build/rfb_2011_2012` (the natural
+   pair), all `nice -n 19`, arms interleaved across two outer rounds
+   inside ONE window:
+
+       python ensemble/bench/quiet_window.py -- <the interleaved arm script>
+
+   Canary rules as always: warmup tick discarded, spread voids the
+   window, a voided window decides nothing
+   ([[runpod-failure-is-not-invalidation]] does not apply — this is the
+   local box; [[mojolearn-box-drifts]] does: alternate INSIDE the
+   window). Regression arm owed too (`RF_BENCH_REG` at a >=1M shape)
+   before any default flip touches the regression path's claims —
+   RegressionBin pays two atomics and 2012's contention story differs
+   there.
+
+5. **Default flips are the orchestrator's** on a measured bit-identical
+   win per house rule 11 ([[mojotrees-switches-must-flip]] — same
+   session as the window that measured it). Order of independent
+   verdicts: 2010, 2011, 2012 alone vs base; if 2011 and 2012 both win
+   or split, the pair build decides between them. On any flip, re-grep
+   status words per [[fix-docs-on-discovery]] (the survey and the
+   deviation blocks say OFF).
+
+## What this round did NOT do
+
+- No histogram subtraction (DEV 2013 reserved; survey §3 is the design;
+  it needs its own session and its own check fixture).
+- No edits outside `ensemble/` — the core/segmented_sort multi-bit
+  pass, the pixi task, and the graph-capture watch are written as
+  proposals in the survey §4.
+- No runs, no builds, no timings, per the lane's standing rule.
