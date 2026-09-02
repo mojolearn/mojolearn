@@ -1,15 +1,24 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Compare a driver's Mamba-1 stage dumps against the independent corpus.
+"""Compare a driver's mamba-family stage dumps against the independent corpus.
 
 The corpus (`mamba/corpus/`, see its README.md) carries a float64 per-stage
 reference (`ref64/`) computed by somebody else's algorithm (state-spaces/mamba
-`selective_scan_ref` in the HuggingFace block order). This tool reads a
-directory of raw little-endian float32 stage dumps the lane's driver wrote --
-same stage names, same shapes, row-major, one file `<stage>.f32` per stage --
-and compares each against ref64 at a stated tolerance. It is a TOLERANCE
-check; the lane's bitwise oracle is its own pinned host oracle. A dump that
-passes here is consistent with the reference algorithm, certified of nothing.
+and, for Mamba-1/2, the HuggingFace spellings; gen_corpus.py cites every copy
+by line). This tool reads a directory of raw little-endian float32 stage
+dumps the lane's driver wrote -- same stage names, same shapes, row-major,
+one file `<stage>.f32` per stage -- and compares each against ref64 at a
+stated tolerance. It is a TOLERANCE check; the lane's bitwise oracle is its
+own pinned host oracle. A dump that passes here is consistent with the
+reference algorithm, certified of nothing.
+
+FAMILY-AGNOSTIC BY CONSTRUCTION (recorded 2026-09-01, closing the mamba2
+contract's "the tool's mamba2 support is a separate lane item" clause): the
+tool reads ONLY the case's own manifest.json (`stage_order`, per-stage
+`shape`/`ref64`/`ref32`) and never a family table, so the SAME tool serves
+`mamba/corpus/<case>` (Mamba-1), `mamba/corpus/mamba2/<case>` and
+`mamba/corpus/mamba3/<case>` unchanged. The per-family pixi tasks are
+`check-mamba-corpus`, `check-mamba2-corpus` and `check-mamba3-corpus`.
 
 Usage:
     python tools/mamba_corpus_check.py <case_dir> <stage_dump_dir> [--rtol 1e-5] [--atol 1e-6]

@@ -279,9 +279,13 @@ only, the lane's bitwise oracle is its own pinned host oracle
 and nothing here is a bitwise certificate of anything.
 
 **STATUS: FIXTURES GENERATED AND COMMITTED** (f45fa796, 2026-09-01; run
-record and corpus sha256 in "How to regenerate" below). Still owed: the
-`pixi run check-mamba2-corpus` tolerance gate (its tool lives outside this
-directory), and the check lane's byte-gate. See "Layout agreement with the
+record and corpus sha256 in "How to regenerate" below). The
+`pixi run check-mamba2-corpus` TASK exists as of later that day
+(`tools/mamba_corpus_check.py` turned out family-agnostic — it reads only
+the case's own manifest, no extension needed); what is still owed is a
+stage-dump path in `mamba2_check.mojo` (check-lane item), the compare run,
+and the `--self-test` calibration. The check lane's byte-gate ran GREEN
+the same evening (contract run record). See "Layout agreement with the
 check lane" at the end for the 2026-09-01 MISSING-FIXTURE incident record —
 the refusal fired with `x.f32` present and committed; the defect candidates
 are on the check side, not in this layout.
@@ -470,9 +474,11 @@ Versions: torch 2.14.0 (CPU wheel; README's pin said 2.13.0 — 2.14.0 is
 what the index served this day and the invariants held; a byte-level
 reproduction must match the recorded sha, not the version line), numpy
 2.5.2, python 3.14.6, scratch venv outside pixi. Still owed: the
-`--self-test` tolerance calibration once `tools/mamba_corpus_check.py`
-(or its sibling) grows mamba2 support — that check tool lives outside `mamba/corpus/` and is a separate
-lane item (`pixi run check-mamba2-corpus`, contract 8g). Expected corpus size
+`--self-test` tolerance calibration run — the tool needed NO mamba2
+extension (family-agnostic; `pixi run check-mamba2-corpus` exists as of
+2026-09-01, contract 8g), so the calibration is purely a run:
+`python tools/mamba_corpus_check.py mamba/corpus/mamba2/<case> --self-test`
+per case, then tighten the task's default 1e-5. Expected corpus size
 is roughly 35-40 MB across the 17 cases (the REDUCED sets exist to keep the
 long-L cases small).
 
@@ -511,3 +517,130 @@ valid UTF-8. Both live in `mamba/checks/mamba2_check.mojo` (outside this
 directory's lane); the corpus side's standing proof is generator verify
 arm 0, which hard-asserts presence and byte-identity of every root tensor
 file on each `--verify` run.
+
+---
+
+# Mamba-3 (SISO) reference corpus (`mamba3/`)
+
+The Mamba-3 half of this directory, for profile
+`mojolearn.identical.mamba3.siso.fp32.v1`
+(`mamba/IDENTICAL_MAMBA3_CONTRACT.md`; this family discharges its section
+8g). Everything the Mamba-1 preamble says applies verbatim: `ref64/` is a
+TOLERANCE reference, `ref32/` informative only, the lane's bitwise oracle is
+its own pinned host oracle (`mamba/checks/mamba3_oracle.mojo`), and nothing
+here is a bitwise certificate of anything.
+
+**STATUS: GENERATOR WRITTEN 2026-09-01, GENERATION RUN OWED.** The mamba3
+family in `gen_corpus.py` is UNRUN; no `mamba3/` fixture files exist yet.
+The exact command the orchestrator owes (same scratch venv as the other two
+families; einops required by the verbatim copies):
+
+```sh
+/path/to/mamba-ref-venv/bin/python mamba/corpus/gen_corpus.py --family mamba3 --verify
+```
+
+Until that runs, `mamba/checks/mamba3_check.mojo`'s corpus arm REFUSES BY
+NAME (`MISSING FIXTURE`), which is the required behavior, and
+`pixi run check-mamba3-corpus` refuses on the missing manifest.
+
+## The normative table is NOT this directory's
+
+Unlike Mamba-1 and Mamba-2, the case table landed FIRST in Mojo:
+`mamba/checks/mamba3_fixture.mojo` (18 cases, seed base
+`0x4D6D6233436F7270` "Mmb3Corp", tensor ids 41-54, disjoint from Mamba-1's
+1-11 and Mamba-2's 21-31). `gen_corpus.py`'s mamba3 table MIRRORS it index
+for index, plant for plant; the byte gate in `mamba3_check.mojo`
+(`gate_corpus`: file bytes == the in-check generator's bytes, binary-safe
+reads, each failure kind refusing under its own name) is the arbiter if the
+two tables ever drift.
+
+## Reference, pinned
+
+ONE repository (contract section 0: HF transformers @ `d56c55b` has NO
+mamba3 model -- said out loud, not papered over): state-spaces/mamba
+`e9594ce`, checkout in `/Users/andrewhendel/CascadeProjects/upstream/`.
+Verbatim copies in `gen_corpus.py`, cited by line:
+`tests/ops/triton/test_mamba3_siso.py::_segsum` (:22-31),
+`::mamba3_siso_step_ref` (:34-146), `::mamba3_siso_fwd_ref` (:149-340).
+Block order and constants from `mamba_ssm/modules/mamba3.py`; the B/C norm
+from `layernorm_gated.py::rms_norm_ref` (:18-39) at z=None, eps 1e-5 by
+construction (mamba3.py:126-127); the chunked schedule SHAPE from
+`ops/triton/mamba3/mamba3_siso_fwd.py`.
+
+**The staged reference follows the PROFILE's schedule, not the unchunked
+reference's** (contract DEVIATION 827): chunked two-phase SSD at Q = 64
+with the SERIAL inter-chunk pass, the kernel's diagonal spelling (strict
+mask + gamma-scaled pre-rotation qk dot, DEVIATION 830), and the per-token
+serial mod-2pi angle recurrence (DEVIATION 829). The verbatim
+`mamba3_siso_fwd_ref` (ONE whole-sequence attention, include-then-subtract
+diagonal, mod at the end) and `mamba3_siso_step_ref` (per-token recurrence)
+are equal to it in EXACT arithmetic and different in bits, so verify arms 1
+and 2 report roundoff-scale distances and demand bit-equality of NOTHING --
+the mamba2 `ssd_minimal` arm's posture, not its HF arm's. Their hard
+`.to(torch.float32)` casts (fwd_ref :188-189, step_ref :87) are rebound to
+the working dtype in the float64 run (`_m3_ref_f32_as`, the
+`_scan_ref_dtype` move).
+
+## Profile constants (fixed for every case)
+
+`d_state` N = 128, `expand` = 2, `headdim` P = 64 (H = `d_inner`/64),
+`ngroups` G = 1, **`CHUNK_SIZE` Q = 64 (part of the arithmetic, DEVIATIONS
+827/783)**, `num_rope_angles` R = 32 (rope_fraction 0.5; pairs 32..63
+unrotated, DEVIATION 828), both norm eps 1e-5, `A_floor` 1e-4, softplus
+threshold 20, NO conv, NO dt clamp, no bias on in_proj/out_proj.
+`d_in_proj` = 2·`d_inner` + 2·G·N + 3·H + R, column order
+z | x | B | C | dd_dt | dd_A | trap | angle (mamba3.py:106-107).
+
+## The stages
+
+28 card stages, tags exactly contract section 7's list: `input.x`,
+`norm.sumsq`, `norm.out`, `in_proj.out`, `A.out`, `dt.out`, `adt.out`,
+`trap.sigma`, `trap.scale`, `bcnorm.B`, `bcnorm.C`, `angle.theta`, `rot.q`,
+`rot.k`, `qkdot.out`, `kscale.out`, `dacs.out`, `seg.L`, `yintra.out`,
+`ystate.out`, `skip.out`, `gate.out`, `out_proj.out`, `residual.out`,
+`ssd.h_last`, `ssd.k_last`, `ssd.v_last`, `ssd.theta_last`. Authoritative
+per-stage definitions are `M3_STAGE_DEFS` in `gen_corpus.py`, copied into
+`mamba3/manifest.json` by the run. `seg.L` is recorded only on
+`m3_base_b1_l1_d32` and `m3_base_b2_l4_d32`; everywhere else the manifest
+states the elision. REDUCED cases record `input.x`, `dt.out`, `adt.out`,
+`trap.scale`, `angle.theta`, `dacs.out`, `yintra.out`, `ystate.out`,
+`skip.out`, `gate.out`, `residual.out` and the four `ssd.*` reports.
+
+## Cases (18, mirrored from `mamba3_fixture.mojo`)
+
+L set {1, 4, 63, 64, 65, 129, 257} (63/64/65 bracket the Q = 64 boundary)
+plus the decode fixture's 70; d_model in {32, 64}. The four planted
+witnesses and why each exists are spelled in the fixture's module
+docstring and repeated per case in `gen_corpus.py`'s notes: `m3_adv_a_floor`
+(dd_A rows planted, the ONLY region where the S5 clamp binds),
+`m3_adv_angle_crossing` (2pi-seam crossings INSIDE the first chunk, counted,
+zero refused as VACUOUS), `m3_adv_trap_saturating` (sigma to exact 0 AND 1),
+`m3_adv_signed_zeros` (the Mamba-1 zero rule verbatim), plus the softplus
+band [8, 14] case, `m3_init_states_b1_l65_d32` (nonzero four-piece
+`Input_States`; the continuation is TOLERANCE-checked, NEVER bit-gated
+against an unbroken prefill -- contract DEVIATION 831), the composition
+parent/rows at L=65, and `m3_decode_b1_l60p10_d32` (the L=70 prefill IS the
+decode reference; verify arm 6 checks the prefix property and that
+`trap.scale`'s final prefix row DIFFERS -- the trapezoid's beta' seam, the
+DEV-832 comparability clause's witness).
+
+## Verify arms
+
+(0) root tensors on disk + `x.f32` byte-identity (HARD-asserted);
+(1) verbatim `mamba3_siso_fwd_ref`, roundoff-scale; (2) verbatim
+`mamba3_siso_step_ref`, roundoff-scale; (3) composition rows bitwise +
+rows-differ negative control; (4) determinism (regenerate, byte-compare);
+(5) witness intent reached, HARD-asserted where the contract names vacuity
+(A-floor binds AND does not, angle mod engages, trap saturates both ways,
+band cells nonzero, theta_in inside [0, 2pi)); (6) the decode prefix
+property with its beta'-seam negative control.
+
+## Layout agreement with the check lane
+
+As Mamba-2's: inputs at case root, `mamba/corpus/mamba3/<case>/<tensor>.f32`
+(`init_theta/init_h/init_k/init_v.f32` only where the case carries states);
+`ref*/` holds stage records only. `mamba3_fixture.mojo::m3_corpus_dir`
+spells the same layout; `mamba3_check.mojo::gate_corpus` opens the
+REPO-ROOT-RELATIVE paths, so the check must run from the repository root.
+The Mamba-1 corpus sha256 is computed EXCLUDING both `mamba2/` and
+`mamba3/`, so generating this family moves no Mamba-1 or Mamba-2 byte.

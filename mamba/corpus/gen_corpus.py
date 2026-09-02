@@ -28,16 +28,19 @@ for every (lo, hi) used here and rounds ONCE to float32, so a Mojo program can
 regenerate the same bits from the README's spec with no library RNG. The
 generator asserts that exactness with exact rationals for every element.
 
-THIS FILE ALSO CARRIES THE MAMBA-2 (SSD) CORPUS (one corpus tool, the
-orchestrator's decision 2026-09-01). The Mamba-2 half lives in the clearly
-fenced section below (profile `mojolearn.identical.mamba2.fp32.v1`,
-`mamba/IDENTICAL_MAMBA2_CONTRACT.md` section 8g), emits into
-`mamba/corpus/mamba2/<case>/` with its own top-level manifest, and leaves
-every Mamba-1 byte untouched (the Mamba-1 sha256 is computed EXCLUDING
-`mamba2/`).
+THIS FILE ALSO CARRIES THE MAMBA-2 (SSD) AND MAMBA-3 (SISO) CORPORA (one
+corpus tool, the orchestrator's decision 2026-09-01). Each family lives in
+its own clearly fenced section below (mamba2: profile
+`mojolearn.identical.mamba2.fp32.v1`, `mamba/IDENTICAL_MAMBA2_CONTRACT.md`
+section 8g; mamba3: profile `mojolearn.identical.mamba3.siso.fp32.v1`,
+`mamba/IDENTICAL_MAMBA3_CONTRACT.md` section 8g, its case table MIRRORING
+`mamba/checks/mamba3_fixture.mojo`, which landed FIRST and is normative),
+emits into `mamba/corpus/mamba2/<case>/` / `mamba/corpus/mamba3/<case>/`
+with its own top-level manifest, and leaves every Mamba-1 byte untouched
+(the Mamba-1 sha256 is computed EXCLUDING `mamba2/` and `mamba3/`).
 
 Run (see README.md for the scratch venv):
-    python mamba/corpus/gen_corpus.py [--out mamba/corpus] [--verify] [--family mamba1|mamba2|all]
+    python mamba/corpus/gen_corpus.py [--out mamba/corpus] [--verify] [--family mamba1|mamba2|mamba3|all]
 `--verify` additionally runs the verbatim selective_scan_ref over the HF-shaped
 path with z and D and compares against the composed stages, and regenerates
 every file into a temp dir and byte-compares (determinism). The mamba2 family
@@ -55,6 +58,10 @@ import shutil
 import sys
 import tempfile
 from fractions import Fraction
+# `Optional` and `Tuple` exist ONLY because the verbatim mamba3 reference
+# copies below (`mamba3_siso_step_ref`, `mamba3_siso_fwd_ref`) carry them in
+# their signatures; the upstream test file imports them at its own top.
+from typing import Optional, Tuple
 
 import numpy as np
 import torch
@@ -701,7 +708,7 @@ def generate(out_root, verify=False):
         json.dump(top, fh, indent=1, sort_keys=True)
         fh.write("\n")
     print(f"wrote {len(CASES)} cases to {out_root}, {total_bytes / 1e6:.3f} MB of tensor and manifest files")
-    print(f"mamba1 corpus sha256 (files .f32 .f64 .json, mamba2/ excluded): {sha256_of_dir(out_root, skip_dirs=('mamba2',))}")
+    print(f"mamba1 corpus sha256 (files .f32 .f64 .json, mamba2/ and mamba3/ excluded): {sha256_of_dir(out_root, skip_dirs=('mamba2', 'mamba3'))}")
     if verify:
         run_verify(out_root, all_meta)
 
@@ -1928,19 +1935,1300 @@ def m2_run_verify(m2_root, all_meta):
               f"{not torch.equal(hb_pre, pre['ssd.h_last'])} (must be True)")
 
 
+# ==========================================================================
+# ==========================================================================
+#                    MAMBA-3 (SISO) CORPUS EXTENSION
+#
+# Profile: mojolearn.identical.mamba3.siso.fp32.v1
+# (mamba/IDENTICAL_MAMBA3_CONTRACT.md; section 8g is the clause this section
+# discharges). Same discipline as the two families above: every input element
+# is a hashed value under mojolearn.mamba.corpus.hash.v1 -- NEW seed base,
+# NEW tensor names and ids (41-54) -- torch float64 per-stage references,
+# float32 run informative only, nothing here a bitwise certificate of
+# anything. Cases land in mamba/corpus/mamba3/<case>/ with their own
+# top-level manifest; the Mamba-1 and Mamba-2 corpora are byte-untouched.
+#
+# THE CASE TABLE IS NOT THIS FILE'S TO INVENT. Unlike the two families
+# above, the normative table landed FIRST, in Mojo:
+# `mamba/checks/mamba3_fixture.mojo` (18 cases, seed base 0x4D6D6233436F7270
+# "Mmb3Corp", ids 41-54, the plants of its module docstring). This section
+# MIRRORS that table index for index, plant for plant, and the byte gate in
+# `mamba/checks/mamba3_check.mojo` (`pixi run check-mamba3-block -- corpus`
+# family arm: file bytes == the in-check generator's bytes) is the arbiter
+# if the two tables ever drift.
+#
+# References (checkout /Users/andrewhendel/CascadeProjects/upstream/mamba @
+# e9594ce1c732d97440f0332fdc43170a2294dbfa; there is NO second repository --
+# HF transformers @ d56c55b has no mamba3 model, said out loud in contract
+# section 0):
+#   tests/ops/triton/test_mamba3_siso.py::_segsum (:22-31),
+#     ::mamba3_siso_step_ref (:34-146), ::mamba3_siso_fwd_ref (:149-340)
+#     -- the NORMATIVE math references, copied VERBATIM below;
+#   mamba_ssm/modules/mamba3.py::heavy_tail_activation (:27-41),
+#     ::Mamba3.forward (:160-278), ::__init__ defaults (:44-70), in_proj
+#     layout (:106-107), B/C biases (:121-122), B/C norms eps 1e-5
+#     (:126-127) -- block order and constants;
+#   mamba_ssm/ops/triton/layernorm_gated.py::rms_norm_ref (:18-39) at
+#     z=None, group_size=None -- the B/C norm spelling (rstd spelled
+#     `1 / torch.sqrt(...)`, never torch.rsqrt);
+#   mamba_ssm/ops/triton/mamba3/mamba3_siso_fwd.py -- the chunked schedule
+#     SHAPE the staged reference follows (phase structure; the contract's
+#     citations).
+#
+# THE STAGED REFERENCE FOLLOWS THE PROFILE'S CHUNKED SCHEDULE, NOT THE
+# UNCHUNKED REFERENCE'S (contract DEVIATION 827): per-chunk intra/state
+# terms, a SERIAL inter-chunk pass, Q = CHUNK_SIZE = 64; the kernel's
+# diagonal spelling (strict mask + gamma-scaled pre-rotation qk dot,
+# DEVIATION 830); the per-token serial mod-2pi angle recurrence (DEVIATION
+# 829). The verbatim `mamba3_siso_fwd_ref` computes ONE whole-sequence
+# quadratic attention with the include-then-subtract diagonal and the
+# mod-at-the-end angle placement -- equal in EXACT arithmetic, different
+# bits -- so verify arm 1 reports its roundoff-scale distance and demands
+# bit-equality of NOTHING (the mamba2 ssd_minimal arm's posture, not its
+# HF arm's). Verify arm 2 does the same against `mamba3_siso_step_ref`'s
+# per-token recurrence. A float64 tolerance reference absorbs all three
+# spellings' differences, which is exactly why the corpus is never a
+# bitwise oracle.
+# ==========================================================================
+
+M3_PROFILE = "mojolearn.identical.mamba3.siso.fp32.v1"
+M3_CORPUS_VERSION = "mamba3-corpus-v1"
+M3_SEED_BASE = 0x4D6D6233436F7270  # "Mmb3Corp", mamba3_fixture.mojo
+M3_D_STATE = 128        # N, the QK head dim, mamba3.py:47
+M3_EXPAND = 2           # mamba3.py:48
+M3_HEADDIM = 64         # P, the V head dim, mamba3.py:49
+M3_NGROUPS = 1          # G = num_bc_heads, mamba3.py:50
+M3_CHUNK = 64           # Q, mamba3.py:64 -- PART OF THE ARITHMETIC (DEV 827/783)
+M3_ROPE = 32            # R = num_rope_angles at rope_fraction 0.5, mamba3.py:98-103
+M3_EPS = 1e-5           # block norm AND B/C norms, mamba3.py:126-127
+M3_A_FLOOR = 1e-4       # mamba3.py:57, the S5 clamp bound
+
+# Tensor names/ids: mamba3_fixture.mojo's M3_TID_* table verbatim. File
+# names are `<name>.f32` at case root, exactly what
+# mamba3_check.mojo::gate_corpus opens.
+M3_TENSOR_IDS = {
+    "x": 41,
+    "block_norm.weight": 42,
+    "in_proj.weight": 43,
+    "dt_bias": 44,
+    "B_norm.weight": 45,
+    "C_norm.weight": 46,
+    "B_bias": 47,
+    "C_bias": 48,
+    "D": 49,
+    "out_proj.weight": 50,
+    "init_theta": 51,
+    "init_h": 52,
+    "init_k": 53,
+    "init_v": 54,
+}
+
+
+def m3_dims(d_model):
+    """d_inner, nheads, d_in_proj (mamba3.py:92-107; column order
+    z | x | B | C | dd_dt | dd_A | trap | angle)."""
+    d_inner = M3_EXPAND * d_model
+    assert d_inner % M3_HEADDIM == 0, d_model
+    H = d_inner // M3_HEADDIM
+    dip = 2 * d_inner + 2 * M3_NGROUPS * M3_D_STATE + 3 * H + M3_ROPE
+    return d_inner, H, dip
+
+
+def m3_cols(d_model):
+    """Column offsets of the 8-way split (mamba3.py:106-107, :177-186;
+    mamba3_fixture.mojo::Mamba3Dims col_* methods). The split is a COPY,
+    not a seam."""
+    d_inner, H, _ = m3_dims(d_model)
+    col_dt = 2 * d_inner + 2 * M3_NGROUPS * M3_D_STATE
+    return dict(
+        z=0, x=d_inner, b=2 * d_inner,
+        c=2 * d_inner + M3_NGROUPS * M3_D_STATE,
+        dt=col_dt, a=col_dt + H, trap=col_dt + 2 * H, angle=col_dt + 3 * H,
+    )
+
+
+def m3_default_ranges(d_model):
+    """mamba3_fixture.mojo::m3_case_weights defaults, verbatim."""
+    d_inner, _, _ = m3_dims(d_model)
+    s_in = fan_in_scale(d_model)
+    s_out = fan_in_scale(d_inner)
+    return {
+        "x": (-2.0, 2.0),
+        "block_norm.weight": (0.5, 1.5),
+        "in_proj.weight": (-s_in, s_in),
+        "dt_bias": (-7.0, -2.0),
+        "B_norm.weight": (0.5, 1.5),
+        "C_norm.weight": (0.5, 1.5),
+        "B_bias": (0.5, 1.5),
+        "C_bias": (0.5, 1.5),
+        "D": (0.5, 1.5),
+        "out_proj.weight": (-s_out, s_out),
+        "init_theta": (0.0, 6.25),  # inside [0, 2pi), the S10 mod's invariant
+        "init_h": (-1.0, 1.0),
+        "init_k": (-1.0, 1.0),
+        "init_v": (-1.0, 1.0),
+    }
+
+
+def m3_shapes_for(d_model, B, L, with_init=False):
+    d_inner, H, dip = m3_dims(d_model)
+    s = {
+        "x": [B, L, d_model],
+        "block_norm.weight": [d_model],
+        "in_proj.weight": [dip, d_model],
+        "dt_bias": [H],
+        "B_norm.weight": [M3_D_STATE],
+        "C_norm.weight": [M3_D_STATE],
+        "B_bias": [H, M3_D_STATE],
+        "C_bias": [H, M3_D_STATE],
+        "D": [H],
+        "out_proj.weight": [d_model, d_inner],
+    }
+    if with_init:
+        s["init_theta"] = [B, H, M3_ROPE]
+        s["init_h"] = [B, H, M3_HEADDIM, M3_D_STATE]
+        s["init_k"] = [B, H, M3_D_STATE]
+        s["init_v"] = [B, H, M3_HEADDIM]
+    return s
+
+
+def m3_map_range(f_unit, lo, hi):
+    """map_range, minus the dyadic-exactness assertion where it cannot
+    apply. The mamba3 fixture table carries exactly ONE non-dyadic range
+    (dt_bias in [-2.5, -1.8], the angle-crossing case,
+    mamba3_fixture.mojo k=13). The float64 evaluation
+    `f32(lo + (hi - lo) * f)` is still deterministic IEEE double
+    arithmetic and is the Mojo fixture's own spelling
+    (`corpus_tensor`: `Float32(lo + span * unit)`), so the two
+    implementations agree bit for bit even where the exact-rational check
+    cannot certify it; every dyadic range still goes through the
+    asserting map_range."""
+    if _is_dyadic_small(lo) and _is_dyadic_small(hi):
+        return map_range(f_unit, lo, hi)
+    span = float(hi) - float(lo)
+    return (float(lo) + span * f_unit).astype(np.float32)
+
+
+def m3_gen_tensor(seed, name, shape, lo, hi):
+    n = int(np.prod(shape))
+    f = hashed_unit(seed, M3_TENSOR_IDS[name], n)
+    return m3_map_range(f, lo, hi).reshape(shape)
+
+
+# Stage sets. Card order per contract section 7 (28 stages). seg.L is
+# recorded only on the two tiny cases; everywhere else the elision is
+# STATED in the manifest, never silent (section 7's rule, the m2 pattern).
+M3_FULL_STAGES = [
+    "input.x", "norm.sumsq", "norm.out", "in_proj.out", "A.out",
+    "dt.out", "adt.out", "trap.sigma", "trap.scale", "bcnorm.B",
+    "bcnorm.C", "angle.theta", "rot.q", "rot.k", "qkdot.out",
+    "kscale.out", "dacs.out", "yintra.out", "ystate.out", "skip.out",
+    "gate.out", "out_proj.out", "residual.out", "ssd.h_last",
+    "ssd.k_last", "ssd.v_last", "ssd.theta_last",
+]
+M3_SEG_STAGES = (M3_FULL_STAGES[:17] + ["seg.L"] + M3_FULL_STAGES[17:])
+M3_REDUCED_STAGES = [
+    "input.x", "dt.out", "adt.out", "trap.scale", "angle.theta",
+    "dacs.out", "yintra.out", "ystate.out", "skip.out", "gate.out",
+    "residual.out", "ssd.h_last", "ssd.k_last", "ssd.v_last",
+    "ssd.theta_last",
+]
+
+# The case table: mamba3_fixture.mojo::m3_corpus_case MIRRORED index for
+# index (18 cases; contract 8g's L set {1, 4, 63, 64, 65, 129, 257} plus
+# the decode fixture's 70). `plant` names the in_proj.weight row-block
+# overwrite the fixture spells (its module docstring records why each
+# exists); `overrides` are range replacements; both must track the fixture
+# EXACTLY -- the byte gate is the arbiter.
+M3_CASES = [
+    dict(name="m3_base_b1_l1_d32", B=1, L=1, d_model=32, stages=M3_SEG_STAGES,
+         note="smallest shape; L=1 under Q=64 exercises the padded sub-chunk arm and is the decode step shape; seg.L recorded (size allows)"),
+    dict(name="m3_base_b2_l4_d32", B=2, L=4, d_model=32, stages=M3_SEG_STAGES,
+         note="B=2 L=4, the corpus-check default case (at L=1 token-major and channel-major are the same bytes -- the mamba1 reindexing lesson); seg.L recorded"),
+    dict(name="m3_base_b3_l4_d64", B=3, L=4, d_model=64,
+         note="d_model 64 (H=2, the first multi-head shape -- rotation is PER HEAD, so post-rotation K/Q differ per head even at G=1), odd batch"),
+    dict(name="m3_base_b1_l63_d32", B=1, L=63, d_model=32,
+         note="one row short of the chunk: the largest one-chunk shape"),
+    dict(name="m3_base_b1_l64_d32", B=1, L=64, d_model=32,
+         note="the exact one-chunk boundary (Q = 64), zero padding"),
+    dict(name="m3_base_b1_l65_d64", B=1, L=65, d_model=64,
+         note="the first chunk crossing at H=2; CHUNK_SIZE_32's witness shape (L > 32)"),
+    dict(name="m3_comp_b2_l65_d32", B=2, L=65, d_model=32, stages=M3_REDUCED_STAGES,
+         note="composition parent: B=2 at L=65 (one crossing); its rows are m3_comp_row0/row1 with the SAME parameters"),
+    dict(name="m3_comp_row0_b1_l65_d32", B=1, L=65, d_model=32, stages=M3_REDUCED_STAGES,
+         x_source=("m3_comp_b2_l65_d32", 0),
+         note="row 0 of m3_comp_b2_l65_d32 as a B=1 case (same seed, same parameters, x = parent x[0])"),
+    dict(name="m3_comp_row1_b1_l65_d32", B=1, L=65, d_model=32, stages=M3_REDUCED_STAGES,
+         x_source=("m3_comp_b2_l65_d32", 1),
+         note="row 1 of m3_comp_b2_l65_d32, same construction"),
+    dict(name="m3_state_b1_l129_d32", B=1, L=129, d_model=32,
+         note="THREE working chunks (129 = 2*64 + 1): STATE_TERM_SCALE_FIRST's witness (L > Q with nonzero incoming state at chunks 1 and 2)"),
+    dict(name="m3_state_b2_l257_d64", B=2, L=257, d_model=64, stages=M3_REDUCED_STAGES,
+         note="five chunks at H=2, B=2; the longest shape in the family"),
+    dict(name="m3_adv_softplus_band_b2_l8_d32", B=2, L=8, d_model=32,
+         overrides={"dt_bias": (8.0, 14.0)},
+         note="(a) biased dt IN the softplus distinguishing band [8, 14], never straddling 20 (the mamba1 adv_softplus_guard lesson, inherited by contract section 4's closing note)"),
+    dict(name="m3_adv_a_floor_b2_l8_d32", B=2, L=8, d_model=32, plant="a_floor",
+         note="(b) the A_FLOOR_UNCLAMPED witness: dd_A rows of in_proj.weight PLANTED (column 0 = -30000.0, others +0.0), the ONLY region where the S5 clamp binds (dd_A < 1 - 1e4); dd_A = -30000 * norm.out[:, 0] so a healthy fraction of cells clamp AND a healthy fraction do not; verify arm 5 counts both and refuses zero as VACUOUS"),
+    dict(name="m3_adv_angle_crossing_b1_l48_d32", B=1, L=48, d_model=32, plant="angle",
+         overrides={"dt_bias": (-2.5, -1.8)},
+         note="(c) the ANGLE_MOD_PER_CHUNK/_AT_END witness: angle rows of in_proj.weight widened to [-4096, 4096] (tanh saturates, angle rate ~ +-pi), dt_bias in [-2.5, -1.8] (dt ~ 0.08-0.15), so the serial angle recurrence random-walks across the [0, 2pi) seam INSIDE the first chunk; verify arm 5 counts non-boundary mod engagements and refuses zero as VACUOUS (contract 8f: a fixture that never crosses is vacuous for these arms)"),
+    dict(name="m3_adv_trap_saturating_b2_l8_d32", B=2, L=8, d_model=32, plant="trap",
+         note="(d) trap rows of in_proj.weight in [-1024, 1024]: sigma(trap) saturates to exact 0 and exact 1 in FP32, both directions (corpus row owed by name, contract 8g); TRAP_LEFT_ONLY's fixture must stay NONUNIFORM in trap, which saturation both ways guarantees"),
+    dict(name="m3_adv_signed_zeros_b2_l8_d32", B=2, L=8, d_model=32,
+         zero_rule="x[b,t,:] = +0.0 for t%4==0; x[b,t,:] = -0.0 for t%4==2; of the remaining elements, flat index i%7==3 is -0.0",
+         note="(e) the mamba-1 zero rule verbatim; zero-sign propagation through the S1 fold and the S4 GEMM cells is compared BY SIGN BIT by the lane, which the tolerance cannot see"),
+    dict(name="m3_init_states_b1_l65_d32", B=1, L=65, d_model=32, init_states=True,
+         note="(f) nonzero hashed Input_States (theta in [0, 6.25] -- inside [0, 2pi) by the S10 mod's own invariant -- h/k/v in [-1, 1]): RESUME_KERNEL_ASSOC's witness and the section-5-claim-2 TOLERANCE continuation row; the S22 correction folds the scalar FIRST (fwd_ref :266-267, the normative association). NEVER a bitwise gate against an unbroken prefill (contract DEVIATION 831)"),
+    dict(name="m3_decode_b1_l60p10_d32", B=1, L=70, d_model=32, prefix_len=60,
+         note="(g) gate (d)'s chunk-crossing decode fixture (contract 8d: prefill 60, decode through 70, Q=64). As a CASE TABLE row it is the L=70 prefill, because DEVIATION 831 makes that prefill the decode reference; the decode CHAIN itself is the lane's gate (d), not a corpus fixture. Verify arm 6 checks the prefix property here"),
+]
+
+
+def m3_case_seed(k):
+    return (M3_SEED_BASE + 0x1000 * k) & M64
+
+
+def m3_case_index(name):
+    for k, c in enumerate(M3_CASES):
+        if c["name"] == name:
+            return k
+    raise KeyError(name)
+
+
+def m3_case_by_name(name):
+    return M3_CASES[m3_case_index(name)]
+
+
+# --------------------------------------------------------------------------
+# _segsum, mamba3_siso_step_ref and mamba3_siso_fwd_ref, copied VERBATIM
+# from https://github.com/state-spaces/mamba
+# commit e9594ce1c732d97440f0332fdc43170a2294dbfa
+# tests/ops/triton/test_mamba3_siso.py lines 22-31, 34-146 and 149-340
+# (Copyright (c) 2025, Dao AI Lab, Goombalab; Apache-2.0). Our only edits:
+# the lazy einops import line inside each body (the DEVIATION 1934 rule --
+# einops must not be a module-scope import of this file), the `typing`
+# names imported at this file's top, and this banner. Do not edit further.
+# --------------------------------------------------------------------------
+def _segsum(x: torch.Tensor) -> torch.Tensor:
+    """Segment sum helper for attention computation."""
+    from einops import repeat  # DEVIATION 1934: lazy, ours
+    T = x.size(-1)
+    x = repeat(x, "... d -> ... d e", e=T)
+    mask = torch.tril(torch.ones(T, T, device=x.device, dtype=bool), diagonal=-1)
+    x = x.masked_fill(~mask, 0)
+    x_segsum = torch.cumsum(x, dim=-2)
+    mask = torch.tril(torch.ones(T, T, device=x.device, dtype=bool), diagonal=0)
+    x_segsum = x_segsum.masked_fill(~mask, -torch.inf)
+    return x_segsum
+
+
+def mamba3_siso_step_ref(
+    Q: torch.Tensor,
+    K: torch.Tensor,
+    V: torch.Tensor,
+    ADT: torch.Tensor,
+    DT: torch.Tensor,
+    Trap: torch.Tensor,
+    Q_bias: torch.Tensor,
+    K_bias: torch.Tensor,
+    Angles: torch.Tensor,
+    D: Optional[torch.Tensor] = None,
+    Z: Optional[torch.Tensor] = None,
+    Input_States: Optional[Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]] = None,
+) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
+    """Reference implementation of Mamba-3 in recurrent (step) mode.
+
+    Args:
+        Input_States: Optional tuple of (Angle_State, SSM_State, K_State, V_State)
+
+    Returns:
+        out: Output tensor (batch, seqlen, nheads, headdim_v)
+        Final_States: Tuple of (Angle_State, SSM_State, K_State, V_State)
+    """
+    from einops import repeat  # DEVIATION 1934: lazy, ours
+    batch, seqlen, nheads_qk, headdim_qk = Q.shape
+    _, _, nheads, headdim_v = V.shape
+    headdim_angles = Angles.shape[-1]
+    device = Q.device
+    assert seqlen > 0
+    Angles = torch.tanh(Angles) * math.pi
+
+    # Expand Q/K for GQA
+    if Q.shape[2] != V.shape[2]:
+        Q = repeat(Q, "b s h_bc d -> b s (h_bc g) d", g=V.shape[2] // Q.shape[2])
+    if K.shape[2] != V.shape[2]:
+        K = repeat(K, "b s h_bc d -> b s (h_bc g) d", g=V.shape[2] // K.shape[2])
+
+    def apply_rotary_emb(tensor, cos, sin):
+        tensor_reshaped = tensor.view(*tensor.shape[:-1], -1, 2)
+        tensor_0 = tensor_reshaped[..., 0]
+        tensor_1 = tensor_reshaped[..., 1]
+        if cos.shape[-1] < tensor_0.shape[-1]:
+            pad_size = tensor_0.shape[-1] - cos.shape[-1]
+            cos = F.pad(cos, (0, pad_size), value=1.0)
+            sin = F.pad(sin, (0, pad_size), value=0.0)
+        rotated_0 = tensor_0 * cos - tensor_1 * sin
+        rotated_1 = tensor_0 * sin + tensor_1 * cos
+        rotated = torch.stack([rotated_0, rotated_1], dim=-1).view_as(tensor)
+        return rotated
+
+    # Initialize states
+    if Input_States is not None:
+        Angle_State, SSM_State, K_State, V_State = Input_States
+        Angle_State = Angle_State.clone()
+        SSM_State = SSM_State.clone().to(torch.float32)
+        K_State = K_State.clone()
+        V_State = V_State.clone()
+    else:
+        Angle_State = torch.zeros((batch, nheads, headdim_angles), dtype=torch.float32, device=device)
+        SSM_State = torch.zeros((batch, nheads, headdim_v, headdim_qk), dtype=torch.float32, device=device)
+        K_State = torch.zeros((batch, nheads, headdim_qk), dtype=Q.dtype, device=device)
+        V_State = torch.zeros((batch, nheads, headdim_v), dtype=V.dtype, device=device)
+
+    TWO_PI = 2 * math.pi
+    out_arr = []
+
+    for idx in range(seqlen):
+        q = Q[:, idx, :, :] + Q_bias.unsqueeze(0)
+        k = K[:, idx, :, :] + K_bias.unsqueeze(0)
+        v = V[:, idx, :, :]
+        adt = ADT[:, :, idx]
+        dt = DT[:, :, idx]
+        trap = Trap[:, :, idx]
+        z = Z[:, idx, :, :] if Z is not None else None
+        angles = Angles[:, idx, :, :]
+
+        # Update angle state with cumsum: Angle_State = (Angle_State + Angles * DT) mod 2π
+        Angle_State = Angle_State + angles * dt.unsqueeze(-1)
+        Angle_State = Angle_State - TWO_PI * torch.floor(Angle_State / TWO_PI)
+
+        # Apply rotary embeddings to Q and K using cumulative angles
+        cos_angles = torch.cos(Angle_State)
+        sin_angles = torch.sin(Angle_State)
+        q_rot = apply_rotary_emb(q, cos_angles, sin_angles)
+        k_rot = apply_rotary_emb(k, cos_angles, sin_angles)
+
+        trap = torch.sigmoid(trap)
+        alpha = torch.exp(adt)
+        beta = (1 - trap) * dt * alpha
+        gamma = trap * dt
+
+        # Update SSM state using previous K_State and V_State
+        SSM_State = alpha.unsqueeze(-1).unsqueeze(-1) * SSM_State
+        SSM_State = SSM_State + beta.unsqueeze(-1).unsqueeze(-1) * (K_State.unsqueeze(-2) * V_State.unsqueeze(-1))
+        SSM_State = SSM_State + gamma.unsqueeze(-1).unsqueeze(-1) * (k_rot.unsqueeze(-2) * v.unsqueeze(-1))
+
+        # Compute output
+        out = torch.einsum("bhdD, bhD -> bhd", SSM_State, q_rot.to(SSM_State.dtype))
+
+        if D is not None:
+            out = out + D[None, :, None] * v
+
+        if Z is not None:
+            out = out * z * torch.sigmoid(z)
+
+        out_arr.append(out)
+
+        # Update K and V states for next step
+        K_State = k_rot
+        V_State = v
+
+    out = torch.stack(out_arr, dim=1)
+    Final_States = (Angle_State, SSM_State, K_State, V_State)
+    return out, Final_States
+
+
+def mamba3_siso_fwd_ref(
+    Q: torch.Tensor,
+    K: torch.Tensor,
+    V: torch.Tensor,
+    ADT: torch.Tensor,
+    DT: torch.Tensor,
+    Trap: torch.Tensor,
+    Q_bias: torch.Tensor,
+    K_bias: torch.Tensor,
+    Angles: torch.Tensor,
+    D: Optional[torch.Tensor] = None,
+    Z: Optional[torch.Tensor] = None,
+    Initial_States: Optional[Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]] = None,
+    chunk_size: int = 64,
+    dtype: torch.dtype = torch.float32,
+    cu_seqlens: Optional[torch.Tensor] = None,
+):
+    """Reference implementation of Mamba-3 forward pass.
+
+    Args:
+        Initial_States: Optional tuple of (Angle_State, SSM_State, K_State, V_State)
+
+    Returns:
+        out_z: Output with Z gating applied
+        final_states: (Final_Angle_State, Final_SSM_State, Final_K_State, Final_V_State)
+    """
+    from einops import repeat  # DEVIATION 1934: lazy, ours
+    batch, total_seqlen, nheads_qk, headdim_qk = Q.shape
+    _, _, nheads, headdim_v = V.shape
+    headdim_angles = Angles.shape[-1]
+    device = Q.device
+
+    is_varlen = cu_seqlens is not None
+    if is_varlen:
+        assert batch == 1
+
+    # Cast inputs
+    Q = Q.to(dtype)
+    K = K.to(dtype)
+    V = V.to(dtype)
+    ADT = ADT.to(torch.float32)
+    DT = DT.to(torch.float32)
+    Trap = Trap.to(dtype)
+    Q_bias = Q_bias.to(dtype)
+    K_bias = K_bias.to(dtype)
+    Angles = Angles.to(dtype)
+    if D is not None:
+        D = D.to(dtype)
+    if Z is not None:
+        Z = Z.to(dtype)
+    if Initial_States is not None:
+        Initial_Angle_State, Initial_SSM_State, Initial_K_State, Initial_V_State = Initial_States
+
+    Angles = torch.tanh(Angles) * math.pi
+    # Expand Q/K for GQA
+    if Q.shape[2] != V.shape[2]:
+        Q = repeat(Q, "b s h_bc d -> b s (h_bc g) d", g=V.shape[2] // Q.shape[2])
+    if K.shape[2] != V.shape[2]:
+        K = repeat(K, "b s h_bc d -> b s (h_bc g) d", g=V.shape[2] // K.shape[2])
+
+    out_zs = []
+    Final_Angle_States = []
+    Final_SSM_States = []
+    Final_K_States = []
+    Final_V_States = []
+
+    TWO_PI = 2 * math.pi
+
+    def _rotary(tensor, cos, sin):
+        tensor_reshaped = tensor.view(*tensor.shape[:-1], -1, 2)
+        tensor_0 = tensor_reshaped[..., 0]
+        tensor_1 = tensor_reshaped[..., 1]
+        if cos.shape[-1] < tensor_0.shape[-1]:
+            pad_size = tensor_0.shape[-1] - cos.shape[-1]
+            cos = F.pad(cos, (0, pad_size), value=1.0)
+            sin = F.pad(sin, (0, pad_size), value=0.0)
+        rotated_0 = tensor_0 * cos - tensor_1 * sin
+        rotated_1 = tensor_0 * sin + tensor_1 * cos
+        return torch.stack([rotated_0, rotated_1], dim=-1).view_as(tensor)
+
+    def compute_one_sequence(seq_idx):
+        if is_varlen:
+            start_idx, end_idx = cu_seqlens[seq_idx].item(), cu_seqlens[seq_idx + 1].item()
+            Q_curr = Q[0, start_idx:end_idx, :, :]
+            K_curr = K[0, start_idx:end_idx, :, :]
+            V_curr = V[0, start_idx:end_idx, :, :]
+            ADT_curr = ADT[0, :, start_idx:end_idx]
+            DT_curr = DT[0, :, start_idx:end_idx]
+            Trap_curr = Trap[0, :, start_idx:end_idx]
+            Angles_curr = Angles[0, start_idx:end_idx, :, :]
+            Z_curr = Z[0, start_idx:end_idx, :, :] if Z is not None else None
+        else:
+            Q_curr = Q[seq_idx]
+            K_curr = K[seq_idx]
+            V_curr = V[seq_idx]
+            ADT_curr = ADT[seq_idx]
+            DT_curr = DT[seq_idx]
+            Trap_curr = Trap[seq_idx]
+            Angles_curr = Angles[seq_idx]
+            Z_curr = Z[seq_idx] if Z is not None else None
+
+        Trap_curr = torch.sigmoid(Trap_curr)
+        seqlen_curr = Q_curr.shape[0]
+
+        Angles_scaled = Angles_curr.float() * DT_curr.transpose(0, 1).unsqueeze(-1)
+        Angles_Cumsum = torch.cumsum(Angles_scaled, dim=0)
+        if Initial_States is not None:
+            Initial_Angle_State_curr = Initial_Angle_State[seq_idx]
+            Angles_Cumsum = Angles_Cumsum + Initial_Angle_State_curr.unsqueeze(0)
+        Angles_Cumsum = Angles_Cumsum - TWO_PI * torch.floor(Angles_Cumsum / TWO_PI)
+        Final_Angle_States.append(Angles_Cumsum[-1])
+
+        # Initialize acc_states
+        if Initial_States is not None:
+            Initial_SSM_State_curr = Initial_SSM_State[seq_idx]
+            Initial_K_State_curr = Initial_K_State[seq_idx]
+            Initial_V_State_curr = Initial_V_State[seq_idx]
+
+            scalar = DT_curr[:, 0] * (1 - Trap_curr[:, 0])
+            acc_states = Initial_SSM_State_curr + Initial_V_State_curr[:, :, None] * Initial_K_State_curr[:, None, :] * scalar[:, None, None]
+        else:
+            acc_states = torch.zeros((nheads, headdim_v, headdim_qk), device=device, dtype=torch.float32)
+
+        # Compute shifted gamma and scale
+        DT_shifted = F.pad(DT_curr[:, 1:], (0, 1))
+        Trap_shifted = F.pad(Trap_curr[:, 1:], (0, 1))
+        shifted_gamma = DT_shifted * (1 - Trap_shifted)
+        scale = DT_curr * Trap_curr + DT_shifted * (1 - Trap_shifted)
+
+        # Add biases
+        Q_curr = Q_curr + Q_bias.unsqueeze(0)
+        K_curr = K_curr + K_bias.unsqueeze(0)
+
+        # Compute QK dot for skip connection
+        QK_dot = torch.sum(K_curr * Q_curr, dim=-1) * shifted_gamma.transpose(0, 1)
+
+        # Rotary embeddings using Angles_Cumsum
+        cos_angles_curr = torch.cos(Angles_Cumsum).to(Q_curr.dtype)
+        sin_angles_curr = torch.sin(Angles_Cumsum).to(Q_curr.dtype)
+        Q_curr = _rotary(Q_curr, cos_angles_curr, sin_angles_curr)
+        K_curr = _rotary(K_curr, cos_angles_curr, sin_angles_curr)
+
+        Final_K_States.append(K_curr[-1])
+        Final_V_States.append(V_curr[-1])
+
+        K_curr_scaled = K_curr * scale.transpose(0, 1).unsqueeze(-1).to(K_curr.dtype)
+
+        # Compute output via quadratic attention
+        QK = torch.einsum("thd,shd->hts", Q_curr, K_curr_scaled)
+        QK_causal = torch.tril(QK)
+        QK_causal = (QK_causal * torch.exp(_segsum(ADT_curr))).to(QK_causal.dtype)
+        out = torch.einsum("hts,shd->thd", QK_causal, V_curr)
+
+        if Initial_States is not None:
+            da_cs = torch.cumsum(ADT_curr, dim=-1)
+            exp_da_cs = torch.exp(da_cs)
+            out = out + torch.einsum("hDd,thd,ht->thD", acc_states.to(Q_curr.dtype), Q_curr, exp_da_cs.to(Q_curr.dtype))
+
+        if D is not None:
+            out = out + D[None, :, None] * V_curr
+
+        out = out - V_curr * QK_dot.unsqueeze(-1)
+
+        if Z_curr is not None:
+            out = out * Z_curr * torch.sigmoid(Z_curr)
+        out_zs.append(out)
+
+        # Compute final state
+        da_cs_last = torch.exp(torch.sum(ADT_curr, dim=-1))
+        da_cs_rev = torch.exp(torch.sum(ADT_curr, dim=-1, keepdim=True) - torch.cumsum(ADT_curr, dim=-1))
+        V_curr_scaled = V_curr * da_cs_rev.permute(1, 0).unsqueeze(-1).to(V_curr.dtype)
+        final_acc_states = acc_states * da_cs_last.unsqueeze(-1).unsqueeze(-1) + torch.einsum(
+            "thd,thD->hDd", K_curr_scaled, V_curr_scaled.to(K_curr_scaled.dtype))
+        Final_SSM_States.append(final_acc_states)
+
+    num_sequences = cu_seqlens.size(0) - 1 if is_varlen else batch
+    for seq_idx in range(num_sequences):
+        compute_one_sequence(seq_idx)
+
+    if not is_varlen:
+        out_zs = torch.stack(out_zs, dim=0)
+        Final_Angle_States = torch.stack(Final_Angle_States, dim=0)
+        Final_SSM_States = torch.stack(Final_SSM_States, dim=0)
+        Final_K_States = torch.stack(Final_K_States, dim=0)
+        Final_V_States = torch.stack(Final_V_States, dim=0)
+    else:
+        out_zs = torch.cat(out_zs, dim=0).unsqueeze(0)
+        Final_Angle_States = torch.stack(Final_Angle_States, dim=0)
+        Final_SSM_States = torch.stack(Final_SSM_States, dim=0)
+        Final_K_States = torch.stack(Final_K_States, dim=0)
+        Final_V_States = torch.stack(Final_V_States, dim=0)
+
+    return out_zs, (Final_Angle_States, Final_SSM_States, Final_K_States, Final_V_States)
+# ---- end of verbatim test_mamba3_siso.py copies ---------------------------
+
+
+# NOTE on the hard `.to(torch.float32)` casts inside the verbatim copies
+# (fwd_ref :188-189 for ADT/DT; step_ref :87 for the SSM state): for the
+# float64 reference run those would silently halve the reference's
+# precision. `_m3_ref_f32_as` therefore temporarily rebinds
+# `torch.Tensor.to` so that an EXPLICIT torch.float32 dtype argument maps
+# to the working dtype -- the same move, and the same justification, as
+# `_scan_ref_dtype` above (`.float()` there, `.to(torch.float32)` here).
+# The float32 run is unaffected (the mapping is the identity). The
+# `torch.zeros(..., dtype=torch.float32)` zero-state constructions inside
+# the copies are NOT Tensor.to calls and stay float32; the first arithmetic
+# against a float64 operand promotes them, and the cross-checks are
+# roundoff-scale reports either way.
+class _m3_ref_f32_as:
+    def __init__(self, dtype):
+        self.dtype = dtype
+
+    def __enter__(self):
+        self._orig = torch.Tensor.to
+        dtype = self.dtype
+        orig = self._orig
+
+        def to_mapped(t, *args, **kwargs):
+            if args and args[0] is torch.float32:
+                args = (dtype,) + args[1:]
+            if kwargs.get("dtype") is torch.float32:
+                kwargs = dict(kwargs, dtype=dtype)
+            return orig(t, *args, **kwargs)
+
+        torch.Tensor.to = to_mapped
+        return self
+
+    def __exit__(self, *a):
+        torch.Tensor.to = self._orig
+
+
+# --------------------------------------------------------------------------
+# The staged Mamba-3 block: every stage of contract section 7, spelled by
+# the profile's own schedule (the KERNEL's chunked two-phase shape,
+# DEVIATION 827; the kernel's diagonal spelling, DEVIATION 830; the
+# per-token serial mod, DEVIATION 829) in plain torch. Citations: m3 =
+# mamba_ssm/modules/mamba3.py; fwd = ops/triton/mamba3/mamba3_siso_fwd.py;
+# ref = tests/ops/triton/test_mamba3_siso.py::mamba3_siso_fwd_ref;
+# rmr = ops/triton/layernorm_gated.py::rms_norm_ref -- all at the pin.
+# --------------------------------------------------------------------------
+def m3_pad_tokens(t, pad):
+    """Zero-pad dim=1 (tokens) at the end; contract section 3: the last
+    chunk is padded to Q with +0.0 q/k/v/dt/angle rows."""
+    if pad == 0:
+        return t
+    spec = [0, 0] * (t.dim() - 2) + [0, pad]
+    return F.pad(t, spec)
+
+
+def m3_forward(p, x, dtype):
+    """Returns a dict of stage tag -> tensor (contract section 7's card
+    shapes), all in `dtype`. `p` may carry the four `init_*` pieces
+    (`Input_States`, contract section 5 claim 2)."""
+    P = {k: v.to(dtype) for k, v in p.items()}
+    init_theta = P.pop("init_theta", None)
+    init_h = P.pop("init_h", None)
+    init_k = P.pop("init_k", None)
+    init_v = P.pop("init_v", None)
+    x = x.to(dtype)
+    Bsz, L, dm = x.shape
+    d_inner, H, dip = m3_dims(dm)
+    G, N, Q, PP, R = M3_NGROUPS, M3_D_STATE, M3_CHUNK, M3_HEADDIM, M3_ROPE
+    Mtok = Bsz * L
+    nchunks = -(-L // Q)
+    out = {}
+    out["input.x"] = x.reshape(Mtok, dm)
+
+    # S1-S3 block RMSNorm, mamba2 S1-S3 VERBATIM (contract section 4;
+    # block.py Block.forward :51-53 non-fused arm; rstd per rmr :29).
+    residual = x
+    sumsq = x.pow(2).sum(-1)
+    out["norm.sumsq"] = sumsq.reshape(-1)
+    rstd = 1 / torch.sqrt(sumsq / dm + M3_EPS)
+    hnorm = P["block_norm.weight"] * (x * rstd[..., None])
+    out["norm.out"] = hnorm.reshape(Mtok, dm)
+
+    # S4 in_proj (m3 :176); 8-way split z|x|B|C|dd_dt|dd_A|trap|angle
+    # (m3 :106-107, :177-186; a COPY, not a seam)
+    proj = F.linear(hnorm, P["in_proj.weight"])
+    out["in_proj.out"] = proj.reshape(Mtok, dip)
+    z, xs, Bs, Cs, dd_dt, dd_A, trap_raw, angle_raw = torch.split(
+        proj, [d_inner, d_inner, G * N, G * N, H, H, H, R], dim=-1)
+
+    # S5 data-dependent A: -heavy_tail(dd_A) then clamp(max=-A_floor)
+    # (m3 :194-195; heavy_tail_activation :39-41 spelled branchless there,
+    # bit-equal to the branch spelling -- contract S5's 782-style record)
+    A = -(dd_A.clamp_min(0) + torch.reciprocal(1 - dd_A.clamp_max(0)))
+    A = torch.clamp(A, max=-M3_A_FLOOR)
+    out["A.out"] = A.reshape(Mtok, H)
+
+    # S6 dt = softplus(dd_dt + dt_bias), NO clamp (m3 :196)
+    dt = F.softplus(dd_dt + P["dt_bias"])
+    out["dt.out"] = dt.reshape(Mtok, H)
+
+    # S7 ADT = A * dt (m3 :197); always <= -A_floor*dt <= 0
+    adt = A * dt
+    out["adt.out"] = adt.reshape(Mtok, H)
+
+    # S8-S9 trapezoid: sigma, gamma, beta', scale (ref :249, :272-275;
+    # fwd :293-306); shifted operands are +0.0 past the sequence end
+    sig = torch.sigmoid(trap_raw)
+    out["trap.sigma"] = sig.reshape(Mtok, H)
+    dt_sh = F.pad(dt[:, 1:, :], (0, 0, 0, 1))
+    sig_sh = F.pad(sig[:, 1:, :], (0, 0, 0, 1))
+    gamma = dt * sig
+    scale = gamma + dt_sh * (1 - sig_sh)
+    out["trap.scale"] = scale.reshape(Mtok, H)
+
+    # S21 B/C RMSNorm over N per (b, l, g), eps 1e-5, learned weight, NO
+    # gate NO bias (m3 :126-127, :204-206; rmr :29-30 at z=None)
+    Bn = Bs.reshape(Bsz, L, G, N)
+    Cn = Cs.reshape(Bsz, L, G, N)
+    Bn = (Bn * (1 / torch.sqrt(Bn.pow(2).mean(-1, keepdim=True) + M3_EPS))) * P["B_norm.weight"]
+    Cn = (Cn * (1 / torch.sqrt(Cn.pow(2).mean(-1, keepdim=True) + M3_EPS))) * P["C_norm.weight"]
+    out["bcnorm.B"] = Bn.reshape(Mtok, G, N)
+    out["bcnorm.C"] = Cn.reshape(Mtok, G, N)
+
+    # S10 angle recurrence: a = tanh(angle_raw)*pi, inc = a*dt per head,
+    # theta serial per token with the mod applied EVERY step (DEVIATION
+    # 829's placement, step_ref :109-111; the head expand of angle_raw is
+    # a COPY, m3 :202)
+    TWO_PI = 2 * math.pi
+    a = torch.tanh(angle_raw) * math.pi                     # [B, L, R]
+    inc = a.unsqueeze(2) * dt.unsqueeze(-1)                 # [B, L, H, R]
+    theta_state = (init_theta.clone() if init_theta is not None
+                   else torch.zeros(Bsz, H, R, dtype=dtype))
+    thetas = []
+    for t in range(L):
+        theta_state = theta_state + inc[:, t]
+        theta_state = theta_state - TWO_PI * torch.floor(theta_state / TWO_PI)
+        thetas.append(theta_state)
+    theta = torch.stack(thetas, dim=1)                      # [B, L, H, R]
+    out["angle.theta"] = theta.reshape(Mtok, H, R)
+
+    # S12 Q/K bias AFTER the norm, BEFORE rotation (fwd :312-316; ref
+    # :278-279); the G -> H broadcast is a COPY
+    q = Cn.repeat_interleave(H // G, dim=2) + P["C_bias"]
+    k = Bn.repeat_interleave(H // G, dim=2) + P["B_bias"]
+
+    # S14 qk_dot PRE-rotation, times gamma -- the KERNEL's diagonal
+    # spelling (fwd :319-325; DEVIATION 830 picks gamma over the ref's
+    # beta')
+    qkg = (q * k).sum(-1) * gamma
+    out["qkdot.out"] = qkg.reshape(Mtok, H)
+
+    # S13 rotation: interleaved pairs (2i, 2i+1), first R of the 64 pairs;
+    # pairs >= R structurally unrotated (ref _rotary :216-226 pads
+    # cos=1/sin=0, bit-equal to never computing them -- DEVIATION 828)
+    cosA = torch.cos(theta)
+    sinA = torch.sin(theta)
+    cpad = F.pad(cosA, (0, N // 2 - R), value=1.0)
+    spad = F.pad(sinA, (0, N // 2 - R), value=0.0)
+
+    def _rot(t):
+        tr = t.reshape(*t.shape[:-1], -1, 2)
+        t0, t1 = tr[..., 0], tr[..., 1]
+        return torch.stack([t0 * cpad - t1 * spad, t0 * spad + t1 * cpad], dim=-1).reshape(t.shape)
+
+    q_rot = _rot(q)
+    k_rot = _rot(k)
+    out["rot.q"] = q_rot.reshape(Mtok, H, N)
+    out["rot.k"] = k_rot.reshape(Mtok, H, N)  # PRE-scale, the carried spelling
+
+    # S15 K scaling AFTER rotation, AFTER the k-state read (fwd :337-344)
+    k_scaled = k_rot * scale.unsqueeze(-1)
+    out["kscale.out"] = k_scaled.reshape(Mtok, H, N)
+
+    v = xs.reshape(Bsz, L, H, PP)
+
+    # S22 resumption correction, the NORMATIVE ref's association: fold the
+    # scalar LAST onto (v x k) (ref :266-267; the kernel's fwd :371
+    # association is refused silently -- contract S22)
+    if init_h is not None:
+        c1 = dt[:, 0, :] * (1 - sig[:, 0, :])               # [B, H]
+        h = init_h + (init_v.unsqueeze(-1) * init_k.unsqueeze(-2)) * c1[..., None, None]
+    else:
+        h = torch.zeros(Bsz, H, PP, N, dtype=dtype)
+
+    # The chunked SSD core (DEVIATION 827: the kernel's two-phase chunked
+    # schedule at Q = 64, not the ref's whole-sequence attention).
+    pad = (Q - L % Q) % Q
+    qc = m3_pad_tokens(q_rot, pad).reshape(Bsz, nchunks, Q, H, N)
+    kc = m3_pad_tokens(k_scaled, pad).reshape(Bsz, nchunks, Q, H, N)
+    vc = m3_pad_tokens(v, pad).reshape(Bsz, nchunks, Q, H, PP)
+    adtq = m3_pad_tokens(adt, pad).reshape(Bsz, nchunks, Q, H).permute(0, 3, 1, 2)
+
+    # mamba2 S11 inherited: per-chunk cumsum of ADT; padded positions
+    # carry the last real value (padded adt is +0.0)
+    dacs = torch.cumsum(adtq, dim=-1)                       # [B, H, C, Q]
+    out["dacs.out"] = dacs
+
+    # S16 decay: L[i][j] = exp(sum_{s=j+1..i} adt_s) for j < i, STRUCTURAL
+    # +0.0 for j >= i INCLUDING the diagonal (fwd :413-417 strict mask;
+    # DEVIATION 830 moved the diagonal to S14/S18)
+    mask_strict = torch.tril(torch.ones(Q, Q, dtype=torch.bool), diagonal=-1)
+    xrep = adtq.unsqueeze(-1).expand(Bsz, H, nchunks, Q, Q)
+    seg = torch.cumsum(xrep.masked_fill(~mask_strict, 0), dim=-2)
+    Lmat = torch.where(mask_strict, torch.exp(seg), seg.new_zeros(()))
+    out["seg.L"] = Lmat.permute(0, 2, 1, 3, 4)              # card [B, C, H, Q, Q]
+
+    # S16 intra-chunk attention: s = q_rot . k_scaled^T over n, M = s (.) L,
+    # Y_intra = M . v (fwd :411-418)
+    s_qk = torch.einsum("bcthn,bcshn->bhcts", qc, kc)
+    Mm = s_qk * Lmat
+    Yintra = torch.einsum("bhcts,bcshp->bcthp", Mm, vc)
+    out["yintra.out"] = Yintra.reshape(Bsz, nchunks * Q, H, PP)[:, :L].reshape(Mtok, H, PP)
+
+    # S17 state read-out + S20 SERIAL inter-chunk pass (fwd :406-407,
+    # :439-444; the profile's serial fma answer, mamba2 S17 inherited)
+    ys_chunks = []
+    for c in range(nchunks):
+        exp_dacs = torch.exp(dacs[:, :, c])                 # [B, H, Q]
+        ys = torch.einsum("bthn,bhpn->bthp", qc[:, c], h) * exp_dacs.permute(0, 2, 1)[..., None]
+        ys_chunks.append(ys)
+        d_last = dacs[:, :, c, -1]                          # [B, H]
+        d_rev = d_last.unsqueeze(-1) - dacs[:, :, c]        # [B, H, Q]
+        vdec = vc[:, c] * torch.exp(d_rev).permute(0, 2, 1)[..., None]
+        incr = torch.einsum("bthp,bthn->bhpn", vdec, kc[:, c])
+        h = torch.exp(d_last)[..., None, None] * h + incr
+    Ystate = torch.stack(ys_chunks, dim=1).reshape(Bsz, nchunks * Q, H, PP)[:, :L]
+    out["ystate.out"] = Ystate.reshape(Mtok, H, PP)
+    out["ssd.h_last"] = h                                   # [B, H, P, N]
+
+    # S18 diagonal + D skip in ONE add: t = D[h] + qk_gamma, Y += t * v
+    # (fwd :421-422, the kernel's own association)
+    Y = Yintra.reshape(Bsz, nchunks * Q, H, PP)[:, :L] + Ystate
+    skip = Y + (P["D"] + qkg).unsqueeze(-1) * v
+    out["skip.out"] = skip.reshape(Mtok, H, PP)
+
+    # S19 Z gate, in-core, no output norm at defaults (fwd :430-431)
+    z4 = z.reshape(Bsz, L, H, PP)
+    gate = skip * F.silu(z4)
+    out["gate.out"] = gate.reshape(Mtok, H, PP)
+
+    # S4 out_proj (m3 :277), S23 residual (block.py :52/:67)
+    o = F.linear(gate.reshape(Bsz, L, d_inner), P["out_proj.weight"])
+    out["out_proj.out"] = o.reshape(Mtok, dm)
+    out["residual.out"] = (residual + o).reshape(Mtok, dm)
+
+    # section 5's four report pieces: k post-bias post-rotation PRE-scale
+    # and v raw at the LAST REAL token (fwd wrapper :709-729; ref
+    # :290-291), theta after the last real token
+    out["ssd.k_last"] = k_rot[:, L - 1]                     # [B, H, N]
+    out["ssd.v_last"] = v[:, L - 1]                         # [B, H, P]
+    out["ssd.theta_last"] = theta[:, L - 1]                 # [B, H, R]
+    return out
+
+
+def m3_stage_shapes(meta):
+    B, L, dm = meta["B"], meta["L"], meta["d_model"]
+    d_inner, H, C = meta["d_inner"], meta["nheads"], meta["nchunks"]
+    M = B * L
+    dip = m3_dims(dm)[2]
+    Q, N, PP, G, R = M3_CHUNK, M3_D_STATE, M3_HEADDIM, M3_NGROUPS, M3_ROPE
+    return {
+        "input.x": [M, dm], "norm.sumsq": [M], "norm.out": [M, dm],
+        "in_proj.out": [M, dip], "A.out": [M, H], "dt.out": [M, H],
+        "adt.out": [M, H], "trap.sigma": [M, H], "trap.scale": [M, H],
+        "bcnorm.B": [M, G, N], "bcnorm.C": [M, G, N],
+        "angle.theta": [M, H, R], "rot.q": [M, H, N], "rot.k": [M, H, N],
+        "qkdot.out": [M, H], "kscale.out": [M, H, N],
+        "dacs.out": [B, H, C, Q], "seg.L": [B, C, H, Q, Q],
+        "yintra.out": [M, H, PP], "ystate.out": [M, H, PP],
+        "skip.out": [M, H, PP], "gate.out": [M, H, PP],
+        "out_proj.out": [M, dm], "residual.out": [M, dm],
+        "ssd.h_last": [B, H, PP, N], "ssd.k_last": [B, H, N],
+        "ssd.v_last": [B, H, PP], "ssd.theta_last": [B, H, R],
+    }
+
+
+M3_STAGE_DEFS = {
+    "input.x": "the block input, as given, token-major  [M, d_model]",
+    "norm.sumsq": "S1: per-row sum of squares (mamba2 S1 verbatim)  [M]",
+    "norm.out": "S2-S3: x * (1/sqrt(sumsq/d_model + 1e-5)) * weight (mamba2 S2-S3 verbatim; rms_norm_ref:29 rstd)  [M, d_model]",
+    "in_proj.out": "S4: norm.out @ in_proj.weight^T; columns z | x | B | C | dd_dt | dd_A | trap | angle (mamba3.py:106-107)  [M, d_in_proj]",
+    "A.out": "S5: clamp(-heavy_tail(dd_A), max=-1e-4) (mamba3.py:194-195; heavy_tail :39-41)  [M, H]",
+    "dt.out": "S6: softplus(dd_dt + dt_bias), NO clamp (mamba3.py:196)  [M, H]",
+    "adt.out": "S7: A * dt (mamba3.py:197); always <= 0  [M, H]",
+    "trap.sigma": "S8: sigmoid(trap) (fwd_ref :249)  [M, H]",
+    "trap.scale": "S9: dt*sigma + dt_shifted*(1 - sigma_shifted), the trapezoid scale; shifted operands +0.0 past the sequence end (fwd:304-306; fwd_ref :272-275)  [M, H]",
+    "bcnorm.B": "S21: RMSNorm over d_state with learned weight, eps 1e-5, no gate no bias (mamba3.py:126, :204; rms_norm_ref:29-30 at z=None)  [M, G, N]",
+    "bcnorm.C": "S21, the C side (mamba3.py:127, :206)  [M, G, N]",
+    "angle.theta": "S10: theta_t = mod2pi(theta_{t-1} + tanh(angle_raw)*pi * dt_t), SERIAL per token, mod EVERY step (DEVIATION 829; step_ref :109-111 placement)  [M, H, R]",
+    "rot.q": "S12-S13: (C_normed + C_bias) rotated by theta, interleaved pairs, first 32 of 64 pairs (DEVIATION 828)  [M, H, N]",
+    "rot.k": "S12-S13, the K side, PRE-scale (the carried k-state spelling, fwd:337-341)  [M, H, N]",
+    "qkdot.out": "S14: (q . k) BEFORE rotation, times gamma -- the kernel's diagonal spelling (fwd:319-325; DEVIATION 830)  [M, H]",
+    "kscale.out": "S15: k_rot * scale, AFTER rotation AFTER the state read (fwd:337-344)  [M, H, N]",
+    "dacs.out": "mamba2 S11 inherited: per-chunk serial cumsum of ADT; padded positions carry the last real value  [B, H, C, Q]",
+    "seg.L": "S16 decay: exp(segsum) STRICTLY below the diagonal, +0.0 on and above it (fwd:413-417; DEVIATION 830 moved the diagonal out)  [B, C, H, Q, Q]",
+    "yintra.out": "S16: ((q_rot . k_scaled^T) (.) L) . v per chunk (fwd:411-418), truncated to L  [M, H, P]",
+    "ystate.out": "S17: (q_rot . h_chunk_start^T) * exp(dacs), dacs INCLUSIVE of the token (fwd:406-407); h passed SERIALLY across chunks (S20, fwd:439-444)  [M, H, P]",
+    "skip.out": "S18: Y + (D[h] + qk_gamma) * v -- diagonal and skip in ONE add (fwd:421-422)  [M, H, P]",
+    "gate.out": "S19: skip * silu(z), in-core, no output norm at defaults (fwd:430-431)  [M, H, P]",
+    "out_proj.out": "S4: gate.out @ out_proj.weight^T (mamba3.py:277)  [M, d_model]",
+    "residual.out": "S23: residual + out_proj.out (block.py:52/:67; mamba2 S22 verbatim)  [M, d_model]",
+    "ssd.h_last": "section 5 report: the SSM state after the final chunk of the serial pass  [B, H, P, N]",
+    "ssd.k_last": "section 5 report: k post-bias post-rotation PRE-scale at the last real token (fwd wrapper :709-729)  [B, H, N]",
+    "ssd.v_last": "section 5 report: v raw at the last real token  [B, H, P]",
+    "ssd.theta_last": "section 5 report: theta after the last real token  [B, H, R]",
+}
+
+
+def m3_build_case(case):
+    k = m3_case_index(case["name"])
+    d_model = case["d_model"]
+    d_inner, H, dip = m3_dims(d_model)
+    B, L = case["B"], case["L"]
+    src = case.get("x_source")
+    seed = m3_case_seed(m3_case_index(src[0])) if src else m3_case_seed(k)
+    with_init = case.get("init_states", False)
+    shapes = m3_shapes_for(d_model, B, L, with_init=with_init)
+    ranges = m3_default_ranges(d_model)
+    ranges.update(case.get("overrides", {}))
+    tensors = {}
+    for name, shape in shapes.items():
+        if name == "x" and src:
+            parent = m3_case_by_name(src[0])
+            pshape = m3_shapes_for(d_model, parent["B"], parent["L"])["x"]
+            lo, hi = ranges["x"]
+            px = m3_gen_tensor(seed, "x", pshape, lo, hi)
+            tensors["x"] = px[src[1]:src[1] + 1].copy()
+            continue
+        lo, hi = ranges[name]
+        tensors[name] = m3_gen_tensor(seed, name, shape, lo, hi)
+    # The in_proj.weight PLANTS, mirroring mamba3_fixture.mojo::
+    # m3_case_weights branch for branch. Each overwrites a row block of the
+    # already-hashed base tensor, so everything outside the block keeps the
+    # default derivation bit for bit.
+    plant = case.get("plant")
+    cols = m3_cols(d_model)
+    if plant == "a_floor":
+        # dd_A rows [col_a, col_a+H): column 0 = -30000.0, others +0.0
+        w = tensors["in_proj.weight"]
+        w[cols["a"]:cols["a"] + H, :] = np.float32(0.0)
+        w[cols["a"]:cols["a"] + H, 0] = np.float32(-30000.0)
+    elif plant == "angle":
+        # angle rows [col_angle, col_angle+R) remapped through
+        # [-4096, 4096] using the SAME hashed f values (the fixture's own
+        # in-place respelling of corpus_tensor at those flat indices)
+        f = hashed_unit(seed, M3_TENSOR_IDS["in_proj.weight"], dip * d_model).reshape(dip, d_model)
+        g0 = cols["angle"]
+        tensors["in_proj.weight"][g0:g0 + M3_ROPE] = m3_map_range(
+            f[g0:g0 + M3_ROPE].reshape(-1), -4096.0, 4096.0).reshape(M3_ROPE, d_model)
+    elif plant == "trap":
+        f = hashed_unit(seed, M3_TENSOR_IDS["in_proj.weight"], dip * d_model).reshape(dip, d_model)
+        t0 = cols["trap"]
+        tensors["in_proj.weight"][t0:t0 + H] = m3_map_range(
+            f[t0:t0 + H].reshape(-1), -1024.0, 1024.0).reshape(H, d_model)
+    elif plant is not None:
+        raise ValueError(plant)
+    if "zero_rule" in case:
+        tensors["x"] = apply_zero_rule(tensors["x"], case["zero_rule"])
+    meta = dict(
+        name=case["name"], family="mamba3", corpus=M3_CORPUS_VERSION,
+        profile=M3_PROFILE, hash_spec=HASH_SPEC,
+        seed=f"0x{seed:016X}", seed_case_index=(m3_case_index(src[0]) if src else k),
+        B=B, L=L, d_model=d_model, d_inner=d_inner, nheads=H,
+        headdim=M3_HEADDIM, d_state=M3_D_STATE, ngroups=M3_NGROUPS,
+        num_rope_angles=M3_ROPE, expand=M3_EXPAND, chunk_size=M3_CHUNK,
+        nchunks=-(-L // M3_CHUNK), rms_eps=M3_EPS, a_floor=M3_A_FLOOR,
+        softplus_threshold=20.0,
+        tensors={name: dict(shape=shapes[name], dtype="float32", order="row-major",
+                            tensor_id=M3_TENSOR_IDS[name], lo=ranges[name][0], hi=ranges[name][1],
+                            file=f"{name}.f32")
+                 for name in shapes},
+        note=case["note"],
+    )
+    if plant == "a_floor":
+        meta["tensors"]["in_proj.weight"]["plant"] = (
+            "dd_A rows [col_a, col_a+H): column 0 = -30000.0, all other columns +0.0 "
+            "(mamba3_fixture.mojo k=12)")
+    elif plant == "angle":
+        meta["tensors"]["in_proj.weight"]["plant"] = (
+            "angle rows [col_angle, col_angle+32) remapped through [-4096, 4096] "
+            "from the same hashed stream (mamba3_fixture.mojo k=13)")
+    elif plant == "trap":
+        meta["tensors"]["in_proj.weight"]["plant"] = (
+            "trap rows [col_trap, col_trap+H) remapped through [-1024, 1024] "
+            "from the same hashed stream (mamba3_fixture.mojo k=14)")
+    if src:
+        meta["x_source"] = dict(case=src[0], batch_row=src[1])
+        meta["tensors"]["x"]["derived"] = f"byte slice of {src[0]}/x.f32, batch row {src[1]}"
+    if "zero_rule" in case:
+        meta["zero_rule"] = case["zero_rule"]
+        meta["tensors"]["x"]["derived"] = "hashed, then zero_rule applied"
+    if "prefix_len" in case:
+        meta["prefix_len"] = case["prefix_len"]
+    return tensors, meta
+
+
+def m3_emit_case(case, out_root):
+    tensors, meta = m3_build_case(case)
+    stages = list(case.get("stages", M3_FULL_STAGES))
+    cdir = os.path.join(out_root, case["name"])
+    os.makedirs(os.path.join(cdir, "ref64"), exist_ok=True)
+    os.makedirs(os.path.join(cdir, "ref32"), exist_ok=True)
+    for name, arr in tensors.items():
+        meta["tensors"][name]["sha256"] = m2_write_raw(os.path.join(cdir, f"{name}.f32"), arr, np.float32)
+    p = {k: torch.from_numpy(v.copy()) for k, v in tensors.items() if k != "x"}
+    x = torch.from_numpy(tensors["x"].copy())
+    r64 = m3_forward(p, x, torch.float64)
+    r32 = m3_forward(p, x, torch.float32)
+    shapes = m3_stage_shapes(meta)
+    stage_meta = {}
+    for s in stages:
+        shp = shapes[s]
+        assert list(r64[s].shape) == shp, (s, tuple(r64[s].shape), shp)
+        sha64 = m2_write_raw(os.path.join(cdir, "ref64", f"{s}.f64"), r64[s].numpy(), np.float64)
+        sha32 = m2_write_raw(os.path.join(cdir, "ref32", f"{s}.f32"), r32[s].numpy(), np.float32)
+        stage_meta[s] = dict(shape=shp, order="row-major", ref64=f"ref64/{s}.f64",
+                             ref32=f"ref32/{s}.f32", sha256_ref64=sha64, sha256_ref32=sha32)
+    meta["stages"] = stage_meta
+    meta["stage_order"] = stages
+    if "seg.L" not in stages:
+        meta["elided_stages"] = dict(
+            stages=["seg.L"],
+            reason="size cap (contract section 7: the elision is stated, never silent); "
+                   "recorded on m3_base_b1_l1_d32 and m3_base_b2_l4_d32")
+    meta["stage_definitions"] = "see ../manifest.json"
+    with open(os.path.join(cdir, "manifest.json"), "w") as fh:
+        json.dump(meta, fh, indent=1, sort_keys=True)
+        fh.write("\n")
+    return dict(meta=meta, r64=r64, r32=r32, p=p, x=x)
+
+
+def m3_cross_inputs(meta, r, p, dtype):
+    """The verbatim references' inputs, read back off the staged run's own
+    tensors (the m2_cross_checks pattern): raw trap/angle from in_proj.out,
+    normed B/C from bcnorm.*, dt/adt from their stages."""
+    Bsz, L = meta["B"], meta["L"]
+    dm = meta["d_model"]
+    d_inner, H, dip = m3_dims(dm)
+    G, N, PP, R = M3_NGROUPS, M3_D_STATE, M3_HEADDIM, M3_ROPE
+    cols = m3_cols(dm)
+    ip = r["in_proj.out"].reshape(Bsz, L, dip)
+    z = ip[..., :d_inner].reshape(Bsz, L, H, PP)
+    v = ip[..., cols["x"]:cols["x"] + d_inner].reshape(Bsz, L, H, PP)
+    trap_raw = ip[..., cols["trap"]:cols["trap"] + H].permute(0, 2, 1)   # [B, H, L]
+    angle_raw = ip[..., cols["angle"]:]                                   # [B, L, R]
+    Angles = angle_raw.unsqueeze(2).expand(Bsz, L, H, R)
+    Bn = r["bcnorm.B"].reshape(Bsz, L, G, N)
+    Cn = r["bcnorm.C"].reshape(Bsz, L, G, N)
+    adt = r["adt.out"].reshape(Bsz, L, H).permute(0, 2, 1)
+    dt = r["dt.out"].reshape(Bsz, L, H).permute(0, 2, 1)
+    init = None
+    if "init_h" in p:
+        init = tuple(p[n].to(dtype) for n in ("init_theta", "init_h", "init_k", "init_v"))
+    return dict(Q=Cn, K=Bn, V=v, ADT=adt, DT=dt, Trap=trap_raw,
+                Q_bias=p["C_bias"].to(dtype), K_bias=p["B_bias"].to(dtype),
+                Angles=Angles, D=p["D"].to(dtype), Z=z, init=init)
+
+
+def m3_generate(out_root, verify=False):
+    m3_root = os.path.join(out_root, "mamba3")
+    os.makedirs(m3_root, exist_ok=True)
+    top = dict(
+        family="mamba3", corpus=M3_CORPUS_VERSION, profile=M3_PROFILE,
+        contract="mamba/IDENTICAL_MAMBA3_CONTRACT.md",
+        normative_case_table="mamba/checks/mamba3_fixture.mojo (landed first; the byte gate in mamba3_check.mojo is the arbiter)",
+        hash_spec=HASH_SPEC, seed_base=f"0x{M3_SEED_BASE:016X}",
+        seed_rule="seed_k = seed_base + 0x1000 * k, k = case index below; x_source cases reuse the parent's seed",
+        d_state=M3_D_STATE, expand=M3_EXPAND, headdim=M3_HEADDIM,
+        ngroups=M3_NGROUPS, chunk_size=M3_CHUNK, num_rope_angles=M3_ROPE,
+        rms_eps=M3_EPS, a_floor=M3_A_FLOOR, softplus_threshold=20.0,
+        upstream=dict(
+            mamba=("https://github.com/state-spaces/mamba @ e9594ce1c732d97440f0332fdc43170a2294dbfa, "
+                   "tests/ops/triton/test_mamba3_siso.py::_segsum L22-31, ::mamba3_siso_step_ref L34-146, "
+                   "::mamba3_siso_fwd_ref L149-340 (verbatim, NORMATIVE for values; the staged reference "
+                   "follows the kernel's chunked schedule per contract DEVIATIONS 827/829/830); "
+                   "mamba_ssm/modules/mamba3.py (block order, defaults, in_proj layout :106-107); "
+                   "mamba_ssm/ops/triton/mamba3/mamba3_siso_fwd.py (chunked schedule shape); "
+                   "mamba_ssm/ops/triton/layernorm_gated.py::rms_norm_ref L18-39 (B/C norm)"),
+            transformers=("NO SECOND REFERENCE: huggingface/transformers @ d56c55b has no mamba3 model "
+                          "(contract section 0's one-repository note, said out loud)"),
+        ),
+        tensor_ids=M3_TENSOR_IDS, stage_definitions=M3_STAGE_DEFS, cases=[])
+    total_bytes = 0
+    all_meta = {}
+    for k, case in enumerate(M3_CASES):
+        entry = m3_emit_case(case, m3_root)
+        all_meta[case["name"]] = entry
+        meta = entry["meta"]
+        row = dict(index=k, name=case["name"], seed=meta["seed"], B=case["B"], L=case["L"],
+                   d_model=case["d_model"], d_inner=meta["d_inner"], nheads=meta["nheads"],
+                   nchunks=meta["nchunks"], stages=meta["stage_order"], note=case["note"])
+        if "prefix_len" in case:
+            row["prefix_len"] = case["prefix_len"]
+        top["cases"].append(row)
+        cdir = os.path.join(m3_root, case["name"])
+        total_bytes += sum(os.path.getsize(os.path.join(dp, f)) for dp, _, fn in os.walk(cdir) for f in fn)
+    with open(os.path.join(m3_root, "manifest.json"), "w") as fh:
+        json.dump(top, fh, indent=1, sort_keys=True)
+        fh.write("\n")
+    print(f"wrote {len(M3_CASES)} mamba3 cases to {m3_root}, {total_bytes / 1e6:.3f} MB of tensor and manifest files")
+    print(f"mamba3 corpus sha256 (files .f32 .f64 .json): {sha256_of_dir(m3_root)}")
+    if verify:
+        m3_run_verify(m3_root, all_meta)
+
+
+def m3_run_verify(m3_root, all_meta):
+    print("\n== m3 verify 0: root input tensors on disk (mamba3_check.mojo::gate_corpus opens "
+          "mamba/corpus/mamba3/<case>/<tensor>.f32 RELATIVE TO THE REPO ROOT) ==")
+    for name, entry in all_meta.items():
+        cdir = os.path.join(m3_root, name)
+        missing = [tm["file"] for tm in entry["meta"]["tensors"].values()
+                   if not os.path.exists(os.path.join(cdir, tm["file"]))]
+        assert not missing, (name, "missing root tensor files", missing)
+        with open(os.path.join(cdir, "x.f32"), "rb") as fh:
+            got = fh.read()
+        want = np.ascontiguousarray(entry["x"].numpy().astype("<f4")).tobytes()
+        assert got == want, (name, "x.f32 bytes differ from the hashed derivation")
+        print(f"  {name:36s} {len(entry['meta']['tensors'])} root tensors present; "
+              f"x.f32 {len(got)} bytes == hashed derivation")
+
+    print("\n== m3 verify 1: verbatim mamba3_siso_fwd_ref (whole-sequence attention, mod at end, "
+          "include-then-subtract diagonal) -- roundoff-scale agreement expected, NEVER bit-equality ==")
+    print("== m3 verify 2: verbatim mamba3_siso_step_ref (per-token recurrence) -- same posture ==")
+    for name, entry in all_meta.items():
+        meta, p = entry["meta"], entry["p"]
+        M = meta["B"] * meta["L"]
+        H, PP = meta["nheads"], M3_HEADDIM
+        for dtype, r in ((torch.float64, entry["r64"]), (torch.float32, entry["r32"])):
+            ins = m3_cross_inputs(meta, r, p, dtype)
+            with _m3_ref_f32_as(dtype):
+                fo, (fa, fh_, fk, fv) = mamba3_siso_fwd_ref(
+                    ins["Q"], ins["K"], ins["V"], ins["ADT"], ins["DT"], ins["Trap"],
+                    ins["Q_bias"], ins["K_bias"], ins["Angles"], D=ins["D"], Z=ins["Z"],
+                    Initial_States=ins["init"], chunk_size=M3_CHUNK, dtype=dtype)
+                so, (sa, sh_, sk, sv) = mamba3_siso_step_ref(
+                    ins["Q"], ins["K"], ins["V"], ins["ADT"], ins["DT"], ins["Trap"],
+                    ins["Q_bias"], ins["K_bias"], ins["Angles"], D=ins["D"], Z=ins["Z"],
+                    Input_States=ins["init"])
+            g = r["gate.out"]
+            d_f = max(float((fo.reshape(M, H, PP) - g).abs().max()),
+                      float((fh_ - r["ssd.h_last"]).abs().max()),
+                      float((fk - r["ssd.k_last"]).abs().max()),
+                      float((fv - r["ssd.v_last"]).abs().max()),
+                      float((fa - r["ssd.theta_last"]).abs().max()))
+            d_s = max(float((so.reshape(M, H, PP) - g).abs().max()),
+                      float((sh_ - r["ssd.h_last"]).abs().max()),
+                      float((sk - r["ssd.k_last"]).abs().max()),
+                      float((sv - r["ssd.v_last"]).abs().max()),
+                      float((sa - r["ssd.theta_last"]).abs().max()))
+            print(f"  {name:36s} {str(dtype):14s} fwd_ref maxabs={d_f:.3e} | step_ref maxabs={d_s:.3e}")
+
+    print("\n== m3 verify 3: batch composition (comp rows vs parent, ref64 and ref32) ==")
+    pm = all_meta["m3_comp_b2_l65_d32"]
+    Lc = 65
+    m_lead = ("input.x", "dt.out", "adt.out", "trap.scale", "angle.theta",
+              "yintra.out", "ystate.out", "skip.out", "gate.out", "residual.out")
+    b_lead = ("dacs.out", "ssd.h_last", "ssd.k_last", "ssd.v_last", "ssd.theta_last")
+    for b in (0, 1):
+        cm = all_meta[f"m3_comp_row{b}_b1_l65_d32"]
+        for tag, key in (("ref64", "r64"), ("ref32", "r32")):
+            for s in M3_REDUCED_STAGES:
+                if s in m_lead:
+                    a = pm[key][s][b * Lc:(b + 1) * Lc]
+                elif s in b_lead:
+                    a = pm[key][s][b:b + 1]
+                else:
+                    continue
+                c = cm[key][s]
+                print(f"  row{b} {tag} {s:14s} bit-equal={torch.equal(a, c)} maxabs={float((a - c).abs().max()):.3e}")
+    r0 = all_meta["m3_comp_row0_b1_l65_d32"]["r64"]["gate.out"]
+    r1 = all_meta["m3_comp_row1_b1_l65_d32"]["r64"]["gate.out"]
+    print(f"  negative control: row0 vs row1 gate.out DIFFER = {not torch.equal(r0, r1)} (must be True)")
+
+    print("\n== m3 verify 4: determinism (regenerate into a temp dir, byte-compare) ==")
+    tmp = tempfile.mkdtemp(prefix="mamba3-corpus-")
+    try:
+        for case in M3_CASES:
+            m3_emit_case(case, tmp)
+        mism = []
+        for dp, _, fn in os.walk(tmp):
+            for f in fn:
+                a = os.path.join(dp, f)
+                bpath = os.path.join(m3_root, os.path.relpath(a, tmp))
+                with open(a, "rb") as fa, open(bpath, "rb") as fb:
+                    if fa.read() != fb.read():
+                        mism.append(os.path.relpath(a, tmp))
+        print(f"  files compared: {sum(len(fn) for _, _, fn in os.walk(tmp))}, mismatches: {len(mism)}")
+        for m in mism:
+            print("   MISMATCH", m)
+    finally:
+        shutil.rmtree(tmp)
+
+    print("\n== m3 verify 5: adversarial and witness intent reached (a fixture that cannot "
+          "witness its arm is a clause not gated -- HARD-asserted where the contract names vacuity) ==")
+    # softplus band [8, 14]
+    e = all_meta["m3_adv_softplus_band_b2_l8_d32"]
+    meta = e["meta"]
+    cols = m3_cols(meta["d_model"])
+    H = meta["nheads"]
+    ip = e["r64"]["in_proj.out"]
+    biased = ip[:, cols["dt"]:cols["dt"] + H] + e["p"]["dt_bias"].double()
+    n_band = int(((biased >= 8) & (biased <= 14)).sum())
+    print(f"  softplus band: biased dt min={float(biased.min()):.4f} max={float(biased.max()):.4f} "
+          f"in [8,14]: {n_band} of {biased.numel()}")
+    assert n_band > 0, "softplus-band fixture is VACUOUS (no cell in [8, 14])"
+    # A-floor clamp: both clamped and unclamped cells must exist
+    e = all_meta["m3_adv_a_floor_b2_l8_d32"]
+    meta = e["meta"]
+    cols = m3_cols(meta["d_model"])
+    H = meta["nheads"]
+    dd_A = e["r32"]["in_proj.out"][:, cols["a"]:cols["a"] + H]
+    n_clamp = int((dd_A < (1.0 - 1e4)).sum())   # heavy_tail(x) < 1e-4 iff x < 1 - 1e4 = -9999
+    n_free = int(dd_A.numel()) - n_clamp
+    a_out = e["r32"]["A.out"]
+    n_at_floor = int((a_out == np.float32(-M3_A_FLOOR)).sum())
+    print(f"  A-floor: clamp binds on {n_clamp} of {dd_A.numel()} cells ({n_free} unclamped); "
+          f"A.out == -1e-4 exactly on {n_at_floor} cells (float32)")
+    assert n_clamp > 0 and n_free > 0, "A-floor fixture is VACUOUS (contract 8f: the clamp must bind AND not bind)"
+    # angle 2pi crossing INSIDE the first chunk, at non-boundary tokens
+    e = all_meta["m3_adv_angle_crossing_b1_l48_d32"]
+    meta = e["meta"]
+    Bb, Ll, Hh = meta["B"], meta["L"], meta["nheads"]
+    R = M3_ROPE
+    cols = m3_cols(meta["d_model"])
+    ip = e["r64"]["in_proj.out"].reshape(Bb, Ll, -1)
+    a_rate = torch.tanh(ip[..., cols["angle"]:]) * math.pi
+    dt64 = e["r64"]["dt.out"].reshape(Bb, Ll, Hh)
+    inc = a_rate.unsqueeze(2) * dt64.unsqueeze(-1)
+    TWO_PI = 2 * math.pi
+    th = torch.zeros(Bb, Hh, R, dtype=torch.float64)
+    engaged = 0
+    for t in range(Ll):
+        th = th + inc[:, t]
+        fl = torch.floor(th / TWO_PI)
+        engaged += int((fl != 0).sum())
+        th = th - TWO_PI * fl
+    print(f"  angle crossing: mod engagements over {Ll} tokens (L < Q = 64, so ALL inside chunk 0): {engaged}")
+    assert engaged > 0, "angle-crossing fixture is VACUOUS (contract 8f: a fixture that never crosses 2pi)"
+    # trap saturation both directions
+    e = all_meta["m3_adv_trap_saturating_b2_l8_d32"]
+    sig = e["r32"]["trap.sigma"]
+    n0, n1 = int((sig == 0).sum()), int((sig == 1).sum())
+    print(f"  trap saturation: sigma exactly 0: {n0}, exactly 1: {n1} of {sig.numel()} (both must be nonzero)")
+    assert n0 > 0 and n1 > 0, "trap-saturating fixture is VACUOUS (one-sided)"
+    # signed zeros
+    e = all_meta["m3_adv_signed_zeros_b2_l8_d32"]
+    xn = e["x"].numpy()
+    ip64 = e["r64"]["in_proj.out"].numpy()
+    ip32 = e["r32"]["in_proj.out"].numpy()
+    print(f"  signed zeros: x has {int((xn == 0).sum())} zeros of which {int(np.signbit(xn[xn == 0]).sum())} are -0.0; "
+          f"ref64 in_proj.out -0.0 count={int(np.signbit(ip64[ip64 == 0]).sum())}, "
+          f"ref32 in_proj.out -0.0 count={int(np.signbit(ip32[ip32 == 0]).sum())}")
+    # init-states liveness: theta inside [0, 2pi); chunk decays normal
+    e = all_meta["m3_init_states_b1_l65_d32"]
+    th0 = e["p"]["init_theta"]
+    scale = torch.exp(e["r32"]["dacs.out"][..., -1])
+    print(f"  init states: theta_in in [{float(th0.min()):.4f}, {float(th0.max()):.4f}] (must be inside [0, 2pi)); "
+          f"exp(dacs_last) float32 min={float(scale.min()):.3e} zeros={int((scale == 0).sum())} of {scale.numel()}")
+    assert float(th0.min()) >= 0.0 and float(th0.max()) < TWO_PI
+
+    print("\n== m3 verify 6: the decode fixture's prefix property (DEVIATION 831: the L=70 "
+          "prefill IS the decode reference; DEV 832's comparability clause is the negative control) ==")
+    e = all_meta["m3_decode_b1_l60p10_d32"]
+    Lp = m3_case_by_name("m3_decode_b1_l60p10_d32")["prefix_len"]
+    for tag, key, dtype in (("ref64", "r64", torch.float64), ("ref32", "r32", torch.float32)):
+        pre = m3_forward(e["p"], e["x"][:, :Lp], dtype)
+        full = e[key]
+        for s in ("dt.out", "adt.out", "angle.theta", "qkdot.out", "gate.out", "residual.out"):
+            a, c = pre[s], full[s][:Lp]
+            print(f"  {tag} prefix {s:14s} bit-equal={torch.equal(a, c)} maxabs={float((a - c).abs().max()):.3e}")
+        # trap.scale rows 0..Lp-2 are prefix-stable; row Lp-1's beta' leg
+        # exists only in the longer run (the trapezoid's seam, contract
+        # section 3) -- it MUST differ or the comparability clause's
+        # fixture is vacuous.
+        ts_pre, ts_full = pre["trap.scale"], full["trap.scale"][:Lp]
+        head_eq = torch.equal(ts_pre[:Lp - 1], ts_full[:Lp - 1])
+        last_differs = not torch.equal(ts_pre[Lp - 1], ts_full[Lp - 1])
+        print(f"  {tag} trap.scale rows 0..{Lp - 2} bit-equal={head_eq}; "
+              f"row {Lp - 1} DIFFERS={last_differs} (must be True -- the beta' seam)")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.dirname(os.path.abspath(__file__)))
     ap.add_argument("--verify", action="store_true")
-    ap.add_argument("--family", choices=["mamba1", "mamba2", "all"], default="all",
+    ap.add_argument("--family", choices=["mamba1", "mamba2", "mamba3", "all"], default="all",
                     help="which corpus family to (re)generate; mamba1 output is byte-stable "
-                         "and mamba2 lands in <out>/mamba2/, so 'all' is safe")
+                         "and mamba2/mamba3 land in <out>/mamba2/ and <out>/mamba3/, so 'all' is safe")
     a = ap.parse_args()
     print(f"torch {torch.__version__} numpy {np.__version__} python {sys.version.split()[0]}")
     if a.family in ("mamba1", "all"):
         generate(a.out, verify=a.verify)
     if a.family in ("mamba2", "all"):
         m2_generate(a.out, verify=a.verify)
+    if a.family in ("mamba3", "all"):
+        m3_generate(a.out, verify=a.verify)
 
 
 if __name__ == "__main__":
