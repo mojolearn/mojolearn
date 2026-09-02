@@ -56,6 +56,7 @@ from ensemble.decisiontree.decisiontree import DecisionTreeParams, GINI
 from core.philox import RNG_STRIDE
 from ensemble.randomforest import (
     CLASSIFICATION,
+    ROWS_SORTED_SAMPLE,
     RF_params,
     RandomForest,
     RandomForestMetaData,
@@ -436,8 +437,49 @@ def arm_d_unported_arms(ctx: DeviceContext) raises -> Int:
         ctx.enqueue_copy(dst_buf=hb, src_buf=smp.selected_rows_[0])
         ctx.synchronize()
         oracle_rows += 1
+        # DEVIATION 2010 (2026-09-01): what this arm asserts depends on
+        # the flag, because the flag changes exactly one thing -- ORDER.
+        # Flag OFF: `selected_rows_` is RAFT's raw draw SEQUENCE and the
+        # compare is element-by-element against the oracle, unchanged.
+        # Flag ON: `sample()` sorts the draws ascending, so the SEQUENCE
+        # is deliberately not RAFT's -- order is NOT part of the mirror
+        # claim under the flag (the forest is a function of the drawn
+        # MULTISET; the sequence exists in cuML only as an artifact of
+        # uniformInt's thread mapping). The arm therefore compares
+        # against the SORTED oracle expectation, element-by-element --
+        # which asserts multiset equality AND that the buffer really is
+        # ascending, i.e. still holds the seed chain, bounds and stride
+        # through the sort. This red was MEASURED, not predicted: the
+        # flag-on gate run of 2026-09-01 (orchestrator, ffb61151) failed
+        # here by construction ("i 0 got 1 want 981", 1325 rows), the
+        # one arm the DEVIATION 2010 block had not anticipated.
+        var want_vals = List[Int]()
         for i in range(min(n_vals, ns)):
-            var want = Int(atol(t[7 + i]))
+            want_vals.append(Int(atol(t[7 + i])))
+        comptime if ROWS_SORTED_SAMPLE:
+            if n_vals < ns:
+                # A partial oracle row cannot be multiset-compared (the
+                # sorted full sequence's prefix is not the sorted
+                # prefix). No e2e row is partial today (all carry
+                # n_vals == ns, read 2026-09-01); if one ever appears,
+                # refuse loudly rather than skip silently.
+                oracle_wrong += 1
+                print(
+                    "  arm D: partial oracle row (n_vals", n_vals,
+                    "< ns", ns, ") cannot be compared under"
+                    " ROWS_SORTED_SAMPLE",
+                )
+            # Host insertion sort, a different spelling from the device
+            # radix under test (ns <= 700 in every oracle row).
+            for a in range(1, len(want_vals)):
+                var v = want_vals[a]
+                var b = a - 1
+                while b >= 0 and want_vals[b] > v:
+                    want_vals[b + 1] = want_vals[b]
+                    b -= 1
+                want_vals[b + 1] = v
+        for i in range(len(want_vals)):
+            var want = want_vals[i]
             if Int(hb.unsafe_ptr().unsafe_load(i)) != want:
                 oracle_wrong += 1
                 if oracle_wrong <= 2:
@@ -447,6 +489,10 @@ def arm_d_unported_arms(ctx: DeviceContext) raises -> Int:
                         hb.unsafe_ptr().unsafe_load(i), "want", want,
                     )
         if hi != 0:
+            # Under ROWS_SORTED_SAMPLE both buffers below are sorted, so
+            # this becomes a MULTISET-difference test -- still exactly
+            # DEVIATION 400's reach claim (the full seed must draw a
+            # different SAMPLE than its truncated low word).
             var smp2 = RowSampler(ctx, True, seed, nr, ns, False)
             smp2.sample(ctx, Int32(tree_id))
             var hb2 = ctx.enqueue_create_host_buffer[DType.int32](ns)
@@ -481,10 +527,17 @@ def arm_d_unported_arms(ctx: DeviceContext) raises -> Int:
             "bootstrap rows disagree with RAFT's compiled output",
         )
     else:
-        print(
-            "  arm D: bootstrap sampler matches RAFT's own output per cell"
-            " across", oracle_rows, "cuML call sites",
-        )
+        comptime if ROWS_SORTED_SAMPLE:
+            print(
+                "  arm D: bootstrap sampler matches RAFT's own output as"
+                " a sorted MULTISET (DEVIATION 2010: order is the flag's"
+                " own change) across", oracle_rows, "cuML call sites",
+            )
+        else:
+            print(
+                "  arm D: bootstrap sampler matches RAFT's own output"
+                " per cell across", oracle_rows, "cuML call sites",
+            )
 
     # Weighted bootstrap is PORTED now (`randomforest.cuh:125-138`), so it
     # must draw rather than raise -- and every drawn index must be a legal

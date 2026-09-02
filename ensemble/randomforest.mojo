@@ -480,6 +480,20 @@ comptime LABELS_SAMPLED_ORDER = True
 # read as the flag, not as a defect. The forest fingerprints must be
 # UNCHANGED flag-on vs flag-off; that equality is the identity gate.
 #
+# AND ONE CHECK ARM, FOUND RED RATHER THAN PREDICTED (2026-09-01, the
+# flag-on gate run at ffb61151): `forest_check` arm D asserts RAFT's
+# draw SEQUENCE element-by-element against `selected_rows_`, and under
+# this flag that sequence is deliberately not RAFT's -- 1325 rows
+# "disagreed" ("i 0 got 1 want 981") with the flag doing exactly what
+# this block says (same multiset, ascending). The first write-up above
+# anticipated the trace record and missed the check arm; recorded per
+# the fix-docs rule. Arm D is now flag-aware: under the flag it
+# compares against the SORTED oracle expectation (multiset equality
+# plus ascendingness, which still holds the seed chain, bounds and
+# stride through the sort); flag-off keeps the element-by-element
+# sequence assert untouched. Order is not part of the mirror claim
+# under the flag -- the forest is a function of the drawn multiset.
+#
 # PRICE. One `n_selected`-element device sort per tree: ~2*ceil(log2
 # n_rows) even passes x 4 launches (~80-90 launches/tree at 1M-2M) plus
 # ~8 bytes/element of traffic per pass, and 12 bytes/element of
@@ -490,8 +504,13 @@ comptime LABELS_SAMPLED_ORDER = True
 # rf@2000000 is exactly what the A/B decides; sub-1M behavior does not
 # vote.
 #
-# UNVERIFIED, RUN OWED (orchestrator; see ensemble/PLAN.md, "2026-09-01
-# candidate round" for the full gate plan and exact commands).
+# GATE STATE (2026-09-01 evening, orchestrator's run record at
+# ffb61151): mechanism check (rf_perf_candidates_check S1/S2) GREEN;
+# fingerprint pair FP_2010 flag-off vs flag-on ALL HASH LINES EQUAL --
+# the identity half is in hand. STILL OWED: the flag-on `forest_check`
+# rerun (arm D was red before the flag-aware fix above landed), and the
+# 1M/2M timing A/B that owns any default flip (ensemble/PLAN.md,
+# "2026-09-01 candidate round").
 # =========================================================
 comptime ROWS_SORTED_SAMPLE = False
 

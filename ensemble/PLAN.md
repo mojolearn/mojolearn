@@ -1159,7 +1159,9 @@ forest_check (arm B: 4 of 4 tree pairs differ at max_features=0.25, as they
 must), fingerprint_probe all rc=0 on the default build;
 `rf_perf_candidates_check`: ALL ARMS GREEN (2010 dropped-passes and 2012
 undercount sabotages included). Steps 3 (fingerprint equality pairs) and 4
-(the 1M/2M windows) still owed.
+(the 1M/2M windows) still owed as of that record — STEP 3 RAN LATER THE
+SAME EVENING and turned up one red: see "GATE RECORD, 2026-09-01 evening"
+below. Step 4 remains owed.
 
 ## The three candidates (all OFF by default; one source, flag flipped between builds)
 
@@ -1244,3 +1246,42 @@ prove reach through the forest ([[reached-but-inert]], solved per arm).
   pass, the pixi task, and the graph-capture watch are written as
   proposals in the survey §4.
 - No runs, no builds, no timings, per the lane's standing rule.
+
+## GATE RECORD, 2026-09-01 evening (orchestrator run at ffb61151) — one red, fixed write-only
+
+The orchestrator ran steps 1-3 of the plan above on the Apple M4:
+
+- Step-1 suite GREEN on the default build (flags off = no-op build held).
+- `rf_perf_candidates_check` ALL ARMS GREEN (G0-G2, H1-H3, S1-S2 —
+  every mechanism and both sabotages behaved as written).
+- Fingerprint pairs FP_2010, FP_2011, FP_2012 all EQUAL
+  (flip-build-restore, one line per pair, all hash lines identical on
+  all five configs + K4 twins) — the identity half of house rule 11 is
+  in hand for all three candidates.
+- Step-1 suite GREEN on the 2011 and 2012 flag-on builds.
+
+**THE ONE RED**: with `ROWS_SORTED_SAMPLE = True`, `forest_check` arm D
+failed by construction — "arm D bootstrap MISMATCH seed 0 tree 0 i 0
+got 1 want 981 ... 1325 bootstrap rows disagree with RAFT's compiled
+output". That arm asserts RAFT's draw SEQUENCE element-by-element, and
+DEV 2010's whole mechanism is that the sequence is no longer RAFT's
+(same multiset, ascending). The deviation block had anticipated the
+identity-trace `treeT.rows` divergence and NOT this arm — a real gap in
+the write-up, recorded in the block per the fix-docs rule, not
+annotated away.
+
+**THE FIX (this session, write-only)**: arm D is now flag-aware. Under
+`ROWS_SORTED_SAMPLE` it compares `selected_rows_` against the SORTED
+oracle expectation element-by-element — which asserts multiset equality
+AND ascendingness, i.e. the seed chain, bounds and stride still hold
+through the sort — and states in the arm why order is not part of the
+mirror claim under the flag; a partial oracle row (none exists today,
+all e2e rows carry n_vals == ns, read 2026-09-01) REFUSES rather than
+silently skipping. Flag-off keeps the element-by-element sequence
+assert byte-untouched. The DEVIATION 400 reach sub-arm needed no code
+change (sorted buffers make it a multiset-difference test, which is
+still exactly its claim); a comment says so.
+
+RUN OWED next: `forest_check` on the 2010 flag-on build (the
+orchestrator's stated rerun), then step 4's timing windows. Nothing in
+this fix touches step 4.
