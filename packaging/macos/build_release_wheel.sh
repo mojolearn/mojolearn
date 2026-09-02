@@ -62,6 +62,17 @@ cp "$here/CITATION.cff" "$here/python/mojolearn/"
 # 2026-09-01: `_mojolearn_gp` (gaussian_process) joined as the THIRTEENTH,
 # the day the estimator left `_NOT_YET` (commit 22a5b550), added to BOTH
 # lists below the same day its binding was written.
+# 2026-09-02: `_mojolearn_mamba` (FOURTEENTH) and `_mojolearn_transformer`
+# (FIFTEENTH) added to BOTH lists. The mamba pair was FOUND MISSING while
+# the transformer binding was being written ([[fix-docs-on-discovery]]):
+# it had shipped a Python surface on 2026-09-01 with these two lists never
+# updated, which is exactly the ships-STALE failure the paragraph above
+# describes -- a release cut in between would have carried the mamba
+# classes and no binary, or a stale one. The transformer binding has NEVER
+# been compiled anywhere (its Python path is RUN OWED,
+# transformer/README.md's PyPI-surface ledger); listing it here means the
+# first release build after it compiles ships it fresh or fails loudly,
+# never silently omits it.
 #
 # DELIBERATELY NOT MIRRORED IN tools/e1_bootstrap.sh, AND THAT ASYMMETRY IS
 # THE POINT. That script builds bindings on a RENTED GPU under a work bound.
@@ -70,8 +81,8 @@ cp "$here/CITATION.cff" "$here/python/mojolearn/"
 # and would roughly double its binding-build time. A leg that spends its
 # lease compiling and comes home with an empty lanes/ has bought nothing at
 # all. Add a binding there only when a phase actually imports it.
-BUILD_SCRIPTS="build.sh build_gbdt.sh build_estimators.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_tsa.sh build_linalg.sh build_arima.sh build_training.sh build_gp.sh"
-EXT_NAMES="_mojolearn _mojolearn_gbdt _mojolearn_estimators _mojolearn_rf _mojolearn_trees _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_training _mojolearn_gp"
+BUILD_SCRIPTS="build.sh build_gbdt.sh build_estimators.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_tsa.sh build_linalg.sh build_arima.sh build_training.sh build_gp.sh build_mamba.sh build_transformer.sh"
+EXT_NAMES="_mojolearn _mojolearn_gbdt _mojolearn_estimators _mojolearn_rf _mojolearn_trees _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_training _mojolearn_gp _mojolearn_mamba _mojolearn_transformer"
 
 # THE PER-SCRIPT GATES ARE OFF HERE, AND THE REASON IS A CLEAN CHECKOUT.
 # Each bindings/build_*.sh ends by copying python/mojolearn/ aside and

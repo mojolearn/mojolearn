@@ -7,8 +7,9 @@
 # is separate from every sibling for the reason the estimators binding's
 # header gives: an independently changing binding must not become a merge
 # point. The lane reaches the identical GEMM and checks/numerics through
-# their own entry points; nothing else crosses. All fourteen binaries land
-# in one wheel.
+# their own entry points; nothing else crosses. All fifteen binaries land
+# in one wheel (this line said fourteen until the transformer binding, the
+# fifteenth, landed 2026-09-02).
 #
 # THE FLAGS BELOW ARE NOT ORNAMENTAL. Every one of them is a bug somebody
 # already shipped. The full write-ups live in `bindings/build.sh` and

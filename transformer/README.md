@@ -129,6 +129,74 @@ is the shape one would take. Registering it is owed.
 | `corpus/` | `gen_corpus.py` (85 KB) and its README. The generator is written and, per its own README, has not been executed by its author; no case data is on disk. Its checker is `tools/transformer_corpus_check.py`. |
 | `__init__.mojo`, `checks/__init__.mojo`, `impl/__init__.mojo` | empty package markers. |
 
+## The PyPI surface (DEVIATION 795, written 2026-09-02, UNVERIFIED, RUN OWED)
+
+Until 2026-09-02 the certified block exported no Python symbol at all. The
+surface is now written and has NEVER been compiled or run: everything in this
+section is CONSTRUCTION plus a ledger of the exact runs owed.
+
+**What is exposed.** `mojolearn.TransformerBlock` (also
+`mojolearn.transformer`), through the FIFTEENTH binding
+`bindings/_mojolearn_transformer.mojo` and
+`python/mojolearn/_transformer_impl.py`. NumPy float32 in and out, no torch.
+ONE entry pair, both through `llama_decoder_layer_forward` and nothing else:
+`forward` (prefill, and chunked-prefill continuation on a carried state) and
+`step` (single-token decode, the same spelling at L = 1 -- contract section
+7.2's construction, so there is no second arithmetic path to drift). The
+state is EXPLICIT and caller-owned (`TransformerState`): the KV cache as two
+flat capacity buffers PACKED AT THE USED STRIDE plus `cached_tokens`, the
+bytes round-tripping exactly. DEVIATION 795 (its full block is the binding
+file's header) is the surface's departure record: a pointer-ABI surface
+where upstream has only torch modules; the packed-at-used-stride cache
+crossing whole with `cached_tokens` as the one integer state piece and
+`max_tokens` as a params scalar; the rotary table and scale rebuilt per call
+from the FROZEN constants (eps 1e-6, theta 10000.0 -- never parameters); and
+the refusal split (boundary disagreements refused in the binding, everything
+else passed down UNJUDGED so the lane's own by-name refusals stay reachable
+from Python).
+
+**What is deliberately NOT exposed.** The BACKWARD / training-step profile
+(`checks/transformer_backward_check.mojo` exists, is registered, and has NO
+RECORDED RUN -- a surface over an ungated path would be a green label on
+nothing); the corpus (a generator with no case data, the phase 7 row); any
+multi-layer backbone, checkpoint/`from_pretrained` import, generation,
+FlashAttention/SDPA (contract section 6), biases, dropout, masks beyond
+causal, or any reduced-precision dtype (contract section 11). GQA IS exposed
+(`n_kv_heads`; DEVIATION 813).
+
+**Certificates and rows.** `IDENTITY_PATHS.md` carries NO transformer block
+composition row today (the registry stops at the mamba compositions, rows
+92-93); adding one, and any certificate wording, is the orchestrator's call,
+not this lane's. The three-column forward record this surface stands on is
+the status block at the top of this file, and the surface claims nothing
+wider than it.
+
+**RUN LEDGER -- the exact commands, in order, all OWED.** There is no
+`pixi.toml` task for surface gates, deliberately mirroring the mamba
+surface (its gate runs as a module, not through pixi and not through
+pytest); the smoke inside the build script is a smoke, and
+`python/mojolearn/tests/test_transformer_surface.py` is the gate.
+
+    # 1. the fast tier: build (measures the UNMEASURED AIR floor -- pin it
+    #    in bindings/build_transformer.sh, same change as the run record),
+    #    then the gate
+    bash bindings/build_transformer.sh
+    cd python && python3 -m mojolearn.tests.test_transformer_surface
+
+    # 2. the deterministic tier (repeat-run bitwise arm asserted)
+    MOJOLEARN_NUMERIC_MODE=deterministic bash bindings/build_transformer.sh
+    cd python && MOJOLEARN_NUMERIC_MODE=deterministic \
+        python3 -m mojolearn.tests.test_transformer_surface
+
+    # 3. the identical tier (all bitwise arms asserted: decode == prefill,
+    #    split == whole, the packed cache round-trip)
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_transformer.sh
+    cd python && MOJOLEARN_NUMERIC_MODE=identical \
+        python3 -m mojolearn.tests.test_transformer_surface
+
+One box, one vendor: a green run of all three closes the PyPI row only, and
+says nothing cross-vendor beyond what the lane's own cards already say.
+
 ## Two things a reader should not take from this directory
 
 **"Bit-identical across GPUs" is a measured sentence only for paths that have
