@@ -4662,8 +4662,64 @@ wave it through). Terminating trivially: it deletes work.
 **Price.** At R > 1 a thread's registers hold the fold across R rows (the
 same registers), and the per-thread key conversion costs ~3 ALU ops per row
 against a scattered gather. Workspace: NONE -- `cap_blocks` bounds the R = 1
-block count and R only shrinks it. Partition, reduce, sampler, leaf: all
-untouched by construction.
+block count and R only shrinks it. Reduce, sampler, leaf: untouched by
+construction. THE PARTITION IS NOT, and this paragraph's first version said
+it was -- see the red round below, which is the record of that sentence
+being falsified by the gates; the surviving price is one `d_wl` restage
+plus one drain per plain cycle at R > 1.
+
+**RED ROUND, 2026-09-01 (orchestrator's ladder at 5124cf4e), AND THE FIX --
+the first cut CORRUPTED EVERY PLAIN-PATH PARTITION at R > 1.** The gates
+did their job: flag-off `device_batched_check` and `check.sh` GREEN, but
+EVERY RPT arm RED with root-up divergence -- `device_batched_check` at
+RPT_4 and RPT_8 "merged classification forest: nodes differ" (2189 of
+2189), `device_forest_check` "19 of 24 trees differ in node COUNT; 210 of
+225 nodes differ", `device_regression_check` failing the ANALYTIC step
+fixture ("a constant survives quantization exactly", 33 nodes), `device_
+tree_check` "5 of 9 configurations differ in node COUNT", `bestfirst_check`
+RED (its cuML-`max_leaves` comparison arm is depth-wise). The TAIL_DROP
+no-op witness held GREEN at R = 1 as designed.
+
+**The mechanism, and it was NOT the fold or the coverage.** The suspects
+this entry's arithmetic defends -- tail coverage, blocks-per-node, double-
+applied R -- all re-derive clean, and the per-cell kernel checks were never
+implicated. The defect was a PREMISE CONSUMER outside the search: the level
+loop's plain cycle (no best-first, no rescue retry) SKIPS the partition's
+`stage_batch` -- DEVIATION 455's `elif len(retry) > 0` shape, named in 472
+as "the no-retry restage skip" -- and that skip was sound only because the
+partition's plan was BYTE-IDENTICAL to the plan the search staged: same
+work_items, same TPB tile. 2020 widened the SEARCH tile and silently broke
+the premise: the partition launched its TPB-tiled grid (`build_workload_
+info(part_items, TPB)`, DEVIATION 203's scatter contract) against a `d_wl`
+still holding the WIDENED plan -- fewer entries, wrong `num_blocks` and
+`offset_blockid` -- so `partition_count/scatter/writeback` indexed stale
+`WorkloadInfo`, corrupted `row_ids` from the first split on, and every
+downstream level diverged. One corruption, every symptom: both objectives,
+node COUNTS moving, the analytic fixture failing EXACTLY, and best-first's
+depth-wise arm red while flag-off stayed green (at R = 1 the two plans are
+byte-equal and the skip is still sound).
+
+**The fix (the restage leg, in both twins).** The skip condition becomes
+`len(retry) > 0 or SEARCH_ROWS_PER_THREAD > 1`: at R > 1 the plain cycle
+restages before partitioning and pays DEVIATION 455's drain (required for
+455's own measured race -- the restage copies land after the reduce drain
+with nothing to retire them before the next cycle's staging rewrite). The
+comptime disjunct folds away at R = 1, so the shipped program keeps its
+exact skip-and-no-drain shape. DEVIATION 472's byte-compare keeps the
+restage to the ONE slot whose bytes differ on this path (`d_wl`; `d_blk_
+base` was always computed TPB-based inside `stage_batch`, `d_items`/
+`d_tree`/`d_tsalt`/`d_nb`/`d_nc` are unchanged bytes). Audited after the
+fix: `d_wl`'s only device readers are the two search kernels (staged by the
+search, per-cycle) and the four partition kernels (now restaged on every
+path at R > 1); `node_split_kernel` is launched only by checks.
+
+**What this round teaches, for the next arm in this band.** A comptime flag
+that changes what a SHARED buffer holds must audit every consumer of that
+buffer ACROSS PHASES, not just the kernels it launches -- the staleness
+premise lived in an `elif` two phases downstream, in code this entry's
+first cut never read. And the gate ladder caught in one round what the
+in-entry arithmetic could not: the arithmetic was correct about the kernels
+and wrong about the program.
 
 **GATE (the orchestrator runs everything; this lane ran nothing).**
 

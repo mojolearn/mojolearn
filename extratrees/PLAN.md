@@ -435,3 +435,29 @@ to "are we exhausting ET" is at the survey's tail: on Apple the remaining
 headroom inside this formulation is occupancy then the roofline; on the
 dispatch-bound vendors it is NOT exhausted and 2020/1024/packing all aim at
 the same measured bound.
+
+## 2026-09-01, later: DEV 2020's first cut FAILED the gate ladder; fixed, ladder RE-OWED
+
+The orchestrator's run at 5124cf4e: DEV 2021 (MAX_ACC_4) fully GREEN; DEV
+2020 RED on every RPT>1 arm (batched 2189 node diffs, forest 19/24 trees,
+regression failing the ANALYTIC step fixture, tree 5/9 configs, bestfirst
+via its depth-wise comparison arm), flag-off and the R=1 sabotage witness
+GREEN. The defect was NOT the fold or the coverage: the level loop's
+plain-cycle partition-restage skip (455's `elif len(retry) > 0`) silently
+assumed the search's staged plan is byte-identical to the partition's TPB
+plan, and the widened search tile broke that premise -- the partition ran
+its TPB grid against the widened `d_wl` and corrupted `row_ids` from the
+first split. Full postmortem in DEVIATIONS.md 2020's RED ROUND section.
+
+Fix (both twins): the skip condition is now `len(retry) > 0 or
+SEARCH_ROWS_PER_THREAD > 1` -- at R > 1 the plain cycle restages (472's
+byte-compare confines the copy to `d_wl`) and pays 455's drain; the
+comptime disjunct folds away at R = 1, so the default program is
+byte-for-byte the shipped shape. New honest price under the arm: one
+restage + one drain per plain cycle, now part of what the timing A/B
+measures.
+
+RE-OWED: the EXACT same ladder as above (gates, RED-observed sabotage
+pair, then the alternating fit_once A/Bs at 1M and 2M). No command
+changes. DEV 2021 needs no rerun for correctness (all green) -- only its
+timing arms remain owed.

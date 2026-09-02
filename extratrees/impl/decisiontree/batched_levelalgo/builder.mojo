@@ -3074,7 +3074,12 @@ def search_batch(
     # in the regression twin; the partition keeps its own TPB tiling,
     # which DEVIATION 203's scatter assumes -- is widened by the comptime
     # `SEARCH_ROWS_PER_THREAD` (default 1: this line compiles the exact
-    # pre-2020 program). The kernels need no coverage change: their loop
+    # pre-2020 program). BECAUSE the two plans now differ at R > 1, the
+    # level loop's plain-cycle restage skip is no longer sound and the
+    # partition restages `d_wl` -- the 2026-09-01 red round's finding;
+    # see the DEVIATION 2020 restage leg at the `elif len(retry) > 0 or
+    # SEARCH_ROWS_PER_THREAD > 1` sites and the ledger's RED ROUND
+    # section. The kernels need no coverage change: their loop
     # was ALREADY `for i in tid, tid + TPB*num_blocks, ...`, complete and
     # disjoint at any block count. The BITS do not move because nothing
     # order-bearing is regrouped: the score pass sums integers through
@@ -4103,10 +4108,38 @@ def train_forest_classification_device_timed(
                 # 205's rescue fires.
                 stage_batch(ctx, ws, part_items, part_trees, plan, Int(k))
                 ctx.synchronize()
-            elif len(retry) > 0:
+            elif len(retry) > 0 or SEARCH_ROWS_PER_THREAD > 1:
                 # The sub-batches left THEIR work items on the device. The
                 # partition below reads `d_items` and `d_wl`, so put this
                 # batch's back.
+                #
+                # ==========================================================
+                # DEVIATION 2020 (restage leg) -- THE DEFECT ITS FIRST CUT
+                # SHIPPED, found by the 2026-09-01 gate round (every RPT>1
+                # arm RED, root-up divergence). The plain no-rescue cycle
+                # SKIPS this restage, and the skip's unstated premise was
+                # that the partition's plan is BYTE-IDENTICAL to the plan
+                # the search staged -- same work_items, same TPB tile -- so
+                # `d_wl` already held it. 2020 widened the SEARCH tile to
+                # `TPB * R` and broke exactly that premise: the partition's
+                # grid is TPB-tiled (`plan` above, DEVIATION 203's scatter
+                # contract) while `d_wl` still held the widened plan --
+                # fewer entries, wrong `num_blocks`/`offset_blockid` -- so
+                # every plain-path partition indexed stale WorkloadInfo and
+                # corrupted `row_ids` from the first level on. So at R > 1
+                # the plain cycle restages too (the comptime disjunct folds
+                # away at R = 1, keeping the shipped program's exact
+                # skip-and-no-drain shape). DEVIATION 472's byte-compare
+                # keeps the restage cheap: on this path only `d_wl`'s bytes
+                # differ, so only `d_wl` actually copies. The drain below is
+                # DEVIATION 455's, and it is REQUIRED here for the same
+                # measured reason: these copies land after the cycle's
+                # reduce drain, and the next cycle's `stage_batch` rewrites
+                # the same `h_*` staging with nothing in between to retire
+                # them. That is one restage + one drain per plain cycle
+                # under the arm -- a real price the A/B now measures instead
+                # of a corruption the gates caught.
+                # ==========================================================
                 stage_batch(ctx, ws, work_items, item_trees, plan, Int(k))
                 # DEVIATION 455: this re-stage's copies are the ONE set that
                 # DEVIATION 450's invariant did not cover -- they are
@@ -4116,8 +4149,9 @@ def train_forest_classification_device_timed(
                 # run-to-run nondeterminism of the device fit on the
                 # rescue-heavy fixture (rescue_check, shaped_constant_heavy:
                 # device node counts 587/605 across two runs of identical
-                # source). One drain, on the rescue path only; the
-                # rescue-free cycle keeps 450's single-drain shape.
+                # source). One drain, on the rescue path only (and, since
+                # the 2020 restage leg, on every plain cycle at R > 1); the
+                # R = 1 rescue-free cycle keeps 450's single-drain shape.
                 ctx.synchronize()
 
             # --- the PARTITION, on the device (deviation 203) -------------
@@ -5310,7 +5344,15 @@ def train_forest_regression_device_timed(
                 # 205's rescue fires.
                 stage_batch(ctx, ws, part_items, part_trees, plan, Int(k))
                 ctx.synchronize()
-            elif len(retry) > 0:
+            elif len(retry) > 0 or SEARCH_ROWS_PER_THREAD > 1:
+                # DEVIATION 2020 (restage leg) -- see the classification
+                # twin for the full block: the plain cycle's restage skip
+                # was sound only while the partition's TPB plan was
+                # byte-identical to the plan the search staged, and the
+                # widened search tile broke that premise; at R > 1 the
+                # plain cycle restages `d_wl` (472's byte-compare keeps it
+                # to the one changed slot) and pays 455's drain. The
+                # comptime disjunct folds away at R = 1.
                 stage_batch(ctx, ws, work_items, item_trees, plan, Int(k))
                 # DEVIATION 455 -- see the classification twin: the
                 # re-stage's copies must be drained before the next cycle
