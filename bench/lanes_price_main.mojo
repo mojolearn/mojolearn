@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""What IDENTICAL costs on the six frozen lanes: ONE driver, one lane per run.
+"""What IDENTICAL costs on the frozen lanes: ONE driver, one lane per run.
 
     MOJOLEARN_LANES_PRICE_LANE=kde \\
         tools/with_build_lock.sh     pixi run mojo run -I . bench/lanes_price_main.mojo
@@ -26,6 +26,79 @@ with two exceptions that are transcriptions and say so below: the metrics
 lane's SIZES (comptime constants inside `metrics_main.mojo`, a file that
 carries a `main`) and the gemm card's bit-assembled `_exact` fill (same
 reason; `bench/gemm_price_main.mojo` made the same choice).
+
+AND SIX MORE LANES, THE ARMS SECTION 7 OF THE PAPER PRICES, ported here on
+2026-09-02 from the two Apple-only mains so the same question can be asked
+on NVIDIA and AMD. Those two mains are driven by
+`tools/price_unsupervised_identity.sh` and `tools/price_linalg_identity.sh`,
+neither of which has any remote-leg wiring, so every number the paper prints
+for them is a ONE-BOX number. This driver is the one
+`tools/diag/identity_cost_leg.sh` rides onto a rented box, which is the
+whole reason for the port:
+
+    kmeans    bench/identity_price_main.mojo:92   `kmeans_fit_main`, the Lloyd loop end to end
+    knn       bench/identity_price_main.mojo:150  `brute_force_knn_impl`, AUTO by default, TILED on request
+    dbscan    bench/identity_price_main.mojo:195  `dbscan_fit_impl`, brute-force eps neighbourhood
+    gram      bench/linalg_price_main.mojo:94     `gemm_tn`, the Gram shape `A^T A`
+    nt        bench/linalg_price_main.mojo:124    `gemm_nt`, the N-T product
+    gemv      bench/linalg_price_main.mojo:151    `gemv_n`, OLS's step 6
+
+WHY each of those six is worth pricing is argued in the two source files'
+docstrings and is not re-argued here; what each lane function below records
+is where its fixture came from, line by line, so a reader can check the port
+against the original without leaving the file.
+
+THE PROTOCOL IS THIS FILE'S, NOT THE TWO SOURCES'. They disagree with each
+other and both disagree with this harness, so neither is carried over.
+`bench/identity_price_main.mojo` runs `REPEATS = 3` (`:63`) with NO untimed
+warm-up and prints one line per repeat, so its first line pays every
+kernel's first launch and lands in the same median as the other two.
+`bench/linalg_price_main.mojo` takes ONE untimed warm-up per arm and then
+AVERAGES its three timed reps into a SINGLE printed sample (`:104-117`), so
+its band cannot be read per round at all. Every lane here does what cd and
+kde already do: one untimed warm-up round, then ROUNDS individually timed
+and individually hashed rounds, which is the shape `tools/lanes_price.sh`
+pairs mode against mode and turns into a band. A port that kept its source's
+protocol would produce a row that cannot be read beside the rows above it.
+
+THE SIZE KNOB, AND WHY THE SIX NEW LANES HAVE ONE AND THE SIX OLD ONES DO
+NOT. Every fixture in this file was built on an Apple M4 and sized for it.
+On a datacenter GPU an Apple-sized fixture measures the launch and not the
+arm. Measured 2026-09-02 at one commit on an M4 and an H100, 5 rounds: the
+cd lane took 1.3 ms on the H100 against 89 ms on the M4, and the gemm lane
+took 100 MICROSECONDS against 9.2 ms, and at 100 us that gemm lane's
+per-round ratio band came out 0.205 .. 0.773 -- a band that straddles 1.0
+and spends most of its width below it. Four of six H100 lanes and five of
+six Apple lanes straddled 1.0 that day. A FIXTURE THAT CANNOT SEPARATE THE
+TWO ARMS IS A FIXTURE THAT IS TOO SMALL, NOT A RESULT, and that
+100-microsecond gemm is the recorded example of it. So each of the six new
+lanes reads its size from the environment, with the DEFAULT set to the size
+the published Apple numbers were taken at (so those stay reproducible) and a
+larger step named beside it for a datacenter box:
+
+    lane    variable                            default (Apple)  datacenter step
+    kmeans  MOJOLEARN_LANES_PRICE_KMEANS_ROWS   100000           2000000
+    knn     MOJOLEARN_LANES_PRICE_KNN_INDEX     20000            400000
+    dbscan  MOJOLEARN_LANES_PRICE_DBSCAN_ROWS   20000            100000
+    gram    MOJOLEARN_LANES_PRICE_GRAM_ROWS     1000000          8000000
+    nt      MOJOLEARN_LANES_PRICE_NT_ROWS       4096             262144
+    gemv    MOJOLEARN_LANES_PRICE_GEMV_DIM      128              8192
+
+The right-hand column is a STARTING POINT, not a measurement: it is the step
+to try first, and if its band still straddles 1.0 the answer is a bigger
+fixture and not a rerun. Two of the six are not invented here --
+`bench/scaling_main.mojo:180` already sweeps k-NN at 400,000 index rows with
+the same `buf_len = max(n_index // 8, k)` formula this lane uses (`:50`),
+and `:185` sweeps brute-force DBSCAN at 200,000 rows. DBSCAN's step stops
+below that because the brute arm's cost is QUADRATIC in the rows: that
+file's `_dbscan_rbc_only_at` docstring puts brute at 800,000 near four and a
+half minutes PER REPEAT on the laptop, and this harness runs one warm-up
+plus ROUNDS rounds in each of two modes.
+
+THE SIX ORIGINAL LANES TAKE NO SIZE KNOB AND MUST NOT GAIN ONE HERE. An
+MI325X price run was taken at their spellings and their sizes
+(`bench/LANES_PRICE.md`, 2026-08-31, sha `035493e1`), and a size that moves
+is a row that can no longer be compared with it.
 
 WHAT ONE ROUND IS. One fit (or score pass) from the lane's public entry on a
 fixture built ONCE before the loop and re-initialized where the entry reads
@@ -56,7 +129,8 @@ LINE FORMAT, seven whitespace fields, parsed by `tools/lanes_price.sh`:
     LPRICE <lane> <mode> <round|warmup> <size> <seconds> <hash16>
 
 Environment:
-    MOJOLEARN_LANES_PRICE_LANE    cd | kde | linkage | svm | metrics | gemm (required)
+    MOJOLEARN_LANES_PRICE_LANE    cd | kde | linkage | svm | metrics | gemm |
+                                  kmeans | knn | dbscan | gram | nt | gemv (required)
     MOJOLEARN_LANES_PRICE_ROUNDS  timed rounds in this process (default 5; the
                                   script sets 1 and alternates processes instead)
     MOJOLEARN_LANES_PRICE_SMOKE   1 -> tiny sizes, for proving the build, the
@@ -64,6 +138,13 @@ Environment:
     MOJOLEARN_LANES_PRICE_GEMM_SHAPE  row of bench/gemm_shapes.mojo (default 6,
                                   kmeans.dist.4096x64x64, the E3 table's shape)
     MOJOLEARN_LANES_PRICE_SVM_FIXTURE index into svm `all_fixtures()` (default 1, F2.xor)
+    MOJOLEARN_LANES_PRICE_KMEANS_ROWS n rows for the kmeans lane (default 100000)
+    MOJOLEARN_LANES_PRICE_KNN_INDEX   index rows for the knn lane (default 20000)
+    MOJOLEARN_LANES_PRICE_KNN_METHOD  auto | tiled for the knn lane (default auto)
+    MOJOLEARN_LANES_PRICE_DBSCAN_ROWS n rows for the dbscan lane (default 20000)
+    MOJOLEARN_LANES_PRICE_GRAM_ROWS   k rows for the gram lane (default 1000000)
+    MOJOLEARN_LANES_PRICE_NT_ROWS     m rows for the nt lane (default 4096)
+    MOJOLEARN_LANES_PRICE_GEMV_DIM    the square m = k for the gemv lane (default 128)
 
 No pixi task. No number printed by this file is a measurement until
 `bench/LANES_PRICE.md`'s clean-window procedure produced it.
@@ -149,6 +230,21 @@ from gemm.checks.gemm_oracle import OP_NN as ORACLE_OP_NN
 from gemm.checks.gemm_oracle import OP_NT as ORACLE_OP_NT
 from gemm.checks.gemm_oracle import OP_TN as ORACLE_OP_TN
 
+# ---- kmeans / knn / dbscan (bench/identity_price_main.mojo's arms) ----------
+from cluster.impl.cluster.detail.kmeans import kmeans_fit_main
+from cluster.impl.cluster.kmeans_params import INIT_ARRAY, KMeansParams
+from dbscan.impl.dbscan.dbscan import dbscan_fit_impl
+from dbscan.impl.dbscan.runner import EPS_NN_BRUTE_FORCE
+from neighbors.impl.neighbors.detail.knn_brute_force import (
+    KNN_METHOD_AUTO,
+    KNN_METHOD_TILED,
+    brute_force_knn_impl,
+    compute_norms,
+)
+
+# ---- gram / nt / gemv (bench/linalg_price_main.mojo's arms) -----------------
+from core.gemm import gemm_nt, gemm_tn, gemv_n
+
 
 def _mode_name() -> String:
     """The build's tier, from the ONE definition of it.
@@ -201,6 +297,13 @@ def _fold_i32(h: UInt64, v: Int32) -> UInt64:
     return _fold_word(h, UInt64(Int(v)) & UInt64(0xFFFFFFFF), 4)
 
 
+def _fold_u32(h: UInt64, v: UInt32) -> UInt64:
+    # Same masking as `_fold_i32` and for the same reason. An unsigned
+    # source cannot sign-extend, but the mask costs nothing and the two
+    # folds then read identically, so neither can drift from the other.
+    return _fold_word(h, UInt64(Int(v)) & UInt64(0xFFFFFFFF), 4)
+
+
 def _fold_f32_list(h: UInt64, xs: List[Float32]) -> UInt64:
     var out = h
     for i in range(len(xs)):
@@ -221,6 +324,25 @@ def _hash_device_f32(
     var out = h
     for i in range(n):
         out = _fold_f32(out, host.unsafe_ptr().unsafe_load(i))
+    _ = host^
+    return out
+
+
+def _hash_device_u32(
+    ctx: DeviceContext, h: UInt64, buf: DeviceBuffer[DType.uint32], n: Int
+) raises -> UInt64:
+    """The `uint32` sibling. k-means labels and k-NN neighbour indices are
+    `uint32` buffers, and they are OUTPUTS, so they belong in the hash."""
+    var host = ctx.enqueue_create_host_buffer[DType.uint32](n)
+    if n == len(buf):
+        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
+    else:
+        var view = buf.create_sub_buffer[DType.uint32](0, n)
+        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
+    ctx.synchronize()
+    var out = h
+    for i in range(n):
+        out = _fold_u32(out, host.unsafe_ptr().unsafe_load(i))
     _ = host^
     return out
 
@@ -730,6 +852,490 @@ def run_gemm(ctx: DeviceContext, smoke: Bool, rounds: Int) raises:
 
 
 # ============================================================================
+# kmeans, knn, dbscan -- the three arms of bench/identity_price_main.mojo
+# ============================================================================
+
+
+def _price_u01(row: Int, k: Int, salt: Int) -> Float32:
+    """TRANSCRIBED from `bench/identity_price_main.mojo:76-85`, byte for byte.
+
+    Named `_price_u01` and not `_u01` because `u01` is already imported into
+    this file from `metrics/checks/fixtures.mojo` and the two are DIFFERENT
+    generators. The three fixtures below are the fixtures the published
+    Apple numbers were taken on only if these bits are that file's bits, so
+    the mixer is transcribed rather than approximated -- the same choice,
+    for the same reason, that `_gemm_mix` above records.
+    """
+    var z = (
+        UInt64(row) * 0x9E3779B97F4A7C15
+        + UInt64(k + 1) * 0xBF58476D1CE4E5B9
+        + UInt64(salt + 1) * 0x94D049BB133111EB
+    )
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EB
+    z = z ^ (z >> 31)
+    return Float32(Int((z >> 40) & UInt64(0xFFFF))) / Float32(65536.0)
+
+
+def run_kmeans(ctx: DeviceContext, smoke: Bool, rounds: Int) raises:
+    """`bench/identity_price_main.mojo:92`'s `kmeans.fit` arm: the Lloyd loop
+    end to end through `kmeans_fit_main`, `INIT_ARRAY`, `n_init` 1,
+    `max_iter` 10, `tol` 1e-12, at d 32 and k 16, on rows
+    `Float32(i % k) * 3 + _price_u01(i, f, 1)` with unit weights and
+    centroids seeded from `Float32(j) * 3 + _price_u01(j, f, 77)`. The
+    fixture and the parameters are transcribed from `:93-133`.
+
+    `tol` IS 1e-12 AND THAT IS THE ARM (`:128-133` says why): it is the
+    smallest tolerance `validate()` accepts, so both modes run all ten
+    iterations. A fit that stops on a different iteration in the two modes
+    is not a price, it is a different amount of work.
+
+    Rows come from `MOJOLEARN_LANES_PRICE_KMEANS_ROWS`, default 100000 (the
+    Apple size, so the published number stays reproducible), 2000000 the
+    datacenter step. d and k are deliberately NOT knobs: the fixture's
+    cluster structure IS `i % k` at a spacing of 3, so k moves the fixture
+    and not merely its size, and 32 x 16 is the aspect the Apple number was
+    taken at.
+    """
+    var n = _env_int(
+        "MOJOLEARN_LANES_PRICE_KMEANS_ROWS", 2048 if smoke else 100000
+    )
+    var d = 32
+    var k = 16
+
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](n * d)
+    var hw = ctx.enqueue_create_host_buffer[DType.float32](n)
+    var hc = ctx.enqueue_create_host_buffer[DType.float32](k * d)
+    ctx.synchronize()
+    for i in range(n):
+        hw.unsafe_ptr().unsafe_store(i, Float32(1.0))
+        for f in range(d):
+            hx.unsafe_ptr().unsafe_store(
+                i * d + f,
+                Float32(i % k) * Float32(3.0) + _price_u01(i, f, 1),
+            )
+    for j in range(k):
+        for f in range(d):
+            hc.unsafe_ptr().unsafe_store(
+                j * d + f, Float32(j) * Float32(3.0) + _price_u01(j, f, 77)
+            )
+
+    var x = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var w = ctx.enqueue_create_buffer[DType.float32](n)
+    var cent = ctx.enqueue_create_buffer[DType.float32](k * d)
+    var labels = ctx.enqueue_create_buffer[DType.uint32](n)
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=w, src_ptr=hw.unsafe_ptr())
+    ctx.synchronize()
+
+    var params = KMeansParams.default()
+    params.n_clusters = k
+    params.init = INIT_ARRAY
+    params.n_init = 1
+    params.max_iter = 10
+    params.tol = 1.0e-12
+
+    var ledger = Ledger(
+        "kmeans", String(n) + "x" + String(d) + ".k" + String(k)
+    )
+    for r in range(rounds + 1):
+        # The fit READS `cent` as its starting set under `INIT_ARRAY` and
+        # overwrites it with the best restart
+        # (`cluster/impl/cluster/detail/kmeans.mojo:922`'s docstring says
+        # both), so the seed is re-uploaded every round and every round is
+        # therefore the SAME fit rather than a continuation. That is the
+        # only re-initialization the upstream arm does between its repeats
+        # (`bench/identity_price_main.mojo:136-137`), and `x` and `w` are
+        # left alone here for the same reason: if the fit mutated them the
+        # way `cdFit` mutates its inputs, the in-process hash verdict below
+        # would print HASH-MOVED, which is exactly how the cd lane's
+        # in-place mutation was found.
+        ctx.enqueue_copy(dst_buf=cent, src_ptr=hc.unsafe_ptr())
+        ctx.enqueue_memset(labels, UInt32(0xFFFFFFFF))
+        ctx.synchronize()
+        var t0 = perf_counter_ns()
+        var res = kmeans_fit_main(
+            ctx, x, w, cent, labels, params, n, d,
+            Float32(4096.0), Float32(4096.0),
+        )
+        ctx.synchronize()
+        var t1 = perf_counter_ns()
+        var h = _hash_device_f32(ctx, FNV_OFFSET, cent, k * d)
+        h = _hash_device_u32(ctx, h, labels, n)
+        h = _fold_f64(h, res.inertia)
+        h = _fold_word(h, UInt64(res.n_iter), 4)
+        ledger.emit("warmup" if r == 0 else String(r), t1 - t0, h)
+    ledger.verdict()
+    _ = hx^
+    _ = hw^
+    _ = hc^
+    _ = x^
+    _ = w^
+    _ = cent^
+    _ = labels^
+
+
+def run_knn(ctx: DeviceContext, smoke: Bool, rounds: Int) raises:
+    """`bench/identity_price_main.mojo:150`'s k-NN arms: `brute_force_knn_impl`
+    on `_price_u01(i, f, 3)` index rows against `_price_u01(i, f, 5)`
+    queries, d 32, k 10, query tile 256, `buf_len = max(n_index // 8, k)`,
+    `is_sqrt` True, row-major on both sides, vendor top-k off. Transcribed
+    from `:151-182`, including the two `compute_norms` calls, which happen
+    ONCE before the loop there (`:180-182`) and once before the loop here.
+
+    ONE LANE, TWO METHODS, because they are two arms of ONE entry and the
+    upstream file prices both and says why at `:19-43`:
+    `MOJOLEARN_LANES_PRICE_KNN_METHOD` is `auto` (the default; the shipped
+    dispatch, which under IDENTICAL is pinned to the tiled arm on every
+    column by DEVIATION 509, so at `k <= 64` this arm prices a KERNEL SWAP)
+    or `tiled` (the same arm asked for explicitly, which is also what
+    `k > 64` must take). The method is part of the ledger's size field, so
+    the two can never be averaged into one row by the driver script.
+
+    Index rows come from `MOJOLEARN_LANES_PRICE_KNN_INDEX`, default 20000
+    (the Apple size), 400000 the datacenter step -- a size
+    `bench/scaling_main.mojo:180` already sweeps through this same entry
+    with this same `buf_len` formula (`:50`), so it is a shape this tree has
+    run and not one invented for a bigger number. The query count stays at
+    the upstream 1000: the distance work is `n_queries * n_index` and the
+    tiled arm processes 256 queries at a time, so the index axis is the one
+    that grows the arm rather than the number of tiles.
+    """
+    var method_name = String(getenv("MOJOLEARN_LANES_PRICE_KNN_METHOD"))
+    if method_name == "":
+        method_name = String("auto")
+    var method = KNN_METHOD_AUTO
+    if method_name == "tiled":
+        method = KNN_METHOD_TILED
+    elif method_name != "auto":
+        raise Error(
+            "lanes_price: MOJOLEARN_LANES_PRICE_KNN_METHOD must be 'auto' or"
+            " 'tiled'; got '" + method_name + "'"
+        )
+
+    var n_index = _env_int(
+        "MOJOLEARN_LANES_PRICE_KNN_INDEX", 2048 if smoke else 20000
+    )
+    var n_queries = 1000
+    var d = 32
+    var k = 10
+    var tile = 256
+    var buf_len = max(n_index // 8, k)
+
+    var index = ctx.enqueue_create_buffer[DType.float32](n_index * d)
+    var queries = ctx.enqueue_create_buffer[DType.float32](n_queries * d)
+    var inorm = ctx.enqueue_create_buffer[DType.float32](n_index)
+    var qnorm = ctx.enqueue_create_buffer[DType.float32](n_queries)
+    var dist = ctx.enqueue_create_buffer[DType.float32](tile * n_index)
+    var bv = ctx.enqueue_create_buffer[DType.float32](tile * 2 * buf_len)
+    var bi = ctx.enqueue_create_buffer[DType.uint32](tile * 2 * buf_len)
+    var od = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
+    var oi = ctx.enqueue_create_buffer[DType.uint32](n_queries * k)
+    var oi32 = ctx.enqueue_create_buffer[DType.int32](n_queries * k)
+    var hi = ctx.enqueue_create_host_buffer[DType.float32](n_index * d)
+    var hq = ctx.enqueue_create_host_buffer[DType.float32](n_queries * d)
+    ctx.synchronize()
+    for i in range(n_index):
+        for f in range(d):
+            hi.unsafe_ptr().unsafe_store(i * d + f, _price_u01(i, f, 3))
+    for i in range(n_queries):
+        for f in range(d):
+            hq.unsafe_ptr().unsafe_store(i * d + f, _price_u01(i, f, 5))
+    ctx.enqueue_copy(dst_buf=index, src_ptr=hi.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=queries, src_ptr=hq.unsafe_ptr())
+    ctx.synchronize()
+    compute_norms(ctx, index, inorm, n_index, d, False)
+    compute_norms(ctx, queries, qnorm, n_queries, d, False)
+    ctx.synchronize()
+
+    var ledger = Ledger(
+        "knn",
+        method_name + "." + String(n_index) + "x" + String(n_queries) + "x"
+        + String(d) + ".k" + String(k),
+    )
+    for r in range(rounds + 1):
+        # Poisoned before the clock starts, this file's convention (see
+        # `run_linkage`): if the entry ever left an output slot unwritten,
+        # the poison would be in the hash instead of whatever the previous
+        # round left there. The poison is the same value every round, so it
+        # cannot be what a HASH-MOVED verdict is reporting.
+        #
+        # THE POISON IS LARGE AND POSITIVE, unlike the gemm lane's
+        # `-987654.0`, and the sign is the point. This entry selects the k
+        # SMALLEST distances, and its distances are non-negative, so a
+        # positive poison LOSES every comparison it could take part in. A
+        # negative one would win, and if any arm of this dispatch ever
+        # merged into `out_dist` rather than overwriting it, the harness
+        # would have quietly changed the answer it is timing. The index
+        # poison is the largest `uint32` for the same reason: the tiled
+        # arm's composite key breaks ties toward the LOWEST index
+        # (DEVIATION 500), so this one loses there too.
+        ctx.enqueue_memset(od, Float32(987654.0))
+        ctx.enqueue_memset(oi, UInt32(0xFFFFFFFF))
+        ctx.synchronize()
+        var t0 = perf_counter_ns()
+        brute_force_knn_impl(
+            ctx, queries, qnorm, index, inorm, dist, bv, bi, od, oi, oi32,
+            n_queries, n_index, d, k, tile, buf_len, True, False, True, True,
+            method,
+        )
+        ctx.synchronize()
+        var t1 = perf_counter_ns()
+        var h = _hash_device_f32(ctx, FNV_OFFSET, od, n_queries * k)
+        h = _hash_device_u32(ctx, h, oi, n_queries * k)
+        ledger.emit("warmup" if r == 0 else String(r), t1 - t0, h)
+    ledger.verdict()
+    _ = hi^
+    _ = hq^
+    _ = index^
+    _ = queries^
+    _ = inorm^
+    _ = qnorm^
+    _ = dist^
+    _ = bv^
+    _ = bi^
+    _ = od^
+    _ = oi^
+    _ = oi32^
+
+
+def run_dbscan(ctx: DeviceContext, smoke: Bool, rounds: Int) raises:
+    """`bench/identity_price_main.mojo:195`'s `dbscan.fit` arm: the
+    brute-force eps neighbourhood plus the propagation, `eps` 1.2,
+    `min_pts` 8, device-chosen batch, 200 iterations, `EPS_NN_BRUTE_FORCE`,
+    on `Float32(i % 6) * 5 + _price_u01(i, f, 9)` rows at d 8. Fixture and
+    call transcribed from `:196-217`.
+
+    Rows come from `MOJOLEARN_LANES_PRICE_DBSCAN_ROWS`, default 20000 (the
+    Apple size), 100000 the datacenter step. THE ROWS ARE THE EXPENSIVE
+    AXIS HERE IN A WAY THEY ARE NOT IN THE OTHER LANES: the brute arm is
+    quadratic in them, and `bench/scaling_main.mojo`'s
+    `_dbscan_rbc_only_at` docstring puts brute at 800,000 near four and a
+    half minutes per repeat on the laptop. The fixture keeps six clusters
+    at a spacing of 5 at every size, so more rows means a denser blob and
+    not a different problem; d stays at 8 for the same reason k stays at 16
+    in the kmeans lane.
+    """
+    var n = _env_int(
+        "MOJOLEARN_LANES_PRICE_DBSCAN_ROWS", 2048 if smoke else 20000
+    )
+    var d = 8
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](n * d)
+    ctx.synchronize()
+    for i in range(n):
+        for f in range(d):
+            hx.unsafe_ptr().unsafe_store(
+                i * d + f, Float32(i % 6) * Float32(5.0) + _price_u01(i, f, 9)
+            )
+    var x = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var labels = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    ctx.synchronize()
+
+    var ledger = Ledger("dbscan", String(n) + "x" + String(d))
+    for r in range(rounds + 1):
+        # `-7` is the linkage lane's poison and is not a label DBSCAN can
+        # produce (`-1` is its noise marker), so an unwritten row is visible
+        # in the hash rather than inherited from the round before.
+        ctx.enqueue_memset(labels, Int32(-7))
+        ctx.synchronize()
+        var t0 = perf_counter_ns()
+        var n_clusters = dbscan_fit_impl(
+            ctx, x, labels, n, d, 1.2, 8, 0, 200, EPS_NN_BRUTE_FORCE, False
+        )
+        ctx.synchronize()
+        var t1 = perf_counter_ns()
+        var h = _hash_device_i32(ctx, FNV_OFFSET, labels, n)
+        h = _fold_word(h, UInt64(n_clusters), 4)
+        ledger.emit("warmup" if r == 0 else String(r), t1 - t0, h)
+    ledger.verdict()
+    _ = hx^
+    _ = x^
+    _ = labels^
+
+
+# ============================================================================
+# gram, nt, gemv -- the three arms of bench/linalg_price_main.mojo
+# ============================================================================
+
+
+def _linalg_val(i: Int, salt: Int) -> Float32:
+    """TRANSCRIBED from `bench/linalg_price_main.mojo:76-77`: an integer in
+    `[-1000000, 1000000]` scaled by 1e-6.
+
+    `_gemm_mix` above IS that file's `_mix` (`:66-73`) -- the same splitmix64
+    constants in the same order -- so it is reused rather than spelled a
+    third time, and the three linalg fixtures below carry that file's bits.
+    """
+    var num = Int(_gemm_mix(i, salt) % 2000001) - 1000000
+    return Float32(num) * Float32(1.0e-6)
+
+
+def _fill_linalg(
+    ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int, salt: Int
+) raises:
+    """`bench/linalg_price_main.mojo:80-87`'s `_fill`, with ONE change.
+
+    That file lets its staging host buffer die at its last use, which is the
+    `enqueue_copy` -- and the copy is enqueued, not finished, so the buffer
+    can be freed while the DMA is still reading it
+    (`[[mojo-buffer-freed-at-last-use]]`). Held past the `synchronize` here,
+    which is what `_hash_device_f32` above already does with its own staging
+    buffer. Nothing else about the fill moves.
+    """
+    var h = ctx.enqueue_create_host_buffer[DType.float32](n)
+    ctx.synchronize()
+    for i in range(n):
+        h.unsafe_ptr().unsafe_store(i, _linalg_val(i, salt))
+    ctx.enqueue_copy(dst_buf=buf, src_ptr=h.unsafe_ptr())
+    ctx.synchronize()
+    _ = h^
+
+
+def run_gram(ctx: DeviceContext, smoke: Bool, rounds: Int) raises:
+    """`bench/linalg_price_main.mojo:94`'s `gram.32x32x1M` arm: `gemm_tn` at
+    the shipped PCA/OLS Gram aspect, 32 features by however many rows.
+    Transcribed from `:96-102`, salt 11.
+
+    WHAT THIS ARM PRICES IS NOT THE SAME THING ON EVERY COLUMN, and the
+    upstream docstring's reading is the APPLE one. On Apple both modes take
+    `core/gram_splitk.mojo`'s kernel and IDENTICAL pins its partition, so
+    the arm prices a PIN: same code, two partitions. On NVIDIA and AMD
+    `gram_splitk_applies` returns False at EVERY shape under FAST -- its
+    first test is a comptime one, and that function's docstring gives the
+    reason (MAX's own split-K is reachable off Apple, so the vendor rule
+    resumes) -- while under IDENTICAL the same predicate answers True
+    wherever the kernel's own capacity allows, which 32 x 32 does. So off
+    Apple this arm prices a REPLACEMENT of the vendor matmul by the pinned
+    kernel. Both are real prices of identity; they are not the same number
+    and must not be read as one.
+
+    Rows come from `MOJOLEARN_LANES_PRICE_GRAM_ROWS`, default 1000000 (the
+    Apple size, the `32x32x1M` in the upstream arm's name), 8000000 the
+    datacenter step. m and n stay 32: `gram_splitk_applies` REFUSES under
+    IDENTICAL above `GRAM_MAX_COLS` or the register budget, and 32 is the
+    shipped aspect, so the row count is the only axis that may move. The
+    memory is 384 bytes per row across `x`, `xt` and `xt2`, so the
+    datacenter step wants about 3.1 GB of device memory for this lane.
+    """
+    var m = 32
+    var k = _env_int(
+        "MOJOLEARN_LANES_PRICE_GRAM_ROWS", 4096 if smoke else 1000000
+    )
+    var x = ctx.enqueue_create_buffer[DType.float32](k * m)
+    var z = ctx.enqueue_create_buffer[DType.float32](m * m)
+    var xt = ctx.enqueue_create_buffer[DType.float32](k * m)
+    var xt2 = ctx.enqueue_create_buffer[DType.float32](k * m)
+    _fill_linalg(ctx, x, k * m, 11)
+
+    var ledger = Ledger("gram", String(m) + "x" + String(m) + "x" + String(k))
+    for r in range(rounds + 1):
+        ctx.enqueue_memset(z, Float32(-987654.0))
+        ctx.synchronize()
+        var t0 = perf_counter_ns()
+        gemm_tn(ctx, z, x, xt, xt2, m, m, k)
+        ctx.synchronize()
+        var t1 = perf_counter_ns()
+        var h = _hash_device_f32(ctx, FNV_OFFSET, z, m * m)
+        ledger.emit("warmup" if r == 0 else String(r), t1 - t0, h)
+    ledger.verdict()
+    _ = x^
+    _ = z^
+    _ = xt^
+    _ = xt2^
+
+
+def run_nt(ctx: DeviceContext, smoke: Bool, rounds: Int) raises:
+    """`bench/linalg_price_main.mojo:124`'s `nt.4096x64x64` arm: `gemm_nt`,
+    the N-T product, at n 64 and k 64. Transcribed from `:126-133`, salts 21
+    and 22.
+
+    THE EXPENSIVE ONE BY CONSTRUCTION, and the upstream docstring says why:
+    under FAST this is MAX's tuned matmul and under IDENTICAL it is
+    `pinned_gemm_nt_kernel`, one thread per output cell (DEVIATION 526). So
+    the arm prices the REPLACEMENT of a closed vendor library rather than a
+    change of rounding.
+
+    Rows come from `MOJOLEARN_LANES_PRICE_NT_ROWS`, default 4096 (the Apple
+    size, the `4096` in the upstream arm's name), 262144 the datacenter
+    step. n and k stay 64 because 64 is the feature width of the k-NN
+    distance step this shape comes from, and because the pinned kernel's
+    thread count is `m * n`: the row axis is what gives a datacenter GPU
+    enough cells to fill itself.
+    """
+    var m = _env_int("MOJOLEARN_LANES_PRICE_NT_ROWS", 256 if smoke else 4096)
+    var n = 64
+    var k = 64
+    var x = ctx.enqueue_create_buffer[DType.float32](m * k)
+    var y = ctx.enqueue_create_buffer[DType.float32](n * k)
+    var z = ctx.enqueue_create_buffer[DType.float32](m * n)
+    _fill_linalg(ctx, x, m * k, 21)
+    _fill_linalg(ctx, y, n * k, 22)
+
+    var ledger = Ledger("nt", String(m) + "x" + String(n) + "x" + String(k))
+    for r in range(rounds + 1):
+        ctx.enqueue_memset(z, Float32(-987654.0))
+        ctx.synchronize()
+        var t0 = perf_counter_ns()
+        gemm_nt(ctx, z, x, y, m, n, k)
+        ctx.synchronize()
+        var t1 = perf_counter_ns()
+        var h = _hash_device_f32(ctx, FNV_OFFSET, z, m * n)
+        ledger.emit("warmup" if r == 0 else String(r), t1 - t0, h)
+    ledger.verdict()
+    _ = x^
+    _ = y^
+    _ = z^
+
+
+def run_gemv(ctx: DeviceContext, smoke: Bool, rounds: Int) raises:
+    """`bench/linalg_price_main.mojo:151`'s `gemv.128x128` arm: `gemv_n`,
+    OLS's step 6, on a square `m x k`. Transcribed from `:153-159`, salts 31
+    and 32.
+
+    Priced although it is tiny, and the upstream docstring gives the reason
+    to keep it that way: "it is small so it cannot matter" is an argument,
+    and this harness exists to replace arguments with seconds. Under
+    IDENTICAL the arm is `pinned_gemv_n_kernel`, which gives each output row
+    to ONE thread so k is walked ascending with no cross-lane fold at all
+    (`core/gemm.mojo:794-802`, DEVIATION 526).
+
+    The square dimension comes from `MOJOLEARN_LANES_PRICE_GEMV_DIM`,
+    default 128 (the Apple size, the `128x128` in the upstream arm's name),
+    8192 the datacenter step. ONE knob sets both m and k because the call
+    site is square -- `w <- covA Ab` at the feature count -- and because the
+    two axes buy different things in the pinned arm: m is its whole thread
+    count and k is the length of each thread's walk, so moving only one of
+    them prices half the kernel.
+    """
+    var dim = _env_int("MOJOLEARN_LANES_PRICE_GEMV_DIM", 32 if smoke else 128)
+    var m = dim
+    var k = dim
+    var x = ctx.enqueue_create_buffer[DType.float32](m * k)
+    var y = ctx.enqueue_create_buffer[DType.float32](k)
+    var z = ctx.enqueue_create_buffer[DType.float32](m)
+    _fill_linalg(ctx, x, m * k, 31)
+    _fill_linalg(ctx, y, k, 32)
+
+    var ledger = Ledger("gemv", String(m) + "x" + String(k))
+    for r in range(rounds + 1):
+        ctx.enqueue_memset(z, Float32(-987654.0))
+        ctx.synchronize()
+        var t0 = perf_counter_ns()
+        gemv_n(ctx, z, x, y, m, k)
+        ctx.synchronize()
+        var t1 = perf_counter_ns()
+        var h = _hash_device_f32(ctx, FNV_OFFSET, z, m)
+        ledger.emit("warmup" if r == 0 else String(r), t1 - t0, h)
+    ledger.verdict()
+    _ = x^
+    _ = y^
+    _ = z^
+
+
+# ============================================================================
 # main
 # ============================================================================
 
@@ -758,9 +1364,22 @@ def main() raises:
         run_metrics(ctx, smoke, rounds)
     elif lane == "gemm":
         run_gemm(ctx, smoke, rounds)
+    elif lane == "kmeans":
+        run_kmeans(ctx, smoke, rounds)
+    elif lane == "knn":
+        run_knn(ctx, smoke, rounds)
+    elif lane == "dbscan":
+        run_dbscan(ctx, smoke, rounds)
+    elif lane == "gram":
+        run_gram(ctx, smoke, rounds)
+    elif lane == "nt":
+        run_nt(ctx, smoke, rounds)
+    elif lane == "gemv":
+        run_gemv(ctx, smoke, rounds)
     else:
         raise Error(
             "lanes_price: MOJOLEARN_LANES_PRICE_LANE must be one of"
-            " cd kde linkage svm metrics gemm; got '" + lane + "'"
+            " cd kde linkage svm metrics gemm kmeans knn dbscan gram nt gemv;"
+            " got '" + lane + "'"
         )
     print("== done [" + mode + "] lane=" + lane + " ==")

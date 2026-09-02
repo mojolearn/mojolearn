@@ -1,0 +1,30 @@
+== leg lane=kde mode=FAST round=1 16:24:30 ==
+== bench/lanes_price_main.mojo [FAST] lane=kde rounds=1 smoke=False ==
+LPRICE kde FAST warmup 1024x256x8 0.024502 110eb573543dcc0f
+LPRICE kde FAST 1 1024x256x8 0.01695 110eb573543dcc0f
+HASH-STABLE kde FAST 2 rounds all 110eb573543dcc0f
+== done [FAST] lane=kde ==
+== leg lane=kde mode=FAST round=2 16:24:30 ==
+== bench/lanes_price_main.mojo [FAST] lane=kde rounds=1 smoke=False ==
+LPRICE kde FAST warmup 1024x256x8 0.020596 110eb573543dcc0f
+LPRICE kde FAST 1 1024x256x8 0.016021 110eb573543dcc0f
+HASH-STABLE kde FAST 2 rounds all 110eb573543dcc0f
+== done [FAST] lane=kde ==
+== leg lane=kde mode=FAST round=3 16:24:31 ==
+== bench/lanes_price_main.mojo [FAST] lane=kde rounds=1 smoke=False ==
+LPRICE kde FAST warmup 1024x256x8 0.028457 110eb573543dcc0f
+LPRICE kde FAST 1 1024x256x8 0.022961 110eb573543dcc0f
+HASH-STABLE kde FAST 2 rounds all 110eb573543dcc0f
+== done [FAST] lane=kde ==
+== leg lane=kde mode=FAST round=4 16:24:31 ==
+== bench/lanes_price_main.mojo [FAST] lane=kde rounds=1 smoke=False ==
+LPRICE kde FAST warmup 1024x256x8 0.021133 110eb573543dcc0f
+LPRICE kde FAST 1 1024x256x8 0.017073 110eb573543dcc0f
+HASH-STABLE kde FAST 2 rounds all 110eb573543dcc0f
+== done [FAST] lane=kde ==
+== leg lane=kde mode=FAST round=5 16:24:31 ==
+== bench/lanes_price_main.mojo [FAST] lane=kde rounds=1 smoke=False ==
+LPRICE kde FAST warmup 1024x256x8 0.02258 110eb573543dcc0f
+LPRICE kde FAST 1 1024x256x8 0.015896 110eb573543dcc0f
+HASH-STABLE kde FAST 2 rounds all 110eb573543dcc0f
+== done [FAST] lane=kde ==

@@ -6,6 +6,19 @@
 #   MOJOLEARN_LANES_PRICE_LANES="kde svm" tools/lanes_price.sh
 #   MOJOLEARN_LANES_PRICE_SMOKE=1 MOJOLEARN_LANES_PRICE_ROUNDS=1 tools/lanes_price.sh
 #   MOJOLEARN_LANES_PRICE_SABOTAGE_SWAP=1 ... tools/lanes_price.sh   # must ABORT (exit 3)
+#   MOJOLEARN_LANES_PRICE_LANES="kmeans knn dbscan gram nt gemv" \
+#       MOJOLEARN_LANES_PRICE_KMEANS_ROWS=2000000 tools/lanes_price.sh
+#
+# SIX LANES BY DEFAULT, TWELVE AVAILABLE. The six in $LANES below are the six
+# frozen lanes and their default stays exactly what it was, because an MI325X
+# price run was taken against those spellings and those sizes
+# (bench/LANES_PRICE.md, 2026-08-31). The paper's Section 7 arms -- kmeans,
+# knn, dbscan, gram, nt, gemv, ported into the same driver on 2026-09-02 --
+# are OPT-IN through MOJOLEARN_LANES_PRICE_LANES, and each takes its fixture
+# size from its own MOJOLEARN_LANES_PRICE_* variable. This script passes the
+# whole environment through to both binaries, so those variables need no
+# handling here; `bench/lanes_price_main.mojo`'s header names them with their
+# Apple defaults and their datacenter steps.
 #
 # `bench/lanes_price_main.mojo` carries the per-lane entries and the hash;
 # `bench/LANES_PRICE.md` carries the clean-window procedure and the table;

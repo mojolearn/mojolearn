@@ -1,4 +1,4 @@
-# What IDENTICAL costs on the six frozen lanes: the price harness
+# What IDENTICAL costs, lane by lane: the price harness
 
 Status: **FIRST CLEAN-WINDOW MEASUREMENT TAKEN 2026-08-31, and it is on AMD,
 not Apple.** MI325X, 5 alternated rounds, sha `035493e1`. Three of the six
@@ -6,6 +6,13 @@ lanes separate from 1.0; the other three do not, and are reported as no
 separation rather than as a price. **APPLE AND NVIDIA ARE BOTH STILL OWED on
 this harness**, so nothing here is a cross-vendor statement and no row ranks
 a vendor.
+
+Second status, 2026-09-02: **the six frozen lanes ran on an Apple M4 and an
+NVIDIA H100 at one commit and MOST OF THE TABLE COULD NOT SEPARATE THE TWO
+ARMS.** The Apple fixtures are far too small for a datacenter GPU and two of
+the Apple rows compared a build against itself. That run is written up under
+"2026-09-02: the run that could not separate the arms" below, and it is the
+reason six more lanes and a size knob exist as of the same day.
 
 Files:
 
@@ -36,6 +43,60 @@ It is not device time and it is not a per-kernel number.
 | svm | `svm.checks.svc_check._run_device` (svc_fit + svc_predict decision + classes) on `F2.xor`, the card fixture | 240 x 2 rbf | same (no smaller fixture exists) | decision function, classes, n_support, b |
 | metrics | every ported metric in `metrics_main.mojo`'s order on its hashed fixtures, timed as one pass | labels 2053, floats 2053, silhouette 521 x 4, trust 301 x 6 | 257 / 257 / 67 x 4 / 61 x 6 | every returned value by its bits plus the silhouette samples |
 | gemm | `gemm.checks.gemm_identical.identical_gemm` on one `bench/gemm_shapes.mojo` row | row 6 `kmeans.dist.4096x64x64` NT | row 4 `pca.transform.8192x4x4` | C |
+
+Those six take NO size knob and must not gain one. The MI325X row below was
+taken at their sizes, and a size that moves is a row that can no longer be
+compared with it.
+
+**Six more lanes, added 2026-09-02: the arms Section 7 of the paper prices.**
+They were `bench/identity_price_main.mojo` and `bench/linalg_price_main.mojo`,
+driven by `tools/price_unsupervised_identity.sh` and
+`tools/price_linalg_identity.sh`, which have no remote-leg wiring and have
+only ever run on an Apple M4. Ported into this driver so the same question
+can be asked on Apple, NVIDIA and AMD, since this is the harness
+`tools/diag/identity_cost_leg.sh` rides onto a rented box.
+
+| lane | entry | what it prices | default size (Apple) | datacenter step | size knob | output hashed |
+|---|---|---|---|---|---|---|
+| kmeans | `cluster.impl.cluster.detail.kmeans.kmeans_fit_main` (INIT_ARRAY, n_init 1, max_iter 10, tol 1e-12) | the Lloyd loop end to end; pins only, no extra kernel | 100000 x 32, k 16 | 2000000 rows | `MOJOLEARN_LANES_PRICE_KMEANS_ROWS` | centroids, labels, inertia, n_iter |
+| knn | `neighbors.impl.neighbors.detail.knn_brute_force.brute_force_knn_impl` (d 32, k 10, tile 256, is_sqrt) | the AUTO pin to TILED under IDENTICAL (DEVIATION 509), a kernel swap at k <= 64 | 20000 index x 1000 queries | 400000 index | `MOJOLEARN_LANES_PRICE_KNN_INDEX`, `_KNN_METHOD` | out_dist, out_idx |
+| dbscan | `dbscan.impl.dbscan.dbscan.dbscan_fit_impl` (eps 1.2, min_pts 8, brute-force eps NN) | the brute eps neighbourhood plus propagation | 20000 x 8 | 100000 rows | `MOJOLEARN_LANES_PRICE_DBSCAN_ROWS` | labels, n_clusters |
+| gram | `core.gemm.gemm_tn`, the Gram shape `A^T A` at the PCA/OLS aspect | on Apple the split-K PIN; off Apple the REPLACEMENT of the vendor matmul | 32 x 32 x 1000000 | 8000000 rows | `MOJOLEARN_LANES_PRICE_GRAM_ROWS` | Z |
+| nt | `core.gemm.gemm_nt`, the N-T product | the vendor matmul against `pinned_gemm_nt_kernel`, one thread per cell (DEVIATION 526) | 4096 x 64 x 64 | 262144 rows | `MOJOLEARN_LANES_PRICE_NT_ROWS` | Z |
+| gemv | `core.gemm.gemv_n`, OLS's step 6 | the vendor GEMV against `pinned_gemv_n_kernel`, one thread per output row | 128 x 128 | 8192 x 8192 | `MOJOLEARN_LANES_PRICE_GEMV_DIM` | Z |
+
+`MOJOLEARN_LANES_PRICE_KNN_METHOD` is `auto` (the default and the shipped
+dispatch) or `tiled` (the same arm asked for explicitly, and what `k > 64`
+must take). Both are priced upstream and both are reachable here; the method
+is written into the row's size field so the two never merge.
+
+`MOJOLEARN_LANES_PRICE_SMOKE=1` gives the six new lanes tiny fixtures the
+same way it does the six old ones: kmeans 2048 rows, knn 2048 index rows,
+dbscan 2048 rows, gram 4096 rows, nt 256 rows, gemv 32 x 32. As everywhere
+else in this harness a SMOKE number is launch overhead and proves only the
+build, the mode witness and the hash. An explicit size variable overrides
+the SMOKE size, which is the same precedence `MOJOLEARN_LANES_PRICE_GEMM_SHAPE`
+already has.
+
+Every default in that table is the size the published Apple numbers were
+taken at, so those stay reproducible with nothing set. The datacenter column
+is a STARTING POINT and not a measurement: it is the step to try first, and
+if the band still straddles 1.0 the answer is a bigger fixture and not a
+rerun. The k-NN and DBSCAN steps are not invented -- `bench/scaling_main.mojo`
+already sweeps k-NN at 400,000 index rows through this same entry with this
+same `buf_len` formula (`:180`, `:50`) and brute DBSCAN at 200,000 (`:185`).
+DBSCAN's step stops below its own sweep because the brute arm is QUADRATIC in
+the rows; that file puts brute at 800,000 near four and a half minutes per
+repeat on the laptop, and this harness runs a warm-up plus ROUNDS rounds in
+each of two modes.
+
+The six new lanes took ONE protocol change from their sources, and it is
+deliberate. `bench/identity_price_main.mojo` runs three repeats with NO
+untimed warm-up; `bench/linalg_price_main.mojo` takes one warm-up and then
+AVERAGES three timed reps into a single sample. Neither is carried over.
+Every lane here does what cd and kde do: one untimed warm-up round, then
+ROUNDS individually timed, individually hashed rounds. A row that kept its
+source's protocol could not be read beside the rows above it.
 
 Under FAST the same entry runs with its pins (`identical_mul_add`, `ftz`,
 `identical_*`) compiled away; under IDENTICAL they are live. The two modes
@@ -83,6 +144,29 @@ comptime modes, and the result is a BAND.
    (`MOJOLEARN_LANES_PRICE_ROUNDS=5` is the default; `MOJOLEARN_LANES_PRICE_LANES`
    narrows the lane list; the script holds the build lock for the whole
    run and writes `bench/results/lanes_price/<timestamp>_<sha>/`.)
+
+   The six Section 7 lanes are opt-in and are NOT in the default lane list.
+   At the Apple sizes, which is the run that reproduces the published Apple
+   numbers:
+
+       MOJOLEARN_LANES_PRICE_LANES="kmeans knn dbscan gram nt gemv" \
+           tools/lanes_price.sh
+
+   At the datacenter step, which is the run to take on a rented box:
+
+       MOJOLEARN_LANES_PRICE_LANES="kmeans knn dbscan gram nt gemv" \
+       MOJOLEARN_LANES_PRICE_KMEANS_ROWS=2000000 \
+       MOJOLEARN_LANES_PRICE_KNN_INDEX=400000 \
+       MOJOLEARN_LANES_PRICE_DBSCAN_ROWS=100000 \
+       MOJOLEARN_LANES_PRICE_GRAM_ROWS=8000000 \
+       MOJOLEARN_LANES_PRICE_NT_ROWS=262144 \
+       MOJOLEARN_LANES_PRICE_GEMV_DIM=8192 \
+           tools/lanes_price.sh
+
+   The same variables set in `tools/diag/identity_cost_leg.sh`'s environment
+   are forwarded to this script, so a rented-box leg asks for the lanes and
+   the sizes without editing either file. With none of them set the leg does
+   exactly what it did before: the six frozen lanes at their Apple sizes.
 4. Read `ratio.tsv`: per lane, the median IDENTICAL seconds over the median
    FAST seconds, with `ratio_min`/`ratio_max` the per-round paired ratios
    (IDENTICAL_r / FAST_r). Report the median WITH the min/max band, the
@@ -145,6 +229,55 @@ them, and was fixed in the same session.
 Nothing in this table ranks vendors: it holds ONE box. Apple and NVIDIA rows
 are owed.
 
+## 2026-09-02: the run that could not separate the arms
+
+The six frozen lanes ran on an Apple M4 and on an NVIDIA H100 at one commit,
+5 alternated rounds each. **Most of the table measured nothing, and the
+reason is the fixtures, not the arms.**
+
+- On the H100 the fixtures are Apple-sized and far too small. The cd lane
+  took **1.3 ms** there against **89 ms** on the M4. The gemm lane took
+  **100 microseconds** against 9.2 ms, and at 100 us the number is kernel
+  launch overhead: its per-round ratio band came out **0.205 .. 0.773**,
+  which is a band that never touches 1.0 from above and spends its width
+  below it.
+- **Four of six H100 lanes and five of six Apple lanes produced bands
+  straddling 1.0.**
+- Worse, on Apple the linkage and gemm lanes reported `fast==ident bits`.
+  When the FAST arm produces the same bits as the IDENTICAL arm, the two
+  arms are the same computation, the true ratio is 1.0 by construction, and
+  every deviation from 1.0 in those rows is noise. Those rows measure
+  nothing at all.
+- Only `cd` separated on both boxes (1.248 Apple, 1.249 H100), and `kde` on
+  the H100 (1.264).
+
+THE RULE THIS RUN FIXES IN PLACE. **A band that straddles 1.0 says the
+fixture cannot tell the two arms apart. It does not say identity is free.**
+A fixture that cannot separate the arms is a fixture that is too small, and
+that is a property of the harness and not a result about the library. The
+100-microsecond gemm is the recorded example, and it is quoted in
+`bench/lanes_price_main.mojo`'s header and in
+`tools/diag/identity_cost_leg.sh` so the next person to read a straddling
+band reads the rule beside it.
+
+Note the difference between a straddling band and a `fast==ident bits` row,
+because they are two different failures. The AMD gemm row above is
+`fast==ident bits` AND separates cleanly at 1.40x, which is a real and
+interesting result: same answer, 40% more time, the price of the guarantee.
+An Apple `fast==ident bits` row whose band straddles 1.0 is that row with no
+signal left in it.
+
+WHAT WAS DONE ABOUT IT, the same day: the six Section 7 arms were ported into
+this driver (they had no remote-leg wiring of their own), and every one of
+them takes its fixture size from the environment with the Apple size as the
+default and a larger step named for a datacenter GPU. The six frozen lanes
+were left exactly as they were, sizes and spellings both, so the MI325X table
+above stays comparable.
+
+**A SEPARATED PRICE FOR THE STRADDLING LANES NEEDS A BIGGER FIXTURE, NOT A
+RERUN.** That is owed for the six frozen lanes too, and it is owed as a
+harness change rather than as more rounds.
+
 ## Hashes from the smoke run (tiny sizes; hashes are not timing)
 
 `bench/results/lanes_price/2026-08-23_125704_e69db89_SMOKE/`, sha e69db89,
@@ -190,9 +323,22 @@ property of the entry and of the harness, not a deviation.
 ## Deviations
 
 None spent. The block 700-704 is reserved for this harness and stays unused
-unless a harness change moves bits.
+unless a harness change moves bits. The 2026-09-02 port spent none either:
+it adds six callers of entries that already ship, and changes no library
+code, so no arm's bits move because of it.
 
 ## Hand-off
 
-None required. The harness reads and imports from the six frozen lanes and
-edits none of them.
+None required. The harness reads and imports from the lanes it prices and
+edits none of them. Since 2026-09-02 that list also includes
+`cluster.impl.cluster.detail.kmeans`, `dbscan.impl.dbscan.dbscan`,
+`neighbors.impl.neighbors.detail.knn_brute_force` and `core.gemm`, all
+imported at their public entries.
+
+`bench/identity_price_main.mojo` and `bench/linalg_price_main.mojo` are NOT
+deleted and are not superseded on Apple: they are the files the published
+Apple numbers came from, and the new lanes here reproduce their fixtures at
+their default sizes rather than replacing them. If a number from one of them
+and a number from the matching lane here ever disagree at the same size on
+the same box, the two protocols are the first place to look -- this harness
+warms up and times each round separately, and those two do not.

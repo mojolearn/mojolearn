@@ -1,0 +1,30 @@
+== leg lane=gemm mode=IDENTICAL round=1 16:24:51 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=gemm rounds=1 smoke=False ==
+LPRICE gemm IDENTICAL warmup kmeans.dist.4096x64x64.4096x64x64 0.005496 79adfe2dd5bd57e6
+LPRICE gemm IDENTICAL 1 kmeans.dist.4096x64x64.4096x64x64 0.009574 79adfe2dd5bd57e6
+HASH-STABLE gemm IDENTICAL 2 rounds all 79adfe2dd5bd57e6
+== done [IDENTICAL] lane=gemm ==
+== leg lane=gemm mode=IDENTICAL round=2 16:24:51 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=gemm rounds=1 smoke=False ==
+LPRICE gemm IDENTICAL warmup kmeans.dist.4096x64x64.4096x64x64 0.005397 79adfe2dd5bd57e6
+LPRICE gemm IDENTICAL 1 kmeans.dist.4096x64x64.4096x64x64 0.007693 79adfe2dd5bd57e6
+HASH-STABLE gemm IDENTICAL 2 rounds all 79adfe2dd5bd57e6
+== done [IDENTICAL] lane=gemm ==
+== leg lane=gemm mode=IDENTICAL round=3 16:24:51 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=gemm rounds=1 smoke=False ==
+LPRICE gemm IDENTICAL warmup kmeans.dist.4096x64x64.4096x64x64 0.005493 79adfe2dd5bd57e6
+LPRICE gemm IDENTICAL 1 kmeans.dist.4096x64x64.4096x64x64 0.008038 79adfe2dd5bd57e6
+HASH-STABLE gemm IDENTICAL 2 rounds all 79adfe2dd5bd57e6
+== done [IDENTICAL] lane=gemm ==
+== leg lane=gemm mode=IDENTICAL round=4 16:24:52 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=gemm rounds=1 smoke=False ==
+LPRICE gemm IDENTICAL warmup kmeans.dist.4096x64x64.4096x64x64 0.005512 79adfe2dd5bd57e6
+LPRICE gemm IDENTICAL 1 kmeans.dist.4096x64x64.4096x64x64 0.008865 79adfe2dd5bd57e6
+HASH-STABLE gemm IDENTICAL 2 rounds all 79adfe2dd5bd57e6
+== done [IDENTICAL] lane=gemm ==
+== leg lane=gemm mode=IDENTICAL round=5 16:24:52 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=gemm rounds=1 smoke=False ==
+LPRICE gemm IDENTICAL warmup kmeans.dist.4096x64x64.4096x64x64 0.005424 79adfe2dd5bd57e6
+LPRICE gemm IDENTICAL 1 kmeans.dist.4096x64x64.4096x64x64 0.008046 79adfe2dd5bd57e6
+HASH-STABLE gemm IDENTICAL 2 rounds all 79adfe2dd5bd57e6
+== done [IDENTICAL] lane=gemm ==
