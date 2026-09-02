@@ -212,6 +212,7 @@ that is an untested promise and is marked as one rather than assumed.
 | `SpectralClustering` | cuML, cuVS, RAFT | kNN connectivity graph, normalized Laplacian, thick-restart Lanczos | yes | yes | yes | Apple + AMD byte-identical at one commit, `221aa141`, 171 stages; NVIDIA owed |
 | `ExponentialSmoothing` | cuML `tsa` | Holt-Winters, additive and multiplicative | yes | yes | yes | Apple + AMD byte-identical at one commit, `221aa141`, 182 stages; NVIDIA owed |
 | `kpss_test`, `select_d` | cuML `tsa` | stationarity test and auto_arima's choice of d | yes | yes | yes | Apple + AMD byte-identical at one commit, `221aa141`, 13 stages; NVIDIA owed |
+| `ARIMA` | cuML `tsa` | BATCHED ARIMA, one series per row each with its own parameters: batched Kalman filter, `estimate_x0` over a Householder QR, own-written batched L-BFGS; `predict` (`end` EXCLUDED, cuML's convention) and `forecast`; exog, CSS, confidence intervals and missing observations refused by name | yes | yes | yes | the KALMAN FILTER is Apple + NVIDIA + AMD byte-identical at `221aa141`, 139 stages; the FIT is gated on ONE Apple M4 only and its Python surface gate (`check-arima-surface`) is RUN OWED -- no cross-vendor claim for `fit` |
 | `mojolearn.metrics` | cuML, RAFT | fourteen scoring functions, scikit-learn's names with cuML's defaults and semantics | yes | yes | yes | Apple + NVIDIA + AMD, 64 stages |
 | `mojolearn.linalg.matmul` | -- | FP32 matrix product, profile `mojolearn.identical.gemm.fp32.v1` | yes | yes (Apple + NVIDIA + AMD) | yes | Apple + NVIDIA + AMD, 61 stages |
 
@@ -221,24 +222,26 @@ byte-identical: 171, 182 and 13 stages, 0 records differing. Their NVIDIA
 column did not fail; it never ran, which is a different statement. The
 certificate is `bench/results/e1/CERT_2026-08-31.md`.
 
-Beside them, and not in the table because it has no `fit` and therefore no
-estimator, `arima` is byte-identical on THREE vendors at that same commit,
-Apple M4 against AMD MI325X against NVIDIA, 139 stages. It is the first lane
-in this repository whose time-series card is closed on all three columns.
+`arima` is byte-identical on THREE vendors at that same commit, Apple M4
+against AMD MI325X against NVIDIA, 139 stages -- the first lane in this
+repository whose time-series card is closed on all three columns. That card
+is the Kalman filter's. The `ARIMA` estimator over it joined the table on
+2026-09-01 (this paragraph used to say it was "not in the table because it
+has no `fit`"); the fit itself has run on one Apple M4 only and inherits
+nothing from the filter's card.
 
 Estimators save to and load from `.npz` files, and a model fitted on a Mac
 loads and predicts identically on an NVIDIA or AMD box (95 of 95 models,
 probabilities included, in the E2 certificate below).
 
 Named rather than omitted, because "why is this missing" is a short and
-interesting question: `ARIMA` (the batched Kalman filter, its gradient and
-predict all exist; `estimate_x0` and the batched L-BFGS driver do not, so
-there is no `fit`), `MultiClassOneVsAll` from
-Python, Intel and Qualcomm GPU columns, and a CPU fallback of any kind.
-Importing `ARIMA` raises with the line where the thing that
-exists stops, rather than an `AttributeError`. `RadiusNeighbors` was on this
-list until 2026-08-31 and `SVR` until 2026-09-01; both are in the table
-above now.
+interesting question: `AutoARIMA` (its `p/q/P/Q/k` search and
+information-criterion arms are not ported; the differencing half ships as
+`kpss_test` / `select_d`), `MultiClassOneVsAll` from Python, Intel and
+Qualcomm GPU columns, and a CPU fallback of any kind. `RadiusNeighbors` was
+on this list until 2026-08-31, `SVR` until 2026-09-01, and `ARIMA` -- the
+longest-standing entry, "no `estimate_x0`, no L-BFGS, no `fit`" -- also
+until 2026-09-01; all three are in the table above now.
 
 ## The numeric tiers
 

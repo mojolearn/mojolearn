@@ -268,7 +268,7 @@ every one of these rows FIXED-COST at tiny shipped fixtures (24x2 to 48x4),
 | holtwinters, 3 rounds | 17.816 | none ran | no peer | FAST | Apple M4 | `fast_speed/2026-08-28-APPLE-classical.md`, cc499f7 |
 | kpss, 3 rounds | 0.681 | none ran (statsmodels missing) | no peer | FAST | Apple M4 | same |
 | holtwinters, kpss | unrun | | | | AMD MI325X | no AMD classical FAST speed leg |
-| arima | unrun on every column | | | | all | `CHANGELOG.md` 0.2.0, `ARIMA` has no `fit`; `estimate_x0` and the batched L-BFGS driver are not ported |
+| arima | unrun on every column | | | | all | `CHANGELOG.md` 0.2.0, `ARIMA` has no `fit`; `estimate_x0` and the batched L-BFGS driver are not ported. *(Overtaken 2026-09-01: `ARIMA.fit` shipped. Still unrun on every column -- no arima timing exists anywhere.)* |
 
 ### 2.17 Metrics
 
@@ -401,7 +401,7 @@ with an opponent; the board calls it 116 pairs.
 | Apple M4, depthwise and lossguide on higgs; any 2M or 5M rung | Only the year fixture has been run for those two lanes on the Mac. "No 5M rung on the Mac by policy, that load goes to rented boxes" (`2026-08-26-APPLE-HIGGS-1M.md`). |
 | Apple M4, rf against lightgbm-cpu with more than one round | The lightgbm-cpu arm ran 258 s per fit and hit the per-arm budget after one round (`2026-08-28-APPLE-forest.md`). |
 | Apple M4, xgboost CPU or GPU, cuML, lightgbm-cuda | Not installed or no Metal build; refused by name on every Apple tree board. |
-| ridge, logistic, arima, svr on any column | No speed lane exists. `ARIMA` has no `fit` and `SVR` is absent (`CHANGELOG.md` 0.2.0). |
+| ridge, logistic, arima, svr on any column | No speed lane exists. `ARIMA` has no `fit` and `SVR` is absent (`CHANGELOG.md` 0.2.0). *(Overtaken 2026-09-01: both shipped -- `SVR` and a batched `ARIMA.fit`. The verdict of this row stands: still no speed lane, no timing has been taken for either.)* |
 | Any lane, IDENTICAL against a peer other than gemm | The only IDENTICAL-versus-vendor timings on disk are the GEMM shapes in `SPEED_LANE_2026-08-25.md`. Every other lane's IDENTICAL cost is ours-versus-ours (section 4). |
 | Scale label on every forest board | Every 2026-08-28 forest board prints "Scale UNKNOWN for every row in this run" because the arms did not emit `scale=`; the rows are listed as fixed-cost "because that is the conservative bucket", not because they are small. |
 

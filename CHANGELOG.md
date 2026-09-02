@@ -39,6 +39,46 @@
   `bindings/build_gp.sh` do not exist yet, and the estimator raises by
   name with the build command until they do.
 
+- **`mojolearn.ARIMA`**, batched ARIMA with `fit`, `predict` and
+  `forecast`, backed by `arima/` (DEVIATIONS 670-687 and 990-993): the
+  ported cuML batched Kalman filter under an own-written `estimate_x0`
+  (Householder QR) and an own-written batched L-BFGS, both landed
+  2026-09-01 and gated in both numeric tiers by
+  `arima/checks/fit_check.mojo`. This closes 0.2.0's longest-standing
+  `_NOT_YET` entry ("`ARIMA` in particular has no `fit`").
+
+  **`y` IS 2-D, `(batch_size, n_obs)`, and that is the point of the lane**:
+  every series in the batch is fitted at once with its OWN parameters, one
+  set of launches, cuML's design and not a loop. A 1-D `y` is one series;
+  outputs stay 2-D. Data goes to `fit`, not the constructor, like the
+  package's other estimators and unlike both upstreams. `predict`'s `end`
+  is EXCLUDED (cuML's convention, NOT statsmodels'). Default order is
+  `(1, 0, 0)`, which is neither upstream's, for reasons the class states.
+
+  **Refused by name, end to end**: exogenous regressors (unported --
+  `ARIMAParams` has no `beta`; the count crosses the boundary and
+  `validate_order` refuses `n_exog != 0`, so the refusal is reachable from
+  every caller), `method='css'`/`'css-ml'`, confidence intervals (`level`),
+  missing observations, `start_params`, `trend='t'`/`'ct'`, `rd > 8`,
+  `r > 5`. `AutoARIMA`'s search is not ported; its differencing half ships
+  as `kpss_test` / `select_d`.
+
+  **What the cross-vendor headline does and does not cover**: the lane's
+  KALMAN FILTER is byte-identical on three vendors at `221aa141` (139
+  stages); the FIT is gated on ONE Apple M4 only and the class says so
+  rather than inheriting the card. The Python surface gate is
+  `python/mojolearn/tests/test_arima_surface.py` (`pixi run
+  check-arima-surface`, one tier per process, DEVIATION 796): surface
+  BUILT, RUN OWED -- the ordered command ledger is in `arima/README.md`,
+  "Public estimator surface".
+
+  Files: `arima/estimator.mojo`, `bindings/_mojolearn_arima.mojo` (the
+  eleventh extension), `bindings/build_arima.sh`,
+  `python/mojolearn/_arima_impl.py`, `python/mojolearn/__init__.py`,
+  `python/mojolearn/_backend.py`, both wheel packagers, and the stale
+  "there is no `fit`" paragraphs in `python/mojolearn/_tsa_impl.py` and
+  `bindings/_mojolearn_tsa.mojo` deleted 2026-09-02.
+
 - **`python -m mojolearn conformance {export,validate,diff}`**, the identity
   claim as a portable artifact (bundle format v1, `docs/CONFORMANCE.md`). A
   bundle freezes the pinned k-means fixture's inputs, expected stage bytes,
@@ -555,12 +595,14 @@ each class states its own.** Read the class, not this list.
 
 `ARIMA`, `SVR` and `RadiusNeighbors` are still absent and are named in
 `mojolearn._NOT_YET`: importing one raises with the line where the thing
-that exists stops, rather than an `AttributeError`. (`RadiusNeighbors`
-shipped after this release; see the unreleased section at the top.) `ARIMA` in particular
+that exists stops, rather than an `AttributeError`. (All three shipped
+after this release -- `RadiusNeighbors`, `SVR`, and `ARIMA` with a fit on
+2026-09-01; see the unreleased section at the top.) `ARIMA` in particular
 has no `fit` -- `arima/` ports the batched Kalman filter likelihood, its
 gradient and predict, but `estimate_x0` and the batched L-BFGS driver are
 NOT PORTED, and those are exactly what produces the coefficients every
-existing entry point requires as input.
+existing entry point requires as input. (True at this release; both landed
+2026-09-01.)
 
 ### Cross-vendor standing
 
@@ -595,8 +637,10 @@ only thing keeping it out.
 this section said was missing exists.** At `221aa141` all three lanes have
 an Apple card and an AMD card taken at that one commit, and each pair is
 byte-identical, `spectral` at 171 stages, `holtwinters` at 182 and `tsa` at
-13, with 0 records differing. `arima`, which has no Python estimator and so no row in
-the README table, is byte-identical at the same commit on THREE vendors,
+13, with 0 records differing. `arima`, which at this release has no Python
+estimator and so no row in the README table (the estimator and its row
+landed 2026-09-01; see the unreleased section), is byte-identical at the
+same commit on THREE vendors,
 Apple against AMD against NVIDIA, 139 stages. The NVIDIA column for the
 other three did not fail; it never reached them, because the leg hung in
 `holtwinters` on the DEVIATION 1946 context-lifetime defect above. The

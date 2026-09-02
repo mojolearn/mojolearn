@@ -48,7 +48,7 @@ rather than annotated. What is left:
 | family | what exists | what is missing | size |
 |---|---|---|---|
 | `spectral/` | cuVS spectral embedding as well as cuML spectral clustering, its own identity contract | `SpectralEmbedding` -- the CLUSTERING half shipped, the EMBEDDING half did not | **M** |
-| `arima/`, `tsa/` | batched Kalman filter likelihood; KPSS and differencing order SHIPPED as `kpss_test` / `select_d`; arima's card is byte-identical on THREE vendors at one commit, `221aa141`, 139 stages (`bench/results/e1/CERT_2026-08-31.md`), and `tsa`'s is byte-identical Apple against AMD at that commit, 13 stages, NVIDIA owed | `ARIMA` still has no `fit`, because `estimate_x0` and the batched L-BFGS driver are unported | **L** |
+| `arima/`, `tsa/` | **`ARIMA` SHIPPED 2026-09-01** (`fit`/`predict`/`forecast`, batched, commit `cc269dca`; `estimate_x0` and an own-written batched L-BFGS closed the no-fit gap the "what is missing" cell used to record), on top of `kpss_test` / `select_d`; arima's KERNEL card is byte-identical on THREE vendors at one commit, `221aa141`, 139 stages (`bench/results/e1/CERT_2026-08-31.md`), the FIT is one Apple box, and the Python surface gate (`check-arima-surface`) is BUILT, RUN OWED (`arima/README.md`) | `AutoARIMA` -- the `p/q/P/Q/k` search and its information-criterion arms are NOT PORTED (`arima/NOT_IMPLEMENTED.tsv`); exogenous regressors, confidence intervals, CSS and missing observations refused by name | **M** |
 | `mamba/` | one Mamba-1 block, its own contract | not scikit-learn shaped; belongs behind a separate module or not at all | **defer** |
 
 The ordering rule the shipped eight followed, and the reason it worked: take
