@@ -543,6 +543,24 @@ Until that runs, `mamba/checks/mamba3_check.mojo`'s corpus arm REFUSES BY
 NAME (`MISSING FIXTURE`), which is the required behavior, and
 `pixi run check-mamba3-corpus` refuses on the missing manifest.
 
+Nothing in this family pins a torch version: the INPUT tensors are pure
+numpy functions of the hash spec (torch never touches them, so the byte
+gate is torch-independent), and `ref64`/`ref32` are torch-computed
+TOLERANCE references whose reproduction anchor is the sha256 the
+generation run records — the mamba2 rule ("match the recorded sha, not
+the version line") applies verbatim; the run prints its torch/numpy/python
+versions for the record.
+
+One range in the case table has no short binary spelling: the
+angle-crossing plant's `dt_bias` in `[-2.5, -1.8]` (the fixture's own
+values). It is generated through the fixture's IEEE-double arithmetic
+verbatim rather than through the exact-rational-asserting path — the
+first generation attempt (2026-09-01) proved the asserting path CANNOT
+serve it (`float64 evaluation is not exact` at f = 0.6609215140342712) —
+so for that one tensor the two-implementations-agree claim rests on IEEE
+determinism plus the byte gate, not on a rational proof.
+`gen_corpus.py::m3_map_range` records the full argument.
+
 ## The normative table is NOT this directory's
 
 Unlike Mamba-1 and Mamba-2, the case table landed FIRST in Mojo:

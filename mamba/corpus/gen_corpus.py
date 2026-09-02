@@ -2092,21 +2092,51 @@ def m3_shapes_for(d_model, B, L, with_init=False):
     return s
 
 
+def _m3_is_small_dyadic(v):
+    """True only for map_range's DOCUMENTED precondition class: "dyadic
+    rationals with few significant bits" -- v = m / 2^k with a SHORT m.
+    `_is_dyadic_small` cannot make this call: EVERY binary float is a
+    dyadic rational (Fraction(-1.8) is -8106479329266893 / 2^52, and 2^52
+    passes its power-of-two test), so a guard built on it routes -1.8 to
+    the asserting path, whose per-element exact-rational check then
+    correctly refuses -- the measured first-run failure, 2026-09-01:
+    AssertionError ('float64 evaluation is not exact', -2.5, -1.8,
+    0.6609215140342712, ...). What actually makes `lo + (hi - lo) * f`
+    exact in float64 is the bounds' significands staying short enough
+    that span and every span * f product are exactly representable, so
+    this predicate bounds the NUMERATOR (and, for symmetry, the
+    denominator) at 24 bits -- comfortably covering every range the three
+    corpus tables use (halves, small integers, 6.25, the fan-in scales,
+    2^30, +-4096) and excluding any bound spelled from a non-terminating
+    binary literal. Classifying too eagerly toward the asserting path
+    fails LOUDLY there, never silently, so the bias of this bound is
+    safe."""
+    fr = Fraction(v)
+    den = fr.denominator
+    return (den & (den - 1) == 0
+            and abs(fr.numerator).bit_length() <= 24
+            and den <= (1 << 24))
+
+
 def m3_map_range(f_unit, lo, hi):
-    """map_range, minus the dyadic-exactness assertion where it cannot
-    apply. The mamba3 fixture table carries exactly ONE non-dyadic range
-    (dt_bias in [-2.5, -1.8], the angle-crossing case,
-    mamba3_fixture.mojo k=13). The float64 evaluation
-    `f32(lo + (hi - lo) * f)` is still deterministic IEEE double
-    arithmetic and is the Mojo fixture's own spelling
-    (`corpus_tensor`: `Float32(lo + span * unit)`), so the two
-    implementations agree bit for bit even where the exact-rational check
-    cannot certify it; every dyadic range still goes through the
-    asserting map_range."""
-    if _is_dyadic_small(lo) and _is_dyadic_small(hi):
+    """map_range, minus the exact-rational assertion for the ONE range
+    where it cannot apply: dt_bias in [-2.5, -1.8] (the angle-crossing
+    plant, mamba3_fixture.mojo k=13; -1.8 has no short binary spelling).
+    For that range the EXEMPTION'S ARGUMENT IS IEEE DETERMINISM, not
+    rational exactness: the Mojo fixture's `corpus_tensor` computes
+    `Float32(lo + span * unit)` with lo/hi the doubles nearest the
+    literals, `span = hi - lo` one correctly rounded subtraction, one
+    correctly rounded multiply and add per element, and one final cast --
+    and this arm performs the IDENTICAL operation sequence on the
+    identical doubles, so the two implementations agree bit for bit even
+    though `lo + span * f` is NOT the exact rational value (the byte gate
+    in mamba3_check.mojo remains the arbiter that they in fact agree).
+    Every small-dyadic range -- all of them but this one -- still goes
+    through the asserting map_range, exactness proven per element."""
+    if _m3_is_small_dyadic(lo) and _m3_is_small_dyadic(hi):
         return map_range(f_unit, lo, hi)
     span = float(hi) - float(lo)
-    return (float(lo) + span * f_unit).astype(np.float32)
+    return (float(lo) + span * np.asarray(f_unit, dtype=np.float64)).astype(np.float32)
 
 
 def m3_gen_tensor(seed, name, shape, lo, hi):
