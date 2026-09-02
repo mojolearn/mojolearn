@@ -1,0 +1,93 @@
+
+=== provenance === 16:25:29
+4515b28471cfd4f8e59268b63ba5eded08c42b39
+Darwin MacBook-Air-1-terrabyte.local 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:26:22 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T8132 arm64
+
+=== pixi === 16:25:29
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 16:25:29
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 8: the classical lanes (gemm, cd, kde, linkage, svm, metrics) -- both modes, cards + checks === 16:25:29
+-- lanes, identical --
+  gemm [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  cd [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  kde [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  linkage [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  svm [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  mamba [identical]: card 17 records -- mode IDENTICAL
+  mamba [identical] check OK (16 OK lines)
+  mamba2 [identical]: card 26 records -- mode IDENTICAL
+  mamba2 [identical] check OK (26 OK lines)
+  iforest [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  transformer [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  arima [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  cholesky [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  embedding [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  gp [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  hdbscan [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  holtwinters [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  ivf [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  kernelmethods [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  gmm [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  resample [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  spectral [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  training-loss [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  training-optimizer [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  training-step [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  tsa [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  metrics [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+-- lanes, fast --
+  gemm [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  cd [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  kde [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  linkage [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  svm [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+PHASE8-FINDING: mamba [fast] failed (see /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/bench/results/e1/2026-09-01_162529-MacBook-Air-1-terrabyte/lanes/mamba.fast.log)
+  mamba [fast]: card 17 records -- mode FAST
+PHASE8-FINDING: mamba [fast] check FAILED: Unhandled exception caught during execution: mamba_check: CLAUSE (a) FAILED, 10 stages differ from the oracle, first at A.out on 102 of 256 cells
+PHASE8-FINDING: mamba2 [fast] failed (see /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/bench/results/e1/2026-09-01_162529-MacBook-Air-1-terrabyte/lanes/mamba2.fast.log)
+  mamba2 [fast]: card 26 records -- mode FAST
+PHASE8-FINDING: mamba2 [fast] check FAILED: Unhandled exception caught during execution: GATE A FAILED: 9575 cells differ between the device card and the host oracle (first stage: silu.out)
+  iforest [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  transformer [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  arima [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  cholesky [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  embedding [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  gp [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  hdbscan [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  holtwinters [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  ivf [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  kernelmethods [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  gmm [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  resample [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  spectral [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  training-loss [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  training-optimizer [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  training-step [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  tsa [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+  metrics [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba,mamba2)
+
+=== phase 9 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== done === 16:27:08
+artifacts in /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/bench/results/e1/2026-09-01_162529-MacBook-Air-1-terrabyte
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

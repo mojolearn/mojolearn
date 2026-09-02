@@ -1,0 +1,68 @@
+✨ Pixi task (check-mamba2-block in default): mojo run -I . mamba/checks/mamba2_check.mojo
+Imported from /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/mamba/checks/mamba2_check.mojo:102:
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/mamba/checks/mamba2_check.mojo:102:
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/mamba/checks/mamba2_check.mojo:102:
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/mamba/checks/mamba2_check.mojo:102:
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/mamba/checks/mamba2_check.mojo:102:
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/mamba/checks/mamba2_check.mojo:1290:28: warning: assignment to 'bytes' was never used; assign to '_' instead?
+    var bytes = List[UInt8]()
+                           ^
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/mamba/checks/mamba2_check.mojo:1537:30: warning: assignment to 'expect_first' was never used; assign to '_' instead?
+    var expect_first = String("")
+                             ^
+mamba2 block gate (IDENTICAL_MAMBA2_CONTRACT.md section 8); profile mojolearn.identical.mamba2.fp32.v1; build mode FAST
+shape: B = 1 L = 4 d_model = 32
+  OK    norm.sumsq  (4 cells)
+  OK    norm.out  (128 cells)
+  OK    in_proj.out  (1540 cells)
+  OK    A.out  (1 cells)
+  OK    conv.out  (1280 cells)
+  MOVED silu.out  160 of 1280 cells, first cell 9  a 0x3d015546  b 0x3d015545
+  OK    conv.window  (1280 cells)
+  OK    dt.out  (4 cells)
+  MOVED xd.out  32 of 256 cells, first cell 9  a 0x3a13486b  b 0x3a13486a
+  OK    dacs.out  (256 cells)
+  OK    seg.L  (65536 cells)
+  MOVED cb.G  13 of 65536 cells, first cell 0  a 0xbbe67f1a  b 0xbbe67f12
+  MOVED ydiag.out  236 of 256 cells, first cell 0  a 0x3737105c  b 0x37371055
+  OK    decay.states  (256 cells)
+  MOVED cstate.out  4300 of 8192 cells, first cell 0  a 0x390bbc68  b 0x390bbc69
+  OK    pass.states  (8192 cells)
+  OK    yoff.out  (256 cells)
+  MOVED scan.y  236 of 256 cells, first cell 0  a 0x3737105c  b 0x37371055
+  MOVED skip.out  35 of 256 cells, first cell 9  a 0x3d0de804  b 0x3d0de803
+  MOVED gnorm.gate  50 of 256 cells, first cell 5  a 0xbb739b5c  b 0xbb739b5b
+  MOVED gnorm.sumsq  1 of 4 cells, first cell 3  a 0x3b80c7b5  b 0x3b80c7b6
+  MOVED gnorm.out  91 of 256 cells, first cell 5  a 0xbf2762b1  b 0xbf2762b0
+  MOVED out_proj.out  80 of 128 cells, first cell 0  a 0x3e02a14a  b 0x3e02a14b
+  MOVED residual.out  41 of 128 cells, first cell 0  a 0xbe55d9d6  b 0xbe55d9d5
+  MOVED ssd.h_last  4300 of 8192 cells, first cell 0  a 0x390bbc68  b 0x390bbc69
+  OK    state.h  (8192 cells)
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: GATE A FAILED: 9575 cells differ between the device card and the host oracle (first stage: silu.out)
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1

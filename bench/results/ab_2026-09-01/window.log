@@ -1,0 +1,7 @@
+window start Tue Sep  1 16:37:41 EDT 2026 commit 82098b60
+sym_head r1 rc=0 wall=216s
+sym_old r1 rc=0 wall=222s
+et_head_100k r1 rc=0 wall=1s
+et_old_100k r1 rc=0 wall=2s
+et_head_400k r1 rc=0 wall=3s
+et_old_400k r1 rc=0 wall=3s

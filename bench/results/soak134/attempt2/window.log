@@ -1,0 +1,15 @@
+window2 start Tue Sep  1 15:33:56 EDT 2026
+load_1 pid 93881
+load_2 pid 93882
+load_3 pid 93883
+load_4 pid 93884
+load_5 pid 93885
+load_6 pid 93886
+control pid 93887
+t=0s load=1
+t=20s load=1
+t=40s load=1
+t=60s load=1
+t=81s load=1
+t=2339s load=8
+WATCHDOG: 30 min cap, teardown

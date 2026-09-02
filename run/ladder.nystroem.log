@@ -1,0 +1,76 @@
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/speed/classical_ladder_arm.py:254: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/speed/classical_ladder_arm.py:254: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/speed/classical_ladder_arm.py:254: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/speed/classical_ladder_arm.py:254: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FLADDER-HEADER family=classical-ladder lane=nystroem arm=ours mode=FAST device=Apple_M4 generator=splitmix64-blob-v1 ladder=1000,10000,100000,1000000 exponent=1 per_cell_s=60 total_s=600 mem_cap_bytes=2147483648 reps=3 alpha_bits=0x35800000
+FLADDER-PROBE lane=nystroem ladder=1000,10000,100000,1000000 exponent=1 generator=splitmix64-blob-v1
+FLADDER-HEADER family=classical-ladder lane=nystroem arm=sklearn-cpu device=cpu generator=splitmix64-blob-v1 ladder=1000,10000,100000,1000000 exponent=1 per_cell_s=60 total_s=600 mem_cap_bytes=2147483648 reps=3 threads=10 cpu_count=10 pools=blas/openblas=10;openmp/openmp=10 thread_env=none numpy=2.5.2 sklearn=1.9.0 python=3.14.7
+FLADDER-NOTE lane=nystroem conductor=1 order=ours,theirs,ours,theirs blocks_per_arm=2 device_ours=Apple_M4
+FLADDER-MEM lane=nystroem arm=sklearn-cpu n=1000 bytes=1088000 cap=2147483648 formula=8*n*d+16*n*Q=8*1000*8+16*1000*64 verdict=ok
+FLADDER-HEADER family=classical-ladder lane=nystroem arm=ours mode=FAST device=Apple_M4 generator=splitmix64-blob-v1 ladder=1000,10000,100000,1000000 exponent=1 per_cell_s=60 total_s=600 mem_cap_bytes=2147483648 reps=3 alpha_bits=0x35800000
+FLADDER-CONDUCTED lane=nystroem rung_index=0 block=1 n=1000 ladder=1000,10000,100000,1000000
+FLADDER-MEM lane=nystroem arm=ours n=1000 bytes=832000 cap=2147483648 formula=8*n*d+12*n*Q=8*1000*8+12*1000*64 verdict=ok
+FLADDER-DATA lane=nystroem n=1000 array=x rows=1000 cols=8 datahash=007adba97e506464.03332e68
+FLADDER-WARMUP lane=nystroem arm=ours n=1000 block=1 ms=35.601
+FLADDER lane=nystroem arm=ours n=1000 block=1 rep=1 ms=23.127 hash=ee8b5eb98d6fe9f1@64000 note=-
+FLADDER lane=nystroem arm=ours n=1000 block=1 rep=2 ms=21.113 hash=ee8b5eb98d6fe9f1@64000 note=-
+FLADDER lane=nystroem arm=ours n=1000 block=1 rep=3 ms=20.982 hash=ee8b5eb98d6fe9f1@64000 note=-
+FLADDER-DATA lane=nystroem n=1000 array=x rows=1000 cols=8 datahash=007adba97e506464.03332e68
+FLADDER-WARMUP lane=nystroem arm=sklearn-cpu n=1000 block=1 ms=11.107583
+FLADDER lane=nystroem arm=sklearn-cpu n=1000 block=1 rep=1 ms=1.980917 hash=2dfd34c0754ad184.94e47f03@64000 note=-
+FLADDER lane=nystroem arm=sklearn-cpu n=1000 block=1 rep=2 ms=1.710209 hash=2dfd34c0754ad184.94e47f03@64000 note=-
+FLADDER lane=nystroem arm=sklearn-cpu n=1000 block=1 rep=3 ms=1.524500 hash=2dfd34c0754ad184.94e47f03@64000 note=-
+FLADDER-HEADER family=classical-ladder lane=nystroem arm=ours mode=FAST device=Apple_M4 generator=splitmix64-blob-v1 ladder=1000,10000,100000,1000000 exponent=1 per_cell_s=60 total_s=600 mem_cap_bytes=2147483648 reps=3 alpha_bits=0x35800000
+FLADDER-CONDUCTED lane=nystroem rung_index=0 block=2 n=1000 ladder=1000,10000,100000,1000000
+FLADDER-MEM lane=nystroem arm=ours n=1000 bytes=832000 cap=2147483648 formula=8*n*d+12*n*Q=8*1000*8+12*1000*64 verdict=ok
+FLADDER-DATA lane=nystroem n=1000 array=x rows=1000 cols=8 datahash=007adba97e506464.03332e68
+FLADDER-WARMUP lane=nystroem arm=ours n=1000 block=2 ms=25.564
+FLADDER lane=nystroem arm=ours n=1000 block=2 rep=1 ms=23.104 hash=ee8b5eb98d6fe9f1@64000 note=-
+FLADDER lane=nystroem arm=ours n=1000 block=2 rep=2 ms=21.065 hash=ee8b5eb98d6fe9f1@64000 note=-
+FLADDER lane=nystroem arm=ours n=1000 block=2 rep=3 ms=22.087 hash=ee8b5eb98d6fe9f1@64000 note=-
+FLADDER-DATA lane=nystroem n=1000 array=x rows=1000 cols=8 datahash=007adba97e506464.03332e68
+FLADDER-WARMUP lane=nystroem arm=sklearn-cpu n=1000 block=2 ms=2.603708
+FLADDER lane=nystroem arm=sklearn-cpu n=1000 block=2 rep=1 ms=1.868167 hash=2dfd34c0754ad184.94e47f03@64000 note=-
+FLADDER lane=nystroem arm=sklearn-cpu n=1000 block=2 rep=2 ms=1.799333 hash=2dfd34c0754ad184.94e47f03@64000 note=-
+FLADDER lane=nystroem arm=sklearn-cpu n=1000 block=2 rep=3 ms=1.664916 hash=2dfd34c0754ad184.94e47f03@64000 note=-
+FLADDER-DATACHECK lane=nystroem n=1000 array=x ours=007adba97e506464.03332e68 theirs=007adba97e506464.03332e68 verdict=match
+FLADDER-RUNG lane=nystroem arm=ours n=1000 ms_median=21.600000 ms_min=20.982000 ms_max=23.127000 samples=6
+FLADDER-RUNG lane=nystroem arm=sklearn-cpu n=1000 ms_median=1.754771 ms_min=1.524500 ms_max=1.980917 samples=6
+FLADDER-VERDICT lane=nystroem n=1000 ratio=0.0812x result=LOSS ours_median_ms=21.600000 theirs_median_ms=1.754771 ours_band_ms=20.982000-23.127000 theirs_band_ms=1.524500-1.980917 bands_overlap=no
+FLADDER-MEM lane=nystroem arm=sklearn-cpu n=10000 bytes=10880000 cap=2147483648 formula=8*n*d+16*n*Q=8*10000*8+16*10000*64 verdict=ok
+FLADDER-HEADER family=classical-ladder lane=nystroem arm=ours mode=FAST device=Apple_M4 generator=splitmix64-blob-v1 ladder=1000,10000,100000,1000000 exponent=1 per_cell_s=60 total_s=600 mem_cap_bytes=2147483648 reps=3 alpha_bits=0x35800000
+FLADDER-CONDUCTED lane=nystroem rung_index=1 block=1 n=10000 ladder=1000,10000,100000,1000000
+FLADDER-MEM lane=nystroem arm=ours n=10000 bytes=8320000 cap=2147483648 formula=8*n*d+12*n*Q=8*10000*8+12*10000*64 verdict=ok
+FLADDER-DATA lane=nystroem n=10000 array=x rows=10000 cols=8 datahash=2ffc24ffff9dc114.01193027
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: km_basis_indices: n_samples 10000 exceeds KM_MAX_BASIS_POOL = 4096. The rank pass counts a total order over every pair of rows, which is n_samples^2 host comparisons. To close this refusal, replace the counting rank with a pinned segmented sort over the 64-bit composite key -- the construction neighbors/checks/select_radix_identical.mojo uses for its (distance, index) key -- and re-gate check_nystroem_basis_prefix_stability at the larger size. DEVIATION 1672
+FLADDER-DATA lane=nystroem n=10000 array=x rows=10000 cols=8 datahash=2ffc24ffff9dc114.01193027
+FLADDER-WARMUP lane=nystroem arm=sklearn-cpu n=10000 block=1 ms=5.838500
+FLADDER lane=nystroem arm=sklearn-cpu n=10000 block=1 rep=1 ms=4.782958 hash=211ceea1c630a4a1.07dc8e2a@640000 note=-
+FLADDER lane=nystroem arm=sklearn-cpu n=10000 block=1 rep=2 ms=5.397292 hash=211ceea1c630a4a1.07dc8e2a@640000 note=-
+FLADDER lane=nystroem arm=sklearn-cpu n=10000 block=1 rep=3 ms=5.356875 hash=211ceea1c630a4a1.07dc8e2a@640000 note=-
+FLADDER-HEADER family=classical-ladder lane=nystroem arm=ours mode=FAST device=Apple_M4 generator=splitmix64-blob-v1 ladder=1000,10000,100000,1000000 exponent=1 per_cell_s=60 total_s=600 mem_cap_bytes=2147483648 reps=3 alpha_bits=0x35800000
+FLADDER-CONDUCTED lane=nystroem rung_index=1 block=2 n=10000 ladder=1000,10000,100000,1000000
+FLADDER-MEM lane=nystroem arm=ours n=10000 bytes=8320000 cap=2147483648 formula=8*n*d+12*n*Q=8*10000*8+12*10000*64 verdict=ok
+FLADDER-DATA lane=nystroem n=10000 array=x rows=10000 cols=8 datahash=2ffc24ffff9dc114.01193027
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: km_basis_indices: n_samples 10000 exceeds KM_MAX_BASIS_POOL = 4096. The rank pass counts a total order over every pair of rows, which is n_samples^2 host comparisons. To close this refusal, replace the counting rank with a pinned segmented sort over the 64-bit composite key -- the construction neighbors/checks/select_radix_identical.mojo uses for its (distance, index) key -- and re-gate check_nystroem_basis_prefix_stability at the larger size. DEVIATION 1672
+FLADDER-DATA lane=nystroem n=10000 array=x rows=10000 cols=8 datahash=2ffc24ffff9dc114.01193027
+FLADDER-WARMUP lane=nystroem arm=sklearn-cpu n=10000 block=2 ms=5.397292
+FLADDER lane=nystroem arm=sklearn-cpu n=10000 block=2 rep=1 ms=5.474500 hash=211ceea1c630a4a1.07dc8e2a@640000 note=-
+FLADDER lane=nystroem arm=sklearn-cpu n=10000 block=2 rep=2 ms=5.455375 hash=211ceea1c630a4a1.07dc8e2a@640000 note=-
+FLADDER lane=nystroem arm=sklearn-cpu n=10000 block=2 rep=3 ms=4.852833 hash=211ceea1c630a4a1.07dc8e2a@640000 note=-
+FLADDER-STOP lane=nystroem reached=1000 skipped=10000 rule=exit1 detail=the rung produced no usable pair of cells
+FLADDER-SUMMARY lane=nystroem rungs_declared=4 rungs_run=1 contiguous=yes wins=0 losses=1 ties=0 first_win=- stopped=exit1

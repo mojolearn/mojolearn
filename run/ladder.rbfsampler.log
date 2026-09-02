@@ -1,0 +1,161 @@
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/speed/classical_ladder_arm.py:254: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/speed/classical_ladder_arm.py:254: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/speed/classical_ladder_arm.py:254: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/speed/classical_ladder_arm.py:254: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/speed/classical_ladder_arm.py:254: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/speed/classical_ladder_arm.py:254: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/speed/classical_ladder_arm.py:254: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/speed/classical_ladder_arm.py:254: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/bench_sklearn.py:141: RuntimeWarning: overflow encountered in scalar multiply
+  + np.uint64(salt + 1) * np.uint64(M3))
+FLADDER-HEADER family=classical-ladder lane=rbfsampler arm=ours mode=FAST device=Apple_M4 generator=splitmix64-blob-v1 ladder=1000,10000,100000,1000000 exponent=1 per_cell_s=60 total_s=600 mem_cap_bytes=2147483648 reps=3 alpha_bits=0x35800000
+FLADDER-PROBE lane=rbfsampler ladder=1000,10000,100000,1000000 exponent=1 generator=splitmix64-blob-v1
+FLADDER-HEADER family=classical-ladder lane=rbfsampler arm=sklearn-cpu device=cpu generator=splitmix64-blob-v1 ladder=1000,10000,100000,1000000 exponent=1 per_cell_s=60 total_s=600 mem_cap_bytes=2147483648 reps=3 threads=10 cpu_count=10 pools=blas/openblas=10;openmp/openmp=10 thread_env=none numpy=2.5.2 sklearn=1.9.0 python=3.14.7
+FLADDER-NOTE lane=rbfsampler conductor=1 order=ours,theirs,ours,theirs blocks_per_arm=2 device_ours=Apple_M4
+FLADDER-MEM lane=rbfsampler arm=sklearn-cpu n=1000 bytes=1088000 cap=2147483648 formula=8*n*d+16*n*Q=8*1000*8+16*1000*64 verdict=ok
+FLADDER-HEADER family=classical-ladder lane=rbfsampler arm=ours mode=FAST device=Apple_M4 generator=splitmix64-blob-v1 ladder=1000,10000,100000,1000000 exponent=1 per_cell_s=60 total_s=600 mem_cap_bytes=2147483648 reps=3 alpha_bits=0x35800000
+FLADDER-CONDUCTED lane=rbfsampler rung_index=0 block=1 n=1000 ladder=1000,10000,100000,1000000
+FLADDER-MEM lane=rbfsampler arm=ours n=1000 bytes=832000 cap=2147483648 formula=8*n*d+12*n*Q=8*1000*8+12*1000*64 verdict=ok
+FLADDER-DATA lane=rbfsampler n=1000 array=x rows=1000 cols=8 datahash=007adba97e506464.03332e68
+FLADDER-WARMUP lane=rbfsampler arm=ours n=1000 block=1 ms=63.947
+FLADDER lane=rbfsampler arm=ours n=1000 block=1 rep=1 ms=2.154 hash=1851bfab831af4e4@64000 note=-
+FLADDER lane=rbfsampler arm=ours n=1000 block=1 rep=2 ms=2.019 hash=1851bfab831af4e4@64000 note=-
+FLADDER lane=rbfsampler arm=ours n=1000 block=1 rep=3 ms=1.88 hash=1851bfab831af4e4@64000 note=-
+FLADDER-DATA lane=rbfsampler n=1000 array=x rows=1000 cols=8 datahash=007adba97e506464.03332e68
+FLADDER-WARMUP lane=rbfsampler arm=sklearn-cpu n=1000 block=1 ms=7.571209
+FLADDER lane=rbfsampler arm=sklearn-cpu n=1000 block=1 rep=1 ms=0.396333 hash=3d2491189f52e424.889685cb@64000 note=-
+FLADDER lane=rbfsampler arm=sklearn-cpu n=1000 block=1 rep=2 ms=0.304916 hash=3d2491189f52e424.889685cb@64000 note=-
+FLADDER lane=rbfsampler arm=sklearn-cpu n=1000 block=1 rep=3 ms=0.329541 hash=3d2491189f52e424.889685cb@64000 note=-
+FLADDER-HEADER family=classical-ladder lane=rbfsampler arm=ours mode=FAST device=Apple_M4 generator=splitmix64-blob-v1 ladder=1000,10000,100000,1000000 exponent=1 per_cell_s=60 total_s=600 mem_cap_bytes=2147483648 reps=3 alpha_bits=0x35800000
+FLADDER-CONDUCTED lane=rbfsampler rung_index=0 block=2 n=1000 ladder=1000,10000,100000,1000000
+FLADDER-MEM lane=rbfsampler arm=ours n=1000 bytes=832000 cap=2147483648 formula=8*n*d+12*n*Q=8*1000*8+12*1000*64 verdict=ok
+FLADDER-DATA lane=rbfsampler n=1000 array=x rows=1000 cols=8 datahash=007adba97e506464.03332e68
+FLADDER-WARMUP lane=rbfsampler arm=ours n=1000 block=2 ms=4.849
+FLADDER lane=rbfsampler arm=ours n=1000 block=2 rep=1 ms=2.303 hash=1851bfab831af4e4@64000 note=-
+FLADDER lane=rbfsampler arm=ours n=1000 block=2 rep=2 ms=2.082 hash=1851bfab831af4e4@64000 note=-
+FLADDER lane=rbfsampler arm=ours n=1000 block=2 rep=3 ms=2.138 hash=1851bfab831af4e4@64000 note=-
+FLADDER-DATA lane=rbfsampler n=1000 array=x rows=1000 cols=8 datahash=007adba97e506464.03332e68
+FLADDER-WARMUP lane=rbfsampler arm=sklearn-cpu n=1000 block=2 ms=0.732750
+FLADDER lane=rbfsampler arm=sklearn-cpu n=1000 block=2 rep=1 ms=0.297708 hash=3d2491189f52e424.889685cb@64000 note=-
+FLADDER lane=rbfsampler arm=sklearn-cpu n=1000 block=2 rep=2 ms=0.299625 hash=3d2491189f52e424.889685cb@64000 note=-
+FLADDER lane=rbfsampler arm=sklearn-cpu n=1000 block=2 rep=3 ms=0.390625 hash=3d2491189f52e424.889685cb@64000 note=-
+FLADDER-DATACHECK lane=rbfsampler n=1000 array=x ours=007adba97e506464.03332e68 theirs=007adba97e506464.03332e68 verdict=match
+FLADDER-RUNG lane=rbfsampler arm=ours n=1000 ms_median=2.110000 ms_min=1.880000 ms_max=2.303000 samples=6
+FLADDER-RUNG lane=rbfsampler arm=sklearn-cpu n=1000 ms_median=0.317228 ms_min=0.297708 ms_max=0.396333 samples=6
+FLADDER-VERDICT lane=rbfsampler n=1000 ratio=0.1503x result=LOSS ours_median_ms=2.110000 theirs_median_ms=0.317228 ours_band_ms=1.880000-2.303000 theirs_band_ms=0.297708-0.396333 bands_overlap=no
+FLADDER-MEM lane=rbfsampler arm=sklearn-cpu n=10000 bytes=10880000 cap=2147483648 formula=8*n*d+16*n*Q=8*10000*8+16*10000*64 verdict=ok
+FLADDER-HEADER family=classical-ladder lane=rbfsampler arm=ours mode=FAST device=Apple_M4 generator=splitmix64-blob-v1 ladder=1000,10000,100000,1000000 exponent=1 per_cell_s=60 total_s=600 mem_cap_bytes=2147483648 reps=3 alpha_bits=0x35800000
+FLADDER-CONDUCTED lane=rbfsampler rung_index=1 block=1 n=10000 ladder=1000,10000,100000,1000000
+FLADDER-MEM lane=rbfsampler arm=ours n=10000 bytes=8320000 cap=2147483648 formula=8*n*d+12*n*Q=8*10000*8+12*10000*64 verdict=ok
+FLADDER-DATA lane=rbfsampler n=10000 array=x rows=10000 cols=8 datahash=2ffc24ffff9dc114.01193027
+FLADDER-WARMUP lane=rbfsampler arm=ours n=10000 block=1 ms=7.619
+FLADDER lane=rbfsampler arm=ours n=10000 block=1 rep=1 ms=4.871 hash=a692d354a1de040d@640000 note=-
+FLADDER lane=rbfsampler arm=ours n=10000 block=1 rep=2 ms=5.009 hash=a692d354a1de040d@640000 note=-
+FLADDER lane=rbfsampler arm=ours n=10000 block=1 rep=3 ms=5.028 hash=a692d354a1de040d@640000 note=-
+FLADDER-DATA lane=rbfsampler n=10000 array=x rows=10000 cols=8 datahash=2ffc24ffff9dc114.01193027
+FLADDER-WARMUP lane=rbfsampler arm=sklearn-cpu n=10000 block=1 ms=2.065667
+FLADDER lane=rbfsampler arm=sklearn-cpu n=10000 block=1 rep=1 ms=1.450958 hash=ecc7c38f6829eb57.007da2a9@640000 note=-
+FLADDER lane=rbfsampler arm=sklearn-cpu n=10000 block=1 rep=2 ms=1.461000 hash=ecc7c38f6829eb57.007da2a9@640000 note=-
+FLADDER lane=rbfsampler arm=sklearn-cpu n=10000 block=1 rep=3 ms=1.430667 hash=ecc7c38f6829eb57.007da2a9@640000 note=-
+FLADDER-HEADER family=classical-ladder lane=rbfsampler arm=ours mode=FAST device=Apple_M4 generator=splitmix64-blob-v1 ladder=1000,10000,100000,1000000 exponent=1 per_cell_s=60 total_s=600 mem_cap_bytes=2147483648 reps=3 alpha_bits=0x35800000
+FLADDER-CONDUCTED lane=rbfsampler rung_index=1 block=2 n=10000 ladder=1000,10000,100000,1000000
+FLADDER-MEM lane=rbfsampler arm=ours n=10000 bytes=8320000 cap=2147483648 formula=8*n*d+12*n*Q=8*10000*8+12*10000*64 verdict=ok
+FLADDER-DATA lane=rbfsampler n=10000 array=x rows=10000 cols=8 datahash=2ffc24ffff9dc114.01193027
+FLADDER-WARMUP lane=rbfsampler arm=ours n=10000 block=2 ms=7.799
+FLADDER lane=rbfsampler arm=ours n=10000 block=2 rep=1 ms=4.97 hash=a692d354a1de040d@640000 note=-
+FLADDER lane=rbfsampler arm=ours n=10000 block=2 rep=2 ms=4.514 hash=a692d354a1de040d@640000 note=-
+FLADDER lane=rbfsampler arm=ours n=10000 block=2 rep=3 ms=4.456 hash=a692d354a1de040d@640000 note=-
+FLADDER-DATA lane=rbfsampler n=10000 array=x rows=10000 cols=8 datahash=2ffc24ffff9dc114.01193027
+FLADDER-WARMUP lane=rbfsampler arm=sklearn-cpu n=10000 block=2 ms=1.763625
+FLADDER lane=rbfsampler arm=sklearn-cpu n=10000 block=2 rep=1 ms=1.426167 hash=ecc7c38f6829eb57.007da2a9@640000 note=-
+FLADDER lane=rbfsampler arm=sklearn-cpu n=10000 block=2 rep=2 ms=1.834875 hash=ecc7c38f6829eb57.007da2a9@640000 note=-
+FLADDER lane=rbfsampler arm=sklearn-cpu n=10000 block=2 rep=3 ms=1.485125 hash=ecc7c38f6829eb57.007da2a9@640000 note=-
+FLADDER-DATACHECK lane=rbfsampler n=10000 array=x ours=2ffc24ffff9dc114.01193027 theirs=2ffc24ffff9dc114.01193027 verdict=match
+FLADDER-RUNG lane=rbfsampler arm=ours n=10000 ms_median=4.920500 ms_min=4.456000 ms_max=5.028000 samples=6
+FLADDER-RUNG lane=rbfsampler arm=sklearn-cpu n=10000 ms_median=1.455979 ms_min=1.426167 ms_max=1.834875 samples=6
+FLADDER-VERDICT lane=rbfsampler n=10000 ratio=0.2959x result=LOSS ours_median_ms=4.920500 theirs_median_ms=1.455979 ours_band_ms=4.456000-5.028000 theirs_band_ms=1.426167-1.834875 bands_overlap=no
+FLADDER-MEM lane=rbfsampler arm=sklearn-cpu n=100000 bytes=108800000 cap=2147483648 formula=8*n*d+16*n*Q=8*100000*8+16*100000*64 verdict=ok
+FLADDER-HEADER family=classical-ladder lane=rbfsampler arm=ours mode=FAST device=Apple_M4 generator=splitmix64-blob-v1 ladder=1000,10000,100000,1000000 exponent=1 per_cell_s=60 total_s=600 mem_cap_bytes=2147483648 reps=3 alpha_bits=0x35800000
+FLADDER-CONDUCTED lane=rbfsampler rung_index=2 block=1 n=100000 ladder=1000,10000,100000,1000000
+FLADDER-MEM lane=rbfsampler arm=ours n=100000 bytes=83200000 cap=2147483648 formula=8*n*d+12*n*Q=8*100000*8+12*100000*64 verdict=ok
+FLADDER-DATA lane=rbfsampler n=100000 array=x rows=100000 cols=8 datahash=be73ca1ecea2b0c3.02e5786c
+FLADDER-WARMUP lane=rbfsampler arm=ours n=100000 block=1 ms=46.827
+FLADDER lane=rbfsampler arm=ours n=100000 block=1 rep=1 ms=41.873 hash=ce5995216847814d@1048576 note=-
+FLADDER lane=rbfsampler arm=ours n=100000 block=1 rep=2 ms=41.173 hash=ce5995216847814d@1048576 note=-
+FLADDER lane=rbfsampler arm=ours n=100000 block=1 rep=3 ms=40.612 hash=ce5995216847814d@1048576 note=-
+FLADDER-DATA lane=rbfsampler n=100000 array=x rows=100000 cols=8 datahash=be73ca1ecea2b0c3.02e5786c
+FLADDER-WARMUP lane=rbfsampler arm=sklearn-cpu n=100000 block=1 ms=12.940250
+FLADDER lane=rbfsampler arm=sklearn-cpu n=100000 block=1 rep=1 ms=12.726500 hash=3ece7fc123eef9a9.8a34642c@1048576 note=-
+FLADDER lane=rbfsampler arm=sklearn-cpu n=100000 block=1 rep=2 ms=11.598833 hash=3ece7fc123eef9a9.8a34642c@1048576 note=-
+FLADDER lane=rbfsampler arm=sklearn-cpu n=100000 block=1 rep=3 ms=11.912166 hash=3ece7fc123eef9a9.8a34642c@1048576 note=-
+FLADDER-HEADER family=classical-ladder lane=rbfsampler arm=ours mode=FAST device=Apple_M4 generator=splitmix64-blob-v1 ladder=1000,10000,100000,1000000 exponent=1 per_cell_s=60 total_s=600 mem_cap_bytes=2147483648 reps=3 alpha_bits=0x35800000
+FLADDER-CONDUCTED lane=rbfsampler rung_index=2 block=2 n=100000 ladder=1000,10000,100000,1000000
+FLADDER-MEM lane=rbfsampler arm=ours n=100000 bytes=83200000 cap=2147483648 formula=8*n*d+12*n*Q=8*100000*8+12*100000*64 verdict=ok
+FLADDER-DATA lane=rbfsampler n=100000 array=x rows=100000 cols=8 datahash=be73ca1ecea2b0c3.02e5786c
+FLADDER-WARMUP lane=rbfsampler arm=ours n=100000 block=2 ms=45.843
+FLADDER lane=rbfsampler arm=ours n=100000 block=2 rep=1 ms=40.752 hash=ce5995216847814d@1048576 note=-
+FLADDER lane=rbfsampler arm=ours n=100000 block=2 rep=2 ms=41.304 hash=ce5995216847814d@1048576 note=-
+FLADDER lane=rbfsampler arm=ours n=100000 block=2 rep=3 ms=41.011 hash=ce5995216847814d@1048576 note=-
+FLADDER-DATA lane=rbfsampler n=100000 array=x rows=100000 cols=8 datahash=be73ca1ecea2b0c3.02e5786c
+FLADDER-WARMUP lane=rbfsampler arm=sklearn-cpu n=100000 block=2 ms=12.853833
+FLADDER lane=rbfsampler arm=sklearn-cpu n=100000 block=2 rep=1 ms=12.630333 hash=3ece7fc123eef9a9.8a34642c@1048576 note=-
+FLADDER lane=rbfsampler arm=sklearn-cpu n=100000 block=2 rep=2 ms=11.585334 hash=3ece7fc123eef9a9.8a34642c@1048576 note=-
+FLADDER lane=rbfsampler arm=sklearn-cpu n=100000 block=2 rep=3 ms=11.568666 hash=3ece7fc123eef9a9.8a34642c@1048576 note=-
+FLADDER-DATACHECK lane=rbfsampler n=100000 array=x ours=be73ca1ecea2b0c3.02e5786c theirs=be73ca1ecea2b0c3.02e5786c verdict=match
+FLADDER-RUNG lane=rbfsampler arm=ours n=100000 ms_median=41.092000 ms_min=40.612000 ms_max=41.873000 samples=6
+FLADDER-RUNG lane=rbfsampler arm=sklearn-cpu n=100000 ms_median=11.755499 ms_min=11.568666 ms_max=12.726500 samples=6
+FLADDER-VERDICT lane=rbfsampler n=100000 ratio=0.2861x result=LOSS ours_median_ms=41.092000 theirs_median_ms=11.755499 ours_band_ms=40.612000-41.873000 theirs_band_ms=11.568666-12.726500 bands_overlap=no
+FLADDER-MEM lane=rbfsampler arm=sklearn-cpu n=1000000 bytes=1088000000 cap=2147483648 formula=8*n*d+16*n*Q=8*1000000*8+16*1000000*64 verdict=ok
+FLADDER-HEADER family=classical-ladder lane=rbfsampler arm=ours mode=FAST device=Apple_M4 generator=splitmix64-blob-v1 ladder=1000,10000,100000,1000000 exponent=1 per_cell_s=60 total_s=600 mem_cap_bytes=2147483648 reps=3 alpha_bits=0x35800000
+FLADDER-CONDUCTED lane=rbfsampler rung_index=3 block=1 n=1000000 ladder=1000,10000,100000,1000000
+FLADDER-MEM lane=rbfsampler arm=ours n=1000000 bytes=832000000 cap=2147483648 formula=8*n*d+12*n*Q=8*1000000*8+12*1000000*64 verdict=ok
+FLADDER-DATA lane=rbfsampler n=1000000 array=x rows=1000000 cols=8 datahash=634b04c88b7b48e8.03c06965
+FLADDER-WARMUP lane=rbfsampler arm=ours n=1000000 block=1 ms=437.096
+FLADDER lane=rbfsampler arm=ours n=1000000 block=1 rep=1 ms=425.913 hash=ce5995216847814d@1048576 note=-
+FLADDER lane=rbfsampler arm=ours n=1000000 block=1 rep=2 ms=388.78 hash=ce5995216847814d@1048576 note=-
+FLADDER lane=rbfsampler arm=ours n=1000000 block=1 rep=3 ms=433.434 hash=ce5995216847814d@1048576 note=-
+FLADDER-DATA lane=rbfsampler n=1000000 array=x rows=1000000 cols=8 datahash=634b04c88b7b48e8.03c06965
+FLADDER-WARMUP lane=rbfsampler arm=sklearn-cpu n=1000000 block=1 ms=133.762167
+FLADDER lane=rbfsampler arm=sklearn-cpu n=1000000 block=1 rep=1 ms=128.891750 hash=3ece7fc123eef9a9.8a34642c@1048576 note=-
+FLADDER lane=rbfsampler arm=sklearn-cpu n=1000000 block=1 rep=2 ms=126.728334 hash=3ece7fc123eef9a9.8a34642c@1048576 note=-
+FLADDER lane=rbfsampler arm=sklearn-cpu n=1000000 block=1 rep=3 ms=126.351458 hash=3ece7fc123eef9a9.8a34642c@1048576 note=-
+FLADDER-HEADER family=classical-ladder lane=rbfsampler arm=ours mode=FAST device=Apple_M4 generator=splitmix64-blob-v1 ladder=1000,10000,100000,1000000 exponent=1 per_cell_s=60 total_s=600 mem_cap_bytes=2147483648 reps=3 alpha_bits=0x35800000
+FLADDER-CONDUCTED lane=rbfsampler rung_index=3 block=2 n=1000000 ladder=1000,10000,100000,1000000
+FLADDER-MEM lane=rbfsampler arm=ours n=1000000 bytes=832000000 cap=2147483648 formula=8*n*d+12*n*Q=8*1000000*8+12*1000000*64 verdict=ok
+FLADDER-DATA lane=rbfsampler n=1000000 array=x rows=1000000 cols=8 datahash=634b04c88b7b48e8.03c06965
+FLADDER-WARMUP lane=rbfsampler arm=ours n=1000000 block=2 ms=425.567
+FLADDER lane=rbfsampler arm=ours n=1000000 block=2 rep=1 ms=438.083 hash=ce5995216847814d@1048576 note=-
+FLADDER lane=rbfsampler arm=ours n=1000000 block=2 rep=2 ms=392.889 hash=ce5995216847814d@1048576 note=-
+FLADDER lane=rbfsampler arm=ours n=1000000 block=2 rep=3 ms=428.785 hash=ce5995216847814d@1048576 note=-
+FLADDER-DATA lane=rbfsampler n=1000000 array=x rows=1000000 cols=8 datahash=634b04c88b7b48e8.03c06965
+FLADDER-WARMUP lane=rbfsampler arm=sklearn-cpu n=1000000 block=2 ms=124.576750
+FLADDER lane=rbfsampler arm=sklearn-cpu n=1000000 block=2 rep=1 ms=125.464792 hash=3ece7fc123eef9a9.8a34642c@1048576 note=-
+FLADDER lane=rbfsampler arm=sklearn-cpu n=1000000 block=2 rep=2 ms=125.466125 hash=3ece7fc123eef9a9.8a34642c@1048576 note=-
+FLADDER lane=rbfsampler arm=sklearn-cpu n=1000000 block=2 rep=3 ms=125.759833 hash=3ece7fc123eef9a9.8a34642c@1048576 note=-
+FLADDER-DATACHECK lane=rbfsampler n=1000000 array=x ours=634b04c88b7b48e8.03c06965 theirs=634b04c88b7b48e8.03c06965 verdict=match
+FLADDER-RUNG lane=rbfsampler arm=ours n=1000000 ms_median=427.349000 ms_min=388.780000 ms_max=438.083000 samples=6
+FLADDER-RUNG lane=rbfsampler arm=sklearn-cpu n=1000000 ms_median=126.055645 ms_min=125.464792 ms_max=128.891750 samples=6
+FLADDER-VERDICT lane=rbfsampler n=1000000 ratio=0.2950x result=LOSS ours_median_ms=427.349000 theirs_median_ms=126.055645 ours_band_ms=388.780000-438.083000 theirs_band_ms=125.464792-128.891750 bands_overlap=no
+FLADDER-SUMMARY lane=rbfsampler rungs_declared=4 rungs_run=4 contiguous=yes wins=0 losses=4 ties=0 first_win=- stopped=-

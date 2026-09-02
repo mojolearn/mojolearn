@@ -1,0 +1,18 @@
+window start Tue Sep  1 12:52:56 EDT 2026
+load_1 pid 36264
+load_2 pid 36265
+load_3 pid 36266
+load_4 pid 36267
+load_5 pid 36268
+load_6 pid 36269
+load_7 pid 36270
+load_8 pid 36271
+control pid 36272
+t=0s load=1
+t=20s load=4
+t=40s load=5
+t=60s load=6
+t=80s load=7
+t=100s load=8
+t=120s load=18
+WATCHDOG: load 18 > 12, teardown at t=120s

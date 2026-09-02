@@ -1,0 +1,19 @@
+SOAK of bench/oracle_d1_f8.txt -- 3000 reps, both searchers, one process
+  chasing DEVIATION 134: a run where the two arms disagreed with each other
+
+  ============== DEVIATION 134f POSITIVE CONTROL ==============
+  THIS BUILD IS SABOTAGED (-D MOJOLEARN_134_CONTROL=1): the
+  fourteen holds-past-drain in TTreeWorkspace.__init__ are
+  compiled out, recreating the pre-a4aee262 greedy ctor.
+  REQUIRED-RED. Historical signature: greedy 2/12 splits,
+  first divergence tree 2, mse 4.679346084594727.
+    RED here  = lifetime mechanism CONFIRMED for the greedy
+                arm; 134 CLOSES once the UN-sabotaged soak
+                pair is quiet.
+    QUIET here IS NOT A PASS. It is a finding: the 134b load
+                window (20-30 concurrent GPU processes), not
+                the lifetime alone, was the missing
+                ingredient -- rerun under the synthetic load
+                recipe (PORTING.md 134f). 134 STAYS OPEN.
+  =============================================================
+

@@ -1,0 +1,7 @@
+
+=== forest.gbdt-symmetric.r1000000.log :: /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/gbmbench/bin/python bench/speed/forest_speed_arm.py --lane gbdt-symmetric --dataset higgs --rows 1000000 ===
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.800537
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-cpu metric=logloss value=0.543225
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-cpu metric=auc value=0.799673
+
+=== forest.gbdt-symmetric.r2000000.log :: /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/gbmbench/bin/python bench/speed/forest_speed_arm.py --lane gbdt-symmetric --dataset higgs --rows 2000000 ===

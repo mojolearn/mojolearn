@@ -1,0 +1,70 @@
+Imported from /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/mamba/checks/mamba2_check.mojo:102:
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/mamba/checks/mamba2_check.mojo:102:
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/mamba/checks/mamba2_check.mojo:102:
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/mamba/checks/mamba2_check.mojo:102:
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/mamba/checks/mamba2_check.mojo:102:
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/mamba/checks/mamba2_check.mojo:1290:28: warning: assignment to 'bytes' was never used; assign to '_' instead?
+    var bytes = List[UInt8]()
+                           ^
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/mamba/checks/mamba2_check.mojo:1537:30: warning: assignment to 'expect_first' was never used; assign to '_' instead?
+    var expect_first = String("")
+                             ^
+mamba2 block gate (IDENTICAL_MAMBA2_CONTRACT.md section 8); profile mojolearn.identical.mamba2.fp32.v1; build mode IDENTICAL
+shape: B = 1 L = 4 d_model = 32
+  OK    norm.sumsq  (4 cells)
+  OK    norm.out  (128 cells)
+  OK    in_proj.out  (1540 cells)
+  OK    A.out  (1 cells)
+  OK    conv.out  (1280 cells)
+  OK    silu.out  (1280 cells)
+  OK    conv.window  (1280 cells)
+  OK    dt.out  (4 cells)
+  OK    xd.out  (256 cells)
+  OK    dacs.out  (256 cells)
+  OK    seg.L  (65536 cells)
+  OK    cb.G  (65536 cells)
+  OK    ydiag.out  (256 cells)
+  OK    decay.states  (256 cells)
+  OK    cstate.out  (8192 cells)
+  OK    pass.states  (8192 cells)
+  OK    yoff.out  (256 cells)
+  OK    scan.y  (256 cells)
+  OK    skip.out  (256 cells)
+  OK    gnorm.gate  (256 cells)
+  OK    gnorm.sumsq  (4 cells)
+  OK    gnorm.out  (256 cells)
+  OK    out_proj.out  (128 cells)
+  OK    residual.out  (128 cells)
+  OK    ssd.h_last  (8192 cells)
+  OK    state.h  (8192 cells)
+card: 26 records, contract section 7 wants 26
+card: all 26 tags present, once each, in section 7's order
+GATE A PASS: every stage bit-identical to the oracle at this shape.
+GATE B PASS: 8 repeated launches, identical bits, every stage
+GATE C PASS: row bits independent of launch companions (B in {1,2,3}), negative control differed on 24733 cells
+One shape, one launch history, one box. Everything else in contract section 8 is OWED: the sabotage arms (one build each), decode / decode-cross / handoff / refusal / corpus arms, the other shapes, FAST recording, and every column that is not this machine.

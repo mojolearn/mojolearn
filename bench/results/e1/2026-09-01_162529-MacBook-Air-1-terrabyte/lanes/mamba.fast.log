@@ -1,0 +1,47 @@
+Imported from /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/mamba/checks/mamba_check.mojo:438:
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/mamba/checks/mamba_check.mojo:438:
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/mamba/checks/mamba_check.mojo:438:
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/mamba/checks/mamba_check.mojo:1591:30: warning: assignment to 'xr' was never used; assign to '_' instead?
+    var xr = dims.x_proj_rows()
+                             ^
+=== mamba block identity gate, profile mojolearn.identical.mamba1.fp32.v1
+mode FAST   block sabotage: none
+shape B=1 L=4 d_model=8 d_inner=16 dt_rank=1
+reach: S14's input lands in (10, 20] on 13 of 64 cells  (fixture F7's band; 0 would make S14_THRESHOLD_10 vacuous)
+clause (a): stages, device vs host oracle, BITWISE:
+  OK    norm.sumsq  (4 cells)
+  OK    norm.out  (32 cells)
+  OK    in_proj.out  (128 cells)
+  MOVED A.out  102 of 256 cells, first cell 0  a 0xc003574a  b 0xc003574b
+  OK    conv.out  (64 cells)
+  MOVED silu.out  7 of 64 cells, first cell 0  a 0x3cdff702  b 0x3cdff703
+  OK    conv.window  (64 cells)
+  MOVED x_proj.out  37 of 132 cells, first cell 1  a 0x3a11d573  b 0x3a11d575
+  MOVED dt_proj.out  11 of 64 cells, first cell 16  a 0xbcccda3b  b 0xbcccda3c
+  MOVED softplus.out  7 of 64 cells, first cell 11  a 0x411ff7c4  b 0x411ff7c3
+  MOVED scan.y  46 of 64 cells, first cell 0  a 0xb409982b  b 0xb409982d
+  MOVED scan.h  162 of 256 cells, first cell 0  a 0xb81dcb38  b 0xb81dcb59
+  MOVED skip.out  7 of 64 cells, first cell 0  a 0x3d0eca10  b 0x3d0eca11
+  MOVED gate.out  8 of 64 cells, first cell 0  a 0xbb2dda93  b 0xbb2dda94
+  MOVED out_proj.out  8 of 32 cells, first cell 1  a 0xba49c452  b 0xba49c453
+  OK    residual.out  (32 cells)
+card: 17 records, contract section 7 wants 17
+card: 17/17 tags in contract section 7's order, all unique
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: mamba_check: CLAUSE (a) FAILED, 10 stages differ from the oracle, first at A.out on 102 of 256 cells
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1

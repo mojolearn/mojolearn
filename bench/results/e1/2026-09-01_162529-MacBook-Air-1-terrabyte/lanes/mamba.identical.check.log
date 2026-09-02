@@ -1,0 +1,51 @@
+Imported from /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/mamba/checks/mamba_check.mojo:438:
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/mamba/checks/mamba_check.mojo:438:
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/mamba/checks/mamba_check.mojo:438:
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/6a87f33b-a6ad-4f88-8358-71f7af5d7127/scratchpad/wt4515/mamba/checks/mamba_check.mojo:1591:30: warning: assignment to 'xr' was never used; assign to '_' instead?
+    var xr = dims.x_proj_rows()
+                             ^
+=== mamba block identity gate, profile mojolearn.identical.mamba1.fp32.v1
+mode IDENTICAL   block sabotage: none
+shape B=1 L=4 d_model=8 d_inner=16 dt_rank=1
+reach: S14's input lands in (10, 20] on 13 of 64 cells  (fixture F7's band; 0 would make S14_THRESHOLD_10 vacuous)
+clause (a): stages, device vs host oracle, BITWISE:
+  OK    norm.sumsq  (4 cells)
+  OK    norm.out  (32 cells)
+  OK    in_proj.out  (128 cells)
+  OK    A.out  (256 cells)
+  OK    conv.out  (64 cells)
+  OK    silu.out  (64 cells)
+  OK    conv.window  (64 cells)
+  OK    x_proj.out  (132 cells)
+  OK    dt_proj.out  (64 cells)
+  OK    softplus.out  (64 cells)
+  OK    scan.y  (64 cells)
+  OK    scan.h  (256 cells)
+  OK    skip.out  (64 cells)
+  OK    gate.out  (64 cells)
+  OK    out_proj.out  (32 cells)
+  OK    residual.out  (32 cells)
+card: 17 records, contract section 7 wants 17
+card: 17/17 tags in contract section 7's order, all unique
+clause (a): PASS, 16/16 stages bit-identical to the oracle, 17/17 card tags.
+clause (b): 8 repeated launches, every stage, every cell
+clause (b): PASS, launches 2..8 bit-identical to launch 1 on all 1384 cells of all 16 stages
+clause (c): SKIPPED (set MOJOLEARN_MAMBA_CHECK_CLAUSE_C=1)
+clause (d): SKIPPED (set MOJOLEARN_MAMBA_CHECK_CLAUSE_D=1)
+clause (e): SKIPPED (set MOJOLEARN_MAMBA_CHECK_CLAUSE_E=1)
+SCOPE: this shape only, IDENTICAL only. Clauses (a), (b), (c), (d), (e) and (f) are gated HERE, and the INDEPENDENT corpus cross-check passed on cases 0 and 1 at rtol=1e-7 (run it with MOJOLEARN_MAMBA_CORPUS_CASE + tools/mamba_corpus_check.py). OWED: the other 14 corpus cases, L=16/64/257, FAST mode, every non-Apple column.

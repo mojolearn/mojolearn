@@ -1,0 +1,105 @@
+SOAK of bench/oracle_d1_f8.txt -- 2000 reps, both searchers, one process
+  chasing DEVIATION 134: a run where the two arms disagreed with each other
+
+  ============== DEVIATION 134f POSITIVE CONTROL ==============
+  THIS BUILD IS SABOTAGED (-D MOJOLEARN_134_CONTROL=1): the
+  fourteen holds-past-drain in TTreeWorkspace.__init__ are
+  compiled out, recreating the pre-a4aee262 greedy ctor.
+  REQUIRED-RED. Historical signature: greedy 2/12 splits,
+  first divergence tree 2, mse 4.679346084594727.
+    RED here  = lifetime mechanism CONFIRMED for the greedy
+                arm; 134 CLOSES once the UN-sabotaged soak
+                pair is quiet.
+    QUIET here IS NOT A PASS. It is a finding: the 134b load
+                window (20-30 concurrent GPU processes), not
+                the lifetime alone, was the missing
+                ingredient -- rerun under the synthetic load
+                recipe (PORTING.md 134f). 134 STAYS OPEN.
+  =============================================================
+
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+  REP 336 DISAGREES WITH CATBOOST: greedy 12 / 12 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse 4.1332526206970215  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 336 THE TWO ARMS DISAGREE WITH EACH OTHER: greedy 4.1332526206970215 pointwise -0.0 -- this is what check-fit-pointwise forbids
+  REP 337 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 338 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 339 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 340 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 341 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 342 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 343 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 344 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 345 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 346 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 347 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 348 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 349 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 350 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 351 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 352 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 353 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 354 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 355 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 356 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 357 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 358 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 359 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 360 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 361 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 362 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+Context leak detected, CoreAnalytics returned false
+  REP 363 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 364 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 365 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 366 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 367 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 368 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 369 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 370 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921
+  REP 371 DISAGREES WITH CATBOOST: greedy 0 / 0 ( first div -1 )  pointwise 1 / 12 ( first div 0 )
+        greedy mse -0.0  pointwise mse -0.0  CatBoost 4.133252577078921

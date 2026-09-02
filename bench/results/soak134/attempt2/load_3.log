@@ -1,0 +1,3 @@
+SOAK of bench/oracle_d1_f8.txt -- 5000 reps, both searchers, one process
+  chasing DEVIATION 134: a run where the two arms disagreed with each other
+

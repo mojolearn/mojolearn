@@ -1,0 +1,3 @@
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=cpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=FAST device=Darwin_arm64 rounds=1 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-cpu mode=FAST device=Darwin_arm64 rounds=1 size=shipped

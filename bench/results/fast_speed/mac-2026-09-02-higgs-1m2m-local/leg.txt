@@ -1,0 +1,10 @@
+family=forest
+commit=37cb9706 parent dc71ae1e
+rounds=1
+size=shipped
+device=Apple_M4
+started=2026-09-02T05:26:01Z
+forest_py=/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/gbmbench/bin/python
+expect_arm forest.gbdt-symmetric.r1000000.log build=-
+arm_exit forest.gbdt-symmetric.r1000000.log=0
+expect_arm forest.gbdt-symmetric.r2000000.log build=-
