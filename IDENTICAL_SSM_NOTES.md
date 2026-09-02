@@ -67,8 +67,14 @@ decision about the neural layer is made later against a written list.
 ## If and when it is promoted: build order
 
 1. `numerics.mojo` rows (identity lane's file; request, do not edit):
-   DONE 2026-08-23 except `portable_sinf` (not asked for by the Mamba-1
-   block): `identical_div` (division characterized per class, row 49),
+   DONE 2026-08-23, and the `portable_sinf` exception this line used to
+   carry ("not asked for by the Mamba-1 block") is CLOSED as of 2026-09-01:
+   DEVIATION 820 built `portable_sinf` and refactored `portable_cosf` onto
+   one shared `_cephes_sincosf_core` (domain |x| < 8192, gate
+   `checks/portable_trig_check.mojo`), with the Mamba-3 lane's S11/S13
+   rotation as the asking consumer (`mamba/IDENTICAL_MAMBA3_CONTRACT.md`
+   section 2a; device-column certification of the pair stays RUN OWED
+   there): `identical_div` (division characterized per class, row 49),
    `identical_rsqrt`, `identical_log1p`, `identical_sigmoid`,
    `identical_silu`, `identical_softplus` (rows 50-54), gates
    `check-division` and `check-portable-nn`, Apple-gated; the H100/MI325X
