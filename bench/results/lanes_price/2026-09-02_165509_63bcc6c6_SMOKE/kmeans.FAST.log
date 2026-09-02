@@ -1,0 +1,6 @@
+== leg lane=kmeans mode=FAST round=1 16:56:02 ==
+== bench/lanes_price_main.mojo [FAST] lane=kmeans rounds=1 smoke=True ==
+LPRICE kmeans FAST warmup 2048x32.k16 0.256064 ffa05b13341a115e
+LPRICE kmeans FAST 1 2048x32.k16 0.032156 ffa05b13341a115e
+HASH-STABLE kmeans FAST 2 rounds all ffa05b13341a115e
+== done [FAST] lane=kmeans ==

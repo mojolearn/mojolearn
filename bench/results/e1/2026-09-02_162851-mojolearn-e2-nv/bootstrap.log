@@ -1,0 +1,149 @@
+
+=== provenance === 16:28:51
+cd56e8ce14bd11dfd3ccec326554db430bbb46aa
+Linux mojolearn-e2-nv 5.15.0-185-generic #195-Ubuntu SMP Fri Jun 19 17:11:50 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+
+=== pixi === 16:28:52
+This script will automatically download and install Pixi (latest) for you.
+Getting it from this url: https://github.com/prefix-dev/pixi/releases/latest/download/pixi-x86_64-unknown-linux-musl.tar.gz
+The 'pixi' binary is installed into '/root/.pixi/bin'
+Updating '/root/.bashrc'
+Please restart or source your shell.
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 16:28:55
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=8 9) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=8 9) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=8 9) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=8 9) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=8 9) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=8 9) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=8 9) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=8 9) ===
+
+=== phase 8: the classical lanes (gemm, cd, kde, linkage, svm, metrics) -- both modes, cards + checks === 16:28:55
+-- lanes, identical --
+  gemm [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  cd [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  kde [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  linkage [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  svm [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  mamba [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  mamba2 [identical]: card 26 records -- mode IDENTICAL
+  mamba2 [identical] check OK (26 OK lines)
+  mamba3 [identical]: card 28 records -- mode IDENTICAL
+  mamba3 [identical] check OK (30 OK lines)
+  iforest [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  transformer [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  arima [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  cholesky [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  embedding [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  gp [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  hdbscan [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  holtwinters [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  ivf [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  kernelmethods [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  gmm [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  resample [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  spectral [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  training-loss [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  training-optimizer [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  training-step [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  tsa [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  metrics [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+-- lanes, fast --
+  gemm [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  cd [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  kde [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  linkage [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  svm [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  mamba [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+PHASE8-FINDING: mamba2 [fast] failed (see /root/mojolearn/bench/results/e1/2026-09-02_162851-mojolearn-e2-nv/lanes/mamba2.fast.log)
+  mamba2 [fast]: card 26 records -- mode FAST
+PHASE8-FINDING: mamba2 [fast] check FAILED: Unhandled exception caught during execution: GATE A FAILED: 24668 cells differ between the device card and the host oracle (first stage: norm.out)
+PHASE8-FINDING: mamba3 [fast] failed (see /root/mojolearn/bench/results/e1/2026-09-02_162851-mojolearn-e2-nv/lanes/mamba3.fast.log)
+  mamba3 [fast]: card 28 records -- mode FAST
+PHASE8-FINDING: mamba3 [fast] check FAILED: Unhandled exception caught during execution: GATE A FAILED: 14044 cells differ between the device card and the host oracle (first stage: in_proj.out)
+  iforest [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  transformer [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  arima [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  cholesky [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  embedding [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  gp [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  hdbscan [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  holtwinters [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  ivf [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  kernelmethods [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  gmm [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  resample [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  spectral [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  training-loss [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  training-optimizer [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  training-step [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  tsa [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+  metrics [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba2 mamba3)
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 16:30:39
+phase 9 builds: build.sh build_estimators.sh build_gbdt.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_tsa.sh build_linalg.sh build_arima.sh build_training.sh build_gp.sh build_mamba.sh build_transformer.sh
+phase 9 tiers:  fast deterministic identical
+fast set: 15 of 10 binaries
+deterministic set: 15 of 10 binaries
+identical set: 15 of 10 binaries
+--- stability fast
+      Select it with mojolearn.set_numeric_mode('identical') before the call, or set MOJOLEARN_NUMERIC_MODE=identical before importing mojolearn; the identical binary builds with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_linalg.sh
+      Or pass identical=False to say in the source that you want the fast product and are making no identity claim about it.
+    wrote /root/mojolearn/bench/results/e1/2026-09-02_162851-mojolearn-e2-nv/stability/fast.json
+--- stability deterministic
+      Select it with mojolearn.set_numeric_mode('identical') before the call, or set MOJOLEARN_NUMERIC_MODE=identical before importing mojolearn; the identical binary builds with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_linalg.sh
+      Or pass identical=False to say in the source that you want the deterministic product and are making no identity claim about it.
+    wrote /root/mojolearn/bench/results/e1/2026-09-02_162851-mojolearn-e2-nv/stability/deterministic.json
+--- stability identical
+    | tsvd             | STABLE   | YES  6/6 calls agreed   | eb98ef49f9c747f0 |
+    
+    mode=identical  stable=29  moved=0  refused=0
+    wrote /root/mojolearn/bench/results/e1/2026-09-02_162851-mojolearn-e2-nv/stability/identical.json
+--- stability concurrent
+      round 11  fast           -> fast           7fbeefec8014f640
+    
+      fast           STABLE  all 24 calls returned THE SAME answer
+      deterministic  STABLE  all 12 calls returned THE SAME answer
+      identical      STABLE  all 12 calls returned THE SAME answer
+    
+
+=== phase 9 diag: tools/leg_diag_surfaces.sh === 16:47:42
+          second vendor: arima/'s three-vendor card is the Kalman filter's,
+          and the fit has never left one Apple M4.
+    
+    == summary ==
+    # Python surface gates on this box
+    # host:   mojolearn-e2-nv  x86_64
+    # kernel: 5.15.0-185-generic
+    # date:   2026-09-02T16:47:42Z
+    # commit: cd56e8ce14bd11dfd3ccec326554db430bbb46aa
+    
+    # gpu: NVIDIA H100 80GB HBM3, 580.173.02
+    
+    fast           test_mamba_surface           RED (rc=1)
+    fast           test_transformer_surface     RED (rc=1)
+    fast           test_arima_surface           GREEN
+    deterministic  test_mamba_surface           RED (rc=1)
+    deterministic  test_transformer_surface     RED (rc=1)
+    identical      test_mamba_surface           RED (rc=1)
+    identical      test_transformer_surface     GREEN
+    identical      test_arima_surface           GREEN
+
+=== done === 16:47:52
+artifacts in /root/mojolearn/bench/results/e1/2026-09-02_162851-mojolearn-e2-nv
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

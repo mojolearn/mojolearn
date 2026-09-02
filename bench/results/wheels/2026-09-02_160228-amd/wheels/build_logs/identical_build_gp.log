@@ -1,0 +1,86 @@
+start 2026-09-02T20:07:19Z
+Imported from /root/mojolearn/bindings/_mojolearn_gp.mojo:111:
+Imported from ./gaussian_process/estimator.mojo:105:
+/root/mojolearn/./core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gp.mojo:111:
+Imported from ./gaussian_process/estimator.mojo:105:
+/root/mojolearn/./core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gp.mojo:111:
+Imported from ./gaussian_process/estimator.mojo:105:
+/root/mojolearn/./core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gp.mojo:111:
+Imported from ./gaussian_process/estimator.mojo:104:
+Imported from /root/mojolearn/./cholesky/checks/trsm.mojo:73:
+/root/mojolearn/./cholesky/checks/chol_sabotage.mojo:209:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        flag[0] = Int32(0)
+        ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gp.mojo:111:
+Imported from ./gaussian_process/estimator.mojo:104:
+Imported from /root/mojolearn/./cholesky/checks/trsm.mojo:73:
+/root/mojolearn/./cholesky/checks/chol_sabotage.mojo:232:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                flag[0] = Int32(1)
+                ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gp.mojo:111:
+Imported from ./gaussian_process/estimator.mojo:104:
+Imported from /root/mojolearn/./cholesky/checks/trsm.mojo:73:
+/root/mojolearn/./cholesky/checks/chol_sabotage.mojo:239:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if flag[0] != Int32(0):
+           ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gp.mojo:111:
+Imported from ./gaussian_process/estimator.mojo:105:
+/root/mojolearn/./core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gp.mojo:111:
+Imported from ./gaussian_process/estimator.mojo:105:
+/root/mojolearn/./core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gp.mojo:111:
+Imported from ./gaussian_process/estimator.mojo:98:
+Imported from /root/mojolearn/./cholesky/estimator.mojo:48:
+/root/mojolearn/./cholesky/checks/potrf.mojo:665:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        flag[0] = Int32(0)
+        ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gp.mojo:111:
+Imported from ./gaussian_process/estimator.mojo:98:
+Imported from /root/mojolearn/./cholesky/estimator.mojo:48:
+/root/mojolearn/./cholesky/checks/potrf.mojo:681:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                flag[0] = Int32(1)
+                ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gp.mojo:111:
+Imported from ./gaussian_process/estimator.mojo:98:
+Imported from /root/mojolearn/./cholesky/estimator.mojo:48:
+/root/mojolearn/./cholesky/checks/potrf.mojo:685:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if flag[0] != Int32(0):
+           ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_gp.mojo:421:16: warning: assignment to 'info' was never used; assign to '_' instead?
+    var info = 0
+               ^
+/root/mojolearn/bindings/_mojolearn_gp.mojo:585:21: warning: assignment to 'n_clamped' was never used; assign to '_' instead?
+    var n_clamped = 0
+                    ^
+built python/mojolearn/identical/_mojolearn_gp.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+end 2026-09-02T20:07:33Z OK

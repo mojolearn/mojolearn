@@ -1,0 +1,15 @@
+vendor=hip
+arch=gfx1100
+gpu_archs_requested=gfx1100
+build_rc=0 stage_rc=0
+build_seconds=280
+set_fast_count=15
+set_fast_bytes=19953551
+set_deterministic_count=15
+set_deterministic_bytes=19957783
+set_identical_count=15
+set_identical_bytes=18685039
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=15544879

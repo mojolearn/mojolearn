@@ -1,0 +1,24 @@
+vendor=cuda  build_rc=0  smoke_rc=0  sabotage_rc=0  nogpu_rc=0
+gates=NOT APPLICABLE (cross-build: box sm_90, set sm_80); evidence is build_rc and the read-back
+seconds=454
+vendor=cuda
+arch=sm_80
+gpu_archs_requested=sm_80
+build_rc=0 stage_rc=0
+build_seconds=454
+set_fast_count=15
+set_fast_bytes=31242096
+set_deterministic_count=15
+set_deterministic_bytes=30926824
+set_identical_count=15
+set_identical_bytes=30637152
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=21705073
+smoke[fast]: NOT APPLICABLE: cross-build, box is sm_90 and the set is sm_80
+smoke[deterministic]: NOT APPLICABLE: cross-build, box is sm_90 and the set is sm_80
+smoke[identical]: NOT APPLICABLE: cross-build, box is sm_90 and the set is sm_80
+sabotage: NOT APPLICABLE: cross-build, box is sm_90 and the set is sm_80
+nogpu: NOT APPLICABLE: cross-build, box is sm_90 and the set is sm_80
+source_e1_dir=bench/results/e1/2026-09-02_202439-mojolearn-e2-nv/

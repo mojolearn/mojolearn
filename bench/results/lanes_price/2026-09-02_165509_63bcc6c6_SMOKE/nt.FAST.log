@@ -1,0 +1,6 @@
+== leg lane=nt mode=FAST round=1 16:56:04 ==
+== bench/lanes_price_main.mojo [FAST] lane=nt rounds=1 smoke=True ==
+LPRICE nt FAST warmup 256x64x64 0.006935 7dea8f5ec67a4e9d
+LPRICE nt FAST 1 256x64x64 0.006818 7dea8f5ec67a4e9d
+HASH-STABLE nt FAST 2 rounds all 7dea8f5ec67a4e9d
+== done [FAST] lane=nt ==

@@ -1,0 +1,405 @@
+{
+ "mode": "deterministic",
+ "repeats": 6,
+ "rows": [
+  {
+   "lane": "agglomerative",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "02ca572ae936a2fa",
+    "02ca572ae936a2fa",
+    "02ca572ae936a2fa",
+    "02ca572ae936a2fa",
+    "02ca572ae936a2fa",
+    "02ca572ae936a2fa"
+   ],
+   "error": null
+  },
+  {
+   "lane": "dbscan",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "a4608e954c7420b7",
+    "a4608e954c7420b7",
+    "a4608e954c7420b7",
+    "a4608e954c7420b7",
+    "a4608e954c7420b7",
+    "a4608e954c7420b7"
+   ],
+   "error": null
+  },
+  {
+   "lane": "elasticnet",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "417b2b6ef980d28f",
+    "417b2b6ef980d28f",
+    "417b2b6ef980d28f",
+    "417b2b6ef980d28f",
+    "417b2b6ef980d28f",
+    "417b2b6ef980d28f"
+   ],
+   "error": null
+  },
+  {
+   "lane": "et-clf",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40"
+   ],
+   "error": null
+  },
+  {
+   "lane": "et-reg",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "a1d2eb9ddb149617",
+    "a1d2eb9ddb149617",
+    "a1d2eb9ddb149617",
+    "a1d2eb9ddb149617",
+    "a1d2eb9ddb149617",
+    "a1d2eb9ddb149617"
+   ],
+   "error": null
+  },
+  {
+   "lane": "gbdt-depthwise",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "5af5e69c7a51e998",
+    "5af5e69c7a51e998",
+    "5af5e69c7a51e998",
+    "5af5e69c7a51e998",
+    "5af5e69c7a51e998",
+    "5af5e69c7a51e998"
+   ],
+   "error": null
+  },
+  {
+   "lane": "gbdt-lossguide",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "d824f0e1683d12b9",
+    "d824f0e1683d12b9",
+    "d824f0e1683d12b9",
+    "d824f0e1683d12b9",
+    "d824f0e1683d12b9",
+    "d824f0e1683d12b9"
+   ],
+   "error": null
+  },
+  {
+   "lane": "gbdt-rmse",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "23ff518cc9a7f332",
+    "23ff518cc9a7f332",
+    "23ff518cc9a7f332",
+    "23ff518cc9a7f332",
+    "23ff518cc9a7f332",
+    "23ff518cc9a7f332"
+   ],
+   "error": null
+  },
+  {
+   "lane": "gbdt-symmetric",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "f48275d3af938625",
+    "f48275d3af938625",
+    "f48275d3af938625",
+    "f48275d3af938625",
+    "f48275d3af938625",
+    "f48275d3af938625"
+   ],
+   "error": null
+  },
+  {
+   "lane": "gemm-pinned",
+   "verdict": "REFUSED",
+   "distinct": 0,
+   "hashes": [],
+   "error": "RuntimeError: mojolearn.linalg: this process loaded the DETERMINISTIC build, which makes NO cross-vendor identity claim; mojolearn.identical.gemm.fp32.v1 is what the IDENTICAL build computes.\n  Select it with mojolearn.set_numeric_mode('identical') before the call, or set MOJOLEARN_NUMERIC_MODE=identical before importing mojolearn; the identical binary builds with\n      MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_linalg.sh\n  Or pass identical=False to say in the source that you want the deterministic product and are making no identity claim about it."
+  },
+  {
+   "lane": "gemm-vendor",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "1638dc63e27d8526",
+    "1638dc63e27d8526",
+    "1638dc63e27d8526",
+    "1638dc63e27d8526",
+    "1638dc63e27d8526",
+    "1638dc63e27d8526"
+   ],
+   "error": null
+  },
+  {
+   "lane": "holtwinters",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "e6e43307ca85f1c7",
+    "e6e43307ca85f1c7",
+    "e6e43307ca85f1c7",
+    "e6e43307ca85f1c7",
+    "e6e43307ca85f1c7",
+    "e6e43307ca85f1c7"
+   ],
+   "error": null
+  },
+  {
+   "lane": "iforest",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "cbdf90cd2472725a",
+    "cbdf90cd2472725a",
+    "cbdf90cd2472725a",
+    "cbdf90cd2472725a",
+    "cbdf90cd2472725a",
+    "cbdf90cd2472725a"
+   ],
+   "error": null
+  },
+  {
+   "lane": "kde",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "51e248a7e0bf958b",
+    "51e248a7e0bf958b",
+    "51e248a7e0bf958b",
+    "51e248a7e0bf958b",
+    "51e248a7e0bf958b",
+    "51e248a7e0bf958b"
+   ],
+   "error": null
+  },
+  {
+   "lane": "kmeans",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "da3cb10e46c91256",
+    "da3cb10e46c91256",
+    "da3cb10e46c91256",
+    "da3cb10e46c91256",
+    "da3cb10e46c91256",
+    "da3cb10e46c91256"
+   ],
+   "error": null
+  },
+  {
+   "lane": "knn-clf",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "f359ee4876deb908",
+    "f359ee4876deb908",
+    "f359ee4876deb908",
+    "f359ee4876deb908",
+    "f359ee4876deb908",
+    "f359ee4876deb908"
+   ],
+   "error": null
+  },
+  {
+   "lane": "knn-reg",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "ff4a92b889616aea",
+    "ff4a92b889616aea",
+    "ff4a92b889616aea",
+    "ff4a92b889616aea",
+    "ff4a92b889616aea",
+    "ff4a92b889616aea"
+   ],
+   "error": null
+  },
+  {
+   "lane": "knn-tied",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "aedec506c016b58c",
+    "aedec506c016b58c",
+    "aedec506c016b58c",
+    "aedec506c016b58c",
+    "aedec506c016b58c",
+    "aedec506c016b58c"
+   ],
+   "error": null
+  },
+  {
+   "lane": "lasso",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "b21520dab533f838",
+    "b21520dab533f838",
+    "b21520dab533f838",
+    "b21520dab533f838",
+    "b21520dab533f838",
+    "b21520dab533f838"
+   ],
+   "error": null
+  },
+  {
+   "lane": "logistic",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "4f82254ef9ad5365",
+    "4f82254ef9ad5365",
+    "4f82254ef9ad5365",
+    "4f82254ef9ad5365",
+    "4f82254ef9ad5365",
+    "4f82254ef9ad5365"
+   ],
+   "error": null
+  },
+  {
+   "lane": "metrics",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "01a17b9ad7a6275c",
+    "01a17b9ad7a6275c",
+    "01a17b9ad7a6275c",
+    "01a17b9ad7a6275c",
+    "01a17b9ad7a6275c",
+    "01a17b9ad7a6275c"
+   ],
+   "error": null
+  },
+  {
+   "lane": "ols",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "022e6a59dbc6c16c",
+    "022e6a59dbc6c16c",
+    "022e6a59dbc6c16c",
+    "022e6a59dbc6c16c",
+    "022e6a59dbc6c16c",
+    "022e6a59dbc6c16c"
+   ],
+   "error": null
+  },
+  {
+   "lane": "pca",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "dab7b242a549d6b7",
+    "dab7b242a549d6b7",
+    "dab7b242a549d6b7",
+    "dab7b242a549d6b7",
+    "dab7b242a549d6b7",
+    "dab7b242a549d6b7"
+   ],
+   "error": null
+  },
+  {
+   "lane": "rf-clf",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "eacd6bff8b4088b8",
+    "eacd6bff8b4088b8",
+    "eacd6bff8b4088b8",
+    "eacd6bff8b4088b8",
+    "eacd6bff8b4088b8",
+    "eacd6bff8b4088b8"
+   ],
+   "error": null
+  },
+  {
+   "lane": "rf-reg",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "91269c5ae3828665",
+    "91269c5ae3828665",
+    "91269c5ae3828665",
+    "91269c5ae3828665",
+    "91269c5ae3828665",
+    "91269c5ae3828665"
+   ],
+   "error": null
+  },
+  {
+   "lane": "ridge",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "e13255231f90fa00",
+    "e13255231f90fa00",
+    "e13255231f90fa00",
+    "e13255231f90fa00",
+    "e13255231f90fa00",
+    "e13255231f90fa00"
+   ],
+   "error": null
+  },
+  {
+   "lane": "spectral",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "7c5f4e5c32dc0ca1",
+    "7c5f4e5c32dc0ca1",
+    "7c5f4e5c32dc0ca1",
+    "7c5f4e5c32dc0ca1",
+    "7c5f4e5c32dc0ca1",
+    "7c5f4e5c32dc0ca1"
+   ],
+   "error": null
+  },
+  {
+   "lane": "svc",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "23ec23f0a55ea0ed",
+    "23ec23f0a55ea0ed",
+    "23ec23f0a55ea0ed",
+    "23ec23f0a55ea0ed",
+    "23ec23f0a55ea0ed",
+    "23ec23f0a55ea0ed"
+   ],
+   "error": null
+  },
+  {
+   "lane": "tsvd",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "298ddf0ad6567426",
+    "298ddf0ad6567426",
+    "298ddf0ad6567426",
+    "298ddf0ad6567426",
+    "298ddf0ad6567426",
+    "298ddf0ad6567426"
+   ],
+   "error": null
+  }
+ ]
+}

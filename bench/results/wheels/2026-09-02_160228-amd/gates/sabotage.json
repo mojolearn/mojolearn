@@ -1,0 +1,101 @@
+{
+  "cases": {
+    "baseline": {
+      "expected_import_ok": true,
+      "pass": true,
+      "returncode": 0,
+      "stderr_head": "",
+      "stderr_tail": "",
+      "stdout": "{\"vendor\": \"hip\", \"how\": \"the box probe (device nodes and driver libraries)\", \"mode\": \"identical\"}",
+      "substrings": {},
+      "vendor_reported": "hip"
+    },
+    "correct_set_removed": {
+      "expected_import_ok": false,
+      "pass": true,
+      "returncode": 1,
+      "stderr_head": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json, mojolearn; from mojolearn import _backend; print(json.dumps({'vendor': mojolearn.vendor(), 'how': _backend.vendor_how(), 'mode': mojolearn.numeric_mode()}))\n    ^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/bench/results/e1/2026-09-02_200357-mojolearn-e2-amd/diag/sabotage_scratch/correct_set_removed/mojolearn/__init__.py\", line 117, in <module>\n    _backend.select()",
+      "stderr_tail": "    libamdhip64.so.7             not loadable\n    libamdhip64.so.6             loads\n    libamdhip64.so               loads\n  MOJOLEARN_VENDOR is not set.\n\nA device node or a driver library for one of the sets above must be visible to this process. In a container that means the GPU is passed through (`--gpus all` for NVIDIA, `--device /dev/kfd --device /dev/dri` for AMD). If the device is present and this probe is wrong, MOJOLEARN_VENDOR=cuda or MOJOLEARN_VENDOR=hip picks the directory directly and the first fit reports the runtime's own error.",
+      "stdout": "",
+      "substrings": {
+        "MOJOLEARN_VENDOR": true,
+        "NO SUPPORTED GPU FOUND": true,
+        "['cuda']": true
+      },
+      "vendor_reported": null
+    },
+    "forced_vendor_without_evidence": {
+      "expected_import_ok": false,
+      "pass": true,
+      "returncode": 1,
+      "stderr_head": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json, mojolearn; from mojolearn import _backend; print(json.dumps({'vendor': mojolearn.vendor(), 'how': _backend.vendor_how(), 'mode': mojolearn.numeric_mode()}))\n    ^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/bench/results/e1/2026-09-02_200357-mojolearn-e2-amd/diag/sabotage_scratch/forced_vendor_without_evidence/mojolearn/__init__.py\", line 117, in <module>\n    _backend.select()",
+      "stderr_tail": "    /dev/nvidia0                 absent\n    libcuda.so.1                 not loadable\n    libcuda.so                   not loadable\n\nLoading the cuda set anyway can KILL THIS PROCESS rather than raise: measured 2026-08-30, forcing hip on a box with no ROCm aborts during import with no traceback, while forcing cuda on a box with no CUDA raises a normal exception at the first fit. The two are not alike and this refusal is the one that survives.\nIf the device really is present and this probe is wrong, MOJOLEARN_VENDOR_FORCE=1 proceeds and accepts that risk. Unset MOJOLEARN_VENDOR to let the probe choose.",
+      "stdout": "",
+      "substrings": {
+        "KILL THIS PROCESS": true,
+        "MOJOLEARN_VENDOR_FORCE=1": true,
+        "NO evidence": true
+      },
+      "vendor_reported": null
+    },
+    "poisoned_forced": {
+      "expected_import_ok": false,
+      "pass": true,
+      "returncode": 1,
+      "stderr_head": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json, mojolearn; from mojolearn import _backend; print(json.dumps({'vendor': mojolearn.vendor(), 'how': _backend.vendor_how(), 'mode': mojolearn.numeric_mode()}))\n    ^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/bench/results/e1/2026-09-02_200357-mojolearn-e2-amd/diag/sabotage_scratch/poisoned_forced/mojolearn/__init__.py\", line 117, in <module>\n    _backend.select()",
+      "stderr_tail": "              ~~~~~~~^^\n  File \"/root/mojolearn/bench/results/e1/2026-09-02_200357-mojolearn-e2-amd/diag/sabotage_scratch/poisoned_forced/mojolearn/_backend.py\", line 568, in _layout\n    raise ImportError(\n    ...<3 lines>...\n    )\nImportError: mojolearn: MOJOLEARN_VENDOR=cuda but this install carries no cuda set under /root/mojolearn/bench/results/e1/2026-09-02_200357-mojolearn-e2-amd/diag/sabotage_scratch/poisoned_forced/mojolearn/cuda; it carries ['hip']",
+      "stdout": "",
+      "substrings": {},
+      "vendor_reported": null
+    },
+    "poisoned_ignored": {
+      "expected_import_ok": true,
+      "pass": true,
+      "returncode": 0,
+      "stderr_head": "",
+      "stderr_tail": "",
+      "stdout": "{\"vendor\": \"hip\", \"how\": \"the box probe (device nodes and driver libraries)\", \"mode\": \"identical\"}",
+      "substrings": {},
+      "vendor_reported": "hip"
+    },
+    "tier_mislabeled": {
+      "expected_import_ok": false,
+      "pass": true,
+      "returncode": 1,
+      "stderr_head": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json, mojolearn; from mojolearn import _backend; print(json.dumps({'vendor': mojolearn.vendor(), 'how': _backend.vendor_how(), 'mode': mojolearn.numeric_mode()}))\n                                                                                                                                                  ~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/bench/results/e1/2026-09-02_200357-mojolearn-e2-amd/diag/sabotage_scratch/tier_mislabeled/mojolearn/_backend.py\", line 1071, in numeric_mode\n    raise RuntimeError(",
+      "stderr_tail": "                                                                                                                                                  ~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/bench/results/e1/2026-09-02_200357-mojolearn-e2-amd/diag/sabotage_scratch/tier_mislabeled/mojolearn/_backend.py\", line 1071, in numeric_mode\n    raise RuntimeError(\n    ...<3 lines>...\n    )\nRuntimeError: mojolearn: the loaded gbdt binary was compiled fast but the selector loaded the deterministic set -- a binary is in the wrong directory; rebuild both sets",
+      "stdout": "",
+      "substrings": {
+        "compiled fast": true
+      },
+      "vendor_reported": null
+    },
+    "wrong_label_ignored": {
+      "expected_import_ok": true,
+      "pass": true,
+      "returncode": 0,
+      "stderr_head": "",
+      "stderr_tail": "",
+      "stdout": "{\"vendor\": \"hip\", \"how\": \"the box probe (device nodes and driver libraries)\", \"mode\": \"identical\"}",
+      "substrings": {},
+      "vendor_reported": "hip"
+    },
+    "wrong_label_refused": {
+      "expected_import_ok": false,
+      "pass": true,
+      "returncode": 1,
+      "stderr_head": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json, mojolearn; from mojolearn import _backend; print(json.dumps({'vendor': mojolearn.vendor(), 'how': _backend.vendor_how(), 'mode': mojolearn.numeric_mode()}))\n    ^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/bench/results/e1/2026-09-02_200357-mojolearn-e2-amd/diag/sabotage_scratch/wrong_label_refused/mojolearn/__init__.py\", line 117, in <module>\n    _backend.select()",
+      "stderr_tail": "    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/bench/results/e1/2026-09-02_200357-mojolearn-e2-amd/diag/sabotage_scratch/wrong_label_refused/mojolearn/_backend.py\", line 685, in _check_vendor\n    raise ImportError(\n    ...<5 lines>...\n    )\nImportError: mojolearn: /root/mojolearn/bench/results/e1/2026-09-02_200357-mojolearn-e2-amd/diag/sabotage_scratch/wrong_label_refused/mojolearn/cuda/gfx942/identical/_mojolearn.so was compiled for hip but sits in the cuda set (/root/mojolearn/bench/results/e1/2026-09-02_200357-mojolearn-e2-amd/diag/sabotage_scratch/wrong_label_refused/mojolearn/cuda/gfx942); a binary is in the wrong vendor directory. The set is refused rather than loaded under a label it does not answer to. Rebuild the sets with packaging/linux/build_sets.sh on the right box and repack.",
+      "stdout": "",
+      "substrings": {
+        "compiled for hip": true,
+        "wrong vendor directory": true
+      },
+      "vendor_reported": null
+    }
+  },
+  "ok": true,
+  "other": "cuda",
+  "python": "pixi run -e gbmbench python3",
+  "vendor": "hip"
+}

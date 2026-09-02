@@ -1,0 +1,125 @@
+[17:04:10 leg_diag] 1/5 build_sets
+[17:04:10 build_sets] repo /root/mojolearn, dest /root/mojolearn/bench/results/e1/2026-09-02_170407-mojolearn-e2-nv/diag/wheels, tiers: fast deterministic identical, jobs: 3
+[17:04:10 build_sets] pixi env: gbmbench
+[17:10:57 build_sets] builds finished in 407s (rc=0)
+[17:11:02 build_sets] vendor read-back per binary:
+    fast _mojolearn cuda
+    fast _mojolearn_gbdt cuda
+    fast _mojolearn_estimators cuda
+    fast _mojolearn_rf cuda
+    fast _mojolearn_trees cuda
+    fast _mojolearn_svm cuda
+    fast _mojolearn_solver cuda
+    fast _mojolearn_metrics cuda
+    fast _mojolearn_tsa cuda
+    fast _mojolearn_linalg cuda
+    fast _mojolearn_arima cuda
+    fast _mojolearn_training cuda
+    fast _mojolearn_gp cuda
+    fast _mojolearn_mamba cuda
+    fast _mojolearn_transformer cuda
+    deterministic _mojolearn cuda
+    deterministic _mojolearn_gbdt cuda
+    deterministic _mojolearn_estimators cuda
+    deterministic _mojolearn_rf cuda
+    deterministic _mojolearn_trees cuda
+    deterministic _mojolearn_svm cuda
+    deterministic _mojolearn_solver cuda
+    deterministic _mojolearn_metrics cuda
+    deterministic _mojolearn_tsa cuda
+    deterministic _mojolearn_linalg cuda
+    deterministic _mojolearn_arima cuda
+    deterministic _mojolearn_training cuda
+    deterministic _mojolearn_gp cuda
+    deterministic _mojolearn_mamba cuda
+    deterministic _mojolearn_transformer cuda
+    identical _mojolearn cuda
+    identical _mojolearn_gbdt cuda
+    identical _mojolearn_estimators cuda
+    identical _mojolearn_rf cuda
+    identical _mojolearn_trees cuda
+    identical _mojolearn_svm cuda
+    identical _mojolearn_solver cuda
+    identical _mojolearn_metrics cuda
+    identical _mojolearn_tsa cuda
+    identical _mojolearn_linalg cuda
+    identical _mojolearn_arima cuda
+    identical _mojolearn_training cuda
+    identical _mojolearn_gp cuda
+    identical _mojolearn_mamba cuda
+    identical _mojolearn_transformer cuda
+[17:11:03 build_sets] GPU architectures embedded, per binary:
+         45 sm_90a
+[17:11:03 build_sets] architecture set: sm_90a 
+[17:11:03 build_sets] architecture: sm_90a (requested: the box GPU itself)
+[17:11:03 build_sets] vendor: cuda
+[17:11:31 build_sets] CPU ISA baseline: clean at x86-64-v3 (45 binaries)
+[17:11:38 build_sets] patchelf: /usr/bin/patchelf
+[17:11:38 build_sets] pixi env lib: /root/mojolearn/.pixi/envs/gbmbench/lib
+  closure verified: 4 libraries, nothing unresolved
+  staged 4: libKGENCompilerRTShared.so, libAsyncRTMojoBindings.so, libMSupportGlobals.so, libAsyncRTRuntimeGlobals.so
+  driver libraries left to the box: none
+  extensions 90.5 MB, runtime libraries 3.2 MB, uncompressed set 93.7 MB
+vendor=cuda
+arch=sm_90a
+gpu_archs_requested=
+build_rc=0 stage_rc=0
+build_seconds=452
+set_fast_count=15
+set_fast_bytes=31295344
+set_deterministic_count=15
+set_deterministic_bytes=30988264
+set_identical_count=15
+set_identical_bytes=28261472
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=22195824
+[17:11:42 leg_diag] 2/5 assemble the package as the wheel will lay it out
+[17:11:42 leg_diag] 3/5 gate (a): smoke, every family, every tier
+      svc              ok   23ec23f0a55ea0ed     0.0s
+      tsvd             ok   298ddf0ad6567426     0.0s
+    smoke v0.4.0 mode=fast vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+      svc              ok   23ec23f0a55ea0ed     0.0s
+      tsvd             ok   298ddf0ad6567426     0.0s
+    smoke v0.4.0 mode=deterministic vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+      svc              ok   c982ba99909e46eb     0.0s
+      tsvd             ok   eb98ef49f9c747f0     0.0s
+    smoke v0.4.0 mode=identical vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+[17:11:49 leg_diag] 4/5 gate (b): sabotage
+      baseline               PASS  rc=0  {"vendor": "cuda", "how": "the box probe (device nodes and driver libraries)", "mode": "identical"}
+      wrong_label_ignored    PASS  rc=0  {"vendor": "cuda", "how": "the box probe (device nodes and driver libraries)", "mode": "identical"}
+      forced_vendor_without_evidence PASS  rc=1  If the device really is present and this probe is wrong, MOJOLEARN_VENDOR_FORCE=1 proceeds and accepts that risk. Unset MOJOLEARN_VENDOR to let the probe c
+      wrong_label_refused    PASS  rc=1  ImportError: mojolearn: /root/mojolearn/bench/results/e1/2026-09-02_170407-mojolearn-e2-nv/diag/sabotage_scratch/wrong_label_refused/mojolearn/hip/sm_90a/identical
+      poisoned_ignored       PASS  rc=0  {"vendor": "cuda", "how": "the box probe (device nodes and driver libraries)", "mode": "identical"}
+      poisoned_forced        PASS  rc=1  ImportError: mojolearn: MOJOLEARN_VENDOR=hip but this install carries no hip set under /root/mojolearn/bench/results/e1/2026-09-02_170407-mojolearn-e2-nv/diag/sabo
+      correct_set_removed    PASS  rc=1  A device node or a driver library for one of the sets above must be visible to this process. In a container that means the GPU is passed through (`--gpus all` for 
+      tier_mislabeled        PASS  rc=1  RuntimeError: mojolearn: the loaded gbdt binary was compiled fast but the selector loaded the deterministic set -- a binary is in the wrong directory; rebuild both
+    sabotage PASS
+[17:11:51 leg_diag] 5/5 gate (d): no GPU
+      env_hidden   import rc=0 IMPORTED cuda; fit rc=-11
+      namespace    PASS
+      docker       PASS
+    nogpu PASS
+vendor=cuda  build_rc=0  smoke_rc=0  sabotage_rc=0  nogpu_rc=0
+seconds=467
+vendor=cuda
+arch=sm_90a
+gpu_archs_requested=
+build_rc=0 stage_rc=0
+build_seconds=452
+set_fast_count=15
+set_fast_bytes=31295344
+set_deterministic_count=15
+set_deterministic_bytes=30988264
+set_identical_count=15
+set_identical_bytes=28261472
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=22195824
+smoke[fast]: smoke v0.4.0 mode=fast vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+smoke[deterministic]: smoke v0.4.0 mode=deterministic vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+smoke[identical]: smoke v0.4.0 mode=identical vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+sabotage: sabotage PASS
+nogpu: nogpu PASS

@@ -1,0 +1,80 @@
+start 2026-09-02T20:41:09Z
+!! MOJOLEARN_GPU_ARCHS=sm_120a (--target-accelerator); read the architecture back out of the built .so
+Imported from /root/mojolearn/bindings/_mojolearn_training.mojo:67:
+Imported from ./training/estimator.mojo:98:
+./training/checks/loss.mojo:503:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_training.mojo:67:
+Imported from ./training/estimator.mojo:98:
+./training/checks/loss.mojo:508:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var other = red[tid + step]
+                        ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_training.mojo:67:
+Imported from ./training/estimator.mojo:98:
+./training/checks/loss.mojo:512:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if other > red[tid]:
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_training.mojo:67:
+Imported from ./training/estimator.mojo:98:
+./training/checks/loss.mojo:513:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    red[tid] = other
+                    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_training.mojo:67:
+Imported from ./training/estimator.mojo:98:
+./training/checks/loss.mojo:515:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = identical_fmax(red[tid], other)
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_training.mojo:67:
+Imported from ./training/estimator.mojo:98:
+./training/checks/loss.mojo:515:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = identical_fmax(red[tid], other)
+                                          ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_training.mojo:67:
+Imported from ./training/estimator.mojo:98:
+./training/checks/loss.mojo:518:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var total = red[0]
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_training.mojo:202:19: warning: assignment to 'n_total' was never used; assign to '_' instead?
+    var n_total = 0
+                  ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:256:19: warning: assignment to 'n_total' was never used; assign to '_' instead?
+    var n_total = 0
+                  ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:332:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+Included from /root/mojolearn/bindings/_mojolearn_training.mojo:67:
+Included from ./training/estimator.mojo:111:
+./training/checks/optimizer.mojo:560:20: warning: assignment to 'm' was never used; assign to '_' instead?
+    var m = Float32(0.0)
+                   ^
+Included from /root/mojolearn/bindings/_mojolearn_training.mojo:67:
+Included from ./training/estimator.mojo:111:
+./training/checks/optimizer.mojo:570:20: warning: assignment to 'v' was never used; assign to '_' instead?
+    var v = Float32(0.0)
+                   ^
+Included from /root/mojolearn/bindings/_mojolearn_training.mojo:67:
+Included from ./training/estimator.mojo:111:
+./training/checks/optimizer.mojo:590:21: warning: assignment to 'dn' was never used; assign to '_' instead?
+    var dn = Float32(0.0)
+                    ^
+Included from /root/mojolearn/bindings/_mojolearn_training.mojo:67:
+Included from ./training/estimator.mojo:111:
+./training/checks/optimizer.mojo:591:20: warning: assignment to 'q' was never used; assign to '_' instead?
+    var q = Float32(0.0)
+                   ^
+Included from /root/mojolearn/bindings/_mojolearn_training.mojo:67:
+Included from ./training/estimator.mojo:111:
+./training/checks/optimizer.mojo:638:24: warning: assignment to 'p_out' was never used; assign to '_' instead?
+    var p_out = Float32(0.0)
+                       ^
+built python/mojolearn/deterministic/_mojolearn_training.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+end 2026-09-02T20:41:30Z OK

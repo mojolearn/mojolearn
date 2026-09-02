@@ -48,6 +48,42 @@ docstrings and is not re-argued here; what each lane function below records
 is where its fixture came from, line by line, so a reader can check the port
 against the original without leaving the file.
 
+AND THREE TREE LANES, ADDED THE SAME DAY, BECAUSE THERE WERE NONE. The
+twelve lanes above cover clustering, neighbours, density, linkage, svm,
+metrics and linear algebra and NOT ONE OF THEM FITS A TREE. Decision trees
+are the largest certified family in this project -- 109 of 180
+bitwise-identical training configurations -- and they are the workloads the
+performance section leads with, so until today the one question this harness
+exists to answer had never been asked of them:
+
+    gbdt   checks/estimation_bench.mojo:76-81  `gbdt.train.train`, symmetric
+                                               (oblivious) boosting, Logloss
+    rf     ensemble/bench/rf_bench.mojo:319    `fit_forest[ClsObj]`, the
+                                               random forest
+    et     extratrees/bench/fit_once.mojo:153  `train_forest_classification_device`,
+                                               extremely randomized trees
+
+These three DIFFER FROM EVERY LANE ABOVE IN ONE WAY THAT MATTERS TO THE SIZE
+TABLE. [[mojolearn-large-data-timing-floor]] is a hard rule -- tree
+performance is never measured or decided below 1,000,000 rows -- so their
+defaults are 1,000,000 rows and not the 2048, 4096 or 20000 rows the six
+Section 7 lanes default to. A 20000-row tree fit is not a small price, it is
+an inadmissible one, and the 50,000-row symmetric window that was caught and
+killed on 2026-09-01 (`bench/results/ab_large_2026-09-01/RESULTS.md:3-7`,
+nothing from it votes anywhere) is why the rule is a rule. Each lane
+therefore takes TWO knobs, rows AND trees, and it is the TREE count that was
+dialed to bring one fit into the seconds this harness wants. Each lane
+function says which of its numbers came from a measured window and which
+were reasoned from one.
+
+They also build their own fixtures rather than importing one. Every fixture
+above is either imported from the lane it prices or transcribed from a price
+main that already existed; there is no tree price main to port, and the tree
+benches that do exist read HIGGS or epsilon from `~/.cache/mojolearn`, which
+a rented box has not staged. So all three fixtures are built in the lane out
+of this file's own `_price_u01`, with an axis-aligned label whose reason is
+argued at `_tree_hits3` and is a TIMING reason, not an accuracy one.
+
 THE PROTOCOL IS THIS FILE'S, NOT THE TWO SOURCES'. They disagree with each
 other and both disagree with this harness, so neither is carried over.
 `bench/identity_price_main.mojo` runs `REPEATS = 3` (`:63`) with NO untimed
@@ -83,6 +119,36 @@ larger step named beside it for a datacenter box:
     gram    MOJOLEARN_LANES_PRICE_GRAM_ROWS     1000000          8000000
     nt      MOJOLEARN_LANES_PRICE_NT_ROWS       4096             262144
     gemv    MOJOLEARN_LANES_PRICE_GEMV_DIM      128              8192
+
+and the three tree lanes, whose row default is a FLOOR rather than a
+published Apple size, take a tree count beside it:
+
+    lane    variable                            default (Apple)  datacenter step
+    gbdt    MOJOLEARN_LANES_PRICE_GBDT_ROWS     1000000          2000000
+            MOJOLEARN_LANES_PRICE_GBDT_TREES    20               60
+    rf      MOJOLEARN_LANES_PRICE_RF_ROWS       1000000          2000000
+            MOJOLEARN_LANES_PRICE_RF_TREES      4                16
+    et      MOJOLEARN_LANES_PRICE_ET_ROWS       1000000          2000000
+            MOJOLEARN_LANES_PRICE_ET_TREES      20               60
+
+THE TREE ROW DEFAULTS ARE NOT NEGOTIABLE DOWNWARD and they are not a fixture
+that was sized for an M4. 1,000,000 is [[mojolearn-large-data-timing-floor]]'s
+floor and the smaller sizes the twelve lanes above use would be meaningless
+here for a reason that is stronger than "too small to separate": a tree fit
+below the floor is a DIFFERENT PROBLEM, not a cheaper one. Under the floor
+the per-tree fixed costs (quantization, border building, pool setup, the
+per-level launch tax) dominate the per-row work, so the measurement prices
+the harness's arrival rather than the arm. `bench/results/PERF_2026-08-20_fixed-cost.md`
+puts the symmetric arm at 9.43 ms fixed plus 18.5 us per 1000 rows, which at
+20000 rows is 96% fixed cost and at 1,000,000 rows is 34%. Every default in
+the tree rows is taken from a window this tree has already run at the floor:
+et's 28 x 20 trees x depth 12 at 1M and 2M is verbatim
+`bench/results/ab_large_2026-09-01/RESULTS.md:14-16`, gbdt's 100 columns at
+depth 6 is `checks/estimation_bench.mojo:60` with that window's patched
+`N_ROWS`, and rf's 50 columns at depth 12 and 128 bins is
+`ensemble/bench/rf_bench.mojo:62-64` at that window's patched row count. Only
+the TREE counts were dialed, and only downward, and each lane says by how
+much and against which measured seconds.
 
 The right-hand column is a STARTING POINT, not a measurement: it is the step
 to try first, and if its band still straddles 1.0 the answer is a bigger
@@ -130,11 +196,17 @@ LINE FORMAT, seven whitespace fields, parsed by `tools/lanes_price.sh`:
 
 Environment:
     MOJOLEARN_LANES_PRICE_LANE    cd | kde | linkage | svm | metrics | gemm |
-                                  kmeans | knn | dbscan | gram | nt | gemv (required)
+                                  kmeans | knn | dbscan | gram | nt | gemv |
+                                  gbdt | rf | et (required)
     MOJOLEARN_LANES_PRICE_ROUNDS  timed rounds in this process (default 5; the
                                   script sets 1 and alternates processes instead)
     MOJOLEARN_LANES_PRICE_SMOKE   1 -> tiny sizes, for proving the build, the
-                                  witness and the hash; never for a number
+                                  witness and the hash; NEVER FOR A NUMBER,
+                                  and on the three tree lanes never for a
+                                  number twice over: a SMOKE tree fit is 4096
+                                  rows, which is below the 1,000,000-row floor
+                                  those lanes exist under, so it is not a
+                                  small price but an inadmissible one
     MOJOLEARN_LANES_PRICE_GEMM_SHAPE  row of bench/gemm_shapes.mojo (default 6,
                                   kmeans.dist.4096x64x64, the E3 table's shape)
     MOJOLEARN_LANES_PRICE_SVM_FIXTURE index into svm `all_fixtures()` (default 1, F2.xor)
@@ -145,6 +217,12 @@ Environment:
     MOJOLEARN_LANES_PRICE_GRAM_ROWS   k rows for the gram lane (default 1000000)
     MOJOLEARN_LANES_PRICE_NT_ROWS     m rows for the nt lane (default 4096)
     MOJOLEARN_LANES_PRICE_GEMV_DIM    the square m = k for the gemv lane (default 128)
+    MOJOLEARN_LANES_PRICE_GBDT_ROWS   n rows for the gbdt lane (default 1000000)
+    MOJOLEARN_LANES_PRICE_GBDT_TREES  n_estimators for the gbdt lane (default 20)
+    MOJOLEARN_LANES_PRICE_RF_ROWS     n rows for the rf lane (default 1000000)
+    MOJOLEARN_LANES_PRICE_RF_TREES    n_trees for the rf lane (default 4)
+    MOJOLEARN_LANES_PRICE_ET_ROWS     n rows for the et lane (default 1000000)
+    MOJOLEARN_LANES_PRICE_ET_TREES    n_trees for the et lane (default 20)
 
 No pixi task. No number printed by this file is a measurement until
 `bench/LANES_PRICE.md`'s clean-window procedure produced it.
@@ -244,6 +322,36 @@ from neighbors.impl.neighbors.detail.knn_brute_force import (
 
 # ---- gram / nt / gemv (bench/linalg_price_main.mojo's arms) -----------------
 from core.gemm import gemm_nt, gemm_tn, gemv_n
+
+# ---- gbdt / rf / et (the tree families; no price main existed to port) -----
+# `DecisionTreeParams` is spelled once under `ensemble/` and once under
+# `extratrees/` and the two are DIFFERENT structs (the extratrees one carries
+# `max_leaf_nodes`, DEVIATION 466, and its `__init__` defaults `max_depth` to
+# 16). They are aliased apart here so neither lane can be handed the other
+# lane's parameter block by an import that merely looks right.
+from ensemble.decisiontree.batched_levelalgo.bins import ClassificationBin
+from ensemble.decisiontree.batched_levelalgo.objectives import (
+    ClassificationObjectiveFunction,
+)
+from ensemble.decisiontree.decisiontree import GINI as RF_GINI
+from ensemble.decisiontree.decisiontree import (
+    DecisionTreeParams as RfTreeParams,
+)
+from ensemble.randomforest import RF_params, fit_forest
+from extratrees.estimator import (
+    MAX_FEATURES_SQRT,
+    count_to_ratio,
+    resolve_max_features,
+)
+from extratrees.impl.decisiontree.batched_levelalgo.builder import (
+    train_forest_classification_device,
+    upload_dataset,
+)
+from extratrees.impl.decisiontree.decisiontree import (
+    DecisionTreeParams as EtTreeParams,
+)
+from extratrees.impl.randomforest.randomforest import class_ids_for
+from gbdt.train import train as gbdt_train
 
 
 def _mode_name() -> String:
@@ -1336,6 +1444,460 @@ def run_gemv(ctx: DeviceContext, smoke: Bool, rounds: Int) raises:
 
 
 # ============================================================================
+# gbdt, rf, et -- the three tree families, added 2026-09-02
+# ============================================================================
+
+#: `fit_forest`'s objective, spelled exactly as
+#: `ensemble/bench/rf_bench.mojo:57` spells it (`comptime ClsObj =
+#: ClassificationObjectiveFunction[DT, LT, ClassificationBin]` at DT float32,
+#: LT int32). The forest loop is generic over the objective, so this alias is
+#: what picks the CLASSIFICATION arm.
+comptime RF_CLS_OBJ = ClassificationObjectiveFunction[
+    DType.float32, DType.int32, ClassificationBin
+]
+
+
+def _tree_hits3(row: Int, salt: Int) -> Int:
+    """How many of the first three features of `row` sit above their midpoint.
+
+    THE LABEL IS AXIS-ALIGNED ON PURPOSE, and the argument is
+    `ensemble/bench/rf_bench.mojo:277-289`'s, which is worth repeating here
+    because it is a TIMING argument and not only an accuracy one. That file's
+    first fixture was twelve diagonal bands; held-out accuracy came out at the
+    class baseline for BOTH arms, so neither implementation learned anything --
+    and the two arms were building trees of very different SIZES while learning
+    nothing. A price is a ratio of two fits, so a fixture with no signal does
+    not merely make the accuracy vacuous, it lets the two modes build different
+    amounts of tree and then reports the difference as a price. A rule three
+    levels of any of these trees can represent exactly cannot do that.
+
+    `_price_u01` is a pure function of `(row, feature, salt)`, so recomputing
+    the three columns here gives the SAME BITS the fill loop stored, with no
+    second pass over the fixture.
+    """
+    var hits = 0
+    for f in range(3):
+        if _price_u01(row, f, salt) >= Float32(0.5):
+            hits += 1
+    return hits
+
+
+def run_gbdt(ctx: DeviceContext, smoke: Bool, rounds: Int) raises:
+    """`checks/estimation_bench.mojo:76-81`'s fit: `gbdt.train.train` at
+    `border_count` 254, `learning_rate` 0.1, `l2_leaf_reg` 1.0, Logloss with
+    `leaf_estimation_iterations` 10 (their `catboost_options.cpp:157-164`
+    default), depth 6, on 100 raw float32 columns. `grow_policy` is passed
+    EXPLICITLY as `SymmetricTree` although that is already the default
+    (`gbdt/train.mojo:511`): this lane is named for the growth policy, and a
+    lane whose identity depends on a default nobody restates is a lane that
+    silently changes meaning when the default does.
+
+    WHY 100 FEATURES AT DEPTH 6 AND NOT SOMETHING ROUNDER. That is the shape
+    the symmetric lane's own 1M window ran (`N_FEATURES = 100`,
+    `checks/estimation_bench.mojo:60`, with `N_ROWS` patched to 1000000 and
+    then 2000000 -- `bench/results/ab_large_2026-09-01/RESULTS.md:10-13`), and
+    the d6 cells there are the only per-tree symmetric costs this tree has
+    MEASURED at the floor. The cell this lane's arm actually sits in is d6
+    ll10 -- 273.2 and 257.5 ms/tree at HEAD, `RESULTS.md:57` -- which at the
+    default 20 trees predicts a fit near 5.3 s on the M4, in the band this
+    harness wants. The d6 RMSE cell beside it (170.3 / 166.4, `:56`) is the
+    same fit without the estimation stage, quoted only so a reader can see how
+    much of this lane's seconds the Newton walker is.
+
+    WHAT THE ROUND INCLUDES, said plainly because it dilutes the ratio.
+    `train` is the RAW-FLOATS door: it builds the borders and quantizes into
+    the compressed index before the boosting loop starts
+    (`_build_cindex_from_floats`, `gbdt/train.mojo:155`), and all of that is
+    inside the clock. It is inside the clock in BOTH modes, so the comparison
+    is still like for like, but the identical pins live in the boosting loop
+    and the quantization is a constant added to both arms, which pulls the
+    ratio toward 1.0. The tighter arm exists -- `fit`
+    (`gbdt/methods/doc_parallel_boosting.mojo:2369`) takes an already-built
+    compressed index -- and is the lane to add if this row turns out not to
+    separate. It is NOT taken here because building that index means
+    transcribing `build_layout` plus the binarize kernel launch
+    (`bench/interleaved/catboost_interleaved.mojo:56-90`) into a harness that
+    is supposed to mirror call sites rather than re-spell them.
+
+    Rows come from `MOJOLEARN_LANES_PRICE_GBDT_ROWS`, default 1000000, with
+    2000000 the datacenter step; trees from `MOJOLEARN_LANES_PRICE_GBDT_TREES`,
+    default 20, 60 the datacenter step. THE ROW DEFAULT IS A FLOOR AND NOT A
+    TUNING CHOICE: [[mojolearn-large-data-timing-floor]] forbids measuring or
+    deciding tree performance below 1,000,000 rows, so the 2048- and
+    20000-row defaults the kmeans, knn and dbscan lanes above use would be
+    inadmissible here even though they are the published sizes there. A
+    50,000-row symmetric window was caught and killed on 2026-09-01 for
+    exactly this and nothing from it votes anywhere (`RESULTS.md:3-7`). The
+    TREE count is the axis that was moved to fit the fit into a few seconds
+    instead, because a boosted round is very nearly a fixed cost repeated --
+    the per-tree ms/tree figure quoted above is what makes that a subtraction
+    the lane already trusts -- whereas the row count changes what the kernels
+    are doing.
+
+    MEMORY. The fixture is a HOST `List[Float32]` of `n * 100` because that is
+    what `train` takes: 400 MB at the default and 800 MB at the datacenter
+    step, before the device copy of the compressed index. The list is
+    PRE-SIZED and index-assigned rather than appended to, and filled
+    feature-major so the stores are contiguous; `checks/estimation_bench.mojo`
+    appends, which is fine at 50,000 rows and is not fine at a million.
+    """
+    var n = _env_int(
+        "MOJOLEARN_LANES_PRICE_GBDT_ROWS", 4096 if smoke else 1000000
+    )
+    var trees = _env_int(
+        "MOJOLEARN_LANES_PRICE_GBDT_TREES", 2 if smoke else 20
+    )
+    var d = 100
+    var depth = 6
+
+    var x = List[Float32](length=n * d, fill=Float32(0.0))
+    var y = List[Float32](length=n, fill=Float32(0.0))
+    for f in range(d):
+        for i in range(n):
+            x[f * n + i] = _price_u01(i, f, 41)
+    for i in range(n):
+        y[i] = Float32(1.0) if _tree_hits3(i, 41) >= 2 else Float32(0.0)
+
+    var ledger = Ledger(
+        "gbdt",
+        String(n) + "x" + String(d) + ".t" + String(trees) + ".d"
+        + String(depth),
+    )
+    for r in range(rounds + 1):
+        # Nothing to re-initialize before the clock. `train` takes its two
+        # host lists by value and returns a FRESH `TrainedModel` every call,
+        # so a round cannot continue the round before it the way the cd lane's
+        # `coef` or the kmeans lane's `cent` can. If that ever stops being
+        # true the in-process verdict below is what says so.
+        var t0 = perf_counter_ns()
+        var tm = gbdt_train(
+            ctx, x, y, n, d,
+            border_count=254, n_estimators=trees, max_depth=depth,
+            learning_rate=Float32(0.1), l2_leaf_reg=Float32(1.0),
+            loss=String("Logloss"), leaf_estimation_iterations=10,
+            grow_policy=String("SymmetricTree"),
+        )
+        ctx.synchronize()
+        var t1 = perf_counter_ns()
+        # THE MODEL, NOT A SUMMARY. An oblivious tree IS its split list plus
+        # its leaf vector (`gbdt/models/oblivious_model.mojo:113-141`), and
+        # both are host lists by the time `train` returns, so the whole
+        # trained state is reachable with no device readback at all. The
+        # per-iteration learn curve goes in after it because a fit that
+        # produced the same trees by a different route is a finding this lane
+        # should print rather than hide.
+        var h = _fold_f64(FNV_OFFSET, tm.model.bias)
+        h = _fold_word(h, UInt64(len(tm.model.weak_models)), 4)
+        for t in range(len(tm.model.weak_models)):
+            for s in range(len(tm.model.weak_models[t].structure.splits)):
+                h = _fold_i32(
+                    h, tm.model.weak_models[t].structure.splits[s].feature_id
+                )
+                h = _fold_i32(
+                    h, tm.model.weak_models[t].structure.splits[s].bin_idx
+                )
+                h = _fold_i32(
+                    h, tm.model.weak_models[t].structure.splits[s].split_type
+                )
+            for v in range(len(tm.model.weak_models[t].leaf_values)):
+                h = _fold_f32(h, tm.model.weak_models[t].leaf_values[v])
+        for i in range(len(tm.losses)):
+            h = _fold_f64(h, tm.losses[i])
+        ledger.emit("warmup" if r == 0 else String(r), t1 - t0, h)
+        _ = tm^
+    ledger.verdict()
+    _ = x^
+    _ = y^
+
+
+def run_rf(ctx: DeviceContext, smoke: Bool, rounds: Int) raises:
+    """`ensemble/bench/rf_bench.mojo:319-321`'s fit: `fit_forest[ClsObj]` with
+    that file's `_params` block (`:107-129`) -- bootstrap on, `max_samples`
+    1.0, seed 20260821, `n_streams` 4, depth 12, `max_features` 1.0,
+    `max_n_bins` 128, gini, `max_batch_size` 4096 -- on 50 raw float32
+    columns and four classes, column-major on the device.
+
+    `n_streams` STAYS AT 4 AND IS NOT A KNOB. It is their Python default
+    (`randomforestclassifier.py:94`) and the pipelined forest loop's output is
+    bit-identical at any value since DEVIATION 117, so moving it would change
+    the seconds without changing the answer -- which is the one thing a price
+    lane must not let a size knob do.
+
+    Rows come from `MOJOLEARN_LANES_PRICE_RF_ROWS`, default 1000000, with
+    2000000 the datacenter step; trees from `MOJOLEARN_LANES_PRICE_RF_TREES`,
+    default 4, 16 the datacenter step. The 1,000,000 floor is
+    [[mojolearn-large-data-timing-floor]]'s and is argued in `run_gbdt` above;
+    the in-tree arms of `rf_bench.mojo` are `rf@100000` and `rf@500000`
+    (`:661`, `:663`) and BOTH are below it, which is why this lane does not
+    inherit its row count from them. It inherits the 1M/2M shape the RF lane
+    actually measured at, which was a harness-only patch of that same file
+    (`bench/results/ab_large_2026-09-01/RESULTS.md:17-19`).
+
+    WHY FOUR TREES WHEN THAT WINDOW RAN THIRTY. Because that window's fits
+    took 22.3 to 26.4 SECONDS each (`RESULTS.md:28-35`, 30 trees) and
+    `tools/lanes_price.sh` at its default ROUNDS runs twenty fits (five legs
+    per mode, a warm-up and a timed round in each), which is eight minutes of
+    fitting in this one lane before either build. A forest is `n_trees`
+    independent trees with one shared quantile pass in front of them, so the
+    tree count is very nearly a repetition axis: four of them still take about
+    3 s at 1,000,000 rows on the M4 by that same window's per-tree figure, and
+    the whole lane comes back inside a minute. The ROWS are what may not be
+    cut, and they are not cut.
+    """
+    var n = _env_int(
+        "MOJOLEARN_LANES_PRICE_RF_ROWS", 4096 if smoke else 1000000
+    )
+    var trees = _env_int("MOJOLEARN_LANES_PRICE_RF_TREES", 2 if smoke else 4)
+    var d = 50
+    var n_classes = 4
+    var depth = 12
+    var n_bins = 128
+
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](n * d)
+    var hy = ctx.enqueue_create_host_buffer[DType.int32](n)
+    ctx.synchronize()
+    # Filled FEATURE-MAJOR although the layout is column-major either way:
+    # `rf_bench.mojo` walks rows outside and columns inside, which strides
+    # every store across a 200 MB buffer. `_price_u01(i, f, .)` does not care
+    # which order it is asked in, so the bits are the same and the fill is
+    # contiguous.
+    for f in range(d):
+        for i in range(n):
+            hx.unsafe_ptr().unsafe_store(f * n + i, _price_u01(i, f, 43))
+    for i in range(n):
+        hy.unsafe_ptr().unsafe_store(i, Int32(_tree_hits3(i, 43)))
+
+    var dx = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var dy = ctx.enqueue_create_buffer[DType.int32](n)
+    # A ONE-ELEMENT PLACEHOLDER, which is what the entry wants. Unweighted
+    # fits read their weights from `sample_weight_host` and never from this
+    # buffer; `rf_bench.mojo:312` allocates exactly one element for the same
+    # reason, and the binding does the same and says so
+    # (`bindings/_mojolearn_rf.mojo:322-325`).
+    var dsw = ctx.enqueue_create_buffer[DType.float32](1)
+    ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
+    ctx.synchronize()
+
+    var ledger = Ledger(
+        "rf",
+        String(n) + "x" + String(d) + ".t" + String(trees) + ".d"
+        + String(depth) + ".b" + String(n_bins),
+    )
+    for r in range(rounds + 1):
+        # Rebuilt every round rather than hoisted, because `fit_forest` takes
+        # it `mut` (`ensemble/randomforest.mojo:2699`) and a round that
+        # inherited a mutated parameter block would be a different fit wearing
+        # the same label. This is the same reasoning the kmeans lane applies
+        # to its `cent` seed, and it costs nothing here: the block is a
+        # handful of scalars built on the host outside the clock.
+        var p = RF_params(
+            n_trees=Int32(trees),
+            bootstrap=True,
+            max_samples=Float32(1.0),
+            seed=UInt64(20260821),
+            n_streams=Int32(4),
+            tree_params=RfTreeParams(
+                max_depth=Int32(depth),
+                max_leaves=Int32(-1),
+                max_features=Float32(1.0),
+                max_n_bins=Int32(n_bins),
+                min_samples_leaf=Int32(1),
+                min_samples_split=Int32(2),
+                split_criterion=RF_GINI,
+                min_impurity_decrease=Float32(0.0),
+                max_batch_size=Int32(4096),
+            ),
+        )
+        var t0 = perf_counter_ns()
+        var forest = fit_forest[RF_CLS_OBJ](
+            ctx, dx, dy, dsw, n, d, n_classes, p
+        )
+        ctx.synchronize()
+        var t1 = perf_counter_ns()
+        # DEVIATION 401's two identity checkpoints per tree, in its field
+        # order (`ensemble/randomforest.mojo:2645-2687`): the STRUCTURE
+        # (column, threshold bits, metric bits, left child, instance count)
+        # and then `vector_leaf`. Field by field and never as raw struct
+        # bytes, because the struct has padding; that is identity_trace's
+        # rule and the reason the fold is spelled out rather than memcpy'd.
+        # Every one of those is a HOST list by the time the fit returns, so
+        # this whole hash costs no device readback.
+        #
+        # `train_time` IS DELIBERATELY NOT IN IT. It is a member of this
+        # lane's `TreeMetaDataNode` (`ensemble/decisiontree/decisiontree.mojo`)
+        # and it is a WALL CLOCK, so folding it in would make every round
+        # disagree with every other round and the harness would report
+        # HASH-MOVED -- a false contract violation under IDENTICAL, raised
+        # by the harness's own instrument rather than by the arm.
+        var h = FNV_OFFSET
+        for t in range(len(forest.trees)):
+            h = _fold_i32(h, forest.trees[t].depth_counter)
+            h = _fold_i32(h, forest.trees[t].leaf_counter)
+            h = _fold_word(h, UInt64(len(forest.trees[t].sparsetree)), 4)
+            for i in range(len(forest.trees[t].sparsetree)):
+                h = _fold_i32(h, forest.trees[t].sparsetree[i].ColumnId())
+                h = _fold_f32(h, forest.trees[t].sparsetree[i].QueryValue())
+                h = _fold_f32(h, forest.trees[t].sparsetree[i].BestMetric())
+                # `LeftChildId()` hands back an Int64 and -1 IS the leaf test,
+                # so the widen sign-extends to all ones
+                # (`[[mojo-int-widening-sign-extends]]`). Masked to 32 bits
+                # AFTER the widen, which is what `_fold_i32` does internally
+                # and what `_record_tree` does at its own call site.
+                h = _fold_word(
+                    h,
+                    UInt64(Int(forest.trees[t].sparsetree[i].LeftChildId()))
+                    & UInt64(0xFFFFFFFF),
+                    4,
+                )
+                h = _fold_i32(h, forest.trees[t].sparsetree[i].InstanceCount())
+            for i in range(len(forest.trees[t].vector_leaf)):
+                h = _fold_f32(h, forest.trees[t].vector_leaf[i])
+        ledger.emit("warmup" if r == 0 else String(r), t1 - t0, h)
+        _ = forest^
+    ledger.verdict()
+    _ = hx^
+    _ = hy^
+    _ = dx^
+    _ = dy^
+    _ = dsw^
+
+
+def run_et(ctx: DeviceContext, smoke: Bool, rounds: Int) raises:
+    """`extratrees/bench/fit_once.mojo:153-155`'s fit:
+    `train_forest_classification_device` on a `DeviceDataset` uploaded ONCE
+    before the loop (DEVIATION 184 is the reason that upload is a separate
+    entry at all), `max_features` sqrt, seed 0x0F17, depth 12, 28 columns, two
+    classes.
+
+    THE UPLOAD IS OUTSIDE THE CLOCK AND THAT IS DELIBERATE. The estimator door
+    `fit_extra_trees_classifier_device` (`extratrees/estimator.mojo:529`) is
+    the shipped public entry, but it uploads the matrix on every call, so a
+    round taken through it would time a 112 MB host-to-device copy alongside
+    the fit in both modes. `fit_once.mojo` is also the driver the lane's own
+    1M and 2M runs went through, so this is the call whose seconds the tree
+    already has numbers for.
+
+    Rows come from `MOJOLEARN_LANES_PRICE_ET_ROWS`, default 1000000, with
+    2000000 the datacenter step; trees from `MOJOLEARN_LANES_PRICE_ET_TREES`,
+    default 20, 60 the datacenter step. The floor is
+    [[mojolearn-large-data-timing-floor]]'s 1,000,000 rows, argued in
+    `run_gbdt` above. UNLIKE the other two tree lanes this one keeps the tree
+    count its measured window used: 28 features, 20 trees, depth 12, sqrt at
+    1M and 2M rows is exactly the ET arm of
+    `bench/results/ab_large_2026-09-01/RESULTS.md:14-16`, and it came out at
+    5.9 to 6.3 s per fit at 1M and 12.1 to 12.2 s at 2M (`:74-75`). Nothing
+    had to be dialed back to reach a few seconds, so nothing was.
+
+    The published ET profile shape is 100 trees at depth 16 (11.8 s per fit on
+    the M4, `extratrees/DEVIATIONS.md:4182`) and it is NOT the default here.
+    `tools/lanes_price.sh` at its default ROUNDS runs five legs per mode with
+    a warm-up and a timed round in each, which is twenty fits: about four
+    minutes of fitting at the profile shape against about two at this one, for
+    the same kernels run fewer times. Two minutes is worth having and four is
+    not worth spending, and neither number is the reason the rows stay at a
+    million.
+    """
+    var n = _env_int(
+        "MOJOLEARN_LANES_PRICE_ET_ROWS", 4096 if smoke else 1000000
+    )
+    var trees = _env_int("MOJOLEARN_LANES_PRICE_ET_TREES", 2 if smoke else 20)
+    var d = 28
+    var n_classes = 2
+    var depth = 12
+
+    var xcol = List[Float32](length=n * d, fill=Float32(0.0))
+    var lf = List[Float32](length=n, fill=Float32(0.0))
+    for f in range(d):
+        for i in range(n):
+            xcol[f * n + i] = _price_u01(i, f, 47)
+    for i in range(n):
+        lf[i] = Float32(1.0) if _tree_hits3(i, 47) >= 2 else Float32(0.0)
+    # `class_ids_for` is the hoisted float-to-int truncation the device
+    # trainer requires (DEVIATION 186); `fit_once.mojo:113` calls it in the
+    # same place, before the upload and outside every clock.
+    var ids = class_ids_for(lf, Int32(n), Int32(n_classes))
+    var dev = upload_dataset(
+        ctx, xcol, ids, Int32(n), Int32(d), Int32(n_classes)
+    )
+
+    var params = EtTreeParams()
+    params.max_depth = Int32(depth)
+    # `fit_once.mojo:122-125`, with `max_features_code("sqrt", n_feat)` folded
+    # to the constant it returns (`extratrees/bench/bench_data.mojo:153-154`)
+    # so this file does not import a helper whose only job is parsing an
+    # argv string. The ratio, not the count, is what the struct holds, and
+    # `count_to_ratio` is what lands it in the middle of the bucket that
+    # truncates back (`extratrees/estimator.mojo:204-222`).
+    params.max_features = count_to_ratio(
+        resolve_max_features(MAX_FEATURES_SQRT, 0.0, d), d
+    )
+    var tree_ids = List[Int32]()
+    for t in range(trees):
+        tree_ids.append(Int32(t))
+    var seed = UInt64(0x0F17)
+
+    var ledger = Ledger(
+        "et",
+        String(n) + "x" + String(d) + ".t" + String(trees) + ".d"
+        + String(depth) + ".sqrt",
+    )
+    for r in range(rounds + 1):
+        var t0 = perf_counter_ns()
+        # `dataset` is taken `mut` (`builder.mojo:3570`) even though the
+        # matrix is immutable, so the dataset is NOT re-uploaded between
+        # rounds and every round therefore reads whatever the round before it
+        # left. That is the same bet the kmeans lane takes on `x` and `w`, and
+        # the same witness catches it: if a round mutated the data the
+        # in-process verdict below would print HASH-MOVED, which is exactly
+        # how the cd lane's in-place mutation was found.
+        var forest = train_forest_classification_device(
+            ctx, dev, params, tree_ids, seed
+        )
+        ctx.synchronize()
+        var t1 = perf_counter_ns()
+        # The SAME fold as the rf lane's, in the same field order, and it is
+        # written out a second time rather than shared because the two lanes'
+        # `TreeMetaDataNode` and `SparseTreeNode` are DIFFERENT STRUCTS in
+        # different packages (`extratrees/impl/decisiontree/flatnode.mojo:313`
+        # against `ensemble/decisiontree/decisiontree.mojo:424`) that happen
+        # to agree on their accessors. A shared helper would have to be
+        # generic over both, which would assert a relationship between two
+        # ports that this file has no business asserting.
+        #
+        # This lane's node type has NO `train_time`, so the rf lane's
+        # exclusion has nothing to exclude here; the field list is otherwise
+        # identical and is `extratrees/bench/batched_ab.mojo:52-68`'s
+        # `forest_digest` plus the metric.
+        var h = FNV_OFFSET
+        for t in range(len(forest)):
+            h = _fold_i32(h, forest[t].depth_counter)
+            h = _fold_i32(h, forest[t].leaf_counter)
+            h = _fold_word(h, UInt64(forest[t].num_nodes()), 4)
+            for i in range(forest[t].num_nodes()):
+                h = _fold_i32(h, forest[t].sparsetree[i].ColumnId())
+                h = _fold_f32(h, forest[t].sparsetree[i].QueryValue())
+                h = _fold_f32(h, forest[t].sparsetree[i].BestMetric())
+                h = _fold_word(
+                    h,
+                    UInt64(Int(forest[t].sparsetree[i].LeftChildId()))
+                    & UInt64(0xFFFFFFFF),
+                    4,
+                )
+                h = _fold_i32(h, forest[t].sparsetree[i].InstanceCount())
+            for i in range(len(forest[t].vector_leaf)):
+                h = _fold_f32(h, forest[t].vector_leaf[i])
+        ledger.emit("warmup" if r == 0 else String(r), t1 - t0, h)
+        _ = forest^
+    ledger.verdict()
+    _ = xcol^
+    _ = lf^
+    _ = ids^
+    _ = tree_ids^
+    _ = dev^
+
+
+# ============================================================================
 # main
 # ============================================================================
 
@@ -1376,10 +1938,16 @@ def main() raises:
         run_nt(ctx, smoke, rounds)
     elif lane == "gemv":
         run_gemv(ctx, smoke, rounds)
+    elif lane == "gbdt":
+        run_gbdt(ctx, smoke, rounds)
+    elif lane == "rf":
+        run_rf(ctx, smoke, rounds)
+    elif lane == "et":
+        run_et(ctx, smoke, rounds)
     else:
         raise Error(
             "lanes_price: MOJOLEARN_LANES_PRICE_LANE must be one of"
-            " cd kde linkage svm metrics gemm kmeans knn dbscan gram nt gemv;"
-            " got '" + lane + "'"
+            " cd kde linkage svm metrics gemm kmeans knn dbscan gram nt gemv"
+            " gbdt rf et; got '" + lane + "'"
         )
     print("== done [" + mode + "] lane=" + lane + " ==")

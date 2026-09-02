@@ -1,0 +1,130 @@
+test_arima_surface: mojolearn.ARIMA, tier identical, n_obs 512
+
+  PROVENANCE (990)
+    pass the estimator's tier is the process's tier
+    pass the loaded binary is the one under identical/
+    pass the binary exports arima_vendor for _backend.py's cross-check
+    pass the binary exports arima_numeric_mode for the tier read-back
+
+  REFUSALS, python side (992)
+    pass trend='t' is refused by name
+    pass trend='ct' is refused by name
+    pass a polynomial trend specification is refused by name
+    pass an unspelled method is refused
+    pass verbose is refused, it selects log lines this port never prints
+    pass output_type is refused, this package returns NumPy
+    pass a 2-tuple order is refused
+    pass a negative order entry is refused
+    pass a 3-tuple seasonal_order is refused
+    pass level is NOT A PARAMETER of this class, so it is a TypeError; cuML's confidence intervals are unported
+    pass simple_differencing is NOT A PARAMETER of this class; only the True arm exists in this lane
+    pass start_params is NOT A PARAMETER; every fit starts from estimate_x0
+    pass a 3-D y is refused
+    pass predict before fit is refused
+    pass forecast before fit is refused
+
+  REFUSALS, mojo side (992)
+    pass exog is refused by validate_order, as n_exog != 0
+    pass method='css' is refused by arima/estimator.mojo, only MLE is offered
+    pass method='css-ml' is refused by the same file
+    pass p > 8 is refused by validate_order, in cuML's words
+    pass d + D > 2 is refused by validate_order
+    pass an order with no parameters at all is refused
+    pass a seasonal term with s < 2 is refused
+    pass rd > 8 is refused; it selects cuML's block-per-series Kalman kernel, which is unported
+    pass r > 5 is refused; it selects cuML's Schur/Sylvester Lyapunov solver, which is unported
+    pass a NaN is refused by name and by INDEX; missing observations are a cuML path with no port, so a NaN here is not missing data, it is refused input
+    pass a one-observation series is refused
+
+  REFUSALS, after a fit (992)
+    pass predict with end <= start is refused, and the message names BOTH conventions
+    pass forecast(0) is refused
+    pass mu_ raises when trend resolved to 'n', rather than returning a zero-width mean
+
+  RECOVERY
+    pass ar1: params_ is (batch, N) with N = p + q + k + 1
+    pass ar1: the per-series arrays are batch-long
+    pass ar1: phi recovered on all 6 series, worst |error| 0.06917 within 4.75 standard errors (se 0.03156, bound 0.14991)
+    pass ar1: the 6 series produced 6 DISTINCT phi, so nothing was broadcast
+    pass ar1: every series reported OPT_SUCCESS
+    pass ar1: llf_ agrees with -fx_ * (n_obs - 1) to 3.75e-08, so the second Kalman pass evaluated the fit's own point
+    pass ma1: params_ is (batch, N) with N = p + q + k + 1
+    pass ma1: the per-series arrays are batch-long
+    pass ma1: theta recovered on all 6 series, worst |error| 0.06649 within 5.23 standard errors (se 0.03827, bound 0.20017)
+    pass ma1: the 6 series produced 6 DISTINCT theta, so nothing was broadcast
+    pass ma1: every series reported OPT_SUCCESS
+    pass ma1: llf_ agrees with -fx_ * (n_obs - 1) to 3.08e-08, so the second Kalman pass evaluated the fit's own point
+    pass arma11: params_ is (batch, N) with N = p + q + k + 1
+    pass arma11: the per-series arrays are batch-long
+    pass arma11: phi recovered on all 6 series, worst |error| 0.08855 within 7.07 standard errors (se 0.03536, bound 0.24996)
+    pass arma11: the 6 series produced 6 DISTINCT phi, so nothing was broadcast
+    pass arma11: theta recovered on all 6 series, worst |error| 0.11768 within 5.93 standard errors (se 0.04216, bound 0.25000)
+    pass arma11: the 6 series produced 6 DISTINCT theta, so nothing was broadcast
+    pass arma11: every series reported OPT_SUCCESS
+    pass arma11: llf_ agrees with -fx_ * (n_obs - 1) to 4.08e-08, so the second Kalman pass evaluated the fit's own point
+
+  CRITERIA (991)
+    pass ar1: aic_ == 2N - 2 llf with N = 2
+    pass ar1: bic_ == log(T) N - 2 llf with T = 512, the count AFTER differencing
+    pass ar1: the BIC penalty exceeds the AIC penalty at n = 512, since log(T) > 2
+    pass ma1: aic_ == 2N - 2 llf with N = 2
+    pass ma1: bic_ == log(T) N - 2 llf with T = 512, the count AFTER differencing
+    pass ma1: the BIC penalty exceeds the AIC penalty at n = 512, since log(T) > 2
+    pass arma11: aic_ == 2N - 2 llf with N = 3
+    pass arma11: bic_ == log(T) N - 2 llf with T = 512, the count AFTER differencing
+    pass arma11: the BIC penalty exceeds the AIC penalty at n = 512, since log(T) > 2
+
+  PREDICT
+    pass predict(0, n_obs) is (batch, n_obs); `end` IS EXCLUDED, which is cuML's convention and not statsmodels'
+    pass end=None means n_obs, as upstream
+    pass predict(3, 9) is six wide, not seven
+    pass with d = 0 no in-sample prediction is NaN
+    pass a windowed predict is the same bits as the slice of the full one
+    pass the d = 1 model predicts (batch, n_obs) too
+    pass step 0 is NaN when d = 1: differencing consumes it, and the sentinel is the canonical 0x7fc00000 by constant (DEVIATION 676)
+    pass everything from step d onward is finite
+    pass the undefined prediction is the CANONICAL quiet NaN 0x7fc00000 on every vendor, not the hardware's own payload
+    pass the (1,1,1) model with trend='c' packs mu, ar, ma, sigma2
+    pass mu_ exists and is batch-long when trend='c'
+
+  FORECAST
+    pass forecast(6) is (batch, 6)
+    pass no forecast step is NaN, there is no in-sample block in one
+    pass the AR(1) forecast is phi^h times the last observation to 2.81e-07 relative, in closed form, against a reference no kernel produced
+    pass a stationary AR(1) forecast decays; |step 6| does not exceed |step 1|
+    pass forecast(h) is predict(n_obs, n_obs + h), bit for bit
+    pass the d = 1 model forecasts four finite steps
+    pass the differenced forecast continues the LEVEL of the series, so step 1 is the same order as the last observation; a missing finalize_forecast would return the differenced scale
+
+  BATCH COMPOSITION
+    pass three series drawn from six fit to the same bits
+    pass and to the same ITERATION COUNTS, which is the stage that catches a per-series branch reading another series' state
+    pass and the same retcodes
+    pass ONE series fitted alone is the same bits as that series inside a batch of six
+    pass a batch of one is still 2-D, (1, N)
+    pass the forecast is batch-composition invariant too
+    pass and so is the in-sample prediction
+    pass a 1-D y is exactly the (1, n_obs) fit, not a different problem
+
+  binary  /root/mojolearn/python/mojolearn/identical/_mojolearn_arima.so
+  surface mojolearn.ARIMA
+  mode    identical
+  vendor  cuda
+
+    ar1      phi   planted 0.700  fitted 0.6433 0.6776 0.7325 0.6964 0.6929 0.7692
+
+    ma1      theta planted 0.500  fitted 0.5665 0.4441 0.5323 0.5136 0.5060 0.4837
+
+    arma11   phi   planted 0.600  fitted 0.6622 0.6022 0.6075 0.6041 0.6680 0.5114
+
+    arma11   theta planted 0.300  fitted 0.2426 0.2933 0.3098 0.3385 0.1823 0.3218
+
+  88 checks, 0 failed
+
+test_arima_surface: GREEN. The Python surface fits a batch, recovers
+planted coefficients within the lane's own multiples of a standard
+error, predicts on an exclusive end with the canonical NaN before
+d, forecasts the AR(1) closed form, and gives one series the same
+BITS alone as inside a batch of six. What it does NOT prove is a
+second vendor: arima/'s three-vendor card is the Kalman filter's,
+and the fit has never left one Apple M4.

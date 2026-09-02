@@ -1,0 +1,18 @@
+commit=185eb002a8e3dbdca0c23163aed0a6606ee57206
+uname=Linux 5.15.0-185-generic x86_64
+ols_rc=1  price_rc=0
+seconds=412
+price_lanes=cd kde linkage svm metrics gemm
+price_rounds=(default 5)
+price_sizes=kmeans_rows=(apple default) knn_index=(apple default) knn_method=(auto) dbscan_rows=(apple default) gram_rows=(apple default) nt_rows=(apple default) gemv_dim=(apple default)
+-- ols --
+check_ols_is_launch_invariant OK [IDENTICAL]: all 12 coefficients bit-identical across elem_tpb 256/64, 0/37 floats of buffer padding and two different scratch poisons (coef[0] = 0xbc0517a9), and the A-vs-A control agrees
+check_ols_is_launch_invariant OK [IDENTICAL]: all 12 coefficients bit-identical across elem_tpb 256/64, 0/37 floats of buffer padding and two different scratch poisons (coef[0] = 0xbc0517a9), and the A-vs-A control agrees
+-- identity tax (ratio.tsv) --
+lane	n	fast_med_s	ident_med_s	ratio_med	ratio_min	ratio_max	fast_min_s	fast_max_s	ident_min_s	ident_max_s	fast_hash	ident_hash	hash_note
+cd	5	0.001287	0.001704	1.323	1.279	1.333	0.001278	0.001321	0.001647	0.001709	3bc909a47ebc9bda	3cb298860e514e8a	fast!=ident bits
+kde	5	0.000306	0.000388	1.267	1.255	1.731	0.000303	0.000307	0.000384	0.000530	4ec9d98c61d3ae83	3719b9e6a55377a7	fast!=ident bits
+linkage	5	0.001656	0.001578	0.953	0.942	1.007	0.001613	0.001667	0.001570	0.001623	d486f76f518b97e2	5d3155fc940e61d2	fast!=ident bits
+svm	5	0.003339	0.003061	0.917	0.842	0.939	0.003261	0.003634	0.003029	0.003084	24f8ac7fce032509	9bec403e03e1a2cc	fast!=ident bits
+metrics	5	0.001500	0.001511	1.008	1.001	1.110	0.001486	0.001510	0.001487	0.001665	ec63266074ceab42	2321a95d3439fc2b	fast!=ident bits
+gemm	5	0.000070	0.000061	0.881	0.393	0.919	0.000068	0.000154	0.000061	0.000064	c751624f62b9f822	79adfe2dd5bd57e6	fast!=ident bits

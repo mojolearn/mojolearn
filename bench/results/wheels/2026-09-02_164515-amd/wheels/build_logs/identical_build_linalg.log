@@ -1,0 +1,4 @@
+start 2026-09-02T20:49:33Z
+!! MOJOLEARN_GPU_ARCHS=gfx1100 (--target-accelerator); read the architecture back out of the built .so
+built python/mojolearn/identical/_mojolearn_linalg.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+end 2026-09-02T20:49:42Z OK

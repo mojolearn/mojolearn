@@ -1,0 +1,6 @@
+== leg lane=gemv mode=FAST round=1 16:56:04 ==
+== bench/lanes_price_main.mojo [FAST] lane=gemv rounds=1 smoke=True ==
+LPRICE gemv FAST warmup 32x32 0.009955 ab69c3ce6ff22f61
+LPRICE gemv FAST 1 32x32 0.001005 ab69c3ce6ff22f61
+HASH-STABLE gemv FAST 2 rounds all ab69c3ce6ff22f61
+== done [FAST] lane=gemv ==

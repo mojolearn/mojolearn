@@ -1,0 +1,27 @@
+# format: mojolearn-identity-trace v1
+0	m2.input.x	f32	128	99cbd1a262fc5b71
+1	m2.norm.sumsq	f32	4	146a188d431c2eba
+2	m2.norm.out	f32	128	09476533d86ce28e
+3	m2.in_proj.out	f32	1540	4a7ebd1616908807
+4	m2.A.out	f32	1	cc3c664b7855fccf
+5	m2.conv.out	f32	1280	5a7e402f18c2977b
+6	m2.silu.out	f32	1280	866064cc6299618e
+7	m2.conv.window	f32	1280	6a5d4990b37095c6
+8	m2.dt.out	f32	4	6ed0ed4d049310a1
+9	m2.xd.out	f32	256	9eff5bb07e43a426
+10	m2.dacs.out	f32	256	13d7a2110f25ee53
+11	m2.seg.L	f32	65536	e8a4f25890e39af8
+12	m2.cb.G	f32	65536	4bdfc38649bee744
+13	m2.ydiag.out	f32	256	4ca43ff3a4ea7347
+14	m2.decay.states	f32	256	a5e18bd3d34bf4d3
+15	m2.cstate.out	f32	8192	990940e63bdb7c7c
+16	m2.pass.states	f32	8192	8f6955bf94ec2325
+17	m2.yoff.out	f32	256	51d88627df287325
+18	m2.scan.y	f32	256	4ca43ff3a4ea7347
+19	m2.skip.out	f32	256	394c150e62be033e
+20	m2.gnorm.gate	f32	256	9523f6d0d83832c9
+21	m2.gnorm.sumsq	f32	4	0951dc29b3c32098
+22	m2.gnorm.out	f32	256	38d385d33820e5d1
+23	m2.out_proj.out	f32	128	60de56e6ebd0bd65
+24	m2.residual.out	f32	128	65bbf79263efa64e
+25	m2.ssd.h_last	f32	8192	990940e63bdb7c7c

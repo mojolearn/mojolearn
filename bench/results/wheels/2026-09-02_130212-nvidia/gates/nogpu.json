@@ -1,0 +1,43 @@
+{
+  "docker": {
+    "err": "  File \"<string>\", line 1, in <module>\n  File \"/pkg/mojolearn/__init__.py\", line 117, in <module>\n    _backend.select()\n  File \"/pkg/mojolearn/_backend.py\", line 732, in select\n    ident_dir = tier_dir(mode)\n                ^^^^^^^^^^^^^^\n  File \"/pkg/mojolearn/_backend.py\", line 657, in tier_dir\n    _, base = _layout()\n              ^^^^^^^^^\n  File \"/pkg/mojolearn/_backend.py\", line 634, in _layout\n    raise ImportError(\nImportError: mojolearn: NO SUPPORTED GPU FOUND ON THIS BOX, and there is no CPU path in this package. This install carries binary sets for ['cuda'] under /pkg/mojolearn. What was looked for and what was found:\n  cuda:\n    /dev/nvidiactl               absent\n    /dev/nvidia0                 absent\n    libcuda.so.1                 not loadable\n    libcuda.so                   not loadable\n  hip:\n    /dev/kfd                     absent\n    libamdhip64.so.7             not loadable\n    libamdhip64.so.6             not loadable\n    libamdhip64.so               not loadable\n  MOJOLEARN_VENDOR is not set.\n\nA device node or a driver library for one of the sets above must be visible to this process. In a container that means the GPU is passed through (`--gpus all` for NVIDIA, `--device /dev/kfd --device /dev/dri` for AMD). If the device is present and this probe is wrong, MOJOLEARN_VENDOR=cuda or MOJOLEARN_VENDOR=hip picks the directory directly and the first fit reports the runtime's own error.",
+    "found": {
+      "/dev/kfd": true,
+      "/dev/nvidia0": true,
+      "/dev/nvidiactl": true,
+      "MOJOLEARN_VENDOR": true,
+      "NO SUPPORTED GPU FOUND": true
+    },
+    "out": "",
+    "rc": 1,
+    "verdict": "PASS"
+  },
+  "env_hidden": {
+    "fit_err": "",
+    "fit_out": "",
+    "fit_rc": -11,
+    "import_err": "",
+    "import_out": "IMPORTED cuda",
+    "import_rc": 0,
+    "verdict": "IMPORTED (expected: the probe reads device nodes, not these variables)"
+  },
+  "namespace": {
+    "err": "    _backend.select()\n    ~~~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/bench/results/e1/2026-09-02_170407-mojolearn-e2-nv/diag/pkgroot/mojolearn/_backend.py\", line 732, in select\n    ident_dir = tier_dir(mode)\n  File \"/root/mojolearn/bench/results/e1/2026-09-02_170407-mojolearn-e2-nv/diag/pkgroot/mojolearn/_backend.py\", line 657, in tier_dir\n    _, base = _layout()\n              ~~~~~~~^^\n  File \"/root/mojolearn/bench/results/e1/2026-09-02_170407-mojolearn-e2-nv/diag/pkgroot/mojolearn/_backend.py\", line 634, in _layout\n    raise ImportError(\n    ...<12 lines>...\n    )\nImportError: mojolearn: NO SUPPORTED GPU FOUND ON THIS BOX, and there is no CPU path in this package. This install carries binary sets for ['cuda'] under /root/mojolearn/bench/results/e1/2026-09-02_170407-mojolearn-e2-nv/diag/pkgroot/mojolearn. What was looked for and what was found:\n  cuda:\n    /dev/nvidiactl               absent\n    /dev/nvidia0                 absent\n    libcuda.so.1                 not loadable\n    libcuda.so                   not loadable\n  hip:\n    /dev/kfd                     absent\n    libamdhip64.so.7             not loadable\n    libamdhip64.so.6             not loadable\n    libamdhip64.so               not loadable\n  MOJOLEARN_VENDOR is not set.\n\nA device node or a driver library for one of the sets above must be visible to this process. In a container that means the GPU is passed through (`--gpus all` for NVIDIA, `--device /dev/kfd --device /dev/dri` for AMD). If the device is present and this probe is wrong, MOJOLEARN_VENDOR=cuda or MOJOLEARN_VENDOR=hip picks the directory directly and the first fit reports the runtime's own error.",
+    "found": {
+      "/dev/nvidia0": true,
+      "/dev/nvidiactl": true,
+      "MOJOLEARN_VENDOR": true,
+      "NO SUPPORTED GPU FOUND": true
+    },
+    "hidden": [
+      "/dev/nvidiactl",
+      "/dev/nvidia0",
+      "/lib/x86_64-linux-gnu/libcuda.so",
+      "/lib/x86_64-linux-gnu/libcuda.so.1"
+    ],
+    "out": "",
+    "rc": 1,
+    "verdict": "PASS"
+  },
+  "summary": "PASS"
+}

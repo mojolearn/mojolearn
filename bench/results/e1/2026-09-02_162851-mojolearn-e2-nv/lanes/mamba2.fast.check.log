@@ -1,0 +1,68 @@
+✨ Pixi task (check-mamba2-block in default): mojo run -I . mamba/checks/mamba2_check.mojo
+Imported from /root/mojolearn/mamba/checks/mamba2_check.mojo:102:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba2_check.mojo:102:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/mamba/checks/mamba2_check.mojo:102:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba2_check.mojo:102:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba2_check.mojo:102:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+/root/mojolearn/mamba/checks/mamba2_check.mojo:1290:28: warning: assignment to 'bytes' was never used; assign to '_' instead?
+    var bytes = List[UInt8]()
+                           ^
+/root/mojolearn/mamba/checks/mamba2_check.mojo:1537:30: warning: assignment to 'expect_first' was never used; assign to '_' instead?
+    var expect_first = String("")
+                             ^
+mamba2 block gate (IDENTICAL_MAMBA2_CONTRACT.md section 8); profile mojolearn.identical.mamba2.fp32.v1; build mode FAST
+shape: B = 1 L = 4 d_model = 32
+  OK    norm.sumsq  (4 cells)
+  MOVED norm.out  72 of 128 cells, first cell 1  a 0xbfbd420d  b 0xbfbd420f
+  MOVED in_proj.out  1540 of 1540 cells, first cell 0  a 0xbe951447  b 0xbe951591
+  OK    A.out  (1 cells)
+  MOVED conv.out  1279 of 1280 cells, first cell 0  a 0xbe45885f  b 0xbe4588a4
+  MOVED silu.out  1278 of 1280 cells, first cell 0  a 0xbdb28a0b  b 0xbdb28a43
+  MOVED conv.window  1280 of 1280 cells, first cell 0  a 0xbe5b0dfc  b 0xbe5b0ea5
+  MOVED dt.out  4 of 4 cells, first cell 0  a 0x3c91c303  b 0x3c91c3c8
+  MOVED xd.out  256 of 256 cells, first cell 0  a 0xbacb5063  b 0xbacb51b6
+  MOVED dacs.out  256 of 256 cells, first cell 0  a 0xbe3db090  b 0xbe3db190
+  MOVED seg.L  762 of 65536 cells, first cell 256  a 0x3f6160c6  b 0x3f616140
+  MOVED cb.G  16 of 65536 cells, first cell 0  a 0xbbe680ba  b 0xbbe67f12
+  MOVED ydiag.out  256 of 256 cells, first cell 0  a 0x37371075  b 0x37371055
+  MOVED decay.states  3 of 256 cells, first cell 0  a 0x3f17272c  b 0x3f1727f5
+  MOVED cstate.out  8191 of 8192 cells, first cell 0  a 0x390bbe84  b 0x390bbc69
+  OK    pass.states  (8192 cells)
+  OK    yoff.out  (256 cells)
+  MOVED scan.y  256 of 256 cells, first cell 0  a 0x37371075  b 0x37371055
+  MOVED skip.out  256 of 256 cells, first cell 0  a 0xbdc3e564  b 0xbdc3e5a2
+  MOVED gnorm.gate  256 of 256 cells, first cell 0  a 0x3c432c48  b 0x3c432dee
+  MOVED gnorm.sumsq  4 of 4 cells, first cell 0  a 0x3b07847f  b 0x3b0784cc
+  MOVED gnorm.out  256 of 256 cells, first cell 0  a 0x3f8c1253  b 0x3f8c1364
+  MOVED out_proj.out  128 of 128 cells, first cell 0  a 0x3e029440  b 0x3e02a14b
+  MOVED residual.out  128 of 128 cells, first cell 0  a 0xbe55e6e0  b 0xbe55d9d5
+  MOVED ssd.h_last  8191 of 8192 cells, first cell 0  a 0x390bbe84  b 0x390bbc69
+  OK    state.h  (8192 cells)
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: GATE A FAILED: 24668 cells differ between the device card and the host oracle (first stage: norm.out)
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1

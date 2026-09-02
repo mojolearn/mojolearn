@@ -1,0 +1,30 @@
+== leg lane=svm mode=IDENTICAL round=1 20:21:08 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=svm rounds=1 smoke=False ==
+LPRICE svm IDENTICAL warmup F2.xor.240x2 0.421267855 9bec403e03e1a2cc
+LPRICE svm IDENTICAL 1 F2.xor.240x2 0.003178839 9bec403e03e1a2cc
+HASH-STABLE svm IDENTICAL 2 rounds all 9bec403e03e1a2cc
+== done [IDENTICAL] lane=svm ==
+== leg lane=svm mode=IDENTICAL round=2 20:21:10 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=svm rounds=1 smoke=False ==
+LPRICE svm IDENTICAL warmup F2.xor.240x2 0.412039712 9bec403e03e1a2cc
+LPRICE svm IDENTICAL 1 F2.xor.240x2 0.003157031 9bec403e03e1a2cc
+HASH-STABLE svm IDENTICAL 2 rounds all 9bec403e03e1a2cc
+== done [IDENTICAL] lane=svm ==
+== leg lane=svm mode=IDENTICAL round=3 20:21:12 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=svm rounds=1 smoke=False ==
+LPRICE svm IDENTICAL warmup F2.xor.240x2 0.425719214 9bec403e03e1a2cc
+LPRICE svm IDENTICAL 1 F2.xor.240x2 0.003311625 9bec403e03e1a2cc
+HASH-STABLE svm IDENTICAL 2 rounds all 9bec403e03e1a2cc
+== done [IDENTICAL] lane=svm ==
+== leg lane=svm mode=IDENTICAL round=4 20:21:14 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=svm rounds=1 smoke=False ==
+LPRICE svm IDENTICAL warmup F2.xor.240x2 0.433926595 9bec403e03e1a2cc
+LPRICE svm IDENTICAL 1 F2.xor.240x2 0.003099791 9bec403e03e1a2cc
+HASH-STABLE svm IDENTICAL 2 rounds all 9bec403e03e1a2cc
+== done [IDENTICAL] lane=svm ==
+== leg lane=svm mode=IDENTICAL round=5 20:21:16 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=svm rounds=1 smoke=False ==
+LPRICE svm IDENTICAL warmup F2.xor.240x2 0.432895595 9bec403e03e1a2cc
+LPRICE svm IDENTICAL 1 F2.xor.240x2 0.003098812 9bec403e03e1a2cc
+HASH-STABLE svm IDENTICAL 2 rounds all 9bec403e03e1a2cc
+== done [IDENTICAL] lane=svm ==

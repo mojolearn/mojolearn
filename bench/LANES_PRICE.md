@@ -14,6 +14,13 @@ the Apple rows compared a build against itself. That run is written up under
 "2026-09-02: the run that could not separate the arms" below, and it is the
 reason six more lanes and a size knob exist as of the same day.
 
+Third status, 2026-09-02: **THE HARNESS PRICED NO TREE.** Twelve lanes and
+not one tree fit, in the project whose largest certified family is decision
+trees (109 of 180 bitwise-identical training configurations) and whose
+performance section leads with them. Three tree lanes -- `gbdt`, `rf`, `et`
+-- were added the same day at the 1,000,000-row floor. **NOTHING HAS BEEN RUN
+ON THEM. RUN OWED, on every column.**
+
 Files:
 
 - `bench/lanes_price_main.mojo`, the driver: one lane per process, the lane's
@@ -70,13 +77,58 @@ dispatch) or `tiled` (the same arm asked for explicitly, and what `k > 64`
 must take). Both are priced upstream and both are reachable here; the method
 is written into the row's size field so the two never merge.
 
+**Three tree lanes, added 2026-09-02, because there were none.** The twelve
+lanes above cover clustering, neighbours, density, linkage, svm, metrics and
+linear algebra and NOT ONE OF THEM FITS A TREE. Decision trees are the
+largest certified family in this project (109 of 180 bitwise-identical
+training configurations) and they are the workloads the performance section
+leads with, so until today what identical mode costs a tree fit had never
+been measured anywhere. Each lane fits on a fixture built IN the lane, out of
+the driver's own `_price_u01`, because the tree benches that exist read HIGGS
+or epsilon from `~/.cache/mojolearn` and a rented box has not staged them.
+
+| lane | entry | what it prices | default size (Apple) | datacenter step | size knobs | output hashed |
+|---|---|---|---|---|---|---|
+| gbdt | `gbdt.train.train` (`grow_policy` SymmetricTree, border_count 254, lr 0.1, l2 1.0, Logloss with `leaf_estimation_iterations` 10, depth 6) | the symmetric (oblivious) boosting loop, plus the border build and quantization the raw-floats door does in front of it | 1000000 x 100, 20 trees | 2000000 rows, 60 trees | `MOJOLEARN_LANES_PRICE_GBDT_ROWS`, `_GBDT_TREES` | model bias, every tree's split list (feature, bin, type) and leaf values, the learn curve |
+| rf | `ensemble.randomforest.fit_forest[ClsObj]` (bootstrap, `max_samples` 1.0, seed 20260821, `n_streams` 4, depth 12, `max_n_bins` 128, gini) | the quantile pass plus the pipelined forest loop | 1000000 x 50, 4 trees, 4 classes | 2000000 rows, 16 trees | `MOJOLEARN_LANES_PRICE_RF_ROWS`, `_RF_TREES` | per tree: depth/leaf counters, then DEVIATION 401's node fold (column, threshold bits, metric bits, left child, instance count) and `vector_leaf`. NOT `train_time` |
+| et | `extratrees.impl.decisiontree.batched_levelalgo.builder.train_forest_classification_device` (`max_features` sqrt, seed 0x0F17, depth 12), on a `DeviceDataset` uploaded once before the loop | the merged device fit only; the upload is outside the clock | 1000000 x 28, 20 trees, 2 classes | 2000000 rows, 60 trees | `MOJOLEARN_LANES_PRICE_ET_ROWS`, `_ET_TREES` | the same node fold and `vector_leaf`, per tree |
+
+**THE TREE ROW DEFAULTS ARE A FLOOR, NOT AN APPLE SIZE, AND THEY DO NOT MOVE
+DOWNWARD.** `[[mojolearn-large-data-timing-floor]]` forbids measuring or
+deciding tree performance below 1,000,000 rows, so the 2048-, 4096- and
+20000-row defaults the six lanes above carry would be inadmissible here. The
+reason is stronger than "too small to separate": under the floor a tree fit
+is a DIFFERENT PROBLEM rather than a cheaper one, because the per-tree fixed
+costs dominate. `bench/results/PERF_2026-08-20_fixed-cost.md` puts the
+symmetric arm at 9.43 ms fixed plus 18.5 us per 1000 rows, which is 96% fixed
+cost at 20,000 rows and 34% at 1,000,000. A 50,000-row symmetric window was
+caught and killed on 2026-09-01 for exactly this and nothing from it votes
+anywhere.
+
+Every default above comes from a window this tree has already run at the
+floor: et's 28 columns / 20 trees / depth 12 at 1M and 2M is verbatim the ET
+arm of `bench/results/ab_large_2026-09-01/RESULTS.md` (5.9-6.3 s per fit at
+1M), gbdt's 100 columns at depth 6 is `checks/estimation_bench.mojo`'s shape
+with that window's patched `N_ROWS` (273.2 / 257.5 ms per tree in the d6 ll10
+cell, so about 5.3 s at 20 trees), and rf's 50 columns / depth 12 / 128 bins
+is `ensemble/bench/rf_bench.mojo`'s at that window's patched row count. **Only
+the TREE counts were dialed, and only downward.** rf's window ran 30 trees at
+22.3-26.4 s per fit, which is eight minutes of fitting for one lane at the
+default ROUNDS; a forest is `n_trees` independent trees behind one shared
+quantile pass, so four trees is the same work repeated fewer times and lands
+near 3 s. et needed no dialing at all. The row count is the axis that changes
+what the kernels are doing, and it is the axis that stays.
+
 `MOJOLEARN_LANES_PRICE_SMOKE=1` gives the six new lanes tiny fixtures the
 same way it does the six old ones: kmeans 2048 rows, knn 2048 index rows,
-dbscan 2048 rows, gram 4096 rows, nt 256 rows, gemv 32 x 32. As everywhere
-else in this harness a SMOKE number is launch overhead and proves only the
-build, the mode witness and the hash. An explicit size variable overrides
-the SMOKE size, which is the same precedence `MOJOLEARN_LANES_PRICE_GEMM_SHAPE`
-already has.
+dbscan 2048 rows, gram 4096 rows, nt 256 rows, gemv 32 x 32; and the three
+tree lanes 4096 rows with 2 trees each. As everywhere else in this harness a
+SMOKE number is launch overhead and proves only the build, the mode witness
+and the hash. **On the tree lanes a SMOKE number is not a price twice over**:
+4096 rows is below the 1,000,000-row floor those lanes exist under, so it is
+not a small price but an inadmissible one, and it may not be quoted, compared
+or put in a table. An explicit size variable overrides the SMOKE size, which
+is the same precedence `MOJOLEARN_LANES_PRICE_GEMM_SHAPE` already has.
 
 Every default in that table is the size the published Apple numbers were
 taken at, so those stay reproducible with nothing set. The datacenter column
@@ -161,6 +213,23 @@ comptime modes, and the result is a BAND.
        MOJOLEARN_LANES_PRICE_GRAM_ROWS=8000000 \
        MOJOLEARN_LANES_PRICE_NT_ROWS=262144 \
        MOJOLEARN_LANES_PRICE_GEMV_DIM=8192 \
+           tools/lanes_price.sh
+
+   The three tree lanes are opt-in the same way and are also NOT in the
+   default lane list. At their defaults, which are already at the
+   1,000,000-row floor and are the Apple run:
+
+       MOJOLEARN_LANES_PRICE_LANES="gbdt rf et" tools/lanes_price.sh
+
+   At the datacenter step, which is the run to take on a rented box:
+
+       MOJOLEARN_LANES_PRICE_LANES="gbdt rf et" \
+       MOJOLEARN_LANES_PRICE_GBDT_ROWS=2000000 \
+       MOJOLEARN_LANES_PRICE_GBDT_TREES=60 \
+       MOJOLEARN_LANES_PRICE_RF_ROWS=2000000 \
+       MOJOLEARN_LANES_PRICE_RF_TREES=16 \
+       MOJOLEARN_LANES_PRICE_ET_ROWS=2000000 \
+       MOJOLEARN_LANES_PRICE_ET_TREES=60 \
            tools/lanes_price.sh
 
    The same variables set in `tools/diag/identity_cost_leg.sh`'s environment
@@ -323,9 +392,10 @@ property of the entry and of the harness, not a deviation.
 ## Deviations
 
 None spent. The block 700-704 is reserved for this harness and stays unused
-unless a harness change moves bits. The 2026-09-02 port spent none either:
-it adds six callers of entries that already ship, and changes no library
-code, so no arm's bits move because of it.
+unless a harness change moves bits. The 2026-09-02 work spent none either:
+it adds nine callers of entries that already ship -- six ported from the two
+Apple price mains and three tree lanes with no upstream price main to port
+from -- and changes no library code, so no arm's bits move because of it.
 
 ## Hand-off
 
@@ -333,7 +403,23 @@ None required. The harness reads and imports from the lanes it prices and
 edits none of them. Since 2026-09-02 that list also includes
 `cluster.impl.cluster.detail.kmeans`, `dbscan.impl.dbscan.dbscan`,
 `neighbors.impl.neighbors.detail.knn_brute_force` and `core.gemm`, all
-imported at their public entries.
+imported at their public entries, and the three tree families: `gbdt.train`,
+`ensemble.randomforest` (with `ensemble.decisiontree.*` for the parameter
+block and the objective) and
+`extratrees.impl.decisiontree.batched_levelalgo.builder` (with
+`extratrees.estimator` for `max_features` resolution and
+`extratrees.impl.randomforest.randomforest` for `class_ids_for`).
+
+`DecisionTreeParams` is spelled once under `ensemble/` and once under
+`extratrees/` and the two are DIFFERENT structs, so the driver aliases them
+apart on import (`RfTreeParams` / `EtTreeParams`). The node folds are
+likewise written out twice rather than shared, because
+`ensemble/decisiontree/decisiontree.mojo`'s `TreeMetaDataNode` and
+`extratrees/impl/decisiontree/flatnode.mojo`'s are two ports that agree on
+their accessors and are not the same type. The ensemble one carries a
+`train_time` member; it is a wall clock and is deliberately NOT hashed, since
+folding it in would make every round disagree with every other round and the
+harness would raise a false contract violation under IDENTICAL.
 
 `bench/identity_price_main.mojo` and `bench/linalg_price_main.mojo` are NOT
 deleted and are not superseded on Apple: they are the files the published

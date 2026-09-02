@@ -1,0 +1,4 @@
+  env_hidden   import rc=0 IMPORTED cuda; fit rc=-11
+  namespace    PASS
+  docker       PASS
+nogpu PASS

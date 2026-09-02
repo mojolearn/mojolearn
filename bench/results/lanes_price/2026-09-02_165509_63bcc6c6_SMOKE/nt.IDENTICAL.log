@@ -1,0 +1,6 @@
+== leg lane=nt mode=IDENTICAL round=1 16:56:04 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=nt rounds=1 smoke=True ==
+LPRICE nt IDENTICAL warmup 256x64x64 0.006931 7dea8f5ec67a4e9d
+LPRICE nt IDENTICAL 1 256x64x64 0.006768 7dea8f5ec67a4e9d
+HASH-STABLE nt IDENTICAL 2 rounds all 7dea8f5ec67a4e9d
+== done [IDENTICAL] lane=nt ==

@@ -1,0 +1,30 @@
+== leg lane=cd mode=IDENTICAL round=1 21:25:19 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=cd rounds=1 smoke=False ==
+LPRICE cd IDENTICAL warmup 2048x16 0.388599445 3cb298860e514e8a
+LPRICE cd IDENTICAL 1 2048x16 0.001651052 3cb298860e514e8a
+HASH-STABLE cd IDENTICAL 2 rounds all 3cb298860e514e8a
+== done [IDENTICAL] lane=cd ==
+== leg lane=cd mode=IDENTICAL round=2 21:25:21 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=cd rounds=1 smoke=False ==
+LPRICE cd IDENTICAL warmup 2048x16 0.387883139 3cb298860e514e8a
+LPRICE cd IDENTICAL 1 2048x16 0.001706823 3cb298860e514e8a
+HASH-STABLE cd IDENTICAL 2 rounds all 3cb298860e514e8a
+== done [IDENTICAL] lane=cd ==
+== leg lane=cd mode=IDENTICAL round=3 21:25:22 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=cd rounds=1 smoke=False ==
+LPRICE cd IDENTICAL warmup 2048x16 0.38977716 3cb298860e514e8a
+LPRICE cd IDENTICAL 1 2048x16 0.00170882 3cb298860e514e8a
+HASH-STABLE cd IDENTICAL 2 rounds all 3cb298860e514e8a
+== done [IDENTICAL] lane=cd ==
+== leg lane=cd mode=IDENTICAL round=4 21:25:24 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=cd rounds=1 smoke=False ==
+LPRICE cd IDENTICAL warmup 2048x16 0.390238678 3cb298860e514e8a
+LPRICE cd IDENTICAL 1 2048x16 0.001703858 3cb298860e514e8a
+HASH-STABLE cd IDENTICAL 2 rounds all 3cb298860e514e8a
+== done [IDENTICAL] lane=cd ==
+== leg lane=cd mode=IDENTICAL round=5 21:25:26 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=cd rounds=1 smoke=False ==
+LPRICE cd IDENTICAL warmup 2048x16 0.390495868 3cb298860e514e8a
+LPRICE cd IDENTICAL 1 2048x16 0.001647024 3cb298860e514e8a
+HASH-STABLE cd IDENTICAL 2 rounds all 3cb298860e514e8a
+== done [IDENTICAL] lane=cd ==

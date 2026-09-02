@@ -1,0 +1,30 @@
+== leg lane=svm mode=FAST round=1 20:21:07 ==
+== bench/lanes_price_main.mojo [FAST] lane=svm rounds=1 smoke=False ==
+LPRICE svm FAST warmup F2.xor.240x2 0.60355117 24f8ac7fce032509
+LPRICE svm FAST 1 F2.xor.240x2 0.003649839 24f8ac7fce032509
+HASH-STABLE svm FAST 2 rounds all 24f8ac7fce032509
+== done [FAST] lane=svm ==
+== leg lane=svm mode=FAST round=2 20:21:09 ==
+== bench/lanes_price_main.mojo [FAST] lane=svm rounds=1 smoke=False ==
+LPRICE svm FAST warmup F2.xor.240x2 0.56894173 24f8ac7fce032509
+LPRICE svm FAST 1 F2.xor.240x2 0.005609232 24f8ac7fce032509
+HASH-STABLE svm FAST 2 rounds all 24f8ac7fce032509
+== done [FAST] lane=svm ==
+== leg lane=svm mode=FAST round=3 20:21:11 ==
+== bench/lanes_price_main.mojo [FAST] lane=svm rounds=1 smoke=False ==
+LPRICE svm FAST warmup F2.xor.240x2 0.540528785 24f8ac7fce032509
+LPRICE svm FAST 1 F2.xor.240x2 0.003312652 24f8ac7fce032509
+HASH-STABLE svm FAST 2 rounds all 24f8ac7fce032509
+== done [FAST] lane=svm ==
+== leg lane=svm mode=FAST round=4 20:21:13 ==
+== bench/lanes_price_main.mojo [FAST] lane=svm rounds=1 smoke=False ==
+LPRICE svm FAST warmup F2.xor.240x2 0.549984746 24f8ac7fce032509
+LPRICE svm FAST 1 F2.xor.240x2 0.003390718 24f8ac7fce032509
+HASH-STABLE svm FAST 2 rounds all 24f8ac7fce032509
+== done [FAST] lane=svm ==
+== leg lane=svm mode=FAST round=5 20:21:15 ==
+== bench/lanes_price_main.mojo [FAST] lane=svm rounds=1 smoke=False ==
+LPRICE svm FAST warmup F2.xor.240x2 0.54164052 24f8ac7fce032509
+LPRICE svm FAST 1 F2.xor.240x2 0.003300157 24f8ac7fce032509
+HASH-STABLE svm FAST 2 rounds all 24f8ac7fce032509
+== done [FAST] lane=svm ==

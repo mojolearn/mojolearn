@@ -1,0 +1,30 @@
+== leg lane=metrics mode=FAST round=1 21:25:55 ==
+== bench/lanes_price_main.mojo [FAST] lane=metrics rounds=1 smoke=False ==
+LPRICE metrics FAST warmup lab2053.flt2053.sil521x4.tru301x6 0.403410771 ec63266074ceab42
+LPRICE metrics FAST 1 lab2053.flt2053.sil521x4.tru301x6 0.001499823 ec63266074ceab42
+HASH-STABLE metrics FAST 2 rounds all ec63266074ceab42
+== done [FAST] lane=metrics ==
+== leg lane=metrics mode=FAST round=2 21:25:57 ==
+== bench/lanes_price_main.mojo [FAST] lane=metrics rounds=1 smoke=False ==
+LPRICE metrics FAST warmup lab2053.flt2053.sil521x4.tru301x6 0.390061115 ec63266074ceab42
+LPRICE metrics FAST 1 lab2053.flt2053.sil521x4.tru301x6 0.001487573 ec63266074ceab42
+HASH-STABLE metrics FAST 2 rounds all ec63266074ceab42
+== done [FAST] lane=metrics ==
+== leg lane=metrics mode=FAST round=3 21:25:59 ==
+== bench/lanes_price_main.mojo [FAST] lane=metrics rounds=1 smoke=False ==
+LPRICE metrics FAST warmup lab2053.flt2053.sil521x4.tru301x6 0.391240111 ec63266074ceab42
+LPRICE metrics FAST 1 lab2053.flt2053.sil521x4.tru301x6 0.001510115 ec63266074ceab42
+HASH-STABLE metrics FAST 2 rounds all ec63266074ceab42
+== done [FAST] lane=metrics ==
+== leg lane=metrics mode=FAST round=4 21:26:01 ==
+== bench/lanes_price_main.mojo [FAST] lane=metrics rounds=1 smoke=False ==
+LPRICE metrics FAST warmup lab2053.flt2053.sil521x4.tru301x6 0.3893825 ec63266074ceab42
+LPRICE metrics FAST 1 lab2053.flt2053.sil521x4.tru301x6 0.001485874 ec63266074ceab42
+HASH-STABLE metrics FAST 2 rounds all ec63266074ceab42
+== done [FAST] lane=metrics ==
+== leg lane=metrics mode=FAST round=5 21:26:02 ==
+== bench/lanes_price_main.mojo [FAST] lane=metrics rounds=1 smoke=False ==
+LPRICE metrics FAST warmup lab2053.flt2053.sil521x4.tru301x6 0.390651517 ec63266074ceab42
+LPRICE metrics FAST 1 lab2053.flt2053.sil521x4.tru301x6 0.001504512 ec63266074ceab42
+HASH-STABLE metrics FAST 2 rounds all ec63266074ceab42
+== done [FAST] lane=metrics ==

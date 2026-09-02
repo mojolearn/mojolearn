@@ -1,0 +1,100 @@
+start 2026-09-02T20:06:15Z
+Imported from /root/mojolearn/bindings/_mojolearn_solver.mojo:43:
+Imported from ./solver/estimator.mojo:76:
+Imported from ./solver/impl/solver/cd.mojo:121:
+Imported from ./solver/impl/functions/linear_reg.mojo:33:
+/root/mojolearn/./core/column_stats.mojo:436:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            tile[ty * (TRANSPOSE_TILE + 1) + tx] = src.unsafe_load(
+            ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_solver.mojo:43:
+Imported from ./solver/estimator.mojo:76:
+Imported from ./solver/impl/solver/cd.mojo:121:
+Imported from ./solver/impl/functions/linear_reg.mojo:33:
+/root/mojolearn/./core/column_stats.mojo:445:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                r2 * n_rows + c2, tile[tx * (TRANSPOSE_TILE + 1) + ty]
+                                  ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_solver.mojo:43:
+Imported from ./solver/estimator.mojo:75:
+/root/mojolearn/./core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_solver.mojo:43:
+Imported from ./solver/estimator.mojo:75:
+/root/mojolearn/./core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_solver.mojo:43:
+Imported from ./solver/estimator.mojo:75:
+/root/mojolearn/./core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_solver.mojo:43:
+Imported from ./solver/estimator.mojo:75:
+/root/mojolearn/./core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_solver.mojo:43:
+Imported from ./solver/estimator.mojo:75:
+/root/mojolearn/./core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_solver.mojo:42:
+Imported from ./hierarchy/estimator.mojo:92:
+Imported from ./hierarchy/impl/cluster/detail/connectivities.mojo:56:
+Imported from /root/mojolearn/./core/row_norms.mojo:60:
+/root/mojolearn/./core/pinned_reduce.mojo:99:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = value
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_solver.mojo:42:
+Imported from ./hierarchy/estimator.mojo:92:
+Imported from ./hierarchy/impl/cluster/detail/connectivities.mojo:56:
+Imported from /root/mojolearn/./core/row_norms.mojo:60:
+/root/mojolearn/./core/pinned_reduce.mojo:104:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_solver.mojo:42:
+Imported from ./hierarchy/estimator.mojo:92:
+Imported from ./hierarchy/impl/cluster/detail/connectivities.mojo:56:
+Imported from /root/mojolearn/./core/row_norms.mojo:60:
+/root/mojolearn/./core/pinned_reduce.mojo:104:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_solver.mojo:42:
+Imported from ./hierarchy/estimator.mojo:92:
+Imported from ./hierarchy/impl/cluster/detail/connectivities.mojo:56:
+Imported from /root/mojolearn/./core/row_norms.mojo:60:
+/root/mojolearn/./core/pinned_reduce.mojo:104:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                                      ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_solver.mojo:42:
+Imported from ./hierarchy/estimator.mojo:92:
+Imported from ./hierarchy/impl/cluster/detail/connectivities.mojo:56:
+Imported from /root/mojolearn/./core/row_norms.mojo:60:
+/root/mojolearn/./core/pinned_reduce.mojo:107:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var total = red[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_solver.mojo:110:18: warning: assignment to 'n_iter' was never used; assign to '_' instead?
+    var n_iter = 0
+                 ^
+/root/mojolearn/bindings/_mojolearn_solver.mojo:204:18: warning: assignment to 'rounds' was never used; assign to '_' instead?
+    var rounds = 0
+                 ^
+built python/mojolearn/deterministic/_mojolearn_solver.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+end 2026-09-02T20:06:29Z OK

@@ -1,0 +1,31 @@
+{
+  "docker": {
+    "verdict": "NOT TESTED: no docker daemon here"
+  },
+  "env_hidden": {
+    "fit_err": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import numpy as np, mojolearn; X=np.random.default_rng(0).random((256,4),dtype=np.float32); mojolearn.KMeans(n_clusters=2).fit(X); print('FIT OK')\n                                                                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^\n  File \"/root/mojolearn/bench/results/e1/2026-09-02_200357-mojolearn-e2-amd/diag/pkgroot/mojolearn/cluster.py\", line 153, in fit\n    inertia, n_iter, sum_scale, weight_scale = self._bind(\"_mojolearn\").kmeans_fit(\n                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        _addr_ro(x),\n        ^^^^^^^^^^^^\n    ...<10 lines>...\n        ],\n        ^^\n    )\n    ^\nException: At max/mojo/max/gpu/host/device_context.mojo:3825:17: Call to hipInit failed with error code: 100, error name: hipErrorNoDevice, error string: no ROCm-capable device is detected\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.",
+    "fit_out": "",
+    "fit_rc": 1,
+    "import_err": "",
+    "import_out": "IMPORTED hip",
+    "import_rc": 0,
+    "verdict": "IMPORTED (expected: the probe reads device nodes, not these variables)"
+  },
+  "namespace": {
+    "err": "    _backend.select()\n    ~~~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/bench/results/e1/2026-09-02_200357-mojolearn-e2-amd/diag/pkgroot/mojolearn/_backend.py\", line 732, in select\n    ident_dir = tier_dir(mode)\n  File \"/root/mojolearn/bench/results/e1/2026-09-02_200357-mojolearn-e2-amd/diag/pkgroot/mojolearn/_backend.py\", line 657, in tier_dir\n    _, base = _layout()\n              ~~~~~~~^^\n  File \"/root/mojolearn/bench/results/e1/2026-09-02_200357-mojolearn-e2-amd/diag/pkgroot/mojolearn/_backend.py\", line 634, in _layout\n    raise ImportError(\n    ...<12 lines>...\n    )\nImportError: mojolearn: NO SUPPORTED GPU FOUND ON THIS BOX, and there is no CPU path in this package. This install carries binary sets for ['hip'] under /root/mojolearn/bench/results/e1/2026-09-02_200357-mojolearn-e2-amd/diag/pkgroot/mojolearn. What was looked for and what was found:\n  cuda:\n    /dev/nvidiactl               absent\n    /dev/nvidia0                 absent\n    libcuda.so.1                 not loadable\n    libcuda.so                   not loadable\n  hip:\n    /dev/kfd                     absent\n    libamdhip64.so.7             not loadable\n    libamdhip64.so.6             not loadable\n    libamdhip64.so               not loadable\n  MOJOLEARN_VENDOR is not set.\n\nA device node or a driver library for one of the sets above must be visible to this process. In a container that means the GPU is passed through (`--gpus all` for NVIDIA, `--device /dev/kfd --device /dev/dri` for AMD). If the device is present and this probe is wrong, MOJOLEARN_VENDOR=cuda or MOJOLEARN_VENDOR=hip picks the directory directly and the first fit reports the runtime's own error.",
+    "found": {
+      "/dev/kfd": true,
+      "MOJOLEARN_VENDOR": true,
+      "NO SUPPORTED GPU FOUND": true
+    },
+    "hidden": [
+      "/dev/kfd",
+      "/opt/rocm-6.4.0/lib/libamdhip64.so",
+      "/opt/rocm-6.4.0/lib/libamdhip64.so.6"
+    ],
+    "out": "",
+    "rc": 1,
+    "verdict": "PASS"
+  },
+  "summary": "PASS"
+}

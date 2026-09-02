@@ -1,0 +1,22 @@
+vendor=cuda  build_rc=0  smoke_rc=0  sabotage_rc=0  nogpu_rc=0
+seconds=467
+vendor=cuda
+arch=sm_90a
+gpu_archs_requested=
+build_rc=0 stage_rc=0
+build_seconds=452
+set_fast_count=15
+set_fast_bytes=31295344
+set_deterministic_count=15
+set_deterministic_bytes=30988264
+set_identical_count=15
+set_identical_bytes=28261472
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=22195824
+smoke[fast]: smoke v0.4.0 mode=fast vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+smoke[deterministic]: smoke v0.4.0 mode=deterministic vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+smoke[identical]: smoke v0.4.0 mode=identical vendor=cuda (the box probe (device nodes and driver libraries)) lanes=29 PASS
+sabotage: sabotage PASS
+nogpu: nogpu PASS

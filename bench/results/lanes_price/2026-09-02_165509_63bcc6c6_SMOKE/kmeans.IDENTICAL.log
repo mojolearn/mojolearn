@@ -1,0 +1,6 @@
+== leg lane=kmeans mode=IDENTICAL round=1 16:56:03 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=kmeans rounds=1 smoke=True ==
+LPRICE kmeans IDENTICAL warmup 2048x32.k16 0.041017 ffa05b13341a115e
+LPRICE kmeans IDENTICAL 1 2048x32.k16 0.032076 ffa05b13341a115e
+HASH-STABLE kmeans IDENTICAL 2 rounds all ffa05b13341a115e
+== done [IDENTICAL] lane=kmeans ==

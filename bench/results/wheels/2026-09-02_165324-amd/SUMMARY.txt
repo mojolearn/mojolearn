@@ -1,0 +1,24 @@
+vendor=hip  build_rc=0  smoke_rc=0  sabotage_rc=0  nogpu_rc=0
+gates=NOT APPLICABLE (cross-build: box gfx942, set gfx90a); evidence is build_rc and the read-back
+seconds=287
+vendor=hip
+arch=gfx90a
+gpu_archs_requested=gfx90a
+build_rc=0 stage_rc=0
+build_seconds=287
+set_fast_count=15
+set_fast_bytes=20379327
+set_deterministic_count=15
+set_deterministic_bytes=20383543
+set_identical_count=15
+set_identical_bytes=18898031
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=15515979
+smoke[fast]: NOT APPLICABLE: cross-build, box is gfx942 and the set is gfx90a
+smoke[deterministic]: NOT APPLICABLE: cross-build, box is gfx942 and the set is gfx90a
+smoke[identical]: NOT APPLICABLE: cross-build, box is gfx942 and the set is gfx90a
+sabotage: NOT APPLICABLE: cross-build, box is gfx942 and the set is gfx90a
+nogpu: NOT APPLICABLE: cross-build, box is gfx942 and the set is gfx90a
+source_e1_dir=bench/results/e1/2026-09-02_205454-mojolearn-e2-amd/

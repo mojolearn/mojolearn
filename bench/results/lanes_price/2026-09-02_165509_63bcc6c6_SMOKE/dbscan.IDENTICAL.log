@@ -1,0 +1,6 @@
+== leg lane=dbscan mode=IDENTICAL round=1 16:56:04 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=dbscan rounds=1 smoke=True ==
+LPRICE dbscan IDENTICAL warmup 2048x8 0.180979 0c90f5cade5e2977
+LPRICE dbscan IDENTICAL 1 2048x8 0.079986 0c90f5cade5e2977
+HASH-STABLE dbscan IDENTICAL 2 rounds all 0c90f5cade5e2977
+== done [IDENTICAL] lane=dbscan ==

@@ -1,0 +1,30 @@
+== leg lane=kde mode=IDENTICAL round=1 20:20:48 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=kde rounds=1 smoke=False ==
+LPRICE kde IDENTICAL warmup 1024x256x8 0.00071965 3719b9e6a55377a7
+LPRICE kde IDENTICAL 1 1024x256x8 0.000389021 3719b9e6a55377a7
+HASH-STABLE kde IDENTICAL 2 rounds all 3719b9e6a55377a7
+== done [IDENTICAL] lane=kde ==
+== leg lane=kde mode=IDENTICAL round=2 20:20:50 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=kde rounds=1 smoke=False ==
+LPRICE kde IDENTICAL warmup 1024x256x8 0.000799197 3719b9e6a55377a7
+LPRICE kde IDENTICAL 1 1024x256x8 0.000393946 3719b9e6a55377a7
+HASH-STABLE kde IDENTICAL 2 rounds all 3719b9e6a55377a7
+== done [IDENTICAL] lane=kde ==
+== leg lane=kde mode=IDENTICAL round=3 20:20:52 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=kde rounds=1 smoke=False ==
+LPRICE kde IDENTICAL warmup 1024x256x8 0.00070698 3719b9e6a55377a7
+LPRICE kde IDENTICAL 1 1024x256x8 0.000407105 3719b9e6a55377a7
+HASH-STABLE kde IDENTICAL 2 rounds all 3719b9e6a55377a7
+== done [IDENTICAL] lane=kde ==
+== leg lane=kde mode=IDENTICAL round=4 20:20:54 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=kde rounds=1 smoke=False ==
+LPRICE kde IDENTICAL warmup 1024x256x8 0.000729127 3719b9e6a55377a7
+LPRICE kde IDENTICAL 1 1024x256x8 0.000386839 3719b9e6a55377a7
+HASH-STABLE kde IDENTICAL 2 rounds all 3719b9e6a55377a7
+== done [IDENTICAL] lane=kde ==
+== leg lane=kde mode=IDENTICAL round=5 20:20:55 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=kde rounds=1 smoke=False ==
+LPRICE kde IDENTICAL warmup 1024x256x8 0.000962085 3719b9e6a55377a7
+LPRICE kde IDENTICAL 1 1024x256x8 0.000396351 3719b9e6a55377a7
+HASH-STABLE kde IDENTICAL 2 rounds all 3719b9e6a55377a7
+== done [IDENTICAL] lane=kde ==

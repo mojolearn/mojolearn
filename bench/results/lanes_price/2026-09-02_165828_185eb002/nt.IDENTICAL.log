@@ -1,0 +1,30 @@
+== leg lane=nt mode=IDENTICAL round=1 16:59:01 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=nt rounds=1 smoke=False ==
+LPRICE nt IDENTICAL warmup 4096x64x64 0.009302 5c68413208583222
+LPRICE nt IDENTICAL 1 4096x64x64 0.009776 5c68413208583222
+HASH-STABLE nt IDENTICAL 2 rounds all 5c68413208583222
+== done [IDENTICAL] lane=nt ==
+== leg lane=nt mode=IDENTICAL round=2 16:59:01 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=nt rounds=1 smoke=False ==
+LPRICE nt IDENTICAL warmup 4096x64x64 0.001336 5c68413208583222
+LPRICE nt IDENTICAL 1 4096x64x64 0.008635 5c68413208583222
+HASH-STABLE nt IDENTICAL 2 rounds all 5c68413208583222
+== done [IDENTICAL] lane=nt ==
+== leg lane=nt mode=IDENTICAL round=3 16:59:01 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=nt rounds=1 smoke=False ==
+LPRICE nt IDENTICAL warmup 4096x64x64 0.001354 5c68413208583222
+LPRICE nt IDENTICAL 1 4096x64x64 0.008611 5c68413208583222
+HASH-STABLE nt IDENTICAL 2 rounds all 5c68413208583222
+== done [IDENTICAL] lane=nt ==
+== leg lane=nt mode=IDENTICAL round=4 16:59:01 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=nt rounds=1 smoke=False ==
+LPRICE nt IDENTICAL warmup 4096x64x64 0.007386 5c68413208583222
+LPRICE nt IDENTICAL 1 4096x64x64 0.009903 5c68413208583222
+HASH-STABLE nt IDENTICAL 2 rounds all 5c68413208583222
+== done [IDENTICAL] lane=nt ==
+== leg lane=nt mode=IDENTICAL round=5 16:59:01 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=nt rounds=1 smoke=False ==
+LPRICE nt IDENTICAL warmup 4096x64x64 0.00138 5c68413208583222
+LPRICE nt IDENTICAL 1 4096x64x64 0.008656 5c68413208583222
+HASH-STABLE nt IDENTICAL 2 rounds all 5c68413208583222
+== done [IDENTICAL] lane=nt ==

@@ -1,0 +1,53 @@
+== fast ==
+  fast test_mamba_surface -> RED (rc=1)
+        99 checks, 3 failed
+      
+      test_mamba_surface: RED. 3 checks failed.
+  fast test_transformer_surface -> RED (rc=1)
+        44 checks, 2 failed
+      
+      test_transformer_surface: RED. 2 checks failed.
+  fast test_arima_surface -> GREEN
+      run says the surface marshals correctly, refuses what it claims
+      to refuse, recovers planted coefficients and forecasts the
+      closed form. It says NOTHING about cross-vendor identity.
+== deterministic ==
+  deterministic test_mamba_surface -> RED (rc=1)
+        99 checks, 3 failed
+      
+      test_mamba_surface: RED. 3 checks failed.
+  deterministic test_transformer_surface -> RED (rc=1)
+        44 checks, 2 failed
+      
+      test_transformer_surface: RED. 2 checks failed.
+== identical ==
+  identical test_mamba_surface -> RED (rc=1)
+        99 checks, 1 failed
+      
+      test_mamba_surface: RED. 1 checks failed.
+  identical test_transformer_surface -> GREEN
+      the Mojo-side refusals included. One box, one vendor: the
+      cross-vendor statement belongs to the lane's cards, not to this
+      file.
+  identical test_arima_surface -> GREEN
+      BITS alone as inside a batch of six. What it does NOT prove is a
+      second vendor: arima/'s three-vendor card is the Kalman filter's,
+      and the fit has never left one Apple M4.
+
+== summary ==
+# Python surface gates on this box
+# host:   mojolearn-e2-nv  x86_64
+# kernel: 5.15.0-185-generic
+# date:   2026-09-02T16:47:42Z
+# commit: cd56e8ce14bd11dfd3ccec326554db430bbb46aa
+
+# gpu: NVIDIA H100 80GB HBM3, 580.173.02
+
+fast           test_mamba_surface           RED (rc=1)
+fast           test_transformer_surface     RED (rc=1)
+fast           test_arima_surface           GREEN
+deterministic  test_mamba_surface           RED (rc=1)
+deterministic  test_transformer_surface     RED (rc=1)
+identical      test_mamba_surface           RED (rc=1)
+identical      test_transformer_surface     GREEN
+identical      test_arima_surface           GREEN

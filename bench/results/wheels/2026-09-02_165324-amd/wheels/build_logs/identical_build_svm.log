@@ -1,0 +1,420 @@
+start 2026-09-02T20:56:47Z
+!! MOJOLEARN_GPU_ARCHS=gfx90a (--target-accelerator); read the architecture back out of the built .so
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:71:
+/root/mojolearn/./core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:71:
+/root/mojolearn/./core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:71:
+/root/mojolearn/./core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+./svm/impl/svm/smosolver.mojo:319:29: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var p = tmp.unsafe_ptr().bitcast[UInt8]()
+            ~~~~~~~~~~~~~~~~^~~~~~~~
+                             unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:71:
+/root/mojolearn/./core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+./svm/impl/svm/smoblocksolve.mojo:159:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        Kd[tid] = kernel.unsafe_load(tid + tid * n_ws)
+        ~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+./svm/impl/svm/smoblocksolve.mojo:163:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sh_tmp[0] = Float32(0.0)
+        ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+./svm/impl/svm/smoblocksolve.mojo:164:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sh_tmp[1] = Float32(0.0)
+        ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+./svm/impl/svm/smoblocksolve.mojo:184:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            sh_tmp[0] = Float32(tid)
+            ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+./svm/impl/svm/smoblocksolve.mojo:186:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var u = Int(sh_tmp[0])
+                    ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+./svm/impl/svm/smoblocksolve.mojo:220:36: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var eta_ui = ftz(ftz(Kd[tid] + Kd[u]) - ftz(Float32(2.0) * Kui))
+                                 ~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+./svm/impl/svm/smoblocksolve.mojo:220:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var eta_ui = ftz(ftz(Kd[tid] + Kd[u]) - ftz(Float32(2.0) * Kui))
+                                           ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+./svm/impl/svm/smoblocksolve.mojo:231:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            sh_tmp[0] = Float32(tid)
+            ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+./svm/impl/svm/smoblocksolve.mojo:233:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var l = Int(sh_tmp[0])
+                    ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+./svm/impl/svm/smoblocksolve.mojo:241:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            sh_tmp[0] = C - a if y > Float32(0.0) else a
+            ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+./svm/impl/svm/smoblocksolve.mojo:245:36: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var eta_ul = ftz(ftz(Kd[u] + Kd[l]) - ftz(Float32(2.0) * Kui))
+                                 ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+./svm/impl/svm/smoblocksolve.mojo:245:44: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var eta_ul = ftz(ftz(Kd[u] + Kd[l]) - ftz(Float32(2.0) * Kui))
+                                         ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+./svm/impl/svm/smoblocksolve.mojo:249:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            sh_tmp[1] = tmp_l if tmp_l < q_l else q_l
+            ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+./svm/impl/svm/smoblocksolve.mojo:251:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var tmp_u = sh_tmp[0]
+                    ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+./svm/impl/svm/smoblocksolve.mojo:252:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var tmp_l2 = sh_tmp[1]
+                     ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:71:
+/root/mojolearn/./core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:84:9: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    vals[tid] = value
+    ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:85:9: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    keys[tid] = key
+    ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:90:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ov = vals[tid + step]
+                     ~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:91:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ok = keys[tid + step]
+                     ~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:92:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mv = vals[tid]
+                     ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:93:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mk = keys[tid]
+                     ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:100:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                vals[tid] = ov
+                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:101:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                keys[tid] = ok
+                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:104:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var rv = vals[0]
+             ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:105:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var rk = keys[0]
+             ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:126:9: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    vals[tid] = value
+    ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:127:9: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    keys[tid] = key
+    ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:132:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ov = vals[tid + step]
+                     ~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:133:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ok = keys[tid + step]
+                     ~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:134:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mv = vals[tid]
+                     ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:135:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mk = keys[tid]
+                     ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:142:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                vals[tid] = ov
+                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:143:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                keys[tid] = ok
+                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:146:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var rv = vals[0]
+             ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:147:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var rk = keys[0]
+             ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:172:9: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    vals[tid] = value
+    ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:177:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ov = vals[tid + step]
+                     ~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:178:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if ov > vals[tid]:
+                    ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:179:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                vals[tid] = ov
+                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:182:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var rv = vals[0]
+             ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:203:9: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    vals[tid] = value
+    ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:208:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ov = vals[tid + step]
+                     ~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:209:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mv = vals[tid]
+                     ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:211:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                vals[tid] = max(ov, mv)
+                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:213:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                vals[tid] = max(mv, ov)
+                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_svm.mojo:61:
+Imported from ./svm/estimator.mojo:72:
+Imported from ./svm/impl/svm/smosolver.mojo:89:
+Imported from ./svm/impl/svm/smoblocksolve.mojo:87:
+./svm/checks/pinned_argreduce.mojo:216:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var rv = vals[0]
+             ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Included from /root/mojolearn/bindings/_mojolearn_svm.mojo:55:
+Included from ./isolation_forest/estimator.mojo:42:
+Included from ./isolation_forest/impl/isolation_forest/isolation_forest.mojo:76:
+./isolation_forest/impl/isolation_forest/isolation_tree_builder.mojo:796:20: warning: unreachable code after infinite loop
+    return Float32(0.0)
+                   ^
+/root/mojolearn/bindings/_mojolearn_svm.mojo:170:28: warning: assignment to 'res' was never used; assign to '_' instead?
+    var res = SvcFitOutputs()
+                           ^
+/root/mojolearn/bindings/_mojolearn_svm.mojo:253:28: warning: assignment to 'out' was never used; assign to '_' instead?
+    var out = List[Float32]()
+                           ^
+/root/mojolearn/bindings/_mojolearn_svm.mojo:348:28: warning: assignment to 'res' was never used; assign to '_' instead?
+    var res = SvrFitOutputs()
+                           ^
+/root/mojolearn/bindings/_mojolearn_svm.mojo:429:28: warning: assignment to 'out' was never used; assign to '_' instead?
+    var out = List[Float32]()
+                           ^
+/root/mojolearn/bindings/_mojolearn_svm.mojo:520:27: warning: assignment to 'res' was never used; assign to '_' instead?
+    var res = IFRunOutputs()
+                          ^
+built python/mojolearn/identical/_mojolearn_svm.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+end 2026-09-02T20:57:03Z OK

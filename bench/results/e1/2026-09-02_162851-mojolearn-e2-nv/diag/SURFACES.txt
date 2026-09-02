@@ -1,0 +1,16 @@
+# Python surface gates on this box
+# host:   mojolearn-e2-nv  x86_64
+# kernel: 5.15.0-185-generic
+# date:   2026-09-02T16:47:42Z
+# commit: cd56e8ce14bd11dfd3ccec326554db430bbb46aa
+
+# gpu: NVIDIA H100 80GB HBM3, 580.173.02
+
+fast           test_mamba_surface           RED (rc=1)
+fast           test_transformer_surface     RED (rc=1)
+fast           test_arima_surface           GREEN
+deterministic  test_mamba_surface           RED (rc=1)
+deterministic  test_transformer_surface     RED (rc=1)
+identical      test_mamba_surface           RED (rc=1)
+identical      test_transformer_surface     GREEN
+identical      test_arima_surface           GREEN

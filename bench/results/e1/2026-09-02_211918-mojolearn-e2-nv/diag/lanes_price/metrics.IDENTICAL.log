@@ -1,0 +1,30 @@
+== leg lane=metrics mode=IDENTICAL round=1 21:25:56 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=metrics rounds=1 smoke=False ==
+LPRICE metrics IDENTICAL warmup lab2053.flt2053.sil521x4.tru301x6 0.389040195 2321a95d3439fc2b
+LPRICE metrics IDENTICAL 1 lab2053.flt2053.sil521x4.tru301x6 0.001665016 2321a95d3439fc2b
+HASH-STABLE metrics IDENTICAL 2 rounds all 2321a95d3439fc2b
+== done [IDENTICAL] lane=metrics ==
+== leg lane=metrics mode=IDENTICAL round=2 21:25:58 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=metrics rounds=1 smoke=False ==
+LPRICE metrics IDENTICAL warmup lab2053.flt2053.sil521x4.tru301x6 0.396747712 2321a95d3439fc2b
+LPRICE metrics IDENTICAL 1 lab2053.flt2053.sil521x4.tru301x6 0.001500015 2321a95d3439fc2b
+HASH-STABLE metrics IDENTICAL 2 rounds all 2321a95d3439fc2b
+== done [IDENTICAL] lane=metrics ==
+== leg lane=metrics mode=IDENTICAL round=3 21:26:00 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=metrics rounds=1 smoke=False ==
+LPRICE metrics IDENTICAL warmup lab2053.flt2053.sil521x4.tru301x6 0.389078077 2321a95d3439fc2b
+LPRICE metrics IDENTICAL 1 lab2053.flt2053.sil521x4.tru301x6 0.001511195 2321a95d3439fc2b
+HASH-STABLE metrics IDENTICAL 2 rounds all 2321a95d3439fc2b
+== done [IDENTICAL] lane=metrics ==
+== leg lane=metrics mode=IDENTICAL round=4 21:26:01 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=metrics rounds=1 smoke=False ==
+LPRICE metrics IDENTICAL warmup lab2053.flt2053.sil521x4.tru301x6 0.389501276 2321a95d3439fc2b
+LPRICE metrics IDENTICAL 1 lab2053.flt2053.sil521x4.tru301x6 0.001486873 2321a95d3439fc2b
+HASH-STABLE metrics IDENTICAL 2 rounds all 2321a95d3439fc2b
+== done [IDENTICAL] lane=metrics ==
+== leg lane=metrics mode=IDENTICAL round=5 21:26:03 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=metrics rounds=1 smoke=False ==
+LPRICE metrics IDENTICAL warmup lab2053.flt2053.sil521x4.tru301x6 0.392973037 2321a95d3439fc2b
+LPRICE metrics IDENTICAL 1 lab2053.flt2053.sil521x4.tru301x6 0.001513522 2321a95d3439fc2b
+HASH-STABLE metrics IDENTICAL 2 rounds all 2321a95d3439fc2b
+== done [IDENTICAL] lane=metrics ==

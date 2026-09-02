@@ -1,0 +1,6 @@
+== leg lane=gram mode=IDENTICAL round=1 16:56:04 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=gram rounds=1 smoke=True ==
+LPRICE gram IDENTICAL warmup 32x32x4096 0.008984 1cbf58ff572c1af8
+LPRICE gram IDENTICAL 1 32x32x4096 0.006021 1cbf58ff572c1af8
+HASH-STABLE gram IDENTICAL 2 rounds all 1cbf58ff572c1af8
+== done [IDENTICAL] lane=gram ==

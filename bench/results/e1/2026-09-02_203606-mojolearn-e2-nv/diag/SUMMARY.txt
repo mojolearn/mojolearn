@@ -1,0 +1,23 @@
+vendor=cuda  build_rc=0  smoke_rc=0  sabotage_rc=0  nogpu_rc=0
+gates=NOT APPLICABLE (cross-build: box sm_90, set sm_120a); evidence is build_rc and the read-back
+seconds=434
+vendor=cuda
+arch=sm_120a
+gpu_archs_requested=sm_120a
+build_rc=0 stage_rc=0
+build_seconds=434
+set_fast_count=15
+set_fast_bytes=33765232
+set_deterministic_count=15
+set_deterministic_bytes=33355752
+set_identical_count=15
+set_identical_bytes=33258592
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=23416878
+smoke[fast]: NOT APPLICABLE: cross-build, box is sm_90 and the set is sm_120a
+smoke[deterministic]: NOT APPLICABLE: cross-build, box is sm_90 and the set is sm_120a
+smoke[identical]: NOT APPLICABLE: cross-build, box is sm_90 and the set is sm_120a
+sabotage: NOT APPLICABLE: cross-build, box is sm_90 and the set is sm_120a
+nogpu: NOT APPLICABLE: cross-build, box is sm_90 and the set is sm_120a

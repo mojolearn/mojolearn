@@ -1,0 +1,30 @@
+  agglomerative    ok   02ca572ae936a2fa     0.7s
+  dbscan           ok   a4608e954c7420b7     0.0s
+  elasticnet       ok   4626a570a63dacf2     0.0s
+  et-clf           ok   707d2c92e92f6a40     0.0s
+  et-reg           ok   a1d2eb9ddb149617     0.0s
+  gbdt-depthwise   ok   55b5854f757cd739     0.1s
+  gbdt-lossguide   ok   c38591dd2ad30b7f     0.2s
+  gbdt-rmse        ok   df3de5e82469e55e     0.1s
+  gbdt-symmetric   ok   b2547e31cd460d13     0.1s
+  gemm-pinned      ok   REFUSED as designed under deterministic
+  gemm-vendor      ok   e25840533b2ba0cd     0.0s
+  holtwinters      ok   3014ac512d1161ad     0.1s
+  iforest          ok   4ebdf5bb59e30a54     0.1s
+  kde              ok   4f59c8547f8d18c0     0.0s
+  kmeans           ok   da3cb10e46c91256     0.0s
+  knn-clf          ok   f359ee4876deb908     0.0s
+  knn-reg          ok   ff4a92b889616aea     0.0s
+  knn-tied         ok   eb5d50fc1d09b0e1     0.0s
+  lasso            ok   3d3afb54f6bc1a30     0.0s
+  logistic         ok   11f68df08d4ae1bb     0.0s
+  metrics          ok   01a17b9ad7a6275c     0.0s
+  ols              ok   9a3d2aabdcce9dc2     0.0s
+  pca              ok   d4fd24d79e0a2b1c     0.0s
+  rf-clf           ok   1178f0463159b897     0.1s
+  rf-reg           ok   91269c5ae3828665     0.1s
+  ridge            ok   a430ab480f07d9b4     0.0s
+  spectral         ok   7c5f4e5c32dc0ca1     0.1s
+  svc              ok   61d0cf360072c4b8     0.0s
+  tsvd             ok   a378f1007cb95451     0.0s
+smoke v0.4.0 mode=deterministic vendor=hip (the box probe (device nodes and driver libraries)) lanes=29 PASS

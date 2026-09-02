@@ -1,0 +1,30 @@
+== leg lane=linkage mode=IDENTICAL round=1 21:25:37 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=linkage rounds=1 smoke=False ==
+LPRICE linkage IDENTICAL warmup blobs_dups.102x5 0.002695308 5d3155fc940e61d2
+LPRICE linkage IDENTICAL 1 blobs_dups.102x5 0.001623359 5d3155fc940e61d2
+HASH-STABLE linkage IDENTICAL 2 rounds all 5d3155fc940e61d2
+== done [IDENTICAL] lane=linkage ==
+== leg lane=linkage mode=IDENTICAL round=2 21:25:39 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=linkage rounds=1 smoke=False ==
+LPRICE linkage IDENTICAL warmup blobs_dups.102x5 0.002694997 5d3155fc940e61d2
+LPRICE linkage IDENTICAL 1 blobs_dups.102x5 0.001577912 5d3155fc940e61d2
+HASH-STABLE linkage IDENTICAL 2 rounds all 5d3155fc940e61d2
+== done [IDENTICAL] lane=linkage ==
+== leg lane=linkage mode=IDENTICAL round=3 21:25:41 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=linkage rounds=1 smoke=False ==
+LPRICE linkage IDENTICAL warmup blobs_dups.102x5 0.002777036 5d3155fc940e61d2
+LPRICE linkage IDENTICAL 1 blobs_dups.102x5 0.001577824 5d3155fc940e61d2
+HASH-STABLE linkage IDENTICAL 2 rounds all 5d3155fc940e61d2
+== done [IDENTICAL] lane=linkage ==
+== leg lane=linkage mode=IDENTICAL round=4 21:25:43 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=linkage rounds=1 smoke=False ==
+LPRICE linkage IDENTICAL warmup blobs_dups.102x5 0.002683785 5d3155fc940e61d2
+LPRICE linkage IDENTICAL 1 blobs_dups.102x5 0.001585426 5d3155fc940e61d2
+HASH-STABLE linkage IDENTICAL 2 rounds all 5d3155fc940e61d2
+== done [IDENTICAL] lane=linkage ==
+== leg lane=linkage mode=IDENTICAL round=5 21:25:45 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=linkage rounds=1 smoke=False ==
+LPRICE linkage IDENTICAL warmup blobs_dups.102x5 0.002674276 5d3155fc940e61d2
+LPRICE linkage IDENTICAL 1 blobs_dups.102x5 0.001569761 5d3155fc940e61d2
+HASH-STABLE linkage IDENTICAL 2 rounds all 5d3155fc940e61d2
+== done [IDENTICAL] lane=linkage ==

@@ -1,0 +1,6 @@
+== leg lane=gram mode=FAST round=1 16:56:04 ==
+== bench/lanes_price_main.mojo [FAST] lane=gram rounds=1 smoke=True ==
+LPRICE gram FAST warmup 32x32x4096 0.008909 793006eb4ff56963
+LPRICE gram FAST 1 32x32x4096 0.005942 793006eb4ff56963
+HASH-STABLE gram FAST 2 rounds all 793006eb4ff56963
+== done [FAST] lane=gram ==

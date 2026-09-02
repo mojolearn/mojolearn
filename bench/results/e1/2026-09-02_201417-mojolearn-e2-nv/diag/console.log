@@ -1,0 +1,37 @@
+[20:14:21 idcost] 1/2 the least-squares re-verify (the cheap one, and it can FAIL loudly)
+    check_ols_arms_are_pinned OK [IDENTICAL]: step 1 compiles against column bit-identical and the pinned Gram kernel serves 8, 16 and 128 features
+    check_ols_refuses_over_capacity OK [IDENTICAL]: 512 x 130 raised by name through the whole estimator rather than falling through to the vendor matmul
+    check_ols_is_launch_invariant OK [IDENTICAL]: all 12 coefficients bit-identical across elem_tpb 256/64, 0/37 floats of buffer padding and two different scratch poisons (coef[0] = 0xbc0517a9), and the A-vs-A control agrees
+    check_ols_host_surface_takes_the_guard OK [IDENTICAL]: the Python-facing entry interpolates a 6 x 16 design (residual 3.018681760114106e-07), i.e. it takes the min-norm route and not lstsq_eig; the 16 x 6 control does not (0.5533459012942743)
+    check_ols_rank_guard_is_absolute OK [IDENTICAL]: the SAME design has rank 8 at scale 1 and rank 0 at scale 2^-24. DivideByNonZero's threshold is absolute (OLS_NONZERO_THRESH), the quantity it tests scales with the square of the data, and what the comparison outputs is a RANK.
+    check_ols_card_hashes_raw_bytes OK [IDENTICAL]: 0x3f00004b and 0x3f00004c both print 0.5000045 -- decimal text cannot separate them, FNV-1a64 over raw bytes gives 0xeba04fe033207f3f vs 0xcbbb21b684141e94
+    check_ols_card_is_emitted OK [IDENTICAL]: 11 stages, and two fits of one fixture agree on every one of them
+    measure; see IDENTITY_PATHS.md and E1_RUNBOOK.md.
+[20:18:49 idcost] 2/2 the identity tax, six lanes, alternated
+    linkage  5    0.001692    0.001609   0.951   0.930   1.033  d486f76f518b97e2 5d3155fc940e61d2 fast!=ident bits
+    svm      5    0.003391    0.003157   0.931   0.563   1.000  24f8ac7fce032509 9bec403e03e1a2cc fast!=ident bits
+    metrics  5    0.001747    0.001560   0.893   0.709   1.686  ec63266074ceab42 2321a95d3439fc2b fast!=ident bits
+    gemm     5    0.000100    0.000065   0.649   0.205   0.773  c751624f62b9f822 79adfe2dd5bd57e6 fast!=ident bits
+    
+    READ THE RATIO AS A BAND: min/max are the per-round paired ratios
+    (IDENTICAL_r / FAST_r) over 5 alternated rounds on THIS box.
+    The median is the band's center, not a figure to four places. Copy
+    the row into bench/LANES_PRICE.md with the date, the sha and the
+    machine beside it.
+    
+    == done: /root/mojolearn/bench/results/e1/2026-09-02_201417-mojolearn-e2-nv/diag/lanes_price ==
+commit=63bcc6c6773f4cf00a131d4378afc3e7ce79523d
+uname=Linux 5.15.0-185-generic x86_64
+ols_rc=1  price_rc=0
+seconds=436
+-- ols --
+check_ols_is_launch_invariant OK [IDENTICAL]: all 12 coefficients bit-identical across elem_tpb 256/64, 0/37 floats of buffer padding and two different scratch poisons (coef[0] = 0xbc0517a9), and the A-vs-A control agrees
+check_ols_is_launch_invariant OK [IDENTICAL]: all 12 coefficients bit-identical across elem_tpb 256/64, 0/37 floats of buffer padding and two different scratch poisons (coef[0] = 0xbc0517a9), and the A-vs-A control agrees
+-- identity tax (ratio.tsv) --
+lane	n	fast_med_s	ident_med_s	ratio_med	ratio_min	ratio_max	fast_min_s	fast_max_s	ident_min_s	ident_max_s	fast_hash	ident_hash	hash_note
+cd	5	0.001340	0.001673	1.249	1.172	1.682	0.001316	0.001427	0.001668	0.002253	3bc909a47ebc9bda	3cb298860e514e8a	fast!=ident bits
+kde	5	0.000312	0.000394	1.264	1.248	1.321	0.000308	0.000315	0.000387	0.000407	4ec9d98c61d3ae83	3719b9e6a55377a7	fast!=ident bits
+linkage	5	0.001692	0.001609	0.951	0.930	1.033	0.001675	0.001711	0.001591	0.001758	d486f76f518b97e2	5d3155fc940e61d2	fast!=ident bits
+svm	5	0.003391	0.003157	0.931	0.563	1.000	0.003300	0.005609	0.003099	0.003312	24f8ac7fce032509	9bec403e03e1a2cc	fast!=ident bits
+metrics	5	0.001747	0.001560	0.893	0.709	1.686	0.001545	0.002199	0.001485	0.003185	ec63266074ceab42	2321a95d3439fc2b	fast!=ident bits
+gemm	5	0.000100	0.000065	0.649	0.205	0.773	0.000086	0.000404	0.000062	0.000083	c751624f62b9f822	79adfe2dd5bd57e6	fast!=ident bits
