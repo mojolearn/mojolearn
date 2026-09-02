@@ -346,11 +346,30 @@ sanctioned capability growth, but not from this lane).
 | reduction / GEMM stage | ordered-reduction agreement, the mechanism most accelerators get wrong first | `gemm/` trace territory (`tools/gemm_card.sh`) |
 | tree-training card | a real multi-thousand-stage workload, graded by digest and diffed by stage | `gbdt/train.mojo`'s existing `IdentityTrace` |
 
-## Runs owed (nothing on this page has run yet)
+## Runs owed
 
-This machinery was built write-only on 2026-09-01. **Every command below is
-UNVERIFIED, RUN OWED**, in this order. The rebuild comes first because the
-on-disk `.so` artifacts must be presumed stale (artifact provenance, above).
+This machinery was built write-only on 2026-09-01. **Same evening, steps 1
+(the emit half) and 4 ran on the Apple box and behaved as specified**:
+
+- `check-fixture`: FIXTURE OK.
+- `verify --emit-reference`: 77-stage candidate card, fit 0.98 s, at commit
+  `981b3009` (working tree dirty; provenance printed, `.so` artifacts were
+  that morning's identical-arm builds, hashed into the card — step 0's
+  rebuild was NOT run first, which is exactly what the provenance layer is
+  for, and why this card is a pipeline proof, not an installable reference).
+- `conformance export`: 77 stages, 80 files hashed, manifest SHA-256
+  recorded.
+- `validate` on the untouched bundle: PASS. `diff --self`: IDENTICAL.
+- **Required-red arm**: one byte flipped mid-file in
+  `expected/kmeans/0.fit.x_norm.bin` → `validate` FAILED naming that stage
+  through BOTH layers (stage SHA-256 against the manifest, FNV-1a64 against
+  the card); `diff --self` said DIVERGENT. Byte restored → IDENTICAL, PASS.
+
+**Still owed, in order**: step 0's full identical-arm rebuild at a settled
+commit, then steps 1–3 (emit, second-vendor `--confirm-reference` on a
+rented leg at the SAME commit, `install-reference`), then a re-run of the
+bundle round trip from those rebuilt artifacts. Until step 3 lands,
+`verify` keeps exiting 5 (NO REFERENCE). The original owed sequence:
 
 ```
 # 0. rebuild the bindings the fixture path loads (identical arm), then all
@@ -391,5 +410,6 @@ PYTHONPATH=python pixi run python3 -m mojolearn conformance validate /tmp/kmeans
 PYTHONPATH=python pixi run python3 -m mojolearn conformance diff /tmp/kmeans.bundle --self   # must name that stage
 ```
 
-Until step 3 lands, `verify` keeps exiting 5 (NO REFERENCE), exactly as
-`docs/VERIFY.md` documents.
+(The 2026-09-01 evening run above executed steps 1-emit and 4 from this
+list, with the byte flipped mid-file rather than at offset 0 and the
+restore added; behavior matched the annotations in every arm.)
