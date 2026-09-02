@@ -49,7 +49,22 @@ DEVIATION 2031 (fast tier only by routing; expected model-identical):
     # flag arm, FAST -- model equality is the claim, so fingerprint A vs B:
     pixi run mojo run -D MOJOLEARN_2031_SYM_RIDX_SPLITS=1 -I . checks/fit_pointwise_check.mojo
     pixi run mojo run -D MOJOLEARN_2031_SYM_RIDX_SPLITS=1 -I . checks/logloss_train_check.mojo
-    pixi run mojo run -D MOJOLEARN_2031_SYM_RIDX_SPLITS=1 -I . checks/searcher_parity_covtype_check.mojo
+    pixi run mojo run -D MOJOLEARN_2031_SYM_RIDX_SPLITS=1 -I . checks/searcher_parity_covtype_check.mojo ~/.cache/mojolearn
+    # (the fixture-dir argument was missing from this line as first written;
+    #  the check itself said so -- "usage: ... <fixture_dir>" -- fixed on the
+    #  first run, 2026-09-01)
+
+GATE RECORD 2026-09-01 (orchestrator, Apple M4, serial niced, at `1790aea1`):
+the correctness ladder RAN GREEN in every arm. Defaults: check-fit-pointwise
+(W1-W3 pass) + check-logloss-train (learn/replay/holdout/knob/soft-target all
+pass). DEV 2030: fit + logloss under the define FAST both green; the
+IDENTICAL arm (the bit-identity claim's own tier) green -- W2's "20
+iterations identical to the bit" held with the fused kernels live. DEV 2031:
+fit + logloss under the define green; searcher parity at covtype green with
+mse greedy == pointwise IDENTICAL both reps; identical+define INERT-BY-
+ROUTING arm green. Still owed: the two MOJOLEARN_STAGE_TIMES reach probes
+(est.move collapse for 2030; sym.split -2 launches/level + equal fingerprint
+for 2031) and the 1M/2M timing windows.
     # IDENTICAL with the define must be INERT BY ROUTING (ridx_only_splits_for
     # returns False): build it once and confirm byte-identical behavior --
     # a differing result under identical+define is a routing defect, not a perf finding.

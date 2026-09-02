@@ -1149,8 +1149,17 @@ CLAIMED: 2010, 2011, 2012 (code landed, flags OFF). RESERVED, not
 claimed in code: 2013 (histogram subtraction — design in the survey §3,
 a dedicated session). 2014-2019 free.
 
-**This lane is write-only. NOTHING below has been run. Every gate and
-every timing is RUN OWED to the orchestrator, in this order.**
+**This lane is write-only. NOTHING below had run when it landed. Every gate
+and every timing was RUN OWED to the orchestrator, in this order.**
+
+**GATE RECORD 2026-09-01 (orchestrator, Apple M4, serial niced, at
+`1790aea1`): steps 1 and 2 RAN GREEN.** builder_check, builder_kernels_check
+(shared arm matches the host tally in all 384 cells), train_check,
+forest_check (arm B: 4 of 4 tree pairs differ at max_features=0.25, as they
+must), fingerprint_probe all rc=0 on the default build;
+`rf_perf_candidates_check`: ALL ARMS GREEN (2010 dropped-passes and 2012
+undercount sabotages included). Steps 3 (fingerprint equality pairs) and 4
+(the 1M/2M windows) still owed.
 
 ## The three candidates (all OFF by default; one source, flag flipped between builds)
 
