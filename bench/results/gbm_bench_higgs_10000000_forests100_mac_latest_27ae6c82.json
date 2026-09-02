@@ -1,0 +1,88 @@
+{
+  "higgs": {
+    "lgbm-et-cpu": {
+      "accuracy": {
+        "AUC": 0.7784078784598755,
+        "Accuracy": 0.608293,
+        "Log_Loss": 0.6312465288480631,
+        "Precision": 0.577466826123303,
+        "Recall": 0.9718781935688424
+      },
+      "hashes": {
+        "predictions": "7d47259148e69c790ca131f50cba23eef85a9c97a50173329650c342730076fd",
+        "test_target": "09540eed7516010ca810cc17c54640473e593d20b528c5f1035e265f17c5da93"
+      },
+      "train_time": 36.035080458037555
+    },
+    "lgbm-rf-cpu": {
+      "accuracy": {
+        "AUC": 0.7686163378746942,
+        "Accuracy": 0.6594825,
+        "Log_Loss": 0.6060466695993822,
+        "Precision": 0.6223083014573184,
+        "Recall": 0.9091311416781552
+      },
+      "hashes": {
+        "predictions": "b05fba1cd602c6878e0db4c8c49984c118ed61e18921459ecf166bd78f3770b3",
+        "test_target": "09540eed7516010ca810cc17c54640473e593d20b528c5f1035e265f17c5da93"
+      },
+      "train_time": 31.280904832994565
+    },
+    "mojolearn-et-gpu": {
+      "accuracy": {
+        "AUC": 0.7024073718241518,
+        "Accuracy": 0.6168695,
+        "Log_Loss": 0.6648904486124312,
+        "Precision": 0.5896304666503787,
+        "Recall": 0.9109183607030734
+      },
+      "hashes": {
+        "predictions": "7d19892284218ab003b2faa30fedba97fd64ca7f0c0d452d853d6d81cda0e87d",
+        "test_target": "09540eed7516010ca810cc17c54640473e593d20b528c5f1035e265f17c5da93"
+      },
+      "train_time": 131.36765154195018
+    },
+    "mojolearn-rf-gpu": {
+      "accuracy": {
+        "AUC": 0.7748298685952173,
+        "Accuracy": 0.6995115,
+        "Log_Loss": 0.5893149971961975,
+        "Precision": 0.7015564975027854,
+        "Recall": 0.7534052939050547
+      },
+      "hashes": {
+        "predictions": "cf7a63cb32795ea1077de4d3e333fe93c1fac879f1b265b59d374e4501ce579a",
+        "test_target": "09540eed7516010ca810cc17c54640473e593d20b528c5f1035e265f17c5da93"
+      },
+      "train_time": 159.33379008399788
+    },
+    "skl-et-cpu": {
+      "accuracy": {
+        "AUC": 0.7037445411498544,
+        "Accuracy": 0.6135135,
+        "Log_Loss": 0.6661832220965194,
+        "Precision": 0.5868728862952565,
+        "Recall": 0.9140445785645064
+      },
+      "hashes": {
+        "predictions": "fadec4faa16e3709e833a3e5cd4ad6021dfe724f755e6bfd14e0d9579b521e11",
+        "test_target": "09540eed7516010ca810cc17c54640473e593d20b528c5f1035e265f17c5da93"
+      },
+      "train_time": 161.24034404195845
+    },
+    "skl-rf-cpu": {
+      "accuracy": {
+        "AUC": 0.7747582131846108,
+        "Accuracy": 0.7004285,
+        "Log_Loss": 0.5879070266343774,
+        "Precision": 0.7037497412232664,
+        "Recall": 0.7506140616581127
+      },
+      "hashes": {
+        "predictions": "5a6388e2a03a7c34598f6a77b995707b35b3cbe1a29e1d1061427df0deff36bb",
+        "test_target": "09540eed7516010ca810cc17c54640473e593d20b528c5f1035e265f17c5da93"
+      },
+      "train_time": 379.058622917044
+    }
+  }
+}

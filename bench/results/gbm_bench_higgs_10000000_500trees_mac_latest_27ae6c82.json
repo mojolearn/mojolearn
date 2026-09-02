@@ -1,0 +1,32 @@
+{
+  "higgs": {
+    "cat-cpu": {
+      "accuracy": {
+        "AUC": 0.8300346279961667,
+        "Accuracy": 0.746712,
+        "Log_Loss": 1.8036031953297047,
+        "Precision": 0.7395739586951456,
+        "Recall": 0.805692302030579
+      },
+      "hashes": {
+        "predictions": "41f340880f0bf4e5d050cb657c4f6dccba3b0bacbc0ebacef306dd60094a9f3c",
+        "test_target": "09540eed7516010ca810cc17c54640473e593d20b528c5f1035e265f17c5da93"
+      },
+      "train_time": 270.25253562501166
+    },
+    "mojolearn-gbdt-gpu": {
+      "accuracy": {
+        "AUC": 0.8229066540605326,
+        "Accuracy": 0.713025,
+        "Log_Loss": 0.5475006216129515,
+        "Precision": 0.6691900212794857,
+        "Recall": 0.9065616604717919
+      },
+      "hashes": {
+        "predictions": "c5b3ffaf104adaa18186c0db76a97dd2a782534fc8181f93d29787a168fea766",
+        "test_target": "09540eed7516010ca810cc17c54640473e593d20b528c5f1035e265f17c5da93"
+      },
+      "train_time": 586.3782270409865
+    }
+  }
+}
