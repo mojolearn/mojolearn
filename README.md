@@ -403,6 +403,18 @@ Six interleaved year runs over the day ranged from 1.14x to 1.68x as the
 laptop warmed; the table shows the last one, not the best one. The CatBoost
 pair compares symmetric trees only, because LightGBM has no symmetric mode.
 
+**CAVEAT (2026-09-02): the higgs symmetric row does not reproduce at
+current HEAD.** A same-harness rerun at `27ae6c82`
+(`bench/results/mac_m4_higgs_latest_27ae6c82_experiment.md`) measured
+586.4 s at 8.0M train rows against CatBoost CPU's 270.3 s — roughly 4.5x
+slower per row than this table's 131.5 s at 8.8M, with CatBoost only 1.5x
+slower under the same conditions, so box conditions do not explain it.
+Its AUC moved 0.8217 → 0.8229, so either a real time regression landed
+between 2026-08-22 and `27ae6c82` or the 2026-08-22 fit did less work
+than believed; a commit bisect on this harness is owed and this row
+should not be quoted until it lands. The forest rows are unaffected
+(the same rerun holds RF at 2.4x and ET at 1.2x over sklearn at 8M rows).
+
 THE YEAR ROW IS QUOTED ON BOTH METRICS AND THE DIRECTION REVERSES BETWEEN
 THEM. Until 2026-08-31 it quoted MAE only, which is the one of the two we
 win. The two internal records this table is drawn from
