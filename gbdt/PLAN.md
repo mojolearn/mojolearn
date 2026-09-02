@@ -62,9 +62,27 @@ IDENTICAL arm (the bit-identity claim's own tier) green -- W2's "20
 iterations identical to the bit" held with the fused kernels live. DEV 2031:
 fit + logloss under the define green; searcher parity at covtype green with
 mse greedy == pointwise IDENTICAL both reps; identical+define INERT-BY-
-ROUTING arm green. Still owed: the two MOJOLEARN_STAGE_TIMES reach probes
-(est.move collapse for 2030; sym.split -2 launches/level + equal fingerprint
-for 2031) and the 1M/2M timing windows.
+ROUTING arm green.
+
+REACH PROBES 2026-09-01 (same box, minutes later, at `ffb61151`),
+MOJOLEARN_STAGE_TIMES=1 on logloss_train_check (2030) and
+fit_pointwise_check (2031), define off vs on:
+- 2030 REACHED, not inert: est.move moved in the predicted direction in
+  every fit -- 2112.2 -> 1642.2 ms on the check's large fit, and on the
+  small fit 173.0 -> 82.8 ms with est.approx absorbing the pass
+  (73.2 -> 148.9 ms), the exact fused-arm signature. The large fit's
+  est.move did NOT fully collapse (-22%), so part of that row is
+  move-work the fusion does not touch; the magnitude question belongs
+  to the 1M/2M window, which is the only place a flip is decided anyway.
+- 2031 UNRESOLVED at this fixture size: sym.split 675.6 -> 689.3 ms
+  (noise-scale, wrong sign). The deleted reorder pair's traffic is
+  ~32 B/row -- invisible at the check fixture's row count. Not evidence
+  of inertness (the routing gates prove the flag routes; parity proves
+  model equality), but reach is NOT yet shown: the 1M/2M window is the
+  arbiter, and if sym.split does not move there, 2031 is
+  inert-or-negative and stays off.
+
+Still owed: the 1M/2M timing windows (2030, 2031).
     # IDENTICAL with the define must be INERT BY ROUTING (ridx_only_splits_for
     # returns False): build it once and confirm byte-identical behavior --
     # a differing result under identical+define is a routing defect, not a perf finding.
