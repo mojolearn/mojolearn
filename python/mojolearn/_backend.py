@@ -185,9 +185,10 @@ _MODULES = (
     # Added 2026-09-02 with the transformer block surface
     # (TransformerBlock, `_transformer_impl.py`). The binding
     # (bindings/_mojolearn_transformer.mojo + build_transformer.sh, the
-    # FIFTEENTH) landed in the same commit and has NEVER been compiled:
-    # the whole Python path is RUN OWED per tier
-    # (`tests/test_transformer_surface.py`). Listing the name here and in
+    # FIFTEENTH) landed in the same commit and COMPILED FOR THE FIRST TIME
+    # 2026-09-02, on APPLE ONLY; `tests/test_transformer_surface.py` is
+    # green in all three tiers on that one box, and no NVIDIA or AMD box
+    # has built or run it. Listing the name here and in
     # `_build_script`, both, is what makes an unbuilt extension raise BY
     # NAME with the build command instead of a wrong-tier binary
     # answering under the right label (DEVIATION 869, the header above).

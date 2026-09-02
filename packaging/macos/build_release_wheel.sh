@@ -68,11 +68,13 @@ cp "$here/CITATION.cff" "$here/python/mojolearn/"
 # it had shipped a Python surface on 2026-09-01 with these two lists never
 # updated, which is exactly the ships-STALE failure the paragraph above
 # describes -- a release cut in between would have carried the mamba
-# classes and no binary, or a stale one. The transformer binding has NEVER
-# been compiled anywhere (its Python path is RUN OWED,
-# transformer/README.md's PyPI-surface ledger); listing it here means the
-# first release build after it compiles ships it fresh or fails loudly,
-# never silently omits it.
+# classes and no binary, or a stale one. The transformer binding COMPILED
+# FOR THE FIRST TIME 2026-09-02, on the M4 and on APPLE ONLY -- no NVIDIA
+# or AMD box has built it -- and its Python surface gate
+# (python/mojolearn/tests/test_transformer_surface.py) is green in all
+# three tiers on that one box (transformer/README.md's PyPI-surface
+# ledger). Listing it here means a release build ships it fresh or fails
+# loudly, never silently omits it.
 #
 # DELIBERATELY NOT MIRRORED IN tools/e1_bootstrap.sh, AND THAT ASYMMETRY IS
 # THE POINT. That script builds bindings on a RENTED GPU under a work bound.
@@ -92,8 +94,9 @@ EXT_NAMES="_mojolearn _mojolearn_gbdt _mojolearn_estimators _mojolearn_rf _mojol
 # checkout of a tag (the only honest place to build a release from) the
 # first gate fails on the fourth missing .so before anything runs. Found
 # 2026-08-23 on the first clean-tree build. So this script builds all
-# thirteen binaries gate-off (it said "eleven" until 2026-09-01, two
-# bindings after that count was true) and then runs THE release gate,
+# fifteen binaries gate-off (it said "eleven" until 2026-09-01 and
+# "thirteen" until 2026-09-02, in each case some bindings after that count
+# was true) and then runs THE release gate,
 # verify_wheel.sh, which
 # installs the finished wheel into a clean venv under every claimed
 # interpreter and fits every estimator family in EVERY SHIPPED numeric mode

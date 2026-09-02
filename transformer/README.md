@@ -40,6 +40,13 @@ taken from the directory name.
   `LlamaDeviceWeights` refuses at UPLOAD while the clause's `try` wraps only
   the later forward call. Fix the `try`, then turn it on.
 
+**The PYTHON surface is newer than that record and narrower, 2026-09-02.**
+The FIFTEENTH binding `_mojolearn_transformer` compiled for the first time
+that day and `python/mojolearn/tests/test_transformer_surface.py` printed
+green in all three numeric tiers, **on an Apple M4 and nothing else** -- the
+NVIDIA and AMD columns of the SURFACE are OWED even though the lane's own
+cards have all three. "The PyPI surface" section below is the run record.
+
 **The paragraph that stood here until 2026-08-28 said "NOT STARTED beyond
 this document ... no oracle, no fixture, no device kernel, no gate, no card,
 no sabotage and no number", and it was false for days.** It is deleted rather
@@ -129,11 +136,14 @@ is the shape one would take. Registering it is owed.
 | `corpus/` | `gen_corpus.py` (85 KB) and its README. The generator is written and, per its own README, has not been executed by its author; no case data is on disk. Its checker is `tools/transformer_corpus_check.py`. |
 | `__init__.mojo`, `checks/__init__.mojo`, `impl/__init__.mojo` | empty package markers. |
 
-## The PyPI surface (DEVIATION 795, written 2026-09-02, UNVERIFIED, RUN OWED)
+## The PyPI surface (DEVIATION 795, written 2026-09-02, BUILT AND GATED ON APPLE THE SAME DAY)
 
 Until 2026-09-02 the certified block exported no Python symbol at all. The
-surface is now written and has NEVER been compiled or run: everything in this
-section is CONSTRUCTION plus a ledger of the exact runs owed.
+surface was written, COMPILED and GATED that day -- the binding built on the
+first attempt (rc 0) and the surface gate printed green in all three numeric
+tiers, 44 checks 0 failed each. **On ONE box and ONE vendor, an Apple M4.**
+No NVIDIA and no AMD box has built or run this surface and both columns are
+OWED. The run record is at the bottom of this section.
 
 **What is exposed.** `mojolearn.TransformerBlock` (also
 `mojolearn.transformer`), through the FIFTEENTH binding
@@ -171,15 +181,20 @@ not this lane's. The three-column forward record this surface stands on is
 the status block at the top of this file, and the surface claims nothing
 wider than it.
 
-**RUN LEDGER -- the exact commands, in order, all OWED.** There is no
-`pixi.toml` task for surface gates, deliberately mirroring the mamba
-surface (its gate runs as a module, not through pixi and not through
-pytest); the smoke inside the build script is a smoke, and
-`python/mojolearn/tests/test_transformer_surface.py` is the gate.
+**RUN RECORD, 2026-09-02, APPLE M4 -- the exact commands, in order, all
+GREEN.** There is no `pixi.toml` task for surface gates, deliberately
+mirroring the mamba surface (its gate runs as a module, not through pixi and
+not through pytest); the smoke inside the build script is a smoke, and
+`python/mojolearn/tests/test_transformer_surface.py` is the gate. Each tier
+was built FIRST and then gated, and the two upper tiers skip the build-time
+AIR gate by design (`MOJOLEARN_SKIP_BUILD_GATE`, the sibling scripts' rule),
+so the surface gate is their end-to-end verification.
 
-    # 1. the fast tier: build (measures the UNMEASURED AIR floor -- pin it
-    #    in bindings/build_transformer.sh, same change as the run record),
-    #    then the gate
+    # 1. the fast tier: build (the FIRST build ever, rc 0, 15 AIR blobs --
+    #    transformer 7, gemm 8, mamba 0, core 0, checks 0 -- so the
+    #    placeholder floor transformer:1 is now the measured transformer:4
+    #    in bindings/build_transformer.sh; minos 11.0 read back), then the
+    #    gate
     bash bindings/build_transformer.sh
     cd python && python3 -m mojolearn.tests.test_transformer_surface
 
@@ -194,8 +209,35 @@ pytest); the smoke inside the build script is a smoke, and
     cd python && MOJOLEARN_NUMERIC_MODE=identical \
         python3 -m mojolearn.tests.test_transformer_surface
 
+All three printed 44 checks, 0 failed -- fast with the bitwise rows REPORTED,
+deterministic with the repeat-call row ASSERTED, identical with the DECODE,
+RESUMPTION and DETERMINISM arms all bitwise ASSERTED. The build script's own
+smoke passed too (forward B2 L4 plus 4 decode steps, worst |step - prefill|
+2.38e-07, float64 refused by name, `n_heads*head_dim` refused by name, a step
+past `max_tokens` refused in Mojo by name).
+
 One box, one vendor: a green run of all three closes the PyPI row only, and
-says nothing cross-vendor beyond what the lane's own cards already say.
+says nothing cross-vendor beyond what the lane's own cards already say. **The
+NVIDIA and AMD columns of this surface are OWED**, as is the corpus
+cross-check below.
+
+**What the first run cost, and the NAMED LIMIT it left.** The first fast-tier
+run was RED by exactly one check and THE CHECK WAS WRONG, not the binding. It
+asked a transposed `q_proj.weight` to be refused by exact shape, but
+`d_model == n_heads*head_dim` is `LlamaDims.validate`'s own rule, so `q_proj`
+and its mirror `o_proj` are SQUARE at every legal config and their transpose
+is shape-indistinguishable. Every projection was probed -- `k_proj`, `v_proj`,
+`gate_proj`, `up_proj` and `down_proj` transposes are all refused BY NAME with
+an exact-shape message; `q_proj` and `o_proj` transposes are ACCEPTED. The arm
+now asserts the trap on the non-square `k_proj` and records the square pair as
+a NAMED LIMIT of shape checking -- no exact-shape check can see it.
+
+**Still owed after this run.** The corpus. `corpus/` holds a generator and no
+case data, so the gate's float64 reference arm is the gate's OWN transcription
+of the contract, not an independent artifact, and the gate's debt row FAILS
+until the corpus is generated and compared. The NVIDIA and AMD columns of this
+surface. The checkpoint/resume NVIDIA gap. Everything the status block at the
+top of this file already lists as owed for the lane itself.
 
 ## Two things a reader should not take from this directory
 

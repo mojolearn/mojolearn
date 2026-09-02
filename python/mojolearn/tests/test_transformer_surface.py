@@ -53,9 +53,16 @@ recorded as correct in transformer/README.md). The reference
 tolerances, the shapes, the state bookkeeping and every refusal are
 asserted in every tier.
 
-RUN LEDGER. THIS FILE HAS NEVER RUN: the binding has never been
-compiled. UNVERIFIED, RUN OWED, per tier, with the binding REBUILT
-first.
+RUN LEDGER. RAN 2026-09-02 on the M4 (Apple), ALL THREE TIERS GREEN,
+44 checks 0 failed each, with the binding rebuilt for each tier:
+fast (bitwise rows REPORTED), deterministic (the repeat-call row
+ASSERTED), identical (decode, resumption and determinism all
+ASSERTED). The first run was RED by one check and the check was
+wrong, not the binding: it asked a transposed q_proj to be refused
+by shape, and q_proj is square for every legal config -- see the
+NAMED LIMIT note in the refusals arm. The corpus-tolerance row is
+still recorded debt (transformer/corpus holds a generator and no
+case data). Re-run per tier, with the binding REBUILT first.
 
 HOW TO RUN IT
 -------------
@@ -339,9 +346,26 @@ def main(out=sys.stdout):
     rep.raises(arm, TypeError, "up_proj.weight",
                "a float64 weight is refused by its own name",
                TransformerBlock, bad_w, n_heads=A_NH, n_kv_heads=A_NKV)
+    # A SQUARE PROJECTION'S TRANSPOSE IS NOT SHAPE-DETECTABLE, and q_proj
+    # is square for EVERY legal config: LlamaDims.validate's own rule is
+    # d_model == n_heads*head_dim, which is exactly q_proj's row count, and
+    # o_proj is its mirror. Measured on the first run of this file: a
+    # transposed q_proj and a transposed o_proj are both ACCEPTED, every
+    # other transposed projection is refused by name. So the trap is
+    # asserted where it can fire -- on the non-square k/v pair (n_kv *
+    # head_dim rows under GQA, 16 x 32 at config A) -- and the square pair
+    # is recorded here as a NAMED LIMIT of shape checking, not tested as a
+    # refusal it can never be.
+    rep.check(arm,
+              wa["q_proj.weight"].shape[0] == wa["q_proj.weight"].shape[1]
+              and wa["o_proj.weight"].shape[0] == wa["o_proj.weight"].shape[1],
+              "q_proj/o_proj are square at every legal config, so their "
+              "transpose is shape-indistinguishable (NAMED LIMIT: no "
+              "exact-shape check can see it; the trap is asserted on the "
+              "non-square k_proj below)")
     bad_w = dict(wa)
-    bad_w["q_proj.weight"] = wa["q_proj.weight"].T.copy()
-    rep.raises(arm, ValueError, "q_proj.weight",
+    bad_w["k_proj.weight"] = wa["k_proj.weight"].T.copy()
+    rep.raises(arm, ValueError, "k_proj.weight",
                "a transposed projection cannot cross as a plausible "
                "buffer (exact-shape refusal; the OP_NT trap's Python "
                "face)",

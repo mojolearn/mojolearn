@@ -34,6 +34,12 @@ mojolearn/_mojolearn_gp.so
 # for the third instance, and still forgot its own line. Found the next
 # morning by the same signal as always -- the .so untracked in status.
 mojolearn/_mojolearn_mamba.so
+# The transformer binding (2026-09-02, the fifteenth). FIFTH instance of the
+# same omission: the binding landed on 2026-09-02 and this line did not, so
+# the first build left `python/mojolearn/_mojolearn_transformer.so` sitting
+# untracked in `git status` where a careless add would have committed a
+# 12 MB Mach-O. Added the day the binding first compiled.
+mojolearn/_mojolearn_transformer.so
 # Build output copied in by packaging/macos/build_release_wheel.sh so that
 # `python -m mojolearn verify` has a comparator inside the wheel. The single
 # source stays tools/identity_trace_diff.py in git.

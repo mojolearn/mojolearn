@@ -180,19 +180,18 @@ if [ -n "${MOJOLEARN_SKIP_BUILD_GATE:-}" ] || [ "$(uname)" != "Darwin" ]; then
 fi
 
 # ============================================================================
-# A FLOOR, NOT A PROOF. THE FLOOR IS UNMEASURED, RUN OWED: THE FIRST BUILD
-# MUST MEASURE THE BLOB COUNT AND PIN IT.
+# A FLOOR, NOT A PROOF. THE FLOOR IS MEASURED AND PINNED.
 # ============================================================================
 #
-# THIS SCRIPT HAS NEVER RUN. The floor below is the PLACEHOLDER 1, the same
-# placeholder build_training.sh carried until its first real build measured
-# 5 and the floor became 3 (two thirds rounded down, the ratio
-# bindings/build.sh and build_mamba.sh use against THEIR measured counts).
-# floor UNMEASURED, RUN OWED: the first build must measure the blob count
-# and pin it -- run `bash bindings/build_transformer.sh`, read the
-# unconditional per-subsystem counts it prints below, and replace
-# `transformer:1` with two thirds of the measured transformer-prefix count,
-# in the same change that records the measurement.
+# THE FIRST BUILD RAN 2026-09-02 on the M4 (Apple tier, `sh
+# bindings/build_transformer.sh`, rc 0) and measured 15 AIR blobs:
+# transformer 7, gemm 8, mamba 0, core 0, checks 0. The floor below is two
+# thirds of the measured transformer-prefix count rounded down (7 -> 4),
+# the ratio bindings/build.sh, build_mamba.sh and build_training.sh use
+# against THEIR measured counts. mamba 0 is what the header below
+# predicted was not worth asserting in advance: residual_add_kernel is
+# imported from the mamba lane (contract section 0) and leaves no blob
+# under its own prefix, so mamba stays printed and unfloored.
 #
 # WHY A FLOOR OF 1 MUST NOT BE LEFT HERE. build.sh learned twice that
 # presence-of-one is not a filter: the build that lost GBDT kept exactly 1
@@ -220,10 +219,9 @@ for _sub in transformer mamba gemm core checks; do
 done
 
 _failed=0
-# floor UNMEASURED, RUN OWED (header above): raise transformer:1 to two
-# thirds of the first cold build's measured count, same change as the run
-# record.
-for _pair in transformer:1; do
+# floor MEASURED (header above): 7 transformer-prefix blobs on the first
+# build, floored at two thirds.
+for _pair in transformer:4; do
     _s=${_pair%%:*}
     _min=${_pair#*:}
     _n=$(printf '%s\n' "$_air" | grep -c "^${_s}" || true)

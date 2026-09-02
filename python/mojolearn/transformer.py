@@ -23,8 +23,9 @@ call time, per instance. The identity claims are the LANE's: the
 forward card is recorded byte-identical on Apple, NVIDIA and AMD
 (clauses (a) and (d), 2026-08-28; the rest of the clause set is OWED
 cross-vendor and `transformer/README.md` says exactly what). This
-Python path itself is UNVERIFIED, RUN OWED until
-`tests/test_transformer_surface.py` prints.
+Python path itself printed green on 2026-09-02 in all three tiers,
+44 checks 0 failed each (`tests/test_transformer_surface.py`), on ONE
+APPLE M4 and no other vendor -- its NVIDIA and AMD columns are OWED.
 
     import numpy as np
     from mojolearn.transformer import TransformerBlock

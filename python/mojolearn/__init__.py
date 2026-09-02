@@ -59,10 +59,12 @@ RUN LEDGER; still one box, one vendor).
 Llama-shaped decoder layer with an explicit caller-owned KV cache
 (`TransformerState`) for prefill, continuation and single-token decode.
 Not an estimator -- no `fit` -- and it exists for cross-checking:
-`_transformer_impl.py` carries the contract on the class. Its Python
-path is UNVERIFIED, RUN OWED (the binding has never been compiled); the
-LANE underneath is recorded byte-identical Apple/NVIDIA/AMD for the
-forward's clauses (a) and (d) (transformer/README.md).
+`_transformer_impl.py` carries the contract on the class. Its surface
+gate printed green in all three tiers on 2026-09-02, the day the binding
+first compiled -- one box, one vendor, APPLE ONLY, with the NVIDIA and
+AMD columns of this surface OWED; the LANE underneath is recorded
+byte-identical Apple/NVIDIA/AMD for the forward's clauses (a) and (d)
+(transformer/README.md).
 **`GaussianProcessRegressor` IS here** (since 2026-09-01, later the same
 day), with its four kernel classes `RBF`, `Matern`, `ConstantKernel` and
 `WhiteKernel`. It was the one `_NOT_YET` entry ever held back for a reason
@@ -246,11 +248,13 @@ from ._mamba_impl import (
 # its binding `_mojolearn_transformer` (the FIFTEENTH) resolves on FIRST
 # USE like every other, so an unbuilt extension leaves the package
 # importable and raises BY NAME with the build command when touched
-# (`_backend.py`'s design). THE PYTHON PATH IS UNVERIFIED, RUN OWED, per
-# tier -- the binding has NEVER been compiled -- until
-# `tests/test_transformer_surface.py` prints green, one box
-# (`bash bindings/build_transformer.sh` per tier first; the run-owed
-# ledger is transformer/README.md's "PyPI surface" section).
+# (`_backend.py`'s design). THE PYTHON PATH RAN 2026-09-02, the day the
+# binding first compiled -- `tests/test_transformer_surface.py` printed
+# green in all three tiers, 44 checks 0 failed each, with the binding
+# rebuilt for each tier (`bash bindings/build_transformer.sh` per tier
+# first). ONE BOX, ONE VENDOR -- an Apple M4. The NVIDIA and AMD columns
+# of this surface are OWED, and so is the corpus cross-check
+# (transformer/README.md's "PyPI surface" section is the ledger).
 from . import transformer
 from ._transformer_impl import TransformerBlock, TransformerState
 

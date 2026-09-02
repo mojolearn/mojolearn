@@ -176,7 +176,8 @@ include-package-data = false
 # (the optimizer step, the gradient-norm clip and the cross-entropy loss),
 # `_mojolearn_gp.so` (the Gaussian process), `_mojolearn_mamba.so` (the
 # Mamba-1/2/3 blocks) and `_mojolearn_transformer.so` (the transformer
-# block; NEVER YET COMPILED, its Python path is RUN OWED).
+# block; FIRST COMPILED 2026-09-02 on the M4, APPLE ONLY, with its Python
+# surface gate green in all three tiers on that one box).
 #
 # THE GLOB CARRIES THREE TIERS, NOT TWO (2026-08-29): the FAST set here,
 # the IDENTICAL set under identical/, and the DETERMINISTIC set under

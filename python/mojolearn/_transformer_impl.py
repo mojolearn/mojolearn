@@ -73,11 +73,19 @@ remain OWED there and this class claims nothing wider) -- and
 against the tier the package resolved, `_gp_impl.py`'s pattern, so a
 wrong-arm measurement cannot be correctly labelled by accident.
 
-RUN LEDGER. THIS PATH HAS NEVER RUN: the binding has never been
-compiled. UNVERIFIED, RUN OWED, per tier. The gate is
-`python/mojolearn/tests/test_transformer_surface.py`; the build is
-`bash bindings/build_transformer.sh` per tier, REBUILT before any run
-is believed.
+RUN LEDGER. THIS PATH RAN 2026-09-02, the day the binding first
+compiled (rc 0 on the first attempt, 15 AIR blobs, transformer 7 and
+gemm 8). `python/mojolearn/tests/test_transformer_surface.py` printed
+green in ALL THREE TIERS, 44 checks 0 failed each, with the binding
+rebuilt for every tier -- fast (bitwise rows REPORTED), deterministic
+(the repeat-call row ASSERTED), identical (decode, resumption and
+determinism all bitwise ASSERTED). ONE BOX, ONE VENDOR -- an Apple M4;
+no NVIDIA or AMD box has built or run this path and both columns are
+OWED. Still owed with it: the corpus cross-check, because
+`transformer/corpus/` holds a generator and no case data, so the gate's
+float64 reference is its own transcription of the contract rather than
+an independent artifact. The build is `bash bindings/build_transformer.sh`
+per tier, REBUILT before any run is believed.
 """
 
 import numpy as np
@@ -280,8 +288,9 @@ class TransformerBlock(NumericModeMixin):
     clauses (a) and (d) as of 2026-08-28 (transformer/README.md's status
     block; clauses (b), (c), (e) and the sabotage ladder are OWED on the
     cross-vendor legs and this class claims nothing wider) -- and this
-    Python path itself is UNVERIFIED, RUN OWED until
-    `test_transformer_surface.py` prints.
+    Python path itself printed green in all three tiers on 2026-09-02
+    (`test_transformer_surface.py`, 44 checks 0 failed each) on ONE
+    APPLE M4, with its NVIDIA and AMD columns OWED.
 
     WEIGHTS IN, AS GIVEN BITS. The constructor takes a dict keyed by the
     upstream parameter names (modeling_llama.py's; the same names the
