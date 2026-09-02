@@ -68,8 +68,12 @@
   stages); the FIT is gated on ONE Apple M4 only and the class says so
   rather than inheriting the card. The Python surface gate is
   `python/mojolearn/tests/test_arima_surface.py` (`pixi run
-  check-arima-surface`, one tier per process, DEVIATION 796): surface
-  BUILT, RUN OWED -- the ordered command ledger is in `arima/README.md`,
+  check-arima-surface`, one tier per process, DEVIATION 796). It RAN
+  2026-09-02 and printed GREEN in both tiers, 88 checks and 0 failed in
+  each, **on ONE APPLE M4 and no other vendor**. The `identical` process
+  ASSERTED its bitwise arms; the `fast` process reported "the fast arms
+  passed, AND NO BIT WAS CHECKED". A second and third vendor through this
+  surface is OPEN; the ordered command ledger is in `arima/README.md`,
   "Public estimator surface".
 
   Files: `arima/estimator.mojo`, `bindings/_mojolearn_arima.mojo` (the

@@ -80,6 +80,22 @@ HOW TO RUN IT
     #    import and cannot be changed inside one
     cd python && python3 -m mojolearn.tests.test_arima_surface
 
+RUN RECORD
+----------
+FIRST RUN 2026-09-02, ON ONE APPLE M4 AND NO OTHER VENDOR. Both builds
+returned rc 0; both gate processes returned rc 0 with 88 checks and 0
+failed. The `identical` process printed the GREEN verdict, so its bitwise
+arms were ASSERTED and passed; the `fast` process printed "the fast arms
+passed, AND NO BIT WAS CHECKED", which is the whole of what that half is
+worth. Recovery under `identical`, each inside this file's own multiples
+of a standard error -- ar1 phi worst |error| 0.06917 within 4.75 standard
+errors, ma1 theta 0.06649 within 5.23, arma11 phi 0.08855 within 7.07 and
+theta 0.11768 within 5.93.
+
+WHAT THAT RUN DID NOT BUY is the paragraph above under WHAT THIS FILE DOES
+*NOT* PROVE, unchanged. The fit has still never run on a second vendor. A
+run of this file on an NVIDIA and on an AMD box is OPEN.
+
 ENVIRONMENT
     MOJOLEARN_ARIMA_GATE_N_OBS    the recovery length, default 512, which is
                                   `FIT_N_OBS` in `arima/checks/fixtures.mojo`.

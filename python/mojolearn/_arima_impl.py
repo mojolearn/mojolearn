@@ -62,8 +62,12 @@ and their stages. THE FIT IS NOT IN IT. The fit landed after that leg and
 the card was re-emitted BYTE IDENTICAL, which says the fit moved no stage
 the card records; it does not say `fit` has ever run on a second vendor,
 because it has not. `fit`'s own gates are 16 of 16 on ONE Apple M4 in both
-tiers. A three-vendor run THROUGH THIS SURFACE is OWED and nothing here may
-be described as certified across vendors until it exists.
+tiers, and THIS class's own gate,
+`python/mojolearn/tests/test_arima_surface.py`, printed green on that same
+one box on 2026-09-02, 88 checks and 0 failed in each of its two tier
+processes. That is still ONE VENDOR. A three-vendor run THROUGH THIS
+SURFACE is OWED and nothing here may be described as certified across
+vendors until it exists.
 
 That property, where it exists at all, belongs to
 `MOJOLEARN_NUMERIC_MODE=identical`. The FAST build, which is the default,

@@ -1376,27 +1376,47 @@ binary. The test's own verdict says which tier ran and whether any bit was
 asserted. This deviation numbers the wiring decision only; it changes no
 numeric behavior anywhere.
 
-RUN OWED -- THE LEDGER, IN ORDER. Everything below is UNVERIFIED, RUN OWED;
-nothing on this surface may be called green until the orchestrator runs it
-and the verdict prints. One box (the M4) satisfies the first four; the
-three-vendor line stays open after them.
+THE LEDGER, IN ORDER -- STEPS 1 THROUGH 4 RAN 2026-09-02 AND ARE GREEN ON
+ONE APPLE M4. Step 5 is OPEN and nothing on this surface may be described as
+cross-vendor until it closes.
 
     # 1. build both extensions (the identical one is the gated one)
+    #    RAN 2026-09-02, APPLE M4. Both rc 0. The plain build emitted 12
+    #    AIR blobs at minos 11.0 and its build smoke printed "ARIMA
+    #    fit/predict/forecast on (1,0,0) and (1,1,1), exog and css refused".
+    #    It was invoked as `sh` that day, which the script is portable to.
     bash bindings/build_arima.sh
     MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_arima.sh
 
     # 2. the surface gate, IDENTICAL tier (bitwise arms ASSERTED)
+    #    RAN 2026-09-02, APPLE M4, its own process. rc 0, 88 checks, 0
+    #    failed. Verdict GREEN. Planted-coefficient recovery, each inside
+    #    the lane's own multiples of a standard error -- ar1 phi worst
+    #    |error| 0.06917 within 4.75 standard errors, ma1 theta 0.06649
+    #    within 5.23, arma11 phi 0.08855 within 7.07 and theta 0.11768
+    #    within 5.93.
     MOJOLEARN_NUMERIC_MODE=identical pixi run check-arima-surface
 
     # 3. the FAST tier, its own process (bitwise arms RECORDED, not asserted)
+    #    RAN 2026-09-02, APPLE M4. rc 0, 88 checks, 0 failed, verdict "the
+    #    fast arms passed, AND NO BIT WAS CHECKED", which is the whole of
+    #    what a FAST run is worth.
     pixi run check-arima-surface
 
     # 4. the lane's own gates, unchanged, to confirm nothing here moved them
+    #    RAN 2026-09-02, APPLE M4. rc 0, "ALL ARIMA CHECKS PASSED [FAST]
+    #    (no card: set MOJOLEARN_IDENTITY_TRACE)". Unmoved.
     pixi run check-arima
 
     # 5. OPEN AFTER 1-4: a second and third vendor THROUGH THIS SURFACE.
     #    The filter's three-vendor card at 221aa141 does not transfer to
     #    the fit; steps 1-3 on an NVIDIA and an AMD box are what would.
+    #    STILL OPEN as of 2026-09-02. Everything above is ONE APPLE M4.
+
+WHAT STEPS 1-4 DID NOT BUY. They are one box. The ARIMA FIT has still never
+run on a second vendor, exogenous regressors and confidence intervals and
+`AutoARIMA` are still NAMED ABSENCES refused by name, and no timing was
+taken.
 
 The `__init__.py` registration and the `.so` are in `cc269dca` and needed
 no second commit; the pixi task, this section, and the hand-off deletion

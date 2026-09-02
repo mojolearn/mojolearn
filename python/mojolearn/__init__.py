@@ -43,7 +43,10 @@ submodules while `__getattr__` still told a caller they had no surface.
 to explain its absence, is now empty. It is the one estimator in this package
 whose `y` is 2-D: the lane is BATCHED, one series per row, each with its own
 parameters, and `_arima_impl.py` says on the class what else follows from
-that.
+that. Its surface gate `tests/test_arima_surface.py` printed green in both
+of its tiers on 2026-09-02, 88 checks and 0 failed in each, on ONE APPLE
+M4 -- the fit itself has still never run on a second vendor and the class
+says so rather than inheriting the lane's Kalman-filter card.
 **THE MAMBA BLOCKS ARE here** (since 2026-09-01): `Mamba1Block`,
 `Mamba2Block` and `Mamba3Block` (also as the `mojolearn.mamba`
 submodule), reference-pinned SSM blocks with explicit caller-owned state

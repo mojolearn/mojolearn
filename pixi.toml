@@ -1159,9 +1159,15 @@ arima-card = "mojo run -I . arima/arima_main.mojo"
 # `check-arima` this task cannot cover both tiers in one run. Run it once
 # plain (FAST: bitwise arms RECORDED, not asserted) and once under
 # `MOJOLEARN_NUMERIC_MODE=identical` (bitwise arms ASSERTED), after
-# `bash bindings/build_arima.sh` in each mode. UNVERIFIED, RUN OWED as of
-# 2026-09-02: this task has never been executed; the ordered ledger is in
-# arima/README.md.
+# `bash bindings/build_arima.sh` in each mode. RUN 2026-09-02 AND GREEN IN
+# BOTH TIERS ON ONE APPLE M4, the task's own command line from `python/`,
+# one process per tier -- 88 checks and 0 failed in each. The identical run
+# printed the GREEN verdict (planted coefficients recovered, the canonical
+# NaN before d, the AR(1) closed-form forecast, and one series the same
+# BITS alone as inside a batch of six); the fast run printed "the fast arms
+# passed, AND NO BIT WAS CHECKED", which is what a FAST run is worth.
+# APPLE ONLY -- a second and third vendor through this surface is still
+# OPEN. The ordered ledger is in arima/README.md.
 check-arima-surface = "cd python && python3 -m mojolearn.tests.test_arima_surface"
 # spectral: SOURCE ONLY, no gate and no sabotage has ever run. The five sabotage arms written
 # 2026-08-23 have NEVER BEEN COMPILED, so a syntax error in them would break this build.
