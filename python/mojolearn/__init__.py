@@ -229,6 +229,20 @@ from ._gp_impl import (
 # `08a38a13`, all three tiers, identical bitwise-asserted
 # (`mamba/FEATURE_PARITY.md` RUN LEDGER -- one box, one vendor; the
 # NVIDIA/AMD columns stay OWED there).
+# `_mojolearn_training.so` SHIPS IN THE WHEEL, so its Python half must be
+# reachable from the package. The release workflow's "nothing ships that
+# nothing imports" gate caught this on the 0.4.0 cut: `_training_impl.py`
+# was in the wheel and no module imported it, which is the shape
+# `mojolearn/torch_ops.py` had for two minor releases before it was
+# deleted. This module is NOT abandoned -- it drives a shipped binding and
+# has its own surface gate (`tests/test_training_surface.py`) -- so the
+# fix is the import, not a deletion. It is imported PRIVATELY and adds no
+# public name: training stays internal, exactly as the release notes and
+# the paper say, and `__all__` below is unchanged. The import is safe at
+# package load because the module resolves its binding lazily through
+# `_backend`, so an unbuilt training extension still raises BY NAME when
+# touched rather than at import.
+from . import _training_impl as _training_impl  # noqa: F401  (private)
 from . import mamba
 from ._mamba_impl import (
     Mamba1Block,
