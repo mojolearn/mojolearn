@@ -115,7 +115,43 @@ from gbdt.targets.kernel.pointwise_targets import (
 from gbdt.targets.kernel.pointwise_targets import (
     MSE_BLOCK_SIZE,
     launch_approximate,
+    launch_approximate_move_eval,
 )
+from std.sys.compile import is_defined
+
+# ================= DEVIATION BLOCK 2030 =================
+# FUSED MoveTo + evaluation for the Newton walker (single-dim losses).
+#
+# The walker calls `move_to` and `write_value_and_first_derivatives`
+# strictly paired (`descent_helpers.cpp:128-204`: the initial evaluation,
+# then every backtracking try). The split schedule pays a full-row
+# `add_bin_model_value_kernel` pass per pair whose only purpose is to put
+# cursor bytes where the evaluation kernel reads them one launch later.
+# Under this flag `move_to` records the shift (host arithmetic + the
+# existing h2d copy of `d_shift`) and DEFERS the cursor update; the next
+# evaluation launches the fused kernel
+# (`pointwise_targets.launch_approximate_move_eval`), which performs the
+# identical per-row add, stores the identical cursor bytes, and runs the
+# UNCHANGED evaluation body on the just-stored value. Bit-identical in
+# every tier -- same operations, same operands, same order; the kernel
+# block in pointwise_targets.mojo carries the argument.
+#
+# SCOPE: `cursor_dim == 1 and single_bin_dim == 1` only (every pointwise
+# loss). The multiclass family keeps the split schedule; `pending_shift`
+# can never be set on its arms. Any cursor reader outside the pair
+# (`estimate_exact`) flushes the pending shift through the ORIGINAL
+# `add_bin_model_value_kernel` launch first, so the cursor is never
+# observed stale.
+#
+# OFF BY DEFAULT. Arm B builds with `-D MOJOLEARN_2030_FUSED_EST_MOVE=1`.
+# UNVERIFIED, RUN OWED -- the A/B commands are in
+# gbdt/UPSTREAM_SURVEY_2026-09.md and the PLAN appendix; the gates that
+# must hold are `check-fit-pointwise`, `check-logloss-train` and
+# `check-ordered-boosting` built with the define (the changed arm is the
+# Logloss estimation path, and A GATE MUST EXERCISE THE CHANGED ARM --
+# DEVIATION 2009's lesson).
+# ====================================================
+comptime FUSED_EST_MOVE_2030 = is_defined["MOJOLEARN_2030_FUSED_EST_MOVE"]()
 
 
 def merge_stage_times(mut dst: StageTimes, src: StageTimes):
@@ -248,6 +284,11 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
     #: the rows back out via `merge_stage_times`. When disabled every
     #: call is one Bool test.
     var times: StageTimes
+    #: DEVIATION 2030: True between a deferred `move_to` and the fused
+    #: evaluation that applies it. Always False unless the build defines
+    #: `MOJOLEARN_2030_FUSED_EST_MOVE` AND the loss is single-dim; every
+    #: cursor reader outside the move/eval pair flushes it first.
+    var pending_shift: Bool
 
     def point_dim(self) -> Int:
         return self.bin_count * self.single_bin_dim
@@ -306,6 +347,20 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         # `TVector<float> newPoint = MakeEstimationResult(point);` (`:43`)
         var new_point = self.make_estimation_result(point)
 
+        # DEVIATION 2030, the defensive corner: two `move_to` calls with
+        # no evaluation between them (the walker never does this -- its
+        # calls are strictly move -> eval -> move). The earlier shift is
+        # still whole in `d_shift` (its copy was enqueued before anything
+        # below), so apply it through the ORIGINAL kernel, then drain so
+        # the `h_shift` rewrite below cannot race the in-flight DMA of
+        # the deferred copy.
+        @parameter
+        if FUSED_EST_MOVE_2030:
+            if self.pending_shift:
+                self._launch_shift_abmv()
+                self.pending_shift = False
+                self.ctx.synchronize()
+
         # the last eval's synchronize is what makes h_shift reusable here;
         # the walker is strictly move -> eval -> move.
         var shift_len = self.bin_count * self.cursor_dim
@@ -316,11 +371,39 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         self.ctx.enqueue_copy(
             dst_buf=self.d_shift, src_ptr=self.h_shift.unsafe_ptr()
         )
-        # their `AddBinModelValue(shift, bins, ...)` (`pointwise_oracle
-        # .cpp:50-52`): the FLAT kernel over rows, `CeilDivide(size,
-        # blockSize * elementsPerThreads)` blocks (`add_model_value.cu
-        # :60-62`). DEVIATION 210b in `kernel_add_model_value.mojo` has
-        # the 13.6-ms-per-call grid this replaces.
+        # DEVIATION 2030: under the flag, on the single-dim arm, the
+        # cursor update is DEFERRED into the next evaluation's fused
+        # kernel -- the launch below is skipped and the shift rides
+        # `d_shift` until `write_value_and_first_derivatives` (or a
+        # flush) applies it. Every other configuration launches their
+        # kernel exactly as before.
+        var defer_shift = False
+
+        @parameter
+        if FUSED_EST_MOVE_2030:
+            defer_shift = self.cursor_dim == 1 and self.single_bin_dim == 1
+        if defer_shift:
+            self.pending_shift = True
+        else:
+            self._launch_shift_abmv()
+        # `DerAtPoint.Clear(); Der2AtPoint.Clear();` (`:54-55`)
+        self.cached_der2.clear()
+        self.der_at_point.clear()
+        self.current_point.clear()
+        for i in range(shift_len):
+            self.current_point.append(new_point[i])
+        self.times.end(self.ctx, "est.move")
+
+    def _launch_shift_abmv(mut self) raises:
+        """The original MoveTo cursor update, factored so both the split
+        schedule and DEVIATION 2030's flush launch the SAME kernel.
+
+        their `AddBinModelValue(shift, bins, ...)` (`pointwise_oracle
+        .cpp:50-52`): the FLAT kernel over rows, `CeilDivide(size,
+        blockSize * elementsPerThreads)` blocks (`add_model_value.cu
+        :60-62`). DEVIATION 210b in `kernel_add_model_value.mojo` has
+        the 13.6-ms-per-call grid this replaces.
+        """
         var abmv_blocks = (
             self.n_rows + ABMV_BLOCK * ABMV_ELEMENTS - 1
         ) // (ABMV_BLOCK * ABMV_ELEMENTS)
@@ -334,13 +417,6 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             grid_dim=(abmv_blocks, 1, 1),
             block_dim=(ABMV_BLOCK, 1, 1),
         )
-        # `DerAtPoint.Clear(); Der2AtPoint.Clear();` (`:54-55`)
-        self.cached_der2.clear()
-        self.der_at_point.clear()
-        self.current_point.clear()
-        for i in range(shift_len):
-            self.current_point.append(new_point[i])
-        self.times.end(self.ctx, "est.move")
 
     def write_value_and_first_derivatives(
         mut self, mut value: Float64, mut gradient: List[Float64]
@@ -377,16 +453,51 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
 
         if self.single_bin_dim == 1:
             self.times.begin(self.ctx)
-            launch_approximate[True](
-                self.ctx, self.objective,
-                self.d_target, self.d_weights, Int32(self.n_rows),
-                self.d_cursor,
-                Int32(1) if self.has_weights else Int32(0),
-                self.alpha, self.border,
-                self.d_eval_stats, self.d_fv, Int32(1),
-                self.d_mag_dummy, Int32(0),
-                blocks,
-            )
+            # DEVIATION 2030: a deferred MoveTo is applied INSIDE this
+            # evaluation -- the fused kernel performs the identical
+            # per-row cursor add, stores the identical bytes, and runs
+            # the unchanged evaluation body on the just-stored value.
+            # `pending_shift` clears here because the cursor is current
+            # from this launch on (queue order covers every later
+            # reader). `comptime if`, the house elision: with the flag
+            # off (every shipped build) the fused arm is not compiled
+            # and the else arm is byte-for-byte the old call.
+            comptime if FUSED_EST_MOVE_2030:
+                if self.pending_shift:
+                    launch_approximate_move_eval[True](
+                        self.ctx, self.objective,
+                        self.d_shift, self.d_bins,
+                        self.d_target, self.d_weights, Int32(self.n_rows),
+                        self.d_cursor,
+                        Int32(1) if self.has_weights else Int32(0),
+                        self.alpha, self.border,
+                        self.d_eval_stats, self.d_fv, Int32(1),
+                        self.d_mag_dummy, Int32(0),
+                        blocks,
+                    )
+                    self.pending_shift = False
+                else:
+                    launch_approximate[True](
+                        self.ctx, self.objective,
+                        self.d_target, self.d_weights, Int32(self.n_rows),
+                        self.d_cursor,
+                        Int32(1) if self.has_weights else Int32(0),
+                        self.alpha, self.border,
+                        self.d_eval_stats, self.d_fv, Int32(1),
+                        self.d_mag_dummy, Int32(0),
+                        blocks,
+                    )
+            else:
+                launch_approximate[True](
+                    self.ctx, self.objective,
+                    self.d_target, self.d_weights, Int32(self.n_rows),
+                    self.d_cursor,
+                    Int32(1) if self.has_weights else Int32(0),
+                    self.alpha, self.border,
+                    self.d_eval_stats, self.d_fv, Int32(1),
+                    self.d_mag_dummy, Int32(0),
+                    blocks,
+                )
             self.times.end(self.ctx, "est.approx")
             self.times.begin(self.ctx)
             compute_partition_stats(
@@ -699,6 +810,15 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         )
         # `MoveTo(point)` (`:211`)
         self.move_to(point)
+        # DEVIATION 2030: no evaluation follows this move (Exact REPLACES
+        # the walker), so a deferred shift would never be applied. Flush
+        # it through the original kernel so the cursor holds exactly what
+        # the split schedule leaves.
+        @parameter
+        if FUSED_EST_MOVE_2030:
+            if self.pending_shift:
+                self._launch_shift_abmv()
+                self.pending_shift = False
         # `MakeEstimationResult(point)` -> `RegularizeImpl`
         self.regularize(point)
         return point^
@@ -1080,4 +1200,5 @@ def make_bin_optimized_oracle(
         exact^,
         max_leaf,
         est_times^,
+        False,  # pending_shift (DEVIATION 2030): no deferred move yet
     )

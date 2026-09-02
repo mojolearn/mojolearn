@@ -1216,3 +1216,224 @@ def launch_approximate[
             has_weights, alpha, stats, function_value, compute_fv,
             plane_magnitudes, compute_magnitudes, blocks,
         )
+
+
+# ================= DEVIATION BLOCK 2030 =================
+# FUSED MoveTo + ApproximateAt for the Newton walker's per-try pair.
+#
+# CatBoost's oracle pays TWO full-row passes per walker evaluation:
+# `AddBinModelValue` (`add_model_value.cu:14-53`) streams the cursor
+# (read + write) and the per-row bins to apply the shift, then
+# `ApproximateAt`'s kernel streams the cursor AGAIN to evaluate at the
+# moved point (`pointwise_oracle.cpp:35-57`, `:73-78`). The walker calls
+# them strictly paired -- move, then evaluate, never one without the
+# other (`descent_helpers.cpp:128-204`) -- so the first pass exists only
+# to put bytes where the second pass will read them.
+#
+# The two kernels below are the SAME evaluation kernels with the shift
+# application folded into the top: each thread computes
+#
+#     moved = predictions[i] + shift_values[doc_bins[i]]     (one f32 add,
+#     predictions[i] = moved                                  same operands,
+#                                                             same order as
+#                                                             AddBinModelValue's
+#                                                             single-dim arm)
+#
+# and then runs the UNCHANGED evaluation body -- literally a call to the
+# existing kernel `def`, which reloads `predictions[i]` (this thread's own
+# just-written address; single-thread program order makes the store
+# visible, and no other thread reads it). Every arithmetic operation, its
+# order, and every store the split form performs are performed here with
+# identical operands, so the fused form is BIT-IDENTICAL to the split
+# form in every tier: the cursor ends each evaluation holding the same
+# bytes, and the stats/fv outputs are the same kernel body reading the
+# same value.
+#
+# WHAT IT BUYS at 1M-2M rows: one full-row kernel launch per walker
+# evaluation is deleted, and with it the ABMV pass's memory traffic --
+# a cursor read, a cursor write and a bins read (~12 B/row) against the
+# evaluation's ~16 B/row. A Logloss fit at their default
+# `leaf_estimation_iterations=10` pays ~11 evaluations per tree
+# (`estimation_bench` priced the per-iteration cost at ~8 ms/tree-iter
+# at 1M rows, 2026-09-01 window), so the candidate targets the ll10/ll1
+# cells; RMSE cells are untouched (DEVIATION 64 skips the walker).
+#
+# SINGLE-DIMENSION ONLY: the fusion applies where `cursor_dim == 1` and
+# `single_bin_dim == 1` (every pointwise loss). The multiclass family
+# keeps the split form unconditionally -- its MoveTo walks `cursor_dim`
+# planes and its evaluation kernels live in multilogit.mojo.
+#
+# GUARDED, OFF BY DEFAULT: nothing launches these kernels unless the
+# oracle's `FUSED_EST_MOVE_2030` flag (pointwise_oracle.mojo, built with
+# `-D MOJOLEARN_2030_FUSED_EST_MOVE=1`) selects the fused launcher. One
+# source, both arms: the evaluation body is the existing kernel `def`,
+# called; the split arm's call sites are byte-for-byte untouched.
+#
+# UNVERIFIED, RUN OWED (the orchestrator's estimation_bench A/B pattern,
+# exact commands in gbdt/UPSTREAM_SURVEY_2026-09.md and PLAN appendix).
+# ====================================================
+
+
+def cross_entropy_move_eval_kernel[
+    has_border: Bool,
+    estimation: Bool = False,
+](
+    shift_values: MutPointer[Float32, MutAnyOrigin],
+    doc_bins: MutPointer[UInt32, MutAnyOrigin],
+    target_classes: MutPointer[Float32, MutAnyOrigin],
+    weights: MutPointer[Float32, MutAnyOrigin],
+    size_in: Int32,
+    predictions: MutPointer[Float32, MutAnyOrigin],
+    has_weights: Int32,
+    border: Float32,
+    stats: MutPointer[Float32, MutAnyOrigin],
+    function_value: MutPointer[Float32, MutAnyOrigin],
+    compute_fv: Int32,
+    plane_magnitudes: MutPointer[Float32, MutAnyOrigin],
+    compute_magnitudes: Int32,
+):
+    """DEVIATION 2030: `cross_entropy_kernel` with the walker's MoveTo
+    shift applied at the top. The shift add is `AddBinModelValueImpl`'s
+    single-dim arithmetic (`kernel_add_model_value.mojo`,
+    `add_bin_model_value_kernel`: `cursor[i] += bin_values[bins[i]]`)
+    performed by the thread that then evaluates row `i`; the evaluation
+    is the existing kernel called as a device function, unchanged."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(size_in):
+        var moved = predictions.unsafe_load(i) + shift_values.unsafe_load(
+            Int(doc_bins.unsafe_load(i))
+        )
+        predictions.unsafe_store(i, moved)
+    cross_entropy_kernel[has_border, estimation](
+        target_classes, weights, size_in, predictions, has_weights,
+        border, stats, function_value, compute_fv,
+        plane_magnitudes, compute_magnitudes,
+    )
+
+
+def pointwise_target_move_eval_kernel[
+    objective: Int,
+    estimation: Bool = False,
+](
+    shift_values: MutPointer[Float32, MutAnyOrigin],
+    doc_bins: MutPointer[UInt32, MutAnyOrigin],
+    relevs: MutPointer[Float32, MutAnyOrigin],
+    weights: MutPointer[Float32, MutAnyOrigin],
+    size_in: Int32,
+    predictions: MutPointer[Float32, MutAnyOrigin],
+    has_weights: Int32,
+    alpha: Float32,
+    stats: MutPointer[Float32, MutAnyOrigin],
+    function_value: MutPointer[Float32, MutAnyOrigin],
+    compute_fv: Int32,
+    plane_magnitudes: MutPointer[Float32, MutAnyOrigin],
+    compute_magnitudes: Int32,
+):
+    """DEVIATION 2030: `pointwise_target_kernel` with the walker's MoveTo
+    shift applied at the top; the twin of `cross_entropy_move_eval_kernel`
+    for the non-cross-entropy losses whose walker runs (Poisson, Tweedie,
+    Lq, Expectile, Huber under Newton)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(size_in):
+        var moved = predictions.unsafe_load(i) + shift_values.unsafe_load(
+            Int(doc_bins.unsafe_load(i))
+        )
+        predictions.unsafe_store(i, moved)
+    pointwise_target_kernel[objective, estimation](
+        relevs, weights, size_in, predictions, has_weights, alpha,
+        stats, function_value, compute_fv,
+        plane_magnitudes, compute_magnitudes,
+    )
+
+
+def launch_approximate_move_eval[
+    estimation: Bool,
+](
+    ctx: DeviceContext,
+    objective: Int,
+    mut shift_values: DeviceBuffer[DType.float32],
+    mut doc_bins: DeviceBuffer[DType.uint32],
+    mut relevs: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],
+    size: Int32,
+    mut predictions: DeviceBuffer[DType.float32],
+    has_weights: Int32,
+    alpha: Float32,
+    border: Float32,
+    mut stats: DeviceBuffer[DType.float32],
+    mut function_value: DeviceBuffer[DType.float32],
+    compute_fv: Int32,
+    mut plane_magnitudes: DeviceBuffer[DType.float32],
+    compute_magnitudes: Int32,
+    blocks: Int,
+) raises:
+    """DEVIATION 2030's launcher: `launch_approximate`'s dispatch, fused
+    kernels. Same fork (`UseBorder()` is Logloss), same case order as
+    `launch_pointwise_target_kernel` for the generic arm, same grid --
+    the shift prefix touches each row exactly once because the grid is
+    one element per thread over `blocks * MSE_BLOCK_SIZE`."""
+    if objective == OBJECTIVE_LOGLOSS:
+        ctx.enqueue_function[
+            cross_entropy_move_eval_kernel[True, estimation]
+        ](
+            shift_values, doc_bins,
+            relevs, weights, size, predictions, has_weights, border,
+            stats, function_value, compute_fv,
+            plane_magnitudes, compute_magnitudes,
+            grid_dim=(blocks, 1, 1),
+            block_dim=(MSE_BLOCK_SIZE, 1, 1),
+        )
+        return
+    if objective == OBJECTIVE_CROSSENTROPY:
+        ctx.enqueue_function[
+            cross_entropy_move_eval_kernel[False, estimation]
+        ](
+            shift_values, doc_bins,
+            relevs, weights, size, predictions, has_weights, border,
+            stats, function_value, compute_fv,
+            plane_magnitudes, compute_magnitudes,
+            grid_dim=(blocks, 1, 1),
+            block_dim=(MSE_BLOCK_SIZE, 1, 1),
+        )
+        return
+
+    @parameter
+    def _go[obj: Int]() raises:
+        ctx.enqueue_function[
+            pointwise_target_move_eval_kernel[obj, estimation]
+        ](
+            shift_values, doc_bins,
+            relevs, weights, size, predictions, has_weights, alpha,
+            stats, function_value, compute_fv,
+            plane_magnitudes, compute_magnitudes,
+            grid_dim=(blocks, 1, 1),
+            block_dim=(MSE_BLOCK_SIZE, 1, 1),
+        )
+
+    # their case order, `pointwise_targets.cu:455-518`, exactly as
+    # `launch_pointwise_target_kernel` spells it
+    if objective == OBJECTIVE_EXPECTILE:
+        _go[OBJECTIVE_EXPECTILE]()
+    elif objective == OBJECTIVE_QUANTILE:
+        _go[OBJECTIVE_QUANTILE]()
+    elif objective == OBJECTIVE_MAE:
+        _go[OBJECTIVE_MAE]()
+    elif objective == OBJECTIVE_LOGLINQUANTILE:
+        _go[OBJECTIVE_LOGLINQUANTILE]()
+    elif objective == OBJECTIVE_MAPE:
+        _go[OBJECTIVE_MAPE]()
+    elif objective == OBJECTIVE_POISSON:
+        _go[OBJECTIVE_POISSON]()
+    elif objective == OBJECTIVE_LQ:
+        _go[OBJECTIVE_LQ]()
+    elif objective == OBJECTIVE_RMSE:
+        _go[OBJECTIVE_RMSE]()
+    elif objective == OBJECTIVE_TWEEDIE:
+        _go[OBJECTIVE_TWEEDIE]()
+    elif objective == OBJECTIVE_HUBER:
+        _go[OBJECTIVE_HUBER]()
+    else:
+        raise Error(
+            "Unknown target: objective " + String(objective)
+            + " does not reach launch_approximate_move_eval"
+        )

@@ -162,6 +162,13 @@ from checks.kernel_matrix import (
     deterministic_flush_for,
     greedy_one_byte_fixed_for,
     partition_chunks_sm_for,
+    ridx_only_splits_for,
+)
+from gbdt.gpu_util.kernel.partition_stats_gather import (
+    compute_partition_stats_gather,
+)
+from gbdt.methods.greedy_subsets_searcher.kernel.split_points_ridx import (
+    launch_reorder_index_only,
 )
 from checks.numerics import PIN_DETERMINISM
 from checks.numerics import NUMERIC_IDENTICAL
@@ -358,6 +365,62 @@ comptime IDENTICAL_DRAIN_SCHEDULE = HIST_BUILD_MODE == NUMERIC_IDENTICAL
 # recipe in PORTING.md 134f. This define must never reach a shipped
 # build; nothing but the soak invocation passes it.
 comptime SOAK_134_CONTROL = is_defined["MOJOLEARN_134_CONTROL"]()
+
+# ================= DEVIATION BLOCK 2031 =================
+# RIDX-ONLY SPLITS FOR THE SYMMETRIC DRIVER -- DEVIATION 1902's schedule,
+# which the depthwise and lossguide drivers already run, transplanted to
+# `run_tree_layout_traced`. Under the flag the stat planes stay
+# STATIONARY in document order for the life of the fit and a split
+# permutes only the 4 B/row index:
+#
+#   * `launch_histograms_for_blocks` takes `ridx_stats = True`, routing
+#     every gather kernel's stat loads through `row_index` (the depth-0
+#     DIRECT kernels are untouched in both arms -- the root's index is
+#     the identity);
+#   * `launch_reorder_in_leaves` (2*ceil(statCount/8)+2 launches at
+#     stat_count 2 on the slow arm this driver always takes, plus
+#     stat_count*4 B/row read AND written twice per level) becomes
+#     `launch_reorder_index_only` (2 launches, index only);
+#   * both `compute_partition_stats` calls become
+#     `compute_partition_stats_gather` -- phase 1 fetches each stat
+#     through the index, phase 2 and the chunk formula are the SHARED
+#     kernels unchanged.
+#
+# THE BIT ARGUMENT IS DEVIATION 1902's, VERBATIM (split_points_ridx.mojo
+# banner): a permutation of floats moves bytes and never re-rounds, and
+# every reader enumerates the same rows in the same order through the
+# index that the moved buffer would have presented positionally -- the
+# value sequence entering every accumulation is identical, so the sums
+# are identical to the bit. The ROUTING is still inherited from the
+# `ridx_only_splits_for` matrix row: False under IDENTICAL on every
+# column (IDENTICAL's contract is the code path, not just the bits --
+# DEVIATION 1901), True on the four named GPU columns under FAST. So
+# this candidate is FAST-TIER ONLY by routing, expected model-identical,
+# and the A/B gate must confirm the fingerprint before any default flip.
+#
+# WHAT IT BUYS at 1M-2M rows: per level, 2 launches and
+# ~2 * 2 * stat_count * 4 B/row of reorder traffic (the copy out and the
+# gather back of both planes) are deleted; at depth 8 over 1M rows that
+# is ~128 MB of traffic per tree that no longer moves. The hist gather
+# arm reads the same bytes it read before -- the fetch moves from the
+# reorder pass to the consumer.
+#
+# OFF BY DEFAULT: the define is absent from every shipped build. Arm B
+# builds with `-D MOJOLEARN_2031_SYM_RIDX_SPLITS=1`. UNVERIFIED, RUN
+# OWED -- A/B commands in gbdt/UPSTREAM_SURVEY_2026-09.md and the PLAN
+# appendix; the gates that must hold under the define are
+# `check-fit-pointwise` (both searchers, one tree),
+# `check-logloss-train` (the estimation arm reads the partition the
+# split schedule produced -- A GATE MUST EXERCISE THE CHANGED ARM) and
+# `searcher_parity_covtype_check` (mixed policies, the shape that
+# catches numbering).
+# ====================================================
+comptime SYM_RIDX_SPLITS_2031 = (
+    is_defined["MOJOLEARN_2031_SYM_RIDX_SPLITS"]()
+    and ridx_only_splits_for[
+        TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
+    ]()
+)
 
 
 def make_split_features_buffers(
@@ -3617,8 +3680,13 @@ def run_tree_layout_traced[
         # ====================================================
         times.begin(ctx)
 
+        # DEVIATION 2031: `ridx_stats` routes the gather kernels' stat
+        # loads through `row_index` when the flag holds; False is the
+        # shipped byte-for-byte default.
         if planned:
-            launch_histograms_for_blocks[hist2_smem_mode](
+            launch_histograms_for_blocks[
+                hist2_smem_mode, SYM_RIDX_SPLITS_2031
+            ](
                 ctx, dblocks, depth, n_compute, n_rows, stat_count,
                 max_leaves, sm_count, fixed_scale,
                 cindex, row_index, stats, p_off, p_sz, ids_compute,
@@ -3626,7 +3694,9 @@ def run_tree_layout_traced[
                 hist, acc_i32, block_hist, hist_cells_per_leaf,
             )
         else:
-            launch_histograms_for_blocks[hist2_smem_mode](
+            launch_histograms_for_blocks[
+                hist2_smem_mode, SYM_RIDX_SPLITS_2031
+            ](
                 ctx, dblocks, depth, n_compute, n_rows, stat_count,
                 max_leaves, sm_count, fixed_scale,
                 cindex, row_index, stats, p_off, p_sz, zero_ids,
@@ -3696,11 +3766,22 @@ def run_tree_layout_traced[
 
         # their `AllReduceThroughMaster(subsets->CurrentPartStats(), ...)`
         times.begin(ctx)
-        compute_partition_stats(
-            ctx, n_live, max_live_rows, stat_count, n_rows,
-            dense_ids, p_off, p_sz, stats, stat_partials, part_stats,
-            sm_count=sm_count,
-        )
+        # DEVIATION 2031: with stationary stats, phase 1 gathers through
+        # `row_index`; the walk order over positions is unchanged, so the
+        # value sequence entering every partial is identical.
+        comptime if SYM_RIDX_SPLITS_2031:
+            compute_partition_stats_gather(
+                ctx, n_live, max_live_rows, stat_count, n_rows,
+                dense_ids, p_off, p_sz, stats, row_index,
+                stat_partials, part_stats,
+                sm_count=sm_count,
+            )
+        else:
+            compute_partition_stats(
+                ctx, n_live, max_live_rows, stat_count, n_rows,
+                dense_ids, p_off, p_sz, stats, stat_partials, part_stats,
+                sm_count=sm_count,
+            )
         mgr.stream_kernel()
         times.end(ctx, "sym.pstats")
 
@@ -3857,11 +3938,25 @@ def run_tree_layout_traced[
         # `2 * ceil(stat_count / 8) + 2` on the slow one -- so it comes back
         # from the call rather than being written out here. A hardcoded 4 was
         # counting two launches the fast path never issues.
-        var reorder_launches = launch_reorder_in_leaves(
-            ctx, n_live, wide, max_live_rows, stat_count, n_rows,
-            dense_ids, p_off, p_sz, stats, new_stats, row_index, new_index, gmap,
-            sm_count=sm_count,
-        )
+        # DEVIATION 2031: under the flag only the 4 B/row index moves --
+        # `launch_reorder_index_only` is `launch_reorder_in_leaves` with
+        # the stat columns deleted (split_points_ridx.mojo), 2 launches on
+        # the slow arm this driver's `max_live_rows = n_rows` always
+        # selects, and `new_stats` goes untouched.
+        var reorder_launches = 0
+
+        comptime if SYM_RIDX_SPLITS_2031:
+            reorder_launches = launch_reorder_index_only(
+                ctx, n_live, max_live_rows, dense_ids, p_off, p_sz,
+                row_index, new_index, gmap, sm_count=sm_count,
+            )
+        else:
+            reorder_launches = launch_reorder_in_leaves(
+                ctx, n_live, wide, max_live_rows, stat_count, n_rows,
+                dense_ids, p_off, p_sz, stats, new_stats, row_index,
+                new_index, gmap,
+                sm_count=sm_count,
+            )
         for _ in range(reorder_launches):
             mgr.stream_kernel()
 
@@ -4124,11 +4219,21 @@ def run_tree_layout_traced[
         # `ids_a` still holds the LAST level's ids, and `n_live` has doubled
         # since. Refill it for the final leaf count.
         times.begin(ctx)
-        compute_partition_stats(
-            ctx, n_live, max_live_rows, stat_count, n_rows,
-            dense_ids, p_off, p_sz, stats, stat_partials, part_stats,
-            sm_count=sm_count,
-        )
+        # DEVIATION 2031: the tail's refill goes through the same gather
+        # arm as the level loop's -- one schedule per build.
+        comptime if SYM_RIDX_SPLITS_2031:
+            compute_partition_stats_gather(
+                ctx, n_live, max_live_rows, stat_count, n_rows,
+                dense_ids, p_off, p_sz, stats, row_index,
+                stat_partials, part_stats,
+                sm_count=sm_count,
+            )
+        else:
+            compute_partition_stats(
+                ctx, n_live, max_live_rows, stat_count, n_rows,
+                dense_ids, p_off, p_sz, stats, stat_partials, part_stats,
+                sm_count=sm_count,
+            )
         mgr.stream_kernel()
 
         ctx.enqueue_function[compute_leaf_values_kernel](
