@@ -686,7 +686,7 @@ does not edit the ledger; the identity lane assigns the number.
 
 ---
 
-# DEVIATION 537: the flag-guarded v1 swap at the released selection site (2026-09-02, WRITE-ONLY LANE, NOTHING COMPILED OR RUN)
+# DEVIATION 537: the flag-guarded v1 swap at the released selection site (2026-09-02, LADDER STEPS 1-3 RUN AND GREEN ON ONE APPLE M4; STEPS 4 AND 5 OWED)
 
 The MLSys paper records: *"The largest measured gaps occur when fast mode
 calls a mature vendor matrix product while identical mode uses the less
@@ -695,6 +695,31 @@ calculation. A newer portable matrix product exists but is not yet the
 released implementation."* This section is the finding of what that sentence
 refers to, the wiring that prepares the swap, and the ladder that must run
 before anything is claimed. DEVIATIONS 538 and 539 were NOT spent.
+
+## RUN RECORD, 2026-09-02, ONE APPLE M4
+
+Steps 1, 2 and 3 of the ladder below were run by the orchestrator on ONE
+APPLE M4, every command rc 0. In short:
+
+- **Step 1, flag-off inertness: GREEN.** All four commands green in both
+  modes. The edit is dead code with the flag off, as required.
+- **Step 2, the first build with the flag: GREEN, and THE COMPILE RISK IS
+  CLEARED.** It built first try, no error, so the new import of the
+  1,591-line checks module into `core/gemm.mojo` compiles. Every arm OK,
+  and the identity check's reference cell MOVED, which is the finding.
+- **Step 3, the reach proof: GREEN.** A committed probe,
+  `gemm/checks/gemm_537_reach_probe.mojo`, returns `0x80000000` with the
+  flag on where flag-off returns `0x00000000`. THE FLAG REACHES THE BRANCH.
+- **Step 4, the timing window: NOT RUN, OWED.** The box was carrying about
+  9.6 GB of swap that day, so no timing arm was started. There is no timing
+  number for this deviation and none may be quoted.
+- **Step 5, the three-vendor legs: NOT RUN, OWED.** Everything above is ONE
+  APPLE M4, one box, one vendor column ([[A ONE-BOX VERDICT IS NOT THREE]]).
+
+**The flip rule below is unchanged and UNMET.** It still needs three-vendor
+bit agreement on the swapped path at one commit, the identity lane's
+sign-off on IDENTITY_PATHS rows 27/28, and a measured large-shape win. None
+of those exist.
 
 ## The finding: which kernel the paper means
 
@@ -755,51 +780,94 @@ be written; flag-on differs from flag-off by design.
   workspace and synchronizes; the pinned enqueue is asynchronous. A flip
   wants `identical_gemm_into` with a caller-owned workspace (follow-up).
 
-**Nothing here has been compiled. Every claim about the flag's behavior is
-UNVERIFIED, RUN OWED.** The known compile risks: the new top-level imports in
-`core/gemm.mojo` (`gemm.checks.gemm_identical` pulls 1,591 lines of device
-kernels into every build of a widely imported file; no cycle -- checked, that
-module does not import `core.gemm`), and the nested `comptime if` around a
-raising call.
+**THE COMPILE RISK IS CLEARED (2026-09-02, ONE APPLE M4).** The flagged
+risks were the new top-level imports in `core/gemm.mojo`
+(`gemm.checks.gemm_identical` pulls 1,591 lines of device kernels into every
+build of a widely imported file; no cycle -- checked, that module does not
+import `core.gemm`) and the nested `comptime if` around a raising call. The
+first build with the flag named succeeded first try, rc 0, no error, so
+neither risk bit. The flag's numerical behavior is now MEASURED on one box,
+step by step, in the ladder below; what remains UNVERIFIED is the timing
+(step 4) and every vendor column other than Apple (step 5).
 
-## The run-owed ladder (orchestrator only; one light thing at a time)
+## The ladder (orchestrator only; one light thing at a time). Steps 1-3 RUN on ONE APPLE M4, steps 4-5 OWED
 
-1. **Flag-off inertness** (Apple M4, both modes; the edit must be dead code):
+1. **Flag-off inertness** (ONE APPLE M4, both modes; the edit must be dead
+   code) -- **RUN 2026-09-02, ALL FOUR GREEN, rc 0**:
 
        tools/with_build_lock.sh     pixi run mojo run -I . core/gemm_identity_check.mojo
        tools/with_identical_mode.sh pixi run mojo run -I . core/gemm_identity_check.mojo
        tools/with_identical_mode.sh pixi run mojo run -I . gemm/checks/gemm_device_check.mojo
        tools/check_linalg_identity.sh
 
-   EXPECTED: all green, bit for bit as before the edit.
+   MEASURED: green `[FAST]`, where
+   `check_pinned_gemm_is_batch_invariant` is a REPORT and reported 0
+   differing cells at n = 64 and n = 256 against n = 4; green `[IDENTICAL]`,
+   every arm OK, reference cell (0,0) = `6.5419345` / `0x40d15787`; "gemm
+   device kernel + gates: all green [IDENTICAL] (6 gates, sabotage: none)";
+   "linear-algebra identity: both modes green." So the edit is dead code
+   with the flag off, as required.
 
-2. **Flag-on gates** (Apple M4, IDENTICAL):
+2. **Flag-on gates** (ONE APPLE M4, IDENTICAL) -- **RUN 2026-09-02, BOTH
+   GREEN, rc 0; this was the FIRST BUILD WITH THE FLAG and it compiled first
+   try**:
 
        tools/with_identical_mode.sh pixi run mojo run -D MOJOLEARN_537_GEMM_IDENT_SWAP=1 -I . core/gemm_identity_check.mojo
        tools/with_identical_mode.sh pixi run mojo run -D MOJOLEARN_537_GEMM_IDENT_SWAP=1 -I . neighbors/checks/knn_identity_check.mojo
 
-   EXPECTED (UNVERIFIED): batch/launch-invariance arms green -- v1 is gated
-   batch-invariant -- and any arm pinned to the serial spelling moves; a
-   moved bit there is the finding, not a wiring failure. Record which arms
-   moved; that list is the blast radius the flip must re-certify.
+   MEASURED, batch/launch invariance: green, as the wiring argued -- v1 is
+   gated batch-invariant, and `check_pinned_gemm_is_batch_invariant` found
+   all 256 overlapping cells bit-identical at n = 4, n = 64 and n = 256, so
+   v1 is batch-invariant through this entry point too.
+
+   MEASURED, the arm that moved: **exactly one, the identity check's
+   reference cell.** (0,0) = `6.5419426` / `0x40d15798` with the flag on
+   against `6.5419345` / `0x40d15787` with it off. A moved bit there is the
+   finding, not a wiring failure; it is the blast radius the flip must
+   re-certify, and it is measured rather than read off the source.
+
+   MEASURED, the arms that did NOT move: **no kNN arm moved.**
+   `knn_identity_check.mojo` was all arms OK with the flag on -- tie set
+   5/100 by arithmetic, tile invariance at 1/2/3, the fused arm
+   geometry-invariant at 1/40/2000 queries, AUTO == TILED at 53 and 2000
+   queries. `gemm/checks/gemm_device_check.mojo` was also run WITH the flag
+   on: green, the same 6 gates.
 
 3. **Reach proof for the flag** (sabotage-grade, per [[verify reach, not
-   output]]): one flag-on run at a `-0.0` fixture shape (`m = n = 4`,
-   `k = 128`, `_minus_zero_leaves` inputs) through `gemm_nt` must return
-   `0x80000000` where flag-off returns `0x00000000`. If both flag states
-   return the same bits, the flag did not reach the branch.
+   output]]) -- **RUN 2026-09-02, GREEN, THE FLAG REACHES THE BRANCH**. The
+   driver is committed as `gemm/checks/gemm_537_reach_probe.mojo`. It builds
+   the `-0.0` fixture verbatim from
+   `gemm_device_check.mojo::_minus_zero_leaves` at `m = n = 4`, `k = 128`
+   (1 leaf, leaf size 128), `B` all ones, and pushes it through the shipped
+   `gemm_nt`. Two runs, one per flag state:
 
-4. **The timing window** (the number the paper's sentence is owed; Apple
-   first, alternating INSIDE one thermal window per [[the M4 drifts 1.7x in
-   20 min]]; the two flag states are two binaries, so process-level
-   alternation as `tools/price_linalg_identity.sh` does it):
+       tools/with_identical_mode.sh pixi run mojo run -I . gemm/checks/gemm_537_reach_probe.mojo
+       tools/with_identical_mode.sh pixi run mojo run -D MOJOLEARN_537_GEMM_IDENT_SWAP=1 -I . gemm/checks/gemm_537_reach_probe.mojo
+
+   MEASURED: flag OFF, cell (0,0) = `0x00000000`, all 16 cells identical;
+   flag ON, cell (0,0) = `0x80000000`, all 16 cells identical. That is
+   exactly the separation this section predicted from source, so the flag
+   reaches the branch and the two constructions differ on the seed, measured
+   on hardware. Had both flag states returned the same bits, the flag would
+   not have reached the branch.
+
+4. **The timing window** -- **NOT RUN, OWED** (the number the paper's
+   sentence is owed; Apple first, alternating INSIDE one thermal window per
+   [[the M4 drifts 1.7x in 20 min]]; the two flag states are two binaries,
+   so process-level alternation as `tools/price_linalg_identity.sh` does
+   it):
 
        tools/price_linalg_identity.sh    # flag-off arm
        tools/with_identical_mode.sh pixi run mojo run -D MOJOLEARN_537_GEMM_IDENT_SWAP=1 -I . bench/linalg_price_main.mojo   # flag-on arm, same rounds, interleaved
 
-   Large shapes only; report medians and the round count.
+   Large shapes only; report medians and the round count. This leg was
+   deliberately not started on 2026-09-02 because the box was carrying about
+   9.6 GB of swap that day, which would have priced the swap rather than the
+   kernel. **There is no timing number for this deviation, and none may be
+   quoted from anywhere else.**
 
-5. **The three-vendor legs, only if a flip is pursued, all at ONE commit**:
+5. **The three-vendor legs, only if a flip is pursued, all at ONE commit**
+   -- **NOT RUN, OWED. Steps 1-3 above are ONE APPLE M4 and nothing more**:
    the Apple/NVIDIA/AMD identity legs with
    `MOJOLEARN_537_GEMM_IDENT_SWAP=1` threaded through the IDENTICAL builds,
    via `tools/e1_bootstrap.sh` phase 8 / `tools/e2_remote_leg.sh` (the
@@ -815,7 +883,16 @@ commit and in the orchestrator's session: the identity lane signs off on
 moving rows 27/28's certified bits; ladder legs 1-3 are green with the moved
 arms dispositioned; leg 5's three vendor columns agree bit for bit on the
 swapped path; and leg 4 shows a win at large shapes. A one-box win flips
-nothing. Because this is DIFFERENT BITS, [[switches must flip]]'s same-session
+nothing.
+
+**As of 2026-09-02 the rule is UNMET.** Legs 1-3 are green, but on ONE
+APPLE M4 only, and the one arm they moved (the identity check's reference
+cell) is recorded, not yet dispositioned by the identity lane. Legs 4 and 5
+have not run, so there is neither a timing number nor a second vendor
+column. Three of the four conditions are outstanding and the default stays
+where it is.
+
+Because this is DIFFERENT BITS, [[switches must flip]]'s same-session
 rule does not apply -- that rule is for bit-identical measured wins, and this
 is explicitly not one.
 

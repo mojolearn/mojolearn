@@ -509,7 +509,7 @@ ledger.
 
 # THIS LANE'S DEVIATION BLOCK, AND THE GREP THAT MISSES HALF OF IT
 
-DEVIATIONS 530-539 are this lane's. Allocation as of 2026-08-23:
+DEVIATIONS 530-539 are this lane's. Allocation as of 2026-09-02:
 
 | number | what | state |
 |---|---|---|
@@ -520,9 +520,10 @@ DEVIATIONS 530-539 are this lane's. Allocation as of 2026-08-23:
 | 534 | the identity card's device arm | SPENT (`bench/gemm_card_main.mojo`); oracle and device cards byte-identical at 60 stages on Apple |
 | 535 | the price harness's device arms | SPENT (`bench/gemm_price_main.mojo`); wiring only, no number published |
 | 536 | the guarded RunPod remote leg and its runbook | SPENT (`tools/gemm_remote_leg.sh`, `gemm/E1G_RUNBOOK.md`); **UNRUN**, `sh -n` only |
-| 537-539 | unallocated | -- |
+| 537 | the flag-guarded v1 swap at `gemm_nt`'s IDENTICAL arm, `-D MOJOLEARN_537_GEMM_IDENT_SWAP=1` | SPENT (`core/gemm.mojo`, `gemm/checks/gemm_537_reach_probe.mojo`, `gemm/README.md` DEVIATION 537); ladder steps 1-3 GREEN on ONE APPLE M4 2026-09-02, steps 4 (timing) and 5 (three vendors) **OWED**, the flip rule UNMET |
+| 538-539 | unallocated | -- |
 
-**The block is nearly exhausted.** Three numbers remain and the three-vendor
+**The block is nearly exhausted.** Two numbers remain and the three-vendor
 leg has not run. When 539 is spent this lane agrees a second block with the
 identity lane rather than drifting into 540+, which is theirs
 (`DEVIATIONS 541-544` and `546-549` are already spent there).

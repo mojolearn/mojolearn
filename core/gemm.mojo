@@ -84,8 +84,9 @@ from std.sys.compile import is_defined
 # DEVIATION 537: these two imports exist only for the flag-guarded swap
 # below. `gemm/checks/gemm_identical.mojo` does not import `core.gemm`
 # (checked 2026-09-02), so no cycle; the cost is that every build of this
-# file now compiles that module even with the flag off. UNVERIFIED, RUN
-# OWED: no build of this edit has been attempted.
+# file now compiles that module even with the flag off. THE COMPILE RISK IS
+# CLEARED: this file built first try in both flag states on ONE APPLE M4,
+# 2026-09-02.
 from gemm.checks.gemm_identical import identical_gemm
 from gemm.checks.gemm_oracle import OP_NT
 
@@ -268,7 +269,8 @@ def pinned_gemv_n_kernel(
 
 
 # ===========================================================================
-# DEVIATION 537 -- THE FLAG-GUARDED v1 SWAP. OFF BY DEFAULT. NOTHING RUN.
+# DEVIATION 537 -- THE FLAG-GUARDED v1 SWAP. OFF BY DEFAULT.
+# LADDER STEPS 1-3 GREEN ON ONE APPLE M4; STEPS 4 AND 5 OWED.
 # ===========================================================================
 #
 # `-D MOJOLEARN_537_GEMM_IDENT_SWAP=1` routes `gemm_nt`'s IDENTICAL arm (the
@@ -321,9 +323,16 @@ def pinned_gemv_n_kernel(
 # sync and the allocation too. A flip would want `identical_gemm_into` with
 # a caller-owned workspace; that is follow-up work, not this deviation.
 #
-# UNVERIFIED, RUN OWED (exact commands in `gemm/README.md`, DEVIATION 537
-# section): flag-off inertness in both modes, flag-on gates, the timing
-# window, and the three-vendor legs.
+# RUN STATE, 2026-09-02, ONE APPLE M4 (exact commands and measured bits in
+# `gemm/README.md`, DEVIATION 537 section). RUN AND GREEN: flag-off
+# inertness in both modes; the flag-on gates, which compiled first try and
+# moved exactly one arm, the identity check's reference cell (0x40d15787
+# off -> 0x40d15798 on), with no kNN arm moved; and the reach proof
+# `gemm/checks/gemm_537_reach_probe.mojo`, which returns 0x00000000 with
+# the flag off and 0x80000000 with it on, so the flag reaches this branch.
+# STILL OWED, NOT RUN: the timing window (there is no timing number) and
+# the three-vendor legs. The flip rule is unchanged and UNMET -- one Apple
+# box is not three columns.
 comptime GEMM_IDENT_SWAP_537 = is_defined["MOJOLEARN_537_GEMM_IDENT_SWAP"]()
 
 

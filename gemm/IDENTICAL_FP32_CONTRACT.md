@@ -548,7 +548,7 @@ lane's file and neither is edited here.**
    shipped kernels differ from v1 at `P == 1` on exactly one value, and
    everywhere `P > 1` by the whole fold topology.
 
-### 7.6.1 The migration flag, DEVIATION 537 (2026-09-02, wiring only, nothing run)
+### 7.6.1 The migration flag, DEVIATION 537 (2026-09-02; wired, then ladder steps 1-3 run green on ONE APPLE M4, steps 4 and 5 owed)
 
 `-D MOJOLEARN_537_GEMM_IDENT_SWAP=1` now exists in `core/gemm.mojo` and
 routes `gemm_nt`'s IDENTICAL `n > 1` arm to
@@ -573,8 +573,20 @@ untouched.**
   `pinned_gemm_nt_gram_kernel` and item 1's `gram_splitk` in the same
   certification, or name the resulting split of the identical tier across
   two profiles explicitly.
-- The run-owed ladder, with exact commands, is `gemm/README.md`'s
-  DEVIATION 537 section.
+- **What has run, 2026-09-02, ONE APPLE M4.** Ladder steps 1-3 of
+  `gemm/README.md`'s DEVIATION 537 section, all rc 0 and green: flag-off
+  inertness in both modes; the flag-on gates, which built first try (the
+  compile risk is cleared) and moved exactly one arm, the identity check's
+  reference cell, with no k-NN arm moved; and the reach proof
+  `gemm/checks/gemm_537_reach_probe.mojo`, which returns `0x00000000` with
+  the flag off and `0x80000000` with it on at the `-0.0` fixture, so the
+  flag reaches the branch and the two constructions differ on the seed as
+  this section argued from source. **Still owed and not run:** the timing
+  window at large shapes, so no timing number exists, and the three-vendor
+  legs, so Apple M4 is the only column. The flip conditions above are
+  UNMET.
+- The ladder, with exact commands and the measured bits, is
+  `gemm/README.md`'s DEVIATION 537 section.
 
 ## 8. Ragged `k`, and the degenerate shapes
 
