@@ -226,44 +226,91 @@ BUNDLE="/tmp/mojolearn-e2-$COMMIT.tgz"
 # SIDES and compared before anything runs, which is what
 # `tools/gemm_remote_leg.sh` already does and why the RunPod leg never paid
 # this cost. `bench/results` is excluded because nothing on the box reads it.
-log "archive $COMMIT (git archive, bench/results excluded)"
-git -C "$REPO" archive --format=tar "$COMMIT" -- . ':!bench/results' \
-  | gzip > "$BUNDLE" || { log "archive failed"; exit 6; }
-SRC_SHA=$( { shasum -a 256 "$BUNDLE" 2>/dev/null || sha256sum "$BUNDLE"; } | awk '{print $1}' )
-log "  archive $(du -h "$BUNDLE" | awk '{print $1}'), sha256 ${SRC_SHA:0:16}"
-# THE BUNDLE COPY RETRIES. A box answers `echo SSH-OK` before its sshd is
-# settled, and the very next scp can still come back "Connection closed" --
-# which is how the 2026-08-28 13:21 AMD identity leg died thirty seconds
-# after a healthy `rocm-smi`, at a cost of one droplet, one lease and the
-# whole column. The readiness probe above is necessary and it is not
-# sufficient; a transient here is worth five tries, not a leg.
-_scp_ok=0
-for _try in 1 2 3 4 5; do
-  if scp -q -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 \
-        "$BUNDLE" "root@$IP:/root/e2.tgz"; then _scp_ok=1; break; fi
-  log "scp attempt $_try failed; retrying in 15s"
-  sleep 15
-done
-[ "$_scp_ok" = 1 ] || { log "scp failed after 5 attempts"; exit 6; }
-# THE INTEGRITY CHECK THAT REPLACES `git clone`'s. The box recomputes the
-# sha256 of what it received and refuses if it differs from what was sent.
-# `commit.txt` is written from HERE, because an archive has no .git and the
-# box therefore cannot tell you which commit it is running; every artifact
-# the leg files is attributed from that file.
-$SSH "set -e
-      cd /root
-      got=\$( sha256sum e2.tgz | awk '{print \$1}' )
-      if [ \"\$got\" != \"$SRC_SHA\" ]; then
-        echo \"ARCHIVE SHA MISMATCH: sent $SRC_SHA got \$got\"; exit 9
-      fi
-      echo ARCHIVE-SHA-OK
+# THE MAC'S UPLINK IS NOT IN THIS PATH ANY MORE (2026-09-02).
+#
+# The archive route below is correct and it is SLOW FOR ONE REASON THAT IS
+# NOT ITS FAULT: this machine uploads at about 68 KB/s, measured, so an 80 MB
+# archive is fifty-five minutes of a lease that is only two hours long. Three
+# RunPod legs died of exactly this the same morning, one of them after 22
+# minutes at 24 KB/s with the tar still running.
+#
+# THE REPOSITORY IS PUBLIC AND THE BOX HAS A DATACENTER LINK, so the box
+# fetches the commit itself: measured 3.2 SECONDS on an MI325X droplet for
+# this same commit, against fifty-five minutes the other way. `--depth 1` of
+# ONE SHA (GitHub serves a by-sha fetch for a public repo), sparse-checkout
+# excluding bench/results exactly as the archive did, and then the check that
+# replaces the archive's sha256: the box reports `git rev-parse HEAD` and it
+# must equal the commit this leg was told to ship. That is a STRONGER
+# provenance statement than the tarball's, because it is git's own hash of
+# the tree rather than a hash of one transfer of it.
+#
+# The archive path stays as the fallback for a private mirror, an offline
+# commit, or a GitHub outage: set MOJOLEARN_LEG_NO_CLONE=1 to force it.
+CLONE_URL="${MOJOLEARN_LEG_CLONE_URL:-https://github.com/mojolearn/mojolearn.git}"
+CLONE_OK=0
+if [ "${MOJOLEARN_LEG_NO_CLONE:-0}" != "1" ] && [ -n "$CLONE_URL" ]; then
+  log "cloning $COMMIT ON THE BOX from $CLONE_URL (bench/results excluded)"
+  if $SSH "set -e
       rm -rf /root/mojolearn && mkdir -p /root/mojolearn
-      tar -xzf e2.tgz -C /root/mojolearn
       cd /root/mojolearn
+      git init -q
+      git remote add origin '$CLONE_URL'
+      git -c protocol.version=2 fetch -q --depth 1 origin '$COMMIT'
+      git sparse-checkout set --no-cone '/*' '!bench/results' >/dev/null 2>&1 || true
+      git checkout -q --detach FETCH_HEAD
+      got=\$(git rev-parse HEAD)
+      if [ \"\$got\" != '$COMMIT' ]; then
+        echo \"CLONE COMMIT MISMATCH: want $COMMIT got \$got\"; exit 9
+      fi
       printf '%s\\n' '$COMMIT' > commit.txt
-      cat commit.txt
-      grep -c 'is_defined\\[\"MOJOLEARN_NUMERIC_IDENTICAL\"\\]' checks/numerics.mojo" \
-  || { log "remote unpack/verify failed"; exit 6; }
+      echo CLONE-COMMIT-OK \$got
+      grep -c 'is_defined\\[\"MOJOLEARN_NUMERIC_IDENTICAL\"\\]' checks/numerics.mojo"; then
+    CLONE_OK=1
+  else
+    log "the clone path failed; falling back to the archive upload"
+  fi
+fi
+
+if [ "$CLONE_OK" != 1 ]; then
+  log "archive $COMMIT (git archive, bench/results excluded)"
+  git -C "$REPO" archive --format=tar "$COMMIT" -- . ':!bench/results' \
+    | gzip > "$BUNDLE" || { log "archive failed"; exit 6; }
+  SRC_SHA=$( { shasum -a 256 "$BUNDLE" 2>/dev/null || sha256sum "$BUNDLE"; } | awk '{print $1}' )
+  log "  archive $(du -h "$BUNDLE" | awk '{print $1}'), sha256 ${SRC_SHA:0:16}"
+  # THE BUNDLE COPY RETRIES. A box answers `echo SSH-OK` before its sshd is
+  # settled, and the very next scp can still come back "Connection closed" --
+  # which is how the 2026-08-28 13:21 AMD identity leg died thirty seconds
+  # after a healthy `rocm-smi`, at a cost of one droplet, one lease and the
+  # whole column. The readiness probe above is necessary and it is not
+  # sufficient; a transient here is worth five tries, not a leg.
+  _scp_ok=0
+  for _try in 1 2 3 4 5; do
+    if scp -q -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 \
+          "$BUNDLE" "root@$IP:/root/e2.tgz"; then _scp_ok=1; break; fi
+    log "scp attempt $_try failed; retrying in 15s"
+    sleep 15
+  done
+  [ "$_scp_ok" = 1 ] || { log "scp failed after 5 attempts"; exit 6; }
+  # THE INTEGRITY CHECK THAT REPLACES `git clone`'s. The box recomputes the
+  # sha256 of what it received and refuses if it differs from what was sent.
+  # `commit.txt` is written from HERE, because an archive has no .git and the
+  # box therefore cannot tell you which commit it is running; every artifact
+  # the leg files is attributed from that file.
+  $SSH "set -e
+        cd /root
+        got=\$( sha256sum e2.tgz | awk '{print \$1}' )
+        if [ \"\$got\" != \"$SRC_SHA\" ]; then
+          echo \"ARCHIVE SHA MISMATCH: sent $SRC_SHA got \$got\"; exit 9
+        fi
+        echo ARCHIVE-SHA-OK
+        rm -rf /root/mojolearn && mkdir -p /root/mojolearn
+        tar -xzf e2.tgz -C /root/mojolearn
+        cd /root/mojolearn
+        printf '%s\\n' '$COMMIT' > commit.txt
+        cat commit.txt
+        grep -c 'is_defined\\[\"MOJOLEARN_NUMERIC_IDENTICAL\"\\]' checks/numerics.mojo" \
+    || { log "remote unpack/verify failed"; exit 6; }
+fi
 
 # THE WORK BOUND, COMPUTED FROM THE LEASE AND NOT FROM A GUESS.
 # DEVIATION 1090, 2026-08-25. This step used to be an unbounded `$SSH` that
