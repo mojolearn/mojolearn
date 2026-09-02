@@ -31,8 +31,25 @@ EXISTS: `impl/mamba_ssm/modules/mamba2.mojo` + `ssd_minimal.mojo` under
 `IDENTICAL_MAMBA2_CONTRACT.md`, gated on the Apple M4 in the identical
 tier, and since the evening of 2026-09-01 **bit-identical Apple vs a
 rented RTX 4090 (judge: 26 of 26 stages IDENTICAL, that contract's
-PHASE 6 record); the AMD column is OWED after three dead rentals, so
-the THREE-vendor sentence remains Mamba-1's alone.** (b) The Python
+PHASE 6 record). The AMD arm, dead on three rentals that evening, RAN
+2026-09-02 on a DigitalOcean MI325X droplet (gfx942) at commit cb8ea360
+(that card's own `commit.txt`; an earlier writing here said cd56e8ce and
+was wrong) and its OWN gate is green
+(`mamba2 [identical] check OK (26 OK lines)`), AND THE APPLE-vs-AMD HASH
+DIFF RAN THE SAME DAY AND IS IDENTICAL -- the Apple arm was re-run at
+cd56e8ce first, so the comparison would not straddle two source states
+(rc 0, 26 records, gates A, B and C all pass), and
+`tools/identity_trace_diff.py` reports 26 matched stage pairs, none
+unmatched on either side, identical tag sequences, and agreement on
+dtype, count and hash at every pair, RESULT IDENTICAL; the 2026-09-01
+Apple card at 4515b284 diffs identical against the same AMD card too, and
+the only source delta across those commits in anything mamba2 compiles is
+a comment block in the repository's `checks/numerics.mojo`, no code. All
+three vendors now agree pairwise against Apple, but the three columns are
+NOT all at one commit -- the NVIDIA column is the 2026-09-01
+Apple-vs-RTX-4090 result at that day's commit and was NOT re-run at
+cd56e8ce, so a single-commit three-vendor card is still OWED, and an H100
+leg at cd56e8ce is IN FLIGHT to close exactly that.** (b) The Python
 surface is BUILT AND GATED ON APPLE, SAME DAY (2026-09-01 evening):
 `bindings/_mojolearn_mamba.mojo` (the fourteenth binding, two-list ABI)
 built green in ALL THREE TIERS via `bindings/build_mamba.sh` (first
@@ -175,7 +192,7 @@ Upstream spellings are `mamba_ssm/modules/block.py` (blk),
 | MLP interleave (`d_intermediate` > 0, GatedMLP, norm2) | seq:73-78; blk:31-35, :69-86; modules/mlp.py | absent | SHIP LATER | trigger, a checkpoint with d_intermediate > 0; stock mamba/mamba2 LM checkpoints use 0 |
 | LayerNorm option (`rms_norm=False`) | seq:70-72, :177-179 | absent; RMSNorm only | SHIP LATER | trigger, a LayerNorm checkpoint; needs a mean-subtraction seam the contract does not have |
 | `from_pretrained`/`save_pretrained`, HF hub fetch, config json | seq:292-315; utils/hf.py | absent | SHIP LATER (hub fetch); raw-buffer weight intake SHIP NOW | the consumer requirement is "the same weights on both sides", which raw little-endian buffers plus a manifest already deliver (the corpus file format is the precedent). A checkpoint-format importer (torch .bin/safetensors -> our buffers) is a Python-side utility, trigger, first real-checkpoint cross-check |
-| Mamba-3 block | mamba_ssm/modules/mamba3.py:43-70 (rope_fraction :53, MIMO :59-60, heavy_tail_activation :27-41, per-token rotary on B/C, trapezoidal discretization inputs :106-108) | BUILT AND GATED ON APPLE THE SAME DAY (2026-09-01 evening, contract RUN RECORD): gates a/b/c/d/d-cross/continuation/e ALL PASS on the FIRST compile, 11/11 witnessable sabotage arms RED naming their own stage, FOLD refused VACUOUS per DEV 834, shape sweep 42/42. One column, one vendor; corpus family + FAST recording + the E-leg OWED. **PyPI surface: BUILT AND OWED later the same day (`Mamba3Block`/`Mamba3State`, deviation 794 — the consumer table's PyPI row carries the run-owed commands)** | SHIP LATER, gate-first | the contract sibling now exists and the addendum row below scopes the surface knobs; the trigger for SHIPPING is unchanged (a consumer-named Mamba-3 checkpoint) and the completion claim still lives on the three-vendor E-leg |
+| Mamba-3 block | mamba_ssm/modules/mamba3.py:43-70 (rope_fraction :53, MIMO :59-60, heavy_tail_activation :27-41, per-token rotary on B/C, trapezoidal discretization inputs :106-108) | BUILT AND GATED ON APPLE THE SAME DAY (2026-09-01 evening, contract RUN RECORD): gates a/b/c/d/d-cross/continuation/e ALL PASS on the FIRST compile, 11/11 witnessable sabotage arms RED naming their own stage, FOLD refused VACUOUS per DEV 834, shape sweep 42/42. Apple is green; the SECOND COLUMN RAN 2026-09-02 on an AMD MI325X (gfx942) at commit cd56e8ce and GATE (a) IS RED there -- 1,179 cells over four stages (rot.k, kscale.out, ssd.h_last, ssd.k_last), every quoted pair one ULP in the last mantissa bit, while rot.q and the traced rot inputs stay bit-identical (that contract's 2026-09-02 RUN RECORD carries the numbers and the labelled hypothesis). NVIDIA OWED; corpus family + Apple FAST recording + the rest of the E-leg OWED. **PyPI surface: BUILT AND OWED later the same day (`Mamba3Block`/`Mamba3State`, deviation 794 — the consumer table's PyPI row carries the run-owed commands)** | SHIP LATER, gate-first | the contract sibling now exists and the addendum row below scopes the surface knobs; the trigger for SHIPPING is unchanged (a consumer-named Mamba-3 checkpoint) and the completion claim still lives on the three-vendor E-leg |
 | Mamba-3 SURFACE KNOBS (the contract's deferred inventory, addendum to the row above) | mamba3.py:44-70 | pinned or refused, per profile `mojolearn.identical.mamba3.siso.fp32.v1` section 3 | one disposition per knob | PINNED AS PROFILE CONSTANTS: d_state 128, expand 2, headdim 64, ngroups 1, rope_fraction 0.5 (32 angles), A_floor 1e-4, chunk_size 64 (PART OF THE ARITHMETIC, mamba2 DEV 783's standing), B/C norm eps 1e-5. REFUSED BY NAME, structurally (no such knob exists on the surface): is_mimo/mimo_rank, is_outproj_norm, fuse_pregate_headwise_norm, rope_fraction 1.0, ngroups > 1, cu_seqlens/seq_idx varlen, non-Float32 (the shipped bf16 casts, mamba3_siso_combined.py:390-399, refused not reproduced). INITIALIZATION FACTS, out of scope (weights are inputs): dt_min/dt_max/dt_init_floor (:54-56, :111-115), the ones-init B/C biases (:121-122), D init (:140). ABSORBED-KWARG NO-OPS upstream, absent here: dropout, layer_idx, n_layer, device, dtype (:65-69). DEFERRED, not refused (contract section 5): varlen, MIMO, is_outproj_norm arms, multi-block caches |
 
 ## 6. Varlen and batching

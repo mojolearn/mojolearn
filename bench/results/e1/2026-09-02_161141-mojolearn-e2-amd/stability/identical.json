@@ -1,0 +1,412 @@
+{
+ "mode": "identical",
+ "repeats": 6,
+ "rows": [
+  {
+   "lane": "agglomerative",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "02ca572ae936a2fa",
+    "02ca572ae936a2fa",
+    "02ca572ae936a2fa",
+    "02ca572ae936a2fa",
+    "02ca572ae936a2fa",
+    "02ca572ae936a2fa"
+   ],
+   "error": null
+  },
+  {
+   "lane": "dbscan",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "a4608e954c7420b7",
+    "a4608e954c7420b7",
+    "a4608e954c7420b7",
+    "a4608e954c7420b7",
+    "a4608e954c7420b7",
+    "a4608e954c7420b7"
+   ],
+   "error": null
+  },
+  {
+   "lane": "elasticnet",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "f4a2b16c06f0f290",
+    "f4a2b16c06f0f290",
+    "f4a2b16c06f0f290",
+    "f4a2b16c06f0f290",
+    "f4a2b16c06f0f290",
+    "f4a2b16c06f0f290"
+   ],
+   "error": null
+  },
+  {
+   "lane": "et-clf",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40",
+    "707d2c92e92f6a40"
+   ],
+   "error": null
+  },
+  {
+   "lane": "et-reg",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "a1d2eb9ddb149617",
+    "a1d2eb9ddb149617",
+    "a1d2eb9ddb149617",
+    "a1d2eb9ddb149617",
+    "a1d2eb9ddb149617",
+    "a1d2eb9ddb149617"
+   ],
+   "error": null
+  },
+  {
+   "lane": "gbdt-depthwise",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "cd27a77258047c8e",
+    "cd27a77258047c8e",
+    "cd27a77258047c8e",
+    "cd27a77258047c8e",
+    "cd27a77258047c8e",
+    "cd27a77258047c8e"
+   ],
+   "error": null
+  },
+  {
+   "lane": "gbdt-lossguide",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "e65c2a2686bf7341",
+    "e65c2a2686bf7341",
+    "e65c2a2686bf7341",
+    "e65c2a2686bf7341",
+    "e65c2a2686bf7341",
+    "e65c2a2686bf7341"
+   ],
+   "error": null
+  },
+  {
+   "lane": "gbdt-rmse",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "75e3f3a99e5e004b",
+    "75e3f3a99e5e004b",
+    "75e3f3a99e5e004b",
+    "75e3f3a99e5e004b",
+    "75e3f3a99e5e004b",
+    "75e3f3a99e5e004b"
+   ],
+   "error": null
+  },
+  {
+   "lane": "gbdt-symmetric",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "dc987497271f92b1",
+    "dc987497271f92b1",
+    "dc987497271f92b1",
+    "dc987497271f92b1",
+    "dc987497271f92b1",
+    "dc987497271f92b1"
+   ],
+   "error": null
+  },
+  {
+   "lane": "gemm-pinned",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "18ff2fd121056aee",
+    "18ff2fd121056aee",
+    "18ff2fd121056aee",
+    "18ff2fd121056aee",
+    "18ff2fd121056aee",
+    "18ff2fd121056aee"
+   ],
+   "error": null
+  },
+  {
+   "lane": "gemm-vendor",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "18ff2fd121056aee",
+    "18ff2fd121056aee",
+    "18ff2fd121056aee",
+    "18ff2fd121056aee",
+    "18ff2fd121056aee",
+    "18ff2fd121056aee"
+   ],
+   "error": null
+  },
+  {
+   "lane": "holtwinters",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "cff24aef76c6431d",
+    "cff24aef76c6431d",
+    "cff24aef76c6431d",
+    "cff24aef76c6431d",
+    "cff24aef76c6431d",
+    "cff24aef76c6431d"
+   ],
+   "error": null
+  },
+  {
+   "lane": "iforest",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "334ba456c6bb7644",
+    "334ba456c6bb7644",
+    "334ba456c6bb7644",
+    "334ba456c6bb7644",
+    "334ba456c6bb7644",
+    "334ba456c6bb7644"
+   ],
+   "error": null
+  },
+  {
+   "lane": "kde",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "9a2d41d8dd246e5d",
+    "9a2d41d8dd246e5d",
+    "9a2d41d8dd246e5d",
+    "9a2d41d8dd246e5d",
+    "9a2d41d8dd246e5d",
+    "9a2d41d8dd246e5d"
+   ],
+   "error": null
+  },
+  {
+   "lane": "kmeans",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "da3cb10e46c91256",
+    "da3cb10e46c91256",
+    "da3cb10e46c91256",
+    "da3cb10e46c91256",
+    "da3cb10e46c91256",
+    "da3cb10e46c91256"
+   ],
+   "error": null
+  },
+  {
+   "lane": "knn-clf",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "f359ee4876deb908",
+    "f359ee4876deb908",
+    "f359ee4876deb908",
+    "f359ee4876deb908",
+    "f359ee4876deb908",
+    "f359ee4876deb908"
+   ],
+   "error": null
+  },
+  {
+   "lane": "knn-reg",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "ff4a92b889616aea",
+    "ff4a92b889616aea",
+    "ff4a92b889616aea",
+    "ff4a92b889616aea",
+    "ff4a92b889616aea",
+    "ff4a92b889616aea"
+   ],
+   "error": null
+  },
+  {
+   "lane": "knn-tied",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "eb5d50fc1d09b0e1",
+    "eb5d50fc1d09b0e1",
+    "eb5d50fc1d09b0e1",
+    "eb5d50fc1d09b0e1",
+    "eb5d50fc1d09b0e1",
+    "eb5d50fc1d09b0e1"
+   ],
+   "error": null
+  },
+  {
+   "lane": "lasso",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "8c61a582de814863",
+    "8c61a582de814863",
+    "8c61a582de814863",
+    "8c61a582de814863",
+    "8c61a582de814863",
+    "8c61a582de814863"
+   ],
+   "error": null
+  },
+  {
+   "lane": "logistic",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "7037da78aa5950dd",
+    "7037da78aa5950dd",
+    "7037da78aa5950dd",
+    "7037da78aa5950dd",
+    "7037da78aa5950dd",
+    "7037da78aa5950dd"
+   ],
+   "error": null
+  },
+  {
+   "lane": "metrics",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "9e779d081426adc8",
+    "9e779d081426adc8",
+    "9e779d081426adc8",
+    "9e779d081426adc8",
+    "9e779d081426adc8",
+    "9e779d081426adc8"
+   ],
+   "error": null
+  },
+  {
+   "lane": "ols",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "24aff16838df704a",
+    "24aff16838df704a",
+    "24aff16838df704a",
+    "24aff16838df704a",
+    "24aff16838df704a",
+    "24aff16838df704a"
+   ],
+   "error": null
+  },
+  {
+   "lane": "pca",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "abe2157474e81469",
+    "abe2157474e81469",
+    "abe2157474e81469",
+    "abe2157474e81469",
+    "abe2157474e81469",
+    "abe2157474e81469"
+   ],
+   "error": null
+  },
+  {
+   "lane": "rf-clf",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "eacd6bff8b4088b8",
+    "eacd6bff8b4088b8",
+    "eacd6bff8b4088b8",
+    "eacd6bff8b4088b8",
+    "eacd6bff8b4088b8",
+    "eacd6bff8b4088b8"
+   ],
+   "error": null
+  },
+  {
+   "lane": "rf-reg",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "91269c5ae3828665",
+    "91269c5ae3828665",
+    "91269c5ae3828665",
+    "91269c5ae3828665",
+    "91269c5ae3828665",
+    "91269c5ae3828665"
+   ],
+   "error": null
+  },
+  {
+   "lane": "ridge",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "b72095bd450e4d05",
+    "b72095bd450e4d05",
+    "b72095bd450e4d05",
+    "b72095bd450e4d05",
+    "b72095bd450e4d05",
+    "b72095bd450e4d05"
+   ],
+   "error": null
+  },
+  {
+   "lane": "spectral",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "7c5f4e5c32dc0ca1",
+    "7c5f4e5c32dc0ca1",
+    "7c5f4e5c32dc0ca1",
+    "7c5f4e5c32dc0ca1",
+    "7c5f4e5c32dc0ca1",
+    "7c5f4e5c32dc0ca1"
+   ],
+   "error": null
+  },
+  {
+   "lane": "svc",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "c982ba99909e46eb",
+    "c982ba99909e46eb",
+    "c982ba99909e46eb",
+    "c982ba99909e46eb",
+    "c982ba99909e46eb",
+    "c982ba99909e46eb"
+   ],
+   "error": null
+  },
+  {
+   "lane": "tsvd",
+   "verdict": "STABLE",
+   "distinct": 1,
+   "hashes": [
+    "eb98ef49f9c747f0",
+    "eb98ef49f9c747f0",
+    "eb98ef49f9c747f0",
+    "eb98ef49f9c747f0",
+    "eb98ef49f9c747f0",
+    "eb98ef49f9c747f0"
+   ],
+   "error": null
+  }
+ ]
+}

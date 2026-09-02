@@ -1,0 +1,71 @@
+Imported from /root/mojolearn/mamba/checks/mamba3_check.mojo:109:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba3_check.mojo:109:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/mamba/checks/mamba3_check.mojo:109:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba3_check.mojo:109:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba3_check.mojo:109:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+/root/mojolearn/mamba/checks/mamba3_check.mojo:1228:28: warning: assignment to 'bytes' was never used; assign to '_' instead?
+    var bytes = List[UInt8]()
+                           ^
+/root/mojolearn/mamba/checks/mamba3_check.mojo:1482:30: warning: assignment to 'expect_first' was never used; assign to '_' instead?
+    var expect_first = String("")
+                             ^
+mamba3 block gate (IDENTICAL_MAMBA3_CONTRACT.md section 8); profile mojolearn.identical.mamba3.siso.fp32.v1; build mode IDENTICAL
+shape: B = 1 L = 4 d_model = 32
+  OK    norm.sumsq  (4 cells)
+  OK    norm.out  (128 cells)
+  OK    in_proj.out  (1676 cells)
+  OK    A.out  (4 cells)
+  OK    dt.out  (4 cells)
+  OK    adt.out  (4 cells)
+  OK    trap.sigma  (4 cells)
+  OK    trap.scale  (4 cells)
+  OK    bcnorm.B  (512 cells)
+  OK    bcnorm.C  (512 cells)
+  OK    angle.theta  (128 cells)
+  OK    rot.q  (512 cells)
+  MOVED rot.k  54 of 512 cells, first cell 9  a 0x3fa66f4e  b 0x3fa66f4d
+  OK    qkdot.out  (4 cells)
+  MOVED kscale.out  49 of 512 cells, first cell 9  a 0x3dc75964  b 0x3dc75963
+  OK    dacs.out  (64 cells)
+  OK    seg.L  (4096 cells)
+  OK    pass.states  (8192 cells)
+  OK    yintra.out  (256 cells)
+  OK    ystate.out  (256 cells)
+  OK    skip.out  (256 cells)
+  OK    gate.out  (256 cells)
+  OK    out_proj.out  (128 cells)
+  OK    residual.out  (128 cells)
+  MOVED ssd.h_last  1061 of 8192 cells, first cell 3  a 0x3ba5c22f  b 0x3ba5c230
+  MOVED ssd.k_last  15 of 128 cells, first cell 4  a 0x3fb318a0  b 0x3fb318a1
+  OK    ssd.v_last  (64 cells)
+  OK    ssd.theta_last  (32 cells)
+  OK    state.h  (8192 cells)
+  OK    state.theta  (32 cells)
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: GATE A FAILED: 1179 cells differ between the device card and the host oracle (first stage: rot.k)
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1

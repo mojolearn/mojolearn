@@ -63,9 +63,19 @@ THE NUMERIC TIER IS THE LOADED BINARY'S, SELECTED AT BUILD TIME OF THE
 picks which compiled set answers -- fast (no promise), deterministic
 (same bits run to run on one device), identical (also the same bits
 across vendors, where the lane's cards say so: THREE vendors for
-Mamba-1; TWO for Mamba-2 since the 2026-09-01 evening Apple-vs-RTX-4090
-judge, 26/26 stages identical, its contract's PHASE 6 record, AMD OWED;
-ONE gated vendor, Apple, for Mamba-3) -- and
+Mamba-1; for Mamba-2 the 2026-09-01 evening Apple-vs-RTX-4090 judge,
+26/26 stages identical, its contract's PHASE 6 record, and the
+Apple-vs-AMD hash diff RUN 2026-09-02 and MEASURED IDENTICAL on all 26
+recorded stages (Apple M4 at cd56e8ce against an AMD MI325X, gfx942, at
+cb8ea360, the compiled path unchanged across those commits) -- All three
+vendors now agree pairwise against Apple, but the three columns are NOT
+all at one commit -- the NVIDIA column is the 2026-09-01
+Apple-vs-RTX-4090 result at that day's commit and was NOT re-run at
+cd56e8ce, so a single-commit three-vendor card is still OWED, and an
+H100 leg at cd56e8ce is IN FLIGHT to close exactly that; Mamba-3 PASSES
+on Apple and its AMD
+column is RED as of 2026-09-02, gate (a) off by one ULP on 1,179 cells
+on an MI325X (gfx942), NVIDIA owed) -- and
 `_extension()` cross-checks the binary's own compile-time answer against
 the tier the package resolved, `_gp_impl.py`'s pattern, so a wrong-arm
 measurement cannot be correctly labelled by accident.

@@ -1,0 +1,74 @@
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mamba/checks/mamba3_check.mojo:109:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mamba/checks/mamba3_check.mojo:109:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mamba/checks/mamba3_check.mojo:109:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mamba/checks/mamba3_check.mojo:109:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/mamba/checks/mamba3_check.mojo:109:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn/mamba/checks/mamba3_check.mojo:1228:28: warning: assignment to 'bytes' was never used; assign to '_' instead?
+    var bytes = List[UInt8]()
+                           ^
+/Users/andrewhendel/CascadeProjects/mojolearn/mamba/checks/mamba3_check.mojo:1482:30: warning: assignment to 'expect_first' was never used; assign to '_' instead?
+    var expect_first = String("")
+                             ^
+mamba3 block gate (IDENTICAL_MAMBA3_CONTRACT.md section 8); profile mojolearn.identical.mamba3.siso.fp32.v1; build mode IDENTICAL
+shape: B = 1 L = 4 d_model = 32
+  OK    norm.sumsq  (4 cells)
+  OK    norm.out  (128 cells)
+  OK    in_proj.out  (1676 cells)
+  OK    A.out  (4 cells)
+  OK    dt.out  (4 cells)
+  OK    adt.out  (4 cells)
+  OK    trap.sigma  (4 cells)
+  OK    trap.scale  (4 cells)
+  OK    bcnorm.B  (512 cells)
+  OK    bcnorm.C  (512 cells)
+  OK    angle.theta  (128 cells)
+  OK    rot.q  (512 cells)
+  OK    rot.k  (512 cells)
+  OK    qkdot.out  (4 cells)
+  OK    kscale.out  (512 cells)
+  OK    dacs.out  (64 cells)
+  OK    seg.L  (4096 cells)
+  OK    pass.states  (8192 cells)
+  OK    yintra.out  (256 cells)
+  OK    ystate.out  (256 cells)
+  OK    skip.out  (256 cells)
+  OK    gate.out  (256 cells)
+  OK    out_proj.out  (128 cells)
+  OK    residual.out  (128 cells)
+  OK    ssd.h_last  (8192 cells)
+  OK    ssd.k_last  (128 cells)
+  OK    ssd.v_last  (64 cells)
+  OK    ssd.theta_last  (32 cells)
+  OK    state.h  (8192 cells)
+  OK    state.theta  (32 cells)
+card: 28 records, contract section 7 wants 28
+card: all 28 tags present, once each, in section 7's order
+GATE A PASS: every stage bit-identical to the oracle at this shape.
+GATE B PASS: 8 repeated launches, identical bits, every stage
+GATE C PASS: row bits independent of launch companions (B in {1,2,3}), negative control differed on 14178 cells
+One shape, one launch history, one box. Everything else in contract section 8 is OWED: the sabotage arms (one build each), decode / decode-cross / continuation / refusal / corpus arms, the other shapes and L set, FAST recording, the portable-trig device certification (phase M3-0), and every column that is not this machine (phase M3-6).

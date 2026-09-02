@@ -1,0 +1,50 @@
+== fast ==
+tools/leg_diag_surfaces.sh: line 52: 41033 Aborted                 (core dumped) ( cd "$REPO" && PYTHONPATH=python MOJOLEARN_NUMERIC_MODE="$tier" pixi run -e gbmbench python3 -m "mojolearn.tests.$gate" ) > "$log" 2>&1
+  fast test_mamba_surface -> RED (rc=134)
+      Memory access fault by GPU node-1 (Agent handle: 0x60e2291cdd30) on address 0x7a4b20400000. Reason: Unknown.
+  fast test_transformer_surface -> GREEN
+      construction) and deterministic promises repeat-run bits
+      only. Re-run under MOJOLEARN_NUMERIC_MODE=identical for the
+      fully asserted form.
+  fast test_arima_surface -> GREEN
+      run says the surface marshals correctly, refuses what it claims
+      to refuse, recovers planted coefficients and forecasts the
+      closed form. It says NOTHING about cross-vendor identity.
+== deterministic ==
+tools/leg_diag_surfaces.sh: line 52: 41285 Aborted                 (core dumped) ( cd "$REPO" && PYTHONPATH=python MOJOLEARN_NUMERIC_MODE="$tier" pixi run -e gbmbench python3 -m "mojolearn.tests.$gate" ) > "$log" 2>&1
+  deterministic test_mamba_surface -> RED (rc=134)
+      Memory access fault by GPU node-1 (Agent handle: 0x5f20ff3e6790) on address 0x73fec4400000. Reason: Unknown.
+  deterministic test_transformer_surface -> GREEN
+      construction) and deterministic promises repeat-run bits
+      only. Re-run under MOJOLEARN_NUMERIC_MODE=identical for the
+      fully asserted form.
+== identical ==
+tools/leg_diag_surfaces.sh: line 52: 41456 Aborted                 (core dumped) ( cd "$REPO" && PYTHONPATH=python MOJOLEARN_NUMERIC_MODE="$tier" pixi run -e gbmbench python3 -m "mojolearn.tests.$gate" ) > "$log" 2>&1
+  identical test_mamba_surface -> RED (rc=134)
+      Memory access fault by GPU node-1 (Agent handle: 0x5ba9f2f73830) on address 0x70a012200000. Reason: Unknown.
+  identical test_transformer_surface -> GREEN
+      the Mojo-side refusals included. One box, one vendor: the
+      cross-vendor statement belongs to the lane's cards, not to this
+      file.
+  identical test_arima_surface -> GREEN
+      BITS alone as inside a batch of six. What it does NOT prove is a
+      second vendor: arima/'s three-vendor card is the Kalman filter's,
+      and the fit has never left one Apple M4.
+
+== summary ==
+# Python surface gates on this box
+# host:   mojolearn-e2-amd  x86_64
+# kernel: 6.8.0-59-generic
+# date:   2026-09-02T16:25:05Z
+# commit: cb8ea3603080b368f3278d1e3b9d415caae7acec
+
+# gpu: 
+
+fast           test_mamba_surface           RED (rc=134)
+fast           test_transformer_surface     GREEN
+fast           test_arima_surface           GREEN
+deterministic  test_mamba_surface           RED (rc=134)
+deterministic  test_transformer_surface     GREEN
+identical      test_mamba_surface           RED (rc=134)
+identical      test_transformer_surface     GREEN
+identical      test_arima_surface           GREEN

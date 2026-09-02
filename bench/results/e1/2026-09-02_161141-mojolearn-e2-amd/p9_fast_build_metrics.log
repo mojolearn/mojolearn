@@ -1,0 +1,1179 @@
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:64:
+/root/mojolearn/./core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:43:
+Imported from /root/mojolearn/./core/row_norms.mojo:60:
+/root/mojolearn/./core/pinned_reduce.mojo:99:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = value
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:43:
+Imported from /root/mojolearn/./core/row_norms.mojo:60:
+/root/mojolearn/./core/pinned_reduce.mojo:104:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:43:
+Imported from /root/mojolearn/./core/row_norms.mojo:60:
+/root/mojolearn/./core/pinned_reduce.mojo:104:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:43:
+Imported from /root/mojolearn/./core/row_norms.mojo:60:
+/root/mojolearn/./core/pinned_reduce.mojo:104:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                                      ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:43:
+Imported from /root/mojolearn/./core/row_norms.mojo:60:
+/root/mojolearn/./core/pinned_reduce.mojo:107:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var total = red[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:64:
+/root/mojolearn/./core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:64:
+/root/mojolearn/./core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:64:
+/root/mojolearn/./core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:441:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    sx[r * FKNN_SMEM_STRIDE + c] = v
+                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:450:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    sy[r2 * FKNN_SMEM_STRIDE + c2] = v2
+                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:464:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:466:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        regy[j] = sy[
+                                  ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:480:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                    sx[(tr + 0) * FKNN_SMEM_STRIDE + kk]
+                                    ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:491:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                    sx[
+                                    ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:513:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:523:17: warning: '@parameter for' is deprecated; use 'comptime for'
+                @parameter
+                ^~~~~~~~~~
+                comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:537:17: warning: '@parameter for' is deprecated; use 'comptime for'
+                @parameter
+                ^~~~~~~~~~
+                comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:638:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:669:25: warning: '@parameter for' is deprecated; use 'comptime for'
+                        @parameter
+                        ^~~~~~~~~~
+                        comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:674:25: warning: '@parameter for' is deprecated; use 'comptime for'
+                        @parameter
+                        ^~~~~~~~~~
+                        comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:110:
+/root/mojolearn/./neighbors/impl/neighbors/detail/fused_l2_knn.mojo:744:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:64:
+/root/mojolearn/./core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:222:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_K] = Int32(k)
+        ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:223:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_LEN] = Int32(length)
+        ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:224:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_PREVIOUS_LEN] = Int32(length)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:225:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:226:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_BACK_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:227:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        kth_bits[0] = UInt32(0)
+        ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:253:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_len = Int(ctr[CTR_LEN])
+                              ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:254:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_k = Int(ctr[CTR_K])
+                            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:255:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var previous_len = Int(ctr[CTR_PREVIOUS_LEN])
+                               ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:267:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = Int32(0)
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:269:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_FILTER_CNT] = Int32(0)
+            ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:274:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var kth = kth_bits[0]
+                  ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:332:69: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var scanned = block_prefix_sum[block_size=SELECT_BLOCK](hist[tid])
+                                                                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:333:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = scanned
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:339:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            prev_count = hist[tid - 1]
+                         ~~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:340:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var cur_count = hist[tid]
+                        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:344:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_K] = Int32(current_k - Int(prev_count))
+            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:345:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_LEN] = Int32(Int(cur_count) - Int(prev_count))
+            ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:346:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (UInt32(tid) << UInt32(start_bit))
+            ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:346:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (UInt32(tid) << UInt32(start_bit))
+                          ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:349:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_PREVIOUS_LEN] = Int32(current_len)
+            ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:353:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES - 1:
+               ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:353:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES - 1:
+                                    ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:355:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var lf_kth = kth_bits[0]
+                         ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:100:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:357:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var needed = Int(ctr[CTR_K])
+                             ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:199:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_K] = Int32(k)
+        ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:200:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_LEN] = Int32(length)
+        ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:201:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_PREVIOUS_LEN] = Int32(length)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:202:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:203:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        kth_bits[0] = UInt64(0)
+        ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:227:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_len = Int(ctr[CTR_LEN])
+                              ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:228:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_k = Int(ctr[CTR_K])
+                            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:229:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var previous_len = Int(ctr[CTR_PREVIOUS_LEN])
+                               ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:239:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = Int32(0)
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:241:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_FILTER_CNT] = Int32(0)
+            ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:246:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var kth = kth_bits[0]
+                  ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:290:69: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var scanned = block_prefix_sum[block_size=SELECT_BLOCK](hist[tid])
+                                                                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:291:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = scanned
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:296:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            prev_count = hist[tid - 1]
+                         ~~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:297:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var cur_count = hist[tid]
+                        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:299:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_K] = Int32(current_k - Int(prev_count))
+            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:300:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_LEN] = Int32(Int(cur_count) - Int(prev_count))
+            ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:301:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (
+            ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:301:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (
+                          ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:306:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_PREVIOUS_LEN] = Int32(current_len)
+            ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:309:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES_64 - 1:
+               ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:309:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES_64 - 1:
+                                    ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:315:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var lf_kth = kth_bits[0]
+                         ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:356:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        s_val[tid] = o_val.unsafe_load(tid)
+        ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:357:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        s_idx[tid] = o_idx.unsafe_load(tid)
+        ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:360:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var key_t = composite_key(s_val[tid], s_idx[tid], select_min)
+                                  ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:360:52: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var key_t = composite_key(s_val[tid], s_idx[tid], select_min)
+                                              ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:363:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if composite_key(s_val[j], s_idx[j], select_min) < key_t:
+                             ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:363:45: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if composite_key(s_val[j], s_idx[j], select_min) < key_t:
+                                       ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:365:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        o_val.unsafe_store(rank, s_val[tid])
+                                 ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:93:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:366:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        o_idx.unsafe_store(rank, s_idx[tid])
+                                 ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:684:15: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    val_smem: UnsafePointer[
+              ^~~~~~~~~~~~~
+              Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:689:15: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    idx_smem: UnsafePointer[
+              ^~~~~~~~~~~~~
+              Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:36:
+Imported from /root/mojolearn/./cluster/impl/cluster/kmeans.mojo:35:
+Imported from /root/mojolearn/./cluster/impl/cluster/detail/kmeans.mojo:64:
+/root/mojolearn/./cluster/checks/plus_plus.mojo:247:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        carry[0] = Float32(0.0)
+        ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:36:
+Imported from /root/mojolearn/./cluster/impl/cluster/kmeans.mojo:35:
+Imported from /root/mojolearn/./cluster/impl/cluster/detail/kmeans.mojo:64:
+/root/mojolearn/./cluster/checks/plus_plus.mojo:258:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            csum.unsafe_store(i, base + carry[0] + inc)
+                                        ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:36:
+Imported from /root/mojolearn/./cluster/impl/cluster/kmeans.mojo:35:
+Imported from /root/mojolearn/./cluster/impl/cluster/detail/kmeans.mojo:64:
+/root/mojolearn/./cluster/checks/plus_plus.mojo:261:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            carry[0] = carry[0] + inc
+            ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:36:
+Imported from /root/mojolearn/./cluster/impl/cluster/kmeans.mojo:35:
+Imported from /root/mojolearn/./cluster/impl/cluster/detail/kmeans.mojo:64:
+/root/mojolearn/./cluster/checks/plus_plus.mojo:261:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            carry[0] = carry[0] + inc
+                       ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:537:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:550:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:301:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:432:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:624:18: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        out_val: UnsafePointer[
+                 ^~~~~~~~~~~~~
+                 Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:629:18: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        out_idx: UnsafePointer[
+                 ^~~~~~~~~~~~~
+                 Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:571:17: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        in_val: UnsafePointer[
+                ^~~~~~~~~~~~~
+                Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:576:17: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        in_idx: UnsafePointer[
+                ^~~~~~~~~~~~~
+                Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:36:
+Imported from /root/mojolearn/./cluster/impl/cluster/kmeans.mojo:39:
+Imported from /root/mojolearn/./cluster/impl/cluster/detail/min_cluster_distance_compute.mojo:73:
+/root/mojolearn/./cluster/impl/distance/fused_distance_nn/simt_kernel.mojo:478:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    s_xnorm[i] = nv
+                    ~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:36:
+Imported from /root/mojolearn/./cluster/impl/cluster/kmeans.mojo:39:
+Imported from /root/mojolearn/./cluster/impl/cluster/detail/min_cluster_distance_compute.mojo:73:
+/root/mojolearn/./cluster/impl/distance/fused_distance_nn/simt_kernel.mojo:486:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                s_ynorm[i2] = nv2
+                ~~~~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:36:
+Imported from /root/mojolearn/./cluster/impl/cluster/kmeans.mojo:39:
+Imported from /root/mojolearn/./cluster/impl/cluster/detail/min_cluster_distance_compute.mojo:73:
+/root/mojolearn/./cluster/impl/distance/fused_distance_nn/simt_kernel.mojo:494:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                rxn[i] = s_xnorm[i * tr + accrowid]
+                         ~~~~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:36:
+Imported from /root/mojolearn/./cluster/impl/cluster/kmeans.mojo:39:
+Imported from /root/mojolearn/./cluster/impl/cluster/detail/min_cluster_distance_compute.mojo:73:
+/root/mojolearn/./cluster/impl/distance/fused_distance_nn/simt_kernel.mojo:497:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                ryn[j] = s_ynorm[j * tc + acccolid]
+                         ~~~~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:518:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:601:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:647:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:666:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:283:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:367:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Imported from ./spectral/estimator.mojo:66:
+Imported from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Imported from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Imported from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:54:
+Imported from /root/mojolearn/./neighbors/estimator.mojo:130:
+Imported from /root/mojolearn/./neighbors/impl/neighbors/detail/knn_brute_force.mojo:104:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_warpsort.mojo:375:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+/root/mojolearn/bindings/_mojolearn_metrics.mojo:126:22: warning: assignment to 'out' was never used; assign to '_' instead?
+    var out = Float32(0.0)
+                     ^
+/root/mojolearn/bindings/_mojolearn_metrics.mojo:148:22: warning: assignment to 'out' was never used; assign to '_' instead?
+    var out = Float64(0.0)
+                     ^
+/root/mojolearn/bindings/_mojolearn_metrics.mojo:171:22: warning: assignment to 'out' was never used; assign to '_' instead?
+    var out = Float64(0.0)
+                     ^
+/root/mojolearn/bindings/_mojolearn_metrics.mojo:195:22: warning: assignment to 'out' was never used; assign to '_' instead?
+    var out = Float64(0.0)
+                     ^
+/root/mojolearn/bindings/_mojolearn_metrics.mojo:221:22: warning: assignment to 'out' was never used; assign to '_' instead?
+    var out = Float64(0.0)
+                     ^
+/root/mojolearn/bindings/_mojolearn_metrics.mojo:247:22: warning: assignment to 'out' was never used; assign to '_' instead?
+    var out = Float64(0.0)
+                     ^
+/root/mojolearn/bindings/_mojolearn_metrics.mojo:274:22: warning: assignment to 'out' was never used; assign to '_' instead?
+    var out = Float64(0.0)
+                     ^
+/root/mojolearn/bindings/_mojolearn_metrics.mojo:302:22: warning: assignment to 'out' was never used; assign to '_' instead?
+    var out = Float64(0.0)
+                     ^
+/root/mojolearn/bindings/_mojolearn_metrics.mojo:329:22: warning: assignment to 'out' was never used; assign to '_' instead?
+    var out = Float32(0.0)
+                     ^
+/root/mojolearn/bindings/_mojolearn_metrics.mojo:352:22: warning: assignment to 'out' was never used; assign to '_' instead?
+    var out = Float32(0.0)
+                     ^
+/root/mojolearn/bindings/_mojolearn_metrics.mojo:396:23: warning: assignment to 'mean' was never used; assign to '_' instead?
+    var mean = Float32(0.0)
+                      ^
+/root/mojolearn/bindings/_mojolearn_metrics.mojo:436:22: warning: assignment to 'out' was never used; assign to '_' instead?
+    var out = Float64(0.0)
+                     ^
+/root/mojolearn/bindings/_mojolearn_metrics.mojo:519:17: warning: assignment to 'n_out' was never used; assign to '_' instead?
+    var n_out = 0
+                ^
+/root/mojolearn/bindings/_mojolearn_metrics.mojo:576:17: warning: assignment to 'n_out' was never used; assign to '_' instead?
+    var n_out = 0
+                ^
+Included from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Included from ./spectral/estimator.mojo:66:
+Included from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Included from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:47:
+Included from ./spectral/impl/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo:64:
+./spectral/impl/sparse/op/coo_ops.mojo:114:9: warning: ref 'i' was never used, remove it?
+    for i in range(n):
+        ^
+Included from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Included from ./spectral/estimator.mojo:66:
+Included from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Included from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:36:
+Included from /root/mojolearn/./cluster/impl/cluster/kmeans.mojo:39:
+/root/mojolearn/./cluster/impl/cluster/detail/min_cluster_distance_compute.mojo:197:41: warning: assignment to 'data_batch' was never used; assign to '_' instead?
+    var data_batch = get_data_batch_size(batch_samples, n_samples)
+                                        ^
+Included from /root/mojolearn/bindings/_mojolearn_metrics.mojo:64:
+Included from ./spectral/estimator.mojo:66:
+Included from ./spectral/impl/spectral/spectral_clustering.mojo:23:
+Included from ./spectral/impl/cuvs/cluster/detail/spectral.mojo:36:
+Included from /root/mojolearn/./cluster/impl/cluster/kmeans.mojo:39:
+/root/mojolearn/./cluster/impl/cluster/detail/min_cluster_distance_compute.mojo:198:50: warning: assignment to 'centroid_batch' was never used; assign to '_' instead?
+    var centroid_batch = get_centroids_batch_size(batch_centroids, n_clusters)
+                                                 ^
+built python/mojolearn/_mojolearn_metrics.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)

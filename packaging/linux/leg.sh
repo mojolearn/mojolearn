@@ -37,6 +37,26 @@ say() { echo "[$(date +%T) linux-leg $VENDOR] $*"; }
 
 case "$VENDOR" in
   nvidia)
+    # DIGITALOCEAN IS THE DEFAULT FOR NVIDIA TOO SINCE 2026-09-02, and the
+    # reason is a measured one. RunPod legs died four times that morning --
+    # a 276 MB archive over this Mac's 68 KB/s uplink, a dropped ssh
+    # mid-upload, and a phase-9 run that built 2 of 15 bindings -- while the
+    # DigitalOcean path landed both an MI325X and an H100 the same
+    # afternoon, and it is the path that got the clone fix (the box fetches
+    # the commit from GitHub in about three seconds). DO carries
+    # gpu-h100x1-80gb in nyc2. Set MOJOLEARN_LINUX_LEG_NVIDIA_VIA=runpod for
+    # the old route, which is kept below unchanged.
+    if [ "${MOJOLEARN_LINUX_LEG_NVIDIA_VIA:-do}" = "do" ]; then
+      export MOJOLEARN_E1_PHASES=9
+      export MOJOLEARN_P9_ONLY_DIAG=1
+      export MOJOLEARN_P9_DIAG="$DIAG"
+      export MOJOLEARN_P9_DIAG_TIMEOUT="${MOJOLEARN_P9_DIAG_TIMEOUT:-2400}"
+      export MOJOLEARN_WHEEL_VERSION="${MOJOLEARN_WHEEL_VERSION:-}" MOJOLEARN_WHEEL_INDEX="${MOJOLEARN_WHEEL_INDEX:-testpypi}"
+      say "renting an H100 on DigitalOcean; diag=$DIAG"
+      bash tools/e2_remote_leg.sh nv "${MOJOLEARN_DO_TOKEN_FILE:-$HOME/.mojolearn_do_token}"; RC=$?
+      break_nvidia_case=1
+    fi
+    if [ "${break_nvidia_case:-0}" = "1" ]; then : ; else
     export MOJOLEARN_RUNPOD_KEY_FILE="${MOJOLEARN_RUNPOD_KEY_FILE:-$HOME/.mojolearn_runpod_key}"
     export RUNPOD_API_KEY="${RUNPOD_API_KEY:-$(cat "$MOJOLEARN_RUNPOD_KEY_FILE")}"
     export MOJOLEARN_GEMM_LEG_E1_PHASES=9
@@ -53,7 +73,8 @@ case "$VENDOR" in
     export MOJOLEARN_GEMM_LEG_GPU_NVIDIA="${MOJOLEARN_GEMM_LEG_GPU_NVIDIA:-NVIDIA H100 PCIe}"
     export MOJOLEARN_WHEEL_VERSION="${MOJOLEARN_WHEEL_VERSION:-}" MOJOLEARN_WHEEL_INDEX="${MOJOLEARN_WHEEL_INDEX:-testpypi}"
     say "renting; diag=$DIAG"
-    tools/gemm_remote_leg.sh nvidia --payload phase8 --rent; RC=$? ;;
+    tools/gemm_remote_leg.sh nvidia --payload phase8 --rent; RC=$?
+    fi ;;
   amd)
     export MOJOLEARN_E1_PHASES=9
     export MOJOLEARN_P9_ONLY_DIAG=1
@@ -82,7 +103,9 @@ say "leg exited rc=$RC; locating the fetched diag/"
 # same vendor still must not overlap, and that is what the pre-flight lease
 # check at the top of this file is for.
 case "$VENDOR" in
-  nvidia) VTOKEN=nvidia ;;
+  # A DigitalOcean nvidia leg files as `*-mojolearn-e2-nv`, a RunPod one as
+  # `*-runpod-nvidia`; match the route that actually ran rather than the word.
+  nvidia) if [ "${MOJOLEARN_LINUX_LEG_NVIDIA_VIA:-do}" = "do" ]; then VTOKEN=e2-nv; else VTOKEN=nvidia; fi ;;
   amd)    VTOKEN=amd ;;
 esac
 NEW=""

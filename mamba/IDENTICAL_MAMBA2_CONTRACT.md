@@ -495,12 +495,17 @@ ONE COLUMN. Nothing here is a cross-vendor claim; phase 6 owns that.
   `mamba2_check.mojo` (the mamba1 `MOJOLEARN_MAMBA_CORPUS_DUMP` shape, a
   check-lane item), then the compare and the `--self-test` calibration
   that tightens the task's tolerances; kernel-matrix rows — WRITTEN as
-  `IDENTITY_PATHS.md` row 92 (Apple RECORDED, NVIDIA RECORDED, AMD OWED;
-  the block's kernels read no vendor-varying tunable so
+  `IDENTITY_PATHS.md` row 92 (Apple RECORDED, NVIDIA RECORDED, AMD RAN
+  2026-09-02 and the Apple-vs-AMD hash diff MEASURED IDENTICAL at 26 of
+  26 stages; the block's kernels read no vendor-varying tunable so
   `checks/kernel_matrix.mojo` gains no knob row, said there rather than
-  omitted), with the cross-column READS owed to the E-leg; and PHASE 6's
-  AMD column — the three-vendor E-series leg the completion claim lives
-  on.
+  omitted), with the cross-column READS owed to the E-leg; and the
+  SINGLE-COMMIT three-vendor card. All three vendors now agree pairwise
+  against Apple, but the three columns are NOT all at one commit -- the
+  NVIDIA column is the 2026-09-01 Apple-vs-RTX-4090 result at that day's
+  commit and was NOT re-run at cd56e8ce, so a single-commit three-vendor
+  card is still OWED, and an H100 leg at cd56e8ce is IN FLIGHT to close
+  exactly that.
 - **PHASE 6, TWO OF THREE VENDORS (2026-09-01 evening).** Apple
   reference column (commit d7e4b3bc, stamp 2026-09-01_162529 rebuilt as
   _162925) vs a rented RTX 4090 phase-8 column (stamp
@@ -510,11 +515,44 @@ ONE COLUMN. Nothing here is a cross-vendor claim; phase 6 owns that.
   mamba IDENTICAL (17 stages) beside it. Both boxes' FAST arms
   diverge from the oracle as FAST must (Apple first at silu.out,
   NVIDIA first at norm.out — recorded, no claim).
-- **THE AMD COLUMN IS OWED, NOT FAILED** ([[runpod-failure-is-not-invalidation]],
-  [[one-box-verdict-is-not-three]]): three MI300X rentals on 2026-09-01
-  evening never yielded a working ssh session (attempt 1: no ssh
-  endpoint in 600s; attempts 2 and 3: endpoint exposed on host
-  213.173.96.53 but never answered — likely one broken host). All three
-  pods were terminated by the leg and VERIFIED gone (HTTP 404); no
-  orphans, no cards. The completion claim REMAINS OPEN until an AMD
-  column lands; nothing here retracts the Apple↔NVIDIA identity above.
+- **THE AMD ARM RAN 2026-09-02 AND THE APPLE-vs-AMD HASH DIFF IS
+  MEASURED IDENTICAL, 26 OF 26 STAGES.** On a DigitalOcean MI325X
+  droplet (gfx942) at commit cb8ea360 (the card's own `commit.txt` in
+  `bench/results/e1/2026-09-02_161141-mojolearn-e2-amd/`; an earlier
+  writing here said cd56e8ce and was wrong) the arm printed
+  `mamba2 [identical]: card 26 records -- mode IDENTICAL` and
+  `mamba2 [identical] check OK (26 OK lines)`. THE DIFF FOLLOWED THE
+  SAME DAY. The Apple arm was FIRST RE-RUN at cd56e8ce, so that the
+  comparison would not straddle two source states, and came back rc 0
+  with 26 records, GATE A pass (every stage bit-identical to the
+  oracle), GATE B pass (8 repeated launches identical) and GATE C pass
+  (the negative control differing on 24,733 cells); then
+  `python3 tools/identity_trace_diff.py` against the AMD card reported
+  matched stage pairs 26, unmatched in A 0, unmatched in B 0, TAG
+  SEQUENCES ARE IDENTICAL, all 26 matched pairs agreeing on dtype,
+  count and hash, **RESULT: IDENTICAL**. The two commits are ONE
+  VARIABLE and that was CHECKED rather than assumed -- cb8ea360 to
+  cd56e8ce moves only `packaging/linux/build_sets.sh`, which mamba2
+  does not compile, and across 4515b284 to cb8ea360 the only delta in
+  anything mamba2 compiles (`impl/mamba_ssm/modules/mamba2.mojo`,
+  `ssd_minimal.mojo`, `checks/mamba2_oracle.mojo`, `mamba2_check.mojo`,
+  `checks/numerics.mojo` at the repository root) is a COMMENT BLOCK in
+  `checks/numerics.mojo`, no code. The ORIGINAL 2026-09-01 Apple card
+  at 4515b284 diffs IDENTICAL against the same AMD card too, 26 of 26,
+  so the agreement does not depend on which Apple card is used. THE
+  LIMIT IS THE COMMIT SPREAD ([[one-box-verdict-is-not-three]]). All
+  three vendors now agree pairwise against Apple, but the three columns
+  are NOT all at one commit -- the NVIDIA column is the 2026-09-01
+  Apple-vs-RTX-4090 result at that day's commit and was NOT re-run at
+  cd56e8ce, so a single-commit three-vendor card is still OWED, and an
+  H100 leg at cd56e8ce is IN FLIGHT to close exactly that. The same
+  box's mamba2 FAST arm diverged from the oracle on 18,838 cells, first
+  stage `in_proj.out` -- expected, recorded, not a red
+  ([[fast-is-not-identical]]). This run followed three MI300X
+  rentals on 2026-09-01 evening that never yielded a working ssh session
+  (attempt 1: no ssh endpoint in 600s; attempts 2 and 3: endpoint
+  exposed on host 213.173.96.53 but never answered — likely one broken
+  host); all three pods were terminated by the leg and VERIFIED gone
+  (HTTP 404), no orphans and no cards, and that infra failure was never
+  a red ([[runpod-failure-is-not-invalidation]]). Nothing here retracts
+  the Apple↔NVIDIA identity above.

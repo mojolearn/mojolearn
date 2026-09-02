@@ -20,8 +20,19 @@ for byte). Prefill, continuation from a carried state, `initial_states`
 through the certified Mojo entry points the lane gates run;
 `numeric_mode=` selects the fast / deterministic / identical tier at
 call time, per instance. The identity claims are the LANES': three
-vendors for Mamba-1, two for Mamba-2 (Apple + NVIDIA, AMD owed), one
-gated vendor (Apple) for Mamba-3 as of 2026-09-01. The Mamba-1/2
+vendors for Mamba-1; for Mamba-2, Apple + NVIDIA bit-identical and now
+Apple + AMD too, the Apple-vs-AMD hash diff having RUN 2026-09-02 and
+come back IDENTICAL on all 26 recorded stages (Apple M4 at cd56e8ce
+against an AMD MI325X, gfx942, at cb8ea360, with the compiled path
+unchanged across those commits) -- All three vendors now agree pairwise
+against Apple, but the three columns are NOT all at one commit -- the
+NVIDIA column is the 2026-09-01 Apple-vs-RTX-4090 result at that day's
+commit and was NOT re-run at cd56e8ce, so a single-commit three-vendor
+card is still OWED, and an H100 leg at cd56e8ce is IN FLIGHT to close
+exactly that; and for Mamba-3, Apple PASS with the AMD column RED as of 2026-09-02 --
+gate (a) failed on an MI325X (gfx942) by one ULP on 1,179 cells over
+four stages, NVIDIA owed
+(`mamba/IDENTICAL_MAMBA3_CONTRACT.md`'s 2026-09-02 RUN RECORD). The Mamba-1/2
 Python path printed green in all three tiers on 2026-09-01 (one box,
 one vendor); the Mamba-3 path is UNVERIFIED, RUN OWED until
 `tests/test_mamba_surface.py` prints with its arms in.

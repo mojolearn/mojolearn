@@ -1,0 +1,68 @@
+✨ Pixi task (check-mamba2-block in default): mojo run -I . mamba/checks/mamba2_check.mojo
+Imported from /root/mojolearn/mamba/checks/mamba2_check.mojo:102:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba2_check.mojo:102:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/mamba/checks/mamba2_check.mojo:102:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba2_check.mojo:102:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba2_check.mojo:102:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+/root/mojolearn/mamba/checks/mamba2_check.mojo:1290:28: warning: assignment to 'bytes' was never used; assign to '_' instead?
+    var bytes = List[UInt8]()
+                           ^
+/root/mojolearn/mamba/checks/mamba2_check.mojo:1537:30: warning: assignment to 'expect_first' was never used; assign to '_' instead?
+    var expect_first = String("")
+                             ^
+mamba2 block gate (IDENTICAL_MAMBA2_CONTRACT.md section 8); profile mojolearn.identical.mamba2.fp32.v1; build mode FAST
+shape: B = 1 L = 4 d_model = 32
+  OK    norm.sumsq  (4 cells)
+  OK    norm.out  (128 cells)
+  MOVED in_proj.out  1182 of 1540 cells, first cell 0  a 0xbe951592  b 0xbe951591
+  OK    A.out  (1 cells)
+  MOVED conv.out  842 of 1280 cells, first cell 1  a 0xbe0d9b8b  b 0xbe0d9b8a
+  MOVED silu.out  826 of 1280 cells, first cell 2  a 0xbd85b96d  b 0xbd85b96e
+  MOVED conv.window  987 of 1280 cells, first cell 1  a 0xbdc00c9f  b 0xbdc00c9b
+  OK    dt.out  (4 cells)
+  MOVED xd.out  154 of 256 cells, first cell 2  a 0xba984897  b 0xba984898
+  OK    dacs.out  (256 cells)
+  MOVED seg.L  1 of 65536 cells, first cell 513  a 0x3f4e125b  b 0x3f4e125c
+  MOVED cb.G  15 of 65536 cells, first cell 0  a 0xbbe67f15  b 0xbbe67f12
+  MOVED ydiag.out  237 of 256 cells, first cell 0  a 0x37371058  b 0x37371055
+  OK    decay.states  (256 cells)
+  MOVED cstate.out  6792 of 8192 cells, first cell 0  a 0x390bbc6a  b 0x390bbc69
+  OK    pass.states  (8192 cells)
+  OK    yoff.out  (256 cells)
+  MOVED scan.y  237 of 256 cells, first cell 0  a 0x37371058  b 0x37371055
+  MOVED skip.out  157 of 256 cells, first cell 2  a 0xbd92b974  b 0xbd92b976
+  MOVED gnorm.gate  222 of 256 cells, first cell 0  a 0x3c432df0  b 0x3c432dee
+  MOVED gnorm.sumsq  3 of 4 cells, first cell 1  a 0x3b1f9bae  b 0x3b1f9baf
+  MOVED gnorm.out  210 of 256 cells, first cell 0  a 0x3f8c1365  b 0x3f8c1364
+  MOVED out_proj.out  110 of 128 cells, first cell 0  a 0x3e02a14c  b 0x3e02a14b
+  MOVED residual.out  71 of 128 cells, first cell 0  a 0xbe55d9d4  b 0xbe55d9d5
+  MOVED ssd.h_last  6792 of 8192 cells, first cell 0  a 0x390bbc6a  b 0x390bbc69
+  OK    state.h  (8192 cells)
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: GATE A FAILED: 18838 cells differ between the device card and the host oracle (first stage: in_proj.out)
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
