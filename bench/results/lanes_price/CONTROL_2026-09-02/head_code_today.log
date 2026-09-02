@@ -1,0 +1,393 @@
+== round 1/3: FAST ==
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:662:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:436:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            tile[ty * (TRANSPOSE_TILE + 1) + tx] = src.unsafe_load(
+            ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:662:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:445:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                r2 * n_rows + c2, tile[tx * (TRANSPOSE_TILE + 1) + ty]
+                                  ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:612:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = ftz(
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:617:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = x.unsafe_load(t * m + i)
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:632:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        cv[b] = tile[base + bj0 + b]
+                                ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:634:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        var xi = tile[base + bi0 + a]
+                                 ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:651:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var xj = tile[base + jm]
+                         ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:656:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])], xj, acc[c]
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:670:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:671:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(jj[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+PRICE FAST gram.32x32x1M 21.334333333333333
+PRICE FAST nt.4096x64x64 3.661
+PRICE FAST gemv.128x128 2.999
+== round 1/3: IDENTICAL ==
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:662:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:436:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            tile[ty * (TRANSPOSE_TILE + 1) + tx] = src.unsafe_load(
+            ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:662:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:445:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                r2 * n_rows + c2, tile[tx * (TRANSPOSE_TILE + 1) + ty]
+                                  ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:612:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = ftz(
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:617:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = x.unsafe_load(t * m + i)
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:632:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        cv[b] = tile[base + bj0 + b]
+                                ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:634:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        var xi = tile[base + bi0 + a]
+                                 ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:651:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var xj = tile[base + jm]
+                         ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:656:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])], xj, acc[c]
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:670:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:671:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(jj[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+PRICE IDENTICAL gram.32x32x1M 25.636333333333337
+PRICE IDENTICAL nt.4096x64x64 3.667
+PRICE IDENTICAL gemv.128x128 2.6646666666666667
+== round 2/3: FAST ==
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:662:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:436:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            tile[ty * (TRANSPOSE_TILE + 1) + tx] = src.unsafe_load(
+            ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:662:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:445:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                r2 * n_rows + c2, tile[tx * (TRANSPOSE_TILE + 1) + ty]
+                                  ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:612:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = ftz(
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:617:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = x.unsafe_load(t * m + i)
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:632:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        cv[b] = tile[base + bj0 + b]
+                                ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:634:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        var xi = tile[base + bi0 + a]
+                                 ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:651:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var xj = tile[base + jm]
+                         ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:656:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])], xj, acc[c]
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:670:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:671:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(jj[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+PRICE FAST gram.32x32x1M 25.65833333333333
+PRICE FAST nt.4096x64x64 3.956
+PRICE FAST gemv.128x128 2.6653333333333333
+== round 2/3: IDENTICAL ==
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:662:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:436:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            tile[ty * (TRANSPOSE_TILE + 1) + tx] = src.unsafe_load(
+            ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:662:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:445:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                r2 * n_rows + c2, tile[tx * (TRANSPOSE_TILE + 1) + ty]
+                                  ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:612:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = ftz(
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:617:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = x.unsafe_load(t * m + i)
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:632:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        cv[b] = tile[base + bj0 + b]
+                                ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:634:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        var xi = tile[base + bi0 + a]
+                                 ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:651:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var xj = tile[base + jm]
+                         ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:656:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])], xj, acc[c]
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:670:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:671:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(jj[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+PRICE IDENTICAL gram.32x32x1M 23.994
+PRICE IDENTICAL nt.4096x64x64 3.639333333333333
+PRICE IDENTICAL gemv.128x128 2.346
+== round 3/3: FAST ==
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:662:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:436:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            tile[ty * (TRANSPOSE_TILE + 1) + tx] = src.unsafe_load(
+            ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:662:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:445:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                r2 * n_rows + c2, tile[tx * (TRANSPOSE_TILE + 1) + ty]
+                                  ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:612:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = ftz(
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:617:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = x.unsafe_load(t * m + i)
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:632:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        cv[b] = tile[base + bj0 + b]
+                                ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:634:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        var xi = tile[base + bi0 + a]
+                                 ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:651:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var xj = tile[base + jm]
+                         ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:656:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])], xj, acc[c]
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:670:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:671:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(jj[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+PRICE FAST gram.32x32x1M 23.993
+PRICE FAST nt.4096x64x64 2.6396666666666664
+PRICE FAST gemv.128x128 2.331
+== round 3/3: IDENTICAL ==
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:662:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:436:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            tile[ty * (TRANSPOSE_TILE + 1) + tx] = src.unsafe_load(
+            ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:662:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:445:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                r2 * n_rows + c2, tile[tx * (TRANSPOSE_TILE + 1) + ty]
+                                  ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:612:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = ftz(
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:617:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = x.unsafe_load(t * m + i)
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:632:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        cv[b] = tile[base + bj0 + b]
+                                ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:634:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        var xi = tile[base + bi0 + a]
+                                 ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:651:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var xj = tile[base + jm]
+                         ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:656:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])], xj, acc[c]
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:670:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_price_main.mojo:49:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:74:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:671:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(jj[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+PRICE IDENTICAL gram.32x32x1M 24.020666666666667
+PRICE IDENTICAL nt.4096x64x64 3.6363333333333334
+PRICE IDENTICAL gemv.128x128 2.3266666666666667
+
+== medians over 3 rounds ==
+arm             FAST ms   IDENT ms    ratio samples
+gemv.128x128       2.67       2.35    0.88x 3/3
+gram.32x32x1M      23.99      24.02    1.00x 3/3
+nt.4096x64x64       3.66       3.64    0.99x 3/3
+
+Ratios above 1 are what identity costs. Read them as a band: the
+modes are two binaries and cannot be interleaved inside a process.
