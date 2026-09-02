@@ -29,6 +29,11 @@ mojolearn/_mojolearn_training.so
 # .so sat untracked until the phase-8 rent pre-flight refused the dirty
 # tree. Added the same day, forward.
 mojolearn/_mojolearn_gp.so
+# The mamba binding (2026-09-01, the fourteenth). FOURTH instance: the
+# surface lane shipped green the same evening the gp line above was added
+# for the third instance, and still forgot its own line. Found the next
+# morning by the same signal as always -- the .so untracked in status.
+mojolearn/_mojolearn_mamba.so
 # Build output copied in by packaging/macos/build_release_wheel.sh so that
 # `python -m mojolearn verify` has a comparator inside the wheel. The single
 # source stays tools/identity_trace_diff.py in git.
