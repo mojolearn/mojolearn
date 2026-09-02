@@ -4721,6 +4721,17 @@ first cut never read. And the gate ladder caught in one round what the
 in-entry arithmetic could not: the arithmetic was correct about the kernels
 and wrong about the program.
 
+**GREEN ROUND, 2026-09-01 (orchestrator's rerun of the SAME ladder at
+`012dda62`, minutes after the fix): EVERY ARM GREEN AND THE SABOTAGE
+CORRECTLY RED.** Flag-off batched + `check.sh` green (unchanged);
+RPT_4/RPT_8 batched "0 node diffs, 0 leaf-bit diffs"; RPT_4 forest "0 of
+1430 nodes differ"; RPT_4 regression's analytic step fixture EXACT again
+("0 of 773 nodes differ in structure"); RPT_4 tree "0 of 639 nodes differ";
+RPT_4 bestfirst green. The required-RED pair behaved: RPT_4 + TAIL_DROP RED
+("merged classification forest: nodes differ"), TAIL_DROP alone at R=1
+GREEN (the no-op witness). MAX_ACC_4's three arms green both rounds.
+DEVIATIONS 2020 and 2021 are gate-clean; only their timing A/Bs remain.
+
 **GATE (the orchestrator runs everything; this lane ran nothing).**
 
 Correctness + identity, flag off then on (all GREEN):
