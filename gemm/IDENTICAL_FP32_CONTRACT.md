@@ -536,8 +536,45 @@ lane's file and neither is edited here.**
    and certificate, OR it migrates to v1 and its committed bits move.
 2. **`core/gemm.mojo::pinned_gemm_nt_kernel` and `::pinned_gemv_n_kernel`
    compute `gemm_oracle_serial`**, the diagnostic reference, whenever
-   `k > K_LEAF_MIN`. Their `P == 1` behaviour is exactly right under v1
-   (9.2(f)); what is not right is that they do not partition at all.
+   `k > K_LEAF_MIN`. Additionally, and CORRECTED HERE 2026-09-02 (the
+   sentence that stood here said their `P == 1` behaviour was exactly right
+   under v1, which described a version of the file that no longer exists):
+   as of this checkout both kernels store the `+0.0`-seeded one-term fold
+   `ftz(Float32(0.0) + ftz(acc))` that 9.2(f)'s retracted change request
+   proposed. Somebody applied it, `gemm/README.md`'s "Reported, not fixed"
+   item 1 measured it (`gemm_nt` returns `0x00000000` where v1 returns
+   `0x80000000` on a `-0.0` leaf partial at `P == 1`), and IDENTITY_PATHS
+   row 28 records the decision NOT to move the certified bits. So the
+   shipped kernels differ from v1 at `P == 1` on exactly one value, and
+   everywhere `P > 1` by the whole fold topology.
+
+### 7.6.1 The migration flag, DEVIATION 537 (2026-09-02, wiring only, nothing run)
+
+`-D MOJOLEARN_537_GEMM_IDENT_SWAP=1` now exists in `core/gemm.mojo` and
+routes `gemm_nt`'s IDENTICAL `n > 1` arm to
+`gemm/checks/gemm_identical.mojo::identical_gemm`, i.e. onto this profile.
+**OFF in every build that does not name it, and the default build's bits are
+untouched.**
+
+- **This flag is NOT "a flag inside v1 that switches the accumulator"**,
+  which the version rules forbid. It sits in the CALLER and selects WHICH
+  profile the released standalone product runs: the shipped serial spelling
+  item 2 describes (certified as IDENTITY_PATHS rows 27/28, the de facto
+  profile of the released identical tier), or v1. Nothing inside v1 changes.
+- **Flag-on and flag-off produce DIFFERENT BITS by design** (item 2 above;
+  fixture F1; the `-0.0` seed difference). No fingerprint-equality gate can
+  license the flip and none is proposed.
+- **Flipping the default is a PROFILE MIGRATION, not a patch**, per the
+  version rules at the top of this document. It requires, at one commit:
+  the identity lane's sign-off (rows 27/28 and the E1U/E2 vendor cards ride
+  on the serial bits); re-certification of the swapped caller path on all
+  three vendor columns, Apple M4, NVIDIA and AMD; and a measured timing win
+  at large shapes. It must also either migrate `gemv_n`,
+  `pinned_gemm_nt_gram_kernel` and item 1's `gram_splitk` in the same
+  certification, or name the resulting split of the identical tier across
+  two profiles explicitly.
+- The run-owed ladder, with exact commands, is `gemm/README.md`'s
+  DEVIATION 537 section.
 
 ## 8. Ragged `k`, and the degenerate shapes
 

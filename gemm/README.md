@@ -683,3 +683,147 @@ does not edit the ledger; the identity lane assigns the number.
 |---|---|---|---|---|
 | (next) | `gemm.fp32.v1`: `C = op(A) . op(B)`, FP32, NN/NT/TN, contiguous row-major, profile `mojolearn.identical.gemm.fp32.v1` (`gemm/IDENTICAL_FP32_CONTRACT.md`); entry `gemm/checks/gemm_identical.mojo::identical_gemm` | RAFT's standalone GEMM is cuBLASLt (`raft/linalg/detail/gemm.hpp`), a closed library: its k-split, its summation order, its FMA contraction and its denormal handling are all the vendor's and change with the GPU, the block count and the batch. Our own FAST arm is MAX `linalg.matmul`, the same class of dependence. | CONSTRUCTION plus Apple's gates (DEVIATIONS 530-536). One numerical plan -- leaves of `L = contract_leaf_size(k)`, `P = contract_leaf_count(k)` from `k` alone, ascending `identical_mul_add` with `ftz` at seven seams inside a leaf, a fixed balanced adjacent-pair tree with bit-for-bit carries across leaves, no seed, `P == 1` folds nothing -- under EIGHT execution plans (FLAT; TILE 16x16/32, 8x32/32, 32x8/16-reversed, 16x16/8-transposed, 4x4/32-transposed; SPLITK; SPLITK_STAGED). Host oracle `gemm_oracle` (normative) and `gemm_oracle_serial` (diagnostic), eleven separating fixtures covering all seven clause-5 distinctions. Device gates: per-cell bits against the oracle at 62 shapes (`k` from 0 to 4,000,000, `P` from 0 to 1024, ragged and odd `P`, `-0.0` leaf partials); launch invariance over all eight plans; batch invariance across a dispatch boundary and across composition (`n` 4 vs 4096; four GEMMs through one dirty shared workspace). SIX sabotages each shown to fail (`LEAF_READS_LAUNCH`, `FOLD_STRIDE`, `PAD_PLUS_ZERO`, `FOLD_SERIAL`, `NODE_ORDER`, `LEAF_ROTATE`). The fold-ladder card (DEVIATION 533) hashes every tree level per shape and localizes `FOLD_STRIDE` to level 01 with level 00 identical. The identity card's oracle and device arms are byte-identical at 60 stages on Apple. Price harness wired, no number published. | **CLOSED ON THREE VENDORS 2026-08-23 (leg 11 both halves, 144aa5b, E3 round 11): the IDENTICAL card is bit-identical Apple M4 <-> NVIDIA H100 <-> AMD MI325X, 60 stages each; judge section 7.** "Bit-identical across GPUs" is a measured sentence for the card's 62 shapes and eight plans; anything outside the card is still Apple-only. `tools/gemm_remote_leg.sh` (DEVIATION 536) has still never run and remains the procedure for future columns. |
 
+
+---
+
+# DEVIATION 537: the flag-guarded v1 swap at the released selection site (2026-09-02, WRITE-ONLY LANE, NOTHING COMPILED OR RUN)
+
+The MLSys paper records: *"The largest measured gaps occur when fast mode
+calls a mature vendor matrix product while identical mode uses the less
+optimized portable kernel; k-NN inherits that difference through its distance
+calculation. A newer portable matrix product exists but is not yet the
+released implementation."* This section is the finding of what that sentence
+refers to, the wiring that prepares the swap, and the ladder that must run
+before anything is claimed. DEVIATIONS 538 and 539 were NOT spent.
+
+## The finding: which kernel the paper means
+
+- **The released implementation** is `core/gemm.mojo::pinned_gemm_nt_kernel`,
+  enqueued by `gemm_nt`'s IDENTICAL arm (`core/gemm.mojo`, DEVIATION 526) and
+  inherited by k-NN at
+  `neighbors/impl/neighbors/detail/knn_brute_force.mojo:453` and `:498`. One
+  thread per cell, whole-k serial ascending, `+0.0`-seeded store.
+- **The newer portable matrix product** is
+  `gemm/checks/gemm_identical.mojo::identical_gemm` -- profile
+  `mojolearn.identical.gemm.fp32.v1`, eight execution plans including the
+  tiled arms, gated at 62 shapes with six sabotages, bit-identical on three
+  vendors at its own card (leg 11, 144aa5b). It is host-reachable
+  (`gemm/host_entry.mojo`, DEVIATION 910) and imported by the bench drivers
+  (`bench/lanes_price_main.mojo:147`), but the released `gemm_nt` path never
+  selects it, and no production caller does.
+- `gemm/checks/gemm_identical_tuned.mojo` (2026-08-25) is newer still but
+  **has never been through a compiler** (`gemm/TUNING_PLAN.md` STATUS) and is
+  NOT this deviation's subject; it is a future optimization OF v1, same bits
+  as v1 by argument (DEVIATION 1263, argued not proven).
+
+## The bit-compatibility verdict: DIFFERENT BITS
+
+Answered from source, not from a run:
+
+- Serial vs tree at `P > 1`: `pinned_gemm_nt_kernel`'s loop is whole-k
+  ascending (`core/gemm.mojo`, the `for p in range(k)` loop) = the DIAGNOSTIC
+  `gemm_oracle_serial`; v1 partitions at `CONTRACT_K_LEAF_MIN = 128`
+  (`gemm/checks/gemm_oracle.mojo:95`) and folds the seedless balanced tree
+  (`gemm/checks/gemm_identical.mojo:222` -> `contract_leaf_size/count`).
+  Fixture F1 measures the separation at k = 1024: `0x4b800000` vs
+  `0x4b8001c0` (clause-5 table above). Contract 7.6 item 2 names it.
+- The seed at `P == 1`: the released kernels store
+  `ftz(Float32(0.0) + ftz(acc))`, laundering a `-0.0` leaf partial; v1 stores
+  it unchanged (contract 7.3, 9.2). Measured: `gemm_nt` `0x00000000`, v1
+  `0x80000000` ("Reported, not fixed" item 1 above; IDENTITY_PATHS row 28).
+
+So the swap is a PROFILE MIGRATION of the released identical standalone
+product onto v1 -- the "last step of Phase 2" row 28 already names -- and
+never a silent patch. No fingerprint-equality gate exists for it and none may
+be written; flag-on differs from flag-off by design.
+
+## The wiring (this commit)
+
+- `core/gemm.mojo`: comptime `GEMM_IDENT_SWAP_537 =
+  is_defined["MOJOLEARN_537_GEMM_IDENT_SWAP"]()`, OFF by default; inside
+  `gemm_nt`'s IDENTICAL arm, flag-on routes `n > 1` to
+  `identical_gemm(ctx, z, x, y, m, n, k, OP_NT)`. The `n == 1` route
+  (`gemv_n`) and `gemm_nt_gram` are NOT swapped: the gram entry hands one
+  pointer to two operands, which `identical_gemm`'s two-`mut`-buffer
+  signature refuses (the aliasing rule `gemm_nt_gram`'s docstring records).
+  Flag-on is a MEASUREMENT configuration, not a shippable state, until a
+  flip migrates all of contract 7.6's kernels or names the split.
+- `gemm/IDENTICAL_FP32_CONTRACT.md` 7.6.1: the versioned-profile
+  scaffolding, plus a correction of 7.6 item 2, whose `P == 1` sentence
+  described a version of `core/gemm.mojo` that predates the applied seed.
+- Semantics caveat recorded at the flag: `identical_gemm` self-allocates its
+  workspace and synchronizes; the pinned enqueue is asynchronous. A flip
+  wants `identical_gemm_into` with a caller-owned workspace (follow-up).
+
+**Nothing here has been compiled. Every claim about the flag's behavior is
+UNVERIFIED, RUN OWED.** The known compile risks: the new top-level imports in
+`core/gemm.mojo` (`gemm.checks.gemm_identical` pulls 1,591 lines of device
+kernels into every build of a widely imported file; no cycle -- checked, that
+module does not import `core.gemm`), and the nested `comptime if` around a
+raising call.
+
+## The run-owed ladder (orchestrator only; one light thing at a time)
+
+1. **Flag-off inertness** (Apple M4, both modes; the edit must be dead code):
+
+       tools/with_build_lock.sh     pixi run mojo run -I . core/gemm_identity_check.mojo
+       tools/with_identical_mode.sh pixi run mojo run -I . core/gemm_identity_check.mojo
+       tools/with_identical_mode.sh pixi run mojo run -I . gemm/checks/gemm_device_check.mojo
+       tools/check_linalg_identity.sh
+
+   EXPECTED: all green, bit for bit as before the edit.
+
+2. **Flag-on gates** (Apple M4, IDENTICAL):
+
+       tools/with_identical_mode.sh pixi run mojo run -D MOJOLEARN_537_GEMM_IDENT_SWAP=1 -I . core/gemm_identity_check.mojo
+       tools/with_identical_mode.sh pixi run mojo run -D MOJOLEARN_537_GEMM_IDENT_SWAP=1 -I . neighbors/checks/knn_identity_check.mojo
+
+   EXPECTED (UNVERIFIED): batch/launch-invariance arms green -- v1 is gated
+   batch-invariant -- and any arm pinned to the serial spelling moves; a
+   moved bit there is the finding, not a wiring failure. Record which arms
+   moved; that list is the blast radius the flip must re-certify.
+
+3. **Reach proof for the flag** (sabotage-grade, per [[verify reach, not
+   output]]): one flag-on run at a `-0.0` fixture shape (`m = n = 4`,
+   `k = 128`, `_minus_zero_leaves` inputs) through `gemm_nt` must return
+   `0x80000000` where flag-off returns `0x00000000`. If both flag states
+   return the same bits, the flag did not reach the branch.
+
+4. **The timing window** (the number the paper's sentence is owed; Apple
+   first, alternating INSIDE one thermal window per [[the M4 drifts 1.7x in
+   20 min]]; the two flag states are two binaries, so process-level
+   alternation as `tools/price_linalg_identity.sh` does it):
+
+       tools/price_linalg_identity.sh    # flag-off arm
+       tools/with_identical_mode.sh pixi run mojo run -D MOJOLEARN_537_GEMM_IDENT_SWAP=1 -I . bench/linalg_price_main.mojo   # flag-on arm, same rounds, interleaved
+
+   Large shapes only; report medians and the round count.
+
+5. **The three-vendor legs, only if a flip is pursued, all at ONE commit**:
+   the Apple/NVIDIA/AMD identity legs with
+   `MOJOLEARN_537_GEMM_IDENT_SWAP=1` threaded through the IDENTICAL builds,
+   via `tools/e1_bootstrap.sh` phase 8 / `tools/e2_remote_leg.sh` (the
+   procedure leg 11 used; `tools/gemm_remote_leg.sh`, DEVIATION 536, remains
+   unrun), plus regeneration of every E1U/E2 card that rides on rows 27/28
+   bits. RunPod/AMD infra failure is not invalidation; an unrun leg is OWED,
+   not waived ([[A ONE-BOX VERDICT IS NOT THREE]]).
+
+## The flip rule
+
+The default NEVER flips in this lane's session. It flips only when, at one
+commit and in the orchestrator's session: the identity lane signs off on
+moving rows 27/28's certified bits; ladder legs 1-3 are green with the moved
+arms dispositioned; leg 5's three vendor columns agree bit for bit on the
+swapped path; and leg 4 shows a win at large shapes. A one-box win flips
+nothing. Because this is DIFFERENT BITS, [[switches must flip]]'s same-session
+rule does not apply -- that rule is for bit-identical measured wins, and this
+is explicitly not one.
+
+## TODO hunks NOT applied (other lanes' files)
+
+- `pixi.toml`: no task registered for the flag-on legs (this file is under
+  concurrent edit; the orchestrator registers tasks per this README's
+  standing note). Suggested task if wanted:
+  `gemm-537-on = "tools/with_identical_mode.sh pixi run mojo run -D MOJOLEARN_537_GEMM_IDENT_SWAP=1 -I . core/gemm_identity_check.mojo"`.
+- `IDENTITY_PATHS.md` rows 27/28: on a flip, their status text must be
+  rewritten by the identity lane; this lane does not edit the ledger.

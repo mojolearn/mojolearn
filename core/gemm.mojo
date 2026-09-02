@@ -79,6 +79,15 @@ from checks.numerics import (
     ftz,
     identical_mul_add,
 )
+from std.sys.compile import is_defined
+
+# DEVIATION 537: these two imports exist only for the flag-guarded swap
+# below. `gemm/checks/gemm_identical.mojo` does not import `core.gemm`
+# (checked 2026-09-02), so no cycle; the cost is that every build of this
+# file now compiles that module even with the flag off. UNVERIFIED, RUN
+# OWED: no build of this edit has been attempted.
+from gemm.checks.gemm_identical import identical_gemm
+from gemm.checks.gemm_oracle import OP_NT
 
 
 # ===========================================================================
@@ -258,6 +267,66 @@ def pinned_gemv_n_kernel(
     z.unsafe_store(i, ftz(Float32(0.0) + ftz(acc)))
 
 
+# ===========================================================================
+# DEVIATION 537 -- THE FLAG-GUARDED v1 SWAP. OFF BY DEFAULT. NOTHING RUN.
+# ===========================================================================
+#
+# `-D MOJOLEARN_537_GEMM_IDENT_SWAP=1` routes `gemm_nt`'s IDENTICAL arm (the
+# `n > 1` branch only) to `gemm/checks/gemm_identical.mojo::identical_gemm`,
+# profile `mojolearn.identical.gemm.fp32.v1`, instead of
+# `pinned_gemm_nt_kernel`. This is the swap the MLSys paper's sentence names:
+# the newer portable matrix product exists (v1, eight execution plans,
+# three-vendor bit-certified at its own card, leg 11) and is not the released
+# implementation; k-NN inherits the pinned kernel through
+# `neighbors/impl/neighbors/detail/knn_brute_force.mojo:453,498`.
+#
+# **THIS IS A BIT-MOVING SWAP, NOT AN OPTIMIZATION OF THE SAME BITS.**
+# Established from source, 2026-09-02:
+#   - `pinned_gemm_nt_kernel` folds the WHOLE k range serially ascending
+#     (this file, the `for p in range(k)` loop) and stores a `+0.0`-seeded
+#     one-term fold (`ftz(Float32(0.0) + ftz(acc))`, below). That is
+#     `gemm_oracle_serial` plus a seed -- the DIAGNOSTIC spelling, per
+#     `gemm/IDENTICAL_FP32_CONTRACT.md` section 7.6 item 2.
+#   - `identical_gemm` partitions k into `P = contract_leaf_count(k)` leaves
+#     (`CONTRACT_K_LEAF_MIN = 128`, `gemm/checks/gemm_oracle.mojo:95`) and
+#     folds a seedless fixed balanced tree. Fixture F1 measures the
+#     difference at k = 1024: serial 0x4b800000, tree 0x4b8001c0
+#     (`gemm/README.md`, clause-5 table). At k <= 128 (P == 1) the two
+#     differ on exactly one value: the seed here launders a `-0.0` leaf
+#     partial to `+0.0`; v1 stores `-0.0` (measured, IDENTITY_PATHS row 28:
+#     gemm_nt 0x00000000, v1 0x80000000).
+#
+# THEREFORE THE FLAG NEVER FLIPS ON A PERFORMANCE NUMBER ALONE, and never on
+# fingerprint equality -- flag-on and flag-off DIFFER by design. Flipping is
+# a PROFILE MIGRATION of the released standalone product onto v1 (the "last
+# step of Phase 2" IDENTITY_PATHS row 28 already names) and requires, at ONE
+# commit: (1) the identity lane's sign-off, because rows 27/28 and the
+# E1U/E2 vendor cards are certified on the current serial bits; (2)
+# re-certification of the swapped caller path on all three vendor columns
+# (Apple, NVIDIA, AMD); (3) a measured timing win at large shapes. The
+# paper's own rule applies: changing the floor is a new profile of the
+# released path, not a patch.
+#
+# SCOPE, deliberately narrow: `gemv_n` (the `n == 1` route, taken FIRST in
+# both modes) and `gemm_nt_gram` are NOT swapped -- the gram entry hands one
+# pointer to two kernel operands, which `identical_gemm`'s two-`mut`-buffer
+# signature refuses, the exact aliasing rule `gemm_nt_gram`'s docstring
+# records. A FLIP must migrate all of contract 7.6's kernels together or
+# record that the identical tier runs two profiles at once; flag-on today is
+# a MEASUREMENT configuration, not a shippable state.
+#
+# SEMANTICS CAVEAT: `identical_gemm` allocates its own workspace and
+# SYNCHRONIZES before returning; the pinned enqueue is asynchronous. Correct
+# for every caller (they synchronize later), but the timing leg measures the
+# sync and the allocation too. A flip would want `identical_gemm_into` with
+# a caller-owned workspace; that is follow-up work, not this deviation.
+#
+# UNVERIFIED, RUN OWED (exact commands in `gemm/README.md`, DEVIATION 537
+# section): flag-off inertness in both modes, flag-on gates, the timing
+# window, and the three-vendor legs.
+comptime GEMM_IDENT_SWAP_537 = is_defined["MOJOLEARN_537_GEMM_IDENT_SWAP"]()
+
+
 #: Threads per block for the two pinned products. SCHEDULING and provably so:
 #: each thread owns a whole output cell, so this number moves WHICH thread
 #: computes a cell and never the order any cell is accumulated in. That is
@@ -327,6 +396,14 @@ def gemm_nt(
         gemv_n(ctx, z, x, y, m, k)
         return
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        comptime if GEMM_IDENT_SWAP_537:
+            # DEVIATION 537, see the block above PINNED_GEMM_TPB: profile
+            # v1 through `identical_gemm`, DIFFERENT BITS from the pinned
+            # kernel below by design, OFF in every build that does not name
+            # `-D MOJOLEARN_537_GEMM_IDENT_SWAP=1`. The `n == 1` route
+            # above stays on `gemv_n` in both flag states.
+            identical_gemm(ctx, z, x, y, m, n, k, OP_NT)
+            return
         # DEVIATION 526. `matmul` is a closed vendor library; see the
         # PINNED PRODUCTS block above. The `n == 1` route is taken FIRST and
         # deliberately, so the degenerate shape keeps landing on ONE
