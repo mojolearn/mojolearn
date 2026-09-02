@@ -401,6 +401,16 @@ for mode in identical fast; do
   # alarm — the IDENTICAL arm is the one the leg is for.
   run_lane_arm mamba2 "$mode" pixi run mojo run -I . mamba/checks/mamba2_check.mojo
   run_lane_check mamba2 "$mode" pixi run check-mamba2-block
+  # mamba3, added 2026-09-01: contract section 8 gates (a)-(f) closed on
+  # Apple the day the lane landed (IDENTICAL_MAMBA3_CONTRACT.md run record,
+  # first compile); PHASE M3-6's three-vendor claim is exactly what this
+  # pair of lines exists to earn. Same shape as mamba and mamba2: the gate
+  # is its own card driver, the arm captures the card and the check asserts.
+  # FAST HAS NEVER BEEN RECORDED FOR THIS LANE; a PHASE8-FINDING on the fast
+  # arm is EXPECTED here and is information, not an alarm -- the IDENTICAL
+  # arm is the one the leg is for.
+  run_lane_arm mamba3 "$mode" pixi run mojo run -I . mamba/checks/mamba3_check.mojo
+  run_lane_check mamba3 "$mode" pixi run check-mamba3-block
   # iforest and transformer, added 2026-08-28 (DEVIATION 1932). BOTH LANES
   # ALREADY HAD EVERYTHING EXCEPT A LINE HERE, and that is the finding:
   #
