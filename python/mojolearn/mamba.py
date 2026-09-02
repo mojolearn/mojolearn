@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""`mojolearn.mamba`: the Mamba-1 and Mamba-2 blocks, for cross-checking.
+"""`mojolearn.mamba`: the Mamba-1, Mamba-2 and Mamba-3 blocks, for
+cross-checking.
 
 The public face of `_mamba_impl.py`, which carries every contract detail
 on its classes; this module exists because `mamba/FEATURE_PARITY.md`'s
@@ -9,17 +10,21 @@ imports, and because the block classes are not estimators -- they have no
 `fit`, so they live beside the sklearn-shaped names rather than among
 them (they ARE also re-exported from `mojolearn` itself).
 
-What is here, in one paragraph. `Mamba1Block` and `Mamba2Block` are ONE
-reference-pinned block each -- norm, mixer, residual -- float32 in and
-out, weights handed in as given bits, with the recurrent state EXPLICIT
-and caller-owned (`Mamba1State`, `Mamba2State`: plain NumPy arrays that
-round-trip byte for byte). Prefill, continuation from a carried state,
-`initial_states` and single-token decode all run through the certified
-Mojo entry points the lane gates run; `numeric_mode=` selects the
-fast / deterministic / identical tier at call time, per instance. The
-identity claims are the LANES': three vendors for Mamba-1, one gated
-vendor (Apple) for Mamba-2 as of 2026-09-01 -- and this Python path is
-UNVERIFIED, RUN OWED until `tests/test_mamba_surface.py` prints.
+What is here, in one paragraph. `Mamba1Block`, `Mamba2Block` and
+`Mamba3Block` are ONE reference-pinned block each -- norm, mixer,
+residual -- float32 in and out, weights handed in as given bits, with
+the recurrent state EXPLICIT and caller-owned (`Mamba1State`,
+`Mamba2State`, `Mamba3State`: plain NumPy arrays that round-trip byte
+for byte). Prefill, continuation from a carried state, `initial_states`
+(Mamba-2) / `Input_States` (Mamba-3) and single-token decode all run
+through the certified Mojo entry points the lane gates run;
+`numeric_mode=` selects the fast / deterministic / identical tier at
+call time, per instance. The identity claims are the LANES': three
+vendors for Mamba-1, two for Mamba-2 (Apple + NVIDIA, AMD owed), one
+gated vendor (Apple) for Mamba-3 as of 2026-09-01. The Mamba-1/2
+Python path printed green in all three tiers on 2026-09-01 (one box,
+one vendor); the Mamba-3 path is UNVERIFIED, RUN OWED until
+`tests/test_mamba_surface.py` prints with its arms in.
 
     import numpy as np
     from mojolearn.mamba import Mamba1Block
@@ -37,6 +42,15 @@ from ._mamba_impl import (
     Mamba1State,
     Mamba2Block,
     Mamba2State,
+    Mamba3Block,
+    Mamba3State,
 )
 
-__all__ = ["Mamba1Block", "Mamba1State", "Mamba2Block", "Mamba2State"]
+__all__ = [
+    "Mamba1Block",
+    "Mamba1State",
+    "Mamba2Block",
+    "Mamba2State",
+    "Mamba3Block",
+    "Mamba3State",
+]

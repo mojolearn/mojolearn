@@ -173,13 +173,14 @@ _MODULES = (
     # (DEVIATION 869, the header above).
     "_mojolearn_gp",
     # Added 2026-09-01 with the Mamba block surface (Mamba1Block /
-    # Mamba2Block, `_mamba_impl.py`). The binding
-    # (bindings/_mojolearn_mamba.mojo + build_mamba.sh) landed in the
-    # same commit and has NOT yet been built anywhere; listing the name
-    # here and in `_build_script`, both, is what makes the unbuilt
-    # extension raise BY NAME with the build command instead of a
-    # wrong-tier binary answering under the right label (DEVIATION 869,
-    # the header above).
+    # Mamba2Block, `_mamba_impl.py`; Mamba3Block joined later the same
+    # day). The binding (bindings/_mojolearn_mamba.mojo + build_mamba.sh)
+    # landed in the same commit; the Mamba-1/2 entries built and gated
+    # green in all three tiers that evening, and the Mamba-3 entries are
+    # RUN OWED per tier until rebuilt. Listing the name here and in
+    # `_build_script`, both, is what makes an unbuilt extension raise BY
+    # NAME with the build command instead of a wrong-tier binary
+    # answering under the right label (DEVIATION 869, the header above).
     "_mojolearn_mamba",
 )
 _SELECTED = None

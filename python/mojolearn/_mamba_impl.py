@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The Mamba-1 and Mamba-2 blocks on the GPU, for a Python caller.
+"""The Mamba-1, Mamba-2 and Mamba-3 blocks on the GPU, for a Python
+caller.
 
-PRIVATE MODULE. `Mamba1Block`, `Mamba2Block`, `Mamba1State` and
-`Mamba2State` are re-exported from `mojolearn/__init__.py` and from
+PRIVATE MODULE. `Mamba1Block`, `Mamba2Block`, `Mamba3Block` and their
+state classes are re-exported from `mojolearn/__init__.py` and from
 `mojolearn.mamba`.
 
 WRITTEN 2026-09-01, closing `mamba/FEATURE_PARITY.md`'s consumer table
@@ -53,24 +54,32 @@ you did not make. This DIFFERS from the classical estimators' `as_f32_c`
 convenience conversion, deliberately: those surfaces summarize data,
 this one certifies bits. Non-finite VALUES are not judged here -- they
 are refused BY NAME and by flat index on the device path
-(`mamba_refuse_bad_inputs` / `mamba2_refuse_bad_inputs`, contract
-section 6), and a Python-side copy would make those refusals
-unreachable.
+(`mamba_refuse_bad_inputs` / `mamba2_refuse_bad_inputs` /
+`mamba3_refuse_bad_inputs`, contract section 6), and a Python-side copy
+would make those refusals unreachable.
 
 THE NUMERIC TIER IS THE LOADED BINARY'S, SELECTED AT BUILD TIME OF THE
-.so. `numeric_mode=` on either class (or the process default) picks
-which compiled set answers -- fast (no promise), deterministic (same
-bits run to run on one device), identical (also the same bits across
-vendors, where the lane's cards say so: THREE vendors for Mamba-1, ONE
-gated vendor for Mamba-2 today, cross-vendor legs owed) -- and
+.so. `numeric_mode=` on any of the classes (or the process default)
+picks which compiled set answers -- fast (no promise), deterministic
+(same bits run to run on one device), identical (also the same bits
+across vendors, where the lane's cards say so: THREE vendors for
+Mamba-1; TWO for Mamba-2 since the 2026-09-01 evening Apple-vs-RTX-4090
+judge, 26/26 stages identical, its contract's PHASE 6 record, AMD OWED;
+ONE gated vendor, Apple, for Mamba-3) -- and
 `_extension()` cross-checks the binary's own compile-time answer against
 the tier the package resolved, `_gp_impl.py`'s pattern, so a wrong-arm
 measurement cannot be correctly labelled by accident.
 
-EVERYTHING RUNNABLE HERE IS UNVERIFIED, RUN OWED: this file and its
-binding have never been built or imported. The gate is
+RUN LEDGER. The Mamba-1/Mamba-2 surface BUILT AND GATED 2026-09-01: all
+three tiers green through `tests/test_mamba_surface.py`, bitwise arms
+asserted under identical (`mamba/FEATURE_PARITY.md`'s consumer-table
+PyPI row; one box, one vendor). `Mamba3Block`/`Mamba3State`, added
+later the same day (the mamba-3 kernel lane's own gates ran green that
+evening, its contract's RUN RECORD), are UNVERIFIED, RUN OWED: their
+binding entries have never been compiled. The gate is
 `python/mojolearn/tests/test_mamba_surface.py`; the build is
-`bash bindings/build_mamba.sh` per tier.
+`bash bindings/build_mamba.sh` per tier, REBUILT before any run is
+believed.
 """
 
 import math
@@ -99,6 +108,16 @@ _M2_EXPAND = 2
 _M2_HEADDIM = 64
 _M2_NGROUPS = 1
 _M2_CHUNK_SIZE = 256
+# Mamba-3 (mamba3 contract section 3 / `mamba/checks/mamba3_fixture.mojo`).
+# NOTE the DIFFERENT chunk size: 64, PART OF THE ARITHMETIC (DEVIATIONS
+# 827/783), and NUM_ROPE_ANGLES 32 (rope_fraction 0.5). There is NO conv
+# and NO dt clamp in Mamba-3.
+_M3_D_STATE = 128
+_M3_EXPAND = 2
+_M3_HEADDIM = 64
+_M3_NGROUPS = 1
+_M3_CHUNK_SIZE = 64
+_M3_NUM_ROPE_ANGLES = 32
 
 
 def _f32_strict(a, what, name):
@@ -475,10 +494,12 @@ class Mamba2Block(_MambaBase):
     non-mem-eff arm of mamba2.py:209-276) -- under profile
     `mojolearn.identical.mamba2.fp32.v1`
     (`mamba/IDENTICAL_MAMBA2_CONTRACT.md`). The LANE is gated on the
-    Apple M4 (identical tier, the contract's RUN RECORD); there is NO
-    cross-vendor card yet and this class claims none -- and this Python
-    path itself is UNVERIFIED, RUN OWED until `test_mamba_surface.py`
-    prints.
+    Apple M4 (identical tier, the contract's RUN RECORD) and, since the
+    2026-09-01 evening judge, bit-identical Apple vs a rented RTX 4090
+    (26/26 stages, its PHASE 6 record; the AMD column is OWED, so no
+    three-vendor sentence exists and this class claims none). The
+    Python path printed green in all three tiers on 2026-09-01, one
+    box, one vendor (`test_mamba_surface.py`).
 
     WEIGHTS IN, AS GIVEN BITS, keyed by the corpus's names
     (`mamba/corpus/README.md`, Mamba-2 section). With d_inner =
@@ -690,6 +711,344 @@ class Mamba2Block(_MambaBase):
         if state is None:
             raise ValueError(
                 "mojolearn Mamba2Block.step: state is required (a decode "
+                "step continues a sequence; allocate_state(B) makes the "
+                "fresh one)"
+            )
+        return self._call(x, state, step=True)
+
+    __call__ = forward
+
+
+class Mamba3State:
+    """The Mamba-3 recurrent state, its contract's DEVIATION-832 pieces,
+    caller-owned (DEVIATIONS 792/794). With H = d_model/32 heads,
+    N = 128 (QK head dim), P = 64 (V head dim), R = 32 rope angles and
+    Q = 64 (the Mamba-3 chunk size -- NOT mamba2's 256):
+
+        theta           : (B, H, R) float32 -- the serial rotary angles,
+                          each in [0, 2pi) by the S10 mod's invariant
+        h               : (B, H, P, N) float32 -- the SEALED
+                          chunk-boundary SSM state (the state ENTERING
+                          the last working chunk)
+        buffer_qrot     : (B, Q, H, N) float32 -- rotated-UNSCALED q
+        buffer_krot     : (B, Q, H, N) float32 -- rotated-UNSCALED k
+        buffer_v        : (B, Q, H, P) float32 -- raw v (the x split;
+                          there is NO conv in Mamba-3)
+        buffer_dt       : (B, Q, H) float32 -- dt rows
+        buffer_sig      : (B, Q, H) float32 -- sigma(trap) rows
+        buffer_adt      : (B, Q, H) float32 -- ADT rows
+        pending_k       : (B, H, N) float32 -- the Input_States pair,
+        pending_v       : (B, H, P) float32    live only under `pending`
+        buffered_tokens : int in [0, Q] INCLUSIVE -- valid buffer rows.
+                          UNLIKE mamba2 the buffer NEVER EMPTIES
+                          (DEVIATION 832(i): in [1, Q] after every
+                          call); 0 only before the first token
+        pending         : bool -- True marks theta/h/pending_k/pending_v
+                          as an upstream Input_States continuation
+                          (contract section 5 claim 2), CONSUMED by the
+                          next call (DEVIATION 794)
+
+    All zeros (and 0, False) before the first token
+    (`allocate_inference_cache`). Updated IN PLACE (`buffered_tokens`
+    and `pending` reassigned) by `forward` and `step`."""
+
+    def __init__(self, theta, h, buffer_qrot, buffer_krot, buffer_v,
+                 buffer_dt, buffer_sig, buffer_adt, pending_k, pending_v,
+                 buffered_tokens=0, pending=False):
+        self.theta = theta
+        self.h = h
+        self.buffer_qrot = buffer_qrot
+        self.buffer_krot = buffer_krot
+        self.buffer_v = buffer_v
+        self.buffer_dt = buffer_dt
+        self.buffer_sig = buffer_sig
+        self.buffer_adt = buffer_adt
+        self.pending_k = pending_k
+        self.pending_v = pending_v
+        self.buffered_tokens = int(buffered_tokens)
+        self.pending = bool(pending)
+
+    def set_input_states(self, theta, h, k, v):
+        """The upstream four-piece `Input_States` continuation (contract
+        section 5 claim 2): copy the given bits into theta/h/pending_k/
+        pending_v and mark them pending for the next call. dtype and
+        shape are refused here (bits must arrive as made -- a silent
+        cast would break the certification); whether the state is FRESH
+        is judged IN MOJO at the next call, by the lane's own
+        set_input_states refusal (Input_States only has upstream meaning
+        at buffered_tokens 0), which this method deliberately does not
+        respell (DEVIATION 794)."""
+        what = "Mamba3State.set_input_states"
+        for name, dst, src in (("theta", self.theta, theta),
+                               ("h", self.h, h),
+                               ("k", self.pending_k, k),
+                               ("v", self.pending_v, v)):
+            arr = _f32_strict(src, what, name)
+            if arr.shape != dst.shape:
+                raise ValueError(
+                    f"mojolearn {what}: {name} has shape {arr.shape}, "
+                    f"want {dst.shape}"
+                )
+            np.copyto(dst, arr, casting="no")
+        self.pending = True
+
+
+class Mamba3Block(_MambaBase):
+    """One Mamba-3 (SISO) block on the GPU -- norm, mixer, residual
+    (`Mamba3.forward`'s SISO arm, mamba_ssm mamba3.py:160-278, inside
+    `Block.forward`'s non-fused arm, block.py:51-53) -- under profile
+    `mojolearn.identical.mamba3.siso.fp32.v1`
+    (`mamba/IDENTICAL_MAMBA3_CONTRACT.md`). The LANE is gated on the
+    Apple M4 (identical tier, the contract's RUN RECORD, 2026-09-01);
+    there is NO cross-vendor card yet and this class claims none -- and
+    this Python path itself is UNVERIFIED, RUN OWED until
+    `test_mamba_surface.py` prints with the mamba3 arms in.
+
+    DELTAS FROM Mamba2Block, in one breath (contract section 0): NO conv
+    (in_proj feeds the core directly; v is the RAW x split); NO dt clamp
+    and therefore NO `dt_limit` argument (S6 is bias -> softplus and
+    nothing else); A is DATA-DEPENDENT per (token, head) with the
+    A_floor clamp; the gate is applied RAW inside the core (no gated
+    output norm); the B/C RMSNorms are new, with per-head biases added
+    AFTER the norm.
+
+    WEIGHTS IN, AS GIVEN BITS, keyed by the fixture's tensor names
+    (`mamba/checks/mamba3_fixture.mojo`, ids 42-50). With d_inner =
+    2*d_model, H = d_inner/64 heads, N = 128, d_in_proj = 2*d_inner +
+    256 + 3*H + 32:
+
+        block_norm.weight  (d_model,)         the BLOCK norm
+        in_proj.weight     (d_in_proj, d_model)  column order z | x | B
+                                              | C | dd_dt | dd_A | trap
+                                              | angle (mamba3.py:106-107)
+        dt_bias            (H,)
+        B_norm.weight      (N,)               the S21 B RMSNorm, eps 1e-5
+        C_norm.weight      (N,)               the S21 C RMSNorm
+        B_bias             (H, N)             ones-init upstream; arrives
+                                              as given bits like all the
+                                              rest (mimo_rank 1 squeezed)
+        C_bias             (H, N)
+        D                  (H,)
+        out_proj.weight    (d_model, d_inner)
+
+    WHAT IS HONORED, WHAT IS FIXED, WHAT IS REFUSED -- the parity
+    addendum row (`mamba/FEATURE_PARITY.md`, "Mamba-3 SURFACE KNOBS")
+    and the contract's section 3 are normative:
+
+        d_model         honored   any MULTIPLE OF 32 (headdim 64 with
+                                  expand 2; refused by name otherwise --
+                                  Mamba3Dims.of carries the rule, this
+                                  side repeats it only to size the state)
+        Input_States    honored   `state.set_input_states(theta, h, k,
+                                  v)` on a FRESH state; the fresh-state
+                                  rule is judged in Mojo (DEVIATION 794)
+        d_state/headdim/ FIXED    128 / 64 / 1 / 0.5 (32 angles) / 1e-4
+          ngroups/rope_           / 64: profile constants; CHUNK_SIZE
+          fraction/A_floor        is PART OF THE ARITHMETIC (DEVIATIONS
+          /chunk                  827/783), never a tuning knob
+        is_mimo/mimo_rank, refused  by absence, structurally: no such
+          is_outproj_norm,          knob exists on this surface (the
+          fuse_pregate_*,           parity addendum row names each)
+          ngroups>1, varlen
+        dt_min/dt_max/  absent    INITIALIZATION facts (mamba3.py:111-
+          dt_init_floor           115); weights arrive as given bits
+        dtype           refused   float32 ONLY; bf16/fp16/float64 by
+                                  name (the shipped bf16 casts are
+                                  REFUSED, not reproduced)
+
+    STATE IS EXPLICIT AND TEN-PIECE (`Mamba3State`; DEVIATIONS 792/794).
+    Decode is PREFILL RESUMPTION (DEVIATION 831): `step` is the same
+    entry at L = 1, and `forward` with a carried state is chunked-prefill
+    continuation. After every call `h_last_`, `k_last_`, `v_last_` and
+    `theta_last_` on this instance hold the REPORT stages -- NOT the
+    resumption state (the sealed-boundary distinction is DEVIATION
+    832's)."""
+
+    _W_NAMES = (
+        "block_norm.weight", "in_proj.weight", "dt_bias",
+        "B_norm.weight", "C_norm.weight", "B_bias", "C_bias", "D",
+        "out_proj.weight",
+    )
+
+    def __init__(self, weights):
+        what = "Mamba3Block"
+        arrs = _take(weights, what, self._W_NAMES)
+        norm_w = _f32_strict(arrs[0], what, "block_norm.weight")
+        if norm_w.ndim != 1 or norm_w.shape[0] < 1:
+            raise ValueError(
+                f"mojolearn {what}: block_norm.weight must be 1-D "
+                f"(d_model,), got shape {norm_w.shape}"
+            )
+        dm = int(norm_w.shape[0])
+        if dm % (_M3_HEADDIM // _M3_EXPAND) != 0:
+            # Mamba3Dims.of's rule, quoted; the Mojo constructor remains
+            # the authority (raw-binding callers hit it), this copy
+            # exists because the state buffers below cannot be sized
+            # without a whole nheads (DEVIATION 793's accepted
+            # duplication, same as Mamba2Block's).
+            raise ValueError(
+                f"mojolearn {what}: d_model must be a multiple of "
+                f"{_M3_HEADDIM // _M3_EXPAND} so that nheads = "
+                f"2*d_model/{_M3_HEADDIM} is whole (profile constants "
+                "headdim 64, expand 2 -- Mamba3Dims.of carries the same "
+                f"refusal); got {dm}"
+            )
+        di = _M3_EXPAND * dm
+        nh = di // _M3_HEADDIM
+        dip = (2 * di + 2 * _M3_NGROUPS * _M3_D_STATE + 3 * nh
+               + _M3_NUM_ROPE_ANGLES)
+        self.d_model = dm
+        self.d_inner = di
+        self.nheads = nh
+        self.d_in_proj = dip
+        self._w = [
+            norm_w,
+            _want_shape(_f32_strict(arrs[1], what, "in_proj.weight"),
+                        what, "in_proj.weight", (dip, dm)),
+            _want_shape(_f32_strict(arrs[2], what, "dt_bias"),
+                        what, "dt_bias", (nh,)),
+            _want_shape(_f32_strict(arrs[3], what, "B_norm.weight"),
+                        what, "B_norm.weight", (_M3_D_STATE,)),
+            _want_shape(_f32_strict(arrs[4], what, "C_norm.weight"),
+                        what, "C_norm.weight", (_M3_D_STATE,)),
+            _want_shape(_f32_strict(arrs[5], what, "B_bias"),
+                        what, "B_bias", (nh, _M3_D_STATE)),
+            _want_shape(_f32_strict(arrs[6], what, "C_bias"),
+                        what, "C_bias", (nh, _M3_D_STATE)),
+            _want_shape(_f32_strict(arrs[7], what, "D"), what, "D", (nh,)),
+            _want_shape(_f32_strict(arrs[8], what, "out_proj.weight"),
+                        what, "out_proj.weight", (dm, di)),
+        ]
+
+    def allocate_state(self, batch_size):
+        """The zero ten-piece state (`allocate_inference_cache`,
+        mamba3.py:442-482, plus DEVIATION 832's buffer pieces). For an
+        upstream Input_States continuation call
+        `set_input_states(theta, h, k, v)` on the fresh state."""
+        b = int(batch_size)
+        if b < 1:
+            raise ValueError(
+                f"mojolearn Mamba3Block: batch_size must be positive, "
+                f"got {batch_size!r}"
+            )
+        nh, q = self.nheads, _M3_CHUNK_SIZE
+        return Mamba3State(
+            np.zeros((b, nh, _M3_NUM_ROPE_ANGLES), dtype=np.float32),
+            np.zeros((b, nh, _M3_HEADDIM, _M3_D_STATE), dtype=np.float32),
+            np.zeros((b, q, nh, _M3_D_STATE), dtype=np.float32),
+            np.zeros((b, q, nh, _M3_D_STATE), dtype=np.float32),
+            np.zeros((b, q, nh, _M3_HEADDIM), dtype=np.float32),
+            np.zeros((b, q, nh), dtype=np.float32),
+            np.zeros((b, q, nh), dtype=np.float32),
+            np.zeros((b, q, nh), dtype=np.float32),
+            np.zeros((b, nh, _M3_D_STATE), dtype=np.float32),
+            np.zeros((b, nh, _M3_HEADDIM), dtype=np.float32),
+            0,
+            False,
+        )
+
+    def _call(self, x, state, step):
+        what = "Mamba3Block.step" if step else "Mamba3Block.forward"
+        x = _batch_tokens(x, what, self.d_model, step)
+        b, l = int(x.shape[0]), int(x.shape[1])
+        if state is None:
+            state = self.allocate_state(b)
+        nh, q = self.nheads, _M3_CHUNK_SIZE
+        theta = _state_buf(state.theta, what, "theta",
+                           (b, nh, _M3_NUM_ROPE_ANGLES))
+        h = _state_buf(state.h, what, "h",
+                       (b, nh, _M3_HEADDIM, _M3_D_STATE))
+        bq = _state_buf(state.buffer_qrot, what, "buffer_qrot",
+                        (b, q, nh, _M3_D_STATE))
+        bk = _state_buf(state.buffer_krot, what, "buffer_krot",
+                        (b, q, nh, _M3_D_STATE))
+        bv = _state_buf(state.buffer_v, what, "buffer_v",
+                        (b, q, nh, _M3_HEADDIM))
+        bd = _state_buf(state.buffer_dt, what, "buffer_dt", (b, q, nh))
+        bs = _state_buf(state.buffer_sig, what, "buffer_sig", (b, q, nh))
+        ba = _state_buf(state.buffer_adt, what, "buffer_adt", (b, q, nh))
+        pk = _state_buf(state.pending_k, what, "pending_k",
+                        (b, nh, _M3_D_STATE))
+        pv = _state_buf(state.pending_v, what, "pending_v",
+                        (b, nh, _M3_HEADDIM))
+        q0 = int(state.buffered_tokens)
+        pend = 1 if state.pending else 0
+        # buffered_tokens outside [0, 64] is a boundary disagreement the
+        # binding refuses by name (DEVIATION 794); it goes down unjudged.
+        y = np.empty((b, l, self.d_model), dtype=np.float32)
+        h_last = np.empty(
+            (b, nh, _M3_HEADDIM, _M3_D_STATE), dtype=np.float32
+        )
+        k_last = np.empty((b, nh, _M3_D_STATE), dtype=np.float32)
+        v_last = np.empty((b, nh, _M3_HEADDIM), dtype=np.float32)
+        theta_last = np.empty(
+            (b, nh, _M3_NUM_ROPE_ANGLES), dtype=np.float32
+        )
+        # TWO LISTS, NOT TWENTY-FIVE ARGUMENTS (DEVIATION 791). Every
+        # array addressed below is bound in this frame -- x, the nine
+        # entries of self._w (alive on self), the ten state pieces, y and
+        # the four reports.
+        w = self._w
+        ext = self._extension()
+        addrs = (
+            # ORDER MATCHES bindings/_mojolearn_mamba.mojo::
+            # mamba3_forward_binding: x, block norm.weight,
+            # in_proj.weight, dt_bias, B_norm.weight, C_norm.weight,
+            # B_bias, C_bias, D, out_proj.weight, theta, h, buffer_qrot,
+            # buffer_krot, buffer_v, buffer_dt, buffer_sig, buffer_adt,
+            # pending_k, pending_v, y_out, h_last_out, k_last_out,
+            # v_last_out, theta_last_out
+            [_addr_ro(x)]
+            + [_addr_ro(a) for a in w]
+            + [_addr(theta), _addr(h), _addr(bq), _addr(bk), _addr(bv),
+               _addr(bd), _addr(bs), _addr(ba), _addr(pk), _addr(pv),
+               _addr(y), _addr(h_last), _addr(k_last), _addr(v_last),
+               _addr(theta_last)]
+        )
+        if step:
+            # B, d_model, buf_len, pending.
+            new_len = ext.mamba3_decode_step(
+                addrs, [b, self.d_model, q0, pend]
+            )
+        else:
+            # B, L, d_model, buf_len, pending.
+            new_len = ext.mamba3_forward(
+                addrs, [b, l, self.d_model, q0, pend]
+            )
+        state.buffered_tokens = int(new_len)
+        # ALWAYS False after a call: the unarmed core consumes a pending
+        # continuation and an armed build aborts at PyInit, so no return
+        # slot exists for it (DEVIATION 794).
+        state.pending = False
+        #: The REPORT stages (h/k/v after the final working chunk, theta
+        #: after the final token), NOT the resumption state -- DEVIATION
+        #: 832's sealed-boundary distinction.
+        self.h_last_ = h_last
+        self.k_last_ = k_last
+        self.v_last_ = v_last
+        self.theta_last_ = theta_last
+        return y
+
+    def forward(self, x, state=None):
+        """One block call: `(B, L, d_model)` float32 in, the block
+        output back, any B and L. `state=None` runs a self-contained
+        prefill from zeros and DISCARDS the final state; pass a
+        `Mamba3State` to carry it -- a later `forward` or `step` on that
+        state is chunked-prefill continuation / decode, bit-for-bit the
+        prefill that ran the whole sequence at once (DEVIATION 831's
+        construction; the identical tier's gates verify it)."""
+        return self._call(x, state, step=False)
+
+    def step(self, x, state):
+        """One decode token: `Mamba3.step`'s semantics, the profile's
+        spelling -- PREFILL RESUMPTION at L = 1 through the same entry
+        as `forward` (DEVIATION 831; upstream's own per-token recurrence
+        rounds differently BY CONSTRUCTION and is the lane's
+        required-RED STEP_UPSTREAM_RECURRENCE arm, never a mode here).
+        `state` is REQUIRED."""
+        if state is None:
+            raise ValueError(
+                "mojolearn Mamba3Block.step: state is required (a decode "
                 "step continues a sequence; allocate_state(B) makes the "
                 "fresh one)"
             )

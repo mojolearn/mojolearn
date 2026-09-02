@@ -1,43 +1,59 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The gate for the Python surface of `mojolearn.mamba` (Mamba1Block,
-Mamba2Block).
+Mamba2Block, Mamba3Block).
 
 Written 2026-09-01, the day the surface landed -- the day
 `mamba/FEATURE_PARITY.md`'s "PyPI surface: NONE EXISTS" row closed. The
 model for this file is `test_gp_surface.py` and the house standard is
-`gemm/PYTHON_SURFACE_GATE.md`.
+`gemm/PYTHON_SURFACE_GATE.md`. The Mamba-3 arms joined later the same
+day, when `Mamba3Block` did.
 
-WHAT THIS CLOSES. `bindings/_mojolearn_mamba.mojo`'s four entry points
+WHAT THIS CLOSES. `bindings/_mojolearn_mamba.mojo`'s six entry points
 and `python/mojolearn/_mamba_impl.py` put the certified Mamba blocks in
 reach of a Python caller. NOTHING IN THAT PATH IS COVERED BY THE LANES'
 GATES: those run inside Mojo (`pixi run check-mamba-block`,
-`check-mamba2`, and siblings), against their own oracles, and stop at
-`mamba_block_forward` / `mamba2_block_forward`. Everything here is
+`check-mamba2`, `mamba/checks/mamba3_check.mojo`, and siblings),
+against their own oracles, and stop at `mamba_block_forward` /
+`mamba2_block_forward` / `mamba3_block_forward`. Everything here is
 downstream of that point: an addrs list whose order is written out twice
 and could be written out wrong once, state buffers marshaled up and back
-per call, a buf_len that must survive the round trip, and dtype/shape
-refusals that exist only on this side.
+per call, a buf_len (and, for Mamba-3, a pending flag) that must survive
+the round trip, and dtype/shape refusals that exist only on this side.
 
 THE EXPECTED VALUES ARE THE COMMITTED CORPUS'S, NOT OUR OWN TALLY. The
-forward arms run corpus cases (`mamba/corpus/base_b2_l4_d8`,
+Mamba-1/2 forward arms run corpus cases (`mamba/corpus/base_b2_l4_d8`,
 `mamba/corpus/mamba2/m2_base_b2_l4_d32`) and compare against their
 `ref64` stages at the corpus README's calibrated tolerance (rtol 1e-5,
 atol 1e-6) -- a TOLERANCE anchor, per that README: the bitwise oracle is
 the lane's, and this file makes no cross-vendor claim. The corpus lives
 in the repository, not the wheel, so this gate runs IN-REPO; a missing
-corpus is a FAILURE naming the path, never a skip
-([[not-applicable-is-not-a-pass]]).
+Mamba-1/2 corpus is a FAILURE naming the path, never a skip
+([[not-applicable-is-not-a-pass]]). MAMBA-3 HAS NO COMMITTED CORPUS YET
+(the fixture table landed first, `mamba3_fixture.mojo`'s header;
+`mamba3_check.mojo`'s gate (g) refuses by name until the corpus lane
+generates `mamba/corpus/mamba3/`), so its tolerance arm is a RECORDED
+DEBT below: the row passes as "[OWED]" while the directory is absent
+and FAILS the moment the directory appears without the comparison being
+wired, so the debt cannot rot into a silent skip. The Mamba-3 bitwise
+arms need no external bytes: they compare the surface against ITSELF
+through the binding -- decode against prefill, split prefill against
+whole, the same continuation twice -- exactly the mamba2 arms' shape,
+on fixture-scale hashed-style inputs (the ranges
+`mamba3_fixture.mojo`'s scale note documents).
 
 WHAT IS ASSERTED AND WHAT IS REPORTED. Under `identical` the bitwise
 arms -- decode == prefill per token, and split prefill (L-1 tokens then
-one step) == whole prefill -- are ASSERTED; under `fast` they are
-REPORTED, per [[fast-is-not-identical]]. The corpus tolerances, the
-shapes, the state bookkeeping and every refusal are asserted in every
-tier.
+one step) == whole prefill, and for Mamba-3 the Q = 64 chunk-crossing
+resumption and the repeated Input_States continuation -- are ASSERTED;
+under `fast` they are REPORTED, per [[fast-is-not-identical]]. The
+corpus tolerances, the shapes, the state bookkeeping and every refusal
+are asserted in every tier.
 
-EVERY RUNNABLE CLAIM HERE IS UNVERIFIED, RUN OWED: neither this file nor
-the binding it exercises has ever run.
+RUN LEDGER. The Mamba-1/2 arms PRINTED GREEN in all three tiers on
+2026-09-01 (one box, one vendor; `mamba/FEATURE_PARITY.md`'s PyPI row).
+The Mamba-3 arms have never run: UNVERIFIED, RUN OWED, per tier, with
+the binding REBUILT first.
 
 HOW TO RUN IT
 -------------
@@ -47,7 +63,12 @@ HOW TO RUN IT
     # 2. the gate, FROM THE REPOSITORY ROOT (it reads mamba/corpus/)
     cd python && python3 -m mojolearn.tests.test_mamba_surface
 
-    # 3. the identical tier, where the bitwise arms are asserted
+    # 3. the deterministic tier
+    MOJOLEARN_NUMERIC_MODE=deterministic bash bindings/build_mamba.sh
+    cd python && MOJOLEARN_NUMERIC_MODE=deterministic \\
+        python3 -m mojolearn.tests.test_mamba_surface
+
+    # 4. the identical tier, where the bitwise arms are asserted
     MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_mamba.sh
     cd python && MOJOLEARN_NUMERIC_MODE=identical \\
         python3 -m mojolearn.tests.test_mamba_surface
@@ -58,7 +79,7 @@ import sys
 
 import numpy as np
 
-from mojolearn import Mamba1Block, Mamba2Block
+from mojolearn import Mamba1Block, Mamba2Block, Mamba3Block
 
 
 class Report(object):
@@ -162,6 +183,15 @@ M1_CASE, M1_B, M1_L, M1_DM = "base_b2_l4_d8", 2, 4, 8
 #: m2_base_b2_l4_d32: B 2, L 4, d_model 32 (d_inner 64, H 1, CD 320) --
 #: the sub-chunk +SEG case; one open (padded) chunk end to end.
 M2_CASE, M2_B, M2_L, M2_DM = "m2_base_b2_l4_d32", 2, 4, 32
+#: Mamba-3 shapes, mirroring the check's own cases: the sub-chunk case
+#: (m3_base_b2_l4_d32's shape) and the decode-cross construction
+#: (contract 8d: prefill 60, decode through token 70; crosses Q = 64).
+#: NO committed corpus exists yet (header), so the inputs are
+#: fixture-scale hashed-style draws, not corpus files.
+M3_B, M3_L, M3_DM = 2, 4, 32
+M3_CROSS_L, M3_CROSS_SPLIT = 70, 60
+M3_Q = 64  # the Mamba-3 chunk size (PART OF THE ARITHMETIC, DEV 827/783)
+M3_TWO_PI_F32 = np.float32(6.2831855)  # bits 0x40C90FDB (contract s3)
 
 
 def m1_weights(case_dir, dm):
@@ -206,6 +236,55 @@ def m2_weights(case_dir, dm):
         "out_proj.weight": f32(
             os.path.join(case_dir, "out_proj.weight.f32"), (dm, di)),
     }
+
+
+def m3_uniform(rng, shape, lo, hi):
+    """A float32 draw in [lo, hi) -- the smoke-test spelling. These are
+    INPUTS, not expected values: every Mamba-3 assertion below compares
+    the surface against itself through the binding (header)."""
+    return (lo + (hi - lo) * rng.random(shape)).astype(np.float32)
+
+
+def m3_weights(rng, dm):
+    """Fixture-scale weights (the ranges `mamba3_fixture.mojo`'s scale
+    note documents: dt_bias in [-7, -2] so dt is small and the chunked
+    recurrence actually recurses; fan-in-scaled projections; near-ones
+    B/C biases, their upstream ones-init neighborhood)."""
+    di = 2 * dm
+    h = di // 64
+    dip = 2 * di + 256 + 3 * h + 32
+    s_in = float(dm) ** -0.5
+    s_out = float(di) ** -0.5
+    return {
+        "block_norm.weight": m3_uniform(rng, (dm,), 0.5, 1.5),
+        "in_proj.weight": m3_uniform(rng, (dip, dm), -s_in, s_in),
+        "dt_bias": m3_uniform(rng, (h,), -7.0, -2.0),
+        "B_norm.weight": m3_uniform(rng, (128,), 0.5, 1.5),
+        "C_norm.weight": m3_uniform(rng, (128,), 0.5, 1.5),
+        "B_bias": m3_uniform(rng, (h, 128), 0.9, 1.1),
+        "C_bias": m3_uniform(rng, (h, 128), 0.9, 1.1),
+        "D": m3_uniform(rng, (h,), 0.5, 1.5),
+        "out_proj.weight": m3_uniform(rng, (dm, di), -s_out, s_out),
+    }
+
+
+def m3_state_bits(rep, arm, got_state, want_state, n_rows, what, assert_it):
+    """The Mamba-3 carried state, compared piece by piece. The six
+    buffers compare on their VALID rows only (rows [0, buf_len); rows
+    beyond buf_len are not state -- the buffer update rewrites [0, r)
+    and leaves stale rows above it, DEVIATION 832(i)), theta and h
+    whole."""
+    rep.bits_equal(arm, got_state.theta, want_state.theta,
+                   what + ": theta", assert_it)
+    rep.bits_equal(arm, got_state.h, want_state.h,
+                   what + ": the sealed boundary h", assert_it)
+    for name in ("buffer_qrot", "buffer_krot", "buffer_v", "buffer_dt",
+                 "buffer_sig", "buffer_adt"):
+        rep.bits_equal(arm,
+                       getattr(got_state, name)[:, :n_rows],
+                       getattr(want_state, name)[:, :n_rows],
+                       what + ": %s rows [0, %d)" % (name, n_rows),
+                       assert_it)
 
 
 def main(out=sys.stdout):
@@ -277,6 +356,55 @@ def main(out=sys.stdout):
                "Mamba2 d_model = 40 is refused (headdim 64 / expand 2; "
                "Mamba2Dims.of carries the same rule)",
                Mamba2Block, zeros2)
+    bad3 = {n: np.zeros(1, np.float32) for n in Mamba3Block._W_NAMES}
+    bad3["block_norm.weight"] = np.zeros((40,), np.float32)
+    rep.raises(arm, ValueError, "multiple of",
+               "Mamba3 d_model = 40 is refused (headdim 64 / expand 2; "
+               "Mamba3Dims.of carries the same rule)",
+               Mamba3Block, bad3)
+    # The smallest legal mamba3 shape: d_model must be a multiple of 32.
+    dm3, di3, h3 = 32, 64, 1
+    dip3 = 2 * di3 + 256 + 3 * h3 + 32
+    zeros3 = {
+        "block_norm.weight": np.zeros((dm3,), np.float32),
+        "in_proj.weight": np.zeros((dip3, dm3), np.float32),
+        "dt_bias": np.zeros((h3,), np.float32),
+        "B_norm.weight": np.zeros((128,), np.float32),
+        "C_norm.weight": np.zeros((128,), np.float32),
+        "B_bias": np.zeros((h3, 128), np.float32),
+        "C_bias": np.zeros((h3, 128), np.float32),
+        "D": np.zeros((h3,), np.float32),
+        "out_proj.weight": np.zeros((dm3, di3), np.float32),
+    }
+    blk3z = Mamba3Block(zeros3)
+    rep.raises(arm, TypeError, "float64",
+               "Mamba3: a float64 x is refused BY NAME",
+               blk3z.forward, np.zeros((1, 2, dm3), np.float64))
+    rep.raises(arm, ValueError, "state is required",
+               "Mamba3: step without a state is refused",
+               blk3z.step, np.zeros((1, 1, dm3), np.float32), None)
+    rep.raises(arm, ValueError, "exactly one token",
+               "Mamba3: a multi-token step is refused",
+               blk3z.step, np.zeros((1, 2, dm3), np.float32),
+               blk3z.allocate_state(1))
+    st3bad = blk3z.allocate_state(1)
+    st3bad.theta = st3bad.theta[:, :, :8]  # wrong shape
+    rep.raises(arm, ValueError, "state buffer theta",
+               "Mamba3: a wrong-shape state buffer is refused by name",
+               blk3z.step, np.zeros((1, 1, dm3), np.float32), st3bad)
+    st3ok = blk3z.allocate_state(1)
+    rep.raises(arm, TypeError, "theta",
+               "Mamba3State.set_input_states: a float64 piece is "
+               "refused by its own name (bits must arrive as made)",
+               st3ok.set_input_states,
+               np.zeros((1, h3, 32), np.float64), st3ok.h,
+               st3ok.pending_k, st3ok.pending_v)
+    bad3w = dict(zeros3)
+    bad3w["in_proj.weight"] = zeros3["in_proj.weight"].T.copy()
+    rep.raises(arm, ValueError, "in_proj.weight",
+               "Mamba3: a transposed projection cannot cross as a "
+               "plausible buffer (exact-shape refusal)",
+               Mamba3Block, bad3w)
 
     # -- the corpus ------------------------------------------------------
     root = corpus_root()
@@ -378,6 +506,158 @@ def main(out=sys.stdout):
                    "the open-chunk dt buffer round-trips (split == whole)",
                    assert_bits)
 
+    # -- MAMBA-3 FORWARD (no committed corpus yet; header) ---------------
+    arm = "MAMBA-3 forward (B%d L%d d%d, fixture-scale inputs)" % (
+        M3_B, M3_L, M3_DM)
+    rng3 = np.random.default_rng(0x4D6D6233)  # ASCII 'Mmb3'
+    w3 = m3_weights(rng3, M3_DM)
+    x3 = m3_uniform(rng3, (M3_B, M3_L, M3_DM), -2.0, 2.0)
+    blk3 = Mamba3Block(w3)
+    st3 = blk3.allocate_state(M3_B)
+    y3 = blk3.forward(x3, st3)
+    h3n = (2 * M3_DM) // 64
+    rep.check(arm, y3.shape == (M3_B, M3_L, M3_DM), "y has x's shape")
+    rep.check(arm, bool(np.isfinite(y3).all()), "y is finite")
+    rep.check(arm, st3.buffered_tokens == M3_L,
+              "buf_len after an L=%d prefill is %d (one working chunk, "
+              "Q = 64)" % (M3_L, M3_L), "got %r" % st3.buffered_tokens)
+    rep.check(arm, st3.pending is False,
+              "pending stays False on a plain prefill")
+    rep.check(arm, not np.any(st3.h),
+              "the SEALED boundary h stays zero with one working chunk "
+              "(DEVIATION 832: h_last_ and the resumption h are "
+              "different tensors)")
+    rep.check(arm, bool(np.any(st3.theta)),
+              "theta advanced (the serial angle recurrence ran)")
+    rep.check(arm,
+              bool((st3.theta >= 0.0).all()
+                   and (st3.theta < M3_TWO_PI_F32).all()),
+              "theta stays in [0, 2pi) (the S10 mod's invariant, "
+              "surviving the round trip)")
+    rep.check(arm, blk3.h_last_.shape == (M3_B, h3n, 64, 128),
+              "h_last_ report shape")
+    rep.check(arm, blk3.k_last_.shape == (M3_B, h3n, 128),
+              "k_last_ report shape")
+    rep.check(arm, blk3.v_last_.shape == (M3_B, h3n, 64),
+              "v_last_ report shape")
+    rep.check(arm, blk3.theta_last_.shape == (M3_B, h3n, 32),
+              "theta_last_ report shape")
+    # The corpus tolerance arm is a RECORDED DEBT, not a skip (header):
+    # it passes as [OWED] only while mamba/corpus/mamba3 does not exist,
+    # and FAILS the moment the corpus lands without this comparison
+    # being wired, so the debt cannot rot.
+    c3 = os.path.join(root, "mamba3")
+    if os.path.isdir(c3):
+        rep.check(arm, False,
+                  "mamba/corpus/mamba3 EXISTS but this gate has no "
+                  "ref64 comparison wired",
+                  "wire the mamba3 corpus arm (mirror the mamba2 arm) "
+                  "in the change that lands the corpus "
+                  "[[fix-docs-on-discovery]]")
+    else:
+        rep.check(arm, True,
+                  "[OWED, recorded debt -- no comparison ran] corpus "
+                  "tolerance arm: mamba/corpus/mamba3 is not generated "
+                  "yet (the fixture table landed first; "
+                  "mamba3_check.mojo gate (g) refuses by name until the "
+                  "corpus lane generates it). This row FAILS once the "
+                  "directory appears, until the ref64 arm is wired")
+
+    # -- MAMBA-3 DECODE == PREFILL, through the Python surface -----------
+    arm = "MAMBA-3 decode (bitwise %s)" % (
+        "ASSERTED" if assert_bits else "reported; fast tier")
+    st3d = blk3.allocate_state(M3_B)
+    for t in range(M3_L):
+        yt = blk3.step(x3[:, t:t + 1, :], st3d)
+        rep.bits_equal(arm, yt[:, 0, :], y3[:, t, :],
+                       "step token %d == prefill token %d" % (t, t),
+                       assert_bits)
+    m3_state_bits(rep, arm, st3d, st3, M3_L,
+                  "after %d steps == after the L=%d prefill"
+                  % (M3_L, M3_L), assert_bits)
+
+    # -- MAMBA-3 RESUMPTION ACROSS THE Q = 64 SEAL (the decode-cross
+    #    construction, contract 8d: prefill 60, decode through 70) ------
+    arm = "MAMBA-3 chunk-crossing resumption (bitwise %s)" % (
+        "ASSERTED" if assert_bits else "reported; fast tier")
+    xc = m3_uniform(rng3, (1, M3_CROSS_L, M3_DM), -2.0, 2.0)
+    st3w = blk3.allocate_state(1)
+    y3w = blk3.forward(xc, st3w)
+    rep.check(arm, st3w.buffered_tokens == M3_CROSS_L - M3_Q,
+              "buf_len after L=%d is %d (the last working chunk's rows; "
+              "the buffer never empties)" % (M3_CROSS_L,
+                                             M3_CROSS_L - M3_Q),
+              "got %r" % st3w.buffered_tokens)
+    rep.check(arm, bool(np.any(st3w.h)),
+              "the sealed boundary h is nonzero once a chunk sealed")
+    st3s = blk3.allocate_state(1)
+    y3h = blk3.forward(xc[:, :M3_CROSS_SPLIT, :], st3s)
+    rep.check(arm, st3s.buffered_tokens == M3_CROSS_SPLIT,
+              "buf_len after L=%d tokens is %d (%d < Q, still one "
+              "working chunk)" % (
+                  M3_CROSS_SPLIT, M3_CROSS_SPLIT, M3_CROSS_SPLIT),
+              "got %r" % st3s.buffered_tokens)
+    rep.bits_equal(arm, y3h, y3w[:, :M3_CROSS_SPLIT, :],
+                   "the L=%d prefill's rows == the whole prefill's "
+                   "first %d rows (prefix property)"
+                   % (M3_CROSS_SPLIT, M3_CROSS_SPLIT), assert_bits)
+    for t in range(M3_CROSS_SPLIT, M3_CROSS_L):
+        yt = blk3.step(xc[:, t:t + 1, :], st3s)
+        rep.bits_equal(arm, yt[:, 0, :], y3w[:, t, :],
+                       "step token %d == prefill token %d (decode is "
+                       "prefill resumption across the seal, DEVIATION "
+                       "831)" % (t, t), assert_bits)
+    rep.check(arm, st3s.buffered_tokens == st3w.buffered_tokens,
+              "final buf_len: split == whole",
+              "got %r vs %r" % (st3s.buffered_tokens,
+                                st3w.buffered_tokens))
+    m3_state_bits(rep, arm, st3s, st3w, M3_CROSS_L - M3_Q,
+                  "split == whole at token %d" % M3_CROSS_L, assert_bits)
+
+    # -- MAMBA-3 Input_States CONTINUATION (contract section 5 claim 2):
+    #    the SAME continuation through the binding twice. There is no
+    #    bitwise claim against an unbroken prefill BY THEOREM (DEVIATION
+    #    831; the check's continuation gate says so in as many words) --
+    #    the surface claims here are marshaling ones: the pieces REACH
+    #    the core, the flag is consumed, and the call repeats byte for
+    #    byte. ------------------------------------------------------------
+    arm = "MAMBA-3 Input_States continuation (repeat bitwise %s)" % (
+        "ASSERTED" if assert_bits else "reported; fast tier")
+    theta0 = m3_uniform(rng3, (M3_B, h3n, 32), 0.0, 6.25)
+    h0 = m3_uniform(rng3, (M3_B, h3n, 64, 128), -0.5, 0.5)
+    k0 = m3_uniform(rng3, (M3_B, h3n, 128), -0.5, 0.5)
+    v0 = m3_uniform(rng3, (M3_B, h3n, 64), -0.5, 0.5)
+    st3a = blk3.allocate_state(M3_B)
+    st3a.set_input_states(theta0, h0, k0, v0)
+    rep.check(arm, st3a.pending is True,
+              "set_input_states marks the pieces pending")
+    y3a = blk3.forward(x3, st3a)
+    rep.check(arm, st3a.pending is False,
+              "pending is consumed by the call (DEVIATION 794)")
+    rep.check(arm, y3a.tobytes() != y3.tobytes(),
+              "the continuation REACHED the core: same x, different "
+              "output than the fresh prefill "
+              "[[mojotrees-verify-reach-not-output]]")
+    st3b = blk3.allocate_state(M3_B)
+    st3b.set_input_states(theta0, h0, k0, v0)
+    y3b = blk3.forward(x3, st3b)
+    rep.bits_equal(arm, y3a, y3b,
+                   "the same continuation through the binding twice is "
+                   "byte-identical", assert_bits)
+    m3_state_bits(rep, arm, st3a, st3b, M3_L,
+                  "continuation state, call 1 == call 2", assert_bits)
+    # The lane's own fresh-state refusal, reached FROM PYTHON: a pending
+    # continuation on a mid-sequence state goes down unjudged by the
+    # wrapper (DEVIATION 794) and is refused in Mojo by name.
+    st3m = blk3.allocate_state(M3_B)
+    blk3.forward(x3, st3m)
+    st3m.set_input_states(theta0, h0, k0, v0)
+    rep.raises(arm, Exception, "fresh",
+               "a pending continuation on a mid-sequence state is "
+               "refused IN MOJO (set_input_states: Input_States only "
+               "has upstream meaning on a fresh state)",
+               blk3.forward, x3, st3m)
+
     rep.render(out)
     out.write("\n")
     if rep.failures:
@@ -386,21 +666,26 @@ def main(out=sys.stdout):
         return 1
     if not assert_bits:
         out.write(
-            "test_mamba_surface: the %s arms passed. The corpus forwards,\n"
-            "the shapes, the state bookkeeping and every refusal hold.\n"
+            "test_mamba_surface: the %s arms passed. The corpus forwards\n"
+            "(Mamba-1/2; the Mamba-3 corpus arm is a recorded debt), the\n"
+            "shapes, the state bookkeeping and every refusal hold.\n"
             "THE BITWISE ARMS WERE REPORTED, NOT ASSERTED: this tier\n"
             "promises speed only. Re-run under\n"
             "MOJOLEARN_NUMERIC_MODE=identical for the asserted form.\n"
             % mode)
         return 0
     out.write(
-        "test_mamba_surface: GREEN. Both blocks reproduce the committed\n"
-        "corpus at its calibrated tolerance through the Python surface,\n"
-        "decode equals prefill bit for bit per token through this path,\n"
-        "a split Mamba-2 prefill resumes bit for bit through the\n"
-        "three-piece state, and every guard on the path fires by name.\n"
-        "One box, one vendor: the cross-vendor statement belongs to the\n"
-        "lanes' cards, not to this file.\n")
+        "test_mamba_surface: GREEN. Mamba-1 and Mamba-2 reproduce the\n"
+        "committed corpus at its calibrated tolerance through the Python\n"
+        "surface (the Mamba-3 corpus arm is a recorded debt until\n"
+        "mamba/corpus/mamba3 is generated), decode equals prefill bit\n"
+        "for bit per token through this path for all three blocks --\n"
+        "Mamba-3 across the Q=64 chunk seal included -- a split prefill\n"
+        "resumes bit for bit through the explicit state, a repeated\n"
+        "Input_States continuation is byte-identical and consumed, and\n"
+        "every guard on the path fires by name. One box, one vendor:\n"
+        "the cross-vendor statement belongs to the lanes' cards, not to\n"
+        "this file.\n")
     return 0
 
 

@@ -46,10 +46,11 @@
 #     wrong, suppresses ahead-of-time Metal compilation.
 #
 # NO SABOTAGE DEFINE EVER BELONGS ON THIS COMMAND LINE. The
-# MOJOLEARN_MAMBA_SABOTAGE_* / MOJOLEARN_MAMBA2_SABOTAGE_* defines are for
-# the lane gates (mamba/checks/); the binding's PyInit aborts by name if
-# one is compiled in, so a sabotaged build fails at import, loudly, rather
-# than serving sabotaged bits under a green label.
+# MOJOLEARN_MAMBA_SABOTAGE_* / MOJOLEARN_MAMBA2_SABOTAGE_* /
+# MOJOLEARN_MAMBA3_SABOTAGE_* defines are for the lane gates
+# (mamba/checks/); the binding's PyInit aborts by name if one is compiled
+# in, so a sabotaged build fails at import, loudly, rather than serving
+# sabotaged bits under a green label.
 #
 # MACOS_FLOOR MUST EQUAL setup.py's DEFAULT_MACOS_TARGET AND EVERY SIBLING
 # BUILD SCRIPT'S. The .so files land in one wheel under one tag, and the
@@ -183,7 +184,15 @@ fi
 #
 # THE FIRST COLD BUILD (2026-09-01, fast tier) MEASURED 16 mamba-prefix AIR
 # blobs (24 total with gemm's 8); the floor below is two thirds of that,
-# rounded down: 10. The placeholder-then-raise discipline is --
+# rounded down: 10. THAT MEASUREMENT PREDATES THE MAMBA-3 ENTRY POINTS
+# (added later on 2026-09-01: mamba3_forward / mamba3_decode_step pull in
+# the m3_* kernel set of mamba3.mojo + mamba3_siso.mojo), so the observed
+# count is expected to GROW well past 16 on the next cold build. The floor
+# 10 stays valid AS A FLOOR, but it should be RAISED to two thirds of the
+# new measured count on the first post-mamba3 build -- that measurement is
+# RUN OWED (the counts print unconditionally below; the orchestrator reads
+# the real number back and raises the floor). The placeholder-then-raise
+# discipline is --
 # exactly what build_training.sh's history teaches: its floor was 1 until
 # its first real build on 2026-09-01 measured 5 and it became 3, the ratio
 # bindings/build.sh uses against ITS measured counts (22 measured -> floor
@@ -205,7 +214,10 @@ fi
 # residual_add, the selective scan) and the Mamba-2 set (m2_conv,
 # m2_assemble_*, m2_dt, m2_buffer_update, m2_skip, m2_gate, and the SSD
 # core's m2_discretize / m2_chunk_cumsum / m2_seg_l / m2_cb_g / m2_ydiag /
-# m2_decay / m2_cstate / m2_statepass / m2_yoff_y). The subsystem prefix
+# m2_decay / m2_cstate / m2_statepass / m2_yoff_y) and, since the mamba3
+# entry points landed, the Mamba-3 set (m3_a_dt, m3_bcnorm,
+# m3_assemble_*, m3_buffer_update and the SISO core's m3_* kernels in
+# mamba3_siso.mojo). The subsystem prefix
 # is the top-level directory the kernel's module lives in, so `mamba` is
 # the floored prefix. gemm/, core/ and checks/ blobs are printed but NOT
 # floored: build_training.sh records that the identical GEMM's blobs can
@@ -282,6 +294,12 @@ fi
 #   Mamba2 forward L=1       -> the whole M2 chain incl. one padded chunk;
 #                               buf_len bookkeeping read back (1)
 #   Mamba2 step              -> prefill resumption at L = 1; buf_len -> 2
+#   Mamba3 forward L=1       -> norm, in_proj GEMM, A/dt, B/C norms, the
+#                               SISO core (rotation, segsum, state pass),
+#                               gate, out_proj GEMM, residual; buf_len 1
+#   Mamba3 step              -> prefill resumption at L = 1; buf_len -> 2;
+#                               the four reports' shapes; a pending
+#                               Input_States continuation consumed
 #
 # Kept small on purpose (d_model 8 and 32, B <= 2, L <= 4) because this
 # runs on every build and the GPU is shared. The recovery assertions here
@@ -383,9 +401,47 @@ assert y3.shape == (1, 1, dm2) and np.isfinite(y3).all()
 assert st2.buffered_tokens == 2, st2.buffered_tokens
 assert blk2.h_last_.shape == (1, h2, 64, 128)
 
+# ---- Mamba-3: d_model 32 (di 64, H 1, N 128, P 64, R 32, dip 419), B 1.
+dm3, di3, h3, dip3 = 32, 64, 1, 419
+w3 = {
+    "block_norm.weight": u((dm3,), 0.5, 1.5),
+    "in_proj.weight": u((dip3, dm3), -0.18, 0.18),
+    "dt_bias": u((h3,), -7.0, -2.0),
+    "B_norm.weight": u((128,), 0.5, 1.5),
+    "C_norm.weight": u((128,), 0.5, 1.5),
+    "B_bias": u((h3, 128), 0.9, 1.1),
+    "C_bias": u((h3, 128), 0.9, 1.1),
+    "D": u((h3,), 0.5, 1.5),
+    "out_proj.weight": u((dm3, di3), -0.125, 0.125),
+}
+blk3 = _mamba_impl.Mamba3Block(w3)
+st3 = blk3.allocate_state(1)
+x3 = u((1, 1, dm3), -2.0, 2.0)
+y3f = blk3.forward(x3, st3)
+assert y3f.shape == (1, 1, dm3), y3f.shape
+assert np.isfinite(y3f).all()
+assert st3.buffered_tokens == 1, st3.buffered_tokens
+y3s = blk3.step(u((1, 1, dm3), -2.0, 2.0), st3)
+assert y3s.shape == (1, 1, dm3) and np.isfinite(y3s).all()
+assert st3.buffered_tokens == 2, st3.buffered_tokens
+assert blk3.h_last_.shape == (1, h3, 64, 128)
+assert blk3.k_last_.shape == (1, h3, 128)
+assert blk3.v_last_.shape == (1, h3, 64)
+assert blk3.theta_last_.shape == (1, h3, 32)
+# a pending Input_States continuation on a FRESH state is consumed.
+st3c = blk3.allocate_state(1)
+st3c.set_input_states(
+    u((1, h3, 32), 0.0, 6.25), u((1, h3, 64, 128), -0.5, 0.5),
+    u((1, h3, 128), -0.5, 0.5), u((1, h3, 64), -0.5, 0.5))
+assert st3c.pending is True
+y3c = blk3.forward(x3, st3c)
+assert np.isfinite(y3c).all() and st3c.pending is False
+
 print("  smoke: Mamba1 forward + 4 decode steps (worst |step-prefill| "
       "%.2e), float64 refused by name, Mamba2 forward + step with "
-      "buf_len 1 -> 2 and the h_last report" % worst)
+      "buf_len 1 -> 2 and the h_last report, Mamba3 forward + step with "
+      "buf_len 1 -> 2, the four reports and a consumed Input_States "
+      "continuation" % worst)
 shutil.rmtree(tmp, ignore_errors=True)
 PY
 

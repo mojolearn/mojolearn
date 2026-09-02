@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CPython boundary for the Mamba-1 and Mamba-2 block lanes.
+"""CPython boundary for the Mamba-1, Mamba-2 and Mamba-3 block lanes.
 
 A FOURTEENTH extension module, and a separate one on purpose, for the
 reason `bindings/_mojolearn_estimators.mojo`'s header gives: an
@@ -9,20 +9,25 @@ closes the "PyPI surface: NONE EXISTS" row of `mamba/FEATURE_PARITY.md`'s
 consumer table -- the certified Mamba-1 block (profile
 `mojolearn.identical.mamba1.fp32.v1`, three-vendor card) and the Mamba-2
 block (profile `mojolearn.identical.mamba2.fp32.v1`, Apple-gated,
-cross-vendor legs owed) exported no Python symbol at all before it.
+cross-vendor legs owed) exported no Python symbol at all before it. The
+Mamba-3 entries (profile `mojolearn.identical.mamba3.siso.fp32.v1`,
+Apple-gated at the kernel level 2026-09-01, cross-vendor legs owed)
+joined later the same day, under the same ABI.
 
 THE BINDING CALLS THE CERTIFIED ENTRY POINTS AND NOTHING ELSE. Every
 forward below goes through `mamba_block_forward`
-(`mamba/impl/transformers/models/mamba/modeling_mamba.mojo`) or
-`mamba2_block_forward` (`mamba/impl/mamba_ssm/modules/mamba2.mojo`) --
-the SAME functions `mamba/checks/mamba_check.mojo` and
-`mamba2_check.mojo` gate. NO arithmetic is respelled in this file: a
+(`mamba/impl/transformers/models/mamba/modeling_mamba.mojo`),
+`mamba2_block_forward` (`mamba/impl/mamba_ssm/modules/mamba2.mojo`) or
+`mamba3_block_forward` (`mamba/impl/mamba_ssm/modules/mamba3.mojo`) --
+the SAME functions `mamba/checks/mamba_check.mojo`, `mamba2_check.mojo`
+and `mamba3_check.mojo` gate. NO arithmetic is respelled in this file: a
 binding-side copy of any seam would be a second spelling of a pinned
 rounding, which is the drift the whole lane exists to forbid. The decode
 entry points are the contract's own construction -- the block forward at
 `l = 1` with the state carried (mamba1 contract section 5; mamba2
-DEVIATION 786, decode is PREFILL RESUMPTION) -- exactly as
-`mamba2_step` spells it ("no arithmetic of its own").
+DEVIATION 786 and mamba3 DEVIATION 831, decode is PREFILL RESUMPTION) --
+exactly as `mamba2_step` and `mamba3_step` spell it ("no arithmetic of
+its own").
 
 DEVIATION 791 -- THE TWO-LIST ABI, ADOPTED UP FRONT. Each entry point
 takes exactly TWO Python lists, `addrs` (every NumPy buffer address, in
@@ -83,6 +88,30 @@ by a gate and to FAIL, and a wheel that quietly served one would be the
 accepted-and-ignored failure at library scale, so `PyInit` aborts by
 name if any arm is compiled in.
 
+DEVIATION 794 -- THE MAMBA-3 STATE IS TEN BUFFERS PLUS TWO SCALARS, AND
+`pending` IS CONSUMED. DEVIATION 792's caller-owned-buffers rule extends
+to Mamba-3's DEVIATION-832 state, which has TEN float pieces: theta
+`[B, H, 32]`, the SEALED chunk-boundary h `[B, H, 64, 128]`, the six
+last-working-chunk buffers (rotated-unscaled q/k `[B, 64, H, 128]`, raw
+v `[B, 64, H, 64]`, dt / sigma(trap) / ADT `[B, 64, H]`), and the
+pending Input_States pair k `[B, H, 128]` / v `[B, H, 64]`. Two scalars
+cross in `params`: `buf_len`, whose valid range is [0, 64] INCLUSIVE --
+DELIBERATELY unlike mamba2's [0, 256) exclusive, because the mamba3
+buffer NEVER EMPTIES (DEVIATION 832(i): r in [1, Q] after every call; 0
+only before the first token) -- and `pending`, a 0/1 flag saying the
+k/v pair (with theta and h) is an upstream Input_States continuation.
+`pending` crosses IN only: in a shipped binding it is ALWAYS False on
+return, because the unarmed core consumes it (`mamba3_block_forward`
+clears it after S22) and an armed build aborts at PyInit below -- so
+the return value stays `buf_len` alone, mamba2's shape, and the wrapper
+reassigns `state.pending = False` on that guarantee. The pending path
+goes through the lane's OWN `Mamba3DeviceState.set_input_states`, so
+its fresh-state refusal (Input_States only has upstream meaning at
+buf_len 0) stays reachable from Python instead of being respelled here.
+FOUR report buffers are written on every Mamba-3 call -- h_last,
+k_last, v_last, theta_last, the contract's REPORT stages, distinct from
+the resumption state exactly as mamba2's h_last is.
+
 THE THREE-TIER SEMANTICS ARE THE BUILD'S, NOT THIS FILE'S. The numeric
 mode (fast / deterministic / identical) is a compile-time define
 (`checks/numerics.mojo`), one binary per tier under
@@ -93,7 +122,11 @@ measurement cannot be correctly labelled by accident.
 THE GIL is released around every device call, and nothing inside a
 `GILReleased` block touches a `PythonObject`.
 
-EVERYTHING HERE IS RUN OWED: this file has never been compiled. Build:
+RUN LEDGER. The Mamba-1/Mamba-2 entries BUILT AND GATED 2026-09-01 (all
+three tiers green through `tests/test_mamba_surface.py`, the
+FEATURE_PARITY consumer table's PyPI row; one box, one vendor). The
+Mamba-3 entries, added later the same day, have NEVER been compiled:
+they are UNVERIFIED, RUN OWED, per tier. Build:
 `bash bindings/build_mamba.sh` (per tier via MOJOLEARN_NUMERIC_MODE).
 """
 
@@ -137,6 +170,21 @@ from mamba.impl.mamba_ssm.modules.mamba2 import (
     Mamba2DeviceState,
     Mamba2DeviceWeights,
     mamba2_block_forward,
+)
+from mamba.checks.mamba3_fixture import (
+    M3_CHUNK_SIZE,
+    M3_D_STATE,
+    M3_HEADDIM,
+    M3_NUM_ROPE_ANGLES,
+    Mamba3Dims,
+    Mamba3Weights,
+)
+from mamba.impl.mamba_ssm.modules.mamba3 import (
+    BLOCK3_ANY_SABOTAGE,
+    Mamba3DeviceStages,
+    Mamba3DeviceState,
+    Mamba3DeviceWeights,
+    mamba3_block_forward,
 )
 
 
@@ -549,20 +597,282 @@ def mamba2_decode_step_binding(
     return PythonObject(out_len)
 
 
+# ===========================================================================
+# Mamba-3: profile mojolearn.identical.mamba3.siso.fp32.v1
+# ===========================================================================
+
+
+def _mamba3_run(
+    a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int
+) raises -> Int:
+    """The GIL-free half of the two Mamba-3 entry points. Returns the
+    post-call `buf_len` (DEVIATION 794: `pending` needs no return slot
+    because a shipped binding always consumes it)."""
+    # Mamba3Dims.of REFUSES a d_model that is not a multiple of 32, by
+    # name -- reached BEFORE any buffer size below is computed from it.
+    var dims = Mamba3Dims.of(dm)
+    var di = dims.d_inner
+    var dip = dims.d_in_proj()
+    var nh = dims.nheads
+    if q0 < 0 or q0 > M3_CHUNK_SIZE:
+        raise Error(
+            String("mamba3: buf_len must be in [0, ")
+            + String(M3_CHUNK_SIZE)
+            + "] (INCLUSIVE -- the buffer never empties, DEVIATION"
+            " 832(i): r in [1, Q] after every call, 0 only before the"
+            " first token), got "
+            + String(q0)
+            + "; the two sides of this boundary disagree about the state"
+        )
+    if pend != 0 and pend != 1:
+        raise Error(
+            "mamba3: pending must be 0 or 1, got "
+            + String(pend)
+            + "; the two sides of this boundary disagree about the state"
+        )
+
+    var w = Mamba3Weights(dims)
+    w.norm_w = _read_f32(a[1], dm)
+    w.w_in = _read_f32(a[2], dip * dm)
+    w.dt_bias = _read_f32(a[3], nh)
+    w.bnorm_w = _read_f32(a[4], M3_D_STATE)
+    w.cnorm_w = _read_f32(a[5], M3_D_STATE)
+    w.b_bias = _read_f32(a[6], nh * M3_D_STATE)
+    w.c_bias = _read_f32(a[7], nh * M3_D_STATE)
+    w.d_skip = _read_f32(a[8], nh)
+    w.w_out = _read_f32(a[9], dm * di)
+
+    var theta_n = b * nh * M3_NUM_ROPE_ANGLES
+    var h_n = b * nh * M3_HEADDIM * M3_D_STATE
+    var qrow_n = b * M3_CHUNK_SIZE * nh
+    var k_n = b * nh * M3_D_STATE
+    var v_n = b * nh * M3_HEADDIM
+
+    var ctx = DeviceContext()
+    var dw = Mamba3DeviceWeights(ctx, w)
+    # The caller's ten-piece state over the fresh zeros (DEVIATION 794).
+    var dstate = Mamba3DeviceState(ctx, b, dims)
+    dstate.buf_qrot = mamba_upload(
+        ctx, _read_f32(a[12], qrow_n * M3_D_STATE)
+    )
+    dstate.buf_krot = mamba_upload(
+        ctx, _read_f32(a[13], qrow_n * M3_D_STATE)
+    )
+    dstate.buf_v = mamba_upload(ctx, _read_f32(a[14], qrow_n * M3_HEADDIM))
+    dstate.buf_dt = mamba_upload(ctx, _read_f32(a[15], qrow_n))
+    dstate.buf_sig = mamba_upload(ctx, _read_f32(a[16], qrow_n))
+    dstate.buf_adt = mamba_upload(ctx, _read_f32(a[17], qrow_n))
+    dstate.buf_len = q0
+    if pend == 1:
+        # THROUGH the lane's own helper, AFTER buf_len is set, so its
+        # fresh-state refusal (buf_len must be 0) fires from Python by
+        # the lane's own words (DEVIATION 794).
+        dstate.set_input_states(
+            ctx,
+            _read_f32(a[10], theta_n),
+            _read_f32(a[11], h_n),
+            _read_f32(a[18], k_n),
+            _read_f32(a[19], v_n),
+        )
+    else:
+        dstate.theta = mamba_upload(ctx, _read_f32(a[10], theta_n))
+        dstate.h = mamba_upload(ctx, _read_f32(a[11], h_n))
+        # Idle outside a pending continuation, uploaded anyway so the
+        # caller's bytes round-trip unchanged (DEVIATION 792's rule).
+        dstate.pend_k = mamba_upload(ctx, _read_f32(a[18], k_n))
+        dstate.pend_v = mamba_upload(ctx, _read_f32(a[19], v_n))
+    var dstages = Mamba3DeviceStages(ctx, b, l, q0, dims)
+    var dx = mamba_upload(ctx, _read_f32(a[0], b * l * dm))
+
+    var trace = IdentityTrace.disabled()
+    mamba3_block_forward(
+        ctx, dstages, dstate, dw, dx, b, l, trace, String("py")
+    )
+
+    _write_f32(a[20], mamba_download(ctx, dstages.residual_out, b * l * dm))
+    # The FOUR reports (contract section 7's ssd.* stages), NOT the
+    # resumption state -- DEVIATION 794's last clause.
+    _write_f32(a[21], mamba_download(ctx, dstages.h_last, h_n))
+    _write_f32(a[22], mamba_download(ctx, dstages.k_last, k_n))
+    _write_f32(a[23], mamba_download(ctx, dstages.v_last, v_n))
+    _write_f32(a[24], mamba_download(ctx, dstages.theta_last, theta_n))
+    _write_f32(a[10], mamba_download(ctx, dstate.theta, theta_n))
+    _write_f32(a[11], mamba_download(ctx, dstate.h, h_n))
+    _write_f32(
+        a[12], mamba_download(ctx, dstate.buf_qrot, qrow_n * M3_D_STATE)
+    )
+    _write_f32(
+        a[13], mamba_download(ctx, dstate.buf_krot, qrow_n * M3_D_STATE)
+    )
+    _write_f32(a[14], mamba_download(ctx, dstate.buf_v, qrow_n * M3_HEADDIM))
+    _write_f32(a[15], mamba_download(ctx, dstate.buf_dt, qrow_n))
+    _write_f32(a[16], mamba_download(ctx, dstate.buf_sig, qrow_n))
+    _write_f32(a[17], mamba_download(ctx, dstate.buf_adt, qrow_n))
+    _write_f32(a[18], mamba_download(ctx, dstate.pend_k, k_n))
+    _write_f32(a[19], mamba_download(ctx, dstate.pend_v, v_n))
+    var out_len = dstate.buf_len
+    _ = dw^
+    _ = dstate^
+    _ = dstages^
+    _ = dx^
+    return out_len
+
+
+def _mamba3_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
+    if len(addrs) != 25:
+        raise Error(
+            what
+            + ": addrs must contain 25 addresses (x, block norm.weight,"
+            " in_proj.weight, dt_bias, B_norm.weight, C_norm.weight,"
+            " B_bias, C_bias, D, out_proj.weight, theta, h, buffer_qrot,"
+            " buffer_krot, buffer_v, buffer_dt, buffer_sig, buffer_adt,"
+            " pending_k, pending_v, y_out, h_last_out, k_last_out,"
+            " v_last_out, theta_last_out), got "
+            + String(len(addrs))
+        )
+    var a = List[Int]()
+    for i in range(25):
+        a.append(Int(py=addrs[i]))
+    return a^
+
+
+def mamba3_forward_binding(
+    addrs: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """One Mamba-3 (SISO) block call: prefill from the state the caller
+    hands in -- fresh (all zeros, buf_len 0, pending 0), resumed (a
+    carried ten-piece state: chunked-prefill continuation), or an
+    upstream Input_States continuation (pending 1 on a FRESH state; the
+    lane's own set_input_states refuses anything else by name). Returns
+    the post-call `buf_len`.
+
+    `addrs` is the TWENTY-FIVE buffer addresses, in this exact order
+    (mirrored in `python/mojolearn/_mamba_impl.py`; H = d_inner/64 =
+    d_model/32 heads, N = 128, P = 64, R = 32, Q = 64, d_in_proj =
+    2*d_inner + 256 + 3*H + 32):
+
+        0  x                 B * L * d_model float32, read
+        1  norm.weight       d_model, read (the BLOCK norm; the fixture
+                              calls it block_norm.weight)
+        2  in_proj.weight    d_in_proj * d_model, read (column order
+                              z | x | B | C | dd_dt | dd_A | trap |
+                              angle, mamba3.py:106-107)
+        3  dt_bias           H, read
+        4  B_norm.weight     N, read (the S21 B RMSNorm, eps 1e-5)
+        5  C_norm.weight     N, read (the S21 C RMSNorm)
+        6  B_bias            H * N, read (per-head, AFTER the norm)
+        7  C_bias            H * N, read
+        8  D                 H, read
+        9  out_proj.weight   d_model * d_inner, read
+       10  theta             B * H * R, READ AND WRITTEN (state: the
+                              serial rotary angles, always in [0, 2pi))
+       11  h                 B * H * P * N, READ AND WRITTEN (state: the
+                              SEALED chunk-boundary h, DEVIATION 832)
+       12  buffer_qrot       B * Q * H * N, READ AND WRITTEN (state:
+                              rotated-UNSCALED q rows of the last
+                              working chunk)
+       13  buffer_krot       B * Q * H * N, READ AND WRITTEN (state)
+       14  buffer_v          B * Q * H * P, READ AND WRITTEN (state: raw
+                              v = the x split, there is NO conv)
+       15  buffer_dt         B * Q * H, READ AND WRITTEN (state)
+       16  buffer_sig        B * Q * H, READ AND WRITTEN (state:
+                              sigma(trap))
+       17  buffer_adt        B * Q * H, READ AND WRITTEN (state)
+       18  pending_k         B * H * N, READ AND WRITTEN (the
+                              Input_States pair, live only under
+                              pending = 1; round-trips otherwise)
+       19  pending_v         B * H * P, READ AND WRITTEN
+       20  y_out             B * L * d_model, WRITTEN (the block output,
+                              residual add included)
+       21  h_last_out        B * H * P * N, WRITTEN (REPORT stage)
+       22  k_last_out        B * H * N, WRITTEN (REPORT stage)
+       23  v_last_out        B * H * P, WRITTEN (REPORT stage)
+       24  theta_last_out    B * H * R, WRITTEN (REPORT stage)
+
+    `params` is, in this exact order:
+
+        0  B
+        1  L
+        2  d_model     must be a multiple of 32; refused otherwise BY
+                        NAME in Mojo (Mamba3Dims.of)
+        3  buf_len     valid rows of the last-working-chunk buffer, in
+                        [0, 64] INCLUSIVE (DEVIATION 794); 0 for a
+                        fresh sequence ONLY
+        4  pending     0 or 1; 1 marks theta/h/pending_k/pending_v as
+                        an upstream Input_States continuation, consumed
+                        by this call (DEVIATION 794)
+
+    There is NO dt clamp parameter: mamba3 S6 is bias -> softplus and
+    nothing else (contract section 0; do not import mamba2's dt_lo /
+    dt_hi here). Profile constants (d_state 128, headdim 64, ngroups 1,
+    rope_fraction 0.5 = 32 angles, A_floor 1e-4, CHUNK_SIZE 64 -- PART
+    OF THE ARITHMETIC, DEVIATIONS 827/783) are NOT parameters; changing
+    one is a v2."""
+    var a = _mamba3_addrs(addrs, String("mamba3_forward"))
+    if len(params) != 5:
+        raise Error(
+            "mamba3_forward: params must contain 5 values (B, L, d_model,"
+            " buf_len, pending), got "
+            + String(len(params))
+        )
+    var b = Int(py=params[0])
+    var l = Int(py=params[1])
+    var dm = Int(py=params[2])
+    var q0 = Int(py=params[3])
+    var pend = Int(py=params[4])
+    var out_len = 0
+    with GILReleased(Python()):
+        out_len = _mamba3_run(a, b, l, dm, q0, pend)
+    return PythonObject(out_len)
+
+
+def mamba3_decode_step_binding(
+    addrs: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """One decode token: `Mamba3.step`'s semantics, the profile's
+    spelling -- PREFILL RESUMPTION at L = 1 (DEVIATION 831), through the
+    same `mamba3_block_forward` the forward entry calls, with NO
+    arithmetic of its own (`mamba3_step`'s rule; the upstream per-token
+    recurrence rounds differently and is the required-RED
+    STEP_UPSTREAM_RECURRENCE arm, never a mode).
+
+    `addrs`: the same TWENTY-FIVE as `mamba3_forward` with L = 1 shapes
+    (x and y_out are B * d_model). `params`: 0 B, 1 d_model, 2 buf_len,
+    3 pending. Returns the post-call buf_len."""
+    var a = _mamba3_addrs(addrs, String("mamba3_decode_step"))
+    if len(params) != 4:
+        raise Error(
+            "mamba3_decode_step: params must contain 4 values (B,"
+            " d_model, buf_len, pending), got "
+            + String(len(params))
+        )
+    var b = Int(py=params[0])
+    var dm = Int(py=params[1])
+    var q0 = Int(py=params[2])
+    var pend = Int(py=params[3])
+    var out_len = 0
+    with GILReleased(Python()):
+        out_len = _mamba3_run(a, b, 1, dm, q0, pend)
+    return PythonObject(out_len)
+
+
 @export
 def PyInit__mojolearn_mamba() abi("C") -> PythonObject:
     # DEVIATION 793's last clause: a sabotage arm exists to be run by a
     # gate and to FAIL; a Python surface that quietly served one would
     # be a wrong answer wearing a green label. Refuse to exist instead.
-    comptime if BLOCK_ANY_SABOTAGE or BLOCK2_ANY_SABOTAGE:
+    comptime if BLOCK_ANY_SABOTAGE or BLOCK2_ANY_SABOTAGE or BLOCK3_ANY_SABOTAGE:
         abort(
             String(
                 "_mojolearn_mamba: refusing to initialize -- a sabotage"
                 " arm is compiled into this binary. Sabotage defines are"
                 " for the lane gates (mamba/checks/), never for a shipped"
                 " binding; rebuild with bash bindings/build_mamba.sh and"
-                " no MOJOLEARN_MAMBA_SABOTAGE_* or"
-                " MOJOLEARN_MAMBA2_SABOTAGE_* define."
+                " no MOJOLEARN_MAMBA_SABOTAGE_*,"
+                " MOJOLEARN_MAMBA2_SABOTAGE_* or"
+                " MOJOLEARN_MAMBA3_SABOTAGE_* define."
             )
         )
     try:
@@ -573,6 +883,8 @@ def PyInit__mojolearn_mamba() abi("C") -> PythonObject:
         m.def_function[mamba1_decode_step_binding]("mamba1_decode_step")
         m.def_function[mamba2_forward_binding]("mamba2_forward")
         m.def_function[mamba2_decode_step_binding]("mamba2_decode_step")
+        m.def_function[mamba3_forward_binding]("mamba3_forward")
+        m.def_function[mamba3_decode_step_binding]("mamba3_decode_step")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_mamba: ", e))

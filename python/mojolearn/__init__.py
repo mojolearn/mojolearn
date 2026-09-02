@@ -9,7 +9,7 @@ those can reach. See NOTICE for the attribution each carries.
 WHAT IS IN THIS ALPHA, AND WHAT IS NOT
 ---------------------------------------
 Twenty-seven estimators, three submodules, two functions and (since
-2026-09-01) the two Mamba block classes: `NearestNeighbors`, `KNeighborsClassifier`,
+2026-09-01) the three Mamba block classes: `NearestNeighbors`, `KNeighborsClassifier`,
 `KNeighborsRegressor`, `RadiusNeighbors`, `KMeans`, `DBSCAN`, `PCA`, `TruncatedSVD`,
 `LinearRegression`, `Ridge`, `LogisticRegression` (binary, L-BFGS),
 `GradientBoosting`, `RandomForestClassifier`, `RandomForestRegressor`,
@@ -44,12 +44,15 @@ to explain its absence, is now empty. It is the one estimator in this package
 whose `y` is 2-D: the lane is BATCHED, one series per row, each with its own
 parameters, and `_arima_impl.py` says on the class what else follows from
 that.
-**THE MAMBA BLOCKS ARE here** (since 2026-09-01): `Mamba1Block` and
-`Mamba2Block` (also as the `mojolearn.mamba` submodule), reference-pinned
-SSM blocks with explicit caller-owned state for prefill, continuation and
-single-token decode. They are NOT estimators -- no `fit` -- and they exist
-for cross-checking: `_mamba_impl.py` carries the contracts, and its Python
-path is UNVERIFIED, RUN OWED until its surface gate prints.
+**THE MAMBA BLOCKS ARE here** (since 2026-09-01): `Mamba1Block`,
+`Mamba2Block` and `Mamba3Block` (also as the `mojolearn.mamba`
+submodule), reference-pinned SSM blocks with explicit caller-owned state
+for prefill, continuation and single-token decode. They are NOT
+estimators -- no `fit` -- and they exist for cross-checking:
+`_mamba_impl.py` carries the contracts. The Mamba-1/2 surface gate
+printed green in all three tiers on 2026-09-01 (one box, one vendor);
+the Mamba-3 path, added later the same day, is UNVERIFIED, RUN OWED
+until the gate prints with its arms in.
 **`GaussianProcessRegressor` IS here** (since 2026-09-01, later the same
 day), with its four kernel classes `RBF`, `Matern`, `ConstantKernel` and
 `WhiteKernel`. It was the one `_NOT_YET` entry ever held back for a reason
@@ -205,10 +208,20 @@ from ._gp_impl import (
 # binding `_mojolearn_mamba` (the FOURTEENTH) resolves on FIRST USE like
 # every other, so an unbuilt extension leaves the package importable and
 # raises BY NAME with the build command when touched (`_backend.py`'s
-# design). The Python path is UNVERIFIED, RUN OWED until
-# `tests/test_mamba_surface.py` prints (`_mamba_impl.py`'s header).
+# design). The Mamba-1/2 surface gate printed green in all three tiers
+# on 2026-09-01; `Mamba3Block` joined later the same day (the Mamba-3
+# kernel lane's own gates ran green that evening) and ITS Python path is
+# UNVERIFIED, RUN OWED until `tests/test_mamba_surface.py` prints with
+# the mamba3 arms in (`_mamba_impl.py`'s run ledger).
 from . import mamba
-from ._mamba_impl import Mamba1Block, Mamba1State, Mamba2Block, Mamba2State
+from ._mamba_impl import (
+    Mamba1Block,
+    Mamba1State,
+    Mamba2Block,
+    Mamba2State,
+    Mamba3Block,
+    Mamba3State,
+)
 
 __all__ = [
     "ARIMA",
@@ -236,6 +249,8 @@ __all__ = [
     "Mamba1State",
     "Mamba2Block",
     "Mamba2State",
+    "Mamba3Block",
+    "Mamba3State",
     "SVC",
     "SVR",
     "SpectralClustering",
