@@ -82,7 +82,33 @@ fit_pointwise_check (2031), define off vs on:
   arbiter, and if sym.split does not move there, 2031 is
   inert-or-negative and stays off.
 
-Still owed: the 1M/2M timing windows (2030, 2031).
+WINDOW VERDICT 2026-09-02 00:18 (orchestrator, Apple M4, quiet box, at
+`2b226f98`; builds a/2030/2031 at N_ROWS 1M then 2M, harness restored clean,
+2 rounds x 6 arms interleaved, nice -n 19; all numbers INTERNAL under the
+DEV 134 embargo):
+- DEV 2030: WIN AT 2M ONLY. ll10 at 2M moved -5.5% and -5.3% in the two
+  rounds (386.5 vs 409.2; 409.6 vs 432.7 ms/tree at depth 6), same sign at
+  depth 8 round 1; ll1 at 2M a small same-sign move; rmse (the
+  no-regression control) within noise both shapes. At 1M every cell was
+  flat (+0.1%/+0.8% ll10) -- the deleted pass is too small a fraction there.
+  Per [[mojotrees-switches-must-flip]] the flip needs a measured win at
+  BOTH shapes; 1M is flat, so the DEFAULT STAYS OFF. Not a NEGATIVE: the
+  2M win is real and consistent; revisit if the est fraction grows or a
+  2M-weighted default policy is adopted.
+- DEV 2031: NEGATIVE. At 2M every cell regressed +13-17% in BOTH rounds
+  (rmse 320.0/320.3 vs a 272.6/301.2; ll10 450.4/475.6 vs 409.2/432.7);
+  at 1M noise-scale. Combined with the reach probe's non-moving sym.split,
+  this is the inert-or-negative branch of the pre-registered prediction:
+  the flag NEVER FLIPS and stays off. Nothing to revert (default already
+  off).
+- Drift note: round-2 2M baselines ran ~10% hotter than round 1
+  ([[mojolearn-box-drifts]]); verdicts rest on within-round interleaved
+  comparisons, which agree in sign across both rounds.
+Raw logs: session scratchpad sym_window.log + symw_run_<arm>_round<r>.log
+(per-depth internal medians; not committed -- numbers embargoed).
+
+Still owed: AMD/NVIDIA legs for the certified gates; the 2030 revisit
+condition above.
     # IDENTICAL with the define must be INERT BY ROUTING (ridx_only_splits_for
     # returns False): build it once and confirm byte-identical behavior --
     # a differing result under identical+define is a routing defect, not a perf finding.
