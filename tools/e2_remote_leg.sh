@@ -523,6 +523,18 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
       # that moved bits would be a tradeoff and not a win.
       fast-replication-ab)
         CMD="env MOJOLEARN_AB_OUT=\"\$OUT/fast_replication_ab\" MOJOLEARN_AB_ROUNDS=${AB_ROUNDS:-3} MOJOLEARN_AB_ROWS=${AB_ROWS:-1000000} sh tools/fast_replication_ab.sh"; WRAP=0 ;;
+      # THE CHECKPOINT FILE, WRITTEN ON THIS BOX SO IT CAN BE COMPARED TO
+      # ANOTHER BOX'S BYTES. The gate's own closing line is the reason this
+      # check exists: "ALL CLAUSES GREEN on ONE device. That is a serializer
+      # result and not a cross-vendor one... TWO BOXES WRITING THE SAME BYTES
+      # is the claim, and this gate cannot manufacture the second file."
+      #
+      # The file lands under the run directory so the fetch brings it back;
+      # comparing it is a `cmp` on the orchestrator's machine, not on the
+      # droplet, because a comparison run on one of the two boxes that made
+      # the files is a weaker arrangement than one run on neither.
+      train-checkpoint)
+        CMD="env MOJOLEARN_TRAIN_STEPS=${TRAIN_STEPS:-8} MOJOLEARN_TRAIN_CKPT_FILE=\"\$OUT/lanes/checkpoint.ckptbin\" pixi run mojo run -I . training/checks/checkpoint_check.mojo" ;;
       column)        CMD='pixi run mojo run -I . matrix_main.mojo' ;;
       gpu-probe)     CMD='pixi run mojo run -I . probe_main.mojo' ;;
       # THE TRANSFORMER BACKWARD. The comment here said "no check driver
