@@ -4,9 +4,9 @@
 """OUR side of the gradient-boosting and forest speed run, and the one
 process that interleaves it with the NVIDIA-native opponents.
 
-    pixi run -e speedbench python bench/speed/forest_speed_arm.py --lane rf
+    pixi run -e gbmbench python bench/speed/forest_speed_arm.py --lane rf
     MOJOLEARN_SPEED_SIZE=smoke \
-      pixi run -e speedbench python bench/speed/forest_speed_arm.py \
+      pixi run -e gbmbench python bench/speed/forest_speed_arm.py \
         --lane gbdt-symmetric
 
 THE QUESTION THIS FILE ANSWERS

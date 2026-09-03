@@ -5,8 +5,8 @@
 plus the dataset loading, the hyper-parameter tables and the output contract
 that `bench/speed/forest_speed_arm.py` shares with them.
 
-    pixi run -e speedbench python tools/speed_gbdt_arm.py --lane rf
-    pixi run -e speedbench python tools/speed_gbdt_arm.py --download year
+    pixi run -e gbmbench python tools/speed_gbdt_arm.py --lane rf
+    pixi run -e gbmbench python tools/speed_gbdt_arm.py --download year
 
 WHY THIS FILE IS THE BASE MODULE AND NOT THE LEAF
 -------------------------------------------------
