@@ -67,7 +67,7 @@ roughly 8x the histogram replicas IDENTICAL's pinned 32 asks for. IDENTICAL
 wins while ALSO paying a software Cephes expf and a barrier-per-step
 reduction. DEVIATION 2040 is the flagged cap; its A/B is owed.
 
-## THE THIRD FINDING, and it is a defect in the guarantee itself
+## THE THIRD FINDING WAS A HARNESS BUG, NOT A DEFECT IN THE GUARANTEE
 
 The L tier (dbscan at 100,000 rows) HALTED the sweep, correctly:
 
@@ -83,12 +83,31 @@ tiers above. Nothing had ever run that lane at 100,000.
 It is a REAL DEFECT and not an infrastructure failure: same process, same
 input, same build, IDENTICAL mode.
 
-**IT IS AMD-ONLY, AND THAT NARROWS IT.** The same lane at the same 100,000
-rows was run on an Apple M4 on 2026-09-03: HASH-STABLE across two rounds in
-BOTH modes, all four legs `28b1431d8b9a627f`. So this is a gfx942 defect and
-not a property of the algorithm or the fixture. The Apple run also priced the
-lane at 1.422x with identical output bits, against 0.965 on the MI325X --
-the same lane, the same size, opposite signs on two vendors. The L tier's remaining lanes did not run,
+**THE CAUSE IS IN THIS HARNESS.** `dbscan_fit_impl` returns the total
+label-propagation PASS COUNT -- its own docstring says so, and
+`dbscan/estimator.mojo` carries a note that the value was documented wrong
+once already. This lane called it `n_clusters` and folded it into the
+identity hash. The fixed point of that propagation is order-invariant, which
+is the whole argument for the `Atomic.min` in `sparse/detail/csr.mojo`, but
+the NUMBER OF PASSES to reach it is decided by block scheduling.
+
+That explains all three observations without any defect in dbscan. AMD only:
+the batch grid is co-resident on 304 CUs and free-running, while the same
+grid runs in waves on an M4 and is stable. Larger sizes only: `passes` is
+SUMMED OVER BATCHES and the batch count goes 1 -> 2 -> 5 across 20k, 50k and
+100k rows, so the chance the sum differs climbs with the fixture. Apple was
+stable at the same 100,000 rows in both modes, all four legs
+`28b1431d8b9a627f`.
+
+The pass count is out of the hash and printed instead. **CONFIRMATION IS
+OWED on an MI325X at 100,000 rows**: if the labels alone hash equal across
+two fits, the guarantee was never violated and this entry retracts to a
+harness bug. Until that run, the finding stands as UNCONFIRMED in both
+directions.
+
+The Apple run also priced the lane at 1.422x with identical output bits,
+against 0.965 on the MI325X -- the same lane, the same size, opposite signs
+on two vendors. The L tier's remaining lanes did not run,
 so gram/nt/gemv/tree numbers at the datacenter step are still owed.
 
 ## What this sweep forbids

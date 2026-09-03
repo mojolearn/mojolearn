@@ -1,0 +1,97 @@
+
+=== provenance === 08:26:34
+a2b5f6565ccaadea8579c0ad0c69f81c5e5d3ee1
+Linux mojolearn-e2-nv 5.15.0-185-generic #195-Ubuntu SMP Fri Jun 19 17:11:50 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+
+=== pixi === 08:26:34
+This script will automatically download and install Pixi (latest) for you.
+Getting it from this url: https://github.com/prefix-dev/pixi/releases/latest/download/pixi-x86_64-unknown-linux-musl.tar.gz
+The 'pixi' binary is installed into '/root/.pixi/bin'
+Updating '/root/.bashrc'
+Please restart or source your shell.
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 08:26:37
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 8: the classical lanes (gemm, cd, kde, linkage, svm, metrics) -- both modes, cards + checks === 08:26:37
+-- lanes, identical --
+  gemm [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  cd [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  kde [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  linkage [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  svm [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  mamba [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  mamba2 [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  mamba3 [identical]: card 28 records -- mode IDENTICAL
+  mamba3 [identical] check OK (30 OK lines)
+  iforest [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  transformer [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  arima [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  cholesky [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  embedding [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  gp [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  hdbscan [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  holtwinters [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  ivf [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  kernelmethods [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  gmm [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  resample [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  spectral [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  training-loss [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  training-optimizer [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  training-step [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  tsa [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  metrics [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+-- lanes, fast --
+  gemm [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  cd [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  kde [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  linkage [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  svm [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  mamba [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  mamba2 [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+PHASE8-FINDING: mamba3 [fast] failed (see /root/mojolearn/bench/results/e1/2026-09-03_082634-mojolearn-e2-nv/lanes/mamba3.fast.log)
+  mamba3 [fast]: card 28 records -- mode FAST
+PHASE8-FINDING: mamba3 [fast] check FAILED: Unhandled exception caught during execution: GATE A FAILED: 14044 cells differ between the device card and the host oracle (first stage: in_proj.out)
+  iforest [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  transformer [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  arima [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  cholesky [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  embedding [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  gp [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  hdbscan [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  holtwinters [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  ivf [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  kernelmethods [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  gmm [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  resample [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  spectral [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  training-loss [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  training-optimizer [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  training-step [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  tsa [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  metrics [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+
+=== phase 9 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== done === 08:27:29
+artifacts in /root/mojolearn/bench/results/e1/2026-09-03_082634-mojolearn-e2-nv
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

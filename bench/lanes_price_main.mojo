@@ -385,7 +385,25 @@ def _fold_word(h: UInt64, v: UInt64, nbytes: Int) -> UInt64:
     """Fold the low `nbytes` bytes of `v`, least significant first. Byte at
     a time and in memory order on a little-endian machine, so this is the
     same function as `core/identity_trace.mojo::fnv1a64_bytes` applied to
-    the value's storage."""
+    the value's storage.
+
+    **ONLY FOLD AN OUTPUT OF THE COMPUTATION. NEVER FOLD A SCHEDULING
+    ARTIFACT.** On 2026-09-03 the dbscan lane folded `dbscan_fit_impl`'s
+    return, believing it a cluster count. It is the total label-propagation
+    PASS COUNT, and the fixed point of that propagation is order-invariant
+    while the number of passes needed to reach it is not: it is decided by
+    how blocks interleave. That produced a hash that moved between two fits
+    of one fixture on an MI325X and was reported as an identity violation.
+
+    The rule this leaves: a value belongs in the hash if the contract
+    promises it, and a convergence-iteration counter is not promised. Note
+    the distinction from the other counts folded in this file -- kmeans'
+    `n_iter`, coordinate descent's, the Boruvka round count, `n_support`,
+    the tree counts -- which are decided by ARITHMETIC that IDENTICAL pins,
+    not by atomic visibility between blocks. Those are reproducible and
+    stay. `train_time` is already excluded for the same reason a pass count
+    now is.
+    """
     var out = h
     for i in range(nbytes):
         out = (out ^ ((v >> UInt64(8 * i)) & UInt64(0xFF))) * FNV_PRIME
@@ -1250,13 +1268,37 @@ def run_dbscan(ctx: DeviceContext, smoke: Bool, rounds: Int) raises:
         ctx.enqueue_memset(labels, Int32(-7))
         ctx.synchronize()
         var t0 = perf_counter_ns()
-        var n_clusters = dbscan_fit_impl(
+        # THE RETURN IS THE PROPAGATION PASS COUNT, NOT A CLUSTER COUNT.
+        # `dbscan_fit_impl`'s own docstring says so ("Returns the total
+        # propagation passes"), and `dbscan/estimator.mojo` carries a note
+        # that this value was already documented wrong once. This lane
+        # called it `n_clusters` and FOLDED IT INTO THE IDENTITY HASH.
+        #
+        # THAT IS A BUG AND IT MANUFACTURED AN IDENTITY VIOLATION. The
+        # fixed point of the label propagation is order-invariant -- that
+        # is the whole argument for the `Atomic.min` in
+        # `sparse/detail/csr.mojo` -- but the NUMBER OF PASSES needed to
+        # reach it is decided by block scheduling. On an MI325X the batch
+        # grid is co-resident, so `passes` is a free-running readout of the
+        # interleave; on an Apple M4 the same grid runs in waves and it is
+        # stable. `passes` is also SUMMED OVER BATCHES, and the batch count
+        # goes 1 -> 2 -> 5 across 20k, 50k and 100k rows, so the chance of
+        # a differing sum climbs with the fixture. AMD only, larger sizes
+        # only: exactly the shape of the 2026-09-03 refusal.
+        #
+        # A convergence-iteration counter is not an output of the
+        # computation. The LABELS are, and they stay in the hash. The pass
+        # count is printed instead, so a change in it is information rather
+        # than a false identity violation.
+        var passes = dbscan_fit_impl(
             ctx, x, labels, n, d, 1.2, 8, 0, 200, EPS_NN_BRUTE_FORCE, False
         )
         ctx.synchronize()
         var t1 = perf_counter_ns()
         var h = _hash_device_i32(ctx, FNV_OFFSET, labels, n)
-        h = _fold_word(h, UInt64(n_clusters), 4)
+        print(
+            "   dbscan passes", passes, "(scheduling, NOT hashed)"
+        )
         ledger.emit("warmup" if r == 0 else String(r), t1 - t0, h)
     ledger.verdict()
     _ = hx^

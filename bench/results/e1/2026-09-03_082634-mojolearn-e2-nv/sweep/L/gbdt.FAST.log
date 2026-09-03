@@ -1,0 +1,18 @@
+== leg lane=gbdt mode=FAST round=1 08:37:57 ==
+== bench/lanes_price_main.mojo [FAST] lane=gbdt rounds=1 smoke=False ==
+LPRICE gbdt FAST warmup 2000000x100.t20.d6 1.482309197 e1778ba42912c1b4
+LPRICE gbdt FAST 1 2000000x100.t20.d6 1.057110114 e1778ba42912c1b4
+HASH-STABLE gbdt FAST 2 rounds all e1778ba42912c1b4
+== done [FAST] lane=gbdt ==
+== leg lane=gbdt mode=FAST round=2 08:38:05 ==
+== bench/lanes_price_main.mojo [FAST] lane=gbdt rounds=1 smoke=False ==
+LPRICE gbdt FAST warmup 2000000x100.t20.d6 1.463869803 e1778ba42912c1b4
+LPRICE gbdt FAST 1 2000000x100.t20.d6 1.060992154 e1778ba42912c1b4
+HASH-STABLE gbdt FAST 2 rounds all e1778ba42912c1b4
+== done [FAST] lane=gbdt ==
+== leg lane=gbdt mode=FAST round=3 08:38:12 ==
+== bench/lanes_price_main.mojo [FAST] lane=gbdt rounds=1 smoke=False ==
+LPRICE gbdt FAST warmup 2000000x100.t20.d6 1.450224444 e1778ba42912c1b4
+LPRICE gbdt FAST 1 2000000x100.t20.d6 1.072713654 e1778ba42912c1b4
+HASH-STABLE gbdt FAST 2 rounds all e1778ba42912c1b4
+== done [FAST] lane=gbdt ==

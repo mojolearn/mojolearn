@@ -1,0 +1,18 @@
+== leg lane=gemv mode=FAST round=1 08:31:26 ==
+== bench/lanes_price_main.mojo [FAST] lane=gemv rounds=1 smoke=False ==
+LPRICE gemv FAST warmup 128x128 0.00013134 c672e0ac7ed6697f
+LPRICE gemv FAST 1 128x128 1.7294e-05 c672e0ac7ed6697f
+HASH-STABLE gemv FAST 2 rounds all c672e0ac7ed6697f
+== done [FAST] lane=gemv ==
+== leg lane=gemv mode=FAST round=2 08:31:27 ==
+== bench/lanes_price_main.mojo [FAST] lane=gemv rounds=1 smoke=False ==
+LPRICE gemv FAST warmup 128x128 0.000136132 c672e0ac7ed6697f
+LPRICE gemv FAST 1 128x128 1.7299e-05 c672e0ac7ed6697f
+HASH-STABLE gemv FAST 2 rounds all c672e0ac7ed6697f
+== done [FAST] lane=gemv ==
+== leg lane=gemv mode=FAST round=3 08:31:29 ==
+== bench/lanes_price_main.mojo [FAST] lane=gemv rounds=1 smoke=False ==
+LPRICE gemv FAST warmup 128x128 0.000151354 c672e0ac7ed6697f
+LPRICE gemv FAST 1 128x128 1.8556e-05 c672e0ac7ed6697f
+HASH-STABLE gemv FAST 2 rounds all c672e0ac7ed6697f
+== done [FAST] lane=gemv ==

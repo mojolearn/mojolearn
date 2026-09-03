@@ -1,0 +1,18 @@
+== leg lane=gemv mode=IDENTICAL round=1 08:31:26 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=gemv rounds=1 smoke=False ==
+LPRICE gemv IDENTICAL warmup 128x128 0.000155981 a0d44fa8c1343b19
+LPRICE gemv IDENTICAL 1 128x128 2.6665e-05 a0d44fa8c1343b19
+HASH-STABLE gemv IDENTICAL 2 rounds all a0d44fa8c1343b19
+== done [IDENTICAL] lane=gemv ==
+== leg lane=gemv mode=IDENTICAL round=2 08:31:28 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=gemv rounds=1 smoke=False ==
+LPRICE gemv IDENTICAL warmup 128x128 0.000138759 a0d44fa8c1343b19
+LPRICE gemv IDENTICAL 1 128x128 2.6771e-05 a0d44fa8c1343b19
+HASH-STABLE gemv IDENTICAL 2 rounds all a0d44fa8c1343b19
+== done [IDENTICAL] lane=gemv ==
+== leg lane=gemv mode=IDENTICAL round=3 08:31:30 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=gemv rounds=1 smoke=False ==
+LPRICE gemv IDENTICAL warmup 128x128 0.000137553 a0d44fa8c1343b19
+LPRICE gemv IDENTICAL 1 128x128 2.6014e-05 a0d44fa8c1343b19
+HASH-STABLE gemv IDENTICAL 2 rounds all a0d44fa8c1343b19
+== done [IDENTICAL] lane=gemv ==

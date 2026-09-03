@@ -1,0 +1,18 @@
+== leg lane=kmeans mode=FAST round=1 08:30:59 ==
+== bench/lanes_price_main.mojo [FAST] lane=kmeans rounds=1 smoke=False ==
+LPRICE kmeans FAST warmup 100000x32.k16 0.005035355 eeea38872c935b98
+LPRICE kmeans FAST 1 100000x32.k16 0.004396796 eeea38872c935b98
+HASH-STABLE kmeans FAST 2 rounds all eeea38872c935b98
+== done [FAST] lane=kmeans ==
+== leg lane=kmeans mode=FAST round=2 08:31:01 ==
+== bench/lanes_price_main.mojo [FAST] lane=kmeans rounds=1 smoke=False ==
+LPRICE kmeans FAST warmup 100000x32.k16 0.005072138 eeea38872c935b98
+LPRICE kmeans FAST 1 100000x32.k16 0.004425616 eeea38872c935b98
+HASH-STABLE kmeans FAST 2 rounds all eeea38872c935b98
+== done [FAST] lane=kmeans ==
+== leg lane=kmeans mode=FAST round=3 08:31:03 ==
+== bench/lanes_price_main.mojo [FAST] lane=kmeans rounds=1 smoke=False ==
+LPRICE kmeans FAST warmup 100000x32.k16 0.005042991 eeea38872c935b98
+LPRICE kmeans FAST 1 100000x32.k16 0.004407146 eeea38872c935b98
+HASH-STABLE kmeans FAST 2 rounds all eeea38872c935b98
+== done [FAST] lane=kmeans ==
