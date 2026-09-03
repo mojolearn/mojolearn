@@ -64,22 +64,28 @@ different output bits, while ALSO paying a software Cephes expf and a
 barrier-per-step reduction. Identity is not supposed to be free, so the FAST
 arm is what is under suspicion.
 
-**THE FIRST EXPLANATION WAS MEASURED AND IS WRONG.** `replication_for`
-multiplies the device's core count, so FAST asks for ~8x the histogram
-replicas IDENTICAL's pinned 32 asks for, and the effect tracking core count
-(0.731 on 304 CUs, 0.938 on 132 SMs) looked like the signature. DEVIATION
-2040 capped it and `tools/fast_replication_ab.sh` measured two FAST builds
-alternated on an MI325X at 1,000,000 rows: gbdt 1.001, rf 1.000, et 0.996,
-every row bits-equal. The cap is inert on time, and reach is not in doubt --
-the binaries differ by 4,096 bytes with different md5s.
+**THE CAUSE, FOUND ON THE THIRD CANDIDATE.** FAST was routed into a
+decoupled-lookback partition kernel that only the FAST build compiles, whose
+lookback walk is SERIAL ON THREAD 0 with a global atomic ticket for tile
+ordering. MI325X, 1,000,000 rows, two FAST builds alternated, three rounds:
 
-TWO CANDIDATES FROM THE SAME AUDIT REMAIN UNTESTED: `partition_stats_chunks`
-reads the same pin and gives FAST 304 chunks against 32, and
-`reorder_single_pass_for` routes FAST-on-AMD into a decoupled-lookback
-partition kernel whose lookback walk is SERIAL ON THREAD 0 with a global
-atomic ticket -- a kernel whose own file records its A/B as OWED and which
-has never been measured on AMD. Until one of those is measured, why
-IDENTICAL wins here is OPEN.
+| arm | gbdt | verdict |
+|---|---|---|
+| 2040 histogram replication | 1.001 | inert, reach verified (binaries differed) |
+| 2041 partition-stats chunks | 0.997 | **BITS MOVED -- not a speed result** |
+| 2042 off the lookback route | 0.602159 s -> 0.471577 s, **0.783** | **bits equal** |
+
+THE TAX WAS NEVER NEGATIVE. FAST off that route runs gbdt at 0.4716 s
+against IDENTICAL's 0.471-0.475 s, the same place. Every "identity is
+faster" reading on this lane was the fast arm carrying a spin-wait kernel
+identical mode never touches. AMD's default is flipped off the route in the
+session that measured it, because the win is bit-identical; NVIDIA is not
+flipped, because it is not measured there.
+
+RUNNING THE ARMS SEPARATELY IS WHAT MADE THIS READABLE. 2041's gbdt row
+MOVED BITS, so its 0.997 is not a speed result at all; combined with 2042
+the win could not have been attributed to either and 2041's bit movement
+would have contaminated it.
 
 ## THE THIRD FINDING WAS A HARNESS BUG, NOT A DEFECT IN THE GUARANTEE
 
