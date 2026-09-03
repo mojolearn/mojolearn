@@ -555,6 +555,17 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
       # column that ran only (a) would be a weaker column than Apple's.
       transformer-backward)
         CMD='env MOJOLEARN_TFB_CHECK_CLAUSE_B=1 MOJOLEARN_TFB_CHECK_CLAUSE_C=1 MOJOLEARN_TFB_CHECK_CLAUSE_D=1 MOJOLEARN_TFB_CHECK_CLAUSE_E=1 MOJOLEARN_TFB_CHECK_CLAUSE_F=1 pixi run mojo run -I . transformer/checks/transformer_backward_check.mojo' ;;
+      # DEVIATION 2043'"'"'S ACCURACY HALF. The speed half is already measured
+      # (0.936 under FAST with the fused one-byte route); what was never
+      # measured is whether held-out quality moves with it, and that -- not
+      # the hashes -- is the gate a FAST default turns on.
+      #
+      # The harness backgrounds its own 2.6 GB higgs fetch beside the three
+      # binding builds because the lease is an hour and serially it does not
+      # fit. It leaves the checkout holding the BASE binary, so a diagnostic
+      # arm is never left installed under the shipped name.
+      gbdt-accuracy-ab)
+        CMD="env MOJOLEARN_GACC_OUT=\"\$OUT/gbdt_accuracy_ab\" MOJOLEARN_GACC_ROUNDS=${GACC_ROUNDS:-3} MOJOLEARN_GACC_ROWS=${GACC_ROWS:-1000000} sh tools/gbdt_accuracy_ab.sh"; WRAP=0 ;;
       *) log "unknown extra check '$chk' -- skipped"; continue ;;
     esac
     NOW=$(date +%s)

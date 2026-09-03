@@ -164,17 +164,32 @@ cat "$OUT/env.txt"
 # timer. Left inside an arm it would be paid inside a per-arm budget, and an
 # arm killed mid-download leaves no cache for the next one.
 # --------------------------------------------------------------------------
+# THE FETCH RUNS *BESIDE* THE BUILDS, NOT BEFORE THEM.
+#
+# The lease is ONE HOUR and it is not negotiable ([[rented-gpus-self-expire]]:
+# a rented GPU expires on its own after an hour, in code). Serially this leg
+# does not fit: a 2.6 GB download plus an 11-million-row gzip-CSV decode, then
+# three mojo binding builds, then the timed rotation. The fetch is network and
+# single-core CPU; the builds are compiler CPU. They do not contend for the
+# GPU and neither needs the other's output, so the fetch is backgrounded here
+# and JOINED after the builds, immediately before the first fit that needs it.
+#
+# It is joined with an explicit `wait` and its exit status is recorded, so a
+# failed download is a stated failure and not a silent fallback to the
+# synthetic fixture -- `load_with_fallback` would otherwise substitute synth
+# rows and the run would look like it had answered the question.
+FETCH_PID=""
 if [ "${MOJOLEARN_GACC_SKIP_FETCH:-0}" != "1" ]; then
-    echo "== fetch higgs (2.6 GB + a several-minute gzip csv decode; once) =="
+    echo "== fetch higgs IN BACKGROUND (2.6 GB + gzip csv decode), joined after the builds =="
     if command -v timeout > /dev/null 2>&1; then
         timeout -k 30 3600 "$PY" tools/speed_gbdt_arm.py --download higgs \
-            > "$OUT/logs/download.higgs.log" 2>&1
+            > "$OUT/logs/download.higgs.log" 2>&1 &
     else
         "$PY" tools/speed_gbdt_arm.py --download higgs \
-            > "$OUT/logs/download.higgs.log" 2>&1
+            > "$OUT/logs/download.higgs.log" 2>&1 &
     fi
-    echo "download_higgs_exit=$?" >> "$OUT/env.txt"
-    tail -3 "$OUT/logs/download.higgs.log"
+    FETCH_PID=$!
+    echo "fetch_pid=$FETCH_PID (backgrounded)"
 fi
 
 # --------------------------------------------------------------------------
@@ -258,6 +273,18 @@ run_arm() {
     echo "  $_arm r$_r exit=$_rc $(grep -c '^FSPEED ' "$_log" 2>/dev/null) timed lines"
     return 0
 }
+
+# JOIN THE BACKGROUNDED FETCH. Nothing below may run on synthetic rows
+# without saying so, so the status is recorded and echoed before any fit.
+if [ -n "$FETCH_PID" ]; then
+    echo "== joining the higgs fetch =="
+    wait "$FETCH_PID"; FETCH_RC=$?
+    echo "download_higgs_exit=$FETCH_RC" >> "$OUT/env.txt"
+    echo "higgs fetch exit=$FETCH_RC"
+    [ "$FETCH_RC" -ne 0 ] && echo "WARNING: the higgs fetch FAILED (exit $FETCH_RC). Every arm below will" \
+        && echo "         fall back to the SYNTHETIC fixture and every line will say NOT-HIGGS."
+    tail -3 "$OUT/logs/download.higgs.log" 2>/dev/null
+fi
 
 echo "== rotation: $ROUNDS rounds x (base, pin, ident), one process each =="
 for r in $(seq 1 "$ROUNDS"); do
