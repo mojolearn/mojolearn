@@ -41,6 +41,41 @@ of overhead reads 1.38x on the very code that read 5.69x when the overhead
 was absent. A ratio taken on a degraded box is not a conservative estimate
 of the ratio; it is a different number.
 
-So the August figures stand as the identity cost, and a re-measurement is
-owed on a quiet box. `sysctl vm.swapusage` and the load average belong in
-the record of any price run.
+## What was concluded here first, and why it was wrong
+
+The sentence that stood here said "the August figures stand as the
+identity cost." THEY DO NOT, and keeping them was the flattering answer
+rather than the correct one.
+
+The control above proves exactly one thing: the code did not regress. It
+does NOT promote the August numbers, because it cannot. Those absolute
+times have never been reproduced on any box, this one included, and the
+run that produced them recorded no memory state, so there is no way to
+establish the conditions they were taken under. An unreproducible number
+is not made trustworthy by the failure of its replacement.
+
+Both readings are unusable, for the same reason and in the same
+direction. THE DILUTION IS ARITHMETIC, not a hand-wave, and it closes on
+this table's own numbers: add the box's fixed cost to August's arms and
+(6.41+21)/(5.27+21) = 1.04 against 0.98 measured for gram, and
+(0.54+2.56)/(0.09+2.56) = 1.17 against 1.38 measured for nt. Every ratio
+on a loaded box is pulled toward 1.0, hardest on the smallest arm. So a
+degraded box UNDERSTATES the identity tax; it does not overstate it, and
+it is not a conservative estimate of it.
+
+The consequence for this repository is that NO Apple price row published
+before 2026-09-03 may be quoted as the cost of identity -- not August's,
+and not the 2026-09-02 lanes run either, whose Gram arm read 34 ms
+against August's 5.27 ms for the same shape and was therefore taken on
+the same degraded machine.
+
+## Where the number comes from instead
+
+A single-tenant rented GPU: no laptop governor, no swap, no browser, and
+one job on the device. `tools/e2_remote_leg.sh`'s `lanes-price` check
+runs the nine lanes on an MI325X and an H100. Apple is re-measured when
+the box is quiet, and `tools/lanes_price.sh` now records memory pressure
+at both ends of every run so that "quiet" is a recorded fact rather than
+an assumption -- the gate here refused a concurrent mojo/pixi and logged
+a clean 0.90 load average on a box with 7.5 GB of swap on an 8 GB device,
+because load average does not see paging.

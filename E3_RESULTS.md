@@ -75,28 +75,41 @@ gate from running its IDENTICAL pass on the box it was written for.
 | `a*b+c` contraction | FUSED (1629/1629 built-to-separate patterns) | FUSED (1629/1629) | FUSED (1629/1629) |
 | translog / sqrtcos certificates | 8705486125800438413 / 12295913102197186379 | same | same |
 
-## What IDENTICAL costs (Apple M4, 3 alternated rounds, medians)
+## What IDENTICAL costs -- RETIRED 2026-09-03, THE NUMBERS ARE DELETED
 
-Measured 2026-08-23 with `price-unsupervised-identity` and
-`price-linalg-identity` (FAST and IDENTICAL alternated process by process
-because the M4's governor drifts; read as a band, not four figures):
+This section carried a seven-row table of FAST-vs-IDENTICAL times taken
+on an Apple M4 on 2026-08-23. THE TABLE HAS BEEN DELETED RATHER THAN
+ANNOTATED, so that no reader and no generator can quote a figure from it.
 
-| arm | FAST ms | IDENTICAL ms | ratio |
-|---|---|---|---|
-| k-means fit | 14.38 | 15.87 | 1.10x |
-| DBSCAN fit | 138.28 | 197.33 | 1.43x |
-| k-NN auto | 8.49 | 22.18 | 2.61x |
-| k-NN tiled | 7.87 | 22.05 | 2.80x |
-| gemv 128x128 | 0.07 | 0.08 | 1.12x |
-| Gram 32x32x1M | 5.27 | 6.41 | 1.22x |
-| standalone `gemm_nt` 4096x64x64 | 0.09 | 0.54 | 5.69x |
+WHY, AND IT IS NOT THAT THE CODE CHANGED. The August source was rebuilt
+in a detached worktree and re-run beside HEAD on 2026-09-02: old code and
+new code agreed with each other and neither agreed with what the same
+script had recorded in August (the Gram arm read 26.33 ms against the
+5.27 ms published here). The library did not regress. The machine was a
+16 GB laptop carrying 7.5 GB of swap on an 8 GB device, and the run that
+produced the original table recorded no memory state at all, so the
+conditions behind those figures cannot be established now.
 
-The k-NN cost is the pinned `gemm_nt` under it (the vendor matmul is a
-closed k-split and TF32 on NVIDIA, rows 24/28/33; the pinned kernel is a
-plain tile). The gemm lane's Phase 2b device kernel (commit `e3128b0`,
-bit-identical to its oracle at 62 shapes) is the candidate replacement;
-its adoption into `core/gemm.mojo` is one value wide at P == 1 (rows
-27/28's `-0.0` note) and regenerates the cards.
+The retired numbers were never useless in the direction one would guess.
+A loaded box adds a FIXED per-launch cost to BOTH arms, which drags every
+ratio toward 1.0 -- hardest on the smallest arm -- so a degraded box
+UNDERSTATES the identity tax rather than inflating it. That makes the
+2026-09-02 Apple lanes run unquotable for the same reason: its Gram arm
+read 34 ms for the shape August read at 5.27 ms. Both readings are off,
+in the same direction, and neither is a conservative bound on the other.
+
+The evidence for all of this is `bench/results/lanes_price/
+CONTROL_2026-09-02/`, which keeps the three logs and the arithmetic.
+
+WHERE THE NUMBER COMES FROM NOW. `tools/lanes_price.sh`, run through
+`tools/e2_remote_leg.sh`'s `lanes-price` check on a single-tenant rented
+MI325X and H100 -- no laptop governor, no swap, no browser, one job on
+the device -- with Apple re-measured on a quiet box as a third column.
+That harness alternates the arms round by round, builds both modes once
+before any measurement, reports a paired ratio BAND rather than four
+significant figures, and now records memory pressure at both ends of the
+run so that "quiet" is a recorded fact. It prices nine lanes: the six
+here plus gbdt, rf and et, which had never been priced at all.
 
 ## Method and artifacts
 

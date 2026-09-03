@@ -60,8 +60,12 @@ They were `bench/identity_price_main.mojo` and `bench/linalg_price_main.mojo`,
 driven by `tools/price_unsupervised_identity.sh` and
 `tools/price_linalg_identity.sh`, which have no remote-leg wiring and have
 only ever run on an Apple M4. Ported into this driver so the same question
-can be asked on Apple, NVIDIA and AMD, since this is the harness
-`tools/diag/identity_cost_leg.sh` rides onto a rented box.
+can be asked on Apple, NVIDIA and AMD. As of 2026-09-03 that is not a plan:
+`tools/e2_remote_leg.sh`'s `lanes-price` check runs these lanes on a rented
+MI325X and H100, and those columns are the ones the price is taken from,
+because a single-tenant GPU has no laptop governor, no swap and no browser.
+Three more lanes -- gbdt, rf and et -- joined on 2026-09-02 and first
+compiled on 2026-09-03; the tree families had never been priced at all.
 
 | lane | entry | what it prices | default size (Apple) | datacenter step | size knob | output hashed |
 |---|---|---|---|---|---|---|
@@ -421,10 +425,26 @@ their accessors and are not the same type. The ensemble one carries a
 folding it in would make every round disagree with every other round and the
 harness would raise a false contract violation under IDENTICAL.
 
-`bench/identity_price_main.mojo` and `bench/linalg_price_main.mojo` are NOT
-deleted and are not superseded on Apple: they are the files the published
-Apple numbers came from, and the new lanes here reproduce their fixtures at
-their default sizes rather than replacing them. If a number from one of them
-and a number from the matching lane here ever disagree at the same size on
-the same box, the two protocols are the first place to look -- this harness
-warms up and times each round separately, and those two do not.
+`bench/identity_price_main.mojo` and `bench/linalg_price_main.mojo` are kept
+as the RECORD of the earlier protocol, and they are SUPERSEDED. The sentence
+here used to say they "are not superseded on Apple: they are the files the
+published Apple numbers came from." Those numbers were retracted on
+2026-09-03 and deleted from `E3_RESULTS.md`, so there is nothing left for
+them to be authoritative about.
+
+The paragraph below already named the disagreement to watch for, and it
+happened: those two mains time a cold first call, and this harness warms up
+and times each round separately. That is a real protocol difference and it
+is not the one that mattered. What mattered was the BOX. August's own source,
+rebuilt in a detached worktree and run beside HEAD, measured the Gram arm at
+26.33 ms against the 5.27 ms it had published, and HEAD measured the same --
+on a 16 GB laptop carrying 7.5 GB of swap.
+
+SO THE RULE IS NOT "PREFER THIS HARNESS." It is that a price run without a
+recorded memory state is not evidence, whichever driver produced it. A loaded
+box adds a fixed per-launch cost to BOTH arms, which pulls every ratio toward
+1.0 and does it hardest on the smallest arm -- so it UNDERSTATES the tax and
+is not a conservative bound on it. `tools/lanes_price.sh` now logs memory
+pressure at both ends of every run for exactly this reason; the concurrency
+gate and the load average both read CLEAN on the swapping box, because load
+average does not see paging.
