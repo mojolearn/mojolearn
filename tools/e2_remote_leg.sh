@@ -97,9 +97,54 @@ DEADMAN_PID=$!
 disown "$DEADMAN_PID" 2>/dev/null || true
 log "dead-man timer pid $DEADMAN_PID ($DEADMAN_SECONDS s, keyed by tag e2 + name $NAME)"
 
+# A PERSISTENT DATA VOLUME, BECAUSE THE BIG DATASET OUTLIVES THE LEASE.
+#
+# `tools/speed_gbdt_arm.py:load_higgs` says it plainly: the download is
+# 2.6 GB, the decode is another 1.3 GB of float32, and it is "a SEPARATE,
+# EXPLICITLY NAMED STEP, never something a timed run does on its own" --
+# the orchestrator budgets a lease around it. On 2026-09-03 a leg folded
+# the fetch into the measurement lease anyway and the whole hour went to
+# the gzip-CSV decode: builds finished in five minutes, then forty-six
+# minutes of pandas and the work bound killed it (EXIT=124).
+#
+# A destroyed droplet takes its cache with it, so paying that once per leg
+# is paying it forever. E2_VOLUME names a DigitalOcean block volume that is
+# attached at create and mounted at /mnt/mojolearn-data; the dataset store
+# lives there and survives teardown. Block storage is about $0.10/GB/month,
+# so ten gigabytes costs a dollar a month and removes forty minutes from
+# every leg that reads HIGGS -- and five of them are queued.
+#
+# VOLUMES ARE REGION-LOCKED. This one is created in $REGION on first use, so
+# an nyc2 volume serves the NVIDIA legs and an AMD leg in tor1 would need
+# its own. That is correct rather than limiting: the vendor comparison is an
+# NVIDIA question.
+VOLUME_ARG=""
+VOL_MOUNT="/mnt/mojolearn-data"
+if [ -n "${E2_VOLUME:-}" ]; then
+  VOL_ID=$(api "$API/volumes?region=$REGION&per_page=100" | python3 -c "import json,sys
+d=json.load(sys.stdin); v=[x['id'] for x in d.get('volumes',[]) if x['name']=='${E2_VOLUME}']
+print(v[0] if v else '')")
+  if [ -z "$VOL_ID" ]; then
+    log "volume ${E2_VOLUME} not found in $REGION; creating ${E2_VOLUME_GB:-20} GB"
+    VOL_ID=$(api -X POST -H "Content-Type: application/json" \
+      -d "{\"name\":\"${E2_VOLUME}\",\"region\":\"$REGION\",\"size_gigabytes\":${E2_VOLUME_GB:-20},\"filesystem_type\":\"ext4\"}" \
+      "$API/volumes" | python3 -c "import json,sys
+try:
+    d=json.load(sys.stdin); print(d.get('volume',{}).get('id',''))
+except Exception:
+    print('')")
+  fi
+  if [ -n "$VOL_ID" ]; then
+    log "attaching volume ${E2_VOLUME} ($VOL_ID) at create"
+    VOLUME_ARG=",\"volumes\":[\"$VOL_ID\"]"
+  else
+    log "!! could not resolve or create volume ${E2_VOLUME}; continuing WITHOUT it"
+  fi
+fi
+
 log "creating $NAME ($SIZE, $REGION)"
 CREATE_BODY="$(api -X POST -H "Content-Type: application/json" \
-  -d "{\"name\":\"$NAME\",\"region\":\"$REGION\",\"size\":\"$SIZE\",\"image\":$IMAGE,\"ssh_keys\":[\"$SSH_KEY_FP\"],\"tags\":[\"e2\"]}" \
+  -d "{\"name\":\"$NAME\",\"region\":\"$REGION\",\"size\":\"$SIZE\",\"image\":$IMAGE,\"ssh_keys\":[\"$SSH_KEY_FP\"],\"tags\":[\"e2\"]$VOLUME_ARG}" \
   "$API/droplets")"
 DROPLET_ID=$(printf '%s' "$CREATE_BODY" | python3 -c "import json,sys
 try:
@@ -274,6 +319,27 @@ ssh_settle() {
   return 1
 }
 ssh_settle
+
+# MOUNT THE PERSISTENT VOLUME BEFORE ANYTHING READS A DATASET.
+#
+# DigitalOcean attaches the volume as a device and mounts NOTHING; an
+# unmounted volume looks exactly like an empty cache, so the fetch would run
+# again and the whole point would be lost silently. This mounts by the stable
+# by-id path, creates the dataset store on it, and READS BACK what is already
+# there so the log says whether this leg will pay for the decode or skip it.
+if [ -n "${E2_VOLUME:-}" ]; then
+  log "mounting volume ${E2_VOLUME} at $VOL_MOUNT"
+  $SSH "set -e
+    dev=/dev/disk/by-id/scsi-0DO_Volume_${E2_VOLUME}
+    if [ ! -e \"\$dev\" ]; then echo VOLUME_DEVICE_MISSING; exit 0; fi
+    mkdir -p $VOL_MOUNT
+    mountpoint -q $VOL_MOUNT || mount -o discard,defaults \"\$dev\" $VOL_MOUNT
+    mkdir -p $VOL_MOUNT/gbm-bench
+    echo VOLUME_MOUNTED \$(df -h $VOL_MOUNT | tail -1 | awk '{print \$2\" total, \"\$4\" free\"}')
+    echo VOLUME_HOLDS: \$(ls -1 $VOL_MOUNT/gbm-bench 2>/dev/null | tr '\n' ' ')
+    du -sh $VOL_MOUNT/gbm-bench 2>/dev/null | awk '{print \"VOLUME_USED \"\$1}'" \
+    2>&1 | sed "s/^/[$VENDOR vol] /" || log "!! volume mount step failed; the fetch will run as if cold"
+fi
 
 if [ "${MOJOLEARN_LEG_NO_CLONE:-0}" != "1" ] && [ -n "$CLONE_URL" ]; then
   # RETRY THE CLONE. A commit mismatch (exit 9) is a real failure and must
@@ -555,7 +621,13 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
       # column that ran only (a) would be a weaker column than Apple's.
       transformer-backward)
         CMD='env MOJOLEARN_TFB_CHECK_CLAUSE_B=1 MOJOLEARN_TFB_CHECK_CLAUSE_C=1 MOJOLEARN_TFB_CHECK_CLAUSE_D=1 MOJOLEARN_TFB_CHECK_CLAUSE_E=1 MOJOLEARN_TFB_CHECK_CLAUSE_F=1 pixi run mojo run -I . transformer/checks/transformer_backward_check.mojo' ;;
-      # DEVIATION 2043'"'"'S ACCURACY HALF. The speed half is already measured
+      # FILL THE VOLUME AND MEASURE NOTHING. `load_higgs` says the download
+      # is a separate, explicitly named step the orchestrator budgets a lease
+      # around; this IS that step. It fetches and decodes onto the persistent
+      # volume so every later leg starts warm. Run once per volume.
+      higgs-seed)
+        CMD="env GBM_BENCH_DATA=$VOL_MOUNT/gbm-bench pixi run -e gbmbench python tools/speed_gbdt_arm.py --download higgs"; WRAP=0 ;;
+      # DEVIATION 2043's ACCURACY HALF. The speed half is already measured
       # (0.936 under FAST with the fused one-byte route); what was never
       # measured is whether held-out quality moves with it, and that -- not
       # the hashes -- is the gate a FAST default turns on.
@@ -565,7 +637,7 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
       # fit. It leaves the checkout holding the BASE binary, so a diagnostic
       # arm is never left installed under the shipped name.
       gbdt-accuracy-ab)
-        CMD="env MOJOLEARN_GACC_OUT=\"\$OUT/gbdt_accuracy_ab\" MOJOLEARN_GACC_ROUNDS=${GACC_ROUNDS:-3} MOJOLEARN_GACC_ROWS=${GACC_ROWS:-1000000} sh tools/gbdt_accuracy_ab.sh"; WRAP=0 ;;
+        CMD="env GBM_BENCH_DATA=$VOL_MOUNT/gbm-bench MOJOLEARN_GACC_SKIP_FETCH=${GACC_SKIP_FETCH:-0} MOJOLEARN_GACC_OUT=\"\$OUT/gbdt_accuracy_ab\" MOJOLEARN_GACC_ROUNDS=${GACC_ROUNDS:-3} MOJOLEARN_GACC_ROWS=${GACC_ROWS:-1000000} sh tools/gbdt_accuracy_ab.sh"; WRAP=0 ;;
       # WHAT THIS BOX IS MISSING, IN ONE PASS. Four leases on 2026-09-03 died
       # one import at a time -- no numpy, then no pandas, then an environment
       # that had to exist before the job importing from it. Each run only ever
