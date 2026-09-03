@@ -1,0 +1,10 @@
+# format: mojolearn-identity-trace v1
+0	emb.emb.ids	i32	6	a927523e989065b7
+1	emb.emb.weight	f32	8	b351257dd06b1264
+2	emb.emb.fwd	f32	12	9e1ffd7bcc650d84
+3	emb.emb.dy	f32	12	e4a32ca5e3930c77
+4	emb.emb.counts	i32	4	0b91f549c9675565
+5	emb.emb.run_begin	i32	5	5bb9bbe5a1689283
+6	emb.emb.perm	i32	6	4c73e65e752bc6e4
+7	emb.emb.dw_seed	f32	8	0c8210784d8af5a5
+8	emb.emb.dw	f32	8	3dd856ba3a9b344c

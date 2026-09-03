@@ -1,0 +1,203 @@
+Imported from /root/mojolearn/training/checks/train_step_check.mojo:76:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/root/mojolearn/training/checks/train_step_check.mojo:898:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with '*'
+    """N5. **This is the clause that stops three machines agreeing that
+       ^
+/root/mojolearn/training/checks/train_step_check.mojo:1184:28: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var pa = a.unsafe_ptr().bitcast[UInt8]()
+             ~~~~~~~~~~~~~~^~~~~~~~
+                            unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+/root/mojolearn/training/checks/train_step_check.mojo:1185:29: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var pb = b2.unsafe_ptr().bitcast[UInt8]()
+             ~~~~~~~~~~~~~~~^~~~~~~~
+                             unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+/root/mojolearn/training/checks/train_step_check.mojo:1192:30: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var pb2 = b2.unsafe_ptr().bitcast[UInt8]()
+              ~~~~~~~~~~~~~~~^~~~~~~~
+                              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/training/checks/train_step_check.mojo:76:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/training/checks/train_step_check.mojo:76:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/training/checks/train_step_check.mojo:76:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/training/checks/train_step_check.mojo:129:
+/root/mojolearn/training/checks/train_loop.mojo:859:32: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var pp = pcopy.unsafe_ptr().bitcast[UInt8]()
+             ~~~~~~~~~~~~~~~~~~^~~~~~~~
+                                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/training/checks/train_step_check.mojo:129:
+/root/mojolearn/training/checks/train_loop.mojo:860:32: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var mp = mcopy.unsafe_ptr().bitcast[UInt8]()
+             ~~~~~~~~~~~~~~~~~~^~~~~~~~
+                                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/training/checks/train_step_check.mojo:129:
+/root/mojolearn/training/checks/train_loop.mojo:861:32: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var vp = vcopy.unsafe_ptr().bitcast[UInt8]()
+             ~~~~~~~~~~~~~~~~~~^~~~~~~~
+                                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/training/checks/train_step_check.mojo:129:
+/root/mojolearn/training/checks/train_loop.mojo:881:40: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var base = (pcopy.unsafe_ptr() + begin).bitcast[UInt8]()
+                    ~~~~~~~~~~~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/training/checks/train_step_check.mojo:129:
+/root/mojolearn/training/checks/train_loop.mojo:881:48: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+        var base = (pcopy.unsafe_ptr() + begin).bitcast[UInt8]()
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+                                                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/training/checks/train_step_check.mojo:76:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/training/checks/train_step_check.mojo:93:
+/root/mojolearn/training/checks/loss.mojo:503:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/train_step_check.mojo:93:
+/root/mojolearn/training/checks/loss.mojo:508:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var other = red[tid + step]
+                        ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/train_step_check.mojo:93:
+/root/mojolearn/training/checks/loss.mojo:512:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if other > red[tid]:
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/train_step_check.mojo:93:
+/root/mojolearn/training/checks/loss.mojo:513:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    red[tid] = other
+                    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/train_step_check.mojo:93:
+/root/mojolearn/training/checks/loss.mojo:515:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = identical_fmax(red[tid], other)
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/train_step_check.mojo:93:
+/root/mojolearn/training/checks/loss.mojo:515:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = identical_fmax(red[tid], other)
+                                          ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/train_step_check.mojo:93:
+/root/mojolearn/training/checks/loss.mojo:518:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var total = red[0]
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/training/checks/train_step_check.mojo:1115:22: warning: assignment to 'text' was never used; assign to '_' instead?
+    var text = String("")
+                     ^
+Included from /root/mojolearn/training/checks/train_step_check.mojo:99:
+/root/mojolearn/training/checks/optimizer.mojo:560:20: warning: assignment to 'm' was never used; assign to '_' instead?
+    var m = Float32(0.0)
+                   ^
+Included from /root/mojolearn/training/checks/train_step_check.mojo:99:
+/root/mojolearn/training/checks/optimizer.mojo:570:20: warning: assignment to 'v' was never used; assign to '_' instead?
+    var v = Float32(0.0)
+                   ^
+Included from /root/mojolearn/training/checks/train_step_check.mojo:99:
+/root/mojolearn/training/checks/optimizer.mojo:590:21: warning: assignment to 'dn' was never used; assign to '_' instead?
+    var dn = Float32(0.0)
+                    ^
+Included from /root/mojolearn/training/checks/train_step_check.mojo:99:
+/root/mojolearn/training/checks/optimizer.mojo:591:20: warning: assignment to 'q' was never used; assign to '_' instead?
+    var q = Float32(0.0)
+                   ^
+Included from /root/mojolearn/training/checks/train_step_check.mojo:99:
+/root/mojolearn/training/checks/optimizer.mojo:638:24: warning: assignment to 'p_out' was never used; assign to '_' instead?
+    var p_out = Float32(0.0)
+                       ^
+=== training-step identity gate, profile mojolearn.identical.train.step.fp32.v1
+=== NOTHING IN THIS FILE, IN train_loop.mojo OR IN TRAINING_LOOP_PLAN.md HAD EVER BEEN COMPILED OR RUN BEFORE THIS PROCESS. Every prediction in their headers is unfalsified.
+=== TWO OF THE TWELVE STAGES OF A STEP HAVE NO GATE OF THEIR OWN: transformer/checks/transformer_backward.mojo and embedding/checks/embedding_identical.mojo. Clause (a) below is the ONLY thing in this repository that has ever compared either of them to its oracle.
+mode NUMERIC_FAST   gemm: none   gemm_backward: none   llama_fwd: none   llama_bwd: none   loss: none   optimizer: none
+steps N = 8   seed = 6085033151980924784   n_total = 13376   J = 11
+shape structs agree (LlamaDims vs TransformerDims)
+clause (a): one step, every intermediate, device vs host oracle, BITWISE
+    2. embed.out  512 cells  IDENTICAL
+    3. block.residual2  512 cells  **512 MOVED**, first at 0  host -0.8861929/00000000bf62dd8a  device -0.8864843/00000000bf62f0a3
+    4. lm_head.logits  1024 cells  **1024 MOVED**, first at 0  host 0.31179994/000000003e9fa43e  device 0.31124184/000000003e9f5b17
+    5. ce.loss  1 cells  **1 MOVED**, first at 0  host 4.7812595/0000000040990014  device 4.7812166/000000004098ffba
+    6. ce.dlogits  1024 cells  **1024 MOVED**, first at 0  host 0.00073214096/000000003a3fed26  device 0.00073162006/000000003a3fca31
+    7. head.d_h  512 cells  **512 MOVED**, first at 0  host -0.0026888407/00000000bb303743  device -0.0026886929/00000000bb3034c8
+    7. head.dw_lm  2048 cells  **2047 MOVED**, first at 0  host -0.0047451067/00000000bb9b7cd7  device -0.0047393646/00000000bb9b4cac
+    8. block.d_x  512 cells  **512 MOVED**, first at 0  host -0.01371719/00000000bc60be11  device -0.0136734955/00000000bc6006cc
+    9. embed.dw  2048 cells  **448 MOVED**, first at 64  host -0.06372917/00000000bd828470  device -0.06374258/00000000bd828b78
+    10. grad.flat  13376 cells  **11775 MOVED**, first at 64  host -0.06372917/00000000bd828470  device -0.06374258/00000000bd828b78
+    11. param.out  13376 cells  **343 MOVED**, first at 327  host -0.0011207577/00000000ba92e663  device -0.0011207574/00000000ba92e661
+    11. adam.m  13376 cells  **11775 MOVED**, first at 64  host -0.0063729184/00000000bbd0d3ea  device -0.0063742595/00000000bbd0df2a
+    11. adam.v  13376 cells  **11775 MOVED**, first at 64  host 4.0613545e-06/00000000368846c5  device 4.063064e-06/0000000036885574
+  device loss 4.7812166/000000004098ffba   host loss 4.7812595/0000000040990014
+  clause (a) **FAILED**: 12 stages moved. The FIRST one in the list above is the address; everything after it is downstream.
+clause (f): the parameter layout
+  unpack round trip clean on distinct planted values
+  clause (f) GREEN
+clause (b): the negative controls, N = 8 steps
+  clean      h_all=2d9f8342b01337a9
+  N1 seed    h_all=e723fca77f9d6b16
+  N2 order   h_all=df057642c76521c3
+  N3 ulp     h_all=2c8f8b47c6b526e6
+    REPORTED, NOT ASSERTED (DEVIATION 1580): the digest moved and step 1's loss did NOT. clean 4.7812166/000000004098ffba vs ulp 4.7812166/000000004098ffba. The perturbation was carried into the checkpoint without ever being computed with.
+  N4 zerolr  param=a0ff9b9708abb351 m=323254ff1d289f92 v=bf83e4fd3f4e6d52
+  clause (b) GREEN: four controls, every requirement met
+clause (c): movement, N = 8
+  moved 13376/13376 parameter cells
+    p0 embed moved 2048/2048 max|dp| 0.00644058/000000003bd30b80
+    p1 norm1_w moved 32/32 max|dp| 0.0073845386/000000003bf1fa00
+    p2 w_q moved 1024/1024 max|dp| 0.007084489/000000003be82500
+    p3 w_k moved 512/512 max|dp| 0.0076580644/000000003bfaf080
+    p4 w_v moved 512/512 max|dp| 0.0075721443/000000003bf81fc0
+    p5 w_o moved 1024/1024 max|dp| 0.007315591/000000003befb7a0
+    p6 norm2_w moved 32/32 max|dp| 0.0063511133/000000003bd01d00
+    p7 w_gate moved 2048/2048 max|dp| 0.0076739564/000000003bfb75d0
+    p8 w_up moved 2048/2048 max|dp| 0.0076893605/000000003bfbf708
+    p9 w_down moved 2048/2048 max|dp| 0.007610403/000000003bf960b0
+    p10 lm_head moved 2048/2048 max|dp| 0.007586926/000000003bf89bc0
+    embed row 2 (present) max|dp| 0.00644058/000000003bd30b80   row 0 (absent) max|dp| 0.004724145/000000003b9acd00
+  clause (c) GREEN: the parameters moved, everywhere, measurably
+clause (d): step-count composition
+  whole (8) h_all=2d9f8342b01337a9   split (4+4) h_all=2d9f8342b01337a9
+  clause (d) GREEN
+clause (e): hygiene
+  trace records 34, required 34 (2 at step 0, then data.ids + loss + ckpt.tensors + ckpt.digest per step)
+  clause (e) GREEN
+clause (g): same-device determinism
+  clause (g) GREEN: 2d9f8342b01337a9 twice
+
+=== SUMMARY
+  (a) oracle       12 stages moved
+  (b) controls     0 requirements failed
+  (c) movement     0 failed
+  (d) composition  0 failed
+  (e) hygiene      0 failed
+  (f) layout       0 failed
+  (g) determinism  0 failed
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: train_step_check: 12 failures. See the clause reports above.
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1

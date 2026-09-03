@@ -1,0 +1,19 @@
+# format: mojolearn-identity-trace v1
+0	opt.step.t	i32	1	ad2aca7747985764
+1	opt.input.param	f32	1526	6417b4ef47284f17
+2	opt.input.grad	f32	1526	7f9745a1886b7b43
+3	opt.clip.sumsq	f32	5	28702811f15312ed
+4	opt.clip.norm	f32	5	1e45a6007dfe2d9b
+5	opt.clip.total_sumsq	f32	1	45470f66e29e490b
+6	opt.clip.total_norm	f32	1	c8255defaefbec6e
+7	opt.clip.coef	f32	1	5e7c7bebcc0358dd
+8	opt.clip.grad	f32	1526	8f3efa95d10135d3
+9	opt.sched.pow1	f32	1	2c8eb2793999e9ea
+10	opt.sched.pow2	f32	1	5d10c8f991bab3ae
+11	opt.sched.bc1	f32	1	0a570446a7d27c56
+12	opt.sched.bc2	f32	1	b2e3687f46e6bb32
+13	opt.sched.step_size	f32	1	6e343970870c8bb9
+14	opt.sched.rt_bc2	f32	1	87a2b6bee0997c2d
+15	opt.adam.m	f32	1526	6a15f0fc49a2ba10
+16	opt.adam.v	f32	1526	3d5f0db025fcc6f3
+17	opt.param.out	f32	1526	8f1fd860187e5957

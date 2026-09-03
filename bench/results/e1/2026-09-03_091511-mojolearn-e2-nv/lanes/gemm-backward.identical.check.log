@@ -1,0 +1,249 @@
+Imported from /root/mojolearn/gemm/checks/gemm_backward_check.mojo:183:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/gemm/checks/gemm_backward_check.mojo:183:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/gemm/checks/gemm_backward_check.mojo:183:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/gemm/checks/gemm_backward_check.mojo:183:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/root/mojolearn/gemm/checks/gemm_backward_check.mojo:2503:28: warning: assignment to 'split_val' was never used; assign to '_' instead?
+    var split_val = Float32(0.0)
+                           ^
+/root/mojolearn/gemm/checks/gemm_backward_check.mojo:2789:25: warning: assignment to 'poison2_moved' was never used; assign to '_' instead?
+    var poison2_moved = 0
+                        ^
+/root/mojolearn/gemm/checks/gemm_backward_check.mojo:2790:28: warning: assignment to 'poison_eps_moved' was never used; assign to '_' instead?
+    var poison_eps_moved = 0
+                           ^
+/root/mojolearn/gemm/checks/gemm_backward_check.mojo:2792:18: warning: assignment to 'sab_77' was never used; assign to '_' instead?
+    var sab_77 = 0
+                 ^
+== gemm/checks/gemm_backward_check.mojo [IDENTICAL]  bwd sabotage: none  fwd sabotage: none ==
+   profile: mojolearn.identical.gemm.fp32.v1   contract: gemm/IDENTICAL_FP32_CONTRACT.md (CONSUMED, NEVER AMENDED)
+   routing: gemm/checks/gemm_backward.mojo   plan: gemm/IDENTICAL_BACKWARD_PLAN.md
+   oracle: gemm/checks/gemm_oracle.mojo::gemm_oracle, evaluated at the BACKWARD shape
+check_backward_routing_is_the_table [IDENTICAL]: six routes against the hand-written table
+  routes moved: 0 of 6, mask 0   predicted for sabotage 'none': mask 0
+check_backward_routing_is_the_table [IDENTICAL] OK: 6 routes x 3 pairwise-distinct shapes equal the hand-written table, and every output shape equals the shape of the operand it is the gradient of
+check_backward_gradients_are_correct [IDENTICAL]: six routes against the derivative, on the exact fixture
+  -- 5x7x3 --
+    OK    dA/NN 5x7x3  15 cells exact
+    OK    dB/NN 5x7x3  21 cells exact
+    OK    dA/NT 5x7x3  15 cells exact
+    OK    dB/NT 5x7x3  21 cells exact
+    OK    dA/TN 5x7x3  15 cells exact
+    OK    dB/TN 5x7x3  21 cells exact
+  -- 9x5x7 --
+    OK    dA/NN 9x5x7  63 cells exact
+    OK    dB/NN 9x5x7  35 cells exact
+    OK    dA/NT 9x5x7  63 cells exact
+    OK    dB/NT 9x5x7  35 cells exact
+    OK    dA/TN 9x5x7  63 cells exact
+    OK    dB/TN 9x5x7  35 cells exact
+  -- 6x11x4 --
+    OK    dA/NN 6x11x4  24 cells exact
+    OK    dB/NN 6x11x4  44 cells exact
+    OK    dA/NT 6x11x4  24 cells exact
+    OK    dB/NT 6x11x4  44 cells exact
+    OK    dA/TN 6x11x4  24 cells exact
+    OK    dB/TN 6x11x4  44 cells exact
+    OK    bias 5x7  7 cells exact, and the ones vector reproduced a sum that has no ones vector in it
+    OK    bias 9x5  5 cells exact, and the ones vector reproduced a sum that has no ones vector in it
+    OK    bias 6x11  11 cells exact, and the ones vector reproduced a sum that has no ones vector in it
+  routes moved: 0 of 6, mask 0   predicted mask 0   bias cells moved: 0 of 23
+check_backward_gradients_are_correct [IDENTICAL] OK: 18 routes and 23 bias cells equal the derivative bit for bit
+check_the_square_fixture_is_vacuous [IDENTICAL]: what a square symmetric fixture cannot see
+    symmetric 6x6x6: untransposed vs correct moved 0 of 72 cells across dA and dB
+    asymmetric 6x6x6: untransposed vs correct moved 72 of 72 cells across dA and dB
+    distinct 5x7x3: untransposed vs correct moved 36 of 36 cells across dA and dB
+check_the_square_fixture_is_vacuous [IDENTICAL] OK: the untransposed route is BITWISE INERT on the symmetric square fixture (0 cells moved) and moves 72 cells on the asymmetric square one and 36 on the pairwise-distinct one. That is why G2 refuses a square fixture, measured rather than asserted.
+check_backward_matches_oracle [IDENTICAL]: per-cell bits against gemm_oracle at the backward shape
+  -- dA, k' = n: the output width drives the partition --
+    OK   dA.NN.n0.P0  NT(dC,W) 5x7x0  L=1 P=0  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dA.NN.n1.P1  NT(dC,W) 3x5x1  L=1 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dA.NN.n128.P1  NT(dC,W) 5x3x128  L=128 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dA.NN.n129.P2  NT(dC,W) 5x3x129  L=128 P=2  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dA.NN.n300.P3.odd  NT(dC,W) 5x3x300  L=128 P=3  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dA.NN.n517.P5.2carries  NT(dC,W) 17x33x517  L=128 P=5  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   dA.NN.n4097.P33.tail1  NT(dC,W) 2x3x4097  L=128 P=33  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   dA.NT.n0.P0  NN(dC,W) 5x7x0  L=1 P=0  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dA.NT.n1.P1  NN(dC,W) 3x5x1  L=1 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dA.NT.n128.P1  NN(dC,W) 5x3x128  L=128 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dA.NT.n129.P2  NN(dC,W) 5x3x129  L=128 P=2  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dA.NT.n300.P3.odd  NN(dC,W) 5x3x300  L=128 P=3  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dA.NT.n517.P5.2carries  NN(dC,W) 17x33x517  L=128 P=5  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   dA.NT.n4097.P33.tail1  NN(dC,W) 2x3x4097  L=128 P=33  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   dA.TN.n0.P0  NT(W,dC) 7x5x0  L=1 P=0  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dA.TN.n1.P1  NT(W,dC) 5x3x1  L=1 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dA.TN.n128.P1  NT(W,dC) 3x5x128  L=128 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dA.TN.n129.P2  NT(W,dC) 3x5x129  L=128 P=2  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dA.TN.n300.P3.odd  NT(W,dC) 3x5x300  L=128 P=3  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dA.TN.n517.P5.2carries  NT(W,dC) 33x17x517  L=128 P=5  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   dA.TN.n4097.P33.tail1  NT(W,dC) 3x2x4097  L=128 P=33  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+  -- dB, k' = m: the TOKEN COUNT drives the partition --
+    OK   dB.NN.m0.P0  TN(W,dC) 7x5x0  L=1 P=0  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dB.NN.m1.P1  TN(W,dC) 5x3x1  L=1 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dB.NN.m128.P1  TN(W,dC) 3x5x128  L=128 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dB.NN.m129.P2  TN(W,dC) 3x5x129  L=128 P=2  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dB.NN.m300.P3.odd  TN(W,dC) 3x5x300  L=128 P=3  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dB.NN.m517.P5.2carries  TN(W,dC) 33x17x517  L=128 P=5  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   dB.NN.m4097.P33.tail1  TN(W,dC) 3x2x4097  L=128 P=33  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   dB.NT.m0.P0  TN(dC,W) 5x7x0  L=1 P=0  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dB.NT.m1.P1  TN(dC,W) 3x5x1  L=1 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dB.NT.m128.P1  TN(dC,W) 5x3x128  L=128 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dB.NT.m129.P2  TN(dC,W) 5x3x129  L=128 P=2  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dB.NT.m300.P3.odd  TN(dC,W) 5x3x300  L=128 P=3  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dB.NT.m517.P5.2carries  TN(dC,W) 17x33x517  L=128 P=5  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   dB.NT.m4097.P33.tail1  TN(dC,W) 2x3x4097  L=128 P=33  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   dB.TN.m0.P0  NN(W,dC) 7x5x0  L=1 P=0  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dB.TN.m1.P1  NN(W,dC) 5x3x1  L=1 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dB.TN.m128.P1  NN(W,dC) 3x5x128  L=128 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dB.TN.m129.P2  NN(W,dC) 3x5x129  L=128 P=2  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dB.TN.m300.P3.odd  NN(W,dC) 3x5x300  L=128 P=3  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dB.TN.m517.P5.2carries  NN(W,dC) 33x17x517  L=128 P=5  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   dB.TN.m4097.P33.tail1  NN(W,dC) 3x2x4097  L=128 P=33  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+  -- the bias, k' = m --
+    OK   db.m5.P1  NN(W,dC) 1x7x5  L=5 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   db.m300.P3.odd  NN(W,dC) 1x7x300  L=128 P=3  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   db.m517.P5.2carries  NN(W,dC) 1x33x517  L=128 P=5  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+  -- exact-integer fixtures: a moved ROUTE fails here too --
+    OK   dA.exact.NN  NT(dC,W) 5x3x7  L=7 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dB.exact.NN  TN(W,dC) 3x7x5  L=5 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dA.exact.NT  NN(dC,W) 5x3x7  L=7 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dB.exact.NT  TN(dC,W) 7x3x5  L=5 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dA.exact.TN  NT(W,dC) 3x5x7  L=7 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dB.exact.TN  NN(W,dC) 3x7x5  L=5 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+  -- EVERY LEAF PARTIAL IS -0.0, routed through dB (contract 9.2) -- the ONLY input that separates a CARRY from +0.0 PADDING --
+    OK   dB.minuszero.m300.P3.carry  TN(W,dC) 1x3x300  L=128 P=3  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dB.minuszero.m517.P5.2carries  TN(W,dC) 1x3x517  L=128 P=5  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   dB.minuszero.m128.P1.nofold  TN(W,dC) 1x3x128  L=128 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dB.minuszero.m4200.P33.odd  TN(W,dC) 1x3x4200  L=128 P=33  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+check_backward_matches_oracle [IDENTICAL] OK: 55 backward calls, every cell bit-identical to gemm_oracle at the backward shape, no cell left unwritten
+check_backward_is_launch_invariant [IDENTICAL]: 8 execution plans, one numerical plan, at the backward shapes
+  dA/NN  NT(dC,W) 520x17x517  L=128 P=5
+      OK   TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+      OK   TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+      OK   TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+      OK   TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)
+      OK   TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)
+      OK   SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+      OK   SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+  dA/NT  NN(dC,W) 520x17x517  L=128 P=5
+      OK   TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+      OK   TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+      OK   TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+      OK   TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)
+      OK   TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)
+      OK   SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+      OK   SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+  dA/TN  NT(W,dC) 17x520x517  L=128 P=5
+      OK   TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+      OK   TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+      OK   TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+      OK   TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)
+      OK   TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)
+      OK   SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+      OK   SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+  dB/NN  TN(W,dC) 17x517x520  L=128 P=5
+      OK   TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+      OK   TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+      OK   TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+      OK   TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)
+      OK   TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)
+      OK   SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+      OK   SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+  dB/NT  TN(dC,W) 517x17x520  L=128 P=5
+      OK   TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+      OK   TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+      OK   TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+      OK   TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)
+      OK   TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)
+      OK   SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+      OK   SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+  dB/TN  NN(W,dC) 17x517x520  L=128 P=5
+      OK   TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)
+      OK   TILE 8x32 KS=32 (256 thr, 2-D grid, no swizzle)
+      OK   TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)
+      OK   TILE 16x16 KS=8 (256 thr, 2-D grid, transposed tiles)
+      OK   TILE 4x4 KS=32 (16 thr, 1-D grid, transposed tiles)
+      OK   SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+      OK   SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+check_backward_is_launch_invariant [IDENTICAL] OK: 6 routes x 8 execution plans (42 comparisons), all bit-identical
+check_backward_b_depends_on_the_token_count_and_says_so [IDENTICAL]: what a microbatch split costs, per cell
+  -- claim 4: the EXACT control, every split must agree --
+    OK   exact.aligned.512  T=512 split 256/256  host says 0 of 35 cells move (first -1), device says 0 (first -1)
+    OK   exact.misaligned.300  T=300 split 150/150  host says 0 of 35 cells move (first -1), device says 0 (first -1)
+  -- claim 2: LEAF-ALIGNED and SUBTREE-ALIGNED splits, predicted ZERO moved cells --
+    OK   aligned.512.256+256  T=512 split 256/256  host says 0 of 35 cells move (first -1), device says 0 (first -1)
+    OK   aligned.384.256+128  T=384 split 256/128  host says 0 of 35 cells move (first -1), device says 0 (first -1)
+  -- claim 1: MISALIGNED splits, predicted MANY moved cells, the host oracle says how many --
+    OK   misaligned.300.150+150  T=300 split 150/150  host says 31 of 35 cells move (first 0), device says 31 (first 0)
+         first moved cell: unsplit -162.84663/0xc322d8bd   accumulated -162.84668/0xc322d8c0
+    OK   misaligned.512.200+312  T=512 split 200/312  host says 30 of 35 cells move (first 0), device says 30 (first 0)
+         first moved cell: unsplit 101.87331/0x42cbbf22   accumulated 101.87337/0x42cbbf2a
+    OK   misaligned.384.192+192  T=384 split 192/192  host says 31 of 35 cells move (first 0), device says 31 (first 0)
+         first moved cell: unsplit -44.29243/0xc2312b73   accumulated -44.29239/0xc2312b68
+  -- claim 3: dA under the same splits, predicted ZERO --
+    OK   dA.aligned.512  T=512 split 256/256: 0 of 2560 dA cells move, as predicted
+    OK   dA.misaligned.300  T=300 split 150/150: 0 of 1500 dA cells move, as predicted
+    OK   dA.misaligned.512.crossplan  T=512 split 200/312: 0 of 4608 dA cells move, as predicted
+check_backward_b_depends_on_the_token_count_and_says_so [IDENTICAL] OK: every arm matched its prediction, including the aligned splits at ZERO moved cells and dA at ZERO under every split
+check_backward_bias_is_the_contract_sum [IDENTICAL]: the ones trick against a reduction with no ones in it
+  -- arm 1: clean, m != n --
+    OK   clean.5x7  m=5 n=7  vs the no-ones reduction: 0 of 7 moved   vs gemm_oracle at NN(W,dC) 1x7x5: 0 moved   never written: 0
+    OK   clean.300x7.P3  m=300 n=7  vs the no-ones reduction: 0 of 7 moved   vs gemm_oracle at NN(W,dC) 1x7x300: 0 moved   never written: 0
+    OK   clean.517x33.P5  m=517 n=33  vs the no-ones reduction: 0 of 33 moved   vs gemm_oracle at NN(W,dC) 1x33x517: 0 moved   never written: 0
+  -- arm 2: clean, m == n, where a wrong axis has the right length --
+    OK   clean.7x7  m=7 n=7  vs the no-ones reduction: 0 of 7 moved   vs gemm_oracle at NN(W,dC) 1x7x7: 0 moved   never written: 0
+  -- arm 3: ones poisoned to 2.0, predicted n of n --
+    OK   poison2.5x7  m=5 n=7  vs the no-ones reduction: 7 of 7 moved   vs gemm_oracle at NN(W,dC) 1x7x5: 0 moved   never written: 0
+         first moved cell 0: device 17.134216/0x418912e0   no-ones reduction 9.22699/0x4113a1c0
+  -- arm 4: ones poisoned to 1.0000001, a MEASUREMENT --
+    OK   poisonEps.5x7  m=5 n=7  vs the no-ones reduction: 2 of 7 moved   vs gemm_oracle at NN(W,dC) 1x7x5: 0 moved   never written: 0
+         first moved cell 0: device 9.226991/0x4113a1c1   no-ones reduction 9.22699/0x4113a1c0
+  ones poisoned to 1.0000001 moved 2 of 7 cells. MEASUREMENT, not an assertion. A number well below 7 is the honest answer that a nearly-one ones vector is a defect this gate can only partly see, and it is the reason arm 3 exists.
+check_backward_bias_is_the_contract_sum [IDENTICAL] OK: db equals a reduction with no ones vector in it, bit for bit, and a poisoned one is caught
+check_backward_workspace_sizing [IDENTICAL]: what the backward call's plan actually needs
+    SEPARATES NN 520x5x17: forward ws = 1 floats (TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)), dA ws = 1 (TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)), dB ws = 425 (SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold))
+    SEPARATES NT 520x5x17: forward ws = 1 floats (TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)), dA ws = 1 (TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)), dB ws = 425 (SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold))
+    SEPARATES TN 520x5x17: forward ws = 1 floats (TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles)), dA ws = 1 (TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)), dB ws = 425 (SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold))
+    SEPARATES NN 64x4x4096: forward ws = 8192 floats (SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)), dA ws = 1 (TILE 16x16 KS=32 (256 thr, 1-D grid, no swizzle)), dB ws = 1 (TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles))
+  9 of 15 shape/orientation pairs give a backward workspace that is NOT the forward number
+  -- one DIRTY shared workspace across dA, dB and db at NN 520x5x17 --
+      OK   dA in the shared loop: 8840 cells identical to the solo launch
+      OK   dB in the shared loop: 85 cells identical to the solo launch
+      OK   db in the shared loop: 5 cells identical to the solo launch
+check_backward_workspace_sizing [IDENTICAL] OK: every helper covers its routed plan, at least one shape separates forward from backward, and one dirty shared workspace carries all three calls
+check_backward_k_range [IDENTICAL]: dB's k' is the token count, swept to four million
+    OK   dB.tokens0.L1.P0  TN(W,dC) 2x1x0  L=1 P=0  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dB.tokens1.L1.P1  TN(W,dC) 2x1x1  L=1 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dB.tokens128.L128.P1  TN(W,dC) 2x1x128  L=128 P=1  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dB.tokens129.L128.P2  TN(W,dC) 2x1x129  L=128 P=2  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dB.tokens300.L128.P3  TN(W,dC) 2x1x300  L=128 P=3  plan=FLAT(1 thread/cell, tpb=256, 1-D grid)
+    OK   dB.tokens517.L128.P5  TN(W,dC) 2x1x517  L=128 P=5  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   dB.tokens4097.L128.P33  TN(W,dC) 2x1x4097  L=128 P=33  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   dB.tokens130900.L128.P1023  TN(W,dC) 2x1x130900  L=128 P=1023  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   dB.tokens131073.L129.P1017  TN(W,dC) 2x1x131073  L=129 P=1017  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   dB.tokens1000000.L977.P1024  TN(W,dC) 2x1x1000000  L=977 P=1024  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+    OK   dB.tokens4000000.L3907.P1024  TN(W,dC) 2x1x4000000  L=3907 P=1024  plan=SPLITK(leaf kernel -> global workspace -> level-wise threadgroup fold)
+  UNTESTED BEYOND FOUR MILLION TOKENS. The partition rule keeps producing `L = ceil(k / 1024)` without bound and the serial ascending chain inside one leaf grows with it, but no arm of this repository has run there and this gate does not pretend otherwise.
+check_backward_k_range [IDENTICAL] OK: 11 token counts, every cell bit-identical to gemm_oracle
+check_backward_card [IDENTICAL]: emitting
+check_backward_card OK: card written
+gemm backward routing + gates: all green [IDENTICAL]  (10 gates, bwd sabotage: none, fwd sabotage: none)

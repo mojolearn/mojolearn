@@ -1,0 +1,18 @@
+# format: mojolearn-identity-trace v1
+0	ce.input.logits	f32	32	066d91556b6b2eb9
+1	ce.input.targets	i32	4	02ad36a3fb8935b4
+2	ce.ce.max	f32	4	c755f1ea18f18afb
+3	ce.ce.shift	f32	32	0ec17dcd4f0d7a08
+4	ce.ce.exp	f32	32	e20398311a6bc1d7
+5	ce.ce.denom	f32	4	930fac938c6067f1
+6	ce.ce.logdenom	f32	4	9cf2e58824ac1724
+7	ce.ce.logp_target	f32	4	043d3474e650e5f5
+8	ce.ce.nll	f32	4	5bad37b4a77be4f5
+9	ce.ce.row	f32	4	5bad37b4a77be4f5
+10	ce.ce.count	i32	1	cd3ac65e44f721b1
+11	ce.ce.divisor	f32	1	4b72b67f9c5cec35
+12	ce.ce.total	f32	1	77bd82552a0d2ff5
+13	ce.ce.loss	f32	1	77bd7f552a0d2adc
+14	ce.ce.target_vec	f32	2	097a29ee2da29518
+15	ce.ce.weights	f32	32	a41469fe0ac6c972
+16	ce.ce.dlogits	f32	32	d899d461e241f91f
