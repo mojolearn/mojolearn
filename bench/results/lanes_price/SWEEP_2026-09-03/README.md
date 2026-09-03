@@ -60,12 +60,26 @@ it is worse for the library than what the small fixture said.
 
 0.782 at 1M rows, 0.731 at 1.5M: IDENTICAL is 1.28x then 1.37x FASTER than
 FAST, in the opposite direction to every matrix lane, with tight bands and
-different output bits. This is not identity being free. It is the FAST arm
-being mis-tuned: `replication_for` multiplies the device's core count, an
-MI325X reports 304, and at the levels that touch every row FAST asks for
-roughly 8x the histogram replicas IDENTICAL's pinned 32 asks for. IDENTICAL
-wins while ALSO paying a software Cephes expf and a barrier-per-step
-reduction. DEVIATION 2040 is the flagged cap; its A/B is owed.
+different output bits, while ALSO paying a software Cephes expf and a
+barrier-per-step reduction. Identity is not supposed to be free, so the FAST
+arm is what is under suspicion.
+
+**THE FIRST EXPLANATION WAS MEASURED AND IS WRONG.** `replication_for`
+multiplies the device's core count, so FAST asks for ~8x the histogram
+replicas IDENTICAL's pinned 32 asks for, and the effect tracking core count
+(0.731 on 304 CUs, 0.938 on 132 SMs) looked like the signature. DEVIATION
+2040 capped it and `tools/fast_replication_ab.sh` measured two FAST builds
+alternated on an MI325X at 1,000,000 rows: gbdt 1.001, rf 1.000, et 0.996,
+every row bits-equal. The cap is inert on time, and reach is not in doubt --
+the binaries differ by 4,096 bytes with different md5s.
+
+TWO CANDIDATES FROM THE SAME AUDIT REMAIN UNTESTED: `partition_stats_chunks`
+reads the same pin and gives FAST 304 chunks against 32, and
+`reorder_single_pass_for` routes FAST-on-AMD into a decoupled-lookback
+partition kernel whose lookback walk is SERIAL ON THREAD 0 with a global
+atomic ticket -- a kernel whose own file records its A/B as OWED and which
+has never been measured on AMD. Until one of those is measured, why
+IDENTICAL wins here is OPEN.
 
 ## THE THIRD FINDING WAS A HARNESS BUG, NOT A DEFECT IN THE GUARANTEE
 

@@ -525,9 +525,20 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
         CMD="env MOJOLEARN_AB_OUT=\"\$OUT/fast_replication_ab\" MOJOLEARN_AB_ROUNDS=${AB_ROUNDS:-3} MOJOLEARN_AB_ROWS=${AB_ROWS:-1000000} sh tools/fast_replication_ab.sh"; WRAP=0 ;;
       column)        CMD='pixi run mojo run -I . matrix_main.mojo' ;;
       gpu-probe)     CMD='pixi run mojo run -I . probe_main.mojo' ;;
-      # (no `transformer` case: the device spelling in transformer/impl/ has
-      #  no check driver yet, so there is nothing here to run. Add the case in
-      #  the same commit that adds the driver.)
+      # THE TRANSFORMER BACKWARD. The comment here said "no check driver
+      # yet, so there is nothing to run" -- that was true until 2026-09-03,
+      # when the driver compiled for the first time and passed all six
+      # clauses on Apple under IDENTICAL (37 stages, 313,308 cells, plus the
+      # batch and length halves with their negative controls, the chunked
+      # arm, the row-39 refusal and clause (f)'s exact-integer correctness
+      # check). It is the cheapest cross-vendor result available: the code
+      # exists, it passes, and the only thing between it and a second column
+      # is a leg.
+      #
+      # ALL SIX CLAUSES, because the default run skips (b) through (f) and a
+      # column that ran only (a) would be a weaker column than Apple's.
+      transformer-backward)
+        CMD='env MOJOLEARN_TFB_CHECK_CLAUSE_B=1 MOJOLEARN_TFB_CHECK_CLAUSE_C=1 MOJOLEARN_TFB_CHECK_CLAUSE_D=1 MOJOLEARN_TFB_CHECK_CLAUSE_E=1 MOJOLEARN_TFB_CHECK_CLAUSE_F=1 pixi run mojo run -I . transformer/checks/transformer_backward_check.mojo' ;;
       *) log "unknown extra check '$chk' -- skipped"; continue ;;
     esac
     NOW=$(date +%s)

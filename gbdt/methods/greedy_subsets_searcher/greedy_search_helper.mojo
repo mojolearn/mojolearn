@@ -369,29 +369,39 @@ comptime SOAK_134_CONTROL = is_defined["MOJOLEARN_134_CONTROL"]()
 
 # ====================================================
 # DEVIATION 2040: cap FAST's histogram replication at the pinned count.
+# **MEASURED 2026-09-03 AND IT MADE NO DIFFERENCE. THE HYPOTHESIS IS DEAD.**
 #
-# `replication_for` below is a faithful port of CatBoost's grid sizing, and
-# the formula multiplies the machine's core count. That was written for
-# parts with tens of SMs. An MI325X reports 304, so at the two tree levels
-# that touch every row FAST asks for ~8x the replicas IDENTICAL's pinned 32
-# asks for -- each replica doing an eighth of the rows, each writing its own
-# partial histogram, all reducing into the same place afterwards.
+# The reasoning was: `replication_for` below is a faithful port of CatBoost's
+# grid sizing and the formula multiplies the machine's core count, an MI325X
+# reports 304, so at the two levels that touch every row FAST asks for ~8x
+# the replicas IDENTICAL's pinned 32 asks for. That would explain IDENTICAL
+# beating FAST on the gbdt lane (0.731 on a 304-CU MI325X against 0.938 on a
+# 132-SM H100 -- an effect that tracks core count).
 #
-# MEASURED CONSEQUENCE, and it is why this flag exists: on an MI325X at
-# 1,000,000 rows the IDENTICAL build ran the gbdt price lane in 0.475 s
-# against FAST's 0.609 s -- IDENTICAL 1.28x FASTER while also paying a
-# software Cephes expf and a barrier-per-step reduction that FAST does not.
+# `tools/fast_replication_ab.sh` on an MI325X at 1,000,000 rows, two FAST
+# builds alternated, three rounds: gbdt 1.001, rf 1.000, et 0.996, every row
+# bits-equal. THE CAP IS INERT ON TIME. Reach is not in doubt -- the two
+# binaries differ (8,672,456 vs 8,676,552 bytes, different md5) -- so the
+# define compiled in and changed codegen and the timing did not move.
 #
-# THIS ARM IS BIT-NEUTRAL WHERE IT IS BEING MEASURED, which is what makes it
-# a legitimate speed switch rather than a tradeoff. The hist_2/one-byte
-# families quantize PER ROW and sum in Int32, so any partition of rows into
-# blocks yields the same histogram bits; only the float binary/half-byte
-# families let `active_block_count` decide which rows form a rounded partial.
-# The gbdt lane on AMD dispatches `launch_hist2_8bit`, the Int32 kernel.
+# WHAT THIS DOES AND DOES NOT SETTLE. It kills the replication factor as the
+# explanation. It does NOT explain why IDENTICAL is faster on this lane, and
+# TWO OTHER CANDIDATES FROM THE SAME AUDIT REMAIN UNTESTED, both of which
+# this flag was deliberately scoped away from:
+#   (1) `partition_stats_chunks` (gbdt/gpu_util/partitions_reduce.mojo:250)
+#       reads the SAME pin and gives FAST 304 chunks against IDENTICAL's 32,
+#       so phase 1 writes 9.5x more float partials and phase 2 reduces them.
+#       This flag does not touch it, because that fold's shape decides which
+#       rows form a rounded partial on the float histogram families.
+#   (2) `reorder_single_pass_for` (checks/kernel_matrix.mojo:1789) routes
+#       FAST-on-AMD into a decoupled-lookback partition kernel whose lookback
+#       walk is SERIAL ON THREAD 0 with a global atomic ticket, while
+#       IDENTICAL takes the three-launch stable partition. That file records
+#       its own A/B as OWED and it has never been run on AMD.
 #
-# OFF BY DEFAULT until the A/B says otherwise. A grid constant is a
-# measurement's to flip, not an argument's.
-# ====================================================
+# The flag stays, OFF, because a refuted hypothesis with a measurement behind
+# it is worth more than an untested one, and because it is the control for
+# whichever of (1) or (2) turns out to matter.
 comptime FAST_REPLICATION_PIN_2040 = is_defined[
     "MOJOLEARN_2040_FAST_REPLICATION_PIN"
 ]()

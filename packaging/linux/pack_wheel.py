@@ -73,11 +73,32 @@ except ImportError:  # pragma: no cover
 REPO = pathlib.Path(__file__).resolve().parents[2]
 PY_DIR = REPO / "python"
 PKG = PY_DIR / "mojolearn"
+# FIFTEEN, and this is the FOURTH list that has to move when a binding is
+# added. `packaging/linux/build_sets.sh` says "THREE lists move together" and
+# names itself, its own EXT_NAMES, and the macOS pair -- it does not name this
+# one, and this one is the list that decides what actually goes INTO the
+# wheel.
+#
+# IT SHIPPED WRONG. The 0.4.0 Linux wheel built 2026-09-02 carries
+# `_mamba_impl.py` and `_transformer_impl.py` and NO `.so` behind either, on
+# all six architecture sets, because those two names were missing here. The
+# legs built them -- every readback.txt lists `_mojolearn_mamba` and
+# `_mojolearn_transformer` for cuda and hip in all three tiers, and every leg
+# reports set_fast_count=15 -- and the pack loop below only raises on a name
+# IN this tuple that is missing on disk, so a name absent from the tuple is
+# never looked for and never missed.
+#
+# That is exactly the failure `build_sets.sh` warns about in words: "A binding
+# missing from them is not a build error -- it is a wheel that ships without
+# that extension and imports fine until the user touches the missing surface."
+# `Mamba1Block` and `TransformerBlock` are both in `__all__`, so a Linux user
+# of that wheel gets an ImportError naming a build command they cannot run.
 EXT_NAMES = (
     "_mojolearn", "_mojolearn_gbdt", "_mojolearn_estimators", "_mojolearn_rf",
     "_mojolearn_trees", "_mojolearn_svm", "_mojolearn_solver",
     "_mojolearn_metrics", "_mojolearn_tsa", "_mojolearn_linalg",
     "_mojolearn_arima", "_mojolearn_training", "_mojolearn_gp",
+    "_mojolearn_mamba", "_mojolearn_transformer",
 )
 TIERS = ("fast", "deterministic", "identical")
 ARCH_RE = re.compile(r"^(sm_[0-9]+a?|gfx[0-9a-f]+)$")
