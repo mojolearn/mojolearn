@@ -1,0 +1,6 @@
+FSPEED-NOTE lane=gbdt-lossguide arms=ours metric=devices delta=1.000000 reason=devices=gpu (explicit); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-WARMUP lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 ms=333357.388
+FSPEED-REFUSED lane=gbdt-lossguide arm=ours reason=per-arm budget 300s exceeded after 333.4s; remaining rounds skipped
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=logloss value=0.525275
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=auc value=0.813308
