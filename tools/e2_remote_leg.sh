@@ -510,6 +510,19 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
       # attempt escaped a `bash -c` through the ssh line and exited 127.
       lanes-price-sweep)
         CMD="env MOJOLEARN_SWEEP_OUT=\"\$OUT/sweep\" MOJOLEARN_SWEEP_ROUNDS=${SWEEP_ROUNDS:-3} sh tools/lanes_price_sweep.sh"; WRAP=0 ;;
+      # DEVIATION 2040. Does capping FAST's histogram replication restore
+      # the expected sign? IDENTICAL beat FAST on the gbdt lane at every
+      # fixture on both devices -- 0.731 on a 304-CU MI325X, 0.938 on a
+      # 132-SM H100 -- and identity is not supposed to be free, so the FAST
+      # arm is the thing under suspicion. The effect tracking the core count
+      # is the signature: `replication_for` multiplies it.
+      #
+      # BOTH ARMS ARE FAST, so the numeric contract is held constant and
+      # only the grid changes. The harness refuses to report a ratio on any
+      # row whose two output hashes differ, because a replication change
+      # that moved bits would be a tradeoff and not a win.
+      fast-replication-ab)
+        CMD="env MOJOLEARN_AB_OUT=\"\$OUT/fast_replication_ab\" MOJOLEARN_AB_ROUNDS=${AB_ROUNDS:-3} MOJOLEARN_AB_ROWS=${AB_ROWS:-1000000} sh tools/fast_replication_ab.sh"; WRAP=0 ;;
       column)        CMD='pixi run mojo run -I . matrix_main.mojo' ;;
       gpu-probe)     CMD='pixi run mojo run -I . probe_main.mojo' ;;
       # (no `transformer` case: the device spelling in transformer/impl/ has
