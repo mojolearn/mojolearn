@@ -1,0 +1,18 @@
+===== A/B ARM MOJOLEARN_2042_FAST_NO_LOOKBACK =====
+== DEVIATION 2040 A/B: rows 1000000, lanes [gbdt rf et], 3 rounds -> bench/results/e1/2026-09-03_104638-mojolearn-e2-nv//fast_replication_ab/MOJOLEARN_2042_FAST_NO_LOOKBACK ==
+== build BASE (FAST, replication as ported) ==
+== build PIN  (FAST, -D MOJOLEARN_2042_FAST_NO_LOOKBACK=1) ==
+== A/B table (ratio = PIN / BASE; below 1.0 means the cap is FASTER) ==
+lane	base_med_s	pin_med_s	ratio	base_hash	pin_hash	verdict
+gbdt	0.812149955	0.814369597	1.003	4a1588d5f77560b2,	4a1588d5f77560b2,	bits equal
+rf	0.93501619	0.933089237	0.998	acfbdbde102e8c54,	acfbdbde102e8c54,	bits equal
+et	2.48810968	2.490306827	1.001	a4d03520b4584c37,	a4d03520b4584c37,	bits equal
+
+A ratio here is only a speed result on a row whose two hashes are EQUAL.
+===== ALL ARMS =====
+MOJOLEARN_2042_FAST_NO_LOOKBACK	gbdt	ratio 1.003	bits
+MOJOLEARN_2042_FAST_NO_LOOKBACK	rf	ratio 0.998	bits
+MOJOLEARN_2042_FAST_NO_LOOKBACK	et	ratio 1.001	bits
+
+ratio = PIN / BASE. Below 1.0 means the arm made FAST faster.
+A ratio is only a speed result on a row whose two hashes are EQUAL.

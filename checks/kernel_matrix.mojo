@@ -1832,9 +1832,15 @@ def reorder_single_pass_for[column: Int, identical: Bool]() -> Bool:
     # (reorder_single_pass.mojo:120-124 names the warp-windowed version as
     # the fix) plus a global atomic ticket for tile ordering.
     #
-    # NVIDIA IS NOT FLIPPED, because it is not measured. The same A/B on an
-    # H100 is owed and the flag is how it runs. A number from one vendor
-    # does not move another vendor's default.
+    # NVIDIA IS MEASURED AND STAYS ON THE ROUTE. The same A/B on an H100 at
+    # the same shape: gbdt 1.003, rf 0.998, et 1.001, all bits equal. The
+    # route costs nothing there, so there is nothing to flip, and the
+    # default is unchanged rather than changed to match AMD.
+    #
+    # WHICH LEAVES NVIDIA'S OWN INVERSION UNEXPLAINED. IDENTICAL still beats
+    # FAST on gbdt there, 0.938, and this route is not why. That is a
+    # smaller effect than AMD's 0.731 and it is a SEPARATE open question;
+    # the AMD answer must not be quoted as covering it.
     comptime if column == COLUMN_AMD:
         return False
     return column == COLUMN_NVIDIA
