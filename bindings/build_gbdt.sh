@@ -240,9 +240,30 @@ tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-gbdt-build.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
 out="$tmpdir/_mojolearn_gbdt.so"
 
+# MOJOLEARN_EXTRA_DEFINES: DIAGNOSTIC DEFINES, PASSED THROUGH VERBATIM, EMPTY
+# BY DEFAULT (added 2026-09-03 for the DEVIATION 2043 accuracy A/B).
+#
+# The numeric mode and the column already have their own variables above
+# because they are CONTRACT axes: each one lands its binary in its own
+# directory and `python/mojolearn/_backend.py` picks it up by name. A
+# per-deviation diagnostic define is neither -- it produces a FAST binary
+# that belongs in the FAST directory and differs from the shipped one only
+# in the arm one comptime row selects -- so it gets a pass-through rather
+# than a directory.
+#
+# THE CALLER OWNS THE STAGING. This variable does NOT move OUTDIR, so a
+# build made with it OVERWRITES the shipped fast artifact in place. That is
+# deliberate: a define whose meaning changes per deviation cannot have a
+# stable directory, and inventing one per deviation is how a tree grows
+# directories nothing reads. `tools/gbdt_accuracy_ab.sh` stashes each .so
+# under its own name immediately after the build and copies the one it wants
+# back before each launch, which is the shape any caller of this variable
+# has to take. A caller that sets it and then forgets to rebuild without it
+# has left a diagnostic binary installed under the shipped name.
+#
 # shellcheck disable=SC2086  # both flag strings are deliberately word-split
 pixi run mojo build --emit shared-lib \
-    $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
+    $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE ${MOJOLEARN_EXTRA_DEFINES:-} \
     $LINK_FLAGS \
     -I . -I bindings \
     bindings/_mojolearn_gbdt.mojo \
