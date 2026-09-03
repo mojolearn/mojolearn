@@ -1,0 +1,6 @@
+== leg lane=gbdt mode=FAST round=1 02:54:04 ==
+== bench/lanes_price_main.mojo [FAST] lane=gbdt rounds=1 smoke=True ==
+LPRICE gbdt FAST warmup 4096x100.t2.d6 4.314035 82211e0c08617512
+LPRICE gbdt FAST 1 4096x100.t2.d6 4.249812 82211e0c08617512
+HASH-STABLE gbdt FAST 2 rounds all 82211e0c08617512
+== done [FAST] lane=gbdt ==

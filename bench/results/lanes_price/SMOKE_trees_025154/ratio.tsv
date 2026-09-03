@@ -1,0 +1,4 @@
+lane	n	fast_med_s	ident_med_s	ratio_med	ratio_min	ratio_max	fast_min_s	fast_max_s	ident_min_s	ident_max_s	fast_hash	ident_hash	hash_note
+gbdt	1	4.249812	4.391733	1.033	1.033	1.033	4.249812	4.249812	4.391733	4.391733	82211e0c08617512	5d6c4dc28120ef37	fast!=ident bits
+rf	1	0.783065	0.795012	1.015	1.015	1.015	0.783065	0.783065	0.795012	0.795012	c771b60d12d2f041	c771b60d12d2f041	fast==ident bits
+et	1	0.122937	0.119970	0.976	0.976	0.976	0.122937	0.122937	0.119970	0.119970	5ab738f63f1ecd9a	5ab738f63f1ecd9a	fast==ident bits

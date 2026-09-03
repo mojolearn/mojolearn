@@ -1,0 +1,6 @@
+== leg lane=rf mode=FAST round=1 02:54:23 ==
+== bench/lanes_price_main.mojo [FAST] lane=rf rounds=1 smoke=True ==
+LPRICE rf FAST warmup 4096x50.t2.d12.b128 0.966015 c771b60d12d2f041
+LPRICE rf FAST 1 4096x50.t2.d12.b128 0.783065 c771b60d12d2f041
+HASH-STABLE rf FAST 2 rounds all c771b60d12d2f041
+== done [FAST] lane=rf ==

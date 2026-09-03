@@ -1,0 +1,6 @@
+== leg lane=rf mode=IDENTICAL round=1 02:54:24 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=rf rounds=1 smoke=True ==
+LPRICE rf IDENTICAL warmup 4096x50.t2.d12.b128 0.873037 c771b60d12d2f041
+LPRICE rf IDENTICAL 1 4096x50.t2.d12.b128 0.795012 c771b60d12d2f041
+HASH-STABLE rf IDENTICAL 2 rounds all c771b60d12d2f041
+== done [IDENTICAL] lane=rf ==
