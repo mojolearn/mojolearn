@@ -147,7 +147,7 @@ are inputs to this profile.
 | `portable_sinf` / `portable_cosf` | EXIST in `checks/numerics.mojo` (DEVIATION 820 built sinf and refactored cosf onto the shared core); gate `checks/portable_trig_check.mojo` / `pixi run` target per that file. CERTIFICATION of the pair on the device columns is a PRECONDITION of phase 2 — RUN OWED, not assumed | S13 rotation |
 | `identical_tanh` | EXISTS (DEVIATION 821, `portable_tanhf`) | S10 angle squash |
 | `identical_sigmoid` | EXISTS (row 52, `portable_sigmoidf`) | S8 trap |
-| `identical_clamp` | DOES NOT EXIST. Already requested by mamba2 DEVIATION 788 (phase 0 of ITS build order); this profile is the SECOND consumer and the FIRST whose bound ALWAYS binds structurally (S5's `max=-A_floor`) | S5 |
+| `identical_clamp` | EXISTS, `checks/numerics.mojo:2273`. Requested by mamba2 DEVIATION 788 and landed since; this profile is the SECOND consumer and the FIRST whose bound ALWAYS binds structurally (S5's `max=-A_floor`) | S5 |
 | mod-2π reduction | NEW SPELLING, not a new function: composed from `identical_div`, exact `floor`, `pinned_mul`, one subtract (DEVIATION 829). No request to the identity lane needed | S10 |
 | π / 2π constants | `Float32(π) = 0x40490FDB`, `Float32(2π) = 0x40C90FDB`, pinned BY BITS in the oracle and kernels; the upstream float64 literal `3.141592653589793` rounds to these in every f32 context the references use | S10, S13 |
 
