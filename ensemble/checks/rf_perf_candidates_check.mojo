@@ -5,13 +5,9 @@
     tools/with_build_lock.sh pixi run mojo run -I . \\
         ensemble/checks/rf_perf_candidates_check.mojo
 
-RUN 2026-09-01, ALL ARMS GREEN (G0-G2, H1-H3, S1-S2), orchestrator, Apple
-M4, serial niced, at commit `1790aea1` -- the gate record in
-`ensemble/PLAN.md` carries the date, the box and the commit. The
-"UNVERIFIED, RUN OWED: this check has never been executed (the lane is
-write-only)" line that stood here was written before that run and was
-never updated; a docstring with no date lost to a dated record, correctly.
-The command above is still the orchestrator's, and STILL ONE APPLE M4.
+RUN 2026-09-01, ALL ARMS GREEN (G0-G2, H1-H3, S1-S2), Apple M4, serial
+niced, at commit `1790aea1`; the gate record is in `ensemble/PLAN.md`. The
+command above is the orchestrator's. STILL ONE APPLE M4.
 
 WHAT THIS CHECK IS FOR, and why it cannot lean on the forest. All three
 candidates are chosen precisely because the FOREST cannot move under

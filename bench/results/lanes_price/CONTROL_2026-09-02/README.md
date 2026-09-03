@@ -1,12 +1,11 @@
 # The control that exonerated the code, 2026-09-02
 
-A price run on this box read the linear-algebra identity tax at 1.00x for
-the Gram product and 0.99x for the standalone N-T matrix product, against
-1.22x and 5.69x in `results/identity-cost-unsupervised-m4-2026-08-23.json`.
-The first reading of that was that the tax had been engineered away by the
-eleven commits that touched the identical GEMM path since. THAT READING WAS
-WRONG, and the experiment that shows it is the one every timing surprise in
-this repo is owed: RUN THE OLD CODE ON THE NEW DAY.
+A price run on this box read the Gram product at 1.00x and the standalone
+N-T matrix product at 0.99x, against the 1.22x and 5.69x published in
+August. The first reading was that the tax had been engineered away. THAT
+READING WAS WRONG, and so was the second one (that August therefore stood).
+The experiment that settles it is the one every timing surprise in this repo
+is owed: RUN THE OLD CODE ON THE NEW DAY.
 
 ## The three runs, same box, same afternoon
 
@@ -25,57 +24,35 @@ The timed path did not change: the only diff between those two commits in
 `bench/linalg_price_main.mojo` is the mode-label function delegating to
 `numeric_mode_name()`, plus an import rename. Nothing inside the clock moved.
 
-## What this establishes, and what it forbids
+## What this establishes
 
 THE LIBRARY DID NOT REGRESS. Old code and new code perform the same on this
 box today. Any conclusion of the form "X got slower since August" drawn from
 a same-day comparison against an August number is unsupported unless this
 control runs first.
 
-RATIOS ARE NOT PROTECTED BY ALTERNATION when the arm is small. Alternating
-FAST and IDENTICAL inside one window cancels drift that scales both arms.
-It does NOT cancel a fixed per-launch cost, which lands in both arms
-equally and therefore pulls every ratio toward 1.0 -- hardest on the arms
-whose true time is smallest. `nt` at 0.09 ms of real work under about 2.6 ms
-of overhead reads 1.38x on the very code that read 5.69x when the overhead
-was absent. A ratio taken on a degraded box is not a conservative estimate
-of the ratio; it is a different number.
+THE AUGUST FIGURES ARE RETRACTED, NOT PROMOTED. This control cannot promote
+them: those absolute times have never been reproduced on any box, and the run
+that produced them recorded no memory state, so the conditions behind them
+cannot be established. The box was carrying 7.5 GB of swap on an 8 GB device
+while reporting a clean 0.90 load average.
 
-## What was concluded here first, and why it was wrong
+RATIOS ARE NOT PROTECTED BY ALTERNATION. Alternating FAST and IDENTICAL
+inside one window cancels drift that SCALES both arms. It does not cancel a
+FIXED per-launch cost, which lands in both arms equally and pulls every ratio
+toward 1.0, hardest on the arm whose true time is smallest. The arithmetic
+closes on the table above: (6.41+21)/(5.27+21) = 1.04 against 0.98 measured
+for gram, and (0.54+2.56)/(0.09+2.56) = 1.17 against 1.38 for nt.
 
-The sentence that stood here said "the August figures stand as the
-identity cost." THEY DO NOT, and keeping them was the flattering answer
-rather than the correct one.
-
-The control above proves exactly one thing: the code did not regress. It
-does NOT promote the August numbers, because it cannot. Those absolute
-times have never been reproduced on any box, this one included, and the
-run that produced them recorded no memory state, so there is no way to
-establish the conditions they were taken under. An unreproducible number
-is not made trustworthy by the failure of its replacement.
-
-Both readings are unusable, for the same reason and in the same
-direction. THE DILUTION IS ARITHMETIC, not a hand-wave, and it closes on
-this table's own numbers: add the box's fixed cost to August's arms and
-(6.41+21)/(5.27+21) = 1.04 against 0.98 measured for gram, and
-(0.54+2.56)/(0.09+2.56) = 1.17 against 1.38 measured for nt. Every ratio
-on a loaded box is pulled toward 1.0, hardest on the smallest arm. So a
-degraded box UNDERSTATES the identity tax; it does not overstate it, and
-it is not a conservative estimate of it.
-
-The consequence for this repository is that NO Apple price row published
-before 2026-09-03 may be quoted as the cost of identity -- not August's,
-and not the 2026-09-02 lanes run either, whose Gram arm read 34 ms
-against August's 5.27 ms for the same shape and was therefore taken on
-the same degraded machine.
+So a contended box UNDERSTATES the identity tax. It is not a conservative
+estimate of it, and the two Apple readings do not bound each other. That
+disqualifies the 2026-09-02 lanes run too, whose Gram arm read 34 ms for the
+shape August read at 5.27 ms.
 
 ## Where the number comes from instead
 
-A single-tenant rented GPU: no laptop governor, no swap, no browser, and
-one job on the device. `tools/e2_remote_leg.sh`'s `lanes-price` check
-runs the nine lanes on an MI325X and an H100. Apple is re-measured when
-the box is quiet, and `tools/lanes_price.sh` now records memory pressure
-at both ends of every run so that "quiet" is a recorded fact rather than
-an assumption -- the gate here refused a concurrent mojo/pixi and logged
-a clean 0.90 load average on a box with 7.5 GB of swap on an 8 GB device,
-because load average does not see paging.
+A single-tenant rented GPU: no laptop governor, no swap, no browser, one job
+on the device. `tools/e2_remote_leg.sh`'s `lanes-price` check runs nine lanes
+on an MI325X and an H100. `tools/lanes_price.sh` now records memory pressure
+at both ends of every run, because the concurrency gate and the load average
+both read clean on the swapping box -- load average does not see paging.

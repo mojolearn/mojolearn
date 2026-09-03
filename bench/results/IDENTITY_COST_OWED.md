@@ -1,53 +1,25 @@
 # The identity tax is measured on ONE vendor
 
-**Status 2026-09-03. THIS FILE'S 2026-08-31 HEADLINE WAS WRONG IN BOTH
-DIRECTIONS AT ONCE, and the corrections point opposite ways.**
+**Status 2026-09-03: measured on AMD MI325X. Apple is the column that is
+owed, and that is the opposite of what this file used to say.**
 
-It said "Apple only" and it said "No price run has ever executed on either
-[H100 or MI325X]". By then a clean-window price run HAD executed on an
-MI325X (2026-08-31, 5 alternated rounds, sha `035493e1`,
-`bench/LANES_PRICE.md`), and an H100 run followed on 2026-09-02. So the
-rented columns were not missing.
+The identity tax is priced by `tools/lanes_price.sh` on rented single-tenant
+GPUs. The MI325X column landed 2026-09-03 at sha `9d4aabb`: nine lanes, three
+alternated rounds, zero swap, nothing else on the device, trees at 1,000,000
+rows.
 
-And the Apple column it treated as the solid one has since been RETRACTED.
-Those figures were taken on a 16 GB laptop carrying 7.5 GB of swap, and no
-run has ever reproduced them: August's own source, rebuilt in a detached
-worktree, measured the Gram arm at 26.33 ms against the 5.27 ms published,
-and HEAD measured the same. The code did not regress; the box was
-contended. See `bench/results/lanes_price/CONTROL_2026-09-02/`.
+The Apple figures this file was built around are RETRACTED. They were taken on
+a 16 GB laptop carrying 7.5 GB of swap and have never been reproduced -- the
+same source rebuilt in a worktree measured the Gram arm at 26.33 ms against
+the 5.27 ms published. A contended box adds a fixed per-launch cost to BOTH
+arms, which pulls every ratio toward 1.0 and hardest on the smallest arm, so
+it UNDERSTATES the tax. Evidence: `bench/results/lanes_price/CONTROL_2026-09-02/`.
 
-**So the sentence to carry away is the reverse of this file's title.** The
-one-vendor problem was never the shape of the gap. The gap is that a price
-taken on a shared laptop understates the tax -- a fixed per-launch cost
-lands in BOTH arms and drags every ratio toward 1.0, hardest on the
-smallest arm -- so the LEAST confounded column is the rented single-tenant
-GPU, not the machine on the desk. `tools/lanes_price.sh` now records
-memory pressure at both ends of every run, because the concurrency gate
-and the load average both read clean on the swapping box: load average
-does not see paging.
+So a rented GPU is the LESS confounded column, not the more. `lanes_price.sh`
+records memory pressure at both ends of a run, because the concurrency gate
+and the load average both read clean on the swapping box.
 
-**What is still genuinely owed:** an Apple column taken on a quiet box, and
-the three tree lanes (`gbdt`, `rf`, `et`), which had never been priced on
-any column until 2026-09-03.
-
-The 2026-08-31 text follows unchanged, including its two wrong sentences,
-because what it got wrong is the point.
-
-## What exists
-
-`bench/results/lanes_price/2026-08-28_163353_26eb8ba/env.txt`:
-
-    host MacBook-Air-1-terrabyte
-    cpu  Apple M4
-    rounds 5
-    lanes cd kde linkage svm metrics gemm
-
-Six lanes, FAST against IDENTICAL, two binaries built once and ALTERNATED
-`F I F I F I` so a thermal drift cannot be read as a tier difference. That is
-a good measurement and it is on one box.
-
-Other documents mention H100 and MI325X near the price discussion. Those are
-PROSE. No price run has ever executed on either.
+**Owed:** an Apple column on a quiet box, and an H100 column.
 
 ## Why one box is not enough here, specifically
 

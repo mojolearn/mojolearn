@@ -75,41 +75,23 @@ gate from running its IDENTICAL pass on the box it was written for.
 | `a*b+c` contraction | FUSED (1629/1629 built-to-separate patterns) | FUSED (1629/1629) | FUSED (1629/1629) |
 | translog / sqrtcos certificates | 8705486125800438413 / 12295913102197186379 | same | same |
 
-## What IDENTICAL costs -- RETIRED 2026-09-03, THE NUMBERS ARE DELETED
+## What IDENTICAL costs
 
-This section carried a seven-row table of FAST-vs-IDENTICAL times taken
-on an Apple M4 on 2026-08-23. THE TABLE HAS BEEN DELETED RATHER THAN
-ANNOTATED, so that no reader and no generator can quote a figure from it.
+Priced by `tools/lanes_price.sh` on rented single-tenant GPUs, through
+`tools/e2_remote_leg.sh`'s `lanes-price` check. Nine lanes: kmeans, knn,
+dbscan, gram, nt, gemv, gbdt, rf, et. `bench/LANES_PRICE.md` carries the
+current table.
 
-WHY, AND IT IS NOT THAT THE CODE CHANGED. The August source was rebuilt
-in a detached worktree and re-run beside HEAD on 2026-09-02: old code and
-new code agreed with each other and neither agreed with what the same
-script had recorded in August (the Gram arm read 26.33 ms against the
-5.27 ms published here). The library did not regress. The machine was a
-16 GB laptop carrying 7.5 GB of swap on an 8 GB device, and the run that
-produced the original table recorded no memory state at all, so the
-conditions behind those figures cannot be established now.
+The 2026-08-23 Apple table that stood here is DELETED. It was taken on a
+laptop carrying 7.5 GB of swap and was never reproduced -- the same source
+rebuilt in a worktree measured the Gram arm at 26.33 ms against the 5.27 ms
+published. A contended box adds a fixed per-launch cost to both arms and
+pulls every ratio toward 1.0, hardest on the smallest arm, so it
+UNDERSTATES the tax. Evidence: `bench/results/lanes_price/CONTROL_2026-09-02/`.
 
-The retired numbers were never useless in the direction one would guess.
-A loaded box adds a FIXED per-launch cost to BOTH arms, which drags every
-ratio toward 1.0 -- hardest on the smallest arm -- so a degraded box
-UNDERSTATES the identity tax rather than inflating it. That makes the
-2026-09-02 Apple lanes run unquotable for the same reason: its Gram arm
-read 34 ms for the shape August read at 5.27 ms. Both readings are off,
-in the same direction, and neither is a conservative bound on the other.
-
-The evidence for all of this is `bench/results/lanes_price/
-CONTROL_2026-09-02/`, which keeps the three logs and the arithmetic.
-
-WHERE THE NUMBER COMES FROM NOW. `tools/lanes_price.sh`, run through
-`tools/e2_remote_leg.sh`'s `lanes-price` check on a single-tenant rented
-MI325X and H100 -- no laptop governor, no swap, no browser, one job on
-the device -- with Apple re-measured on a quiet box as a third column.
-That harness alternates the arms round by round, builds both modes once
-before any measurement, reports a paired ratio BAND rather than four
-significant figures, and now records memory pressure at both ends of the
-run so that "quiet" is a recorded fact. It prices nine lanes: the six
-here plus gbdt, rf and et, which had never been priced at all.
+The matrix arms cost the most because fast mode calls a closed vendor matmul
+(k-split, TF32 on NVIDIA) and identical mode cannot, so it runs a plain
+pinned tile. That gap is optimization maturity as much as numeric restriction.
 
 ## Method and artifacts
 
