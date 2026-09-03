@@ -1,0 +1,14 @@
+===== A/B ARM MOJOLEARN_2041_FAST_CHUNKS_PIN =====
+== DEVIATION 2040 A/B: rows 1000000, lanes [gbdt rf et], 3 rounds -> bench/results/e1/2026-09-03_101532-mojolearn-e2-amd//fast_replication_ab/MOJOLEARN_2041_FAST_CHUNKS_PIN ==
+tools/fast_replication_ab.sh: 30: AB_DEFINE: parameter not set
+ARM MOJOLEARN_2041_FAST_CHUNKS_PIN FAILED rc=2
+===== A/B ARM MOJOLEARN_2042_FAST_NO_LOOKBACK =====
+== DEVIATION 2040 A/B: rows 1000000, lanes [gbdt rf et], 3 rounds -> bench/results/e1/2026-09-03_101532-mojolearn-e2-amd//fast_replication_ab/MOJOLEARN_2042_FAST_NO_LOOKBACK ==
+tools/fast_replication_ab.sh: 30: AB_DEFINE: parameter not set
+ARM MOJOLEARN_2042_FAST_NO_LOOKBACK FAILED rc=2
+===== ALL ARMS =====
+MOJOLEARN_2041_FAST_CHUNKS_PIN: no table
+MOJOLEARN_2042_FAST_NO_LOOKBACK: no table
+
+ratio = PIN / BASE. Below 1.0 means the arm made FAST faster.
+A ratio is only a speed result on a row whose two hashes are EQUAL.

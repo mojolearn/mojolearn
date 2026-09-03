@@ -1806,7 +1806,38 @@ def reorder_single_pass_for[column: Int, identical: Bool]() -> Bool:
     # the A/B harness will say so or refuse.
     comptime if is_defined["MOJOLEARN_2042_FAST_NO_LOOKBACK"]():
         return False
-    return column == COLUMN_NVIDIA or column == COLUMN_AMD
+    # DEVIATION 2042: **AMD FLIPPED OFF 2026-09-03 ON A MEASUREMENT.** This
+    # row's own paragraph above has owed an A/B since the route was added
+    # ("the A/B is the orchestrator's 5M rung intra-leg, and this row is
+    # where the routing flips if the number disagrees"). It was finally run
+    # and the number disagrees.
+    #
+    # MI325X, 1,000,000 rows, two FAST builds alternated, 3 rounds, gbdt:
+    #
+    #     routed here    0.602159 s
+    #     stable partition 0.471577 s      ratio 0.783, BITS EQUAL
+    #
+    # Both arms hash 45bfcba4070bf931, so this is a bit-identical win and
+    # the default moves in the session that measured it. rf 0.998 and et
+    # 1.001, both bits equal, so the flip costs the other two tree lanes
+    # nothing.
+    #
+    # WHAT IT EXPLAINS. IDENTICAL was BEATING FAST on the gbdt lane on both
+    # devices, which is not supposed to happen -- identity is not free, and
+    # IDENTICAL there also pays a software Cephes expf and a
+    # barrier-per-step reduction. The gap was this route: FAST off it runs
+    # at 0.4716 s against IDENTICAL's 0.471-0.475 s. The tax was never
+    # negative; the fast arm was carrying a spin-wait kernel only it
+    # compiles, whose lookback walk is SERIAL ON THREAD 0
+    # (reorder_single_pass.mojo:120-124 names the warp-windowed version as
+    # the fix) plus a global atomic ticket for tile ordering.
+    #
+    # NVIDIA IS NOT FLIPPED, because it is not measured. The same A/B on an
+    # H100 is owed and the flag is how it runs. A number from one vendor
+    # does not move another vendor's default.
+    comptime if column == COLUMN_AMD:
+        return False
+    return column == COLUMN_NVIDIA
 
 
 def ridx_only_splits_for[column: Int, identical: Bool]() -> Bool:
