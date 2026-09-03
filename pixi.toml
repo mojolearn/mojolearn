@@ -58,9 +58,15 @@ probe = "mojo run -I . probe_main.mojo"
 # THE VENDOR ARMS ARE NOT TASKS HERE, ON PURPOSE. cuml, cuvs and cudf are not
 # on conda-forge for osx-arm64 at all, and adding them would re-solve
 # pixi.lock for every environment -- the exact hazard [feature.skgpu]'s
-# comment was written about. They also cannot share an interpreter with the
-# prebuilt python/mojolearn/*.so, which are built against 3.14 while RAPIDS
-# ships for 3.10 through 3.13. They run on the pod's system python:
+# comment was written about. A second reason stood here and is RETRACTED:
+# that they "cannot share an interpreter" with the prebuilt
+# python/mojolearn/*.so. The version claim under it -- "built
+# against 3.14 while RAPIDS ships for 3.10 through 3.13" -- is WRONG and was
+# measured wrong on 2026-09-03: the default environment is Python 3.13.15,
+# and the built `_mojolearn_gbdt.so` imports cleanly under BOTH 3.13 and the
+# `bench` feature's 3.14, so the binding is not pinned to one minor version.
+# The vendor arms stay on the pod's system python for the packaging reason
+# alone, not because of an ABI wall:
 #
 #   python3 tools/speed_gemm_arm.py            cuBLAS, both allow_tf32 arms
 #   python3 tools/speed_torch_seq.py           PyTorch and mamba-ssm
