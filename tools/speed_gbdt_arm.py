@@ -575,8 +575,32 @@ def load_higgs(size, rows_cap=None):
     folder = os.path.join(data_root(), "higgs")
     gz_path = os.path.join(folder, "HIGGS.csv.gz")
     npz_path = os.path.join(folder, "higgs_speed.npz")
-    if os.path.exists(npz_path):
-        z = np.load(npz_path)
+    # A CACHE ENTRY THAT EXISTS IS NOT A CACHE ENTRY THAT LOADS.
+    #
+    # `os.path.exists` stood here and it sent a ZERO-BYTE stub down the
+    # cached branch: on 2026-09-03 a rented box was destroyed while the
+    # decode was still in page cache, and the volume came back holding a
+    # COMPLETE 2,816,407,858-byte HIGGS.csv.gz beside an higgs_speed.npz of
+    # 0 bytes. numpy raises "No data left in file" on that, which reads like
+    # a truncated DOWNLOAD and is not one -- the download was perfect and
+    # the decode was the casualty.
+    #
+    # A half-written cache is treated as an absent one, because the gzip it
+    # is derived from is sitting right beside it and the decode is a couple
+    # of minutes. Failing the leg to avoid that is the wrong trade, and
+    # reporting it as a missing download sends the next run to re-fetch
+    # 2.6 GB it already has.
+    cached = None
+    if os.path.exists(npz_path) and os.path.getsize(npz_path) > 0:
+        try:
+            cached = np.load(npz_path)
+        except Exception as exc:                   # noqa: BLE001
+            sys.stderr.write(
+                "speed_gbdt_arm: %s is unreadable (%s); re-decoding from "
+                "the gzip beside it\n" % (npz_path, exc))
+            cached = None
+    if cached is not None:
+        z = cached
         x, y = z["x"], z["y"]
     else:
         if not os.path.isfile(gz_path):
