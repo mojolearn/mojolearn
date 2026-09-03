@@ -107,9 +107,33 @@ echo "A ratio is a speed result only on a row whose hashes are EQUAL."
 echo "results in $OUT"
 rc=0
 [ "$build_fail" != "0" ] && rc=2
-case "$(shp "$OUT/logs/base.$(echo $LANES | cut -d' ' -f1).log")" in
-    higgs-*) ;;
-    *) echo "!! NOT HIGGS: a synthetic fixture answers nothing here"; rc=4 ;;
-esac
+# THE SHAPE TAG AND THE MISSING-ROUNDS CASE ARE DIFFERENT FAILURES AND THIS
+# CONFLATED THEM. `shp` reads timed `FSPEED ` lines only, so an arm whose
+# rounds were all SKIPPED leaves it empty and the old test then reported
+# "NOT HIGGS: a synthetic fixture" over a run whose fixture was higgs. That
+# happened on the first run: gbdt-lossguide's WARM-UP FIT ALONE took 338.7 s
+# against the harness's 300 s per-arm budget, every timed round was skipped,
+# and the leg blamed the dataset. A wrong diagnosis is worse than no
+# diagnosis; it sends the next person to fix the fetch.
+#
+# So: read the shape from the WARM-UP too, and separate the two verdicts.
+for L in $LANES; do
+    LOG="$OUT/logs/base.$L.log"
+    S=$(shp "$LOG")
+    [ -z "$S" ] && S=$(grep "^FSPEED-WARMUP " "$LOG" 2>/dev/null | head -1 \
+        | awk '{for(i=1;i<=NF;i++) if(index($i,"shape=")==1) printf "%s", substr($i,7)}')
+    case "${S:-none}" in
+        higgs-*) ;;
+        none) echo "!! lane $L produced NO fixture at all -- the arm never ran"; rc=4 ;;
+        *) echo "!! lane $L ran on $S, not higgs: a synthetic fixture answers nothing here"; rc=4 ;;
+    esac
+    if [ -z "$(med "$LOG")" ]; then
+        echo "!! lane $L has NO TIMED ROUNDS. Check for a budget refusal:"
+        grep "^FSPEED-REFUSED " "$LOG" 2>/dev/null | sed 's/^/     /' | head -2
+        echo "     This is a BUDGET result, not a dataset result. Raise"
+        echo "     MOJOLEARN_SPEED_BUDGET (or the lane's rounds) and re-run."
+        rc=5
+    fi
+done
 [ "$rc" != "0" ] && echo "!! grow_policy_ab FAILED (rc=$rc)"
 exit $rc
