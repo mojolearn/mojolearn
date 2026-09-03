@@ -176,8 +176,12 @@ _MODULES = (
     # Mamba2Block, `_mamba_impl.py`; Mamba3Block joined later the same
     # day). The binding (bindings/_mojolearn_mamba.mojo + build_mamba.sh)
     # landed in the same commit; the Mamba-1/2 entries built and gated
-    # green in all three tiers that evening, and the Mamba-3 entries are
-    # RUN OWED per tier until rebuilt. Listing the name here and in
+    # green in all three tiers that evening, and the Mamba-3 entries
+    # followed: gated green at 08a38a13 in all three tiers, with the
+    # corpus arm added 2026-09-03. The "RUN OWED per tier until rebuilt"
+    # note here was stale (60a90de9 fixed the twin sentence in
+    # __init__.py and missed this one). ONE APPLE M4 throughout, and the
+    # binding FAULTS on AMD in every tier. Listing the name here and in
     # `_build_script`, both, is what makes an unbuilt extension raise BY
     # NAME with the build command instead of a wrong-tier binary
     # answering under the right label (DEVIATION 869, the header above).

@@ -1,7 +1,37 @@
 # The identity tax is measured on ONE vendor
 
-**Status 2026-08-31: Apple only. This is the softest reviewable spot in the
-paper and it is a MEASUREMENT gap, not a code gap.**
+**Status 2026-09-03. THIS FILE'S 2026-08-31 HEADLINE WAS WRONG IN BOTH
+DIRECTIONS AT ONCE, and the corrections point opposite ways.**
+
+It said "Apple only" and it said "No price run has ever executed on either
+[H100 or MI325X]". By then a clean-window price run HAD executed on an
+MI325X (2026-08-31, 5 alternated rounds, sha `035493e1`,
+`bench/LANES_PRICE.md`), and an H100 run followed on 2026-09-02. So the
+rented columns were not missing.
+
+And the Apple column it treated as the solid one has since been RETRACTED.
+Those figures were taken on a 16 GB laptop carrying 7.5 GB of swap, and no
+run has ever reproduced them: August's own source, rebuilt in a detached
+worktree, measured the Gram arm at 26.33 ms against the 5.27 ms published,
+and HEAD measured the same. The code did not regress; the box was
+contended. See `bench/results/lanes_price/CONTROL_2026-09-02/`.
+
+**So the sentence to carry away is the reverse of this file's title.** The
+one-vendor problem was never the shape of the gap. The gap is that a price
+taken on a shared laptop understates the tax -- a fixed per-launch cost
+lands in BOTH arms and drags every ratio toward 1.0, hardest on the
+smallest arm -- so the LEAST confounded column is the rented single-tenant
+GPU, not the machine on the desk. `tools/lanes_price.sh` now records
+memory pressure at both ends of every run, because the concurrency gate
+and the load average both read clean on the swapping box: load average
+does not see paging.
+
+**What is still genuinely owed:** an Apple column taken on a quiet box, and
+the three tree lanes (`gbdt`, `rf`, `et`), which had never been priced on
+any column until 2026-09-03.
+
+The 2026-08-31 text follows unchanged, including its two wrong sentences,
+because what it got wrong is the point.
 
 ## What exists
 

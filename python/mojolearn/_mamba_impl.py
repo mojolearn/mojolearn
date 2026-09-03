@@ -84,9 +84,16 @@ RUN LEDGER. The Mamba-1/Mamba-2 surface BUILT AND GATED 2026-09-01: all
 three tiers green through `tests/test_mamba_surface.py`, bitwise arms
 asserted under identical (`mamba/FEATURE_PARITY.md`'s consumer-table
 PyPI row; one box, one vendor). `Mamba3Block`/`Mamba3State`, added
-later the same day (the mamba-3 kernel lane's own gates ran green that
-evening, its contract's RUN RECORD), are UNVERIFIED, RUN OWED: their
-binding entries have never been compiled. The gate is
+later the same day, ARE BUILT AND GATED: the surface gate printed green
+at `08a38a13` on the evening of 2026-09-02 in all three tiers,
+bitwise-asserted, and the mamba3 corpus arm joined it on 2026-09-03
+(102 checks, 0 failed, each tier). The "UNVERIFIED, RUN OWED: their
+binding entries have never been compiled" note that stood here was
+stale; `60a90de9` corrected the same sentence in `__init__.py` and
+missed this copy of it and the one in `_backend.py`. Still true and
+still one box: ONE APPLE M4. The `_mojolearn_mamba` binding FAULTS on
+AMD in every tier (GPU memory access fault, rc 134), so no non-Apple
+claim may be made for this surface. The gate is
 `python/mojolearn/tests/test_mamba_surface.py`; the build is
 `bash bindings/build_mamba.sh` per tier, REBUILT before any run is
 believed.
