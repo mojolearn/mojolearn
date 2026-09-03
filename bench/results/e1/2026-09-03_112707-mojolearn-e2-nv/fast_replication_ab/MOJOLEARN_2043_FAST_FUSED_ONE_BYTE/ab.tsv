@@ -1,0 +1,4 @@
+lane	base_med_s	pin_med_s	ratio	base_hash	pin_hash	verdict
+gbdt	0.756821624	0.70866898	0.936	4a1588d5f77560b2,	0c712c77f0d20a35,	BITS MOVED -- NOT A SPEED RESULT
+rf	0.814742383	0.823937032	1.011	acfbdbde102e8c54,	acfbdbde102e8c54,	bits equal
+et	2.185484197	2.129581388	0.974	a4d03520b4584c37,	a4d03520b4584c37,	bits equal
