@@ -45,8 +45,16 @@ asserts both halves.
   one, so three sabotage arms are unfalsifiable -- and
   `embedding/checks/embedding_identical.mojo` has clause (a) only and no
   sabotage arm ever built.
-- No `pixi.toml` task; the legs drove the gate by path.
-- No checkpoint file format, so clause (d) tests resume WITHIN one process.
+- **`pixi.toml` tasks landed 2026-09-03**: `check-train-step`,
+  `check-train-loop` and `check-train-checkpoint`. The 2026-08-28 legs
+  drove the gate by path because there was nothing to name; **the tasks
+  themselves have not been invoked once.**
+- **Clause (d) still tests resume WITHIN one process.** A checkpoint file
+  format was WRITTEN 2026-09-03 -- `training/CHECKPOINT_FORMAT.md`,
+  `training/checkpoint.mojo`, `training/checks/checkpoint_check.mojo`,
+  DEVIATIONS 2050-2069 -- and **NONE OF IT HAS BEEN COMPILED OR RUN ON ANY
+  BOX.** Until it has, section 12 item 8 is open exactly as it was and
+  section 7 item 6's "no claim about resuming from a file" stands unchanged.
 
 ---
 
@@ -345,6 +353,15 @@ serialization in v1 (DEVIATION 1569), so `OPT_SAB_RESUME_REINIT`'s real form,
 a checkpoint that drops the momentum flags on the way to disk, is not
 reachable from here and this control does not test it.
 
+**A file form of N6 is WRITTEN and UNRUN**, `training/checks/checkpoint_check
+.mojo` clause (iii), which saves at `first`, loads in fresh buffers and resumes
+-- with an R1 control that zeroes `m` and `v` and must move the digest, so
+that a resume which quietly reinitialized from the seed cannot pass. **Its own
+first assertion is that its step loop agrees with `run_training`**, because
+without that it compares two things the checkpoint lane wrote and nothing this
+one wrote. Nothing there has been compiled; N6 is still the only resume
+control this repository has evidence for.
+
 **N7 batch splitting is NOT a control and must not be added.** Somebody will
 want to assert that two microbatches of 8 produce the same digest as one batch
 of 16. **That claim is false and asserting it would be a gate that fails for a
@@ -431,7 +448,10 @@ completely different investigation.**
    meaningless **and the harness cannot detect it.** The card's header line
    records the configuration and a comparison must check it by eye.
 5. **No claim about batch splitting**, 4.2 N7.
-6. **No claim about resuming from a file**, 4.2 N6.
+6. **No claim about resuming from a file**, 4.2 N6. A format and a gate for
+   it were WRITTEN 2026-09-03 (`training/CHECKPOINT_FORMAT.md`, section 12
+   item 8) and **not one line of either has been compiled**, so this
+   disclaimer stands exactly as written until a run replaces it.
 7. **No performance number.** A traced run drains the queue and copies four
    buffers to the host every step, and `identical_optimizer_step` additionally
    downloads all four of `param`, `grad`, `m` and `v` for its refusal pass
@@ -535,8 +555,21 @@ money; the vacuity controls do not.
    happens to be legal by coincidence and not by construction.** The optimizer
    lane owes the same fix for `OPT_TPB = 256`, which is NOT legal on that
    column.
-7. **A `pixi.toml` task.**
+7. ~~**A `pixi.toml` task.**~~ **ADDED 2026-09-03 AND NEVER INVOKED**:
+   `check-train-step`, `check-train-loop`, `check-train-checkpoint`.
+   A task that has not been run is a path with a shorter name, not
+   evidence.
 8. **A checkpoint file format**, if resume-from-disk is ever to be tested.
+   **WRITTEN 2026-09-03 AND NOT RUN.** `training/CHECKPOINT_FORMAT.md` is the
+   spec (`mojolearn.identical.train.ckpt.file.v1`), `training/checkpoint.mojo`
+   the implementation, `training/checks/checkpoint_check.mojo` the gate, and
+   DEVIATIONS 2050-2069 are that lane's, PROPOSED and not in the ledger.
+   **Nothing there has been compiled on any box**, so this item is NOT closed:
+   it closes on a run, and then on a second vendor. `h_all` in that file is
+   deliberately the same number as section 3's, the file carries no field
+   derived from a device, and its clause (iii) is the first thing in the tree
+   that puts a filesystem in the middle of 4.2's N6. The commands are in
+   `CHECKPOINT_FORMAT.md` section 10.
 9. **A second architecture and a second shape**, before the phrase "one
    source, three vendors" is used about training rather than about a GEMM.
 10. **A device-buffer form of `llama_decoder_layer_backward`** (DEVIATION

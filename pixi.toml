@@ -1127,6 +1127,26 @@ check-batch-invariance = "mojo run -I . batch_invariance_main.mojo"
 # work above leans on.
 check-transformer = "mojo run -I . transformer/checks/transformer_check.mojo"
 check-transformer-backward = "mojo run -I . transformer/checks/transformer_backward_check.mojo"
+
+# THE TRAINING-LOOP GATES, which had no task at all until 2026-09-03 --
+# TRAINING_LOOP_PLAN.md section 12 item 7 is exactly this, and the 2026-08-28
+# Apple and AMD legs drove the gate by path because there was nothing to name.
+#
+# `check-train-checkpoint` is WRITTEN AND HAS NEVER RUN, along with
+# `training/checkpoint.mojo` and `training/CHECKPOINT_FORMAT.md`
+# (DEVIATIONS 2050-2069). It is the FILE form of the resume that
+# `train_step_check`'s clause (d) can only do inside one process. Its
+# cross-vendor use is two legs and a `cmp`:
+#   MOJOLEARN_TRAIN_STEPS=8 MOJOLEARN_TRAIN_CKPT_FILE=/tmp/<box>.ckptbin \
+#     pixi run check-train-checkpoint
+#   cmp -l /tmp/apple.ckptbin /tmp/amd.ckptbin
+#   MOJOLEARN_CKPT_COMPARE_A=... MOJOLEARN_CKPT_COMPARE_B=... \
+#     pixi run check-train-checkpoint
+# **A leg that writes the file and never has it compared against another
+# VENDOR'S is not a result.**
+check-train-step = "mojo run -I . training/checks/train_step_check.mojo"
+check-train-loop = "mojo run -I . training/checks/train_loop.mojo"
+check-train-checkpoint = "mojo run -I . training/checks/checkpoint_check.mojo"
 # The INDEPENDENT cross-check: torch float64 per-stage reference, the only
 # comparison in this lane whose other side is not our own code. TWO STEPS --
 # the dump is produced by the gate above, then compared:
