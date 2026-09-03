@@ -1577,6 +1577,35 @@ def greedy_one_byte_fixed_for[column: Int, identical: Bool]() -> Bool:
     """
     comptime if identical:
         return False
+    # DEVIATION 2043, OFF BY DEFAULT, AND IT IS A DIAGNOSTIC RATHER THAN A
+    # SWITCH. The question it answers: why does IDENTICAL beat FAST on the
+    # gbdt lane on an H100 (0.938) when the AMD cause -- the decoupled-
+    # lookback partition, DEVIATION 2042 -- is measured INERT there (1.003)?
+    #
+    # The line below is the asymmetry. It returns `column_lane_width == 64`,
+    # so under FAST it is TRUE on AMD's 64-wide CDNA and FALSE on NVIDIA's
+    # 32-wide SM. At 254 borders every feature is one-byte with more than
+    # 128 bins, and the dispatch in `greedy_search_helper` keys on this row,
+    # so of the four cells (fast/identical x nvidia/amd) FAST-ON-NVIDIA IS
+    # THE ONLY ONE that falls through to CatBoost's PASS(8) ladder --
+    # `gridDim.z = stat_count`, TWO FULL WALKS over the compressed index per
+    # level. The other three run the fused two-stat kernel: one walk, one
+    # launch, half the cindex traffic. Same shape as 2042: a route only the
+    # fast arm compiles, and it is the slower one.
+    #
+    # THE HASHES WILL DIFFER AND THAT IS NOT A DEFECT. The fused arm
+    # accumulates dithered fixed-point Int32; the PASS arm accumulates
+    # warp-private f32. So this arm is a 2041-class TRADEOFF REPORT, not a
+    # 2042-class bit-neutral win, and NO DEFAULT MAY FLIP ON IT. The A/B
+    # harness will refuse a ratio on the hash mismatch; read the two times.
+    #
+    # It is also not a pure routing swap: setting this turns on the
+    # magnitude reduce, `acc_i32` and the fixed bridge that IDENTICAL
+    # already carries, so the arm built is "FAST with IDENTICAL's one-byte
+    # histogram stage". That is the right comparison for the question and
+    # the wrong one for a shipping decision.
+    comptime if is_defined["MOJOLEARN_2043_FAST_FUSED_ONE_BYTE"]():
+        return True
     return column_lane_width(column) == 64
 
 
