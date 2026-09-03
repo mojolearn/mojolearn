@@ -141,6 +141,26 @@ if [ -n "$busy" ]; then
 fi
 
 mkdir -p "$OUT/bin"
+# MEMORY PRESSURE IS A PRICE VARIABLE, and it was missing here until
+# 2026-09-03. This script recorded loadavg and refused a concurrent
+# mojo/pixi, and both read CLEAN on an Apple M4 whose 8 GB swap was 91%
+# consumed -- a box on which the same source that measured 5.27 ms for the
+# Gram product in August measured 26.33 ms. Load average does not see
+# paging, and on unified memory the page cache and the GPU buffers are the
+# same pool. A run taken there is not a slower version of the right
+# answer: a fixed per-launch cost lands in BOTH arms and drags every
+# ratio toward 1.0, so it UNDERSTATES what identity costs.
+mem_note() {
+    if [ "$(uname -s)" = "Darwin" ]; then
+        printf '%s | %s' \
+            "$(sysctl -n vm.swapusage 2>/dev/null || echo 'swap unknown')" \
+            "$(memory_pressure 2>/dev/null | sed -n 's/^System-wide memory free percentage: //p' \
+                | tr -d '\n' | sed 's/^/free /' || echo 'pressure unknown')"
+    else
+        printf '%s' "$(free -m 2>/dev/null | awk '/^Mem:/{printf "mem total %sM used %sM avail %sM; ", $2, $3, $7} /^Swap:/{printf "swap total %sM used %sM", $2, $3}' || echo 'meminfo unknown')"
+    fi
+}
+
 echo "== lanes_price: rounds $ROUNDS, lanes [$LANES], smoke $SMOKE -> $OUT =="
 {
     echo "sha $SHA"
@@ -154,6 +174,7 @@ echo "== lanes_price: rounds $ROUNDS, lanes [$LANES], smoke $SMOKE -> $OUT =="
     echo "smoke $SMOKE"
     echo "busy_check_start $BUSY_NOTE"
     echo "loadavg_start $(sysctl -n vm.loadavg 2>/dev/null || uptime)"
+    echo "mem_start $(mem_note)"
 } > "$OUT/env.txt"
 
 # ---------------------------------------------------------------------------
@@ -253,6 +274,7 @@ else
     echo "busy_check_end none" >> "$OUT/env.txt"
 fi
 echo "loadavg_end $(sysctl -n vm.loadavg 2>/dev/null || uptime)" >> "$OUT/env.txt"
+echo "mem_end $(mem_note)" >> "$OUT/env.txt"
 
 # ---------------------------------------------------------------------------
 # 4. The table: per lane, median IDENTICAL / median FAST, with the spread

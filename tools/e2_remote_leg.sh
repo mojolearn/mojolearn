@@ -421,6 +421,30 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
       # Every ET_PROFILE_* knob crosses the ssh line; leg 3 on 2026-08-29
       # forwarded only ARMS, so the OLD-commit arm (DEVIATION 1945) never ran.
       et-profile)    CMD="env ET_PROFILE_ARMS='${ET_PROFILE_ARMS:-shipped 128}' ET_PROFILE_OLD_COMMIT='${ET_PROFILE_OLD_COMMIT:-}' ET_PROFILE_ROWS2='${ET_PROFILE_ROWS2:-}' ET_PROFILE_SKIP_BREAK='${ET_PROFILE_SKIP_BREAK:-}' ET_PROFILE_ROWS='${ET_PROFILE_ROWS:-}' ET_PROFILE_TREES='${ET_PROFILE_TREES:-}' bash tools/et_profile_leg.sh"; WRAP=0 ;;
+      # THE IDENTITY TAX, MEASURED WHERE IT CAN BE BELIEVED. Every priced
+      # number this repository has published came off ONE Apple M4 -- a
+      # 16 GB laptop that shares its memory between the page cache and the
+      # GPU. On 2026-09-03 that box was carrying 7.5 GB of swap on an 8 GB
+      # device, and the SAME SOURCE that measured the Gram product at
+      # 5.27 ms in August measured it at 26.33 ms there. The failure is not
+      # that the box is slower. A fixed per-launch cost lands in BOTH arms
+      # and drags every ratio toward 1.0, so a loaded box UNDERSTATES what
+      # identity costs and does it worst on the smallest arms -- which is
+      # how `nt` came to read 0.94x on the very code that read 5.69x.
+      # A rented single-tenant GPU has no laptop governor, no swap and no
+      # Chrome, so this is the column where the tax is a measurement
+      # rather than an artifact of the machine.
+      #
+      # WRAP=0 IS LOAD-BEARING HERE, for the reason stated at the top of
+      # this loop: lanes_price.sh builds BOTH arms itself. Forcing it under
+      # with_identical_mode.sh would make its FAST arm a second IDENTICAL
+      # binary and every ratio 1.0 by construction.
+      #
+      # The output goes under the phase-8 run directory because the fetch
+      # at the bottom of this file rsyncs bench/results/e1/ and nothing
+      # else; a price written to the harness's own default path would be
+      # destroyed with the droplet.
+      lanes-price)   CMD="env MOJOLEARN_LANES_PRICE_OUT=\"\$OUT/lanes_price\" MOJOLEARN_LANES_PRICE_LANES='${LANES_PRICE_LANES:-kmeans knn dbscan gram nt gemv gbdt rf et}' MOJOLEARN_LANES_PRICE_ROUNDS=${LANES_PRICE_ROUNDS:-5} sh tools/lanes_price.sh"; WRAP=0 ;;
       column)        CMD='pixi run mojo run -I . matrix_main.mojo' ;;
       gpu-probe)     CMD='pixi run mojo run -I . probe_main.mojo' ;;
       # (no `transformer` case: the device spelling in transformer/impl/ has
