@@ -57,8 +57,13 @@ for lane in $LANES; do
         "$OUT/bin/$arm" >> "$OUT/$lane.$arm.log" 2>&1
     done
   done
-  med() { grep -h "^LPRICE $1 " "$OUT/$2" 2>/dev/null | awk '$3!="warmup"{print $5}' | sort -n | awk '{a[NR]=$1} END{if(NR)print (NR%2)?a[(NR+1)/2]:(a[NR/2]+a[NR/2+1])/2}'; }
-  hsh() { grep -h "^LPRICE $1 " "$OUT/$2" 2>/dev/null | awk '$3!="warmup"{print $6}' | sort -u | tr '\n' ',' ; }
+  # LPRICE <lane> <mode> <round|warmup> <size> <seconds> <hash16>
+  #   $1      $2     $3     $4              $5     $6        $7
+  # The round label is $4, the seconds are $6 and the hash is $7. The first
+  # spelling of these two read $5 as the seconds (it is the SIZE), $6 as the
+  # hash, and filtered warmup on $3 (it is the MODE, so every line survived).
+  med() { grep -h "^LPRICE $1 " "$OUT/$2" 2>/dev/null | awk '$4!="warmup"{print $6}' | sort -n | awk '{a[NR]=$1} END{if(NR)print (NR%2)?a[(NR+1)/2]:(a[NR/2]+a[NR/2+1])/2}'; }
+  hsh() { grep -h "^LPRICE $1 " "$OUT/$2" 2>/dev/null | awk '$4!="warmup"{print $7}' | sort -u | tr '\n' ',' ; }
   b=$(med "$lane" "$lane.base.log"); p=$(med "$lane" "$lane.pin.log")
   bh=$(hsh "$lane" "$lane.base.log"); ph=$(hsh "$lane" "$lane.pin.log")
   if [ -z "$b" ] || [ -z "$p" ]; then
