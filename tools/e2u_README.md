@@ -27,8 +27,11 @@ cell and a REACH table, and writes `e2u_cells.json` (the record:
 verdicts) plus `<cell>.card` and `<cell>.cell.json` per cell. The record is
 rewritten after every cell, so a killed run still leaves one.
 
-The whole matrix is 73 cells (2026-08-23; 67 before the six k-NN
-classifier / regressor cells landed); on an M4 a pass takes a few minutes
+The whole matrix is 111 cells. The last MEASURED pass was 93 cells
+(2026-08-28): the 19 added on 2026-08-31 and 2026-09-01 -- nine
+`radius_*`, six `knn_clf_*` metric and weighting cells,
+`dbscan_metric_manhattan_brute` and `dbscan_sw_brute` -- have never run
+on ANY vendor, Apple included; on an M4 a pass takes a few minutes
 in either mode (the first run's four passes are
 `bench/results/e2u/2026-08-23_081643/`, with the four verdict tables; the
 six `knn_clf_*` / `knn_reg_*` cells' first passes are under

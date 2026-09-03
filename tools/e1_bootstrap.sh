@@ -249,7 +249,7 @@ fi
 
 if run_phase 7; then
 step "phase 7: E2U -- the unsupervised sub-feature matrix through the Python surface, IDENTICAL"
-# tools/e2u_matrix_fit.py (67 cells: KMeans/NearestNeighbors/DBSCAN/PCA/tSVD/OLS);
+# tools/e2u_matrix_fit.py (111 cells: KMeans/NearestNeighbors/DBSCAN/PCA/tSVD/OLS);
 # judged by tools/e2_matrix_diff.py against the Mac's e2u directory
 PYTHONPATH="$REPO/python" pixi run -e gbmbench python3 tools/e2u_matrix_fit.py "$OUT/e2u" \
   || PYTHONPATH="$REPO/python" python3 tools/e2u_matrix_fit.py "$OUT/e2u" \
