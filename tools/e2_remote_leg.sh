@@ -38,7 +38,31 @@ log() { echo "[$(date +%T) $VENDOR] $*"; }
 DROPLET_ID=""
 DEADMAN_PID=""
 
+# FLUSH THE VOLUME BEFORE THE DEVICE GOES AWAY.
+#
+# DigitalOcean detaches the block device when the droplet is destroyed, and
+# nothing on the host syncs it first. On 2026-09-03 the seed leg reported
+# "higgs decoded to .../higgs_speed.npz" and was torn down about a minute
+# later; the next leg found a TRUNCATED gzip -- "No data left in file", 2.7G
+# of a 2.8G download -- and no .npz at all, because both writes were still in
+# page cache. The decode had genuinely succeeded and the bytes were still
+# lost.
+#
+# A dirty page that never reached the disk is the worst kind of cache: the
+# volume readback says the directory is there, so the next leg believes it is
+# warm and fails on the contents instead of on the absence. Sync and unmount
+# before every teardown, and say whether it worked.
+flush_volume() {
+  [ -z "${E2_VOLUME:-}" ] && return 0
+  [ -z "${IP:-}" ] && return 0
+  [ -z "${SSH:-}" ] && return 0   # the leg died before SSH was composed
+  log "syncing and unmounting $VOL_MOUNT before teardown"
+  $SSH "sync; umount $VOL_MOUNT 2>/dev/null && echo VOLUME_UNMOUNTED || echo VOLUME_UNMOUNT_FAILED; sync" \
+    2>&1 | sed "s/^/[$VENDOR vol] /" || log "!! volume flush failed; its contents may be incomplete"
+}
+
 destroy() {
+  flush_volume
   if [ -z "$DROPLET_ID" ]; then
     # no id known: sweep by name so an unreadable create response cannot
     # leave a droplet behind (the leg-10 orphan)
@@ -337,6 +361,13 @@ if [ -n "${E2_VOLUME:-}" ]; then
     mkdir -p $VOL_MOUNT/gbm-bench
     echo VOLUME_MOUNTED \$(df -h $VOL_MOUNT | tail -1 | awk '{print \$2\" total, \"\$4\" free\"}')
     echo VOLUME_HOLDS: \$(ls -1 $VOL_MOUNT/gbm-bench 2>/dev/null | tr '\n' ' ')
+    # A DIRECTORY NAME IS NOT A DATASET. The 2026-09-03 leg saw
+    # \"VOLUME_HOLDS: higgs\" over a truncated gzip and no decoded array, so
+    # the readback names the file the loader actually opens and its size.
+    for f in $VOL_MOUNT/gbm-bench/higgs/higgs_speed.npz $VOL_MOUNT/gbm-bench/higgs/HIGGS.csv.gz; do
+      [ -f \"\$f\" ] && echo VOLUME_FILE \$(basename \$f) \$(stat -c %s \"\$f\") bytes \
+                     || echo VOLUME_FILE \$(basename \$f) ABSENT
+    done
     du -sh $VOL_MOUNT/gbm-bench 2>/dev/null | awk '{print \"VOLUME_USED \"\$1}'" \
     2>&1 | sed "s/^/[$VENDOR vol] /" || log "!! volume mount step failed; the fetch will run as if cold"
 fi
