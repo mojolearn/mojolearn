@@ -566,6 +566,16 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
       # arm is never left installed under the shipped name.
       gbdt-accuracy-ab)
         CMD="env MOJOLEARN_GACC_OUT=\"\$OUT/gbdt_accuracy_ab\" MOJOLEARN_GACC_ROUNDS=${GACC_ROUNDS:-3} MOJOLEARN_GACC_ROWS=${GACC_ROWS:-1000000} sh tools/gbdt_accuracy_ab.sh"; WRAP=0 ;;
+      # WHAT THIS BOX IS MISSING, IN ONE PASS. Four leases on 2026-09-03 died
+      # one import at a time -- no numpy, then no pandas, then an environment
+      # that had to exist before the job importing from it. Each run only ever
+      # reported the FIRST thing wrong. The vendor legs have a much larger
+      # install surface (cuml, cuvs, catboost, lightgbm, torch, mamba-ssm), so
+      # this probes every interpreter for every opponent and reports them all.
+      # A missing OPPONENT is the answer, not a crash; only a missing REQUIRED
+      # module fails it.
+      vendor-preflight)
+        CMD="env MOJOLEARN_PREFLIGHT_OUT=\"\$OUT/vendor_preflight\" sh tools/vendor_preflight.sh"; WRAP=0 ;;
       *) log "unknown extra check '$chk' -- skipped"; continue ;;
     esac
     NOW=$(date +%s)
