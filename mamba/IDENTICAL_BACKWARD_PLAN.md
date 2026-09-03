@@ -4,7 +4,20 @@ Opened 2026-08-25, the mamba BACKWARD lane, DEVIATIONS 1070 through 1089.
 
 ## STATUS
 
-**NOTHING IN THIS LANE HAS BEEN COMPILED OR RUN.** No gate in section 7
+**PHASE A IS DONE: THE ROUTING LAYER COMPILES, UNMODIFIED, IN ALL FOUR
+CONFIGURATIONS (2026-09-03).** The clean build and each of the three
+sabotage arms, through `pixi run build-mamba-backward-probe` plus the
+three `-D` arms. Section 10 item 1 predicted the five-element `Tuple`
+returns and the `comptime if` early returns would need adjustment;
+NEITHER NEEDED ANY EDIT -- every construct already had a compiling twin
+in `gemm/checks/gemm_backward.mojo`.
+
+**NOTHING IN THIS LANE HAS BEEN RUN, AND NO GRADIENT EXISTS.** The probe
+gates compilation only: it asserts no value, compares no bits and
+launches no kernel. The 23 new arithmetic operations of section 3.2 still
+have no kernel, the 26-stage host oracle does not exist, and gates
+MB1-MB10 are specified and unbuilt. Compiling a file with no arithmetic
+in it is the first rung of the ladder and not a result about gradients. No gate in section 7
 exists, no backward fixture has been built, no device has executed a backward
 call, and `mamba/checks/mamba_backward.mojo` has never been through a
 compiler. Every sentence about behavior is a prediction until a gate prints.

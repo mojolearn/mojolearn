@@ -1068,6 +1068,12 @@ check-holtwinters = "mojo run -I . holtwinters/checks/hw_check.mojo"
 check-mamba-block = "mojo run -I . mamba/checks/mamba_check.mojo"
 check-mamba2-block = "mojo run -I . mamba/checks/mamba2_check.mojo"
 check-mamba3-block = "mojo run -I . mamba/checks/mamba3_check.mojo"
+# COMPILE ONLY, and the name says so. Builds the mamba backward's routing
+# layer; asserts nothing about any gradient. Run the three sabotage arms too
+# (-D MOJOLEARN_MAMBA_SABOTAGE_BWD_PROJ_SWAP=1, _BWD_WS_FROM_FORWARD=1,
+# _BWD_CONV_TAP_SLOT=1) -- an untaken comptime branch is not elaborated, so
+# the clean build type-checks only half the routings.
+build-mamba-backward-probe = "mojo build -I . mamba/checks/mamba_backward_compile_probe.mojo -o /tmp/mojolearn_mb_probe"
 
 # BLOCK-LEVEL BATCH INVARIANCE (checks/batch_invariance_check.mojo). The
 # lift of `IDENTICAL_FP32_CONTRACT.md` section 6.1 -- "Why `L` may not depend
