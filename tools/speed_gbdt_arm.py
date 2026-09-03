@@ -1602,6 +1602,18 @@ def build_parser(prog=None):
                         "any timed run")
     p.add_argument("--list-arms", action="store_true",
                    help="print the arm roster for the lane and exit")
+    p.add_argument("--arms", default=None,
+                   help="comma-separated arm names to run, a SUBSET of the "
+                        "lane's roster. This exists because the opponents do "
+                        "not all share an interpreter: cuml and cuvs are not "
+                        "on conda-forge and live on the pod's system python, "
+                        "while catboost, lightgbm and our own extension live "
+                        "in the pixi `gbmbench` environment (pixi.toml). One "
+                        "process cannot import both sets, so a vendor leg "
+                        "runs the lane TWICE with different --arms and the "
+                        "tables are merged. An arm named here that the "
+                        "roster does not have is a REFUSAL, not a silent "
+                        "empty run.")
     return p
 
 
@@ -1638,6 +1650,19 @@ def main(argv=None):
         return 0
 
     arms = build_opponents(args.lane, cfg, data, devices)
+    if args.arms:
+        # A FILTER IS EXPLICIT INTENT AND AN ABSENT ROW IS NOT. `build_opponents`
+        # already turns an uninstallable opponent into a visible refusal rather
+        # than a missing line; selecting a subset must keep that property, so a
+        # name asked for and not found is refused BY NAME here.
+        wanted = [n for n in (x.strip() for x in args.arms.split(",")) if n]
+        have = {a.name for a in arms}
+        for name in wanted:
+            if name not in have:
+                emit_refused(args.lane, name,
+                             "not in this lane's roster on this interpreter; "
+                             "the roster here is: %s" % ",".join(sorted(have)))
+        arms = [a for a in arms if a.name in wanted]
     if not arms:
         emit_refused(args.lane, "all-opponents",
                      "no opponent could be constructed on this box")
