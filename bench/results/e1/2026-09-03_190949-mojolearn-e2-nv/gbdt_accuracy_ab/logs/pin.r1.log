@@ -1,0 +1,6 @@
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=FAST device=NVIDIA_H100_80GB_HBM3 rounds=1 size=shipped
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 ms=1594.978
+FSPEED lane=gbdt-symmetric arm=ours shape=higgs-1000000x28 round=1 ms=934.926 hash=9726a1decc8f60c0
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.542246
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.800538

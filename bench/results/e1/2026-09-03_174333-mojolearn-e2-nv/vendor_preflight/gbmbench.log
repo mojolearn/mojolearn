@@ -1,0 +1,22 @@
+ WARN Skipped running the post-link scripts because `run-post-link-scripts` = `false`
+	- bin/.librsvg-pre-unlink.sh
+
+To enable them, run:
+	pixi config set --local run-post-link-scripts insecure
+
+More info:
+	https://pixi.sh/latest/reference/pixi_configuration/#run-post-link-scripts
+
+PREFLIGHT gbmbench python 3.14.7 at /root/mojolearn/.pixi/envs/gbmbench/bin/python
+PREFLIGHT gbmbench numpy OK [REQUIRED] 2.5.2  (every arm)
+PREFLIGHT gbmbench pandas OK [optional] 3.0.5  (the higgs decode in speed_gbdt_arm)
+PREFLIGHT gbmbench sklearn OK [optional] 1.9.0  (the cpu opponents)
+PREFLIGHT gbmbench catboost OK [optional] 1.2.10  (the gbdt-symmetric opponent (port lineage))
+PREFLIGHT gbmbench lightgbm OK [optional] 4.7.0  (the depthwise/lossguide opponent)
+PREFLIGHT gbmbench xgboost MISSING [optional] No module named 'xgboost'  (a second gbdt opponent)
+PREFLIGHT gbmbench cuml MISSING [optional] No module named 'cuml'  (the classical + rf opponents)
+PREFLIGHT gbmbench cuvs MISSING [optional] No module named 'cuvs'  (the knn/kmeans opponents)
+PREFLIGHT gbmbench torch MISSING [optional] No module named 'torch'  (the transformer opponent)
+PREFLIGHT gbmbench mamba_ssm MISSING [optional] No module named 'mamba_ssm'  (the mamba opponent)
+PREFLIGHT gbmbench mojolearn OK [REQUIRED] mode=fast
+PREFLIGHT gbmbench OK

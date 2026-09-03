@@ -1,0 +1,4 @@
+arm	mode	shape	med_s	auc	logloss	hash
+base	FAST	higgs-1000000x28	0.9728	0.800447	0.542247	c3b1ab8c7f136526
+pin	FAST+2043	higgs-1000000x28	0.9349	0.800538	0.542246	9726a1decc8f60c0
+ident	IDENTICAL	higgs-1000000x28	0.9195	0.800716	0.542067	dac2cf366e219cec

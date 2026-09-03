@@ -1,0 +1,13 @@
+PREFLIGHT system python 3.10.12 at /usr/bin/python3
+PREFLIGHT system numpy MISSING [REQUIRED] No module named 'numpy'  (every arm)
+PREFLIGHT system pandas MISSING [optional] No module named 'pandas'  (the higgs decode in speed_gbdt_arm)
+PREFLIGHT system sklearn MISSING [optional] No module named 'sklearn'  (the cpu opponents)
+PREFLIGHT system catboost MISSING [optional] No module named 'catboost'  (the gbdt-symmetric opponent (port lineage))
+PREFLIGHT system lightgbm MISSING [optional] No module named 'lightgbm'  (the depthwise/lossguide opponent)
+PREFLIGHT system xgboost MISSING [optional] No module named 'xgboost'  (a second gbdt opponent)
+PREFLIGHT system cuml MISSING [optional] No module named 'cuml'  (the classical + rf opponents)
+PREFLIGHT system cuvs MISSING [optional] No module named 'cuvs'  (the knn/kmeans opponents)
+PREFLIGHT system torch MISSING [optional] No module named 'torch'  (the transformer opponent)
+PREFLIGHT system mamba_ssm MISSING [optional] No module named 'mamba_ssm'  (the mamba opponent)
+PREFLIGHT system mojolearn ERROR [REQUIRED] ModuleNotFoundError: No module named 'numpy'
+PREFLIGHT system FAILED: missing required numpy,mojolearn
