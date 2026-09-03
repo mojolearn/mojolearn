@@ -87,11 +87,28 @@ PER_BINDING = {
     "_mojolearn_svm": lambda ml: ml.SVC(),
     "_mojolearn_gp": lambda ml: ml.GaussianProcessRegressor(),
 }
+# THIS LIST SHIPPED SHORT, THE SAME WAY pack_wheel.py's DID.
+#
+# It carried thirteen of the fifteen bindings: `_mojolearn_mamba` and
+# `_mojolearn_transformer` were absent, so the release smoke never LOADED
+# either one. That is the same two names, and the same class of miss, that
+# left the 0.4.0 Linux wheel shipping `_mamba_impl.py` and
+# `_transformer_impl.py` with no `.so` behind them -- and this file is the
+# gate that should have caught that and could not, because a name absent
+# from the list is never looked for and never missed.
+#
+# Neither takes a trivial constructor -- `Mamba1Block` and `TransformerBlock`
+# both require real weight arrays -- so they get the treatment solver,
+# metrics, tsa and linalg already get: loaded through `_backend.binding(name)`
+# and asked for their vendor and tier constants. That does not exercise the
+# math, and it does prove the extension is PRESENT, LOADS, and reports the
+# tier it was filed under, which is what a release smoke is for.
 ALL_BINDINGS = (
     "_mojolearn", "_mojolearn_gbdt", "_mojolearn_estimators", "_mojolearn_rf",
     "_mojolearn_trees", "_mojolearn_svm", "_mojolearn_solver",
     "_mojolearn_metrics", "_mojolearn_tsa", "_mojolearn_linalg",
     "_mojolearn_arima", "_mojolearn_training", "_mojolearn_gp",
+    "_mojolearn_mamba", "_mojolearn_transformer",
 )
 
 
