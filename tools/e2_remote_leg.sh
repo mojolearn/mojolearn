@@ -485,6 +485,48 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
       # else; a price written to the harness's own default path would be
       # destroyed with the droplet.
       lanes-price)   CMD="env MOJOLEARN_LANES_PRICE_OUT=\"\$OUT/lanes_price\" MOJOLEARN_LANES_PRICE_LANES='${LANES_PRICE_LANES:-kmeans knn dbscan gram nt gemv gbdt rf et}' MOJOLEARN_LANES_PRICE_ROUNDS=${LANES_PRICE_ROUNDS:-5} sh tools/lanes_price.sh"; WRAP=0 ;;
+      # THE SIZE SWEEP, and why it is a separate check rather than more rounds.
+      # The first priced columns (MI325X and H100, 2026-09-03) returned three
+      # results that a single fixture cannot explain: `nt` came back 0.69x on
+      # AMD and 1.31x on NVIDIA -- opposite signs -- and on AMD the two modes
+      # returned BIT-IDENTICAL output while taking different times, which is
+      # the fast path walking a slower route to the same answer rather than
+      # identity being free. `kmeans` on the H100 did the same thing at 1.04x.
+      #
+      # A ratio that inverts between vendors at ONE fixture is not yet a
+      # finding about either vendor. The question it raises is whether the
+      # ratio is a property of the CONTRACT or of the SHAPE, and only a sweep
+      # answers that: if identity's cost grows with the fixture, the small
+      # readings were launch overhead; if it holds, the sign is real.
+      #
+      # Three size points per lane, from the harness's own documented steps
+      # (bench/lanes_price_main.mojo's knob table). The tree lanes keep the
+      # 1M-row floor at their smallest point, because a tree measured below
+      # 1M rows is not admissible here at all.
+      lanes-price-sweep)
+        CMD="bash -c '
+          set -u
+          for tier in S M L; do
+            case \$tier in
+              S) K=100000;   N=20000;  D=20000;  G=1000000; T=4096;   V=128;  B=1000000; R=1000000; E=1000000 ;;
+              M) K=500000;   N=100000; D=50000;  G=4000000; T=65536;  V=2048; B=1500000; R=1500000; E=1500000 ;;
+              L) K=2000000;  N=400000; D=100000; G=8000000; T=262144; V=8192; B=2000000; R=2000000; E=2000000 ;;
+            esac
+            echo \"===== SWEEP TIER \$tier =====\"
+            env MOJOLEARN_LANES_PRICE_OUT=\"\$OUT/lanes_price_\$tier\" \
+                MOJOLEARN_LANES_PRICE_LANES=\"kmeans knn dbscan gram nt gemv gbdt rf et\" \
+                MOJOLEARN_LANES_PRICE_ROUNDS=3 \
+                MOJOLEARN_LANES_PRICE_KMEANS_ROWS=\$K \
+                MOJOLEARN_LANES_PRICE_KNN_INDEX=\$N \
+                MOJOLEARN_LANES_PRICE_DBSCAN_ROWS=\$D \
+                MOJOLEARN_LANES_PRICE_GRAM_ROWS=\$G \
+                MOJOLEARN_LANES_PRICE_NT_ROWS=\$T \
+                MOJOLEARN_LANES_PRICE_GEMV_DIM=\$V \
+                MOJOLEARN_LANES_PRICE_GBDT_ROWS=\$B \
+                MOJOLEARN_LANES_PRICE_RF_ROWS=\$R \
+                MOJOLEARN_LANES_PRICE_ET_ROWS=\$E \
+                sh tools/lanes_price.sh || echo \"SWEEP TIER \$tier FAILED rc=\$?\"
+          done'"; WRAP=0 ;;
       column)        CMD='pixi run mojo run -I . matrix_main.mojo' ;;
       gpu-probe)     CMD='pixi run mojo run -I . probe_main.mojo' ;;
       # (no `transformer` case: the device spelling in transformer/impl/ has
