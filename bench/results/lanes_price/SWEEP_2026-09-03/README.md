@@ -18,14 +18,23 @@ Ratio is IDENTICAL / FAST, so above 1.0 is what identity costs.
 | et | 1.000 | 1.000 | parity, same bits | parity, same bits |
 | dbscan | 0.968 | 0.965 | parity, same bits | parity, same bits |
 
-**A ROW WHOSE TWO MODES RETURN THE SAME BITS IS NOT AN IDENTITY COST**,
-whatever its ratio: there the ratio prices two BUILDS of one answer, and the
-numeric restrictions changed nothing about what was computed. `dbscan` is the
-clearest case -- there is no mode-dependent branch anywhere on its reached
-path (same kernel, same grid, same block, same reduction order, no library
-call either side), so its 3% is codegen or noise. `nt` at tier S and `et` at
-both tiers are the same situation, which is the second reason tier S's 0.610
-may not be read as identity being free.
+**A ROW WHOSE TWO MODES RETURN THE SAME BITS STILL COSTS WHAT IT COSTS.**
+Where `fast == ident bits`, identity did not change the ANSWER on this
+vendor, so the ratio does not price a different result -- but a ratio above
+1.0 is still time paid, and what it buys is the OTHER vendors, which a
+single-vendor run cannot see. Measured both ways on this fixture family:
+dbscan at 100,000 rows is 1.422x on an Apple M4 with identical output bits,
+and 0.965 on an MI325X where there is no mode-dependent branch anywhere on
+its reached path. So the verdict to record is the BITS and the RATIO
+together, never the ratio alone.
+
+On THIS box `dbscan` has no mode-dependent branch anywhere on its reached
+path -- same kernel, same grid, same block, same reduction order, no library
+call either side -- so its 3% is codegen or noise. That is a statement about
+the MI325X and not about the lane: the same lane at the same 100,000 rows
+costs 1.422x on an Apple M4. `nt` at tier S and `et` at both tiers are also
+same-bits rows, which is the second reason tier S's 0.610 may not be read as
+identity being free.
 
 Bits verdict per lane, from each tier's `ratio.tsv` column 14:
 
@@ -72,7 +81,14 @@ is invisible at 20,000 and 50,000 rows where dbscan sat at parity in both
 tiers above. Nothing had ever run that lane at 100,000.
 
 It is a REAL DEFECT and not an infrastructure failure: same process, same
-input, same build, IDENTICAL mode. The L tier's remaining lanes did not run,
+input, same build, IDENTICAL mode.
+
+**IT IS AMD-ONLY, AND THAT NARROWS IT.** The same lane at the same 100,000
+rows was run on an Apple M4 on 2026-09-03: HASH-STABLE across two rounds in
+BOTH modes, all four legs `28b1431d8b9a627f`. So this is a gfx942 defect and
+not a property of the algorithm or the fixture. The Apple run also priced the
+lane at 1.422x with identical output bits, against 0.965 on the MI325X --
+the same lane, the same size, opposite signs on two vendors. The L tier's remaining lanes did not run,
 so gram/nt/gemv/tree numbers at the datacenter step are still owed.
 
 ## What this sweep forbids

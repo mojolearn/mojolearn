@@ -287,7 +287,7 @@ The sizes are small -- linkage is 102 x 5 -- so launch overhead is a large
 share of every number in those rows. A separated price for them needs a
 bigger fixture, not a rerun.
 
-**gemm IS NOT AN IDENTITY COST AND MAY NOT BE QUOTED AS ONE.** FAST and
+**gemm's ROW IS SAME-BITS, SO READ THE BITS AND THE RATIO TOGETHER.** FAST and
 IDENTICAL produce the SAME BITS on this box (`79adfe2dd5bd57e6` both). When
 both modes return the same output bits the two arms are one answer, so the
 ratio prices two BUILDS of that answer and not the price of identity. The
@@ -335,10 +335,13 @@ band reads the rule beside it.
 
 Note the difference between a straddling band and a `fast==ident bits` row,
 because they are two different failures. A straddling band is a fixture that
-cannot separate the arms. A `fast==ident bits` row is not an identity cost at
-all, whether it separates or not: the two arms returned one answer, so the
-ratio prices two builds of it. The AMD gemm row above separates cleanly at
-1.40x and is still not a price of identity.
+cannot separate the arms. A `fast==ident bits` row did not change the
+ANSWER on that vendor, so its ratio does not price a different result -- but
+a ratio above 1.0 is still time paid, and what it buys is the OTHER vendors,
+which a single-vendor run cannot see. Record the bits AND the ratio, never
+the ratio alone: dbscan at 100,000 rows is 1.422x on an Apple M4 with
+identical output bits and 0.965 on an MI325X, where no mode-dependent branch
+exists on its reached path at all.
 
 WHAT WAS DONE ABOUT IT, the same day: the six Section 7 arms were ported into
 this driver (they had no remote-leg wiring of their own), and every one of

@@ -171,8 +171,9 @@ comptime NUMERIC_IDENTICAL = 1
 #: cost is real, though the 4.64x once quoted here came off a retracted
 #: Apple round and no longer stands. Where a lane returns THE SAME BITS in
 #: both modes, what the extra cost buys is the OTHER vendors and nothing
-#: else -- and such a row is not an identity cost at all, since the ratio
-#: prices two builds of one answer.
+#: else. Such a row did not change the ANSWER on that vendor, but a ratio
+#: above 1.0 there is still time paid: dbscan at 100,000 rows costs 1.422x
+#: on an Apple M4 with identical output bits. Record the bits AND the ratio.
 #:
 #: THE LINE BETWEEN THE TIERS. A pin belongs to DETERMINISM when, without it,
 #: the same binary on the same GPU with the same input can give different bits
