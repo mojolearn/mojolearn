@@ -54,16 +54,23 @@ GATES
       `FindOptimalSplitDynamic`, which supports THREE of the seven score
       functions. SolarL2, Cosine and NewtonCosine run; L2, NewtonL2, SatL2
       and LOOL2 must RAISE, because `pointwise_scores.cu:469` throws.
-  O7  the searcher's two refusals: an unsupported score function with folds,
-      and DEVIATION 126 (the calcer carrying a different fold count from the
-      layout).
+  O7  the unsupported-score-function refusal fires with folds and not
+      without, AND A FOLD-BASED TREE GROWS at FoldCount 12. The second
+      half asserted DEVIATION 126's refusal until 2026-09-03; that
+      refusal is lifted and the arm now asserts growth.
 
 WHAT THIS FILE DOES NOT GATE, said plainly rather than implied by a green
 tick. O5 builds `compute_hist2`'s arguments itself, so it checks the KERNEL
 at a fold axis and not `PolicyScoreHelper`, which is the caller that normally
-builds them and which hard-codes `1` (`PORTING.md` 115 is the same shape of
-hole, found the same way). Until DEVIATION 126 is lifted no tree grows at
-`fold_count > 1`, so this file gates the parts and O7 gates the refusal.
+builds them (`PORTING.md` 115 is the same shape of hole, found the same way).
+
+A fold-based tree now grows (DEVIATION 126, lifted 2026-09-03: the searcher
+constructed its calcer without a fold count, so the helpers were built at 1
+while the layout was built at 12). WHAT THIS FILE STILL DOES NOT GATE is
+ordered boosting itself: `TDynamicBoosting::Fit` has no definition anywhere
+in this tree -- no per-fold approximation cursors, no prefix-only gradient,
+no per-fold leaf estimation -- and no `boosting_type` exists at any public
+surface, so no fit can select it.
 """
 
 from max.gpu.host import DeviceContext, HostBuffer

@@ -50,10 +50,9 @@ phase-9 diag, the same way `packaging/linux/leg_diag.sh` and
     MOJOLEARN_GEMM_LEG_P9_DIAG=tools/lanes_price.sh \
     sh tools/gemm_remote_leg.sh nvidia --payload phase8 --rent   # H100
 
-Two legs, six lanes each, at ONE shared commit with the Apple run repeated at
-that same commit so all three columns are comparable. The Apple number in the
-table above is at `26eb8ba` and the round would need re-taking at whatever sha
-the legs use.
+Two legs, six lanes each, at ONE shared commit, with an Apple run on a QUIET
+box at that same commit so all three columns are comparable. Nothing from the
+retracted `26eb8ba` Apple round may be reused.
 
 ## What must not happen
 

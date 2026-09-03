@@ -15,8 +15,21 @@ Ratio is IDENTICAL / FAST, so above 1.0 is what identity costs.
 | kmeans | 1.059 | 1.101 | slight cost | slight cost |
 | gbdt | **0.782** | **0.731** | identity FASTER | identity FASTER STILL |
 | rf | 0.994 | 1.001 | parity | parity |
-| et | 1.000 | 1.000 | parity | parity |
-| dbscan | 0.968 | 0.965 | parity | parity |
+| et | 1.000 | 1.000 | parity, same bits | parity, same bits |
+| dbscan | 0.968 | 0.965 | parity, same bits | parity, same bits |
+
+**A ROW WHOSE TWO MODES RETURN THE SAME BITS IS NOT AN IDENTITY COST**,
+whatever its ratio: there the ratio prices two BUILDS of one answer, and the
+numeric restrictions changed nothing about what was computed. `dbscan` is the
+clearest case -- there is no mode-dependent branch anywhere on its reached
+path (same kernel, same grid, same block, same reduction order, no library
+call either side), so its 3% is codegen or noise. `nt` at tier S and `et` at
+both tiers are the same situation, which is the second reason tier S's 0.610
+may not be read as identity being free.
+
+Bits verdict per lane, from each tier's `ratio.tsv` column 14:
+
+dbscan S=fast==ident bits M=fast==ident bits; et S=fast==ident bits M=fast==ident bits; gbdt S=fast!=ident bits M=fast!=ident bits; gemv S=fast!=ident bits M=fast!=ident bits; gram S=fast!=ident bits M=fast!=ident bits; kmeans S=fast!=ident bits M=fast==ident bits; knn S=FAST HASH MOVED across legs (3 distinct) M=FAST HASH MOVED across legs (3 distinct); nt S=fast==ident bits M=fast==ident bits; rf S=fast!=ident bits M=fast!=ident bits
 
 S: kmeans 100k, knn 20k, dbscan 20k, gram 1M, nt 4096, gemv 128, trees 1M.
 M: kmeans 500k, knn 100k, dbscan 50k, gram 4M, nt 65536, gemv 2048, trees 1.5M.

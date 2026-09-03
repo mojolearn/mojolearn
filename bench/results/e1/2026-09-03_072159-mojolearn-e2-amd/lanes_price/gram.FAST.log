@@ -1,0 +1,18 @@
+== leg lane=gram mode=FAST round=1 07:25:04 ==
+== bench/lanes_price_main.mojo [FAST] lane=gram rounds=1 smoke=False ==
+LPRICE gram FAST warmup 32x32x1000000 0.38557913 37fc8ca7a94b7568
+LPRICE gram FAST 1 32x32x1000000 0.000323989 37fc8ca7a94b7568
+HASH-STABLE gram FAST 2 rounds all 37fc8ca7a94b7568
+== done [FAST] lane=gram ==
+== leg lane=gram mode=FAST round=2 07:25:06 ==
+== bench/lanes_price_main.mojo [FAST] lane=gram rounds=1 smoke=False ==
+LPRICE gram FAST warmup 32x32x1000000 0.386290265 37fc8ca7a94b7568
+LPRICE gram FAST 1 32x32x1000000 0.000323299 37fc8ca7a94b7568
+HASH-STABLE gram FAST 2 rounds all 37fc8ca7a94b7568
+== done [FAST] lane=gram ==
+== leg lane=gram mode=FAST round=3 07:25:07 ==
+== bench/lanes_price_main.mojo [FAST] lane=gram rounds=1 smoke=False ==
+LPRICE gram FAST warmup 32x32x1000000 0.37713693 37fc8ca7a94b7568
+LPRICE gram FAST 1 32x32x1000000 0.000329519 37fc8ca7a94b7568
+HASH-STABLE gram FAST 2 rounds all 37fc8ca7a94b7568
+== done [FAST] lane=gram ==

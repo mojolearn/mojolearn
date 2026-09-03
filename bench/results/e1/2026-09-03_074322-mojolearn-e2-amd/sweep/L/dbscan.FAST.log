@@ -1,0 +1,6 @@
+== leg lane=dbscan mode=FAST round=1 07:50:12 ==
+== bench/lanes_price_main.mojo [FAST] lane=dbscan rounds=1 smoke=False ==
+LPRICE dbscan FAST warmup 100000x8 1.77455916 a8c692fc32c3703b
+LPRICE dbscan FAST 1 100000x8 1.772193407 a8c692fc32c3703b
+HASH-STABLE dbscan FAST 2 rounds all a8c692fc32c3703b
+== done [FAST] lane=dbscan ==

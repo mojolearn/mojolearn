@@ -223,8 +223,9 @@ compression block is 8,192 documents and `blockIdx.x` is otherwise always 0.
 ### Rung 3 -- ordered boosting. THE DATA STRUCTURES RUN; the boosting loop is untouched
 
 **STATUS 2026-08-21.** The fold axis is carried and gated end to end through
-the layer both searchers share -- `pixi run check-ordered-boosting`, 8 gates at
-`FoldCount 12 / FoldBits 4 / stripe 16`, 1,463 positions over 600 rows.
+the layer both searchers share -- `pixi run check-ordered-boosting`, seven
+gates at `FoldCount 12 / FoldBits 4 / stripe 16`, 1,463 positions over 600
+rows.
 `PORTING.md` 125-129. It is the first time a fold axis has run a kernel in this
 tree.
 

@@ -22,8 +22,13 @@
   2026-09-01, recorded here because the 0.3.2 section shipped without it).
   Same shape of promise and the same narrowness: the binding's gate is green
   in three tiers on ONE APPLE M4, while the lane cards behind them cover
-  three vendors for Mamba-1 (17 stages at `a0a0eee`), Apple and NVIDIA for
-  Mamba-2 (26 stages) and Apple alone for Mamba-3.
+  three vendors for Mamba-1 (17 stages at `a0a0eee`), Mamba-2 pairwise
+  against Apple on both other vendors (26 stages, the three columns not all
+  at one commit) and Apple = AMD for Mamba-3 (30 stages at `c6e86966`,
+  NVIDIA owed). **OPEN DEFECT: the `_mojolearn_mamba` binding FAULTS ON
+  AMD in every tier** -- GPU memory access fault, rc 134, no output before
+  the fault, first seen 2026-09-02 on an MI325X. No AMD claim is made for
+  this surface.
 
 ### Added
 

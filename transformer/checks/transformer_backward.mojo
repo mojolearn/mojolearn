@@ -5,20 +5,23 @@ block, ONE SOURCE FOR THREE VENDORS, under profile
 `mojolearn.identical.transformer.fp32.v1` and the routing document
 `transformer/IDENTICAL_BACKWARD_PLAN.md`.
 
-**NOTHING IN THIS FILE HAS BEEN COMPILED OR RUN.** Written 2026-08-25 by a
-lane that is forbidden to execute anything. Every statement below about what
-a kernel computes is CONSTRUCTION; every statement about what that would
-mean across vendors is PREDICTION. **No sentence here says the backward is
-bit identical across vendors, because no leg has run and no gate exists.**
+**COMPILED AND RUN 2026-09-03, NOT YET GATED.** Written 2026-08-25; this
+file, its oracle and `transformer_backward_check.mojo` compiled cleanly on
+the FIRST attempt and the check's preflight assertions all passed. The check
+then REFUSED TO CERTIFY: its `d_out` fixture cannot separate a fused
+multiply-add chain from an unfused one, so three sabotage arms are
+unfalsifiable. **No sentence here says the backward is bit identical across
+vendors: the blocker is a FIXTURE, not the arithmetic, and no three-vendor
+leg has run.**
 
 WHAT IS OWED
 --------------
-  1. That it compiles. The RISK list is at the bottom of this docstring.
-  2. `transformer/checks/transformer_backward_check.mojo`, which DOES NOT
-     EXIST. No gate, no fixture, no card, and **not one of the twenty
-     sabotage arms below has ever been fired.** Twenty arms that have never
-     been shown able to fail are twenty arms nobody has tested, which is the
-     condition this project treats as unproven rather than as evidence.
+  1. A `d_out` fixture that separates fused from unfused, so the three
+     unfalsifiable sabotage arms can bite and the gate can certify.
+  2. The sabotage ledger: **not one of the twenty arms below has yet been
+     shown able to fail.** Twenty arms that have never been shown able to
+     fail are twenty arms nobody has tested, which is the condition this
+     project treats as unproven rather than as evidence.
   3. A FLOAT64 directional-derivative reference. Bit identity does not say
      the answer is the RIGHT derivative, and a transpose error is bit
      identical on three vendors.
@@ -122,12 +125,13 @@ kernel is a FIELD of `LlamaBackwardStages` or of the forward's own structs,
 whose lifetime is the struct's. No launcher below allocates a scratch buffer
 and returns without waiting.
 
-RISK: WHAT IS LEAST LIKELY TO COMPILE
+RISK: WHAT WAS LEAST LIKELY TO COMPILE (all of it did, first attempt,
+2026-09-03)
 ---------------------------------------
   * `gemm_backward_a_call`'s FIVE-ELEMENT `Tuple` return and the `call[4]`
-    indexing. The GEMM lane's own open questions flag it, and that file has
-    never been compiled either. If it moves, `_route_a` and `_route_b` below
-    are the only two call sites.
+    indexing. The GEMM lane's own open questions flagged it; that file
+    compiles too, since this one imports it. If it moves, `_route_a` and
+    `_route_b` below are the only two call sites.
   * The per-head gather / `identical_gemm` / scatter loops. `identical_gemm`
     SYNCHRONIZES internally, and four buffers must stay alive across it.
   * **TWO OR MORE DISTINCT FIELDS OF ONE STRUCT PASSED AS SEPARATE `mut`
@@ -143,7 +147,7 @@ RISK: WHAT IS LEAST LIKELY TO COMPILE
     the `MutUntrackedOrigin` versus `MutAnyOrigin` unification errors this
     repository has lost time to.
   * The `comptime if` arms inside kernels. The forward device file uses the
-    same construct throughout and it has not been compiled either.
+    same construct throughout.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx

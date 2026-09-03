@@ -144,8 +144,9 @@ special case. Full record, including what each leg cost to get:
 **The middle tier is not the top one wearing a hat.** Under `deterministic`
 the output hashes DIFFER between vendors on 10 of 12 comparable lanes, the
 vendor matmul among them -- it keeps MAX `matmul`, cuBLAS and rocBLAS and
-their speed, and buys none of the cross-vendor pinning that costs `identical`
-up to 4.64x on the gemm lane.
+their speed, and buys none of the cross-vendor pinning `identical` pays for.
+What that pinning costs is priced in `bench/LANES_PRICE.md`, on rented
+single-tenant GPUs and with the fixture size beside every ratio.
 
 `mojolearn.numeric_mode()` reports the mode that actually loaded, read back
 out of the binary, so a run cannot be mislabeled by accident.
@@ -277,9 +278,15 @@ its own runtime and device context.
 `deterministic` is the tier for a regression test, a byte-comparable model
 file, or a fit reproducible from its seed, none of which need another vendor
 to agree. It exists because that reproducibility used to be purchasable only
-by taking `identical` whole, and `identical` is not free: measured on one M4
-on 2026-08-28, it costs 4.64x on the gemm lane, 1.35x on coordinate descent,
-1.19x on kernel density, and nothing at all on linkage, metrics and SVM.
+by taking `identical` whole, and `identical` is not free. The price is
+measured on rented single-tenant GPUs and lives in `bench/LANES_PRICE.md`,
+with the fixture size beside every ratio, because three lanes changed by more
+than 3x between two sizes and one changed sign; on the matrix and neighbour
+lanes the cost is large and GROWS with size. The Apple figures that used to
+stand here are RETRACTED -- taken on a laptop carrying 7.5 GB of swap and
+never reproduced, and a contended box adds a fixed per-launch cost to BOTH
+arms that pulls every ratio toward 1.0, so it understates the tax rather than
+bounding it.
 
 **The wheel carries all three tiers.** It carried two until 2026-08-29, on
 the stated grounds that the deterministic pin lane was unfinished and that a

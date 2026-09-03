@@ -18,8 +18,9 @@ Third status, 2026-09-02: **THE HARNESS PRICED NO TREE.** Twelve lanes and
 not one tree fit, in the project whose largest certified family is decision
 trees (109 of 180 bitwise-identical training configurations) and whose
 performance section leads with them. Three tree lanes -- `gbdt`, `rf`, `et`
--- were added the same day at the 1,000,000-row floor. **NOTHING HAS BEEN RUN
-ON THEM. RUN OWED, on every column.**
+-- were added the same day at the 1,000,000-row floor and FIRST RAN on
+2026-09-03 on a rented MI325X (`bench/results/lanes_price/SWEEP_2026-09-03/`).
+Apple and NVIDIA columns are still OWED for them.
 
 Files:
 
@@ -134,8 +135,9 @@ not a small price but an inadmissible one, and it may not be quoted, compared
 or put in a table. An explicit size variable overrides the SMOKE size, which
 is the same precedence `MOJOLEARN_LANES_PRICE_GEMM_SHAPE` already has.
 
-Every default in that table is the size the published Apple numbers were
-taken at, so those stay reproducible with nothing set. The datacenter column
+Every default in that table is the size the RETRACTED Apple runs were taken
+at; they are kept as the defaults only so a size is never implicit. The
+datacenter column
 is a STARTING POINT and not a measurement: it is the step to try first, and
 if the band still straddles 1.0 the answer is a bigger fixture and not a
 rerun. The k-NN and DBSCAN steps are not invented -- `bench/scaling_main.mojo`
@@ -202,8 +204,8 @@ comptime modes, and the result is a BAND.
    run and writes `bench/results/lanes_price/<timestamp>_<sha>/`.)
 
    The six Section 7 lanes are opt-in and are NOT in the default lane list.
-   At the Apple sizes, which is the run that reproduces the published Apple
-   numbers:
+   At the Apple-sized defaults (small, and on a datacenter GPU too small to
+   separate the arms):
 
        MOJOLEARN_LANES_PRICE_LANES="kmeans knn dbscan gram nt gemv" \
            tools/lanes_price.sh
@@ -285,14 +287,12 @@ The sizes are small -- linkage is 102 x 5 -- so launch overhead is a large
 share of every number in those rows. A separated price for them needs a
 bigger fixture, not a rerun.
 
-**gemm IS THE INTERESTING ROW.** FAST and IDENTICAL produce the SAME BITS on
-this box (`79adfe2dd5bd57e6` both) and IDENTICAL still costs 1.40x, band
-1.282 .. 1.548, comfortably clear of 1.0. Same answer, 40% more time. That
-is the clean statement of what the pins buy: not a different number here,
-but the GUARANTEE that the number cannot change, which FAST does not make
-and which on another vendor or another shape it does not keep. Read with
-`[[identity-is-not-free]]`: this row is what "conforming costs on every
-vendor" looks like when the conforming answer happens to coincide.
+**gemm IS NOT AN IDENTITY COST AND MAY NOT BE QUOTED AS ONE.** FAST and
+IDENTICAL produce the SAME BITS on this box (`79adfe2dd5bd57e6` both). When
+both modes return the same output bits the two arms are one answer, so the
+ratio prices two BUILDS of that answer and not the price of identity. The
+1.40x is a build-to-build difference on a lane where identity cost nothing in
+bits; read it as a harness observation, not as `[[identity-is-not-free]]`.
 
 The thermal caveat that belongs beside an APPLE row does not belong beside
 these: this is a datacenter Linux box, not the laptop. `tools/lanes_price.sh`
@@ -334,11 +334,11 @@ that is a property of the harness and not a result about the library. The
 band reads the rule beside it.
 
 Note the difference between a straddling band and a `fast==ident bits` row,
-because they are two different failures. The AMD gemm row above is
-`fast==ident bits` AND separates cleanly at 1.40x, which is a real and
-interesting result: same answer, 40% more time, the price of the guarantee.
-An Apple `fast==ident bits` row whose band straddles 1.0 is that row with no
-signal left in it.
+because they are two different failures. A straddling band is a fixture that
+cannot separate the arms. A `fast==ident bits` row is not an identity cost at
+all, whether it separates or not: the two arms returned one answer, so the
+ratio prices two builds of it. The AMD gemm row above separates cleanly at
+1.40x and is still not a price of identity.
 
 WHAT WAS DONE ABOUT IT, the same day: the six Section 7 arms were ported into
 this driver (they had no remote-leg wiring of their own), and every one of

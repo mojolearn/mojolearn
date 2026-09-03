@@ -1,0 +1,40 @@
+
+=== provenance === 07:40:30
+5fb9555f4bbe1262a8174a60c55cc385b71e0c5f
+Linux mojolearn-e2-amd 6.8.0-59-generic #61-Ubuntu SMP PREEMPT_DYNAMIC Fri Apr 11 23:16:11 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
+
+=== pixi === 07:40:31
+This script will automatically download and install Pixi (latest) for you.
+Getting it from this url: https://github.com/prefix-dev/pixi/releases/latest/download/pixi-x86_64-unknown-linux-musl.tar.gz
+The 'pixi' binary is installed into '/root/.pixi/bin'
+Updating '/root/.bashrc'
+Please restart or source your shell.
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 07:40:33
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=99) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=99) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=99) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=99) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=99) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=99) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=99) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=99) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=99) ===
+
+=== phase 9 SKIPPED (MOJOLEARN_E1_PHASES=99) ===
+
+=== done === 07:40:33
+artifacts in /root/mojolearn/bench/results/e1/2026-09-03_074030-mojolearn-e2-amd
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

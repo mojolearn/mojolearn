@@ -1,0 +1,95 @@
+== lanes_price: rounds 3, lanes [kmeans knn dbscan gram nt gemv gbdt rf et], smoke 0 -> bench/results/e1/2026-09-03_073012-mojolearn-e2-nv//lanes_price ==
+== build FAST -> bench/results/e1/2026-09-03_073012-mojolearn-e2-nv//lanes_price/bin/lanes_price.FAST ==
+== build IDENTICAL (tools/with_identical_mode.sh, mojo build form) -> bench/results/e1/2026-09-03_073012-mojolearn-e2-nv//lanes_price/bin/lanes_price.IDENTICAL ==
+
+== lane kmeans: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE kmeans FAST 2 rounds all eeea38872c935b98
+   round 1: HASH-STABLE kmeans IDENTICAL 2 rounds all eeea38872c935b98
+   round 2: HASH-STABLE kmeans FAST 2 rounds all eeea38872c935b98
+   round 2: HASH-STABLE kmeans IDENTICAL 2 rounds all eeea38872c935b98
+   round 3: HASH-STABLE kmeans FAST 2 rounds all eeea38872c935b98
+   round 3: HASH-STABLE kmeans IDENTICAL 2 rounds all eeea38872c935b98
+
+== lane knn: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE knn FAST 2 rounds all 9e9aa062eb21a806
+   round 1: HASH-STABLE knn IDENTICAL 2 rounds all 4c6f4a612b096067
+   round 2: HASH-STABLE knn FAST 2 rounds all 9e9aa062eb21a806
+   round 2: HASH-STABLE knn IDENTICAL 2 rounds all 4c6f4a612b096067
+   round 3: HASH-STABLE knn FAST 2 rounds all 9e9aa062eb21a806
+   round 3: HASH-STABLE knn IDENTICAL 2 rounds all 4c6f4a612b096067
+
+== lane dbscan: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE dbscan FAST 2 rounds all a9223881fb236c77
+   round 1: HASH-STABLE dbscan IDENTICAL 2 rounds all a9223881fb236c77
+   round 2: HASH-STABLE dbscan FAST 2 rounds all a9223881fb236c77
+   round 2: HASH-STABLE dbscan IDENTICAL 2 rounds all a9223881fb236c77
+   round 3: HASH-STABLE dbscan FAST 2 rounds all a9223881fb236c77
+   round 3: HASH-STABLE dbscan IDENTICAL 2 rounds all a9223881fb236c77
+
+== lane gram: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE gram FAST 2 rounds all 8fc43d52cfaafa58
+   round 1: HASH-STABLE gram IDENTICAL 2 rounds all 0e9de1a0121f721a
+   round 2: HASH-STABLE gram FAST 2 rounds all 8fc43d52cfaafa58
+   round 2: HASH-STABLE gram IDENTICAL 2 rounds all 0e9de1a0121f721a
+   round 3: HASH-STABLE gram FAST 2 rounds all 8fc43d52cfaafa58
+   round 3: HASH-STABLE gram IDENTICAL 2 rounds all 0e9de1a0121f721a
+
+== lane nt: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE nt FAST 2 rounds all 1ce38742d2ffc019
+   round 1: HASH-STABLE nt IDENTICAL 2 rounds all 5c68413208583222
+   round 2: HASH-STABLE nt FAST 2 rounds all 1ce38742d2ffc019
+   round 2: HASH-STABLE nt IDENTICAL 2 rounds all 5c68413208583222
+   round 3: HASH-STABLE nt FAST 2 rounds all 1ce38742d2ffc019
+   round 3: HASH-STABLE nt IDENTICAL 2 rounds all 5c68413208583222
+
+== lane gemv: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE gemv FAST 2 rounds all c672e0ac7ed6697f
+   round 1: HASH-STABLE gemv IDENTICAL 2 rounds all a0d44fa8c1343b19
+   round 2: HASH-STABLE gemv FAST 2 rounds all c672e0ac7ed6697f
+   round 2: HASH-STABLE gemv IDENTICAL 2 rounds all a0d44fa8c1343b19
+   round 3: HASH-STABLE gemv FAST 2 rounds all c672e0ac7ed6697f
+   round 3: HASH-STABLE gemv IDENTICAL 2 rounds all a0d44fa8c1343b19
+
+== lane gbdt: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE gbdt FAST 2 rounds all 4a1588d5f77560b2
+   round 1: HASH-STABLE gbdt IDENTICAL 2 rounds all edde9bd742ac76f3
+   round 2: HASH-STABLE gbdt FAST 2 rounds all 4a1588d5f77560b2
+   round 2: HASH-STABLE gbdt IDENTICAL 2 rounds all edde9bd742ac76f3
+   round 3: HASH-STABLE gbdt FAST 2 rounds all 4a1588d5f77560b2
+   round 3: HASH-STABLE gbdt IDENTICAL 2 rounds all edde9bd742ac76f3
+
+== lane rf: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE rf FAST 2 rounds all acfbdbde102e8c54
+   round 1: HASH-STABLE rf IDENTICAL 2 rounds all acfbdbde102e8c54
+   round 2: HASH-STABLE rf FAST 2 rounds all acfbdbde102e8c54
+   round 2: HASH-STABLE rf IDENTICAL 2 rounds all acfbdbde102e8c54
+   round 3: HASH-STABLE rf FAST 2 rounds all acfbdbde102e8c54
+   round 3: HASH-STABLE rf IDENTICAL 2 rounds all acfbdbde102e8c54
+
+== lane et: 3 rounds, FAST then IDENTICAL per round ==
+   round 1: HASH-STABLE et FAST 2 rounds all a4d03520b4584c37
+   round 1: HASH-STABLE et IDENTICAL 2 rounds all a4d03520b4584c37
+   round 2: HASH-STABLE et FAST 2 rounds all a4d03520b4584c37
+   round 2: HASH-STABLE et IDENTICAL 2 rounds all a4d03520b4584c37
+   round 3: HASH-STABLE et FAST 2 rounds all a4d03520b4584c37
+   round 3: HASH-STABLE et IDENTICAL 2 rounds all a4d03520b4584c37
+
+== ratio table (written to bench/results/e1/2026-09-03_073012-mojolearn-e2-nv//lanes_price/ratio.tsv) ==
+lane    n  FAST med s IDENT med s   ratio     min     max  FAST hash        IDENT hash       hash note
+kmeans  3    0.004435    0.004631   1.044   1.023   1.145  eeea38872c935b98 eeea38872c935b98 fast==ident bits
+knn     3    0.001637    0.004709   2.877   2.821   2.917  9e9aa062eb21a806 4c6f4a612b096067 fast!=ident bits
+dbscan  3    0.034997    0.033543   0.958   0.956   0.960  a9223881fb236c77 a9223881fb236c77 fast==ident bits
+gram    3    0.000291    0.000498   1.711   1.701   1.713  8fc43d52cfaafa58 0e9de1a0121f721a fast!=ident bits
+nt      3    0.000065    0.000086   1.310   0.964   1.362  1ce38742d2ffc019 5c68413208583222 fast!=ident bits
+gemv    3    0.000017    0.000026   1.536   1.535   1.544  c672e0ac7ed6697f a0d44fa8c1343b19 fast!=ident bits
+gbdt    3    0.727881    0.696012   0.956   0.940   0.965  4a1588d5f77560b2 edde9bd742ac76f3 fast!=ident bits
+rf      3    0.799110    0.797898   0.998   0.995   1.014  acfbdbde102e8c54 acfbdbde102e8c54 fast==ident bits
+et      3    2.142245    2.126208   0.993   0.990   1.008  a4d03520b4584c37 a4d03520b4584c37 fast==ident bits
+
+READ THE RATIO AS A BAND: min/max are the per-round paired ratios
+(IDENTICAL_r / FAST_r) over 3 alternated rounds on THIS box.
+The median is the band's center, not a figure to four places. Copy
+the row into bench/LANES_PRICE.md with the date, the sha and the
+machine beside it.
+
+== done: bench/results/e1/2026-09-03_073012-mojolearn-e2-nv//lanes_price ==

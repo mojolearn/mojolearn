@@ -1,0 +1,18 @@
+== leg lane=dbscan mode=IDENTICAL round=1 07:45:49 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=dbscan rounds=1 smoke=False ==
+LPRICE dbscan IDENTICAL warmup 20000x8 0.043311195 a9223881fb236c77
+LPRICE dbscan IDENTICAL 1 20000x8 0.040477776 a9223881fb236c77
+HASH-STABLE dbscan IDENTICAL 2 rounds all a9223881fb236c77
+== done [IDENTICAL] lane=dbscan ==
+== leg lane=dbscan mode=IDENTICAL round=2 07:45:50 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=dbscan rounds=1 smoke=False ==
+LPRICE dbscan IDENTICAL warmup 20000x8 0.043403086 a9223881fb236c77
+LPRICE dbscan IDENTICAL 1 20000x8 0.040529319 a9223881fb236c77
+HASH-STABLE dbscan IDENTICAL 2 rounds all a9223881fb236c77
+== done [IDENTICAL] lane=dbscan ==
+== leg lane=dbscan mode=IDENTICAL round=3 07:45:51 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=dbscan rounds=1 smoke=False ==
+LPRICE dbscan IDENTICAL warmup 20000x8 0.043547759 a9223881fb236c77
+LPRICE dbscan IDENTICAL 1 20000x8 0.040458689 a9223881fb236c77
+HASH-STABLE dbscan IDENTICAL 2 rounds all a9223881fb236c77
+== done [IDENTICAL] lane=dbscan ==

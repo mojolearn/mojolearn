@@ -125,8 +125,10 @@ THE GIL is released around every device call, and nothing inside a
 RUN LEDGER. The Mamba-1/Mamba-2 entries BUILT AND GATED 2026-09-01 (all
 three tiers green through `tests/test_mamba_surface.py`, the
 FEATURE_PARITY consumer table's PyPI row; one box, one vendor). The
-Mamba-3 entries, added later the same day, have NEVER been compiled:
-they are UNVERIFIED, RUN OWED, per tier. Build:
+Mamba-3 entries, added later the same day, are BUILT AND GATED: green
+at `08a38a13` in all three tiers, corpus arm added 2026-09-03. ONE APPLE
+M4 -- this binding FAULTS on AMD in every tier (GPU memory access fault,
+rc 134), an open defect. Build:
 `bash bindings/build_mamba.sh` (per tier via MOJOLEARN_NUMERIC_MODE).
 """
 

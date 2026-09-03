@@ -99,9 +99,13 @@ The forward gate has run on three columns; these are the commands that ran it.
     # the forward gate, registered 2026-08-31 at `pixi.toml:1091`:
     pixi run check-transformer
 
-    # the backward gate, registered 2026-08-31 at `pixi.toml:1092`. The file
-    # exists and carries `def main` at :3787. NO RUN OF IT IS RECORDED anywhere
-    # in `bench/results/`, so this command is owed, not reported:
+    # the backward gate, registered 2026-08-31 at `pixi.toml:1092`, `def main`
+    # at :3851. It COMPILED AND RAN for the first time on 2026-09-03, preflight
+    # all green, and then REFUSED to certify: its `d_out` fixture cannot
+    # separate a fused multiply-add chain from an unfused one, so three
+    # sabotage arms are unfalsifiable. DEVIATION 1536 narrows the fixture's
+    # binade budget in answer to that and is WRITTEN, NOT RUN.
+    # COMPILED AND RUN, NOT YET GATED:
     pixi run check-transformer-backward
 
     # both modes, the way the other identity gates do it:
@@ -126,13 +130,13 @@ is the shape one would take. Registering it is owed.
 | file | what |
 |---|---|
 | `IDENTICAL_TRANSFORMER_CONTRACT.md` | **the deliverable.** Twelve sections. The reuse inventory, the pinned reference, what one block call is, the profile constants, all twenty-three seams with their fused-or-unfused decisions, the softmax reduction order, why FlashAttention and SDPA are out of scope, decode equals prefill, the NaN and signed-zero audit, the thirty card stages, the six gated clauses with thirteen named sabotages, what is not claimed, and where this departs from the plan's sketch. |
-| `IDENTICAL_BACKWARD_PLAN.md` | the backward profile's specification. Its gate has not run. |
+| `IDENTICAL_BACKWARD_PLAN.md` | the backward profile's specification. Its gate compiled and ran 2026-09-03 and has not yet certified. |
 | `checks/transformer_check.mojo` | the forward gate, 3,172 lines, `def main` at :2860. This is what produced the three cards above. |
 | `checks/transformer_oracle.mojo` | the NORMATIVE host forward oracle, 1,502 lines. |
 | `checks/transformer_fixture.mojo` | the fixture set, 1,169 lines, shared by the forward and backward gates. |
 | `checks/transformer_backward.mojo` | the device backward, 3,042 lines. |
 | `checks/transformer_backward_oracle.mojo` | the host backward oracle, 1,584 lines. |
-| `checks/transformer_backward_check.mojo` | the backward gate, 4,173 lines, `def main` at :3787. Present and registered; NO RECORDED RUN. |
+| `checks/transformer_backward_check.mojo` | the backward gate, 4,237 lines, `def main` at :3851. COMPILED AND RUN 2026-09-03 on the first attempt, every preflight assertion green, then REFUSED to certify on a `d_out` fixture that cannot separate fused from unfused. DEVIATION 1536 narrows the generator's exponent draw to three binades in answer; WRITTEN, NOT RUN. |
 | `corpus/` | `gen_corpus.py` (85 KB) and its README. The generator is written and, per its own README, has not been executed by its author; no case data is on disk. Its checker is `tools/transformer_corpus_check.py`. |
 | `__init__.mojo`, `checks/__init__.mojo`, `impl/__init__.mojo` | empty package markers. |
 
@@ -166,8 +170,8 @@ else passed down UNJUDGED so the lane's own by-name refusals stay reachable
 from Python).
 
 **What is deliberately NOT exposed.** The BACKWARD / training-step profile
-(`checks/transformer_backward_check.mojo` exists, is registered, and has NO
-RECORDED RUN -- a surface over an ungated path would be a green label on
+(`checks/transformer_backward_check.mojo` compiled and ran 2026-09-03 but has
+NOT CERTIFIED -- a surface over an ungated path would be a green label on
 nothing); the corpus (a generator with no case data, the phase 7 row); any
 multi-layer backbone, checkpoint/`from_pretrained` import, generation,
 FlashAttention/SDPA (contract section 6), biases, dropout, masks beyond
@@ -246,8 +250,9 @@ run on a second vendor.** The FORWARD path has now run on three, and the three
 `transformer.identical.card` files are byte-for-byte the same, so for the
 forward the sentence is earned and its artifacts are named at the top of this
 file. **It is NOT earned for anything else in this directory.** The BACKWARD
-lane has no recorded run on any column, clauses (b), (c) and (e) of the
-forward are still skipped on all three, and no sabotage arm was built in the
+lane compiled and ran on ONE column on 2026-09-03 and its gate has NOT
+certified, clauses (b), (c) and (e) of the forward are still skipped on all
+three, and no sabotage arm was built in the
 2026-08-28 round, so what is closed is clause (a) and clause (d) of the
 forward profile and nothing wider.
 

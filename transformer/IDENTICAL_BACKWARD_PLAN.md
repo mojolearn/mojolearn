@@ -5,24 +5,45 @@ Opened 2026-08-25. DEVIATIONS 1400 through 1449 are this lane's.
 
 ## STATUS
 
-**NO RUN OF THIS GATE IS RECORDED, ON ANY COLUMN. NOT ONE BIT OF THIS
-PROFILE'S OUTPUT HAS BEEN OBSERVED.**
+**COMPILED AND RUN 2026-09-03; THE GATE REFUSED TO CERTIFY, AND THAT IS THE
+CORRECT OUTCOME.** All three files compiled cleanly on the FIRST attempt and
+every preflight assertion passed. The gate then refused: its `d_out` fixture
+cannot separate a fused multiply-add chain from an unfused one, so THREE
+sabotage arms are unfalsifiable. **THE BLOCKER IS A FIXTURE, NOT THE
+ARITHMETIC.** No column carries a certified card, and this is ONE APPLE
+BOX.
+
+**DEVIATION 1536, written 2026-09-03, NOT YET RUN.** The `d_out` generator's
+exponent draw is narrowed from 17 values (`2^-8` through `2^8`) to three
+(`2^-1` through `2^1`, magnitudes in `[0.5, 4)`). **The refusal's own stated
+diagnosis -- "every product in the row is exactly representable" -- IS
+WRONG**, and the correction is in `transformer_backward_check.mojo`'s THE
+BINADE BUDGET block: `fixture_x` carries a 23-bit significand and the
+generator a 24-bit one, so the products need 47 bits and essentially all of
+them round. What fired is ABSORPTION -- with a 17-binade draw one partial of
+a `d_model` fold can be `2^18` times another and swallows the one-`ulp`
+difference the double rounding of any smaller term opens, so both spellings
+land on the dominant term's rounding. Same scar as `checks/numerics.mojo`
+row 9 (2026-08-23) and the same answer as `checks/ieee_arith_check.mojo`
+ARM 6. **RUN OWED: `pixi run check-transformer-backward`.** Nothing here is
+a verdict until that runs; `guard_d_out_separates` measures both clauses on
+every run and refuses rather than reporting a pass.
 
     transformer/checks/transformer_backward_oracle.mojo   the host oracle
     transformer/checks/transformer_backward.mojo          the device spelling
-    transformer/checks/transformer_backward_check.mojo    4,173 lines, main at :3787
+    transformer/checks/transformer_backward_check.mojo    4,237 lines, main at :3851
     transformer/checks/transformer_fixture.mojo           1,169 lines, shared
     pixi.toml:1092   check-transformer-backward, registered since 2026-08-31
 
-All four files exist. **No `transformer.backward.*` card appears anywhere
-under `bench/results/`, on any column.** The claim that the gate file and the
-fixture did not exist is deleted as false; the claim that nothing has been RUN
-stands. Every predicted count in section 5 is on paper.
+All four files exist and all of them compile. **No `transformer.backward.*`
+card appears anywhere under `bench/results/`, on any column**, because the
+gate has not certified. Every predicted count in section 5 is still on
+paper.
 
 **For contrast, and it is not evidence about the backward.** The FORWARD
 profile in this directory ran on three columns on 2026-08-28 and its three
 `transformer.identical.card` files are byte-identical, md5
-`8ce661b469681b18fb5cf4d566ad78ff`, 30 of 30 stages on 262,634 cells, 13
+`8ce661b469681b18fb5cf4d566ad78ff`, 28 of 28 card records on 262,634 cells, 13
 fixture cases, 8 repeated launches, batch composition and sequence length
 invariance each with its own firing control, decode equals prefill with a
 misalignment control, 26 non-finite plants read back off the device, and all
@@ -788,7 +809,7 @@ finds it matters is a threshold change and never a different leaf rule.**
 | 1426 | `transformer_backward.mojo` lives in `checks/` and not `impl/`, because there is no upstream file to mirror; HuggingFace ships no backward and autograd generates it | SPENT |
 | 1427 | the device backward reuses the forward device module's types and restates four private plumbing helpers locally rather than importing underscore-prefixed symbols | SPENT |
 | 1428 | the device backward calls the synchronizing `identical_gemm` rather than the `_into` forms, so it carries no caller-owned workspace; **the cost is that gemm gate G7's workspace-sizing coverage is NOT inherited** | SPENT |
-| 1430-1439 | RESERVED for the gate file. **It EXISTS, 4,173 lines; these numbers are unspent because no run of it is recorded** | |
+| 1430-1439 | RESERVED for the gate file. **It EXISTS, 4,237 lines, and it compiles and runs; these numbers are unspent because the gate has not yet certified** | |
 | 1440-1449 | RESERVED for the float64 directional-derivative reference and the backward corpus, neither of which exists | |
 
 ---
@@ -853,21 +874,25 @@ backward. It is merely slow for the eager one.**
 
 **OWED, in priority order.**
 
-1. A one-line cross-lane edit, an `x` field on `LlamaDeviceStages`.
-2. **Compile both files and run the gate.** It is registered as
-   `check-transformer-backward` and has never produced a record.
-3. **The 22 sabotage arms, each checked against its predicted INERT case as
+1. **A `d_out` FIXTURE THAT SEPARATES FUSED FROM UNFUSED.** This is what
+   blocks certification: three of the 22 sabotage arms are unfalsifiable
+   against the present fixture, so the gate refuses rather than printing a
+   tick over them. DEVIATION 1536 is the attempt at it -- narrower binade
+   budget, written 2026-09-03 -- and it is WRITTEN AND NOT RUN. This item
+   closes when `guard_d_out_separates` prints SEPARATES on both clauses,
+   not when the edit lands.
+2. **The 22 sabotage arms, each checked against its predicted INERT case as
    well as its predicted firing.** This is the phase that decides whether any
    of the above is evidence.
-4. **The float64 directional derivative**, clause (f)'s calculus half and the
+3. **The float64 directional derivative**, clause (f)'s calculus half and the
    largest single owed item. `transformer/corpus/` is a FORWARD corpus, has
    never been executed, and has no case data on disk.
-5. The three-vendor leg.
-6. An IDENTITY_PATHS row, which DEVIATION 1400 reserves and which must not be
-   written until item 5.
+4. The three-vendor leg.
+5. An IDENTITY_PATHS row, which DEVIATION 1400 reserves and which must not be
+   written until item 4.
 
-**What is least likely to compile**, so the first failure is expected rather
-than surprising: the oracle's use of `gemm_backward_a_call`'s five-element
+**What was least likely to compile** -- all of it compiled first try on
+2026-09-03: the oracle's use of `gemm_backward_a_call`'s five-element
 `Tuple` return, which the gemm lane's own header flags as one of the two
 things most likely to need a syntax adjustment; the device file's per-head
 gather-gemm-scatter loop, which allocates nothing but holds four buffers alive

@@ -431,21 +431,22 @@ with the table, never a scalar." The M4 prediction on record was 1.10x to
 
 ### 4.2 Per-lane price, `bench/results/lanes_price/`
 
-FAST versus IDENTICAL, ours only, Apple M4, 5 rounds, commit 26eb8ba,
-2026-08-28 (`lanes_price/2026-08-28_163353_26eb8ba/ratio.tsv`). The M4 drift
-caveat applies; two modes are two binaries and cannot interleave inside one
-process.
+**THE APPLE M4 TABLE THAT STOOD HERE IS RETRACTED AND DELETED**
+(`lanes_price/2026-08-28_163353_26eb8ba/ratio.tsv`, 2026-08-28). The M4 is a
+16 GB laptop that was carrying 7.5 GB of swap while reporting a clean load
+average, and none of those absolute times has been reproduced on any box. A
+contended box adds a FIXED per-launch cost to BOTH arms, which pulls every
+ratio toward 1.0 hardest on the smallest arm, so it UNDERSTATES the tax and
+does not bound it. Evidence:
+`bench/results/lanes_price/CONTROL_2026-09-02/README.md`.
 
-| lane | FAST median s | IDENTICAL median s | ratio (min to max) | bits |
-|---|---|---|---|---|
-| gemm (`gram.32x32x1M`, split-K 240 chunks against pinned 128) | 0.000710 | 0.003297 | 4.644x (3.961 to 5.849) | fast == ident |
-| cd | 0.007365 | 0.009967 | 1.353x (1.199 to 1.714) | fast != ident |
-| kde | 0.003200 | 0.003799 | 1.187x (0.984 to 1.343) | fast != ident |
-| svm | 0.018298 | 0.019268 | 1.053x (0.791 to 1.206) | fast != ident |
-| linkage | 0.011320 | 0.011176 | 0.987x (0.703 to 1.009) | fast == ident |
-| metrics | 0.012427 | 0.011196 | 0.901x (0.721 to 1.194) | fast != ident |
+Two of the deleted rows would not have been identity costs in any case: where
+FAST and IDENTICAL return the SAME output bits, the two arms are one answer
+and the ratio prices two BUILDS of it.
 
-The 2026-08-23 smoke at e69db89 (1 round, `lanes_price/2026-08-23_125704_e69db89_SMOKE/ratio.tsv`) read gemm 1.545x, cd 1.530x, kde 1.007x, linkage 1.014x, svm 0.944x, metrics 0.788x; the 26eb8ba run is current.
+The price is taken on rented single-tenant GPUs instead --
+`bench/results/lanes_price/SWEEP_2026-09-03/` (MI325X) and
+`bench/results/IDENTITY_COST_OWED.md` for what each column still owes.
 
 ### 4.3 Two named single-shape prices
 

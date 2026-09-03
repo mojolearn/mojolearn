@@ -1,0 +1,18 @@
+== leg lane=gram mode=IDENTICAL round=1 07:25:05 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=gram rounds=1 smoke=False ==
+LPRICE gram IDENTICAL warmup 32x32x1000000 0.001074725 0e9de1a0121f721a
+LPRICE gram IDENTICAL 1 32x32x1000000 0.000574088 0e9de1a0121f721a
+HASH-STABLE gram IDENTICAL 2 rounds all 0e9de1a0121f721a
+== done [IDENTICAL] lane=gram ==
+== leg lane=gram mode=IDENTICAL round=2 07:25:06 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=gram rounds=1 smoke=False ==
+LPRICE gram IDENTICAL warmup 32x32x1000000 0.001068136 0e9de1a0121f721a
+LPRICE gram IDENTICAL 1 32x32x1000000 0.000569948 0e9de1a0121f721a
+HASH-STABLE gram IDENTICAL 2 rounds all 0e9de1a0121f721a
+== done [IDENTICAL] lane=gram ==
+== leg lane=gram mode=IDENTICAL round=3 07:25:07 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=gram rounds=1 smoke=False ==
+LPRICE gram IDENTICAL warmup 32x32x1000000 0.001071827 0e9de1a0121f721a
+LPRICE gram IDENTICAL 1 32x32x1000000 0.000571007 0e9de1a0121f721a
+HASH-STABLE gram IDENTICAL 2 rounds all 0e9de1a0121f721a
+== done [IDENTICAL] lane=gram ==

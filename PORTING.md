@@ -146,7 +146,7 @@ NUM   STATUS       LINE  SUMMARY
 123   CLOSED       4693  CompressBlock's four-register accumulator is one register
 124   CLOSED       4711  Three of their directories land in one file under gbdt/methods/
 125   CLOSED       5189  CreateSubsets' fold arm pays one extra partition reduce, per TREE
-126   CLOSED       5230  PolicyScoreHelper hard-codes foldCount = 1; the searcher REFUSES
+126   CLOSED       5230  The searcher built its calcer without a fold count; a fold tree now grows
 127   CLOSED       5268  The doc-parallel searcher is the wrong home for folds
 128   CLOSED       5304  Ordered boosting supports three of the seven score functions
 129   CLOSED       5326  The ordered document array is LONGER than the dataset
@@ -5545,7 +5545,7 @@ the point -- this class of defect cannot be gated by re-running, only by not
 writing it. Sibling of DEVIATION 134's open intermittent, and the reason that
 one deserves a real hunt rather than another hundred green runs.
 
-## 126. [CLOSED] `PolicyScoreHelper` hard-codes `foldCount = 1` at three sites, and the searcher REFUSES rather than growing a tree a fold axis short
+## 126. [CLOSED] The doc-parallel searcher built its scores calcer without a fold count, and the consistency check refused every fold arm
 
 `TScoreHelper` takes `foldCount` and hands it to BOTH halves
 (`histograms_helper.h:361-365`): the first sizing the histogram
@@ -5554,34 +5554,42 @@ one deserves a real hunt rather than another hundred green runs.
 `FindOptimalSplit`, whose `foldCount == 1` test IS the dispatch between the
 plain and the dynamic scorer (`pointwise_scores.cu:537`).
 
-OURS hard-coded 1 at three sites in `pointwise_scores_calcer.mojo`.
+OURS carried it one layer down and dropped it at the call site.
+`ScoresCalcerOnCompressedDataSet.__init__` has always taken
+`fold_count: Int = 1` and forwarded it to `PolicyScoreHelper`, but
+`oblivious_tree_doc_parallel_structure_searcher.mojo` constructed the calcer
+without the argument -- so the helpers were built at 1 while the layout right
+above them was built at 12, and the searcher's consistency check refused every
+fold arm.
 
-**CLOSED the same day it was opened.** `PolicyScoreHelper` and
-`ScoresCalcerOnCompressedDataSet` now take `fold_count` (defaulting to 1,
-their argument order: `TScoreHelper(policy, dataSet, foldCount, maxDepth,
-...)`), it is stored as a field, and it reaches all three sites --
-`ComputeHistogramsHelper`, `compute_hist2`'s `gridDim.z`, and
+**LIFTED 2026-09-03.** ONE OMITTED ARGUMENT, passed. `fold_count` reaches all
+three sites -- `ComputeHistogramsHelper`, `compute_hist2`'s `gridDim.z`, and
 `find_optimal_split`'s plain-versus-dynamic dispatch. Nothing else changed:
 `histogram_alloc_size` already multiplied by `fold_count`, so `d_hist` grows
 on its own.
 
-Why it mattered enough to fix rather than leave guarded: **none of the three
-crashes at `FoldCount > 1`.** The histogram would be allocated a
-`FoldCount`-th of the size it needs, the launch grid would be one fold deep,
-and the scorer would take the PLAIN arm over a partition array whose leaf
-stride is `1 << FoldBits`. The tree comes out well formed. That is the same
-failure mode as DEVIATION 114's hardcoded one-hot flag, in the same file, four
-hours apart -- a constant standing in for a value the caller owns.
+Why the guard mattered rather than a silent fallback: **nothing crashes at
+`FoldCount > 1`.** The histogram would be allocated a `FoldCount`-th of the
+size it needs, the launch grid would be one fold deep, and the scorer would
+take the PLAIN arm over a partition array whose leaf stride is
+`1 << FoldBits`. The tree comes out well formed.
 
-The guard stays. It is now a cross-check between two ported objects rather
-than a refusal: the searcher asks the calcer what fold count it was built at
-and raises if it disagrees with the layout, which costs one host comparison
-per tree and means the first caller to pass folds gets a named error instead
-of a plausible tree. Gated both ways by `check-ordered-boosting` O7: it fires
-with folds and does NOT fire without them.
+The guard stays as a cross-check between two ported objects: the searcher asks
+the calcer what fold count it was built at and raises if it disagrees with the
+layout, which costs one host comparison per tree.
 
-Verified after the change: the CatBoost differential holds at 288 of 288
-across six fixtures on both searchers, and O7 still fires.
+`check-ordered-boosting` passes all seven gates. O7 no longer asserts the
+refusal -- it asserts that SolarL2 WITH FOLDS GROWS A TREE, 1 split at
+FoldCount 12 against the no-fold control's 1 at the same depth. The two counts
+are not required to match, because the fold arm scores each split on a
+different partition. The CatBoost differential holds at 288 of 288 across six
+fixtures on both searchers.
+
+WHAT THIS IS NOT: ordered boosting still cannot be selected by any fit.
+`TDynamicBoosting::Fit` has no definition anywhere in this tree -- no per-fold
+approximation cursors, no prefix-only gradient, no per-fold leaf estimation or
+model averaging, and no `boosting_type` at any public surface. Only the tree
+BELOW the learner can now grow on a fold partition.
 
 ## 127. [CLOSED] THE DOC-PARALLEL SEARCHER IS THE WRONG HOME FOR FOLDS, and its fold arm is a deviation scheduled for deletion
 

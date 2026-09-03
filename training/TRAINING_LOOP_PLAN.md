@@ -39,9 +39,12 @@ asserts both halves.
 
 - **NO NVIDIA LEG**, so the three-machine claim in section 0 is not earned.
 - **Two of the twelve stages have never been gated in isolation and both are
-  on the critical path.** `transformer/checks/transformer_backward.mojo` has
-  no run recorded on any column, and `embedding/checks/embedding_identical.
-  mojo` has clause (a) only and no sabotage arm ever built.
+  on the critical path.** `transformer/checks/transformer_backward.mojo`
+  compiled and ran on Apple 2026-09-03 and its gate has NOT certified -- the
+  `d_out` fixture cannot separate a fused multiply-add chain from an unfused
+  one, so three sabotage arms are unfalsifiable -- and
+  `embedding/checks/embedding_identical.mojo` has clause (a) only and no
+  sabotage arm ever built.
 - No `pixi.toml` task; the legs drove the gate by path.
 - No checkpoint file format, so clause (d) tests resume WITHIN one process.
 
@@ -91,7 +94,7 @@ machines.
 | 4 | lm_head | `gemm_identical.mojo::identical_gemm_into`, `OP_NT` at `(M, V, d_model)` | **GATED**, three vendors |
 | 5, 6 | loss and its backward | `loss.mojo::identical_ce_forward_into` / `_backward_into` | clause (a) and (e) on Apple + AMD |
 | 7 | lm_head backward | `gemm_backward.mojo::identical_gemm_backward_a_into` / `_b_into` | ten gates green Apple + AMD, no sabotage fired |
-| 8 | block backward | `transformer_backward.mojo::llama_decoder_layer_backward` | **WRITTEN, NO RUN RECORDED** |
+| 8 | block backward | `transformer_backward.mojo::llama_decoder_layer_backward` | **WRITTEN, COMPILED AND RUN 2026-09-03; GATE NOT YET CERTIFIED** |
 | 9 | embedding backward | `embedding_identical.mojo::identical_embedding_backward_into` | as stage 2 |
 | 10 | pack gradients | `train_loop.mojo::train_copy_range_kernel` | this lane |
 | 11 | optimizer | `optimizer.mojo::identical_optimizer_step` | clause (a) and (e) on Apple + AMD |
@@ -514,10 +517,11 @@ money; the vacuity controls do not.
    loss, on both boxes. Until that is understood, the control is in the
    failure mode it was written to detect and it is reported rather than
    asserted.
-3. **A gate for `transformer/checks/transformer_backward.mojo`.** It is on the
-   critical path of every step, it is registered as
-   `check-transformer-backward`, and nothing has compared it to its oracle on
-   any column.
+3. **A CERTIFYING gate for `transformer/checks/transformer_backward.mojo`.**
+   It is on the critical path of every step, it is registered as
+   `check-transformer-backward`, and on 2026-09-03 it compiled and ran on one
+   Apple box and REFUSED to certify: three sabotage arms are unfalsifiable
+   against the present `d_out` fixture. The blocker is a fixture.
 4. **Sabotage arms for `embedding/checks/embedding_identical.mojo`**, of which
    not one has ever been built, and its `PLAN_SORT`, without which the
    embedding lane's plan-invariance clause cannot run at all.

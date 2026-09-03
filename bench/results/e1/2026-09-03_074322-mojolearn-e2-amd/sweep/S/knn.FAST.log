@@ -1,0 +1,21 @@
+== leg lane=knn mode=FAST round=1 07:45:45 ==
+== bench/lanes_price_main.mojo [FAST] lane=knn rounds=1 smoke=False ==
+LPRICE knn FAST warmup auto.20000x1000x32.k10 0.432559752 66b39e1b00f63524
+LPRICE knn FAST 1 auto.20000x1000x32.k10 0.000491838 a846602efa98482c
+HASH-MOVED knn FAST round warmup=66b39e1b00f63524 vs 1=a846602efa98482c
+   (FAST: recorded, not a failure -- the arm is not deterministic on this box in this mode; the IDENTICAL leg is where it asserts)
+== done [FAST] lane=knn ==
+== leg lane=knn mode=FAST round=2 07:45:46 ==
+== bench/lanes_price_main.mojo [FAST] lane=knn rounds=1 smoke=False ==
+LPRICE knn FAST warmup auto.20000x1000x32.k10 0.399263417 51f802a7233702ac
+LPRICE knn FAST 1 auto.20000x1000x32.k10 0.000559667 ef63e704dd6598dc
+HASH-MOVED knn FAST round warmup=51f802a7233702ac vs 1=ef63e704dd6598dc
+   (FAST: recorded, not a failure -- the arm is not deterministic on this box in this mode; the IDENTICAL leg is where it asserts)
+== done [FAST] lane=knn ==
+== leg lane=knn mode=FAST round=3 07:45:47 ==
+== bench/lanes_price_main.mojo [FAST] lane=knn rounds=1 smoke=False ==
+LPRICE knn FAST warmup auto.20000x1000x32.k10 0.381043509 fd08af4764cdf880
+LPRICE knn FAST 1 auto.20000x1000x32.k10 0.000492928 94a97ba2b785ba2c
+HASH-MOVED knn FAST round warmup=fd08af4764cdf880 vs 1=94a97ba2b785ba2c
+   (FAST: recorded, not a failure -- the arm is not deterministic on this box in this mode; the IDENTICAL leg is where it asserts)
+== done [FAST] lane=knn ==

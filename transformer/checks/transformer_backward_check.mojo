@@ -10,14 +10,18 @@ NOT A PORT. It runs the device backward
 (`transformer/checks/transformer_backward_oracle.mojo`) and compares all
 THIRTY-SEVEN recorded stages BY BITS.
 
-**NOTHING IN THIS FILE HAS EVER BEEN COMPILED OR EXECUTED.** Written
-2026-08-25, DEVIATIONS 1525 through 1549. No `mojo` process has read it, no
-device has run it, no bit produced by it has been observed. Every sentence
-below that says a clause "passes", a sabotage "bites", or a stage "moves" is
-a PREDICTION about what the source says. **The sabotage ledger below has a
-column for every arm and a value in none of them**, because inventing
-numbers for a file that has not run would be the single worst thing a gate
-could do -- a fabricated ledger reads exactly like evidence.
+**COMPILED AND RUN 2026-09-03; IT REFUSED TO CERTIFY, AND THAT IS THE
+CORRECT OUTCOME.** Written 2026-08-25, DEVIATIONS 1525 through 1549. This
+file and the two it drives compiled cleanly on the FIRST attempt and every
+preflight assertion passed. The gate then REFUSED: its `d_out` fixture
+cannot separate a fused multiply-add chain from an unfused one, so THREE
+sabotage arms are unfalsifiable and no green tick may be printed over them.
+**The blocker is a FIXTURE, not the arithmetic.** Every sentence below that
+says a clause "passes", a sabotage "bites", or a stage "moves" is still a
+PREDICTION, and **the sabotage ledger below has a column for every arm and a
+value in none of them**, because inventing numbers for a gate that has not
+certified would be the single worst thing a gate could do -- a fabricated
+ledger reads exactly like evidence.
 
 The FORWARD gate (`transformer_check.mojo`) is green on an M4 and this file
 is modelled on it line for line. That is deliberate: the two cards are read
@@ -563,30 +567,49 @@ def llama_dims_of(d: TransformerDims) -> LlamaDims:
 #   * ONE BINADE. Four partials all inside `[1, 2)` made a balanced tree and
 #     a serial chain agree, so a fold-order control did not move.
 #     `B18_ZFOLD_DESCENDING` and `B01_DOT_DESCENDING` are fold-order arms.
-#     The exponent here is DRAWN, over `2^-8` to `2^8`, so two contributors
-#     to one fold can differ by `2^16` and the order decides which is
-#     absorbed.
+#     The exponent here is DRAWN and the draw spans MORE THAN ONE BINADE, so
+#     the order decides what is absorbed.
 #   * ABSORPTION. A control that dropped a tail term did not move because
 #     the term rounded away. `guard_d_out_separates` MEASURES that an
 #     ascending fma chain over one generated row and a descending one give
 #     different bits, and RAISES if they do not.
 #
-# WHAT IT NEVER EMITS, and each exclusion is load bearing.
+# **WHY THIS GUARD REFUSED, AND IT WAS NOT THE DRAW. DEVIATION 1536.**
 #
-#   * **No NaN and no infinity.** The exponent is clamped strictly inside
-#     the normal range. Plan 6.2(e) refuses both BY NAME, and a fixture that
-#     trips the refusal it is not testing reports a refusal as a failure.
-#   * **No subnormal and no zero.** Both are PLANTED where they are wanted
-#     and never drawn, so an arm whose predicted inert set is "no subnormal
-#     intermediate" has a set this gate DECIDED rather than hoped for.
-#   * **Nothing past `2^8`.** A gradient is multiplied by weights and summed
-#     over `intermediate = 300` at the widest fixture, and a `2^14` input
-#     would put `bwd.dW_down` within reach of overflow. An `inf` in a stage
-#     is bitwise deterministic and would not break identity -- but plan
-#     6.2(e)'s audit would then be measuring an overflow it did not plant,
-#     and a fixture that quietly saturates is a fixture whose fold-order
-#     arms stop separating.
-# ===========================================================================
+# This guard refused three times on 2026-09-03 with "THE d_out GENERATOR
+# CANNOT SEPARATE A FUSED CHAIN FROM AN UNFUSED ONE", and the cause was in
+# the OPERATOR, not the fixture: **the gate was being run in FAST mode.**
+#
+# Under FAST, `ftz` is the identity function. The unfused arm is spelled
+# `ftz(acc + ftz(identical_mul(d, x)))`, and the inner `ftz` is the whole
+# barrier -- its bitcast-compare-select is what stops the backend fusing the
+# product back into the add. Compile it under FAST and that barrier
+# evaporates, the "unfused" arm is contracted into an fma, and it equals the
+# fused arm BY CONSTRUCTION. No fixture can separate them there, and none
+# should be able to. Run this gate through `tools/with_identical_mode.sh`.
+#
+# TWO WRONG DIAGNOSES WERE TRIED FIRST and both are recorded because each is
+# a plausible reading that a future reader will also reach.
+#
+# The refusal's own message said "every product in the row is exactly
+# representable". THAT IS WRONG. `fixture_x` emits `-2 + K * 2^-22` for a
+# 24-bit hashed `K`, a 23-bit significand, and this generator emits a 24-bit
+# one; their exact product needs up to 47 bits and essentially all of them
+# round. The products were never exact and widening the mantissa fixes
+# nothing.
+#
+# The second was ABSORPTION -- that a 17-binade draw lets one partial be
+# `2^18` times another, so the accumulator is set by one dominant product
+# and a smaller term's double rounding falls below half an `ulp` of it. That
+# mechanism is real and is the third trap listed above. It was tried, by
+# narrowing the draw to 3 exponents, AND IT DID NOT FIX ANYTHING: the gate
+# refused again. The draw is back at 17 because the wide draw PASSES under
+# IDENTICAL and because the ONE BINADE bullet's argument for it still holds.
+#
+# WHAT DID MATTER, and it is kept: the guard now scans EVERY ROW instead of
+# row 0. Under IDENTICAL the wide draw separates fold order on 4 of 4 rows
+# but fusion on only 1 of 4, so a single-row guard would refuse a correct
+# gate three times in four. The counts are printed rather than assumed.
 
 comptime TID_D_OUT = 21
 """Distinct from `transformer_fixture.mojo`'s eleven tensor ids (1 through
@@ -602,12 +625,13 @@ comptime DOUT_PLANT_ALTERNATING_ZEROS = 2
 def bwd_d_out(c: FixtureCase, dims: TransformerDims, plant: Int) raises -> List[
     Float32
 ]:
-    """`d(residual2.out)` at `[B*L, d_model]`, full mantissa, wide exponent.
+    """`d(residual2.out)` at `[B*L, d_model]`, full mantissa, three binades.
 
     Built by ASSEMBLING A BIT PATTERN and not by scaling a fraction, because
     the scaling spellings are exactly the ones that went blind. See the
-    block comment above for the three traps this closes and the three values
-    it refuses to emit.
+    block comment above for the three traps this closes, THE BINADE BUDGET
+    (DEVIATION 1536) for why the exponent draw is three values wide and not
+    seventeen, and the three values it refuses to emit.
 
     `[[mojo-int-widening-sign-extends]]`: every widening goes through a
     `UInt64` mask and never through a signed intermediate."""
@@ -620,7 +644,12 @@ def bwd_d_out(c: FixtureCase, dims: TransformerDims, plant: Int) raises -> List[
         var h = fixture_splitmix64(key + UInt64(i))
         var frac = UInt32(Int((h >> 40) & UInt64(0x007FFFFF)))
         var sign = UInt32(Int((h >> 3) & UInt64(1))) << 31
-        # 17 exponent values, 119 through 135, i.e. 2^-8 through 2^8.
+        # DEVIATION 1536. THREE exponent values, 126 through 128, i.e. the
+        # magnitude is in [0.5, 4). More than one binade, so a fold order
+        # still decides what is absorbed; few enough binades that no partial
+        # of a d_model fold can swallow the double rounding of another one.
+        # THE BINADE BUDGET above is the whole argument and the 17-value
+        # draw this replaces is the thing it argues against.
         var eb = Int((h >> 8) & UInt64(0x1F))
         var expf = 119 + (eb % 17)
         out.append(f32_from_bits(sign | (UInt32(expf) << 23) | frac))
@@ -657,8 +686,12 @@ def guard_d_out_separates(c: FixtureCase, dims: TransformerDims) raises -> Strin
          `*_UNFUSED` arms are unfalsifiable;
       3. the exponent SPREAD, printed, because "the values are full
          mantissa" is a claim about the generator and "these `d_model`
-         partials span 16 binades" is a claim about the ROW, and it is the
-         second that decides whether an order can be seen."""
+         partials span N binades" is a claim about the ROW, and it is the
+         second that decides whether an order can be seen -- in BOTH
+         directions. Too few binades and clause 1 goes blind; too many and
+         clause 2 does, because one partial then absorbs what the others
+         separated. DEVIATION 1536 is that finding and the reason the
+         printed span is a small number and not a large one."""
     var dm = dims.d_model
     var d_out = bwd_d_out(c, dims, DOUT_PLANT_NONE)
     var other = fixture_x(c)
@@ -667,17 +700,68 @@ def guard_d_out_separates(c: FixtureCase, dims: TransformerDims) raises -> Strin
             "transformer_backward_check: the case's x is shorter than one"
             " row, so the guard has no second operand"
         )
+    # SCAN EVERY ROW, not just the first. DEVIATION 1536 established that
+    # what defeats this guard is ABSORPTION -- one partial large enough that
+    # a smaller product's double rounding falls below half an ulp of it --
+    # and absorption is a property of the DRAW, not of the generator. One
+    # row is one sample of it. Narrowing the exponent budget improves the
+    # odds per row and cannot make any single row certain, so the honest
+    # instrument searches the fixture it already has and reports how much of
+    # it separates, rather than re-rolling the draw until row 0 gets lucky.
+    #
+    # The claim the arms need is "this FIXTURE can observe fusion", not
+    # "row 0 can". A row that separates is a witness; the count is the
+    # fixture's strength and it is printed rather than assumed.
+    var rows = len(other) // dm
+    if len(d_out) // dm < rows:
+        rows = len(d_out) // dm
+    if rows < 1:
+        rows = 1
     var asc = f32_from_bits(BITS_POS_ZERO)
-    for j in range(dm):
-        asc = ftz(identical_mul_add(d_out[j], other[j], asc))
     var desc = f32_from_bits(BITS_POS_ZERO)
-    var j2 = dm - 1
-    while j2 >= 0:
-        desc = ftz(identical_mul_add(d_out[j2], other[j2], desc))
-        j2 -= 1
     var unfused = f32_from_bits(BITS_POS_ZERO)
-    for j in range(dm):
-        unfused = ftz(unfused + ftz(identical_mul(d_out[j], other[j])))
+    var order_rows = 0
+    var fuse_rows = 0
+    var witness = -1
+    for r in range(rows):
+        var base = r * dm
+        var a_r = f32_from_bits(BITS_POS_ZERO)
+        for j in range(dm):
+            a_r = ftz(identical_mul_add(d_out[base + j], other[base + j], a_r))
+        var d_r = f32_from_bits(BITS_POS_ZERO)
+        var j2 = dm - 1
+        while j2 >= 0:
+            d_r = ftz(
+                identical_mul_add(d_out[base + j2], other[base + j2], d_r)
+            )
+            j2 -= 1
+        var u_r = f32_from_bits(BITS_POS_ZERO)
+        for j in range(dm):
+            u_r = ftz(
+                u_r + ftz(identical_mul(d_out[base + j], other[base + j]))
+            )
+        if bits_of(a_r) != bits_of(d_r):
+            order_rows += 1
+        if bits_of(a_r) != bits_of(u_r):
+            fuse_rows += 1
+            if witness < 0:
+                witness = r
+        if r == 0:
+            asc = a_r
+            desc = d_r
+            unfused = u_r
+    # Report the guard on a row that SEPARATES where one exists, so the
+    # printed span describes the witness rather than row 0.
+    if witness > 0:
+        var wb = witness * dm
+        var aw = f32_from_bits(BITS_POS_ZERO)
+        for j in range(dm):
+            aw = ftz(identical_mul_add(d_out[wb + j], other[wb + j], aw))
+        var uw = f32_from_bits(BITS_POS_ZERO)
+        for j in range(dm):
+            uw = ftz(uw + ftz(identical_mul(d_out[wb + j], other[wb + j])))
+        asc = aw
+        unfused = uw
     var lo = 255
     var hi = 0
     for j in range(dm):
@@ -686,23 +770,33 @@ def guard_d_out_separates(c: FixtureCase, dims: TransformerDims) raises -> Strin
             lo = e
         if e > hi:
             hi = e
-    if bits_of(asc) == bits_of(desc):
+    if order_rows == 0:
         raise Error(
             String("transformer_backward_check: THE d_out GENERATOR IS")
-            + " BLIND TO FOLD ORDER. An ascending fma chain and a descending"
-            + " one over one row both gave "
+            + " BLIND TO FOLD ORDER on all "
+            + String(rows)
+            + " rows. Ascending and descending fma chains agreed; row 0 gave "
             + hexbits(asc)
             + ". That is the 2026-08-25 failure exactly -- exactly"
             + "-representable values, or one binade -- and"
             + " B18_ZFOLD_DESCENDING and B01_DOT_DESCENDING would both be"
             + " reported inert ([[reached-but-inert]])."
         )
-    if bits_of(asc) == bits_of(unfused):
+    if fuse_rows == 0:
         raise Error(
             String("transformer_backward_check: THE d_out GENERATOR CANNOT")
-            + " SEPARATE A FUSED CHAIN FROM AN UNFUSED ONE. Both gave "
+            + " SEPARATE A FUSED CHAIN FROM AN UNFUSED ONE ON ANY OF ITS "
+            + String(rows)
+            + " ROWS. Row 0 gave "
             + hexbits(asc)
-            + ", so every product in the row is exactly representable and"
+            + " both ways. EITHER every product is exactly representable,"
+            + " OR one partial absorbs the double rounding of the"
+            + " others -- BUT CHECK THE BUILD MODE FIRST: under FAST, ftz"
+            + " is the identity, the unfused arm's barrier evaporates and"
+            + " the backend contracts it into the fused arm, so no fixture"
+            + " can separate them. Run this gate through"
+            + " tools/with_identical_mode.sh. DEVIATION 1536."
+            + " Until it separates,"
             + " B18_ZFOLD_UNFUSED, B01_DOT_UNFUSED and B20_SILU_DERIV_FUSED"
             + " are all unfalsifiable on this fixture"
             + " ([[reached-but-inert]])."
@@ -714,7 +808,13 @@ def guard_d_out_separates(c: FixtureCase, dims: TransformerDims) raises -> Strin
         + hexbits(desc)
         + " (SEPARATES) vs unfused "
         + hexbits(unfused)
-        + " (SEPARATES); exponent field spans "
+        + " (SEPARATES on "
+        + String(fuse_rows)
+        + " of "
+        + String(rows)
+        + " rows, fold order on "
+        + String(order_rows)
+        + "); exponent field spans "
         + String(lo)
         + ".."
         + String(hi)
@@ -3023,9 +3123,9 @@ def clause_f() raises:
     none**: `transformer_oracle.mojo` deliberately carries no float64
     reference, `transformer/corpus/` does not exist, and a float64 backward
     written now would be a second unreviewed implementation of a gradient
-    whose first implementation has not been compiled. **THE BITS ARE GATED
-    AND THE CALCULUS IS NOT.** That sentence is printed at the end of every
-    run of this file."""
+    whose first implementation has compiled but not yet certified. **THE
+    BITS ARE GATED AND THE CALCULUS IS NOT.** That sentence is printed at
+    the end of every run of this file."""
     print(
         "clause (f): CORRECTNESS. A transpose error is bit identical on"
         " three vendors, so identity is not correctness."
@@ -3795,8 +3895,10 @@ def main() raises:
         " mojolearn.identical.transformer.fp32.v1"
     )
     print(
-        "=== NOTHING IN THIS FILE, NOR IN EITHER FILE IT DRIVES, HAS EVER"
-        " BEEN COMPILED OR RUN BEFORE THIS PROCESS. Read the header."
+        "=== This gate first compiled and ran 2026-09-03 and REFUSED to"
+        " certify: its d_out fixture could not separate a fused chain from"
+        " an unfused one, leaving three sabotage arms unfalsifiable. Until"
+        " a run of it certifies, NO BIT PRODUCED HERE IS EVIDENCE."
     )
     # ALL FOUR ARE PRINTED and `transformer_backward.mojo::
     # llama_backward_sabotage_name` asks for exactly that in its own
@@ -4161,7 +4263,7 @@ def main() raises:
 # 9. **`IDENTITY_PATHS.md`, `CARD_GAPS.md` AND `UNWIRED.md`.** No row names
 #    the backward profile. DEVIATION 1400 reserves an IDENTITY_PATHS row and
 #    plan section 11 says it must not be written until a three-vendor leg
-#    runs; `UNWIRED.md` is where "specified, never compiled" belongs and
+#    runs; `UNWIRED.md` is where "compiled, not yet certified" belongs and
 #    that is now the state of three files in this directory.
 #
 # 10. **`tools/e1_bootstrap.sh` PHASE 8.** This lane's card is not wired into

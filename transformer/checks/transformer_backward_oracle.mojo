@@ -4,20 +4,21 @@
 decoder block, under profile `mojolearn.identical.transformer.fp32.v1` and
 the routing document `transformer/IDENTICAL_BACKWARD_PLAN.md`.
 
-**NOTHING IN THIS FILE HAS BEEN COMPILED. NOTHING HAS BEEN RUN. NO BIT
-PRODUCED BY IT HAS BEEN OBSERVED ON ANY HOST OR ANY DEVICE.** Written
-2026-08-25 by a lane that is forbidden to execute anything. Every sentence
-below that says what a seam DOES is a statement about what the source says;
-every sentence that says what two runs will AGREE ON is a PREDICTION. The
-word "identical" appears here only as the name of the profile and of the
-imported functions. It is not a claim this lane has earned.
+**COMPILED AND RUN 2026-09-03, NOT YET GATED.** Written 2026-08-25; this
+file compiled cleanly on the FIRST attempt alongside the device file and
+`transformer_backward_check.mojo`, whose preflight assertions all passed.
+The check then REFUSED TO CERTIFY, because its `d_out` fixture cannot
+separate a fused multiply-add chain from an unfused one and three sabotage
+arms are therefore unfalsifiable. Every sentence that says what two runs
+will AGREE ON is still a PREDICTION. The word "identical" appears here only
+as the name of the profile and of the imported functions. It is not a claim
+this lane has earned.
 
 WHAT IS OWED, before any sentence in this file is evidence
 -----------------------------------------------------------
-  1. That it compiles. See the RISK note at the bottom of this docstring.
-  2. `transformer/checks/transformer_backward_check.mojo`, which does not
-     exist. There is no gate, no fixture, no card, and no sabotage has been
-     fired.
+  1. A `d_out` fixture that separates fused from unfused, so the three
+     unfalsifiable sabotage arms can bite and the gate can certify.
+  2. The sabotage ledger: no arm has yet been shown able to fail.
   3. A FLOAT64 DIRECTIONAL-DERIVATIVE reference. Bit identity says the
      answer is the same everywhere; it does not say the answer is the RIGHT
      derivative, and a transpose error is bit identical on three vendors.
@@ -115,9 +116,9 @@ RISK: WHAT IS LEAST LIKELY TO COMPILE
 ---------------------------------------
   * `gemm_backward_a_call`'s FIVE-ELEMENT `Tuple` return and the `call[4]`
     indexing below. That lane's own open-questions section flags the tuple
-    as one of the two things most likely to need a syntax adjustment, and
-    `gemm_backward.mojo` has never been compiled either. If it moves, the
-    two `_gemm_bwd_*` helpers here are the only two call sites.
+    as one of the two things most likely to need a syntax adjustment;
+    `gemm_backward.mojo` compiles too. If it moves, the two `_gemm_bwd_*`
+    helpers here are the only two call sites.
   * `mut` arguments that are struct fields. This file follows
     `transformer_oracle.mojo`'s rule -- LOCALS THEN ASSIGN, never
     `mut st.field` at a call site -- because that is the shape which

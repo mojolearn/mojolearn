@@ -168,9 +168,11 @@ comptime NUMERIC_IDENTICAL = 1
 #: user needs for a regression test, a byte-comparable model file or a fit
 #: that is reproducible from its seed was, until now, only purchasable by
 #: taking `NUMERIC_IDENTICAL` whole. That is an expensive way to buy it: the
-#: 2026-08-28 price run measured IDENTICAL at 4.64x FAST on the gemm lane
-#: while producing THE SAME BITS as FAST on that box, because what the extra
-#: cost buys there is the OTHER vendors and nothing else.
+#: cost is real, though the 4.64x once quoted here came off a retracted
+#: Apple round and no longer stands. Where a lane returns THE SAME BITS in
+#: both modes, what the extra cost buys is the OTHER vendors and nothing
+#: else -- and such a row is not an identity cost at all, since the ratio
+#: prices two builds of one answer.
 #:
 #: THE LINE BETWEEN THE TIERS. A pin belongs to DETERMINISM when, without it,
 #: the same binary on the same GPU with the same input can give different bits

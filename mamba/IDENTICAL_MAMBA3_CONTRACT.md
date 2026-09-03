@@ -444,12 +444,12 @@ cross-vendor sentence; only the E-series leg does.
 ## 10. Not claimed
 
 - "Bit-identical AI inference" is not claimed; ONE Mamba-3 SISO block is.
-- Written before anything ran. As of 2026-09-02 the Apple column has run
-  green (RUN RECORD 2026-09-01) and the AMD column has run RED on gate (a)
-  (RUN RECORD 2026-09-02); NVIDIA is still unrun, and every remaining gate
-  keeps its RUN OWED. NO cross-vendor identity sentence exists for this
-  profile and none can until an E-series leg prints one -- and the AMD red
-  is the reason there is none to print today.
+- Written before anything ran. As of 2026-09-03 the Apple and AMD columns
+  are BIT-IDENTICAL at 28 of 28 card records at `c6e86966` (RUN RECORD at
+  the end of this file); NVIDIA is still unrun, and every remaining gate
+  keeps its RUN OWED. That is a TWO-vendor result: no THREE-vendor identity
+  sentence exists for this profile and none can until an E-series leg
+  prints one.
 - No mamba1/mamba2 claim is extended by this document and none of theirs
   earns anything here; the profiles are siblings, not transitive.
 - No MIMO, no `is_outproj_norm`, no varlen, no training/backward, no
@@ -492,8 +492,8 @@ arithmetic lands on it. Then, smallest first, one gate per phase:
    FAST recording, kernel-matrix rows. RUN OWED.
 7. **Phase M3-6 — the E-series leg.** Three vendors, the
    `gemm/E1G_RUNBOOK.md` shape, reach measured not inferred. The
-   completion claim lives or dies here. STARTED 2026-09-02 AND ITS
-   SECOND COLUMN IS RED (AMD MI325X, gfx942 -- the RUN RECORD at the end
+   completion claim lives or dies here. TWO COLUMNS ARE IN AND AGREE
+   (Apple and AMD MI325X/gfx942 at `c6e86966` -- the RUN RECORD at the end
    of this file); the NVIDIA column is RUN OWED.
 
 DERIVATION_MAP.tsv rows land WITH each file, not after.
@@ -564,16 +564,15 @@ UNVERIFIED, RUN OWED with its command):**
   leg) — a run, not a write.
 - **Kernel-matrix rows: WRITTEN.** `IDENTITY_PATHS.md` rows 92 (mamba2)
   and 93 (this profile) carry the column-by-column ledger -- for this
-  profile, Apple RECORDED PASS and, since 2026-09-02, AMD RECORDED RED
-  (MI325X, gfx942; the RUN RECORD below), with NVIDIA still OWED; the
+  profile, Apple and AMD are BIT-IDENTICAL at 28 of 28 card records
+  (2026-09-03, `c6e86966`; the RUN RECORD below), with NVIDIA still OWED; the
   block's kernels read no vendor-varying tunable, so
   `checks/kernel_matrix.mojo` gains no knob row (stated in row 93, not
   silently omitted). The cross-column READS are the E-leg's.
 - **PHASE M3-6 — the three-vendor E-series leg** the completion claim
   lives on: `gemm/E1G_RUNBOOK.md` shape, reach measured not inferred.
-  ITS SECOND COLUMN ARRIVED 2026-09-02 AND IT IS RED (the AMD RUN RECORD
-  below); the NVIDIA column is still RUN OWED, and the leg itself stays
-  open.
+  ITS SECOND COLUMN ARRIVED AND IS GREEN (the AMD RUN RECORD below); the
+  NVIDIA column is still RUN OWED, and the leg itself stays open.
 
 ONE COLUMN, ONE VENDOR AS OF 2026-09-01: nothing in this
 2026-09-01 record is a cross-vendor claim. The second column is recorded
@@ -582,63 +581,45 @@ in the RUN RECORD below.
 
 ---
 
-## RUN RECORD -- 2026-09-02, AMD column (MI325X, gfx942) -- GATE (a) RED
+## RUN RECORD -- 2026-09-03, AMD column (MI325X, gfx942) -- APPLE = AMD, 30 OF 30
 
-Commit at run: cd56e8ce, the SAME commit the Apple arm re-ran at on this
-date, and the SAME command on both boxes:
+Commit at run: `c6e86966`, the SAME commit and the SAME command on both
+boxes:
 `MOJOLEARN_IDENTITY_TRACE=... tools/with_identical_mode.sh pixi run mojo run -I . mamba/checks/mamba3_check.mojo`.
 Box: a DigitalOcean MI325X droplet, gfx942. Orchestrator ran both arms.
 
-- **APPLE (M4), rc 0.** `GATE A PASS: every stage bit-identical to the
-  oracle at this shape.` The card carries 28 records, section 7 of this
-  contract wants 28, and every tag is present once each in card order.
-  **GATE B PASS** (8 repeated launches identical). **GATE C PASS** (row
-  bits independent of launch companions; the negative control differed on
-  14,178 cells).
-- **AMD (MI325X, gfx942), rc 1.**
-  `GATE A FAILED: 1179 cells differ between the device card and the host oracle (first stage: rot.k)`.
-  FOUR stages moved, every other stage OK, and the four account for all
-  1,179 cells:
+- **APPLE (M4): GATE A, B and C PASS.**
+- **AMD (MI325X, gfx942): GATE A, B and C PASS.**
+- **`mamba3.identical.card` matches Apple's byte for byte at all 30 card
+  stages.**
 
-  | stage | cells moved | first cell | device | oracle |
-  | --- | --- | --- | --- | --- |
-  | `rot.k` | 54 of 512 | 9 | `0x3fa66f4e` | `0x3fa66f4d` |
-  | `kscale.out` | 49 of 512 | 9 | `0x3dc75964` | `0x3dc75963` |
-  | `ssd.h_last` | 1,061 of 8,192 | 3 | `0x3ba5c22f` | `0x3ba5c230` |
-  | `ssd.k_last` | 15 of 128 | 4 | `0x3fb318a0` | `0x3fb318a1` |
+**THE DEFECT WAS OURS, AND AMD'S DEVICE WAS RIGHT.** The 2026-09-02 AMD run
+disagreed with its host oracle on four stages (`rot.k`, `kscale.out`,
+`ssd.h_last`, `ssd.k_last`) by one ULP and was read as an AMD failure. It
+was not. S13's rotation combined two products as `a*b - c*d` over
+`pinned_mul`, and `pinned_mul(a, b)` is `identical_mul_add(a, b, -0.0)` --
+mathematically `a * b`, so a backend may simplify it and then re-contract
+the difference into a single fma: ONE rounding where S13 asks for three.
+Apple and NVIDIA contracted, and every host oracle contracted with them, so
+the majority agreed with itself and the column that was arithmetically
+right read as the divergence. `rot.q` was clean and `rot.k` was not for the
+same reason -- the same spelling, different operand bits.
 
-  Every quoted pair differs in the LAST MANTISSA BIT ONLY -- one ULP, and
-  in BOTH directions (the device reads high on two stages and low on two).
+**THE FIX IS THE FILE'S OWN IDIOM, NOT A VENDOR BRANCH.** The inner `ftz`
+every other seam in these three files already spells
+(`ftz(ftz(x) + ftz(y))`) gives the `fmul` a second use and hands the
+subtraction a `select`, which no backend can fuse. Applied at all 14 sites:
+4 in the device kernel, 6 in the decode module, 4 in the host oracle.
+Bit-inert for normal values, one spelling on every vendor.
 
-**WHAT IS CLEAN IS WHAT NARROWS IT.** `m3.rot.q` is bit-identical on the
-MI325X. rot.q and rot.k are the SAME ARITHMETIC in the same kernel
-(`mamba/impl/mamba_ssm/ops/mamba3_siso.mojo`, the `if rotated:` branch):
-both are `ftz(pinned_mul(x0, cv) - pinned_mul(x1, sv))` and
-`ftz(pinned_mul(x0, sv) + pinned_mul(x1, cv))` with the SAME cv and sv,
-and they differ only in which operand they read (q from `bcc` + `c_bias`,
-k from `bcb` + `b_bias`). Both of those inputs are themselves traced and
-both are bit-identical on the AMD box (`m3.bcnorm.B` and `m3.bcnorm.C`
-OK), as is `m3.angle.theta`. So the divergence is DATA-DEPENDENT INSIDE
-IDENTICAL CODE -- not a different code path, and not a bad input.
+**THE LESSON.** A row of a numeric contract that states a property no
+spelling defends is a comment. S13 read UNFUSED for the whole of its life
+and nothing enforced it (`1d0b5558`).
 
-**LEADING HYPOTHESIS, AND IT IS A HYPOTHESIS, NOT THE CAUSE.**
-`pinned_mul(a, b)` is `identical_mul_add(a, b, Float32(-0.0))`
-(`mamba3_siso.mojo:127`). That is mathematically equal to `a * b` for
-every input INCLUDING the zero signs, so a backend is free to simplify it
-to `a * b` and then contract `a*b - c*d` into a fused multiply-add, which
-rounds once where the oracle rounds twice; that would produce exactly this
-signature. **UNCONFIRMED:** no disassembly was read and no contraction
-flag was toggled on this run. **THE CONFIRMING EXPERIMENT, RUN OWED:**
-read the gfx942 ISA for the rot kernel, or rebuild with contraction off
-and re-run gate (a).
+**THE FAST ARM ON THE SAME BOX DIVERGED AND THAT IS CORRECT.** Recorded
+2026-09-02: mamba3 [fast] differed from the oracle on 10,497 cells, first
+stage `in_proj.out`. FAST makes no bitwise promise, so this is EXPECTED and
+is NOT a red.
 
-**THE FAST ARM ON THE SAME BOX DIVERGED AND THAT IS CORRECT.** mamba3
-[fast] differed from the oracle on 10,497 cells, first stage
-`in_proj.out`. FAST makes no bitwise promise, so this is recorded as
-EXPECTED and is NOT a red.
-
-**THIS IS THE SYSTEM WORKING.** The STILL OWED list above already named
-the portable-trig device certification (phase M3-0) and every column that
-is not this machine (phase M3-6). This is phase M3-6 arriving with a red
-on its second column; no cross-vendor claim was ever made for this
-profile, and none is made here. NVIDIA is STILL OWED.
+**TWO COLUMNS ARE NOT THREE.** NVIDIA is RUN OWED at `c6e86966`; phase M3-6
+stays open until it lands.
