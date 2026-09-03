@@ -1758,6 +1758,19 @@ def greedy_quantized_hist_for[column: Int, identical: Bool]() -> Bool:
     """
     comptime if identical:
         return False
+    # DEVIATION 2045, DIAGNOSTIC, OFF BY DEFAULT. The second candidate for
+    # the question 2044 asks. ON under FAST, OFF under IDENTICAL, and the
+    # docstring above names its price without ever measuring it: "a per-level
+    # quantize pass over the rows being built ... the once-per-round quantize
+    # XGBoost enjoys is per-LEVEL here". A pass per level is a real cost the
+    # identical arm does not pay.
+    #
+    # Scoped to the NON-SYMMETRIC drivers, so it is EXPECTED INERT on
+    # gbdt-symmetric and is the row to reach for on depthwise and lossguide.
+    # Recording that here so an inert symmetric result reads as confirmation
+    # of the scope rather than as refutation of the candidate.
+    comptime if is_defined["MOJOLEARN_2045_FAST_NO_QUANT_HIST"]():
+        return False
     return (
         column == COLUMN_APPLE
         or column == COLUMN_NVIDIA
@@ -1952,6 +1965,24 @@ def ridx_only_splits_for[column: Int, identical: Bool]() -> Bool:
     """
     comptime if identical:
         return False
+    # DEVIATION 2044, DIAGNOSTIC, OFF BY DEFAULT. Why is IDENTICAL still
+    # FASTER than FAST on gbdt-symmetric on an H100 after 2043 flipped
+    # (0.9195 vs 0.9349, measured 2026-09-03)? This row is a candidate: it is
+    # ON under FAST on every GPU column and OFF under IDENTICAL, and the
+    # docstring above prices only one side of it. What it SAVES is launches
+    # and stat traffic "times the `max_leaves - 1` sequential splits a
+    # LOSSGUIDE tree runs" -- and a SYMMETRIC tree runs none of those, so on
+    # this lane the saving may be near zero while the cost the docstring
+    # itself calls UNPRICED, "the coalescing of the hist kernels\' stat read
+    # turning indirect", is paid in full. Uncoalesced global loads are not
+    # cheap on an SM.
+    #
+    # BIT-NEUTRAL BY CONSTRUCTION, which is what lets the plain A/B harness
+    # rule on it: DEVIATION 1902\'s invariant is "Same histograms, same
+    # partition stats, same model, byte for byte". If the hashes MOVE under
+    # this define, that is a defect in 1902, not a speed result.
+    comptime if is_defined["MOJOLEARN_2044_FAST_NO_RIDX_ONLY"]():
+        return False
     return (
         column == COLUMN_APPLE
         or column == COLUMN_NVIDIA
@@ -2021,6 +2052,20 @@ def hist_smem_mode_for[column: Int, identical: Bool]() -> Int:
     #: allocation size.
     comptime limit = column_shared_limit(column)
 
+    # DEVIATION 2046, DIAGNOSTIC, OFF BY DEFAULT. The third candidate. On
+    # NVIDIA, FAST keeps CatBoost's warp-private f32 slices while IDENTICAL
+    # takes the shared-Int32 arm, where FOUR warps share one 8 KB slice
+    # (`hist_2_one_byte_8bit.mojo`) instead of each holding its own. That is
+    # an OCCUPANCY difference and not only a numeric one, and it runs the
+    # same direction as the 2043 result: the integer accumulator keeps
+    # buying cheaper schedules rather than costing them.
+    #
+    # THE HASHES WILL MOVE -- f32 accumulation becomes dithered fixed point --
+    # so this is not a question for the bit-neutral A/B harness. It needs the
+    # accuracy harness, on the gate 2043 established: faster AND no worse on
+    # held-out AUC.
+    comptime if is_defined["MOJOLEARN_2046_FAST_SHARED_I32"]():
+        return HIST_SMEM_SHARED2_I32
     comptime if identical:
         return HIST_SMEM_SHARED2_I32  # the BIT_IDENTICAL column's value
     elif limit < CATBOOST_PRIVATE_BYTES:
