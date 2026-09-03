@@ -1,0 +1,7 @@
+== leg lane=dbscan mode=IDENTICAL round=1 07:50:16 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=dbscan rounds=1 smoke=False ==
+LPRICE dbscan IDENTICAL warmup 100000x8 1.708990246 c8d68ee330223a88
+LPRICE dbscan IDENTICAL 1 100000x8 1.713616972 a8c692fc32c3703b
+HASH-MOVED dbscan IDENTICAL round warmup=c8d68ee330223a88 vs 1=a8c692fc32c3703b
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: lanes_price: HASH-MOVED dbscan IDENTICAL round warmup=c8d68ee330223a88 vs 1=a8c692fc32c3703b -- under IDENTICAL the output bytes may not move between two fits of one fixture in one process. FINDING, not noise.

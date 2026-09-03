@@ -1,0 +1,18 @@
+== leg lane=kmeans mode=IDENTICAL round=1 07:48:04 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=kmeans rounds=1 smoke=False ==
+LPRICE kmeans IDENTICAL warmup 500000x32.k16 0.050556214 caa59e8ae153607e
+LPRICE kmeans IDENTICAL 1 500000x32.k16 0.048075018 caa59e8ae153607e
+HASH-STABLE kmeans IDENTICAL 2 rounds all caa59e8ae153607e
+== done [IDENTICAL] lane=kmeans ==
+== leg lane=kmeans mode=IDENTICAL round=2 07:48:05 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=kmeans rounds=1 smoke=False ==
+LPRICE kmeans IDENTICAL warmup 500000x32.k16 0.050513482 caa59e8ae153607e
+LPRICE kmeans IDENTICAL 1 500000x32.k16 0.048162494 caa59e8ae153607e
+HASH-STABLE kmeans IDENTICAL 2 rounds all caa59e8ae153607e
+== done [IDENTICAL] lane=kmeans ==
+== leg lane=kmeans mode=IDENTICAL round=3 07:48:06 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=kmeans rounds=1 smoke=False ==
+LPRICE kmeans IDENTICAL warmup 500000x32.k16 0.050510236 caa59e8ae153607e
+LPRICE kmeans IDENTICAL 1 500000x32.k16 0.04812263 caa59e8ae153607e
+HASH-STABLE kmeans IDENTICAL 2 rounds all caa59e8ae153607e
+== done [IDENTICAL] lane=kmeans ==

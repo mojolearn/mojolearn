@@ -158,6 +158,7 @@ from gbdt.gpu_util.partitions_reduce import (
 )
 from checks.kernel_matrix import (
     HIST_SMEM_SHARED2_I32,
+    PINNED_PARTITION_CHUNKS_SM,
     TARGET_COLUMN,
     deterministic_flush_for,
     greedy_one_byte_fixed_for,
@@ -365,6 +366,35 @@ comptime IDENTICAL_DRAIN_SCHEDULE = HIST_BUILD_MODE == NUMERIC_IDENTICAL
 # recipe in PORTING.md 134f. This define must never reach a shipped
 # build; nothing but the soak invocation passes it.
 comptime SOAK_134_CONTROL = is_defined["MOJOLEARN_134_CONTROL"]()
+
+# ====================================================
+# DEVIATION 2040: cap FAST's histogram replication at the pinned count.
+#
+# `replication_for` below is a faithful port of CatBoost's grid sizing, and
+# the formula multiplies the machine's core count. That was written for
+# parts with tens of SMs. An MI325X reports 304, so at the two tree levels
+# that touch every row FAST asks for ~8x the replicas IDENTICAL's pinned 32
+# asks for -- each replica doing an eighth of the rows, each writing its own
+# partial histogram, all reducing into the same place afterwards.
+#
+# MEASURED CONSEQUENCE, and it is why this flag exists: on an MI325X at
+# 1,000,000 rows the IDENTICAL build ran the gbdt price lane in 0.475 s
+# against FAST's 0.609 s -- IDENTICAL 1.28x FASTER while also paying a
+# software Cephes expf and a barrier-per-step reduction that FAST does not.
+#
+# THIS ARM IS BIT-NEUTRAL WHERE IT IS BEING MEASURED, which is what makes it
+# a legitimate speed switch rather than a tradeoff. The hist_2/one-byte
+# families quantize PER ROW and sum in Int32, so any partition of rows into
+# blocks yields the same histogram bits; only the float binary/half-byte
+# families let `active_block_count` decide which rows form a rounded partial.
+# The gbdt lane on AMD dispatches `launch_hist2_8bit`, the Int32 kernel.
+#
+# OFF BY DEFAULT until the A/B says otherwise. A grid constant is a
+# measurement's to flip, not an argument's.
+# ====================================================
+comptime FAST_REPLICATION_PIN_2040 = is_defined[
+    "MOJOLEARN_2040_FAST_REPLICATION_PIN"
+]()
 
 # ================= DEVIATION BLOCK 2031 =================
 # RIDX-ONLY SPLITS FOR THE SYMMETRIC DRIVER -- DEVIATION 1902's schedule,
@@ -2128,6 +2158,22 @@ def replication_for(
     var rep = (max_active_blocks + base - 1) // base
     if rep < 1:
         rep = 1
+    # DEVIATION 2040. Cap FAST at what the pinned count would have asked
+    # for. Bit-neutral on the Int32 histogram families (see the flag's
+    # note); this function is reached by the float families too, so the
+    # flag is scoped to the replication factor and NOT pushed down into
+    # `partition_chunks_sm_for`, whose other three readers include a float
+    # fold whose shape decides which rows form a rounded partial.
+    comptime if FAST_REPLICATION_PIN_2040:
+        comptime if HIST_BUILD_MODE != NUMERIC_IDENTICAL:
+            var pinned_active = blocks_per_sm * PINNED_PARTITION_CHUNKS_SM
+            if gather:
+                pinned_active = 2 * pinned_active
+            var cap = (pinned_active + base - 1) // base
+            if cap < 1:
+                cap = 1
+            if rep > cap:
+                rep = cap
     return rep
 
 
