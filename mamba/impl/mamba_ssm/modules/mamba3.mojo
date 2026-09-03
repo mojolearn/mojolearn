@@ -829,11 +829,19 @@ def m3_step_core_kernel(
                 + ftz(c_bias.unsafe_load(hh * n_state + e1))
             )
             if n == e0:
-                kn = ftz(pinned_mul(bx0, cv) - pinned_mul(bx1, sv))
-                qn = ftz(pinned_mul(qx0, cv) - pinned_mul(qx1, sv))
+                kn = ftz(
+                    ftz(pinned_mul(bx0, cv)) - ftz(pinned_mul(bx1, sv))
+                )
+                qn = ftz(
+                    ftz(pinned_mul(qx0, cv)) - ftz(pinned_mul(qx1, sv))
+                )
             else:
-                kn = ftz(pinned_mul(bx0, sv) + pinned_mul(bx1, cv))
-                qn = ftz(pinned_mul(qx0, sv) + pinned_mul(qx1, cv))
+                kn = ftz(
+                    ftz(pinned_mul(bx0, sv)) + ftz(pinned_mul(bx1, cv))
+                )
+                qn = ftz(
+                    ftz(pinned_mul(qx0, sv)) + ftz(pinned_mul(qx1, cv))
+                )
         else:
             kn = b0
             qn = q0v
@@ -907,9 +915,13 @@ def m3_step_state_kernel(
                 + ftz(b_bias.unsafe_load(hh * n_state + e1))
             )
             if n == e0:
-                kn = ftz(pinned_mul(bx0, cv) - pinned_mul(bx1, sv))
+                kn = ftz(
+                    ftz(pinned_mul(bx0, cv)) - ftz(pinned_mul(bx1, sv))
+                )
             else:
-                kn = ftz(pinned_mul(bx0, sv) + pinned_mul(bx1, cv))
+                kn = ftz(
+                    ftz(pinned_mul(bx0, sv)) + ftz(pinned_mul(bx1, cv))
+                )
         else:
             kn = ftz(
                 ftz(bcb.unsafe_load(bb * n_state + n))

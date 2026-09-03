@@ -676,16 +676,20 @@ def mamba3_block_oracle(
                         var cv = ftz(portable_cosf(th))
                         var sv = ftz(portable_sinf(th))
                         rotq_work[base + e0] = ftz(
-                            pinned_mul(q0v, cv) - pinned_mul(q1v, sv)
+                            ftz(pinned_mul(q0v, cv))
+                            - ftz(pinned_mul(q1v, sv))
                         )
                         rotq_work[base + e1] = ftz(
-                            pinned_mul(q0v, sv) + pinned_mul(q1v, cv)
+                            ftz(pinned_mul(q0v, sv))
+                            + ftz(pinned_mul(q1v, cv))
                         )
                         rotk_work[base + e0] = ftz(
-                            pinned_mul(k0v, cv) - pinned_mul(k1v, sv)
+                            ftz(pinned_mul(k0v, cv))
+                            - ftz(pinned_mul(k1v, sv))
                         )
                         rotk_work[base + e1] = ftz(
-                            pinned_mul(k0v, sv) + pinned_mul(k1v, cv)
+                            ftz(pinned_mul(k0v, sv))
+                            + ftz(pinned_mul(k1v, cv))
                         )
                     else:
                         # STRUCTURAL identity: never computed trig
