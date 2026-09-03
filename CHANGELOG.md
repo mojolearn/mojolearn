@@ -58,7 +58,13 @@
   `python/mojolearn/tests/test_gp_surface.py`, `python/mojolearn/
   __init__.py` (`_NOT_YET` is empty again), `python/mojolearn/_backend.py`
   (`_mojolearn_gp` in `_MODULES` and `_build_script`, DEVIATION 869).
-  **The binding is owed**: `bindings/_mojolearn_gp.mojo` and
+  **CORRECTED 2026-09-03: the binding is NOT owed and this entry is
+  stale.** `bindings/_mojolearn_gp.mojo` (24,925 bytes) and
+  `bindings/build_gp.sh` (18,767 bytes, executable) both landed
+  2026-09-01 at `22a5b550`, and `SUPPORT_MATRIX.md` records the thirteenth
+  binding shipping 23/23 in both tiers. What IS still owed is a release
+  WHEEL carrying `_mojolearn_gp`, which has never been built. The
+  superseded sentence read: the binding is owed, `bindings/_mojolearn_gp.mojo` and
   `bindings/build_gp.sh` do not exist yet, and the estimator raises by
   name with the build command until they do.
 
@@ -66,9 +72,18 @@
   `forecast`, backed by `arima/` (DEVIATIONS 670-687 and 990-993): the
   ported cuML batched Kalman filter under an own-written `estimate_x0`
   (Householder QR) and an own-written batched L-BFGS, both landed
-  2026-09-01 and gated in both numeric tiers by
-  `arima/checks/fit_check.mojo`. This closes 0.2.0's longest-standing
-  `_NOT_YET` entry ("`ARIMA` in particular has no `fit`").
+  2026-09-01. **CORRECTED 2026-09-03: "gated in both numeric tiers by
+  `arima/checks/fit_check.mojo`" WAS AN OVERCLAIM AND IS WITHDRAWN.** That
+  driver is written (61 KB, 2026-09-01) and has never been run: no pixi
+  task is registered for `check-arima-fit`, and no run record for it exists
+  anywhere under `bench/results/`. `arima/README.md`'s own status block is
+  the accurate one -- "WRITTEN AND UNRUN", both tiers NEVER RUN, sabotage
+  arms 0 of 6, no second or third vendor -- and it says plainly that
+  nothing below its line has been compiled. The `p9_*_build_arima.log`
+  files on the 2026-09-02 legs are BINDING builds and are not this gate.
+  This closes 0.2.0's longest-standing `_NOT_YET` entry ("`ARIMA` in
+  particular has no `fit`") IN SOURCE ONLY; the fit is written, not
+  certified.
 
   **`y` IS 2-D, `(batch_size, n_obs)`, and that is the point of the lane**:
   every series in the batch is fitted at once with its OWN parameters, one
