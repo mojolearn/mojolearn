@@ -652,6 +652,15 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
       # column that ran only (a) would be a weaker column than Apple's.
       transformer-backward)
         CMD='env MOJOLEARN_TFB_CHECK_CLAUSE_B=1 MOJOLEARN_TFB_CHECK_CLAUSE_C=1 MOJOLEARN_TFB_CHECK_CLAUSE_D=1 MOJOLEARN_TFB_CHECK_CLAUSE_E=1 MOJOLEARN_TFB_CHECK_CLAUSE_F=1 pixi run mojo run -I . transformer/checks/transformer_backward_check.mojo' ;;
+      # THE LOSSGUIDE RUNG DEVIATION 1902 ASKED FOR. `fast_replication_ab`
+      # runs lanes gbdt/rf/et out of lanes_price_main, which has no
+      # lossguide and no depthwise lane -- so the half of 1902's own stated
+      # gate that could VINDICATE the row has never been runnable by the
+      # harness that keeps ruling on it. Its saving is proportional to the
+      # sequential splits a LOSSGUIDE tree runs, and the symmetric lanes
+      # collect none of it by construction.
+      grow-policy-ab)
+        CMD="env GBM_BENCH_DATA=$VOL_MOUNT/gbm-bench MOJOLEARN_GP_OUT=\"\$OUT/grow_policy_ab\" MOJOLEARN_GP_DEFINES=\"${GP_DEFINES:-MOJOLEARN_2044_FAST_NO_RIDX_ONLY MOJOLEARN_2045_FAST_NO_QUANT_HIST}\" MOJOLEARN_GP_LANES=\"${GP_LANES:-gbdt-lossguide gbdt-depthwise}\" MOJOLEARN_GP_ROWS=${GP_ROWS:-1000000} sh tools/grow_policy_ab.sh"; WRAP=0 ;;
       # OUR TREES vs THE VENDOR LIBRARY, BOTH TIERS, ON NVIDIA. The FAST
       # process interleaves ours with the opponents in one thermal window;
       # the IDENTICAL process runs ours only, because the opponents do not
