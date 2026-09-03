@@ -3143,13 +3143,29 @@ def clause_f() raises:
     for i in range(len(dy_i)):
         dy.append(Float32(dy_i[i]))
         y.append(Float32(y_i[i]))
+    # BOTH OUTPUTS MUST BE EMPTY ON ENTRY. `softmax_backward_into` APPENDS
+    # its results (its docstring's last line says so); pre-filling them with
+    # zeros leaves the real values at indices bq*nh*l onward and makes
+    # `zdot[0]` read back one of the zeros this loop wrote. That is what
+    # this arm did on its first run, and it reported the resulting
+    # 0x00000000 as "a calculus error, not a rounding" -- an exact-integer
+    # arm accusing the gradient of being wrong when the fault was in how
+    # this arm called it.
     var zdot = List[Float32]()
     var ds = List[Float32]()
-    for _ in range(bq * nh * l):
-        zdot.append(Float32(0.0))
-    for _ in range(bq * nh * l * s):
-        ds.append(Float32(0.0))
     softmax_backward_into(dy, y, bq, nh, l, s, zdot, ds)
+    if len(zdot) != bq * nh * l or len(ds) != bq * nh * l * s:
+        raise Error(
+            String("transformer_backward_check: CLAUSE (f) ARM 1 got ")
+            + String(len(zdot))
+            + " z values and "
+            + String(len(ds))
+            + " dS values, wanted "
+            + String(bq * nh * l)
+            + " and "
+            + String(bq * nh * l * s)
+            + ". The oracle APPENDS and both lists must be empty on entry."
+        )
 
     var wrong = 0
     var control_moved = 0
