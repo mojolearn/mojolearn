@@ -458,7 +458,7 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
     log "extra check: $chk (bound ${LEFT}s)"
     PREFIX="bash tools/with_identical_mode.sh"
     [ "$WRAP" = 0 ] && PREFIX=""
-    $SSH "export PATH=/root/.pixi/bin:\$PATH; cd /root/mojolearn && OUT=\$(ls -td bench/results/e1/*/ | head -1) && mkdir -p \"\$OUT/lanes\" && MOJOLEARN_IDENTITY_TRACE=\"\$OUT/lanes/$chk.identical.card\" VENDOR_PRICE_OUT=\"\$OUT/lanes/vendor_price.json\" MOJOLEARN_GEMM_PRICE_OUT=\"\$OUT/lanes/gemm_price_medians.txt\" timeout -k 30 $LEFT $PREFIX $CMD > \"\$OUT/lanes/$chk.identical.check.log\" 2>&1; echo \"EXTRA-$chk-EXIT=\$?\"; tail -8 \"\$OUT/lanes/$chk.identical.check.log\""
+    $SSH "export PATH=/root/.pixi/bin:\$PATH; cd /root/mojolearn && OUT=\$(ls -td bench/results/e1/*/ 2>/dev/null | head -1); [ -z \"\$OUT\" ] && { OUT=bench/results/e1/\$(date +%Y-%m-%d_%H%M%S)-\$(hostname); mkdir -p \"\$OUT\"; }; mkdir -p \"\$OUT/lanes\" && MOJOLEARN_IDENTITY_TRACE=\"\$OUT/lanes/$chk.identical.card\" VENDOR_PRICE_OUT=\"\$OUT/lanes/vendor_price.json\" MOJOLEARN_GEMM_PRICE_OUT=\"\$OUT/lanes/gemm_price_medians.txt\" timeout -k 30 $LEFT $PREFIX $CMD > \"\$OUT/lanes/$chk.identical.check.log\" 2>&1; echo \"EXTRA-$chk-EXIT=\$?\"; tail -8 \"\$OUT/lanes/$chk.identical.check.log\""
   done
 fi
 
