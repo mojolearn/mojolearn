@@ -1,0 +1,77 @@
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:2063:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with '*'
+    """Plan 6.2 clause (c), the length half, **with DEVIATION 1529's
+       ^
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:2590:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with '*'
+    """Plan 5.3, DEVIATION 1416, **demonstrated and NOT gated, and DEVIATION
+       ^
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+=== transformer BACKWARD identity gate, profile mojolearn.identical.transformer.fp32.v1
+=== This gate first compiled and ran 2026-09-03 and REFUSED to certify: its d_out fixture could not separate a fused chain from an unfused one, leaving three sabotage arms unfalsifiable. Until a run of it certifies, NO BIT PRODUCED HERE IS EVIDENCE.
+mode IDENTICAL   backward sabotage: none   gemm-backward: none   forward block: none   gemm forward: none
+ledger: this binary is CLEAN -- no sabotage arm is compiled in. Set MOJOLEARN_TFB_EXPECT_SABOTAGE to have the binary check its own -D.
+preflight: the assertions the plan and the oracles asked for
+  frozen forward constants OK: eps 0x358637bd, theta 0x461c4000, mask fill 0xff7fffff
+  RMSNorm backward scalings: BWD_NEG_HALF 0xbf000000, BWD_TWO 0x40000000, and (-0.5 * x) * 2.0 == -x EXACTLY at a full-mantissa probe
+  plan 5.1(i): a +0.0-seeded fma never returns -0.0 on 36 probes INCLUDING both zero signs, and fma(1.0, -0.0, -0.0) DOES return -0.0, so the assertion is not vacuous
+  softmax backward at s == 1: z = dy exactly and dS = 0x00000000, so the three S18 arms' INERT case has the mechanism it claims
+  d_out generator: ascending 0x427102d1 vs descending 0xc3e65124 (SEPARATES) vs unfused 0x427102d0 (SEPARATES on 1 of 4 rows, fold order on 4); exponent field spans 120..135 (15 binades, so the partials are NOT all in one)
+clause (a): 13 fixture cases, all 37 stages, device vs host oracle, BITWISE
+  case 0 base_b1_l4_nrep1  B=1 L=4 S=4 dm=32 nh=2 nkv=2 hd=16 inter=64  13648 cells: 37/37 stages bit-identical
+  case 1 base_b2_l4_nrep2  B=2 L=4 S=4 dm=32 nh=2 nkv=1 hd=16 inter=64  15328 cells: 37/37 stages bit-identical
+  case 2 base_b1_l1_nrep2  B=1 L=1 S=1 dm=32 nh=2 nkv=1 hd=16 inter=64  10012 cells: 37/37 stages bit-identical
+  case 3 base_b3_l16_nrep2  B=3 L=16 S=16 dm=32 nh=2 nkv=1 hd=16 inter=64  50176 cells: 37/37 stages bit-identical
+  case 4 wide_inter300  B=1 L=4 S=4 dm=32 nh=2 nkv=1 hd=16 inter=300  38736 cells: 37/37 stages bit-identical
+  case 5 odd_head_dim_24  B=1 L=4 S=4 dm=48 nh=2 nkv=1 hd=24 inter=64  20176 cells: 37/37 stages bit-identical
+  case 7 long_l64  B=1 L=64 S=64 dm=32 nh=2 nkv=1 hd=16 inter=64  88384 cells: 37/37 stages bit-identical
+  case 9 adv_signed_zeros  B=2 L=4 S=4 dm=32 nh=2 nkv=1 hd=16 inter=64  15328 cells: 37/37 stages bit-identical
+  case 10 adv_subnormal_x  B=1 L=4 S=4 dm=32 nh=2 nkv=1 hd=16 inter=64  12304 cells: 37/37 stages bit-identical
+  case 11 adv_score_neg_zero  B=1 L=4 S=4 dm=32 nh=2 nkv=1 hd=16 inter=64  12304 cells: 37/37 stages bit-identical
+  case 12 adv_score_extreme  B=1 L=4 S=4 dm=32 nh=2 nkv=1 hd=16 inter=64  12304 cells: 37/37 stages bit-identical
+  case 13 adv_cache_hot_tail  B=1 L=4 S=4 dm=32 nh=2 nkv=1 hd=16 inter=64  12304 cells: 37/37 stages bit-identical
+  case 14 adv_masked_zero_row  B=1 L=4 S=4 dm=32 nh=2 nkv=1 hd=16 inter=64  12304 cells: 37/37 stages bit-identical
+card: 37 records at bench/results/e1/2026-09-03_092106-mojolearn-e2-amd//lanes/transformer-backward.identical.card, plan section 6.1 wants 37
+card: 37/37 tags in plan section 6.1's order, all unique. Stage 0 is the INCOMING GRADIENT and it is on the card deliberately: two cards whose inputs differ are diffing their fixtures
+clause (a): PASS, 13 cases, 37/37 stages bit-identical to the oracle on all 313308 cells, 37/37 card tags
+clause (b): 8 repeated launches of base_b1_l4_nrep1, every stage, every cell, fresh state each time
+clause (b): PASS, launches 2..8 bit-identical to launch 1 on all 13648 cells of all 37 stages
+clause (c) batch: base_b3_l16_nrep2, the same row at B=1, B=2 and B=3, plus the NEGATIVE half
+clause (c) batch control: rows 0 and 1 of the B=2 run differ on 28 of 28 activation stages, so the row slicer distinguishes rows
+clause (c) batch POSITIVE: PASS, every activation stage's row 0 is identical at B=1, B=2 and B=3 and row 1 at B=2 and B=3, on all 40896 compared cells
+clause (c) batch NEGATIVE: PASS, all 9 weight gradients MOVE between B=1 and B=3, on exactly 9280 cells -- the count the host oracle predicted before the device was asked
+clause (c) length: long_l64 truncated to 3 lengths, one weight set and one d_out, tokens 0..3 compared (DEVIATION 1529's corrected split)
+clause (c) length control: token 0 vs token 1 across two lengths differs on 28 stages, so the token viewer distinguishes tokens
+clause (c) length POSITIVE: PASS, the key-axis activation gradients are bit-identical for tokens 0..3 across 3 sequence lengths on all 4536 compared cells
+clause (c) length NEGATIVE: PASS, 18 of 18 query-axis stages MOVE with the sequence length, on exactly 9553 cells -- the count the host oracle predicted. **DEVIATION 1529: plan 6.2's clause (c) lists bwd.d_x and bwd.d_norm1_out as length-INVARIANT and they are in this moving set, which is what the plan's own section 5.2 says.**
+clause (d) device: pos_offset_129, L=133 unchunked against 129 + 4 chunked over the QUERY axis with the cache carried
+clause (d) control: the deliberate misalignment differs on 63 stage-token comparisons, so the comparison distinguishes tokens
+clause (d) device: PASS, 4 chunk-2 tokens bit-identical to the unchunked run on every key-axis stage, on all 6444 compared cells
+clause (d) device NEGATIVE: PASS, 11 query-axis stages are PARTIALS under chunking, which is what plan 5.2 says a per-call backward computes
+clause (d) carry theorem: **A DEMONSTRATION, NOT A GATE.** There is no chunked backward entry point on either half of this lane (DEVIATION 1527), so plan 5.3's theorem has nothing to be pointed at. What follows is the theorem on the chain shape plan section 3 pins.
+clause (d) carry theorem: unsplit 0x4b800000 over {2^24, 1 x 7}; the CARRY reproduces it at ALL 7 split points including misaligned ones; the UNCARRIED two-partial spelling MOVES at 6 of 7 and is inert at 1 (the ones that leave a single absorbed term on the far side -- plan 6.2(d)'s 'MUST MOVE at any chunk of 2 or more terms' is very slightly too strong and this table is the correction).
+clause (e): the row-39 audit on the incoming gradient, 2 bit patterns at cell len/2, plus the signed-zero audit, on base_b1_l4_nrep1
+clause (e) control: a clean call raises on NEITHER half and the device records all 37 stages, so the refusal is not unconditional and 'zero records' is a real signal
+clause (e) row-39: PASS, 2 plants, each reach-measured by bits, each refused BY NAME on BOTH halves, each with 0 stages recorded
+DEVIATION 1534 AUDIT: a NaN planted into x_dev AFTER the forward was READ BACK OFF THE DEVICE (1 non-finite cell, so reach is MEASURED). The backward raised: False. **The backward's refusal covers d_residual2 AND NOTHING ELSE** -- not x_dev, not the eleven weights, not the saved forward stages. Plan 6.2(e) asks only for the incoming gradient, so the CODE AND THE PLAN AGREE and this is a gap in the CLAUSE's scope, not a conformance defect. It is reported and NOT asserted: an assertion here would freeze the gap into a requirement.
+clause (e) signed zeros: PASS, the masked cells of bwd.d_attn_scores are ALL signed zeros (6 are +0.0 and 6 are -0.0), so plan 6.2(e)'s predicted sign is exercised on BOTH halves of its range
+clause (f): CORRECTNESS. A transpose error is bit identical on three vendors, so identity is not correctness.
+clause (f) arm 1: PASS, the softmax closed form matches hand-written EXACT integer arithmetic on 6 dS cells and 2 z folds, with NO EPSILON; and the reversed-subtraction control disagrees on 6 of 6 cells, so the arm can see a sign error
+clause (f) arm 2: PASS, bwd.d_attn_masked == bwd.d_attn_scores bitwise on all 10114 cells of 13 cases -- the identity plan 6.1 records the second stage in order to check
+clause (f) SCOPE: the ROUTING and the linear seams are covered by exact integers. **THE NONLINEAR SEAMS ARE NOT.** silu', the rsqrt tail and the softmax's transcendental inputs do not survive exact integers, and gating them needs a FLOAT64 DIRECTIONAL-DERIVATIVE reference at a stated tolerance which DOES NOT EXIST. **The bits are gated and the calculus is not.**
+SCOPE: this build, this column, IDENTICAL only. What is NOT closed by anything printed above: **THE CALCULUS.** Clause (f) covers the routing and the linear seams by exact integers; silu', the rsqrt tail and the softmax closed form need a FLOAT64 DIRECTIONAL-DERIVATIVE reference at a stated tolerance and THERE IS NONE -- transformer/corpus/ does not exist and transformer_oracle.mojo deliberately carries no float64 reference. **THE BITS ARE GATED AND THE CALCULUS IS NOT.** Also not closed: **plan 5.3's carried chunk theorem on a device** (DEVIATION 1527 -- neither half of this lane has a chunked entry point, so clause (d2) is a demonstration and not a gate); **B10_DW_VIA_CHAIN and BWD_OPERAND_ORDER**, which cannot fire at any shape this profile has and are SMOKE TESTS by name; **B_FANIN_ZERO_SEED**, which has no constructible witness (DEVIATION 1528); **seven arms with no asserted inert case**, because this profile has no d_model == 1, no head_dim == 2 and no all-large-gate fixture; **an INDEPENDENT reference** -- every clause here is our device against our oracle and both are ours; **FAST mode**; **the twenty-one sabotage builds this binary is not**; and **every column that is not this one** -- plan section 11: nothing cross-vendor until a leg runs, and Apple and AMD agreed bit for bit through 302 GEMM stages while NVIDIA diverged at tree001.winners.scores, so two backends agreeing closes nothing.

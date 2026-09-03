@@ -1,0 +1,95 @@
+
+=== provenance === 09:21:06
+bfca82ce06e880d9f1ce7b68c4f12c350ca7b595
+Linux mojolearn-e2-amd 6.8.0-59-generic #61-Ubuntu SMP PREEMPT_DYNAMIC Fri Apr 11 23:16:11 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
+
+=== pixi === 09:21:07
+This script will automatically download and install Pixi (latest) for you.
+Getting it from this url: https://github.com/prefix-dev/pixi/releases/latest/download/pixi-x86_64-unknown-linux-musl.tar.gz
+The 'pixi' binary is installed into '/root/.pixi/bin'
+Updating '/root/.bashrc'
+Please restart or source your shell.
+✔ The default environment has been installed.
+
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 09:21:09
+
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== phase 8: the classical lanes (gemm, cd, kde, linkage, svm, metrics) -- both modes, cards + checks === 09:21:09
+-- lanes, identical --
+  gemm [identical]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  cd [identical]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  kde [identical]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  linkage [identical]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  svm [identical]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  mamba [identical]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  mamba2 [identical]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  mamba3 [identical]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  iforest [identical]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  transformer [identical]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  arima [identical]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  cholesky [identical]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  embedding [identical]: card 9 records -- mode IDENTICAL
+  gp [identical]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  hdbscan [identical]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  holtwinters [identical]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  ivf [identical]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  kernelmethods [identical]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  gmm [identical]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  resample [identical]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  spectral [identical]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  training-loss [identical]: card 17 records -- mode IDENTICAL
+  training-optimizer [identical]: card 18 records -- mode IDENTICAL
+  training-step [identical]: card 34 records -- 
+  tsa [identical]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  metrics [identical]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+-- lanes, fast --
+  gemm [fast]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  cd [fast]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  kde [fast]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  linkage [fast]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  svm [fast]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  mamba [fast]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  mamba2 [fast]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  mamba3 [fast]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  iforest [fast]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  transformer [fast]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  arima [fast]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  cholesky [fast]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  embedding [fast]: card 9 records -- mode FAST
+  gp [fast]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  hdbscan [fast]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  holtwinters [fast]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  ivf [fast]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  kernelmethods [fast]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  gmm [fast]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  resample [fast]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  spectral [fast]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  training-loss [fast]: card 17 records -- mode FAST
+  training-optimizer [fast]: card 18 records -- mode FAST
+PHASE8-FINDING: training-step [fast] failed (see /root/mojolearn/bench/results/e1/2026-09-03_092106-mojolearn-e2-amd/lanes/training-step.fast.log)
+  training-step [fast]: card 34 records -- 
+  tsa [fast]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+  metrics [fast]: SKIPPED (MOJOLEARN_E1_LANES=training-step embedding training-loss training-optimizer)
+
+=== phase 9 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
+
+=== done === 09:22:54
+artifacts in /root/mojolearn/bench/results/e1/2026-09-03_092106-mojolearn-e2-amd
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

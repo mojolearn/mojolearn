@@ -8,7 +8,16 @@ check. They are archived here unmodified.
 | card | records | diffed against | result |
 |---|---|---|---|
 | `mamba3.identical.card` | 28 | MI325X `2026-09-03_072159` and H100 `2026-09-03_073012` / `082634` | byte-identical |
-| `transformer-backward.identical.card` | 37 | H100 `2026-09-03_091511` | byte-identical |
+| `transformer-backward.identical.card` | 37 | H100 `2026-09-03_091511` and MI325X `2026-09-03_092106` | byte-identical, all three |
+| `training-step.identical.card` | 34 | H100 `2026-09-03_091511` and MI325X `2026-09-03_092106` | byte-identical, all three |
+
+The training-step card was RE-RUN ON APPLE AT `bfca82ce`, the same commit
+the MI325X ran, precisely so the composed training loop is three vendors at
+ONE commit rather than three at three. The Apple card already on disk from
+2026-08-28 (`869d4163`) carries the same md5, which is a stronger statement
+than it looks -- 51 files and about 11,000 lines of the training path changed
+between those commits and the recorded bits did not move -- but it is not the
+same statement, and the claim rests on the same-commit run.
 
 ## Read the commit spread before quoting these
 
