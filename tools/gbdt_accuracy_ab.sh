@@ -135,12 +135,12 @@ LANE="${MOJOLEARN_GACC_LANE:-gbdt-symmetric}"
 # so the ABI-correct choice is also the one that fixes the import. It is a
 # MULTI-WORD command, invoked through `py` rather than as "$PY", because
 # quoting a multi-word value looks for a binary with spaces in its name.
-PY="${MOJOLEARN_GACC_PYTHON:-pixi run python}"
+PY="${MOJOLEARN_GACC_PYTHON:-pixi run -e gbmbench python}"
 # shellcheck disable=SC2086  # $PY is deliberately word-split
 py() { $PY "$@"; }
 # The builds run their smoke gates in their own shells, so they are told
 # too -- otherwise the build fails on numpy while the harness does not.
-MOJOLEARN_PYTHON="${MOJOLEARN_GACC_BUILD_PYTHON:-pixi run python}"
+MOJOLEARN_PYTHON="${MOJOLEARN_GACC_BUILD_PYTHON:-pixi run -e gbmbench python}"
 export MOJOLEARN_PYTHON
 SPEED_MARGIN="${MOJOLEARN_GACC_SPEED_MARGIN:-0.02}"
 AUC_TOL="${MOJOLEARN_GACC_AUC_TOL:-0.0005}"
@@ -204,14 +204,21 @@ FETCH_PID=""
 if [ "${MOJOLEARN_GACC_SKIP_FETCH:-0}" != "1" ]; then
     echo "== fetch higgs IN BACKGROUND (2.6 GB + gzip csv decode), joined after the builds =="
     if command -v timeout > /dev/null 2>&1; then
-        timeout -k 30 3600 $PY tools/speed_gbdt_arm.py --download higgs \
+        ( pixi install -e gbmbench > "$OUT/logs/install.gbmbench.log" 2>&1
+          timeout -k 30 3600 $PY tools/speed_gbdt_arm.py --download higgs ) \
             > "$OUT/logs/download.higgs.log" 2>&1 &
     else
-        py tools/speed_gbdt_arm.py --download higgs \
+        ( pixi install -e gbmbench > "$OUT/logs/install.gbmbench.log" 2>&1
+          py tools/speed_gbdt_arm.py --download higgs ) \
             > "$OUT/logs/download.higgs.log" 2>&1 &
     fi
     FETCH_PID=$!
     echo "fetch_pid=$FETCH_PID (backgrounded)"
+    # The 2026-09-03 second leg fell back to synthetic rows because the
+    # interpreter had no pandas. `gbmbench` has it, but the environment has to
+    # EXIST before the fetch can import from it, and `pixi run -e` installs on
+    # first use -- which inside a backgrounded subshell would race the fetch.
+    # It is installed ahead of the fetch, inside the same background job.
 fi
 
 # --------------------------------------------------------------------------
@@ -477,5 +484,18 @@ if [ -z "$(med base)" ] || [ -z "$(med pin)" ]; then
     echo "!! NO COMPARISON PRODUCED: base and pin must both have timed rounds"
     rc=3
 fi
+# THE SYNTHETIC FIXTURE IS NOT AN ANSWER AND MUST NOT EXIT GREEN.
+# The 2026-09-03 leg fell back to synthclf-720000x100 -- which is also BELOW
+# the 1,000,000-row floor this script enforces on its own input -- and still
+# returned 0. Worse, base and pin came back BIT-EQUAL on it: the fused arm
+# never engaged, because a fixture whose features do not reach >128 bins
+# never takes the one-byte branch the define switches. A run that cannot
+# reach the arm under test is a failed run, not a null result.
+case "$(shapes base)" in
+    higgs-*) ;;
+    *) echo "!! NOT HIGGS: the fixture fell back to synthetic rows, which"
+       echo "   neither reaches the arm under test nor clears the row floor"
+       rc=4 ;;
+esac
 [ "$rc" != "0" ] && echo "!! gbdt_accuracy_ab FAILED (rc=$rc)"
 exit $rc
