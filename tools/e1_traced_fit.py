@@ -19,11 +19,26 @@ Fits, against E1_RUNBOOK.md's expectation table:
                 identical -- the headline candidate)
   rf_reg     -- Random Forest regression (rows 16/17 closed; expected
                 identical)
-  gbdt_rmse  -- SYMMETRIC-arm RMSE (rows 9/10 seams still open there;
-                divergence, if any, should first appear at a score/leaf
-                stage -- the card names it)
-  gbdt_logloss -- EXPECTED DIVERGENT at row 12 (device exp/log); included
-                so the card diff demonstrates the ledger naming the stage.
+  gbdt_rmse  -- SYMMETRIC-arm RMSE. The 2026-08-23 round at 39a0d888 had
+                NVIDIA's split SCORES differing in last bits from tree001
+                on, with the argmax picking the same winners anyway
+                (E1_RESULTS.md's first honesty note). By round 2 at
+                53d56ef1 the cell reads IDENTICAL on both vendors through
+                all 302 stages.
+  gbdt_logloss -- "EXPECTED DIVERGENT at row 12 (device exp/log)" STOOD
+                HERE AND IS STALE. That was true of the 2026-08-23 round,
+                where the three vendors gave three different prediction
+                hashes and Apple and AMD first parted at
+                tree000.perm0.leaves.estimated. It is not true now: round
+                2 at 53d56ef1 reads IDENTICAL for this cell on both
+                columns, and its siblings gbdt_logloss_200k, _bayesian and
+                _border are IDENTICAL through all 302 stages
+                (bench/results/e1/e2_verdicts_round2.md).
+                ONE RESIDUE, because it is the difference between an
+                output result and a certificate: round 2's card for THIS
+                cell failed to parse, so its verdict rests on the
+                prediction hash with ZERO stages compared. The siblings
+                carry the stage-level evidence; this cell does not.
 
 Each successful fit is also SAVED into the out_dir as `<name>.model.npz`
 with its file sha256 recorded under the fit's `model` entry. That file is
