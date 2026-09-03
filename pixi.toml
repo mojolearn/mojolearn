@@ -1075,10 +1075,39 @@ check-mamba-block = "mojo run -I . mamba/checks/mamba_check.mojo"
 check-mamba2-block = "mojo run -I . mamba/checks/mamba2_check.mojo"
 check-mamba3-block = "mojo run -I . mamba/checks/mamba3_check.mojo"
 # COMPILE ONLY, and the name says so. Builds the mamba backward's routing
-# layer; asserts nothing about any gradient. Run the three sabotage arms too
-# (-D MOJOLEARN_MAMBA_SABOTAGE_BWD_PROJ_SWAP=1, _BWD_WS_FROM_FORWARD=1,
-# _BWD_CONV_TAP_SLOT=1) -- an untaken comptime branch is not elaborated, so
-# the clean build type-checks only half the routings.
+# layer AND, since 2026-09-03, its two kernel files
+# (mamba/impl/mamba_ssm/ops/selective_scan_backward.mojo and
+# mamba/impl/transformers/models/mamba/modeling_mamba_backward.mojo).
+# **IT ASSERTS NOTHING ABOUT ANY GRADIENT**: no value is checked, no bits are
+# compared, no kernel is launched, and plan gates MB1-MB10 do not exist.
+#
+# RUN THE NINETEEN SABOTAGE ARMS TOO -- an untaken comptime branch is not
+# reliably elaborated, so the clean build type-checks only the profile half of
+# every arm. Each is `-D <name>=1`:
+#   routing   MOJOLEARN_MAMBA_SABOTAGE_BWD_PROJ_SWAP
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_WS_FROM_FORWARD
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_CONV_TAP_SLOT
+#   bwd scan  MOJOLEARN_MAMBA_SABOTAGE_BWD_S9B_FORWARD
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_S9B_DA_OFFSET
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_S9B_UNFUSED
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_T1_SEED_ADD
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_H_SUBTRACT
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_S10_N_DESCENDING
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_DDELTA_TWO_FOLDS
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_DA_ASCENDING
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_DBDC_ATOMIC
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_PARAM_ATOMIC
+#   bwd block MOJOLEARN_MAMBA_SABOTAGE_BWD_S12_MUL_SIGMOID
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_SILU_DERIV_ALT_ASSOC
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_S12B_ASSOC
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_S14_DIVISION
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_JOIN_ORDER
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_S13_TAPS_REVERSED
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_S1B_FOLD_DESCENDING
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_RSTD3_POW
+#             MOJOLEARN_MAMBA_SABOTAGE_BWD_INNER_FROM_NRM
+# The two ATOMIC arms REFUSE BY NAME at their launcher on a kernel_matrix
+# column with no float atomicAdd; they compile everywhere.
 build-mamba-backward-probe = "mojo build -I . mamba/checks/mamba_backward_compile_probe.mojo -o /tmp/mojolearn_mb_probe"
 
 # BLOCK-LEVEL BATCH INVARIANCE (checks/batch_invariance_check.mojo). The

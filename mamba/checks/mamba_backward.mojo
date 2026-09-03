@@ -19,13 +19,32 @@ prose. It does two things and neither of them touches a float.
     block's shapes, and six are token-axis parameter reductions spelled as
     `mojolearn.identical.gemm.fp32.v1` `OP_NN` products against a vector of
     ones, which is DEVIATION 851's trick reused unchanged.
-2.  It DECLARES, and does not implement, the eight fold and recurrence
-    topologies that the Mamba-1 backward needs and that nothing in this
-    repository owns. A declaration here is a name, a direction, a seed, a
-    fusion decision and a pointer at the section of
-    `mamba/IDENTICAL_BACKWARD_PLAN.md` that prices the alternative. **There is
-    deliberately no kernel**, because a kernel written before its gate is a
-    belief with a compile step.
+2.  It DECLARES the eight fold and recurrence topologies that the Mamba-1
+    backward needs and that nothing in this repository owned. A declaration
+    here is a name, a direction, a seed, a fusion decision and a pointer at
+    the section of `mamba/IDENTICAL_BACKWARD_PLAN.md` that prices the
+    alternative, and it now also NAMES THE FUNCTION THAT IMPLEMENTS IT
+    (`mamba_backward_topology_site`).
+
+**THE KERNELS EXIST AS OF 2026-09-03 AND THEY ARE NOT HERE.** The sentence
+that stood in this slot -- "There is deliberately no kernel, because a kernel
+written before its gate is a belief with a compile step" -- is deleted as
+false rather than annotated. The twenty three new arithmetic operations of
+plan section 3.2 are written, in two files that mirror the forward's own
+ownership split:
+
+    mamba/impl/mamba_ssm/ops/selective_scan_backward.mojo
+        T1 T2 T3 T4 T5, B13-B21: the scan's backward, seams S5'-S11'
+    mamba/impl/transformers/models/mamba/modeling_mamba_backward.mojo
+        T6 T7 T8, B4-B11, B22, B26, B30-B34, B37-B42: the block's backward
+
+**The belief-with-a-compile-step objection was right and still stands**: not
+one of those kernels has been compiled, not one has run, gates MB1-MB10 are
+still SPECIFIED AND NOT BUILT and the host backward oracle they must be
+compared against does not exist. What changed is that the arithmetic is now
+readable and falsifiable instead of absent. The declarations stay HERE, apart
+from the kernels, because a gate must be able to print and diff the DECISIONS
+across builds and vendors without linking a device kernel.
 
 The claim is falsifiable rather than decorative, exactly as
 `gemm_backward.mojo`'s is. **If a float-valued expression ever appears below,
@@ -116,18 +135,31 @@ two that need no pre-product, because they reduce a stage directly.
 
 WHAT THIS FILE DOES NOT BUY
 ----------------------------
-Not identical training. Not an identical model. Not even identical gradients
-for one block, because the eight declarations below are declarations and the
-twenty three new arithmetic operations of the plan's section 3.2 have no
-kernel. What is here is the part that was already paid for by two other lanes,
-wired to this block's shapes so the remaining work can be counted honestly.
+Not identical training. Not an identical model. Not identical gradients for
+one block: the arithmetic now exists (see above) but no gate compares it to
+anything, no oracle exists to compare it to, and no device has run it. What
+is here is the part that was already paid for by two other lanes, wired to
+this block's shapes, plus a printable index of where the rest lives.
 
-**Nothing in this file has been compiled or run.**
+**Nothing in this file has been RUN.** The routing layer itself compiled for
+the first time on 2026-09-03, unmodified, in all four configurations
+(`pixi run build-mamba-backward-probe` plus its three `-D` arms); a compile is
+not a result about gradients.
+
+FIVE OF THE SIX SABOTAGE FAMILIES NOW REACH THIS LANE, AND A BANNER MUST SAY
+SO. A backward binary can carry a forward BLOCK arm, a forward SCAN arm, a
+GEMM arm, a backward SCAN arm, a backward BLOCK arm and a ROUTING arm, all at
+once. A check must print `mamba_block_sabotage_name()`,
+`mamba_scan_sabotage_name()`, `gemm_sabotage_name()`,
+`mamba_backward_scan_sabotage_name()`,
+`mamba_backward_block_sabotage_name()` and `mamba_backward_sabotage_name()`
+side by side; `mamba_backward_declarations()` below prints the last three.
 
 DEVIATIONS 1070-1078 (the eight declared topologies and the softplus
 derivative), 1079 (the fourteen routings and their workspace sizing), 1080
 (the six token-axis reductions as ones-vector v1 GEMMs and the pre-product
-buffers they require).
+buffers they require), 1081-1084 (spent in `selective_scan_backward.mojo`),
+1085-1087 (spent in `modeling_mamba_backward.mojo`).
 
 `[[mojo-buffer-freed-at-last-use]]`: every launcher here is an `_into` form
 inherited from `gemm_backward.mojo`. It enqueues and returns. The CALLER owns
@@ -158,6 +190,34 @@ from gemm.checks.gemm_backward import (
     identical_gemm_backward_bias_workspace_max_floats,
 )
 from mamba.checks.mamba_fixture import D_CONV, D_STATE, MambaDims
+
+# THE ARITHMETIC. Imported so this file is the ONE DOOR a backward pass walks
+# through and so the compile probe type-checks the wiring, NOT so that any
+# float lands here: every name below is a launcher taking `DeviceBuffer`s, and
+# the module claim (no floating-point expression in this file) is unchanged.
+from mamba.impl.mamba_ssm.ops.selective_scan_backward import (
+    bwd_da_partial_floats,
+    bwd_dh_floats,
+    bwd_h_checkpoint_floats,
+    mamba_backward_scan_sabotage_name,
+    mamba_bwd_da_into,
+    mamba_bwd_da_log_into,
+    mamba_bwd_dbc_into,
+    mamba_bwd_param_fold_into,
+    selective_scan_bwd_scan_into,
+    selective_scan_checkpoint_fn,
+)
+from mamba.impl.transformers.models.mamba.modeling_mamba_backward import (
+    mamba_backward_block_sabotage_name,
+    mamba_bwd_concat_p_into,
+    mamba_bwd_concat_xp_into,
+    mamba_bwd_conv_tap_product_into,
+    mamba_bwd_ddtp_into,
+    mamba_bwd_dhin_into,
+    mamba_bwd_du_join_into,
+    mamba_bwd_gate_into,
+    mamba_bwd_norm_into,
+)
 
 
 # ===========================================================================
@@ -239,7 +299,18 @@ def mamba_backward_inert_sabotages() -> String:
         + " OP_TN routing because this lane calls neither.\n"
         + "SAB_BWD_BIAS_AXIS: covered, but only at M != W. At a shape where"
         + " the token count equals the reduced width it returns a vector of"
-        + " the right length and the wrong contents."
+        + " the right length and the wrong contents.\n"
+        + "SAB_FOLD_STRIDE and SAB_LEAF_ROTATE: NEWLY REACHABLE, through T3."
+        + " mamba_bwd_dbc_kernel imports gemm_identical's own _fold_push and"
+        + " _leaf_at, so both arms bite inside a Mamba entry point for the"
+        + " first time. Only at d_inner > 128, where the partition has more"
+        + " than one leaf; below that P == 1 and both are inert.\n"
+        + "SAB_LEAF_READS_LAUNCH, SAB_PAD_PLUS_ZERO and SAB_FOLD_SERIAL:"
+        + " NOT reachable through T3. They live in the bodies of gemm's own"
+        + " kernels, not in the four helpers T3 imports, so running them"
+        + " against this lane measures nothing. They ARE reachable through"
+        + " the four dB routings, whose k' is the token count and therefore"
+        + " exceeds 128 at every real shape."
     )
 
 
@@ -714,12 +785,20 @@ comptime T1_IS_FUSED = True
 #: three. Getting this wrong is bitwise inert when every `delta` is equal
 #: across tokens, and at `L == 1`.
 comptime T1_DA_INDEX_OFFSET = 1
+#: IMPLEMENTED BY `selective_scan_bwd_scan_kernel`. The seed is realized as
+#: an OMITTED operation at the first step of the walk (DEVIATION 1082), which
+#: is the only spelling that does not launder a `-0.0` contribution.
 
 #: T2, DEVIATION 1071. `h[t-1]` comes from an explicit checkpoint, never from
 #: upstream's `h[t] - dbu[t]` subtraction, which has unbounded relative
 #: cancellation when `|da*h[t-1]| << |dbu[t]|`.
 comptime T2_H_IS_CHECKPOINTED = True
 comptime T2_H_SUBTRACTION_REFUSED = True
+#: IMPLEMENTED BY `selective_scan_checkpoint_kernel`, which RE-RUNS the
+#: forward recurrence rather than having the certified forward kernel store
+#: it (DEVIATION 1081). That is a SECOND SPELLING of seams S5-S9 and its only
+#: defense is an OWED gate: the checkpoint's last slot must equal the
+#: forward's recorded `scan.h` bitwise at every shape.
 
 
 def t2_h_checkpoint_floats(b: Int, l: Int, dims: MambaDims) -> Int:
@@ -748,6 +827,10 @@ comptime T3_IS_FUSED = True
 #: multiplying by `delta`. The two are algebraically equal, differ in the last
 #: bit, and the chosen one costs `D_STATE` times less memory.
 comptime T3_DB_PREFORMS_DELTA_TIMES_U = True
+#: IMPLEMENTED BY `mamba_bwd_dbc_kernel`, which does not declare a fold: it
+#: imports `contract_partition`, `_leaf_bounds`, `_leaf_at`, `_fold_push` and
+#: `_fold_drain` from `gemm/checks/gemm_identical.mojo` and calls them
+#: unchanged. Same spelling, not same math.
 
 
 def t3_dh_floats(b: Int, l: Int, dims: MambaDims) -> Int:
@@ -772,6 +855,10 @@ comptime T4_DIRECTION_IS_DESCENDING_IN_T = True
 comptime T4_SEED_IS_POSITIVE_ZERO = True
 comptime T4_IS_FUSED = True
 comptime T4_ROUTED_TO_GEMM = False
+#: IMPLEMENTED BY `mamba_bwd_da_partial_kernel`, a SECOND descending pass over
+#: `t` reading the materialized `dh` rather than a fold inside T1's own walk
+#: (DEVIATION 1084), so that `SAB_BWD_DA_ASCENDING` has exactly one line to
+#: reverse.
 
 #: T5, DEVIATION 1074. Every parameter gradient a thread can only compute per
 #: `(b, d)` goes to a PRIVATE SLOT `partial[b, d, ...]` with no atomic
@@ -783,12 +870,20 @@ comptime T5_USES_PRIVATE_SLOTS = True
 comptime T5_DIRECTION_IS_ASCENDING_IN_B = True
 comptime T5_SEED_IS_POSITIVE_ZERO = True
 comptime T5_ATOMIC_REFUSED = True
+#: IMPLEMENTED BY `mamba_bwd_param_fold_kernel`. **ITS ONLY SITE TODAY IS
+#: `dA`.** The plan's claim that T5 is shared by `dD`, `db_dt`, `dcw` and
+#: `dcb` does not survive its own section 3.2: those four are category (b),
+#: routed to the ones-vector v1 GEMMs above at `k' = M`, and `M = B * L`
+#: already folds the batch. Only `dA` declines the routing.
 
 #: T6, DEVIATION 1075. The three-way join at `du`, in D-skip then scan then
 #: x_proj order, three separate flushed adds, left-associated. The order
 #: follows the forward's own data flow. **Predicted BITWISE INERT on any
 #: fixture where one contribution dominates the other two.**
 comptime T6_JOIN_ORDER_D_THEN_SCAN_THEN_XPROJ = True
+#: IMPLEMENTED BY `mamba_bwd_du_join_kernel`. No `+0.0` seed: the first term
+#: is installed rather than accumulated, because `du_D` is a `pinned_mul` and
+#: can be a negative zero.
 
 #: T7, DEVIATION 1076. The RMSNorm backward closed form. `rstd^3` is
 #: `(rstd*rstd)*rstd`, left associated, never `portable_powf`. The division by
@@ -797,6 +892,14 @@ comptime T6_JOIN_ORDER_D_THEN_SCAN_THEN_XPROJ = True
 comptime T7_RSTD3_IS_LEFT_ASSOCIATED = True
 comptime T7_DIVIDES_BY_DMODEL_ONCE_PER_ROW = True
 comptime T7_FINAL_SUBTRACT_IS_UNFUSED = True
+#: IMPLEMENTED BY `mamba_bwd_norm_kernel`. Two notes that belong beside the
+#: declaration rather than only in the kernel: the plan's
+#: `SAB_BWD_RSTD3_ASSOC` arm is VACUOUS BY CONSTRUCTION -- `(r*r)*r` and
+#: `r*(r*r)` are the same two roundings, since IEEE multiplication is
+#: commutative -- and is replaced by `SAB_BWD_RSTD3_POW` (DEVIATION 1086);
+#: and `transformer/checks/transformer_backward.mojo` holds a SECOND, equally
+#: self-consistent RMSNorm backward with a different association that no gate
+#: in this repository can distinguish from this one (DEVIATION 1087).
 
 #: T8, DEVIATION 1077. The residual join, `dres` on the left, ONE flushed add.
 #: **THE ABSORPTION SITE.** This is the backward's `residual.out`, and
@@ -806,6 +909,7 @@ comptime T7_FINAL_SUBTRACT_IS_UNFUSED = True
 #: gate called that arm inert. Any backward gate that compares only `bwd.dx`
 #: is blind in exactly the same way.
 comptime T8_DRES_IS_THE_LEFT_OPERAND = True
+#: IMPLEMENTED BY `mamba_bwd_norm_kernel`'s final store.
 
 #: DEVIATION 1078, not a topology but the one elementwise spelling with an
 #: upstream disagreement. `softplus'` is a MULTIPLY by `identical_sigmoid` of
@@ -817,6 +921,9 @@ comptime T8_DRES_IS_THE_LEFT_OPERAND = True
 #: has already happened once in this lane on `adv_softplus_guard`.
 comptime S14B_USES_SIGMOID_MULTIPLY = True
 comptime S14B_GUARD_THRESHOLD_IS_20 = True
+#: IMPLEMENTED BY `mamba_bwd_ddtp_kernel`, which imports the FORWARD's
+#: `SAB_S14_THRESHOLD_10` so a sabotaged forward gets the derivative of the
+#: function that actually ran.
 
 #: The forward quantities the backward RECOMPUTES rather than stores, each of
 #: which must be spelled with the forward's OWN function and not with an
@@ -826,6 +933,92 @@ comptime S14B_GUARD_THRESHOLD_IS_20 = True
 #: own output. `SAB_S12_MUL_SIGMOID` already exists on the forward side and
 #: bit `gate.out` on 15 of 64 cells.
 comptime RECOMPUTE_USES_THE_FORWARD_SPELLING = True
+
+
+#: The nine declarations above, as ids, so a gate can loop rather than
+#: hard-code nine strings. `TOPO_S14B` is not a topology and is included
+#: because DEVIATION 1078 is a pinned spelling like the other eight and a
+#: table that omitted it would be a table a reader trusts to be complete.
+comptime TOPO_T1 = 0
+comptime TOPO_T2 = 1
+comptime TOPO_T3 = 2
+comptime TOPO_T4 = 3
+comptime TOPO_T5 = 4
+comptime TOPO_T6 = 5
+comptime TOPO_T7 = 6
+comptime TOPO_T8 = 7
+comptime TOPO_S14B = 8
+comptime TOPO_COUNT = 9
+
+
+def mamba_backward_topology_site(which: Int) -> String:
+    """`"T1 file::function"`, the kernel that implements one declaration.
+
+    **A DECLARATION WITH NO NAMED IMPLEMENTATION IS A DECLARATION NOBODY CAN
+    CHECK**, and this lane spent six weeks in exactly that state. The table
+    exists so a gate's banner can print, beside the choices, the function
+    whose bits it is about to compare -- and so that a reviewer diffing this
+    file against the kernels has one list to walk instead of a grep.
+
+    Pure, host-side, device-free, and it reads nothing but `which`.
+    """
+    if which == TOPO_T1:
+        return String(
+            "T1 mamba/impl/mamba_ssm/ops/selective_scan_backward.mojo"
+            "::selective_scan_bwd_scan_kernel"
+        )
+    if which == TOPO_T2:
+        return String(
+            "T2 mamba/impl/mamba_ssm/ops/selective_scan_backward.mojo"
+            "::selective_scan_checkpoint_kernel (producer),"
+            " ::selective_scan_bwd_scan_kernel (reader)"
+        )
+    if which == TOPO_T3:
+        return String(
+            "T3 mamba/impl/mamba_ssm/ops/selective_scan_backward.mojo"
+            "::mamba_bwd_dbc_kernel"
+        )
+    if which == TOPO_T4:
+        return String(
+            "T4 mamba/impl/mamba_ssm/ops/selective_scan_backward.mojo"
+            "::mamba_bwd_da_partial_kernel"
+        )
+    if which == TOPO_T5:
+        return String(
+            "T5 mamba/impl/mamba_ssm/ops/selective_scan_backward.mojo"
+            "::mamba_bwd_param_fold_kernel"
+        )
+    if which == TOPO_T6:
+        return String(
+            "T6 mamba/impl/transformers/models/mamba/"
+            "modeling_mamba_backward.mojo::mamba_bwd_du_join_kernel"
+        )
+    if which == TOPO_T7:
+        return String(
+            "T7 mamba/impl/transformers/models/mamba/"
+            "modeling_mamba_backward.mojo::mamba_bwd_norm_kernel"
+        )
+    if which == TOPO_T8:
+        return String(
+            "T8 mamba/impl/transformers/models/mamba/"
+            "modeling_mamba_backward.mojo::mamba_bwd_norm_kernel (the final"
+            " store; THE ABSORPTION SITE)"
+        )
+    if which == TOPO_S14B:
+        return String(
+            "S14b mamba/impl/transformers/models/mamba/"
+            "modeling_mamba_backward.mojo::mamba_bwd_ddtp_kernel"
+        )
+    return String("?")
+
+
+def mamba_backward_kernel_sites() -> String:
+    """Every declaration beside the function that implements it, one block a
+    gate can print and diff across builds and vendors."""
+    var s = String("mojolearn.identical.mamba1.bwd.fp32.v1 KERNEL SITES\n")
+    for i in range(TOPO_COUNT):
+        s = s + mamba_backward_topology_site(i) + "\n"
+    return s
 
 
 def mamba_backward_declarations() -> String:
@@ -854,5 +1047,9 @@ def mamba_backward_declarations() -> String:
     s = s + "T8 dx join: dres LEFT, one flushed add (ABSORPTION SITE)\n"
     s = s + "S14b softplus': MULTIPLY by identical_sigmoid, guard <= 20\n"
     s = s + "recompute: forward spelling always\n"
-    s = s + "sabotage: " + mamba_backward_sabotage_name() + "\n"
+    s = s + "sabotage routing: " + mamba_backward_sabotage_name() + "\n"
+    s = s + "sabotage bwd scan: " + mamba_backward_scan_sabotage_name() + "\n"
+    s = s + (
+        "sabotage bwd block: " + mamba_backward_block_sabotage_name() + "\n"
+    )
     return s

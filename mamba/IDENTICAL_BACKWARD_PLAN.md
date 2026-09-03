@@ -12,15 +12,25 @@ returns and the `comptime if` early returns would need adjustment;
 NEITHER NEEDED ANY EDIT -- every construct already had a compiling twin
 in `gemm/checks/gemm_backward.mojo`.
 
+**PHASE C IS WRITTEN AND UNCOMPILED: THE ARITHMETIC EXISTS AS OF
+2026-09-03.** The 23 new arithmetic operations of section 3.2 and all eight
+topologies of 3.4 now have kernels, in two files that mirror the forward's
+own ownership split:
+
+    mamba/impl/mamba_ssm/ops/selective_scan_backward.mojo
+        T1 T2 T3 T4 T5 and B13-B21, seams S5'-S11'
+    mamba/impl/transformers/models/mamba/modeling_mamba_backward.mojo
+        T6 T7 T8 and B4-B11, B22, B26, B30-B34, B37-B42
+
 **NOTHING IN THIS LANE HAS BEEN RUN, AND NO GRADIENT EXISTS.** The probe
 gates compilation only: it asserts no value, compares no bits and
-launches no kernel. The 23 new arithmetic operations of section 3.2 still
-have no kernel, the 26-stage host oracle does not exist, and gates
-MB1-MB10 are specified and unbuilt. Compiling a file with no arithmetic
-in it is the first rung of the ladder and not a result about gradients. No gate in section 7
-exists, no backward fixture has been built, no device has executed a backward
-call, and `mamba/checks/mamba_backward.mojo` has never been through a
-compiler. Every sentence about behavior is a prediction until a gate prints.
+launches no kernel. **The two kernel files above have never been through a
+compiler either**, the 26-stage host oracle does not exist, and gates
+MB1-MB10 are specified and unbuilt. Compiling a file is the first rung of
+the ladder and not a result about gradients. No gate in section 7
+exists, no backward fixture has been built and no device has executed a
+backward call. Every sentence about behavior is a prediction until a gate
+prints.
 
 | thing | state |
 |---|---|
@@ -28,8 +38,8 @@ compiler. Every sentence about behavior is a prediction until a gate prints.
 | `mojolearn.identical.gemm.fp32.v1` | IDENTITY_PATHS row 40, CLOSED on three vendors |
 | `gemm/checks/gemm_backward.mojo` | gated on Apple and AMD, no sabotage arm ever fired |
 | the derivation of section 1, the classification of section 2 | derived here |
-| the eight new topologies of 2.3 | DECLARED here, **NO KERNEL WRITTEN** |
-| `mamba/checks/mamba_backward.mojo` | the routing layer, **NEVER COMPILED** |
+| the eight new topologies of 2.3 | DECLARED here; **KERNELS WRITTEN 2026-09-03, NEVER COMPILED, NEVER RUN**. `mamba_backward_topology_site()` is the index |
+| `mamba/checks/mamba_backward.mojo` | the routing layer, COMPILED 2026-09-03 in all four configurations, never run. The row that said **NEVER COMPILED** contradicted this document's own STATUS block and is deleted as false |
 | the gates MB1 through MB10 | SPECIFIED, NOT BUILT. `mamba/checks/` holds no backward check file |
 
 The completion claim this lane may make when the gates are green on three
@@ -120,7 +130,10 @@ The backward, given `dres[M, dm]`, with every association written out.
     S5'    ddelta_A    = sum over n of d_arg*A[d,n]         fold over N
            dA[d,n]     = sum over (b,l) of d_arg*delta[t,d] REDUCES OVER TOKENS
     S15'   dA_log[d,n] = dA[d,n] * A[d,n]                   because A = -exp(A_log)
-    S14'   ddelta      = ddelta_B + ddelta_A                the two paths join
+    S14'   ddelta      = ONE interleaved fold over n, B term then A term
+                        (DEVIATION 1083; this line used to read
+                        `ddelta_B + ddelta_A`, which is a DIFFERENT number
+                        and contradicted 3.2's row B18. See below)
            ddtp[t,d]   = ddelta[t,d] * softplus'(biased[t,d])
            softplus'   = biased <= 20 ? sig(biased) : 1
            db_dt[d]    = sum over (b,l) of ddtp[t,d]        REDUCES OVER TOKENS
@@ -235,7 +248,7 @@ That lane could write a 595 line file with no multiply in it. This one cannot.
 | B4 | recompute `silu(z)` | none | a | `identical_silu`, MUST match S12 |
 | B5 | `dsk = pinned_mul(dg, silu_z)` | none | c-elem | |
 | B6 | `sig_z = identical_sigmoid(z)` | none | a | new SITE, existing primitive |
-| B7 | `silu'(z)` composite | none | c-elem | 3 roundings, association pinned |
+| B7 | `silu'(z)` composite | none | c-elem | FOUR roundings after the sigmoid -- this row said three and undercounted the `1 - sig` subtraction -- association pinned; the spelling is `transformer/checks/transformer_backward.mojo::bwd_silu_backward_kernel`'s, reused rather than re-derived |
 | B8 | `dz = dg * sk * silu'(z)` | none | c-elem | 4 factors, order pinned |
 | B9 | `dy = dsk` | none | copy | |
 | B10 | `du_D = pinned_mul(dsk, D[d])` | none | c-elem | |
@@ -246,9 +259,9 @@ That lane could write a 595 line file with no multiply in it. This one cannot.
 | B15 | `dCm[t,n] = sum_d dy*h` | **d_inner** | **c-top T3** | |
 | B16 | `dBm[t,n] = sum_d w*dh` | **d_inner** | **c-top T3** | same topology |
 | B17 | `du_s = sum_n dh*dbb` | `N` | c-inh | S10's ascending fused chain |
-| B18 | `ddelta = sum_n (B path + A path)` | `N` | c-inh | interleaving pinned |
+| B18 | `ddelta = sum_n (B path + A path)` | `N` | c-inh | interleaving PINNED, DEVIATION 1083. ONE accumulator, `n` ascending, per step the B term then the A term, two `fma`s into one register -- upstream's own shape (`ddelta_vals[i] += ddelta_u * u + dx * A * a`, one statement per state index). `SAB_BWD_DDELTA_TWO_FOLDS` is the two-fold reading section 2.2 used to spell |
 | B19 | `dA` fold over `t` | **sequence** | **c-top T4** | direction is the choice |
-| B20 | parameter fold over `b` | **batch** | **c-top T5** | shared by `dA`, `dD`, `db_dt`, `dcw`, `dcb` |
+| B20 | parameter fold over `b` | **batch** | **c-top T5** | **`dA` ONLY.** The row said it was shared by `dD`, `db_dt`, `dcw` and `dcb` too, and that does not survive this table's own rows B12, B23, B32 and B33: those four are category (b), routed to ones-vector v1 GEMMs at `k' = M`, and `M = B * L` already folds the batch. Only `dA` declines the routing (T4) |
 | B21 | `dA_log = pinned_mul(dA, A)` | none | c-elem | |
 | B22 | `ddtp` = softplus' applied | none | c-elem | DIV or MUL, 2.4 |
 | B23 | `db_dt[d] = sum_t ddtp` | **tokens** | b | ones-vector `OP_NN` |
@@ -286,6 +299,20 @@ to `0`, seed `dh[L,d,n] = +0.0`, one rounding per step, FUSED.
 FUSED mirrors S9, whose clause says fusion is pinned because only fusion has a
 portable spelling. If wrong, every `dh` from `t = L-2` downward moves and nine
 card stages move with it. **The cost of being wrong is the whole lane.**
+
+**T1's SEED IS AN OMITTED OPERATION, DEVIATION 1082, AND THIS PARAGRAPH IS
+NEW.** The line above reads `fma(da[t+1], dh[t+1], contrib)` with
+`dh[L] = +0.0`, and at `t = L - 1` there is no `da[L]`: the forward computed
+`L` values of `da` and this recurrence asks for an `L + 1`-th. The omission is
+not cosmetic, because the two closures differ on a real input class --
+`(+0.0) + (-0.0)` is `+0.0`, so folding a stored `+0.0` in would LAUNDER a
+negative zero wherever `dy[L-1,d] * Cm[L-1,n]` is one. PINNED as the omitted
+form, `dh[L-1,d,n] = ftz(contrib)`, which is the strongest statement of a
+`+0.0` seed and is the same argument `gemm_identical.mojo::_fold_drain`
+already makes for `P == 1` ("performs NO addition"). `SAB_BWD_T1_SEED_ADD` is
+the other closure and is **PREDICTED BITWISE INERT on any fixture without a
+planted negative-zero `dy*Cm` at the last token**, which is every hashed
+fixture.
 
 **T2, `h[t-1]` availability, DEVIATION 1071.** PINNED as an explicit
 checkpoint. The forward stores `h[t,d,n]` for every `t` in `[-1, L)` into a
@@ -345,8 +372,13 @@ because it deletes a declared order in favor of a certified one.
 **T5, the parameter fold over `b`, DEVIATION 1074.** Every parameter gradient
 a thread can only compute per `(b, d)` is written to a private slot
 `partial[b, d, ...]` with NO atomic anywhere, and a SECOND kernel folds over
-`b` ASCENDING from `+0.0` with a plain flushed add. Shared by `dA`, `dD`,
-`db_dt`, `dcw` and `dcb`. The alternative is a float `atomicAdd`, which is
+`b` ASCENDING from `+0.0` with a plain flushed add. **ITS ONLY SITE IS
+`dA`.** This paragraph said it was shared by `dD`, `db_dt`, `dcw` and `dcb`
+as well; that is deleted as false, because section 3.2 routes all four to
+ones-vector v1 GEMMs at `k' = M` and `M = B * L` already folds the batch.
+Only `dA` declines the routing, which is T4's own decision. The kernel is
+written width-generic anyway so a future unrouted parameter has a home rather
+than a second declaration. The alternative is a float `atomicAdd`, which is
 what upstream does five times, REFUSED for IDENTITY_PATHS rows 1 and 2's
 reason. The cost is `B` times the parameter footprint and one extra launch.
 
@@ -706,7 +738,6 @@ assert its arm's predicted cell count, not merely that the arm ran.
 | `SAB_BWD_S9B_DA_OFFSET` | `da[t]` where `da[t+1]` belongs | `bwd.dh` | `L == 1`, or all `delta` equal across `t` |
 | `SAB_BWD_S9B_UNFUSED` | T1's `fma` split into mul then add | `bwd.dh` | `L == 1` |
 | `SAB_BWD_H_SUBTRACT` | upstream's `h[t] - dbu[t]` | `bwd.ddelta` | `h[t-1] == 0`, i.e. `t == 0` only |
-| `SAB_BWD_S12_MUL_SIGMOID` | `silu(z)` as `z * sig(z)` | `bwd.dsk` | `z == 0` |
 | `SAB_BWD_S14_DIVISION` | softplus' as upstream's single division | `bwd.ddtp` | `biased` outside `[8, 14]` |
 | `SAB_BWD_S10_N_DESCENDING` | `du_s` and `ddelta` folded `n` descending | `bwd.du_s` | `N == 1`, or fewer than 2 nonzero terms |
 | `SAB_BWD_DA_ASCENDING` | T4's `t` fold reversed | `bwd.dA_log` | `L == 1` |
@@ -714,7 +745,14 @@ assert its arm's predicted cell count, not merely that the arm ran.
 | `SAB_BWD_S1B_FOLD_DESCENDING` | `drstd` folded `j` descending | `bwd.drstd` | `dm == 1` |
 | `SAB_BWD_S13_TAPS_REVERSED` | B31's correlation index reversed | `bwd.dhin` | conv weights symmetric in `k` |
 | `SAB_BWD_DBDC_ATOMIC` | `dBm`, `dCm` by float atomicAdd | **MB4, not MB3** | `d_inner == 1` |
-| `SAB_BWD_RSTD3_ASSOC` | `rstd^3` right associated | `bwd.dx` | `rstd` a power of two |
+| ~~`SAB_BWD_RSTD3_ASSOC`~~ | **WITHDRAWN, VACUOUS BY CONSTRUCTION.** `(r*r)*r` and `r*(r*r)` are the SAME two roundings -- one product `p = r*r`, then one product `p*r` -- because IEEE multiplication is commutative, so the arm is bit identical on EVERY input and not merely on powers of two. An arm that cannot be witnessed may not be credited (the mamba3 lane's DEVIATION 834 rule) | -- | always |
+| `SAB_BWD_RSTD3_POW` | `rstd^3` as `identical_pow(rstd, 3.0)`, the spelling T7 forbids by name. THE REPLACEMENT for the withdrawn row above, DEVIATION 1086 | `bwd.dx` | never predicted inert; `identical_pow` is a different function |
+| `SAB_BWD_T1_SEED_ADD` | T1's seed folded in as a stored `+0.0` instead of omitted (DEVIATION 1082) | `bwd.dh` | no PLANTED `-0.0` in `dy*Cm` at `t = L-1`, i.e. every hashed fixture |
+| `SAB_BWD_DDELTA_TWO_FOLDS` | `ddelta` as two folds over `n` joined by one add, section 2.2's reading (DEVIATION 1083) | `bwd.ddelta` | one of the two paths is zero for every `n`, which includes `t == 0` on prefill |
+| `SAB_BWD_S12_MUL_SIGMOID` | B4 recomputes `silu(z)` as `z*sig(z)`; the same defect upstream's own backward has | `bwd.dsk` | `z == 0` |
+| `SAB_BWD_SILU_DERIV_ALT_ASSOC` | B7 as `sig + z*sig*(1-sig)` | `bwd.dz` | not predicted; the transformer lane's twin has never fired either |
+| `SAB_BWD_S12B_ASSOC` | B8 as `dg * (sk * silu')` | `bwd.dz` | not predicted |
+| `SAB_BWD_INNER_FROM_NRM` | B38 recovers `inner` as `norm.out / w` | `bwd.dw_norm` | `w_norm[j]` a power of two |
 | `SAB_BWD_PARAM_ATOMIC` | T5's `b` fold by float atomicAdd | **MB4, not MB3** | `B == 1` |
 
 Note the two rows whose failure lands on MB4 rather than MB3. **An atomic
@@ -751,12 +789,22 @@ file belongs to another lane.
 
 ## 8. The phase ladder
 
-Phase A, this document plus `mamba/checks/mamba_backward.mojo`, is DONE,
-ungated and UNCOMPILED. Every phase after it is OWED and is listed in section
-10: the host backward oracle, MB1 and MB2 host only, the routed and elementwise
-device path with MB3, the reverse recurrence kernel with MB7 and MB9, T3's `h`
-and `dh` materialization, T5's parameter folds, the invariance and recording
-gates, the card, the three-vendor leg, and the blocked T3 for model scale.
+Phase A, this document plus `mamba/checks/mamba_backward.mojo`, is DONE and
+COMPILED (2026-09-03, all four configurations), ungated.
+
+Phase C, the arithmetic, is WRITTEN and UNCOMPILED (2026-09-03): the
+elementwise kernels, the reverse recurrence, T3's contraction, T4's and T5's
+folds and the RMSNorm closed form are all in the two files named in the STATUS
+block, with nineteen sabotage arms. **Not one of them has been compiled and
+not one has run.** The next rung is `pixi run build-mamba-backward-probe`
+clean plus each of the nineteen arms.
+
+Phase B, the host backward oracle, is NOT started and it is the blocking item:
+the kernels have nothing normative to be compared against, so MB1, MB2 and MB3
+cannot be written. Everything after that is OWED and is listed in section 10:
+MB1 and MB2 host only, MB3 on the device, MB7 and MB9 for the recurrence, the
+invariance and recording gates, the card, the three-vendor leg, and the
+blocked T3 for model scale.
 **B, C and D are independently parallelizable once A exists; E through G are
 serial, because each one's outputs are the next one's inputs.**
 
@@ -783,7 +831,13 @@ reported by its first number only.
 | 1078 | B22, softplus' as a multiply by `identical_sigmoid` | `bwd.ddtp` and everything upstream, only in the `[8,14]` band | SPENT |
 | 1079 | the fourteen gemm routings and their workspace sizing | out of bounds writes, which a small shape hides | SPENT |
 | 1080 | the six token-axis reductions as ones-vector v1 GEMMs, and the pre-product buffers | six parameter stages | SPENT |
-| 1081-1087 | the oracle, the gates, the kernels, the card | | RESERVED |
+| 1081 | T2's checkpoint PRODUCER: the forward recurrence RE-RUN by `selective_scan_checkpoint_kernel` rather than stored by the certified forward kernel, plus the four buffer layouts | a SECOND SPELLING of S5-S9 drifts from the first; the OWED gate is that the checkpoint's last slot equals the forward's `scan.h` bitwise | SPENT |
+| 1082 | T1's seed is an OMITTED operation, not a stored `+0.0` folded in | a `-0.0` at `t = L-1` is laundered; visible only on a PLANTED fixture | SPENT |
+| 1083 | `ddelta` is ONE interleaved fold over `n`, resolving this document's own contradiction between 2.2 and 3.2 | `bwd.ddelta` and everything downstream of it | SPENT |
+| 1084 | T4 is a SECOND descending pass over `t` reading the materialized `dh`, not a fold inside T1's walk | nothing numerical; `d_arg` is recomputed bit-equal, the cost is `identical_exp` calls | SPENT |
+| 1085 | `silu'` is `transformer/checks/transformer_backward.mojo::bwd_silu_backward_kernel`'s chain, transcribed, and B7's row said 3 roundings where there are 4 | `bwd.dz` and `bwd.dconv` | SPENT |
+| 1086 | `SAB_BWD_RSTD3_ASSOC` withdrawn as vacuous by construction, replaced by `SAB_BWD_RSTD3_POW` | T7's `rstd^3` clause has no falsifier at all | SPENT |
+| 1087 | this repository has TWO self-consistent RMSNorm backwards with different associations and no gate can distinguish them | a future unification silently moves one lane's card | SPENT |
 | 1088 | the blocked T3 for model scale | | RESERVED |
 | 1089 | unallocated | | RESERVED |
 
@@ -791,9 +845,12 @@ reported by its first number only.
 
 ## 10. Open questions, OWED, and things a reader should not assume
 
-1. **Compile `mamba/checks/mamba_backward.mojo`.** The five-element `Tuple`
-   returns and the `comptime if` early returns are the two things most likely
-   to need adjustment.
+1. **DONE for the routing layer, OWED for the kernels.**
+   `mamba/checks/mamba_backward.mojo` compiled 2026-09-03 unmodified in all
+   four configurations. The two kernel files written the same day have NEVER
+   been through a compiler, in any configuration. The commands are
+   `pixi run build-mamba-backward-probe` clean and once per arm; the arm list
+   is in `pixi.toml` beside that task.
 2. **The host backward oracle**, twenty six stages, beside
    `mamba_block_oracle`. It is the normative answer and everything compares to
    it. Then MB1 and MB2 host-only, then the device path.
