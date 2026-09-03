@@ -27,6 +27,7 @@ echo "== DEVIATION 2040 A/B: rows $ROWS, lanes [$LANES], $ROUNDS rounds -> $OUT 
   echo "head $(git rev-parse HEAD 2>/dev/null || echo nogit)"
   echo "host $(hostname -s)"
   echo "rows $ROWS"
+  echo "ab_define $AB_DEFINE"
   if [ "$(uname -s)" = "Darwin" ]; then
     echo "mem $(sysctl -n vm.swapusage 2>/dev/null)"
   else
@@ -37,8 +38,14 @@ echo "== DEVIATION 2040 A/B: rows $ROWS, lanes [$LANES], $ROUNDS rounds -> $OUT 
 echo "== build BASE (FAST, replication as ported) =="
 pixi run mojo build -I . bench/lanes_price_main.mojo -o "$OUT/bin/base" \
   > "$OUT/build.base.log" 2>&1 || { echo "!! BASE build failed"; tail -20 "$OUT/build.base.log"; exit 1; }
-echo "== build PIN  (FAST, -D MOJOLEARN_2040_FAST_REPLICATION_PIN=1) =="
-pixi run mojo build -I . -D MOJOLEARN_2040_FAST_REPLICATION_PIN=1 \
+# WHICH CANDIDATE THIS RUN TESTS. 2040 (histogram replication) is REFUTED --
+# measured inert on an MI325X 2026-09-03. 2041 pins the partition-stats chunk
+# count, 2042 takes FAST off the decoupled-lookback partition. Set
+# MOJOLEARN_AB_DEFINE to pick one; they are separate arms and must not be
+# combined, or a null result cannot be attributed.
+AB_DEFINE="${MOJOLEARN_AB_DEFINE:-MOJOLEARN_2040_FAST_REPLICATION_PIN}"
+echo "== build PIN  (FAST, -D ${AB_DEFINE}=1) =="
+pixi run mojo build -I . -D ${AB_DEFINE}=1 \
   bench/lanes_price_main.mojo -o "$OUT/bin/pin" \
   > "$OUT/build.pin.log" 2>&1 || { echo "!! PIN build failed"; tail -20 "$OUT/build.pin.log"; exit 1; }
 

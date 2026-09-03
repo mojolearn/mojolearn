@@ -1,8 +1,9 @@
-# Two vendors wrote the same checkpoint file, 2026-09-03
+# THREE vendors wrote the same checkpoint file, 2026-09-03
 
     Apple M4      161008 bytes  md5 fa0e2c151f189b4990f3d6c48ae3132d
     AMD MI325X    161008 bytes  md5 fa0e2c151f189b4990f3d6c48ae3132d
-    cmp           no differences
+    NVIDIA H100   161008 bytes  md5 fa0e2c151f189b4990f3d6c48ae3132d
+    cmp           no differences, any pair
 
 Eight training steps of `mojolearn.identical.train.fp32.v1` -- embed,
 transformer block forward, backward, cross-entropy, AdamW with gradient
@@ -26,15 +27,14 @@ a convention that happened to hold.
 
 ## What it does not cover
 
-NVIDIA. A third file from an H100 is OWED and the claim is TWO vendors
-until it lands.
-
 One shape, `d_model 32, L 8, B 2, head_dim 8, V 64`, and one model family.
 The mamba blocks have no backward, so nothing about them can be trained
 and nothing about them is in this file.
 
 And the resume this file makes possible was tested WITHIN one process on
-each box -- `whole(8) == file-split(4+4)`, both `463245ce6c97e68d`. WRITING
-ON ONE VENDOR AND RESUMING ON THE OTHER has not been run: the bytes are
-equal, so it should hold, but "should hold" is not a measurement and this
-directory does not contain one.
+each box -- `whole(8) == file-split(4+4)`, all three boxes reaching
+`463245ce6c97e68d`. WRITING ON ONE VENDOR AND RESUMING ON ANOTHER has not
+been run. With three byte-identical files it is a weaker gap than it was --
+loading any of them is loading the same bytes -- but "the same bytes, so the
+same computation" is an argument and not a measurement, and this directory
+does not contain one.

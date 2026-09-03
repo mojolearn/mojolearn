@@ -1788,6 +1788,24 @@ def reorder_single_pass_for[column: Int, identical: Bool]() -> Bool:
     """
     comptime if identical:
         return False
+    # DEVIATION 2042, OFF BY DEFAULT. The third candidate for why IDENTICAL
+    # BEATS FAST on the gbdt lane, and the one this file already owed an A/B
+    # for -- the paragraph above says "the A/B is the orchestrator's 5M rung
+    # intra-leg" and it has never been run on AMD.
+    #
+    # Only the FAST build compiles this route. Its lookback walk is SERIAL
+    # ON THREAD 0 (reorder_single_pass.mojo:120-124 says so and names the
+    # warp-windowed version as the recorded next step) and it takes a global
+    # atomic ticket for tile ordering, while IDENTICAL takes the three-launch
+    # stable partition. A spin-wait kernel that only the fast arm runs is a
+    # plausible reason the fast arm loses.
+    #
+    # Setting this makes FAST take IDENTICAL's route, so the arm is a pure
+    # routing swap. It is BIT-NEUTRAL BY CONSTRUCTION -- the two routes are
+    # gated against each other as an identity elsewhere in this tree -- and
+    # the A/B harness will say so or refuse.
+    comptime if is_defined["MOJOLEARN_2042_FAST_NO_LOOKBACK"]():
+        return False
     return column == COLUMN_NVIDIA or column == COLUMN_AMD
 
 

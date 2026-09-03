@@ -92,6 +92,7 @@ from max.gpu.primitives.block import sum as block_sum
 from gbdt.targets.kernel.pointwise_targets import pinned_block_sum
 
 from checks.kernel_matrix import partition_chunks_sm_for
+from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 
@@ -248,7 +249,27 @@ def partition_stats_chunks(sm_count: Int, n_stats: Int) -> Int:
     one pin, both readers.
     """
     comptime _identical = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var sm = partition_chunks_sm_for[_identical](sm_count)
+    # DEVIATION 2041, OFF BY DEFAULT. The second candidate for why IDENTICAL
+    # BEATS FAST on the gbdt lane. The first -- the histogram replication
+    # factor, DEVIATION 2040 -- was capped and measured on an MI325X and
+    # made no difference (gbdt 1.001, bits equal, binaries verified
+    # different), so it is refuted and this is next.
+    #
+    # FAST feeds the device count here: (2*304 + 1)//2 = 304 chunks on an
+    # MI325X against IDENTICAL's (2*32 + 1)//2 = 32. Phase 1 writes 9.5x
+    # more float partials and phase 2 reduces 9.5x more of them, every
+    # level, every tree.
+    #
+    # THIS ARM MAY MOVE BITS AND THAT IS THE POINT OF MEASURING IT RATHER
+    # THAN ARGUING IT. `active_block_count` derives from this count on the
+    # FLOAT binary and half-byte histogram families, where the deterministic
+    # flush quantizes the per-block PARTIAL, so which rows form each rounded
+    # partial can change. DEVIATION 2040 was deliberately scoped away from
+    # this function for that reason. `tools/fast_replication_ab.sh` prints
+    # both arms' hashes and REFUSES to report a ratio when they differ, so a
+    # bit-moving result reads as a tradeoff and never as a win.
+    comptime _pin_2041 = is_defined["MOJOLEARN_2041_FAST_CHUNKS_PIN"]()
+    var sm = partition_chunks_sm_for[_identical or _pin_2041](sm_count)
     var chunks = (2 * sm + n_stats - 1) // n_stats
     if chunks < 1:
         chunks = 1

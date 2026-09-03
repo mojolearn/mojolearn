@@ -1,0 +1,192 @@
+Imported from /root/mojolearn/training/checks/checkpoint_check.mojo:92:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/root/mojolearn/training/checks/checkpoint_check.mojo:1195:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with '*'
+    """**The clause this whole lane exists for.**
+       ^
+Imported from /root/mojolearn/training/checks/checkpoint_check.mojo:125:
+/root/mojolearn/training/checks/train_loop.mojo:859:32: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var pp = pcopy.unsafe_ptr().bitcast[UInt8]()
+             ~~~~~~~~~~~~~~~~~~^~~~~~~~
+                                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/training/checks/checkpoint_check.mojo:125:
+/root/mojolearn/training/checks/train_loop.mojo:860:32: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var mp = mcopy.unsafe_ptr().bitcast[UInt8]()
+             ~~~~~~~~~~~~~~~~~~^~~~~~~~
+                                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/training/checks/checkpoint_check.mojo:125:
+/root/mojolearn/training/checks/train_loop.mojo:861:32: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var vp = vcopy.unsafe_ptr().bitcast[UInt8]()
+             ~~~~~~~~~~~~~~~~~~^~~~~~~~
+                                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/training/checks/checkpoint_check.mojo:125:
+/root/mojolearn/training/checks/train_loop.mojo:881:40: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var base = (pcopy.unsafe_ptr() + begin).bitcast[UInt8]()
+                    ~~~~~~~~~~~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/training/checks/checkpoint_check.mojo:125:
+/root/mojolearn/training/checks/train_loop.mojo:881:48: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+        var base = (pcopy.unsafe_ptr() + begin).bitcast[UInt8]()
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+                                                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/training/checks/checkpoint_check.mojo:92:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/training/checks/checkpoint_check.mojo:92:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/training/checks/checkpoint_check.mojo:92:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/training/checks/checkpoint_check.mojo:102:
+/root/mojolearn/training/checkpoint.mojo:280:50: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var h = fnv1a64_bytes(seed, buf.unsafe_ptr() + begin, count)
+                                ~~~~~~~~~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/training/checks/checkpoint_check.mojo:92:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/training/checks/checkpoint_check.mojo:125:
+Imported from /root/mojolearn/training/checks/train_loop.mojo:144:
+/root/mojolearn/training/checks/loss.mojo:503:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/checkpoint_check.mojo:125:
+Imported from /root/mojolearn/training/checks/train_loop.mojo:144:
+/root/mojolearn/training/checks/loss.mojo:508:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var other = red[tid + step]
+                        ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/checkpoint_check.mojo:125:
+Imported from /root/mojolearn/training/checks/train_loop.mojo:144:
+/root/mojolearn/training/checks/loss.mojo:512:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if other > red[tid]:
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/checkpoint_check.mojo:125:
+Imported from /root/mojolearn/training/checks/train_loop.mojo:144:
+/root/mojolearn/training/checks/loss.mojo:513:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    red[tid] = other
+                    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/checkpoint_check.mojo:125:
+Imported from /root/mojolearn/training/checks/train_loop.mojo:144:
+/root/mojolearn/training/checks/loss.mojo:515:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = identical_fmax(red[tid], other)
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/checkpoint_check.mojo:125:
+Imported from /root/mojolearn/training/checks/train_loop.mojo:144:
+/root/mojolearn/training/checks/loss.mojo:515:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = identical_fmax(red[tid], other)
+                                          ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/checkpoint_check.mojo:125:
+Imported from /root/mojolearn/training/checks/train_loop.mojo:144:
+/root/mojolearn/training/checks/loss.mojo:518:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var total = red[0]
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Included from /root/mojolearn/training/checks/checkpoint_check.mojo:125:
+Included from /root/mojolearn/training/checks/train_loop.mojo:151:
+/root/mojolearn/training/checks/optimizer.mojo:560:20: warning: assignment to 'm' was never used; assign to '_' instead?
+    var m = Float32(0.0)
+                   ^
+Included from /root/mojolearn/training/checks/checkpoint_check.mojo:125:
+Included from /root/mojolearn/training/checks/train_loop.mojo:151:
+/root/mojolearn/training/checks/optimizer.mojo:570:20: warning: assignment to 'v' was never used; assign to '_' instead?
+    var v = Float32(0.0)
+                   ^
+Included from /root/mojolearn/training/checks/checkpoint_check.mojo:125:
+Included from /root/mojolearn/training/checks/train_loop.mojo:151:
+/root/mojolearn/training/checks/optimizer.mojo:590:21: warning: assignment to 'dn' was never used; assign to '_' instead?
+    var dn = Float32(0.0)
+                    ^
+Included from /root/mojolearn/training/checks/checkpoint_check.mojo:125:
+Included from /root/mojolearn/training/checks/train_loop.mojo:151:
+/root/mojolearn/training/checks/optimizer.mojo:591:20: warning: assignment to 'q' was never used; assign to '_' instead?
+    var q = Float32(0.0)
+                   ^
+Included from /root/mojolearn/training/checks/checkpoint_check.mojo:125:
+Included from /root/mojolearn/training/checks/train_loop.mojo:151:
+/root/mojolearn/training/checks/optimizer.mojo:638:24: warning: assignment to 'p_out' was never used; assign to '_' instead?
+    var p_out = Float32(0.0)
+                       ^
+=== checkpoint-file gate, profile mojolearn.identical.train.ckpt.file.v1
+=== NOTHING IN THIS FILE, IN training/checkpoint.mojo OR IN training/CHECKPOINT_FORMAT.md HAD EVER BEEN COMPILED OR RUN BEFORE THIS PROCESS. Every prediction in their headers is unfalsified.
+=== A MATCHING FILE SHOWS AGREEMENT AND NEVER CORRECTNESS. Two of the twelve stages of a step have no certifying gate (transformer_backward and embedding_identical), and three machines writing byte-identical checkpoints of the same wrong gradient agree perfectly. TRAINING_LOOP_PLAN.md section 1.1.
+mode NUMERIC_IDENTICAL   steps N = 8   seed = 6085033151980924784   n_total = 13376   J = 11
+file bytes at this shape = 161008   scratch = /tmp
+clause (i): the round trip, bit for bit
+  ok   the hex spelling agrees with train_loop.mojo::hex16
+  ok   file is 161008 bytes = 64 + 64 + 32*11 + 12*13376 + 16
+  ok   h_all == digest_of_lists h_all = a5abcb6b734bb318
+  ok   param  13376 cells IDENTICAL
+  ok   m_state  13376 cells IDENTICAL
+  ok   v_state  13376 cells IDENTICAL
+  ok   eight hyperparameters round trip by bits
+  ok   layout round trips: 11 names, offsets and momentum flags
+  ok   save -> load -> save is byte-for-byte identical
+  clause (i) GREEN
+clause (ii): the refusals
+  the uncorrupted file loads clean; the arms below can fire
+  ok   1 magic: byte 0 flipped -> CKPT_REFUSE_MAGIC
+  ok   2 version: format_version := 2, file hash repaired -> CKPT_REFUSE_VERSION
+  ok   3a shape: a valid file with J-1 tensors -> CKPT_REFUSE_SHAPE
+  ok   3b shape: w_q and w_k counts swapped, n_total unchanged -> CKPT_REFUSE_SHAPE
+  ok   4 truncated: last 8 bytes dropped -> CKPT_REFUSE_TRUNCATED
+  ok   5 content hash: one payload bit flipped, h_file REPAIRED -> CKPT_REFUSE_CONTENT_HASH
+  ok   6 file hash: the same bit flipped, nothing repaired -> CKPT_REFUSE_FILE_HASH
+  ok   7 header: a reserved header field set nonzero -> CKPT_REFUSE_HEADER
+  ok   8 trailing: 8 extra bytes appended -> CKPT_REFUSE_TRAILING
+  ok   9 layout: entry 1 calls itself param_id 0 -> CKPT_REFUSE_LAYOUT
+  ok   10 state: m one element short at SAVE -> CKPT_REFUSE_STATE
+  clause (ii) GREEN: ten arms, each refused BY ITS OWN TAG. **Every CKPT_REFUSE_* tag the format defines has now fired at least once**, so none of them is code that has never decided anything.
+clause (iv): the two-file comparison
+  ok   equal state -> byte-for-byte identical files
+  ok   one flipped payload byte -> named, with its section
+  ok   a descriptor difference is named as one
+  clause (iv) GREEN
+clause (v): determinism of the writer
+  ok   two saves across unrelated device work are byte-identical
+  ok   on-disk length is exactly 64 + 64 + 32*11 + 12*13376 + 16 = 161008
+  clause (v) GREEN
+clause (iii): train, save, load, resume
+  ok   this gate's step loop == run_training, h_all 463245ce6c97e68d over 8 steps
+  LEG FILE written: bench/results/e1/2026-09-03_100513-mojolearn-e2-nv//lanes/checkpoint.ckptbin  161008 bytes  h_all=463245ce6c97e68d  h_file=789a2f41093caed2
+  A leg that writes this file and never has it compared against another VENDOR'S is not a result. See CHECKPOINT_FORMAT.md section 9.
+  saved the state after 4 steps: h_all=1ff5d122c18410b0  t=4
+  whole(8) h_all=463245ce6c97e68d   file-split(4+4) h_all=463245ce6c97e68d
+  ok   TRAIN, SAVE, LOAD, RESUME reproduces 8 continuous steps EXACTLY
+  ok   R1 m,v zeroed -> h_all d51eb3367363069f DIFFERS, required
+  ok   R2 t restarted at 1 -> h_all ad45141a9de235f2 DIFFERS, required
+  R3 REPORTED, NOT ASSERTED: dropping the momentum flags moved NO bit, which is the PREDICTED result under AdamW (the flags are read only on the SGD branch). This is not a pass and not a failure; it is the arm confirming its own prediction.
+  clause (iii) GREEN
+
+=== SUMMARY
+  (i)   round trip    0 failed
+  (ii)  refusals      0 failed
+  (iii) file resume   0 failed
+  (iv)  comparison    0 failed
+  (v)   determinism   0 failed
+ALL CLAUSES GREEN on ONE device. **That is a serializer result and not a cross-vendor one.** One box writing a file it can read back proves the format round-trips; TWO BOXES WRITING THE SAME BYTES is the claim, and this gate cannot manufacture the second file. CHECKPOINT_FORMAT.md section 9 is how that run is done and it is OWED.
