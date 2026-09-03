@@ -248,8 +248,39 @@ BUNDLE="/tmp/mojolearn-e2-$COMMIT.tgz"
 # commit, or a GitHub outage: set MOJOLEARN_LEG_NO_CLONE=1 to force it.
 CLONE_URL="${MOJOLEARN_LEG_CLONE_URL:-https://github.com/mojolearn/mojolearn.git}"
 CLONE_OK=0
+
+# WAIT FOR SSH TO BE STABLE BEFORE SPENDING THE CHEAP PATH ON IT. A droplet
+# reports `active` before sshd is reliably accepting, and the clone below is
+# ONE attempt: a single "Connection closed by <ip> port 22" during boot sends
+# the leg down the 81 MB archive fallback, which on this uplink is about
+# twenty minutes of a sixty-minute lease -- the exact cost the clone exists
+# to avoid. Measured 2026-09-03: droplet active at 03:16:59, clone attempted
+# at 03:18:02, connection closed, archive path taken.
+#
+# Three CONSECUTIVE successes, because the failure mode is a port that
+# accepts once and then resets while sshd finishes starting.
+ssh_settle() {
+  _ok=0
+  for _i in $(seq 1 40); do
+    if $SSH true 2>/dev/null; then
+      _ok=$((_ok + 1))
+      [ "$_ok" -ge 3 ] && { log "ssh settled after $_i probe(s)"; return 0; }
+    else
+      _ok=0
+    fi
+    sleep 5
+  done
+  log "ssh NEVER settled after 40 probes; continuing anyway"
+  return 1
+}
+ssh_settle
+
 if [ "${MOJOLEARN_LEG_NO_CLONE:-0}" != "1" ] && [ -n "$CLONE_URL" ]; then
-  log "cloning $COMMIT ON THE BOX from $CLONE_URL (bench/results excluded)"
+  # RETRY THE CLONE. A commit mismatch (exit 9) is a real failure and must
+  # not be retried; a transport failure is worth another try before paying
+  # for the archive.
+  for _try in 1 2 3; do
+  log "cloning $COMMIT ON THE BOX from $CLONE_URL (bench/results excluded), attempt $_try"
   if $SSH "set -e
       rm -rf /root/mojolearn && mkdir -p /root/mojolearn
       cd /root/mojolearn
@@ -266,9 +297,18 @@ if [ "${MOJOLEARN_LEG_NO_CLONE:-0}" != "1" ] && [ -n "$CLONE_URL" ]; then
       echo CLONE-COMMIT-OK \$got
       grep -c 'is_defined\\[\"MOJOLEARN_NUMERIC_IDENTICAL\"\\]' checks/numerics.mojo"; then
     CLONE_OK=1
+    break
   else
-    log "the clone path failed; falling back to the archive upload"
+    _rc=$?
+    if [ "$_rc" = 9 ]; then
+      log "clone reported a COMMIT MISMATCH (exit 9); not retrying"
+      break
+    fi
+    log "clone attempt $_try failed (rc $_rc)"
+    [ "$_try" -lt 3 ] && sleep 10
   fi
+  done
+  [ "$CLONE_OK" = 1 ] || log "the clone path failed 3 times; falling back to the archive upload"
 fi
 
 if [ "$CLONE_OK" != 1 ]; then
