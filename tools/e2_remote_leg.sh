@@ -652,6 +652,14 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
       # column that ran only (a) would be a weaker column than Apple's.
       transformer-backward)
         CMD='env MOJOLEARN_TFB_CHECK_CLAUSE_B=1 MOJOLEARN_TFB_CHECK_CLAUSE_C=1 MOJOLEARN_TFB_CHECK_CLAUSE_D=1 MOJOLEARN_TFB_CHECK_CLAUSE_E=1 MOJOLEARN_TFB_CHECK_CLAUSE_F=1 pixi run mojo run -I . transformer/checks/transformer_backward_check.mojo' ;;
+      # OUR TREES vs THE VENDOR LIBRARY, BOTH TIERS, ON NVIDIA. The FAST
+      # process interleaves ours with the opponents in one thermal window;
+      # the IDENTICAL process runs ours only, because the opponents do not
+      # move with our build define. Nothing here compares BITS against a
+      # vendor: our identity claim is across OUR OWN backends, and against
+      # theirs the only comparison is speed and held-out accuracy.
+      vendor-trees)
+        CMD="env GBM_BENCH_DATA=$VOL_MOUNT/gbm-bench MOJOLEARN_VT_OUT=\"\$OUT/vendor_trees\" MOJOLEARN_VT_LANE=${VT_LANE:-gbdt-symmetric} MOJOLEARN_VT_ROWS=${VT_ROWS:-1000000} sh tools/vendor_trees_leg.sh"; WRAP=0 ;;
       # FILL THE VOLUME AND MEASURE NOTHING. `load_higgs` says the download
       # is a separate, explicitly named step the orchestrator budgets a lease
       # around; this IS that step. It fetches and decodes onto the persistent
