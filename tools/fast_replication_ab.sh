@@ -19,6 +19,15 @@ OUT="${MOJOLEARN_AB_OUT:-bench/results/fast_replication_ab/$(date +%Y-%m-%d_%H%M
 ROUNDS="${MOJOLEARN_AB_ROUNDS:-3}"
 LANES="${MOJOLEARN_AB_LANES:-gbdt rf et}"
 ROWS="${MOJOLEARN_AB_ROWS:-1000000}"
+# WHICH CANDIDATE THIS RUN TESTS, and it is assigned HERE, above the env block
+# that prints it. It was first assigned down beside the build, while the env
+# block near the top already referenced it, so `set -u` killed every arm at
+# "AB_DEFINE: parameter not set" before a single build started.
+# 2040 (histogram replication) is REFUTED, measured inert on an MI325X.
+# 2041 pins the partition-stats chunk count; 2042 takes FAST off the
+# decoupled-lookback partition. One per run: combining them makes a null
+# result unattributable.
+AB_DEFINE="${MOJOLEARN_AB_DEFINE:-MOJOLEARN_2040_FAST_REPLICATION_PIN}"
 mkdir -p "$OUT/bin"
 
 echo "== DEVIATION 2040 A/B: rows $ROWS, lanes [$LANES], $ROUNDS rounds -> $OUT =="
@@ -38,12 +47,6 @@ echo "== DEVIATION 2040 A/B: rows $ROWS, lanes [$LANES], $ROUNDS rounds -> $OUT 
 echo "== build BASE (FAST, replication as ported) =="
 pixi run mojo build -I . bench/lanes_price_main.mojo -o "$OUT/bin/base" \
   > "$OUT/build.base.log" 2>&1 || { echo "!! BASE build failed"; tail -20 "$OUT/build.base.log"; exit 1; }
-# WHICH CANDIDATE THIS RUN TESTS. 2040 (histogram replication) is REFUTED --
-# measured inert on an MI325X 2026-09-03. 2041 pins the partition-stats chunk
-# count, 2042 takes FAST off the decoupled-lookback partition. Set
-# MOJOLEARN_AB_DEFINE to pick one; they are separate arms and must not be
-# combined, or a null result cannot be attributed.
-AB_DEFINE="${MOJOLEARN_AB_DEFINE:-MOJOLEARN_2040_FAST_REPLICATION_PIN}"
 echo "== build PIN  (FAST, -D ${AB_DEFINE}=1) =="
 pixi run mojo build -I . -D ${AB_DEFINE}=1 \
   bench/lanes_price_main.mojo -o "$OUT/bin/pin" \
