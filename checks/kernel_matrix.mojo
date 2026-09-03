@@ -1568,8 +1568,11 @@ def greedy_one_byte_fixed_for[column: Int, identical: Bool]() -> Bool:
     orchestrator owns it.
 
     `IDENTICAL` is UNTOUCHED and returns False: identity has always compiled
-    the ladder and the identical route must not move. 32-lane columns return
-    False and keep today's dispatch byte for byte. Variable-width columns
+    the ladder and the identical route must not move -- identity reaches the
+    fused kernel through `hist_smem_mode_for`'s shared-Int32 arm, not through
+    this row. 32-lane columns under FAST returned False and kept CatBoost's
+    dispatch byte for byte until 2026-09-03, when the measurement below
+    flipped them; the block under the signature has the numbers. Variable-width columns
     (qualcomm, intel, spec-baseline) are still NOT claimed here -- their
     problem was never the slice layout, it is that a logical 32-lane group
     does not fit an 8-wide wave, which `sub_byte_lane_sync_for` answers and
@@ -1577,10 +1580,11 @@ def greedy_one_byte_fixed_for[column: Int, identical: Bool]() -> Bool:
     """
     comptime if identical:
         return False
-    # DEVIATION 2043, OFF BY DEFAULT, AND IT IS A DIAGNOSTIC RATHER THAN A
-    # SWITCH. The question it answers: why does IDENTICAL beat FAST on the
-    # gbdt lane on an H100 (0.938) when the AMD cause -- the decoupled-
-    # lookback partition, DEVIATION 2042 -- is measured INERT there (1.003)?
+    # DEVIATION 2043, NOW ON BY DEFAULT ON EVERY FAST COLUMN. It began as a
+    # diagnostic for one question -- why does IDENTICAL beat FAST on the gbdt
+    # lane on an H100 (0.938) when the AMD cause, the decoupled-lookback
+    # partition of DEVIATION 2042, is measured INERT there (1.003)? -- and
+    # the answer turned out to be a shipping decision.
     #
     # The line below is the asymmetry. It returns `column_lane_width == 64`,
     # so under FAST it is TRUE on AMD's 64-wide CDNA and FALSE on NVIDIA's
@@ -1593,20 +1597,47 @@ def greedy_one_byte_fixed_for[column: Int, identical: Bool]() -> Bool:
     # launch, half the cindex traffic. Same shape as 2042: a route only the
     # fast arm compiles, and it is the slower one.
     #
-    # THE HASHES WILL DIFFER AND THAT IS NOT A DEFECT. The fused arm
-    # accumulates dithered fixed-point Int32; the PASS arm accumulates
-    # warp-private f32. So this arm is a 2041-class TRADEOFF REPORT, not a
-    # 2042-class bit-neutral win, and NO DEFAULT MAY FLIP ON IT. The A/B
-    # harness will refuse a ratio on the hash mismatch; read the two times.
+    # THE HASHES DIFFER AND THAT IS NOT A DEFECT: the fused arm accumulates
+    # dithered fixed-point Int32 and the PASS arm accumulates warp-private
+    # f32. What stood here was that a moved hash therefore made this a
+    # TRADEOFF REPORT on which "NO DEFAULT MAY FLIP". **THAT IS RETRACTED**,
+    # because it applied an IDENTICAL-tier gate to a FAST-tier decision.
+    # FAST promises no bits by construction ([[fast-is-not-identical]]), so a
+    # moved hash there is evidence of nothing; the gate a FAST default turns
+    # on is FASTER AND NO WORSE ON HELD-OUT ACCURACY. Nothing had measured
+    # the second half, so the flip was withheld on the wrong criterion.
     #
-    # It is also not a pure routing swap: setting this turns on the
-    # magnitude reduce, `acc_i32` and the fixed bridge that IDENTICAL
-    # already carries, so the arm built is "FAST with IDENTICAL's one-byte
-    # histogram stage". That is the right comparison for the question and
-    # the wrong one for a shipping decision.
+    # MEASURED 2026-09-03, H100, higgs 1,000,000 x 28, gbdt-symmetric,
+    # 3 rounds, held-out AUC on the fixed 500,000-row tail
+    # (`tools/gbdt_accuracy_ab.sh`, bench/results/e1/2026-09-03_190949):
+    #
+    #     FAST as shipped (PASS ladder, two walks)  0.9728 s   AUC 0.800447
+    #     FAST fused one-byte (this row True)       0.9349 s   AUC 0.800538
+    #     IDENTICAL, same box, same fixture         0.9195 s   AUC 0.800716
+    #
+    # ratio 0.961, d_AUC +0.000091, d_logloss -0.000001, and base's own AUC
+    # band across the three rounds was ZERO, so the deltas are not spread.
+    # FASTER AND SLIGHTLY MORE ACCURATE, so the row flips.
+    #
+    # THE QUANTIZATION IS NOT A PRECISION-FOR-SPEED TRADE, which is the
+    # thing everyone expects it to be. `choose_scale` picks a POWER OF TWO,
+    # so `val * fixed_scale` is exact; integer addition never rounds, where
+    # an f32 bin absorbs small gradients once its running sum is large; and
+    # `hist2_quantize`'s dither makes the single load-time rounding
+    # zero-mean. IDENTICAL, the most quantized arm of the three, scores the
+    # BEST AUC here.
+    #
+    # WHAT THIS DOES NOT CLOSE: IDENTICAL is STILL faster than the fused
+    # FAST arm (0.9195 vs 0.9349). This row narrows NVIDIA's FAST deficit
+    # from 5.8% to 1.7% and does not eliminate it, so a second cause remains
+    # unlocated and FAST-on-NVIDIA is still the slow cell.
+    #
+    # SCOPE: one lane, one dataset, one rung, one column. gbdt-lossguide and
+    # gbdt-depthwise are UNMEASURED on this row, and so is every fixture
+    # that is not higgs at a million rows.
     comptime if is_defined["MOJOLEARN_2043_FAST_FUSED_ONE_BYTE"]():
         return True
-    return column_lane_width(column) == 64
+    return True
 
 
 def greedy_sub_byte_excluded_for[column: Int, identical: Bool]() -> Bool:
