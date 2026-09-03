@@ -119,7 +119,29 @@ OUT="${MOJOLEARN_GACC_OUT:-bench/results/gbdt_accuracy_ab/$(date +%Y-%m-%d_%H%M%
 ROUNDS="${MOJOLEARN_GACC_ROUNDS:-3}"
 ROWS="${MOJOLEARN_GACC_ROWS:-2000000}"
 LANE="${MOJOLEARN_GACC_LANE:-gbdt-symmetric}"
-PY="${MOJOLEARN_GACC_PYTHON:-python3}"
+# THE INTERPRETER MUST HAVE NUMPY AND A BARE RENTED BOX'S python3 DOES NOT.
+#
+# The 2026-09-03 H100 leg died three separate ways on one cause: the higgs
+# fetch, `build_gbdt.sh`'s own smoke gate and every timed round all raised
+# `ModuleNotFoundError: No module named 'numpy'` under the system python3 of
+# a freshly created droplet.
+#
+# The interpreter must be the DEFAULT pixi environment's -- not the `bench`
+# feature's and not the system's. The binding exports
+# `PyInit__mojolearn_gbdt` (bindings/_mojolearn_gbdt.mojo:441), so it is a
+# CPython extension bound to the ABI of the interpreter it was built
+# against. `bench` is Python 3.14 and would not load the .so it is being
+# asked to measure; the default env is 3.13 and carries numpy 2.5.2 already,
+# so the ABI-correct choice is also the one that fixes the import. It is a
+# MULTI-WORD command, invoked through `py` rather than as "$PY", because
+# quoting a multi-word value looks for a binary with spaces in its name.
+PY="${MOJOLEARN_GACC_PYTHON:-pixi run python}"
+# shellcheck disable=SC2086  # $PY is deliberately word-split
+py() { $PY "$@"; }
+# The builds run their smoke gates in their own shells, so they are told
+# too -- otherwise the build fails on numpy while the harness does not.
+MOJOLEARN_PYTHON="${MOJOLEARN_GACC_BUILD_PYTHON:-pixi run python}"
+export MOJOLEARN_PYTHON
 SPEED_MARGIN="${MOJOLEARN_GACC_SPEED_MARGIN:-0.02}"
 AUC_TOL="${MOJOLEARN_GACC_AUC_TOL:-0.0005}"
 LL_TOL="${MOJOLEARN_GACC_LL_TOL:-0.0005}"
@@ -182,10 +204,10 @@ FETCH_PID=""
 if [ "${MOJOLEARN_GACC_SKIP_FETCH:-0}" != "1" ]; then
     echo "== fetch higgs IN BACKGROUND (2.6 GB + gzip csv decode), joined after the builds =="
     if command -v timeout > /dev/null 2>&1; then
-        timeout -k 30 3600 "$PY" tools/speed_gbdt_arm.py --download higgs \
+        timeout -k 30 3600 $PY tools/speed_gbdt_arm.py --download higgs \
             > "$OUT/logs/download.higgs.log" 2>&1 &
     else
-        "$PY" tools/speed_gbdt_arm.py --download higgs \
+        py tools/speed_gbdt_arm.py --download higgs \
             > "$OUT/logs/download.higgs.log" 2>&1 &
     fi
     FETCH_PID=$!
@@ -263,7 +285,7 @@ run_arm() {
     MOJOLEARN_SPEED_ROUNDS=1 \
     MOJOLEARN_SPEED_BUDGET_S="${MOJOLEARN_SPEED_BUDGET_S:-1800}" \
     MOJOLEARN_SPEED_DEADLINE_S="${MOJOLEARN_SPEED_DEADLINE_S:-3600}" \
-        "$PY" bench/speed/forest_speed_arm.py \
+        py bench/speed/forest_speed_arm.py \
             --lane "$LANE" --dataset higgs --rows "$ROWS" --ours-only \
         > "$_log" 2>&1
     # `$?` IS CAPTURED BEFORE ANYTHING ELSE RUNS. Reading it inside an echo
@@ -441,3 +463,19 @@ echo "PASS(8) ladder accumulates warp-private float32. They are recorded, never"
 echo "gated. A ratio here is a result only on a row whose shape= says higgs."
 echo
 echo "results in $OUT"
+
+# EXIT NON-ZERO WHEN THERE IS NO ANSWER.
+#
+# The 2026-09-03 leg printed a table of dashes and returned 0, so the remote
+# runner logged EXTRA-gbdt-accuracy-ab-EXIT=0 over a run in which nothing
+# built, nothing downloaded and nothing was measured. A harness that reports
+# success on total failure is worse than one that crashes: it costs a lease
+# AND the trust in every other green line beside it.
+rc=0
+[ "$build_fail" != "0" ] && rc=2
+if [ -z "$(med base)" ] || [ -z "$(med pin)" ]; then
+    echo "!! NO COMPARISON PRODUCED: base and pin must both have timed rounds"
+    rc=3
+fi
+[ "$rc" != "0" ] && echo "!! gbdt_accuracy_ab FAILED (rc=$rc)"
+exit $rc

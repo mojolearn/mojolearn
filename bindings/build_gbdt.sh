@@ -331,7 +331,12 @@ minos_matches() {
 # launching proves anything. Kept tiny on purpose -- 512x3, two trees --
 # because this runs on every build and the GPU is shared.
 run_smoke() {
-    MOJOLEARN_SMOKE_SO="$1" python3 - <<'PY'
+    # MOJOLEARN_PYTHON: the smoke gate needs numpy, and a fresh rented box's
+    # SYSTEM python3 does not have it -- the 2026-09-03 H100 leg died here,
+    # `ModuleNotFoundError: No module named 'numpy'` reported as
+    # "the GBDT extension did not come out complete". Default is unchanged;
+    # a caller on a bare box points this at the pixi bench env's interpreter.
+    MOJOLEARN_SMOKE_SO="$1" ${MOJOLEARN_PYTHON:-python3} - <<'PY'
 import os, shutil, sys, tempfile
 tmp = tempfile.mkdtemp()
 pkg = os.path.join(tmp, "mojolearn")
