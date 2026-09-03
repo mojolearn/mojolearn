@@ -1,9 +1,9 @@
 
-=== provenance === 21:19:18
-185eb002a8e3dbdca0c23163aed0a6606ee57206
+=== provenance === 07:30:12
+5da1cbd6437bfde7974c334d97eb08ec502fb0d9
 Linux mojolearn-e2-nv 5.15.0-185-generic #195-Ubuntu SMP Fri Jun 19 17:11:50 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
 
-=== pixi === 21:19:19
+=== pixi === 07:30:12
 This script will automatically download and install Pixi (latest) for you.
 Getting it from this url: https://github.com/prefix-dev/pixi/releases/latest/download/pixi-x86_64-unknown-linux-musl.tar.gz
 The 'pixi' binary is installed into '/root/.pixi/bin'
@@ -11,57 +11,87 @@ Updating '/root/.bashrc'
 Please restart or source your shell.
 ✔ The default environment has been installed.
 
-=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 21:19:21
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 07:30:15
 
-=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+=== phase 0 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
 
-=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
 
-=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
 
-=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
 
-=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
 
-=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
 
-=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
 
-=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
 
-=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+=== phase 8: the classical lanes (gemm, cd, kde, linkage, svm, metrics) -- both modes, cards + checks === 07:30:15
+-- lanes, identical --
+  gemm [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  cd [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  kde [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  linkage [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  svm [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  mamba [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  mamba2 [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  mamba3 [identical]: card 28 records -- mode IDENTICAL
+  mamba3 [identical] check OK (30 OK lines)
+  iforest [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  transformer [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  arima [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  cholesky [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  embedding [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  gp [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  hdbscan [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  holtwinters [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  ivf [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  kernelmethods [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  gmm [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  resample [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  spectral [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  training-loss [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  training-optimizer [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  training-step [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  tsa [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  metrics [identical]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+-- lanes, fast --
+  gemm [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  cd [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  kde [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  linkage [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  svm [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  mamba [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  mamba2 [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+PHASE8-FINDING: mamba3 [fast] failed (see /root/mojolearn/bench/results/e1/2026-09-03_073012-mojolearn-e2-nv/lanes/mamba3.fast.log)
+  mamba3 [fast]: card 28 records -- mode FAST
+PHASE8-FINDING: mamba3 [fast] check FAILED: Unhandled exception caught during execution: GATE A FAILED: 14044 cells differ between the device card and the host oracle (first stage: in_proj.out)
+  iforest [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  transformer [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  arima [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  cholesky [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  embedding [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  gp [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  hdbscan [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  holtwinters [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  ivf [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  kernelmethods [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  gmm [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  resample [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  spectral [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  training-loss [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  training-optimizer [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  training-step [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  tsa [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
+  metrics [fast]: SKIPPED (MOJOLEARN_E1_LANES=mamba3)
 
-=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 21:19:22
-phase 9: DIAG ONLY (MOJOLEARN_P9_ONLY_DIAG=1); no builds, no arms, no probes here
-phase 9 builds: <none>
-phase 9 tiers:  <none>
-concurrent probe SKIPPED: needs all three tiers, P9_TIERS=<none>
+=== phase 9 SKIPPED (MOJOLEARN_E1_PHASES=8) ===
 
-=== phase 9 diag: tools/diag/identity_cost_leg.sh === 21:19:22
-PHASE9-FINDING: diag script returned non-zero (see diag/console.log)
-        
-        == done: /root/mojolearn/bench/results/e1/2026-09-02_211918-mojolearn-e2-nv/diag/lanes_price ==
-    commit=185eb002a8e3dbdca0c23163aed0a6606ee57206
-    uname=Linux 5.15.0-185-generic x86_64
-    ols_rc=1  price_rc=0
-    seconds=412
-    price_lanes=cd kde linkage svm metrics gemm
-    price_rounds=(default 5)
-    price_sizes=kmeans_rows=(apple default) knn_index=(apple default) knn_method=(auto) dbscan_rows=(apple default) gram_rows=(apple default) nt_rows=(apple default) gemv_dim=(apple default)
-    -- ols --
-    check_ols_is_launch_invariant OK [IDENTICAL]: all 12 coefficients bit-identical across elem_tpb 256/64, 0/37 floats of buffer padding and two different scratch poisons (coef[0] = 0xbc0517a9), and the A-vs-A control agrees
-    check_ols_is_launch_invariant OK [IDENTICAL]: all 12 coefficients bit-identical across elem_tpb 256/64, 0/37 floats of buffer padding and two different scratch poisons (coef[0] = 0xbc0517a9), and the A-vs-A control agrees
-    -- identity tax (ratio.tsv) --
-    lane	n	fast_med_s	ident_med_s	ratio_med	ratio_min	ratio_max	fast_min_s	fast_max_s	ident_min_s	ident_max_s	fast_hash	ident_hash	hash_note
-    cd	5	0.001287	0.001704	1.323	1.279	1.333	0.001278	0.001321	0.001647	0.001709	3bc909a47ebc9bda	3cb298860e514e8a	fast!=ident bits
-    kde	5	0.000306	0.000388	1.267	1.255	1.731	0.000303	0.000307	0.000384	0.000530	4ec9d98c61d3ae83	3719b9e6a55377a7	fast!=ident bits
-    linkage	5	0.001656	0.001578	0.953	0.942	1.007	0.001613	0.001667	0.001570	0.001623	d486f76f518b97e2	5d3155fc940e61d2	fast!=ident bits
-    svm	5	0.003339	0.003061	0.917	0.842	0.939	0.003261	0.003634	0.003029	0.003084	24f8ac7fce032509	9bec403e03e1a2cc	fast!=ident bits
-    metrics	5	0.001500	0.001511	1.008	1.001	1.110	0.001486	0.001510	0.001487	0.001665	ec63266074ceab42	2321a95d3439fc2b	fast!=ident bits
-    gemm	5	0.000070	0.000061	0.881	0.393	0.919	0.000068	0.000154	0.000061	0.000064	c751624f62b9f822	79adfe2dd5bd57e6	fast!=ident bits
-
-=== done === 21:26:14
-artifacts in /root/mojolearn/bench/results/e1/2026-09-02_211918-mojolearn-e2-nv
+=== done === 07:31:08
+artifacts in /root/mojolearn/bench/results/e1/2026-09-03_073012-mojolearn-e2-nv
 next: fetch this directory beside the other machine's and run
   python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
   python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

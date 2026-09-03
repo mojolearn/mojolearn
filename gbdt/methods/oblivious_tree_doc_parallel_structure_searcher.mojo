@@ -387,8 +387,15 @@ def fit_oblivious_tree_structure_traced(
         ) else create_fold_based_subsets(
             ctx, max_depth, target, fold_layout
         )
+        # DEVIATION 126, LIFTED 2026-09-03. This call omitted `fold_count`,
+        # so the calcer's helpers were built at the default 1 while the
+        # layout above was built at the fold count, and the consistency
+        # check below raised on every fold arm. The constructor has always
+        # accepted the argument and forwarded it to `PolicyScoreHelper`;
+        # nothing was hard-coded and nothing needed rewriting. The subsets
+        # branch immediately above already took the fold path.
         var calcer_new = ScoresCalcerOnCompressedDataSet(
-            ctx, blocks, layout, n_rows, max_depth, global_ids
+            ctx, blocks, layout, n_rows, max_depth, global_ids, fold_count
         )
         pool.append(
             PointwiseTreeWorkspace(

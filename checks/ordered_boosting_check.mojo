@@ -972,7 +972,15 @@ def main() raises:
         )
         bad += 1
 
+    # O7b, REWRITTEN 2026-09-03. This arm used to assert that SolarL2 with
+    # folds RAISED "DEVIATION 126": the calcer was constructed without a
+    # fold count, so its helpers were built at 1 while the layout was built
+    # at the fold count, and the consistency check refused. The call site
+    # now passes `fold_count`, so the arm asserts what it was always meant
+    # to: A FOLD-BASED TREE GROWS. A supported score function plus folds is
+    # no longer a refusal.
     var msg_b = String("")
+    var nsplits_b = -1
     try:
         var w2 = ctx.enqueue_create_buffer[DType.float32](n_docs)
         var t2 = ctx.enqueue_create_buffer[DType.float32](n_docs)
@@ -980,22 +988,27 @@ def main() raises:
         ctx.enqueue_memset(t2, Float32(1.0))
         ctx.synchronize()
         var pool_b = List[PointwiseTreeWorkspace]()
-        _ = fit_oblivious_tree_structure(
+        var sp_b = fit_oblivious_tree_structure(
             ctx, lay2, N_ROWS, MAX_DEPTH, d_ci2, w2^, t2^, SM_COUNT,
             Float32(1.0), SCORE_FUNCTION_SOLAR_L2, pool_b, folds=folds,
         )
+        nsplits_b = len(sp_b)
     except e:
         msg_b = String(e)
-    if msg_b.find("DEVIATION 126") < 0:
+    if msg_b != "":
         print(
-            "FAIL O7: SolarL2 with folds did not reach DEVIATION 126 (the"
-            " calcer's hard-coded fold count); got:", msg_b,
+            "FAIL O7: SolarL2 with folds must now GROW A TREE, not raise;"
+            " got:", msg_b,
         )
+        bad += 1
+    elif nsplits_b < 1:
+        print("FAIL O7: SolarL2 with folds grew no splits at all")
         bad += 1
 
     # the CONTROL: no folds, and the SAME score function L2 must get past
     # the ordered-boosting guard and past DEVIATION 126
     var msg_c = String("")
+    var nsplits_c = -1
     try:
         var w3 = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
         var t3 = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
@@ -1003,10 +1016,11 @@ def main() raises:
         ctx.enqueue_memset(t3, Float32(1.0))
         ctx.synchronize()
         var pool_c = List[PointwiseTreeWorkspace]()
-        _ = fit_oblivious_tree_structure(
+        var sp_c = fit_oblivious_tree_structure(
             ctx, lay2, N_ROWS, MAX_DEPTH, d_ci2, w3^, t3^, SM_COUNT,
             Float32(1.0), SCORE_FUNCTION_L2, pool_c,
         )
+        nsplits_c = len(sp_c)
     except e:
         msg_c = String(e)
     if msg_c.find("ordered boosting") >= 0 or msg_c.find("DEVIATION 126") >= 0:
@@ -1019,8 +1033,13 @@ def main() raises:
         failures += 1
     else:
         print(
-            "  ok   O7 -- 4-of-7 refusal and DEVIATION 126 both fire with"
-            " folds, neither fires without",
+            "  ok   O7 -- the 4-of-7 score refusal fires with folds and not"
+            " without; A FOLD-BASED TREE GROWS at FoldCount 12 (",
+            nsplits_b, "splits, against", nsplits_c,
+            "for the single-task control at the same depth ). The split"
+            " counts are NOT required to match: the fold arm scores each"
+            " split on a different partition of the data, which is the"
+            " point of ordered scoring.",
         )
 
     if failures == 0:

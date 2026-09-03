@@ -230,9 +230,14 @@ tree.
 
 Three things stood between a fold-based TREE and this page. Two are now gone:
 
-* ~~`PolicyScoreHelper` hard-codes `foldCount = 1` at three sites~~ **CLOSED**
-  (DEVIATION 126). The calcer carries `fold_count`; the differential still
-  stands at 288 of 288.
+* ~~`PolicyScoreHelper` hard-codes `foldCount = 1`~~ **CLOSED FOR REAL
+  2026-09-03** (DEVIATION 126). It was never a hard-coding: the calcer has
+  always taken `fold_count` and forwarded it, and the doc-parallel searcher
+  simply omitted the argument at construction, so the helpers were built at
+  1 while the layout was built at 12 and the consistency check refused. One
+  argument. `check-ordered-boosting` O7 now asserts that A FOLD-BASED TREE
+  GROWS at FoldCount 12 instead of asserting the refusal, and all seven
+  gates pass. The differential still stands at 288 of 288.
 * The fold arm is wired into the DOC-PARALLEL searcher, **which upstream
   cannot have folds at all** (DEVIATION 127). It belongs in
   `oblivious_tree_structure_searcher.mojo`, which now exists. Three lines, and
