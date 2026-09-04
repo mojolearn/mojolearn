@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Public UMAP boundary; graph construction is available, layout is not."""
+"""End-to-end host-list UMAP surface for the supported 2D/3D slice."""
 
 from max.gpu.host import DeviceContext
 from neighbors.estimator import knn_search
 from umap.graph import FuzzySimplicialGraph, fuzzy_simplicial_graph
+from umap.optimizer import optimize_layout
 from umap.params import UMAPParams
+from umap.spectral_init import spectral_initialize
 
 
 def fuzzy_graph_from_data(
@@ -52,12 +54,36 @@ def fit_transform(
     n_samples: Int,
     n_features: Int,
     params: UMAPParams,
-) raises:
+) raises -> List[Float32]:
+    """Exact k-NN → fuzzy graph → spectral init → serial UMAP optimizer.
+
+    FAST currently uses the same serial optimizer as IDENTICAL and makes no
+    speed claim. Its k-NN and eigensolver retain their existing FAST kernels;
+    IDENTICAL retains their cross-vendor numeric contracts and the optimizer's
+    stable host update order.
+    """
     params.validate(n_samples)
     if n_features < 1 or len(x_rowmajor) != n_samples * n_features:
         raise Error("UMAP input does not match its declared shape")
-    raise Error(
-        "UMAP fit_transform REFUSED: fuzzy graph construction exists, but "
-        "spectral initialization, negative-sampling optimization, and the "
-        "output layout are not implemented"
+    if params.n_components != 2 and params.n_components != 3:
+        raise Error("UMAP fit_transform currently supports only 2D or 3D")
+    if params.min_dist != Float32(0.1) or params.spread != Float32(1.0):
+        raise Error(
+            "UMAP fit_transform currently supports only min_dist=0.1 and "
+            "spread=1.0; fitting arbitrary a/b curves is not implemented"
+        )
+    if n_samples < 2 * params.n_components + 4:
+        raise Error("UMAP fit_transform has too few samples for spectral init")
+    var graph = fuzzy_graph_from_data(
+        ctx, x_rowmajor, n_samples, n_features, params
+    )
+    var initial = spectral_initialize(
+        ctx, graph.copy(), params.n_components, params.random_seed
+    )
+    var epochs = params.n_epochs
+    if epochs == 0:
+        epochs = 200
+    return optimize_layout(
+        initial^, graph.weights, n_samples, params.n_components, epochs,
+        seed=params.random_seed,
     )
