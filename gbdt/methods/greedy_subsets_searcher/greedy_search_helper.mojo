@@ -3358,6 +3358,94 @@ def enqueue_symmetric_partition_update(
     )
 
 
+struct TSynchronizedSymmetricLevelState(Movable):
+    """Persistent workspace and host winner boundary for tensor search.
+
+    This state is used only by the opt-in synchronized driver. The baseline
+    owns its existing `List[TTreeWorkspace]` and retains one drain per tree.
+    """
+
+    var layout: CompressedIndexLayout
+    var workspace: List[TTreeWorkspace]
+    var max_depth: Int
+    var level: Int
+    var live_leaves: Int
+
+    def __init__(
+        out self,
+        ctx: DeviceContext,
+        var layout: CompressedIndexLayout,
+        var blocks: List[PolicyBlock],
+        n_rows: Int,
+        stat_count: Int,
+        max_depth: Int,
+        acc_live: Bool,
+    ) raises:
+        if max_depth < 1:
+            raise Error("synchronized symmetric state needs positive depth")
+        self.workspace = List[TTreeWorkspace]()
+        self.workspace.append(TTreeWorkspace(
+            ctx, layout.copy(), blocks^, n_rows, stat_count, max_depth,
+            acc_live,
+        ))
+        self.layout = layout^
+        self.max_depth = max_depth
+        self.level = 0
+        self.live_leaves = 1
+
+    def drain_winner(
+        mut self, ctx: DeviceContext
+    ) raises -> Tuple[Float32, UInt32]:
+        """Drain exactly the current winner record into persistent landing buffers."""
+        if self.level < 0 or self.level >= self.max_depth:
+            raise Error("synchronized symmetric level is out of range")
+        ref workspace = self.workspace[0]
+        workspace.h_wbf.unsafe_ptr().unsafe_store(
+            self.level, DEAD_DEVICE_POISON
+        )
+        ctx.enqueue_copy(
+            dst_ptr=workspace.h_wsc.unsafe_ptr(),
+            src_buf=workspace.winners_score,
+        )
+        ctx.enqueue_copy(
+            dst_ptr=workspace.h_wbf.unsafe_ptr(),
+            src_buf=workspace.winners_bf,
+        )
+        ctx.synchronize()
+        var bin_feature = workspace.h_wbf.unsafe_ptr().unsafe_load(self.level)
+        if bin_feature == DEAD_DEVICE_POISON:
+            raise Error("synchronized symmetric winner copy did not complete")
+        return (
+            workspace.h_wsc.unsafe_ptr().unsafe_load(self.level),
+            bin_feature,
+        )
+
+    def accept_current_winner(
+        mut self,
+        best_score: Float32,
+        best_bin_feature: UInt32,
+        mut out_splits: List[TBinarySplit],
+    ) raises -> Bool:
+        """Apply shared gates, then advance persistent level ownership."""
+        if not accept_symmetric_level_winner(
+            self.layout, best_score, best_bin_feature,
+            self.layout.hist_cells, self.level, self.live_leaves, out_splits,
+        ):
+            return False
+        self.level += 1
+        self.live_leaves *= 2
+        return True
+
+    def drain_and_accept_current_winner(
+        mut self,
+        ctx: DeviceContext,
+        mut out_splits: List[TBinarySplit],
+    ) raises -> Bool:
+        """Bounded synchronized boundary used between two tensor levels."""
+        var winner = self.drain_winner(ctx)
+        return self.accept_current_winner(winner[0], winner[1], out_splits)
+
+
 def run_tree_layout_traced[
     hist2_smem_mode: Int = HIST2_SMEM_MODE
 ](
