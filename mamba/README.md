@@ -8,9 +8,9 @@ state, not trainable estimator or complete language-model APIs.
 
 | family | forward | decode/continuation | Python binding | backward |
 |---|---|---|---|---|
-| Mamba 1 | implemented | implemented | implemented | kernels and host oracle exist; no whole-pass composer or public API |
-| Mamba 2 | implemented | implemented | implemented | routing/workspace scaffold only |
-| Mamba 3 | implemented | implemented | implemented | routing/workspace scaffold only |
+| Mamba 1 | implemented | implemented | implemented | complete whole-pass validation for public gradients |
+| Mamba 2 | implemented | implemented | implemented | complete for short prefill; decode/window backward is unsupported |
+| Mamba 3 | implemented | implemented | implemented | active partial implementation with independent gradient oracles |
 
 All forward families expose `fast`, `deterministic`, and `identical` builds.
 FAST is allowed to differ from the IDENTICAL oracle; recording that difference
@@ -37,24 +37,15 @@ tools/with_identical_mode.sh pixi run check-mamba3-block
 - [Mamba 2 contract](IDENTICAL_MAMBA2_CONTRACT.md)
 - [Mamba 3 contract](IDENTICAL_MAMBA3_CONTRACT.md)
 - [Corpus format and cross-check](corpus/README.md)
-- [Historical parity ledger](../archive/evidence/mamba/FEATURE_PARITY.md)
-- [Historical backward plans](../archive/plans/mamba/)
 
-The contracts define the profile. Historical plans and ledgers explain how it
-was reached but are not the current status source.
+The contracts define the profile; executable checks are the status source.
 
 ## Backward implementation order
 
-1. Compose the existing Mamba 1 backward kernels into one end-to-end pass.
-2. Add an independent whole-pass oracle, non-finite refusal, and the MB1–MB10
-   separating gates.
-3. Add a native binding and Python API only after those gates close.
-4. Implement Mamba 2 backward from an independent oracle.
-5. Implement Mamba 3 backward last.
-
-Do not infer Mamba 2/3 backward capability from their compile probes. Those
-probes currently validate routing and workspace topology, not backward
-arithmetic.
+1. Close the remaining Mamba 3 public gradients against independent oracles.
+2. Define a differentiable continuation-state contract before implementing
+   Mamba 2 decode/window backward.
+3. Re-run IDENTICAL certification on named NVIDIA and AMD devices.
 
 ## Independent gradient oracle
 

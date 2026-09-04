@@ -5,10 +5,10 @@ separates API availability, packaging, and numerical certification. A feature
 being importable does not mean that every hardware column or numeric mode has
 been certified.
 
-For the underlying records, see [archived evidence](archive/evidence/),
-[identity-path ledger](IDENTITY_PATHS.md), and [benchmark results](bench/results/).
-Those records retain dates, commits, devices, cards, sabotage runs, and known
-limitations; this page does not repeat their history.
+For the enforced identity surface, see the
+[identity-path ledger](IDENTITY_PATHS.md). Fresh certification artifacts name
+their commit, device, mode, and limitations; stale narrative reports are not a
+support source.
 
 ## Numeric modes
 
