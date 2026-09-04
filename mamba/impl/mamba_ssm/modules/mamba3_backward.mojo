@@ -4,8 +4,8 @@
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
 
-from checks.numerics import ftz, identical_div, identical_exp, identical_mul_add, identical_sigmoid, identical_silu, identical_tanh, portable_cosf, portable_sinf
-from mamba.checks.mamba3_fixture import M3_A_FLOOR, M3_D_STATE, M3_HEADDIM, M3_NUM_ROPE_ANGLES, M3_PI, Mamba3Dims
+from checks.numerics import ftz, identical_div, identical_exp, identical_mul_add, identical_rsqrt, identical_sigmoid, identical_silu, identical_tanh, portable_cosf, portable_sinf
+from mamba.checks.mamba3_fixture import M3_A_FLOOR, M3_D_STATE, M3_HEADDIM, M3_NUM_ROPE_ANGLES, M3_PI, M3_RMS_EPS, Mamba3Dims
 from mamba.impl.transformers.models.mamba.modeling_mamba import pinned_mul
 
 comptime M3_BWD_TPB = 128
@@ -558,6 +558,30 @@ def mamba3_a_heavy_tail_backward_kernel(d_raw:MutPointer[Float32,MutAnyOrigin],d
 def mamba3_backward_a_heavy_tail_into(ctx:DeviceContext,mut d_raw:DeviceBuffer[DType.float32],mut d_a:DeviceBuffer[DType.float32],mut in_proj:DeviceBuffer[DType.float32],m:Int,dims:Mamba3Dims) raises:
     var cells=m*dims.nheads
     ctx.enqueue_function[mamba3_a_heavy_tail_backward_kernel](d_raw.unsafe_ptr(),d_a.unsafe_ptr(),in_proj.unsafe_ptr(),Int32(cells),Int32(dims.nheads),Int32(dims.d_in_proj()),Int32(dims.col_a()),grid_dim=(_grid(cells),1,1),block_dim=(M3_BWD_TPB,1,1))
+
+
+def mamba3_bcnorm_backward_kernel(dx:MutPointer[Float32,MutAnyOrigin],dwrow:MutPointer[Float32,MutAnyOrigin],dy:MutPointer[Float32,MutAnyOrigin],raw:MutPointer[Float32,MutAnyOrigin],weight:MutPointer[Float32,MutAnyOrigin],m_in:Int32,nh_in:Int32,dip_in:Int32,col_in:Int32):
+    var t=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if t>=Int(m_in):return
+    var ss=Float32(0.0)
+    for n in range(M3_D_STATE):
+        var x=ftz(raw.unsafe_load(t*Int(dip_in)+Int(col_in)+n));ss=ftz(identical_mul_add(x,x,ss))
+    var r=ftz(identical_rsqrt(ftz(ftz(identical_div(ss,Float32(M3_D_STATE)))+M3_RMS_EPS)))
+    var dot=Float32(0.0)
+    for n in range(M3_D_STATE):
+        var g=Float32(0.0)
+        for h in range(Int(nh_in)):g=ftz(g+ftz(dy.unsafe_load((t*Int(nh_in)+h)*M3_D_STATE+n)))
+        var x=ftz(raw.unsafe_load(t*Int(dip_in)+Int(col_in)+n));var gw=ftz(pinned_mul(g,ftz(weight.unsafe_load(n))))
+        dwrow.unsafe_store(t*M3_D_STATE+n,ftz(pinned_mul(g,ftz(pinned_mul(x,r)))));dot=ftz(identical_mul_add(gw,x,dot))
+    var corr=ftz(pinned_mul(ftz(pinned_mul(r,r)),ftz(identical_div(dot,Float32(M3_D_STATE)))))
+    for n in range(M3_D_STATE):
+        var g=Float32(0.0)
+        for h in range(Int(nh_in)):g=ftz(g+ftz(dy.unsafe_load((t*Int(nh_in)+h)*M3_D_STATE+n)))
+        var x=ftz(raw.unsafe_load(t*Int(dip_in)+Int(col_in)+n));dx.unsafe_store(t*M3_D_STATE+n,ftz(pinned_mul(r,ftz(ftz(pinned_mul(g,ftz(weight.unsafe_load(n))))-ftz(pinned_mul(x,corr))))))
+
+
+def mamba3_backward_bcnorm_into(ctx:DeviceContext,mut dx:DeviceBuffer[DType.float32],mut dwrow:DeviceBuffer[DType.float32],mut dy:DeviceBuffer[DType.float32],mut raw:DeviceBuffer[DType.float32],mut weight:DeviceBuffer[DType.float32],m:Int,dims:Mamba3Dims,col:Int) raises:
+    ctx.enqueue_function[mamba3_bcnorm_backward_kernel](dx.unsafe_ptr(),dwrow.unsafe_ptr(),dy.unsafe_ptr(),raw.unsafe_ptr(),weight.unsafe_ptr(),Int32(m),Int32(dims.nheads),Int32(dims.d_in_proj()),Int32(col),grid_dim=(_grid(m),1,1),block_dim=(M3_BWD_TPB,1,1))
 
 
 def mamba3_s17_reverse_state_kernel(

@@ -461,6 +461,8 @@ def main() raises:
     _write_f32(dump_dir + "/grad.conv1d.weight.f32", mamba_download(ctx, conv_backward.d_w, dims.conv_dim()*4))
     _write_f32(dump_dir + "/grad.conv1d.bias.f32", mamba_download(ctx, conv_backward.d_b, dims.conv_dim()))
     _write_f32(dump_dir + "/grad.partial.in_proj.packed.f32", mamba_download(ctx, tail.d_in_proj, m*dims.d_in_proj()))
+    _write_f32(dump_dir + "/operand.in_proj.norm.out.f32", mamba_download(ctx, stages.norm_out, m*dims.d_model))
+    _write_f32(dump_dir + "/grad.diagnostic.in_proj.norm_operand.f32", mamba_download(ctx, stages.norm_out, m*dims.d_model))
     _write_f32(dump_dir + "/grad.stage.norm.out.f32", mamba_download(ctx, tail.d_norm, m*dims.d_model))
     _write_f32(dump_dir + "/grad.in_proj.weight.f32", mamba_download(ctx, tail.d_w_in, dims.d_in_proj()*dims.d_model))
     _write_f32(dump_dir + "/grad.x.f32", mamba_download(ctx, tail.d_block_x, m*dims.d_model))
@@ -501,10 +503,11 @@ def main() raises:
             "\"partial.C.total\",\"partial.silu.x.total\","
             "\"partial.conv.input\",\"conv1d.weight\",\"conv1d.bias\","
             "\"partial.in_proj.packed\",\"stage.norm.out\",\"in_proj.weight\","
+            "\"diagnostic.in_proj.norm_operand\","
             "\"x\",\"block_norm.weight\","
             "\"partial.dt.from_xd\",\"partial.dt.merged\","
             "\"partial.dt_raw.merged\",\"partial.dt_bias.merged\","
-            "\"dt_bias\"]}\n"
+            "\"dt_bias\"],\"operands\":[\"in_proj.norm.out\"]}\n"
         )
     print(
         "MAMBA2 BACKWARD: all ten public parameter/input leaves emitted for"

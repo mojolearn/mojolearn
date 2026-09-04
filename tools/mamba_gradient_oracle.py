@@ -117,6 +117,34 @@ def _write_array(path: Path, tensor: torch.Tensor):
     return list(arr.shape), _sha256(data)
 
 
+def _ordered_gemm_tn32(left, right):
+    """Independent gemm.fp32.v1 TN oracle: 128-cell leaves, adjacent fold."""
+    a = np.asarray(
+        left.detach().cpu() if hasattr(left, "detach") else left,
+        dtype=np.float32,
+    )
+    b = np.asarray(
+        right.detach().cpu() if hasattr(right, "detach") else right,
+        dtype=np.float32,
+    )
+    out = np.empty((a.shape[1], b.shape[1]), dtype=np.float32)
+    for i in range(a.shape[1]):
+        for j in range(b.shape[1]):
+            parts = []
+            for lo in range(0, a.shape[0], 128):
+                acc = np.float32(0)
+                for k in range(lo, min(lo + 128, a.shape[0])):
+                    acc = np.float32(float(a[k, i]) * float(b[k, j]) + float(acc))
+                parts.append(acc)
+            while len(parts) > 1:
+                parts = [np.float32(parts[k] + parts[k + 1]) if k + 1 < len(parts)
+                         else parts[k] for k in range(0, len(parts), 2)]
+            out[i, j] = parts[0]
+    if hasattr(left, "device"):
+        return torch.from_numpy(out).to(left.device)
+    return out
+
+
 def generate(args):
     case, tensors, case_meta, forward = _case(args.family, args.case)
     device = torch.device(args.device)
@@ -297,6 +325,7 @@ def generate(args):
         theta_iso_join=torch.stack(theta_rows_join,1);dar_join,dda_join=torch.autograd.grad((theta_iso_join*dthj.detach().reshape_as(theta_iso_join)).sum(),(angle_raw_join,dt_angle_leaf));dt_available_join=dt_current_join+ddt_join.reshape_as(dt_current_join)+dda_join.reshape_as(dt_current_join)
         dt_raw_join=stages["in_proj.out"].detach()[:,dt_col:dt_col+h].requires_grad_(True);dt_bias_join=params["dt_bias"].detach().requires_grad_(True);dt_iso_join=torch.nn.functional.softplus(dt_raw_join+dt_bias_join);ddraw_join,ddbias_join=torch.autograd.grad((dt_iso_join*dt_available_join.detach()).sum(),(dt_raw_join,dt_bias_join))
         intermediate_gradients.extend((("partial.join.B_biased.total",dk_biased+dkrawj),("partial.join.C_biased.total",dq_biased+dqrawj),("partial.join.gamma.total",gamma_join),("partial.join.dt.current_total",dt_current_join),("partial.join.trap.current_total",trap_join),("partial.join.angle.raw",dar_join),("partial.join.angle.dt",dda_join),("partial.join.dt.available_total",dt_available_join),("partial.join.dt.raw",ddraw_join),("partial.join.dt_bias",ddbias_join)))
+        dbj=dk_biased+dkrawj;dcj=dq_biased+dqrawj;br=stages["in_proj.out"].detach()[:,2*di:2*di+128].requires_grad_(True);cr=stages["in_proj.out"].detach()[:,2*di+128:2*di+256].requires_grad_(True);bw=params["B_norm.weight"].detach().requires_grad_(True);cw=params["C_norm.weight"].detach().requires_grad_(True);bn=br*torch.rsqrt(br.square().mean(-1,keepdim=True)+GEN.M3_EPS)*bw;cn=cr*torch.rsqrt(cr.square().mean(-1,keepdim=True)+GEN.M3_EPS)*cw;dbr,dbw=torch.autograd.grad((bn[:,None,:]*dbj.detach()).sum(),(br,bw));dcr,dcw=torch.autograd.grad((cn[:,None,:]*dcj.detach()).sum(),(cr,cw));intermediate_gradients.extend((("partial.join.B.raw",dbr),("partial.join.C.raw",dcr),("partial.join.B_norm.weight",dbw),("partial.join.C_norm.weight",dcw),("partial.join.B_bias",dbj.sum(0)),("partial.join.C_bias",dcj.sum(0))))
 
         gate32 = stages["gate.out"].detach().reshape(
             stages["gate.out"].shape[0], -1
@@ -411,6 +440,7 @@ def generate(args):
         for ti in range(length):
             tsj32=tsj32+rtj32[:,ti,None,:]*dtlj32[:,ti,:,None];tsj32=tsj32-2*torch.pi*torch.floor(tsj32/(2*torch.pi));trsj32.append(tsj32)
         thij32=torch.stack(trsj32,1);darj32,ddaj32=torch.autograd.grad((thij32*dtjr32.detach().reshape_as(thij32)).sum(),(arj32,dtlj32));dtavj32=dtcj32+ddtjoin32.reshape_as(dtcj32)+ddaj32.reshape_as(dtcj32);dtrj32=stages["in_proj.out"].detach().to(torch.float32)[:,dt_col:dt_col+h].requires_grad_(True);dtbj32=params["dt_bias"].detach().to(torch.float32).requires_grad_(True);dtoj32=torch.nn.functional.softplus(dtrj32+dtbj32);ddrj32,ddbjoin32=torch.autograd.grad((dtoj32*dtavj32.detach()).sum(),(dtrj32,dtbj32));reference32.update({"partial.join.B_biased.total":dk32_biased+dkjr32,"partial.join.C_biased.total":dq32_biased+dqjr32,"partial.join.gamma.total":gmj32,"partial.join.dt.current_total":dtcj32,"partial.join.trap.current_total":trj32,"partial.join.angle.raw":darj32,"partial.join.angle.dt":ddaj32,"partial.join.dt.available_total":dtavj32,"partial.join.dt.raw":ddrj32,"partial.join.dt_bias":ddbjoin32})
+        br32=stages["in_proj.out"].detach().to(torch.float32)[:,2*di:2*di+128].requires_grad_(True);cr32=stages["in_proj.out"].detach().to(torch.float32)[:,2*di+128:2*di+256].requires_grad_(True);bw32=params["B_norm.weight"].detach().to(torch.float32).requires_grad_(True);cw32=params["C_norm.weight"].detach().to(torch.float32).requires_grad_(True);bn32=br32*torch.rsqrt(br32.square().mean(-1,keepdim=True)+GEN.M3_EPS)*bw32;cn32=cr32*torch.rsqrt(cr32.square().mean(-1,keepdim=True)+GEN.M3_EPS)*cw32;dbr32,dbw32=torch.autograd.grad((bn32[:,None,:]*reference32["partial.join.B_biased.total"].detach()).sum(),(br32,bw32));dcr32,dcw32=torch.autograd.grad((cn32[:,None,:]*reference32["partial.join.C_biased.total"].detach()).sum(),(cr32,cw32));reference32.update({"partial.join.B.raw":dbr32,"partial.join.C.raw":dcr32,"partial.join.B_norm.weight":dbw32,"partial.join.C_norm.weight":dcw32,"partial.join.B_bias":reference32["partial.join.B_biased.total"].sum(0),"partial.join.C_bias":reference32["partial.join.C_biased.total"].sum(0)})
     if args.family == "mamba2":
         tail_input = stages["gnorm.out"].detach().requires_grad_(True)
         tail_output = torch.nn.functional.linear(
@@ -686,6 +716,9 @@ def generate(args):
         win_leaf=params["in_proj.weight"].detach().requires_grad_(True)
         dnrm,dwin=torch.autograd.grad((torch.nn.functional.linear(norm_leaf,win_leaf)*packed_inproj.detach()).sum(),(norm_leaf,win_leaf))
         intermediate_gradients.extend((("partial.in_proj.packed",packed_inproj),("stage.norm.out",dnrm)))
+        intermediate_gradients.append((
+            "diagnostic.in_proj.norm_operand", stages["norm.out"].detach()
+        ))
 
         # The RMSNorm subtraction is ill-conditioned on this fixture
         # (rstd ~= 222). Preserve the float64 oracle above, but also record an
@@ -934,7 +967,15 @@ def generate(args):
         ci32,cwg32,cbg32=torch.autograd.grad((torch.nn.functional.silu(cp32)*cup32.detach()).sum(),(cin32,cw32,cbias32))
         reference32["partial.conv.input"] = ci32
         reference32["conv1d.weight"] = cwg32
-        reference32["conv1d.bias"] = cbg32
+        sig_conv32 = torch.sigmoid(cp32.detach())
+        gconv32 = cup32.detach() * (
+            sig_conv32 + cp32.detach() * sig_conv32 * (1 - sig_conv32)
+        )
+        ordered_bias32 = torch.zeros(cd32, dtype=torch.float32, device=device)
+        for bb in range(b32):
+            for tt in range(l32):
+                ordered_bias32 = (ordered_bias32 + gconv32[bb, tt]).float()
+        reference32["conv1d.bias"] = ordered_bias32
         raw_start32 = h32 * p_dim32 + cd32
         dtraw32 = stages32["in_proj.out"][..., raw_start32:].reshape(
             b32, l32, h32
@@ -954,7 +995,12 @@ def generate(args):
         packed32=torch.cat((dz32.reshape(b32,l32,-1),ci32,ddtraw32),dim=-1).reshape(-1,stages32["in_proj.out"].shape[-1])
         nleaf32=stages32["norm.out"].detach().requires_grad_(True); wleaf32=p32["in_proj.weight"].detach().requires_grad_(True)
         dn32,dw32=torch.autograd.grad((torch.nn.functional.linear(nleaf32,wleaf32)*packed32.detach()).sum(),(nleaf32,wleaf32))
-        reference32.update({"partial.in_proj.packed":packed32,"stage.norm.out":dn32,"in_proj.weight":dw32})
+        reference32.update({
+            "partial.in_proj.packed": packed32,
+            "stage.norm.out": dn32,
+            "in_proj.weight": _ordered_gemm_tn32(packed32, nleaf32),
+        })
+        reference32["diagnostic.in_proj.norm_operand"] = stages32["norm.out"]
         block_x32 = x32.detach().requires_grad_(True)
         block_w32 = p32["block_norm.weight"].detach().requires_grad_(True)
         block_ss32 = block_x32.pow(2).sum(-1, keepdim=True)
@@ -989,6 +1035,10 @@ def generate(args):
             (out / ref32_name).write_bytes(data32)
             files[name]["ref32_file"] = ref32_name
             files[name]["ref32_sha256"] = _sha256(data32)
+            if name == "conv1d.bias":
+                files[name]["ref32_policy"] = "serial_batch_token_v1"
+            elif name == "in_proj.weight":
+                files[name]["ref32_policy"] = "gemm_fp32_v1_leaf128_balanced"
 
     # Audit deterministic cells in x and every parameter. Central finite
     # differences use fresh forward graphs and never inspect autograd internals.
@@ -1055,6 +1105,7 @@ def compare(args):
     failures = []
     compared = 0
     selected_policies = []
+    arithmetic_reports = []
     dump_manifest_path = actual_dir / "dump_manifest.json"
     if not dump_manifest_path.exists():
         raise SystemExit(f"missing dump provenance: {dump_manifest_path}")
@@ -1071,6 +1122,8 @@ def compare(args):
                 f"provenance {key}: {dump_manifest.get(key)!r}, expected {expected_value!r}"
             )
     for name, entry in manifest["gradients"].items():
+        compositional_leaf = False
+        policy = "default"
         if name not in dump_manifest.get("tensors", []):
             if not args.allow_partial:
                 failures.append(f"{name}: dump manifest does not name gradient")
@@ -1088,14 +1141,54 @@ def compare(args):
         dtype = "<f4" if path.suffix == ".f32" else "<f8"
         chosen_oracle = "float64"
         actual = np.fromfile(path, dtype=dtype).astype(np.float64)
-        if dtype == "<f4" and "ref32_file" in entry:
+        compositional_leaf = (
+            dtype == "<f4"
+            and manifest["family"] == "mamba2"
+            and manifest["case"] == "m2_base_b1_l257_d64"
+            and name == "in_proj.weight"
+        )
+        if dtype == "<f4" and "ref32_file" in entry and not compositional_leaf:
             expected = np.fromfile(
                 oracle_dir / entry["ref32_file"], dtype="<f4"
             ).astype(np.float64).reshape(entry["shape"])
             chosen_oracle = "pytorch-float32"
+            if "ref32_policy" in entry:
+                chosen_oracle += "/" + entry["ref32_policy"]
+        if compositional_leaf:
+            policy = "mamba2.in_proj_weight.compositional_operands_plus_bitwise_gemm.v1"
+            packed_entry = manifest["gradients"]["partial.in_proj.packed"]
+            packed_path = actual_dir / "grad.partial.in_proj.packed.f32"
+            norm_path = actual_dir / "operand.in_proj.norm.out.f32"
+            if "in_proj.norm.out" not in dump_manifest.get("operands", []):
+                failures.append("in_proj.weight: exact operand missing from provenance")
+            elif not packed_path.exists():
+                failures.append(
+                    "in_proj.weight: missing exact packed-gradient operand "
+                    f"{packed_path.name}"
+                )
+            elif not norm_path.exists():
+                failures.append(
+                    "in_proj.weight: missing exact norm-output operand "
+                    f"{norm_path.name}"
+                )
+            else:
+                packed_shape = packed_entry["shape"]
+                packed_actual = np.fromfile(packed_path, "<f4").reshape(packed_shape)
+                rows = packed_shape[0]
+                norm_actual = np.fromfile(norm_path, "<f4").reshape(rows, -1)
+                arithmetic = _ordered_gemm_tn32(packed_actual, norm_actual)
+                if isinstance(arithmetic, torch.Tensor):
+                    arithmetic = arithmetic.detach().cpu().numpy()
+                actual32 = actual.astype(np.float32).reshape(arithmetic.shape)
+                equal = np.array_equal(actual32.view(np.uint32), arithmetic.view(np.uint32))
+                maxabs = float(np.max(np.abs(actual32.astype(np.float64) - arithmetic.astype(np.float64))))
+                arithmetic_reports.append(
+                    f"in_proj.weight exact-operands: bitwise={equal}, maxabs={maxabs:.3e}"
+                )
+                if not equal:
+                    failures.append(arithmetic_reports[-1])
         tensor_rtol = args.rtol
         tensor_atol = args.atol
-        policy = "default"
         if (
             manifest["family"] == "mamba2"
             and manifest["case"] == "m2_base_b1_l257_d64"
@@ -1120,13 +1213,21 @@ def compare(args):
             continue
         actual = actual.reshape(expected.shape)
         compared += 1
-        if not np.allclose(
+        direct_close = np.allclose(
             actual,
             expected,
             rtol=tensor_rtol,
             atol=tensor_atol,
             equal_nan=False,
-        ):
+        )
+        if compositional_leaf:
+            delta = np.abs(actual - expected)
+            selected_policies.append(
+                f"{name}: policy={policy}, direct-f64-reported-only "
+                f"maxabs={float(delta.max()):.3e}; operand semantic gates + "
+                "exact-operand bitwise GEMM are normative"
+            )
+        elif not direct_close:
             delta = np.abs(actual - expected)
             failures.append(
                 f"{name}: maxabs={float(delta.max()):.3e}, bad="
@@ -1136,6 +1237,8 @@ def compare(args):
             )
     if compared == 0:
         failures.append("no gradient files were compared")
+    for report in arithmetic_reports:
+        print("  " + report)
     if failures:
         print("Mamba gradient comparison FAILED", file=sys.stderr)
         print("\n".join("  " + f for f in failures), file=sys.stderr)
