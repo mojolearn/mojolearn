@@ -152,7 +152,7 @@ Environment:
 Deviations recorded by this lane: 1850 (the sampled weight witness), 1851
 (the speed lane's own seed base), 1853 (the KV-cache restore between
 rounds), 1854 (the mamba decode row is the mamba prefill row at L=1).
-No pixi task; `bench/speed/SEQ_SPEED.md` has the procedure.
+No pixi task; `bench/speed/README.md` has the procedure.
 """
 
 from std.memory import bitcast
@@ -1166,7 +1166,7 @@ def main() raises:
         " the opponent does not: llama_refuse_bad_inputs /"
         " mamba_refuse_bad_inputs download every weight per call, and"
         " eager_attention_forward synchronizes per (batch, head). See"
-        " bench/speed/SEQ_SPEED.md."
+        " bench/speed/README.md."
     )
     # DEVIATION 1885 -- THE PRECISION CUT TRAVELS WITH THE NUMBER.
     #

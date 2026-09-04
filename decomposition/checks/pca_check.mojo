@@ -701,7 +701,7 @@ def check_covariance_is_symmetric() raises:
 # 4 x 4 PCA.
 #
 # So this part runs the real fit at 64 and at 128, and prints the result in a
-# form `bench/pca_wide_sklearn.py` re-derives from the SAME fixture with
+# form `decomposition/pca_wide_sklearn.py` re-derives from the SAME fixture with
 # `sklearn.decomposition.PCA`. sklearn is the ORACLE here and not a design
 # source: the design is cuML's `pcaFit` (`cuml/cpp/src/pca/pca.cuh:104`), and
 # sklearn only says whether the numbers are right.
@@ -720,7 +720,7 @@ comptime WIDE_TOP = 8
 
 
 def _wide_u01(row: Int, k: Int, salt: Int) -> Float64:
-    """splitmix64 -> [0, 1). Mirrored exactly in `bench/pca_wide_sklearn.py`."""
+    """splitmix64 -> [0, 1). Mirrored exactly in `decomposition/pca_wide_sklearn.py`."""
     var z = (
         UInt64(row) * 0x9E3779B97F4A7C15
         + UInt64(k + 1) * 0xBF58476D1CE4E5B9

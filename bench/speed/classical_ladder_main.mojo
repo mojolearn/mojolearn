@@ -26,7 +26,7 @@ so nobody knows whether there is a story. This file asks.
 ======================================== WHY A LADDER IS NOT A DATASET CHOICE
 The house rule (`never build to datasets`) forbids picking, dropping,
 deferring or tuning a benchmark dataset by whether it flatters us.
-`bench/speed/CLASSICAL_SPEED.md` adds that the lanes' fixture builders take a
+`bench/speed/README.md` adds that the lanes' fixture builders take a
 fixture id and not an `n`, so inventing a bigger one would be inventing a
 dataset.
 
@@ -131,7 +131,7 @@ Worked out here rather than guessed at run time. `n` is the row count.
       (16,000^3 / 3 = 1.4 x 10^12).
 
   There is no rung below 500 anywhere here. The sub-100-row regime already
-  has its measurement in `bench/speed/CLASSICAL_SPEED.md` and re-taking it
+  has its measurement in historical benchmark evidence and re-taking it
   would just be the same fixed-cost number under a new name.
 
 ============================================================ THE DATA, AND WHY
@@ -170,7 +170,7 @@ anyone could quietly switch to.
 The per-lane PARAMETERS (d, K, q, the bandwidth, the length scales, gamma,
 n_neighbors) are pinned as comptime constants below and set EXPLICITLY ON
 BOTH SIDES, never left to two libraries' defaults. That is the fairness rule
-`bench/speed/CLASSICAL_SPEED.md` already obeys.
+`bench/speed/README.md` requires.
 
 ===================================================== THE TWO ARMS AGREE ON DATA
 By REGENERATION plus a CHECKSUM, not by a dump. Both sides run the same

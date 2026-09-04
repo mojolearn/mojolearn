@@ -55,7 +55,7 @@ GATES:
       It is not a hypothetical limit. The peel loops in `compute_histogram_2`
       and `_4` were left divergent after the body was converged, and every
       gate in this file passed at block 128 AND at block 256, in both the
-      broken and the fixed version. `checks/pointwise_hist2_5bit_check.mojo`
+      broken and the fixed version. `checks/pointwise_hist2_check.mojo`
       caught it on its first run -- 115 wrong cells for `uint2`, 73 for
       `uint4` -- because eight of its threads share an inner histogram copy
       and the barrier is what holds their writes apart. `archive/reference/PORTING.md` 92.

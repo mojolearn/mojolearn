@@ -425,6 +425,46 @@ def check_ctr_train() raises:
         + String(" 'useless catFeature found')")
     )
 
+    # The public categorical surface promises exact dense integer codes.
+    # Int(Float32) used to make 1.5 silently alias category 1, while a hole
+    # made `max + 1` claim a category the fit never observed.
+    var fractional = x.copy()
+    fractional[0] = Float32(1.5)
+    var r4 = False
+    try:
+        _ = train(
+            ctx, fractional, y, n, CTRT_FEATURES, n_estimators=1,
+            cat_features=cat_flags,
+        )
+    except:
+        r4 = True
+    _expect_raise(failures, r4, String("a fractional categorical code"))
+
+    var sparse_codes = x.copy()
+    for r in range(n):
+        if sparse_codes[r] == Float32(1.0):
+            sparse_codes[r] = Float32(500.0)
+    var r5 = False
+    try:
+        _ = train(
+            ctx, sparse_codes, y, n, CTRT_FEATURES, n_estimators=1,
+            cat_features=cat_flags,
+        )
+    except:
+        r5 = True
+    _expect_raise(failures, r5, String("non-dense categorical codes"))
+
+    # Apply shares the same exact-code validator. Unseen integer categories
+    # remain valid and take the table's empty value; fractional aliases do not.
+    var bad_apply = x.copy()
+    bad_apply[0] = Float32(1.5)
+    var r6 = False
+    try:
+        _ = predict_floats(ctx, freq_model, bad_apply, n)
+    except:
+        r6 = True
+    _expect_raise(failures, r6, String("a fractional apply-time category"))
+
     # THE FOURTH REFUSAL IS GONE, AND ITS REMOVAL IS THE RESULT.
     #
     # `TCatFeatureParams.default()` used to raise here, because Borders is

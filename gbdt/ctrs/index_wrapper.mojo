@@ -5,14 +5,9 @@
 MIRRORS `catboost/cuda/cuda_util/kernel/index_wrapper.cuh` at CatBoost
 `54a8143a`, the whole file (30 lines).
 
-## Why it is here and not at its mirror address
-
-Its address is `gbdt/gpu_util/kernel/index_wrapper.mojo`, under the
-directory that mirrors `cuda_util`. That directory belongs to another lane
-this round. **Move this file there when the lanes rejoin**; nothing about
-it is CTR-specific, and `cuda_util`'s own gather/scatter/scan kernels
-(`ScatterWithMask`, `SegmentedScanAndScatterNonNegativeVector`) read the
-same packing.
+It lives with the CTR machinery that consumes the packed segment flag.
+Although CatBoost places the primitive under `cuda_util`, keeping the sole
+implementation here avoids a second wrapper and makes its ownership clear.
 
 ## The packing, which is not what it looks like
 

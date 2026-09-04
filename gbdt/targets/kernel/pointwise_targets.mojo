@@ -35,7 +35,7 @@ THE OBJECTIVE DOES NOT DECIDE THE LEAF ALONE. Four of the nine have a
 second derivative that is identically zero, and CatBoost gives those a
 GRADIENT or an EXACT leaf estimator rather than a Newton one
 (`catboost_options.cpp:113-131`, `:289-300`).
-`gbdt/options/leaf_estimation_defaults.mojo` is where that table lives; a
+`gbdt/options/catboost_options.mojo` is where that table lives; a
 reader who takes the derivative formula here as the whole of a loss will get
 the leaf values wrong.
 

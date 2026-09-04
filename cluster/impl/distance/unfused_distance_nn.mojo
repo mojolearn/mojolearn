@@ -53,7 +53,7 @@ Two consequences of the identity, both of them theirs and both load-bearing:
    repository that is exactly reproducible without costing anything**, and it
    is why the whole assignment step can sit in the SCHEDULING half of
    `checks/numerics.mojo`'s table rather than the numeric half. The GEMM
-   that feeds it is a different story, see `checks/gemm.mojo`.
+   that feeds it is a different story, see `core/gemm.mojo`.
 """
 
 from checks.kernel_matrix import (

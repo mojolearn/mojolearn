@@ -5,7 +5,7 @@
     tools/with_build_lock.sh pixi run mojo run -I . \\
         ensemble/checks/philox_check.mojo
 
-Covers `ensemble/checks/philox.mojo` against
+Covers `core/philox.mojo` against
 `ensemble/bench/philox_oracle.txt`, which is the output of THEIR generator
 compiled and run (`ensemble/tools/philox_oracle/`): cuRAND's own Philox bytes,
 fetched at build time, under RAFT v26.08.00's own wrapper, transcribed line by

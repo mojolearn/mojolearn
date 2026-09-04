@@ -1071,9 +1071,9 @@ check-metrics-regression = "mojo run -I . metrics/checks/regression_metrics_chec
 check-metrics-silhouette = "mojo run -I . metrics/checks/silhouette_check.mojo"
 check-metrics-trust = "mojo run -I . metrics/checks/trustworthiness_check.mojo"
 check-holtwinters = "mojo run -I . holtwinters/checks/hw_check.mojo"
-check-mamba-block = "mojo run -I . mamba/checks/mamba_check.mojo"
-check-mamba2-block = "mojo run -I . mamba/checks/mamba2_check.mojo"
-check-mamba3-block = "mojo run -I . mamba/checks/mamba3_check.mojo"
+check-mamba-block = "tools/with_identical_mode.sh mojo run -I . mamba/checks/mamba_check.mojo"
+check-mamba2-block = "tools/with_identical_mode.sh mojo run -I . mamba/checks/mamba2_check.mojo"
+check-mamba3-block = "tools/with_identical_mode.sh mojo run -I . mamba/checks/mamba3_check.mojo"
 # COMPILE ONLY, and the name says so. Builds the mamba backward's routing
 # layer AND, since 2026-09-03, its two kernel files
 # (mamba/impl/mamba_ssm/ops/selective_scan_backward.mojo and
@@ -1109,6 +1109,9 @@ check-mamba3-block = "mojo run -I . mamba/checks/mamba3_check.mojo"
 # The two ATOMIC arms REFUSE BY NAME at their launcher on a kernel_matrix
 # column with no float atomicAdd; they compile everywhere.
 build-mamba-backward-probe = "mojo build -I . mamba/checks/mamba_backward_compile_probe.mojo -o /tmp/mojolearn_mb_probe"
+# PARTIAL Mamba-2 backward evidence: output-projection weight gradient only.
+# The runner prints the unimplemented seams and never claims whole-pass status.
+dump-mamba2-backward-tail = "work=/tmp/mojolearn-mamba2-mojo-grad; mkdir -p $work; find $work -maxdepth 1 -type f -delete; MOJOLEARN_MAMBA_GRAD_DUMP=$work mojo run -I . mamba/checks/mamba2_backward_tail_dump.mojo"
 
 # BLOCK-LEVEL BATCH INVARIANCE (checks/batch_invariance_check.mojo). The
 # lift of `IDENTICAL_FP32_CONTRACT.md` section 6.1 -- "Why `L` may not depend
@@ -1160,8 +1163,13 @@ check-batch-invariance = "mojo run -I . batch_invariance_main.mojo"
 # only by someone who already knew the path. A gate that cannot be named is a
 # gate that does not get run, and these two are what the batch-invariance
 # work above leans on.
-check-transformer = "mojo run -I . transformer/checks/transformer_check.mojo"
-check-transformer-backward = "mojo run -I . transformer/checks/transformer_backward_check.mojo"
+check-transformer = "tools/with_identical_mode.sh mojo run -I . transformer/checks/transformer_check.mojo"
+check-transformer-backward = "tools/with_identical_mode.sh mojo run -I . transformer/checks/transformer_backward_check.mojo"
+# Independent CPU float64 references for Transformer backward, cross-entropy,
+# SGD/AdamW, and embedding gradients. Run in the skgpu environment because
+# PyTorch is intentionally not a core dependency. The generated NPZ is an
+# interchange artifact; no mojolearn implementation is imported here.
+independent-gradient-oracles = "python tools/independent_gradient_oracles.py"
 
 # THE TRAINING-LOOP GATES, which had no task at all until 2026-09-03 --
 # TRAINING_LOOP_PLAN.md section 12 item 7 is exactly this, and the 2026-08-28
@@ -1242,7 +1250,7 @@ check-if = "mojo run -I . isolation_forest/checks/if_check.mojo"
 #
 # IT USES `core/identity_trace.mojo`, THE LOSSGUIDE LANE'S FACILITY, and
 # does not re-implement it. This lane briefly had its own copy
-# (`checks/stage_digest.mojo`, commit e5cef46) because both lanes built
+# (the former stage-digest check, commit e5cef46) because both lanes built
 # the same instrument inside the same hour without knowing; it is deleted.
 # Theirs is a strict superset -- generic over DType, `create_sub_buffer` for
 # a short read, raw dumps, tag-uniqueness enforcement, a format version, and
@@ -1375,6 +1383,10 @@ python = "3.14.*"
 # 2026-08-20 that `torch.backends.mps.is_available()` is True and a matmul
 # runs on device. Do not infer the answer from the build string.
 pytorch = ">=2.13"
+# Required by the verbatim upstream selective-scan and SSD references used by
+# the Mamba forward/gradient corpus. It stays in this PyTorch-only environment
+# rather than expanding the core Mojo environment.
+einops = ">=0.8"
 # Pinned to `bench`, not floating. See the note above.
 scikit-learn = "==1.9.0"
 numpy = "==2.5.2"
@@ -1385,6 +1397,16 @@ scipy = "==1.18.0"
 # ratio is the device and nothing else. Prints REFUSED lines for the four
 # estimators that cannot reach the GPU at all, which is most of them.
 sklearn-gpu = "python bench/bench_sklearn_gpu.py"
+
+# Independent Mamba forward corpora and whole-block gradient oracles. Corpus
+# tasks write only to a fresh temporary directory; refreshing committed binary
+# fixtures remains an explicit, reviewed operation.
+mamba-corpus-m1 = "work=$(mktemp -d); python mamba/corpus/gen_corpus.py --family mamba1 --verify --out $work"
+mamba-corpus-m2 = "work=$(mktemp -d); python mamba/corpus/gen_corpus.py --family mamba2 --verify --out $work"
+mamba-corpus-m3 = "work=$(mktemp -d); python mamba/corpus/gen_corpus.py --family mamba3 --verify --out $work"
+mamba-grad-m1 = "work=/tmp/mojolearn-mamba1-grad; mkdir -p $work; find $work -maxdepth 1 -type f -delete; python tools/mamba_gradient_oracle.py --family mamba1 --out $work"
+mamba-grad-m2 = "work=/tmp/mojolearn-mamba2-grad; mkdir -p $work; find $work -maxdepth 1 -type f -delete; python tools/mamba_gradient_oracle.py --family mamba2 --out $work"
+mamba-grad-m3 = "work=/tmp/mojolearn-mamba3-grad; mkdir -p $work; find $work -maxdepth 1 -type f -delete; python tools/mamba_gradient_oracle.py --family mamba3 --out $work"
 
 # Wheel building only. setuptools 77 is the floor for the PEP 639 `license`
 # expression in python/pyproject.toml; `build` is the PEP 517 frontend.

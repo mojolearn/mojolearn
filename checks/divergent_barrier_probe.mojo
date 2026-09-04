@@ -31,7 +31,7 @@ WHAT THIS DOES AND DOES NOT ESTABLISH -- and the distinction is the point.
 
   IT DOES NOT establish that item 11 was wrong, and item 11 is NOT wrong.
   A few hours after this probe was written, a divergent barrier reproduced
-  for real in `checks/pointwise_hist2_5bit_check.mojo`: 115 wrong cells
+  for real in `checks/pointwise_hist2_check.mojo`: 115 wrong cells
   for the `uint2` entry point and 73 for `uint4`, every one of them low,
   from a peel loop that half the block skipped while `AddPoint` took eight
   barriers inside it. `archive/reference/PORTING.md` 92 carries the account.

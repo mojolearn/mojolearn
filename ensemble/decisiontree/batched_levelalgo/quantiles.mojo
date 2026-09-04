@@ -176,7 +176,7 @@ already been bitten once by assuming a Mojo stdlib numeric matched libm
 
 DEVIATION 111. `cub::DeviceSegmentedRadixSort::SortKeys`
 (`quantiles.cuh:244`, `:258`) is hand-written as
-`ensemble/checks/segmented_sort.mojo`.
+`core/segmented_sort.mojo`.
 
 WHAT IT COSTS: CUB is OPEN, so under the charter the correct move is to
 port the kernel rather than substitute a vendor primitive -- and there

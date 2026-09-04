@@ -43,6 +43,7 @@ from gbdt.models.ctr_value_table import (
     TCtrValueTable,
     build_ctr_tables,
     column_plan,
+    dense_category_code,
     expand_raw_columns,
 )
 from std.math import log2
@@ -608,11 +609,13 @@ def train(
     fills the cache (`gpu_binarization_helpers.cpp:31-54`,
     `doc_parallel_dataset_builder.cpp:250`).
 
-    **THE BOOSTING LOOP STILL RUNS ONE OF THEM.** Their loop searches the
-    structure on a random non-estimation permutation and estimates leaf
-    values on every permutation separately
-    (`doc_parallel_boosting.h:345-390`); that half is not ported yet, so
-    the sets other than the estimation one are built and unused.
+    **THE BOOSTING LOOP RUNS ALL OF THEM.** It searches the structure on a
+    random non-estimation permutation, estimates and applies that structure
+    against every permutation's compressed index and cursor, and exports
+    the estimation permutation's weak model (`doc_parallel_boosting.h:
+    345-398`). This is wired through `perm_cindexes` and
+    `est_permutation` in `fit_with_test`; the one-permutation numeric path
+    retains its original buffer and execution shape.
 
     `cat_feature_params` is a list because Mojo default arguments cannot
     call a raising constructor; EMPTY means `TCatFeatureParams.default()`,
@@ -813,7 +816,9 @@ def train(
                 continue
             var maxc = 0
             for r in range(n_rows):
-                var c = Int(x_colmajor[f * n_rows + r])
+                var c = dense_category_code(
+                    x_colmajor[f * n_rows + r], f, r
+                )
                 if c > maxc:
                     maxc = c
             if maxc + 1 > cat_params.one_hot_max_size:
@@ -901,16 +906,16 @@ def train(
 
         # dense codes: cardinality is max + 1
         var maxc = 0
+        var seen = List[Bool]()
+        seen.resize(1, False)
+        var codes = List[UInt32]()
         for r in range(n_rows):
-            var c = Int(col[r])
-            if c < 0:
-                raise Error(
-                    "cat_features column "
-                    + String(f)
-                    + " holds a negative code; codes must be dense 0..k-1"
-                )
+            var c = dense_category_code(col[r], f, r)
             if c > maxc:
                 maxc = c
+                seen.resize(maxc + 1, False)
+            seen[c] = True
+            codes.append(UInt32(c))
         var unique_values = maxc + 1
         if unique_values <= 1:
             # their `CB_ENSURE(uniqueValues > 1)`
@@ -920,6 +925,13 @@ def train(
                 + String(f)
                 + " has one category)"
             )
+        for c in range(unique_values):
+            if not seen[c]:
+                raise Error(
+                    "cat_features column " + String(f)
+                    + " is not densely coded: category " + String(c)
+                    + " is absent from 0.." + String(maxc)
+                )
 
         if unique_values <= cat_params.one_hot_max_size:
             # `UseForOneHotEncoding` (`binarizations_manager.cpp:106-109`):
@@ -928,10 +940,6 @@ def train(
             column_one_hot.append(True)
             column_ctr_grid.append(-1)
             continue
-
-        var codes = List[UInt32]()
-        for r in range(n_rows):
-            codes.append(UInt32(Int(col[r])))
 
         var ctr_columns = List[List[Float32]]()
         for _ in range(len(configs)):

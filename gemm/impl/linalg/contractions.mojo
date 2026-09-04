@@ -13,7 +13,7 @@ WHY THIS FILE EXISTS SEPARATELY FROM THE CONSTANTS IN `core/gemm.mojo`
 ----------------------------------------------------------------------
 `core/gemm.mojo` carries `Policy4x4<float, 4>` FLATTENED into seven
 `comptime` integers, because the one kernel instantiated at that policy
-(`cluster/gbdt/distance/fused_distance_nn/simt_kernel.mojo`) needs exactly
+(`cluster/impl/distance/fused_distance_nn/simt_kernel.mojo`) needs exactly
 that instantiation and nothing else. Those constants are correct and this
 file does not replace them; it transcribes the POLICY ITSELF, parameterized,
 so a second instantiation (the skinny policy for small `k`, the column-major

@@ -67,7 +67,7 @@ four of them (`gmm`, `gp`, `krr`, `nystroem`, `rbfsampler`, and
 `holtwinters`'s untraced form) construct their own `DeviceContext` inside the
 call. That context construction is real cost a caller pays and it is NOT
 compute. Every one of those lanes says so in its own docstring and
-`bench/speed/CLASSICAL_SPEED.md` repeats the list, because a reader comparing
+the emitted benchmark metadata repeats the list, because a reader comparing
 a 3 ms `gmm` against a 3 ms `cuml` arm has to know that most of our 3 ms is a
 context.
 

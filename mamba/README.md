@@ -46,3 +46,44 @@ was reached but are not the current status source.
 Do not infer Mamba 2/3 backward capability from their compile probes. Those
 probes currently validate routing and workspace topology, not backward
 arithmetic.
+
+## Independent gradient oracle
+
+`tools/mamba_gradient_oracle.py` differentiates the cited upstream PyTorch
+forward transcription in float64 and independently audits selected gradient
+cells with central finite differences. It covers all three families and emits
+portable `grad.<tensor>.f64` files plus a manifest:
+
+```sh
+pixi run -e skgpu mamba-grad-m1
+pixi run -e skgpu mamba-grad-m2
+pixi run -e skgpu mamba-grad-m3
+```
+
+For an accelerator run, invoke the script through `pixi run -e skgpu python`
+and add `--device cuda`. The same spelling selects a ROCm device in a ROCm
+PyTorch build; the manifest records CUDA versus HIP. These are tolerance
+references. IDENTICAL validation still requires a Mojo device card to match
+the pinned Mojo host oracle bit for bit.
+
+Once a whole-pass Mojo backward runner emits matching files, compare it with:
+
+```sh
+python tools/mamba_gradient_oracle.py \
+  --compare /tmp/mamba1-grad /tmp/mamba1-mojo-grad
+```
+
+Mamba 2 currently has one implemented, explicitly partial device segment: the
+residual/output-projection tail computes `d_gnorm` and
+`d(out_proj.weight)`. Its runner emits only the independently comparable
+weight gradient and names every remaining seam:
+
+```sh
+pixi run -e skgpu mamba-grad-m2
+pixi run dump-mamba2-backward-tail
+pixi run -e skgpu python tools/mamba_gradient_oracle.py --allow-partial \
+  --compare /tmp/mojolearn-mamba2-grad /tmp/mojolearn-mamba2-mojo-grad
+```
+
+Passing this comparison certifies only the output-projection weight derivative,
+not a whole Mamba 2 backward pass.

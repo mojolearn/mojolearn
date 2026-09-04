@@ -901,7 +901,7 @@ def column_lane_width_is_fixed(column: Int) -> Bool:
     hardware lane. BOTH ARE FALSE. Thirteen files import `shuffle_xor` or
     `lane_id` (see archive/reference/VENDOR_COLUMNS.md, which now names them), `split_warp_reduce`
     sizes its butterfly by `WARP_SIZE`, and DEVIATION BLOCK 30 in
-    `dbscan/impl/dbscan/detail/epsilon_neighborhood.mojo` says in its own
+    `dbscan/impl/neighbors/epsilon_neighborhood.mojo` says in its own
     source that its width-16 reduction is correct only at a lane width of 32.
 
     WHAT SURVIVES, and it is what this function actually rests on: no

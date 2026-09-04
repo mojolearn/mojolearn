@@ -26,7 +26,7 @@ WHAT THEIR DISPATCH DOES, WHICH IS NOT WHAT THIS FILE USED TO SAY
 is every k-NN measurement this repository has ever taken - cuVS runs
 `fusedL2Knn`, and until 2026-08-19 this tree had ported only the fallback and
 compared it against scikit-learn as though it were their algorithm. That is
-now `neighbors/gbdt/neighbors/detail/fused_l2_knn.mojo`, and
+now `neighbors/impl/neighbors/detail/fused_l2_knn.mojo`, and
 `brute_force_knn_impl` below is their dispatch rather than a direct call to
 whichever function we happened to own.
 

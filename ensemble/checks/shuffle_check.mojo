@@ -4,7 +4,7 @@
 
     pixi run mojo run -I . ensemble/checks/shuffle_check.mojo
 
-Covers `ensemble/checks/shuffle_iterator.mojo` against
+Covers `core/shuffle_iterator.mojo` against
 `ensemble/bench/shuffle_oracle.txt`, which is the output of THEIR headers
 compiled and run (`ensemble/tools/shuffle_oracle/oracle.cpp`, CCCL 3.4.3 at
 `9d65c77f`, the CCCL cuML v26.08.00 resolves).

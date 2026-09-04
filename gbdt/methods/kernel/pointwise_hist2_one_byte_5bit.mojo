@@ -288,7 +288,7 @@ struct PointHist5[origin: MutOrigin](PointHist2):
         the result at `Buffer[2 * (32 * f + fold) + w]` -- feature-major,
         then fold, then STAT PARITY, which is the stat-MINOR layout the
         module docstring warns about and which
-        `checks/pointwise_hist2_5bit_check.mojo` gates per cell.
+        `checks/pointwise_hist2_check.mojo` gates per cell.
         """
         var tid = Int(thread_idx.x)
         # `Buffer -= SliceOffset()` (`:206`): back to the block base

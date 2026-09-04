@@ -784,9 +784,8 @@ def fit_non_symmetric_tree[
     # (DENORMAL-vs-ZERO / SIGN / NAN-payload / ULP<=n / LARGE), which is the
     # diagnosis where a hash is only the location.
     #
-    # THIS LANE BRIEFLY HAD ITS OWN COPY (`checks/stage_digest.mojo`,
-    # commit e5cef46) because both lanes built the same instrument inside
-    # the same hour without knowing. It is deleted. Two implementations of
+    # This lane briefly had its own digest implementation (commit e5cef46)
+    # before `core/identity_trace.mojo` became canonical. It is deleted. Two implementations of
     # one instrument is the drift surface every rule in this tree is about,
     # and theirs is a strict superset: generic over `DType` where mine was
     # four hand-written methods, `create_sub_buffer` for a short read where

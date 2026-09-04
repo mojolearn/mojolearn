@@ -29,7 +29,7 @@ counterpart at any version -- there is no GPU Gaussian mixture, no GPU
 Gaussian process, no GPU Nystroem, no GPU random Fourier features, no GPU
 bootstrap and no GPU spectral clustering in RAPIDS -- and those arms fall
 back to the strongest thing that genuinely runs on the box and SAY SO in the
-label. `bench/speed/CLASSICAL_SPEED.md` lists them in one table so nobody has
+label. `bench/speed/README.md` defines the comparison policy so nobody has
 to infer it from a log.
 
 THE TWO SIDES RUN ON THE SAME BYTES

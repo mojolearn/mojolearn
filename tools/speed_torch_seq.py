@@ -92,7 +92,7 @@ whole arrangement exists to avoid.
 
 WHAT IS NOT COMPARABLE, IN ONE PLACE
 =====================================
-Read `bench/speed/SEQ_SPEED.md` before quoting any ratio from this. The
+Read `bench/speed/README.md` before quoting any ratio from this. The
 short list: our block entry validates every weight on the host on every
 call and torch does not; our attention materializes seven score-sized
 buffers and synchronizes per head and torch's does not; our GEMM is the

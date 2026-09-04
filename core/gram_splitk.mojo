@@ -25,7 +25,7 @@ equivalent is MEASURED unusable at this shape:
   `SplitKTileScheduler`, `amd_4wave_split_k_matmul`) and ALL of it is
   comptime-gated `not has_apple_gpu_accelerator()`
   (`matmul/gpu/__init__.mojo:725, :1368`); the public `matmul` entry point
-  exposes no k-partitioning parameter at all (`matmul/__init__.mojo`). No
+  exposes no k-partitioning parameter at all. No
   syrk / rank-k update exists anywhere in `linalg`, and
   `linalg.bmm.batched_matmul`'s only Apple GPU arm is
   `naive_batched_matmul_kernel` (`bmm.mojo:899-925`) -- a scalar per-thread

@@ -3352,7 +3352,7 @@ def check_backward_card() raises:
 
     **WHY THE CARD IS EMITTED HERE AND NOT FROM A SECOND DRIVER.**
     `IDENTICAL_BACKWARD_PLAN.md` section 5 G9 asks for
-    `bench/gemm_bwd_card_main.mojo`, patterned on `bench/gemm_card_main.mojo`.
+    a backward card patterned on `bench/gemm_card_main.mojo`.
     Three reasons it is here instead, and the first is the strongest:
 
     1. A second driver is a SECOND SPELLING OF THE FIXTURES. The forward

@@ -16,7 +16,7 @@ that a caller could observe is named in THE POLICY CHOICES below rather than
 left implicit.
 
 **The boundary shape is deliberate.** Data crosses as raw pointers plus
-lengths, matching the convention mojotrees' `bindings/_mojotrees.mojo` already
+lengths, matching the convention `bindings/_mojolearn_trees.mojo` already
 uses, so the eventual CPython extension passes buffer addresses straight
 through without a second representation being invented in between.
 

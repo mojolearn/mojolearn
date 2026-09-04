@@ -17,7 +17,7 @@ their dispatch for pairwise distance under an argmin or a top-k does not call
 cuBLAS at all, it calls a FUSED kernel that never materializes the distance
 matrix, and a device-wide matmul cannot be fused into anything. Callers whose
 product is an intermediate inside a reduction belong on the fused kernel
-(`cluster/gbdt/distance/fused_distance_nn/simt_kernel.mojo`,
+(`cluster/impl/distance/fused_distance_nn/simt_kernel.mojo`,
 `neighbors/.../fused_l2_knn.mojo`), not here.
 
 A STANDALONE register-tiled contraction used to sit here as well, a port of

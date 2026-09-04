@@ -119,6 +119,39 @@ from gbdt.ctrs.ctr import (
     TCtrConfig,
     ctr_type_name,
 )
+from std.math import isfinite
+
+
+def dense_category_code(value: Float32, feature: Int, row: Int) raises -> Int:
+    """Validate the dense-code contract shared by fit and apply.
+
+    Converting first and checking only the resulting integer silently aliases
+    1.5 with category 1 (and makes NaN/Inf conversion backend-dependent).
+    Categorical inputs at this surface are exact, non-negative integer codes.
+    An integer not observed during fitting remains valid at apply time and
+    takes the CTR table's unseen-category value.
+    """
+    if not isfinite(value):
+        raise Error(
+            "categorical feature " + String(feature) + " row "
+            + String(row) + " is not finite"
+        )
+    # Codes are stored as UInt32 by the CTR kernels. Check the exclusive
+    # upper bound before conversion so a finite oversized Float32 cannot
+    # wrap to an unrelated category.
+    if value < Float32(0.0) or value >= Float32(4294967296.0):
+        raise Error(
+            "categorical feature " + String(feature) + " row "
+            + String(row) + " is outside the UInt32 code range"
+        )
+    var code = Int(value)
+    if Float32(code) != value:
+        raise Error(
+            "categorical feature " + String(feature) + " row "
+            + String(row) + " must be an exact non-negative integer code; got "
+            + String(value)
+        )
+    return code
 
 
 def ctr_type_from_name(name: String) raises -> Int:
@@ -581,6 +614,10 @@ def expand_raw_columns(
             ref table = ctr_tables[ti]
             for r in range(n_rows):
                 out.append(
-                    table.value_for(Int(x_raw[src * n_rows + r]))
+                    table.value_for(
+                        dense_category_code(
+                            x_raw[src * n_rows + r], src, r
+                        )
+                    )
                 )
     return out^

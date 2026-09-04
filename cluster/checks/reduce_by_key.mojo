@@ -8,7 +8,7 @@ NOT A PORT of cuVS. Their two calls are
 from `update_centroids`, `detail/kmeans.cuh:300-318`), and RAFT is a
 separate library this tree does not mirror file for file. The CALL SITES,
 their order, and their accumulate-versus-reset semantics are theirs and are
-copied in `cluster/gbdt/cluster/detail/kmeans_common.mojo`.
+copied in `cluster/impl/cluster/detail/kmeans_common.mojo`.
 
 THE ACCUMULATOR IS THE INTERESTING PART, AND IT IS NOT A NEW PROBLEM
 --------------------------------------------------------------------

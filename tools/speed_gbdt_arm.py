@@ -1221,7 +1221,7 @@ def sklearn_iforest_arm(cfg, data):
     LABEL IT HONESTLY: this is a CPU opponent, and unless the cuML arm below
     runs it is the ONLY opponent this lane has. A GPU-versus-CPU ratio in
     this lane is not the same claim as a GPU-versus-GPU ratio in the others,
-    and the FOREST_SPEED.md table says so in the lane's own row."""
+    and the benchmark output must say so in the lane's own row."""
     from sklearn.ensemble import IsolationForest
 
     def make():

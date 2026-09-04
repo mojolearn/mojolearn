@@ -161,9 +161,8 @@ THEIRS: `TFeatureTensor` and `TBinarySplit` are both in
 
 OURS: `TBinarySplit` landed earlier in `gbdt/models/oblivious_model.mojo`
 with `Int32` fields, because the model is where this port first needed it.
-`TFeatureTensor` is here rather than in a new `gbdt/data/feature.mojo`
-because this lane ships two files and a third would be a directory
-decision, not a port decision.
+`TFeatureTensor` remains here beside the builder that consumes it; there is
+no second feature-model definition to drift from it.
 
 WHY IT MATTERS AND WHAT IT COSTS: `Int32` is the wrong signedness for
 BOTH the comparator and the hash. `std::tie(FeatureId, BinIdx, SplitType)`

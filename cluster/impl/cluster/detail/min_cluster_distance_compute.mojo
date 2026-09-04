@@ -121,7 +121,7 @@ def _launch_fused[
     """One policy instantiation of the fused kernel, launched with THEIR grid
     computation: `launchConfigGenerator<P>(m, n, shmemSize, kernel)` at
     `fused_l2_nn.cuh:135-138`, ported (M4 inputs) in
-    `neighbors/gbdt/distance/detail/pairwise_distance_base.mojo`.
+    `neighbors/impl/distance/detail/pairwise_distance_base.mojo`.
 
     `grid.x` is PINNED to 1: the cross-block merge (`updateReducedVal`'s
     mutex) is the `replaced` row in `DERIVATION_MAP.tsv`, so a `grid.x > 1`

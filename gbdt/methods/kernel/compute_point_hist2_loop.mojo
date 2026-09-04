@@ -215,7 +215,7 @@ def _peel[
     IT. When `compute_histogram`'s body was converged, these peel loops were
     left as theirs -- they looked like peels, not like body loops. At
     `BLOCK_SIZE = 256` and `span = 128`, exactly half the block enters, and
-    `checks/pointwise_hist2_5bit_check.mojo` came back with 115 wrong
+    `checks/pointwise_loop_check.mojo` came back with 115 wrong
     cells for the `uint2` form and 73 for `uint4` while the scalar forms
     were exact -- points silently missing, totals low.
 

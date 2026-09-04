@@ -160,8 +160,8 @@ TWO SMALLER CONSEQUENCES OF THE SAME DECISION, both real ports of theirs:
 
   * `TFoldsHistogram` (`gpu_data/folds_histogram.h`) is ported HERE, not in
     `gbdt/gpu_data/`, because the one-byte fan-out cannot be written without
-    it and this lane owns two files. It is 27 lines and it moves to
-    `gbdt/gpu_data/folds_histogram.mojo` the moment anything else needs it.
+    it. Keeping the 27-line type beside its only consumer avoids a second
+    representation.
   * `TComputeHist1Kernel` is NOT ported. `pointwise_hist1.cu` is dead in
     the upstream -- registered, wrapped, and called by nothing
     (`archive/reference/PORTING.md` 91 D, `gbdt/NOT_IMPLEMENTED.tsv`).
