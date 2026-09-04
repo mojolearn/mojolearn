@@ -285,6 +285,10 @@ def generate(args):
         krj=stages["rot.k"].detach().reshape_as(k_join).requires_grad_(True);scj=stages["trap.scale"].detach().reshape(bsz,length,-1).requires_grad_(True);dkrj,dscj=torch.autograd.grad(((krj*scj.unsqueeze(-1))*k_join.detach()).sum(),(krj,scj))
         intermediate_gradients.extend((("partial.join.rot.q",q_join),("partial.join.kscale",k_join),("partial.join.value",v_join),("partial.join.dacs",dacs_join),("partial.join.s15.rot.k",dkrj),("partial.join.s15.scale",dscj)))
         qrj=q_biased.detach().requires_grad_(True);krjraw=k_biased.detach().requires_grad_(True);thj=stages["angle.theta"].detach().requires_grad_(True);rqj=rotate_leaf(qrj,thj);rkj=rotate_leaf(krjraw,thj);dqrawj,dkrawj,dthj=torch.autograd.grad((rqj*q_join.detach().reshape_as(rqj)).sum()+(rkj*dkrj.detach().reshape_as(rkj)).sum(),(qrj,krjraw,thj));intermediate_gradients.extend((("partial.join.rotary.C_biased",dqrawj),("partial.join.rotary.B_biased",dkrawj),("partial.join.rotary.theta",dthj)))
+        dadt_dacs=torch.zeros_like(dadt);dj=dacs_join.reshape(bsz,length,-1)
+        for cc in range(chunks):
+            lo=cc*qsize;hi=min(length,lo+qsize);dadt_dacs[:,lo:hi]=torch.flip(torch.cumsum(torch.flip(dj[:,lo:hi],dims=[1]),dim=1),dims=[1])
+        dadt_join=dadt+dadt_dacs;a_join=stages["A.out"].detach().reshape_as(dadt_join).requires_grad_(True);dt_join=stages["dt.out"].detach().reshape_as(dadt_join).requires_grad_(True);da_join,ddt_join=torch.autograd.grad(((a_join*dt_join)*dadt_join.detach()).sum(),(a_join,dt_join));intermediate_gradients.extend((("partial.join.adt.from_dacs",dadt_dacs),("partial.join.adt.total",dadt_join),("partial.join.A.from_adt",da_join),("partial.join.dt.from_adt",ddt_join)))
 
         gate32 = stages["gate.out"].detach().reshape(
             stages["gate.out"].shape[0], -1
@@ -390,6 +394,10 @@ def generate(args):
         dk1732,dv1732,ddac1732=torch.autograd.grad(lr32,(kr1732,vr1732,darc32));reference32.update({"partial.s17.readout.rot.q":dq1732,"partial.s17.readout.dacs":real_dacs(ddar1732),"partial.s17.recur.kscale":dk1732,"partial.s17.recur.value":dv1732,"partial.s17.recur.dacs":real_dacs(ddac1732)})
         qj32=dq32s+dq1732.reshape_as(dq32s);kj32=dks32+dk1732.reshape_as(dks32);vj32=(dv32+dv32s.reshape_as(dv32))+dv1732.reshape_as(dv32);daj32=real_dacs(ddar1732)+real_dacs(ddac1732);krj32=stages["rot.k"].detach().to(torch.float32).reshape_as(kj32).requires_grad_(True);scj32=stages["trap.scale"].detach().to(torch.float32).reshape(bsz,length,-1).requires_grad_(True);dkrj32,dscj32=torch.autograd.grad(((krj32*scj32.unsqueeze(-1))*kj32.detach()).sum(),(krj32,scj32));reference32.update({"partial.join.rot.q":qj32,"partial.join.kscale":kj32,"partial.join.value":vj32,"partial.join.dacs":daj32,"partial.join.s15.rot.k":dkrj32,"partial.join.s15.scale":dscj32})
         qrjr32=q32_biased.detach().requires_grad_(True);krjr32=k32_biased.detach().requires_grad_(True);thjr32=stages["angle.theta"].detach().to(torch.float32).requires_grad_(True);rqjr32=rotate_leaf(qrjr32,thjr32);rkjr32=rotate_leaf(krjr32,thjr32);dqjr32,dkjr32,dtjr32=torch.autograd.grad((rqjr32*qj32.detach().reshape_as(rqjr32)).sum()+(rkjr32*dkrj32.detach().reshape_as(rkjr32)).sum(),(qrjr32,krjr32,thjr32));reference32.update({"partial.join.rotary.C_biased":dqjr32,"partial.join.rotary.B_biased":dkjr32,"partial.join.rotary.theta":dtjr32})
+        dadc32=torch.zeros_like(dadt32);dj32=daj32.reshape(bsz,length,-1)
+        for cc in range(chunks):
+            lo=cc*qsize;hi=min(length,lo+qsize);dadc32[:,lo:hi]=torch.flip(torch.cumsum(torch.flip(dj32[:,lo:hi],dims=[1]),dim=1),dims=[1])
+        dat32=dadt32+dadc32;aj32=stages["A.out"].detach().to(torch.float32).reshape_as(dat32).requires_grad_(True);dtaj32=stages["dt.out"].detach().to(torch.float32).reshape_as(dat32).requires_grad_(True);dajoin32,ddtjoin32=torch.autograd.grad(((aj32*dtaj32)*dat32.detach()).sum(),(aj32,dtaj32));reference32.update({"partial.join.adt.from_dacs":dadc32,"partial.join.adt.total":dat32,"partial.join.A.from_adt":dajoin32,"partial.join.dt.from_adt":ddtjoin32})
     if args.family == "mamba2":
         tail_input = stages["gnorm.out"].detach().requires_grad_(True)
         tail_output = torch.nn.functional.linear(
@@ -932,6 +940,19 @@ def generate(args):
         nleaf32=stages32["norm.out"].detach().requires_grad_(True); wleaf32=p32["in_proj.weight"].detach().requires_grad_(True)
         dn32,dw32=torch.autograd.grad((torch.nn.functional.linear(nleaf32,wleaf32)*packed32.detach()).sum(),(nleaf32,wleaf32))
         reference32.update({"partial.in_proj.packed":packed32,"stage.norm.out":dn32,"in_proj.weight":dw32})
+        block_x32 = x32.detach().requires_grad_(True)
+        block_w32 = p32["block_norm.weight"].detach().requires_grad_(True)
+        block_ss32 = block_x32.pow(2).sum(-1, keepdim=True)
+        block_out32 = block_x32 * torch.rsqrt(
+            block_ss32 / block_x32.shape[-1] + GEN.M2_EPS
+        ) * block_w32
+        full_dx32, dblock_w32 = torch.autograd.grad(
+            (block_out32.reshape_as(dn32) * dn32.detach()).sum()
+            + _objective(block_x32),
+            (block_x32, block_w32),
+        )
+        reference32["x"] = full_dx32
+        reference32["block_norm.weight"] = dblock_w32
     leaf_gradients = torch.autograd.grad(loss, [v for _, v in leaves])
     named_gradients = [*intermediate_gradients, *zip(
         (name for name, _ in leaves), leaf_gradients

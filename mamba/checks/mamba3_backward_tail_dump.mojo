@@ -48,6 +48,8 @@ from mamba.impl.mamba_ssm.modules.mamba3_backward import (
     mamba3_backward_join_s16_s17_into,
     mamba3_backward_s15_only_into,
     mamba3_backward_rotary_only_into,
+    mamba3_backward_dacs_to_adt_into,
+    mamba3_backward_join_two_into,
 )
 from mamba.impl.transformers.models.mamba.modeling_mamba import (
     mamba_download,
@@ -218,6 +220,11 @@ def main() raises:
     mamba3_backward_s15_only_into(ctx,d_krot_join,d_scale_join,d_k_join,stages.rotk_work,stages.scale_work,head_cells)
     var d_qraw_join=mamba_zeros(ctx,state_cells);var d_kraw_join=mamba_zeros(ctx,state_cells);var d_theta_join=mamba_zeros(ctx,m*dims.nheads*M3_NUM_ROPE_ANGLES)
     mamba3_backward_rotary_only_into(ctx,d_qraw_join,d_kraw_join,d_theta_join,d_q_join,d_krot_join,stages.bcnorm_b,stages.bcnorm_c,device_weights.b_bias,device_weights.c_bias,stages.theta_out,m*dims.nheads*(M3_D_STATE//2),dims.nheads)
+    var d_adt_from_dacs=mamba_zeros(ctx,head_cells);var d_adt_join=mamba_zeros(ctx,head_cells)
+    mamba3_backward_dacs_to_adt_into(ctx,d_adt_from_dacs,d_dacs_join,fixture.b,fixture.l,dims.nheads,M3_CHUNK_SIZE)
+    mamba3_backward_join_two_into(ctx,d_adt_join,d_adt_seg,d_adt_from_dacs,head_cells)
+    var d_a_join=mamba_zeros(ctx,head_cells);var d_dt_join_adt=mamba_zeros(ctx,head_cells);var d_dt_join_scratch=mamba_zeros(ctx,head_cells);var zero_dt=mamba_zeros(ctx,head_cells)
+    mamba3_backward_adt_product_into(ctx,d_a_join,d_dt_join_adt,d_dt_join_scratch,d_adt_join,stages.a_out,stages.dt_out,zero_dt,head_cells)
     ctx.synchronize()
 
     _write_f32(
@@ -281,6 +288,10 @@ def main() raises:
     _write_f32(output + "/grad.partial.join.rotary.C_biased.f32",mamba_download(ctx,d_qraw_join,state_cells))
     _write_f32(output + "/grad.partial.join.rotary.B_biased.f32",mamba_download(ctx,d_kraw_join,state_cells))
     _write_f32(output + "/grad.partial.join.rotary.theta.f32",mamba_download(ctx,d_theta_join,m*dims.nheads*M3_NUM_ROPE_ANGLES))
+    _write_f32(output + "/grad.partial.join.adt.from_dacs.f32",mamba_download(ctx,d_adt_from_dacs,head_cells))
+    _write_f32(output + "/grad.partial.join.adt.total.f32",mamba_download(ctx,d_adt_join,head_cells))
+    _write_f32(output + "/grad.partial.join.A.from_adt.f32",mamba_download(ctx,d_a_join,head_cells))
+    _write_f32(output + "/grad.partial.join.dt.from_adt.f32",mamba_download(ctx,d_dt_join_adt,head_cells))
     if case_k == 5:
         with open(output + "/dump_manifest.json", "w") as fh:
             fh.write(
@@ -327,7 +338,9 @@ def main() raises:
             + "\"partial.join.kscale\",\"partial.join.value\","
             + "\"partial.join.dacs\",\"partial.join.s15.rot.k\","
             + "\"partial.join.s15.scale\",\"partial.join.rotary.C_biased\","
-            + "\"partial.join.rotary.B_biased\",\"partial.join.rotary.theta\"]}\n"
+            + "\"partial.join.rotary.B_biased\",\"partial.join.rotary.theta\","
+            + "\"partial.join.adt.from_dacs\",\"partial.join.adt.total\","
+            + "\"partial.join.A.from_adt\",\"partial.join.dt.from_adt\"]}\n"
         )
 
     _ = d_gamma_qk^

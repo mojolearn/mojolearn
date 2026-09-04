@@ -646,6 +646,28 @@ def mamba3_join_two_kernel(dst:MutPointer[Float32,MutAnyOrigin],a:MutPointer[Flo
     if i<Int(n_in):dst.unsafe_store(i,ftz(ftz(a.unsafe_load(i))+ftz(b.unsafe_load(i))))
 
 
+def mamba3_dacs_reverse_kernel(d_adt:MutPointer[Float32,MutAnyOrigin],d_dacs:MutPointer[Float32,MutAnyOrigin],b_in:Int32,l_in:Int32,nh_in:Int32,qs_in:Int32):
+    """Transpose of the chunk-local inclusive cumsum that forms dACS."""
+    var b=Int(b_in);var l=Int(l_in);var nh=Int(nh_in);var qs=Int(qs_in);var nc=(l+qs-1)//qs
+    var cell=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if cell>=b*nc*nh:return
+    var h=cell%nh;var c=(cell//nh)%nc;var bb=cell//(nh*nc);var carry=Float32(0.0)
+    for rev in range(qs):
+        var token=c*qs+qs-1-rev
+        if token<l:
+            var idx=(bb*l+token)*nh+h
+            carry=ftz(carry+ftz(d_dacs.unsafe_load(idx)));d_adt.unsafe_store(idx,carry)
+
+
+def mamba3_backward_dacs_to_adt_into(ctx:DeviceContext,mut d_adt:DeviceBuffer[DType.float32],mut d_dacs:DeviceBuffer[DType.float32],b:Int,l:Int,nh:Int,qs:Int) raises:
+    var cells=b*((l+qs-1)//qs)*nh
+    ctx.enqueue_function[mamba3_dacs_reverse_kernel](d_adt.unsafe_ptr(),d_dacs.unsafe_ptr(),Int32(b),Int32(l),Int32(nh),Int32(qs),grid_dim=(_grid(cells),1,1),block_dim=(M3_BWD_TPB,1,1))
+
+
+def mamba3_backward_join_two_into(ctx:DeviceContext,mut dst:DeviceBuffer[DType.float32],mut a:DeviceBuffer[DType.float32],mut b:DeviceBuffer[DType.float32],cells:Int) raises:
+    ctx.enqueue_function[mamba3_join_two_kernel](dst.unsafe_ptr(),a.unsafe_ptr(),b.unsafe_ptr(),Int32(cells),grid_dim=(_grid(cells),1,1),block_dim=(M3_BWD_TPB,1,1))
+
+
 def mamba3_backward_join_s16_s17_into(ctx:DeviceContext,mut qout:DeviceBuffer[DType.float32],mut kout:DeviceBuffer[DType.float32],mut vout:DeviceBuffer[DType.float32],mut dout:DeviceBuffer[DType.float32],mut q16:DeviceBuffer[DType.float32],mut q17:DeviceBuffer[DType.float32],mut k16:DeviceBuffer[DType.float32],mut k17:DeviceBuffer[DType.float32],mut vold:DeviceBuffer[DType.float32],mut v17:DeviceBuffer[DType.float32],mut dr:DeviceBuffer[DType.float32],mut dc:DeviceBuffer[DType.float32],state_cells:Int,value_cells:Int,head_cells:Int) raises:
     ctx.enqueue_function[mamba3_join_two_kernel](qout.unsafe_ptr(),q16.unsafe_ptr(),q17.unsafe_ptr(),Int32(state_cells),grid_dim=(_grid(state_cells),1,1),block_dim=(M3_BWD_TPB,1,1))
     ctx.enqueue_function[mamba3_join_two_kernel](kout.unsafe_ptr(),k16.unsafe_ptr(),k17.unsafe_ptr(),Int32(state_cells),grid_dim=(_grid(state_cells),1,1),block_dim=(M3_BWD_TPB,1,1))
