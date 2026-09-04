@@ -3275,6 +3275,89 @@ def enqueue_symmetric_level_winner(
     )
 
 
+def enqueue_symmetric_split_flags(
+    ctx: DeviceContext,
+    mut cindex: DeviceBuffer[DType.uint32],
+    mut row_index: DeviceBuffer[DType.uint32],
+    mut p_off: DeviceBuffer[DType.uint32],
+    mut p_sz: DeviceBuffer[DType.uint32],
+    mut dense_ids: DeviceBuffer[DType.uint32],
+    mut sp_feats: DeviceBuffer[DType.uint8],
+    mut sp_bins: DeviceBuffer[DType.uint32],
+    mut flags: DeviceBuffer[DType.uint8],
+    mut seq: DeviceBuffer[DType.uint32],
+    n_live: Int,
+    sm_count: Int,
+) raises:
+    """Enqueue the first post-winner launch; owns no drain or accounting."""
+    ctx.enqueue_function[split_and_make_sequence_kernel](
+        cindex.unsafe_ptr(), row_index.unsafe_ptr(),
+        p_off.unsafe_ptr(), p_sz.unsafe_ptr(), dense_ids.unsafe_ptr(),
+        sp_feats.unsafe_ptr().bitcast[CFeature](), sp_bins.unsafe_ptr(),
+        flags.unsafe_ptr(), seq.unsafe_ptr(),
+        grid_dim=(split_points_grid_x(n_live, sm_count), n_live, 1),
+        block_dim=(SPLIT_BLOCK_SIZE, 1, 1),
+    )
+
+
+def enqueue_symmetric_parent_histogram_copy(
+    ctx: DeviceContext,
+    mut dense_ids: DeviceBuffer[DType.uint32],
+    mut right_leaf_ids: DeviceBuffer[DType.uint32],
+    stat_count: Int,
+    hist_cells_per_leaf: Int,
+    n_live: Int,
+    mut hist: DeviceBuffer[DType.float32],
+) raises:
+    """Copy each parent histogram into its new right-child slot."""
+    if (hist_cells_per_leaf * stat_count) % 4 == 0:
+        ctx.enqueue_function[copy_histograms_vec4_kernel](
+            dense_ids.unsafe_ptr(), right_leaf_ids.unsafe_ptr(),
+            Int32(stat_count), Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
+            grid_dim=(
+                (hist_cells_per_leaf * stat_count // 4 + 255) // 256,
+                n_live, 1,
+            ),
+            block_dim=(256, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[copy_histograms_kernel](
+            dense_ids.unsafe_ptr(), right_leaf_ids.unsafe_ptr(),
+            Int32(stat_count), Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
+            grid_dim=(
+                (hist_cells_per_leaf * stat_count + 255) // 256,
+                n_live, 1,
+            ),
+            block_dim=(256, 1, 1),
+        )
+
+
+def enqueue_symmetric_partition_update(
+    ctx: DeviceContext,
+    mut dense_ids: DeviceBuffer[DType.uint32],
+    mut right_leaf_ids: DeviceBuffer[DType.uint32],
+    n_live: Int,
+    mut sorted_flags: DeviceBuffer[DType.uint8],
+    mut p_off: DeviceBuffer[DType.uint32],
+    mut p_sz: DeviceBuffer[DType.uint32],
+    mut hp_off: DeviceBuffer[DType.uint32],
+    mut hp_sz: DeviceBuffer[DType.uint32],
+    mut ids_compute: DeviceBuffer[DType.uint32],
+    mut sub_from: DeviceBuffer[DType.uint32],
+    mut sub_what: DeviceBuffer[DType.uint32],
+    sm_count: Int,
+) raises:
+    """Update child partitions and prepare the next level's histogram plan."""
+    ctx.enqueue_function[update_partitions_and_plan_kernel](
+        dense_ids.unsafe_ptr(), right_leaf_ids.unsafe_ptr(), Int32(n_live),
+        sorted_flags.unsafe_ptr(), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
+        hp_off.unsafe_ptr(), hp_sz.unsafe_ptr(), ids_compute.unsafe_ptr(),
+        sub_from.unsafe_ptr(), sub_what.unsafe_ptr(),
+        grid_dim=(split_points_grid_x(n_live, sm_count), n_live, 1),
+        block_dim=(512, 1, 1),
+    )
+
+
 def run_tree_layout_traced[
     hist2_smem_mode: Int = HIST2_SMEM_MODE
 ](
@@ -3997,13 +4080,9 @@ def run_tree_layout_traced[
         # (`split_points.cu:563`): MACHINE-sized, like every strided grid in
         # their file; `wide` was data-sized and is not what their grid x
         # means.
-        ctx.enqueue_function[split_and_make_sequence_kernel](
-            active_cindex.unsafe_ptr(), row_index.unsafe_ptr(),
-            p_off.unsafe_ptr(), p_sz.unsafe_ptr(), dense_ids.unsafe_ptr(),
-            sp_feats.unsafe_ptr().bitcast[CFeature](), sp_bins.unsafe_ptr(),
-            flags.unsafe_ptr(), seq.unsafe_ptr(),
-            grid_dim=(split_points_grid_x(n_live, sm_count), n_live, 1),
-            block_dim=(SPLIT_BLOCK_SIZE, 1, 1),
+        enqueue_symmetric_split_flags(
+            ctx, active_cindex, row_index, p_off, p_sz, dense_ids,
+            sp_feats, sp_bins, flags, seq, n_live, sm_count,
         )
         mgr.stream_kernel()
 
@@ -4071,27 +4150,10 @@ def run_tree_layout_traced[
         # level pair them and derive one by subtraction whichever is smaller.
         # WIDTH DISPATCH, see `copy_histograms_vec4_kernel`'s deviation
         # block. MEASURED 11.0 -> 65.2 GB/s at a depth-6 level's shape.
-        if (hist_cells_per_leaf * stat_count) % 4 == 0:
-            ctx.enqueue_function[copy_histograms_vec4_kernel](
-                dense_ids.unsafe_ptr(), ids_c.unsafe_ptr(),
-                Int32(stat_count), Int32(hist_cells_per_leaf),
-                hist.unsafe_ptr(),
-                grid_dim=(
-                    (hist_cells_per_leaf * stat_count // 4 + 255) // 256,
-                    n_live, 1
-                ),
-                block_dim=(256, 1, 1),
-            )
-        else:
-            ctx.enqueue_function[copy_histograms_kernel](
-                dense_ids.unsafe_ptr(), ids_c.unsafe_ptr(),
-                Int32(stat_count), Int32(hist_cells_per_leaf),
-                hist.unsafe_ptr(),
-                grid_dim=(
-                    (hist_cells_per_leaf * stat_count + 255) // 256, n_live, 1
-                ),
-                block_dim=(256, 1, 1),
-            )
+        enqueue_symmetric_parent_histogram_copy(
+            ctx, dense_ids, ids_c, stat_count, hist_cells_per_leaf,
+            n_live, hist,
+        )
         mgr.stream_kernel()
 
         # their `UpdatePartitionsAfterSplit` (`split_points.cu:387`), reached
@@ -4111,14 +4173,9 @@ def run_tree_layout_traced[
         # variant (DEVIATION 210) also writes next level's compute plan
         # from the border thread's registers, retiring the per-level
         # `plan_level_kernel` launch above.
-        ctx.enqueue_function[update_partitions_and_plan_kernel](
-            dense_ids.unsafe_ptr(), ids_c.unsafe_ptr(), Int32(n_live),
-            sflags.unsafe_ptr(), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
-            hp_off.unsafe_ptr(), hp_sz.unsafe_ptr(),
-            ids_compute.unsafe_ptr(),
-            sub_from.unsafe_ptr(), sub_what.unsafe_ptr(),
-            grid_dim=(split_points_grid_x(n_live, sm_count), n_live, 1),
-            block_dim=(512, 1, 1),
+        enqueue_symmetric_partition_update(
+            ctx, dense_ids, ids_c, n_live, sflags, p_off, p_sz,
+            hp_off, hp_sz, ids_compute, sub_from, sub_what, sm_count,
         )
         mgr.stream_kernel()
         times.end(ctx, "sym.split")
