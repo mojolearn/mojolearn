@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Dump the implemented Mamba-3 output-projection backward boundary."""
+"""Dump the implemented Mamba-3 base-prefill backward boundary."""
 
 from std.memory import bitcast
 from std.os import getenv
@@ -340,6 +340,11 @@ def main() raises:
     _write_f32(output + "/grad.in_proj.weight.f32",mamba_download(ctx,d_w_in,dims.d_in_proj()*dims.d_model))
     _write_f32(output + "/grad.x.f32",mamba_download(ctx,d_x,m*dims.d_model))
     _write_f32(output + "/grad.block_norm.weight.f32",mamba_download(ctx,d_norm_w,dims.d_model))
+    _write_f32(output + "/grad.dt_bias.f32",mamba_download(ctx,d_dt_bias_join,dims.nheads))
+    _write_f32(output + "/grad.B_norm.weight.f32",mamba_download(ctx,d_bw,M3_D_STATE))
+    _write_f32(output + "/grad.C_norm.weight.f32",mamba_download(ctx,d_cw,M3_D_STATE))
+    _write_f32(output + "/grad.B_bias.f32",mamba_download(ctx,d_bb,dims.nheads*M3_D_STATE))
+    _write_f32(output + "/grad.C_bias.f32",mamba_download(ctx,d_cb,dims.nheads*M3_D_STATE))
     if case_k == 5:
         with open(output + "/dump_manifest.json", "w") as fh:
             fh.write(
@@ -359,7 +364,7 @@ def main() raises:
             "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
             + "\"family\":\"mamba3\",\"case\":\"" + case_name + "\","
             + "\"objective\":\"signed_dyadic_weight_v1\","
-            + "\"mode\":\"partial-output-gate-skip-qkdot-tail\","
+            + "\"mode\":\"complete-public-prefill-l4\","
             + "\"tensors\":[\"stage.gate.out\",\"out_proj.weight\","
             + "\"stage.skip.out\",\"stage.in_proj.z\","
             + "\"partial.in_proj.x.from_skip\",\"stage.qkdot.out\",\"D\","
@@ -396,7 +401,8 @@ def main() raises:
             + "\"partial.join.dt.raw\",\"partial.join.dt_bias\",\"partial.join.B.raw\",\"partial.join.C.raw\","
             + "\"partial.join.B_norm.weight\",\"partial.join.C_norm.weight\",\"partial.join.B_bias\",\"partial.join.C_bias\","
             + "\"partial.join.in_proj.packed\",\"stage.norm.out\",\"in_proj.weight\","
-            + "\"x\",\"block_norm.weight\"]}\n"
+            + "\"x\",\"block_norm.weight\",\"dt_bias\","
+            + "\"B_norm.weight\",\"C_norm.weight\",\"B_bias\",\"C_bias\"]}\n"
         )
 
     _ = d_gamma_qk^
