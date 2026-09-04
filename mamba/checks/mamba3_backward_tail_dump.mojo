@@ -9,7 +9,7 @@ from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.identity_trace import IdentityTrace
 from mamba.checks.mamba3_backward import (
-    PROJ3_OUT,
+    PROJ3_IN, PROJ3_OUT,
     RED3_D,
     RED3_DT_BIAS,
     RED3_BNORM_W, RED3_CNORM_W, RED3_B_BIAS, RED3_C_BIAS,
@@ -53,6 +53,7 @@ from mamba.impl.mamba_ssm.modules.mamba3_backward import (
     mamba3_backward_join_two_into,
     mamba3_backward_a_heavy_tail_into,
     mamba3_backward_bcnorm_into,
+    mamba3_backward_pack_in_proj_into,
 )
 from mamba.impl.transformers.models.mamba.modeling_mamba import (
     mamba_download,
@@ -245,6 +246,10 @@ def main() raises:
     var d_bw=mamba_zeros(ctx,M3_D_STATE);var d_cw=mamba_zeros(ctx,M3_D_STATE);var d_bb=mamba_zeros(ctx,dims.nheads*M3_D_STATE);var d_cb=mamba_zeros(ctx,dims.nheads*M3_D_STATE)
     mamba3_backward_reduce_into(ctx,d_bw,d_bw_rows,ones,workspace,RED3_BNORM_W,dims,m);mamba3_backward_reduce_into(ctx,d_cw,d_cw_rows,ones,workspace,RED3_CNORM_W,dims,m)
     mamba3_backward_reduce_into(ctx,d_bb,d_b_join,ones,workspace,RED3_B_BIAS,dims,m);mamba3_backward_reduce_into(ctx,d_cb,d_c_join,ones,workspace,RED3_C_BIAS,dims,m)
+    var d_in_proj=mamba_zeros(ctx,m*dims.d_in_proj());var d_norm=mamba_zeros(ctx,m*dims.d_model);var d_w_in=mamba_zeros(ctx,dims.d_in_proj()*dims.d_model)
+    mamba3_backward_pack_in_proj_into(ctx,d_in_proj,d_z,d_v_join,d_b_raw,d_c_raw,d_dt_raw_join,d_a_raw_join,d_trap_join,d_angle_raw_join,m,dims)
+    mamba3_backward_proj_a_into(ctx,d_norm,d_in_proj,device_weights.w_in,workspace,PROJ3_IN,dims,m)
+    mamba3_backward_proj_b_into(ctx,d_w_in,d_in_proj,stages.norm_out,workspace,PROJ3_IN,dims,m)
     ctx.synchronize()
 
     _write_f32(
@@ -326,6 +331,9 @@ def main() raises:
     _write_f32(output + "/grad.partial.join.B.raw.f32",mamba_download(ctx,d_b_raw,m*M3_D_STATE));_write_f32(output + "/grad.partial.join.C.raw.f32",mamba_download(ctx,d_c_raw,m*M3_D_STATE))
     _write_f32(output + "/grad.partial.join.B_norm.weight.f32",mamba_download(ctx,d_bw,M3_D_STATE));_write_f32(output + "/grad.partial.join.C_norm.weight.f32",mamba_download(ctx,d_cw,M3_D_STATE))
     _write_f32(output + "/grad.partial.join.B_bias.f32",mamba_download(ctx,d_bb,dims.nheads*M3_D_STATE));_write_f32(output + "/grad.partial.join.C_bias.f32",mamba_download(ctx,d_cb,dims.nheads*M3_D_STATE))
+    _write_f32(output + "/grad.partial.join.in_proj.packed.f32",mamba_download(ctx,d_in_proj,m*dims.d_in_proj()))
+    _write_f32(output + "/grad.stage.norm.out.f32",mamba_download(ctx,d_norm,m*dims.d_model))
+    _write_f32(output + "/grad.in_proj.weight.f32",mamba_download(ctx,d_w_in,dims.d_in_proj()*dims.d_model))
     if case_k == 5:
         with open(output + "/dump_manifest.json", "w") as fh:
             fh.write(
@@ -380,7 +388,8 @@ def main() raises:
             + "\"partial.join.trap.current_total\",\"partial.join.angle.raw\","
             + "\"partial.join.angle.dt\",\"partial.join.dt.available_total\","
             + "\"partial.join.dt.raw\",\"partial.join.dt_bias\",\"partial.join.B.raw\",\"partial.join.C.raw\","
-            + "\"partial.join.B_norm.weight\",\"partial.join.C_norm.weight\",\"partial.join.B_bias\",\"partial.join.C_bias\"]}\n"
+            + "\"partial.join.B_norm.weight\",\"partial.join.C_norm.weight\",\"partial.join.B_bias\",\"partial.join.C_bias\","
+            + "\"partial.join.in_proj.packed\",\"stage.norm.out\",\"in_proj.weight\"]}\n"
         )
 
     _ = d_gamma_qk^

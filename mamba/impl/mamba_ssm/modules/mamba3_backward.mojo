@@ -584,6 +584,77 @@ def mamba3_backward_bcnorm_into(ctx:DeviceContext,mut dx:DeviceBuffer[DType.floa
     ctx.enqueue_function[mamba3_bcnorm_backward_kernel](dx.unsafe_ptr(),dwrow.unsafe_ptr(),dy.unsafe_ptr(),raw.unsafe_ptr(),weight.unsafe_ptr(),Int32(m),Int32(dims.nheads),Int32(dims.d_in_proj()),Int32(col),grid_dim=(_grid(m),1,1),block_dim=(M3_BWD_TPB,1,1))
 
 
+def mamba3_pack_in_proj_backward_kernel(
+    packed: MutPointer[Float32, MutAnyOrigin],
+    dz: MutPointer[Float32, MutAnyOrigin],
+    dx: MutPointer[Float32, MutAnyOrigin],
+    db: MutPointer[Float32, MutAnyOrigin],
+    dc: MutPointer[Float32, MutAnyOrigin],
+    ddt: MutPointer[Float32, MutAnyOrigin],
+    da: MutPointer[Float32, MutAnyOrigin],
+    dtrap: MutPointer[Float32, MutAnyOrigin],
+    dangle: MutPointer[Float32, MutAnyOrigin],
+    cells_in: Int32,
+    di_in: Int32,
+    nh_in: Int32,
+    dip_in: Int32,
+):
+    """Pack the eight split adjoints in the normative projection order."""
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= Int(cells_in):
+        return
+    var dip = Int(dip_in)
+    var di = Int(di_in)
+    var nh = Int(nh_in)
+    var token = cell // dip
+    var col = cell % dip
+    var value: Float32
+    if col < di:
+        value = dz.unsafe_load(token * di + col)
+    elif col < 2 * di:
+        value = dx.unsafe_load(token * di + col - di)
+    elif col < 2 * di + M3_D_STATE:
+        value = db.unsafe_load(token * M3_D_STATE + col - 2 * di)
+    elif col < 2 * di + 2 * M3_D_STATE:
+        value = dc.unsafe_load(token * M3_D_STATE + col - 2 * di - M3_D_STATE)
+    elif col < 2 * di + 2 * M3_D_STATE + nh:
+        value = ddt.unsafe_load(token * nh + col - 2 * di - 2 * M3_D_STATE)
+    elif col < 2 * di + 2 * M3_D_STATE + 2 * nh:
+        value = da.unsafe_load(token * nh + col - 2 * di - 2 * M3_D_STATE - nh)
+    elif col < 2 * di + 2 * M3_D_STATE + 3 * nh:
+        value = dtrap.unsafe_load(token * nh + col - 2 * di - 2 * M3_D_STATE - 2 * nh)
+    else:
+        value = dangle.unsafe_load(
+            token * M3_NUM_ROPE_ANGLES
+            + col - 2 * di - 2 * M3_D_STATE - 3 * nh
+        )
+    packed.unsafe_store(cell, ftz(value))
+
+
+def mamba3_backward_pack_in_proj_into(
+    ctx: DeviceContext,
+    mut packed: DeviceBuffer[DType.float32],
+    mut dz: DeviceBuffer[DType.float32],
+    mut dx: DeviceBuffer[DType.float32],
+    mut db: DeviceBuffer[DType.float32],
+    mut dc: DeviceBuffer[DType.float32],
+    mut ddt: DeviceBuffer[DType.float32],
+    mut da: DeviceBuffer[DType.float32],
+    mut dtrap: DeviceBuffer[DType.float32],
+    mut dangle: DeviceBuffer[DType.float32],
+    m: Int,
+    dims: Mamba3Dims,
+) raises:
+    var cells = m * dims.d_in_proj()
+    ctx.enqueue_function[mamba3_pack_in_proj_backward_kernel](
+        packed.unsafe_ptr(), dz.unsafe_ptr(), dx.unsafe_ptr(), db.unsafe_ptr(),
+        dc.unsafe_ptr(), ddt.unsafe_ptr(), da.unsafe_ptr(), dtrap.unsafe_ptr(),
+        dangle.unsafe_ptr(), Int32(cells), Int32(dims.d_inner),
+        Int32(dims.nheads), Int32(dims.d_in_proj()),
+        grid_dim=(_grid(cells), 1, 1), block_dim=(M3_BWD_TPB, 1, 1),
+    )
+
+
 def mamba3_s17_reverse_state_kernel(
     d_state_direct:MutPointer[Float32,MutAnyOrigin],d_state_total:MutPointer[Float32,MutAnyOrigin],d_initial:MutPointer[Float32,MutAnyOrigin],
     d_y:MutPointer[Float32,MutAnyOrigin],q:MutPointer[Float32,MutAnyOrigin],dacs:MutPointer[Float32,MutAnyOrigin],

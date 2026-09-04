@@ -63,6 +63,9 @@ from mamba.checks.mamba3_backward import (
     mamba3_rope_pair_indices,
     mamba3_rope_pair_is_rotated,
 )
+from mamba.impl.mamba_ssm.modules.mamba3_backward import (
+    mamba3_backward_pack_in_proj_into,
+)
 
 
 def _force_elaborate(
@@ -71,6 +74,15 @@ def _force_elaborate(
     mut b: DeviceBuffer[DType.float32],
     mut c: DeviceBuffer[DType.float32],
     mut ws: DeviceBuffer[DType.float32],
+    mut p0: DeviceBuffer[DType.float32],
+    mut p1: DeviceBuffer[DType.float32],
+    mut p2: DeviceBuffer[DType.float32],
+    mut p3: DeviceBuffer[DType.float32],
+    mut p4: DeviceBuffer[DType.float32],
+    mut p5: DeviceBuffer[DType.float32],
+    mut p6: DeviceBuffer[DType.float32],
+    mut p7: DeviceBuffer[DType.float32],
+    mut p8: DeviceBuffer[DType.float32],
     dims: Mamba3Dims,
     m: Int,
 ) raises:
@@ -78,6 +90,9 @@ def _force_elaborate(
     mamba3_backward_proj_a_into(ctx, a, b, c, ws, PROJ3_IN, dims, m)
     mamba3_backward_proj_b_into(ctx, a, b, c, ws, PROJ3_IN, dims, m)
     mamba3_backward_reduce_into(ctx, a, b, c, ws, RED3_D, dims, m)
+    mamba3_backward_pack_in_proj_into(
+        ctx, p0, p1, p2, p3, p4, p5, p6, p7, p8, m, dims
+    )
 
 
 def main() raises:
