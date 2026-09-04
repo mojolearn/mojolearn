@@ -48,7 +48,7 @@ def main() raises:
         ctx, out, xd, xbc, 2, 513, 1, 32, 40, 3, 256
     )
     mamba2_reduce_scale_product_into(
-        ctx, reduction, out, dacs, 2, 3, 1, 256
+        ctx, reduction, out, dacs, d_y, 2, 3, 1, 256
     )
     mamba2_reverse_cumsum_and_da_into(
         ctx, discretize, reduction.d_dacs_total, dt, dt_bias,

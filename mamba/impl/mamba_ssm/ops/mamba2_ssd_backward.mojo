@@ -367,6 +367,7 @@ struct Mamba2SSDScaleReduction(Movable):
     var workspace: DeviceBuffer[DType.float32]
     var d_dacs_state: DeviceBuffer[DType.float32]  # [B,H,C,Q]
     var d_dacs_total: DeviceBuffer[DType.float32]  # S18 yoff + S17 state
+    var d_dacs_decay: DeviceBuffer[DType.float32]  # S15 cstate decay
 
     def __init__(
         out self, ctx: DeviceContext, b: Int, nc: Int, nh: Int, qv: Int
@@ -385,6 +386,32 @@ struct Mamba2SSDScaleReduction(Movable):
         )
         self.d_dacs_state.enqueue_fill(Float32(0.0))
         self.d_dacs_total = ctx.enqueue_create_buffer[DType.float32](rows * qv)
+        self.d_dacs_decay = ctx.enqueue_create_buffer[DType.float32](rows * qv)
+
+
+def mamba2_decay_to_dacs_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    d_decay: MutPointer[Float32, MutAnyOrigin],
+    decay: MutPointer[Float32, MutAnyOrigin],
+    rows_in: Int32,
+    q_in: Int32,
+):
+    """Reverse exp(dacs[last]-dacs[i]); last-minus-last cancels."""
+    var rows = Int(rows_in)
+    var qv = Int(q_in)
+    var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if row >= rows:
+        return
+    var base = row * qv
+    var last_sum = Float32(0.0)
+    for ii in range(qv - 1):
+        var g = ftz(pinned_mul(
+            ftz(d_decay.unsafe_load(base + ii)),
+            ftz(decay.unsafe_load(base + ii)),
+        ))
+        dst.unsafe_store(base + ii, ftz(-g))
+        last_sum = ftz(last_sum + g)
+    dst.unsafe_store(base + qv - 1, last_sum)
 
 
 struct Mamba2SSDDiscretizeBackward(Movable):
@@ -747,12 +774,14 @@ def mamba2_merge_dacs_kernel(
     dst: MutPointer[Float32, MutAnyOrigin],
     yoff: MutPointer[Float32, MutAnyOrigin],
     state: MutPointer[Float32, MutAnyOrigin],
+    decay: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
 ):
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n_in):
         dst.unsafe_store(
-            i, ftz(ftz(yoff.unsafe_load(i)) + ftz(state.unsafe_load(i)))
+            i, ftz(ftz(ftz(yoff.unsafe_load(i)) + ftz(state.unsafe_load(i)))
+                   + ftz(decay.unsafe_load(i)))
         )
 
 
@@ -881,6 +910,7 @@ def mamba2_reduce_scale_product_into(
     mut reduction: Mamba2SSDScaleReduction,
     mut state: Mamba2SSDBackwardState,
     mut dacs: DeviceBuffer[DType.float32],
+    mut decay: DeviceBuffer[DType.float32],
     b: Int,
     nc: Int,
     nh: Int,
@@ -919,10 +949,17 @@ def mamba2_reduce_scale_product_into(
         grid_dim=(_grid(rows), 1, 1),
         block_dim=(M2_SSD_BWD_TPB, 1, 1),
     )
+    ctx.enqueue_function[mamba2_decay_to_dacs_kernel](
+        reduction.d_dacs_decay.unsafe_ptr(), state.d_decay_cstate.unsafe_ptr(),
+        decay.unsafe_ptr(), Int32(rows), Int32(qv),
+        grid_dim=(_grid(rows), 1, 1),
+        block_dim=(M2_SSD_BWD_TPB, 1, 1),
+    )
     var dacs_cells = rows * qv
     ctx.enqueue_function[mamba2_merge_dacs_kernel](
         reduction.d_dacs_total.unsafe_ptr(), state.d_dacs_yoff.unsafe_ptr(),
-        reduction.d_dacs_state.unsafe_ptr(), Int32(dacs_cells),
+        reduction.d_dacs_state.unsafe_ptr(), reduction.d_dacs_decay.unsafe_ptr(),
+        Int32(dacs_cells),
         grid_dim=(_grid(dacs_cells), 1, 1),
         block_dim=(M2_SSD_BWD_TPB, 1, 1),
     )

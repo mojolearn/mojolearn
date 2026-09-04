@@ -201,6 +201,7 @@ def main() raises:
         scale_reduction,
         ssd_backward,
         stages.dacs,
+        stages.decay,
         fixture.b,
         stages.nc,
         dims.nheads,
@@ -305,6 +306,11 @@ def main() raises:
             scale_reduction.d_dacs_state,
             fixture.b * dims.nheads * stages.nc * m2_q_eff(),
         ),
+    )
+    _write_f32(
+        dump_dir + "/grad.partial.dacs.from_decay.f32",
+        mamba_download(ctx, scale_reduction.d_dacs_decay,
+            fixture.b * dims.nheads * stages.nc * m2_q_eff()),
     )
     _write_f32(
         dump_dir + "/grad.partial.C.from_yoff.f32",
@@ -425,7 +431,7 @@ def main() raises:
             "\"stage.pass.states.direct\",\"stage.pass.states.total\","
             "\"stage.cstate.out\",\"stage.initial_state\","
             "\"stage.scale.product\",\"partial.decay.from_cstate\","
-            "\"partial.dacs.from_state\","
+            "\"partial.dacs.from_state\",\"partial.dacs.from_decay\","
             "\"partial.C.from_yoff\",\"partial.dacs.from_yoff\","
             "\"partial.dacs.total\",\"partial.da.from_seg\",\"partial.da.total\","
             "\"partial.A.from_da\",\"partial.dt.from_da\","

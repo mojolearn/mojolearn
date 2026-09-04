@@ -229,7 +229,8 @@ def generate(args):
         beta_dt[:,1:]=beta_grad[:,:-1]*(1-sig_stage[:,1:])
         dsig_shift=-beta_grad[:,:-1]*dt_stage[:,1:]
         beta_trap[:,1:]=dsig_shift*sig_stage[:,1:]*(1-sig_stage[:,1:])
-        intermediate_gradients.extend((("partial.beta.dt",beta_dt),("partial.beta.trap_raw",beta_trap),("partial.dt.current_total",d_dt_qk+beta_dt.reshape_as(d_dt_qk)),("partial.trap.current_total",d_sig_qk*sig_qk*(1-sig_qk)+beta_trap.reshape_as(d_sig_qk))))
+        dt_current=d_dt_qk+beta_dt.reshape_as(d_dt_qk)
+        intermediate_gradients.extend((("partial.beta.dt",beta_dt),("partial.beta.trap_raw",beta_trap),("partial.dt.current_total",dt_current),("partial.trap.current_total",d_sig_qk*sig_qk*(1-sig_qk)+beta_trap.reshape_as(d_sig_qk))))
         angle_raw=stages["in_proj.out"].detach()[:,-32:].reshape(bsz,length,32).requires_grad_(True);dt_angle=stages["dt.out"].detach().reshape(bsz,length,-1).requires_grad_(True)
         theta_state=torch.zeros(bsz,dt_angle.shape[-1],32,dtype=angle_raw.dtype,device=angle_raw.device);theta_rows=[]
         rate=torch.tanh(angle_raw)*torch.pi
@@ -239,6 +240,12 @@ def generate(args):
         theta_iso=torch.stack(theta_rows,1)
         dangle_raw,ddt_angle=torch.autograd.grad((theta_iso*dtheta_r.detach().reshape_as(theta_iso)).sum(),(angle_raw,dt_angle))
         intermediate_gradients.extend((("partial.angle.raw",dangle_raw),("partial.angle.dt",ddt_angle)))
+        dt_available=dt_current+ddt_angle.reshape_as(dt_current)
+        di=stages["gate.out"].shape[1]*stages["gate.out"].shape[2];h=dt_available.shape[-1];dt_col=2*di+2*128
+        dt_raw=stages["in_proj.out"].detach()[:,dt_col:dt_col+h].requires_grad_(True);dt_bias_leaf=params["dt_bias"].detach().requires_grad_(True)
+        dt_iso=torch.nn.functional.softplus(dt_raw+dt_bias_leaf)
+        ddraw,ddbias=torch.autograd.grad((dt_iso*dt_available.detach()).sum(),(dt_raw,dt_bias_leaf))
+        intermediate_gradients.extend((("partial.dt.available_total",dt_available),("partial.dt.raw",ddraw),("partial.dt_bias",ddbias)))
 
         gate32 = stages["gate.out"].detach().to(torch.float32)
         gate32.requires_grad_(True)
@@ -313,11 +320,14 @@ def generate(args):
         reference32.update({"partial.B_biased.total":dk32_biased+dkr32raw,"partial.C_biased.total":dq32_biased+dqr32raw,"partial.gamma.total":dgamma32+dsc32.reshape_as(dgamma32)})
         bg32=dsc32.reshape(bsz,length,-1);dts32=stages["dt.out"].detach().to(torch.float32).reshape_as(bg32);sg32=stages["trap.sigma"].detach().to(torch.float32).reshape_as(bg32)
         bdt32=torch.zeros_like(bg32);btr32=torch.zeros_like(bg32);bdt32[:,1:]=bg32[:,:-1]*(1-sg32[:,1:]);dsg32=-bg32[:,:-1]*dts32[:,1:];btr32[:,1:]=dsg32*sg32[:,1:]*(1-sg32[:,1:])
-        reference32.update({"partial.beta.dt":bdt32,"partial.beta.trap_raw":btr32,"partial.dt.current_total":ddt32_qk+bdt32.reshape_as(ddt32_qk),"partial.trap.current_total":dsig32_qk*sig32_qk*(1-sig32_qk)+btr32.reshape_as(dsig32_qk)})
+        dtcur32=ddt32_qk+bdt32.reshape_as(ddt32_qk)
+        reference32.update({"partial.beta.dt":bdt32,"partial.beta.trap_raw":btr32,"partial.dt.current_total":dtcur32,"partial.trap.current_total":dsig32_qk*sig32_qk*(1-sig32_qk)+btr32.reshape_as(dsig32_qk)})
         ar32=angle_raw.detach().to(torch.float32).requires_grad_(True);dta32=dt_angle.detach().to(torch.float32).requires_grad_(True);ts32=torch.zeros(bsz,dta32.shape[-1],32,dtype=torch.float32,device=ar32.device);trs32=[];rt32=torch.tanh(ar32)*torch.pi
         for ti in range(length):
             ts32=ts32+rt32[:,ti,None,:]*dta32[:,ti,:,None];ts32=ts32-2*torch.pi*torch.floor(ts32/(2*torch.pi));trs32.append(ts32)
         thi32=torch.stack(trs32,1);dar32,dda32=torch.autograd.grad((thi32*dth32.detach().reshape_as(thi32)).sum(),(ar32,dta32));reference32.update({"partial.angle.raw":dar32,"partial.angle.dt":dda32})
+        dtavail32=dtcur32+dda32.reshape_as(dtcur32);dtr32=stages["in_proj.out"].detach().to(torch.float32)[:,dt_col:dt_col+h].requires_grad_(True);dtb32=params["dt_bias"].detach().to(torch.float32).requires_grad_(True)
+        dto32=torch.nn.functional.softplus(dtr32+dtb32);ddraw32,ddbias32=torch.autograd.grad((dto32*dtavail32.detach()).sum(),(dtr32,dtb32));reference32.update({"partial.dt.available_total":dtavail32,"partial.dt.raw":ddraw32,"partial.dt_bias":ddbias32})
     if args.family == "mamba2":
         tail_input = stages["gnorm.out"].detach().requires_grad_(True)
         tail_output = torch.nn.functional.linear(
@@ -419,6 +429,10 @@ def generate(args):
                 b_recorded[:, start:start+real],
             )
         intermediate_gradients.append(("partial.decay.from_cstate", ddecay))
+        decay_product = ddecay * stages["decay.states"]
+        d_dacs_decay = -decay_product
+        d_dacs_decay[..., -1] = decay_product[..., :-1].sum(-1)
+        intermediate_gradients.append(("partial.dacs.from_decay", d_dacs_decay))
         d_dacs_state = torch.zeros_like(stages["dacs.out"])
         d_scale = d_scale_product.sum(dim=(-1, -2))
         d_dacs_state[..., -1] = d_scale.permute(0, 2, 1) * torch.exp(
@@ -426,9 +440,9 @@ def generate(args):
         )
         intermediate_gradients.append(("partial.dacs.from_state", d_dacs_state))
         intermediate_gradients.append((
-            "partial.dacs.total", d_dacs_yoff + d_dacs_state
+            "partial.dacs.total", d_dacs_yoff + d_dacs_state + d_dacs_decay
         ))
-        dacs_total = (d_dacs_yoff + d_dacs_state).detach()
+        dacs_total = (d_dacs_yoff + d_dacs_state + d_dacs_decay).detach()
         a_leaf = stages["A.out"].detach().requires_grad_(True)
         dt_leaf = stages["dt.out"].reshape(bsz, length, nheads).detach().requires_grad_(True)
         da_leaf = (dt_leaf * a_leaf).requires_grad_(True)
@@ -656,13 +670,19 @@ def generate(args):
                 b_recorded32[:, start:start+real],
             )
         reference32["partial.decay.from_cstate"] = ddecay32
+        decay_product32 = ddecay32 * stages32["decay.states"]
+        ddacs_decay32 = -decay_product32
+        ddacs_decay32[..., -1] = decay_product32[..., :-1].sum(-1)
+        reference32["partial.dacs.from_decay"] = ddacs_decay32
         ddacs_state32 = torch.zeros_like(stages32["dacs.out"])
         dscale32 = dscale_product32.sum(dim=(-1, -2))
         ddacs_state32[..., -1] = dscale32.permute(0, 2, 1) * torch.exp(
             stages32["dacs.out"][..., -1]
         )
         reference32["partial.dacs.from_state"] = ddacs_state32
-        reference32["partial.dacs.total"] = ddacs_yoff32 + ddacs_state32
+        reference32["partial.dacs.total"] = (
+            ddacs_yoff32 + ddacs_state32 + ddacs_decay32
+        )
         dacs_total32 = reference32["partial.dacs.total"].detach()
         a32 = stages32["A.out"].detach().requires_grad_(True)
         dt32 = stages32["dt.out"].reshape(b32, l32, h32).detach().requires_grad_(True)

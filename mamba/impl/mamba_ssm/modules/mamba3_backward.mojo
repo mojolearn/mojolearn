@@ -430,3 +430,42 @@ def mamba3_backward_angle_into(
     ctx.enqueue_function[mamba3_theta_reverse_kernel](d_rate.unsafe_ptr(),d_theta.unsafe_ptr(),dt.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),grid_dim=(_grid(chains),1,1),block_dim=(M3_BWD_TPB,1,1))
     var m=b*l;var cells=m*M3_NUM_ROPE_ANGLES if m*M3_NUM_ROPE_ANGLES>m*dims.nheads else m*dims.nheads
     ctx.enqueue_function[mamba3_angle_reduce_kernel](d_angle.unsafe_ptr(),d_dt.unsafe_ptr(),d_rate.unsafe_ptr(),d_theta.unsafe_ptr(),in_proj.unsafe_ptr(),dt.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(dims.d_in_proj()),Int32(dims.col_angle()),grid_dim=(_grid(cells),1,1),block_dim=(M3_BWD_TPB,1,1))
+
+
+def mamba3_dt_softplus_partial_kernel(
+    d_dt_total: MutPointer[Float32, MutAnyOrigin],
+    d_dt_raw: MutPointer[Float32, MutAnyOrigin],
+    d_dt_bias_rows: MutPointer[Float32, MutAnyOrigin],
+    d_dt_current: MutPointer[Float32, MutAnyOrigin],
+    d_dt_angle: MutPointer[Float32, MutAnyOrigin],
+    in_proj: MutPointer[Float32, MutAnyOrigin],
+    dt_bias: MutPointer[Float32, MutAnyOrigin],
+    cells_in: Int32,
+    nh_in: Int32,
+    dip_in: Int32,
+    col_dt_in: Int32,
+):
+    """Join available dt legs and apply S6 softplus' derivative."""
+    var cells=Int(cells_in);var nh=Int(nh_in);var dip=Int(dip_in);var col=Int(col_dt_in)
+    var cell=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if cell>=cells:return
+    var token=cell//nh;var h=cell%nh
+    var total=ftz(ftz(d_dt_current.unsafe_load(cell))+ftz(d_dt_angle.unsafe_load(cell)))
+    d_dt_total.unsafe_store(cell,total)
+    var pre=ftz(ftz(in_proj.unsafe_load(token*dip+col+h))+ftz(dt_bias.unsafe_load(h)))
+    var prime=Float32(1.0)
+    if pre<=Float32(20.0):
+        prime=ftz(identical_sigmoid(pre))
+    var draw=ftz(pinned_mul(total,prime))
+    d_dt_raw.unsafe_store(cell,draw)
+    d_dt_bias_rows.unsafe_store(cell,draw)
+
+
+def mamba3_backward_dt_partial_into(
+    ctx:DeviceContext,
+    mut d_dt_total:DeviceBuffer[DType.float32],mut d_dt_raw:DeviceBuffer[DType.float32],mut d_dt_bias_rows:DeviceBuffer[DType.float32],
+    mut d_dt_current:DeviceBuffer[DType.float32],mut d_dt_angle:DeviceBuffer[DType.float32],mut in_proj:DeviceBuffer[DType.float32],mut dt_bias:DeviceBuffer[DType.float32],
+    m:Int,dims:Mamba3Dims,
+) raises:
+    var cells=m*dims.nheads
+    ctx.enqueue_function[mamba3_dt_softplus_partial_kernel](d_dt_total.unsafe_ptr(),d_dt_raw.unsafe_ptr(),d_dt_bias_rows.unsafe_ptr(),d_dt_current.unsafe_ptr(),d_dt_angle.unsafe_ptr(),in_proj.unsafe_ptr(),dt_bias.unsafe_ptr(),Int32(cells),Int32(dims.nheads),Int32(dims.d_in_proj()),Int32(dims.col_dt()),grid_dim=(_grid(cells),1,1),block_dim=(M3_BWD_TPB,1,1))

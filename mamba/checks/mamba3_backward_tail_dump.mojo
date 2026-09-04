@@ -11,6 +11,7 @@ from core.identity_trace import IdentityTrace
 from mamba.checks.mamba3_backward import (
     PROJ3_OUT,
     RED3_D,
+    RED3_DT_BIAS,
     mamba3_backward_ones_floats,
     mamba3_backward_proj_a_into,
     mamba3_backward_proj_b_into,
@@ -38,6 +39,7 @@ from mamba.impl.mamba_ssm.modules.mamba3_backward import (
     mamba3_backward_join_rotary_into,
     mamba3_backward_join_current_into,
     mamba3_backward_angle_into,
+    mamba3_backward_dt_partial_into,
 )
 from mamba.impl.transformers.models.mamba.modeling_mamba import (
     mamba_download,
@@ -178,6 +180,9 @@ def main() raises:
     var d_angle_raw=mamba_zeros(ctx,m*M3_NUM_ROPE_ANGLES)
     var d_dt_angle=mamba_zeros(ctx,head_cells)
     mamba3_backward_angle_into(ctx,d_angle_rate,d_angle_raw,d_dt_angle,d_theta_rot,stages.dt_work,stages.in_proj,fixture.b,fixture.l,dims)
+    var d_dt_available=mamba_zeros(ctx,head_cells);var d_dt_raw=mamba_zeros(ctx,head_cells);var d_dt_bias_rows=mamba_zeros(ctx,head_cells);var d_dt_bias=mamba_zeros(ctx,dims.nheads)
+    mamba3_backward_dt_partial_into(ctx,d_dt_available,d_dt_raw,d_dt_bias_rows,d_dt_total,d_dt_angle,stages.in_proj,device_weights.dt_bias,m,dims)
+    mamba3_backward_reduce_into(ctx,d_dt_bias,d_dt_bias_rows,ones,workspace,RED3_DT_BIAS,dims,m)
     ctx.synchronize()
 
     _write_f32(
@@ -216,6 +221,9 @@ def main() raises:
     _write_f32(output + "/grad.partial.trap.current_total.f32",mamba_download(ctx,d_trap_total,head_cells))
     _write_f32(output + "/grad.partial.angle.raw.f32",mamba_download(ctx,d_angle_raw,m*M3_NUM_ROPE_ANGLES))
     _write_f32(output + "/grad.partial.angle.dt.f32",mamba_download(ctx,d_dt_angle,head_cells))
+    _write_f32(output + "/grad.partial.dt.available_total.f32",mamba_download(ctx,d_dt_available,head_cells))
+    _write_f32(output + "/grad.partial.dt.raw.f32",mamba_download(ctx,d_dt_raw,head_cells))
+    _write_f32(output + "/grad.partial.dt_bias.f32",mamba_download(ctx,d_dt_bias,dims.nheads))
     with open(output + "/dump_manifest.json", "w") as fh:
         fh.write(
             "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
@@ -236,7 +244,8 @@ def main() raises:
             + "\"partial.B_biased.total\",\"partial.C_biased.total\","
             + "\"partial.gamma.total\",\"partial.dt.current_total\","
             + "\"partial.trap.current_total\",\"partial.angle.raw\","
-            + "\"partial.angle.dt\"]}\n"
+            + "\"partial.angle.dt\",\"partial.dt.available_total\","
+            + "\"partial.dt.raw\",\"partial.dt_bias\"]}\n"
         )
 
     _ = d_gamma_qk^
@@ -280,3 +289,7 @@ def main() raises:
     _ = d_dt_angle^
     _ = d_angle_raw^
     _ = d_angle_rate^
+    _ = d_dt_bias^
+    _ = d_dt_bias_rows^
+    _ = d_dt_raw^
+    _ = d_dt_available^
