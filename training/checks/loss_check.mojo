@@ -101,27 +101,7 @@ from training.checks.loss_oracle import (
 )
 
 
-# ===========================================================================
-# THE CARD PATH IS THE CALLER'S WHEN THE CALLER NAMES ONE.
-#
-# DEVIATION 1452, and it is DEVIATION 970 of the mamba lane not repeated.
-# There, a `comptime TRACE_PATH` was read DIRECTLY by every write site, so
-# the card always landed in /tmp no matter what the caller asked for.
-# `tools/e1_bootstrap.sh` phase 8 sets `MOJOLEARN_IDENTITY_TRACE` to
-# `<out>/lanes/<lane>.identical.card` and its comment claimed the driver
-# honored it. It did not. The Apple column of 2026-08-24 ran the mamba lane
-# GREEN -- clause (a) PASS, 16/16 stages bit-identical, a 17-tag card
-# written -- and phase 8 reported "NO CARD written", because the card was
-# in /tmp under the alias while the judge looked in lanes/.
-# `tools/e3_round_judge.sh` section 7 treats a missing IDENTICAL card as a
-# hard failure, so the one lane the leg was FOR could never have been
-# judged, and the rental would have been spent finding that out.
-#
-# THE SHAPE OF THAT BUG IS WHAT MATTERS HERE: a green check with no card is
-# INDISTINGUISHABLE FROM SUCCESS to the gate above it. So the path is read
-# from the environment at RUN time and the constant below is only the
-# fallback for a standalone run by hand.
-# ===========================================================================
+# Card output follows the caller-selected runtime path; standalone runs use the fallback.
 
 comptime TRACE_PATH = "/tmp/mojolearn_loss_ce.trace"
 

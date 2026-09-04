@@ -2133,7 +2133,6 @@ def clause_c_length(ctx: DeviceContext, k: Int) raises:
             "transformer_backward_check: clause (c)'s length half needs at"
             " least two lengths and the case chosen is too short"
         )
-
     print(
         "clause (c) length: "
         + String(c.name)
@@ -2669,7 +2668,6 @@ def clause_d_carry_theorem() raises:
             + " failure here is a finding about `ftz` or about `fma` and not"
             + " about the chain."
         )
-
     var uncarried_moved = 0
     var uncarried_inert = 0
     for cut in range(1, n):
@@ -4201,91 +4199,3 @@ def main() raises:
             " NVIDIA diverged at tree001.winners.scores, so two backends"
             " agreeing closes nothing."
         )
-
-
-# ===========================================================================
-# OWED, AND WHY I DID NOT DO IT HERE
-#
-# This file is the only one this lane's gate agent was permitted to write.
-# Everything below is a belief about ANOTHER file, recorded rather than
-# acted on, so that the next agent inherits the finding instead of
-# rediscovering it. **None of it has been verified by running anything.**
-#
-# 1. **A CHUNKED BACKWARD ENTRY POINT, DEVIATION 1527.** Plan section 5.3's
-#    carried-accumulator chunk theorem is the property the plan calls "the
-#    one this lane gets for free that the GEMM lane cannot have", and
-#    NEITHER HALF OF THE LANE IMPLEMENTS IT. `llama_decoder_layer_backward`
-#    and `transformer_block_backward_oracle` both take no seed, no carry
-#    flag and no accumulator argument. The shape it needs is the embedding
-#    lane's `accumulate` exactly: one `Bool` that says "do not zero-fill the
-#    four accumulating outputs, seed their chains from what you were
-#    handed". Until it exists, clause (d2) is a demonstration on a
-#    hand-written chain and the theorem is ungated on both halves.
-#
-# 2. **PLAN SECTION 6.2's CLAUSE (c) LIST IS WRONG, DEVIATION 1529.** It
-#    names `bwd.d_x` and `bwd.d_norm1_out` as SEQUENCE-LENGTH invariant and
-#    the plan's own section 5.2 says they are not: both are downstream of
-#    `bwd.d_k_proj_out` / `bwd.d_v_proj_out`, which are the `[pos0, S)`
-#    slices of query-axis sums. `[[fix-docs-on-discovery]]` binds whoever
-#    edits that file: **delete the false sentence, do not soften it.** The
-#    corrected clause is `is_query_axis_stage` in this file, and the
-#    BATCH half of the clause is unaffected -- `bwd.d_k_cache` is
-#    `[B, n_kv, S, hd]` and IS batch-composition invariant. **The two halves
-#    have different moving sets and the plan uses one list for both.**
-#
-# 3. **PLAN 6.2(d)'s "MUST MOVE at any chunk of 2 or more terms" IS VERY
-#    SLIGHTLY TOO STRONG.** `clause_d_carry_theorem` measures it: over
-#    `{2^24, 1 x 7}` the uncarried two-partial spelling is INERT at the
-#    splits that leave a single absorbed term on the far side, because
-#    `2^24 + 1` rounds back to `2^24`. The sentence should read "must move
-#    at SOME split of 2 or more terms, and the gate must report which".
-#
-# 4. **A `d_out` GENERATOR IN `transformer_fixture.mojo`, DEVIATION 1531.**
-#    That file's eleven tensor ids stop at the cache tail because it predates
-#    the backward, so this gate carries its own generator and its own
-#    separation guard. Two generators in two files is two chances to be
-#    edited apart, and the right home is the fixture. It is a file this
-#    agent may not edit.
-#
-# 5. **A `d_model == 1` FIXTURE CASE.** Plan 6.3 predicts that inert set for
-#    `B01_DOT_UNFUSED`, `B01_DOT_DESCENDING` and
-#    `B_RSTD_RECOMPUTE_DESCENDING`, and the fixture set cannot express it,
-#    so all three are reported MOVED-BUT-UNMASKED rather than as reach
-#    proofs. One case closes three arms.
-#
-# 6. **AN `x` FIELD ON `LlamaDeviceStages`**, plan section 1's cross-lane
-#    request. A one-line edit that deletes an argument from
-#    `llama_decoder_layer_backward` and removes the one place this gate has
-#    to keep a forward buffer alive by hand.
-#
-# 7. **A RUNNER FOR THE TWENTY-TWO SABOTAGE BUILDS.** `is_defined` is a
-#    compile-time query, so exercising the set is twenty-two compiles. What
-#    is owed is a script that, per arm, builds with the arm's `-D`, exports
-#    `MOJOLEARN_TFB_EXPECT_SABOTAGE=<arm>` and `MOJOLEARN_IDENTITY_TRACE=
-#    <out>/<arm>.card`, runs this file and requires a NONZERO exit.
-#    `B11_DQ_VIA_GEMM` additionally needs `MOJOLEARN_TFB_CHECK_LONG=1`, and
-#    `B10_DW_VIA_CHAIN`, `BWD_OPERAND_ORDER` and `B_FANIN_ZERO_SEED` are
-#    expected to raise a NAMED "smoke test" or "not constructed" error
-#    rather than a bitten-arm one, which a runner must distinguish or it
-#    will record three false failures. A shell file under `tools/` is
-#    outside this agent's remit.
-#
-# 8. **`transformer/corpus/` AND THE FLOAT64 DIRECTIONAL DERIVATIVE.** The
-#    only two things that can catch our oracle being wrong in the same way
-#    as our device. Neither exists. Plan section 11 calls the float64
-#    reference the lane's largest owed item and this file agrees: **a
-#    transpose error is bit identical on three vendors.**
-#
-# 9. **`IDENTITY_PATHS.md`, `archive/plans/CARD_GAPS.md` AND `archive/plans/UNWIRED.md`.** No row names
-#    the backward profile. DEVIATION 1400 reserves an IDENTITY_PATHS row and
-#    plan section 11 says it must not be written until a three-vendor leg
-#    runs; `archive/plans/UNWIRED.md` is where "compiled, not yet certified" belongs and
-#    that is now the state of three files in this directory.
-#
-# 10. **`tools/e1_bootstrap.sh` PHASE 8.** This lane's card is not wired into
-#     the leg's judge. What phase 8 needs is one entry that sets
-#     `MOJOLEARN_IDENTITY_TRACE` to
-#     `<out>/lanes/transformer_backward.identical.card` and runs this file.
-#     DEVIATION 1526 is why that will now work and DEVIATION 970 is why it
-#     would not have.
-# ===========================================================================
