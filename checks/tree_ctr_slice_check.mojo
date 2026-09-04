@@ -21,7 +21,7 @@ from gbdt.models.tensor_ctr_value_table import (
     value_for_split_tensor_row,
     next_tensor_base_from_winner,
 )
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 from gbdt.ctrs.ctr_binarization import (
     BORDER_SELECTION_UNIFORM,
     TBinarizationOptions,
@@ -35,6 +35,7 @@ from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     accept_symmetric_level_winner,
     TSynchronizedSymmetricLevelState,
     TTreeWorkspace,
+    run_bounded_synchronized_tensor_tree,
     run_synchronized_symmetric_level,
     run_tree_layout,
 )
@@ -381,6 +382,9 @@ def main() raises:
     var pinned_device = insert_staged_tensor_candidate_device(
         ctx, pinned_initial, pinned_base.copy()
     )
+    var production_device = insert_staged_tensor_candidate_device(
+        ctx, pinned_initial, pinned_base.copy()
+    )
     var reference_device = insert_staged_tensor_candidate_device(
         ctx, pinned_initial, pinned_base^
     )
@@ -411,6 +415,43 @@ def main() raises:
     var no_trace = IdentityTrace.disabled()
     var no_times = StageTimes()
     no_times.enabled = False
+
+    # The production API accepts only explicit candidate/cindex pairs and
+    # returns fit-ready stable model metadata. Exercise its one-level bounded
+    # form independently of the manual two-level state checks below.
+    var production_rows = ctx.enqueue_create_buffer[DType.uint32](6)
+    var production_stats = ctx.enqueue_create_buffer[DType.float32](12)
+    ctx.enqueue_copy(dst_buf=production_rows, src_ptr=h_rows.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=production_stats, src_ptr=h_stats.unsafe_ptr())
+    var production_cindexes = List[DeviceBuffer[DType.uint32]]()
+    production_cindexes.append(production_device^)
+    var production_candidates = List[TStagedTensorCandidate]()
+    production_candidates.append(pinned_initial.copy())
+    var production_borders = List[List[Float32]]()
+    production_borders.append(List[Float32]())
+    var production_blocks = blocks_for(pinned_initial.compressed.layout, 6)
+    var production_result = run_bounded_synchronized_tensor_tree(
+        ctx, pinned_initial.compressed.layout.copy(), production_blocks^,
+        production_cindexes^, production_candidates^,
+        production_rows, production_stats, 6, 2,
+        Float32(6.0), grad_mag, SCORE_FUNCTION_COSINE, False,
+        Float32(3.0), Float32(0.0), UInt64(0), True, 1,
+        production_borders^, base_folds.copy(), no_trace, no_times,
+        "tensor_production",
+    )
+    if len(production_result.splits) != 1 or (
+        len(production_result.leaf_offsets) != 2
+        or len(production_result.leaf_sizes) != 2
+        or len(production_result.stable_borders) != 2
+        or len(production_result.stable_fold_counts) != 2
+        or len(production_result.registry.features) != 1
+    ):
+        raise Error("bounded tensor production result is incomplete")
+    var production_rows_total = 0
+    for leaf in range(len(production_result.leaf_sizes)):
+        production_rows_total += production_result.leaf_sizes[leaf]
+    if production_rows_total != 6:
+        raise Error("bounded tensor production result lost rows")
     var sync_splits = List[TBinarySplit]()
     var reference_splits = List[TBinarySplit]()
     if not run_synchronized_symmetric_level(

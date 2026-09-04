@@ -18,6 +18,11 @@ from gbdt.models.oblivious_model import (
     BIN_SPLIT_TAKE_GREATER,
     TBinarySplit,
 )
+from gbdt.models.tensor_ctr_value_table import (
+    persist_synchronized_tensor_path,
+    TStagedTensorCandidate,
+    TTensorCtrRegistry,
+)
 from gbdt.methods.greedy_subsets_searcher.split_properties_helper import (
     HISTOGRAMS_CURRENT_PATH,
     HISTOGRAMS_PREVIOUS_PATH,
@@ -3822,6 +3827,108 @@ def run_synchronized_symmetric_level[
         return False
     _ = state.enqueue_post_winner(ctx, row_index, stats)
     return True
+
+
+@fieldwise_init
+struct TSynchronizedTensorTreeResult(Movable):
+    """Fit-integration payload from an explicit bounded tensor-tree run."""
+
+    var splits: List[TBinarySplit]
+    var leaf_offsets: List[Int]
+    var leaf_sizes: List[Int]
+    var staged_by_level: List[TStagedTensorCandidate]
+    var stable_borders: List[List[Float32]]
+    var stable_fold_counts: List[Int]
+    var registry: TTensorCtrRegistry
+
+def run_bounded_synchronized_tensor_tree[
+    hist2_smem_mode: Int = HIST2_SMEM_MODE
+](
+    ctx: DeviceContext,
+    layout: CompressedIndexLayout,
+    blocks: List[PolicyBlock],
+    level_cindexes: List[DeviceBuffer[DType.uint32]],
+    staged_by_level: List[TStagedTensorCandidate],
+    mut row_index: DeviceBuffer[DType.uint32],
+    mut stats: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    stat_count: Int,
+    weight_magnitude: Float32,
+    gradient_magnitude: Float32,
+    score_function: Int,
+    multiclass_optimization: Bool,
+    l2_leaf_reg: Float32,
+    score_std_dev: Float32,
+    level_seed_base: UInt64,
+    use_subtraction: Bool,
+    first_tensor_model_column: Int,
+    base_borders: List[List[Float32]],
+    base_fold_counts: List[Int],
+    mut trace: IdentityTrace,
+    mut times: StageTimes,
+    tree_tag: String,
+) raises -> TSynchronizedTensorTreeResult:
+    """Run only an explicitly materialized tensor candidate path.
+
+    One cindex and one exact staged candidate are required per level. This
+    API never manufactures a candidate from an ordinary winning feature and
+    therefore cannot silently turn the baseline search into tensor training.
+    """
+    var depth = len(staged_by_level)
+    if depth == 0 or len(level_cindexes) != depth:
+        raise Error("bounded tensor tree needs one cindex per candidate level")
+    if first_tensor_model_column != len(base_borders) or (
+        len(base_borders) != len(base_fold_counts)
+    ):
+        raise Error("bounded tensor tree stable model prefix mismatch")
+    if n_rows < 1 or stat_count < 2:
+        raise Error("bounded tensor tree has invalid row/stat shape")
+    var state = TSynchronizedSymmetricLevelState(
+        ctx, layout.copy(), blocks.copy(), level_cindexes[0].copy(),
+        n_rows, stat_count, depth, False,
+    )
+    state.initialize_tree(ctx, weight_magnitude, gradient_magnitude)
+    var splits = List[TBinarySplit]()
+    for level in range(depth):
+        if staged_by_level[level].compressed.layout.hist_cells != (
+            layout.hist_cells
+        ):
+            raise Error("bounded tensor candidate changed pinned layout size")
+        if level > 0:
+            state.replace_active_cindex(ctx, level_cindexes[level].copy())
+        if not run_synchronized_symmetric_level[hist2_smem_mode](
+            state, ctx, row_index, stats, splits, score_function,
+            multiclass_optimization, l2_leaf_reg, score_std_dev,
+            level_seed_base + UInt64(level), use_subtraction,
+            trace, times, tree_tag,
+        ):
+            raise Error("bounded synchronized tensor level had no accepted winner")
+        if Int(splits[level].feature_id) != staged_by_level[level].feature_id:
+            raise Error("bounded tensor path winner was not its staged candidate")
+
+    var registry = TTensorCtrRegistry(first_tensor_model_column)
+    var retained = staged_by_level.copy()
+    _ = persist_synchronized_tensor_path(splits, retained.copy(), registry)
+    if len(registry.features) != depth:
+        raise Error("bounded tensor path did not retain one table per level")
+    var stable_borders = base_borders.copy()
+    var stable_folds = base_fold_counts.copy()
+    for level in range(depth):
+        stable_borders.append(retained[level].candidate.borders.copy())
+        stable_folds.append(len(retained[level].candidate.borders))
+    var leaf_offsets = List[Int]()
+    var leaf_sizes = List[Int]()
+    ref workspace = state.workspace[0]
+    ctx.enqueue_copy(dst_ptr=workspace.h_off.unsafe_ptr(), src_buf=workspace.p_off)
+    ctx.enqueue_copy(dst_ptr=workspace.h_sz.unsafe_ptr(), src_buf=workspace.p_sz)
+    ctx.synchronize()
+    for leaf in range(state.live_leaves):
+        leaf_offsets.append(Int(workspace.h_off.unsafe_ptr().unsafe_load(leaf)))
+        leaf_sizes.append(Int(workspace.h_sz.unsafe_ptr().unsafe_load(leaf)))
+    return TSynchronizedTensorTreeResult(
+        splits^, leaf_offsets^, leaf_sizes^, retained^, stable_borders^,
+        stable_folds^, registry^,
+    )
 
 
 def run_tree_layout_traced[
