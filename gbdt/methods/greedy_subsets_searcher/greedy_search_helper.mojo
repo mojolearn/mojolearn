@@ -587,10 +587,6 @@ def run_one_level(
     var h_scale = ctx.enqueue_create_host_buffer[DType.float32](1)
     h_scale.unsafe_ptr().unsafe_store(0, Float32(1.0))
     ctx.enqueue_copy(dst_buf=scale_dev, src_ptr=h_scale.unsafe_ptr())
-    # DEVIATION 1947 (2026-09-01): the refusal that stood here is GONE. The
-    # binary family's accumulator partitions THREAD INDICES into groups of
-    # 32, which is valid on a 64-wide wavefront, so this probe-only entry
-    # launches on every column like every other.
     ctx.enqueue_function[binary_hist_kernel](
         folds.unsafe_ptr(),
         fold_off.unsafe_ptr(),
@@ -973,13 +969,6 @@ def run_tree(
     h_sz.unsafe_ptr().unsafe_store(0, UInt32(n_rows))
     ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_off.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
-    # DEVIATION 2007b: the `hp_off`/`hp_sz` seed uploads that stood here
-    # are DELETED -- write-only in this driver as well (their only other
-    # reference is `update_partitions_after_split_kernel`'s output args,
-    # the unread `partsCpu` mirror). See the banner in
-    # `run_tree_layout_traced`; `checks/plan_fusion_check.mojo` POISON-
-    # seeds the pair on purpose. The buffers stay: the kernel still
-    # stores into them.
 
     var hist_cells = max_leaves * stat_count * n_features
     var hist = ctx.enqueue_create_buffer[DType.float32](hist_cells)
@@ -1264,11 +1253,6 @@ def run_tree(
         for i in range(n_live):
             h_ids_a.unsafe_ptr().unsafe_store(i, UInt32(i))
         ctx.enqueue_copy(dst_buf=ids_a, src_ptr=h_ids_a.unsafe_ptr())
-        # DEVIATION 1905: dead drain. The kernels below read `ids_a`
-        # behind this copy on the same queue, and the next HOST touch of
-        # `h_ids_a` (next iteration's refill, or the post-loop refill) sits
-        # behind the level's kept size-read drain. FAST deletes it;
-        # IDENTICAL keeps today's schedule.
         comptime if IDENTICAL_DRAIN_SCHEDULE:
             ctx.synchronize()
 
@@ -1387,10 +1371,6 @@ def run_tree(
             ids_a, p_off, p_sz, stats, stat_partials, part_stats,
             sm_count=sm_count,
         )
-        # DEVIATION 1905: dead drain. `compute_partition_stats` only
-        # enqueues, the score kernel below reads `part_stats` behind it on
-        # the same queue, and no host read or staging release sits between
-        # them. FAST deletes it; IDENTICAL keeps today's schedule.
         comptime if IDENTICAL_DRAIN_SCHEDULE:
             ctx.synchronize()
 
@@ -1425,10 +1405,6 @@ def run_tree(
             grid_dim=(1, 1, 1),
             block_dim=(SCORE_BLOCK_SIZE, 1, 1),
         )
-        # DEVIATION 1905: dead drain. The copy below is queue-ordered
-        # behind the score kernel; only the drain AFTER the copy makes
-        # `hob` readable, and that one stays. FAST deletes this one;
-        # IDENTICAL keeps today's schedule.
         comptime if IDENTICAL_DRAIN_SCHEDULE:
             ctx.synchronize()
         ctx.enqueue_copy(dst_ptr=hob.unsafe_ptr(), src_buf=out_bin)
@@ -1582,10 +1558,6 @@ def run_tree(
         grid_dim=(n_live + LEAF_BLOCK - 1) // LEAF_BLOCK,
         block_dim=LEAF_BLOCK,
     )
-    # DEVIATION 1905: dead drain. The two copies below are queue-ordered
-    # behind the kernel and the drain after THEM is what makes their host
-    # buffers readable. FAST deletes this one; IDENTICAL keeps today's
-    # schedule.
     comptime if IDENTICAL_DRAIN_SCHEDULE:
         ctx.synchronize()
 
@@ -4224,11 +4196,6 @@ def run_tree_layout_traced[
                 h_sz.unsafe_ptr().unsafe_store(i, merged)
             live = h2
         ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
-        # DEVIATION 1905: dead drain. `h_sz` is pool-owned (it outlives
-        # the fit, so no staging lifetime hangs here), the host does not
-        # write it again before the tail's own `wait_complete`, and every
-        # device read of `p_sz` below is queue-ordered behind this
-        # upload. FAST deletes it; IDENTICAL keeps today's schedule.
         comptime if IDENTICAL_DRAIN_SCHEDULE:
             ctx.synchronize()
         n_live = live

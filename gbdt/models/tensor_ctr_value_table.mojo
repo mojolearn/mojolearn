@@ -29,6 +29,11 @@ from gbdt.gpu_data.compressed_index_builder import (
     pack_quantized_columns_host,
 )
 from std.memory import bitcast
+from max.gpu.host import DeviceBuffer, DeviceContext
+from gbdt.gpu_data.kernel.binarize import (
+    WRITE_BLOCK_SIZE,
+    write_compressed_index_kernel,
+)
 
 
 def split_tensor_hash(hash: UInt64) -> Tuple[UInt32, UInt32]:
@@ -395,6 +400,52 @@ def stage_tensor_candidate_host(
     if compressed.layout.features[feature_id].one_hot_feature:
         raise Error("a tensor CTR was registered as a one-hot feature")
     return TStagedTensorCandidate(feature_id, candidate^, compressed^)
+
+
+def insert_staged_tensor_candidate_device(
+    ctx: DeviceContext,
+    staged: TStagedTensorCandidate,
+    base_words: List[UInt32],
+) raises -> DeviceBuffer[DType.uint32]:
+    """Insert one staged tensor into a base index already in staged layout.
+
+    This is the exact launch the symmetric searcher needs after repacking its
+    standing columns under the extended layout. Candidate bits must be zero;
+    the kernel ORs them in and preserves every neighbouring packed feature.
+    The staging buffers are drained here because they are local owners.
+    """
+    if len(base_words) != len(staged.compressed.words):
+        raise Error("staged tensor base compressed-index size mismatch")
+    ref cf = staged.compressed.layout.features[staged.feature_id]
+    var shifted_mask = cf.mask << cf.shift
+    var n_rows = len(staged.candidate.bins)
+    for r in range(n_rows):
+        var at = Int(cf.offset) * n_rows + r
+        if (base_words[at] & shifted_mask) != UInt32(0):
+            raise Error("staged tensor destination bits are not zero")
+        if staged.candidate.bins[r] > UInt32(255):
+            raise Error("staged tensor bin exceeds UInt8 writer input")
+    var h_words = ctx.enqueue_create_host_buffer[DType.uint32](len(base_words))
+    for i in range(len(base_words)):
+        h_words.unsafe_ptr().unsafe_store(i, base_words[i])
+    var d_words = ctx.enqueue_create_buffer[DType.uint32](len(base_words))
+    ctx.enqueue_copy(dst_buf=d_words, src_ptr=h_words.unsafe_ptr())
+    var h_bins = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
+    for r in range(n_rows):
+        h_bins.unsafe_ptr().unsafe_store(r, UInt8(staged.candidate.bins[r]))
+    var d_bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    ctx.enqueue_copy(dst_buf=d_bins, src_ptr=h_bins.unsafe_ptr())
+    ctx.enqueue_function[write_compressed_index_kernel](
+        Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
+        d_bins.unsafe_ptr(), Int32(n_rows), d_words.unsafe_ptr(),
+        grid_dim=(n_rows + WRITE_BLOCK_SIZE - 1) // WRITE_BLOCK_SIZE,
+        block_dim=WRITE_BLOCK_SIZE,
+    )
+    ctx.synchronize()
+    _ = h_words^
+    _ = h_bins^
+    _ = d_bins^
+    return d_words^
 
 
 def materialize_tensor_candidate(

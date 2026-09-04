@@ -1022,12 +1022,6 @@ def fit_non_symmetric_tree[
     h_sz.unsafe_ptr().unsafe_store(0, UInt32(n_rows))
     ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_off.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
-    # DEVIATION 2007b: the `hp_off`/`hp_sz` seed uploads that stood here
-    # are DELETED -- write-only buffers in this driver too; their only
-    # other reference is `update_partitions_after_split_kernel`'s output
-    # args (the unread `partsCpu` mirror,
-    # `gpu_util/gpu_data/partitions.mojo`). `checks/plan_fusion_check.mojo`
-    # POISON-seeds the pair by design; see the symmetric driver's banner.
     ctx.enqueue_memset(hist, Float32(0.0))
     # DEVIATION 1892: same gate as the symmetric driver's per-tree memset
     # -- under a float flush with the warp-private `hist2` arm nothing
@@ -1786,34 +1780,6 @@ def fit_non_symmetric_tree[
                         var slot = i * argmax_blocks + b
                         var bf = h_region_bin.unsafe_ptr().unsafe_load(slot)
                         if bf == UInt32(0xFFFFFFFF):
-                            # =============== CORRECTED 2026-08-22 ===============
-                            # This used to say "their poison record IS a
-                            # default-constructed `TBestSplitProperties`, so
-                            # skipping it and comparing against it are the same
-                            # thing". BOTH HALVES WERE WRONG.
-                            #
-                            #   their ARGMAX poison  (compute_scores.cu:46-49)
-                            #       FeatureId=-1  BinId=-1  Score=FLT_MAX  Gain=FLT_MAX
-                            #   their default ctor   (gpu_structures.h:65-68)
-                            #       FeatureId=-1  BinId= 0  Score=+inf     Gain=+inf
-                            #
-                            # Two of four fields differ, and `FLT_MAX < inf` is
-                            # TRUE, so in THEIR host reduce an all-poison block
-                            # actually REPLACES the accumulator rather than
-                            # losing to it.
-                            #
-                            # THE OUTCOME IS THE SAME AND THAT IS WHY IT IS SAFE
-                            # to skip: `Defined()` is `FeatureId != (ui32)-1`,
-                            # and the poison carries the sentinel feature id, so
-                            # a leaf whose every block was poisoned ends
-                            # undefined either way. `BinId` is the only field
-                            # that differs afterwards and nothing reads it on an
-                            # undefined split.
-                            #
-                            # Recorded rather than "fixed" because reproducing
-                            # their replacement would mean constructing a record
-                            # with `Gain = FLT_MAX` purely to lose to nothing.
-                            # ====================================================
                             continue
                         if Int(bf) >= hist_cells_per_leaf:
                             raise Error(

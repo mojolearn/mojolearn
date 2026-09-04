@@ -3602,12 +3602,6 @@ def train_forest_classification_device_timed(
             + String(n_classes)
             + " (DEVIATION 172: shared sizing is comptime here)"
         )
-    # DEVIATION 218: the 2^21-row refusal that stood here (DEVIATION 175,
-    # first bound by a real request on full higgs) is LIFTED. Above
-    # `SCORE_MAX_ROWS_EXACT` the published Gini pair is node-uniformly
-    # SHIFTED (`classification_key_shift`) instead of refused --
-    # `score_row_bound_ok` remains the exactness boundary's statement, and
-    # everything at or under it is bit-for-bit unchanged.
 
     # --- identity trace (`core/identity_trace.mojo`) -- NOT A PORT --------
     # Stage checkpoints so a cross-backend bit difference has an ADDRESS.

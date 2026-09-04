@@ -9,6 +9,9 @@ Usage, from the repository root (the directory must already exist):
 
     MOJOLEARN_MAMBA_GRAD_DUMP=/tmp/mamba2-mojo \
       mojo run -I . mamba/checks/mamba2_backward_tail_dump.mojo
+
+Set ``MOJOLEARN_MAMBA2_GRAD_CASE=m2_base_b1_l257_d64`` for the dedicated
+two-chunk S17 recurrence witness.  No other alternate case is accepted.
 """
 
 from std.memory import bitcast
@@ -76,8 +79,19 @@ def _write_f32(path: String, values: List[Float32]) raises:
 
 
 def main() raises:
-    # This is the gradient oracle's default Mamba-2 case.
-    comptime case_k = 1  # m2_base_b2_l4_d32
+    # Default remains the inexpensive tail fixture.  The one supported
+    # alternate crosses Q=256 exactly once and is the S17 carry witness.
+    var case_k = 1
+    var case_name = String("m2_base_b2_l4_d32")
+    var requested_case = String(getenv("MOJOLEARN_MAMBA2_GRAD_CASE"))
+    if requested_case != "":
+        if requested_case != "m2_base_b1_l257_d64":
+            raise Error(
+                "MOJOLEARN_MAMBA2_GRAD_CASE supports only "
+                "m2_base_b1_l257_d64"
+            )
+        case_k = 4
+        case_name = requested_case
     var fixture = m2_corpus_case(case_k)
     var weights = m2_case_weights(case_k)
     var dims = weights.dims.copy()
@@ -265,7 +279,9 @@ def main() raises:
     with open(dump_dir + "/dump_manifest.json", "w") as fh:
         fh.write(
             "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
-            "\"family\":\"mamba2\",\"case\":\"m2_base_b2_l4_d32\","
+            "\"family\":\"mamba2\",\"case\":\""
+            + case_name
+            + "\","
             "\"objective\":\"signed_dyadic_weight_v1\","
             "\"tensors\":[\"out_proj.weight\",\"stage.gnorm.out\","
             "\"stage.gnorm.gate\",\"norm.weight\",\"stage.skip.out\","

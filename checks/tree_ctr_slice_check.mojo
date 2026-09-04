@@ -7,6 +7,7 @@ from gbdt.models.tensor_ctr_value_table import (
     build_borders_split_tensor_table,
     build_split_feature_freq_tensor_table,
     join_tensor_hash,
+    insert_staged_tensor_candidate_device,
     materialize_tensor_candidate,
     parse_feature_freq_tensor_table,
     persist_winning_tensor_candidate,
@@ -15,6 +16,7 @@ from gbdt.models.tensor_ctr_value_table import (
     TTensorCtrRegistry,
     value_for_split_tensor_row,
 )
+from max.gpu.host import DeviceContext
 from gbdt.ctrs.ctr_binarization import (
     BORDER_SELECTION_UNIFORM,
     TBinarizationOptions,
@@ -27,6 +29,7 @@ from gbdt.gpu_data.compressed_index_builder import pack_quantized_columns_host
 
 
 def main() raises:
+    var ctx = DeviceContext()
     # The model format must cover the full UInt64 hash domain. A direct
     # decimal parse through Int64 cannot represent this value.
     var high_hash = UInt64(0xFEDCBA9876543210)
@@ -225,4 +228,29 @@ def main() raises:
         staged_borders.candidate.tensor_hash
     ):
         raise Error("model registry persisted the losing tensor candidate")
+
+    # Device insertion starts from the extended layout with only this
+    # candidate's bitfield cleared. The production OR-writer must restore
+    # exactly the host reference words without moving neighbouring features.
+    ref staged_cf = staged_borders.compressed.layout.features[
+        staged_borders.feature_id
+    ]
+    var shifted_mask = staged_cf.mask << staged_cf.shift
+    var base_words = staged_borders.compressed.words.copy()
+    for r in range(6):
+        var at = Int(staged_cf.offset) * 6 + r
+        base_words[at] &= ~shifted_mask
+    var device_words = insert_staged_tensor_candidate_device(
+        ctx, staged_borders, base_words^
+    )
+    var host_words = ctx.enqueue_create_host_buffer[DType.uint32](
+        len(staged_borders.compressed.words)
+    )
+    ctx.enqueue_copy(dst_ptr=host_words.unsafe_ptr(), src_buf=device_words)
+    ctx.synchronize()
+    for i in range(len(staged_borders.compressed.words)):
+        if host_words[i] != staged_borders.compressed.words[i]:
+            raise Error("device tensor insertion differs from host packing")
+    _ = host_words^
+    _ = device_words^
     print("tree CTR slice: deterministic pair FeatureFreq + text round trip PASS")

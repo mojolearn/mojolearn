@@ -667,13 +667,6 @@ def _estimate_and_apply(
     # `n_leaves * approx_dim` and is BIN-MAJOR, which is the layout
     # `add_model_value_kernel`'s z axis reads.
     var est_len = n_leaves * approx_dim
-    # DEVIATION 1891: a second full drain stood here, whose only real work
-    # was the lifetime hold for `h_po`/`h_ps` ("the far end of the hold").
-    # The workspace owns them now (DEVIATION 1890), so the hold has no
-    # buffers to protect and the drain folded into the tail one below.
-    # `h_est` is safe to write without a drain for the same reason
-    # `h_po`/`h_ps` are: the previous task's copy of it ran before that
-    # task's tail drain returned.
     if len(estimated) != est_len:
         raise Error(
             "the estimator returned " + String(len(estimated))
@@ -745,12 +738,6 @@ def fit_with_test(
     leaf_estimation_method: Int = LEAF_ESTIMATION_NEWTON,
     alpha: Float32 = Float32(0.0),
     estimator_alpha: Float32 = Float32(0.5),
-    # `boost_from_average`, PORTED 2026-08-22 and RESOLVED BY THE CALLER:
-    # their layering resolves the data-dependent default in
-    # `options_helper.cpp::AdjustBoostFromAverageDefaultValue` before the
-    # trainer runs, and this port keeps that shape -- `train`/the python
-    # surface resolve, this function only obeys. False is every existing
-    # caller and every oracle fixture (the generators pin it off).
     boost_from_average: Bool = False,
     # THE HELD-OUT ARM IS OPTIONAL AND EVERY EXISTING CALLER IS
     # UNCHANGED. `fit` has nine call sites across checks, benches and
