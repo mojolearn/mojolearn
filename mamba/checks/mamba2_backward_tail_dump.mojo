@@ -39,6 +39,7 @@ from mamba.impl.mamba_ssm.modules.mamba2_backward import (
     mamba2_backward_gnorm_into,
     mamba2_backward_silu_gate_into,
     mamba2_backward_tail_into,
+    mamba2_backward_input_projection_into,
 )
 from mamba.impl.mamba_ssm.modules.ssd_minimal import m2_q_eff
 from mamba.impl.mamba_ssm.ops.mamba2_ssd_backward import (
@@ -235,6 +236,10 @@ def main() raises:
         ctx, conv_backward, discretize_backward, stages.conv_out,
         stages.in_proj, dweights.conv_w, fixture.b, fixture.l, dims.d_inner,
         dims.conv_dim(), dims.d_in_proj(), stages.q0,
+    )
+    mamba2_backward_input_projection_into(
+        ctx, tail, conv_backward.d_in_xbc, discretize_backward.d_dtraw,
+        stages.norm_out, dweights.w_in, dims, m,
     )
     ctx.synchronize()
     _write_f32(
@@ -446,6 +451,9 @@ def main() raises:
     _write_f32(dump_dir + "/grad.partial.conv.input.f32", mamba_download(ctx, conv_backward.d_in_xbc, m*dims.conv_dim()))
     _write_f32(dump_dir + "/grad.conv1d.weight.f32", mamba_download(ctx, conv_backward.d_w, dims.conv_dim()*4))
     _write_f32(dump_dir + "/grad.conv1d.bias.f32", mamba_download(ctx, conv_backward.d_b, dims.conv_dim()))
+    _write_f32(dump_dir + "/grad.partial.in_proj.packed.f32", mamba_download(ctx, tail.d_in_proj, m*dims.d_in_proj()))
+    _write_f32(dump_dir + "/grad.stage.norm.out.f32", mamba_download(ctx, tail.d_norm, m*dims.d_model))
+    _write_f32(dump_dir + "/grad.in_proj.weight.f32", mamba_download(ctx, tail.d_w_in, dims.d_in_proj()*dims.d_model))
     _write_f32(
         dump_dir + "/grad.partial.dt_bias.merged.f32",
         mamba_download(ctx, discretize_backward.d_dt_bias, dims.nheads),
@@ -476,6 +484,7 @@ def main() raises:
             "\"partial.B.from_cstate\",\"partial.B.total\","
             "\"partial.C.total\",\"partial.silu.x.total\","
             "\"partial.conv.input\",\"conv1d.weight\",\"conv1d.bias\","
+            "\"partial.in_proj.packed\",\"stage.norm.out\",\"in_proj.weight\","
             "\"partial.dt.from_xd\",\"partial.dt.merged\","
             "\"partial.dt_raw.merged\",\"partial.dt_bias.merged\"]}\n"
         )

@@ -641,9 +641,9 @@ def mamba3_backward_s17_operands_into(ctx:DeviceContext,mut dq:DeviceBuffer[DTyp
     ctx.enqueue_function[mamba3_s17_operands_kernel](dq.unsafe_ptr(),ddr.unsafe_ptr(),dk.unsafe_ptr(),dv.unsafe_ptr(),ddc.unsafe_ptr(),dy.unsafe_ptr(),q.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),dacs.unsafe_ptr(),states.unsafe_ptr(),dstates.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(_grid(cells),1,1),block_dim=(M3_BWD_TPB,1,1))
 
 
-def mamba3_join_two_kernel(out:MutPointer[Float32,MutAnyOrigin],a:MutPointer[Float32,MutAnyOrigin],b:MutPointer[Float32,MutAnyOrigin],n_in:Int32):
+def mamba3_join_two_kernel(dst:MutPointer[Float32,MutAnyOrigin],a:MutPointer[Float32,MutAnyOrigin],b:MutPointer[Float32,MutAnyOrigin],n_in:Int32):
     var i=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if i<Int(n_in):out.unsafe_store(i,ftz(ftz(a.unsafe_load(i))+ftz(b.unsafe_load(i))))
+    if i<Int(n_in):dst.unsafe_store(i,ftz(ftz(a.unsafe_load(i))+ftz(b.unsafe_load(i))))
 
 
 def mamba3_backward_join_s16_s17_into(ctx:DeviceContext,mut qout:DeviceBuffer[DType.float32],mut kout:DeviceBuffer[DType.float32],mut vout:DeviceBuffer[DType.float32],mut dout:DeviceBuffer[DType.float32],mut q16:DeviceBuffer[DType.float32],mut q17:DeviceBuffer[DType.float32],mut k16:DeviceBuffer[DType.float32],mut k17:DeviceBuffer[DType.float32],mut vold:DeviceBuffer[DType.float32],mut v17:DeviceBuffer[DType.float32],mut dr:DeviceBuffer[DType.float32],mut dc:DeviceBuffer[DType.float32],state_cells:Int,value_cells:Int,head_cells:Int) raises:
@@ -651,3 +651,11 @@ def mamba3_backward_join_s16_s17_into(ctx:DeviceContext,mut qout:DeviceBuffer[DT
     ctx.enqueue_function[mamba3_join_two_kernel](kout.unsafe_ptr(),k16.unsafe_ptr(),k17.unsafe_ptr(),Int32(state_cells),grid_dim=(_grid(state_cells),1,1),block_dim=(M3_BWD_TPB,1,1))
     ctx.enqueue_function[mamba3_join_two_kernel](vout.unsafe_ptr(),vold.unsafe_ptr(),v17.unsafe_ptr(),Int32(value_cells),grid_dim=(_grid(value_cells),1,1),block_dim=(M3_BWD_TPB,1,1))
     ctx.enqueue_function[mamba3_join_two_kernel](dout.unsafe_ptr(),dr.unsafe_ptr(),dc.unsafe_ptr(),Int32(head_cells),grid_dim=(_grid(head_cells),1,1),block_dim=(M3_BWD_TPB,1,1))
+
+
+def mamba3_backward_s15_only_into(ctx:DeviceContext,mut d_krot:DeviceBuffer[DType.float32],mut d_scale:DeviceBuffer[DType.float32],mut d_kscaled:DeviceBuffer[DType.float32],mut krot:DeviceBuffer[DType.float32],mut scale:DeviceBuffer[DType.float32],rows:Int) raises:
+    ctx.enqueue_function[mamba3_s15_backward_kernel](d_krot.unsafe_ptr(),d_scale.unsafe_ptr(),d_kscaled.unsafe_ptr(),krot.unsafe_ptr(),scale.unsafe_ptr(),Int32(rows),grid_dim=(_grid(rows),1,1),block_dim=(M3_BWD_TPB,1,1))
+
+
+def mamba3_backward_rotary_only_into(ctx:DeviceContext,mut dqraw:DeviceBuffer[DType.float32],mut dkraw:DeviceBuffer[DType.float32],mut dtheta:DeviceBuffer[DType.float32],mut dqrot:DeviceBuffer[DType.float32],mut dkrot:DeviceBuffer[DType.float32],mut bcb:DeviceBuffer[DType.float32],mut bcc:DeviceBuffer[DType.float32],mut bbias:DeviceBuffer[DType.float32],mut cbias:DeviceBuffer[DType.float32],mut theta:DeviceBuffer[DType.float32],pairs:Int,nh:Int) raises:
+    ctx.enqueue_function[mamba3_rotary_backward_kernel](dqraw.unsafe_ptr(),dkraw.unsafe_ptr(),dtheta.unsafe_ptr(),dqrot.unsafe_ptr(),dkrot.unsafe_ptr(),bcb.unsafe_ptr(),bcc.unsafe_ptr(),bbias.unsafe_ptr(),cbias.unsafe_ptr(),theta.unsafe_ptr(),Int32(pairs),Int32(nh),grid_dim=(_grid(pairs),1,1),block_dim=(M3_BWD_TPB,1,1))

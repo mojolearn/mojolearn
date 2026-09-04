@@ -45,6 +45,9 @@ from mamba.impl.mamba_ssm.modules.mamba3_backward import (
     mamba3_backward_adt_product_into,
     mamba3_backward_s17_state_into,
     mamba3_backward_s17_operands_into,
+    mamba3_backward_join_s16_s17_into,
+    mamba3_backward_s15_only_into,
+    mamba3_backward_rotary_only_into,
 )
 from mamba.impl.transformers.models.mamba.modeling_mamba import (
     mamba_download,
@@ -209,6 +212,12 @@ def main() raises:
     mamba3_backward_s17_state_into(ctx,d_state_direct,d_state_total,d_initial_state,d_skip,stages.rotq_work,stages.dacs,fixture.b,fixture.l,dims,M3_CHUNK_SIZE)
     var d_q17=mamba_zeros(ctx,state_cells);var d_dacs_read17=mamba_zeros(ctx,head_cells);var d_k17=mamba_zeros(ctx,state_cells);var d_v17=mamba_zeros(ctx,tail_cells);var d_dacs_rec17=mamba_zeros(ctx,head_cells)
     mamba3_backward_s17_operands_into(ctx,d_q17,d_dacs_read17,d_k17,d_v17,d_dacs_rec17,d_skip,stages.rotq_work,stages.kscale_work,stages.v_work,stages.dacs,stages.pass_states,d_state_total,fixture.b,fixture.l,dims,M3_CHUNK_SIZE)
+    var d_q_join=mamba_zeros(ctx,state_cells);var d_k_join=mamba_zeros(ctx,state_cells);var d_v_join=mamba_zeros(ctx,tail_cells);var d_dacs_join=mamba_zeros(ctx,head_cells)
+    mamba3_backward_join_s16_s17_into(ctx,d_q_join,d_k_join,d_v_join,d_dacs_join,d_q_s16,d_q17,d_ks_s16,d_k17,d_value_total,d_v17,d_dacs_read17,d_dacs_rec17,state_cells,tail_cells,head_cells)
+    var d_krot_join=mamba_zeros(ctx,state_cells);var d_scale_join=mamba_zeros(ctx,head_cells)
+    mamba3_backward_s15_only_into(ctx,d_krot_join,d_scale_join,d_k_join,stages.rotk_work,stages.scale_work,head_cells)
+    var d_qraw_join=mamba_zeros(ctx,state_cells);var d_kraw_join=mamba_zeros(ctx,state_cells);var d_theta_join=mamba_zeros(ctx,m*dims.nheads*M3_NUM_ROPE_ANGLES)
+    mamba3_backward_rotary_only_into(ctx,d_qraw_join,d_kraw_join,d_theta_join,d_q_join,d_krot_join,stages.bcnorm_b,stages.bcnorm_c,device_weights.b_bias,device_weights.c_bias,stages.theta_out,m*dims.nheads*(M3_D_STATE//2),dims.nheads)
     ctx.synchronize()
 
     _write_f32(
@@ -263,6 +272,15 @@ def main() raises:
     _write_f32(output + "/grad.partial.s17.recur.kscale.f32",mamba_download(ctx,d_k17,state_cells))
     _write_f32(output + "/grad.partial.s17.recur.value.f32",mamba_download(ctx,d_v17,tail_cells))
     _write_f32(output + "/grad.partial.s17.recur.dacs.f32",mamba_download(ctx,d_dacs_rec17,head_cells))
+    _write_f32(output + "/grad.partial.join.rot.q.f32",mamba_download(ctx,d_q_join,state_cells))
+    _write_f32(output + "/grad.partial.join.kscale.f32",mamba_download(ctx,d_k_join,state_cells))
+    _write_f32(output + "/grad.partial.join.value.f32",mamba_download(ctx,d_v_join,tail_cells))
+    _write_f32(output + "/grad.partial.join.dacs.f32",mamba_download(ctx,d_dacs_join,head_cells))
+    _write_f32(output + "/grad.partial.join.s15.rot.k.f32",mamba_download(ctx,d_krot_join,state_cells))
+    _write_f32(output + "/grad.partial.join.s15.scale.f32",mamba_download(ctx,d_scale_join,head_cells))
+    _write_f32(output + "/grad.partial.join.rotary.C_biased.f32",mamba_download(ctx,d_qraw_join,state_cells))
+    _write_f32(output + "/grad.partial.join.rotary.B_biased.f32",mamba_download(ctx,d_kraw_join,state_cells))
+    _write_f32(output + "/grad.partial.join.rotary.theta.f32",mamba_download(ctx,d_theta_join,m*dims.nheads*M3_NUM_ROPE_ANGLES))
     if case_k == 5:
         with open(output + "/dump_manifest.json", "w") as fh:
             fh.write(
@@ -305,7 +323,11 @@ def main() raises:
             + "\"partial.s17.state.total\",\"partial.s17.initial_state\","
             + "\"partial.s17.readout.rot.q\",\"partial.s17.readout.dacs\","
             + "\"partial.s17.recur.kscale\",\"partial.s17.recur.value\","
-            + "\"partial.s17.recur.dacs\"]}\n"
+            + "\"partial.s17.recur.dacs\",\"partial.join.rot.q\","
+            + "\"partial.join.kscale\",\"partial.join.value\","
+            + "\"partial.join.dacs\",\"partial.join.s15.rot.k\","
+            + "\"partial.join.s15.scale\",\"partial.join.rotary.C_biased\","
+            + "\"partial.join.rotary.B_biased\",\"partial.join.rotary.theta\"]}\n"
         )
 
     _ = d_gamma_qk^
@@ -366,3 +388,12 @@ def main() raises:
     _ = d_k17^
     _ = d_dacs_read17^
     _ = d_q17^
+    _ = d_scale_join^
+    _ = d_krot_join^
+    _ = d_dacs_join^
+    _ = d_v_join^
+    _ = d_k_join^
+    _ = d_q_join^
+    _ = d_theta_join^
+    _ = d_kraw_join^
+    _ = d_qraw_join^

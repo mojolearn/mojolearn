@@ -27,6 +27,7 @@ from checks.numerics import (
 )
 from mamba.checks.mamba2_backward import (
     PROJ2_OUT,
+    PROJ2_IN,
     RED2_GNORM_W,
     RED2_D,
     mamba2_backward_ones_floats,
@@ -196,6 +197,9 @@ struct Mamba2BackwardTail(Movable):
     var d_x_from_d: DeviceBuffer[DType.float32]  # [M, d_inner], partial
     var d_d_product: DeviceBuffer[DType.float32]  # [M, H]
     var d_d: DeviceBuffer[DType.float32]  # [H]
+    var d_in_proj: DeviceBuffer[DType.float32]
+    var d_norm: DeviceBuffer[DType.float32]
+    var d_w_in: DeviceBuffer[DType.float32]
     var gnorm_weight_product: DeviceBuffer[DType.float32]  # [M, d_inner]
     var ones: DeviceBuffer[DType.float32]  # [M]
     var reduction_workspace: DeviceBuffer[DType.float32]
@@ -225,6 +229,9 @@ struct Mamba2BackwardTail(Movable):
         if nd < 1:
             nd = 1
         self.d_d = ctx.enqueue_create_buffer[DType.float32](nd)
+        self.d_in_proj = ctx.enqueue_create_buffer[DType.float32](m*dims.d_in_proj())
+        self.d_norm = ctx.enqueue_create_buffer[DType.float32](m*dims.d_model)
+        self.d_w_in = ctx.enqueue_create_buffer[DType.float32](dims.d_in_proj()*dims.d_model)
         var ngw = dims.d_inner
         if ngw < 1:
             ngw = 1
@@ -242,6 +249,12 @@ struct Mamba2BackwardTail(Movable):
             PROJ2_OUT, dims, m
         )
         var ws = wa
+        if wb > ws:
+            ws = wb
+        wa = mamba2_backward_proj_a_workspace_max_floats(PROJ2_IN, dims, m)
+        if wa > ws:
+            ws = wa
+        wb = mamba2_backward_proj_b_workspace_max_floats(PROJ2_IN, dims, m)
         if wb > ws:
             ws = wb
         if ws < 1:
@@ -385,6 +398,32 @@ def mamba2_backward_d_skip_into(
         grid_dim=(_grid(cells), 1, 1),
         block_dim=(M2_BWD_TPB, 1, 1),
     )
+
+
+def mamba2_pack_inproj_grad_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin], z: MutPointer[Float32, MutAnyOrigin],
+    xbc: MutPointer[Float32, MutAnyOrigin], dt: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32, di_in: Int32, cd_in: Int32, dip_in: Int32, nh_in: Int32,
+):
+    var m=Int(m_in); var di=Int(di_in); var cd=Int(cd_in); var dip=Int(dip_in); var nh=Int(nh_in)
+    var i=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if i>=m*dip: return
+    var r=i//dip; var c=i-r*dip
+    if c<di: dst.unsafe_store(i,z.unsafe_load(r*di+c))
+    elif c<di+cd: dst.unsafe_store(i,xbc.unsafe_load(r*cd+c-di))
+    else: dst.unsafe_store(i,dt.unsafe_load(r*nh+c-di-cd))
+
+
+def mamba2_backward_input_projection_into(
+    ctx: DeviceContext, mut out: Mamba2BackwardTail,
+    mut d_xbc: DeviceBuffer[DType.float32], mut d_dt: DeviceBuffer[DType.float32],
+    mut norm: DeviceBuffer[DType.float32], mut weight: DeviceBuffer[DType.float32],
+    dims: Mamba2Dims, m: Int,
+) raises:
+    var n=m*dims.d_in_proj()
+    ctx.enqueue_function[mamba2_pack_inproj_grad_kernel](out.d_in_proj.unsafe_ptr(),out.d_z.unsafe_ptr(),d_xbc.unsafe_ptr(),d_dt.unsafe_ptr(),Int32(m),Int32(dims.d_inner),Int32(dims.conv_dim()),Int32(dims.d_in_proj()),Int32(dims.nheads),grid_dim=(_grid(n),1,1),block_dim=(M2_BWD_TPB,1,1))
+    mamba2_backward_proj_a_into(ctx,out.d_norm,out.d_in_proj,weight,out.workspace,PROJ2_IN,dims,m)
+    mamba2_backward_proj_b_into(ctx,out.d_w_in,out.d_in_proj,norm,out.workspace,PROJ2_IN,dims,m)
     mamba2_backward_reduce_into(
         ctx,
         out.d_d,
