@@ -16,15 +16,24 @@ from core.identity_trace import IdentityTrace
 from mamba.checks.mamba_backward import (
     PROJ_OUT,
     PROJ_DT,
+    PROJ_IN,
     PROJ_X,
+    RED_CONV_BIAS,
+    RED_CONV_W_TAP0,
+    RED_CONV_W_TAP1,
+    RED_CONV_W_TAP2,
+    RED_CONV_W_TAP3,
     RED_D,
     RED_DT_BIAS,
+    RED_NORM_W,
     mamba_backward_proj_a_into,
     mamba_backward_proj_b_into,
     mamba_backward_reduce_into,
+    mamba_reduction_tap,
     mamba_backward_workspace_max_floats,
 )
 from mamba.checks.mamba_fixture import (
+    D_CONV,
     D_STATE,
     MambaDims,
     corpus_case,
@@ -42,9 +51,13 @@ from mamba.impl.transformers.models.mamba.modeling_mamba import (
 )
 from mamba.impl.transformers.models.mamba.modeling_mamba_backward import (
     mamba_bwd_concat_xp_into,
+    mamba_bwd_concat_p_into,
+    mamba_bwd_conv_tap_product_into,
     mamba_bwd_ddtp_into,
+    mamba_bwd_dhin_into,
     mamba_bwd_du_join_into,
     mamba_bwd_gate_into,
+    mamba_bwd_norm_into,
 )
 from mamba.impl.mamba_ssm.ops.selective_scan_backward import (
     bwd_da_partial_floats,
@@ -211,11 +224,113 @@ def main() raises:
         ctx, du, dconv, du_d, du_s, du_x, stages.conv_out, m, dims.d_inner
     )
 
+    # B31-B33: causal-convolution input gradient plus bias and four weight
+    # tap reductions. Each tap's arithmetic stays on device. The final four
+    # contiguous columns are interleaved on the host after synchronization;
+    # that operation is a pure layout copy and introduces no numeric seam.
+    var dhin = mamba_zeros(ctx, m * dims.d_inner)
+    mamba_bwd_dhin_into(
+        ctx, dhin, dconv, dweights.conv_w,
+        fixture.b, fixture.l, dims.d_inner,
+    )
+    var dconv_bias = mamba_zeros(ctx, dims.d_inner)
+    mamba_backward_reduce_into(
+        ctx, dconv_bias, dconv, ones, workspace,
+        RED_CONV_BIAS, dims, m,
+    )
+    var tap_product0 = mamba_zeros(ctx, m * dims.d_inner)
+    var tap_product1 = mamba_zeros(ctx, m * dims.d_inner)
+    var tap_product2 = mamba_zeros(ctx, m * dims.d_inner)
+    var tap_product3 = mamba_zeros(ctx, m * dims.d_inner)
+    var tap_grad0 = mamba_zeros(ctx, dims.d_inner)
+    var tap_grad1 = mamba_zeros(ctx, dims.d_inner)
+    var tap_grad2 = mamba_zeros(ctx, dims.d_inner)
+    var tap_grad3 = mamba_zeros(ctx, dims.d_inner)
+    mamba_bwd_conv_tap_product_into(
+        ctx, tap_product0, dconv, stages.in_proj, state_in.conv_win,
+        fixture.b, fixture.l, dims.d_inner, 0,
+    )
+    mamba_backward_reduce_into(
+        ctx, tap_grad0, tap_product0, ones, workspace,
+        RED_CONV_W_TAP0, dims, m,
+    )
+    mamba_bwd_conv_tap_product_into(
+        ctx, tap_product1, dconv, stages.in_proj, state_in.conv_win,
+        fixture.b, fixture.l, dims.d_inner, 1,
+    )
+    mamba_backward_reduce_into(
+        ctx, tap_grad1, tap_product1, ones, workspace,
+        RED_CONV_W_TAP1, dims, m,
+    )
+    mamba_bwd_conv_tap_product_into(
+        ctx, tap_product2, dconv, stages.in_proj, state_in.conv_win,
+        fixture.b, fixture.l, dims.d_inner, 2,
+    )
+    mamba_backward_reduce_into(
+        ctx, tap_grad2, tap_product2, ones, workspace,
+        RED_CONV_W_TAP2, dims, m,
+    )
+    mamba_bwd_conv_tap_product_into(
+        ctx, tap_product3, dconv, stages.in_proj, state_in.conv_win,
+        fixture.b, fixture.l, dims.d_inner, 3,
+    )
+    mamba_backward_reduce_into(
+        ctx, tap_grad3, tap_product3, ones, workspace,
+        RED_CONV_W_TAP3, dims, m,
+    )
+
+    # B34-B42: join the two in-projection halves, route both projection
+    # derivatives, then run the fused RMSNorm/residual backward and its
+    # deterministic token reduction. `dx` is the full block input gradient.
+    var dp = mamba_zeros(ctx, m * 2 * dims.d_inner)
+    mamba_bwd_concat_p_into(ctx, dp, dhin, dz, m, dims.d_inner)
+    var dnrm = mamba_zeros(ctx, m * dims.d_model)
+    var dw_in = mamba_zeros(ctx, 2 * dims.d_inner * dims.d_model)
+    mamba_backward_proj_a_into(
+        ctx, dnrm, dp, dweights.w_in, workspace, PROJ_IN, dims, m
+    )
+    mamba_backward_proj_b_into(
+        ctx, dw_in, dp, stages.norm_out, workspace, PROJ_IN, dims, m
+    )
+    var dx_full = mamba_zeros(ctx, m * dims.d_model)
+    var drstd = mamba_zeros(ctx, m)
+    var norm_product = mamba_zeros(ctx, m * dims.d_model)
+    mamba_bwd_norm_into(
+        ctx, dx_full, drstd, norm_product, dres, dnrm, x,
+        stages.norm_out, dweights.norm_w, stages.norm_sumsq,
+        m, dims.d_model,
+    )
+    var dw_norm = mamba_zeros(ctx, dims.d_model)
+    mamba_backward_reduce_into(
+        ctx, dw_norm, norm_product, ones, workspace, RED_NORM_W, dims, m
+    )
+
     var dd_skip = mamba_zeros(ctx, dims.d_inner)
     mamba_backward_reduce_into(
         ctx, dd_skip, product_d, ones, workspace, RED_D, dims, m
     )
     ctx.synchronize()
+
+    var tg0 = mamba_download(ctx, tap_grad0, dims.d_inner)
+    var tg1 = mamba_download(ctx, tap_grad1, dims.d_inner)
+    var tg2 = mamba_download(ctx, tap_grad2, dims.d_inner)
+    var tg3 = mamba_download(ctx, tap_grad3, dims.d_inner)
+    var dconv_weight = List[Float32]()
+    for _ in range(dims.d_inner * D_CONV):
+        dconv_weight.append(Float32(0.0))
+    for d in range(dims.d_inner):
+        dconv_weight[
+            d * D_CONV + mamba_reduction_tap(RED_CONV_W_TAP0)
+        ] = tg0[d]
+        dconv_weight[
+            d * D_CONV + mamba_reduction_tap(RED_CONV_W_TAP1)
+        ] = tg1[d]
+        dconv_weight[
+            d * D_CONV + mamba_reduction_tap(RED_CONV_W_TAP2)
+        ] = tg2[d]
+        dconv_weight[
+            d * D_CONV + mamba_reduction_tap(RED_CONV_W_TAP3)
+        ] = tg3[d]
 
     _write_f32(
         output + "/grad.out_proj.weight.f32",
@@ -241,6 +356,23 @@ def main() raises:
         output + "/grad.x_proj.weight.f32",
         mamba_download(ctx, dw_x, dims.x_proj_rows() * dims.d_inner),
     )
+    _write_f32(output + "/grad.conv1d.weight.f32", dconv_weight)
+    _write_f32(
+        output + "/grad.conv1d.bias.f32",
+        mamba_download(ctx, dconv_bias, dims.d_inner),
+    )
+    _write_f32(
+        output + "/grad.in_proj.weight.f32",
+        mamba_download(ctx, dw_in, 2 * dims.d_inner * dims.d_model),
+    )
+    _write_f32(
+        output + "/grad.norm.weight.f32",
+        mamba_download(ctx, dw_norm, dims.d_model),
+    )
+    _write_f32(
+        output + "/grad.x.f32",
+        mamba_download(ctx, dx_full, m * dims.d_model),
+    )
     _write_f32(
         output + "/stage.dB.f32", mamba_download(ctx, dbm, m * D_STATE)
     )
@@ -252,15 +384,39 @@ def main() raises:
             "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
             "\"family\":\"mamba1\",\"case\":\"base_b2_l4_d8\","
             "\"objective\":\"signed_dyadic_weight_v1\","
-            "\"producer\":\"mamba1-device-through-du-join-v1\","
-            "\"partial\":true,\"tensors\":[\"out_proj.weight\",\"D\","
+            "\"producer\":\"mamba1-device-whole-pass-v1\","
+            "\"partial\":false,\"tensors\":[\"x\",\"norm.weight\","
+            "\"in_proj.weight\",\"conv1d.weight\",\"conv1d.bias\","
+            "\"out_proj.weight\",\"D\","
             "\"A_log\",\"dt_proj.weight\",\"dt_proj.bias\","
             "\"x_proj.weight\",\"stage.dB\",\"stage.dC\"]}\n"
         )
     print(
-        "MAMBA1 BACKWARD PARTIAL DEVICE: output/gate plus checkpoint, reverse"
-        " scan, B/C/A_log, dt/x projections and du join executed"
+        "MAMBA1 BACKWARD DEVICE WHOLE PASS: emitted all 11 external-oracle"
+        " gradients plus diagnostic dB/dC"
     )
+    _ = dconv_weight^
+    _ = tg3^
+    _ = tg2^
+    _ = tg1^
+    _ = tg0^
+    _ = dw_norm^
+    _ = norm_product^
+    _ = drstd^
+    _ = dx_full^
+    _ = dw_in^
+    _ = dnrm^
+    _ = dp^
+    _ = tap_grad3^
+    _ = tap_grad2^
+    _ = tap_grad1^
+    _ = tap_grad0^
+    _ = tap_product3^
+    _ = tap_product2^
+    _ = tap_product1^
+    _ = tap_product0^
+    _ = dconv_bias^
+    _ = dhin^
     _ = dconv^
     _ = du^
     _ = dw_x^

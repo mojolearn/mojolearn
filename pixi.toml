@@ -1112,6 +1112,7 @@ build-mamba-backward-probe = "mojo build -I . mamba/checks/mamba_backward_compil
 # PARTIAL Mamba-2 backward evidence: output-projection weight gradient only.
 # The runner prints the unimplemented seams and never claims whole-pass status.
 dump-mamba2-backward-tail = "work=/tmp/mojolearn-mamba2-mojo-grad; mkdir -p $work; find $work -maxdepth 1 -type f -delete; MOJOLEARN_MAMBA_GRAD_DUMP=$work mojo run -I . mamba/checks/mamba2_backward_tail_dump.mojo"
+build-mamba2-ssd-backward-probe = "mojo build -I . mamba/checks/mamba2_ssd_backward_compile_probe.mojo -o /tmp/mojolearn_m2_ssd_bwd_probe"
 
 # BLOCK-LEVEL BATCH INVARIANCE (checks/batch_invariance_check.mojo). The
 # lift of `IDENTICAL_FP32_CONTRACT.md` section 6.1 -- "Why `L` may not depend

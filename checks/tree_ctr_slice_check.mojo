@@ -4,6 +4,7 @@
 
 from gbdt.models.tensor_ctr_value_table import (
     build_feature_freq_tensor_table,
+    build_borders_split_tensor_table,
     build_split_feature_freq_tensor_table,
     join_tensor_hash,
     parse_feature_freq_tensor_table,
@@ -113,4 +114,36 @@ def main() raises:
     for r in range(6):
         if split_expanded[18 + r] != want[r]:
             raise Error("split-history registry apply mismatch")
+
+    # Borders is ordered while fitting and full-pool at apply. The first
+    # row of every tensor key sees only the prior; repeated keys see only
+    # earlier rows in `order`. The serialized table carries the final
+    # per-key target histograms, not those prefix values.
+    var target: List[UInt8] = [0, 1, 1, 0, 1, 1]
+    var order: List[UInt32] = [0, 1, 2, 3, 4, 5]
+    var history2: List[TBinarySplit] = [
+        TBinarySplit(Int32(0), Int32(0), Int32(BIN_SPLIT_TAKE_GREATER))
+    ]
+    var borders_fit = build_borders_split_tensor_table(
+        x, cindex, target, order, 6, 3, sources.copy(), history2^,
+        2, 0, Float32(0.5), Float32(1.0),
+    )
+    var learn_want: List[Float32] = [
+        Float32(0.5), Float32(0.5), Float32(0.5),
+        Float32(0.5), Float32(0.25), Float32(0.25),
+    ]
+    for r in range(6):
+        if borders_fit.learn_values[r] != learn_want[r]:
+            raise Error("ordered Borders prefix value mismatch")
+    var borders_text = borders_fit.table.to_text()
+    var borders_table = parse_feature_freq_tensor_table(borders_text)
+    var apply_want: List[Float32] = [
+        Float32(0.5), Float32(0.75), Float32(0.75),
+        Float32(0.5), Float32(0.5), Float32(0.5),
+    ]
+    for r in range(6):
+        if value_for_split_tensor_row(
+            borders_table, x, cindex, 6, r
+        ) != apply_want[r]:
+            raise Error("Borders full-pool apply value mismatch")
     print("tree CTR slice: deterministic pair FeatureFreq + text round trip PASS")

@@ -44,6 +44,8 @@ struct TFeatureFreqTensorTable(Copyable, Movable):
     var source_features: List[Int]
     var cardinalities: List[Int]
     var splits: List[TBinarySplit]
+    var target_classes_count: Int
+    var target_border_idx: Int
     var prior_num: Float32
     var prior_denom: Float32
     var denominator: Int
@@ -55,6 +57,8 @@ struct TFeatureFreqTensorTable(Copyable, Movable):
         var source_features: List[Int],
         var cardinalities: List[Int],
         var splits: List[TBinarySplit],
+        target_classes_count: Int,
+        target_border_idx: Int,
         prior_num: Float32,
         prior_denom: Float32,
         denominator: Int,
@@ -64,6 +68,8 @@ struct TFeatureFreqTensorTable(Copyable, Movable):
         self.source_features = source_features^
         self.cardinalities = cardinalities^
         self.splits = splits^
+        self.target_classes_count = target_classes_count
+        self.target_border_idx = target_border_idx
         self.prior_num = prior_num
         self.prior_denom = prior_denom
         self.denominator = denominator
@@ -87,11 +93,34 @@ struct TFeatureFreqTensorTable(Copyable, Movable):
         if len(self.splits) != 0:
             raise Error("split-history tensor apply requires quantized columns")
         var key = self.key_for_row(x_colmajor, n_rows, row)
-        var count = 0
-        if key >= 0 and key < len(self.counts):
-            count = self.counts[key]
-        return (Float32(count) + self.prior_num) / (
-            Float32(self.denominator) + self.prior_denom
+        return self.value_for_key(key)
+
+    def value_for_key(self, key: Int) raises -> Float32:
+        if self.target_classes_count == 0:
+            var count = 0
+            if key >= 0 and key < len(self.counts):
+                count = self.counts[key]
+            return (Float32(count) + self.prior_num) / (
+                Float32(self.denominator) + self.prior_denom
+            )
+        if self.target_classes_count < 2 or self.target_border_idx < 0 or (
+            self.target_border_idx >= self.target_classes_count - 1
+        ):
+            raise Error("invalid Borders tensor target-class metadata")
+        if key < 0:
+            return self.prior_num / self.prior_denom
+        var off = key * self.target_classes_count
+        if off + self.target_classes_count > len(self.counts):
+            return self.prior_num / self.prior_denom
+        var total = 0
+        var good = 0
+        for cls in range(self.target_classes_count):
+            var count = self.counts[off + cls]
+            total += count
+            if cls > self.target_border_idx:
+                good += count
+        return (Float32(good) + self.prior_num) / (
+            Float32(total) + self.prior_denom
         )
 
     def to_text(self) -> String:
@@ -110,6 +139,8 @@ struct TFeatureFreqTensorTable(Copyable, Movable):
             out += " " + String(Int(self.splits[i].feature_id))
             out += " " + String(Int(self.splits[i].bin_idx))
             out += " " + String(Int(self.splits[i].split_type))
+        out += " classes " + String(self.target_classes_count)
+        out += " target_border " + String(self.target_border_idx)
         out += " prior " + String(self.prior_num) + " " + String(self.prior_denom)
         out += " denominator " + String(self.denominator)
         out += " counts " + String(len(self.counts))
@@ -181,7 +212,7 @@ def build_feature_freq_tensor_table(
             key = key * cards[i] + code
         counts[key] += 1
     return TFeatureFreqTensorTable(
-        tensor.get_hash(), source_features^, cards^, List[TBinarySplit](),
+        tensor.get_hash(), source_features^, cards^, List[TBinarySplit](), 0, -1,
         prior_num, prior_denom, n_rows, counts^,
     )
 
@@ -241,7 +272,7 @@ def build_split_feature_freq_tensor_table(
         counts[key] += 1
     return TFeatureFreqTensorTable(
         tensor.get_hash(), base.source_features.copy(),
-        base.cardinalities.copy(), canonical_splits^,
+        base.cardinalities.copy(), canonical_splits^, 0, -1,
         prior_num, prior_denom, n_rows, counts^,
     )
 
@@ -256,15 +287,94 @@ def value_for_split_tensor_row(
     """Apply a serialized split-history tensor to one quantized row."""
     var key = table.key_for_row(x_colmajor, n_rows, row)
     if key < 0:
-        return table.prior_num / (Float32(table.denominator) + table.prior_denom)
+        return table.value_for_key(-1)
     for i in range(len(table.splits)):
         key = 2 * key + _split_bit(table.splits[i], cindex, n_rows, row)
-    var count = 0
-    if key < len(table.counts):
-        count = table.counts[key]
-    return (Float32(count) + table.prior_num) / (
-        Float32(table.denominator) + table.prior_denom
+    return table.value_for_key(key)
+
+
+struct TBordersSplitTensorFit(Copyable, Movable):
+    """Ordered learn column plus the full-pool table used by model apply."""
+
+    var learn_values: List[Float32]
+    var table: TFeatureFreqTensorTable
+
+    def __init__(
+        out self, var learn_values: List[Float32],
+        var table: TFeatureFreqTensorTable,
+    ):
+        self.learn_values = learn_values^
+        self.table = table^
+
+
+def build_borders_split_tensor_table(
+    x_colmajor: List[Float32],
+    cindex: List[UInt32],
+    binarized_target: List[UInt8],
+    order: List[UInt32],
+    n_rows: Int,
+    n_features: Int,
+    var source_features: List[Int],
+    var splits: List[TBinarySplit],
+    target_classes_count: Int,
+    target_border_idx: Int,
+    prior_num: Float32,
+    prior_denom: Float32,
+) raises -> TBordersSplitTensorFit:
+    """Fit an ordered Borders CTR and its full-pool apply histogram."""
+    if len(binarized_target) != n_rows or len(order) != n_rows:
+        raise Error("Borders tensor target/order size mismatch")
+    if target_classes_count < 2 or target_classes_count > 256 or (
+        target_border_idx < 0 or target_border_idx >= target_classes_count - 1
+    ):
+        raise Error("invalid Borders tensor target-class metadata")
+    if prior_denom == Float32(0.0):
+        raise Error("Borders tensor prior denominator must be non-zero")
+    var shape = build_split_feature_freq_tensor_table(
+        x_colmajor, cindex, n_rows, n_features,
+        source_features^, splits^, prior_num, prior_denom,
     )
+    var key_count = len(shape.counts)
+    if key_count > 10000000 // target_classes_count:
+        raise Error("Borders tensor histogram exceeds 10,000,000 counts")
+    var histogram = List[Int]()
+    histogram.resize(key_count * target_classes_count, 0)
+    var prefix = List[Int]()
+    prefix.resize(key_count * target_classes_count, 0)
+    var learn = List[Float32]()
+    learn.resize(n_rows, Float32(0.0))
+    var seen_rows = List[Bool]()
+    seen_rows.resize(n_rows, False)
+    for pos in range(n_rows):
+        var row = Int(order[pos])
+        if row < 0 or row >= n_rows or seen_rows[row]:
+            raise Error("Borders tensor order is not a permutation")
+        seen_rows[row] = True
+        var key = shape.key_for_row(x_colmajor, n_rows, row)
+        for i in range(len(shape.splits)):
+            key = 2 * key + _split_bit(shape.splits[i], cindex, n_rows, row)
+        var cls = Int(binarized_target[row])
+        if cls < 0 or cls >= target_classes_count:
+            raise Error("Borders tensor target class is out of range")
+        var total = 0
+        var good = 0
+        for k in range(target_classes_count):
+            var count = prefix[key * target_classes_count + k]
+            total += count
+            if k > target_border_idx:
+                good += count
+        learn[row] = (Float32(good) + prior_num) / (
+            Float32(total) + prior_denom
+        )
+        prefix[key * target_classes_count + cls] += 1
+        histogram[key * target_classes_count + cls] += 1
+    var table = TFeatureFreqTensorTable(
+        shape.tensor_hash, shape.source_features.copy(),
+        shape.cardinalities.copy(), shape.splits.copy(),
+        target_classes_count, target_border_idx,
+        prior_num, prior_denom, 0, histogram^,
+    )
+    return TBordersSplitTensorFit(learn^, table^)
 
 
 def parse_feature_freq_tensor_table(line: String) raises -> TFeatureFreqTensorTable:
@@ -338,6 +448,22 @@ def parse_feature_freq_tensor_table(line: String) raises -> TFeatureFreqTensorTa
         if product > 10000000 // 2:
             raise Error("tensor split table exceeds 10,000,000 entries")
         product *= 2
+    if String(t[p]) != "classes":
+        raise Error("expected tensor target classes")
+    p += 1
+    var classes = Int(String(t[p]))
+    p += 1
+    if classes != 0 and (classes < 2 or classes > 256):
+        raise Error("tensor target classes must be zero or at least two")
+    if String(t[p]) != "target_border":
+        raise Error("expected tensor target border")
+    p += 1
+    var target_border = Int(String(t[p]))
+    p += 1
+    if (classes == 0 and target_border != -1) or (
+        classes > 0 and (target_border < 0 or target_border >= classes - 1)
+    ):
+        raise Error("invalid tensor target border")
     if String(t[p]) != "prior":
         raise Error("expected tensor prior")
     p += 1
@@ -345,6 +471,8 @@ def parse_feature_freq_tensor_table(line: String) raises -> TFeatureFreqTensorTa
     p += 1
     var pd = Float32(Float64(String(t[p])))
     p += 1
+    if classes > 0 and pd == Float32(0.0):
+        raise Error("Borders tensor prior denominator must be non-zero")
     if String(t[p]) != "denominator":
         raise Error("expected tensor denominator")
     p += 1
@@ -357,7 +485,11 @@ def parse_feature_freq_tensor_table(line: String) raises -> TFeatureFreqTensorTa
     p += 1
     var ncounts = Int(String(t[p]))
     p += 1
-    if ncounts != product:
+    var count_width = classes if classes > 0 else 1
+    if product > 10000000 // count_width:
+        raise Error("tensor table exceeds 10,000,000 counts")
+    var expected_counts = product * count_width
+    if ncounts != expected_counts:
         raise Error("tensor count length does not match cardinalities")
     var counts = List[Int]()
     var total = 0
@@ -368,8 +500,10 @@ def parse_feature_freq_tensor_table(line: String) raises -> TFeatureFreqTensorTa
             raise Error("tensor counts must be non-negative")
         total += count
         counts.append(count)
-    if total != denom:
+    if classes == 0 and total != denom:
         raise Error("tensor counts do not sum to denominator")
+    if classes > 0 and denom != 0:
+        raise Error("Borders tensor denominator must be zero")
     if p != len(t):
         raise Error("trailing fields in feature_freq_tensor record")
     var tensor = TFeatureTensor()
@@ -392,7 +526,8 @@ def parse_feature_freq_tensor_table(line: String) raises -> TFeatureFreqTensorTa
         ):
             raise Error("tensor splits are not in canonical order")
     return TFeatureFreqTensorTable(
-        hash, sources^, cards^, splits^, pn, pd, denom, counts^
+        hash, sources^, cards^, splits^, classes, target_border,
+        pn, pd, denom, counts^
     )
 
 
@@ -427,6 +562,8 @@ def _same_table(a: TFeatureFreqTensorTable, b: TFeatureFreqTensorTable) -> Bool:
         a.prior_num != b.prior_num
         or a.prior_denom != b.prior_denom
         or a.denominator != b.denominator
+        or a.target_classes_count != b.target_classes_count
+        or a.target_border_idx != b.target_border_idx
         or len(a.counts) != len(b.counts)
     ):
         return False

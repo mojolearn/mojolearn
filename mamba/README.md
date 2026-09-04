@@ -98,3 +98,10 @@ pixi run -e skgpu python tools/mamba_gradient_oracle.py --allow-partial \
 Passing this comparison certifies only the output projection, gated RMSNorm,
 SiLU gate, and D-skip derivatives, not the SSD recurrence or a whole Mamba 2
 backward pass.
+
+The first pinned SSD-backward kernel now exists separately in
+`impl/mamba_ssm/ops/mamba2_ssd_backward.mojo`: it implements the descending
+inter-chunk state recurrence and emits chunk-increment, incoming-state,
+initial-state, and per-cell scale-product gradients. It is compile-probed but
+not yet connected to S18, which must produce its direct incoming-state
+gradient before the recurrence can join the partial block composer.
