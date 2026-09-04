@@ -34,6 +34,7 @@ from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     accept_symmetric_level_winner,
     TSynchronizedSymmetricLevelState,
     TTreeWorkspace,
+    run_synchronized_symmetric_level,
     run_tree_layout,
 )
 from gbdt.gpu_data.feature_blocks import blocks_for
@@ -284,12 +285,13 @@ def main() raises:
     _ = host_words^
     _ = device_words^
 
-    # Invoke the real symmetric histogram/scoring loop. The standing base
-    # feature is constant; only the staged tensor separates the planted
-    # gradient, so the returned split must name its dynamic feature id.
-    var zeros: List[UInt32] = [0, 0, 0, 0, 0, 0]
+    # Invoke the real symmetric histogram/scoring loop. The tensor carries
+    # the dominant signal and must win level one; a weaker independent base
+    # signal leaves legitimate gain for level two. A tensor-only target would
+    # make the first split pure and correctly stop at the acceptance gate.
+    var secondary: List[UInt32] = [0, 1, 0, 1, 1, 0]
     var zero_columns = List[List[UInt32]]()
-    zero_columns.append(zeros.copy())
+    zero_columns.append(secondary.copy())
     var dynamic_stage = stage_tensor_candidate_host(
         zero_columns, base_folds, List[Bool](),
         staged_borders.candidate.copy(),
@@ -306,17 +308,24 @@ def main() raises:
         ctx, dynamic_stage, dynamic_base^
     )
     var base_device = ctx.enqueue_create_buffer[DType.uint32](6)
-    ctx.enqueue_memset(base_device, UInt32(0))
+    var h_base = ctx.enqueue_create_host_buffer[DType.uint32](6)
+    for r in range(6):
+        h_base.unsafe_ptr().unsafe_store(r, secondary[r])
+    ctx.enqueue_copy(dst_buf=base_device, src_ptr=h_base.unsafe_ptr())
     var stats = ctx.enqueue_create_buffer[DType.float32](12)
     var h_stats = ctx.enqueue_create_host_buffer[DType.float32](12)
     var grad_mag = Float32(0.0)
     for r in range(6):
         h_stats.unsafe_ptr().unsafe_store(r, Float32(1.0))
-        var g = Float32(-1.0) if dynamic_stage.candidate.bins[r] == (
+        var tensor_signal = Float32(-4.0) if dynamic_stage.candidate.bins[r] == (
             UInt32(0)
-        ) else Float32(1.0)
+        ) else Float32(4.0)
+        var base_signal = Float32(-1.0) if secondary[r] == UInt32(0) else (
+            Float32(1.0)
+        )
+        var g = tensor_signal + base_signal
         h_stats.unsafe_ptr().unsafe_store(6 + r, g)
-        grad_mag += Float32(1.0)
+        grad_mag += -g if g < Float32(0.0) else g
     ctx.enqueue_copy(dst_buf=stats, src_ptr=h_stats.unsafe_ptr())
     var rows = ctx.enqueue_create_buffer[DType.uint32](6)
     var h_rows = ctx.enqueue_create_host_buffer[DType.uint32](6)
@@ -331,51 +340,97 @@ def main() raises:
     var workspace = List[TTreeWorkspace]()
     var dynamic_folds: List[Int] = [1, len(dynamic_stage.candidate.borders)]
     _ = run_tree_layout(
-        ctx, 6, base_folds, 1, base_device, stats, rows, cursor,
+        ctx, 6, base_folds, 2, base_device, stats, rows, cursor,
         Float32(6.0), grad_mag, splits, leaves, offsets, workspace,
         dynamic_cindex=Optional(dynamic_device.copy()),
         dynamic_fold_counts=dynamic_folds,
     )
-    if len(splits) != 1 or Int(splits[0].feature_id) != (
+    if len(splits) != 2 or Int(splits[0].feature_id) != (
         dynamic_stage.feature_id
     ):
-        raise Error("symmetric search did not rank the staged tensor feature")
+        raise Error("baseline did not rank the staged tensor before base signal")
 
-    # Opt-in synchronized driver, one complete level over the same planted
-    # tensor-only signal. Baseline above remains its independent oracle.
+    # Pin the dynamic slot at this CTR configuration's maximum requested
+    # border count. Reserving all 255 UInt8 values would expose hundreds of
+    # empty, equivalent thresholds to scoring; the configured grid is the
+    # tight upper bound shared by every per-level regeneration.
+    var pinned_initial = stage_tensor_candidate_host(
+        zero_columns, base_folds, List[Bool](),
+        dynamic_stage.candidate.copy(), fold_capacity=grid.border_count,
+    )
+    var pinned_base = pinned_initial.compressed.words.copy()
+    ref pinned_cf = pinned_initial.compressed.layout.features[
+        pinned_initial.feature_id
+    ]
+    var pinned_mask = pinned_cf.mask << pinned_cf.shift
+    for r in range(6):
+        var at = Int(pinned_cf.offset) * 6 + r
+        pinned_base[at] &= ~pinned_mask
+    var pinned_device = insert_staged_tensor_candidate_device(
+        ctx, pinned_initial, pinned_base.copy()
+    )
+    var reference_device = insert_staged_tensor_candidate_device(
+        ctx, pinned_initial, pinned_base^
+    )
+
+    # Opt-in synchronized driver, initially over the same planted signal.
+    # The baseline monolith above remains the independent first-level oracle.
     var sync_rows = ctx.enqueue_create_buffer[DType.uint32](6)
     var sync_stats = ctx.enqueue_create_buffer[DType.float32](12)
     ctx.enqueue_copy(dst_buf=sync_rows, src_ptr=h_rows.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=sync_stats, src_ptr=h_stats.unsafe_ptr())
-    var sync_layout = dynamic_stage.compressed.layout.copy()
+    var sync_layout = pinned_initial.compressed.layout.copy()
     var sync_blocks = blocks_for(sync_layout, 6)
     var sync_state = TSynchronizedSymmetricLevelState(
-        ctx, sync_layout^, sync_blocks^, dynamic_device^, 6, 2, 1, False
+        ctx, sync_layout^, sync_blocks^, pinned_device^, 6, 2, 2, False
     )
     sync_state.initialize_tree(ctx, Float32(6.0), grad_mag)
+    var reference_rows = ctx.enqueue_create_buffer[DType.uint32](6)
+    var reference_stats = ctx.enqueue_create_buffer[DType.float32](12)
+    ctx.enqueue_copy(dst_buf=reference_rows, src_ptr=h_rows.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=reference_stats, src_ptr=h_stats.unsafe_ptr())
+    var reference_layout = pinned_initial.compressed.layout.copy()
+    var reference_blocks = blocks_for(reference_layout, 6)
+    var reference_state = TSynchronizedSymmetricLevelState(
+        ctx, reference_layout^, reference_blocks^, reference_device^,
+        6, 2, 2, False,
+    )
+    reference_state.initialize_tree(ctx, Float32(6.0), grad_mag)
     var no_trace = IdentityTrace.disabled()
     var no_times = StageTimes()
     no_times.enabled = False
-    _ = sync_state.enqueue_pre_score(
-        ctx, sync_rows, sync_stats, True, no_trace, no_times, "tensor_sync"
-    )
-    var sync_argmax = (sync_state.layout.hist_cells + 255) // 256
-    if sync_argmax > 64:
-        sync_argmax = 64
-    sync_state.enqueue_score(
-        ctx, sync_argmax, SCORE_FUNCTION_COSINE, False,
-        Float32(3.0), Float32(0.0), UInt64(0)
-    )
-    sync_state.enqueue_winner_reduction(ctx, sync_argmax)
     var sync_splits = List[TBinarySplit]()
-    if not sync_state.drain_and_accept_current_winner(ctx, sync_splits):
+    var reference_splits = List[TBinarySplit]()
+    if not run_synchronized_symmetric_level(
+        sync_state, ctx, sync_rows, sync_stats, sync_splits,
+        SCORE_FUNCTION_COSINE, False, Float32(3.0), Float32(0.0),
+        UInt64(0), True, no_trace, no_times, "tensor_sync",
+    ):
         raise Error("synchronized tensor driver rejected its planted winner")
-    _ = sync_state.enqueue_post_winner(ctx, sync_rows, sync_stats)
+    if not run_synchronized_symmetric_level(
+        reference_state, ctx, reference_rows, reference_stats,
+        reference_splits, SCORE_FUNCTION_COSINE, False, Float32(3.0),
+        Float32(0.0), UInt64(0), False, no_trace, no_times,
+        "tensor_sync_reference",
+    ):
+        raise Error("full-histogram tensor reference rejected level one")
     ctx.synchronize()
     if len(sync_splits) != 1 or sync_splits[0].feature_id != splits[0].feature_id:
         raise Error("synchronized tensor driver disagrees with baseline winner")
+    if reference_splits[0].feature_id != sync_splits[0].feature_id or (
+        reference_splits[0].bin_idx != sync_splits[0].bin_idx
+    ):
+        raise Error(
+            "full-histogram reference disagrees at level one: sync feature="
+            + String(sync_splits[0].feature_id) + " bin="
+            + String(sync_splits[0].bin_idx) + " reference feature="
+            + String(reference_splits[0].feature_id) + " bin="
+            + String(reference_splits[0].bin_idx)
+        )
     if sync_state.level != 1 or sync_state.live_leaves != 2:
         raise Error("synchronized tensor driver did not advance level state")
+    if sync_state.last_pre_score_accounting != 3:
+        raise Error("first synchronized level changed baseline pre-score schedule")
 
     # Persist from the real ranked split list, rather than from the candidate
     # batch. This is the model-state boundary that prevents losing candidates
@@ -426,13 +481,9 @@ def main() raises:
     # A synchronized dynamic driver pins the ephemeral column capacity, so
     # regeneration rewrites only its bits and never invalidates histogram or
     # workspace sizing established before the tree loop.
-    var pinned_initial = stage_tensor_candidate_host(
-        base_columns, base_folds, List[Bool](),
-        dynamic_stage.candidate.copy(), fold_capacity=255,
-    )
     var pinned_next = stage_tensor_candidate_host(
-        base_columns, base_folds, List[Bool](), regenerated^,
-        fold_capacity=255,
+        zero_columns, base_folds, List[Bool](), regenerated^,
+        fold_capacity=grid.border_count,
     )
     ref initial_cf = pinned_initial.compressed.layout.features[
         pinned_initial.feature_id
@@ -447,4 +498,74 @@ def main() raises:
         or initial_cf.folds != next_cf.folds
     ):
         raise Error("pinned tensor regeneration changed the search layout")
+
+    # Replace the accepted level's active column only after its reorder has
+    # drained, then execute level two. The replacement invalidates parent
+    # histograms, so this level must rebuild all live leaves; subtracting a
+    # new-column child from an old-column parent is mathematically invalid.
+    var replacement_base = pinned_next.compressed.words.copy()
+    ref replacement_cf = pinned_next.compressed.layout.features[
+        pinned_next.feature_id
+    ]
+    var replacement_mask = replacement_cf.mask << replacement_cf.shift
+    for r in range(6):
+        var at = Int(replacement_cf.offset) * 6 + r
+        replacement_base[at] &= ~replacement_mask
+    var replacement_device = insert_staged_tensor_candidate_device(
+        ctx, pinned_next, replacement_base.copy()
+    )
+    var reference_replacement_device = insert_staged_tensor_candidate_device(
+        ctx, pinned_next, replacement_base^
+    )
+    sync_state.replace_active_cindex(ctx, replacement_device^)
+    reference_state.replace_active_cindex(ctx, reference_replacement_device^)
+    if not run_synchronized_symmetric_level(
+        sync_state, ctx, sync_rows, sync_stats, sync_splits,
+        SCORE_FUNCTION_COSINE, False, Float32(3.0), Float32(0.0),
+        UInt64(1), True, no_trace, no_times, "tensor_sync",
+    ):
+        var rejected_rows = sync_state.drain_live_row_count(ctx)
+        raise Error(
+            "synchronized tensor driver rejected level-two winner: score="
+            + String(sync_state.last_winner_score) + " bin="
+            + String(sync_state.last_winner_bin) + " rows="
+            + String(rejected_rows) + " accounting="
+            + String(sync_state.last_pre_score_accounting)
+        )
+    if not run_synchronized_symmetric_level(
+        reference_state, ctx, reference_rows, reference_stats,
+        reference_splits, SCORE_FUNCTION_COSINE, False, Float32(3.0),
+        Float32(0.0), UInt64(1), False, no_trace, no_times,
+        "tensor_sync_reference",
+    ):
+        var rejected_rows = reference_state.drain_live_row_count(ctx)
+        raise Error(
+            "full-histogram tensor reference rejected level two: score="
+            + String(reference_state.last_winner_score) + " bin="
+            + String(reference_state.last_winner_bin) + " rows="
+            + String(rejected_rows) + " accounting="
+            + String(reference_state.last_pre_score_accounting)
+        )
+    if len(sync_splits) != 2 or sync_state.level != 2 or (
+        sync_state.live_leaves != 4
+    ):
+        raise Error("synchronized tensor driver did not complete two levels")
+    if sync_splits[1].feature_id != reference_splits[1].feature_id or (
+        sync_splits[1].bin_idx != reference_splits[1].bin_idx
+    ):
+        raise Error("synchronized winner disagrees with full-histogram reference")
+    if sync_state.last_pre_score_accounting != 3:
+        raise Error("replacement level did not rebuild full histograms")
+    if reference_state.last_pre_score_accounting != 3:
+        raise Error("level-two reference did not use the full histogram path")
+    ref sync_workspace = sync_state.workspace[0]
+    ctx.enqueue_copy(
+        dst_ptr=sync_workspace.h_sz.unsafe_ptr(), src_buf=sync_workspace.p_sz
+    )
+    ctx.synchronize()
+    var conserved_rows = 0
+    for leaf in range(sync_state.live_leaves):
+        conserved_rows += Int(sync_workspace.h_sz.unsafe_ptr().unsafe_load(leaf))
+    if conserved_rows != 6:
+        raise Error("synchronized tensor driver lost rows across two levels")
     print("tree CTR slice: deterministic pair FeatureFreq + text round trip PASS")

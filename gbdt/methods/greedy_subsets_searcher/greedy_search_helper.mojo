@@ -3373,6 +3373,10 @@ struct TSynchronizedSymmetricLevelState(Movable):
     var max_depth: Int
     var level: Int
     var live_leaves: Int
+    var last_pre_score_accounting: Int
+    var cindex_changed_since_histogram: Bool
+    var last_winner_score: Float32
+    var last_winner_bin: UInt32
 
     def __init__(
         out self,
@@ -3399,6 +3403,10 @@ struct TSynchronizedSymmetricLevelState(Movable):
         self.max_depth = max_depth
         self.level = 0
         self.live_leaves = 1
+        self.last_pre_score_accounting = 0
+        self.cindex_changed_since_histogram = False
+        self.last_winner_score = Float32(0.0)
+        self.last_winner_bin = DEAD_DEVICE_POISON
 
     def initialize_tree(
         mut self,
@@ -3437,6 +3445,10 @@ struct TSynchronizedSymmetricLevelState(Movable):
         )
         self.level = 0
         self.live_leaves = 1
+        self.last_pre_score_accounting = 0
+        self.cindex_changed_since_histogram = False
+        self.last_winner_score = Float32(0.0)
+        self.last_winner_bin = DEAD_DEVICE_POISON
 
     def replace_active_cindex(
         mut self,
@@ -3448,6 +3460,21 @@ struct TSynchronizedSymmetricLevelState(Movable):
         # This extra drain belongs only to the synchronized tensor path.
         ctx.synchronize()
         self.active_cindex = replacement^
+        # Parent histograms belong to the prior column values. Subtraction is
+        # valid again only after one full rebuild over the replacement.
+        self.cindex_changed_since_histogram = True
+
+    def drain_live_row_count(mut self, ctx: DeviceContext) raises -> Int:
+        """Return the host-visible live partition cardinality for diagnostics."""
+        ref workspace = self.workspace[0]
+        ctx.enqueue_copy(
+            dst_ptr=workspace.h_sz.unsafe_ptr(), src_buf=workspace.p_sz
+        )
+        ctx.synchronize()
+        var total = 0
+        for leaf in range(self.live_leaves):
+            total += Int(workspace.h_sz.unsafe_ptr().unsafe_load(leaf))
+        return total
 
     def enqueue_winner_reduction(
         mut self, ctx: DeviceContext, argmax_blocks: Int
@@ -3530,7 +3557,10 @@ struct TSynchronizedSymmetricLevelState(Movable):
         ref workspace = self.workspace[0]
         var n_live = self.live_leaves
         var half = n_live // 2
-        var planned = use_subtraction and self.level > 0
+        var planned = (
+            use_subtraction and self.level > 0
+            and not self.cindex_changed_since_histogram
+        )
         var n_compute = half if planned else n_live
         var fixed_scale = rebind[MutPointer[Float32, MutAnyOrigin]](
             workspace.scale_dev.unsafe_ptr()
@@ -3635,6 +3665,8 @@ struct TSynchronizedSymmetricLevelState(Movable):
                 workspace.part_stats,
                 count=n_live * self.stat_count,
             )
+        self.last_pre_score_accounting = accounting
+        self.cindex_changed_since_histogram = False
         return accounting
 
     def drain_winner(
@@ -3685,6 +3717,8 @@ struct TSynchronizedSymmetricLevelState(Movable):
     ) raises -> Bool:
         """Bounded synchronized boundary used between two tensor levels."""
         var winner = self.drain_winner(ctx)
+        self.last_winner_score = winner[0]
+        self.last_winner_bin = winner[1]
         return self.accept_current_winner(winner[0], winner[1], out_splits)
 
     def enqueue_post_winner(
@@ -3746,6 +3780,48 @@ struct TSynchronizedSymmetricLevelState(Movable):
         self.level += 1
         self.live_leaves *= 2
         return reorder_launches
+
+
+def run_synchronized_symmetric_level[
+    hist2_smem_mode: Int = HIST2_SMEM_MODE
+](
+    mut state: TSynchronizedSymmetricLevelState,
+    ctx: DeviceContext,
+    mut row_index: DeviceBuffer[DType.uint32],
+    mut stats: DeviceBuffer[DType.float32],
+    mut out_splits: List[TBinarySplit],
+    score_function: Int,
+    multiclass_optimization: Bool,
+    l2_leaf_reg: Float32,
+    score_std_dev: Float32,
+    level_seed: UInt64,
+    use_subtraction: Bool,
+    mut trace: IdentityTrace,
+    mut times: StageTimes,
+    tree_tag: String,
+) raises -> Bool:
+    """Run one bounded synchronized level over already-bound tensor columns.
+
+    A caller may regenerate and replace the active pinned cindex after this
+    returns. Baseline tree search does not call this entry.
+    """
+    _ = state.enqueue_pre_score[hist2_smem_mode](
+        ctx, row_index, stats, use_subtraction, trace, times, tree_tag
+    )
+    var argmax_blocks = (state.layout.hist_cells + 255) // 256
+    if argmax_blocks > 64:
+        argmax_blocks = 64
+    if argmax_blocks < 1:
+        argmax_blocks = 1
+    state.enqueue_score(
+        ctx, argmax_blocks, score_function, multiclass_optimization,
+        l2_leaf_reg, score_std_dev, level_seed,
+    )
+    state.enqueue_winner_reduction(ctx, argmax_blocks)
+    if not state.drain_and_accept_current_winner(ctx, out_splits):
+        return False
+    _ = state.enqueue_post_winner(ctx, row_index, stats)
+    return True
 
 
 def run_tree_layout_traced[
