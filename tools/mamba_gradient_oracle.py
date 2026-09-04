@@ -257,6 +257,9 @@ def generate(args):
             if ss:
                 dadt[:,tt]=((dseg[:,cc,:,:, :ss]*seg_leaf.detach()[:,cc,:,:, :ss])[:,:,ss:,:].sum(dim=(-1,-2)))
         intermediate_gradients.extend((("partial.s16.seg.L",dseg),("partial.seg.adt",dadt)))
+        a_seg=stages["A.out"].detach().reshape_as(dadt).requires_grad_(True);dt_seg=stages["dt.out"].detach().reshape_as(dadt).requires_grad_(True)
+        da_seg,ddt_seg=torch.autograd.grad(((a_seg*dt_seg)*dadt.detach()).sum(),(a_seg,dt_seg))
+        intermediate_gradients.extend((("partial.A.from_seg",da_seg),("partial.dt.from_seg",ddt_seg),("partial.dt.with_seg",dt_available.reshape_as(ddt_seg)+ddt_seg)))
 
         gate32 = stages["gate.out"].detach().to(torch.float32)
         gate32.requires_grad_(True)
@@ -345,6 +348,7 @@ def generate(args):
             cc,ss=divmod(tt,qsize)
             if ss:dadt32[:,tt]=((dseg32[:,cc,:,:, :ss]*seg32.detach()[:,cc,:,:, :ss])[:,:,ss:,:].sum(dim=(-1,-2)))
         reference32.update({"partial.s16.seg.L":dseg32,"partial.seg.adt":dadt32})
+        as32=stages["A.out"].detach().to(torch.float32).reshape_as(dadt32).requires_grad_(True);dtsg32=stages["dt.out"].detach().to(torch.float32).reshape_as(dadt32).requires_grad_(True);das32,ddts32=torch.autograd.grad(((as32*dtsg32)*dadt32.detach()).sum(),(as32,dtsg32));reference32.update({"partial.A.from_seg":das32,"partial.dt.from_seg":ddts32,"partial.dt.with_seg":dtavail32.reshape_as(ddts32)+ddts32})
     if args.family == "mamba2":
         tail_input = stages["gnorm.out"].detach().requires_grad_(True)
         tail_output = torch.nn.functional.linear(
@@ -536,6 +540,7 @@ def generate(args):
             ("partial.da.from_seg", dda_seg),
             ("partial.da.total", dda),
             ("partial.A.from_da", da_param),
+            ("partial.A_log.from_current_ssd", da_param * a_leaf.detach()),
             ("partial.dt.from_da", ddt),
         ))
         x_discrete = stages["silu.out"].reshape(bsz, length, conv_dim)[
@@ -790,6 +795,9 @@ def generate(args):
         reference32["partial.da.from_seg"] = dda_seg32
         reference32["partial.da.total"] = dda32
         reference32["partial.A.from_da"] = dapar32
+        reference32["partial.A_log.from_current_ssd"] = (
+            dapar32 * a32.detach()
+        )
         reference32["partial.dt.from_da"] = ddt32
         xdisc32 = stages32["silu.out"].reshape(b32, l32, cd32)[
             ..., : h32 * p_dim32

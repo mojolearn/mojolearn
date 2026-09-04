@@ -417,6 +417,7 @@ def mamba2_decay_to_dacs_kernel(
 struct Mamba2SSDDiscretizeBackward(Movable):
     var d_da: DeviceBuffer[DType.float32]  # [B,T,H]
     var d_a: DeviceBuffer[DType.float32]  # [H]
+    var d_a_log: DeviceBuffer[DType.float32]  # [H]
     var d_dt: DeviceBuffer[DType.float32]  # [B,T,H], S10 contribution
     var d_dtraw: DeviceBuffer[DType.float32]  # [B,T,H], current partial
     var d_dt_bias: DeviceBuffer[DType.float32]  # [H], current partial
@@ -438,6 +439,7 @@ struct Mamba2SSDDiscretizeBackward(Movable):
     def __init__(out self, ctx: DeviceContext, b: Int, t: Int, nh: Int) raises:
         self.d_da = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
         self.d_a = ctx.enqueue_create_buffer[DType.float32](nh)
+        self.d_a_log = ctx.enqueue_create_buffer[DType.float32](nh)
         self.d_dt = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
         self.d_dtraw = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
         self.d_dt_bias = ctx.enqueue_create_buffer[DType.float32](nh)
@@ -616,6 +618,7 @@ def mamba2_reverse_cumsum_kernel(
 
 def mamba2_da_product_backward_kernel(
     d_a: MutPointer[Float32, MutAnyOrigin],
+    d_a_log: MutPointer[Float32, MutAnyOrigin],
     d_dt: MutPointer[Float32, MutAnyOrigin],
     d_da: MutPointer[Float32, MutAnyOrigin],
     dt: MutPointer[Float32, MutAnyOrigin],
@@ -638,6 +641,8 @@ def mamba2_da_product_backward_kernel(
             ftz(dt.unsafe_load(idx)), upstream, acc
         ))
     d_a.unsafe_store(hh, acc)
+    # A = -exp(A_log), hence dA/dA_log = A with the recorded A bits.
+    d_a_log.unsafe_store(hh, ftz(pinned_mul(acc, av)))
 
 
 def mamba2_dt_backward_kernel(
@@ -754,7 +759,8 @@ def mamba2_reverse_cumsum_and_da_into(
         block_dim=(M2_SSD_BWD_TPB, 1, 1),
     )
     ctx.enqueue_function[mamba2_da_product_backward_kernel](
-        out.d_a.unsafe_ptr(), out.d_dt.unsafe_ptr(), out.d_da.unsafe_ptr(),
+        out.d_a.unsafe_ptr(), out.d_a_log.unsafe_ptr(), out.d_dt.unsafe_ptr(),
+        out.d_da.unsafe_ptr(),
         dt.unsafe_ptr(), a.unsafe_ptr(), Int32(b * t_work), Int32(nh),
         grid_dim=(_grid(nh), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
     )
@@ -809,7 +815,8 @@ def mamba2_ydiag_xd_and_partial_dt_into(
         block_dim=(M2_SSD_BWD_TPB, 1, 1),
     )
     ctx.enqueue_function[mamba2_da_product_backward_kernel](
-        out.d_a.unsafe_ptr(), out.d_dt.unsafe_ptr(), out.d_da_total.unsafe_ptr(),
+        out.d_a.unsafe_ptr(), out.d_a_log.unsafe_ptr(), out.d_dt.unsafe_ptr(),
+        out.d_da_total.unsafe_ptr(),
         dt.unsafe_ptr(), a.unsafe_ptr(), Int32(b * t_work), Int32(nh),
         grid_dim=(_grid(nh), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
     )

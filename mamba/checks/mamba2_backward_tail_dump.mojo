@@ -353,6 +353,10 @@ def main() raises:
         mamba_download(ctx, discretize_backward.d_a, dims.nheads),
     )
     _write_f32(
+        dump_dir + "/grad.partial.A_log.from_current_ssd.f32",
+        mamba_download(ctx, discretize_backward.d_a_log, dims.nheads),
+    )
+    _write_f32(
         dump_dir + "/grad.partial.dt.from_da.f32",
         mamba_download(
             ctx, discretize_backward.d_dt,
@@ -443,7 +447,8 @@ def main() raises:
             "\"partial.dacs.from_state\",\"partial.dacs.from_decay\","
             "\"partial.C.from_yoff\",\"partial.dacs.from_yoff\","
             "\"partial.dacs.total\",\"partial.da.from_seg\",\"partial.da.total\","
-            "\"partial.A.from_da\",\"partial.dt.from_da\","
+            "\"partial.A.from_da\",\"partial.A_log.from_current_ssd\","
+            "\"partial.dt.from_da\","
             "\"partial.xd.from_ydiag\",\"partial.x.from_xd\","
             "\"partial.cb.G.from_ydiag\",\"partial.seg.L.from_ydiag\","
             "\"partial.B.from_cb\",\"partial.C.from_cb\","

@@ -41,6 +41,7 @@ from mamba.impl.mamba_ssm.modules.mamba3_backward import (
     mamba3_backward_angle_into,
     mamba3_backward_dt_partial_into,
     mamba3_backward_seg_adt_into,
+    mamba3_backward_adt_product_into,
 )
 from mamba.impl.transformers.models.mamba.modeling_mamba import (
     mamba_download,
@@ -187,6 +188,8 @@ def main() raises:
     var seg_cells=fixture.b*stages.nc*dims.nheads*M3_CHUNK_SIZE*M3_CHUNK_SIZE
     var d_seg=mamba_zeros(ctx,seg_cells);var d_adt_seg=mamba_zeros(ctx,head_cells)
     mamba3_backward_seg_adt_into(ctx,d_seg,d_adt_seg,d_skip,stages.rotq_work,stages.kscale_work,stages.v_work,stages.seg_l,fixture.b,fixture.l,dims,M3_CHUNK_SIZE)
+    var d_a_seg=mamba_zeros(ctx,head_cells);var d_dt_seg=mamba_zeros(ctx,head_cells);var d_dt_with_seg=mamba_zeros(ctx,head_cells)
+    mamba3_backward_adt_product_into(ctx,d_a_seg,d_dt_seg,d_dt_with_seg,d_adt_seg,stages.a_out,stages.dt_out,d_dt_available,head_cells)
     ctx.synchronize()
 
     _write_f32(
@@ -230,6 +233,9 @@ def main() raises:
     _write_f32(output + "/grad.partial.dt_bias.f32",mamba_download(ctx,d_dt_bias,dims.nheads))
     _write_f32(output + "/grad.partial.s16.seg.L.f32",mamba_download(ctx,d_seg,seg_cells))
     _write_f32(output + "/grad.partial.seg.adt.f32",mamba_download(ctx,d_adt_seg,head_cells))
+    _write_f32(output + "/grad.partial.A.from_seg.f32",mamba_download(ctx,d_a_seg,head_cells))
+    _write_f32(output + "/grad.partial.dt.from_seg.f32",mamba_download(ctx,d_dt_seg,head_cells))
+    _write_f32(output + "/grad.partial.dt.with_seg.f32",mamba_download(ctx,d_dt_with_seg,head_cells))
     with open(output + "/dump_manifest.json", "w") as fh:
         fh.write(
             "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
@@ -252,7 +258,9 @@ def main() raises:
             + "\"partial.trap.current_total\",\"partial.angle.raw\","
             + "\"partial.angle.dt\",\"partial.dt.available_total\","
             + "\"partial.dt.raw\",\"partial.dt_bias\","
-            + "\"partial.s16.seg.L\",\"partial.seg.adt\"]}\n"
+            + "\"partial.s16.seg.L\",\"partial.seg.adt\","
+            + "\"partial.A.from_seg\",\"partial.dt.from_seg\","
+            + "\"partial.dt.with_seg\"]}\n"
         )
 
     _ = d_gamma_qk^
@@ -302,3 +310,6 @@ def main() raises:
     _ = d_dt_available^
     _ = d_adt_seg^
     _ = d_seg^
+    _ = d_dt_with_seg^
+    _ = d_dt_seg^
+    _ = d_a_seg^

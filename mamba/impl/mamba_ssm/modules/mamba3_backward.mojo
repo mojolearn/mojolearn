@@ -517,3 +517,24 @@ def mamba3_backward_seg_adt_into(
     var nc=(l+qs-1)//qs;var segcells=b*nc*dims.nheads*qs*qs;var hcells=b*l*dims.nheads
     ctx.enqueue_function[mamba3_s16_dseg_kernel](d_seg.unsafe_ptr(),d_y.unsafe_ptr(),q.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(_grid(segcells),1,1),block_dim=(M3_BWD_TPB,1,1))
     ctx.enqueue_function[mamba3_seg_to_adt_kernel](d_adt.unsafe_ptr(),d_seg.unsafe_ptr(),seg.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(_grid(hcells),1,1),block_dim=(M3_BWD_TPB,1,1))
+
+
+def mamba3_adt_product_backward_kernel(
+    d_a:MutPointer[Float32,MutAnyOrigin],d_dt_from_adt:MutPointer[Float32,MutAnyOrigin],
+    d_dt_with_seg:MutPointer[Float32,MutAnyOrigin],d_adt:MutPointer[Float32,MutAnyOrigin],
+    a:MutPointer[Float32,MutAnyOrigin],dt:MutPointer[Float32,MutAnyOrigin],
+    d_dt_available:MutPointer[Float32,MutAnyOrigin],cells_in:Int32,
+):
+    var cell=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if cell>=Int(cells_in):return
+    var da_dt=ftz(d_adt.unsafe_load(cell));var av=ftz(a.unsafe_load(cell));var dtv=ftz(dt.unsafe_load(cell))
+    var da=ftz(pinned_mul(da_dt,dtv));var ddt=ftz(pinned_mul(da_dt,av))
+    d_a.unsafe_store(cell,da);d_dt_from_adt.unsafe_store(cell,ddt)
+    d_dt_with_seg.unsafe_store(cell,ftz(ftz(d_dt_available.unsafe_load(cell))+ddt))
+
+
+def mamba3_backward_adt_product_into(
+    ctx:DeviceContext,mut d_a:DeviceBuffer[DType.float32],mut d_dt_from_adt:DeviceBuffer[DType.float32],mut d_dt_with_seg:DeviceBuffer[DType.float32],
+    mut d_adt:DeviceBuffer[DType.float32],mut a:DeviceBuffer[DType.float32],mut dt:DeviceBuffer[DType.float32],mut d_dt_available:DeviceBuffer[DType.float32],cells:Int,
+) raises:
+    ctx.enqueue_function[mamba3_adt_product_backward_kernel](d_a.unsafe_ptr(),d_dt_from_adt.unsafe_ptr(),d_dt_with_seg.unsafe_ptr(),d_adt.unsafe_ptr(),a.unsafe_ptr(),dt.unsafe_ptr(),d_dt_available.unsafe_ptr(),Int32(cells),grid_dim=(_grid(cells),1,1),block_dim=(M3_BWD_TPB,1,1))
