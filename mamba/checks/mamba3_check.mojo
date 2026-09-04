@@ -107,7 +107,13 @@ from std.sys import argv
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace, read_trace_lines
-from checks.numerics import ftz, identical_mul_add, identical_tanh
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    ftz,
+    identical_mul_add,
+    identical_tanh,
+)
 from mamba.checks.mamba3_fixture import (
     BITS_POS_INF,
     BITS_QNAN,
@@ -516,6 +522,65 @@ def total_moved(diffs: List[StageDiff]) -> Int:
     for i in range(len(diffs)):
         n += diffs[i].n_diff
     return n
+
+
+def fast_stage_rtol(i: Int) -> Float32:
+    """Fixed budgets: trig and chunked recurrence receive the widest bands."""
+    # Report/copy stages remain approximate in FAST; no stage silently gains
+    # an IDENTICAL promise from the current data movement implementation.
+    if i == 25 or i == 26:
+        return Float32(6e-5)
+    if i == 0:
+        return Float32(4e-6)
+    if i == 1 or i == 3 or i == 4 or i == 5:
+        return Float32(2e-5)
+    if i == 2 or i == 6 or i == 7 or i == 8 or i == 9:
+        return Float32(6e-5)
+    if i >= 10 and i <= 16:
+        return Float32(5e-4)  # serial angle, trig, qk, exp/segsum
+    if (i >= 17 and i <= 21) or i == 24 or i >= 27:
+        return Float32(8e-4)  # state pass, scan joins, carried state
+    return Float32(5e-4)
+
+
+def _absf(x: Float32) -> Float32:
+    return -x if x < Float32(0.0) else x
+
+
+def fast_accuracy_check(
+    host: List[List[Float32]], dev: List[List[Float32]]
+) raises -> Int:
+    var failed = 0
+    for s in range(N_STAGES):
+        if len(host[s]) != len(dev[s]):
+            raise Error("mamba3 FAST stage length mismatch at " + stage_name(s))
+        var rtol = fast_stage_rtol(s)
+        var atol = Float32(3e-6)
+        var outside = 0
+        var bits = 0
+        var max_abs = Float32(0.0)
+        for i in range(len(host[s])):
+            var h = host[s][i]
+            var d = dev[s][i]
+            if bitcast[DType.uint32](h) != bitcast[DType.uint32](d):
+                bits += 1
+            var hb = bitcast[DType.uint32](h) & UInt32(0x7FFFFFFF)
+            var db = bitcast[DType.uint32](d) & UInt32(0x7FFFFFFF)
+            if hb >= UInt32(0x7F800000) or db >= UInt32(0x7F800000):
+                outside += 1
+                continue
+            var ae = _absf(d - h)
+            if ae > max_abs:
+                max_abs = ae
+            if ae > atol + rtol * _absf(h):
+                outside += 1
+        print("  FAST " + stage_name(s) + " outside=" + String(outside)
+              + "/" + String(len(host[s])) + " bit_diff=" + String(bits)
+              + " max_abs=" + String(max_abs) + " rtol=" + String(rtol)
+              + " atol=" + String(atol))
+        if outside > 0:
+            failed += 1
+    return failed
 
 
 # ===========================================================================
@@ -1811,15 +1876,24 @@ def main() raises:
 
     var diffs = gate_a(ctx, case_k, b, l, True)
     var n = total_moved(diffs)
-    if n != 0:
-        raise Error(
-            String("GATE A FAILED: ")
-            + String(n)
-            + " cells differ between the device card and the host oracle"
-            + " (first stage: "
-            + first_moved(diffs)
-            + ")"
-        )
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        if n != 0:
+            raise Error(
+                String("GATE A FAILED: ") + String(n)
+                + " cells differ between the device card and the host oracle"
+                + " (first stage: " + first_moved(diffs) + ")"
+            )
+    else:
+        var trace_fast = IdentityTrace.disabled()
+        var pair = run_pair(ctx, case_k, b, l, trace_fast, String("m3fast"))
+        var accuracy_failures = fast_accuracy_check(pair[1], pair[0])
+        if accuracy_failures != 0:
+            raise Error(
+                "mamba3 FAST numerical accuracy FAILED on "
+                + String(accuracy_failures) + " stages"
+            )
+        print("FAST accuracy PASS; bit differences are diagnostic only")
+        return
     check_card_tags(card_path(), String("m3"))
     print(
         "GATE A PASS: every stage bit-identical to the oracle at this"

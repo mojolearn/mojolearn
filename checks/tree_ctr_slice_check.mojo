@@ -21,6 +21,7 @@ from gbdt.models.oblivious_model import (
     BIN_SPLIT_TAKE_GREATER,
     TBinarySplit,
 )
+from gbdt.gpu_data.compressed_index_builder import pack_quantized_columns_host
 
 
 def main() raises:
@@ -172,4 +173,25 @@ def main() raises:
         raise Error("equal ordered CTR values did not quantize equally")
     if candidate.bins[0] <= candidate.bins[4]:
         raise Error("tensor CTR candidate grid reversed value ordering")
+
+    # Real compressed-index seam: appending the tensor can shift policy
+    # blocks, so rebuild through `build_layout` rather than OR-ing into an
+    # assumed trailing word. Decode from the resulting CFeature exactly as
+    # the histogram kernels do and recover every candidate bin.
+    var quantized = List[List[UInt32]]()
+    quantized.append(cindex.copy())
+    quantized.append(candidate.bins.copy())
+    var candidate_folds = len(candidate.borders)
+    var folds: List[Int] = [1, candidate_folds]
+    var packed = pack_quantized_columns_host(quantized, folds)
+    ref candidate_feature = packed.layout.features[1]
+    if Int(candidate_feature.first_fold_index) != 1:
+        raise Error("tensor candidate does not occupy the expected rank cells")
+    for r in range(6):
+        var word = packed.words[Int(candidate_feature.offset) * 6 + r]
+        var decoded = (word >> candidate_feature.shift) & (
+            candidate_feature.mask
+        )
+        if decoded != candidate.bins[r]:
+            raise Error("compressed tensor candidate bin mismatch")
     print("tree CTR slice: deterministic pair FeatureFreq + text round trip PASS")

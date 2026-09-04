@@ -187,3 +187,57 @@ def build_layout(
     return CompressedIndexLayout(
         features^, policy_of^, next_column, fold_cursor
     )
+
+
+struct HostCompressedIndex(Copyable, Movable):
+    """Canonical packed index plus the layout that defines its addresses."""
+
+    var layout: CompressedIndexLayout
+    var words: List[UInt32]
+
+    def __init__(
+        out self, var layout: CompressedIndexLayout, var words: List[UInt32]
+    ):
+        self.layout = layout^
+        self.words = words^
+
+
+def pack_quantized_columns_host(
+    columns: List[List[UInt32]],
+    fold_counts: List[Int],
+    one_hot: List[Bool] = List[Bool](),
+) raises -> HostCompressedIndex:
+    """Pack already-quantized columns through the production layout.
+
+    Dynamic CTR candidates arrive after their statistic and borders have
+    already been computed. Re-quantizing floats would add a second rounding
+    seam; this is the host reference for the production builder's final
+    write, using `CFeature.offset/mask/shift` from `build_layout` itself.
+    """
+    if len(columns) != len(fold_counts):
+        raise Error("quantized column/fold-count mismatch")
+    var n_rows = 0
+    if len(columns) > 0:
+        n_rows = len(columns[0])
+    for f in range(len(columns)):
+        if len(columns[f]) != n_rows:
+            raise Error("quantized columns have different row counts")
+    var layout = build_layout(fold_counts, one_hot)
+    var words = List[UInt32]()
+    words.resize(n_rows * layout.columns, UInt32(0))
+    for f in range(len(columns)):
+        ref cf = layout.features[f]
+        var folds = fold_counts[f]
+        for r in range(n_rows):
+            var bin = Int(columns[f][r])
+            var max_bin = folds
+            if cf.one_hot_feature:
+                max_bin = folds - 1
+            if bin < 0 or bin > max_bin:
+                raise Error("quantized feature bin is outside its fold range")
+            var at = Int(cf.offset) * n_rows + r
+            if (UInt32(bin) & ~cf.mask) != UInt32(0):
+                raise Error("quantized feature bin exceeds its packing mask")
+            var encoded = UInt32(bin) << cf.shift
+            words[at] |= encoded
+    return HostCompressedIndex(layout^, words^)
