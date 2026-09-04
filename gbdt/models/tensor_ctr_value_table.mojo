@@ -863,6 +863,69 @@ struct TTensorCtrRegistry(Copyable, Movable):
                     ))
         return out^
 
+    def expand_for_model_apply(
+        self,
+        x_raw: List[Float32],
+        n_rows: Int,
+        model_borders: List[List[Float32]],
+        one_hot: List[Bool] = List[Bool](),
+    ) raises -> List[Float32]:
+        """Reconstruct tensor columns and their split-history bins in order.
+
+        Split tensors may name an earlier tensor model column, so apply is
+        necessarily sequential. Each completed column is quantized against
+        the model's own borders before the next table is evaluated. This is
+        the host counterpart of the device cindex ultimately used by tree
+        prediction; it does not invent a second grid.
+        """
+        var n_raw_features = self.first_model_column
+        var n_model_features = n_raw_features + len(self.features)
+        if len(model_borders) != n_model_features:
+            raise Error("tensor CTR registry/model border count mismatch")
+        if len(one_hot) != 0 and len(one_hot) != n_model_features:
+            raise Error("tensor CTR registry/model one-hot count mismatch")
+        if len(x_raw) != n_rows * n_raw_features:
+            raise Error("tensor CTR model apply raw shape mismatch")
+
+        var expanded = x_raw.copy()
+        var bins = List[UInt32]()
+        bins.resize(n_rows * n_model_features, UInt32(0))
+        for f in range(n_raw_features):
+            var categorical = len(one_hot) != 0 and one_hot[f]
+            for r in range(n_rows):
+                var value = x_raw[f * n_rows + r]
+                if value != value:
+                    raise Error("tensor CTR split history cannot quantize NaN")
+                var bin = 0
+                if categorical:
+                    bin = dense_category_code(value, f, r)
+                else:
+                    for b in range(len(model_borders[f])):
+                        if value > model_borders[f][b]:
+                            bin += 1
+                bins[f * n_rows + r] = UInt32(bin)
+
+        for i in range(len(self.features)):
+            ref feature = self.features[i]
+            var column = n_raw_features + i
+            if feature.model_column != column:
+                raise Error("tensor CTR registry model columns are not contiguous")
+            for r in range(n_rows):
+                var value: Float32
+                if len(feature.table.splits) == 0:
+                    value = feature.table.value_for_row(x_raw, n_rows, r)
+                else:
+                    value = value_for_split_tensor_row(
+                        feature.table, x_raw, bins, n_rows, r
+                    )
+                expanded.append(value)
+                var bin = 0
+                for b in range(len(model_borders[column])):
+                    if value > model_borders[column][b]:
+                        bin += 1
+                bins[column * n_rows + r] = UInt32(bin)
+        return expanded^
+
 
 def persist_winning_tensor_candidate(
     staged: TStagedTensorCandidate, mut registry: TTensorCtrRegistry

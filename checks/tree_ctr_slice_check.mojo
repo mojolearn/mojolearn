@@ -137,9 +137,20 @@ def main() raises:
     var split_expanded = split_registry.expand_for_apply_with_bins(
         x, cindex, 6, 3
     )
+    var apply_borders = List[List[Float32]]()
+    var raw_split_border: List[Float32] = [Float32(0.5)]
+    apply_borders.append(raw_split_border^)
+    apply_borders.append(List[Float32]())
+    apply_borders.append(List[Float32]())
+    apply_borders.append(List[Float32]())
+    var model_expanded = split_registry.expand_for_model_apply(
+        x, 6, apply_borders^
+    )
     for r in range(6):
         if split_expanded[18 + r] != want[r]:
             raise Error("split-history registry apply mismatch")
+        if model_expanded[18 + r] != split_expanded[18 + r]:
+            raise Error("tensor model apply did not reconstruct split bins")
 
     # Borders is ordered while fitting and full-pool at apply. The first
     # row of every tensor key sees only the prior; repeated keys see only

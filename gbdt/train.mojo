@@ -153,9 +153,10 @@ struct TrainedModel(Movable):
     row; without them it refuses. See
     `gbdt/models/ctr_value_table.mojo`."""
     var tensor_ctr_registry: TTensorCtrRegistry
-    """Winning combination/tree CTR tables. Empty while
-    `max_ctr_complexity > 1` remains refused; serialized now so enabling the
-    trainer cannot create models whose dynamic feature identity is lost."""
+    """Winning combination/tree CTR tables. Serialized model apply rebuilds
+    these columns and their split-history bins in level order. Public
+    combination training remains refused until this registry is populated by
+    the production structure-search driver rather than focused checks."""
 
 
 def _build_cindex_from_floats(
@@ -1804,6 +1805,8 @@ def model_input_features(tm: TrainedModel) raises -> Int:
     behind one column per CTR config -- the shape their
     `TStaticCtrProvider` reconstructs from the model rather than being
     told."""
+    if len(tm.tensor_ctr_registry.features) != 0:
+        return tm.tensor_ctr_registry.first_model_column
     if len(tm.ctr_tables) == 0:
         return len(tm.fold_counts)
     return column_plan(
@@ -1844,11 +1847,10 @@ def predict_floats(
     missing, which is why `ctr_column_count` travels through save and load
     beside them."""
     var n_features = len(tm.fold_counts)
-    if len(tm.tensor_ctr_registry.features) != 0:
+    if len(tm.tensor_ctr_registry.features) != 0 and len(tm.ctr_tables) != 0:
         raise Error(
-            "tensor CTR model apply is not wired into device quantization yet;"
-            " the registry is preserved by model IO, but scoring it through"
-            " the simple-CTR expansion would ignore split history"
+            "combined simple-CTR and tensor-CTR model apply needs a composed"
+            " column plan and is not wired yet"
         )
     if tm.ctr_column_count != len(tm.ctr_tables):
         raise Error(
@@ -1863,7 +1865,11 @@ def predict_floats(
             " never mapped onto"
         )
     var expanded: List[Float32]
-    if len(tm.ctr_tables) == 0:
+    if len(tm.tensor_ctr_registry.features) != 0:
+        expanded = tm.tensor_ctr_registry.expand_for_model_apply(
+            x_colmajor, n_rows, tm.borders, tm.one_hot
+        )
+    elif len(tm.ctr_tables) == 0:
         if len(x_colmajor) != n_rows * n_features:
             raise Error("x_colmajor size mismatch")
         expanded = x_colmajor.copy()
@@ -1928,7 +1934,16 @@ def predict_multi_floats(
     """
     var approx_dim = model_approx_dim(tm.model)
     var expanded_x: List[Float32]
-    if len(tm.ctr_tables) != 0:
+    if len(tm.tensor_ctr_registry.features) != 0 and len(tm.ctr_tables) != 0:
+        raise Error(
+            "combined simple-CTR and tensor-CTR model apply needs a composed"
+            " column plan and is not wired yet"
+        )
+    if len(tm.tensor_ctr_registry.features) != 0:
+        expanded_x = tm.tensor_ctr_registry.expand_for_model_apply(
+            x_colmajor, n_rows, tm.borders, tm.one_hot
+        )
+    elif len(tm.ctr_tables) != 0:
         expanded_x = expand_raw_columns(
             tm.ctr_tables, len(tm.fold_counts), x_colmajor, n_rows
         )
