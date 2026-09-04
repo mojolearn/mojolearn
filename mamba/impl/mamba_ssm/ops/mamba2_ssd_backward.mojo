@@ -49,6 +49,7 @@ struct Mamba2SSDBackwardState(Movable):
     var d_cstate: DeviceBuffer[DType.float32]  # [B,C,H,P,N]
     var d_scale_product: DeviceBuffer[DType.float32]  # [B,C,H,P,N]
     var d_initial: DeviceBuffer[DType.float32]  # [B,H,P,N]
+    var d_decay_cstate: DeviceBuffer[DType.float32]  # [B,H,C,Q]
 
     def __init__(
         out self, ctx: DeviceContext, b: Int, nc: Int, nh: Int
@@ -74,6 +75,63 @@ struct Mamba2SSDBackwardState(Movable):
             state_cells
         )
         self.d_initial = ctx.enqueue_create_buffer[DType.float32](boundary_cells)
+        self.d_decay_cstate = ctx.enqueue_create_buffer[DType.float32](
+            b * nh * nc * 256
+        )
+
+
+def mamba2_cstate_ddecay_kernel(
+    d_decay: MutPointer[Float32, MutAnyOrigin],
+    d_cstate: MutPointer[Float32, MutAnyOrigin],
+    xd: MutPointer[Float32, MutAnyOrigin],
+    xbc: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, t_in: Int32, nh_in: Int32, di_in: Int32,
+    cd_in: Int32, nc_in: Int32, q_in: Int32,
+):
+    """Cstate's decay adjoint; one owner contracts p-major then n."""
+    var b = Int(b_in)
+    var t = Int(t_in)
+    var nh = Int(nh_in)
+    var di = Int(di_in)
+    var cd = Int(cd_in)
+    var nc = Int(nc_in)
+    var qv = Int(q_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= b * nh * nc * qv:
+        return
+    var bb = cell // (nh * nc * qv)
+    var rem = cell - bb * nh * nc * qv
+    var hh = rem // (nc * qv)
+    rem -= hh * nc * qv
+    var cc = rem // qv
+    var ii = rem - cc * qv
+    var tt = cc * qv + ii
+    var acc = Float32(0.0)
+    if tt < t:
+        for pp in range(M2_HEADDIM):
+            var xv = ftz(xd.unsafe_load((bb * t * nh + tt * nh + hh) * M2_HEADDIM + pp))
+            for nn in range(M2_D_STATE):
+                var upstream = ftz(d_cstate.unsafe_load(
+                    (((bb * nc + cc) * nh + hh) * M2_HEADDIM + pp)
+                    * M2_D_STATE + nn
+                ))
+                var bv = ftz(xbc.unsafe_load((bb * t + tt) * cd + di + nn))
+                acc = ftz(identical_mul_add(upstream, ftz(pinned_mul(xv, bv)), acc))
+    d_decay.unsafe_store(cell, acc)
+
+
+def mamba2_cstate_ddecay_into(
+    ctx: DeviceContext, mut out: Mamba2SSDBackwardState,
+    mut xd: DeviceBuffer[DType.float32], mut xbc: DeviceBuffer[DType.float32],
+    b: Int, t: Int, nh: Int, di: Int, cd: Int, nc: Int, qv: Int,
+) raises:
+    var cells = b * nh * nc * qv
+    ctx.enqueue_function[mamba2_cstate_ddecay_kernel](
+        out.d_decay_cstate.unsafe_ptr(), out.d_cstate.unsafe_ptr(),
+        xd.unsafe_ptr(), xbc.unsafe_ptr(), Int32(b), Int32(t), Int32(nh),
+        Int32(di), Int32(cd), Int32(nc), Int32(qv),
+        grid_dim=(_grid(cells), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
+    )
 
 
 def mamba2_s18_direct_dpass_kernel(
@@ -343,6 +401,8 @@ struct Mamba2SSDDiscretizeBackward(Movable):
     var d_seg_ydiag: DeviceBuffer[DType.float32]  # [B,C,H,Q,Q]
     var d_b_cb: DeviceBuffer[DType.float32]  # [B,T,N]
     var d_c_cb: DeviceBuffer[DType.float32]  # [B,T,N]
+    var d_da_seg: DeviceBuffer[DType.float32]  # [B,T,H]
+    var d_da_total: DeviceBuffer[DType.float32]  # S11 + segment
 
     def __init__(out self, ctx: DeviceContext, b: Int, t: Int, nh: Int) raises:
         self.d_da = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
@@ -367,6 +427,44 @@ struct Mamba2SSDDiscretizeBackward(Movable):
         )
         self.d_b_cb = ctx.enqueue_create_buffer[DType.float32](b * t * M2_D_STATE)
         self.d_c_cb = ctx.enqueue_create_buffer[DType.float32](b * t * M2_D_STATE)
+        self.d_da_seg = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
+        self.d_da_total = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
+
+
+def mamba2_seg_backward_kernel(
+    d_da_seg: MutPointer[Float32, MutAnyOrigin],
+    d_da_total: MutPointer[Float32, MutAnyOrigin],
+    d_seg: MutPointer[Float32, MutAnyOrigin],
+    seg: MutPointer[Float32, MutAnyOrigin],
+    d_da_s11: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, t_in: Int32, nh_in: Int32, nc_in: Int32, q_in: Int32,
+):
+    var b = Int(b_in)
+    var t = Int(t_in)
+    var nh = Int(nh_in)
+    var nc = Int(nc_in)
+    var qv = Int(q_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= b * t * nh:
+        return
+    var bb = cell // (t * nh)
+    var rem = cell - bb * t * nh
+    var tt = rem // nh
+    var hh = rem - tt * nh
+    var cc = tt // qv
+    var kk = tt - cc * qv
+    var real = t - cc * qv
+    if real > qv:
+        real = qv
+    var acc = Float32(0.0)
+    for jj in range(kk):
+        for ii in range(kk, real):
+            var idx = (((bb * nc + cc) * nh + hh) * qv + ii) * qv + jj
+            acc = ftz(identical_mul_add(
+                ftz(d_seg.unsafe_load(idx)), ftz(seg.unsafe_load(idx)), acc
+            ))
+    d_da_seg.unsafe_store(cell, acc)
+    d_da_total.unsafe_store(cell, ftz(ftz(d_da_s11.unsafe_load(cell)) + acc))
 
 
 def mamba2_ydiag_matrix_backward_kernel(
@@ -596,6 +694,7 @@ def mamba2_ydiag_xd_and_partial_dt_into(
     mut xd: DeviceBuffer[DType.float32],
     mut xbc: DeviceBuffer[DType.float32],
     mut dt: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
     mut dtraw: DeviceBuffer[DType.float32],
     mut dt_bias: DeviceBuffer[DType.float32],
     b: Int, t_work: Int, nh: Int, di: Int, cd: Int, nc: Int, qv: Int,
@@ -614,6 +713,18 @@ def mamba2_ydiag_xd_and_partial_dt_into(
         Int32(di), Int32(cd), Int32(nc), Int32(qv),
         grid_dim=(_grid(b * t_work * M2_D_STATE), 1, 1),
         block_dim=(M2_SSD_BWD_TPB, 1, 1),
+    )
+    ctx.enqueue_function[mamba2_seg_backward_kernel](
+        out.d_da_seg.unsafe_ptr(), out.d_da_total.unsafe_ptr(),
+        out.d_seg_ydiag.unsafe_ptr(), seg_l.unsafe_ptr(), out.d_da.unsafe_ptr(),
+        Int32(b), Int32(t_work), Int32(nh), Int32(nc), Int32(qv),
+        grid_dim=(_grid(b * t_work * nh), 1, 1),
+        block_dim=(M2_SSD_BWD_TPB, 1, 1),
+    )
+    ctx.enqueue_function[mamba2_da_product_backward_kernel](
+        out.d_a.unsafe_ptr(), out.d_dt.unsafe_ptr(), out.d_da_total.unsafe_ptr(),
+        dt.unsafe_ptr(), a.unsafe_ptr(), Int32(b * t_work), Int32(nh),
+        grid_dim=(_grid(nh), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
     )
     ctx.enqueue_function[mamba2_ydiag_xd_backward_kernel](
         out.d_xd_ydiag.unsafe_ptr(), out.d_x_from_xd.unsafe_ptr(),

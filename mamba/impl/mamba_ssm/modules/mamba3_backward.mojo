@@ -4,8 +4,8 @@
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
 
-from checks.numerics import ftz, identical_mul_add, identical_sigmoid, identical_silu, portable_cosf, portable_sinf
-from mamba.checks.mamba3_fixture import M3_D_STATE, M3_HEADDIM, M3_NUM_ROPE_ANGLES, Mamba3Dims
+from checks.numerics import ftz, identical_mul_add, identical_sigmoid, identical_silu, identical_tanh, portable_cosf, portable_sinf
+from mamba.checks.mamba3_fixture import M3_D_STATE, M3_HEADDIM, M3_NUM_ROPE_ANGLES, M3_PI, Mamba3Dims
 from mamba.impl.transformers.models.mamba.modeling_mamba import pinned_mul
 
 comptime M3_BWD_TPB = 128
@@ -333,3 +333,100 @@ def mamba3_backward_join_rotary_into(
     ctx.enqueue_function[mamba3_join_value_scale_kernel](d_value.unsafe_ptr(),d_gamma.unsafe_ptr(),d_beta.unsafe_ptr(),d_value_skip.unsafe_ptr(),d_value_s16.unsafe_ptr(),d_scale.unsafe_ptr(),Int32(vc),Int32(sc),grid_dim=(_grid(cells),1,1),block_dim=(M3_BWD_TPB,1,1))
     var pairs=m*dims.nheads*(M3_D_STATE//2)
     ctx.enqueue_function[mamba3_rotary_backward_kernel](d_qraw.unsafe_ptr(),d_kraw.unsafe_ptr(),d_theta.unsafe_ptr(),d_qrot.unsafe_ptr(),d_krot.unsafe_ptr(),bcb.unsafe_ptr(),bcc.unsafe_ptr(),b_bias.unsafe_ptr(),c_bias.unsafe_ptr(),theta.unsafe_ptr(),Int32(pairs),Int32(dims.nheads),grid_dim=(_grid(pairs),1,1),block_dim=(M3_BWD_TPB,1,1))
+
+
+def mamba3_join_bc_kernel(
+    out_b: MutPointer[Float32, MutAnyOrigin], out_c: MutPointer[Float32, MutAnyOrigin],
+    qk_b: MutPointer[Float32, MutAnyOrigin], qk_c: MutPointer[Float32, MutAnyOrigin],
+    rot_b: MutPointer[Float32, MutAnyOrigin], rot_c: MutPointer[Float32, MutAnyOrigin], n_in: Int32,
+):
+    var i=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if i>=Int(n_in): return
+    out_b.unsafe_store(i,ftz(ftz(qk_b.unsafe_load(i))+ftz(rot_b.unsafe_load(i))))
+    out_c.unsafe_store(i,ftz(ftz(qk_c.unsafe_load(i))+ftz(rot_c.unsafe_load(i))))
+
+
+def mamba3_beta_join_kernel(
+    out_gamma: MutPointer[Float32, MutAnyOrigin], out_dt: MutPointer[Float32, MutAnyOrigin],
+    out_trap: MutPointer[Float32, MutAnyOrigin], qk_gamma: MutPointer[Float32, MutAnyOrigin],
+    scale_gamma: MutPointer[Float32, MutAnyOrigin], qk_dt: MutPointer[Float32, MutAnyOrigin],
+    qk_trap: MutPointer[Float32, MutAnyOrigin], d_beta: MutPointer[Float32, MutAnyOrigin],
+    dt: MutPointer[Float32, MutAnyOrigin], sigma: MutPointer[Float32, MutAnyOrigin],
+    b_in:Int32,l_in:Int32,nh_in:Int32,
+):
+    var b=Int(b_in);var l=Int(l_in);var nh=Int(nh_in)
+    var i=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if i>=b*l*nh:return
+    var li=(i//nh)%l
+    var ddt=ftz(qk_dt.unsafe_load(i));var dtr=ftz(qk_trap.unsafe_load(i))
+    if li>0:
+        var db=ftz(d_beta.unsafe_load(i-nh));var sig=ftz(sigma.unsafe_load(i));var dtv=ftz(dt.unsafe_load(i))
+        ddt=ftz(ddt+ftz(pinned_mul(db,ftz(Float32(1.0)-sig))))
+        var ds=ftz(-ftz(pinned_mul(db,dtv)))
+        dtr=ftz(dtr+ftz(pinned_mul(ftz(pinned_mul(ds,sig)),ftz(Float32(1.0)-sig))))
+    out_gamma.unsafe_store(i,ftz(ftz(qk_gamma.unsafe_load(i))+ftz(scale_gamma.unsafe_load(i))))
+    out_dt.unsafe_store(i,ddt);out_trap.unsafe_store(i,dtr)
+
+
+def mamba3_backward_join_current_into(
+    ctx:DeviceContext,mut out_b:DeviceBuffer[DType.float32],mut out_c:DeviceBuffer[DType.float32],
+    mut out_gamma:DeviceBuffer[DType.float32],mut out_dt:DeviceBuffer[DType.float32],mut out_trap:DeviceBuffer[DType.float32],
+    mut qk_b:DeviceBuffer[DType.float32],mut qk_c:DeviceBuffer[DType.float32],mut rot_b:DeviceBuffer[DType.float32],mut rot_c:DeviceBuffer[DType.float32],
+    mut qk_gamma:DeviceBuffer[DType.float32],mut scale_gamma:DeviceBuffer[DType.float32],mut qk_dt:DeviceBuffer[DType.float32],mut qk_trap:DeviceBuffer[DType.float32],
+    mut d_beta:DeviceBuffer[DType.float32],mut dt:DeviceBuffer[DType.float32],mut sigma:DeviceBuffer[DType.float32],b:Int,l:Int,dims:Mamba3Dims,
+) raises:
+    var bc=b*l*dims.nheads*M3_D_STATE;var hs=b*l*dims.nheads
+    ctx.enqueue_function[mamba3_join_bc_kernel](out_b.unsafe_ptr(),out_c.unsafe_ptr(),qk_b.unsafe_ptr(),qk_c.unsafe_ptr(),rot_b.unsafe_ptr(),rot_c.unsafe_ptr(),Int32(bc),grid_dim=(_grid(bc),1,1),block_dim=(M3_BWD_TPB,1,1))
+    ctx.enqueue_function[mamba3_beta_join_kernel](out_gamma.unsafe_ptr(),out_dt.unsafe_ptr(),out_trap.unsafe_ptr(),qk_gamma.unsafe_ptr(),scale_gamma.unsafe_ptr(),qk_dt.unsafe_ptr(),qk_trap.unsafe_ptr(),d_beta.unsafe_ptr(),dt.unsafe_ptr(),sigma.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),grid_dim=(_grid(hs),1,1),block_dim=(M3_BWD_TPB,1,1))
+
+
+def mamba3_theta_reverse_kernel(
+    d_rate: MutPointer[Float32, MutAnyOrigin], d_theta: MutPointer[Float32, MutAnyOrigin],
+    dt: MutPointer[Float32, MutAnyOrigin], b_in:Int32,l_in:Int32,nh_in:Int32,
+):
+    var b=Int(b_in);var l=Int(l_in);var nh=Int(nh_in)
+    var cell=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if cell>=b*nh*M3_NUM_ROPE_ANGLES:return
+    var r=cell%M3_NUM_ROPE_ANGLES;var bh=cell//M3_NUM_ROPE_ANGLES
+    var h=bh%nh;var bb=bh//nh;var carry=Float32(0.0)
+    for rev in range(l):
+        var t=l-1-rev;var rowh=(bb*l+t)*nh+h
+        carry=ftz(carry+ftz(d_theta.unsafe_load(rowh*M3_NUM_ROPE_ANGLES+r)))
+        d_rate.unsafe_store(rowh*M3_NUM_ROPE_ANGLES+r,ftz(pinned_mul(carry,ftz(dt.unsafe_load(rowh)))))
+
+
+def mamba3_angle_reduce_kernel(
+    d_angle: MutPointer[Float32, MutAnyOrigin], d_dt: MutPointer[Float32, MutAnyOrigin],
+    d_rate: MutPointer[Float32, MutAnyOrigin], d_theta: MutPointer[Float32, MutAnyOrigin],
+    angle_raw: MutPointer[Float32, MutAnyOrigin], dt: MutPointer[Float32, MutAnyOrigin],
+    b_in:Int32,l_in:Int32,nh_in:Int32,dip_in:Int32,col_angle_in:Int32,
+):
+    var b=Int(b_in);var l=Int(l_in);var m=b*l;var nh=Int(nh_in);var dip=Int(dip_in);var ca=Int(col_angle_in)
+    var cell=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if cell<m*M3_NUM_ROPE_ANGLES:
+        var r=cell%M3_NUM_ROPE_ANGLES;var token=cell//M3_NUM_ROPE_ANGLES;var acc=Float32(0.0)
+        for h in range(nh):
+            var dr=ftz(d_rate.unsafe_load((token*nh+h)*M3_NUM_ROPE_ANGLES+r))
+            acc=ftz(acc+dr)
+        var raw=ftz(angle_raw.unsafe_load(token*dip+ca+r));var tv=ftz(identical_tanh(raw))
+        var prime=ftz(pinned_mul(M3_PI,ftz(Float32(1.0)-ftz(pinned_mul(tv,tv)))))
+        d_angle.unsafe_store(cell,ftz(pinned_mul(acc,prime)))
+    if cell<m*nh:
+        var token=cell//nh;var h=cell%nh;var bb=token//l;var li=token%l;var accdt=Float32(0.0)
+        for r in range(M3_NUM_ROPE_ANGLES):
+            var raw=ftz(angle_raw.unsafe_load(token*dip+ca+r));var rate=ftz(pinned_mul(ftz(identical_tanh(raw)),M3_PI))
+            var carry=Float32(0.0)
+            for u in range(li,l):
+                carry=ftz(carry+ftz(d_theta.unsafe_load(((bb*l+u)*nh+h)*M3_NUM_ROPE_ANGLES+r)))
+            accdt=ftz(identical_mul_add(carry,rate,accdt))
+        d_dt.unsafe_store(cell,accdt)
+
+
+def mamba3_backward_angle_into(
+    ctx:DeviceContext,mut d_rate:DeviceBuffer[DType.float32],mut d_angle:DeviceBuffer[DType.float32],mut d_dt:DeviceBuffer[DType.float32],
+    mut d_theta:DeviceBuffer[DType.float32],mut dt:DeviceBuffer[DType.float32],mut in_proj:DeviceBuffer[DType.float32],b:Int,l:Int,dims:Mamba3Dims,
+) raises:
+    var chains=b*dims.nheads*M3_NUM_ROPE_ANGLES
+    ctx.enqueue_function[mamba3_theta_reverse_kernel](d_rate.unsafe_ptr(),d_theta.unsafe_ptr(),dt.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),grid_dim=(_grid(chains),1,1),block_dim=(M3_BWD_TPB,1,1))
+    var m=b*l;var cells=m*M3_NUM_ROPE_ANGLES if m*M3_NUM_ROPE_ANGLES>m*dims.nheads else m*dims.nheads
+    ctx.enqueue_function[mamba3_angle_reduce_kernel](d_angle.unsafe_ptr(),d_dt.unsafe_ptr(),d_rate.unsafe_ptr(),d_theta.unsafe_ptr(),in_proj.unsafe_ptr(),dt.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(dims.d_in_proj()),Int32(dims.col_angle()),grid_dim=(_grid(cells),1,1),block_dim=(M3_BWD_TPB,1,1))

@@ -49,6 +49,7 @@ from mamba.impl.mamba_ssm.ops.mamba2_ssd_backward import (
     mamba2_reverse_cumsum_and_da_into,
     mamba2_ydiag_xd_and_partial_dt_into,
     mamba2_reverse_chunk_state_into,
+    mamba2_cstate_ddecay_into,
     mamba2_s18_direct_dpass_into,
 )
 from mamba.impl.transformers.models.mamba.modeling_mamba import (
@@ -187,6 +188,11 @@ def main() raises:
         stages.nc,
         m2_q_eff(),
     )
+    mamba2_cstate_ddecay_into(
+        ctx, ssd_backward, stages.xd_work, stages.xbc_work, fixture.b,
+        stages.t_work, dims.nheads, dims.d_inner, dims.conv_dim(),
+        stages.nc, m2_q_eff(),
+    )
     var scale_reduction = Mamba2SSDScaleReduction(
         ctx, fixture.b, stages.nc, dims.nheads, m2_q_eff()
     )
@@ -211,7 +217,7 @@ def main() raises:
     mamba2_ydiag_xd_and_partial_dt_into(
         ctx, discretize_backward, tail.d_scan, stages.cb_g, stages.seg_l,
         stages.xd_work,
-        stages.xbc_work, stages.dt_work, stages.dtraw_work, dweights.dt_bias,
+        stages.xbc_work, stages.dt_work, stages.a_out, stages.dtraw_work, dweights.dt_bias,
         fixture.b, stages.t_work, dims.nheads, dims.d_inner,
         dims.conv_dim(), stages.nc, m2_q_eff(), fixture.dt_lo, fixture.dt_hi,
     )
@@ -280,6 +286,11 @@ def main() raises:
         mamba_download(ctx, ssd_backward.d_scale_product, state_cells),
     )
     _write_f32(
+        dump_dir + "/grad.partial.decay.from_cstate.f32",
+        mamba_download(ctx, ssd_backward.d_decay_cstate,
+            fixture.b * dims.nheads * stages.nc * m2_q_eff()),
+    )
+    _write_f32(
         dump_dir + "/grad.stage.initial_state.f32",
         mamba_download(
             ctx,
@@ -319,7 +330,14 @@ def main() raises:
     _write_f32(
         dump_dir + "/grad.partial.da.total.f32",
         mamba_download(
-            ctx, discretize_backward.d_da,
+            ctx, discretize_backward.d_da_total,
+            fixture.b * stages.t_work * dims.nheads,
+        ),
+    )
+    _write_f32(
+        dump_dir + "/grad.partial.da.from_seg.f32",
+        mamba_download(
+            ctx, discretize_backward.d_da_seg,
             fixture.b * stages.t_work * dims.nheads,
         ),
     )
@@ -406,9 +424,10 @@ def main() raises:
             "\"partial.silu.x.from_D\",\"D\","
             "\"stage.pass.states.direct\",\"stage.pass.states.total\","
             "\"stage.cstate.out\",\"stage.initial_state\","
-            "\"stage.scale.product\",\"partial.dacs.from_state\","
+            "\"stage.scale.product\",\"partial.decay.from_cstate\","
+            "\"partial.dacs.from_state\","
             "\"partial.C.from_yoff\",\"partial.dacs.from_yoff\","
-            "\"partial.dacs.total\",\"partial.da.total\","
+            "\"partial.dacs.total\",\"partial.da.from_seg\",\"partial.da.total\","
             "\"partial.A.from_da\",\"partial.dt.from_da\","
             "\"partial.xd.from_ydiag\",\"partial.x.from_xd\","
             "\"partial.cb.G.from_ydiag\",\"partial.seg.L.from_ydiag\","

@@ -12,6 +12,7 @@ from mamba.impl.mamba_ssm.ops.mamba2_ssd_backward import (
     mamba2_ydiag_xd_and_partial_dt_into,
     mamba2_reverse_chunk_state_into,
     mamba2_s18_direct_dpass_into,
+    mamba2_cstate_ddecay_into,
 )
 
 
@@ -31,6 +32,7 @@ def main() raises:
     var dt = ctx.enqueue_create_buffer[DType.float32](2 * 513 * 1)
     var dtraw = ctx.enqueue_create_buffer[DType.float32](2 * 513 * 1)
     var dt_bias = ctx.enqueue_create_buffer[DType.float32](1)
+    var a_out = ctx.enqueue_create_buffer[DType.float32](1)
     var dacs = ctx.enqueue_create_buffer[DType.float32](2 * 1 * 3 * 256)
     var pass_states = ctx.enqueue_create_buffer[DType.float32](
         2 * 3 * 1 * 64 * 128
@@ -42,6 +44,9 @@ def main() raises:
     mamba2_reverse_chunk_state_into(
         ctx, out, d_final, pass_states, dacs, 2, 1, 3, 256
     )
+    mamba2_cstate_ddecay_into(
+        ctx, out, xd, xbc, 2, 513, 1, 32, 40, 3, 256
+    )
     mamba2_reduce_scale_product_into(
         ctx, reduction, out, dacs, 2, 3, 1, 256
     )
@@ -50,7 +55,7 @@ def main() raises:
         2, 513, 1, 3, 256
     )
     mamba2_ydiag_xd_and_partial_dt_into(
-        ctx, discretize, d_y, cb_g, seg_l, xd, xbc, dt, dtraw, dt_bias,
+        ctx, discretize, d_y, cb_g, seg_l, xd, xbc, dt, a_out, dtraw, dt_bias,
         2, 513, 1, 32, 40, 3, 256, 0.0, 1.0
     )
     print("mamba2 SSD backward reverse-chunk recurrence compile probe")
