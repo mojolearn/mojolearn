@@ -57,10 +57,10 @@ def fit_transform(
 ) raises -> List[Float32]:
     """Exact k-NN → fuzzy graph → spectral init → serial UMAP optimizer.
 
-    FAST currently uses the same serial optimizer as IDENTICAL and makes no
-    speed claim. Its k-NN and eigensolver retain their existing FAST kernels;
-    IDENTICAL retains their cross-vendor numeric contracts and the optimizer's
-    stable host update order.
+    FAST uses a conflict-free GPU Jacobi optimizer with one owner per output
+    row and an epoch snapshot; it is tolerance-compared, not bit-compared, to
+    the serial update trajectory. IDENTICAL retains the k-NN/eigensolver
+    cross-vendor contracts and the optimizer's stable host update order.
     """
     params.validate(n_samples)
     if n_features < 1 or len(x_rowmajor) != n_samples * n_features:
@@ -84,6 +84,6 @@ def fit_transform(
     if epochs == 0:
         epochs = 200
     return optimize_layout(
-        initial^, graph.weights, n_samples, params.n_components, epochs,
+        ctx, initial^, graph.weights, n_samples, params.n_components, epochs,
         seed=params.random_seed,
     )

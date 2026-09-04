@@ -4,6 +4,9 @@
 
 from std.math import pow
 from std.memory import bitcast
+from max.gpu.host import DeviceContext
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from umap.optimizer_fast import optimize_layout_fast
 
 
 comptime UMAP_GRAD_CLIP = Float32(4.0)
@@ -52,8 +55,7 @@ def optimize_layout_identical(
     Attractive updates move both endpoints; repulsive updates move only the
     head, matching UMAP's `move_other=True` layout semantics. Each coordinate
     update rounds through Float32 in program order. This is IDENTICAL's
-    conflict-free reference. FAST intentionally shares it until a separately
-    gated parallel launcher exists.
+    conflict-free reference. FAST uses the separately gated Jacobi launcher.
     """
     if n_samples < 2 or (n_components != 2 and n_components != 3):
         raise Error("UMAP optimizer supports at least two samples in 2D/3D")
@@ -147,6 +149,7 @@ def optimize_layout_identical(
 
 
 def optimize_layout(
+    ctx: DeviceContext,
     initial_embedding: List[Float32],
     weights: List[Float32],
     n_samples: Int,
@@ -159,10 +162,23 @@ def optimize_layout(
     b: Float32 = Float32(0.89506088),
     seed: UInt64 = UInt64(0),
 ) raises -> List[Float32]:
-    """FAST currently shares the serial reference; no speed claim is made."""
-    return optimize_layout_identical(
-        initial_embedding, weights, n_samples, n_components, n_epochs,
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return optimize_layout_identical(
+            initial_embedding, weights, n_samples, n_components, n_epochs,
+            initial_learning_rate, negative_sample_rate, repulsion_strength,
+            a, b, seed,
+        )
+    # Kernel launch and graph-upload overhead dominates small layouts on the
+    # currently supported devices.  Keep FAST on the serial reference below
+    # the measured crossover instead of making the "fast" API slower.
+    if n_samples < 1024:
+        return optimize_layout_identical(
+            initial_embedding, weights, n_samples, n_components, n_epochs,
+            initial_learning_rate, negative_sample_rate, repulsion_strength,
+            a, b, seed,
+        )
+    return optimize_layout_fast(
+        ctx, initial_embedding, weights, n_samples, n_components, n_epochs,
         initial_learning_rate, negative_sample_rate, repulsion_strength,
         a, b, seed,
     )
-
