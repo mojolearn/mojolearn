@@ -967,6 +967,54 @@ def persist_ranked_tensor_winners(
     return columns^
 
 
+def persist_synchronized_tensor_path(
+    mut accepted_splits: List[TBinarySplit],
+    staged_by_level: List[TStagedTensorCandidate],
+    mut registry: TTensorCtrRegistry,
+) raises -> List[Int]:
+    """Remap one reused search slot into stable level-ordered model columns.
+
+    The synchronized searcher ranks one ephemeral tensor column per level.
+    Reusing that physical slot is correct for histograms but cannot be
+    serialized directly: every winning tensor needs its own model column,
+    and later tensor tables must reference those stable earlier columns.
+    """
+    if len(accepted_splits) != len(staged_by_level):
+        raise Error("synchronized tensor winners/candidates length mismatch")
+    var original_splits = accepted_splits.copy()
+    var columns = List[Int]()
+    for level in range(len(staged_by_level)):
+        ref staged = staged_by_level[level]
+        if Int(original_splits[level].feature_id) != staged.feature_id:
+            raise Error("synchronized tensor winner does not name level candidate")
+        var table = staged.candidate.table.copy()
+        for s in range(len(table.splits)):
+            var remapped = False
+            for prior in range(level):
+                if (
+                    table.splits[s].feature_id
+                    == original_splits[prior].feature_id
+                    and table.splits[s].bin_idx
+                    == original_splits[prior].bin_idx
+                    and table.splits[s].split_type
+                    == original_splits[prior].split_type
+                ):
+                    table.splits[s].feature_id = accepted_splits[prior].feature_id
+                    remapped = True
+                    break
+            if not remapped and Int(table.splits[s].feature_id) == staged.feature_id:
+                raise Error("tensor split history references an unknown ephemeral level")
+        var stable_tensor = TFeatureTensor()
+        for source in range(len(table.source_features)):
+            stable_tensor.add_cat_feature(UInt32(table.source_features[source]))
+        stable_tensor.add_binary_splits(table.splits.copy())
+        table.tensor_hash = stable_tensor.get_hash()
+        var column = registry.register(table^)
+        accepted_splits[level].feature_id = Int32(column)
+        columns.append(column)
+    return columns^
+
+
 def next_tensor_base_from_winner(
     staged: TStagedTensorCandidate, winning_split: TBinarySplit
 ) raises -> TFeatureTensor:

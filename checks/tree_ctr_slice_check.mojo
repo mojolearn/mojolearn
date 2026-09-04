@@ -11,6 +11,7 @@ from gbdt.models.tensor_ctr_value_table import (
     materialize_tensor_candidate,
     parse_feature_freq_tensor_table,
     persist_ranked_tensor_winners,
+    persist_synchronized_tensor_path,
     persist_winning_tensor_candidate,
     regenerate_feature_freq_after_winner,
     split_tensor_hash,
@@ -569,6 +570,36 @@ def main() raises:
         raise Error("replacement level did not rebuild full histograms")
     if reference_state.last_pre_score_accounting != 3:
         raise Error("level-two reference did not use the full histogram path")
+
+    # Production persistence cannot serialize the synchronized driver's
+    # reused ephemeral slot directly. Remap its level-ordered candidates to
+    # distinct stable columns, including split-history references.
+    var path_splits = List[TBinarySplit]()
+    path_splits.append(splits[0])
+    var second_bin = (Int(splits[0].bin_idx) + 1) % grid.border_count
+    path_splits.append(TBinarySplit(
+        Int32(dynamic_stage.feature_id), Int32(second_bin),
+        Int32(BIN_SPLIT_TAKE_GREATER),
+    ))
+    var path_candidates = List[TStagedTensorCandidate]()
+    path_candidates.append(pinned_initial.copy())
+    path_candidates.append(pinned_next.copy())
+    var path_registry = TTensorCtrRegistry(2)
+    var path_columns = persist_synchronized_tensor_path(
+        path_splits, path_candidates^, path_registry
+    )
+    if len(path_columns) != 2 or path_columns[0] != 2 or path_columns[1] != 3:
+        raise Error("synchronized tensor path did not allocate stable columns")
+    if path_splits[0].feature_id != Int32(2) or (
+        path_splits[1].feature_id != Int32(3)
+    ):
+        raise Error("synchronized tensor winners were not remapped")
+    var found_stable_parent = False
+    for s in range(len(path_registry.features[1].table.splits)):
+        if path_registry.features[1].table.splits[s].feature_id == Int32(2):
+            found_stable_parent = True
+    if not found_stable_parent:
+        raise Error("tensor split history retained its ephemeral parent id")
     ref sync_workspace = sync_state.workspace[0]
     ctx.enqueue_copy(
         dst_ptr=sync_workspace.h_sz.unsafe_ptr(), src_buf=sync_workspace.p_sz
