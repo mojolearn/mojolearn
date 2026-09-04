@@ -829,6 +829,11 @@ if [ "$PAYLOAD" = "speed" ]; then
 fi
 
 if [ "$PAYLOAD" = "phase8" ]; then
+    # A phase8 payload must actually select phase 8. An empty bootstrap phase
+    # selector means "all phases", which turns this bounded comparison into a
+    # full bootstrap and can consume the lease before the requested cards run.
+    if [ -z "$E1_PHASES" ]; then E1_PHASES=8; fi
+
     # Two gemm-payload options that phase8 cannot honor. Refused by name
     # rather than ignored: an ignored flag is an operator who believes
     # something ran.
@@ -3248,6 +3253,12 @@ leg_check_remote_body() {
             echo "  A body that reimplements phase 8 is a second lane list"
             echo "  and the judge would be reading cards from a different"
             echo "  program than the one it is named after."
+            return 1
+        fi
+        if ! grep -q 'MOJOLEARN_E1_PHASES="8"' "$_body"; then
+            echo "  the phase8 body does not select bootstrap phase 8."
+            echo "  An empty selector runs every phase and can exhaust the lease"
+            echo "  before the requested cross-GPU cards are produced."
             return 1
         fi
         if ! grep -q 'unset MOJOLEARN_MAMBA_CHECK_B' "$_body"; then
