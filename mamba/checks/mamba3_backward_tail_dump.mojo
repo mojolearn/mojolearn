@@ -225,6 +225,15 @@ def main() raises:
     mamba3_backward_join_two_into(ctx,d_adt_join,d_adt_seg,d_adt_from_dacs,head_cells)
     var d_a_join=mamba_zeros(ctx,head_cells);var d_dt_join_adt=mamba_zeros(ctx,head_cells);var d_dt_join_scratch=mamba_zeros(ctx,head_cells);var zero_dt=mamba_zeros(ctx,head_cells)
     mamba3_backward_adt_product_into(ctx,d_a_join,d_dt_join_adt,d_dt_join_scratch,d_adt_join,stages.a_out,stages.dt_out,zero_dt,head_cells)
+    var d_b_join=mamba_zeros(ctx,state_cells);var d_c_join=mamba_zeros(ctx,state_cells);var d_gamma_join=mamba_zeros(ctx,head_cells);var d_dt_join_current=mamba_zeros(ctx,head_cells);var d_trap_join=mamba_zeros(ctx,head_cells);var d_beta_join=mamba_zeros(ctx,head_cells)
+    ctx.enqueue_copy(dst_buf=d_beta_join, src_buf=d_scale_join)
+    mamba3_backward_join_current_into(ctx,d_b_join,d_c_join,d_gamma_join,d_dt_join_current,d_trap_join,d_b_qk,d_c_qk,d_kraw_join,d_qraw_join,d_gamma_qk,d_scale_join,d_dt_qk,d_trap_qk,d_beta_join,stages.dt_work,stages.sig_work,fixture.b,fixture.l,dims)
+    var d_angle_rate_join=mamba_zeros(ctx,m*dims.nheads*M3_NUM_ROPE_ANGLES);var d_angle_raw_join=mamba_zeros(ctx,m*M3_NUM_ROPE_ANGLES);var d_dt_angle_join=mamba_zeros(ctx,head_cells)
+    mamba3_backward_angle_into(ctx,d_angle_rate_join,d_angle_raw_join,d_dt_angle_join,d_theta_join,stages.dt_work,stages.in_proj,fixture.b,fixture.l,dims)
+    var d_dt_join_base=mamba_zeros(ctx,head_cells);mamba3_backward_join_two_into(ctx,d_dt_join_base,d_dt_join_current,d_dt_join_adt,head_cells)
+    var d_dt_join_available=mamba_zeros(ctx,head_cells);var d_dt_raw_join=mamba_zeros(ctx,head_cells);var d_dt_bias_rows_join=mamba_zeros(ctx,head_cells);var d_dt_bias_join=mamba_zeros(ctx,dims.nheads)
+    mamba3_backward_dt_partial_into(ctx,d_dt_join_available,d_dt_raw_join,d_dt_bias_rows_join,d_dt_join_base,d_dt_angle_join,stages.in_proj,device_weights.dt_bias,m,dims)
+    mamba3_backward_reduce_into(ctx,d_dt_bias_join,d_dt_bias_rows_join,ones,workspace,RED3_DT_BIAS,dims,m)
     ctx.synchronize()
 
     _write_f32(
@@ -292,6 +301,16 @@ def main() raises:
     _write_f32(output + "/grad.partial.join.adt.total.f32",mamba_download(ctx,d_adt_join,head_cells))
     _write_f32(output + "/grad.partial.join.A.from_adt.f32",mamba_download(ctx,d_a_join,head_cells))
     _write_f32(output + "/grad.partial.join.dt.from_adt.f32",mamba_download(ctx,d_dt_join_adt,head_cells))
+    _write_f32(output + "/grad.partial.join.B_biased.total.f32",mamba_download(ctx,d_b_join,state_cells))
+    _write_f32(output + "/grad.partial.join.C_biased.total.f32",mamba_download(ctx,d_c_join,state_cells))
+    _write_f32(output + "/grad.partial.join.gamma.total.f32",mamba_download(ctx,d_gamma_join,head_cells))
+    _write_f32(output + "/grad.partial.join.dt.current_total.f32",mamba_download(ctx,d_dt_join_current,head_cells))
+    _write_f32(output + "/grad.partial.join.trap.current_total.f32",mamba_download(ctx,d_trap_join,head_cells))
+    _write_f32(output + "/grad.partial.join.angle.raw.f32",mamba_download(ctx,d_angle_raw_join,m*M3_NUM_ROPE_ANGLES))
+    _write_f32(output + "/grad.partial.join.angle.dt.f32",mamba_download(ctx,d_dt_angle_join,head_cells))
+    _write_f32(output + "/grad.partial.join.dt.available_total.f32",mamba_download(ctx,d_dt_join_available,head_cells))
+    _write_f32(output + "/grad.partial.join.dt.raw.f32",mamba_download(ctx,d_dt_raw_join,head_cells))
+    _write_f32(output + "/grad.partial.join.dt_bias.f32",mamba_download(ctx,d_dt_bias_join,dims.nheads))
     if case_k == 5:
         with open(output + "/dump_manifest.json", "w") as fh:
             fh.write(
@@ -340,7 +359,12 @@ def main() raises:
             + "\"partial.join.s15.scale\",\"partial.join.rotary.C_biased\","
             + "\"partial.join.rotary.B_biased\",\"partial.join.rotary.theta\","
             + "\"partial.join.adt.from_dacs\",\"partial.join.adt.total\","
-            + "\"partial.join.A.from_adt\",\"partial.join.dt.from_adt\"]}\n"
+            + "\"partial.join.A.from_adt\",\"partial.join.dt.from_adt\","
+            + "\"partial.join.B_biased.total\",\"partial.join.C_biased.total\","
+            + "\"partial.join.gamma.total\",\"partial.join.dt.current_total\","
+            + "\"partial.join.trap.current_total\",\"partial.join.angle.raw\","
+            + "\"partial.join.angle.dt\",\"partial.join.dt.available_total\","
+            + "\"partial.join.dt.raw\",\"partial.join.dt_bias\"]}\n"
         )
 
     _ = d_gamma_qk^

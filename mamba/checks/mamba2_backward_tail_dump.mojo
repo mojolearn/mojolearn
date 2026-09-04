@@ -465,6 +465,10 @@ def main() raises:
         dump_dir + "/grad.partial.dt_bias.merged.f32",
         mamba_download(ctx, discretize_backward.d_dt_bias, dims.nheads),
     )
+    _write_f32(
+        dump_dir + "/grad.dt_bias.f32",
+        mamba_download(ctx, discretize_backward.d_dt_bias, dims.nheads),
+    )
     with open(dump_dir + "/dump_manifest.json", "w") as fh:
         fh.write(
             "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
@@ -494,7 +498,8 @@ def main() raises:
             "\"partial.in_proj.packed\",\"stage.norm.out\",\"in_proj.weight\","
             "\"x\",\"block_norm.weight\","
             "\"partial.dt.from_xd\",\"partial.dt.merged\","
-            "\"partial.dt_raw.merged\",\"partial.dt_bias.merged\"]}\n"
+            "\"partial.dt_raw.merged\",\"partial.dt_bias.merged\","
+            "\"dt_bias\"]}\n"
         )
     print(
         "MAMBA2 BACKWARD PARTIAL: emitted output projection + gated RMSNorm"

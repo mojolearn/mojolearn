@@ -289,6 +289,14 @@ def generate(args):
         for cc in range(chunks):
             lo=cc*qsize;hi=min(length,lo+qsize);dadt_dacs[:,lo:hi]=torch.flip(torch.cumsum(torch.flip(dj[:,lo:hi],dims=[1]),dim=1),dims=[1])
         dadt_join=dadt+dadt_dacs;a_join=stages["A.out"].detach().reshape_as(dadt_join).requires_grad_(True);dt_join=stages["dt.out"].detach().reshape_as(dadt_join).requires_grad_(True);da_join,ddt_join=torch.autograd.grad(((a_join*dt_join)*dadt_join.detach()).sum(),(a_join,dt_join));intermediate_gradients.extend((("partial.join.adt.from_dacs",dadt_dacs),("partial.join.adt.total",dadt_join),("partial.join.A.from_adt",da_join),("partial.join.dt.from_adt",ddt_join)))
+        beta_join=dscj.reshape(bsz,length,-1);beta_dt_join=torch.zeros_like(beta_join);beta_trap_join=torch.zeros_like(beta_join);beta_dt_join[:,1:]=beta_join[:,:-1]*(1-sig_stage[:,1:]);dsig_join=-beta_join[:,:-1]*dt_stage[:,1:];beta_trap_join[:,1:]=dsig_join*sig_stage[:,1:]*(1-sig_stage[:,1:])
+        dt_current_join=d_dt_qk+beta_dt_join.reshape_as(d_dt_qk);trap_join=d_sig_qk*sig_qk*(1-sig_qk)+beta_trap_join.reshape_as(d_sig_qk);gamma_join=d_gamma+dscj.reshape_as(d_gamma)
+        angle_raw_join=stages["in_proj.out"].detach()[:,-32:].reshape(bsz,length,32).requires_grad_(True);dt_angle_leaf=stages["dt.out"].detach().reshape(bsz,length,-1).requires_grad_(True);theta_state_join=torch.zeros(bsz,dt_angle_leaf.shape[-1],32,dtype=angle_raw_join.dtype,device=angle_raw_join.device);theta_rows_join=[];rate_join=torch.tanh(angle_raw_join)*torch.pi
+        for ti in range(length):
+            theta_state_join=theta_state_join+rate_join[:,ti,None,:]*dt_angle_leaf[:,ti,:,None];theta_state_join=theta_state_join-2*torch.pi*torch.floor(theta_state_join/(2*torch.pi));theta_rows_join.append(theta_state_join)
+        theta_iso_join=torch.stack(theta_rows_join,1);dar_join,dda_join=torch.autograd.grad((theta_iso_join*dthj.detach().reshape_as(theta_iso_join)).sum(),(angle_raw_join,dt_angle_leaf));dt_available_join=dt_current_join+ddt_join.reshape_as(dt_current_join)+dda_join.reshape_as(dt_current_join)
+        dt_raw_join=stages["in_proj.out"].detach()[:,dt_col:dt_col+h].requires_grad_(True);dt_bias_join=params["dt_bias"].detach().requires_grad_(True);dt_iso_join=torch.nn.functional.softplus(dt_raw_join+dt_bias_join);ddraw_join,ddbias_join=torch.autograd.grad((dt_iso_join*dt_available_join.detach()).sum(),(dt_raw_join,dt_bias_join))
+        intermediate_gradients.extend((("partial.join.B_biased.total",dk_biased+dkrawj),("partial.join.C_biased.total",dq_biased+dqrawj),("partial.join.gamma.total",gamma_join),("partial.join.dt.current_total",dt_current_join),("partial.join.trap.current_total",trap_join),("partial.join.angle.raw",dar_join),("partial.join.angle.dt",dda_join),("partial.join.dt.available_total",dt_available_join),("partial.join.dt.raw",ddraw_join),("partial.join.dt_bias",ddbias_join)))
 
         gate32 = stages["gate.out"].detach().reshape(
             stages["gate.out"].shape[0], -1
@@ -398,6 +406,11 @@ def generate(args):
         for cc in range(chunks):
             lo=cc*qsize;hi=min(length,lo+qsize);dadc32[:,lo:hi]=torch.flip(torch.cumsum(torch.flip(dj32[:,lo:hi],dims=[1]),dim=1),dims=[1])
         dat32=dadt32+dadc32;aj32=stages["A.out"].detach().to(torch.float32).reshape_as(dat32).requires_grad_(True);dtaj32=stages["dt.out"].detach().to(torch.float32).reshape_as(dat32).requires_grad_(True);dajoin32,ddtjoin32=torch.autograd.grad(((aj32*dtaj32)*dat32.detach()).sum(),(aj32,dtaj32));reference32.update({"partial.join.adt.from_dacs":dadc32,"partial.join.adt.total":dat32,"partial.join.A.from_adt":dajoin32,"partial.join.dt.from_adt":ddtjoin32})
+        betaj32=dscj32.reshape(bsz,length,-1);bdtj32=torch.zeros_like(betaj32);btrj32=torch.zeros_like(betaj32);bdtj32[:,1:]=betaj32[:,:-1]*(1-sg32[:,1:]);dsgj32=-betaj32[:,:-1]*dts32[:,1:];btrj32[:,1:]=dsgj32*sg32[:,1:]*(1-sg32[:,1:]);dtcj32=ddt32_qk+bdtj32.reshape_as(ddt32_qk);trj32=dsig32_qk*sig32_qk*(1-sig32_qk)+btrj32.reshape_as(dsig32_qk);gmj32=dgamma32+dscj32.reshape_as(dgamma32)
+        arj32=angle_raw.detach().to(torch.float32).requires_grad_(True);dtlj32=dt_angle.detach().to(torch.float32).requires_grad_(True);tsj32=torch.zeros(bsz,dtlj32.shape[-1],32,dtype=torch.float32,device=arj32.device);trsj32=[];rtj32=torch.tanh(arj32)*torch.pi
+        for ti in range(length):
+            tsj32=tsj32+rtj32[:,ti,None,:]*dtlj32[:,ti,:,None];tsj32=tsj32-2*torch.pi*torch.floor(tsj32/(2*torch.pi));trsj32.append(tsj32)
+        thij32=torch.stack(trsj32,1);darj32,ddaj32=torch.autograd.grad((thij32*dtjr32.detach().reshape_as(thij32)).sum(),(arj32,dtlj32));dtavj32=dtcj32+ddtjoin32.reshape_as(dtcj32)+ddaj32.reshape_as(dtcj32);dtrj32=stages["in_proj.out"].detach().to(torch.float32)[:,dt_col:dt_col+h].requires_grad_(True);dtbj32=params["dt_bias"].detach().to(torch.float32).requires_grad_(True);dtoj32=torch.nn.functional.softplus(dtrj32+dtbj32);ddrj32,ddbjoin32=torch.autograd.grad((dtoj32*dtavj32.detach()).sum(),(dtrj32,dtbj32));reference32.update({"partial.join.B_biased.total":dk32_biased+dkjr32,"partial.join.C_biased.total":dq32_biased+dqjr32,"partial.join.gamma.total":gmj32,"partial.join.dt.current_total":dtcj32,"partial.join.trap.current_total":trj32,"partial.join.angle.raw":darj32,"partial.join.angle.dt":ddaj32,"partial.join.dt.available_total":dtavj32,"partial.join.dt.raw":ddrj32,"partial.join.dt_bias":ddbjoin32})
     if args.family == "mamba2":
         tail_input = stages["gnorm.out"].detach().requires_grad_(True)
         tail_output = torch.nn.functional.linear(
@@ -936,6 +949,7 @@ def generate(args):
         )
         reference32["partial.dt_raw.merged"] = ddtraw32
         reference32["partial.dt_bias.merged"] = ddtbias32
+        reference32["dt_bias"] = ddtbias32
         packed32=torch.cat((dz32.reshape(b32,l32,-1),ci32,ddtraw32),dim=-1).reshape(-1,stages32["in_proj.out"].shape[-1])
         nleaf32=stages32["norm.out"].detach().requires_grad_(True); wleaf32=p32["in_proj.weight"].detach().requires_grad_(True)
         dn32,dw32=torch.autograd.grad((torch.nn.functional.linear(nleaf32,wleaf32)*packed32.detach()).sum(),(nleaf32,wleaf32))
