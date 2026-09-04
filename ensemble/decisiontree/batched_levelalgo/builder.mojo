@@ -78,68 +78,10 @@ comptime N_BLKS_FOR_COLS = 10
 # `builder.cuh:205` -- "Memory alignment value"
 comptime ALIGN_VALUE = 512
 
-# ================= DEVIATION BLOCK 2011 =================
-# HISTOGRAM ITEMS-PER-THREAD -- NOT theirs (2026-09-01). OFF BY DEFAULT
-# (1 compiles cuML's mapping byte-for-byte).
-#
-# WHAT UPSTREAM DOES. cuML tiles a node at ONE CTA PER 128 ROWS:
-# `updateWorkloadInfo` gives each node `max(ceildiv(count, TPB), 1)`
-# blocks (`builder.cuh:398-399`), and the histogram kernel's grid-stride
-# loop (`builder_kernels_impl.cuh:336`) therefore runs ~ONE iteration
-# per thread -- the "loop" is a remainder guard, not a loop. Every
-# competitor blocks rows per thread instead: LightGBM's CUDA histogram
-# gives each thread ~400 rows (`NUM_DATA_PER_THREAD=400`,
-# `cuda_histogram_constructor.hpp:22`, grid_dim_y from
-# `ceil(num_data/400)`), and CatBoost's hist kernels run unroll-traits
-# loops over per-block row ranges. cuML has no ITEMS_PER_THREAD anywhere
-# (verified at the pin: grep zero hits).
-#
-# WHY IT COSTS THEM (and us) AT 1M-2M ROWS. Blocks-per-node scales with
-# rows, and EVERY block of a node pays the full per-block overheads of
-# the shared arm: zero-init of the whole `histogram_len` slot, and --
-# the expensive half -- the shared->global flush of `histogram_len`
-# integer ATOMICS (`:344-351`). At rf@1000000 the root gets ~7.8k
-# blocks; at 4 classes x 128 bins that is ~4M global flush atomics for
-# ONE column of ONE level. Fewer, fatter blocks divide both overheads
-# and finally give the grid-stride loop real iterations to overlap
-# gather latency across.
-#
-# WHAT THIS DEVIATION DOES. `HIST_ITEMS_PER_THREAD = R` builds the
-# SPLIT-PHASE workload table at granularity `TPB * R` (one block per
-# `TPB*R` rows), so each histogram thread strides R times. THE KERNEL
-# IS UNTOUCHED: its `stride = block_dim * num_blocks` / `tid = thread +
-# offset_blockid * block_dim` arithmetic covers the node's range exactly
-# once for ANY block count (each thread owns `{tid + k*stride}`), which
-# is why the change is a TABLE change, not a kernel change.
-#
-# BIT-IDENTITY ARGUMENT. The (element -> thread) assignment moves; the
-# multiset of increments per (node, column, bin, class) cell does not,
-# and every histogram accumulator is an integer (`ClassificationBin`
-# UInt32) or fixed-point Int32 (`RegressionBin`, weighted bins --
-# DEVIATION 101) atomic: commutative and associative EXACTLY. The flush
-# is the same integer atomics in different-sized pieces. Downstream
-# (find_best_splits, partition, leaves) reads only the summed cells.
-# Fingerprints must be UNCHANGED flag-on vs flag-off.
-#
-# THE ONE INTERACTION, PRICED: DEVIATION 1919's no-retry partition
-# reuses the SPLIT phase's staged workload table, whose granularity this
-# flag coarsens -- and the partition scan's slot math REQUIRES TPB
-# granularity (`range_pos = offset_blockid * TPB + slot % TPB`). Under
-# R > 1 the reuse is therefore DISABLED (`advance_batch` below) and
-# every batch restages the partition's own TPB-granularity table:
-# +1 `xfer_phase_upload` per no-retry batch, the exact launch 1919
-# removed. The A/B pair carries that price inside it, so the measured
-# verdict is on the NET.
-#
-# `find_best_splits` (grid = nodes x columns), `phase_setup`
-# (element-indexed) and the partition kernels (own staging) never read
-# the split-phase table's granularity; the histogram launch is its only
-# reader under this flag. `max_blocks_dimx_for`'s bound holds a fortiori
-# (coarser granularity emits fewer entries).
-#
-# UNVERIFIED, RUN OWED (orchestrator; archive/plans/ensemble/PLAN.md "2026-09-01
-# candidate round"). The candidate arm is R = 4.
-# =========================================================
+# Histogram work uses the upstream one-item-per-thread mapping. If this is
+# tuned above one, partition-phase workload reuse must remain disabled because
+# its slot mapping requires TPB-granular rows; histogram integer accumulation
+# itself remains order-independent.
 comptime HIST_ITEMS_PER_THREAD = 1
 comptime HIST_WORKLOAD_GRANULARITY = TPB_DEFAULT * HIST_ITEMS_PER_THREAD
 
@@ -1224,21 +1166,6 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
                 self.params.split_criterion = GINI
             else:
                 self.params.split_criterion = MSE
-
-        # DEVIATION 405's REFUSE arm stood here from 2026-08-22 to
-        # 2026-08-23, RETIRED BY DEVIATION 406. Under NUMERIC_IDENTICAL
-        # the criteria whose gain calls `log` on the device -- Entropy,
-        # Poisson, Gamma -- raised by name, because the stdlib lowered
-        # `log` differently per vendor (IDENTITY_PATHS row 12, then open)
-        # and a fit that cannot be identical must raise rather than
-        # silently return a non-identical model ("there is no fourth
-        # move"). That reasoning was right on its date and is kept here as
-        # history. Row 12 then closed at commit ed0fe5d (`portable_logf`,
-        # one arithmetic on every backend), the three gains now route
-        # every `log` through `identical_log` (`objectives.mojo`,
-        # DEVIATION 406), and under IDENTICAL they compute instead of
-        # raising. Nothing is gated here any more -- the routing lives at
-        # the call sites, so there is no criterion left to refuse.
 
         self.original_n_sampled_cols = n_sampled_cols_for(
             params.max_features, n_cols
