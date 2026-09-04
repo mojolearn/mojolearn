@@ -170,6 +170,36 @@ def generate(args):
         intermediate_gradients.append(("stage.scan.y", d_scan))
         intermediate_gradients.append(("partial.silu.x.from_D", d_x_from_d))
 
+        # Isolated S18 oracle.  Treat the recorded incoming chunk states as
+        # leaves and differentiate yoff = (C @ h_in) * exp(dacs).  This is
+        # independent of the Mojo reverse recurrence and deliberately stops
+        # before S17 adds the next-chunk carry.
+        pass_input = stages["pass.states"].detach().requires_grad_(True)
+        bsz = pass_input.shape[0]
+        nheads, headdim = pass_input.shape[2:4]
+        length = d_scan.numel() // (bsz * nheads * headdim)
+        d_scan_ssd = d_scan.reshape(bsz, length, nheads, headdim)
+        nstate = pass_input.shape[-1]
+        conv_dim = stages["silu.out"].shape[-1]
+        c_input = stages["silu.out"].reshape(bsz, length, conv_dim)[
+            ..., headdim * nheads + nstate : headdim * nheads + 2 * nstate
+        ].detach()
+        qsize = stages["dacs.out"].shape[-1]
+        yoff_terms = []
+        for token in range(length):
+            chunk, inner = divmod(token, qsize)
+            dot = (
+                c_input[:, token, None, None, :]
+                * pass_input[:, chunk]
+            ).sum(-1)
+            scale = torch.exp(stages["dacs.out"][:, :, chunk, inner]).unsqueeze(-1)
+            yoff_terms.append(dot * scale)
+        isolated_yoff = torch.stack(yoff_terms, dim=1)
+        direct_d_pass = torch.autograd.grad(
+            (isolated_yoff * d_scan_ssd.detach()).sum(), pass_input
+        )[0]
+        intermediate_gradients.append(("stage.pass.states.direct", direct_d_pass))
+
         # The RMSNorm subtraction is ill-conditioned on this fixture
         # (rstd ~= 222). Preserve the float64 oracle above, but also record an
         # independent PyTorch-float32 calibration for native-f32 dumps. This
@@ -210,6 +240,28 @@ def generate(args):
         reference32["partial.silu.x.from_D"] = (
             dscan32 * p32["D"][None, :, None]
         )
+        pass32 = stages32["pass.states"].detach().requires_grad_(True)
+        b32 = pass32.shape[0]
+        h32, p_dim32 = pass32.shape[2:4]
+        l32 = dscan32.numel() // (b32 * h32 * p_dim32)
+        dscan_ssd32 = dscan32.reshape(b32, l32, h32, p_dim32)
+        n32 = pass32.shape[-1]
+        cd32 = stages32["silu.out"].shape[-1]
+        c32 = stages32["silu.out"].reshape(b32, l32, cd32)[
+            ..., h32 * p_dim32 + n32 : h32 * p_dim32 + 2 * n32
+        ].detach()
+        q32 = stages32["dacs.out"].shape[-1]
+        yoff32 = []
+        for token in range(l32):
+            chunk, inner = divmod(token, q32)
+            dot32 = (c32[:, token, None, None, :] * pass32[:, chunk]).sum(-1)
+            scale32 = torch.exp(
+                stages32["dacs.out"][:, :, chunk, inner]
+            ).unsqueeze(-1)
+            yoff32.append(dot32 * scale32)
+        reference32["stage.pass.states.direct"] = torch.autograd.grad(
+            (torch.stack(yoff32, dim=1) * dscan_ssd32.detach()).sum(), pass32
+        )[0]
     leaf_gradients = torch.autograd.grad(loss, [v for _, v in leaves])
     named_gradients = [*intermediate_gradients, *zip(
         (name for name, _ in leaves), leaf_gradients

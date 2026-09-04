@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """First executable slice of the pinned Mamba-2 SSD backward.
 
-This module implements only the reverse inter-chunk state recurrence from
-DEVIATION 1342. It consumes the direct gradient of each chunk's incoming
-state (produced later by the S18 backward), plus an optional final-state
+This module implements the S18 direct pass-state contraction and the reverse
+inter-chunk state recurrence from DEVIATION 1342. It consumes the output
+gradient plus an optional final-state
 gradient, and emits gradients of incoming states and chunk increments along
 with per-cell scale products for DEVIATION 1345's later P*N contraction.
 
@@ -36,7 +36,8 @@ def _grid(n: Int) -> Int:
 struct Mamba2SSDBackwardState(Movable):
     """Outputs of the reverse inter-chunk recurrence."""
 
-    var d_pass: DeviceBuffer[DType.float32]  # [B,C,H,P,N]
+    var direct_d_pass: DeviceBuffer[DType.float32]  # [B,C,H,P,N], S18 only
+    var d_pass: DeviceBuffer[DType.float32]  # [B,C,H,P,N], S17 + S18
     var d_cstate: DeviceBuffer[DType.float32]  # [B,C,H,P,N]
     var d_scale_product: DeviceBuffer[DType.float32]  # [B,C,H,P,N]
     var d_initial: DeviceBuffer[DType.float32]  # [B,H,P,N]
@@ -50,12 +51,102 @@ struct Mamba2SSDBackwardState(Movable):
         var boundary_cells = b * nh * M2_HEADDIM * M2_D_STATE
         if boundary_cells < 1:
             boundary_cells = 1
+        self.direct_d_pass = ctx.enqueue_create_buffer[DType.float32](state_cells)
         self.d_pass = ctx.enqueue_create_buffer[DType.float32](state_cells)
         self.d_cstate = ctx.enqueue_create_buffer[DType.float32](state_cells)
         self.d_scale_product = ctx.enqueue_create_buffer[DType.float32](
             state_cells
         )
         self.d_initial = ctx.enqueue_create_buffer[DType.float32](boundary_cells)
+
+
+def mamba2_s18_direct_dpass_kernel(
+    direct_d_pass: MutPointer[Float32, MutAnyOrigin],
+    d_yoff: MutPointer[Float32, MutAnyOrigin],  # [B,T,H,P]
+    xbc: MutPointer[Float32, MutAnyOrigin],  # [B,T,CD]
+    dacs: MutPointer[Float32, MutAnyOrigin],  # [B,H,C,Q]
+    b_in: Int32,
+    t_in: Int32,
+    nh_in: Int32,
+    di_in: Int32,
+    cd_in: Int32,
+    nc_in: Int32,
+    q_in: Int32,
+):
+    """S18: contract d_yoff * exp(dacs) with C into direct d_pass.
+
+    One thread owns one `(b,c,h,p,n)` output.  The Q contraction retains the
+    forward contract's ascending 128-cell leaves and two-leaf balanced fold;
+    rows beyond T are structural zeroes and are never read.
+    """
+    var b = Int(b_in)
+    var t_work = Int(t_in)
+    var nh = Int(nh_in)
+    var di = Int(di_in)
+    var cd = Int(cd_in)
+    var nc = Int(nc_in)
+    var qv = Int(q_in)
+    var pn = M2_HEADDIM * M2_D_STATE
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= b * nc * nh * pn:
+        return
+    var bb = cell // (nc * nh * pn)
+    var rem = cell - bb * nc * nh * pn
+    var cc = rem // (nh * pn)
+    rem -= cc * nh * pn
+    var hh = rem // pn
+    rem -= hh * pn
+    var pp = rem // M2_D_STATE
+    var nn = rem - pp * M2_D_STATE
+    var leaf = qv
+    if leaf > 128:
+        leaf = 128
+    var acc0 = Float32(0.0)
+    var acc1 = Float32(0.0)
+    for ii in range(qv):
+        var tt = cc * qv + ii
+        if tt < t_work:
+            var dy_idx = ((bb * t_work + tt) * nh + hh) * M2_HEADDIM + pp
+            var dy = ftz(d_yoff.unsafe_load(dy_idx))
+            var scale = ftz(identical_exp(ftz(
+                dacs.unsafe_load(((bb * nh + hh) * nc + cc) * qv + ii)
+            )))
+            var d_dot = ftz(pinned_mul(dy, scale))
+            var cv = ftz(xbc.unsafe_load((bb * t_work + tt) * cd + di + M2_D_STATE + nn))
+            if ii < leaf:
+                acc0 = ftz(identical_mul_add(cv, d_dot, acc0))
+            else:
+                acc1 = ftz(identical_mul_add(cv, d_dot, acc1))
+    var result = acc0
+    if qv > leaf:
+        result = ftz(acc0 + acc1)
+    direct_d_pass.unsafe_store(cell, result)
+
+
+def mamba2_s18_direct_dpass_into(
+    ctx: DeviceContext,
+    mut out: Mamba2SSDBackwardState,
+    mut d_yoff: DeviceBuffer[DType.float32],
+    mut xbc: DeviceBuffer[DType.float32],
+    mut dacs: DeviceBuffer[DType.float32],
+    b: Int,
+    t_work: Int,
+    nh: Int,
+    di: Int,
+    cd: Int,
+    nc: Int,
+    qv: Int,
+) raises:
+    var cells = b * nc * nh * M2_HEADDIM * M2_D_STATE
+    if cells < 1:
+        return
+    ctx.enqueue_function[mamba2_s18_direct_dpass_kernel](
+        out.direct_d_pass.unsafe_ptr(), d_yoff.unsafe_ptr(), xbc.unsafe_ptr(),
+        dacs.unsafe_ptr(), Int32(b), Int32(t_work), Int32(nh), Int32(di),
+        Int32(cd), Int32(nc), Int32(qv),
+        grid_dim=(_grid(cells), 1, 1),
+        block_dim=(M2_SSD_BWD_TPB, 1, 1),
+    )
 
 
 struct Mamba2SSDScaleReduction(Movable):
@@ -174,7 +265,6 @@ def mamba2_reverse_chunk_state_kernel(
 def mamba2_reverse_chunk_state_into(
     ctx: DeviceContext,
     mut out: Mamba2SSDBackwardState,
-    mut direct_d_pass: DeviceBuffer[DType.float32],
     mut d_final: DeviceBuffer[DType.float32],
     mut pass_states: DeviceBuffer[DType.float32],
     mut dacs: DeviceBuffer[DType.float32],
@@ -192,7 +282,7 @@ def mamba2_reverse_chunk_state_into(
         out.d_cstate.unsafe_ptr(),
         out.d_scale_product.unsafe_ptr(),
         out.d_initial.unsafe_ptr(),
-        direct_d_pass.unsafe_ptr(),
+        out.direct_d_pass.unsafe_ptr(),
         d_final.unsafe_ptr(),
         pass_states.unsafe_ptr(),
         dacs.unsafe_ptr(),

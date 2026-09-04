@@ -18,6 +18,8 @@ from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
 from mamba.checks.mamba2_fixture import (
+    M2_D_STATE,
+    M2_HEADDIM,
     m2_case_weights,
     m2_case_x,
     m2_corpus_case,
@@ -34,6 +36,11 @@ from mamba.impl.mamba_ssm.modules.mamba2_backward import (
     mamba2_backward_gnorm_into,
     mamba2_backward_silu_gate_into,
     mamba2_backward_tail_into,
+)
+from mamba.impl.mamba_ssm.modules.ssd_minimal import m2_q_eff
+from mamba.impl.mamba_ssm.ops.mamba2_ssd_backward import (
+    Mamba2SSDBackwardState,
+    mamba2_s18_direct_dpass_into,
 )
 from mamba.impl.transformers.models.mamba.modeling_mamba import (
     mamba_download,
@@ -125,6 +132,23 @@ def main() raises:
     mamba2_backward_d_skip_into(
         ctx, tail, stages.silu_out, dweights.d_skip, dims, m
     )
+    var ssd_backward = Mamba2SSDBackwardState(
+        ctx, fixture.b, stages.nc, dims.nheads
+    )
+    mamba2_s18_direct_dpass_into(
+        ctx,
+        ssd_backward,
+        tail.d_scan,
+        stages.xbc_work,
+        stages.dacs,
+        fixture.b,
+        stages.t_work,
+        dims.nheads,
+        dims.d_inner,
+        dims.conv_dim(),
+        stages.nc,
+        m2_q_eff(),
+    )
     ctx.synchronize()
     _write_f32(
         dump_dir + "/grad.out_proj.weight.f32",
@@ -162,6 +186,18 @@ def main() raises:
         dump_dir + "/grad.D.f32",
         mamba_download(ctx, tail.d_d, dims.nheads),
     )
+    _write_f32(
+        dump_dir + "/grad.stage.pass.states.direct.f32",
+        mamba_download(
+            ctx,
+            ssd_backward.direct_d_pass,
+            fixture.b
+            * stages.nc
+            * dims.nheads
+            * M2_HEADDIM
+            * M2_D_STATE,
+        ),
+    )
     with open(dump_dir + "/dump_manifest.json", "w") as fh:
         fh.write(
             "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
@@ -170,14 +206,17 @@ def main() raises:
             "\"tensors\":[\"out_proj.weight\",\"stage.gnorm.out\","
             "\"stage.gnorm.gate\",\"norm.weight\",\"stage.skip.out\","
             "\"stage.in_proj.z\",\"stage.scan.y\","
-            "\"partial.silu.x.from_D\",\"D\"]}\n"
+            "\"partial.silu.x.from_D\",\"D\","
+            "\"stage.pass.states.direct\"]}\n"
         )
     print(
         "MAMBA2 BACKWARD PARTIAL: emitted output projection + gated RMSNorm"
-        " + SiLU gate + D-skip; SSD recurrence, convolution, input projection, block norm, and"
+        " + SiLU gate + D-skip + S18 direct pass-state gradient; S17 reverse recurrence,"
+        " convolution, input projection, block norm, and"
         " full dx remain"
     )
     _ = tail^
+    _ = ssd_backward^
     _ = d_residual^
     _ = stages^
     _ = state^
