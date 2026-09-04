@@ -7,10 +7,15 @@ from gbdt.models.tensor_ctr_value_table import (
     build_borders_split_tensor_table,
     build_split_feature_freq_tensor_table,
     join_tensor_hash,
+    materialize_tensor_candidate,
     parse_feature_freq_tensor_table,
     split_tensor_hash,
     TTensorCtrRegistry,
     value_for_split_tensor_row,
+)
+from gbdt.ctrs.ctr_binarization import (
+    BORDER_SELECTION_UNIFORM,
+    TBinarizationOptions,
 )
 from gbdt.models.oblivious_model import (
     BIN_SPLIT_TAKE_GREATER,
@@ -146,4 +151,25 @@ def main() raises:
             borders_table, x, cindex, 6, r
         ) != apply_want[r]:
             raise Error("Borders full-pool apply value mismatch")
+
+    # Candidate seam consumed by compressed-index/ranking code: ordered
+    # learn values, the CTR's own grid, and its quantized bins stay bound
+    # to the same tensor/model table.
+    var grid = TBinarizationOptions(BORDER_SELECTION_UNIFORM, 3)
+    var candidate = materialize_tensor_candidate(
+        borders_fit.table.copy(), borders_fit.learn_values.copy(), grid
+    )
+    if candidate.tensor_hash != borders_fit.table.tensor_hash or (
+        len(candidate.bins) != 6 or len(candidate.borders) == 0
+    ):
+        raise Error("tensor CTR candidate lost its identity or shape")
+    for r in range(6):
+        if Int(candidate.bins[r]) > len(candidate.borders):
+            raise Error("tensor CTR candidate emitted an invalid bin")
+    if candidate.bins[0] != candidate.bins[1] or (
+        candidate.bins[4] != candidate.bins[5]
+    ):
+        raise Error("equal ordered CTR values did not quantize equally")
+    if candidate.bins[0] <= candidate.bins[4]:
+        raise Error("tensor CTR candidate grid reversed value ordering")
     print("tree CTR slice: deterministic pair FeatureFreq + text round trip PASS")

@@ -14,6 +14,11 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
 
 from checks.numerics import ftz, identical_exp, identical_mul_add
+from gemm.checks.gemm_identical import (
+    identical_gemm_into,
+    identical_gemm_workspace_max_floats,
+)
+from gemm.checks.gemm_oracle import OP_NN
 from mamba.checks.mamba2_fixture import M2_D_STATE, M2_HEADDIM
 from mamba.impl.transformers.models.mamba.modeling_mamba import pinned_mul
 
@@ -51,6 +56,60 @@ struct Mamba2SSDBackwardState(Movable):
             state_cells
         )
         self.d_initial = ctx.enqueue_create_buffer[DType.float32](boundary_cells)
+
+
+struct Mamba2SSDScaleReduction(Movable):
+    """Storage for DEVIATION 1345's certified P*N contraction."""
+
+    var d_scale: DeviceBuffer[DType.float32]  # [B,C,H]
+    var ones_pn: DeviceBuffer[DType.float32]  # [P*N]
+    var workspace: DeviceBuffer[DType.float32]
+    var d_dacs_state: DeviceBuffer[DType.float32]  # [B,H,C,Q]
+
+    def __init__(
+        out self, ctx: DeviceContext, b: Int, nc: Int, nh: Int, qv: Int
+    ) raises:
+        var rows = b * nc * nh
+        if rows < 1:
+            rows = 1
+        var pn = M2_HEADDIM * M2_D_STATE
+        self.d_scale = ctx.enqueue_create_buffer[DType.float32](rows)
+        self.ones_pn = ctx.enqueue_create_buffer[DType.float32](pn)
+        self.ones_pn.enqueue_fill(Float32(1.0))
+        var ws = identical_gemm_workspace_max_floats(rows, 1, pn)
+        self.workspace = ctx.enqueue_create_buffer[DType.float32](ws)
+        self.d_dacs_state = ctx.enqueue_create_buffer[DType.float32](
+            rows * qv
+        )
+        self.d_dacs_state.enqueue_fill(Float32(0.0))
+
+
+def mamba2_scale_to_dacs_kernel(
+    d_dacs_state: MutPointer[Float32, MutAnyOrigin],
+    d_scale: MutPointer[Float32, MutAnyOrigin],
+    dacs: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    nc_in: Int32,
+    nh_in: Int32,
+    q_in: Int32,
+):
+    """Chain dscale through scale=exp(dacs[last]); other q cells stay zero."""
+    var b = Int(b_in)
+    var nc = Int(nc_in)
+    var nh = Int(nh_in)
+    var qv = Int(q_in)
+    var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if row >= b * nc * nh:
+        return
+    var bb = row // (nc * nh)
+    var rem = row - bb * nc * nh
+    var c = rem // nh
+    var h = rem - c * nh
+    var dacs_idx = ((bb * nh + h) * nc + c) * qv + (qv - 1)
+    var scale = ftz(identical_exp(ftz(dacs.unsafe_load(dacs_idx))))
+    d_dacs_state.unsafe_store(
+        dacs_idx, ftz(pinned_mul(ftz(d_scale.unsafe_load(row)), scale))
+    )
 
 
 def mamba2_reverse_chunk_state_kernel(
@@ -142,5 +201,50 @@ def mamba2_reverse_chunk_state_into(
         Int32(nc),
         Int32(qv),
         grid_dim=(_grid(chains), 1, 1),
+        block_dim=(M2_SSD_BWD_TPB, 1, 1),
+    )
+
+
+def mamba2_reduce_scale_product_into(
+    ctx: DeviceContext,
+    mut reduction: Mamba2SSDScaleReduction,
+    mut state: Mamba2SSDBackwardState,
+    mut dacs: DeviceBuffer[DType.float32],
+    b: Int,
+    nc: Int,
+    nh: Int,
+    qv: Int,
+) raises:
+    """Reduce P*N products into one scale gradient per chunk/head.
+
+    ``d_scale_product`` is row-major `[B,C,H,P,N]`; treating its first three
+    axes as GEMM rows makes contracted index `p*N+n`, exactly DEVIATION 1345's
+    pinned p-major linearization. GEMM-v1 supplies 64 leaves of 128 and its
+    six-level balanced fold. No local reduction spelling exists here.
+    """
+    var rows = b * nc * nh
+    if rows < 1:
+        return
+    comptime pn = M2_HEADDIM * M2_D_STATE
+    identical_gemm_into(
+        ctx,
+        reduction.d_scale,
+        state.d_scale_product,
+        reduction.ones_pn,
+        reduction.workspace,
+        rows,
+        1,
+        pn,
+        OP_NN,
+    )
+    ctx.enqueue_function[mamba2_scale_to_dacs_kernel](
+        reduction.d_dacs_state.unsafe_ptr(),
+        reduction.d_scale.unsafe_ptr(),
+        dacs.unsafe_ptr(),
+        Int32(b),
+        Int32(nc),
+        Int32(nh),
+        Int32(qv),
+        grid_dim=(_grid(rows), 1, 1),
         block_dim=(M2_SSD_BWD_TPB, 1, 1),
     )

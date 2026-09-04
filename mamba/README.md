@@ -102,6 +102,8 @@ backward pass.
 The first pinned SSD-backward kernel now exists separately in
 `impl/mamba_ssm/ops/mamba2_ssd_backward.mojo`: it implements the descending
 inter-chunk state recurrence and emits chunk-increment, incoming-state,
-initial-state, and per-cell scale-product gradients. It is compile-probed but
-not yet connected to S18, which must produce its direct incoming-state
-gradient before the recurrence can join the partial block composer.
+initial-state, and per-cell scale-product gradients. The scale products are
+now reduced by GEMM-v1 over the exact p-major `P*N=8192` layout, then chained
+through `exp(dacs[last])` into a sparse per-chunk `d_dacs` contribution. It is
+compile-probed but not yet connected to S18, which must produce its direct
+incoming-state gradient before the recurrence can join the partial composer.

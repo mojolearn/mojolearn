@@ -432,6 +432,7 @@ of clause (d).
 
 from std.memory import bitcast
 from std.os import getenv
+from std.time import perf_counter_ns
 
 from max.gpu.host import DeviceContext
 
@@ -457,7 +458,7 @@ from mamba.checks.mamba_fixture import (
 )
 from mamba.checks.mamba_oracle import MambaState, MambaStages, mamba_block_oracle
 from mamba.checks.mamba_backward_oracle import mamba_block_backward_oracle
-from checks.numerics import ftz
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 from mamba.impl.transformers.models.mamba.modeling_mamba import (
     BLOCK_ANY_SABOTAGE,
     MambaDeviceStages,
@@ -821,6 +822,86 @@ def count_moved(diffs: List[StageDiff]) -> Int:
         if diffs[i].n_diff > 0:
             n += 1
     return n
+
+
+def fast_stage_rtol(i: Int) -> Float32:
+    """Conservative FP32 forward-error budgets, by accumulated depth.
+
+    Copies use zero. Pointwise stages use 8-40 epsilon-scale relative
+    budgets; projection and recurrent stages grow to 1e-4/2e-4. These are
+    intentionally looser than the independent corpus's observed 1e-7 arm,
+    so the gate tests accuracy rather than requiring one vendor's rounding.
+    They are fixed by stage, never inferred from the result under test.
+    """
+    if i == 6:  # conv.window, a state copy
+        return Float32(0.0)
+    if i == 0:
+        return Float32(4e-6)  # serial norm sumsq
+    if i == 1 or i == 3:
+        return Float32(8e-6)  # norm and A exponential
+    if i == 2 or i == 4:
+        return Float32(2e-5)  # first projection / four-tap convolution
+    if i >= 5 and i <= 9:
+        return Float32(4e-5)  # pointwise + x/dt projections
+    if i >= 10 and i <= 12:
+        return Float32(1e-4)  # recurrent scan and skip join
+    return Float32(2e-4)  # gate, output projection, residual
+
+
+def _absf(x: Float32) -> Float32:
+    return -x if x < Float32(0.0) else x
+
+
+def fast_accuracy_check(
+    host: List[List[Float32]], dev: List[List[Float32]]
+) raises -> Int:
+    """Validate FAST numerically while reporting every bit disagreement."""
+    var names = stage_names()
+    var failed = 0
+    for s in range(len(names)):
+        if len(host[s]) != len(dev[s]):
+            raise Error("mamba FAST accuracy: stage length mismatch at " + names[s])
+        var rtol = fast_stage_rtol(s)
+        var atol = Float32(2e-6)
+        if rtol == Float32(0.0):
+            atol = Float32(0.0)
+        var outside = 0
+        var bit_diff = 0
+        var max_abs = Float32(0.0)
+        var max_rel = Float32(0.0)
+        for i in range(len(host[s])):
+            var hv = host[s][i]
+            var dv = dev[s][i]
+            if bitcast[DType.uint32](hv) != bitcast[DType.uint32](dv):
+                bit_diff += 1
+            var hb = bitcast[DType.uint32](hv) & UInt32(0x7FFFFFFF)
+            var db = bitcast[DType.uint32](dv) & UInt32(0x7FFFFFFF)
+            if hb >= UInt32(0x7F800000) or db >= UInt32(0x7F800000):
+                outside += 1
+                continue
+            var ae = _absf(dv - hv)
+            var scale = _absf(hv)
+            var limit = atol + rtol * scale
+            if ae > max_abs:
+                max_abs = ae
+            var denom = scale if scale > atol else atol
+            var rel = Float32(0.0)
+            if denom > Float32(0.0):
+                rel = ae / denom
+            if rel > max_rel:
+                max_rel = rel
+            if ae > limit:
+                outside += 1
+        print(
+            "  FAST  " + names[s] + "  outside=" + String(outside) + "/"
+            + String(len(host[s])) + " bit_diff=" + String(bit_diff) + "/"
+            + String(len(host[s])) + " max_abs=" + String(max_abs)
+            + " max_rel=" + String(max_rel) + " rtol=" + String(rtol)
+            + " atol=" + String(atol)
+        )
+        if outside > 0:
+            failed += 1
+    return failed
 
 
 def first_moved(diffs: List[StageDiff]) -> String:
@@ -1815,9 +1896,24 @@ def main() raises:
 
     var ctx = DeviceContext()
     var trace = IdentityTrace.to_path(card_path())
+    var timing_start = perf_counter_ns()
     var dev = run_block(ctx, w, x, b, l, dims, trace, TAG_PREFIX)
+    var timing_ns = perf_counter_ns() - timing_start
+    if env_on("MOJOLEARN_MAMBA_TIMING"):
+        print(
+            "TIMING_OBSERVATION mode=" + mode_name() + " wall_ms="
+            + String(Float64(timing_ns) / 1.0e6)
+            + " includes allocation, synchronization, trace and downloads;"
+            " one sample, NOT a benchmark and NOT a FAST-vs-IDENTICAL claim"
+        )
 
-    print("clause (a): stages, device vs host oracle, BITWISE:")
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        print("clause (a): stages, device vs host oracle, BITWISE:")
+    else:
+        print(
+            "FAST check: device vs host oracle by stagewise tolerance;"
+            " bit differences are recorded separately:"
+        )
     var diffs = compare_dumps(host, dev, True)
     var n_moved = count_moved(diffs)
 
@@ -1877,49 +1973,67 @@ def main() raises:
             " invariance claims and a deterministic sabotage satisfies them."
         )
     else:
-        if n_moved != 0:
-            raise Error(
-                String("mamba_check: CLAUSE (a) FAILED, ")
-                + String(n_moved)
-                + " stages differ from the oracle, first at "
-                + first_moved(diffs)
-            )
-        print(
-            "clause (a): PASS, "
-            + String(len(diffs))
-            + "/"
-            + String(len(diffs))
-            + " stages bit-identical to the oracle, 17/17 card tags."
-        )
-        clause_b(ctx, w, x, b, l, dims, dev)
-        if env_on("MOJOLEARN_MAMBA_CHECK_CLAUSE_C"):
-            clause_c(ctx, w, l, dims)
-        else:
-            print(
-                "clause (c): SKIPPED (set MOJOLEARN_MAMBA_CHECK_CLAUSE_C=1)"
-            )
-        if env_on("MOJOLEARN_MAMBA_CHECK_CLAUSE_D"):
-            if b != 1:
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+            if n_moved != 0:
                 raise Error(
-                    "mamba_check: clause (d) is written for B=1; set"
-                    " MOJOLEARN_MAMBA_CHECK_B=1"
+                    String("mamba_check: CLAUSE (a) FAILED, ")
+                    + String(n_moved)
+                    + " stages differ from the oracle, first at "
+                    + first_moved(diffs)
                 )
-            clause_d(ctx, w, x, l, dims)
-        else:
             print(
-                "clause (d): SKIPPED (set MOJOLEARN_MAMBA_CHECK_CLAUSE_D=1)"
+                "clause (a): PASS, "
+                + String(len(diffs))
+                + "/"
+                + String(len(diffs))
+                + " stages bit-identical to the oracle, 17/17 card tags."
             )
-        if env_on("MOJOLEARN_MAMBA_CHECK_CLAUSE_E"):
-            clause_e(ctx, b, l, dims)
-        else:
+            clause_b(ctx, w, x, b, l, dims, dev)
+            if env_on("MOJOLEARN_MAMBA_CHECK_CLAUSE_C"):
+                clause_c(ctx, w, l, dims)
+            else:
+                print(
+                    "clause (c): SKIPPED (set MOJOLEARN_MAMBA_CHECK_CLAUSE_C=1)"
+                )
+            if env_on("MOJOLEARN_MAMBA_CHECK_CLAUSE_D"):
+                if b != 1:
+                    raise Error(
+                        "mamba_check: clause (d) is written for B=1; set"
+                        " MOJOLEARN_MAMBA_CHECK_B=1"
+                    )
+                clause_d(ctx, w, x, l, dims)
+            else:
+                print(
+                    "clause (d): SKIPPED (set MOJOLEARN_MAMBA_CHECK_CLAUSE_D=1)"
+                )
+            if env_on("MOJOLEARN_MAMBA_CHECK_CLAUSE_E"):
+                clause_e(ctx, b, l, dims)
+            else:
+                print(
+                    "clause (e): SKIPPED (set MOJOLEARN_MAMBA_CHECK_CLAUSE_E=1)"
+                )
             print(
-                "clause (e): SKIPPED (set MOJOLEARN_MAMBA_CHECK_CLAUSE_E=1)"
+                "SCOPE: this shape, IDENTICAL: numerical accuracy and bitwise"
+                " identity are both required. Optional clauses (c-e) retain"
+                " their bitwise meanings."
             )
-        print(
-            "SCOPE: this shape only, IDENTICAL only. Clauses (a), (b), (c),"
-            " (d), (e) and (f) are gated HERE, and the INDEPENDENT corpus"
-            " cross-check passed on cases 0 and 1 at rtol=1e-7 (run it with"
-            " MOJOLEARN_MAMBA_CORPUS_CASE + tools/mamba_corpus_check.py)."
-            " OWED: the other 14 corpus cases, L=16/64/257, FAST mode, every"
-            " non-Apple column."
-        )
+        else:
+            var accuracy_failures = fast_accuracy_check(host, dev)
+            if accuracy_failures != 0:
+                raise Error(
+                    "mamba_check: FAST numerical accuracy FAILED on "
+                    + String(accuracy_failures)
+                    + " stages; bit differences above are diagnostic, not"
+                    " themselves failures"
+                )
+            print(
+                "FAST accuracy: PASS on all " + String(len(diffs))
+                + " stages; " + String(n_moved)
+                + " stages differ by bits from the host oracle as recorded"
+                " above. No cross-tier speed claim was made."
+            )
+            print(
+                "FAST scope: accuracy only. Bitwise repeat, batch, decode and"
+                " launch invariance clauses are IDENTICAL-profile promises"
+                " and are not asserted by this run."
+            )

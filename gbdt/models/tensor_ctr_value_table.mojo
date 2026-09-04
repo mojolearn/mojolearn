@@ -20,6 +20,10 @@ from gbdt.models.oblivious_model import (
     BIN_SPLIT_TAKE_GREATER,
     TBinarySplit,
 )
+from gbdt.ctrs.ctr_binarization import (
+    TBinarizationOptions,
+    compute_ctr_borders,
+)
 
 
 def split_tensor_hash(hash: UInt64) -> Tuple[UInt32, UInt32]:
@@ -305,6 +309,63 @@ struct TBordersSplitTensorFit(Copyable, Movable):
     ):
         self.learn_values = learn_values^
         self.table = table^
+
+
+struct TTensorCtrCandidate(Copyable, Movable):
+    """A dynamic tensor column at the compressed-index/ranking boundary.
+
+    `values` are the learn statistic (ordered for Borders), `borders` are
+    selected with the CTR description's own grid, and `bins` are exactly
+    what the existing compressed-index builder and histogram ranker consume.
+    Keeping the table beside them binds model apply to the candidate identity.
+    """
+
+    var tensor_hash: UInt64
+    var table: TFeatureFreqTensorTable
+    var values: List[Float32]
+    var borders: List[Float32]
+    var bins: List[UInt32]
+
+    def __init__(
+        out self,
+        tensor_hash: UInt64,
+        var table: TFeatureFreqTensorTable,
+        var values: List[Float32],
+        var borders: List[Float32],
+        var bins: List[UInt32],
+    ):
+        self.tensor_hash = tensor_hash
+        self.table = table^
+        self.values = values^
+        self.borders = borders^
+        self.bins = bins^
+
+
+def materialize_tensor_candidate(
+    var table: TFeatureFreqTensorTable,
+    var learn_values: List[Float32],
+    grid: TBinarizationOptions,
+) raises -> TTensorCtrCandidate:
+    """Turn a fitted tensor statistic into a rankable quantized feature."""
+    if len(learn_values) == 0:
+        raise Error("cannot rank an empty tensor CTR column")
+    var borders = compute_ctr_borders(learn_values, grid)
+    if len(borders) > 255:
+        raise Error("tensor CTR candidate exceeds one-byte fold capacity")
+    var bins = List[UInt32]()
+    bins.resize(len(learn_values), UInt32(0))
+    for r in range(len(learn_values)):
+        var bin = 0
+        # Same strict comparison as `binarize_float_feature_kernel`: the
+        # bin is the number of borders strictly below the feature value.
+        for b in range(len(borders)):
+            if learn_values[r] > borders[b]:
+                bin += 1
+        bins[r] = UInt32(bin)
+    var hash = table.tensor_hash
+    return TTensorCtrCandidate(
+        hash, table^, learn_values^, borders^, bins^
+    )
 
 
 def build_borders_split_tensor_table(
