@@ -10,8 +10,11 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.identity_trace import IdentityTrace
 from mamba.checks.mamba3_backward import (
     PROJ3_OUT,
+    RED3_D,
+    mamba3_backward_ones_floats,
     mamba3_backward_proj_a_into,
     mamba3_backward_proj_b_into,
+    mamba3_backward_reduce_into,
     mamba3_backward_workspace_max_floats,
 )
 from mamba.checks.mamba3_fixture import (
@@ -24,6 +27,9 @@ from mamba.impl.mamba_ssm.modules.mamba3 import (
     Mamba3DeviceWeights,
     allocate_inference_cache,
     mamba3_block_forward,
+)
+from mamba.impl.mamba_ssm.modules.mamba3_backward import (
+    mamba3_backward_gate_skip_into,
 )
 from mamba.impl.transformers.models.mamba.modeling_mamba import (
     mamba_download,
@@ -99,6 +105,24 @@ def main() raises:
         ctx, d_weight, d_output, stages.gate_out, workspace,
         PROJ3_OUT, dims, m,
     )
+    var tail_cells = m * dims.d_inner
+    var head_cells = m * dims.nheads
+    var d_skip = mamba_zeros(ctx, tail_cells)
+    var d_z = mamba_zeros(ctx, tail_cells)
+    var d_v = mamba_zeros(ctx, tail_cells)
+    var d_qkdot = mamba_zeros(ctx, head_cells)
+    var d_d_product = mamba_zeros(ctx, head_cells)
+    var d_d = mamba_zeros(ctx, dims.nheads)
+    var ones = mamba_zeros(ctx, mamba3_backward_ones_floats(m))
+    ones.enqueue_fill(Float32(1.0))
+    mamba3_backward_gate_skip_into(
+        ctx, d_skip, d_z, d_v, d_qkdot, d_d_product, d_gate,
+        stages.skip_out, stages.qkdot, stages.in_proj,
+        device_weights.d_skip, dims, m,
+    )
+    mamba3_backward_reduce_into(
+        ctx, d_d, d_d_product, ones, workspace, RED3_D, dims, m
+    )
     ctx.synchronize()
 
     _write_f32(
@@ -109,15 +133,29 @@ def main() raises:
         output + "/grad.out_proj.weight.f32",
         mamba_download(ctx, d_weight, dims.d_model * dims.d_inner),
     )
+    _write_f32(output + "/grad.stage.skip.out.f32", mamba_download(ctx, d_skip, tail_cells))
+    _write_f32(output + "/grad.stage.in_proj.z.f32", mamba_download(ctx, d_z, tail_cells))
+    _write_f32(output + "/grad.partial.in_proj.x.from_skip.f32", mamba_download(ctx, d_v, tail_cells))
+    _write_f32(output + "/grad.stage.qkdot.out.f32", mamba_download(ctx, d_qkdot, head_cells))
+    _write_f32(output + "/grad.D.f32", mamba_download(ctx, d_d, dims.nheads))
     with open(output + "/dump_manifest.json", "w") as fh:
         fh.write(
             "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
             + "\"family\":\"mamba3\",\"case\":\"m3_base_b2_l4_d32\","
             + "\"objective\":\"signed_dyadic_weight_v1\","
-            + "\"mode\":\"partial-output-projection-tail\","
-            + "\"tensors\":[\"stage.gate.out\",\"out_proj.weight\"]}\n"
+            + "\"mode\":\"partial-output-gate-skip-tail\","
+            + "\"tensors\":[\"stage.gate.out\",\"out_proj.weight\","
+            + "\"stage.skip.out\",\"stage.in_proj.z\","
+            + "\"partial.in_proj.x.from_skip\",\"stage.qkdot.out\",\"D\"]}\n"
         )
 
+    _ = ones^
+    _ = d_d^
+    _ = d_d_product^
+    _ = d_qkdot^
+    _ = d_v^
+    _ = d_z^
+    _ = d_skip^
     _ = workspace^
     _ = d_weight^
     _ = d_gate^

@@ -145,6 +145,28 @@ def generate(args):
         )
         intermediate_gradients.append(("stage.gate.out", d_gate))
 
+        skip_input = stages["skip.out"].detach().requires_grad_(True)
+        z_input = stages["in_proj.out"].detach()[:, :skip_input.shape[1] * skip_input.shape[2]].reshape(skip_input.shape).requires_grad_(True)
+        gate_isolated = skip_input * torch.nn.functional.silu(z_input)
+        d_skip, d_z = torch.autograd.grad(
+            (gate_isolated * d_gate.detach()).sum(), (skip_input, z_input)
+        )
+        intermediate_gradients.extend((
+            ("stage.skip.out", d_skip),
+            ("stage.in_proj.z", d_z),
+        ))
+        value = stages["in_proj.out"].detach()[:, skip_input.shape[1] * skip_input.shape[2]:2 * skip_input.shape[1] * skip_input.shape[2]].reshape(skip_input.shape).requires_grad_(True)
+        qkdot = stages["qkdot.out"].detach().requires_grad_(True)
+        d_param = params["D"].detach().requires_grad_(True)
+        skip_isolated = (d_param + qkdot).unsqueeze(-1) * value
+        d_value, d_qkdot, d_d = torch.autograd.grad(
+            (skip_isolated * d_skip.detach()).sum(), (value, qkdot, d_param)
+        )
+        intermediate_gradients.extend((
+            ("partial.in_proj.x.from_skip", d_value),
+            ("stage.qkdot.out", d_qkdot),
+        ))
+
         gate32 = stages["gate.out"].detach().to(torch.float32)
         gate32.requires_grad_(True)
         weight32 = params["out_proj.weight"].detach().to(torch.float32)
@@ -155,6 +177,30 @@ def generate(args):
         )
         reference32["stage.gate.out"] = d_gate32
         reference32["out_proj.weight"] = d_weight32
+        skip32 = stages["skip.out"].detach().to(torch.float32)
+        skip32.requires_grad_(True)
+        width32 = skip32.shape[1] * skip32.shape[2]
+        z32 = stages["in_proj.out"].detach()[:, :width32].reshape(skip32.shape).to(torch.float32)
+        z32.requires_grad_(True)
+        gate_isolated32 = skip32 * torch.nn.functional.silu(z32)
+        dskip32, dz32 = torch.autograd.grad(
+            (gate_isolated32 * d_gate32.detach()).sum(), (skip32, z32)
+        )
+        reference32["stage.skip.out"] = dskip32
+        reference32["stage.in_proj.z"] = dz32
+        value32 = stages["in_proj.out"].detach()[:, width32:2 * width32].reshape(skip32.shape).to(torch.float32)
+        value32.requires_grad_(True)
+        qk32 = stages["qkdot.out"].detach().to(torch.float32)
+        qk32.requires_grad_(True)
+        d32 = params["D"].detach().to(torch.float32)
+        d32.requires_grad_(True)
+        skip_isolated32 = (d32 + qk32).unsqueeze(-1) * value32
+        dv32, dqk32, dd32 = torch.autograd.grad(
+            (skip_isolated32 * dskip32.detach()).sum(), (value32, qk32, d32)
+        )
+        reference32["partial.in_proj.x.from_skip"] = dv32
+        reference32["stage.qkdot.out"] = dqk32
+        reference32["D"] = dd32
     if args.family == "mamba2":
         tail_input = stages["gnorm.out"].detach().requires_grad_(True)
         tail_output = torch.nn.functional.linear(
@@ -274,6 +320,24 @@ def generate(args):
             ("partial.da.total", dda),
             ("partial.A.from_da", da_param),
             ("partial.dt.from_da", ddt),
+        ))
+        raw_start = nheads * headdim + conv_dim
+        dtraw_leaf = stages["in_proj.out"][..., raw_start:].reshape(
+            bsz, length, nheads
+        ).detach().requires_grad_(True)
+        dtbias_leaf = params["dt_bias"].detach().requires_grad_(True)
+        dt_lo, dt_hi = GEN.m2_effective_dt_limit(case)
+        rebuilt_dt = torch.clamp(
+            torch.nn.functional.softplus(dtraw_leaf + dtbias_leaf),
+            min=dt_lo,
+            max=dt_hi,
+        )
+        ddtraw, ddtbias = torch.autograd.grad(
+            (rebuilt_dt * ddt.detach()).sum(), (dtraw_leaf, dtbias_leaf)
+        )
+        intermediate_gradients.extend((
+            ("partial.dt_raw.from_da", ddtraw),
+            ("partial.dt_bias.from_da", ddtbias),
         ))
 
         # The RMSNorm subtraction is ill-conditioned on this fixture
@@ -400,6 +464,21 @@ def generate(args):
         reference32["partial.da.total"] = dda32
         reference32["partial.A.from_da"] = dapar32
         reference32["partial.dt.from_da"] = ddt32
+        raw_start32 = h32 * p_dim32 + cd32
+        dtraw32 = stages32["in_proj.out"][..., raw_start32:].reshape(
+            b32, l32, h32
+        ).detach().requires_grad_(True)
+        dtbias32 = p32["dt_bias"].detach().requires_grad_(True)
+        rebuilt_dt32 = torch.clamp(
+            torch.nn.functional.softplus(dtraw32 + dtbias32),
+            min=dt_lo,
+            max=dt_hi,
+        )
+        ddtraw32, ddtbias32 = torch.autograd.grad(
+            (rebuilt_dt32 * ddt32.detach()).sum(), (dtraw32, dtbias32)
+        )
+        reference32["partial.dt_raw.from_da"] = ddtraw32
+        reference32["partial.dt_bias.from_da"] = ddtbias32
     leaf_gradients = torch.autograd.grad(loss, [v for _, v in leaves])
     named_gradients = [*intermediate_gradients, *zip(
         (name for name, _ in leaves), leaf_gradients

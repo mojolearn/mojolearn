@@ -13,7 +13,13 @@ No intra-chunk, B/C, A/dt, or projection gradient is claimed here.
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
 
-from checks.numerics import ftz, identical_exp, identical_mul_add
+from checks.numerics import (
+    ftz,
+    identical_exp,
+    identical_mul_add,
+    identical_sigmoid,
+    identical_softplus,
+)
 from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
@@ -285,11 +291,15 @@ struct Mamba2SSDDiscretizeBackward(Movable):
     var d_da: DeviceBuffer[DType.float32]  # [B,T,H]
     var d_a: DeviceBuffer[DType.float32]  # [H]
     var d_dt: DeviceBuffer[DType.float32]  # [B,T,H], S10 contribution
+    var d_dtraw: DeviceBuffer[DType.float32]  # [B,T,H], current partial
+    var d_dt_bias: DeviceBuffer[DType.float32]  # [H], current partial
 
     def __init__(out self, ctx: DeviceContext, b: Int, t: Int, nh: Int) raises:
         self.d_da = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
         self.d_a = ctx.enqueue_create_buffer[DType.float32](nh)
         self.d_dt = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
+        self.d_dtraw = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
+        self.d_dt_bias = ctx.enqueue_create_buffer[DType.float32](nh)
 
 
 def mamba2_reverse_cumsum_kernel(
@@ -352,13 +362,50 @@ def mamba2_da_product_backward_kernel(
     d_a.unsafe_store(hh, acc)
 
 
+def mamba2_dt_backward_kernel(
+    d_dtraw: MutPointer[Float32, MutAnyOrigin],
+    d_dt_bias: MutPointer[Float32, MutAnyOrigin],
+    d_dt: MutPointer[Float32, MutAnyOrigin],
+    dtraw: MutPointer[Float32, MutAnyOrigin],
+    dt_bias: MutPointer[Float32, MutAnyOrigin],
+    bt_in: Int32,
+    nh_in: Int32,
+    dt_lo: Float32,
+    dt_hi: Float32,
+):
+    """Reverse S9 for the currently accumulated d_dt contribution."""
+    var bt = Int(bt_in)
+    var nh = Int(nh_in)
+    var hh = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if hh >= nh:
+        return
+    var bias = ftz(dt_bias.unsafe_load(hh))
+    var dbias = Float32(0.0)
+    for row in range(bt):
+        var idx = row * nh + hh
+        var biased = ftz(ftz(dtraw.unsafe_load(idx)) + bias)
+        var sp = ftz(identical_softplus(biased))
+        var local = Float32(0.0)
+        if sp >= dt_lo and sp <= dt_hi:
+            local = ftz(pinned_mul(
+                ftz(d_dt.unsafe_load(idx)), ftz(identical_sigmoid(biased))
+            ))
+        d_dtraw.unsafe_store(idx, local)
+        dbias = ftz(dbias + local)
+    d_dt_bias.unsafe_store(hh, dbias)
+
+
 def mamba2_reverse_cumsum_and_da_into(
     ctx: DeviceContext,
     mut out: Mamba2SSDDiscretizeBackward,
     mut d_dacs: DeviceBuffer[DType.float32],
     mut dt: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32],
+    mut dtraw: DeviceBuffer[DType.float32],
+    mut dt_bias: DeviceBuffer[DType.float32],
     b: Int, t_work: Int, nh: Int, nc: Int, qv: Int,
+    dt_lo: Float32,
+    dt_hi: Float32,
 ) raises:
     ctx.enqueue_function[mamba2_reverse_cumsum_kernel](
         out.d_da.unsafe_ptr(), d_dacs.unsafe_ptr(), Int32(b), Int32(t_work),
@@ -368,6 +415,12 @@ def mamba2_reverse_cumsum_and_da_into(
     ctx.enqueue_function[mamba2_da_product_backward_kernel](
         out.d_a.unsafe_ptr(), out.d_dt.unsafe_ptr(), out.d_da.unsafe_ptr(),
         dt.unsafe_ptr(), a.unsafe_ptr(), Int32(b * t_work), Int32(nh),
+        grid_dim=(_grid(nh), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
+    )
+    ctx.enqueue_function[mamba2_dt_backward_kernel](
+        out.d_dtraw.unsafe_ptr(), out.d_dt_bias.unsafe_ptr(),
+        out.d_dt.unsafe_ptr(), dtraw.unsafe_ptr(), dt_bias.unsafe_ptr(),
+        Int32(b * t_work), Int32(nh), dt_lo, dt_hi,
         grid_dim=(_grid(nh), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
     )
 

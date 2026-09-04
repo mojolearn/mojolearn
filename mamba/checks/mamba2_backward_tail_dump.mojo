@@ -204,8 +204,9 @@ def main() raises:
     )
     mamba2_reverse_cumsum_and_da_into(
         ctx, discretize_backward, scale_reduction.d_dacs_total,
-        stages.dt_work, stages.a_out, fixture.b, stages.t_work,
-        dims.nheads, stages.nc, m2_q_eff(),
+        stages.dt_work, stages.a_out, stages.dtraw_work, dweights.dt_bias,
+        fixture.b, stages.t_work, dims.nheads, stages.nc, m2_q_eff(),
+        fixture.dt_lo, fixture.dt_hi,
     )
     ctx.synchronize()
     _write_f32(
@@ -326,6 +327,17 @@ def main() raises:
             fixture.b * stages.t_work * dims.nheads,
         ),
     )
+    _write_f32(
+        dump_dir + "/grad.partial.dt_raw.from_da.f32",
+        mamba_download(
+            ctx, discretize_backward.d_dtraw,
+            fixture.b * stages.t_work * dims.nheads,
+        ),
+    )
+    _write_f32(
+        dump_dir + "/grad.partial.dt_bias.from_da.f32",
+        mamba_download(ctx, discretize_backward.d_dt_bias, dims.nheads),
+    )
     with open(dump_dir + "/dump_manifest.json", "w") as fh:
         fh.write(
             "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
@@ -342,7 +354,8 @@ def main() raises:
             "\"stage.scale.product\",\"partial.dacs.from_state\","
             "\"partial.C.from_yoff\",\"partial.dacs.from_yoff\","
             "\"partial.dacs.total\",\"partial.da.total\","
-            "\"partial.A.from_da\",\"partial.dt.from_da\"]}\n"
+            "\"partial.A.from_da\",\"partial.dt.from_da\","
+            "\"partial.dt_raw.from_da\",\"partial.dt_bias.from_da\"]}\n"
         )
     print(
         "MAMBA2 BACKWARD PARTIAL: emitted output projection + gated RMSNorm"

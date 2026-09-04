@@ -30,7 +30,8 @@ def _force_elaborate(
     mamba2_reverse_chunk_state_into(ctx, out, b, c, d, 2, 1, 3, 256)
     mamba2_reduce_scale_product_into(ctx, reduction, out, d, 2, 3, 1, 256)
     mamba2_reverse_cumsum_and_da_into(
-        ctx, discretize, reduction.d_dacs_total, a, b, 2, 513, 1, 3, 256
+        ctx, discretize, reduction.d_dacs_total, a, b, c, d,
+        2, 513, 1, 3, 256, 0.0, 1.0
     )
 
 

@@ -12,6 +12,7 @@ from gbdt.models.tensor_ctr_value_table import (
     parse_feature_freq_tensor_table,
     persist_ranked_tensor_winners,
     persist_winning_tensor_candidate,
+    regenerate_feature_freq_after_winner,
     split_tensor_hash,
     stage_tensor_candidate_host,
     TStagedTensorCandidate,
@@ -344,4 +345,23 @@ def main() raises:
         raise Error("winning tensor split did not advance split history")
     if next_tensor.get_hash() == dynamic_stage.candidate.table.tensor_hash:
         raise Error("next-level tensor identity did not change")
+
+    # Regenerate the next candidate from the selected dynamic column itself.
+    # The extended column-major index is the host mirror of the layout that
+    # the real ranker consumed above.
+    var extended_cindex = cindex.copy()
+    for r in range(6):
+        extended_cindex.append(dynamic_stage.candidate.bins[r])
+    var regenerated = regenerate_feature_freq_after_winner(
+        dynamic_stage, splits[0], x, extended_cindex, 6, 3, grid
+    )
+    if regenerated.tensor_hash != next_tensor.get_hash() or (
+        len(regenerated.table.splits) != len(next_tensor.splits)
+    ):
+        raise Error("next-level tensor candidate was not regenerated")
+    for r in range(6):
+        if regenerated.values[r] != value_for_split_tensor_row(
+            regenerated.table, x, extended_cindex, 6, r
+        ):
+            raise Error("regenerated tensor candidate value mismatch")
     print("tree CTR slice: deterministic pair FeatureFreq + text round trip PASS")

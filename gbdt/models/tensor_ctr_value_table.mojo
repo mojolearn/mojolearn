@@ -906,3 +906,37 @@ def next_tensor_base_from_winner(
     if tensor.get_hash() == before:
         raise Error("winning split did not advance tensor tracker state")
     return tensor^
+
+
+def regenerate_feature_freq_after_winner(
+    staged: TStagedTensorCandidate,
+    winning_split: TBinarySplit,
+    x_colmajor: List[Float32],
+    extended_cindex: List[UInt32],
+    n_rows: Int,
+    n_features: Int,
+    grid: TBinarizationOptions,
+) raises -> TTensorCtrCandidate:
+    """Build the next-level FeatureFreq candidate from an actual winner.
+
+    `extended_cindex` must include the ephemeral winning tensor column. This
+    makes regeneration consume precisely the bins that structure search
+    ranked, rather than reconstructing a similar-looking split off-path.
+    """
+    var tensor = next_tensor_base_from_winner(staged, winning_split)
+    var sources = List[Int]()
+    for i in range(len(tensor.cat_features)):
+        sources.append(Int(tensor.cat_features[i]))
+    var table = build_split_feature_freq_tensor_table(
+        x_colmajor, extended_cindex, n_rows, n_features,
+        sources^, tensor.splits.copy(),
+        staged.candidate.table.prior_num,
+        staged.candidate.table.prior_denom,
+    )
+    var values = List[Float32]()
+    values.resize(n_rows, Float32(0.0))
+    for row in range(n_rows):
+        values[row] = value_for_split_tensor_row(
+            table, x_colmajor, extended_cindex, n_rows, row
+        )
+    return materialize_tensor_candidate(table^, values^, grid)
