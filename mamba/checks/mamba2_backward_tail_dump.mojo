@@ -158,6 +158,7 @@ def main() raises:
         ssd_backward,
         tail.d_scan,
         stages.xbc_work,
+        stages.pass_states,
         stages.dacs,
         fixture.b,
         stages.t_work,
@@ -276,6 +277,27 @@ def main() raises:
             fixture.b * dims.nheads * stages.nc * m2_q_eff(),
         ),
     )
+    _write_f32(
+        dump_dir + "/grad.partial.C.from_yoff.f32",
+        mamba_download(
+            ctx, ssd_backward.d_c_yoff,
+            fixture.b * stages.t_work * M2_D_STATE,
+        ),
+    )
+    _write_f32(
+        dump_dir + "/grad.partial.dacs.from_yoff.f32",
+        mamba_download(
+            ctx, ssd_backward.d_dacs_yoff,
+            fixture.b * dims.nheads * stages.nc * m2_q_eff(),
+        ),
+    )
+    _write_f32(
+        dump_dir + "/grad.partial.dacs.total.f32",
+        mamba_download(
+            ctx, scale_reduction.d_dacs_total,
+            fixture.b * dims.nheads * stages.nc * m2_q_eff(),
+        ),
+    )
     with open(dump_dir + "/dump_manifest.json", "w") as fh:
         fh.write(
             "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
@@ -289,7 +311,9 @@ def main() raises:
             "\"partial.silu.x.from_D\",\"D\","
             "\"stage.pass.states.direct\",\"stage.pass.states.total\","
             "\"stage.cstate.out\",\"stage.initial_state\","
-            "\"stage.scale.product\",\"partial.dacs.from_state\"]}\n"
+            "\"stage.scale.product\",\"partial.dacs.from_state\","
+            "\"partial.C.from_yoff\",\"partial.dacs.from_yoff\","
+            "\"partial.dacs.total\"]}\n"
         )
     print(
         "MAMBA2 BACKWARD PARTIAL: emitted output projection + gated RMSNorm"

@@ -183,7 +183,8 @@ def generate(args):
         conv_dim = stages["silu.out"].shape[-1]
         c_input = stages["silu.out"].reshape(bsz, length, conv_dim)[
             ..., headdim * nheads + nstate : headdim * nheads + 2 * nstate
-        ].detach()
+        ].detach().requires_grad_(True)
+        dacs_input = stages["dacs.out"].detach().requires_grad_(True)
         qsize = stages["dacs.out"].shape[-1]
         yoff_terms = []
         for token in range(length):
@@ -192,13 +193,16 @@ def generate(args):
                 c_input[:, token, None, None, :]
                 * pass_input[:, chunk]
             ).sum(-1)
-            scale = torch.exp(stages["dacs.out"][:, :, chunk, inner]).unsqueeze(-1)
+            scale = torch.exp(dacs_input[:, :, chunk, inner]).unsqueeze(-1)
             yoff_terms.append(dot * scale)
         isolated_yoff = torch.stack(yoff_terms, dim=1)
-        direct_d_pass = torch.autograd.grad(
-            (isolated_yoff * d_scan_ssd.detach()).sum(), pass_input
-        )[0]
+        direct_d_pass, direct_d_c, d_dacs_yoff = torch.autograd.grad(
+            (isolated_yoff * d_scan_ssd.detach()).sum(),
+            (pass_input, c_input, dacs_input),
+        )
         intermediate_gradients.append(("stage.pass.states.direct", direct_d_pass))
+        intermediate_gradients.append(("partial.C.from_yoff", direct_d_c))
+        intermediate_gradients.append(("partial.dacs.from_yoff", d_dacs_yoff))
         d_pass = torch.empty_like(direct_d_pass)
         d_cstate = torch.empty_like(direct_d_pass)
         d_scale_product = torch.empty_like(direct_d_pass)
@@ -221,6 +225,9 @@ def generate(args):
             stages["dacs.out"][..., -1]
         )
         intermediate_gradients.append(("partial.dacs.from_state", d_dacs_state))
+        intermediate_gradients.append((
+            "partial.dacs.total", d_dacs_yoff + d_dacs_state
+        ))
 
         # The RMSNorm subtraction is ill-conditioned on this fixture
         # (rstd ~= 222). Preserve the float64 oracle above, but also record an
@@ -282,19 +289,24 @@ def generate(args):
         cd32 = stages32["silu.out"].shape[-1]
         c32 = stages32["silu.out"].reshape(b32, l32, cd32)[
             ..., h32 * p_dim32 + n32 : h32 * p_dim32 + 2 * n32
-        ].detach()
+        ].detach().requires_grad_(True)
+        dacs32 = stages32["dacs.out"].detach().requires_grad_(True)
         q32 = stages32["dacs.out"].shape[-1]
         yoff32 = []
         for token in range(l32):
             chunk, inner = divmod(token, q32)
             dot32 = (c32[:, token, None, None, :] * pass32[:, chunk]).sum(-1)
             scale32 = torch.exp(
-                stages32["dacs.out"][:, :, chunk, inner]
+                dacs32[:, :, chunk, inner]
             ).unsqueeze(-1)
             yoff32.append(dot32 * scale32)
-        reference32["stage.pass.states.direct"] = torch.autograd.grad(
-            (torch.stack(yoff32, dim=1) * dscan_ssd32.detach()).sum(), pass32
-        )[0]
+        direct32, dc32, ddacs_yoff32 = torch.autograd.grad(
+            (torch.stack(yoff32, dim=1) * dscan_ssd32.detach()).sum(),
+            (pass32, c32, dacs32),
+        )
+        reference32["stage.pass.states.direct"] = direct32
+        reference32["partial.C.from_yoff"] = dc32
+        reference32["partial.dacs.from_yoff"] = ddacs_yoff32
         direct32 = reference32["stage.pass.states.direct"]
         dpass32 = torch.empty_like(direct32)
         dcstate32 = torch.empty_like(direct32)
@@ -318,6 +330,7 @@ def generate(args):
             stages32["dacs.out"][..., -1]
         )
         reference32["partial.dacs.from_state"] = ddacs_state32
+        reference32["partial.dacs.total"] = ddacs_yoff32 + ddacs_state32
     leaf_gradients = torch.autograd.grad(loss, [v for _, v in leaves])
     named_gradients = [*intermediate_gradients, *zip(
         (name for name, _ in leaves), leaf_gradients

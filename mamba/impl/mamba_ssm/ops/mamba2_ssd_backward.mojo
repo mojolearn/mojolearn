@@ -37,6 +37,8 @@ struct Mamba2SSDBackwardState(Movable):
     """Outputs of the reverse inter-chunk recurrence."""
 
     var direct_d_pass: DeviceBuffer[DType.float32]  # [B,C,H,P,N], S18 only
+    var d_c_yoff: DeviceBuffer[DType.float32]  # [B,T,N], S18 only
+    var d_dacs_yoff: DeviceBuffer[DType.float32]  # [B,H,C,Q], S18 only
     var d_pass: DeviceBuffer[DType.float32]  # [B,C,H,P,N], S17 + S18
     var d_cstate: DeviceBuffer[DType.float32]  # [B,C,H,P,N]
     var d_scale_product: DeviceBuffer[DType.float32]  # [B,C,H,P,N]
@@ -52,6 +54,14 @@ struct Mamba2SSDBackwardState(Movable):
         if boundary_cells < 1:
             boundary_cells = 1
         self.direct_d_pass = ctx.enqueue_create_buffer[DType.float32](state_cells)
+        # T is not known to this state constructor; these are sized by the
+        # enclosing chunk extent and the launcher writes only real T rows.
+        self.d_c_yoff = ctx.enqueue_create_buffer[DType.float32](
+            b * nc * 256 * M2_D_STATE
+        )
+        self.d_dacs_yoff = ctx.enqueue_create_buffer[DType.float32](
+            b * nh * nc * 256
+        )
         self.d_pass = ctx.enqueue_create_buffer[DType.float32](state_cells)
         self.d_cstate = ctx.enqueue_create_buffer[DType.float32](state_cells)
         self.d_scale_product = ctx.enqueue_create_buffer[DType.float32](
@@ -123,11 +133,94 @@ def mamba2_s18_direct_dpass_kernel(
     direct_d_pass.unsafe_store(cell, result)
 
 
+def mamba2_s18_dc_ddacs_kernel(
+    d_c: MutPointer[Float32, MutAnyOrigin],
+    d_dacs: MutPointer[Float32, MutAnyOrigin],
+    d_yoff: MutPointer[Float32, MutAnyOrigin],
+    xbc: MutPointer[Float32, MutAnyOrigin],
+    pass_states: MutPointer[Float32, MutAnyOrigin],
+    dacs: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    t_in: Int32,
+    nh_in: Int32,
+    di_in: Int32,
+    cd_in: Int32,
+    nc_in: Int32,
+    q_in: Int32,
+):
+    """S18 dC and the yoff contribution to d_dacs, without atomics."""
+    var b = Int(b_in)
+    var t_work = Int(t_in)
+    var nh = Int(nh_in)
+    var di = Int(di_in)
+    var cd = Int(cd_in)
+    var nc = Int(nc_in)
+    var qv = Int(q_in)
+    var pn = M2_HEADDIM * M2_D_STATE
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var dc_cells = b * t_work * M2_D_STATE
+    if cell < dc_cells:
+        var bb = cell // (t_work * M2_D_STATE)
+        var rem = cell - bb * t_work * M2_D_STATE
+        var tt = rem // M2_D_STATE
+        var nn = rem - tt * M2_D_STATE
+        var cc = tt // qv
+        var ii = tt - cc * qv
+        var acc = Float32(0.0)
+        for hh in range(nh):
+            var scale = ftz(identical_exp(ftz(dacs.unsafe_load(
+                ((bb * nh + hh) * nc + cc) * qv + ii
+            ))))
+            for pp in range(M2_HEADDIM):
+                var dy = ftz(d_yoff.unsafe_load(
+                    ((bb * t_work + tt) * nh + hh) * M2_HEADDIM + pp
+                ))
+                var d_dot = ftz(pinned_mul(dy, scale))
+                var pv = ftz(pass_states.unsafe_load(
+                    (((bb * nc + cc) * nh + hh) * pn)
+                    + pp * M2_D_STATE + nn
+                ))
+                acc = ftz(identical_mul_add(pv, d_dot, acc))
+        d_c.unsafe_store(cell, acc)
+    var da_cell = cell
+    var da_cells = b * nh * nc * qv
+    if da_cell < da_cells:
+        var bb = da_cell // (nh * nc * qv)
+        var rem = da_cell - bb * nh * nc * qv
+        var hh = rem // (nc * qv)
+        rem -= hh * nc * qv
+        var cc = rem // qv
+        var ii = rem - cc * qv
+        var tt = cc * qv + ii
+        var total = Float32(0.0)
+        if tt < t_work:
+            var scale = ftz(identical_exp(ftz(dacs.unsafe_load(da_cell))))
+            for pp in range(M2_HEADDIM):
+                var dot = Float32(0.0)
+                for nn in range(M2_D_STATE):
+                    dot = ftz(identical_mul_add(
+                        ftz(xbc.unsafe_load(
+                            (bb * t_work + tt) * cd + di + M2_D_STATE + nn
+                        )),
+                        ftz(pass_states.unsafe_load(
+                            (((bb * nc + cc) * nh + hh) * pn)
+                            + pp * M2_D_STATE + nn
+                        )), dot,
+                    ))
+                var dy = ftz(d_yoff.unsafe_load(
+                    ((bb * t_work + tt) * nh + hh) * M2_HEADDIM + pp
+                ))
+                total = ftz(identical_mul_add(dy, dot, total))
+            total = ftz(pinned_mul(total, scale))
+        d_dacs.unsafe_store(da_cell, total)
+
+
 def mamba2_s18_direct_dpass_into(
     ctx: DeviceContext,
     mut out: Mamba2SSDBackwardState,
     mut d_yoff: DeviceBuffer[DType.float32],
     mut xbc: DeviceBuffer[DType.float32],
+    mut pass_states: DeviceBuffer[DType.float32],
     mut dacs: DeviceBuffer[DType.float32],
     b: Int,
     t_work: Int,
@@ -147,6 +240,17 @@ def mamba2_s18_direct_dpass_into(
         grid_dim=(_grid(cells), 1, 1),
         block_dim=(M2_SSD_BWD_TPB, 1, 1),
     )
+    var extra_cells = b * nh * nc * qv
+    var dc_cells = b * t_work * M2_D_STATE
+    if dc_cells > extra_cells:
+        extra_cells = dc_cells
+    ctx.enqueue_function[mamba2_s18_dc_ddacs_kernel](
+        out.d_c_yoff.unsafe_ptr(), out.d_dacs_yoff.unsafe_ptr(),
+        d_yoff.unsafe_ptr(), xbc.unsafe_ptr(), pass_states.unsafe_ptr(),
+        dacs.unsafe_ptr(), Int32(b), Int32(t_work), Int32(nh), Int32(di),
+        Int32(cd), Int32(nc), Int32(qv), grid_dim=(_grid(extra_cells), 1, 1),
+        block_dim=(M2_SSD_BWD_TPB, 1, 1),
+    )
 
 
 struct Mamba2SSDScaleReduction(Movable):
@@ -156,6 +260,7 @@ struct Mamba2SSDScaleReduction(Movable):
     var ones_pn: DeviceBuffer[DType.float32]  # [P*N]
     var workspace: DeviceBuffer[DType.float32]
     var d_dacs_state: DeviceBuffer[DType.float32]  # [B,H,C,Q]
+    var d_dacs_total: DeviceBuffer[DType.float32]  # S18 yoff + S17 state
 
     def __init__(
         out self, ctx: DeviceContext, b: Int, nc: Int, nh: Int, qv: Int
@@ -173,6 +278,20 @@ struct Mamba2SSDScaleReduction(Movable):
             rows * qv
         )
         self.d_dacs_state.enqueue_fill(Float32(0.0))
+        self.d_dacs_total = ctx.enqueue_create_buffer[DType.float32](rows * qv)
+
+
+def mamba2_merge_dacs_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    yoff: MutPointer[Float32, MutAnyOrigin],
+    state: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        dst.unsafe_store(
+            i, ftz(ftz(yoff.unsafe_load(i)) + ftz(state.unsafe_load(i)))
+        )
 
 
 def mamba2_scale_to_dacs_kernel(
@@ -336,5 +455,12 @@ def mamba2_reduce_scale_product_into(
         Int32(nh),
         Int32(qv),
         grid_dim=(_grid(rows), 1, 1),
+        block_dim=(M2_SSD_BWD_TPB, 1, 1),
+    )
+    var dacs_cells = rows * qv
+    ctx.enqueue_function[mamba2_merge_dacs_kernel](
+        reduction.d_dacs_total.unsafe_ptr(), state.d_dacs_yoff.unsafe_ptr(),
+        reduction.d_dacs_state.unsafe_ptr(), Int32(dacs_cells),
+        grid_dim=(_grid(dacs_cells), 1, 1),
         block_dim=(M2_SSD_BWD_TPB, 1, 1),
     )

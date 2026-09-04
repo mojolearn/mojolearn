@@ -26,6 +26,10 @@ from gbdt.models.oblivious_model import (
     TBinarySplit,
 )
 from gbdt.gpu_data.compressed_index_builder import pack_quantized_columns_host
+from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
+    TTreeWorkspace,
+    run_tree_layout,
+)
 
 
 def main() raises:
@@ -253,4 +257,61 @@ def main() raises:
             raise Error("device tensor insertion differs from host packing")
     _ = host_words^
     _ = device_words^
+
+    # Invoke the real symmetric histogram/scoring loop. The standing base
+    # feature is constant; only the staged tensor separates the planted
+    # gradient, so the returned split must name its dynamic feature id.
+    var zeros: List[UInt32] = [0, 0, 0, 0, 0, 0]
+    var zero_columns = List[List[UInt32]]()
+    zero_columns.append(zeros.copy())
+    var dynamic_stage = stage_tensor_candidate_host(
+        zero_columns, base_folds, List[Bool](),
+        staged_borders.candidate.copy(),
+    )
+    var dynamic_base = dynamic_stage.compressed.words.copy()
+    ref dynamic_cf = dynamic_stage.compressed.layout.features[
+        dynamic_stage.feature_id
+    ]
+    var dynamic_mask = dynamic_cf.mask << dynamic_cf.shift
+    for r in range(6):
+        var at = Int(dynamic_cf.offset) * 6 + r
+        dynamic_base[at] &= ~dynamic_mask
+    var dynamic_device = insert_staged_tensor_candidate_device(
+        ctx, dynamic_stage, dynamic_base^
+    )
+    var base_device = ctx.enqueue_create_buffer[DType.uint32](6)
+    ctx.enqueue_memset(base_device, UInt32(0))
+    var stats = ctx.enqueue_create_buffer[DType.float32](12)
+    var h_stats = ctx.enqueue_create_host_buffer[DType.float32](12)
+    var grad_mag = Float32(0.0)
+    for r in range(6):
+        h_stats.unsafe_ptr().unsafe_store(r, Float32(1.0))
+        var g = Float32(-1.0) if dynamic_stage.candidate.bins[r] == (
+            UInt32(0)
+        ) else Float32(1.0)
+        h_stats.unsafe_ptr().unsafe_store(6 + r, g)
+        grad_mag += Float32(1.0)
+    ctx.enqueue_copy(dst_buf=stats, src_ptr=h_stats.unsafe_ptr())
+    var rows = ctx.enqueue_create_buffer[DType.uint32](6)
+    var h_rows = ctx.enqueue_create_host_buffer[DType.uint32](6)
+    for r in range(6):
+        h_rows.unsafe_ptr().unsafe_store(r, UInt32(r))
+    ctx.enqueue_copy(dst_buf=rows, src_ptr=h_rows.unsafe_ptr())
+    var cursor = ctx.enqueue_create_buffer[DType.float32](6)
+    ctx.enqueue_memset(cursor, Float32(0.0))
+    var splits = List[TBinarySplit]()
+    var leaves = List[Float32]()
+    var offsets = List[Int]()
+    var workspace = List[TTreeWorkspace]()
+    var dynamic_folds: List[Int] = [1, len(dynamic_stage.candidate.borders)]
+    _ = run_tree_layout(
+        ctx, 6, base_folds, 1, base_device, stats, rows, cursor,
+        Float32(6.0), grad_mag, splits, leaves, offsets, workspace,
+        dynamic_cindex=Optional(dynamic_device^),
+        dynamic_fold_counts=dynamic_folds,
+    )
+    if len(splits) != 1 or Int(splits[0].feature_id) != (
+        dynamic_stage.feature_id
+    ):
+        raise Error("symmetric search did not rank the staged tensor feature")
     print("tree CTR slice: deterministic pair FeatureFreq + text round trip PASS")

@@ -3222,6 +3222,12 @@ def run_tree_layout_traced[
     random_strength: Float32 = Float32(0.0),
     # their `TGpuAwareRandom` for this tree; see DEVIATION 139 at its use.
     random_seed: UInt64 = UInt64(0),
+    # Internal dynamic-CTR seam. All three are supplied together after a
+    # staged tensor has extended the compressed-index layout. Empty/None is
+    # every public caller today and preserves the old handles and layout.
+    var dynamic_cindex: Optional[DeviceBuffer[DType.uint32]] = None,
+    dynamic_fold_counts: List[Int] = List[Int](),
+    dynamic_one_hot: List[Bool] = List[Bool](),
 ) raises -> List[Int]:
     """`FitImpl` over a LAYOUT: mixed feature widths, one launch per policy.
 
@@ -3249,10 +3255,22 @@ def run_tree_layout_traced[
     # `multiclass_targets.cpp:31-42` for the multi-dimensional case, where
     # it is `1 + NumClasses` minus one for MultiClass's pinned class).
     # Every single-dimensional loss is 2 and that is the default.
+    var active_fold_counts = fold_counts.copy()
+    var active_one_hot = one_hot.copy()
+    var active_cindex = cindex.copy()
+    if dynamic_cindex.__bool__():
+        if len(dynamic_fold_counts) == 0:
+            raise Error("dynamic cindex requires its extended fold counts")
+        active_fold_counts = dynamic_fold_counts.copy()
+        active_one_hot = dynamic_one_hot.copy()
+        active_cindex = dynamic_cindex.value().copy()
+    elif len(dynamic_fold_counts) != 0 or len(dynamic_one_hot) != 0:
+        raise Error("dynamic search layout requires a dynamic cindex")
+
     var stat_count = 1 + approx_dim
     var max_leaves = 1 << max_depth
 
-    var layout = build_layout(fold_counts, one_hot)
+    var layout = build_layout(active_fold_counts, active_one_hot)
     var blocks = blocks_for(layout, n_rows)
     var hist_cells_per_leaf = layout.hist_cells
 
@@ -3277,7 +3295,7 @@ def run_tree_layout_traced[
         or ws[0].n_rows_key != n_rows
         or ws[0].stat_count_key != stat_count
         or ws[0].max_leaves_key != max_leaves
-        or ws[0].n_features_key != len(fold_counts)
+        or ws[0].n_features_key != len(active_fold_counts)
         or ws[0].hist_cells_per_leaf_key != hist_cells_per_leaf
         or ws[0].acc_live_key != _ACC_LIVE
     ):
@@ -3689,7 +3707,7 @@ def run_tree_layout_traced[
             ](
                 ctx, dblocks, depth, n_compute, n_rows, stat_count,
                 max_leaves, sm_count, fixed_scale,
-                cindex, row_index, stats, p_off, p_sz, ids_compute,
+                active_cindex, row_index, stats, p_off, p_sz, ids_compute,
                 dense_ids,
                 hist, acc_i32, block_hist, hist_cells_per_leaf,
             )
@@ -3699,7 +3717,7 @@ def run_tree_layout_traced[
             ](
                 ctx, dblocks, depth, n_compute, n_rows, stat_count,
                 max_leaves, sm_count, fixed_scale,
-                cindex, row_index, stats, p_off, p_sz, zero_ids,
+                active_cindex, row_index, stats, p_off, p_sz, zero_ids,
                 dense_ids,
                 hist, acc_i32, block_hist, hist_cells_per_leaf,
             )
@@ -3711,10 +3729,10 @@ def run_tree_layout_traced[
             level_ids,
             flat_first.unsafe_ptr(), flat_folds.unsafe_ptr(),
             flat_one_hot.unsafe_ptr(),
-            Int32(len(fold_counts)), Int32(hist_cells_per_leaf),
+            Int32(len(active_fold_counts)), Int32(hist_cells_per_leaf),
             hist.unsafe_ptr(),
             grid_dim=(
-                (len(fold_counts) + 255) // 256, n_compute, stat_count
+                (len(active_fold_counts) + 255) // 256, n_compute, stat_count
             ),
             block_dim=(256, 1, 1),
         )
@@ -3897,7 +3915,7 @@ def run_tree_layout_traced[
         # their file; `wide` was data-sized and is not what their grid x
         # means.
         ctx.enqueue_function[split_and_make_sequence_kernel](
-            cindex.unsafe_ptr(), row_index.unsafe_ptr(),
+            active_cindex.unsafe_ptr(), row_index.unsafe_ptr(),
             p_off.unsafe_ptr(), p_sz.unsafe_ptr(), dense_ids.unsafe_ptr(),
             sp_feats.unsafe_ptr().bitcast[CFeature](), sp_bins.unsafe_ptr(),
             flags.unsafe_ptr(), seq.unsafe_ptr(),
@@ -4384,6 +4402,9 @@ def run_tree_layout[
     mags_dev: Optional[DeviceBuffer[DType.float32]] = None,
     random_strength: Float32 = Float32(0.0),
     random_seed: UInt64 = UInt64(0),
+    var dynamic_cindex: Optional[DeviceBuffer[DType.uint32]] = None,
+    dynamic_fold_counts: List[Int] = List[Int](),
+    dynamic_one_hot: List[Bool] = List[Bool](),
 ) raises -> List[Int]:
     """The un-instrumented entry: the exact pre-instrumentation signature,
     forwarding to `run_tree_layout_traced` with BOTH instruments off.
@@ -4417,4 +4438,7 @@ def run_tree_layout[
         mags_dev=mags_dev,
         random_strength=random_strength,
         random_seed=random_seed,
+        dynamic_cindex=dynamic_cindex^,
+        dynamic_fold_counts=dynamic_fold_counts,
+        dynamic_one_hot=dynamic_one_hot,
     )
