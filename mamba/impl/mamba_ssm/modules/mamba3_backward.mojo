@@ -4,8 +4,8 @@
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
 
-from checks.numerics import ftz, identical_mul_add, identical_sigmoid, identical_silu
-from mamba.checks.mamba3_fixture import M3_D_STATE, M3_HEADDIM, Mamba3Dims
+from checks.numerics import ftz, identical_mul_add, identical_sigmoid, identical_silu, portable_cosf, portable_sinf
+from mamba.checks.mamba3_fixture import M3_D_STATE, M3_HEADDIM, M3_NUM_ROPE_ANGLES, Mamba3Dims
 from mamba.impl.transformers.models.mamba.modeling_mamba import pinned_mul
 
 comptime M3_BWD_TPB = 128
@@ -264,3 +264,72 @@ def mamba3_backward_s16_s15_into(
     var cells = qcells if qcells > vcells else vcells
     ctx.enqueue_function[mamba3_s16_qkv_backward_kernel](d_q.unsafe_ptr(), d_ks.unsafe_ptr(), d_v.unsafe_ptr(), d_y.unsafe_ptr(), q.unsafe_ptr(), ks.unsafe_ptr(), v.unsafe_ptr(), seg_l.unsafe_ptr(), Int32(b), Int32(l), Int32(dims.nheads), Int32(qsize), grid_dim=(_grid(cells),1,1), block_dim=(M3_BWD_TPB,1,1))
     ctx.enqueue_function[mamba3_s15_backward_kernel](d_krot.unsafe_ptr(), d_scale.unsafe_ptr(), d_ks.unsafe_ptr(), krot.unsafe_ptr(), scale.unsafe_ptr(), Int32(b*l*dims.nheads), grid_dim=(_grid(b*l*dims.nheads),1,1), block_dim=(M3_BWD_TPB,1,1))
+
+
+def mamba3_join_value_scale_kernel(
+    d_value: MutPointer[Float32, MutAnyOrigin],
+    d_gamma: MutPointer[Float32, MutAnyOrigin],
+    d_beta: MutPointer[Float32, MutAnyOrigin],
+    d_value_skip: MutPointer[Float32, MutAnyOrigin],
+    d_value_s16: MutPointer[Float32, MutAnyOrigin],
+    d_scale: MutPointer[Float32, MutAnyOrigin],
+    value_cells_in: Int32,
+    scale_cells_in: Int32,
+):
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell < Int(value_cells_in):
+        d_value.unsafe_store(cell, ftz(ftz(d_value_skip.unsafe_load(cell)) + ftz(d_value_s16.unsafe_load(cell))))
+    if cell < Int(scale_cells_in):
+        var ds = ftz(d_scale.unsafe_load(cell))
+        d_gamma.unsafe_store(cell, ds)
+        d_beta.unsafe_store(cell, ds)
+
+
+def mamba3_rotary_backward_kernel(
+    d_qraw: MutPointer[Float32, MutAnyOrigin], d_kraw: MutPointer[Float32, MutAnyOrigin],
+    d_theta: MutPointer[Float32, MutAnyOrigin], d_qrot: MutPointer[Float32, MutAnyOrigin],
+    d_krot: MutPointer[Float32, MutAnyOrigin], bcb: MutPointer[Float32, MutAnyOrigin],
+    bcc: MutPointer[Float32, MutAnyOrigin], b_bias: MutPointer[Float32, MutAnyOrigin],
+    c_bias: MutPointer[Float32, MutAnyOrigin], theta: MutPointer[Float32, MutAnyOrigin],
+    pairs_in: Int32, nh_in: Int32,
+):
+    var pairs = Int(pairs_in); var nh = Int(nh_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= pairs: return
+    var pair = cell % (M3_D_STATE // 2); var rowh = cell // (M3_D_STATE // 2)
+    var h = rowh % nh; var token = rowh // nh; var e0 = 2*pair; var e1 = e0+1
+    var base = rowh*M3_D_STATE
+    var dq0 = ftz(d_qrot.unsafe_load(base+e0)); var dq1 = ftz(d_qrot.unsafe_load(base+e1))
+    var dk0 = ftz(d_krot.unsafe_load(base+e0)); var dk1 = ftz(d_krot.unsafe_load(base+e1))
+    if pair >= M3_NUM_ROPE_ANGLES:
+        d_qraw.unsafe_store(base+e0,dq0); d_qraw.unsafe_store(base+e1,dq1)
+        d_kraw.unsafe_store(base+e0,dk0); d_kraw.unsafe_store(base+e1,dk1); return
+    var th = ftz(theta.unsafe_load(rowh*M3_NUM_ROPE_ANGLES+pair))
+    var c = ftz(portable_cosf(th)); var s = ftz(portable_sinf(th))
+    d_qraw.unsafe_store(base+e0,ftz(ftz(pinned_mul(dq0,c))+ftz(pinned_mul(dq1,s))))
+    d_qraw.unsafe_store(base+e1,ftz(ftz(pinned_mul(dq1,c))-ftz(pinned_mul(dq0,s))))
+    d_kraw.unsafe_store(base+e0,ftz(ftz(pinned_mul(dk0,c))+ftz(pinned_mul(dk1,s))))
+    d_kraw.unsafe_store(base+e1,ftz(ftz(pinned_mul(dk1,c))-ftz(pinned_mul(dk0,s))))
+    var q0 = ftz(ftz(bcc.unsafe_load(token*M3_D_STATE+e0))+ftz(c_bias.unsafe_load(h*M3_D_STATE+e0)))
+    var q1 = ftz(ftz(bcc.unsafe_load(token*M3_D_STATE+e1))+ftz(c_bias.unsafe_load(h*M3_D_STATE+e1)))
+    var k0 = ftz(ftz(bcb.unsafe_load(token*M3_D_STATE+e0))+ftz(b_bias.unsafe_load(h*M3_D_STATE+e0)))
+    var k1 = ftz(ftz(bcb.unsafe_load(token*M3_D_STATE+e1))+ftz(b_bias.unsafe_load(h*M3_D_STATE+e1)))
+    var dt = Float32(0.0)
+    dt = ftz(identical_mul_add(dq0,ftz(-ftz(pinned_mul(q0,s))-ftz(pinned_mul(q1,c))),dt))
+    dt = ftz(identical_mul_add(dq1,ftz(ftz(pinned_mul(q0,c))-ftz(pinned_mul(q1,s))),dt))
+    dt = ftz(identical_mul_add(dk0,ftz(-ftz(pinned_mul(k0,s))-ftz(pinned_mul(k1,c))),dt))
+    dt = ftz(identical_mul_add(dk1,ftz(ftz(pinned_mul(k0,c))-ftz(pinned_mul(k1,s))),dt))
+    d_theta.unsafe_store(rowh*M3_NUM_ROPE_ANGLES+pair,dt)
+
+
+def mamba3_backward_join_rotary_into(
+    ctx: DeviceContext, mut d_value: DeviceBuffer[DType.float32], mut d_gamma: DeviceBuffer[DType.float32], mut d_beta: DeviceBuffer[DType.float32],
+    mut d_qraw: DeviceBuffer[DType.float32], mut d_kraw: DeviceBuffer[DType.float32], mut d_theta: DeviceBuffer[DType.float32],
+    mut d_value_skip: DeviceBuffer[DType.float32], mut d_value_s16: DeviceBuffer[DType.float32], mut d_scale: DeviceBuffer[DType.float32],
+    mut d_qrot: DeviceBuffer[DType.float32], mut d_krot: DeviceBuffer[DType.float32], mut bcb: DeviceBuffer[DType.float32], mut bcc: DeviceBuffer[DType.float32],
+    mut b_bias: DeviceBuffer[DType.float32], mut c_bias: DeviceBuffer[DType.float32], mut theta: DeviceBuffer[DType.float32], m: Int, dims: Mamba3Dims,
+) raises:
+    var vc=m*dims.d_inner; var sc=m*dims.nheads; var cells=vc if vc>sc else sc
+    ctx.enqueue_function[mamba3_join_value_scale_kernel](d_value.unsafe_ptr(),d_gamma.unsafe_ptr(),d_beta.unsafe_ptr(),d_value_skip.unsafe_ptr(),d_value_s16.unsafe_ptr(),d_scale.unsafe_ptr(),Int32(vc),Int32(sc),grid_dim=(_grid(cells),1,1),block_dim=(M3_BWD_TPB,1,1))
+    var pairs=m*dims.nheads*(M3_D_STATE//2)
+    ctx.enqueue_function[mamba3_rotary_backward_kernel](d_qraw.unsafe_ptr(),d_kraw.unsafe_ptr(),d_theta.unsafe_ptr(),d_qrot.unsafe_ptr(),d_krot.unsafe_ptr(),bcb.unsafe_ptr(),bcc.unsafe_ptr(),b_bias.unsafe_ptr(),c_bias.unsafe_ptr(),theta.unsafe_ptr(),Int32(pairs),Int32(dims.nheads),grid_dim=(_grid(pairs),1,1),block_dim=(M3_BWD_TPB,1,1))

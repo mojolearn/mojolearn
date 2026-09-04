@@ -373,6 +373,16 @@ def main() raises:
             fixture.b * stages.nc * dims.nheads * m2_q_eff() * m2_q_eff()),
     )
     _write_f32(
+        dump_dir + "/grad.partial.B.from_cb.f32",
+        mamba_download(ctx, discretize_backward.d_b_cb,
+            fixture.b * stages.t_work * M2_D_STATE),
+    )
+    _write_f32(
+        dump_dir + "/grad.partial.C.from_cb.f32",
+        mamba_download(ctx, discretize_backward.d_c_cb,
+            fixture.b * stages.t_work * M2_D_STATE),
+    )
+    _write_f32(
         dump_dir + "/grad.partial.dt_raw.merged.f32",
         mamba_download(
             ctx, discretize_backward.d_dtraw,
@@ -402,6 +412,7 @@ def main() raises:
             "\"partial.A.from_da\",\"partial.dt.from_da\","
             "\"partial.xd.from_ydiag\",\"partial.x.from_xd\","
             "\"partial.cb.G.from_ydiag\",\"partial.seg.L.from_ydiag\","
+            "\"partial.B.from_cb\",\"partial.C.from_cb\","
             "\"partial.dt.from_xd\",\"partial.dt.merged\","
             "\"partial.dt_raw.merged\",\"partial.dt_bias.merged\"]}\n"
         )

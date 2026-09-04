@@ -211,6 +211,18 @@ def generate(args):
         scale_s15 = stages["trap.scale"].detach().reshape(bsz, length, qrot.shape[2]).requires_grad_(True)
         dkrot, dscale = torch.autograd.grad(((krot * scale_s15.unsqueeze(-1)) * dkscaled.detach()).sum(), (krot, scale_s15))
         intermediate_gradients.extend((("partial.s16.rot.q", dqrot), ("partial.s16.kscale", dkscaled), ("partial.s16.value", dv_s16), ("partial.s15.rot.k", dkrot), ("partial.s15.scale", dscale)))
+        intermediate_gradients.extend((("partial.value.total", d_value + dv_s16.reshape_as(d_value)), ("partial.scale.gamma", dscale), ("partial.scale.beta", dscale)))
+        theta_r = stages["angle.theta"].detach().requires_grad_(True)
+        qr = q_biased.detach().requires_grad_(True); kr = k_biased.detach().requires_grad_(True)
+        def rotate_leaf(t, th):
+            pair = t.reshape(*t.shape[:-1], -1, 2)
+            c = torch.cos(th); s = torch.sin(th)
+            c = torch.nn.functional.pad(c, (0, pair.shape[-2]-c.shape[-1]), value=1.0)
+            s = torch.nn.functional.pad(s, (0, pair.shape[-2]-s.shape[-1]), value=0.0)
+            return torch.stack((pair[...,0]*c-pair[...,1]*s, pair[...,0]*s+pair[...,1]*c), -1).reshape_as(t)
+        rqo=rotate_leaf(qr,theta_r); rko=rotate_leaf(kr,theta_r)
+        dqr_raw,dkr_raw,dtheta_r=torch.autograd.grad((rqo*dqrot.detach().reshape_as(rqo)).sum()+(rko*dkrot.detach().reshape_as(rko)).sum(),(qr,kr,theta_r))
+        intermediate_gradients.extend((("partial.rotary.C_biased",dqr_raw),("partial.rotary.B_biased",dkr_raw),("partial.rotary.theta",dtheta_r)))
 
         gate32 = stages["gate.out"].detach().to(torch.float32)
         gate32.requires_grad_(True)
@@ -277,6 +289,11 @@ def generate(args):
         scl32 = stages["trap.scale"].detach().to(torch.float32).reshape(bsz,length,qrot32.shape[2]).requires_grad_(True)
         dkr32, dsc32 = torch.autograd.grad(((kr32*scl32.unsqueeze(-1))*dks32.detach()).sum(), (kr32,scl32))
         reference32.update({"partial.s16.rot.q":dq32s,"partial.s16.kscale":dks32,"partial.s16.value":dv32s,"partial.s15.rot.k":dkr32,"partial.s15.scale":dsc32})
+        reference32.update({"partial.value.total":dv32+dv32s.reshape_as(dv32),"partial.scale.gamma":dsc32,"partial.scale.beta":dsc32})
+        th32=stages["angle.theta"].detach().to(torch.float32).requires_grad_(True); qr32=q32_biased.detach().requires_grad_(True); kr32=k32_biased.detach().requires_grad_(True)
+        rqo32=rotate_leaf(qr32,th32); rko32=rotate_leaf(kr32,th32)
+        dqr32raw,dkr32raw,dth32=torch.autograd.grad((rqo32*dq32s.detach().reshape_as(rqo32)).sum()+(rko32*dkr32.detach().reshape_as(rko32)).sum(),(qr32,kr32,th32))
+        reference32.update({"partial.rotary.C_biased":dqr32raw,"partial.rotary.B_biased":dkr32raw,"partial.rotary.theta":dth32})
     if args.family == "mamba2":
         tail_input = stages["gnorm.out"].detach().requires_grad_(True)
         tail_output = torch.nn.functional.linear(
@@ -434,6 +451,26 @@ def generate(args):
             ("partial.dt.merged", ddt_merged),
             ("partial.cb.G.from_ydiag", dcb_ydiag),
             ("partial.seg.L.from_ydiag", dseg_ydiag),
+        ))
+        b_leaf = stages["silu.out"].reshape(bsz, length, conv_dim)[
+            ..., nheads * headdim : nheads * headdim + nstate
+        ].detach().requires_grad_(True)
+        c_leaf = c_input.detach().requires_grad_(True)
+        cb_parts = []
+        for chunk in range(cb_leaf.shape[1]):
+            start = chunk * qsize
+            real = min(qsize, length - start)
+            cb_parts.append(torch.einsum(
+                "bin,bjn->bij", c_leaf[:, start:start+real],
+                b_leaf[:, start:start+real]
+            ))
+        cb_loss = sum(
+            (part * dcb_ydiag[:, chunk, :part.shape[1], :part.shape[2]].detach()).sum()
+            for chunk, part in enumerate(cb_parts)
+        )
+        db_cb, dc_cb = torch.autograd.grad(cb_loss, (b_leaf, c_leaf))
+        intermediate_gradients.extend((
+            ("partial.B.from_cb", db_cb), ("partial.C.from_cb", dc_cb)
         ))
         raw_start = nheads * headdim + conv_dim
         dtraw_leaf = stages["in_proj.out"][..., raw_start:].reshape(
@@ -613,6 +650,25 @@ def generate(args):
         reference32["partial.dt.merged"] = ddt_merged32
         reference32["partial.cb.G.from_ydiag"] = dcb32
         reference32["partial.seg.L.from_ydiag"] = dseg32
+        b32_leaf = stages32["silu.out"].reshape(b32, l32, cd32)[
+            ..., h32 * p_dim32 : h32 * p_dim32 + n32
+        ].detach().requires_grad_(True)
+        c32_leaf = c32.detach().requires_grad_(True)
+        cb32_parts = []
+        for chunk in range(cb32.shape[1]):
+            start = chunk * q32
+            real = min(q32, l32 - start)
+            cb32_parts.append(torch.einsum(
+                "bin,bjn->bij", c32_leaf[:, start:start+real],
+                b32_leaf[:, start:start+real]
+            ))
+        cb32_loss = sum(
+            (part * dcb32[:, chunk, :part.shape[1], :part.shape[2]].detach()).sum()
+            for chunk, part in enumerate(cb32_parts)
+        )
+        db32, dc_cb32 = torch.autograd.grad(cb32_loss, (b32_leaf, c32_leaf))
+        reference32["partial.B.from_cb"] = db32
+        reference32["partial.C.from_cb"] = dc_cb32
         raw_start32 = h32 * p_dim32 + cd32
         dtraw32 = stages32["in_proj.out"][..., raw_start32:].reshape(
             b32, l32, h32

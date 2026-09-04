@@ -221,6 +221,48 @@ def mamba2_s18_dc_ddacs_kernel(
         d_dacs.unsafe_store(da_cell, total)
 
 
+def mamba2_cb_backward_kernel(
+    d_b: MutPointer[Float32, MutAnyOrigin],
+    d_c: MutPointer[Float32, MutAnyOrigin],
+    d_cb: MutPointer[Float32, MutAnyOrigin],
+    xbc: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, t_in: Int32, di_in: Int32, cd_in: Int32,
+    nc_in: Int32, q_in: Int32,
+):
+    var b = Int(b_in)
+    var t = Int(t_in)
+    var di = Int(di_in)
+    var cd = Int(cd_in)
+    var nc = Int(nc_in)
+    var qv = Int(q_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= b * t * M2_D_STATE:
+        return
+    var bb = cell // (t * M2_D_STATE)
+    var rem = cell - bb * t * M2_D_STATE
+    var tt = rem // M2_D_STATE
+    var nn = rem - tt * M2_D_STATE
+    var cc = tt // qv
+    var pos = tt - cc * qv
+    var real = t - cc * qv
+    if real > qv:
+        real = qv
+    var db = Float32(0.0)
+    var dc = Float32(0.0)
+    for ii in range(pos, real):
+        db = ftz(identical_mul_add(
+            ftz(d_cb.unsafe_load(((bb*nc+cc)*qv+ii)*qv+pos)),
+            ftz(xbc.unsafe_load((bb*t+cc*qv+ii)*cd+di+M2_D_STATE+nn)), db
+        ))
+    for jj in range(pos + 1):
+        dc = ftz(identical_mul_add(
+            ftz(d_cb.unsafe_load(((bb*nc+cc)*qv+pos)*qv+jj)),
+            ftz(xbc.unsafe_load((bb*t+cc*qv+jj)*cd+di+nn)), dc
+        ))
+    d_b.unsafe_store(cell, db)
+    d_c.unsafe_store(cell, dc)
+
+
 def mamba2_s18_direct_dpass_into(
     ctx: DeviceContext,
     mut out: Mamba2SSDBackwardState,
@@ -299,6 +341,8 @@ struct Mamba2SSDDiscretizeBackward(Movable):
     var d_dt_merged: DeviceBuffer[DType.float32]  # current partial sum
     var d_cb_ydiag: DeviceBuffer[DType.float32]  # [B,C,Q,Q]
     var d_seg_ydiag: DeviceBuffer[DType.float32]  # [B,C,H,Q,Q]
+    var d_b_cb: DeviceBuffer[DType.float32]  # [B,T,N]
+    var d_c_cb: DeviceBuffer[DType.float32]  # [B,T,N]
 
     def __init__(out self, ctx: DeviceContext, b: Int, t: Int, nh: Int) raises:
         self.d_da = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
@@ -321,6 +365,8 @@ struct Mamba2SSDDiscretizeBackward(Movable):
         self.d_seg_ydiag = ctx.enqueue_create_buffer[DType.float32](
             b * nc * nh * 256 * 256
         )
+        self.d_b_cb = ctx.enqueue_create_buffer[DType.float32](b * t * M2_D_STATE)
+        self.d_c_cb = ctx.enqueue_create_buffer[DType.float32](b * t * M2_D_STATE)
 
 
 def mamba2_ydiag_matrix_backward_kernel(
@@ -560,6 +606,13 @@ def mamba2_ydiag_xd_and_partial_dt_into(
         d_y.unsafe_ptr(), xd.unsafe_ptr(), cb_g.unsafe_ptr(), seg_l.unsafe_ptr(),
         Int32(b), Int32(t_work), Int32(nh), Int32(nc), Int32(qv),
         grid_dim=(_grid(b * nc * qv * qv), 1, 1),
+        block_dim=(M2_SSD_BWD_TPB, 1, 1),
+    )
+    ctx.enqueue_function[mamba2_cb_backward_kernel](
+        out.d_b_cb.unsafe_ptr(), out.d_c_cb.unsafe_ptr(),
+        out.d_cb_ydiag.unsafe_ptr(), xbc.unsafe_ptr(), Int32(b), Int32(t_work),
+        Int32(di), Int32(cd), Int32(nc), Int32(qv),
+        grid_dim=(_grid(b * t_work * M2_D_STATE), 1, 1),
         block_dim=(M2_SSD_BWD_TPB, 1, 1),
     )
     ctx.enqueue_function[mamba2_ydiag_xd_backward_kernel](

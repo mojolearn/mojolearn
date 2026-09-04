@@ -3232,6 +3232,49 @@ def accept_symmetric_level_winner(
     return True
 
 
+def enqueue_symmetric_level_winner(
+    ctx: DeviceContext,
+    mut out_score: DeviceBuffer[DType.float32],
+    mut out_bin: DeviceBuffer[DType.uint32],
+    argmax_blocks: Int,
+    mut bfr_off: DeviceBuffer[DType.uint32],
+    mut bfr_mask: DeviceBuffer[DType.uint32],
+    mut bfr_shift: DeviceBuffer[DType.uint32],
+    mut bfr_first: DeviceBuffer[DType.uint32],
+    mut bfr_folds: DeviceBuffer[DType.uint32],
+    mut bfr_oh: DeviceBuffer[DType.uint8],
+    mut bfr_bin: DeviceBuffer[DType.uint32],
+    level: Int,
+    live_leaves: Int,
+    mut winners_score: DeviceBuffer[DType.float32],
+    mut winners_bf: DeviceBuffer[DType.uint32],
+    mut sp_feats: DeviceBuffer[DType.uint8],
+    mut sp_bins: DeviceBuffer[DType.uint32],
+    mut right_leaf_ids: DeviceBuffer[DType.uint32],
+) raises:
+    """Enqueue one level's device winner reduction and split packing.
+
+    This deliberately owns neither a drain nor host acceptance. Keeping
+    those boundaries separate lets the baseline queue every level exactly
+    as before, while a tensor-only driver may drain after this launch and
+    feed the result through `accept_symmetric_level_winner`.
+    """
+    ctx.enqueue_function[resolve_and_pack_kernel](
+        out_score.unsafe_ptr(), out_bin.unsafe_ptr(),
+        Int32(argmax_blocks),
+        bfr_off.unsafe_ptr(), bfr_mask.unsafe_ptr(),
+        bfr_shift.unsafe_ptr(), bfr_first.unsafe_ptr(),
+        bfr_folds.unsafe_ptr(), bfr_oh.unsafe_ptr(),
+        bfr_bin.unsafe_ptr(),
+        Int32(level), Int32(live_leaves),
+        winners_score.unsafe_ptr(), winners_bf.unsafe_ptr(),
+        sp_feats.unsafe_ptr(), sp_bins.unsafe_ptr(),
+        right_leaf_ids.unsafe_ptr(),
+        grid_dim=(1, 1, 1),
+        block_dim=(RESOLVE_BLOCK_SIZE, 1, 1),
+    )
+
+
 def run_tree_layout_traced[
     hist2_smem_mode: Int = HIST2_SMEM_MODE
 ](
@@ -3940,19 +3983,11 @@ def run_tree_layout_traced[
         # host applies BEFORE splitting are applied by ours AFTER the
         # drain, with a one-level rollback on the rare stop.
         times.begin(ctx)
-        ctx.enqueue_function[resolve_and_pack_kernel](
-            out_score.unsafe_ptr(), out_bin.unsafe_ptr(),
-            Int32(argmax_blocks),
-            bfr_off.unsafe_ptr(), bfr_mask.unsafe_ptr(),
-            bfr_shift.unsafe_ptr(), bfr_first.unsafe_ptr(),
-            bfr_folds.unsafe_ptr(), bfr_oh.unsafe_ptr(),
-            bfr_bin.unsafe_ptr(),
-            Int32(depth), Int32(n_live),
-            winners_score.unsafe_ptr(), winners_bf.unsafe_ptr(),
-            sp_feats.unsafe_ptr(), sp_bins.unsafe_ptr(),
-            ids_c.unsafe_ptr(),
-            grid_dim=(1, 1, 1),
-            block_dim=(RESOLVE_BLOCK_SIZE, 1, 1),
+        enqueue_symmetric_level_winner(
+            ctx, out_score, out_bin, argmax_blocks,
+            bfr_off, bfr_mask, bfr_shift, bfr_first, bfr_folds,
+            bfr_oh, bfr_bin, depth, n_live,
+            winners_score, winners_bf, sp_feats, sp_bins, ids_c,
         )
         mgr.stream_kernel()
         times.end(ctx, "sym.winner")

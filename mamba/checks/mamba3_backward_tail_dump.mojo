@@ -20,6 +20,7 @@ from mamba.checks.mamba3_backward import (
 from mamba.checks.mamba3_fixture import (
     M3_CHUNK_SIZE,
     M3_D_STATE,
+    M3_NUM_ROPE_ANGLES,
     m3_case_weights,
     m3_case_x,
     m3_corpus_case,
@@ -34,6 +35,7 @@ from mamba.impl.mamba_ssm.modules.mamba3_backward import (
     mamba3_backward_gate_skip_into,
     mamba3_backward_qkdot_into,
     mamba3_backward_s16_s15_into,
+    mamba3_backward_join_rotary_into,
 )
 from mamba.impl.transformers.models.mamba.modeling_mamba import (
     mamba_download,
@@ -154,6 +156,19 @@ def main() raises:
         stages.seg_l, stages.rotk_work, stages.scale_work,
         fixture.b, fixture.l, dims, M3_CHUNK_SIZE,
     )
+    var d_value_total = mamba_zeros(ctx, tail_cells)
+    var d_gamma_scale = mamba_zeros(ctx, head_cells)
+    var d_beta_scale = mamba_zeros(ctx, head_cells)
+    var d_qraw_rot = mamba_zeros(ctx, state_cells)
+    var d_kraw_rot = mamba_zeros(ctx, state_cells)
+    var d_theta_rot = mamba_zeros(ctx, m * dims.nheads * M3_NUM_ROPE_ANGLES)
+    mamba3_backward_join_rotary_into(
+        ctx, d_value_total, d_gamma_scale, d_beta_scale, d_qraw_rot,
+        d_kraw_rot, d_theta_rot, d_v, d_v_s16, d_scale_s15,
+        d_q_s16, d_krot_s15, stages.bcnorm_b, stages.bcnorm_c,
+        device_weights.b_bias, device_weights.c_bias, stages.theta_out,
+        m, dims,
+    )
     ctx.synchronize()
 
     _write_f32(
@@ -179,6 +194,12 @@ def main() raises:
     _write_f32(output + "/grad.partial.s16.value.f32", mamba_download(ctx, d_v_s16, tail_cells))
     _write_f32(output + "/grad.partial.s15.rot.k.f32", mamba_download(ctx, d_krot_s15, state_cells))
     _write_f32(output + "/grad.partial.s15.scale.f32", mamba_download(ctx, d_scale_s15, head_cells))
+    _write_f32(output + "/grad.partial.value.total.f32", mamba_download(ctx, d_value_total, tail_cells))
+    _write_f32(output + "/grad.partial.scale.gamma.f32", mamba_download(ctx, d_gamma_scale, head_cells))
+    _write_f32(output + "/grad.partial.scale.beta.f32", mamba_download(ctx, d_beta_scale, head_cells))
+    _write_f32(output + "/grad.partial.rotary.C_biased.f32", mamba_download(ctx, d_qraw_rot, state_cells))
+    _write_f32(output + "/grad.partial.rotary.B_biased.f32", mamba_download(ctx, d_kraw_rot, state_cells))
+    _write_f32(output + "/grad.partial.rotary.theta.f32", mamba_download(ctx, d_theta_rot, m * dims.nheads * M3_NUM_ROPE_ANGLES))
     with open(output + "/dump_manifest.json", "w") as fh:
         fh.write(
             "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
@@ -192,7 +213,10 @@ def main() raises:
             + "\"partial.qkdot.gamma\",\"partial.qkdot.dt\","
             + "\"partial.qkdot.trap_raw\",\"partial.s16.rot.q\","
             + "\"partial.s16.kscale\",\"partial.s16.value\","
-            + "\"partial.s15.rot.k\",\"partial.s15.scale\"]}\n"
+            + "\"partial.s15.rot.k\",\"partial.s15.scale\","
+            + "\"partial.value.total\",\"partial.scale.gamma\","
+            + "\"partial.scale.beta\",\"partial.rotary.C_biased\","
+            + "\"partial.rotary.B_biased\",\"partial.rotary.theta\"]}\n"
         )
 
     _ = d_gamma_qk^
@@ -222,3 +246,9 @@ def main() raises:
     _ = d_v_s16^
     _ = d_ks_s16^
     _ = d_q_s16^
+    _ = d_theta_rot^
+    _ = d_kraw_rot^
+    _ = d_qraw_rot^
+    _ = d_beta_scale^
+    _ = d_gamma_scale^
+    _ = d_value_total^
