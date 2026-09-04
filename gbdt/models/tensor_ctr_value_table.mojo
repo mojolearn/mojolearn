@@ -15,6 +15,11 @@ its refusal remains until the structure searcher can mint those tensors.
 
 from gbdt.methods.batch_feature_tensor_builder import TFeatureTensor
 from gbdt.models.ctr_value_table import dense_category_code
+from gbdt.models.oblivious_model import (
+    BIN_SPLIT_TAKE_BIN,
+    BIN_SPLIT_TAKE_GREATER,
+    TBinarySplit,
+)
 
 
 def split_tensor_hash(hash: UInt64) -> Tuple[UInt32, UInt32]:
@@ -38,6 +43,7 @@ struct TFeatureFreqTensorTable(Copyable, Movable):
     var tensor_hash: UInt64
     var source_features: List[Int]
     var cardinalities: List[Int]
+    var splits: List[TBinarySplit]
     var prior_num: Float32
     var prior_denom: Float32
     var denominator: Int
@@ -48,6 +54,7 @@ struct TFeatureFreqTensorTable(Copyable, Movable):
         tensor_hash: UInt64,
         var source_features: List[Int],
         var cardinalities: List[Int],
+        var splits: List[TBinarySplit],
         prior_num: Float32,
         prior_denom: Float32,
         denominator: Int,
@@ -56,6 +63,7 @@ struct TFeatureFreqTensorTable(Copyable, Movable):
         self.tensor_hash = tensor_hash
         self.source_features = source_features^
         self.cardinalities = cardinalities^
+        self.splits = splits^
         self.prior_num = prior_num
         self.prior_denom = prior_denom
         self.denominator = denominator
@@ -76,6 +84,8 @@ struct TFeatureFreqTensorTable(Copyable, Movable):
     def value_for_row(
         self, x_colmajor: List[Float32], n_rows: Int, row: Int
     ) raises -> Float32:
+        if len(self.splits) != 0:
+            raise Error("split-history tensor apply requires quantized columns")
         var key = self.key_for_row(x_colmajor, n_rows, row)
         var count = 0
         if key >= 0 and key < len(self.counts):
@@ -95,6 +105,11 @@ struct TFeatureFreqTensorTable(Copyable, Movable):
         out += " cardinalities " + String(len(self.cardinalities))
         for i in range(len(self.cardinalities)):
             out += " " + String(self.cardinalities[i])
+        out += " splits " + String(len(self.splits))
+        for i in range(len(self.splits)):
+            out += " " + String(Int(self.splits[i].feature_id))
+            out += " " + String(Int(self.splits[i].bin_idx))
+            out += " " + String(Int(self.splits[i].split_type))
         out += " prior " + String(self.prior_num) + " " + String(self.prior_denom)
         out += " denominator " + String(self.denominator)
         out += " counts " + String(len(self.counts))
@@ -166,8 +181,89 @@ def build_feature_freq_tensor_table(
             key = key * cards[i] + code
         counts[key] += 1
     return TFeatureFreqTensorTable(
-        tensor.get_hash(), source_features^, cards^,
+        tensor.get_hash(), source_features^, cards^, List[TBinarySplit](),
         prior_num, prior_denom, n_rows, counts^,
+    )
+
+
+def _split_bit(
+    split: TBinarySplit, cindex: List[UInt32], n_rows: Int, row: Int
+) raises -> Int:
+    var feature = Int(split.feature_id)
+    var bin = Int(split.bin_idx)
+    if feature < 0 or bin < 0 or feature * n_rows + row >= len(cindex):
+        raise Error("split-history tensor references an invalid quantized column")
+    var value = Int(cindex[feature * n_rows + row])
+    if Int(split.split_type) == BIN_SPLIT_TAKE_BIN:
+        return 1 if value == bin else 0
+    if Int(split.split_type) == BIN_SPLIT_TAKE_GREATER:
+        return 1 if value > bin else 0
+    raise Error("split-history tensor has an unknown split type")
+
+
+def build_split_feature_freq_tensor_table(
+    x_colmajor: List[Float32],
+    cindex: List[UInt32],
+    n_rows: Int,
+    n_features: Int,
+    var source_features: List[Int],
+    var splits: List[TBinarySplit],
+    prior_num: Float32 = Float32(0.0),
+    prior_denom: Float32 = Float32(1.0),
+) raises -> TFeatureFreqTensorTable:
+    """Fit FeatureFreq on categorical ids crossed with split history."""
+    if len(splits) == 0:
+        raise Error("split-history tensor needs at least one binary split")
+    var base = build_feature_freq_tensor_table(
+        x_colmajor, n_rows, n_features, source_features^,
+        prior_num, prior_denom,
+    )
+    var tensor = TFeatureTensor()
+    for i in range(len(base.source_features)):
+        tensor.add_cat_feature(UInt32(base.source_features[i]))
+    tensor.add_binary_splits(splits^)
+    var canonical_splits = tensor.get_splits()
+    if len(canonical_splits) > 30:
+        raise Error("split-history tensor supports at most 30 unique splits")
+    var entries = len(base.counts)
+    for _ in range(len(canonical_splits)):
+        if entries > 10000000 // 2:
+            raise Error("split-history tensor exceeds 10,000,000 entries")
+        entries *= 2
+    var counts = List[Int]()
+    counts.resize(entries, 0)
+    for row in range(n_rows):
+        var key = base.key_for_row(x_colmajor, n_rows, row)
+        for i in range(len(canonical_splits)):
+            key = 2 * key + _split_bit(
+                canonical_splits[i], cindex, n_rows, row
+            )
+        counts[key] += 1
+    return TFeatureFreqTensorTable(
+        tensor.get_hash(), base.source_features.copy(),
+        base.cardinalities.copy(), canonical_splits^,
+        prior_num, prior_denom, n_rows, counts^,
+    )
+
+
+def value_for_split_tensor_row(
+    table: TFeatureFreqTensorTable,
+    x_colmajor: List[Float32],
+    cindex: List[UInt32],
+    n_rows: Int,
+    row: Int,
+) raises -> Float32:
+    """Apply a serialized split-history tensor to one quantized row."""
+    var key = table.key_for_row(x_colmajor, n_rows, row)
+    if key < 0:
+        return table.prior_num / (Float32(table.denominator) + table.prior_denom)
+    for i in range(len(table.splits)):
+        key = 2 * key + _split_bit(table.splits[i], cindex, n_rows, row)
+    var count = 0
+    if key < len(table.counts):
+        count = table.counts[key]
+    return (Float32(count) + table.prior_num) / (
+        Float32(table.denominator) + table.prior_denom
     )
 
 
@@ -217,6 +313,31 @@ def parse_feature_freq_tensor_table(line: String) raises -> TFeatureFreqTensorTa
             raise Error("invalid tensor cardinality product")
         product *= card
         cards.append(card)
+    if String(t[p]) != "splits":
+        raise Error("expected tensor splits")
+    p += 1
+    var n_splits = Int(String(t[p]))
+    p += 1
+    if n_splits < 0 or n_splits > 30:
+        raise Error("invalid tensor split count")
+    var splits = List[TBinarySplit]()
+    for _ in range(n_splits):
+        var feature = Int(String(t[p]))
+        p += 1
+        var bin = Int(String(t[p]))
+        p += 1
+        var kind = Int(String(t[p]))
+        p += 1
+        if feature < 0 or feature > 2147483647 or bin < 0 or (
+            bin > 2147483647
+        ) or (
+            kind != BIN_SPLIT_TAKE_BIN and kind != BIN_SPLIT_TAKE_GREATER
+        ):
+            raise Error("invalid tensor split record")
+        splits.append(TBinarySplit(Int32(feature), Int32(bin), Int32(kind)))
+        if product > 10000000 // 2:
+            raise Error("tensor split table exceeds 10,000,000 entries")
+        product *= 2
     if String(t[p]) != "prior":
         raise Error("expected tensor prior")
     p += 1
@@ -258,9 +379,21 @@ def parse_feature_freq_tensor_table(line: String) raises -> TFeatureFreqTensorTa
         if i > 0 and sources[i - 1] >= sources[i]:
             raise Error("tensor sources are not canonical and unique")
         tensor.add_cat_feature(UInt32(sources[i]))
+    tensor.add_binary_splits(splits.copy())
     if tensor.get_hash() != hash:
         raise Error("feature tensor hash does not match its sources")
-    return TFeatureFreqTensorTable(hash, sources^, cards^, pn, pd, denom, counts^)
+    if len(tensor.splits) != len(splits):
+        raise Error("tensor splits are not canonical and unique")
+    for i in range(len(splits)):
+        if (
+            tensor.splits[i].feature_id != splits[i].feature_id
+            or tensor.splits[i].bin_idx != splits[i].bin_idx
+            or tensor.splits[i].split_type != splits[i].split_type
+        ):
+            raise Error("tensor splits are not in canonical order")
+    return TFeatureFreqTensorTable(
+        hash, sources^, cards^, splits^, pn, pd, denom, counts^
+    )
 
 
 def _same_projection(a: TFeatureFreqTensorTable, b: TFeatureFreqTensorTable) -> Bool:
@@ -270,10 +403,19 @@ def _same_projection(a: TFeatureFreqTensorTable, b: TFeatureFreqTensorTable) -> 
         return False
     if len(a.cardinalities) != len(b.cardinalities):
         return False
+    if len(a.splits) != len(b.splits):
+        return False
     for i in range(len(a.source_features)):
         if a.source_features[i] != b.source_features[i]:
             return False
         if a.cardinalities[i] != b.cardinalities[i]:
+            return False
+    for i in range(len(a.splits)):
+        if (
+            a.splits[i].feature_id != b.splits[i].feature_id
+            or a.splits[i].bin_idx != b.splits[i].bin_idx
+            or a.splits[i].split_type != b.splits[i].split_type
+        ):
             return False
     return True
 
@@ -367,4 +509,30 @@ struct TTensorCtrRegistry(Copyable, Movable):
                 raise Error("tensor CTR registry model columns are not contiguous")
             for r in range(n_rows):
                 out.append(feature.table.value_for_row(x_raw, n_rows, r))
+        return out^
+
+    def expand_for_apply_with_bins(
+        self,
+        x_raw: List[Float32],
+        cindex: List[UInt32],
+        n_rows: Int,
+        n_raw_features: Int,
+    ) raises -> List[Float32]:
+        """Apply both categorical-only and split-history tensor columns."""
+        if self.first_model_column != n_raw_features:
+            raise Error("tensor CTR apply plan/raw column mismatch")
+        if len(x_raw) != n_rows * n_raw_features:
+            raise Error("tensor CTR apply raw shape mismatch")
+        var out = x_raw.copy()
+        for i in range(len(self.features)):
+            ref feature = self.features[i]
+            if feature.model_column != n_raw_features + i:
+                raise Error("tensor CTR registry model columns are not contiguous")
+            for r in range(n_rows):
+                if len(feature.table.splits) == 0:
+                    out.append(feature.table.value_for_row(x_raw, n_rows, r))
+                else:
+                    out.append(value_for_split_tensor_row(
+                        feature.table, x_raw, cindex, n_rows, r
+                    ))
         return out^

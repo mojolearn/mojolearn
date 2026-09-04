@@ -15,7 +15,10 @@ from max.gpu.host import DeviceContext
 from core.identity_trace import IdentityTrace
 from mamba.checks.mamba_backward import (
     PROJ_OUT,
+    PROJ_DT,
+    PROJ_X,
     RED_D,
+    RED_DT_BIAS,
     mamba_backward_proj_a_into,
     mamba_backward_proj_b_into,
     mamba_backward_reduce_into,
@@ -37,7 +40,12 @@ from mamba.impl.transformers.models.mamba.modeling_mamba import (
     mamba_upload,
     mamba_zeros,
 )
-from mamba.impl.transformers.models.mamba.modeling_mamba_backward import mamba_bwd_gate_into
+from mamba.impl.transformers.models.mamba.modeling_mamba_backward import (
+    mamba_bwd_concat_xp_into,
+    mamba_bwd_ddtp_into,
+    mamba_bwd_du_join_into,
+    mamba_bwd_gate_into,
+)
 from mamba.impl.mamba_ssm.ops.selective_scan_backward import (
     bwd_da_partial_floats,
     bwd_dh_floats,
@@ -168,7 +176,41 @@ def main() raises:
     var da_log = mamba_zeros(ctx, dims.d_inner * D_STATE)
     mamba_bwd_da_log_into(ctx, da_log, da, stages.a_out, dims.d_inner)
 
+    # B22-B29: softplus derivative, dt projection, inverse x_proj split,
+    # x-projection gradients, and the three-way join at the scan input.
+    var ddtp = mamba_zeros(ctx, m * dims.d_inner)
+    mamba_bwd_ddtp_into(
+        ctx, ddtp, ddelta, stages.dt_proj, dweights.b_dt, m, dims.d_inner
+    )
+    var ddtl = mamba_zeros(ctx, m * dims.dt_rank)
+    var dw_dt = mamba_zeros(ctx, dims.d_inner * dims.dt_rank)
+    mamba_backward_proj_a_into(
+        ctx, ddtl, ddtp, dweights.w_dt, workspace, PROJ_DT, dims, m
+    )
+    mamba_backward_proj_b_into(
+        ctx, dw_dt, ddtp, stages.dt_low, workspace, PROJ_DT, dims, m
+    )
+    var db_dt = mamba_zeros(ctx, dims.d_inner)
     var ones = mamba_upload(ctx, _ones(m))
+    mamba_backward_reduce_into(
+        ctx, db_dt, ddtp, ones, workspace, RED_DT_BIAS, dims, m
+    )
+    var dxp = mamba_zeros(ctx, m * dims.x_proj_rows())
+    mamba_bwd_concat_xp_into(ctx, dxp, ddtl, dbm, dcm, m, dims)
+    var du_x = mamba_zeros(ctx, m * dims.d_inner)
+    var dw_x = mamba_zeros(ctx, dims.x_proj_rows() * dims.d_inner)
+    mamba_backward_proj_a_into(
+        ctx, du_x, dxp, dweights.w_x, workspace, PROJ_X, dims, m
+    )
+    mamba_backward_proj_b_into(
+        ctx, dw_x, dxp, stages.silu_out, workspace, PROJ_X, dims, m
+    )
+    var du = mamba_zeros(ctx, m * dims.d_inner)
+    var dconv = mamba_zeros(ctx, m * dims.d_inner)
+    mamba_bwd_du_join_into(
+        ctx, du, dconv, du_d, du_s, du_x, stages.conv_out, m, dims.d_inner
+    )
+
     var dd_skip = mamba_zeros(ctx, dims.d_inner)
     mamba_backward_reduce_into(
         ctx, dd_skip, product_d, ones, workspace, RED_D, dims, m
@@ -188,6 +230,18 @@ def main() raises:
         mamba_download(ctx, da_log, dims.d_inner * D_STATE),
     )
     _write_f32(
+        output + "/grad.dt_proj.weight.f32",
+        mamba_download(ctx, dw_dt, dims.d_inner * dims.dt_rank),
+    )
+    _write_f32(
+        output + "/grad.dt_proj.bias.f32",
+        mamba_download(ctx, db_dt, dims.d_inner),
+    )
+    _write_f32(
+        output + "/grad.x_proj.weight.f32",
+        mamba_download(ctx, dw_x, dims.x_proj_rows() * dims.d_inner),
+    )
+    _write_f32(
         output + "/stage.dB.f32", mamba_download(ctx, dbm, m * D_STATE)
     )
     _write_f32(
@@ -198,14 +252,24 @@ def main() raises:
             "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
             "\"family\":\"mamba1\",\"case\":\"base_b2_l4_d8\","
             "\"objective\":\"signed_dyadic_weight_v1\","
-            "\"producer\":\"mamba1-device-output-gate-scan-v1\","
+            "\"producer\":\"mamba1-device-through-du-join-v1\","
             "\"partial\":true,\"tensors\":[\"out_proj.weight\",\"D\","
-            "\"A_log\",\"stage.dB\",\"stage.dC\"]}\n"
+            "\"A_log\",\"dt_proj.weight\",\"dt_proj.bias\","
+            "\"x_proj.weight\",\"stage.dB\",\"stage.dC\"]}\n"
         )
     print(
         "MAMBA1 BACKWARD PARTIAL DEVICE: output/gate plus checkpoint, reverse"
-        " scan, B/C contractions and A_log derivative executed"
+        " scan, B/C/A_log, dt/x projections and du join executed"
     )
+    _ = dconv^
+    _ = du^
+    _ = dw_x^
+    _ = du_x^
+    _ = dxp^
+    _ = db_dt^
+    _ = dw_dt^
+    _ = ddtl^
+    _ = ddtp^
     _ = da_log^
     _ = da_partial^
     _ = da^

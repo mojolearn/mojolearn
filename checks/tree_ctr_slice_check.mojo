@@ -4,10 +4,16 @@
 
 from gbdt.models.tensor_ctr_value_table import (
     build_feature_freq_tensor_table,
+    build_split_feature_freq_tensor_table,
     join_tensor_hash,
     parse_feature_freq_tensor_table,
     split_tensor_hash,
     TTensorCtrRegistry,
+    value_for_split_tensor_row,
+)
+from gbdt.models.oblivious_model import (
+    BIN_SPLIT_TAKE_GREATER,
+    TBinarySplit,
 )
 
 
@@ -79,4 +85,32 @@ def main() raises:
     if loaded.value_for_row(unseen, 6, 0) != Float32(1.0 / 7.0):
         # (0,1) is seen once; make the assertion explicit rather than vague.
         raise Error("combination CTR tensor key order changed")
+
+    # Dynamic split history: cross the same categorical tensor with the
+    # canonical predicate `quantized feature 0 > 0`, then prove that the
+    # predicate and its counts survive model text and registry application.
+    var cindex: List[UInt32] = [0, 0, 1, 1, 1, 0]
+    var history: List[TBinarySplit] = [
+        TBinarySplit(Int32(0), Int32(0), Int32(BIN_SPLIT_TAKE_GREATER))
+    ]
+    var split_table = build_split_feature_freq_tensor_table(
+        x, cindex, 6, 3, sources.copy(), history^
+    )
+    var split_text = split_table.to_text()
+    var split_loaded = parse_feature_freq_tensor_table(split_text)
+    if split_loaded.to_text() != split_text:
+        raise Error("split-history tensor is not canonical on round trip")
+    for r in range(6):
+        if value_for_split_tensor_row(
+            split_loaded, x, cindex, 6, r
+        ) != want[r]:
+            raise Error("split-history FeatureFreq mismatch at row " + String(r))
+    var split_registry = TTensorCtrRegistry(3)
+    _ = split_registry.register(split_loaded^)
+    var split_expanded = split_registry.expand_for_apply_with_bins(
+        x, cindex, 6, 3
+    )
+    for r in range(6):
+        if split_expanded[18 + r] != want[r]:
+            raise Error("split-history registry apply mismatch")
     print("tree CTR slice: deterministic pair FeatureFreq + text round trip PASS")
