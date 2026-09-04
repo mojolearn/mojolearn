@@ -1245,6 +1245,7 @@ check-spectral = "mojo run -I . spectral/checks/spectral_check.mojo"
 spectral-card = "mojo run -I . spectral/spectral_main.mojo"
 check-umap = "mojo run -I . umap/checks/graph_check.mojo"
 check-umap-identical = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . umap/checks/graph_check.mojo"
+check-umap-spectral = "mojo run -I . umap/checks/spectral_init_check.mojo"
 check-if = "mojo run -I . isolation_forest/checks/if_check.mojo"
 
 # The depthwise IDENTITY TRACE: one hash record per stage of a fit, so a
