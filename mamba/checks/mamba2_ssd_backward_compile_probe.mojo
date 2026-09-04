@@ -7,6 +7,7 @@ from mamba.impl.mamba_ssm.ops.mamba2_ssd_backward import (
     Mamba2SSDBackwardState,
     Mamba2SSDScaleReduction,
     Mamba2SSDDiscretizeBackward,
+    Mamba2ConvBackward,
     mamba2_reduce_scale_product_into,
     mamba2_reverse_cumsum_and_da_into,
     mamba2_ydiag_xd_and_partial_dt_into,
@@ -14,6 +15,7 @@ from mamba.impl.mamba_ssm.ops.mamba2_ssd_backward import (
     mamba2_s18_direct_dpass_into,
     mamba2_cstate_ddecay_into,
     mamba2_postconv_merge_into,
+    mamba2_conv_backward_prefill_into,
 )
 
 
@@ -25,6 +27,7 @@ def main() raises:
     var out = Mamba2SSDBackwardState(ctx, 2, 3, 1)
     var reduction = Mamba2SSDScaleReduction(ctx, 2, 3, 1, 256)
     var discretize = Mamba2SSDDiscretizeBackward(ctx, 2, 513, 1)
+    var conv_backward = Mamba2ConvBackward(ctx, 2, 513, 40)
     var d_y = ctx.enqueue_create_buffer[DType.float32](2 * 513 * 1 * 64)
     var cb_g = ctx.enqueue_create_buffer[DType.float32](2 * 3 * 256 * 256)
     var seg_l = ctx.enqueue_create_buffer[DType.float32](2 * 3 * 1 * 256 * 256)
@@ -61,4 +64,8 @@ def main() raises:
         2, 513, 1, 32, 40, 3, 256, 0.0, 1.0
     )
     mamba2_postconv_merge_into(ctx, discretize, out, d_y, 2, 513, 1)
+    mamba2_conv_backward_prefill_into(
+        ctx, conv_backward, discretize, xbc, pass_states, cb_g,
+        2, 513, 32, 40, 98, 0,
+    )
     print("mamba2 SSD backward reverse-chunk recurrence compile probe")

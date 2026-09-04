@@ -44,6 +44,7 @@ from mamba.impl.mamba_ssm.modules.ssd_minimal import m2_q_eff
 from mamba.impl.mamba_ssm.ops.mamba2_ssd_backward import (
     Mamba2SSDBackwardState,
     Mamba2SSDDiscretizeBackward,
+    Mamba2ConvBackward,
     Mamba2SSDScaleReduction,
     mamba2_reduce_scale_product_into,
     mamba2_reverse_cumsum_and_da_into,
@@ -51,6 +52,7 @@ from mamba.impl.mamba_ssm.ops.mamba2_ssd_backward import (
     mamba2_reverse_chunk_state_into,
     mamba2_cstate_ddecay_into,
     mamba2_postconv_merge_into,
+    mamba2_conv_backward_prefill_into,
     mamba2_s18_direct_dpass_into,
 )
 from mamba.impl.transformers.models.mamba.modeling_mamba import (
@@ -227,6 +229,12 @@ def main() raises:
     mamba2_postconv_merge_into(
         ctx, discretize_backward, ssd_backward, tail.d_x_from_d,
         fixture.b, stages.t_work, dims.nheads,
+    )
+    var conv_backward = Mamba2ConvBackward(ctx, fixture.b, fixture.l, dims.conv_dim())
+    mamba2_conv_backward_prefill_into(
+        ctx, conv_backward, discretize_backward, stages.conv_out,
+        stages.in_proj, dweights.conv_w, fixture.b, fixture.l, dims.d_inner,
+        dims.conv_dim(), dims.d_in_proj(), stages.q0,
     )
     ctx.synchronize()
     _write_f32(
@@ -435,6 +443,9 @@ def main() raises:
             fixture.b * stages.t_work * dims.nheads,
         ),
     )
+    _write_f32(dump_dir + "/grad.partial.conv.input.f32", mamba_download(ctx, conv_backward.d_in_xbc, m*dims.conv_dim()))
+    _write_f32(dump_dir + "/grad.conv1d.weight.f32", mamba_download(ctx, conv_backward.d_w, dims.conv_dim()*4))
+    _write_f32(dump_dir + "/grad.conv1d.bias.f32", mamba_download(ctx, conv_backward.d_b, dims.conv_dim()))
     _write_f32(
         dump_dir + "/grad.partial.dt_bias.merged.f32",
         mamba_download(ctx, discretize_backward.d_dt_bias, dims.nheads),
@@ -464,6 +475,7 @@ def main() raises:
             "\"partial.xd.from_cstate\",\"partial.xd.total\","
             "\"partial.B.from_cstate\",\"partial.B.total\","
             "\"partial.C.total\",\"partial.silu.x.total\","
+            "\"partial.conv.input\",\"conv1d.weight\",\"conv1d.bias\","
             "\"partial.dt.from_xd\",\"partial.dt.merged\","
             "\"partial.dt_raw.merged\",\"partial.dt_bias.merged\"]}\n"
         )
@@ -478,6 +490,7 @@ def main() raises:
     _ = d_final^
     _ = scale_reduction^
     _ = discretize_backward^
+    _ = conv_backward^
     _ = d_residual^
     _ = stages^
     _ = state^

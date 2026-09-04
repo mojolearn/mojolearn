@@ -137,7 +137,9 @@ def generate(args):
         # output is residual + linear(gate, out_proj.weight), so its incoming
         # cotangent is exactly the objective cotangent.  Rebuilding this one
         # linear seam keeps the reference independent of the Mojo composer.
-        gate_input = stages["gate.out"].detach().requires_grad_(True)
+        gate_input = stages["gate.out"].detach().reshape(
+            stages["gate.out"].shape[0], -1
+        ).requires_grad_(True)
         out_weight = params["out_proj.weight"].detach().requires_grad_(True)
         projected = torch.nn.functional.linear(gate_input, out_weight)
         d_gate, _ = torch.autograd.grad(
@@ -149,7 +151,8 @@ def generate(args):
         z_input = stages["in_proj.out"].detach()[:, :skip_input.shape[1] * skip_input.shape[2]].reshape(skip_input.shape).requires_grad_(True)
         gate_isolated = skip_input * torch.nn.functional.silu(z_input)
         d_skip, d_z = torch.autograd.grad(
-            (gate_isolated * d_gate.detach()).sum(), (skip_input, z_input)
+            (gate_isolated * d_gate.detach().reshape_as(skip_input)).sum(),
+            (skip_input, z_input)
         )
         intermediate_gradients.extend((
             ("stage.skip.out", d_skip),
@@ -267,8 +270,21 @@ def generate(args):
             direct=torch.einsum("bthp,bthn,bth->bhpn",dy_state[:,lo:hi],qrot.detach()[:,lo:hi],ev)
             direct_states[:,cc]=direct;carry_state=direct+carry_state*torch.exp(dacs_state[:,:,cc,-1])[:,:,None,None];total_states[:,cc]=carry_state
         intermediate_gradients.extend((("partial.s17.state.direct",direct_states),("partial.s17.state.total",total_states),("partial.s17.initial_state",carry_state)))
+        qr17=qrot.detach().requires_grad_(True);da17=dacs_state.detach().requires_grad_(True);ps17=stages["pass.states"].detach();ys=[]
+        for cc in range(chunks):
+            lo=cc*qsize;hi=min(length,lo+qsize);ys.append(torch.einsum("bthn,bhpn->bthp",qr17[:,lo:hi],ps17[:,cc])*torch.exp(da17[:,:,cc,:hi-lo]).permute(0,2,1)[...,None])
+        dq17,dda_read=torch.autograd.grad((torch.cat(ys,1)*dy_state).sum(),(qr17,da17))
+        kr17=kscaled.detach().requires_grad_(True);vr17=value_s16.detach().requires_grad_(True);da_rec=dacs_state.detach().requires_grad_(True);loss_rec=(kr17.sum()+vr17.sum()+da_rec.sum())*0
+        for cc in range(chunks-1):
+            lo=cc*qsize;hi=min(length,lo+qsize);last=da_rec[:,:,cc,-1];dec=torch.exp(last[:,:,None]-da_rec[:,:,cc,:hi-lo]);inc=torch.einsum("bthp,bthn,bht->bhpn",vr17[:,lo:hi],kr17[:,lo:hi],dec);hn=torch.exp(last)[:,:,None,None]*ps17[:,cc]+inc;loss_rec=loss_rec+(hn*total_states[:,cc+1].detach()).sum()
+        dk17,dv17,dda_rec=torch.autograd.grad(loss_rec,(kr17,vr17,da_rec),allow_unused=True)
+        if dk17 is None:dk17=torch.zeros_like(kr17);dv17=torch.zeros_like(vr17);dda_rec=torch.zeros_like(da_rec)
+        real_dacs=lambda g: torch.cat([g[:,:,cc,:min(qsize,length-cc*qsize)].permute(0,2,1) for cc in range(chunks)],1).reshape(-1,g.shape[1])
+        intermediate_gradients.extend((("partial.s17.readout.rot.q",dq17),("partial.s17.readout.dacs",real_dacs(dda_read)),("partial.s17.recur.kscale",dk17),("partial.s17.recur.value",dv17),("partial.s17.recur.dacs",real_dacs(dda_rec))))
 
-        gate32 = stages["gate.out"].detach().to(torch.float32)
+        gate32 = stages["gate.out"].detach().reshape(
+            stages["gate.out"].shape[0], -1
+        ).to(torch.float32)
         gate32.requires_grad_(True)
         weight32 = params["out_proj.weight"].detach().to(torch.float32)
         weight32.requires_grad_(True)
@@ -285,7 +301,8 @@ def generate(args):
         z32.requires_grad_(True)
         gate_isolated32 = skip32 * torch.nn.functional.silu(z32)
         dskip32, dz32 = torch.autograd.grad(
-            (gate_isolated32 * d_gate32.detach()).sum(), (skip32, z32)
+            (gate_isolated32 * d_gate32.detach().reshape_as(skip32)).sum(),
+            (skip32, z32)
         )
         reference32["stage.skip.out"] = dskip32
         reference32["stage.in_proj.z"] = dz32
@@ -360,6 +377,13 @@ def generate(args):
         for cc in range(chunks-1,-1,-1):
             lo=cc*qsize;hi=min(length,lo+qsize);ev32=torch.exp(dacs_s32[:,:,cc,:hi-lo]).permute(0,2,1);dr32=torch.einsum("bthp,bthn,bth->bhpn",dys32[:,lo:hi],qrot32.detach()[:,lo:hi],ev32);dsdir32[:,cc]=dr32;car32=dr32+car32*torch.exp(dacs_s32[:,:,cc,-1])[:,:,None,None];dstot32[:,cc]=car32
         reference32.update({"partial.s17.state.direct":dsdir32,"partial.s17.state.total":dstot32,"partial.s17.initial_state":car32})
+        qr1732=qrot32.detach().requires_grad_(True);da1732=dacs_s32.detach().requires_grad_(True);ps1732=stages["pass.states"].detach().to(torch.float32);ys1732=[]
+        for cc in range(chunks):
+            lo=cc*qsize;hi=min(length,lo+qsize);ys1732.append(torch.einsum("bthn,bhpn->bthp",qr1732[:,lo:hi],ps1732[:,cc])*torch.exp(da1732[:,:,cc,:hi-lo]).permute(0,2,1)[...,None])
+        dq1732,ddar1732=torch.autograd.grad((torch.cat(ys1732,1)*dys32).sum(),(qr1732,da1732));kr1732=ks32.detach().requires_grad_(True);vr1732=vv32.detach().requires_grad_(True);darc32=dacs_s32.detach().requires_grad_(True);lr32=(kr1732.sum()+vr1732.sum()+darc32.sum())*0
+        for cc in range(chunks-1):
+            lo=cc*qsize;hi=min(length,lo+qsize);last=darc32[:,:,cc,-1];dec=torch.exp(last[:,:,None]-darc32[:,:,cc,:hi-lo]);inc=torch.einsum("bthp,bthn,bht->bhpn",vr1732[:,lo:hi],kr1732[:,lo:hi],dec);hn=torch.exp(last)[:,:,None,None]*ps1732[:,cc]+inc;lr32=lr32+(hn*dstot32[:,cc+1].detach()).sum()
+        dk1732,dv1732,ddac1732=torch.autograd.grad(lr32,(kr1732,vr1732,darc32));reference32.update({"partial.s17.readout.rot.q":dq1732,"partial.s17.readout.dacs":real_dacs(ddar1732),"partial.s17.recur.kscale":dk1732,"partial.s17.recur.value":dv1732,"partial.s17.recur.dacs":real_dacs(ddac1732)})
     if args.family == "mamba2":
         tail_input = stages["gnorm.out"].detach().requires_grad_(True)
         tail_output = torch.nn.functional.linear(
@@ -594,6 +618,24 @@ def generate(args):
             ("partial.C.total", direct_d_c + dc_cb),
             ("partial.silu.x.total", d_x_from_d.reshape_as(dx_from_xd) + dx_from_xd),
         ))
+        conv_input = stages["in_proj.out"].reshape(bsz, length, -1)[
+            ..., nheads * headdim : nheads * headdim + conv_dim
+        ].detach().requires_grad_(True)
+        conv_w = params["conv1d.weight"].detach().requires_grad_(True)
+        conv_b = params["conv1d.bias"].detach().requires_grad_(True)
+        conv_pre = torch.nn.functional.conv1d(
+            conv_input.transpose(1, 2), conv_w, conv_b,
+            padding=conv_w.shape[-1] - 1, groups=conv_dim,
+        )[..., :length].transpose(1, 2)
+        upstream_conv = torch.cat((
+            (d_x_from_d.reshape_as(dx_from_xd) + dx_from_xd).reshape(bsz,length,-1),
+            (db_cb + db_cstate), direct_d_c + dc_cb,
+        ), dim=-1)
+        din_conv, dw_conv, dbias_conv = torch.autograd.grad(
+            (torch.nn.functional.silu(conv_pre) * upstream_conv.detach()).sum(),
+            (conv_input, conv_w, conv_b),
+        )
+        intermediate_gradients.append(("partial.conv.input", din_conv))
         raw_start = nheads * headdim + conv_dim
         dtraw_leaf = stages["in_proj.out"][..., raw_start:].reshape(
             bsz, length, nheads
@@ -851,6 +893,15 @@ def generate(args):
         reference32["partial.silu.x.total"] = (
             reference32["partial.silu.x.from_D"].reshape_as(dx_xd32) + dx_xd32
         )
+        cin32 = stages32["in_proj.out"].reshape(b32,l32,-1)[...,h32*p_dim32:h32*p_dim32+cd32].detach().requires_grad_(True)
+        cw32 = p32["conv1d.weight"].detach().requires_grad_(True)
+        cbias32 = p32["conv1d.bias"].detach().requires_grad_(True)
+        cp32 = torch.nn.functional.conv1d(cin32.transpose(1,2),cw32,cbias32,padding=cw32.shape[-1]-1,groups=cd32)[...,:l32].transpose(1,2)
+        cup32 = torch.cat((reference32["partial.silu.x.total"].reshape(b32,l32,-1),reference32["partial.B.total"],reference32["partial.C.total"]),dim=-1)
+        ci32,cwg32,cbg32=torch.autograd.grad((torch.nn.functional.silu(cp32)*cup32.detach()).sum(),(cin32,cw32,cbias32))
+        reference32["partial.conv.input"] = ci32
+        reference32["conv1d.weight"] = cwg32
+        reference32["conv1d.bias"] = cbg32
         raw_start32 = h32 * p_dim32 + cd32
         dtraw32 = stages32["in_proj.out"][..., raw_start32:].reshape(
             b32, l32, h32
@@ -969,6 +1020,10 @@ def compare(args):
                 f"provenance {key}: {dump_manifest.get(key)!r}, expected {expected_value!r}"
             )
     for name, entry in manifest["gradients"].items():
+        if name not in dump_manifest.get("tensors", []):
+            if not args.allow_partial:
+                failures.append(f"{name}: dump manifest does not name gradient")
+            continue
         expected = np.fromfile(oracle_dir / entry["file"], dtype="<f8").reshape(entry["shape"])
         path = actual_dir / entry["file"]
         if not path.exists():
@@ -979,9 +1034,6 @@ def compare(args):
                 if not args.allow_partial:
                     failures.append(f"{name}: missing gradient dump")
                 continue
-        if name not in dump_manifest.get("tensors", []):
-            failures.append(f"{name}: file exists but dump manifest does not name it")
-            continue
         dtype = "<f4" if path.suffix == ".f32" else "<f8"
         chosen_oracle = "float64"
         actual = np.fromfile(path, dtype=dtype).astype(np.float64)

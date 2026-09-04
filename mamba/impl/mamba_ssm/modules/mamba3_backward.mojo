@@ -574,3 +574,80 @@ def mamba3_backward_s17_state_into(
 ) raises:
     var cells=b*dims.nheads*M3_HEADDIM*M3_D_STATE
     ctx.enqueue_function[mamba3_s17_reverse_state_kernel](d_direct.unsafe_ptr(),d_total.unsafe_ptr(),d_initial.unsafe_ptr(),d_y.unsafe_ptr(),q.unsafe_ptr(),dacs.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(_grid(cells),1,1),block_dim=(M3_BWD_TPB,1,1))
+
+
+def mamba3_s17_operands_kernel(
+    d_q_read:MutPointer[Float32,MutAnyOrigin],d_dacs_read:MutPointer[Float32,MutAnyOrigin],
+    d_k_rec:MutPointer[Float32,MutAnyOrigin],d_v_rec:MutPointer[Float32,MutAnyOrigin],d_dacs_rec:MutPointer[Float32,MutAnyOrigin],
+    d_y:MutPointer[Float32,MutAnyOrigin],q:MutPointer[Float32,MutAnyOrigin],k:MutPointer[Float32,MutAnyOrigin],v:MutPointer[Float32,MutAnyOrigin],
+    dacs:MutPointer[Float32,MutAnyOrigin],states:MutPointer[Float32,MutAnyOrigin],d_states:MutPointer[Float32,MutAnyOrigin],
+    b_in:Int32,l_in:Int32,nh_in:Int32,qs_in:Int32,
+):
+    var b=Int(b_in);var l=Int(l_in);var nh=Int(nh_in);var qs=Int(qs_in);var nc=(l+qs-1)//qs
+    var th=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if th>=b*l*nh:return
+    var h=th%nh;var token=(th//nh)%l;var bb=th//(nh*l);var c=token//qs;var inner=token%qs
+    var dcidx=((bb*nh+h)*nc+c)*qs+inner;var ev=ftz(identical_exp(ftz(dacs.unsafe_load(dcidx))))
+    var read_scalar=Float32(0.0)
+    for n in range(M3_D_STATE):
+        var dq=Float32(0.0)
+        for p in range(M3_HEADDIM):
+            var dy=ftz(d_y.unsafe_load(th*M3_HEADDIM+p));var hs=ftz(states.unsafe_load((((bb*nc+c)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
+            dq=ftz(identical_mul_add(dy,hs,dq))
+        d_q_read.unsafe_store(th*M3_D_STATE+n,ftz(pinned_mul(dq,ev)))
+        read_scalar=ftz(identical_mul_add(ftz(q.unsafe_load(th*M3_D_STATE+n)),dq,read_scalar))
+    d_dacs_read.unsafe_store(th,ftz(pinned_mul(read_scalar,ev)))
+    var last=ftz(dacs.unsafe_load(((bb*nh+h)*nc+c)*qs+(qs-1)));var dec=ftz(identical_exp(ftz(last-ftz(dacs.unsafe_load(dcidx)))))
+    var rec_scalar=Float32(0.0)
+    for n in range(M3_D_STATE):
+        var dk=Float32(0.0)
+        for p in range(M3_HEADDIM):
+            var carry=Float32(0.0)
+            if c+1<nc:carry=ftz(d_states.unsafe_load((((bb*nc+c+1)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
+            dk=ftz(identical_mul_add(carry,ftz(v.unsafe_load(th*M3_HEADDIM+p)),dk))
+        d_k_rec.unsafe_store(th*M3_D_STATE+n,ftz(pinned_mul(dk,dec)))
+    for p in range(M3_HEADDIM):
+        var dv=Float32(0.0)
+        for n in range(M3_D_STATE):
+            var carry=Float32(0.0)
+            if c+1<nc:carry=ftz(d_states.unsafe_load((((bb*nc+c+1)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
+            dv=ftz(identical_mul_add(carry,ftz(k.unsafe_load(th*M3_D_STATE+n)),dv))
+        var outv=ftz(pinned_mul(dv,dec));d_v_rec.unsafe_store(th*M3_HEADDIM+p,outv)
+        rec_scalar=ftz(identical_mul_add(outv,ftz(v.unsafe_load(th*M3_HEADDIM+p)),rec_scalar))
+    var dr=ftz(-rec_scalar)
+    if inner==qs-1 or token==l-1:
+        var add=Float32(0.0)
+        for j in range(qs):
+            var tj=c*qs+j
+            if tj<l:
+                var idx=((bb*nh+h)*nc+c)*qs+j;var de=ftz(identical_exp(ftz(last-ftz(dacs.unsafe_load(idx)))))
+                for p in range(M3_HEADDIM):
+                    for n in range(M3_D_STATE):
+                        var carry=Float32(0.0)
+                        if c+1<nc:carry=ftz(d_states.unsafe_load((((bb*nc+c+1)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
+                        add=ftz(identical_mul_add(carry,ftz(pinned_mul(ftz(pinned_mul(ftz(v.unsafe_load(((bb*l+tj)*nh+h)*M3_HEADDIM+p)),ftz(k.unsafe_load(((bb*l+tj)*nh+h)*M3_D_STATE+n)))),de)),add))
+        for p in range(M3_HEADDIM):
+            for n in range(M3_D_STATE):
+                var carry=Float32(0.0)
+                if c+1<nc:carry=ftz(d_states.unsafe_load((((bb*nc+c+1)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
+                var hs=ftz(states.unsafe_load((((bb*nc+c)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
+                add=ftz(identical_mul_add(carry,ftz(pinned_mul(hs,ftz(identical_exp(last)))),add))
+        dr=ftz(dr+add)
+    d_dacs_rec.unsafe_store(th,dr)
+
+
+def mamba3_backward_s17_operands_into(ctx:DeviceContext,mut dq:DeviceBuffer[DType.float32],mut ddr:DeviceBuffer[DType.float32],mut dk:DeviceBuffer[DType.float32],mut dv:DeviceBuffer[DType.float32],mut ddc:DeviceBuffer[DType.float32],mut dy:DeviceBuffer[DType.float32],mut q:DeviceBuffer[DType.float32],mut k:DeviceBuffer[DType.float32],mut v:DeviceBuffer[DType.float32],mut dacs:DeviceBuffer[DType.float32],mut states:DeviceBuffer[DType.float32],mut dstates:DeviceBuffer[DType.float32],b:Int,l:Int,dims:Mamba3Dims,qs:Int) raises:
+    var cells=b*l*dims.nheads
+    ctx.enqueue_function[mamba3_s17_operands_kernel](dq.unsafe_ptr(),ddr.unsafe_ptr(),dk.unsafe_ptr(),dv.unsafe_ptr(),ddc.unsafe_ptr(),dy.unsafe_ptr(),q.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),dacs.unsafe_ptr(),states.unsafe_ptr(),dstates.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(_grid(cells),1,1),block_dim=(M3_BWD_TPB,1,1))
+
+
+def mamba3_join_two_kernel(out:MutPointer[Float32,MutAnyOrigin],a:MutPointer[Float32,MutAnyOrigin],b:MutPointer[Float32,MutAnyOrigin],n_in:Int32):
+    var i=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if i<Int(n_in):out.unsafe_store(i,ftz(ftz(a.unsafe_load(i))+ftz(b.unsafe_load(i))))
+
+
+def mamba3_backward_join_s16_s17_into(ctx:DeviceContext,mut qout:DeviceBuffer[DType.float32],mut kout:DeviceBuffer[DType.float32],mut vout:DeviceBuffer[DType.float32],mut dout:DeviceBuffer[DType.float32],mut q16:DeviceBuffer[DType.float32],mut q17:DeviceBuffer[DType.float32],mut k16:DeviceBuffer[DType.float32],mut k17:DeviceBuffer[DType.float32],mut vold:DeviceBuffer[DType.float32],mut v17:DeviceBuffer[DType.float32],mut dr:DeviceBuffer[DType.float32],mut dc:DeviceBuffer[DType.float32],state_cells:Int,value_cells:Int,head_cells:Int) raises:
+    ctx.enqueue_function[mamba3_join_two_kernel](qout.unsafe_ptr(),q16.unsafe_ptr(),q17.unsafe_ptr(),Int32(state_cells),grid_dim=(_grid(state_cells),1,1),block_dim=(M3_BWD_TPB,1,1))
+    ctx.enqueue_function[mamba3_join_two_kernel](kout.unsafe_ptr(),k16.unsafe_ptr(),k17.unsafe_ptr(),Int32(state_cells),grid_dim=(_grid(state_cells),1,1),block_dim=(M3_BWD_TPB,1,1))
+    ctx.enqueue_function[mamba3_join_two_kernel](vout.unsafe_ptr(),vold.unsafe_ptr(),v17.unsafe_ptr(),Int32(value_cells),grid_dim=(_grid(value_cells),1,1),block_dim=(M3_BWD_TPB,1,1))
+    ctx.enqueue_function[mamba3_join_two_kernel](dout.unsafe_ptr(),dr.unsafe_ptr(),dc.unsafe_ptr(),Int32(head_cells),grid_dim=(_grid(head_cells),1,1),block_dim=(M3_BWD_TPB,1,1))

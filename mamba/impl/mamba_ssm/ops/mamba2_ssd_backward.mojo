@@ -472,6 +472,81 @@ struct Mamba2SSDDiscretizeBackward(Movable):
         self.d_da_total = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
 
 
+struct Mamba2ConvBackward(Movable):
+    var d_conv: DeviceBuffer[DType.float32]
+    var d_in_xbc: DeviceBuffer[DType.float32]
+    var d_w: DeviceBuffer[DType.float32]
+    var d_b: DeviceBuffer[DType.float32]
+
+    def __init__(out self, ctx: DeviceContext, b: Int, l: Int, cd: Int) raises:
+        self.d_conv = ctx.enqueue_create_buffer[DType.float32](b*l*cd)
+        self.d_in_xbc = ctx.enqueue_create_buffer[DType.float32](b*l*cd)
+        self.d_w = ctx.enqueue_create_buffer[DType.float32](cd*4)
+        self.d_b = ctx.enqueue_create_buffer[DType.float32](cd)
+
+
+def mamba2_conv_backward_kernel(
+    d_conv: MutPointer[Float32, MutAnyOrigin], d_in: MutPointer[Float32, MutAnyOrigin],
+    d_w: MutPointer[Float32, MutAnyOrigin], d_b: MutPointer[Float32, MutAnyOrigin],
+    dx: MutPointer[Float32, MutAnyOrigin], dbv: MutPointer[Float32, MutAnyOrigin],
+    dcv: MutPointer[Float32, MutAnyOrigin], conv: MutPointer[Float32, MutAnyOrigin],
+    inp: MutPointer[Float32, MutAnyOrigin], w: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, l_in: Int32, di_in: Int32, cd_in: Int32, dip_in: Int32,
+):
+    var b=Int(b_in); var l=Int(l_in); var di=Int(di_in); var cd=Int(cd_in); var dip=Int(dip_in)
+    var d=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if d>=cd: return
+    var bias=Float32(0.0)
+    var gw0=Float32(0.0); var gw1=Float32(0.0); var gw2=Float32(0.0); var gw3=Float32(0.0)
+    for bb in range(b):
+        for t in range(l):
+            var up: Float32
+            if d<di: up=ftz(dx.unsafe_load((bb*l+t)*di+d))
+            elif d<di+M2_D_STATE: up=ftz(dbv.unsafe_load((bb*l+t)*M2_D_STATE+d-di))
+            else: up=ftz(dcv.unsafe_load((bb*l+t)*M2_D_STATE+d-di-M2_D_STATE))
+            var cv=ftz(conv.unsafe_load((bb*l+t)*cd+d)); var sig=ftz(identical_sigmoid(cv))
+            var deriv=ftz(sig+ftz(pinned_mul(cv,ftz(pinned_mul(sig,ftz(1.0-sig))))))
+            var g=ftz(pinned_mul(up,deriv)); d_conv.unsafe_store((bb*l+t)*cd+d,g)
+            bias=ftz(bias+g)
+            for k in range(4):
+                var p=t-3+k
+                if p>=0:
+                    var xv=ftz(inp.unsafe_load((bb*l+p)*dip+di+d))
+                    if k==0: gw0=ftz(identical_mul_add(g,xv,gw0))
+                    elif k==1: gw1=ftz(identical_mul_add(g,xv,gw1))
+                    elif k==2: gw2=ftz(identical_mul_add(g,xv,gw2))
+                    else: gw3=ftz(identical_mul_add(g,xv,gw3))
+        for t in range(l):
+            var gi=Float32(0.0)
+            for lag in range(4):
+                var ot=t+lag
+                if ot<l:
+                    gi=ftz(identical_mul_add(ftz(d_conv.unsafe_load((bb*l+ot)*cd+d)),ftz(w.unsafe_load(d*4+3-lag)),gi))
+            d_in.unsafe_store((bb*l+t)*cd+d,gi)
+    d_w.unsafe_store(d*4,gw0); d_w.unsafe_store(d*4+1,gw1)
+    d_w.unsafe_store(d*4+2,gw2); d_w.unsafe_store(d*4+3,gw3); d_b.unsafe_store(d,bias)
+
+
+def mamba2_conv_backward_prefill_into(
+    ctx: DeviceContext, mut out: Mamba2ConvBackward,
+    mut merged: Mamba2SSDDiscretizeBackward,
+    mut conv: DeviceBuffer[DType.float32],
+    mut inp: DeviceBuffer[DType.float32],
+    mut w: DeviceBuffer[DType.float32],
+    b: Int, l: Int, di: Int, cd: Int, dip: Int, q0: Int,
+) raises:
+    if q0 != 0:
+        raise Error("mamba2 conv backward supports prefill q0=0 only")
+    ctx.enqueue_function[mamba2_conv_backward_kernel](
+        out.d_conv.unsafe_ptr(), out.d_in_xbc.unsafe_ptr(), out.d_w.unsafe_ptr(),
+        out.d_b.unsafe_ptr(), merged.d_x_total.unsafe_ptr(),
+        merged.d_b_total.unsafe_ptr(), merged.d_c_total.unsafe_ptr(),
+        conv.unsafe_ptr(), inp.unsafe_ptr(), w.unsafe_ptr(), Int32(b), Int32(l),
+        Int32(di), Int32(cd), Int32(dip), grid_dim=(_grid(cd),1,1),
+        block_dim=(M2_SSD_BWD_TPB,1,1),
+    )
+
+
 def mamba2_postconv_merge_kernel(
     d_c_total: MutPointer[Float32, MutAnyOrigin],
     d_x_total: MutPointer[Float32, MutAnyOrigin],

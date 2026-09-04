@@ -2779,7 +2779,9 @@ def m3_forward(p, x, dtype):
     # S17 state read-out + S20 SERIAL inter-chunk pass (fwd :406-407,
     # :439-444; the profile's serial fma answer, mamba2 S17 inherited)
     ys_chunks = []
+    pass_states = []
     for c in range(nchunks):
+        pass_states.append(h)
         exp_dacs = torch.exp(dacs[:, :, c])                 # [B, H, Q]
         ys = torch.einsum("bthn,bhpn->bthp", qc[:, c], h) * exp_dacs.permute(0, 2, 1)[..., None]
         ys_chunks.append(ys)
@@ -2790,6 +2792,7 @@ def m3_forward(p, x, dtype):
         h = torch.exp(d_last)[..., None, None] * h + incr
     Ystate = torch.stack(ys_chunks, dim=1).reshape(Bsz, nchunks * Q, H, PP)[:, :L]
     out["ystate.out"] = Ystate.reshape(Mtok, H, PP)
+    out["pass.states"] = torch.stack(pass_states, dim=1)
     out["ssd.h_last"] = h                                   # [B, H, P, N]
 
     # S18 diagonal + D skip in ONE add: t = D[h] + qk_gamma, Y += t * v
@@ -2832,6 +2835,7 @@ def m3_stage_shapes(meta):
         "qkdot.out": [M, H], "kscale.out": [M, H, N],
         "dacs.out": [B, H, C, Q], "seg.L": [B, C, H, Q, Q],
         "yintra.out": [M, H, PP], "ystate.out": [M, H, PP],
+        "pass.states": [B, C, H, PP, N],
         "skip.out": [M, H, PP], "gate.out": [M, H, PP],
         "out_proj.out": [M, dm], "residual.out": [M, dm],
         "ssd.h_last": [B, H, PP, N], "ssd.k_last": [B, H, N],

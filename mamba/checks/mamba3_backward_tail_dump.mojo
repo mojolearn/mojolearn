@@ -44,6 +44,7 @@ from mamba.impl.mamba_ssm.modules.mamba3_backward import (
     mamba3_backward_seg_adt_into,
     mamba3_backward_adt_product_into,
     mamba3_backward_s17_state_into,
+    mamba3_backward_s17_operands_into,
 )
 from mamba.impl.transformers.models.mamba.modeling_mamba import (
     mamba_download,
@@ -86,6 +87,16 @@ def main() raises:
         raise Error("set MOJOLEARN_MAMBA_GRAD_DUMP to an existing directory")
 
     var case_k = 1
+    var case_name = String("m3_base_b2_l4_d32")
+    var requested_case = String(getenv("MOJOLEARN_MAMBA3_GRAD_CASE"))
+    if requested_case != "":
+        if requested_case != "m3_base_b1_l65_d64":
+            raise Error(
+                "MOJOLEARN_MAMBA3_GRAD_CASE supports only "
+                + "m3_base_b1_l65_d64"
+            )
+        case_k = 5
+        case_name = requested_case
     var fixture = m3_corpus_case(case_k)
     var weights = m3_case_weights(case_k)
     var dims = weights.dims.copy()
@@ -196,6 +207,8 @@ def main() raises:
     var initial_state_cells=fixture.b*dims.nheads*M3_HEADDIM*M3_D_STATE
     var d_state_direct=mamba_zeros(ctx,chunk_state_cells);var d_state_total=mamba_zeros(ctx,chunk_state_cells);var d_initial_state=mamba_zeros(ctx,initial_state_cells)
     mamba3_backward_s17_state_into(ctx,d_state_direct,d_state_total,d_initial_state,d_skip,stages.rotq_work,stages.dacs,fixture.b,fixture.l,dims,M3_CHUNK_SIZE)
+    var d_q17=mamba_zeros(ctx,state_cells);var d_dacs_read17=mamba_zeros(ctx,head_cells);var d_k17=mamba_zeros(ctx,state_cells);var d_v17=mamba_zeros(ctx,tail_cells);var d_dacs_rec17=mamba_zeros(ctx,head_cells)
+    mamba3_backward_s17_operands_into(ctx,d_q17,d_dacs_read17,d_k17,d_v17,d_dacs_rec17,d_skip,stages.rotq_work,stages.kscale_work,stages.v_work,stages.dacs,stages.pass_states,d_state_total,fixture.b,fixture.l,dims,M3_CHUNK_SIZE)
     ctx.synchronize()
 
     _write_f32(
@@ -245,10 +258,29 @@ def main() raises:
     _write_f32(output + "/grad.partial.s17.state.direct.f32",mamba_download(ctx,d_state_direct,chunk_state_cells))
     _write_f32(output + "/grad.partial.s17.state.total.f32",mamba_download(ctx,d_state_total,chunk_state_cells))
     _write_f32(output + "/grad.partial.s17.initial_state.f32",mamba_download(ctx,d_initial_state,initial_state_cells))
+    _write_f32(output + "/grad.partial.s17.readout.rot.q.f32",mamba_download(ctx,d_q17,state_cells))
+    _write_f32(output + "/grad.partial.s17.readout.dacs.f32",mamba_download(ctx,d_dacs_read17,head_cells))
+    _write_f32(output + "/grad.partial.s17.recur.kscale.f32",mamba_download(ctx,d_k17,state_cells))
+    _write_f32(output + "/grad.partial.s17.recur.value.f32",mamba_download(ctx,d_v17,tail_cells))
+    _write_f32(output + "/grad.partial.s17.recur.dacs.f32",mamba_download(ctx,d_dacs_rec17,head_cells))
+    if case_k == 5:
+        with open(output + "/dump_manifest.json", "w") as fh:
+            fh.write(
+                "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
+                + "\"family\":\"mamba3\",\"case\":\"" + case_name + "\","
+                + "\"objective\":\"signed_dyadic_weight_v1\","
+                + "\"mode\":\"partial-s17-recurrence-l65\","
+                + "\"tensors\":[\"partial.s17.state.direct\","
+                + "\"partial.s17.state.total\",\"partial.s17.initial_state\","
+                + "\"partial.s17.readout.rot.q\",\"partial.s17.readout.dacs\","
+                + "\"partial.s17.recur.kscale\",\"partial.s17.recur.value\","
+                + "\"partial.s17.recur.dacs\"]}\n"
+            )
+        return
     with open(output + "/dump_manifest.json", "w") as fh:
         fh.write(
             "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
-            + "\"family\":\"mamba3\",\"case\":\"m3_base_b2_l4_d32\","
+            + "\"family\":\"mamba3\",\"case\":\"" + case_name + "\","
             + "\"objective\":\"signed_dyadic_weight_v1\","
             + "\"mode\":\"partial-output-gate-skip-qkdot-tail\","
             + "\"tensors\":[\"stage.gate.out\",\"out_proj.weight\","
@@ -270,7 +302,10 @@ def main() raises:
             + "\"partial.s16.seg.L\",\"partial.seg.adt\","
             + "\"partial.A.from_seg\",\"partial.dt.from_seg\","
             + "\"partial.dt.with_seg\",\"partial.s17.state.direct\","
-            + "\"partial.s17.state.total\",\"partial.s17.initial_state\"]}\n"
+            + "\"partial.s17.state.total\",\"partial.s17.initial_state\","
+            + "\"partial.s17.readout.rot.q\",\"partial.s17.readout.dacs\","
+            + "\"partial.s17.recur.kscale\",\"partial.s17.recur.value\","
+            + "\"partial.s17.recur.dacs\"]}\n"
         )
 
     _ = d_gamma_qk^
@@ -326,3 +361,8 @@ def main() raises:
     _ = d_initial_state^
     _ = d_state_total^
     _ = d_state_direct^
+    _ = d_dacs_rec17^
+    _ = d_v17^
+    _ = d_k17^
+    _ = d_dacs_read17^
+    _ = d_q17^
