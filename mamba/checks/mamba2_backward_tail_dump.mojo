@@ -210,6 +210,7 @@ def main() raises:
     )
     mamba2_ydiag_xd_and_partial_dt_into(
         ctx, discretize_backward, tail.d_scan, stages.cb_g, stages.seg_l,
+        stages.xd_work,
         stages.xbc_work, stages.dt_work, stages.dtraw_work, dweights.dt_bias,
         fixture.b, stages.t_work, dims.nheads, dims.d_inner,
         dims.conv_dim(), stages.nc, m2_q_eff(), fixture.dt_lo, fixture.dt_hi,
@@ -362,6 +363,16 @@ def main() raises:
         ),
     )
     _write_f32(
+        dump_dir + "/grad.partial.cb.G.from_ydiag.f32",
+        mamba_download(ctx, discretize_backward.d_cb_ydiag,
+            fixture.b * stages.nc * m2_q_eff() * m2_q_eff()),
+    )
+    _write_f32(
+        dump_dir + "/grad.partial.seg.L.from_ydiag.f32",
+        mamba_download(ctx, discretize_backward.d_seg_ydiag,
+            fixture.b * stages.nc * dims.nheads * m2_q_eff() * m2_q_eff()),
+    )
+    _write_f32(
         dump_dir + "/grad.partial.dt_raw.merged.f32",
         mamba_download(
             ctx, discretize_backward.d_dtraw,
@@ -390,6 +401,7 @@ def main() raises:
             "\"partial.dacs.total\",\"partial.da.total\","
             "\"partial.A.from_da\",\"partial.dt.from_da\","
             "\"partial.xd.from_ydiag\",\"partial.x.from_xd\","
+            "\"partial.cb.G.from_ydiag\",\"partial.seg.L.from_ydiag\","
             "\"partial.dt.from_xd\",\"partial.dt.merged\","
             "\"partial.dt_raw.merged\",\"partial.dt_bias.merged\"]}\n"
         )

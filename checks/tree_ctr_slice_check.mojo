@@ -31,6 +31,7 @@ from gbdt.models.oblivious_model import (
 )
 from gbdt.gpu_data.compressed_index_builder import pack_quantized_columns_host
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
+    accept_symmetric_level_winner,
     TTreeWorkspace,
     run_tree_layout,
 )
@@ -207,6 +208,22 @@ def main() raises:
         )
         if decoded != candidate.bins[r]:
             raise Error("compressed tensor candidate bin mismatch")
+
+    # The reusable synchronized-driver boundary applies exactly the same
+    # host gates and split resolution as the baseline post-tree walk.
+    var accepted_splits = List[TBinarySplit]()
+    if not accept_symmetric_level_winner(
+        packed.layout, Float32(1.0), candidate_feature.first_fold_index,
+        packed.layout.hist_cells, 0, 1, accepted_splits,
+    ):
+        raise Error("one-level winner boundary rejected an improving split")
+    if len(accepted_splits) != 1 or accepted_splits[0].feature_id != Int32(1):
+        raise Error("one-level winner boundary resolved the wrong feature")
+    if accept_symmetric_level_winner(
+        packed.layout, Float32(1.0), candidate_feature.first_fold_index,
+        packed.layout.hist_cells, 1, 2, accepted_splits,
+    ):
+        raise Error("one-level winner boundary accepted a repeated split")
 
     # Candidate feature ids are ephemeral until ranking chooses one. Stage
     # two candidates at the same next id, persist only the selected Borders

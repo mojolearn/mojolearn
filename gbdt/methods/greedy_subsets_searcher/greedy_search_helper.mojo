@@ -3184,6 +3184,54 @@ def _sym_dd2(n: Int) -> String:
     return String(n)
 
 
+def accept_symmetric_level_winner(
+    layout: CompressedIndexLayout,
+    best_score: Float32,
+    best_bin_u: UInt32,
+    hist_cells_per_leaf: Int,
+    level: Int,
+    live_leaves: Int,
+    mut out_splits: List[TBinarySplit],
+) raises -> Bool:
+    """Apply the host-side gates for one resolved symmetric-tree winner.
+
+    The ordinary driver invokes this after its single end-of-tree drain. A
+    synchronized tensor driver can invoke the same primitive after each
+    bounded level drain, keeping sentinel, improvement, and repeat handling
+    identical without changing the baseline command schedule.
+    """
+    if best_bin_u == UInt32(0xFFFFFFFF) or Int(best_bin_u) >= (
+        hist_cells_per_leaf
+    ):
+        raise Error(
+            "All splits have infinite score. Probably, numerical"
+            " overflow occurs in loss function and/or split score"
+            " calculation. Try increasing l2_leaf_reg, and/or"
+            " decreasing learning_rate, etc."
+            " [level " + String(level) + ", live leaves "
+            + String(live_leaves) + "]"
+        )
+    var choice = resolve_split(layout, Int(best_bin_u))
+    if not (best_score > Float32(0.0)):
+        return False
+    for i in range(len(out_splits)):
+        if (
+            out_splits[i].feature_id == Int32(choice.feature)
+            and out_splits[i].bin_idx == Int32(choice.bin)
+        ):
+            return False
+    out_splits.append(TBinarySplit(
+        Int32(choice.feature),
+        Int32(choice.bin),
+        Int32(
+            BIN_SPLIT_TAKE_BIN
+            if layout.features[choice.feature].one_hot_feature
+            else BIN_SPLIT_TAKE_GREATER
+        ),
+    ))
+    return True
+
+
 def run_tree_layout_traced[
     hist2_smem_mode: Int = HIST2_SMEM_MODE
 ](
@@ -4161,44 +4209,11 @@ def run_tree_layout_traced[
     for depth2 in range(max_depth):
         var best_score = h_wsc.unsafe_ptr().unsafe_load(depth2)
         var best_bin_u = h_wbf.unsafe_ptr().unsafe_load(depth2)
-        if (
-            best_bin_u == UInt32(0xFFFFFFFF)
-            or Int(best_bin_u) >= hist_cells_per_leaf
+        if not accept_symmetric_level_winner(
+            layout, best_score, best_bin_u, hist_cells_per_leaf,
+            depth2, 1 << depth2, out_splits,
         ):
-            # their `CB_ENSURE(bestSplits[0].FeatureId != (ui32)-1, ...)`
-            raise Error(
-                "All splits have infinite score. Probably, numerical"
-                " overflow occurs in loss function and/or split score"
-                " calculation. Try increasing l2_leaf_reg, and/or"
-                " decreasing learning_rate, etc."
-                " [level " + String(depth2) + ", live leaves "
-                + String(1 << depth2) + "]"
-            )
-        var choice = resolve_split(layout, Int(best_bin_u))
-        # improving-score gate; for an oblivious tree all leaves share one
-        # BestSplit, so one test is the whole gate.
-        var stop_level = not (best_score > Float32(0.0))
-        # their repeat-split stop: a repeat means no candidate improved on
-        # a split whose gain is already spent.
-        for i in range(len(out_splits)):
-            if (
-                out_splits[i].feature_id == Int32(choice.feature)
-                and out_splits[i].bin_idx == Int32(choice.bin)
-            ):
-                stop_level = True
-        if stop_level:
             break
-        out_splits.append(
-            TBinarySplit(
-                Int32(choice.feature),
-                Int32(choice.bin),
-                Int32(
-                    BIN_SPLIT_TAKE_BIN
-                    if layout.features[choice.feature].one_hot_feature
-                    else BIN_SPLIT_TAKE_GREATER
-                ),
-            )
-        )
         grown += 1
 
     if grown < max_depth:

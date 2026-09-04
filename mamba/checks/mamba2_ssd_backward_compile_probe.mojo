@@ -26,6 +26,7 @@ def main() raises:
     var d_y = ctx.enqueue_create_buffer[DType.float32](2 * 513 * 1 * 64)
     var cb_g = ctx.enqueue_create_buffer[DType.float32](2 * 3 * 256 * 256)
     var seg_l = ctx.enqueue_create_buffer[DType.float32](2 * 3 * 1 * 256 * 256)
+    var xd = ctx.enqueue_create_buffer[DType.float32](2 * 513 * 1 * 64)
     var xbc = ctx.enqueue_create_buffer[DType.float32](2 * 513 * 40)
     var dt = ctx.enqueue_create_buffer[DType.float32](2 * 513 * 1)
     var dtraw = ctx.enqueue_create_buffer[DType.float32](2 * 513 * 1)
@@ -49,7 +50,7 @@ def main() raises:
         2, 513, 1, 3, 256
     )
     mamba2_ydiag_xd_and_partial_dt_into(
-        ctx, discretize, d_y, cb_g, seg_l, xbc, dt, dtraw, dt_bias,
+        ctx, discretize, d_y, cb_g, seg_l, xd, xbc, dt, dtraw, dt_bias,
         2, 513, 1, 32, 40, 3, 256, 0.0, 1.0
     )
     print("mamba2 SSD backward reverse-chunk recurrence compile probe")

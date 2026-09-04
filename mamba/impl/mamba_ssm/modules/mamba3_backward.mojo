@@ -180,3 +180,87 @@ def mamba3_backward_qkdot_into(
         sigma.unsafe_ptr(), Int32(m), Int32(dims.nheads),
         grid_dim=(_grid(cells), 1, 1), block_dim=(M3_BWD_TPB, 1, 1),
     )
+
+
+def mamba3_s16_qkv_backward_kernel(
+    d_q: MutPointer[Float32, MutAnyOrigin],
+    d_k: MutPointer[Float32, MutAnyOrigin],
+    d_v: MutPointer[Float32, MutAnyOrigin],
+    d_y: MutPointer[Float32, MutAnyOrigin],
+    q: MutPointer[Float32, MutAnyOrigin],
+    k: MutPointer[Float32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    seg_l: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, l_in: Int32, nh_in: Int32, qsize_in: Int32,
+):
+    """Naive, ownership-safe S16 backward over real rows within each chunk."""
+    var b = Int(b_in); var l = Int(l_in); var nh = Int(nh_in); var qs = Int(qsize_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var q_cells = b * l * nh * M3_D_STATE
+    var v_cells = b * l * nh * M3_HEADDIM
+    if cell < q_cells:
+        var n = cell % M3_D_STATE
+        var rowh = cell // M3_D_STATE
+        var h = rowh % nh; var token = (rowh // nh) % l; var bb = rowh // (nh * l)
+        var chunk = token // qs; var inner = token % qs
+        var dq = Float32(0.0); var dk = Float32(0.0)
+        for p in range(M3_HEADDIM):
+            var dy_i = ftz(d_y.unsafe_load(((bb * l + token) * nh + h) * M3_HEADDIM + p))
+            for j in range(inner):
+                var tj = chunk * qs + j
+                if tj < l:
+                    var lv = ftz(seg_l.unsafe_load((((bb * ((l + qs - 1) // qs) + chunk) * nh + h) * qs + inner) * qs + j))
+                    var kv = ftz(k.unsafe_load(((bb * l + tj) * nh + h) * M3_D_STATE + n))
+                    var vv = ftz(v.unsafe_load(((bb * l + tj) * nh + h) * M3_HEADDIM + p))
+                    dq = ftz(identical_mul_add(dy_i, ftz(pinned_mul(ftz(pinned_mul(kv, lv)), vv)), dq))
+            for i in range(inner + 1, qs):
+                var ti = chunk * qs + i
+                if ti < l:
+                    var dy = ftz(d_y.unsafe_load(((bb * l + ti) * nh + h) * M3_HEADDIM + p))
+                    var lv2 = ftz(seg_l.unsafe_load((((bb * ((l + qs - 1) // qs) + chunk) * nh + h) * qs + i) * qs + inner))
+                    var qv = ftz(q.unsafe_load(((bb * l + ti) * nh + h) * M3_D_STATE + n))
+                    var vv2 = ftz(v.unsafe_load(((bb * l + token) * nh + h) * M3_HEADDIM + p))
+                    dk = ftz(identical_mul_add(dy, ftz(pinned_mul(ftz(pinned_mul(qv, lv2)), vv2)), dk))
+        d_q.unsafe_store(cell, dq); d_k.unsafe_store(cell, dk)
+    if cell < v_cells:
+        var p = cell % M3_HEADDIM
+        var rowh = cell // M3_HEADDIM
+        var h = rowh % nh; var token = (rowh // nh) % l; var bb = rowh // (nh * l)
+        var chunk = token // qs; var inner = token % qs; var dv = Float32(0.0)
+        for i in range(inner + 1, qs):
+            var ti = chunk * qs + i
+            if ti < l:
+                var dot = Float32(0.0)
+                for n in range(M3_D_STATE):
+                    dot = ftz(identical_mul_add(ftz(q.unsafe_load(((bb*l+ti)*nh+h)*M3_D_STATE+n)), ftz(k.unsafe_load(((bb*l+token)*nh+h)*M3_D_STATE+n)), dot))
+                var lv = ftz(seg_l.unsafe_load((((bb*((l+qs-1)//qs)+chunk)*nh+h)*qs+i)*qs+inner))
+                dv = ftz(identical_mul_add(ftz(d_y.unsafe_load(((bb*l+ti)*nh+h)*M3_HEADDIM+p)), ftz(pinned_mul(dot, lv)), dv))
+        d_v.unsafe_store(cell, dv)
+
+
+def mamba3_s15_backward_kernel(
+    d_krot: MutPointer[Float32, MutAnyOrigin], d_scale: MutPointer[Float32, MutAnyOrigin],
+    d_kscaled: MutPointer[Float32, MutAnyOrigin], krot: MutPointer[Float32, MutAnyOrigin],
+    scale: MutPointer[Float32, MutAnyOrigin], rows_in: Int32,
+):
+    var rows = Int(rows_in); var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if row >= rows: return
+    var acc = Float32(0.0); var sc = ftz(scale.unsafe_load(row))
+    for n in range(M3_D_STATE):
+        var cell = row * M3_D_STATE + n; var dk = ftz(d_kscaled.unsafe_load(cell)); var kr = ftz(krot.unsafe_load(cell))
+        d_krot.unsafe_store(cell, ftz(pinned_mul(dk, sc)))
+        acc = ftz(identical_mul_add(dk, kr, acc))
+    d_scale.unsafe_store(row, acc)
+
+
+def mamba3_backward_s16_s15_into(
+    ctx: DeviceContext, mut d_q: DeviceBuffer[DType.float32], mut d_ks: DeviceBuffer[DType.float32],
+    mut d_v: DeviceBuffer[DType.float32], mut d_krot: DeviceBuffer[DType.float32], mut d_scale: DeviceBuffer[DType.float32],
+    mut d_y: DeviceBuffer[DType.float32], mut q: DeviceBuffer[DType.float32], mut ks: DeviceBuffer[DType.float32],
+    mut v: DeviceBuffer[DType.float32], mut seg_l: DeviceBuffer[DType.float32], mut krot: DeviceBuffer[DType.float32],
+    mut scale: DeviceBuffer[DType.float32], b: Int, l: Int, dims: Mamba3Dims, qsize: Int,
+) raises:
+    var qcells = b*l*dims.nheads*M3_D_STATE; var vcells = b*l*dims.nheads*M3_HEADDIM
+    var cells = qcells if qcells > vcells else vcells
+    ctx.enqueue_function[mamba3_s16_qkv_backward_kernel](d_q.unsafe_ptr(), d_ks.unsafe_ptr(), d_v.unsafe_ptr(), d_y.unsafe_ptr(), q.unsafe_ptr(), ks.unsafe_ptr(), v.unsafe_ptr(), seg_l.unsafe_ptr(), Int32(b), Int32(l), Int32(dims.nheads), Int32(qsize), grid_dim=(_grid(cells),1,1), block_dim=(M3_BWD_TPB,1,1))
+    ctx.enqueue_function[mamba3_s15_backward_kernel](d_krot.unsafe_ptr(), d_scale.unsafe_ptr(), d_ks.unsafe_ptr(), krot.unsafe_ptr(), scale.unsafe_ptr(), Int32(b*l*dims.nheads), grid_dim=(_grid(b*l*dims.nheads),1,1), block_dim=(M3_BWD_TPB,1,1))

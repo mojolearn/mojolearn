@@ -18,6 +18,7 @@ from mamba.checks.mamba3_backward import (
     mamba3_backward_workspace_max_floats,
 )
 from mamba.checks.mamba3_fixture import (
+    M3_CHUNK_SIZE,
     M3_D_STATE,
     m3_case_weights,
     m3_case_x,
@@ -32,6 +33,7 @@ from mamba.impl.mamba_ssm.modules.mamba3 import (
 from mamba.impl.mamba_ssm.modules.mamba3_backward import (
     mamba3_backward_gate_skip_into,
     mamba3_backward_qkdot_into,
+    mamba3_backward_s16_s15_into,
 )
 from mamba.impl.transformers.models.mamba.modeling_mamba import (
     mamba_download,
@@ -140,6 +142,18 @@ def main() raises:
         device_weights.c_bias, stages.gamma_work, stages.dt_work,
         stages.sig_work, dims, m,
     )
+    var state_cells = m * dims.nheads * M3_D_STATE
+    var d_q_s16 = mamba_zeros(ctx, state_cells)
+    var d_ks_s16 = mamba_zeros(ctx, state_cells)
+    var d_v_s16 = mamba_zeros(ctx, tail_cells)
+    var d_krot_s15 = mamba_zeros(ctx, state_cells)
+    var d_scale_s15 = mamba_zeros(ctx, head_cells)
+    mamba3_backward_s16_s15_into(
+        ctx, d_q_s16, d_ks_s16, d_v_s16, d_krot_s15, d_scale_s15,
+        d_skip, stages.rotq_work, stages.kscale_work, stages.v_work,
+        stages.seg_l, stages.rotk_work, stages.scale_work,
+        fixture.b, fixture.l, dims, M3_CHUNK_SIZE,
+    )
     ctx.synchronize()
 
     _write_f32(
@@ -160,6 +174,11 @@ def main() raises:
     _write_f32(output + "/grad.partial.qkdot.gamma.f32", mamba_download(ctx, d_gamma_qk, head_cells))
     _write_f32(output + "/grad.partial.qkdot.dt.f32", mamba_download(ctx, d_dt_qk, head_cells))
     _write_f32(output + "/grad.partial.qkdot.trap_raw.f32", mamba_download(ctx, d_trap_qk, head_cells))
+    _write_f32(output + "/grad.partial.s16.rot.q.f32", mamba_download(ctx, d_q_s16, state_cells))
+    _write_f32(output + "/grad.partial.s16.kscale.f32", mamba_download(ctx, d_ks_s16, state_cells))
+    _write_f32(output + "/grad.partial.s16.value.f32", mamba_download(ctx, d_v_s16, tail_cells))
+    _write_f32(output + "/grad.partial.s15.rot.k.f32", mamba_download(ctx, d_krot_s15, state_cells))
+    _write_f32(output + "/grad.partial.s15.scale.f32", mamba_download(ctx, d_scale_s15, head_cells))
     with open(output + "/dump_manifest.json", "w") as fh:
         fh.write(
             "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
@@ -171,7 +190,9 @@ def main() raises:
             + "\"partial.in_proj.x.from_skip\",\"stage.qkdot.out\",\"D\","
             + "\"partial.qkdot.B_biased\",\"partial.qkdot.C_biased\","
             + "\"partial.qkdot.gamma\",\"partial.qkdot.dt\","
-            + "\"partial.qkdot.trap_raw\"]}\n"
+            + "\"partial.qkdot.trap_raw\",\"partial.s16.rot.q\","
+            + "\"partial.s16.kscale\",\"partial.s16.value\","
+            + "\"partial.s15.rot.k\",\"partial.s15.scale\"]}\n"
         )
 
     _ = d_gamma_qk^
@@ -196,3 +217,8 @@ def main() raises:
     _ = device_weights^
     _ = d_trap_qk^
     _ = d_dt_qk^
+    _ = d_scale_s15^
+    _ = d_krot_s15^
+    _ = d_v_s16^
+    _ = d_ks_s16^
+    _ = d_q_s16^
