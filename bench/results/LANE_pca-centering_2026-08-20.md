@@ -55,7 +55,7 @@ cuML's `pca.cuh:138` meanAdd restores it); `stable=false` arm at :67-69 is
 `///@todo: implement this using cutlass + customized epilogue!` over
 `ASSERT(false, "cov: Implement stable=false case!")`. The fusion is THEIR
 declared design, unshippable on cuBLAS (no epilogue hook), shippable on our
-hand-written kernel. DEVIATION 42 (PORTING.md) records it.
+hand-written kernel. DEVIATION 42 (archive/reference/PORTING.md) records it.
 
 **What changed:**
 

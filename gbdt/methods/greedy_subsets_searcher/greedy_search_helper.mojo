@@ -349,7 +349,7 @@ comptime IDENTICAL_DRAIN_SCHEDULE = HIST_BUILD_MODE == NUMERIC_IDENTICAL
 # lifetime ends at its last `enqueue_copy` again -- the PRE-FIX ctor,
 # recreated verbatim: thirteen intervening host allocations between the
 # first stager's death and the drain, two exact size-and-type matches
-# among the followers (PORTING.md 134d's ranked greedy candidate for the
+# among the followers (archive/reference/PORTING.md 134d's ranked greedy candidate for the
 # 2/12 first-div-t2 sighting). A comptime define, not an env var, for
 # the same reason `GLOBAL_NUMERIC_MODE` is one: destruction points are
 # decided at compile time and no runtime branch can move them -- a
@@ -363,7 +363,7 @@ comptime IDENTICAL_DRAIN_SCHEDULE = HIST_BUILD_MODE == NUMERIC_IDENTICAL
 # pass -- it is a finding: the 134b load window (20-30 concurrent GPU
 # processes), not the lifetime alone, was the missing ingredient, and
 # 134 STAYS OPEN. Run it quiet-box first, then under the synthetic load
-# recipe in PORTING.md 134f. This define must never reach a shipped
+# recipe in archive/reference/PORTING.md 134f. This define must never reach a shipped
 # build; nothing but the soak invocation passes it.
 comptime SOAK_134_CONTROL = is_defined["MOJOLEARN_134_CONTROL"]()
 
@@ -447,7 +447,7 @@ comptime FAST_REPLICATION_PIN_2040 = is_defined[
 #
 # OFF BY DEFAULT: the define is absent from every shipped build. Arm B
 # builds with `-D MOJOLEARN_2031_SYM_RIDX_SPLITS=1`. UNVERIFIED, RUN
-# OWED -- A/B commands in gbdt/UPSTREAM_SURVEY_2026-09.md and the PLAN
+# OWED -- A/B commands in archive/research/gbdt/UPSTREAM_SURVEY_2026-09.md and the PLAN
 # appendix; the gates that must hold under the define are
 # `check-fit-pointwise` (both searchers, one tree),
 # `check-logloss-train` (the estimation arm reads the partition the
@@ -984,7 +984,7 @@ def run_tree(
     # defragmenting implementation by default on NVIDIA
     # (`MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_VMM`), which is their
     # `MemoryDefragmentation` under another name. See `gpu_lib/gpu_base.mojo`
-    # and `VENDOR_LIBS.md`.
+    # and `archive/reference/VENDOR_LIBS.md`.
     #
     # So the work worth doing was not a second allocator underneath theirs.
     # It was getting the allocations OUT of the level loop, which is where
@@ -1566,7 +1566,7 @@ def run_tree(
         # `RebuildLeavesSizes` is `currentParts.Read(partsCpu)` over the
         # whole leaf range (`split_properties_helper.cpp:800-813`) and runs
         # once per `MakeSplit`, at `:950`. O(leaves) on the host, never
-        # O(rows). See HOST_AND_DEVICE.md.
+        # O(rows). See archive/reference/HOST_AND_DEVICE.md.
         #
         # ORDERING, and it is the part that a wrong answer would not
         # announce. The two id uploads, the kernel, and this copy are all
@@ -1861,7 +1861,7 @@ def launch_one_byte[
             # instead of overwriting each other with a plain store.
             #
             # It ran at grid.x = 1 for exactly as long as that flush was
-            # missing, which was one commit. See UNWIRED.md for the
+            # missing, which was one commit. See archive/plans/UNWIRED.md for the
             # measurement that forced it: 459 of 3168 cells wrong on
             # contiguous ids at 16 replicas.
             #
@@ -1903,7 +1903,7 @@ def launch_one_byte[
             # instead of overwriting each other with a plain store.
             #
             # It ran at grid.x = 1 for exactly as long as that flush was
-            # missing, which was one commit. See UNWIRED.md for the
+            # missing, which was one commit. See archive/plans/UNWIRED.md for the
             # measurement that forced it: 459 of 3168 cells wrong on
             # contiguous ids at 16 replicas.
             #
@@ -2755,7 +2755,7 @@ def resolve_split(
 
     O(features) on the host, which is the right side of the boundary: it
     scales with the TREE's feature count, never with rows. See
-    HOST_AND_DEVICE.md.
+    archive/reference/HOST_AND_DEVICE.md.
     """
     for i in range(len(layout.features)):
         ref f = layout.features[i]
@@ -2819,7 +2819,7 @@ struct TTreeWorkspace(Movable):
     (`cuda_lib/memory_pool.h`), so `CreateInitialSubsets`
     (`split_properties_helper.cpp:1040-1080`) reuses the same device
     memory for tree 2 that tree 1 gave back. This port dropped the pool
-    layer (`gbdt/gpu_lib/NOT_PORTED.md`) and called
+    layer (`archive/reference/gbdt/NOT_PORTED.md`) and called
     `enqueue_create_buffer` directly, which meant a fresh allocation of
     every plane for EVERY tree.
 

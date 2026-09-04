@@ -22,7 +22,7 @@ device answer is not a CPU path". Neither of the two below is reachable from
     -- it is not a certified path and IDENTITY_PATHS row 18's host-libm
     concern does not reach a tolerance report.
 
-NO FLOAT64 EVER TOUCHES THE DEVICE. `HOST_AND_DEVICE.md` and this
+NO FLOAT64 EVER TOUCHES THE DEVICE. `archive/reference/HOST_AND_DEVICE.md` and this
 repository's hardware ledger: there is no float64 on the Apple column at all,
 not as a precision preference but as an absent type. `reference_*_f64` runs on
 the host and only on the host.

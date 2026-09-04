@@ -298,7 +298,7 @@ cell("gbdt_rmse_nan_min", gb(loss="RMSE", nan_mode="Min", _X="X_nan",
                              _y="y_reg", **GB_BASE))
 cell("gbdt_rmse_nan_max", gb(loss="RMSE", nan_mode="Max", _X="X_nan",
                              _y="y_reg", **GB_BASE))
-# 2026-08-23, the three owed knobs (E3_RESULTS.md): 'Forbidden' on a NaN
+# 2026-08-23, the three owed knobs (archive/evidence/E3_RESULTS.md): 'Forbidden' on a NaN
 # matrix is a REFUSAL (a certified answer, same message on every vendor)
 # and on a clean matrix is an ordinary fit through the same code (equal
 # to gbdt_rmse by construction, and certified so); the Bayesian bootstrap
@@ -364,7 +364,7 @@ cell("gbdt_rmse_borders_sub5k", gb(loss="RMSE", border_build_max_samples=5000,
 # TAddModelDocParallel<TNonSymmetricTree>. Lossguide's score function is
 # left UNSET so the cell takes CatBoost's own GPU default there, NewtonL2
 # (catboost_options.cpp:980-991); `_lossguide_cosine` pins Cosine so the
-# leafwise Cosine calcer (LOSSGUIDE.md DEVIATION 318) is in the sweep too.
+# leafwise Cosine calcer (archive/research/LOSSGUIDE.md DEVIATION 318) is in the sweep too.
 cell("gbdt_rmse_depthwise", gb(loss="RMSE", grow_policy="Depthwise",
                                _y="y_reg", **GB_BASE))
 cell("gbdt_logloss_depthwise", gb(loss="Logloss", grow_policy="Depthwise",

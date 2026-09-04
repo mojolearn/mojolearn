@@ -6,7 +6,7 @@
 #
 # WHAT THIS IS FOR, AND WHAT IT HONESTLY IS NOT
 # ---------------------------------------------
-# `UNSUPERVISED_IDENTITY.md`'s first owed item is "a second vendor", and the
+# `archive/research/UNSUPERVISED_IDENTITY.md`'s first owed item is "a second vendor", and the
 # only way to discharge it completely is E1: the same commit on an M4 and on
 # an MI300X, cards diffed. That needs hardware, costs money, and takes a day.
 #
@@ -188,4 +188,4 @@ fi
 echo "column invariance: every column produced the same cards and the same"
 echo "outputs, on one device, under IDENTICAL. Artifacts in $OUT."
 echo "This is NOT a cross-vendor measurement -- the arithmetic was this"
-echo "machine's on every arm. E1 is still owed; see E1_RUNBOOK.md."
+echo "machine's on every arm. E1 is still owed; see archive/evidence/E1_RUNBOOK.md."

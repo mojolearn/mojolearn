@@ -14,8 +14,8 @@ WHY THIS FILE EXISTS AT ALL, AND WHY IT DID NOT UNTIL NOW
 ---------------------------------------------------------
 `NOT_IMPLEMENTED.tsv` carried this file as `UNPORTABLE`, on the ground that it has
 14 warp intrinsics (`__shfl_xor_sync`, `laneId`) and Mojo 1.0 had none.
-**That ground was false and has been retracted** (`PORTING.md 2`,
-`VENDOR_LIBRARIES.md`). The primitives are under `std.gpu.primitives.warp`
+**That ground was false and has been retracted** (`archive/reference/PORTING.md 2`,
+`archive/reference/VENDOR_LIBRARIES.md`). The primitives are under `std.gpu.primitives.warp`
 and `max.gpu.sync`; the earlier searches looked one namespace level too high
 in four places and missed all four.
 
@@ -139,7 +139,7 @@ DEVIATIONS, each one deliberate
 1. **Register arrays are `SIMD` values, not arrays.** RAFT holds
    `T val_arr_[kMaxArrLen]` and nvcc keeps it in registers. The obvious Mojo
    transliteration, `stack_allocation` with no address space, is thread-local
-   MEMORY and would spill every element of the queue (`PORTING.md 26`, which
+   MEMORY and would spill every element of the queue (`archive/reference/PORTING.md 26`, which
    cost this tree a whole slower-than-naive GEMM). `kMaxArrLen` is a power of
    two by construction, so `SIMD[DType.uint32, arr_len]` is exact.
 
@@ -167,7 +167,7 @@ DEVIATIONS, each one deliberate
    `ceildiv(block_warps, 2) * capacity`, which is `>= ceildiv(nwarps, 2) * k`
    for every legal call. At the maximum instantiation (capacity 256,
    block_warps 8) that is 4 KB per half, 8 KB total, against Metal's 32 KB
-   threadgroup budget (`PORTING.md 1`). A consequence: the `store` and
+   threadgroup budget (`archive/reference/PORTING.md 1`). A consequence: the `store` and
    `load_sorted` overloads that face shared memory are typed
    `UnsafePointer[..., address_space = AddressSpace.SHARED,
    origin=MutUntrackedOrigin]` rather than `MutPointer`, because theirs is
@@ -190,7 +190,7 @@ DEVIATIONS, each one deliberate
 
 7. **`in_idx == nullptr` becomes an explicit `has_in_idx` flag.** RAFT
    branches on a null pointer (`:798`). A Mojo kernel argument cannot be
-   usefully null, and `PORTING.md 19` forbids selecting a pointer with a
+   usefully null, and `archive/reference/PORTING.md 19` forbids selecting a pointer with a
    conditional expression in this tree, so the caller passes a flag and, when
    it is 0, any distinct valid buffer that is never read. When the flag is 0
    the payload is `i`, the column index within the row, which is what k-NN
@@ -735,7 +735,7 @@ def block_sort_done[
     #
     # The trigger is exactly that: the while-condition variable's last write in
     # the body is a bare copy of another local. Any arithmetic on top of the
-    # copy (`a = b - 1`, `a = b; a = a - 1`) compiles. See `PORTING.md`.
+    # copy (`a = b - 1`, `a = b; a = a - 1`) compiles. See `archive/reference/PORTING.md`.
     #
     # `split` is a pure function of `nwarps` -- `split == (nwarps + 1) >> 1`
     # holds on entry to every iteration, by induction from their initializer

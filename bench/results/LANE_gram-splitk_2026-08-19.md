@@ -46,7 +46,7 @@ repo was sparse-cloned at tag `max/v26.5.0` (matching conda-meta
      uncoalesced. The tiled arm requires `compute >= A100` (`:820-823`),
      the other requires AMD (`:853`).
    - The route also REQUIRES a materialized chunk-major transpose of X —
-     twice, since one buffer cannot be two matmul operands (PORTING.md
+     twice, since one buffer cannot be two matmul operands (archive/reference/PORTING.md
      24) — plus a reduce pass. Minimum extra traffic ~2.5 GB against the
      hand-written kernel's single 512 MB read, before the naive kernel's
      own re-reads.
@@ -192,11 +192,11 @@ first run (then reverted):**
   dispatch story and the 25 GFLOP/s measurement).
 - `core/column_stats.mojo` header ("they call a tuned BLAS, so we call
   ours" as an unconditional rule).
-- `VENDOR_LIBRARIES.md`: gemm_tn wired row (now names the arm), new
+- `archive/reference/VENDOR_LIBRARIES.md`: gemm_tn wired row (now names the arm), new
   `gemm_tn_via_transpose` row, the "RAFT distance / stats::cov" mapping
   row, the RESOLVED paragraph, C8, and the `transpose_a` limits paragraph.
-- `VENDOR_LIBS.md` MADE table (covariance_kernel row's "now calls").
-- `PORTING.md` col-major hazard tail.
+- `archive/reference/VENDOR_LIBS.md` MADE table (covariance_kernel row's "now calls").
+- `archive/reference/PORTING.md` col-major hazard tail.
 - `glm/.../lstsq.mojo`, `decomposition/.../pca.mojo`, `.../tsvd.mojo` call-site
   comments ("steps 1, 5, 6 all on MAX's tuned kernels" etc.).
 
@@ -230,6 +230,6 @@ message. Files: `core/gram_splitk.mojo` (new), `core/gemm.mojo`,
 `core/column_stats.mojo`, `mojo_only/kernel_matrix.mojo` (K_LIB_GRAM_SPLITK),
 `mojo_only/gram_splitk_check.mojo` (new), `mojo_only/vendor_correctness_check.mojo`,
 `decomposition/pca_main.mojo`, `decomposition/gbdt/linalg/detail/{pca,tsvd}.mojo`,
-`glm/gbdt/linalg/detail/lstsq.mojo`, `VENDOR_LIBRARIES.md`, `VENDOR_LIBS.md`,
-`PORTING.md`, this report. `neighbors/`, `dbscan/`, the scoreboard and
+`glm/gbdt/linalg/detail/lstsq.mojo`, `archive/reference/VENDOR_LIBRARIES.md`, `archive/reference/VENDOR_LIBS.md`,
+`archive/reference/PORTING.md`, this report. `neighbors/`, `dbscan/`, the scoreboard and
 `bench/bench_main.mojo` untouched.

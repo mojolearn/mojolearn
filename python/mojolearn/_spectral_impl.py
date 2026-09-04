@@ -150,13 +150,13 @@ class SpectralClustering:
         The `SIGN_FLIP` sabotage bites on the `hashed` fixture and is inert
         on `path`, `ring`, `hashed_unnorm` and `blobs`, because after a
         restart the re-canonicalization absorbs the flip on those four
-        (`CARD_GAPS.md:78`; the contract's section 9 table). The rule has
+        (`archive/plans/CARD_GAPS.md:78`; the contract's section 9 table). The rule has
         two host instruments the sabotage does not target, so the clause is
         not undefended, but the DEVICE path's coverage is one fixture wide.
       * A WHOLE-COLUMN SIGN DISAGREEMENT BETWEEN TWO VENDORS WOULD BE
         INVISIBLE TO THE CARD. `spectral.ritz.vectors` is recorded AFTER
         the sign pin is applied, so the pin re-canonicalizes such a
-        divergence away before it is hashed (`CARD_GAPS.md`, "Three more
+        divergence away before it is hashed (`archive/plans/CARD_GAPS.md`, "Three more
         cards that hash on the far side of a washer"). That is an open gap,
         not a solved problem.
       * SEAM J4's CERTIFICATE GATE IS OWED. The fused `ROTATE` (DEVIATION

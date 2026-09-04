@@ -45,7 +45,7 @@ adds clauses of its own, and it does not exist yet.
 
 THE PROPORTION, RE-COUNTED RATHER THAN INHERITED
 -------------------------------------------------
-`mamba/BACKWARD_SCOPE_M2_M3.md` section 2 counts 70 operations, split
+`archive/plans/mamba/BACKWARD_SCOPE_M2_M3.md` section 2 counts 70 operations, split
 6 copies / 3 (a) / 20 (b) / 41 (c), with 19 of the (c) rows called
 c-TOPOLOGY and six of those called NEW topologies. **That document says of
 itself that not one number in it was measured**, and reading the contracts

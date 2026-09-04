@@ -244,7 +244,7 @@ watched for: it reads as a result.
 
 ## Provenance
 
-Identity: `E3_RESULTS.md` round 13, `bench/results/e1/2026-08-28_130918-MacBook-Air-1-terrabyte`
+Identity: `archive/evidence/E3_RESULTS.md` round 13, `bench/results/e1/2026-08-28_130918-MacBook-Air-1-terrabyte`
 (Apple), `2026-08-28_131651-runpod-nvidia`, `2026-08-28_173933-mojolearn-e2-amd`.
 Judge: `bash tools/e3_round_judge.sh <apple> <nvidia> <amd>`.
 

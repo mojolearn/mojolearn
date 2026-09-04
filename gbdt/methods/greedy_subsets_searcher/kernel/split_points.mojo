@@ -29,7 +29,7 @@ future reader does not mistake it for a design to preserve:
 
 So the per-leaf `cub::DeviceRadixSort::SortPairs` in a host loop, 255 of them
 for a depth-8 tree, is the one part of this design its authors say is wrong.
-DEVIATION (PORTING.md 4): there is no CUB in Mojo, and the sort is being used
+DEVIATION (archive/reference/PORTING.md 4): there is no CUB in Mojo, and the sort is being used
 only as a stable 1-bit partition, so that is what is written.
 """
 
@@ -194,7 +194,7 @@ def update_partitions_after_split_kernel(
     The kernel here takes `host_offset` / `host_size` and writes them, so the
     device half is ported. What is missing is the driver allocating those as
     PINNED host memory rather than ordinary device buffers, which is where
-    the trick actually pays. Listed in UNWIRED.md.
+    the trick actually pays. Listed in archive/plans/UNWIRED.md.
     """
     var leaf_slot = Int(block_idx.y)
     var left_leaf = Int(left_leaves.unsafe_load(leaf_slot))
@@ -277,7 +277,7 @@ def update_partitions_and_plan_kernel(
     writes `ids_c[j] = n_live + j`, with `half` next level equal to
     `n_live` now. So the plan store moves into the border branch: same
     comparison, same operands, same tie rule (an exact tie computes the
-    RIGHT child -- PORTING.md 136), one fewer launch per planned level.
+    RIGHT child -- archive/reference/PORTING.md 136), one fewer launch per planned level.
     NO arithmetic moves: the choice is an integer compare on the same two
     numbers `plan_level_kernel` loads, and every partition store is
     byte-identical to the unfused kernel's.

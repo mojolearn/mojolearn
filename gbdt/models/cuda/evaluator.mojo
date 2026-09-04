@@ -61,7 +61,7 @@ the mask away when no split needs it (`NeedXorMask`,
 `evaluator_impl.cpp:16`, `:257`); this file mirrors that with a comptime
 kernel parameter picked from the model, so a float-only model runs the
 byte-for-byte kernel it ran before this arm existed. Recorded as a
-deviation in `PORTING.md`, because their GPU evaluator declines the case
+deviation in `archive/reference/PORTING.md`, because their GPU evaluator declines the case
 and ours takes it.
 
 DEVIATIONS, all stated:

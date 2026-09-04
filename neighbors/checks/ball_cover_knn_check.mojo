@@ -187,7 +187,7 @@ def _hash01(row: Int, feature: Int) -> Float64:
 
 def _scat_coord(row: Int, feature: Int) -> Float32:
     """A scattered point in a box of side 10. Magnitudes are kept small for
-    the reason `ball_cover_check.mojo` gives: `PORTING.md 21` records a k-NN
+    the reason `ball_cover_check.mojo` gives: `archive/reference/PORTING.md 21` records a k-NN
     fixture destroyed by float32 cancellation at a spacing of 100."""
     return Float32(10.0 * _hash01(row, feature))
 

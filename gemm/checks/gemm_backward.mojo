@@ -17,7 +17,7 @@ than decorative. For `C = A . B`,
 
 and both of those are the operation the forward already implements, at a
 different transpose. If a multiply or an add ever appears below, the claim is
-false and `gemm/IDENTICAL_BACKWARD_PLAN.md` has to say so.
+false and `archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md` has to say so.
 
 **THE CONTRACT IS NOT AMENDED AND MAY NOT BE.**
 `gemm/IDENTICAL_FP32_CONTRACT.md` is frozen; this file CONSUMES it. Nothing
@@ -84,10 +84,10 @@ It buys one arithmetic instead of two.
 WHAT THIS FILE DOES NOT BUY
 ----------------------------
 Identical gradients for a linear layer's matmul. **Not an identical training
-run.** `IDENTICAL_GEMM_PLAN.md` makes the same distinction for the forward
+run.** `archive/plans/IDENTICAL_GEMM_PLAN.md` makes the same distinction for the forward
 pass ("it gets you deterministic linear layers, NOT deterministic models") and
 every word of it applies here with a longer list attached. The list is
-`gemm/IDENTICAL_BACKWARD_PLAN.md` section 4, and the item a reader should not
+`archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md` section 4, and the item a reader should not
 miss is that **`dB`'s `k` is the token count**, so the weight gradient's bits
 are a function of how many tokens were in the call. That is the contract
 working as specified, and it is also the reason a microbatched step is not

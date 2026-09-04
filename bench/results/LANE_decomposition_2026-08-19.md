@@ -177,7 +177,7 @@ corrected paths, the default-arm finding, the cap section, current results.
 
 ---
 
-## 4. PROPOSED PORTING.md DEVIATION ENTRIES (numbered from 30)
+## 4. PROPOSED archive/reference/PORTING.md DEVIATION ENTRIES (numbered from 30)
 
 **30. The device Jacobi's convergence test is RELATIVE, and RAFT's is a
 closed-library parameter.** cuSOLVER `syevj` takes `tol` measured against the
@@ -217,19 +217,19 @@ with the unclamped value and over-reads. Not copied.
 
 ## 5. FALSE DOC SENTENCES FOUND IN FILES I MAY NOT EDIT
 
-- **`VENDOR_LIBRARIES.md:67`** — `| RAFT `pca.cuh` | cuSOLVER `syevj` | …`.
+- **`archive/reference/VENDOR_LIBRARIES.md:67`** — `| RAFT `pca.cuh` | cuSOLVER `syevj` | …`.
   The *conclusion* ("NOT FOUND as a dense eigensolver") is correct and I
   re-verified it. The *attribution* is wrong: there is no `pca.cuh` in RAFT,
   and it is cuML that calls `eigJacobi`. Suggest `cuml pca.cuh -> raft
   eigJacobi -> cuSOLVER syevj (opt-in arm; the default arm is eigDC ->
   syevd)`.
-- **`PORTING.md 22`** (as quoted by `jacobi_eigh.mojo`) — records the
+- **`archive/reference/PORTING.md 22`** (as quoted by `jacobi_eigh.mojo`) — records the
   eigensolver as running on the host with a condition that would move it to
   the device. **It moved.** The entry describes a state that no longer exists.
 - **`UNWIRED.md`** — `pca.mojo` says the ordering/truncation departure "is
   named in UNWIRED.md"; whoever owns that file should confirm the entry still
   matches, since `sign_flip` left the host list and the size cap is gone.
-- **`HOST_AND_DEVICE.md`** — not read in full; the `jacobi_eigh.mojo` rule-one
+- **`archive/reference/HOST_AND_DEVICE.md`** — not read in full; the `jacobi_eigh.mojo` rule-one
   discussion it anchors was rewritten this round.
 
 ---
@@ -343,8 +343,8 @@ No timing benchmarks were run.
   single-threaded O(n^3) per sweep and costs minutes there. The per-cell
   residual and orthonormality checks still run at 256 and are the properties
   that actually pin the answer.
-- **Did not edit `core/**`, `PORTING.md`, `VENDOR_LIBRARIES.md`, `UNWIRED.md`,
-  `HOST_AND_DEVICE.md`, or any root doc.** Findings for those are in section 5.
+- **Did not edit `core/**`, `archive/reference/PORTING.md`, `archive/reference/VENDOR_LIBRARIES.md`, `UNWIRED.md`,
+  `archive/reference/HOST_AND_DEVICE.md`, or any root doc.** Findings for those are in section 5.
 
 ## 8. OPEN ITEMS FOR THE NEXT ROUND
 

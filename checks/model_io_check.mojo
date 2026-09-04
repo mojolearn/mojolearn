@@ -21,7 +21,7 @@ WHAT IS CHECKED, AND THE FAILURE EACH PART EXISTS FOR
    constant feature with no borders, a one-hot feature, leaf weights on some
    trees and not others, and hostile losses. A trained model will not
    produce those corners; a fixture we build does, which is the same reason
-   `RECON_CTRS.md` argues for constructed fixtures over real datasets.
+   `archive/research/RECON_CTRS.md` argues for constructed fixtures over real datasets.
 3. A TRAINED MODEL WITH A ONE-HOT FEATURE: predict, save, load, predict.
    Bit-identical per row, not close, and the loaded struct equal field by
    field.

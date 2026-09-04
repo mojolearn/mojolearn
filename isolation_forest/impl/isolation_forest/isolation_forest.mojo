@@ -665,7 +665,7 @@ struct IsolationForest(Movable):
                 trace.record_list_f32(tag + ".structure.thr", sthr)
                 trace.record_list_i32(tag + ".structure.left", sl)
                 trace.record_list_i32(tag + ".structure.right", sr)
-                # CARD_GAPS.md items 1-4 for this lane. `structure.thr` is a
+                # archive/plans/CARD_GAPS.md items 1-4 for this lane. `structure.thr` is a
                 # hash taken on the far side of two washers: the mul-add
                 # ABSORBS a divergence in either bound whenever (max - min)
                 # is small against |min|, and the repartition fallback

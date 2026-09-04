@@ -14,7 +14,7 @@ is specified independently of platform, so both machines fit BYTE-IDENTICAL
 inputs -- the device is the only variable, which is the whole rule of E1.
 The "inputs" hashes in e1_fits.json prove it before any fit is compared.
 
-Fits, against E1_RUNBOOK.md's expectation table:
+Fits, against archive/evidence/E1_RUNBOOK.md's expectation table:
   et_clf     -- Extra Trees classification (integer score core; expected
                 identical -- the headline candidate)
   rf_reg     -- Random Forest regression (rows 16/17 closed; expected
@@ -22,7 +22,7 @@ Fits, against E1_RUNBOOK.md's expectation table:
   gbdt_rmse  -- SYMMETRIC-arm RMSE. The 2026-08-23 round at 39a0d888 had
                 NVIDIA's split SCORES differing in last bits from tree001
                 on, with the argmax picking the same winners anyway
-                (E1_RESULTS.md's first honesty note). By round 2 at
+                (archive/evidence/E1_RESULTS.md's first honesty note). By round 2 at
                 53d56ef1 the cell reads IDENTICAL on both vendors through
                 all 302 stages.
   gbdt_logloss -- "EXPECTED DIVERGENT at row 12 (device exp/log)" STOOD

@@ -17,7 +17,7 @@ fuse and nothing in it that is not a prefix sum.
 
 There would in any case be nothing to substitute: `nn.cumsum.cumsum` and
 `max.algorithm.reduction.cumsum` both take neither a `DeviceContext` nor a
-`target`, which `VENDOR_LIBRARIES.md` records as the signature of a HOST-ONLY
+`target`, which `archive/reference/VENDOR_LIBRARIES.md` records as the signature of a HOST-ONLY
 entry point, and it lists no device scan anywhere in the shipped kernel
 libraries.
 

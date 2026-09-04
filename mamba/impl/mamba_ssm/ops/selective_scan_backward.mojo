@@ -8,7 +8,7 @@ mojolearn answer to that kernel under the profile
 `mojolearn.identical.mamba1.bwd.fp32.v1`, which CONSUMES
 `mojolearn.identical.mamba1.fp32.v1` and adds clauses of its own. The forward
 contract `mamba/IDENTICAL_MAMBA_CONTRACT.md` is consumed here and NEVER
-edited; the plan is `mamba/IDENTICAL_BACKWARD_PLAN.md` and its topology names
+edited; the plan is `archive/plans/mamba/IDENTICAL_BACKWARD_PLAN.md` and its topology names
 T1-T5 are used below without restating their prices.
 
 **THIS FILE OWNS EXACTLY WHAT THE FORWARD SCAN FILE OWNS, MIRRORED.**
@@ -105,7 +105,7 @@ WHAT THIS FILE IS NOT
 ----------------------
 Not a gate. **Nothing here has been compiled or run**, no gradient has ever
 been produced by it, and every sentence about behavior is a prediction.
-`mamba/IDENTICAL_BACKWARD_PLAN.md` section 7's gates MB1-MB10 are still
+`archive/plans/mamba/IDENTICAL_BACKWARD_PLAN.md` section 7's gates MB1-MB10 are still
 SPECIFIED AND NOT BUILT, and the host backward oracle they compare against
 does not exist, so there is nothing yet to compare these bits to. The blocked
 T3 of plan section 5.3 (the model-scale tiling) is NOT here either: the T3

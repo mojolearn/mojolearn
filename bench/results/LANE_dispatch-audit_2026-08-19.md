@@ -151,7 +151,7 @@ the implied file is ambiguous to a reader.
 
 **One more false doc sentence corrected:** `pca.mojo` recommended
 `nn.argsort.argsort` as the device replacement for its host selection sort,
-citing `VENDOR_LIBRARIES.md`'s AVAILABLE row. Per this round's addenda
+citing `archive/reference/VENDOR_LIBRARIES.md`'s AVAILABLE row. Per this round's addenda
 `nn.argsort[target="gpu"]` is non-monotone above 256 elements — i.e. wrong at
 exactly the `n_cols` this note is about, silently. The recommendation is
 deleted and the reason recorded.
@@ -284,7 +284,7 @@ No `PORTED_MAP.tsv` rows are proposed: this lane ported nothing.
 
 ---
 
-## 6. PROPOSED PORTING.md DEVIATION ENTRIES (numbered from 30; renumber)
+## 6. PROPOSED archive/reference/PORTING.md DEVIATION ENTRIES (numbered from 30; renumber)
 
 **30. DBSCAN defaults to RBC where cuML's dispatch cannot reach RBC at all.**
 Theirs: `eps_nn_method` defaults to `BRUTE_FORCE` (`dbscan.hpp:74`), and even
@@ -311,7 +311,7 @@ not. Reason: none — unfixed gap. See lane finding F2.
 
 ## 7. FALSE DOC SENTENCES IN FILES I MAY NOT EDIT
 
-- **`VENDOR_LIBRARIES.md`** records `nn.argsort.argsort` as AVAILABLE and
+- **`archive/reference/VENDOR_LIBRARIES.md`** records `nn.argsort.argsort` as AVAILABLE and
   device-capable. Per this round's addenda it is non-monotone above 256
   elements and returns a well-formed but wrong permutation. `pca.mojo` had
   taken that row at face value and recommended it as a replacement for its

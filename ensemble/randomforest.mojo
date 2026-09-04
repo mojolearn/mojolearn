@@ -207,7 +207,7 @@ that build and the old text here defended it. Porting the parallel
 design supersedes it: only their `:585` clamp (streams <= trees)
 survives in `set_rf_params`.
 
-**A CORRECTION THAT IS PART OF THIS RESULT.** `ensemble/PLAN.md` and
+**A CORRECTION THAT IS PART OF THIS RESULT.** `archive/plans/ensemble/PLAN.md` and
 `decisiontree/batched_levelalgo/random_utils.mojo` both justify this
 deviation by citing "cuML's own docs say `n_streams=1` for
 reproducibility (`randomforestclassifier.pyx:182`)". **That sentence is
@@ -435,7 +435,7 @@ comptime LABELS_SAMPLED_ORDER = True
 # histogram, count and partition kernels make through `row_ids[i]` --
 # `bin_of(row, col)` / `value(row, col)`, and pre-2001 `labels[row]` --
 # is therefore a RANDOM-INDEX gather for the whole life of the tree.
-# The gather probe (extratrees/DEVIATIONS.md ~:2470) priced exactly this
+# The gather probe (archive/research/extratrees/DEVIATIONS.md ~:2470) priced exactly this
 # access on this device: permuted gather 6.7-9.0x slower than
 # sequential, and the launch-log attribution puts the gathering kernel
 # (histogram) at 85.3% of device time at the large bench shape.
@@ -509,7 +509,7 @@ comptime LABELS_SAMPLED_ORDER = True
 # fingerprint pair FP_2010 flag-off vs flag-on ALL HASH LINES EQUAL --
 # the identity half is in hand. STILL OWED: the flag-on `forest_check`
 # rerun (arm D was red before the flag-aware fix above landed), and the
-# 1M/2M timing A/B that owns any default flip (ensemble/PLAN.md,
+# 1M/2M timing A/B that owns any default flip (archive/plans/ensemble/PLAN.md,
 # "2026-09-01 candidate round").
 # =========================================================
 comptime ROWS_SORTED_SAMPLE = False
@@ -2476,7 +2476,7 @@ struct RowSampler(Movable):
         # everything that reads the mask or `selected_rows` is enqueued on
         # this same queue afterwards, so ordering is the queue's. A sync
         # here was this port's own wait, with no counterpart in their
-        # source -- HOST_AND_DEVICE.md's rule two says exactly this wait
+        # source -- archive/reference/HOST_AND_DEVICE.md's rule two says exactly this wait
         # is in scope to delete. Nothing host-side reads the mask before
         # `fit_forest`'s post-loop synchronize.
 

@@ -56,7 +56,7 @@ THE CALL CYCLE, theirs (`pointwise_oracle.cpp`):
   the total passes through their `static_cast<float>` truncation
   (`pointwise_oracle.cpp:106`) before it becomes the walker's double --
   it was Float64 until 2026-08-22, which gave our AnyImprovement test
-  sub-float32 resolution their walker does not have (PORTING.md 140's
+  sub-float32 resolution their walker does not have (archive/reference/PORTING.md 140's
   two extra accepted rounds were exactly that).
 * `AddRigdeRegulaizationIfNecessary` (`:109-111`) is a no-op unless
   `AddRidgeToTargetFunction`, which no configuration this repository runs
@@ -145,7 +145,7 @@ from std.sys.compile import is_defined
 #
 # OFF BY DEFAULT. Arm B builds with `-D MOJOLEARN_2030_FUSED_EST_MOVE=1`.
 # UNVERIFIED, RUN OWED -- the A/B commands are in
-# gbdt/UPSTREAM_SURVEY_2026-09.md and the PLAN appendix; the gates that
+# archive/research/gbdt/UPSTREAM_SURVEY_2026-09.md and the PLAN appendix; the gates that
 # must hold are `check-fit-pointwise`, `check-logloss-train` and
 # `check-ordered-boosting` built with the define (the changed arm is the
 # Logloss estimation path, and A GATE MUST EXERCISE THE CHANGED ARM --
@@ -554,7 +554,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             # for their atomic's order; its WIDTH is now theirs too. It
             # was Float64, which let AnyImprovement see improvements
             # BELOW float32 resolution and accept steps their walker
-            # cannot see -- PORTING.md 140 measured ours accepting 8
+            # cannot see -- archive/reference/PORTING.md 140 measured ours accepting 8
             # rounds where 6-7 sit at the float32 noise floor. Found
             # 2026-08-22 in the Newton-walk audit; the walk-divergence
             # entry carries the measurement.

@@ -17,7 +17,7 @@ static_cast<TImpl*>(this)`) becomes a comptime `bits` dispatch in the three
 `hist2_*` helpers below, which is the same static resolution spelled the way
 Mojo can say it. The two-stat loop file is INLINED into the two kernels here
 rather than kept as a separate module, exactly as the PASS family inlines
-`compute_hist_loop_one_stat.cuh` into `hist_one_byte.mojo` (PORTING.md 10
+`compute_hist_loop_one_stat.cuh` into `hist_one_byte.mojo` (archive/reference/PORTING.md 10
 and 13 record why the loop cannot be a freestanding function yet).
 
 WHY THIS FAMILY EXISTS, AND WHEN CATBOOST TAKES IT
@@ -40,7 +40,7 @@ odd, their `HIST2_PASS` macro first covers stat 0 with a one-stat
 count with `SkipFirst = true` (`hist_one_byte.cu:306-312`); the `skip_first`
 comptime parameter below is that template bool.
 
-DEVIATION (PORTING.md 1): CatBoost runs this at `BlockSize = 384`
+DEVIATION (archive/reference/PORTING.md 1): CatBoost runs this at `BlockSize = 384`
 (`hist_2_one_byte_base.cuh:169`), so `384 * 32` floats is 49,152 bytes and
 Apple gives 32,768. The matrix row `K_HIST_2_ONE_BYTE` resolves the block to
 256, which asks for exactly 32,768 bytes and keeps their per-warp slice
@@ -653,7 +653,7 @@ def hist2_one_byte_kernel[bits: Int, skip_first: Bool, smem_mode: Int](
     comptime skip_int = 1 if skip_first else 0
     var stats_p = stats + (skip_int + 2 * Int(block_idx.z)) * stat_line_size
 
-    # `TPointHist2OneByteBase`'s constructor, inlined (PORTING.md 10):
+    # `TPointHist2OneByteBase`'s constructor, inlined (archive/reference/PORTING.md 10):
     #     for (i = threadIdx.x; i < histSize; i += BlockSize) hist[i] = 0;
     #     Histogram = hist + impl->SliceOffset();
     #     __syncthreads();

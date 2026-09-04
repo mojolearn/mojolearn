@@ -16,7 +16,7 @@ the CPython binding can reach. When this file was written four training
 paths could NOT be reached from Python: there was no `grow_policy` slot on
 `gbdt_fit`, `MultiClassOneVsAll` is refused by name in
 `python/mojolearn/ensemble.py`, and the feature-parallel searcher has no
-caller but its own check (`UNWIRED.md`). **Since 2026-08-23 `grow_policy`
+caller but its own check (`archive/plans/UNWIRED.md`). **Since 2026-08-23 `grow_policy`
 IS on the Python surface (DEVIATION 259)** and the E2 matrix carries
 `gbdt_*_depthwise` / `gbdt_*_lossguide` cells through the boosting loop; the
 two growth cards here are KEPT as the lane-fixture cards -- one searcher

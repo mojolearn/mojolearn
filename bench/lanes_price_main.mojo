@@ -929,7 +929,7 @@ def run_gemm(ctx: DeviceContext, smoke: Bool, rounds: Int) raises:
     """The gemm lane's host-visible entry `identical_gemm` on one row of
     `bench/gemm_shapes.mojo`, the table with provenance (no shape is invented
     here). Default row 6, `kmeans.dist.4096x64x64` NT, which is the shape
-    E3_RESULTS.md priced as the standalone gemm; smoke row 4,
+    archive/evidence/E3_RESULTS.md priced as the standalone gemm; smoke row 4,
     `pca.transform.8192x4x4`. `MOJOLEARN_LANES_PRICE_GEMM_SHAPE` selects.
     Under FAST the same kernel runs with its pins compiled away, which is
     what the two builds of every other lane do too."""
@@ -1832,7 +1832,7 @@ def run_et(ctx: DeviceContext, smoke: Bool, rounds: Int) raises:
     had to be dialed back to reach a few seconds, so nothing was.
 
     The published ET profile shape is 100 trees at depth 16 (11.8 s per fit on
-    the M4, `extratrees/DEVIATIONS.md:4182`) and it is NOT the default here.
+    the M4, `archive/research/extratrees/DEVIATIONS.md:4182`) and it is NOT the default here.
     `tools/lanes_price.sh` at its default ROUNDS runs five legs per mode with
     a warm-up and a timed round in each, which is twenty fits: about four
     minutes of fitting at the profile shape against about two at this one, for

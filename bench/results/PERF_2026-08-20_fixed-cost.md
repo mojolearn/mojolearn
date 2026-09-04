@@ -44,12 +44,12 @@ pool, so `CreateInitialSubsets` gets tree 2's histograms from the memory
 tree 1 released. This port dropped the pool layer and called
 `enqueue_create_buffer` directly, so every tree allocated its own planes.
 `TTreeWorkspace` is a pool of one, held by `fit` across the boosting loop.
-PORTING.md 59.
+archive/reference/PORTING.md 59.
 
 Second, smaller: their histogram copy and subtract move one float per
 thread, which is free on NVIDIA (`__ldg` + `WriteThrough` fill a sector per
 warp) and is not free here. Isolated at a depth-6 level's shape:
-**11.0 GB/s at 4 bytes per thread, 65.2 GB/s at 16.** PORTING.md 60.
+**11.0 GB/s at 4 bytes per thread, 65.2 GB/s at 16.** archive/reference/PORTING.md 60.
 
 ## Result
 
@@ -75,7 +75,7 @@ forced off. All twenty checks pass.
 
 ## Two negative results, recorded so nobody re-runs them
 
-**CatBoost's warp-scan shape is not a win here.** `PORTING.md 8` replaced
+**CatBoost's warp-scan shape is not a win here.** `archive/reference/PORTING.md 8` replaced
 their `cub::WarpScan<double>` with one thread per feature because the port
 believed Mojo had no warp primitives -- a belief that is stale. Measured
 against their shape (32 lanes per feature, shared memory in place of the

@@ -198,7 +198,7 @@ struct Split(ImplicitlyCopyable, Movable):
 #     shuffle would not carry them; `warp.shuffle_xor` on `Int64` was
 #     measured to work on this target and is used directly. **No timing
 #     number is attached to any of this and none will be until the perf
-#     round** (`extratrees/PLAN.md`).
+#     round** (`archive/plans/extratrees/PLAN.md`).
 #     ==================================================================
 #
 #     ==================================================================
@@ -232,7 +232,7 @@ struct Split(ImplicitlyCopyable, Movable):
 #     a whole-struct kernel argument.
 #
 #     WHY THE HAND-WRITTEN FORM IS NOT AN INVENTION UNDER
-#     `VENDOR_LIBRARIES.md`. The rule is to call the vendor's library
+#     `archive/reference/VENDOR_LIBRARIES.md`. The rule is to call the vendor's library
 #     where the incumbent calls one. There is no `linalg`, `algorithm` or
 #     `math` entry point in MAX for a 128-bit integer product, and there
 #     is no vendor intrinsic to call on ANY of the three targets, since
@@ -283,7 +283,7 @@ struct Split(ImplicitlyCopyable, Movable):
 #     is a footgun this reduction is called twice in a row by.
 #
 #     WHY NOT `warp.reduce` OR A BLOCK COLLECTIVE, which
-#     `VENDOR_LIBRARIES.md` would otherwise require. `max.gpu.primitives`
+#     `archive/reference/VENDOR_LIBRARIES.md` would otherwise require. `max.gpu.primitives`
 #     offers `sum`, `max`, `min`, `broadcast` and `prefix_sum` over a
 #     SCALAR. The thing being reduced here is a 36-byte record under a
 #     four-level lexicographic order, which is none of those, and no

@@ -27,7 +27,7 @@ check fixture was not random. It was affine in the row index, i.e. a lattice.
 | **D5c** | `select_k-inl.cuh:47-72` — `choose_select_k_algorithm` sends `2 < k <= 256` to WARPSORT and only `k > 256` to radix. | Radix is our only ported selector for the fallback. | Not fixable here; `select_warpsort.mojo` and `faiss_select/` are other lanes'. Recorded. |
 | **D5d** | `fused_l2_knn.cuh:251-279`, `:313-337` — cross-column-block merge with a mutex array, `atomicCAS`/`atomicExch`, `__threadfence`. | Not ported; we launch `gridDim.x == 1`. | **Not a behavioral divergence**: their own `rowEpilog_lambda` opens `if (gridDim.x == 1) { return; }` (`:226`) and their final store is gated on `gridDim.x == 1` (`:474`), so at that configuration their kernel *is* ours. We lose their `grid.x > 1` configuration, which `launchConfigGenerator` picks when `m` is small. Same deviation, same reason, as `simt_kernel.mojo`. |
 | **D5e** | `fused_l2_knn.cuh:221-222` — the selector is `faiss_select::WarpSelect<AccT, uint32_t, false, Comparator<AccT>, NumWarpQ, NumThreadQ, 32>`, register-resident, merged by `updateSortedWarpQ` (`:148-179`) with `__ballot_sync` / `__shfl_up_sync` / `__ffs`. | Placeholder: shared-memory sorted list, threshold reject (theirs, `:383`), staging buffer (theirs, `:424`), serial merge (**not** theirs). | **NOT FIXED BY DESIGN** — `faiss_select/` is the warpsort lane's. Marked `SELECTOR SLOT` in the file. |
-| **D5f** | `Policy::SmemSize = 2 * SmemPage` (`contractions.cuh:100`) — their contraction is double-buffered. | Single page, as `core/gemm.mojo` already is. | Deviation, with a number: two pages at `Policy2x8` is 36,992 bytes against Metal's 32 KB (`PORTING.md 1`). Forced. It is also why we cannot alias their 256-wide `allWarpTopKs` over the GEMM pages, which is what drove DEVIATION BLOCK 2 in the file. |
+| **D5f** | `Policy::SmemSize = 2 * SmemPage` (`contractions.cuh:100`) — their contraction is double-buffered. | Single page, as `core/gemm.mojo` already is. | Deviation, with a number: two pages at `Policy2x8` is 36,992 bytes against Metal's 32 KB (`archive/reference/PORTING.md 1`). Forced. It is also why we cannot alias their 256-wide `allWarpTopKs` over the GEMM pages, which is what drove DEVIATION BLOCK 2 in the file. |
 | **D5g** | `fused_l2_knn.cuh:405-412` — the staging slot comes from a warp prefix sum over `numValsWarpTopK`. | Shared-memory integer `Atomic.fetch_add`. | Different ORDER of staged candidates, same SET; stage 3 sorts them, so it cannot change the result. Documented in the file. |
 | **D5h** | `faiss_distance_utils.h::chooseTileSize` — `preferredTileRows = 512`, `1024` if `dim <= 32`; `tileCols = numCentroids` if `tileRows * n * elemSize * 2 <= 512 MB`, else `min(targetUsage / (2*elemSize*tileRows), n)` with `targetUsage` 768 MB / 1 GB by device memory; then `tile_cols = max(tile_cols, k)` (`:107`). | Not ported at all; `query_tile` is a caller constant (256 in the benches) and there is no column tile. | **NOT FIXED** — goes with D1. Note their heuristic would pick `tile_rows = 1024`, `tile_cols = 131072` at the scaling harness' 400k × 2000 × 32, i.e. 4 column tiles, not one. |
 | **D5i** | `knn_brute_force.cuh:229-256` — bitmap/bitset filter, masking rejected candidates to ±inf before `select_k`. | Not ported. | Recorded in §3 as an UNPORTED row. |
@@ -118,7 +118,7 @@ cuvs/cpp/src/neighbors/detail/haversine_distance.cuh	haversine_knn, the other ar
 
 ---
 
-## 4. Proposed PORTING.md deviation entries (numbered from 30)
+## 4. Proposed archive/reference/PORTING.md deviation entries (numbered from 30)
 
 **30. A device-wide vendor call cannot be fused, and that is what made k-NN
 slow.** `linalg.matmul` must write its output to memory, so substituting it for
@@ -172,7 +172,7 @@ collinear points do. Mix (splitmix64) rather than combine linearly.
    false as written: it was a port of their fallback. It should name both paths
    and say which one their dispatch takes.
 
-4. **`VENDOR_LIBRARIES.md`** — every entry justified by the retired rule 2
+4. **`archive/reference/VENDOR_LIBRARIES.md`** — every entry justified by the retired rule 2
    needs re-reading against "follow their dispatch". At minimum the k-NN
    `select_k -> nn.topk.top_k` entry must be scoped to the fallback path only.
 

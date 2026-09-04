@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The device GEMM of profile `mojolearn.identical.gemm.fp32.v1`.
 
-Phase 2b of `IDENTICAL_GEMM_PLAN.md`'s lane charter. The contract is
+Phase 2b of `archive/plans/IDENTICAL_GEMM_PLAN.md`'s lane charter. The contract is
 `gemm/IDENTICAL_FP32_CONTRACT.md`; the answer is
 `gemm/checks/gemm_oracle.mojo::gemm_oracle`, bit for bit, for `OP_NN`,
 `OP_NT` and `OP_TN`.
@@ -735,7 +735,7 @@ def identical_gemm_tiled_kernel[
 # ===========================================================================
 # `core/gram_splitk.mojo`'s architecture, with v1's numerical policy instead
 # of that file's (which pins a chunk COUNT and folds SERIALLY, and stays that
-# way as its own profile -- IDENTICAL_GEMM_PLAN.md's LANE BOUNDARY item 2).
+# way as its own profile -- archive/plans/IDENTICAL_GEMM_PLAN.md's LANE BOUNDARY item 2).
 
 
 def identical_gemm_leaf_kernel(

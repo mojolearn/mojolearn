@@ -14,7 +14,7 @@ its section 10.
 
 WHAT THIS GATE IS FOR
 ----------------------
-`training/TRAINING_LOOP_PLAN.md:49`: *"No checkpoint file format, so clause
+`archive/plans/training/TRAINING_LOOP_PLAN.md:49`: *"No checkpoint file format, so clause
 (d) tests resume WITHIN one process."* Section 4.2's N6 says the same at
 length and section 7 item 6 turns it into a disclaimer: **"No claim about
 resuming from a file."** Clause (iii) below is the first thing in this

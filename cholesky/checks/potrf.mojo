@@ -13,7 +13,7 @@ either library is a cuSOLVER call -- `cuvs/src/neighbors/scann/detail/
 scann_avq.cuh:179-200` (`potrf` then `potrs`) is the only factorization from
 scratch in the two trees, and `cuml/src/solver/lars_impl.cuh:315-320` reaches
 RAFT's rank-one UPDATE, which is itself three cuBLAS calls around a host
-`std::sqrt`. cuSOLVER and cuBLAS are CLOSED; `VENDOR_LIBS.md`'s surviving
+`std::sqrt`. cuSOLVER and cuBLAS are CLOSED; `archive/reference/VENDOR_LIBS.md`'s surviving
 exception says call the platform equivalent because there is nothing to port,
 and `IDENTITY_PATHS.md`'s opening rule says a mode has three moves. There is
 no MAX `potrf` to call, so the move here is not REPLACE-with-a-vendor-call
@@ -130,7 +130,7 @@ does not cover.
 #
 # THE HOST ROUND TRIP PER PANEL IS DELIBERATE. `info` is read back after
 # every panel, and the driver stops. That is a control-plane decision of
-# exactly the kind `HOST_AND_DEVICE.md` governs, it costs one drain per
+# exactly the kind `archive/reference/HOST_AND_DEVICE.md` governs, it costs one drain per
 # panel, and it is what both LAPACK and RAFT do -- `cholesky_r1_update.cuh:
 # 105-108` copies two scalars to the host, takes the square root THERE, and
 # copies one back, once per rank. Continuing past a failed pivot to save

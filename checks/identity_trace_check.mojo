@@ -51,7 +51,7 @@ instrument could lie.
 WHAT IT DOES NOT TEST. Whether the CHECKPOINTS ARE IN THE RIGHT PLACES. A
 trace can be self-consistent, localizing, content-only and honest about
 denormals while checkpointing the wrong buffers entirely. That judgement
-lives with each call site and with `LOSSGUIDE.md`'s stage list.
+lives with each call site and with `archive/research/LOSSGUIDE.md`'s stage list.
 """
 
 from max.gpu.host import DeviceContext

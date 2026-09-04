@@ -246,7 +246,7 @@ def kernel_ridge_fit_host(
 
     # DEVIATION 1684. The training Gram is `K(X, X)` and `km_kernel_matrix`
     # takes its two operands as two MUTABLE buffers, which Mojo refuses to
-    # satisfy from one allocation (PORTING.md 24, and
+    # satisfy from one allocation (archive/reference/PORTING.md 24, and
     # `decomposition/impl/linalg/detail/pca.mojo` carries the same note for
     # `X^T X`). So `X` is uploaded TWICE. The alternative -- a special
     # diagonal path -- would be a SECOND kernel-matrix code path reached only

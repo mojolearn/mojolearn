@@ -23,7 +23,7 @@ thresholds. `bench/oracle_cat.txt` found it: 0 of 18 one-hot splits matching
 CatBoost, train mse 2.30 against their 0.147.
 
 `PORTING_RULES` 3 and 8 at once: the file had a caller, was not in
-`UNWIRED.md`, the suite was green, and the branch the suite ran was not the
+`archive/plans/UNWIRED.md`, the suite was green, and the branch the suite ran was not the
 branch the product ran.
 
 So this check does the one thing neither of those did: it hands

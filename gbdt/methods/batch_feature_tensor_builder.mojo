@@ -124,7 +124,7 @@ fixture with `0x80000001` in it is what caught it.
 Two defences, both applied: `@no_inline` on `_as_u32`, and `_widen_u32`,
 which masks to 32 bits so the answer is right whichever way the
 constructor resolves. This is the third member of the family
-`gbdt/models/hash.mojo` and `PORTING.md` 17 opened -- **assume Mojo's
+`gbdt/models/hash.mojo` and `archive/reference/PORTING.md` 17 opened -- **assume Mojo's
 numeric conversions are approximate until an external oracle says
 otherwise.**
 

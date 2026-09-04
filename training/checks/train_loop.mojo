@@ -14,7 +14,7 @@ host oracle; a digest was computed, computed twice with the same result, and a
 checkpoint taken at step 4 and resumed through step 8 reproduced eight
 continuous steps exactly. Written 2026-08-25 by the training-loop lane,
 DEVIATIONS 1550 through 1589. The design is
-`training/TRAINING_LOOP_PLAN.md` and the gate is
+`archive/plans/training/TRAINING_LOOP_PLAN.md` and the gate is
 `training/checks/train_step_check.mojo`, which has run.
 
 **WHAT IS STILL UNPAID: THE OTHER TWO VENDORS.** No two digests from DIFFERENT
@@ -2012,5 +2012,5 @@ def main() raises:
     print(
         "NOTE: no timing may be quoted from this binary. A traced step"
         " drains the queue four times and the optimizer's refusal downloads"
-        " four buffers every step (HOST_AND_DEVICE.md)."
+        " four buffers every step (archive/reference/HOST_AND_DEVICE.md)."
     )

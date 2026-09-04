@@ -1174,7 +1174,7 @@ def identical_embedding_backward_into(
     `dW = ftz(dW_first + dW_second)` does NOT, in general, which is contract
     5.4's `R = 4` row again, and `SAB_ACCUM_BY_ADD` is that arm.
 
-    Set beside `gemm/IDENTICAL_BACKWARD_PLAN.md` 3.2, where `dB` splits
+    Set beside `archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md` 3.2, where `dB` splits
     reproduce only at an ALIGNED split, one that is both a leaf boundary and
     a subtree boundary of v1's balanced tree -- **a chain has no boundaries
     to align to.** Do NOT cite that section's measurement as evidence that an

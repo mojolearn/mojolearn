@@ -424,7 +424,7 @@ def check_leafwise_scores(ctx: DeviceContext) raises:
     # reported 15 naive / 3 fused and I read that as "MAX contracts on some
     # instantiations and not others". **That reading was wrong and the
     # sentence it produced has been deleted from the kernel file and from
-    # LOSSGUIDE.md.** Running `host_best` against itself on the CPU, with
+    # archive/research/LOSSGUIDE.md.** Running `host_best` against itself on the CPU, with
     # no device involved at all, reproduces the same 15/3 split: it is a
     # property of the FIXTURES.
     #

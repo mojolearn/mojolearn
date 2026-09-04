@@ -3,7 +3,7 @@
 # python/mojolearn/_mojolearn_mamba.so. Run from anywhere; requires pixi.
 #
 # THIS EXTENSION IS mamba/ AND NOTHING ELSE. It is the FOURTEENTH binding,
-# closing mamba/FEATURE_PARITY.md's "PyPI surface: NONE EXISTS" row, and it
+# closing archive/evidence/mamba/FEATURE_PARITY.md's "PyPI surface: NONE EXISTS" row, and it
 # is separate from every sibling for the reason the estimators binding's
 # header gives: an independently changing binding must not become a merge
 # point. The lane reaches the identical GEMM and checks/numerics through

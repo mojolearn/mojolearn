@@ -43,7 +43,7 @@ FOUR GATES, and why each is shaped the way it is:
       and the two searchers consume the planes through disjoint kernel
       stacks.
 
-SABOTAGE TABLE (each run by hand, one line each; see PORTING.md):
+SABOTAGE TABLE (each run by hand, one line each; see archive/reference/PORTING.md):
   A  kernel second-order branch stores `weight` instead of `weight*der2`
      -> S1 fails per-cell, S2 collapses to identical models
   B  host passes `second_order = False` unconditionally

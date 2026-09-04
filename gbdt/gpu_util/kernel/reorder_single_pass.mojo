@@ -142,7 +142,7 @@ kernel.
 #   gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:1655
 # (the single-leaf helper at greedy_search_helper.mojo:645 may take it
 # too; it never exceeds one leaf so the threshold decides). Until wired,
-# the path is callable and dead, and `UNWIRED.md`'s owner should list it
+# the path is callable and dead, and `archive/plans/UNWIRED.md`'s owner should list it
 # if a level ships without the wiring.
 # =========================================================================
 """

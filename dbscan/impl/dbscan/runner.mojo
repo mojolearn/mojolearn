@@ -332,7 +332,7 @@ their code branches on is this Bool.
 
     `batch_size = 0` means one batch over the whole dataset.
 
-    `phase_timing` (PORTING.md 38) is the port of the instrumentation cuML
+    `phase_timing` (archive/reference/PORTING.md 38) is the port of the instrumentation cuML
     hangs on this function: their `verbosity` parameter gates a
     `CUML_LOG_DEBUG("- Batch %d / %ld ...")` per batch per loop, and every
     phase sits in an nvtx range (`Trace::Dbscan::VertexDeg` :255/:330,
@@ -651,7 +651,7 @@ their code branches on is this Bool.
     # `runner.cuh:257`: batch 0 is the one batch whose COLUMNS loop 1 also
     # produces, so loop 2 can skip its neighborhood pass (`:327`).
     #
-    # DEVIATION 39 (PORTING.md): theirs fills during loop 1 into `adj_graph`
+    # DEVIATION 39 (archive/reference/PORTING.md): theirs fills during loop 1 into `adj_graph`
     # sized to batch 0's own edge count (`algo.cuh:150`) and then GROWS it
     # to `maxadjlen` at `runner.cuh:317` -- `rmm::device_uvector::resize`
     # preserves contents when growing. `DeviceBuffer` has no growing resize,
@@ -807,7 +807,7 @@ their code branches on is this Bool.
 
         # Their ternary `i == 0 ? labels : labels_temp` is written out: a
         # pointer-valued conditional picks the wrong branch in this Mojo
-        # (`PORTING.md 19`), and buffers are not pointers here anyway. The
+        # (`archive/reference/PORTING.md 19`), and buffers are not pointers here anyway. The
         # merge is a separate `if (i > 0)` in theirs too (`runner.cuh:389`).
         var t_cc = perf_counter_ns()
         var batch_passes: Int

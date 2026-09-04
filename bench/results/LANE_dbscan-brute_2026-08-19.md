@@ -17,7 +17,7 @@ Strongest remaining gap is complexity, not constant: this is still
 | # | What upstream does (file:line) | What ours did | Fixed? |
 |---|---|---|---|
 | D1 | `vertexdeg/algo.cuh:229` calls `epsUnexpL2SqNeighborhood`, a FUSED `Contractions_NT` tile kernel: `acc[i][j]` in registers (`epsilon_neighborhood.cuh:41`), `acc <= eps` in `epilog()` (`:106`), writes bool `adj` + reduces `vd` with `logicalWarpReduce`+`blockReduce`+atomics in the SAME kernel (`:137-160`). Never materializes a distance matrix. | `runner.mojo` ran `gemm_nt` (MAX matmul) into an `m x N` float32 `dist`, then `expand_distances_kernel` over it, then `eps_neighborhood_kernel` reading it back. 16 bytes/pair of traffic against their 1, three launches against one. | **FIXED.** New `dbscan/gbdt/neighbors/epsilon_neighborhood.mojo`. |
-| D2 | `accumulate()` (`epsilon_neighborhood.cuh:129-130`) is `diff = regx - regy; acc += diff*diff` -- UNEXPANDED, straight from coordinates. | Expanded identity `\|\|x\|\|^2+\|\|y\|\|^2-2xy` through a GEMM. An ARITHMETIC change: cancels catastrophically in float32 when norms dominate distances (`PORTING.md 21`). | **FIXED.** Unexpanded. `row_norm_kernel`, `x_norm`, `x_alias`, `xn_alias` and `dist` all leave the DBSCAN path. |
+| D2 | `accumulate()` (`epsilon_neighborhood.cuh:129-130`) is `diff = regx - regy; acc += diff*diff` -- UNEXPANDED, straight from coordinates. | Expanded identity `\|\|x\|\|^2+\|\|y\|\|^2-2xy` through a GEMM. An ARITHMETIC change: cancels catastrophically in float32 when norms dominate distances (`archive/reference/PORTING.md 21`). | **FIXED.** Unexpanded. `row_norm_kernel`, `x_norm`, `x_alias`, `xn_alias` and `dist` all leave the DBSCAN path. |
 | D3 | `adjgraph/algo.cuh:65` `thrust::exclusive_scan` -> `cub::DeviceScan`, device-wide, single pass with decoupled lookback. | `exclusive_scan_kernel` launched at `grid_dim=(1,1,1)`: ONE threadgroup scanning the whole array serially, once per batch, twice per fit. | **FIXED.** Three-launch scan-then-propagate (deviation 32). Verified at 2,000,000 entries / 977 blocks. |
 | D4 | `runner.cuh:245-400`: two batch loops. Loop 1 REVERSED (`:247`, their comment copied verbatim) does vertexdeg -> read `vd[n_points]` -> corepoints. Loop 2 does vertexdeg (`i>0`) -> adjgraph -> `weak_cc_batched` into `labels` (`i==0`) or `labels_temp` -> `MergeLabels::run`. `adj_graph` is a LOCAL `rmm::device_uvector` resized to the largest batch (`:230`, `:317`). | One global `weak_cc` over a CSR built from every row, `MergeLabels` never ported, `col_ind` sized `N x N` by the caller. Correct, but gave back exactly the memory batching exists to save. | **FIXED.** `mergelabels/runner.mojo` + `label/merge_labels.mojo` ported; `col_ind` now allocated inside `dbscan_fit` for the largest batch, as theirs is. |
 | D4b | *(brief said this "halves the arithmetic")* `runner.cuh` still recomputes vertexdeg for every batch except batch 0 (`:328-350`). | -- | **The brief's premise is wrong and it is worth recording why.** The second pass is unavoidable in EITHER structure: `weak_cc`'s `filter_op` reads `core[j]` for neighbours `j` in every other batch, so the whole core mask must exist before any batch is labelled. Upstream does `2*n_batches - 1` neighborhood passes; we now do the same, where we did `2*n_batches`. The saving is one pass out of `2*n_batches`, not a halving. |
@@ -52,7 +52,7 @@ Audited every one in `dbscan/`. After this lane:
 - `nn.cumsum` -- **not used, and confirmed unusable.** Its installed signature
   is `cumsum[dtype, exclusive, reverse, *, axis](output, input)`: no
   `ctx: DeviceContext`, no `target`, unlike `nn.argsort`/`nn.topk`/`nn.gather`
-  which carry both. There is no way to enqueue it. `VENDOR_LIBS.md` was
+  which carry both. There is no way to enqueue it. `archive/reference/VENDOR_LIBS.md` was
   already right about this.
 
 ---
@@ -117,7 +117,7 @@ this lane owns. Nothing needs merging by hand unless the root
 
 ---
 
-## 4. PROPOSED `PORTING.md` DEVIATION ENTRIES (numbered from 30)
+## 4. PROPOSED `archive/reference/PORTING.md` DEVIATION ENTRIES (numbered from 30)
 
 **30. `logicalWarpReduce<AccThCols>` -> `shuffle_xor` butterfly.**
 RAFT reduces the 16 threads sharing an output row with `shfl_xor` inside a
@@ -182,10 +182,10 @@ module docstrings):
   at the time it was written.
 
 **In files I may NOT edit** -- for the orchestrator:
-- `VENDOR_LIBRARIES.md` and `VENDOR_LIBS.md` list `linalg.matmul` as the
+- `archive/reference/VENDOR_LIBRARIES.md` and `archive/reference/VENDOR_LIBS.md` list `linalg.matmul` as the
   route for DBSCAN's distance step. DBSCAN no longer calls it, and per the
   new rule it should never have.
-- `PORTING.md` mentions DBSCAN's distance path; whatever it says about
+- `archive/reference/PORTING.md` mentions DBSCAN's distance path; whatever it says about
   `gemm_nt` + `expand_distances` there is now false for this section.
 - Root `README.md` / `RESUME.md` / `HANDOFF.md` claims that DBSCAN "was
   cheap because the distance step already existed" (the same sentence as the

@@ -39,7 +39,7 @@ Both are theirs. This file implements the first; the searcher implements the
 second. Reversing either is invisible on any fixture whose candidates do not
 tie exactly, and changes which feature a tie resolves to on one that does.
 
-## THE SIGN CONVENTION (PORTING.md 94a)
+## THE SIGN CONVENTION (archive/reference/PORTING.md 94a)
 
 `gbdt/methods/kernel/pointwise_scores.mojo` keeps CATBOOST's: `FLT_MAX`
 sentinel, `gain < bestGain`, LOWER IS BETTER. The greedy-subsets scorer in
@@ -86,7 +86,7 @@ def folds_histogram_for(folds: List[UInt32]) raises -> FoldsHistogram:
     The one-byte fan-out needs it to size each bit width's multiplier, and
     `pointwise_kernels.cpp:57-60` reads it with the ranges `(4,5) (6,6)
     (7,7) (8,8)` -- so a 16-fold feature (IntLog2 == 4) counts toward the
-    FIVE-bit kernel. `PORTING.md` 102a.
+    FIVE-bit kernel. `archive/reference/PORTING.md` 102a.
     """
     var h = FoldsHistogram()
     for i in range(len(folds)):
@@ -110,7 +110,7 @@ def folds_histogram_for(folds: List[UInt32]) raises -> FoldsHistogram:
             # `checks/pointwise_vs_greedy_check.mojo` on its first run.
             #
             # It is also why their one-byte ranges start at FOUR
-            # (`PORTING.md` 102a): ceil(log2(16)) is 4, so a 16-fold
+            # (`archive/reference/PORTING.md` 102a): ceil(log2(16)) is 4, so a 16-fold
             # feature belongs to the 5-bit kernel, whose bound is (15, 32].
             var bit = 0
             while (1 << bit) < f:

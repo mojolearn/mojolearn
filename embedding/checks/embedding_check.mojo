@@ -1947,7 +1947,7 @@ def clause_e(ctx: DeviceContext) raises:
     contributor in the second microbatch is carried through unchanged,
     because its "fold" is zero additions on the loaded seed.
 
-    Set beside `gemm/IDENTICAL_BACKWARD_PLAN.md` 3.2, where `dB` splits
+    Set beside `archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md` 3.2, where `dB` splits
     reproduce only at an ALIGNED split -- one that is both a leaf boundary
     and a subtree boundary of v1's balanced tree. **A CHAIN HAS NO
     BOUNDARIES TO ALIGN TO.** And do NOT cite that section's measurement as
@@ -1978,7 +1978,7 @@ def clause_e(ctx: DeviceContext) raises:
     Asserted in BOTH modes. The carry theorem is a claim about the SEQUENCE
     of operations and not about their rounding, so it holds under FAST as
     well, and a FAST failure here is a real routing defect rather than a
-    numerics one -- `gemm/IDENTICAL_BACKWARD_PLAN.md`'s G2 argument."""
+    numerics one -- `archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md`'s G2 argument."""
     var c = emb_case(emb_case_by_name(String("f_split")))
     var cfg = emb_case_config(c)
     var ids = emb_case_ids(c)
@@ -3267,9 +3267,9 @@ def main() raises:
 #    `MOJOLEARN_EMB_CHECK_CLAUSE_E=1`. A shell file under `tools/` is
 #    outside this agent's remit.
 #
-# 7. **`IDENTITY_PATHS.md`, `SUPPORT_MATRIX.md`, `CARD_GAPS.md` and
-#    `UNWIRED.md`** all enumerate lanes and none mentions `embedding/`. Four
-#    entries owed, all in files this lane may not edit. `UNWIRED.md` in
+# 7. **`IDENTITY_PATHS.md`, `SUPPORT_MATRIX.md`, `archive/plans/CARD_GAPS.md` and
+#    `archive/plans/UNWIRED.md`** all enumerate lanes and none mentions `embedding/`. Four
+#    entries owed, all in files this lane may not edit. `archive/plans/UNWIRED.md` in
 #    particular is where "specified, never compiled" belongs, and that is
 #    now the state of five files rather than three.
 #

@@ -1026,7 +1026,7 @@ struct TCatFeatureParams(Copyable, Movable):
         ordered statistic would have to run in ROW order -- a different and
         much worse estimator rather than a slower one.
         `gbdt/data/permutation.mojo` ported `TDataPermutation` on
-        2026-08-21 (`PORTING.md` 55). The second said a `Borders` model
+        2026-08-21 (`archive/reference/PORTING.md` 55). The second said a `Borders` model
         could not carry its apply-time CTR tables, so the fallback stayed
         here to avoid shipping a default that trains and cannot score;
         `build_ctr_tables` grew the target-class histogram arm and that is

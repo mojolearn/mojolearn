@@ -112,7 +112,7 @@ diagnostic.** The same annotation is applied pre-emptively to the new
 |---|---|---|
 | `bitonic_sort.cuh:27,35,97,125,144,158,174,190,230` — every function is `_RAFT_DEVICE _RAFT_FORCEINLINE`; `select_warpsort.cuh` marks all 32 members `_RAFT_DEVICE` | `select_warpsort.mojo` had **no inline annotation anywhere**. | **FIXED.** `@always_inline` on `is_ordered`, `dummy_key`, `twiddle_in`, `twiddle_out`, `bitonic_merge`, `bitonic_sort`, `block_sort_done`, `block_sort_store` and all seven `WarpSortImmediate` methods. This is what unblocked `capacity >= 64` on Metal. |
 | `select_warpsort.cuh:709-710` — `for (... ; nwarps > 1; nwarps = split, split = (nwarps + 1) >> 1)` | Transliterated literally, which crashes the Mojo compiler (see §0). | **FIXED**, by restating the induction step as arithmetic. Values identical. |
-| `select_warpsort.cuh` module docstring in ours claimed the port "COMPILES" | It compiled *alone* and crashed at every launch site, i.e. it was never at COMPILES by `VENDOR_LIBRARIES.md`'s four tiers. | **FIXED by the work**: it is now at RUNS ON DEVICE, checked against radix and against a host oracle. `UNWIRED.md` §"`select_warpsort`, 2026-08-19: COMPILES, NEVER RUN" is now false end to end — see §5. |
+| `select_warpsort.cuh` module docstring in ours claimed the port "COMPILES" | It compiled *alone* and crashed at every launch site, i.e. it was never at COMPILES by `archive/reference/VENDOR_LIBRARIES.md`'s four tiers. | **FIXED by the work**: it is now at RUNS ON DEVICE, checked against radix and against a host oracle. `UNWIRED.md` §"`select_warpsort`, 2026-08-19: COMPILES, NEVER RUN" is now false end to end — see §5. |
 | `matrix/detail/select_warpsort.cuh` vs `neighbors/detail/faiss_select/Select.cuh` | This tree treated "warpsort" as ONE thing. | **Not a bug in code, a bug in the map.** They are two independent implementations of the FAISS design and neither subsumes the other; see §7 for the diff. Both are now ported, in separate directories, with the difference written into both file headers. |
 | `select_warpsort.cuh:329` `set_k_th_` uses `__shfl_sync` with an explicit width and a deliberately out-of-range lane | Correctly recorded as the reason `warp_sort_filtered/_distributed/_distributed_ext` are unported. | **Still true, and now bounded.** That blocker does NOT reach `faiss_select`: its only indexed shuffle is `shfl(warpK[...], kLane)` with `kLane = (k-1) % WarpSize` (`Select.cuh:351`), already reduced, no width. So the fusion is reachable even if `warp_sort_filtered` never lands. |
 | `fused_l2_knn.cuh:174-175` `__shfl_up_sync(mask, ..., 1)` and `raft::shfl` at `:141,:163` | Not previously assessed. | **Both expressible.** Mojo has `shuffle_up(value, offset)` and `shuffle_idx(value, offset)`; neither of those call sites uses a width, and `:141/:163` index by `kLane`/`srcLane`, both already in `[0,31]`. The one thing `updateSortedWarpQ` needs that Mojo lacks is `__ballot_sync` + `__ffs` — see §7, OPEN. |
@@ -128,7 +128,7 @@ elements inside one subtree, so no element's cross-lane phase can observe
 another subtree's later levels.
 
 **Cleared by measurement, not by reasoning:** `stack_allocation` without an
-address space is memory, not registers (`PORTING.md 26`). Neither file uses it
+address space is memory, not registers (`archive/reference/PORTING.md 26`). Neither file uses it
 for a queue. The emitted AIR confirms it: `WarpSortImmediate[64,·]` lowers to
 `{ i64, <2 x i32>, <2 x i32>, <2 x i32>, <2 x i32>, i64 }` passed and returned
 **by value** — the queues really are in registers. The only `stack_allocation`
@@ -195,7 +195,7 @@ instantiated. Both are now false.
 
 ---
 
-## 4. PROPOSED `PORTING.md` DEVIATION ENTRIES (renumber from 30)
+## 4. PROPOSED `archive/reference/PORTING.md` DEVIATION ENTRIES (renumber from 30)
 
 **30. A bare copy into a `while`-condition variable crashes the Mojo compiler.**
 `while a > 1: a = b; b = b - 1` segfaults `mojo build`, on host and device

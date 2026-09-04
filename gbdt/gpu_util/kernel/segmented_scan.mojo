@@ -74,7 +74,7 @@ the caller did not flag row 0, exactly as theirs does.
 
 The device-wide decoupling: three kernels, block scan, scan of block
 aggregates, add the carry. CUB does this internally and MAX ships no
-device-wide scan (`VENDOR_LIBS.md` 3b/3c), so it is written out.
+device-wide scan (`archive/reference/VENDOR_LIBS.md` 3b/3c), so it is written out.
 
 # =========================================================================
 # DEVIATION BLOCK 1: the BLOCK-level scan is hand-written here, where

@@ -1,4 +1,4 @@
-"""DOES THE HIGGS AUC GAP GROW WITH DEPTH? The falsifiable half of PORTING.md 140.
+"""DOES THE HIGGS AUC GAP GROW WITH DEPTH? The falsifiable half of archive/reference/PORTING.md 140.
 
 The config hypothesis died on 2026-08-31: matching CatBoost's regularization
 moved CatBoost UP and widened the gap. The surviving suspect is item 140's

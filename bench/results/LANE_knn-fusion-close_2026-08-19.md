@@ -166,7 +166,7 @@ cuvs neighbors/detail/fused_l2_knn.cuh::usePrevTopKs	not ported	loadPrevTopKsGme
 
 ---
 
-## 4. PROPOSED PORTING.md DEVIATION ENTRIES (numbered from 30)
+## 4. PROPOSED archive/reference/PORTING.md DEVIATION ENTRIES (numbered from 30)
 
 **30. A `WarpSelect`-style register queue survives a Mojo `while` loop as
 `phi` values, and the way to prove it is `--emit=asm --target-accelerator`.**

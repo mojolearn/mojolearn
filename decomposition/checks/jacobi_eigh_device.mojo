@@ -140,7 +140,7 @@ from std.memory import stack_allocation
 # LAUNCH GEOMETRY, NOT A PROBLEM BOUND. One block of 32 threads, and every
 # loop over the matrix below is strided by exactly this, so any `n` is
 # covered. Nothing `n`-sized lives in threadgroup memory, so no value of `n`
-# can exhaust Metal's 32 KB budget (`PORTING.md 1`).
+# can exhaust Metal's 32 KB budget (`archive/reference/PORTING.md 1`).
 # READ FROM THE MATRIX, not restated here. `checks/kernel_matrix.mojo`
 # owns every tunable in this tree; changing TARGET_COLUMN there rebuilds
 # this kernel for another vendor with no edit in this file.
@@ -417,7 +417,7 @@ def jacobi_eigh_kernel(
         # double loop over the strict upper triangle, run once per sweep with
         # 31 of the 32 threads idle. Every thread now accumulates a strided
         # slice of the SAME triangle and the block reduces them. See
-        # VENDOR_LIBRARIES.md.
+        # archive/reference/VENDOR_LIBRARIES.md.
         #
         # DEVIATION BLOCK 3 -- THE FOLD THAT DECIDES A SWEEP COUNT.
         #

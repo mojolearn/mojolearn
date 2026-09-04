@@ -37,7 +37,7 @@ this lane; the orchestrator times.
   (`raft/cpp/include/raft/core/operators.hpp:198-205`) breaks value ties
   toward the LOWER key.
 - Our port uses `argmin_op`'s total order in BOTH arms (documented in
-  `simt_kernel.mojo`, PORTING.md 14): that is what makes the two arms
+  `simt_kernel.mojo`, archive/reference/PORTING.md 14): that is what makes the two arms
   diffable and the fused answer reduction-shape independent. Unchanged by
   this lane.
 
@@ -183,7 +183,7 @@ exact).
 - Doc debt for the orchestrator: delete SCOREBOARD item 1's "streams a
   materialized distance tile" sentence (falsified above; this lane was
   barred from that file), and fold the sums-privatization deviation into
-  PORTING.md's numbered list (PORTING.md was mid-edit by a peer session, so
+  archive/reference/PORTING.md's numbered list (archive/reference/PORTING.md was mid-edit by a peer session, so
   the deviation is recorded in the module docstrings and here instead).
 
 ## Files

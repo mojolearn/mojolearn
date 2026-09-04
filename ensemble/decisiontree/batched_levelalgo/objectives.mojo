@@ -34,7 +34,7 @@ which of two near-tied splits `split.cuh`'s total order selects.
 `EntropyGain` recomputes `raft::log(DataT(2))` on every one of its three
 terms in every class (`:99`, `:107`, `:113`); it is NOT hoisted here
 either. This repository has been bitten by exactly this class of defect
-twice, most recently PORTING.md 54.
+twice, most recently archive/reference/PORTING.md 54.
 
 ================= DEVIATION BLOCK (whole file) =================
 NUMBERING NOTE FOR THE MERGE. This lane was assigned 101/105/106/107.
@@ -101,7 +101,7 @@ This repository has a recorded defect for exactly this substitution:
 `std.math.log` carries ~5e-8 ABSOLUTE error against libm, measured at
 w = 840 as 5656.057589200282 against libm's 5656.057589153382, and that
 noise silently re-decided dynamic-programming plateau ties in CatBoost's
-border selection (PORTING.md 54 and the docstring of
+border selection (archive/reference/PORTING.md 54 and the docstring of
 `gbdt/grid_creator/binarization.mojo::_penalty_min_entropy`). **The
 recorded fix is `external_call["log", Float64]` -- libm through FFI --
 and that fix is HOST-ONLY.** The same docstring says so in as many words:
@@ -126,7 +126,7 @@ PRICE, and it is a real one:
     divergence is not merely a last-bit one on the gain: on a plateau of
     equally-good splits the total order in `split.cuh:142-191` fires on
     the noise instead of on the tie-break, and a DIFFERENT split is
-    chosen. Same class of failure as PORTING.md 54, different tree.
+    chosen. Same class of failure as archive/reference/PORTING.md 54, different tree.
   * Across OUR OWN vendors the choice is still deterministic -- one
     source, one `log` -- so the identity column survives; it is
     comparability with cuML that is lost, not reproducibility.
@@ -136,7 +136,7 @@ because that is where they compute it.
 ON FMA: `gain += lval * invLeft * lval * invLen` is a multiply-add inside
 ONE source expression, which is exactly the case nvcc contracts by
 default (`-fmad=true`) and clang contracts at `-ffp-contract=on`. Mojo
-contracting it too is agreement, not divergence. The PORTING.md 54 defect
+contracting it too is agreement, not divergence. The archive/reference/PORTING.md 54 defect
 was the other case -- contraction ACROSS an inlined call boundary, which
 clang does not do. Since DEVIATION 405 the transcendental-free gains
 route their seams through `_ftz_seam` / `_mul_add_seam` (both

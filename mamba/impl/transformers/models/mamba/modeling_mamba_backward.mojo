@@ -8,7 +8,7 @@ is the same one: that file owns forward seams S1-S4 (RMSNorm), S12 (the z
 gate), S13 (the conv tap chain), S14 (the softplus), S15, S16 (the residual)
 and the four S17 projections, and this file owns their derivatives.
 `mamba/impl/mamba_ssm/ops/selective_scan_backward.mojo` owns S5'-S11', the
-scan. `mamba/IDENTICAL_BACKWARD_PLAN.md` is the plan and its topology names
+scan. `archive/plans/mamba/IDENTICAL_BACKWARD_PLAN.md` is the plan and its topology names
 T6, T7, T8 are used below without restating their prices.
 
 WHAT IS HERE, BY THE PLAN'S OPERATION NUMBERS
@@ -331,7 +331,7 @@ def _silu_prime(x: Float32) -> Float32:
     STATED GAP RATHER THAN A DECISION ON EVIDENCE.** There is no PyTorch
     checkout in `/Users/andrewhendel/CascadeProjects/upstream/`, so ATen's
     `silu_backward` is unread; and `selective_scan_bwd_kernel.cuh` was read
-    by `mamba/IDENTICAL_BACKWARD_PLAN.md` section 6 and not by this file, so
+    by `archive/plans/mamba/IDENTICAL_BACKWARD_PLAN.md` section 6 and not by this file, so
     every upstream claim here is that document's reading repeated, never a
     line quoted from a file this author opened. **What section 6 records
     about upstream's SiLU is one thing only**: their backward recomputes

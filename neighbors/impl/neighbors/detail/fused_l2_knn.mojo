@@ -158,7 +158,7 @@ deviation and can now cite this block instead of a wall.
 **DEVIATION BLOCK 3 - single-buffered shared pages.** Their
 `Policy::SmemSize` is `2 * SmemPage` because `Contractions_NT` is DOUBLE
 BUFFERED. Two pages at Policy2x8 is 36,992 bytes against Metal's 32 KB
-threadgroup limit (`PORTING.md 1`), so this port is single-buffered exactly
+threadgroup limit (`archive/reference/PORTING.md 1`), so this port is single-buffered exactly
 as `core/gemm.mojo` is. With the selector now in registers the kernel's
 shared footprint is one page, 18,496 bytes, and nothing else -- so the
 ceiling that forces this is Apple's alone and the double buffer would fit on

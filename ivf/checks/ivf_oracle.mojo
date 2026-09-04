@@ -41,7 +41,7 @@ that depends on it is a REPORT.
 WHAT THE ORACLE DOES **NOT** REPLAY
 -------------------------------------
 The COARSE QUANTIZER. There is no host k-means here and there is not going
-to be one: `cluster/` owns that fit, `UNSUPERVISED_IDENTITY.md` states its
+to be one: `cluster/` owns that fit, `archive/research/UNSUPERVISED_IDENTITY.md` states its
 identity status, and a second spelling of Lloyd's algorithm in this file
 would be exactly the duplication this lane exists not to commit. The
 oracle takes the centroids AS GIVEN and replays everything downstream of
@@ -469,7 +469,7 @@ def reference_assignment_f64(
 
     THIS DOES NOT REPLACE THE DEVICE ASSIGNMENT AND IS NOT COMPARED TO IT
     BIT FOR BIT. The k-means assignment kernel is `cluster/`'s, its
-    identity status is `UNSUPERVISED_IDENTITY.md`'s, and the only thing
+    identity status is `archive/research/UNSUPERVISED_IDENTITY.md`'s, and the only thing
     this function is used for is stating which list an EXACTLY equidistant
     point must land in.
     """

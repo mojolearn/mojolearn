@@ -3,7 +3,7 @@
 """The DEVICE spelling of the backward pass of one Llama-shaped decoder
 block, ONE SOURCE FOR THREE VENDORS, under profile
 `mojolearn.identical.transformer.fp32.v1` and the routing document
-`transformer/IDENTICAL_BACKWARD_PLAN.md`.
+`archive/plans/transformer/IDENTICAL_BACKWARD_PLAN.md`.
 
 **COMPILED AND RUN 2026-09-03, NOT YET GATED.** Written 2026-08-25; this
 file, its oracle and `transformer_backward_check.mojo` compiled cleanly on
@@ -92,7 +92,7 @@ Every kernel below owns its output cell entirely.
 There is **no shared memory, no warp primitive, NO FLOAT ATOMIC, no
 cross-block reduction and no `core/pinned_reduce.mojo` call anywhere in this
 file.** That matters more here than it did in the forward, because
-`gemm/IDENTICAL_BACKWARD_PLAN.md` section 4.5 named the attention backward
+`archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md` section 4.5 named the attention backward
 the one row with "a genuine structural obstacle", on the grounds that the
 standard fused attention backward accumulates `dK` and `dV` across thread
 blocks with float atomics. **That obstacle is gone, and not by cleverness:**
@@ -954,7 +954,7 @@ def bwd_norm_dx_kernel(
     `dprod` exists so the weight gradient can be a GEMM (DEVIATION 1410).
     `dW[j] = sum_t dy_tj * inner_tj` is a Hadamard then a reduce, so the
     obvious reading is that it needs a new pinned fold. It does not, for the
-    reason `gemm/IDENTICAL_BACKWARD_PLAN.md` section 3.3 gives about `db`:
+    reason `archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md` section 3.3 gives about `db`:
     with the product materialized, the reduction is `ones . dprod`, an
     `OP_NN` at `(1, dm, M)` whose leaf is `fma(ftz(1.0), ftz(p), acc)` --
     the contract's ascending flushed chain inside a leaf and the contract's
@@ -1266,7 +1266,7 @@ def bwd_softmax_ds_kernel(
 # THE THREE ATTENTION CHAINS. DEVIATIONS 1402, 1403, 1404, 1424.
 #
 # ONE THREAD PER OUTPUT CELL, no float atomic, no cross-thread reduction.
-# `gemm/IDENTICAL_BACKWARD_PLAN.md` section 4.5 named the attention backward
+# `archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md` section 4.5 named the attention backward
 # the one row with "a genuine structural obstacle", because the standard
 # FUSED attention backward accumulates `dK` and `dV` across thread blocks
 # with float atomics. That obstacle is gone here, and not by cleverness: it

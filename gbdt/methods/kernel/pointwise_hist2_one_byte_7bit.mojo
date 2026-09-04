@@ -32,7 +32,7 @@ The slot map is the simplest of the three:
 Same two family conventions as the 5-bit file -- WEIGHT even, TARGET odd, and
 a stat-MINOR reduce -- and they are still the ones that change no total.
 
-DEVIATION (PORTING.md 11 and 92): `thread_block_tile<32>::sync()` becomes a
+DEVIATION (archive/reference/PORTING.md 11 and 92): `thread_block_tile<32>::sync()` becomes a
 threadgroup `barrier()`. At 32 lanes their tile is a full warp, so this is
 the case where the substitution costs most in absolute terms and least in
 meaning: it widens a warp sync to a block sync 32 times per point.

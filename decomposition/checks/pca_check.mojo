@@ -637,7 +637,7 @@ def check_tsvd_against_pca() raises:
 def check_covariance_is_symmetric() raises:
     """`X^T X` must be EXACTLY symmetric, and this is a tripwire not a formality.
 
-    `PORTING.md 23` records what a transposed contraction looks like here: it
+    `archive/reference/PORTING.md 23` records what a transposed contraction looks like here: it
     does not produce an obviously wrong number, it produces a plausible and
     NON-SYMMETRIC matrix, and the symptom surfaced two files away as the
     Jacobi eigensolver running to its sweep limit and raising. That cost a

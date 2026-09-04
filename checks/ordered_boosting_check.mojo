@@ -16,8 +16,8 @@ THE FIXTURE IS RAGGED ON PURPOSE. `create_folds(n = 600, g = 2.0,
 min_fold_size = 100)` gives SIX folds, so `FoldCount` is 12 and `FoldBits` is
 4: the data-partition stripe is 16 while the histogram stride is 12. At a
 power-of-two fold count those two coincide and a kernel that used the wrong
-one would be exact everywhere -- `PORTING.md` 91 B's fold stripe is only
-observable at a ragged count, and `NEXT_TWO.md` records a whole round lost to
+one would be exact everywhere -- `archive/reference/PORTING.md` 91 B's fold stripe is only
+observable at a ragged count, and `archive/plans/NEXT_TWO.md` records a whole round lost to
 a fixture where "every power-of-two fold count made two offsets coincide".
 
 EVERY PLANTED VALUE IS DISTINCT PER DOCUMENT. `weight[i]` and `target[i]` are
@@ -62,7 +62,7 @@ GATES
 WHAT THIS FILE DOES NOT GATE, said plainly rather than implied by a green
 tick. O5 builds `compute_hist2`'s arguments itself, so it checks the KERNEL
 at a fold axis and not `PolicyScoreHelper`, which is the caller that normally
-builds them (`PORTING.md` 115 is the same shape of hole, found the same way).
+builds them (`archive/reference/PORTING.md` 115 is the same shape of hole, found the same way).
 
 A fold-based tree now grows (DEVIATION 126, lifted 2026-09-03: the searcher
 constructed its calcer without a fold count, so the helpers were built at 1
@@ -239,7 +239,7 @@ def main() raises:
     # Taking them from `lay.parts` makes the whole file self-referential:
     # the first sabotage run against it -- `plan_fold_layout` writing the
     # TEST half before the LEARN half, which is the exact failure
-    # `PORTING.md` 119 warns about -- moved NOTHING, because both sides of
+    # `archive/reference/PORTING.md` 119 warns about -- moved NOTHING, because both sides of
     # every comparison came from the swapped layout.
     var want_off = List[Int]()
     var want_size = List[Int]()
@@ -854,7 +854,7 @@ def main() raises:
     # exact whichever one the kernel uses. The two only separate at
     # `leaf > 0`, so this repeats the histogram at DEPTH 2 -- four leaves,
     # twelve folds -- where the partition array is strided by 16 and the
-    # histogram by 12. `NEXT_TWO.md`'s "reached but inert" list has an entry
+    # histogram by 12. `archive/plans/NEXT_TWO.md`'s "reached but inert" list has an entry
     # for exactly this shape and this gate would have joined it.
     var idx_after = subsets.indices.copy()
     launch_gather_with_mask_u32(

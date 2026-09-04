@@ -47,7 +47,7 @@ equidistant tie by arrival order.
 ## What it does not claim
 
 Not a cross-vendor measurement. E1 is still owed: same commit, real MI300X,
-`E1_RUNBOOK.md` Phase 3u. Run `check-ieee-arith` first on that box — the
+`archive/evidence/E1_RUNBOOK.md` Phase 3u. Run `check-ieee-arith` first on that box — the
 2026-08-23 AMD leg recorded "a\*b+c is UNFUSED on this backend" from the
 counting arm later shown to be an artifact, so AMD's real contraction
 behaviour is unmeasured.

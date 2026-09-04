@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """RUNG 1's GATE: two independent searchers, one fixture, the same tree.
 
-`NEXT_TWO.md` promised this from the start -- "its histograms must agree with
+`archive/plans/NEXT_TWO.md` promised this from the start -- "its histograms must agree with
 the greedy-subsets histograms this repo already has, on the same rows and the
 same compressed index. That is a differential with an existing correct
 implementation on the other side, which is the strongest gate available."
@@ -24,7 +24,7 @@ the split is a different file:
 
 Different histogram layouts (stat-major against stat-minor), different
 collision schemes, different reduce shapes, OPPOSITE SIGN CONVENTIONS
-(`PORTING.md` 94a), a fixed-point accumulator on one side at 8 bits and none
+(`archive/reference/PORTING.md` 94a), a fixed-point accumulator on one side at 8 bits and none
 on the other. Agreement between them is not a tautology; it is two ports of
 one algorithm arriving at one answer.
 
@@ -32,7 +32,7 @@ one algorithm arriving at one answer.
 
 It does NOT prove either matches CatBoost -- both could share a misreading.
 `tools/catboost_oracle.py` is what compares against their own output, and
-`PORTING.md` 91 F records that it runs their CPU learner.
+`archive/reference/PORTING.md` 91 F records that it runs their CPU learner.
 
 It DOES prove that the ~9,000 lines landed for the pointwise family compute
 the same splits as an implementation that has been gated against CatBoost's

@@ -141,7 +141,7 @@ it.
 ## What this lane is expected to say, written down before it runs
 
 Recorded here so the result is usable either way, in the spirit of
-`gemm/UNPINNED_CONTROL.md` -- whose own prediction was wrong on the low side,
+`archive/evidence/gemm/UNPINNED_CONTROL.md` -- whose own prediction was wrong on the low side,
 which is exactly why writing it down first was worth doing.
 
 * **GEMM: roughly parity with `cublas-tf32`**, because under FAST we are

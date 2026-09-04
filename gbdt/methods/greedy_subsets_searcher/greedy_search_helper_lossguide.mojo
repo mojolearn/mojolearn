@@ -76,7 +76,7 @@ file because the other two are shared:
   2. `ComputeOptimalSplits` -> `ComputeOptimalSplit`, the kernel
      (`kernel/compute_scores.mojo`'s `compute_optimal_split_kernel`)
   3. `MakeSplit`            -> their single-leaf fast path, or the multi-leaf
-     kernels with a one-element list (see `LOSSGUIDE.md` finding 3)
+     kernels with a one-element list (see `archive/research/LOSSGUIDE.md` finding 3)
   4. `ShouldTerminate`      -> shared, and `MaxLeaves` is where Lossguide
      differs from every other policy in what the number MEANS
 """
@@ -216,7 +216,7 @@ def select_leaves_to_split_traced(
 
     NOT A PORT, like everything on the ladder: CatBoost ships one GPU backend
     and needs no cross-backend address for a diverging bit. The two stages
-    this adds are the ones `LOSSGUIDE.md`'s stage table owed and the driver's
+    this adds are the ones `archive/research/LOSSGUIDE.md`'s stage table owed and the driver's
     existing records cannot supply:
 
     * `<prefix>queue.*` -- the per-leaf `BestSplit` records over ALL leaves,

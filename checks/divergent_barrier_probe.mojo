@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Does a DIVERGENT threadgroup barrier actually fail on this device? NO.
 
-`PORTING.md` 11 is the reason two histogram families in this repository run
+`archive/reference/PORTING.md` 11 is the reason two histogram families in this repository run
 one iteration count for the whole block instead of CatBoost's per-thread
 counts. Its stated evidence is that a divergent barrier was OBSERVED failing:
 
@@ -34,7 +34,7 @@ WHAT THIS DOES AND DOES NOT ESTABLISH -- and the distinction is the point.
   for real in `checks/pointwise_hist2_5bit_check.mojo`: 115 wrong cells
   for the `uint2` entry point and 73 for `uint4`, every one of them low,
   from a peel loop that half the block skipped while `AddPoint` took eight
-  barriers inside it. `PORTING.md` 92 carries the account.
+  barriers inside it. `archive/reference/PORTING.md` 92 carries the account.
 
 WHY THE TWO RESULTS DO NOT CONFLICT, which is the useful part:
 
@@ -52,7 +52,7 @@ WHY THE TWO RESULTS DO NOT CONFLICT, which is the useful part:
   worth it precisely because it is what stops "divergent barrier" being
   used as a catch-all explanation for any histogram that reads wrong --
   this repository has produced that same symptom from a racing tally twice
-  and from a reused async staging buffer once (`PORTING.md` 12).
+  and from a reused async staging buffer once (`archive/reference/PORTING.md` 12).
 """
 from std.gpu import thread_idx
 from std.memory import stack_allocation
@@ -129,7 +129,7 @@ def main() raises:
         raise Error(
             "a divergent threadgroup barrier NOW misbehaves on this device"
             " (" + String(total_wrong) + " wrong slots). That is a change"
-            " from 2026-08-21, when it did not, and it means PORTING.md 11"
+            " from 2026-08-21, when it did not, and it means archive/reference/PORTING.md 11"
             " and 92 both need rewriting -- and that every kernel relying"
             " on uniform iteration is now relying on it for a real reason"
             " rather than a specification one."

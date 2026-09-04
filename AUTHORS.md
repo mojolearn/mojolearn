@@ -24,7 +24,7 @@ for that relationship is mirroring, not "not ours".
 The distinction that does survive is a legal one and it is narrow: mirroring a
 copyrighted work closely enough produces a DERIVATIVE WORK, and Apache-2.0
 section 4 attaches obligations to a derivative work no matter who typed it.
-That is why [DERIVATION.md](DERIVATION.md) says "derivative work" in the
+That is why [archive/evidence/DERIVATION.md](archive/evidence/DERIVATION.md) says "derivative work" in the
 places it does. It is a statement about license obligations, not about who did
 the work, and those two questions have different answers here:
 
@@ -32,7 +32,7 @@ the work, and those two questions have different answers here:
   * **Whose design does it follow, and what does that oblige us to do?** The
     ten upstreams below, and it obliges us to carry their license and say
     the files are changed. [NOTICE](NOTICE) names them, their licence texts
-    are named in [DERIVATION.md](DERIVATION.md), which holds
+    are named in [archive/evidence/DERIVATION.md](archive/evidence/DERIVATION.md), which holds
     the record.
 
 And a port is not transcription. CUDA has float64, streams, warp-local
@@ -41,12 +41,12 @@ whole kernels needed constructs their source does not contain, each one a
 decision the upstream never had to make.
 
 CORRECTED 2026-08-31. This paragraph said "about thirty-six such deviations
-are recorded in `PORTING.md`", and it was wrong about the number and about
+are recorded in `archive/reference/PORTING.md`", and it was wrong about the number and about
 the place. Recounted: **890 distinct numbered `DEVIATION` entries** across
 tracked `*.mojo`, `*.md`, `*.tsv`, `*.py` and `*.txt`, of which **791**
-appear in the Mojo source itself. They do not live in `PORTING.md`; they live
+appear in the Mojo source itself. They do not live in `archive/reference/PORTING.md`; they live
 in per-file `DEVIATION BLOCK`s and in the lane `DERIVATION_MAP.tsv` notes,
-and `PORTING.md` references only 28 of them by number. `PORTING.md` has its
+and `archive/reference/PORTING.md` references only 28 of them by number. `archive/reference/PORTING.md` has its
 own separate numbering, of which there are **147 numbered items**, running to
 number 354 with gaps for entries never issued. Both counts are scope
 dependent and the scope is stated so it can be re-run: distinct integers
@@ -86,7 +86,7 @@ pinned commits, not two. The lanes are `cholesky/`, `core/`, `dbscan/`,
 `spectral/` and `svm/`; `metrics/` alone has thirteen rows, more than the old
 sentence claimed in total. NVIDIA, Apache-2.0. The maps are the authority and
 this count moves as lanes land; it rose by one during the pass that wrote
-this paragraph. The per-lane table is in [DERIVATION.md](DERIVATION.md).
+this paragraph. The per-lane table is in [archive/evidence/DERIVATION.md](archive/evidence/DERIVATION.md).
 
 **FAISS, and this one is NOT Apache-2.0.**
 `neighbors/impl/neighbors/detail/faiss_select/` mirrors the FAISS
@@ -127,7 +127,7 @@ calls it a transcription of `node_split_random`, and
 `extratrees/impl/decisiontree/batched_levelalgo/objectives.mojo` (1,413
 lines), which carries their impurity expressions beside cuML's. BSD-3-Clause,
 which requires the notice, the conditions and the disclaimer to be retained;
-DERIVATION.md records all three. **Everything else in this tree that cites
+archive/evidence/DERIVATION.md records all three. **Everything else in this tree that cites
 scikit-learn cites it as an ORACLE, not as a design source** -- `mixture/`,
 `gaussian_process/`, `resample/`, `kde/`, `kernel_methods/` and
 `decomposition/` -- because cuML, cuVS and RAFT implement those algorithms
@@ -139,8 +139,8 @@ generator cuML's isolation forest draws from. The algorithm is Marsaglia's
 and published (2003); the header that expresses it is NVIDIA proprietary and
 is not in this repository. This is recorded as an open question pending a
 decision by Andrew Hendel, and it is neither cleared nor conceded. The facts
-are in [DERIVATION.md](DERIVATION.md) and
-DERIVATION.md's cuRAND section.
+are in [archive/evidence/DERIVATION.md](archive/evidence/DERIVATION.md) and
+archive/evidence/DERIVATION.md's cuRAND section.
 
 Until 2026-08-20 cuML had no attribution anywhere in this project and FAISS
 had none either; until 2026-08-31 transformers, mamba and scikit-learn had
@@ -166,7 +166,7 @@ bad find-and-replace of `ported/`, which is itself now `impl/`. The total
 it implies, 56,838 lines, was measured when this repository held five lanes;
 it now holds twenty-six. And it split a lane count against a whole-tree
 count, so the 48.1% was not a percentage of anything. The current figures,
-which [DERIVATION.md](DERIVATION.md) states and derives:
+which [archive/evidence/DERIVATION.md](archive/evidence/DERIVATION.md) states and derives:
 
     Mojo tracked in this repository                   431,889 lines
     has an upstream file it corresponds to     127,712 to 141,739   30% to 33%
@@ -175,7 +175,7 @@ which [DERIVATION.md](DERIVATION.md) states and derives:
 The lower bound counts every `impl/` directory plus all of `gbdt/`; the
 upper adds `ensemble/`'s cuML-mirroring code less its own original half. Both
 bounds are generous to the derivation, so the true original share sits at the
-high end. `DERIVATION.md` carries the reasoning.
+high end. `archive/evidence/DERIVATION.md` carries the reasoning.
 
 THE LIBRARY-VERSUS-CHECKS SPLIT IS NOT RESTATED HERE, and that is deliberate.
 The old sub-numbers (5,875 and 21,445) were real measurements of the
@@ -220,7 +220,7 @@ Most substantial single piece: the fixed-point accumulator, which serves both
 the histogram flush and the k-means centroid update unchanged. It was written
 on the belief that Metal has no float atomic add; that belief was false, and
 it survives as the deterministic arm rather than as a forced substitution. See
-`PORTING.md` item 7. The determinism ladder it supports has no counterpart in
+`archive/reference/PORTING.md` item 7. The determinism ladder it supports has no counterpart in
 any of the ten upstreams: CatBoost tags its GPU learner non-deterministic,
 and RAFT's k-NN has no tie-break at all.
 

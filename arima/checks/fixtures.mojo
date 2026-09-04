@@ -560,7 +560,7 @@ def fit_order_table() -> List[FitOrderCase]:
 # PLANTED-PARAMETER RECOVERY
 # ---------------------------------------------------------------------------
 #
-# `arima/SABOTAGES.md` opens by saying this lane's expected values are OUR
+# `archive/research/arima/SABOTAGES.md` opens by saying this lane's expected values are OUR
 # OWN TALLY. A fit can do better: every series in `tsa/checks/fixtures.mojo`
 # is generated FROM KNOWN COEFFICIENTS, so the right answer is known before
 # the fit runs and does not come from us. A fit that recovers the planted

@@ -156,7 +156,7 @@ def ivf_flat_build_and_search_host(
     A cross-vendor run that diverges therefore has an ADDRESS, and the
     addresses partition the way the lane's identity table does:
     `ivf.quantizer.*` is `cluster/`'s and its status is
-    `UNSUPERVISED_IDENTITY.md`'s; `ivf.assign` through `ivf.list_data` is
+    `archive/research/UNSUPERVISED_IDENTITY.md`'s; `ivf.assign` through `ivf.list_data` is
     hazards 1, 2 and 3; `ivf.probe_lists` is hazard 1 on the query side;
     `ivf.cand_idx` is hazard 3's carry; and `ivf.out_idx` diverging while
     `ivf.out_dist` agrees is the tie class and nothing else -- which is

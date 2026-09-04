@@ -265,7 +265,7 @@ comptime ALIGN_VALUE = 512
 # reader under this flag. `max_blocks_dimx_for`'s bound holds a fortiori
 # (coarser granularity emits fewer entries).
 #
-# UNVERIFIED, RUN OWED (orchestrator; ensemble/PLAN.md "2026-09-01
+# UNVERIFIED, RUN OWED (orchestrator; archive/plans/ensemble/PLAN.md "2026-09-01
 # candidate round"). The candidate arm is R = 4.
 # =========================================================
 comptime HIST_ITEMS_PER_THREAD = 1

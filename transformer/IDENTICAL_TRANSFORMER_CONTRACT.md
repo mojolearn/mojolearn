@@ -569,13 +569,13 @@ only ever runs one L cannot tell the two apart.
 A row's bits must be identical whether its sequence shares the launch with
 zero, one or two others. Nothing in sections 4 through 7 reads B, so this is
 true by construction and the gate exists to catch the construction being
-violated by an execution plan. `IDENTICAL_GEMM_PLAN.md:86-93` is the
+violated by an execution plan. `archive/plans/IDENTICAL_GEMM_PLAN.md:86-93` is the
 in-repo statement of why this is the same problem, and
 `check_pinned_gemm_is_batch_invariant` in `core/gemm_identity_check.mojo` is
 the property one layer down.
 
 **Honesty about novelty.** Unlike the Mamba block, batch invariance for
-attention has been pursued in public. `IDENTICAL_SSM_NOTES.md:40-47` records
+attention has been pursued in public. `archive/research/IDENTICAL_SSM_NOTES.md:40-47` records
 that Thinking Machines' *Defeating Nondeterminism in LLM Inference* covers
 RMSNorm, matmul and attention, and that vLLM's `VLLM_BATCH_INVARIANT=1`
 raises only for its Mamba-class backends. **So batch invariance is not this
@@ -708,7 +708,7 @@ clause (d) when they are written, they will look inert and be deleted.
 
 - **One block, not a model.** No embedding, no `lm_head`, no logits, no
   tokens, no sampling, no argmax, no multi-layer residual stream. The
-  `IDENTICAL_GEMM_PLAN.md` sketch's item 7 (deterministic argmax first,
+  `archive/plans/IDENTICAL_GEMM_PLAN.md` sketch's item 7 (deterministic argmax first,
   seeded sampling later) is outside this contract entirely.
 - **Not bit-identical AI inference**, in those words, which the GEMM
   charter forbids.
@@ -749,7 +749,7 @@ clause (d) when they are written, they will look inert and be deleted.
 
 ### 12.1 The sketch
 
-`IDENTICAL_GEMM_PLAN.md:153-177`, "After GEMM: the minimum transformer
+`archive/plans/IDENTICAL_GEMM_PLAN.md:153-177`, "After GEMM: the minimum transformer
 path", already sketched this lane in seven steps. Six are followed. Three
 departures.
 
@@ -765,7 +765,7 @@ departures.
 | (not in the sketch) the attention-weighted value sum | **DEPARTS from the obvious reading.** The sketch's "pinned dot products" would naturally route both attention matmuls through the GEMM. S19 does not, and section 7.2 is the argument. |
 
 The sketch's own precondition, that this lane should open only after the
-three-vendor GEMM run closes (`IDENTICAL_SSM_NOTES.md:48-51`), is satisfied.
+three-vendor GEMM run closes (`archive/research/IDENTICAL_SSM_NOTES.md:48-51`), is satisfied.
 IDENTITY_PATHS row 40 closed on three vendors at `144aa5b` on 2026-08-23.
 
 ### 12.2 Where the code will go

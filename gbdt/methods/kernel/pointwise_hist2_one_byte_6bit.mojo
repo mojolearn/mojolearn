@@ -36,7 +36,7 @@ Same two family conventions as the 5-bit file, and they are the ones that
 change no total: WEIGHT in the even slot, TARGET in the odd one, and a
 stat-MINOR reduce. See that file's docstring.
 
-DEVIATION (PORTING.md 11 and 92): their `thread_block_tile<16>::sync()`
+DEVIATION (archive/reference/PORTING.md 11 and 92): their `thread_block_tile<16>::sync()`
 becomes a threadgroup `barrier()`, the only sync Mojo exposes. This
 accumulator takes FOUR per iteration of its four-iteration loop, so sixteen
 threadgroup barriers per point against the 5-bit file's eight. Priced, not

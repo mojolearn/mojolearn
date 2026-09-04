@@ -13,7 +13,7 @@ Files: `cluster/mojo_only/scalable_init.mojo` (new),
 `cluster/gbdt/cluster/detail/kmeans.mojo`,
 `cluster/mojo_only/kmeans_check.mojo`, `cluster/kmeans_main.mojo`,
 `cluster/README.md`, `cluster/PORTED_MAP.tsv`, `cluster/UNPORTED.tsv`,
-`UNWIRED.md`, `PORTING.md` (deviations 47, 48).
+`UNWIRED.md`, `archive/reference/PORTING.md` (deviations 47, 48).
 
 ## Upstream citations (cuVS `94c2819`, the repo's recorded pin; paths under `cpp/src/cluster/detail/`)
 
@@ -124,7 +124,7 @@ Reach evidence is sabotage/replay, not digests:
   (`oversampling_factor = 0`) was already held by
   `check_kmeans_plus_plus_init`.
 
-## Deviations, priced (full text in PORTING.md 47/48)
+## Deviations, priced (full text in archive/reference/PORTING.md 47/48)
 
 - **47 — randomness:** per-sample uniforms are a splitmix64 counter hash of
   `(round_seed, index)` (host contributes one u64 per round; O(rows) host

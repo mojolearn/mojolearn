@@ -39,7 +39,7 @@ def main() raises:
     # `pointwise_hist2_one_byte_templ.cuh:179-183` on the device. The two
     # middle fixtures were added 2026-08-21: before them the 6-bit
     # accumulator had NO differential against CatBoost at all, and
-    # `PORTING.md` 108 is the record of what a kernel reached by exactly one
+    # `archive/reference/PORTING.md` 108 is the record of what a kernel reached by exactly one
     # fixture costs. Which accumulator each fixture actually enters is
     # OBSERVED, not assumed -- `pixi run check-onebyte-reach`.
     var fixtures = List[String]()
@@ -79,7 +79,7 @@ def main() raises:
         # BOTH SEARCHERS against CatBoost's own dumped decisions. The
         # greedy one is what this repository has always shipped; the
         # pointwise one is the port of the learner CatBoost itself uses for
-        # single-target symmetric trees (`PORTING.md` 91 F), and until this
+        # single-target symmetric trees (`archive/reference/PORTING.md` 91 F), and until this
         # ran, every gate on it compared it against a host recomputation or
         # against the other searcher -- never against CatBoost's output.
         check_tree_structure(path, False)

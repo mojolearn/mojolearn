@@ -1545,7 +1545,7 @@ def clause_c_batch(ctx: DeviceContext, k: Int) raises:
     0, 1 or 2 others. Nothing in contract sections 4 through 7 reads B, so
     this is true BY CONSTRUCTION and the gate exists to catch the
     construction being violated by an execution plan.
-    `IDENTICAL_GEMM_PLAN.md:86-93` is the in-repo statement of why this is
+    `archive/plans/IDENTICAL_GEMM_PLAN.md:86-93` is the in-repo statement of why this is
     the same problem one layer down.
 
     ONE `x` is generated at the case's B and SLICED, so row 0's input bits

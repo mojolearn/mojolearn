@@ -11,7 +11,7 @@ PORT OF `cuml/python/cuml/cuml/kernel_ridge/kernel_ridge.py` at cuML
 that reaches `cupyx.lapack.posv` -- cuSOLVER's `potrf` followed by `potrs`.
 So the ALGORITHM is fully readable and is transliterated here line for line;
 only the two library calls underneath it are closed, and
-`VENDOR_LIBS.md`'s surviving exception plus `cholesky/`'s pinned
+`archive/reference/VENDOR_LIBS.md`'s surviving exception plus `cholesky/`'s pinned
 `potrf_lower` / `cho_solve` stand in for them. `PORTING_RULES` rule 2 is why
 this file exists at all: their control plane is on the host, so ours is.
 

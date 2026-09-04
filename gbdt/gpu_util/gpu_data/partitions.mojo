@@ -76,7 +76,7 @@ environment).
   `HostBuffer` conforms to `AnyType`, `Copyable`, `Deinitable`,
   `ImplicitlyCopyable`, `Movable`, `Sized` and `Writable`, and NOT to
   `DevicePassable`, which is the trait a kernel argument has to satisfy.
-  Handing a kernel `HostBuffer.unsafe_ptr()` anyway is what UNWIRED.md
+  Handing a kernel `HostBuffer.unsafe_ptr()` anyway is what archive/plans/UNWIRED.md
   measured, and the kernel wrote nothing, silently, 64 cells of 64 wrong.
   A host virtual address is not a device address here.
 - `DeviceBuffer.map_to_host` does see kernel output and was measured 2x

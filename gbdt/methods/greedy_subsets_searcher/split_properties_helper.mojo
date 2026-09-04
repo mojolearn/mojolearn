@@ -31,7 +31,7 @@ one built. Equal sibling sizes are the common case on a binary feature -- 632
 of 744 planned pairs on the balanced fixture in
 `checks/sibling_tiebreak_check.mojo` -- and the choice is NOT inert: the
 subtraction runs in float32 on cells that have already been rounded out of
-float32's exact-integer range, so swapping it moves histogram bits. PORTING.md
+float32's exact-integer range, so swapping it moves histogram bits. archive/reference/PORTING.md
 136.
 
 **THIS HOST COPY IS NOT ON THE SHIPPED PATH.** DEVIATION 94 moved the choice
@@ -184,7 +184,7 @@ def build_necessary_histograms(leaves: List[LeafRecord]) raises -> LevelPlan:
         # `ids` is pushed in ASCENDING leaf index (`:1300`), so `ids[0]` is
         # `i` and `ids[1]` is `sibling`, the strict `<` is on `i`, and ON AN
         # EXACT TIE THE `else` BRANCH FIRES AND `sibling` IS COMPUTED. This
-        # port had it inverted from `409a16c` until 2026-08-21; PORTING.md
+        # port had it inverted from `409a16c` until 2026-08-21; archive/reference/PORTING.md
         # 136 has what that cost.
         var small = sibling
         var big = i

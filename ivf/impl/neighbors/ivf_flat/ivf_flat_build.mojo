@@ -32,7 +32,7 @@ carry:
     even, which is what makes their scan's per-list work uniform. Ours
     inherits Lloyd's list-size distribution, empty lists included.
   - **the identity status of the coarse centroids is the k-means lane's,
-    not this lane's.** `UNSUPERVISED_IDENTITY.md` is the file that says
+    not this lane's.** `archive/research/UNSUPERVISED_IDENTITY.md` is the file that says
     what it is, and `ivf/README.md` quotes it rather than restating it.
 
 WHICH K-MEANS ENTRY POINT, AND WHY THAT ONE
@@ -89,7 +89,7 @@ def upload_f32(
 ) raises -> DeviceBuffer[DType.float32]:
     """Host list to device buffer, through a runtime host buffer.
 
-    The second hop is `neighbors/estimator.mojo`'s: `UNWIRED.md:31` records
+    The second hop is `neighbors/estimator.mojo`'s: `archive/plans/UNWIRED.md:31` records
     that an arbitrary host pointer is not interchangeable with one from
     `enqueue_create_host_buffer` on this stack, and that the failure is
     SILENT.

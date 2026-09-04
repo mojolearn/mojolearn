@@ -18,7 +18,7 @@ THE CARD: sixteen stages plus the coarse fit's, FNV-1a64 over raw bytes.
 A cross-vendor run that diverges has an address:
 
     ivf.quantizer.*   `cluster/`'s k-means fit under this prefix. Its
-                      identity status is UNSUPERVISED_IDENTITY.md's, NOT
+                      identity status is archive/research/UNSUPERVISED_IDENTITY.md's, NOT
                       this lane's, and a divergence here is that lane's
                       to read.
     ivf.centers       the coarse centroids. Hazard 2: everything below is

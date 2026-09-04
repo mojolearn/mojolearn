@@ -7,7 +7,7 @@
 
 WHY THIS EXISTS, AND WHAT IT IS NOT
 ====================================
-`docs/LINUX_WHEEL.md` section 7 lists five gates for the Linux wheel and
+`docs/PYPI_RELEASE.md` lists the gates for the Linux wheel and
 every one of them needs a rented box: the sets have to be built on an NVIDIA
 box and an AMD box before anything can be smoked. That is roughly two leases
 and a hundred minutes of build before the FIRST answer arrives about whether

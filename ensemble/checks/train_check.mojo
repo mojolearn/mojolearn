@@ -514,7 +514,7 @@ def arm_e_determinism(ctx: DeviceContext) raises -> Int:
     This is the property the classification path exists for: the histogram
     is an integer counter under an integer atomic, so it does not depend on
     the order blocks arrive, and `Split::update` breaks every tie on a total
-    order. If this arm ever fails, the identity claim in `ensemble/PLAN.md`
+    order. If this arm ever fails, the identity claim in `archive/plans/ensemble/PLAN.md`
     is void and the cause is upstream of anything a tolerance can hide.
     """
     var n_rows = 512

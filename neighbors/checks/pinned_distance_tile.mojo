@@ -16,7 +16,7 @@ WHY `IDENTICAL` CANNOT USE IT
 ------------------------------
 A vendor matmul chooses its own tile shape and its own k-split, per vendor
 and per shape, and a k-split IS a summation order. Nothing in this
-repository can pin it, read it, or check it -- `VENDOR_LIBRARIES.md` is
+repository can pin it, read it, or check it -- `archive/reference/VENDOR_LIBRARIES.md` is
 about which calls we may make, not about what they do to the last bit. Two
 GPUs running `linalg.matmul` on the same inputs are entitled to two
 different `z`, and the whole expanded identity is built on `z`.

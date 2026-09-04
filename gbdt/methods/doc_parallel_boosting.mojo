@@ -77,7 +77,7 @@ all in the configuration this port runs, and saying so is part of the audit:
   `AppendEnsembles` replay on restore has no counterpart, because there is
   no snapshotting.
 
-  It is not ordered boosting -- see PORTING.md 88 for why that is a
+  It is not ordered boosting -- see archive/reference/PORTING.md 88 for why that is a
   different learner entirely -- but it is the machinery ordered boosting is
   built on.
 - **`CalcScoreModelLengthMult` (`:358`). PORTED, and it is not model-size
@@ -895,7 +895,7 @@ def fit_with_test(
     # run and what CatBoost runs for MULTICLASS symmetric trees. True is
     # `TDocParallelObliviousTreeSearcher`, which is what CatBoost runs for
     # SINGLE-TARGET symmetric trees at `boosting_type=Plain`
-    # (`PORTING.md` 91 F) -- the arm every matched benchmark pins CatBoost
+    # (`archive/reference/PORTING.md` 91 F) -- the arm every matched benchmark pins CatBoost
     # to.
     #
     # Additive with a default, like `test` above and for the same reason:

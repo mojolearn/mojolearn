@@ -183,7 +183,7 @@ def _host_f32(
 ) raises -> HostBuffer[DType.float32]:
     """A RUNTIME host buffer holding `v`.
 
-    `knn_search`'s boundary is host POINTERS, and `UNWIRED.md:31` records
+    `knn_search`'s boundary is host POINTERS, and `archive/plans/UNWIRED.md:31` records
     that a pointer from `enqueue_create_host_buffer` is not interchangeable
     with an arbitrary host pointer on this stack -- silently. Every fixture
     this file hands to an estimator goes through here, which is what

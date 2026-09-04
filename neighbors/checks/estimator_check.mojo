@@ -17,7 +17,7 @@ coordinates rather than uniform or structured ones, because
 paid for twice: a check whose expected value is the same in every cell
 verifies a total and says nothing about placement. With hashed coordinates
 every distance is distinct to well beyond Float32, so the tie ambiguity
-recorded at `UNWIRED.md:371` cannot fire and comparing INDICES is legitimate
+recorded at `archive/plans/UNWIRED.md:371` cannot fire and comparing INDICES is legitimate
 here. It would not be legitimate on structured data.
 
 WHAT THESE DO NOT COVER, said plainly rather than left for someone to

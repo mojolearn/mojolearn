@@ -36,7 +36,7 @@ THE POLICY CHOICES
    point for point. This file does not add an opinion beyond the runner's
    default; `EPS_NN_BRUTE_FORCE` is reachable by passing it explicitly
    (`mojolearn.DBSCAN(algorithm='brute')`) and is the arm `dbscan_brute` in
-   the benchmark compares against and the arm `E1U_RESULTS.md` certified.
+   the benchmark compares against and the arm `archive/evidence/E1U_RESULTS.md` certified.
 
 3. **`max_mbytes_per_batch = 0` MEANS THEIR ESTIMATE, NOT "NO LIMIT".** Zero
    selects cuML's own `80% * total - dataset` rule

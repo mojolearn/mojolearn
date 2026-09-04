@@ -23,7 +23,7 @@ against it, per cell:
 
 Exit code is 0 only when every cell is IDENTICAL or REFUSED=. The table
 is also written as e2_verdicts.md beside the first directory when
---write is given, for E2_RESULTS.md to include verbatim.
+--write is given, for archive/evidence/E2_RESULTS.md to include verbatim.
 
 usage: python3 tools/e2_matrix_diff.py <ref_dir>:LABEL <dir>:LABEL [...] [--write]
 """

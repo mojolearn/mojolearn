@@ -75,7 +75,7 @@ elementwise seams. The plan here is one thread per output cell for every seam
 except S1 (one thread per token row, because the fold is per row) and S13
 (one thread per (batch, channel), because the conv chain is serial in `l` and
 that is MAX's and the CUDA kernel's shape). This is an EXECUTION plan quantity
-in `IDENTICAL_GEMM_PLAN.md`'s sense: it decides which thread computes a cell,
+in `archive/plans/IDENTICAL_GEMM_PLAN.md`'s sense: it decides which thread computes a cell,
 never the sequence of values accumulated into it.
 
 **DEVIATION 726 -- the conv window is computed OUT OF PLACE.** The window

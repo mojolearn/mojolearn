@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Can a shared-memory pointer cross a function boundary? YES.
 
-This probe exists because `PORTING.md` 13 asserted for months that it could
+This probe exists because `archive/reference/PORTING.md` 13 asserted for months that it could
 not, and that assertion is why every histogram kernel in
 `gbdt/methods/greedy_subsets_searcher/kernel/` carries its own copy of
 CatBoost's ONE shared loop -- a duplication that has already produced one
-silently-wrong-histogram bug (`PORTING.md` 13's original entry).
+silently-wrong-histogram bug (`archive/reference/PORTING.md` 13's original entry).
 
 The claim was never a language limit. `stack_allocation` yields
 `MutUntrackedOrigin`; a callee annotated `MutAnyOrigin` rejects it because
@@ -16,7 +16,7 @@ works.
 This is a check rather than a scratch probe because the claim it falsifies
 was load-bearing for a design decision, and a claim about the toolchain rots
 silently. If Mojo ever does take this away, this goes red and the entry in
-`PORTING.md` 13 gets rewritten again -- rather than the tree quietly keeping
+`archive/reference/PORTING.md` 13 gets rewritten again -- rather than the tree quietly keeping
 a duplication whose justification expired.
 
 The gate is per-slot, not a total: each of the 64 threads adds a DISTINCT
@@ -40,7 +40,7 @@ def accumulate_into_shared[
     slot: Int,
     v: Float32,
 ):
-    """The callee `PORTING.md` 13 said could not be written.
+    """The callee `archive/reference/PORTING.md` 13 said could not be written.
 
     Note the `[origin: MutOrigin, //]`: that, and nothing else, is the
     difference between this compiling and the error that was read as a
@@ -93,10 +93,10 @@ def main() raises:
         raise Error(
             String(wrong)
             + " of 64 slots wrong: a shared-memory pointer no longer"
-            " survives a function boundary, and PORTING.md 13 needs"
+            " survives a function boundary, and archive/reference/PORTING.md 13 needs"
             " rewriting again"
         )
     print(
         "shared pointer across a function boundary: WORKS (64/64 slots),"
-        " so PORTING.md 13's original blocker does not exist"
+        " so archive/reference/PORTING.md 13's original blocker does not exist"
     )

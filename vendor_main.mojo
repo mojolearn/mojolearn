@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Runs `checks/vendor_correctness_check.mojo` and PRINTS the table.
 
-The correctness column in `VENDOR_LIBRARIES.md` is a transcript of this
+The correctness column in `archive/reference/VENDOR_LIBRARIES.md` is a transcript of this
 program's output. Regenerate it here rather than trusting the file:
 
     tools/with_build_lock.sh pixi run \

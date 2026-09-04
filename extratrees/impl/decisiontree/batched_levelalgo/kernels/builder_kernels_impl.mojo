@@ -837,7 +837,7 @@ def node_feature_range_kernel[
 
     SHARED MEMORY. This kernel declares none. The three block-wide reductions
     come from `max.gpu.primitives.block`, whose scratch is Modular's to size
-    (VENDOR_LIBRARIES.md: call the vendor collective, do not hand-write it), so
+    (archive/reference/VENDOR_LIBRARIES.md: call the vendor collective, do not hand-write it), so
     there is no budget for this file to query and no per-vendor size to guess.
     Their `extern __shared__ char smem[]` (`:235`) holds the histogram, the
     quantile borders and the done-flag -- all three of which DEVIATION 137
@@ -1222,7 +1222,7 @@ def build_workload_info(
     THIS FUNCTION IS `builder.cuh`'S, NOT `builder_kernels_impl.cuh`'S, and
     it is here because `builder.mojo` belongs to another session's lane this
     round. Moving it there is a merge-time action, the same convention
-    `extratrees/DEVIATIONS.md` uses for its own placement.
+    `archive/research/extratrees/DEVIATIONS.md` uses for its own placement.
     """
     var info = List[WorkloadInfo]()
     var n_large_nodes = 0
@@ -1634,7 +1634,7 @@ def build_workload_info(
 #     regression key that DOES fit `Int64`, by publishing cuML's own MSE
 #     gain rather than sklearn's proxy. The sentence is deleted rather
 #     than annotated, per LANE_RULES 17. The same sentence still stands in
-#     `extratrees/DEVIATIONS.md` entry 175, which is not this sub-lane's
+#     `archive/research/extratrees/DEVIATIONS.md` entry 175, which is not this sub-lane's
 #     file to edit and is reported as an OPEN item for its owner.
 #
 #     PRICE. A classification node above 2^21 rows must be refused or the
@@ -3349,7 +3349,7 @@ def node_feature_score_finalize_kernel[
 #        different iteration from its neighbours, and every collective
 #        inside the loop is undefined the moment that happens. This is
 #        the vendor library, called rather than hand-written
-#        (`VENDOR_LIBRARIES.md`); `PORTING_RULES.md` 0b-i exempts the
+#        (`archive/reference/VENDOR_LIBRARIES.md`); `PORTING_RULES.md` 0b-i exempts the
 #        block primitives from the transcription rule for exactly this.
 #
 #     2. THE SHARED CARVE IS ONE ARRAY OF `2 * TPB`, NOT TWO OF `TPB`.

@@ -186,7 +186,7 @@ def _check_primitives(ctx: DeviceContext, mut failures: List[String]) raises:
     )
 
     # ONE HOST STAGING BUFFER PER `enqueue_copy`. They are asynchronous
-    # (`PORTING.md` 12), and the first draft of this section reused a single
+    # (`archive/reference/PORTING.md` 12), and the first draft of this section reused a single
     # buffer for all four uploads -- which failed loudly, on all four
     # primitives at once, before any of them had a bug.
     var up_values = ctx.enqueue_create_host_buffer[DType.uint32](n)

@@ -7,18 +7,14 @@ be audited years later, not so that you have to absorb them to fix a bug.
 
 ## 1. What you need
 
-One GPU. Any vendor. That is the entire hardware requirement.
+One GPU supported by the installed Mojo toolchain and this checkout. There is
+no CPU path. Released wheels support a narrower, explicitly packaged set of
+architectures; see [the support matrix](../SUPPORT_MATRIX.md) rather than
+inferring wheel support from a GPU family name.
 
-| vendor | floor | examples that qualify |
-|---|---|---|
-| NVIDIA | Turing | T4, RTX 20XX, 30XX, 40XX, 50XX. A free Google Colab T4 is enough |
-| AMD | RDNA2 | Radeon RX 6900, RX 7600, RX 7900, and the integrated 780M / 880M / 890M in ordinary laptops |
-| Apple | M1 | any Apple silicon Mac, M1 through M5 |
-
-There is no CPU path, so a GPU is required. It does not have to be a good one,
-you do not have to rent one, and you never need a second vendor. The three
-vendor certificates in this tree are what it takes to CLOSE a cross-vendor
-identity claim, and running those legs is a maintainer job.
+You do not need to rent hardware or own a second vendor to contribute. The
+three-vendor certificates close cross-vendor identity claims, and running
+those legs is a maintainer job.
 
 You also need [pixi](https://pixi.sh). Everything else is in `pixi.toml`.
 

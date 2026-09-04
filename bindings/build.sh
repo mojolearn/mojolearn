@@ -31,7 +31,7 @@ mkdir -p python/mojolearn
 # COMPILED METAL FUNCTIONS DEPENDED ON THE BASENAME OF THE ENTRY FILE.** It
 # compiled a copy under a measured stem, verified the artifact, and retried
 # over a list of eleven alternates. That explanation is WRONG and the whole
-# apparatus is gone; PORTING.md 70 has been corrected to match.
+# apparatus is gone; archive/reference/PORTING.md 70 has been corrected to match.
 #
 # Measured 2026-08-21 on `bindings/_mojolearn_gbdt.mojo`, one variable at a
 # time, WITH THE COMPILER CACHE CLEARED BEFORE EACH BUILD -- the step every
@@ -435,7 +435,7 @@ if ! kernels_plausible "$out" || ! minos_matches "$out" || ! run_smoke "$out"; t
       "The cache is regenerable; a poisoned one is not detectable any other" \
       "way, because the build succeeds and the artifact merely does not work." \
       "" \
-      "See the comment at the top of this script and PORTING.md 70." >&2
+      "See the comment at the top of this script and archive/reference/PORTING.md 70." >&2
     exit 1
 fi
 

@@ -255,7 +255,7 @@
 
 - **A fit on a dead or saturated GPU device now RAISES a named
   "DEVIATION 2002" error instead of returning a silent empty model.**
-  Measured 2026-09-01 (PORTING.md DEVIATION 2002): at box saturation
+  Measured 2026-09-01 (archive/reference/PORTING.md DEVIATION 2002): at box saturation
   (Metal context death under 9-process load) every fit returned a
   coherent-shaped empty model — 0 splits, mse -0.0 — with no error.
   Fits now witness their own device delivery: a per-tree canary word in
@@ -267,7 +267,7 @@
   folds) cannot trip any of these — they check delivery, never the
   model. Sabotage arm `-D MOJOLEARN_2002_SABOTAGE=1` fakes the dead
   device, REQUIRED-RED; never in a shipped build. UNVERIFIED, ALL RUNS
-  OWED — the exact commands are in PORTING.md's DEVIATION 2002 entry.
+  OWED — the exact commands are in archive/reference/PORTING.md's DEVIATION 2002 entry.
 
 - **`RandomForestClassifier` / `RandomForestRegressor`: an unspecified
   `max_depth` now means UNLIMITED depth, not 16.** BEHAVIOR CHANGE on the
@@ -938,7 +938,7 @@ Python 3.10 through 3.14, GPU only.
   `mojolearn.numeric_mode()` reads the loaded mode back from the binary.
 - Cross-vendor certificates at this release's source: E2 sub-feature matrix
   99 cells, 0 divergent, Apple M4 (Metal) against NVIDIA H100 (CUDA) and
-  against AMD MI325X (HIP); see `E2_RESULTS.md`, `E1_RESULTS.md` and the
+  against AMD MI325X (HIP); see `archive/evidence/E2_RESULTS.md`, `archive/evidence/E1_RESULTS.md` and the
   ledger `IDENTITY_PATHS.md`.
 
 ### Packaging

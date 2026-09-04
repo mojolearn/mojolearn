@@ -43,7 +43,7 @@ computed straight from the coordinates. The old path used the expanded
 identity `||x||^2 + ||y||^2 - 2 x.y` so that the cross term could go through
 a GEMM. That is not a different route to the same number: when the norms
 dominate the distances, the subtraction cancels and float32 loses the
-answer. This tree has already paid for that once -- `PORTING.md 21`, and the
+answer. This tree has already paid for that once -- `archive/reference/PORTING.md 21`, and the
 comment in `dbscan_check.mojo` that keeps the fixture coordinates small on
 purpose. Unexpanded needs no norms, so `row_norm_kernel`, `x_norm` and
 `xn_alias` leave the DBSCAN path entirely.
@@ -121,7 +121,7 @@ THEIRS: `raft::logicalWarpReduce<P::AccThCols>(sums[i], raft::add_op())`
 (`:150`) reduces across the 16 threads that share an output row using
 `shfl_xor` inside a width-16 logical warp.
 OURS: `shuffle_xor` at offsets 1, 2, 4, 8. Mojo's `shuffle_idx` has no width
-argument (`PORTING.md`, the `simt_kernel.mojo` note), but `shuffle_xor` needs
+argument (`archive/reference/PORTING.md`, the `simt_kernel.mojo` note), but `shuffle_xor` needs
 none: XOR with an offset below `AccThCols` only ever flips the low lane bits,
 so it stays inside the same aligned 16-lane group their logical warp is, and
 every lane of the group ends holding the group's sum.
@@ -349,7 +349,7 @@ def eps_unexp_neigh_kernel[
     # (`epsilon_neighborhood.cuh:41`). SIMD values and not
     # `stack_allocation`: without an address space that is thread-local
     # MEMORY, which is what made the first register-tiled GEMM here slower
-    # than the naive one (`PORTING.md 26`).
+    # than the naive one (`archive/reference/PORTING.md 26`).
     var acc0 = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
     var acc1 = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
     var acc2 = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
@@ -524,7 +524,7 @@ def eps_unexp_neighborhood[
 
     Both operands are the same buffer here, which the old expanded path could
     not do: `gemm_nt` takes `DeviceBuffer` arguments and Mojo refuses one
-    buffer as two mutable kernel arguments (`PORTING.md 24`), so the runner
+    buffer as two mutable kernel arguments (`archive/reference/PORTING.md 24`), so the runner
     carried an `x_alias` COPY of the whole dataset and a second copy of its
     norms. `enqueue_function` takes raw pointers, so the fused kernel simply
     reads `x` twice and both copies are gone.

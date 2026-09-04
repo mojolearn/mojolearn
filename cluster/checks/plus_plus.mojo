@@ -14,7 +14,7 @@ an `n_trials x n_samples` matrix; fusing them removes that buffer entirely,
 and cannot change the answer because the reduction consumes each element
 exactly once immediately after it is formed.
 
-**That fusion is a DEVIATION and it is recorded as one** (PORTING.md 16),
+**That fusion is a DEVIATION and it is recorded as one** (archive/reference/PORTING.md 16),
 even though it is arithmetically identical, because it changes the summation
 ORDER over samples and therefore the last bits of `costPerCandidate`. When
 two candidates tie to the last bit, a different order picks a different
@@ -93,7 +93,7 @@ def candidate_cost_kernel(
     # `max.gpu.primitives.block`. The hand-written shared-memory tree
     # reduction this replaced is gone: same arithmetic, one call, and
     # the reduction shape is Modular's to tune rather than ours to
-    # guess. See VENDOR_LIBRARIES.md.
+    # guess. See archive/reference/VENDOR_LIBRARIES.md.
     var s0 = pinned_block_sum[PLUS_PLUS_TPB](acc)
     if tid == 0:
         out_cost.unsafe_store(trial, s0)
@@ -144,7 +144,7 @@ def adopt_candidate_min_kernel(
 # candidates ON DEVICE. The first
 # version of this port copied all `n_samples` distances to the host and drew
 # there, once per accepted centroid, which is O(rows) host traffic and breaks
-# `HOST_AND_DEVICE.md`'s first rule outright.
+# `archive/reference/HOST_AND_DEVICE.md`'s first rule outright.
 #
 # The replacement is a two-level search and moves NOTHING that scales with
 # rows across the bus:
@@ -231,7 +231,7 @@ def write_inclusive_scan_kernel(
     One block per chunk. `block.prefix_sum` INCLUSIVE within the chunk, plus
     that chunk's exclusive offset from stage 2. Together the three stages are
     `cub::DeviceScan::InclusiveSum`, which has no shipped GPU counterpart:
-    `nn.cumsum` is CPU-only. This is the genuine gap `VENDOR_LIBRARIES.md`
+    `nn.cumsum` is CPU-only. This is the genuine gap `archive/reference/VENDOR_LIBRARIES.md`
     records, built out of the block primitive that DOES ship.
     """
     var n = Int(n_in)

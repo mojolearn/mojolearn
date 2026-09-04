@@ -171,7 +171,7 @@ def _installed_tiers(native_files: list[dict[str, Any]]) -> dict[str, Any]:
                     vendor = f"{part}/{parts[i + 1]}"
         by_vendor.setdefault(vendor, {t: 0 for t in NUMERIC_TIERS})[tier] += 1
     return {
-        "expected_extensions_per_tier": 10,
+        "expected_extensions_per_tier": 15,
         "present": [tier for tier in NUMERIC_TIERS if counts[tier] > 0],
         "absent": [tier for tier in NUMERIC_TIERS if counts[tier] == 0],
         "extensions_by_tier": counts,
@@ -181,7 +181,7 @@ def _installed_tiers(native_files: list[dict[str, Any]]) -> dict[str, Any]:
         # raise, so it is worth naming as its own state rather than as present.
         "incomplete": [
             tier for tier in NUMERIC_TIERS
-            if any(0 < v[tier] < 10 for v in by_vendor.values())
+            if any(0 < v[tier] < 15 for v in by_vendor.values())
         ],
     }
 

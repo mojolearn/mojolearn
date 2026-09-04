@@ -53,9 +53,9 @@ CTR set this port mirrors. `TCatFeatureParams.default()` here is their GPU
 `simple_ctr` -- `Borders` plus `FeatureFreq` -- and
 `IsSupportedCtrType(CPU, FeatureFreq)` is FALSE
 (`private/libs/options/restrictions.h:18-48`). Their GPU arm, which does
-have it, cannot run on this machine (`PORTING.md` 109). Feature
+have it, cannot run on this machine (`archive/reference/PORTING.md` 109). Feature
 combinations are a second, independent blocker: `max_ctr_complexity` is
-refused above 1 here where CatBoost defaults to 4. `PORTING.md` 113 and
+refused above 1 here where CatBoost defaults to 4. `archive/reference/PORTING.md` 113 and
 `tools/catboost_cat_oracle.py` carry the full argument.
 
 A one-hot split is compared the same way a numeric one is -- per feature,
@@ -417,7 +417,7 @@ def print_policy_reach(path: String = String("bench/oracle.txt")) raises:
     PORTING_RULES 8: "the benchmark prints which path it took, beside the
     timing. A harness that cannot name the kernel it ran can publish a number
     about a different one." The same applies to a differential, and
-    `PORTING.md` 108 is what it costs when it does not -- three fixtures
+    `archive/reference/PORTING.md` 108 is what it costs when it does not -- three fixtures
     covering three of the four one-byte accumulators, with nobody able to say
     from the output which was which.
 

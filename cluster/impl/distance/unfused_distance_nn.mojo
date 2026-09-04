@@ -135,7 +135,7 @@ def reduce_min_kernel(
     - `cub::BlockReduce<KVType, TPB>` becomes a warp-shuffle butterfly
       followed by a one-slot-per-warp shared merge. **This used to be a
       whole-block shared-memory tree, justified by a claim that Mojo has no
-      warp primitives. That claim was false** (PORTING.md 2). CUB's default
+      warp primitives. That claim was false** (archive/reference/PORTING.md 2). CUB's default
       algorithm is `BLOCK_REDUCE_WARP_REDUCTIONS`
       (`cub/block/block_reduce.cuh:238`), documented at `:120-135` as a
       warp-synchronous reduction inside each warp followed by a propagation
@@ -144,11 +144,11 @@ def reduce_min_kernel(
       `TPB` pairs to `TPB / 32` pairs.
     - `raft::KeyValuePair` becomes two output pointers. Mojo can express the
       struct, but a kernel parameter that is a struct of mixed types is a
-      launch risk this tree has already been bitten by (PORTING.md 9), and
+      launch risk this tree has already been bitten by (archive/reference/PORTING.md 9), and
       the split costs one extra store per block.
 
     Neither one costs fidelity, and the reason is worth stating precisely
-    (PORTING.md 14). Unlike the histogram scan (PORTING.md 8) this reducer is
+    (archive/reference/PORTING.md 14). Unlike the histogram scan (archive/reference/PORTING.md 8) this reducer is
     a min over a TOTAL order, `(value, then key ascending)`, which makes it
     associative, commutative AND idempotent. The shared tree, the butterfly,
     and CUB's own raking reduction therefore all return the same pair. The

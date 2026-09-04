@@ -33,7 +33,7 @@ Step 2 is transliterated below. Step 1 has no CatBoost implementation to port
 the docs 2026-08-19: one overload, no `ctx`, no `target`), so the DEVICE-WIDE
 scan is written here as the standard two-level decoupled scan. That is what
 CUB does internally and it is recorded as a gap rather than presented as a
-choice. See `VENDOR_LIBS.md` sections 3b and 3c.
+choice. See `archive/reference/VENDOR_LIBS.md` sections 3b and 3c.
 
 The BLOCK-level half of it is not hand-written any more:
 `max.gpu.primitives.block.prefix_sum[exclusive=True]` is
@@ -92,7 +92,7 @@ def block_scan_flags_kernel(
     third adds the carry, which is the decoupled shape CUB uses internally.
 
     NO CATBOOST COUNTERPART: they call CUB here. `nn.cumsum` ships CPU-only
-    (VENDOR_LIBS.md 3b), so the DEVICE-WIDE decoupling is written out. The
+    (archive/reference/VENDOR_LIBS.md 3b), so the DEVICE-WIDE decoupling is written out. The
     within-block scan is `max.gpu.primitives.block.prefix_sum`, so what is
     hand-written here is only the part CUB would call `DeviceScan` for. If
     Modular gives `cumsum` a target, these three kernels become one call.

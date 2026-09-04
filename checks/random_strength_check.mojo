@@ -4,7 +4,7 @@
 
 Driven through `gbdt.methods.doc_parallel_boosting.fit` end to end. Nothing
 below hands a kernel its inputs: a gate that builds the kernel's inputs
-cannot check the caller that normally builds them (PORTING.md 115), and the
+cannot check the caller that normally builds them (archive/reference/PORTING.md 115), and the
 whole point of this round is the CALLER -- the kernel path was already
 written and inert.
 
@@ -77,7 +77,7 @@ failed by a correct port.
        same in every cell would verify a total and nothing about placement
        ([[uniform-test-data-hides-permutation]]); this one names the cell.
 
-## Sabotage table, RUN (full results and counts in PORTING.md 142)
+## Sabotage table, RUN (full results and counts in archive/reference/PORTING.md 142)
 
     mutation                                        gate that moved
     ----------------------------------------------------------------

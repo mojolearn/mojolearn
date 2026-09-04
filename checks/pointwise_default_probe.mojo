@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Which searcher should `fit` default to? A measurement, not an argument.
 
-`PORTING.md` 106 shipped `use_pointwise_searcher` defaulting to False and
+`archive/reference/PORTING.md` 106 shipped `use_pointwise_searcher` defaulting to False and
 said the flip was a measurement's job. This is that measurement.
 
 The two arms are BIT-IDENTICAL over twenty iterations

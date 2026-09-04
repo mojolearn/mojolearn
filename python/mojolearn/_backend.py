@@ -21,7 +21,7 @@ of a LADDER in which each rung keeps the rung below it:
 `MOJOLEARN_NUMERIC_MODE=<tier>` in the environment AT IMPORT TIME makes
 `mojolearn` load that set under the canonical module names, so every caller's
 `from . import _mojolearn_gbdt` sees the right arithmetic (IDENTITY_PATHS.md;
-E1/E2_RESULTS.md are the measurements). Unset or `fast` loads the default
+E1/archive/evidence/E2_RESULTS.md are the measurements). Unset or `fast` loads the default
 set. Anything else raises: a mode that is accepted and ignored is worse than
 one refused -- which is exactly what this selector did to `deterministic`
 until 2026-08-29, when the tier existed in the compiler and was unreachable

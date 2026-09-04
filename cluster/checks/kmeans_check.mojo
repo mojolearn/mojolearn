@@ -5,7 +5,7 @@
 NO CUVS COUNTERPART. Their tests are gtest fixtures against a CPU reference;
 this is the harness this tree's own rule demands, which is a different thing.
 
-**A kernel is not ported until it has been enqueued** (`PORTING.md 9`).
+**A kernel is not ported until it has been enqueued** (`archive/reference/PORTING.md 9`).
 Everything under `cluster/` compiled cleanly for two commits while having
 never run, and compiling is not evidence.
 
@@ -621,7 +621,7 @@ def check_kmeans_plus_plus_init() raises:
 
     Every other check here uses `INIT_ARRAY` on purpose, so that a failure
     cannot hide in the draw. The cost of that is that the entire
-    initialization stayed UNREACHED, which `UNWIRED.md` has said since the
+    initialization stayed UNREACHED, which `archive/plans/UNWIRED.md` has said since the
     section was written and which is now false only because of this.
 
     It exercises the scan, the binary search, the gather, the candidate cost
@@ -918,7 +918,7 @@ def check_assignment_arm_dispatch() raises:
 
     Both arms must also AGREE here: same labels bitwise (planted separation
     is 100 per cluster against jitter <= 1, so no near-ties; both arms
-    reduce with `raft::argmin_op`'s total order, PORTING.md 14), and
+    reduce with `raft::argmin_op`'s total order, archive/reference/PORTING.md 14), and
     distances within a tolerance -- NOT bitwise, because the two arms sum
     the dot product in different orders, exactly as upstream's two arms do.
 
@@ -1228,7 +1228,7 @@ def _privatized_sums_dropped_flush_kernel[
     """CHECK-LOCAL SABOTAGE COPY of `accumulate_centroid_sums_privatized_
     kernel`, identical except that BLOCK 0 SKIPS ITS FLUSH (the `veclen`
     read parameter is mirrored so the copy stays identical to the shipped
-    body -- PORTING.md 46). It exists only
+    body -- archive/reference/PORTING.md 46). It exists only
     so `check_privatized_accumulate` can prove the per-block flush is
     load-bearing: a privatized kernel whose flush silently vanished would
     otherwise be indistinguishable from a slow day. Never shipped, never
@@ -1641,7 +1641,7 @@ def check_privatized_accumulate() raises:
     var wsum = ctx.enqueue_create_buffer[DType.int32](k)
     ctx.synchronize()
 
-    # The read-width arm this fixture pins (PORTING.md 46): d=32 on real
+    # The read-width arm this fixture pins (archive/reference/PORTING.md 46): d=32 on real
     # device buffers must take the veclen=4 instantiation. The dispatch
     # routes on this same function, so run B below exercises the VECTOR
     # arm, and the bitwise comparison against the scalar direct oracle is
@@ -1897,7 +1897,7 @@ def _accumulate_arm_correct(d: Int, expect_veclen: Int) raises:
 
 def check_accumulate_veclen_dispatch() raises:
     """Pin the accumulate read-width dispatch's NON-DEFAULT arms where the
-    selection ladder takes them (PORTING.md 46): d=33 rejects both vector
+    selection ladder takes them (archive/reference/PORTING.md 46): d=33 rejects both vector
     widths (132 bytes per row is neither a 16- nor an 8-byte multiple), and
     d=34 takes the 2-wide arm. The default veclen=4 arm is pinned inside
     `check_privatized_accumulate`, on the same fixture that proves the

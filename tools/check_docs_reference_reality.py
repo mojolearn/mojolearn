@@ -35,8 +35,8 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-SKIP_DIRS = {".git", ".pixi", "bench/results", "__pycache__", ".venv",
-             "upstream", "node_modules", "corpus"}
+SKIP_DIRS = {".git", ".pixi", "archive", "bench/results", "__pycache__", ".venv",
+             "upstream", "node_modules", "corpus", "python/build"}
 SCAN_EXT = {".md", ".py", ".sh", ".mojo", ".toml"}
 
 #: A backticked token is treated as a path claim only if it looks like one:
@@ -50,6 +50,8 @@ UPSTREAM_PREFIXES = (
     "max/", "models/", "mamba_ssm/", "src_prims/", "torch/", "triton/",
     "sparse/", "solver/", "matrix/", "hierarchy/", "selection/",
     "sklearn/", "scipy/", "numpy/", "faiss/", "xgboost/", "lightgbm/",
+    "python/cuml/", "python/cuvs/", "ops/triton/", "transformers/",
+    "random_projection/", "rapids-cmake/", "tests/",
 )
 REPO_FILES = []
 SRC_EXT = (".py", ".sh", ".mojo", ".md", ".toml", ".json", ".txt", ".cu", ".cuh")

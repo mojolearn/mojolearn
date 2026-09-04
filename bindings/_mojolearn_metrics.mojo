@@ -26,7 +26,7 @@ this file should know which is which before believing a number that comes
 out of it:
 
   * `metrics/` is CERTIFIED bit-identical Apple M4 <-> NVIDIA H100 <-> AMD
-    MI325X at leg 11 (`E3_RESULTS.md` round 11, commit 144aa5b, section 7,
+    MI325X at leg 11 (`archive/evidence/E3_RESULTS.md` round 11, commit 144aa5b, section 7,
     34 stages), on the 34-stage card of that commit. The card has since
     grown to 61 stages on Apple only; the three-vendor leg on the GROWN card
     is OWED (`metrics/README.md` Status).

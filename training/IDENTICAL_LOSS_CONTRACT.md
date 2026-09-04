@@ -425,7 +425,7 @@ transformer refused on its key axis, and this lane accepts it knowingly
 because a batch reduction's length IS the batch. It is the same finding
 `gemm_backward_b_call` recorded about the weight gradient, and the consequence
 is the same: **the microbatch schedule is part of a training run's numerical
-specification, not an execution detail.** `gemm/IDENTICAL_BACKWARD_PLAN.md`
+specification, not an execution detail.** `archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md`
 2.2 sharpens it with the aligned-split rule and that sharpening applies here
 unchanged. Sabotage `L_REDUCE_SERIAL`, inert at every `N <= 128`, so
 `N >= 129` is mandatory under the same predicted-mask discipline.
@@ -808,7 +808,7 @@ row, `L_SMOOTH_ALWAYS_SPELLED` needs a `-0.0` row loss, and
 A loss whose gradient is only checked against finite differences is checked
 against a TOLERANCE, and this lane deals in BITS. **Finite differences are
 DEMOTED to a reported diagnostic and are NOT a gate, DEVIATION 1163**, the same
-demotion `gemm/IDENTICAL_BACKWARD_PLAN.md` made for its G2: on a fixture chosen
+demotion `archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md` made for its G2: on a fixture chosen
 so the derivative is exactly representable, the derivative can be WRITTEN DOWN,
 and a step size is a tolerance wearing a different hat.
 

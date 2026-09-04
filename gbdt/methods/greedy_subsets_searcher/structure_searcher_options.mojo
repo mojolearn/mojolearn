@@ -33,7 +33,7 @@ already sampled -- their `ComputeTarget` calls `objective.StochasticDer(
 bootstrapConfig, ...)` INSIDE `CreateInitialSubsets`
 (`greedy_search_helper.cpp:376-380`), and ours does it one level up. Adding
 the field here would put a second, unread copy of the bootstrap
-configuration in the tree. Recorded in `UNWIRED.md` with the call site that
+configuration in the tree. Recorded in `archive/plans/UNWIRED.md` with the call site that
 would consume it if the split ever moves.
 
 `FixedBinarySplits` is not here either. It is CatBoost's mechanism for

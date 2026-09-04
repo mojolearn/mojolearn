@@ -24,7 +24,7 @@ file isolates the cost of `mojolearn.identical.gemm.fp32.v1`.
 This file times `identical_gemm_into` against `unpinned_gemm_into`, which is
 the SAME plan selection, the SAME tile constants, the SAME grid, the SAME
 staging loop and the SAME leaf schedule, with ONLY the fold-order pin removed.
-`gemm/UNPINNED_CONTROL.md` carries the clause-by-clause table of what was
+`archive/evidence/gemm/UNPINNED_CONTROL.md` carries the clause-by-clause table of what was
 dropped and the confounds that survive.
 
 ONE BINARY, ALTERNATING CALL BY CALL. This is the whole reason this file
@@ -336,7 +336,7 @@ def main() raises:
         " over rounds."
     )
     print(
-        "   PREDICTION ON RECORD (gemm/UNPINNED_CONTROL.md): 1.10x-1.45x at"
+        "   PREDICTION ON RECORD (archive/evidence/gemm/UNPINNED_CONTROL.md): 1.10x-1.45x at"
         " the tiled t512 rows, 1.00x-1.06x at the t1 rows, 1.3x-1.8x at"
         " gram.32x32x1M, and the fold under 2% anywhere."
     )
@@ -514,7 +514,7 @@ def main() raises:
         "   SCOPE: this box, this build, these twenty shapes, "
         + String(REPEATS)
         + " timed calls per arm per shape after one untimed warm-up."
-        " gemm/UNPINNED_CONTROL.md lists seven confounds this file does not"
+        " archive/evidence/gemm/UNPINNED_CONTROL.md lists seven confounds this file does not"
         " remove, C1 (the pinned fold's register cost acting through"
         " occupancy) being the one timing alone cannot separate."
     )

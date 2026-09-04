@@ -169,7 +169,7 @@ _CODE_NAMES = {
 # and it also emits a card (`gbdt/train.mojo`), but a GBDT fit large enough
 # to be interesting takes far longer than the thirty seconds this command is
 # budgeted, and its card runs to thousands of stages. The whole-library
-# cross-vendor record is E3_RESULTS.md; this command is a doorway, not a
+# cross-vendor record is archive/evidence/E3_RESULTS.md; this command is a doorway, not a
 # replacement for it, and it says so in its own output.
 # --------------------------------------------------------------------------
 
@@ -868,12 +868,12 @@ def _proves_block():
         "  1. Nothing about a second vendor. One machine cannot check a",
         "     cross-vendor property. The cross-vendor content of this result",
         "     is entirely in where the reference card came from, printed",
-        "     above, and in E3_RESULTS.md.",
+        "     above, and in archive/evidence/E3_RESULTS.md.",
         "  2. Nothing about stages the trace does not checkpoint, and not",
         "     that the computation was identical. Matching hashes mean the",
         "     buffers agreed at those checkpoints.",
         "  3. Nothing about the rest of the library. This is one k-means fit.",
-        "     IDENTITY_PATHS.md enumerates the pathways; E3_RESULTS.md is the",
+        "     IDENTITY_PATHS.md enumerates the pathways; archive/evidence/E3_RESULTS.md is the",
         "     whole-library record across three vendors.",
     ]
 
@@ -1316,7 +1316,7 @@ def _write_candidate(out_path, env, comparator):
         "# READ THIS BEFORE TRUSTING THE NUMBERS BELOW. This card is one",
         "# machine's output. It becomes evidence for a CROSS-VENDOR claim",
         "# only when the same card has been produced on a second and a third",
-        "# vendor and the three agree, which is E3_RESULTS.md's job. Record",
+        "# vendor and the three agree, which is archive/evidence/E3_RESULTS.md's job. Record",
         "# the peer runs in docs/VERIFY.md when you install this file.",
     ]
     with open(out_path, "w", encoding="utf-8") as fh:

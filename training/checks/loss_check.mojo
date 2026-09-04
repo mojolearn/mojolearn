@@ -2222,7 +2222,7 @@ def clause_c(ctx: DeviceContext, k: Int) raises:
     L11 or L14 through L16 reads `N` -- not the row chunk, not the launch
     geometry, not the block size, not the vendor -- so this is true BY
     CONSTRUCTION and the gate exists to catch the construction being
-    violated by an execution plan. `IDENTICAL_GEMM_PLAN.md:86-93` is the
+    violated by an execution plan. `archive/plans/IDENTICAL_GEMM_PLAN.md:86-93` is the
     in-repo statement of why this is the same problem one layer down.
 
     **THE EXCEPTION IS L12 AND ONLY L12, AND EXCLUDING IT IS THE CLAUSE

@@ -8,7 +8,7 @@ The public Python surface is `python/mojolearn/ensemble.py`.
 WHY GBDT HAS ITS OWN EXTENSION
 -------------------------------
 Mojo 1.0.0 (ed45d567) decides how many kernels it compiles ahead of time from
-THE BASENAME OF THE ENTRY FILE -- see PORTING.md 70 and the long comment in
+THE BASENAME OF THE ENTRY FILE -- see archive/reference/PORTING.md 70 and the long comment in
 `bindings/build.sh`. That is an upstream defect with no fix here, only a
 workaround: compile a copy under a measured basename and CHECK the artifact.
 

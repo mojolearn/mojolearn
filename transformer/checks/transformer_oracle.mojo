@@ -781,7 +781,7 @@ def rms_norm_into(
     Four things about this that are decisions rather than transcription.
 
     **S1's fold is SERIAL and the contract 12.1 table records that as a
-    DEPARTURE from `IDENTICAL_GEMM_PLAN.md`'s sketch, which asked for a
+    DEPARTURE from `archive/plans/IDENTICAL_GEMM_PLAN.md`'s sketch, which asked for a
     pinned TREE.** The serial chain is the mamba contract's S1 unchanged, it
     gives this block ONE fold shape instead of two (the same shape as S17's
     denominator), and it keeps the norm out of every launch-geometry

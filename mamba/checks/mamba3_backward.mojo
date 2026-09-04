@@ -56,7 +56,7 @@ yet.
 
 THE PROPORTION, RE-COUNTED RATHER THAN INHERITED
 -------------------------------------------------
-`mamba/BACKWARD_SCOPE_M2_M3.md` section 4 counts 98 operations, split
+`archive/plans/mamba/BACKWARD_SCOPE_M2_M3.md` section 4 counts 98 operations, split
 8 copies / 5 (a) / 22 (b) / 63 (c), with 30 of the (c) rows called c-TOPOLOGY
 and eight of those called NEW topologies. That document says of itself that
 not one number in it was measured. Reading the contracts against it moves ten

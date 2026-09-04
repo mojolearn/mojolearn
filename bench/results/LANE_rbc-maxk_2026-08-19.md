@@ -67,7 +67,7 @@ lives in cuVS, which is why every citation above is cuVS/cuML.
 - After `col_ind` is sized at `maxadjlen`, batch 0's fill runs ONCE against
   the `ex_scan`/`vd` that the reversed loop 1 left resident. This placement
   (theirs fills inside loop 1 and then grows the buffer) is **DEVIATION 39
-  (PORTING.md)** — `DeviceBuffer` has no growing resize; same single fill,
+  (archive/reference/PORTING.md)** — `DeviceBuffer` has no growing resize; same single fill,
   byte-identical state at loop 2's entry.
 - Loop 2's RBC arm: batch 0 skips the neighborhood pass entirely (`:327`);
   batches > 0 call `rbc_eps_nn_query_max_k` with `maxklen[b2]` when
@@ -113,7 +113,7 @@ label every point exactly as unbatched BRUTE_FORCE does.
 
 **Docs corrected in the same change** (rule: a falsified sentence is deleted,
 not annotated): `dbscan/UNPORTED.tsv`'s two-loop-dispatch row (now ported),
-`dbscan/PORTED_MAP.tsv`'s runner row, `runner.mojo`'s header, PORTING.md 39
+`dbscan/PORTED_MAP.tsv`'s runner row, `runner.mojo`'s header, archive/reference/PORTING.md 39
 added, and `LANE_rbc-build_2026-08-19.md` §9's `K_LIB_BALL_COVER_EPS` bullet
 replaced per §4 below.
 
@@ -233,7 +233,7 @@ check output in §3 was produced on exactly that content; the only difference
 between what was run and `83d4bd9` is an 8-line docstring reconciliation in
 `runner.mojo`'s header, which the batching lane's own commit (`f60f575`)
 then took. THIS commit therefore carries the lane's remaining truth:
-PORTING.md 39, the `registers.mojo` K_LIB banner, the `LANE_rbc-build` §9
+archive/reference/PORTING.md 39, the `registers.mojo` K_LIB banner, the `LANE_rbc-build` §9
 correction, the PORTED_MAP/UNPORTED rows, and this report. `neighbors/mutex_probe_main.mojo` and
 `neighbors/gbdt/distance/` were left unstaged -- another lane's
 working-tree files.

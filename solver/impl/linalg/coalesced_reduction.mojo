@@ -52,7 +52,7 @@ compensation", their own comment at `-inl.cuh:480-483`), and the two
 `BlockReduce.Sum` calls are plain (uncompensated) CUB folds. `block.sum`
 stands in for `cub::BlockReduce<..., BLOCK_REDUCE_RAKING>::Sum` exactly as
 `core/column_stats.mojo` records (a collective, not an algorithm;
-VENDOR_LIBS.md banner, third case). `inplace` is never true on either of
+archive/reference/VENDOR_LIBS.md banner, third case). `inplace` is never true on either of
 this section's paths and is not ported.
 
 NO `identical_mul_add`, NO `ftz` HERE, DELIBERATELY: this is the FAST arm,

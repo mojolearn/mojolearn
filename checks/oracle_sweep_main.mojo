@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE DEPTH AND FEATURE-COUNT SWEEP of the CatBoost differential.
 
-`NEXT_TWO.md` rung 5's second open item. `pixi run oracle` compares the port
+`archive/plans/NEXT_TWO.md` rung 5's second open item. `pixi run oracle` compares the port
 against CatBoost at ONE depth (4) and ONE feature count (16), varying only
 the border budget. Both of those are structural: depth decides how many
 partitions the histogram helper carries and therefore when the subtraction

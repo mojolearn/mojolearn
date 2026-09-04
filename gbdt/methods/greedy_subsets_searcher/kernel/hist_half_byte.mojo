@@ -214,7 +214,7 @@ def half_byte_hist_kernel(
 
     var stats_p = stats + Int(block_idx.z) * stat_line_size
 
-    # `TPointHistHalfByteBase`'s constructor, inlined (PORTING.md 10):
+    # `TPointHistHalfByteBase`'s constructor, inlined (archive/reference/PORTING.md 10):
     #     for (i = threadIdx.x; i < histSize; i += BlockSize) buff[i] = 0;
     #     __syncthreads();
     #     Histogram = buff + SliceOffset();
@@ -660,7 +660,7 @@ def half_byte_hist_gather_kernel[ridx_stats: Bool = False](
 
     var stats_p = stats + Int(block_idx.z) * stat_line_size
 
-    # `TPointHistHalfByteBase`'s constructor, inlined (PORTING.md 10):
+    # `TPointHistHalfByteBase`'s constructor, inlined (archive/reference/PORTING.md 10):
     #     for (i = threadIdx.x; i < histSize; i += BlockSize) buff[i] = 0;
     #     __syncthreads();
     #     Histogram = buff + SliceOffset();

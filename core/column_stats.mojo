@@ -129,7 +129,7 @@ def column_mean_kernel(
     # subtracted from every row before the covariance. `pinned_block_sum`
     # IS the library call under FAST (bit for bit, so the shipped build
     # is unmoved) and a halving tree with no lane primitive in it under
-    # IDENTICAL. See `core/pinned_reduce.mojo` and VENDOR_LIBRARIES.md.
+    # IDENTICAL. See `core/pinned_reduce.mojo` and archive/reference/VENDOR_LIBRARIES.md.
     #
     # The contract is met at both call sites (`pca.mojo:200`,
     # `gram_splitk_check.mojo:248`): `block_dim == STATS_TPB`, there is

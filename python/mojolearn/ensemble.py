@@ -68,7 +68,7 @@ carries `k - 1`. Therefore:
 `MultiClassOneVsAll` is implemented and gated in the Mojo layer but is NOT
 reachable from Python. **The reason recorded here until 2026-08-21 was wrong**
 -- it said the kernels did not fit in the extension under any measured
-basename, which was the basename theory PORTING.md 70 has since retracted.
+basename, which was the basename theory archive/reference/PORTING.md 70 has since retracted.
 What actually blocks it is this wrapper: `predict_proba` would have to route
 through the elementwise sigmoid over `n_classes` INDEPENDENT approxes instead
 of MultiClass's softmax over `n_classes - 1`, and nothing gates that yet.
@@ -91,7 +91,7 @@ import numpy as np
 #
 # It was COMMISSIONED for a different reason -- a supposed per-module cap on
 # ahead-of-time Metal compilation, keyed on the entry file's basename -- and
-# that reason turned out not to exist. See PORTING.md 70: the kernels were
+# that reason turned out not to exist. See archive/reference/PORTING.md 70: the kernels were
 # being lost to `MACOSX_DEPLOYMENT_TARGET` in the environment plus a compiler
 # cache that does not key on it, and the basename never mattered.
 from . import _mojolearn_gbdt, _serialize
@@ -131,7 +131,7 @@ MULTI_OUTPUT_LOSSES = ("MultiClass",)
 #: `MultiClassOneVsAll` IS IMPLEMENTED AND GATED IN THE MOJO LAYER and is
 #: NOT REACHABLE FROM PYTHON. **The reason recorded here until 2026-08-21 was
 #: wrong**: it said the two kernels did not fit in the extension under any
-#: measured basename, which was the basename theory PORTING.md 70 has since
+#: measured basename, which was the basename theory archive/reference/PORTING.md 70 has since
 #: retracted. The artifact carries every gbdt kernel the module contains.
 #:
 #: What actually blocks it is THIS FILE. `predict_proba` would have to route

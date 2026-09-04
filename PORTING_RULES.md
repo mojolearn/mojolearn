@@ -181,7 +181,7 @@ So:
   Do not paraphrase it from the comments. The comments describe intent; the
   branches are the algorithm.
 - **A ported file that no caller reaches is not done.** Track it in
-  `UNWIRED.md` and treat wiring it as part of the port, not a follow-up.
+  `archive/plans/UNWIRED.md` and treat wiring it as part of the port, not a follow-up.
 - **Cite the line range of the loop you transcribed** so a reviewer can diff
   branch for branch.
 
@@ -232,7 +232,7 @@ The symbol is the diff surface. Keep it greppable in their tree.
 
 Andrew, 2026-08-19 (evening). Rule 3 says a ported file no caller reaches is
 not done. **This is the case rule 3 misses**: the file HAS a caller, it is not
-in `UNWIRED.md`, and the suite is green -- because every check runs the DEFAULT
+in `archive/plans/UNWIRED.md`, and the suite is green -- because every check runs the DEFAULT
 side of the switch and nothing runs the other.
 
 The measured case. `ball_cover` shipped opt-in behind `eps_nn_method`, mirroring

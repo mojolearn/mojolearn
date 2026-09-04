@@ -19,7 +19,7 @@ partitions:
    fused kernel computes the same integers from the same operands, so the
    demand is EQUALITY, not tolerance.
 
-3. THE SABOTAGE: the fused body with the pre-PORTING.md-136 tie inversion
+3. THE SABOTAGE: the fused body with the pre-archive/reference/PORTING.md-136 tie inversion
    (`small` starts LEFT, moves only on a strictly smaller right). It must
    disagree with the incumbent on the plan words of EXACTLY the tied pairs
    and agree everywhere else -- partitions included, because the sabotage

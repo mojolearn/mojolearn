@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # E1 remote bootstrap: run ON the GPU box (MI300X droplet, RunPod pod, or
-# the Mac reference side). Executes E1_RUNBOOK.md Phases 0-3 and leaves
+# the Mac reference side). Executes archive/evidence/E1_RUNBOOK.md Phases 0-3 and leaves
 # every artifact under bench/results/e1/<stamp>-<host>/.
 #
 # usage:  bash tools/e1_bootstrap.sh

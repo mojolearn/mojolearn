@@ -26,7 +26,7 @@ reproducible, not sampled luck.
 - year MSE parity holds (80.11 vs 79.98; morning window had 1.31–1.68×
   over 3 repeats — this single repeat at 1.25× is in family, low end).
 - higgs AUC gap (0.8213 vs 0.8301, −0.009) is the tracked Newton-walk
-  divergence (PORTING.md item 140), not noise. It is real and owed.
+  divergence (archive/reference/PORTING.md item 140), not noise. It is real and owed.
 - The harness Log_Loss column is asymmetric for CatBoost (scores its
   raw output, 1.80 vs our calibrated 0.55) — do not quote it either
   direction; AUC/Accuracy are the comparable columns.

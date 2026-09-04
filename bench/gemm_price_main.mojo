@@ -1735,7 +1735,7 @@ def _timed_shape_with_device(
     2026-08-25 under DEVIATIONS 1130-1136: the identical kernel's OWN plan
     selection and tile constants, imported rather than copied, with the leaf
     loop kept AS A SCHEDULE so the staging window does not move, and only the
-    fold-order pin removed. `gemm/UNPINNED_CONTROL.md` carries the
+    fold-order pin removed. `archive/evidence/gemm/UNPINNED_CONTROL.md` carries the
     clause-by-clause table of what was dropped, the confounds that remain,
     and a prediction written down before the run.
 

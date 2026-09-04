@@ -63,7 +63,7 @@ Runtime `vl` meets the comptime parameter through
 (warp-coalesced scalar reads are full transactions there); the premise
 fails on Apple, where the identical swap on the assignment kernel
 measured 63 -> 21 ms/iter (re-verdict ef0c4ba). Full pricing in
-PORTING.md 46.
+archive/reference/PORTING.md 46.
 
 ## Pricing
 
@@ -107,7 +107,7 @@ sabotage registering is the assertion, the count is scheduling.)
 ## Suggested SCOREBOARD sentence (I do not edit the scoreboard)
 
 > k-means accumulate now reads X `veclen`-wide through the same
-> `fused_veclen_for` ladder as the assignment kernel (PORTING.md 46, a
+> `fused_veclen_for` ladder as the assignment kernel (archive/reference/PORTING.md 46, a
 > priced deviation beyond upstream's scalar reads: one SIMD chunk + one
 > label/weight read per `veclen` cells), bit-identical on all three arms
 > by check; awaiting re-timing -- the 54 ms/iter accumulate figure
@@ -122,4 +122,4 @@ plus the report commit that follows it.
 
 Files: `cluster/mojo_only/reduce_by_key.mojo`,
 `cluster/mojo_only/kmeans_check.mojo`, `cluster/kmeans_main.mojo`,
-`PORTING.md`.
+`archive/reference/PORTING.md`.

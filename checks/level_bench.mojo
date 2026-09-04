@@ -414,7 +414,7 @@ def bench_remaining_phases(n_rows: Int, repeats: Int) raises:
 
     var nf = ctx.enqueue_create_buffer[DType.uint32](n_features)
     var nf2 = ctx.enqueue_create_buffer[DType.uint32](n_features)
-    # ONE STAGING BUFFER PER COPY (PORTING.md item 12). `hnf` was refilled
+    # ONE STAGING BUFFER PER COPY (archive/reference/PORTING.md item 12). `hnf` was refilled
     # between the two enqueues with no synchronize, so on a discrete GPU
     # `nf` could receive the second fill. Found 2026-08-30 while fixing the
     # same defect in the OLS gate.

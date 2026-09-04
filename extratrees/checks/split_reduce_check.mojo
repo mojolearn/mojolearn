@@ -624,7 +624,7 @@ def run_arm[
     """One launch of the SHIPPING kernel, with `sabotage` selecting the arm.
 
     Buffers are allocated per call rather than reused: this file takes no
-    timing numbers (`extratrees/PLAN.md`), and a reused output buffer that
+    timing numbers (`archive/plans/extratrees/PLAN.md`), and a reused output buffer that
     someone forgot to re-seed is exactly the kind of defect the init kernel
     exists to prevent.
     """
@@ -806,7 +806,7 @@ def main() raises:
     # ---------------------------------------------------------------------
     # The device, and the budget the launch is priced against. ONE query per
     # attribute: `get_attribute` costs 1.26 ms a call on Metal
-    # (STANDING_ORDERS.md), and nothing here needs it twice.
+    # (archive/plans/STANDING_ORDERS.md), and nothing here needs it twice.
     # ---------------------------------------------------------------------
     var ctx = DeviceContext()
     # ONE query per attribute. `WARP_SIZE` is not a queryable attribute on

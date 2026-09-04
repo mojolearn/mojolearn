@@ -83,7 +83,7 @@ def compute_batch_size(
     Their `estimated_memory` out-parameter (`:96`) feeds one debug log line
     (`dbscan.cuh:171-173`) and is not returned here.
 
-    DEVIATION 37 (PORTING.md): their `:66` computes
+    DEVIATION 37 (archive/reference/PORTING.md): their `:66` computes
     `max_mbytes_per_batch * 1000000 - est_mem_fixed` in `size_t`, so a
     nonzero budget smaller than the fixed cost WRAPS, and the `min` at `:69`
     turns the wrap into a full-size batch. Ours raises instead. Their
@@ -231,7 +231,7 @@ def dbscan_fit_impl_weighted(
     which is also theirs.
 
     `phase_timing` prints `PHASE <name> batch <i>/<n> <ms>` per phase; see
-    `dbscan_fit` and PORTING.md 38. Off, nothing prints.
+    `dbscan_fit` and archive/reference/PORTING.md 38. Off, nothing prints.
     """
     if n_rows <= 0:
         raise Error("No rows in the input array. DBSCAN cannot be fitted!")

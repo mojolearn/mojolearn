@@ -22,7 +22,7 @@ GPUs at every stage, at every launch, at every batch composition, and
 between the prefill and decode paths, under the declared profile. Not
 bit-identical inference of a model, not Mamba-3, not training, not
 variable-length batching. The cross-vendor half of that sentence is earned
-ONLY by an E-series leg (the `gemm/E1G_RUNBOOK.md` shape, judge section 8)
+ONLY by an E-series leg (the `archive/evidence/gemm/E1G_RUNBOOK.md` shape, judge section 8)
 and is NOT earned by anything built on one machine.
 
 Seam numbers `S*` in this document are THIS document's. Mamba-1's seams are
@@ -403,7 +403,7 @@ Nothing above earns a cross-vendor sentence; only the E-series leg does.
 - **Mamba-3 exists at the pin** (`mamba_ssm/modules/mamba3.py` and the
   `ops/*/mamba3/` kernel trees at `e9594ce`) and is explicitly OUT OF
   SCOPE — recorded here only so the roadmap decision is made against a
-  written sentence, the IDENTICAL_SSM_NOTES.md discipline.
+  written sentence, the archive/research/IDENTICAL_SSM_NOTES.md discipline.
 
 ## 11. Build order for the implementation round
 
@@ -431,7 +431,7 @@ file, not after (the 2026-08-31 lesson).
 6. **Phase 5 — shapes and corpus.** L in {256, 257, 513, 770}, d_model 64,
    adversarial corpus cases, FAST-mode recording, `checks/kernel_matrix.mojo`
    rows for the new kernels. RUN OWED.
-7. **Phase 6 — the E-series leg.** Three vendors, the `gemm/E1G_RUNBOOK.md`
+7. **Phase 6 — the E-series leg.** Three vendors, the `archive/evidence/gemm/E1G_RUNBOOK.md`
    shape, reach measured not inferred (the leg-14 lesson), FAST negative
    control read on every column. RUN OWED — this is the phase the
    completion claim lives or dies on.

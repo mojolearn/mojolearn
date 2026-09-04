@@ -22,7 +22,7 @@ prose. It does two things and neither of them touches a float.
 2.  It DECLARES the eight fold and recurrence topologies that the Mamba-1
     backward needs and that nothing in this repository owned. A declaration
     here is a name, a direction, a seed, a fusion decision and a pointer at
-    the section of `mamba/IDENTICAL_BACKWARD_PLAN.md` that prices the
+    the section of `archive/plans/mamba/IDENTICAL_BACKWARD_PLAN.md` that prices the
     alternative, and it now also NAMES THE FUNCTION THAT IMPLEMENTS IT
     (`mamba_backward_topology_site`).
 
@@ -48,7 +48,7 @@ across builds and vendors without linking a device kernel.
 
 The claim is falsifiable rather than decorative, exactly as
 `gemm_backward.mojo`'s is. **If a float-valued expression ever appears below,
-the claim is false and `mamba/IDENTICAL_BACKWARD_PLAN.md` has to say so.**
+the claim is false and `archive/plans/mamba/IDENTICAL_BACKWARD_PLAN.md` has to say so.**
 Grepping this file for `Float32` and finding only prose is the whole test.
 
 THE PROPORTION, STATED RATHER THAN PADDED

@@ -98,7 +98,7 @@ accumulator would put the regression path permanently outside this
 library's identity floor -- and that floor is FROZEN, so there would be no
 way back later except an API change. Integer addition is associative, so
 a fixed-point sum is order-independent by construction. This is not a
-choice this lane invented: `ensemble/PLAN.md`'s vendor-call table already
+choice this lane invented: `archive/plans/ensemble/PLAN.md`'s vendor-call table already
 names this exact site -- "double atomicAdd on RegressionBin.label_sum |
 histogram | NO float64 on device -- fixed-point accumulate".
 PRICE, stated in units rather than adjectives:

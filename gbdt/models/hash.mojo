@@ -24,7 +24,7 @@ split arm (`:113-120`) is a bare 0/1 and takes no extension.
 
 Not reached by `train()`: this port's tree CTRs do not exist yet, and its
 own model format keys tables by dense code. The fold becomes live when
-tree-CTR tables land in the model file (RECON_CTRS.md step 6). Gated by
+tree-CTR tables land in the model file (archive/research/RECON_CTRS.md step 6). Gated by
 `pixi run check-cityhash` chain rows against their compiled source.
 """
 

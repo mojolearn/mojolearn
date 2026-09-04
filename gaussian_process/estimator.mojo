@@ -636,14 +636,14 @@ def gpr_fit_host(
     #   `sabotage`             in the header below. It is the one argument
     #                          that changes the ARITHMETIC without changing
     #                          any input, so it is exactly a decision the
-    #                          ALGORITHM makes and `CARD_GAPS.md`'s rule
+    #                          ALGORITHM makes and `archive/plans/CARD_GAPS.md`'s rule
     #                          admits it
     #   `optimizer`,           cannot vary: `gp_validate_optimizer` accepts
     #   `n_restarts_optimizer`,  only "none", 0 and False and refuses the
     #   `normalize_y`          rest BY NAME (DEVIATIONS 1761, 1764)
     #   `elem_tpb`             DELIBERATELY ABSENT. Threads per block is
     #                          SCHEDULING, `check_launch_invariance` exists
-    #                          to prove no bit reads it, and `CARD_GAPS.md`
+    #                          to prove no bit reads it, and `archive/plans/CARD_GAPS.md`
     #                          forbids launch geometry in an identity trace
     #                          because recording it would break the very
     #                          property that check establishes

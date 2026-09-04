@@ -5,7 +5,7 @@
 NOT A PORT, and not a benchmark. CatBoost has no equivalent and the bench
 harness must never read these numbers: attributing wall time to a STAGE on an
 asynchronous queue requires a drain at every stage boundary, which is a
-control-plane change of exactly the kind `HOST_AND_DEVICE.md` is about --
+control-plane change of exactly the kind `archive/reference/HOST_AND_DEVICE.md` is about --
 the same reason `core/identity_trace.mojo` rule 4 says a traced run is not a
 timing, a STAGE-TIMED RUN IS NOT A TIMING either. `quiet_window` would
 rightly refuse it. What this is for is TRIAGE: before an optimization round

@@ -597,7 +597,7 @@ def train(
 
     **ALL `permutation_count` COLUMN SETS ARE BUILT** as of 2026-08-21, one
     compressed index each (DEVIATION 89), where this used to build only the
-    estimation permutation's -- the sentence PORTING.md 55 recorded, now
+    estimation permutation's -- the sentence archive/reference/PORTING.md 55 recorded, now
     false. `permutation_count` resolves the way `UpdateGpuSpecificDefaults`
     resolves it (`cuda/train_lib/train.cpp:99-108`): their default of 4,
     ASSIGNED down to 1 when no categorical feature feeds a CTR -- an
@@ -797,7 +797,7 @@ def train(
     # categorical feature it overrides an explicit `permutation_count`
     # too, because four identical permutations of a dataset with no
     # permutation-dependent column are four identical datasets. This port
-    # is Plain (PORTING.md 88), so the second half of their condition
+    # is Plain (archive/reference/PORTING.md 88), so the second half of their condition
     # holds unconditionally here.
     #
     # `HasPermutationFeatures` (`:86-98`) is "some cat feature is used for

@@ -78,7 +78,7 @@ half of the finding above would be a claim with nothing holding it up.
 
 FOUR THINGS DIFFER FROM THEIRS AND ALL FOUR ARE DECLARED BELOW: deviations
 100 (block sizes), 101 (`exit(1)`), 102 (the wrapper object), plus the scan
-grid, which is an inherited consequence of `PORTING.md` 8 rather than a new
+grid, which is an inherited consequence of `archive/reference/PORTING.md` 8 rather than a new
 decision -- see `scan_pointwise_histograms`.
 
 DEVIATION 100: THE BLOCK SIZES ARE THE KERNEL MATRIX'S, NOT THEIR LITERALS
@@ -152,8 +152,8 @@ it can be sent to another PROCESS -- CatBoost's multi-host path. There is no
 such path here and porting the table without it would be porting a name.
 `TCudaBufferPtr<T>` carries a pointer and a size; ours are separate
 arguments, the same substitution every ported kernel in this tree already
-makes (`PORTING.md` 9). And `NonEmptyDevices()` is the multi-device fan-out,
-which `PORTING.md` 91 A settled: at device count 1 the layouts coincide, and
+makes (`archive/reference/PORTING.md` 9). And `NonEmptyDevices()` is the multi-device fan-out,
+which `archive/reference/PORTING.md` 91 A settled: at device count 1 the layouts coincide, and
 one device is what this tree runs.
 
 TWO SMALLER CONSEQUENCES OF THE SAME DECISION, both real ports of theirs:
@@ -164,7 +164,7 @@ TWO SMALLER CONSEQUENCES OF THE SAME DECISION, both real ports of theirs:
     `gbdt/gpu_data/folds_histogram.mojo` the moment anything else needs it.
   * `TComputeHist1Kernel` is NOT ported. `pointwise_hist1.cu` is dead in
     the upstream -- registered, wrapped, and called by nothing
-    (`PORTING.md` 91 D, `gbdt/NOT_IMPLEMENTED.tsv`).
+    (`archive/reference/PORTING.md` 91 D, `gbdt/NOT_IMPLEMENTED.tsv`).
 
 INHERITED, NOT NEW: the 8-bit path takes a `fixed_scale` their kernels have
 no parameter for. That is DEVIATION 93 (Metal has no threadgroup float
@@ -382,7 +382,7 @@ def update_bins_kernel(
     id gains one bit, and that bit is read out of the `bins` column the
     split names. `loadBit` selects the bit inside `bins`; `loadBit +
     foldBits` places it above the fold bits in the destination, which is the
-    packing `PORTING.md` 91 B describes -- fold id in the LOW bits, depth
+    packing `archive/reference/PORTING.md` 91 B describes -- fold id in the LOW bits, depth
     bits above it.
 
     IT IS A GATHER AND AN OR, not a store. `dstBins[i] |= ...` keeps every
@@ -652,7 +652,7 @@ def scan_pointwise_histograms[
 
     `grid.x` DIFFERS FROM THEIRS AND IT IS NOT A NEW DECISION. Theirs gives
     each feature a 32-lane WARP -- hence `featureCount * 32` threads -- and
-    scans 32 bins at a time with `InclusiveScanInWarp`. `PORTING.md` 8
+    scans 32 bins at a time with `InclusiveScanInWarp`. `archive/reference/PORTING.md` 8
     replaced that with one THREAD per feature, for the reason recorded on
     `scan_pointwise_histograms_kernel`: their loop puts `__syncthreads()`
     inside `if (featureId < featureCount)`, which the tail block reaches

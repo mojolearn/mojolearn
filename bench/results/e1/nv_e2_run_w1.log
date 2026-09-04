@@ -1,9 +1,9 @@
 
-=== provenance === 10:46:38
-646a4e078b6f5f59c81fce560a2012f94f4abdec
+=== provenance === 21:20:31
+53a076781ad5c74e4dcf553cb246969eea92d5db
 Linux mojolearn-e2-nv 5.15.0-185-generic #195-Ubuntu SMP Fri Jun 19 17:11:50 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
 
-=== pixi === 10:46:38
+=== pixi === 21:20:32
 This script will automatically download and install Pixi (latest) for you.
 Getting it from this url: https://github.com/prefix-dev/pixi/releases/latest/download/pixi-x86_64-unknown-linux-musl.tar.gz
 The 'pixi' binary is installed into '/root/.pixi/bin'
@@ -11,7 +11,7 @@ Updating '/root/.bashrc'
 Please restart or source your shell.
 ✔ The default environment has been installed.
 
-=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 10:46:41
+=== mode: IDENTICAL by build define (no source flip since 2026-08-23) === 21:20:34
 
 === phase 0 SKIPPED (MOJOLEARN_E1_PHASES=99) ===
 
@@ -33,8 +33,8 @@ Please restart or source your shell.
 
 === phase 9 SKIPPED (MOJOLEARN_E1_PHASES=99) ===
 
-=== done === 10:46:41
-artifacts in /root/mojolearn/bench/results/e1/2026-09-03_104638-mojolearn-e2-nv
+=== done === 21:20:34
+artifacts in /root/mojolearn/bench/results/e1/2026-09-03_212031-mojolearn-e2-nv
 next: fetch this directory beside the other machine's and run
   python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
   python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card

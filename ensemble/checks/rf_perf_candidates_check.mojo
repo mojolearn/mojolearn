@@ -6,7 +6,7 @@
         ensemble/checks/rf_perf_candidates_check.mojo
 
 RUN 2026-09-01, ALL ARMS GREEN (G0-G2, H1-H3, S1-S2), Apple M4, serial
-niced, at commit `1790aea1`; the gate record is in `ensemble/PLAN.md`. The
+niced, at commit `1790aea1`; the gate record is in `archive/plans/ensemble/PLAN.md`. The
 command above is the orchestrator's. STILL ONE APPLE M4.
 
 WHAT THIS CHECK IS FOR, and why it cannot lean on the forest. All three

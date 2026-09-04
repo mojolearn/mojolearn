@@ -44,7 +44,7 @@ accumulation-order error 4.09e-6 relative, same number).
 "6 of 6 off-diagonal pairs are not bitwise symmetric"
 (`check_covariance_is_symmetric`), ols_main "device Jacobi did not converge
 ... ||offdiag||/||A||_F still 0.51755863" — a garbled contraction surfacing
-exactly as PORTING.md 23 predicts. The failing regime, mapped by sweep
+exactly as archive/reference/PORTING.md 23 predicts. The failing regime, mapped by sweep
 (m=n x k, per-cell oracle):
 
     k=64   k=512  k=2048  k=10007  k=100003
@@ -81,7 +81,7 @@ Still a hard abort, not a catchable raise: exit 133 inside
 `linalg::transpose::_copy_with_strides rank=2 dtype=f32`,
 "enqueue_cpu_range is only supported on CPU DeviceContexts"
 (`vendor_main --transpose`, 2026-08-19 evening). It stays banned; the ban is
-re-dated in VENDOR_LIBRARIES.md.
+re-dated in archive/reference/VENDOR_LIBRARIES.md.
 
 ## What RAFT does (file:line, read from the checkout at 661a3b8)
 
@@ -119,12 +119,12 @@ traffic than `xty_kernel`'s single pass.
   unwired), and the WIRED `gemm_tn` row (CORRECT, aliases pre-poisoned,
   mag-relative 1e-5 tolerance justified by the same-sign diagonal; measured
   spread 4.09e-6 on BOTH routes).
-- `VENDOR_LIBRARIES.md`: three new table rows; `gemm_nt` n=1 wired row
+- `archive/reference/VENDOR_LIBRARIES.md`: three new table rows; `gemm_nt` n=1 wired row
   corrected to CORRECT (the guard exists and passes — the old WRONG row and
   the "exits non-zero today" header sentence were stale); transpose ban
   re-dated; the stale `ColKernelPolicy` RESOLVED paragraph and C8's stale
   complaint rewritten to the current truth.
-- `PORTING.md`: new hazard section — a col_major view is honored by some
+- `archive/reference/PORTING.md`: new hazard section — a col_major view is honored by some
   matmul arms and silently ignored by others, with the sweep and the
   two lessons (a passing battery is evidence about its shapes only;
   arm-dependent correctness is disqualifying by itself).

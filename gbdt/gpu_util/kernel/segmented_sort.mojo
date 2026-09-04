@@ -21,7 +21,7 @@ port's reach is `ComputeWeightedQuantile`
 # to `cub::DeviceSegmentedRadixSort::SortPairs`, so the body being ported
 # here is the SortPairs itself. CUB is OPEN and therefore a port candidate
 # under PORTING_RULES 0b-i, and MAX ships no device sort at all
-# (VENDOR_LIBS.md, re-checked 2026-08-20), so there is nothing to call.
+# (archive/reference/VENDOR_LIBS.md, re-checked 2026-08-20), so there is nothing to call.
 #
 # Their `Descending` arm (`SortPairsDescending`, `:29-36`) is NOT PORTED:
 # `ComputeWeightedQuantile` passes the default `compareGreater = false`

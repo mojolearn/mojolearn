@@ -222,7 +222,7 @@ def main() raises:
     # THE MEASUREMENT the brief asked for: Depthwise and Lossguide at a
     # depth the leaf budget does not bind (depth 4, max_leaves 16 >= 2^4).
     # Their SelectLeavesToSplit differ -- every improving leaf vs the one
-    # best leaf, no sign test under Lossguide (LOSSGUIDE.md 1) -- so the
+    # best leaf, no sign test under Lossguide (archive/research/LOSSGUIDE.md 1) -- so the
     # two trees coincide only when every leaf at every level improves and
     # the depth bound closes both. Printed, not asserted: it is a property
     # of the fixture, not of the port.

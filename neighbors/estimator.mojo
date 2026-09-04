@@ -95,7 +95,7 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
 THE REPRODUCIBILITY LIMITATION, WHICH IS REAL AND IS NOT HIDDEN
 ---------------------------------------------------------------
 
-`UNWIRED.md:371`: RAFT places k-NN output with `atomicAdd` and has no index
+`archive/plans/UNWIRED.md:371`: RAFT places k-NN output with `atomicAdd` and has no index
 tie-break, so under the DEFAULT build **which of several equidistant
 neighbours is returned is not reproducible**. Distances are stable; the
 identity of a tied neighbour is not. Any caller building a bit-identity
@@ -538,7 +538,7 @@ def knn_search_traced(
     ctx.synchronize()
 
     # Device -> pinned host buffer -> the caller's memory. The second hop is
-    # not decoration: `UNWIRED.md:31` records that a pointer from
+    # not decoration: `archive/plans/UNWIRED.md:31` records that a pointer from
     # `enqueue_create_host_buffer` is not interchangeable with an arbitrary
     # host pointer on this stack, and the failure is SILENT. Copying through
     # a buffer the runtime made keeps this on the route the checks exercise.
@@ -589,7 +589,7 @@ def knn_search_traced(
     # Cost is `n_queries * k^2` host comparisons -- 400,000 at the benchmark
     # shape against a 756 ms fit, so it does not move the number. The key is
     # (distance, index), a TOTAL order, so the ORDER is reproducible given
-    # the set. It cannot repair `UNWIRED.md:371`, which is about WHICH of
+    # the set. It cannot repair `archive/plans/UNWIRED.md:371`, which is about WHICH of
     # several equidistant neighbours lands in the set at all.
     for i in range(n_queries):
         var base = i * k
@@ -776,7 +776,7 @@ def knn_classifier_predict(
     # replacement is row-level).
     var d_w = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
     if weighted:
-        # HOST LISTS ACROSS THE BOUNDARY, not pointers: `UNWIRED.md:31`
+        # HOST LISTS ACROSS THE BOUNDARY, not pointers: `archive/plans/UNWIRED.md:31`
         # records that a pointer from `enqueue_create_host_buffer` is not
         # interchangeable with an arbitrary host pointer on this stack and
         # that the failure is SILENT. The copy is `n_queries * k` floats,
@@ -957,7 +957,7 @@ def knn_regressor_predict(
 
     var d_w = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
     if weighted:
-        # HOST LISTS ACROSS THE BOUNDARY, not pointers: `UNWIRED.md:31`
+        # HOST LISTS ACROSS THE BOUNDARY, not pointers: `archive/plans/UNWIRED.md:31`
         # records that a pointer from `enqueue_create_host_buffer` is not
         # interchangeable with an arbitrary host pointer on this stack and
         # that the failure is SILENT. The copy is `n_queries * k` floats,
@@ -1040,8 +1040,8 @@ def knn_regressor_predict(
 # yet, and introducing the first one to save a build on the first radius
 # surface is the wrong order to do those two things in. The build is
 # `O(sqrt(m))` landmarks against `m` points; the query is the part that scales
-# with the neighbourhood. This is named in `docs/DESIGN_NOTES.md` as the thing
-# to revisit when a handle exists.
+# with the neighbourhood. A reusable fitted device handle remains future work
+# tracked in `ROADMAP.md` when it becomes a project priority.
 #
 # WHAT IS DELIBERATELY NOT HERE. `max_k` truncation. `rbc_eps_nn_query_max_k`
 # keeps the FIRST `max_k` hits in emission order, so a truncated row keeps a

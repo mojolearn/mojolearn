@@ -133,7 +133,7 @@ check_ols_dispatch_guard OK: n_cols>n_rows and n_cols==1 both refused, 256x4 acc
   is far from the bench shapes; if a ragged width ever ships hot, the
   edge-thread variant is the follow-up.
 - Did not touch neighbors/, gbdt/methods/ (peer in-progress work),
-  SCOREBOARD, or PORTING.md (no caller-visible behavior change; the three
+  SCOREBOARD, or archive/reference/PORTING.md (no caller-visible behavior change; the three
   new symbols -- `gram_splitk_cells_for`, `gram_splitk_reg_tile_side`,
   `gram_splitk_reg_tiled` -- are additive, no existing signature moved).
 

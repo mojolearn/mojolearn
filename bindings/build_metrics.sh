@@ -37,7 +37,7 @@
 #              homogeneity, completeness, v-measure, r2, KL divergence,
 #              silhouette (score and samples) and trustworthiness. CERTIFIED
 #              bit-identical Apple M4 <-> NVIDIA H100 <-> AMD MI325X at leg 11
-#              (E3_RESULTS.md round 11, section 7, 34 stages, commit 144aa5b).
+#              (archive/evidence/E3_RESULTS.md round 11, section 7, 34 stages, commit 144aa5b).
 #   spectral/  SpectralClustering, both cuVS overloads. HAS RUN ON ONE APPLE
 #              M4 AND NOWHERE ELSE (IDENTICAL_SPECTRAL_CONTRACT.md section 10:
 #              "no cross-vendor result of any kind"). It is not in

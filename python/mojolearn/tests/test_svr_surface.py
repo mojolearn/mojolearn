@@ -4,7 +4,7 @@
 
 Written 2026-09-01, the day the surface landed. The model for this file is
 `python/mojolearn/tests/test_linalg_identity.py` and the house standard it
-follows is `gemm/PYTHON_SURFACE_GATE.md`.
+follows is `archive/evidence/gemm/PYTHON_SURFACE_GATE.md`.
 
 WHAT THIS CLOSES
 ----------------

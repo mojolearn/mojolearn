@@ -7,7 +7,7 @@ anybody has said about the inputs on which they CANNOT fire.
 
 **THIS FILE HAS NEVER BEEN EXECUTED.** Not one line below has been run, no
 output shown here was produced by running it, and the counts quoted in
-`NUMERICAL_BLINDNESS.md` were obtained by reading the tree with `grep` and
+`archive/research/NUMERICAL_BLINDNESS.md` were obtained by reading the tree with `grep` and
 `sed`, not by running this. Treat every claim about its behavior as a claim
 about source that has been read and not as a measurement. The first person to
 run it should expect to fix something.
@@ -47,7 +47,7 @@ INERT-DERIVED > UNKNOWN.
                    file's sabotage ledger NAMES a condition on which the arm
                    cannot fire.
     INERT-DERIVED  Nobody stated one; a condition was derived by hand in
-                   `NUMERICAL_BLINDNESS.md` and is mirrored in `DERIVED` below.
+                   `archive/research/NUMERICAL_BLINDNESS.md` and is mirrored in `DERIVED` below.
     UNKNOWN        Nobody has said and nothing was derived. NOT AN ERROR. This
                    tool never raises on UNKNOWN and never exits non-zero for
                    it. It counts it, prints it, and that count is the finding.
@@ -160,18 +160,18 @@ EXTRA_LANES = {
 # training arm, because the loss and optimizer arms live in one directory.
 CONTRACTS = {
     "gemm": ["gemm/IDENTICAL_FP32_CONTRACT.md",
-             "gemm/IDENTICAL_BACKWARD_PLAN.md"],
+             "archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md"],
     "mamba": ["mamba/IDENTICAL_MAMBA_CONTRACT.md",
-              "mamba/IDENTICAL_BACKWARD_PLAN.md"],
+              "archive/plans/mamba/IDENTICAL_BACKWARD_PLAN.md"],
     "transformer": ["transformer/IDENTICAL_TRANSFORMER_CONTRACT.md",
-                    "transformer/IDENTICAL_BACKWARD_PLAN.md"],
+                    "archive/plans/transformer/IDENTICAL_BACKWARD_PLAN.md"],
     "training": ["training/IDENTICAL_LOSS_CONTRACT.md",
                  "training/IDENTICAL_OPTIMIZER_CONTRACT.md"],
     "embedding": ["embedding/IDENTICAL_EMBEDDING_CONTRACT.md"],
 }
 
 # The tree-wide tables that record what has actually been run.
-PATH_TABLES = ["IDENTITY_PATHS.md", "UNWIRED.md", "NOVELTY_NOTES.md"]
+PATH_TABLES = ["IDENTITY_PATHS.md", "archive/plans/UNWIRED.md", "archive/research/NOVELTY_NOTES.md"]
 
 RESULTS_DIR = "bench/results"
 
@@ -292,7 +292,7 @@ MOVED_RE = re.compile(
 # ---------------------------------------------------------------------------
 # THE DERIVED CONDITIONS
 # ---------------------------------------------------------------------------
-# Every entry here was derived BY HAND in `NUMERICAL_BLINDNESS.md` and is
+# Every entry here was derived BY HAND in `archive/research/NUMERICAL_BLINDNESS.md` and is
 # mirrored here so the tool and the analysis cannot drift apart silently. The
 # .md is the normative copy; if the two disagree, the .md is right and this
 # dict is stale.
@@ -1058,7 +1058,7 @@ def print_summary(arms: list[Arm], fired_from: str) -> None:
     n_stated = sum(1 for a in arms if a.stated)
     print("  arms with a condition stated ANYWHERE (regardless of class)  "
           + str(n_stated) + " of " + str(len(arms)))
-    print("  arms with a hand-derived condition in NUMERICAL_BLINDNESS.md  "
+    print("  arms with a hand-derived condition in archive/research/NUMERICAL_BLINDNESS.md  "
           + str(sum(1 for a in arms if a.derived)))
     print("  arms nobody has characterized at all .........................  "
           + str(sum(1 for a in arms if a.classification == "UNKNOWN")))

@@ -44,7 +44,7 @@ not recalled.
 | `:55` | `est_mem_per_row = n_rows * sizeof(bool) + (neigh_per_row + 2) * sizeof(Index_)` | `n_rows * 1 + (npr + 2) * 4` | MATCHES (bool = 1, Index_ = int32 = 4) |
 | `:60` | `est_mem_fixed = n_rows * (sizeof(Index_) + sizeof(bool))` | `n_rows * (4 + 1)` | MATCHES |
 | `:65` | `ASSERT(est_mem_per_row > 0, ...)` | raise on `<= 0` | MATCHES |
-| `:66` | `batch_size = (max_mbytes_per_batch * 1000000 - est_mem_fixed) / est_mem_per_row` — **`size_t`, so a budget under the fixed cost WRAPS**, and `:69`'s `min` turns the wrap into a full batch; a budget between fixed and fixed+one-row yields batch 0, which divides by zero at `runner.cuh:131` | raise on both | **DEVIATION 37** (PORTING.md). The MB unit is decimal 1,000,000 in both, verified against their literal |
+| `:66` | `batch_size = (max_mbytes_per_batch * 1000000 - est_mem_fixed) / est_mem_per_row` — **`size_t`, so a budget under the fixed cost WRAPS**, and `:69`'s `min` turns the wrap into a full batch; a budget between fixed and fixed+one-row yields batch 0, which divides by zero at `runner.cuh:131` | raise on both | **DEVIATION 37** (archive/reference/PORTING.md). The MB unit is decimal 1,000,000 in both, verified against their literal |
 | `:69` | `min((size_t)n_owned_rows, batch_size)` | same | MATCHES |
 | `:71` | **`if (eps_nn_method != EpsNnMethod::RBC)`** around the whole clamp block `:71-95` | **WAS MISSING: the clamp ran unconditionally.** The docstring knew and said "fixing it means threading eps_nn_method in" | **FIXED.** `eps_nn_method: Int` added in their parameter position (`:37`), clamp wrapped, threaded from `dbscan_fit_impl`. Reach on both sides in §4 |
 | `:74-83` | clamp to `MAX_LABEL / n_rows` with an info log | same arithmetic, no log | MATCHES (the log is a CUML_LOG_INFO) |
@@ -133,7 +133,7 @@ number, with no scattered overrides. What this lane did:
 
 ## 3. TASK 3 — THE INSTRUMENTATION
 
-`dbscan_fit` takes `phase_timing: Bool = False` (PORTING.md 38). It is the
+`dbscan_fit` takes `phase_timing: Bool = False` (archive/reference/PORTING.md 38). It is the
 port of what cuML hangs on these exact boundaries — one nvtx range per phase
 (`runner.cuh:255`, `:299`, `:330`, `:355`, `:373`, `:397`, `:411`) and a
 per-batch `CUML_LOG_DEBUG` gated by `verbosity` (`dbscan.cuh:114`) — printed
@@ -277,7 +277,7 @@ in §3.
   "cuvs neighbors/ball_cover not ported" row (false since the RBC default
   landed) was replaced by a two-loop max_k dispatch row, which the rbc-maxk
   lane then deleted the same day on porting exactly that dispatch.
-- `PORTING.md` — deviations 37, 38.
+- `archive/reference/PORTING.md` — deviations 37, 38.
 - `bench/results/LANE_rbc-build_2026-08-19.md` E1,
   `bench/results/LANE_dispatch-audit_2026-08-19.md` rows 8/D2/F1 — falsified
   or completed statements corrected in this commit.

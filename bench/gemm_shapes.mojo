@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The shapes `gemm.fp32.v1` is judged on. ONE table, with provenance.
 
-`IDENTICAL_GEMM_PLAN.md`'s charter, Phase 4: *"Include representative shapes
+`archive/plans/IDENTICAL_GEMM_PLAN.md`'s charter, Phase 4: *"Include representative shapes
 from both MojoLearn and transformer inference."* And Phase 3 needs ragged
 cases. This file is that table, in one place, so the invariance gates and the
 benchmark draw from the SAME shapes rather than each inventing its own -- two
@@ -49,7 +49,7 @@ instruction to a human, and the human did not.
 
 THE TRANSFORMER ROWS ARE THE POINT OF THE EXERCISE, AND THE HONEST CAVEAT
 --------------------------------------------------------------------------
-`IDENTICAL_GEMM_PLAN.md` argues that a general identical GEMM is worth more
+`archive/plans/IDENTICAL_GEMM_PLAN.md` argues that a general identical GEMM is worth more
 than a tree-learning feature because the audience for batch-invariant
 inference is far larger. These rows are that claim made checkable: the
 projection shapes of real models at real token counts, so "v1 costs Nx" is

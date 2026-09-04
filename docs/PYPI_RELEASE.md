@@ -1,408 +1,118 @@
-# Releasing `mojolearn` to PyPI
+# Release runbook
 
-The runbook for `.github/workflows/release-provenance.yml` and
-`tools/release_runner.sh`. Terse on purpose. Every command is meant to be
-pasted as written, with `X.Y.Z` replaced.
+Releases are built and published by
+`.github/workflows/release-provenance.yml`. Publishing uses GitHub Trusted
+Publisher OIDC; do not add an API token. The workflow is manual-only and its
+build runs on a deliberately started, ephemeral Apple-silicon GPU runner.
 
-## 1. What a release is here
+The release may contain:
 
-* Up to TWO wheels under the project name `mojolearn`: the macOS arm64
-  wheel, tagged `py3` and `macosx_11_0_arm64`, built by section 3, and from
-  0.3.0 a Linux x86_64 wheel carrying both a CUDA and a HIP set, built by
-  section 9 on rented boxes and handed to the workflow as a finished
-  artifact. Each artifact serves python 3.10 through 3.14 because the
-  extensions link no libpython (see `python/setup.py`). A release with no
-  Linux wheel staged is macOS-only and that is not an error.
-* The wheel carries TEN extensions in THREE numeric tiers. This bullet said
-  "five extensions in TWO numeric modes"; both halves were false by 2026-08-29
-  and are replaced, not softened. The FAST set lives at
-  `python/mojolearn/*.so`, the other two at
-  `python/mojolearn/deterministic/*.so` and `python/mojolearn/identical/*.so`.
-  All three ship in the one wheel, and which tiers a wheel carries is ONE
-  variable, `MOJOLEARN_RELEASE_MODES`, read by `build_release_wheel.sh` and
-  `verify_wheel.sh` alike; set them the same for one release or the verifier
-  fails a wheel for lacking a tier nobody asked it to build.
-* The tier is a PARAMETER, not an install option, and never was an extra.
-  `mojolearn.set_numeric_mode(...)` sets the process default in code and
-  `Estimator(..., numeric_mode=...)` sets one instance's;
-  `MOJOLEARN_NUMERIC_MODE` still sets the STARTING default at import and is
-  the oldest spelling, not the only one (`python/mojolearn/_mode.py`,
-  `python/mojolearn/_backend.py`). There is one distribution,
-  `pip install mojolearn`, with no extras.
-* The source targets Metal, CUDA and HIP from one tree, and **TWO wheels are
-  published, not one.** This bullet used to say "only the macOS wheel is
-  published so far" and that stopped being true on 2026-08-30. The Linux
-  wheel (one wheel, CUDA and HIP sets, vendor and GPU architecture picked at
-  import) shipped in 0.3.0, shipped an AVX-512 host-code defect with it, and
-  0.3.1 on 2026-08-31 is the fix; 0.3.2 followed. `docs/LINUX_WHEEL.md` is
-  its design and its evidence and section 9 below is its flow. Still no sdist
-  ever (section 8).
-* The version is written in THREE places and all three must be bumped
-  together, in one commit: `python/pyproject.toml` (`version = "X.Y.Z"`),
-  `python/mojolearn/_version.py` (`__version__ = "X.Y.Z"`) and `CITATION.cff`
-  (`version`, `date-released`). The workflow's "Version agreement" step
-  refuses a build where the first two differ; it does NOT read `CITATION.cff`,
-  so that one is on you, and a wrong `date-released` is minted permanently
-  into a DOI. The CHANGELOG heading date is a fourth place and it is the one
-  most easily left on the day the entry was drafted rather than the day the
-  wheel shipped.
-* The runner is your M4. GitHub's hosted macOS runner has no usable Apple
-  GPU and produces a wheel with no Metal kernels; TestPyPI 0.1.0a2 was that
-  wheel. The repo has no permanently registered runners; `tools/release_runner.sh`
-  registers one ephemeral runner for exactly one job.
+- one `py3-none-macosx_11_0_arm64` wheel, built by the workflow;
+- optionally one prebuilt Linux x86-64 wheel carrying CUDA and HIP sets.
 
-## 2. Preflight checklist
+There is no sdist. Each wheel contains the requested numeric-mode sets; normal
+releases carry FAST, DETERMINISTIC, and IDENTICAL. The extension inventory is
+15 per mode and is checked mechanically by `packaging/check_ext_lists.py`.
 
-Check each; do not start the build until all hold.
+## 1. Prepare the source state
 
-* `git status` is clean for everything the wheel reads. `bindings/`,
-  `packaging/`, `python/`, `pixi.toml`, `pixi.lock`, `README.md`, `LICENSE`,
-  `NOTICE`, and every Mojo source directory the ten extensions compile.
-  Uncommitted edits build into the wheel and are unreproducible afterwards.
-* Version bumped in `python/pyproject.toml`, `python/mojolearn/_version.py`,
-  and `CITATION.cff` (`version`, `date-released`). One commit, pushed to
-  `main`.
-* `README.md` at the repository root is what PyPI shows as the long
-  description. `packaging/macos/build_release_wheel.sh` copies root
-  `LICENSE`, `NOTICE` and `README.md` into `python/` on every build
-  (`python/.gitignore` keeps the copies out of the checkout), and
-  `python/pyproject.toml` reads `readme = "README.md"`. Read the root README
-  as a PyPI visitor would before building.
-* `LICENSE` and `NOTICE` exist at the repository root. Both are listed in
-  `license-files` in `python/pyproject.toml` and ship in the wheel.
-* No secrets anywhere in the tree or in the workflow. The publish job uses a
-  Trusted Publisher (OIDC) and holds no API token. `grep -rn "pypi-Ag"
-  .github tools packaging python` should print nothing (PyPI API tokens
-  begin with that prefix).
-* Trusted Publisher configured on BOTH indexes for owner `mojolearn`, repo
-  `mojolearn`, workflow file `release-provenance.yml`, environment `pypi`
-  (PyPI) and `testpypi` (TestPyPI). Check it; nothing in this repository can.
-  * https://pypi.org/manage/project/mojolearn/settings/publishing/
-  * https://test.pypi.org/manage/project/mojolearn/settings/publishing/
-* GitHub environments `testpypi` and `pypi` exist on the repository
-  (https://github.com/mojolearn/mojolearn/settings/environments). The
-  workflow header records they were created 2026-08-20.
-* The organization setting "Require approval for all outside collaborators"
-  is ON at https://github.com/organizations/mojolearn/settings/actions. The
-  release runner is a self-hosted machine on a public repo; that setting and
-  the workflow_dispatch-only trigger are the two things keeping fork code off
-  it.
-* `gh auth status` succeeds on the M4 and the account is an admin of the
-  repository (the runner registration token endpoint needs it).
-* `python3.10` through `python3.14` all resolve on the M4. The workflow runs
-  `actions/setup-python` for all five; if the first run reports `SKIP` for
-  any interpreter, install that interpreter on the machine so it is on the
-  runner account's PATH and re-run. A `SKIP` fails the job by design.
+Update the same `X.Y.Z` in:
 
-## 3. Build and verify locally
+- `python/pyproject.toml`
+- `python/mojolearn/_version.py`
+- `CITATION.cff`, including `date-released`
 
-Always first, on the M4, before touching the workflow, and always from a
-CLEAN CHECKOUT of the commit being released, never from the shared working
-tree. The first clean-tree build on 2026-08-23 found that the per-script
-gates in `bindings/build_*.sh` import the whole package and so need every
-extension to exist already; the shared tree always had them, a fresh
-checkout never does. `build_release_wheel.sh` therefore builds with those
-gates off and runs `verify_wheel.sh` itself at the end as the one release
-gate.
+Update `CHANGELOG.md`, commit the exact release state, and run the release
+preflight:
 
 ```sh
-git worktree add --detach ../mojolearn-release vX.Y.Z
-cd ../mojolearn-release && pixi install -e default -e pkg
-./packaging/macos/build_release_wheel.sh      # builds, gates, and verifies
-pixi run -e pkg twine check python/dist/*.whl
+pixi run probe
+bash packaging/release_workflow_test.sh
+python packaging/check_ext_lists.py
+git diff --check
 ```
 
-`verify_wheel.sh` installs the wheel into a fresh venv under every
-`python3.10` .. `python3.14` it can find and runs `packaging/macos/smoke.py`
-ONCE PER SHIPPED TIER per interpreter, and the smoke does real fits
-on every estimator family (k-means, k-NN, gradient boosting, random forest,
-extra trees, DBSCAN, PCA, truncated SVD, OLS) and asserts that
-`mojolearn.numeric_mode()` reads back the mode that was asked for. All five
-interpreters must print `PASS` for EVERY shipped tier; a `SKIP` means an interpreter
-is missing from the machine and the release workflow will fail on it. Never
-use `--no-gpu` for a release.
+Do not release from a dirty tree or treat a source-tree pass as an
+installed-wheel pass.
 
-What `build_release_wheel.sh` refuses, from its own comments. Each is an
-exit, not a warning.
+## 2. Optional Linux artifact
 
-* **Stale extension.** `pyproject.toml` globs `*.so`, so any extension not
-  rebuilt in this run ships whatever old file sits in the tree. The script
-  builds every extension itself before packing.
-* **Unclosed dylib set.** `packaging/macos/stage_dylibs.py` walks the full
-  transitive closure of MAX runtime dylibs for all extensions in one call,
-  stages them under `python/mojolearn/.dylibs`, repoints rpaths, re-signs,
-  and fails if anything is left unresolved. On the build machine the
-  original rpath still resolves into the pixi environment, so this is the
-  only check that can see the problem.
-* **minos/tag mismatch.** Every extension's `LC_BUILD_VERSION minos` must
-  equal `DEFAULT_MACOS_TARGET` in `python/setup.py`. One wheel carries one
-  tag and the tag must be the floor of everything inside.
-* **ISA baseline.** `packaging/isa_baseline.py` disassembles each extension
-  and refuses bf16, i8mm or SME instructions, which would SIGILL on the
-  older Macs the tag invites in.
-* **No GPU kernels embedded.** `packaging/macos/check_gpu_embedded.py`
-  refuses a binary with no Metal shader code, which is what a machine
-  without a usable Apple GPU silently produces.
+Linux vendor sets must be built on their actual GPU vendors using
+`packaging/linux/leg.sh`, combined with `packaging/linux/pack_wheel.py`, and
+repaired/audited with `packaging/linux/audit.sh`. Follow each script's help
+and fail-closed checks; architecture coverage must be explicit.
 
-Expected local output shows `wheel:` and one
-`python/dist/mojolearn-X.Y.Z-py3-none-macosx_11_0_arm64.whl`, then FIFTEEN
-`PASS` lines -- five interpreters times three tiers -- and `all interpreters
-passed` from the verify script. It read "ten" while there were two tiers.
-Count them: a wheel that silently shipped one tier short prints ten PASS lines
-too, and the difference between those two tens is the whole point of the loop.
+Run installed-wheel smoke on supported NVIDIA and AMD targets. One successful
+build box does not certify another GPU architecture. Retain the resulting
+logs under `bench/results/wheels/`.
 
-## 4. Publish path A (the normal one)
+Stage exactly one final Linux wheel and its matching `.sha256` sidecar in:
 
-Two terminals on the M4. Nothing here stores a token.
+```text
+${MOJOLEARN_LINUX_WHEEL_DIR:-$HOME/.mojolearn-linux-wheel}
+```
 
-Terminal 1, the runner. It installs the GitHub runner under
-`$HOME/.mojolearn-runner` on first use (sha256-verified against the release
-notes), registers ONE ephemeral runner with labels
-`self-hosted, macos, arm64, metal, real-gpu`, runs `run.sh` in the
-foreground, and removes the registration when the single job finishes or
-when you Ctrl-C.
+Leave that directory absent or empty for a macOS-only release. The workflow
+rejects ambiguous, mismatched, wrongly versioned, or unaudited artifacts.
+
+## 3. Start the one-job runner
+
+On the Apple-silicon release Mac:
 
 ```sh
-tools/release_runner.sh --dry-run   # first time: installs, registers nothing
+tools/release_runner.sh --dry-run
 tools/release_runner.sh
 ```
 
-Terminal 2, dispatch and watch. `gh workflow run` targets the default
-branch unless you pass `--ref <branch-or-tag>`.
+The real invocation registers one ephemeral runner and waits in the
+foreground. Keep it open. It removes its registration after the job exits.
+
+The machine must have pixi and Python 3.10 through 3.14 available. The workflow
+builds on real Metal hardware, checks embedded GPU code and ISA/minimum-OS
+requirements, installs the wheel into clean environments, and runs every
+claimed interpreter and numeric mode.
+
+## 4. Dispatch
+
+From another terminal, first build without publishing:
 
 ```sh
-gh workflow run release-provenance.yml -f publish=testpypi
+gh workflow run release-provenance.yml --ref <release-commit-or-tag> -f publish=none
 gh run watch
 ```
 
-A run with `-f publish=none` builds and verifies without publishing; use it
-for a rehearsal. Each dispatch needs its own `tools/release_runner.sh`
-because the runner exits after one job.
+Inspect the complete job and artifact manifest. A skipped interpreter, absent
+mode, missing extension, GPU smoke failure, or digest disagreement blocks the
+release.
 
-Test-install from TestPyPI in a clean venv, outside the repository so the
-checkout cannot shadow the installed package. The extra index lets numpy
-and anything else the wheel depends on resolve from PyPI.
+Then dispatch to TestPyPI when qualification is needed:
 
 ```sh
-cd /tmp
-python3.12 -m venv tp && tp/bin/pip install --no-cache-dir \
-  --index-url https://test.pypi.org/simple/ \
-  --extra-index-url https://pypi.org/simple/ \
-  "mojolearn==X.Y.Z"
-tp/bin/python /Users/andrewhendel/CascadeProjects/mojolearn/packaging/macos/smoke.py
-MOJOLEARN_NUMERIC_MODE=deterministic tp/bin/python \
-  /Users/andrewhendel/CascadeProjects/mojolearn/packaging/macos/smoke.py
-MOJOLEARN_NUMERIC_MODE=identical tp/bin/python \
-  /Users/andrewhendel/CascadeProjects/mojolearn/packaging/macos/smoke.py
-```
-
-All three invocations must succeed (fast, deterministic and identical sets).
-Then repeat the whole dance for PyPI.
-
-```sh
-tools/release_runner.sh                                   # terminal 1
-gh workflow run release-provenance.yml -f publish=pypi    # terminal 2
+gh workflow run release-provenance.yml --ref <release-commit-or-tag> -f publish=testpypi
 gh run watch
 ```
 
-The publish job prints the sha256 of what it uploaded and the build job's
-step summary prints the sha256 of what it built; they must match, and the
-job fails if they do not. Compare the PyPI file hash on
-https://pypi.org/project/mojolearn/#files against the same value.
+Install from TestPyPI in a clean environment and run representative public
+surfaces in all three modes. Dependencies may need the normal PyPI index as an
+extra index.
 
-## 5. Tag and GitHub release
-
-Only after the PyPI upload is on the index. Tag the exact commit that was
-built.
+Finally publish the same source state to PyPI:
 
 ```sh
-git tag -a vX.Y.Z -m "mojolearn X.Y.Z"
-git push origin vX.Y.Z
-gh release create vX.Y.Z --title "mojolearn X.Y.Z" --notes-file <notes> \
-  python/dist/mojolearn-X.Y.Z-*.whl
+gh workflow run release-provenance.yml --ref <release-commit-or-tag> -f publish=pypi
+gh run watch
 ```
 
-Creating the GitHub release is what fires Zenodo. Zenodo's GitHub
-integration is enabled for this repository and acts on `release` events
-only; pushes and tags alone do nothing. It mints one DOI per release using
-`/.zenodo.json` for metadata (author ORCID 0009-0000-9877-3623, also in
-`CITATION.cff`). The DOI appears at
-https://zenodo.org/account/settings/github/ within minutes. Put the
-CONCEPT DOI (the one that resolves to the latest version) into `README.md`
-and into `CITATION.cff` as a `doi:` field in a follow-up commit; the
-version DOI changes every release, the concept DOI does not.
+Never rebuild after a successful qualification and silently call the new
+artifact equivalent. The workflow records and rechecks wheel digests before
+upload.
 
-Pre-releases also mint DOIs. For an rc, tag as `vX.Y.ZrcN`, pass
-`--prerelease` to `gh release create`, and only create the GitHub release
-when you actually want a DOI for it. A tag with no GitHub release mints
-nothing.
+## 5. Close the release
 
-## 6. Rollback
+Confirm the project page exposes the intended files and hashes, then install
+from PyPI into clean environments and run the documented smoke path. Record
+the workflow run, wheel hashes, supported architectures, and any unrun column
+in the release evidence.
 
-PyPI never allows re-uploading a filename or a version, so a bad release
-cannot be replaced in place.
-
-1. Yank it in the web UI. Open
-   https://pypi.org/manage/project/mojolearn/releases/ and use the yank
-   action on that version's page. A yanked release stays downloadable by
-   exact pin but is no longer chosen by default. Do the same on TestPyPI if
-   it went there.
-2. Fix, bump to `X.Y.Z+1` (or the next pre-release), and release again from
-   section 2. The Zenodo record of the yanked release stays; say so in the
-   next release notes.
-
-## 7. Dispatch without a runner
-
-If `gh workflow run` is issued with no runner registered, the build job
-sits queued waiting for one. Start `tools/release_runner.sh` and it is
-picked up; or cancel with `gh run cancel <id>`.
-
-## 8. What is deliberately NOT done
-
-* No API tokens in the repo, in the workflow, or in any environment
-  secret. Trusted Publisher OIDC only; `id-token: write` exists on exactly
-  one job.
-* No push-triggered or tag-triggered publishing. `workflow_dispatch` only,
-  so a release is always a decision somebody made at a terminal.
-* No sdist. There is no source build without the Mojo toolchain and no way
-  to make one that works; `python/setup.py` says so at the top.
-* No Linux wheel PUBLISHED yet. The build legs ran green on 2026-08-30 and
-  a 0.3.0 wheel was packed and audited, but each vendor set carried ONE GPU
-  architecture (the build box's own: sm_90a, gfx942) and the wheel failed
-  27 of 29 lanes on an A40, so it was never uploaded to PyPI
-  (bench/results/wheels/LEGS_2026-08-30.md). The architecture axis that
-  fixes this -- one set per architecture inside the same single wheel,
-  picked at import -- is implemented (docs/LINUX_WHEEL.md); its
-  per-architecture build legs and the cross-model install smoke are owed
-  before any Linux wheel ships.
-* No permanently registered runner. The self-hosted runner exists for one
-  job and is removed.
-
-## 9. The Linux wheel (docs/LINUX_WHEEL.md)
-
-**This heading read "no wheel published" until 2026-08-31 and had been wrong
-since 0.3.0.** `manylinux_2_35_x86_64` wheels are on PyPI for 0.3.0 and
-0.3.1, and 0.3.1 is the one to install: 0.3.0 SIGILLs on any x86-64 host
-without AVX-512. The steps below are how a Linux wheel gets made, not a plan
-for a first one.
-
-Every command below runs from the repository root on the M4, and every
-command that touches a GPU rents a box. Nothing here runs Mojo, pixi, pytest
-or a wheel build on the Mac; the only local work is a pure-Python zip and two
-`docker run --cpus 2` containers on a finished wheel. Check
-`bench/results/runpod_leases/` and the RunPod pod list before the NVIDIA leg
-and the DigitalOcean droplet list before the AMD leg; another session may
-own a box, and each provider holds one at a time.
-
-1. Build the CUDA sets and run the on-box gates, on RunPod -- ONE LEG PER
-   ARCHITECTURE the release carries. A leg builds exactly one architecture
-   (one `mojo build` is one architecture, LEGS_2026-08-30.md): by default
-   the build box's own, or a named one via `MOJOLEARN_GPU_ARCHS`, which
-   `build_sets.sh` verifies against the binaries' own read-back. Match the
-   box to the architecture (`MOJOLEARN_GEMM_LEG_GPU_NVIDIA`) unless the leg
-   is deliberately measuring cross-building. Launch from a session that
-   will outlive it.
-
-   ```sh
-   nohup bash packaging/linux/leg.sh nvidia > bench/results/wheels/nvidia.log 2>&1 &
-   disown
-   # and, for each further architecture, e.g.:
-   MOJOLEARN_GPU_ARCHS=sm_80 MOJOLEARN_GEMM_LEG_GPU_NVIDIA="NVIDIA A100 80GB PCIe" \
-     nohup bash packaging/linux/leg.sh nvidia > bench/results/wheels/nvidia-sm80.log 2>&1 &
-   disown
-   ```
-
-   Lands in `bench/results/wheels/<stamp>-nvidia/`, with
-   `wheels/sets/cuda/<arch>/`
-   (thirty `.so`, `.libs/`, `manifest.json`, `readback.txt`,
-   `arch_readback.txt`), `wheels/SIZES.txt`,
-   `gates/smoke_{fast,deterministic,identical}.json`, `gates/sabotage.json`,
-   `gates/nogpu.json` and `SUMMARY.txt`. The raw leg output is under
-   `bench/results/e1/<stamp>-runpod-nvidia/` and `bench/results/e1g/`.
-
-2. The same on the MI325X, on DigitalOcean.
-
-   ```sh
-   nohup bash packaging/linux/leg.sh amd > bench/results/wheels/amd.log 2>&1 &
-   disown
-   ```
-
-   Lands in `bench/results/wheels/<stamp>-amd/` with the same files under
-   `wheels/sets/hip/`.
-
-3. Pack, on the Mac, pure Python.
-
-   ```sh
-   python3 packaging/linux/pack_wheel.py \
-     --set bench/results/wheels/<stamp1>-nvidia/wheels/sets/cuda \
-     --set bench/results/wheels/<stamp2>-nvidia/wheels/sets/cuda \
-     --set bench/results/wheels/<stamp3>-amd/wheels/sets/hip \
-     --check-against python/dist/mojolearn-X.Y.Z-py3-none-macosx_11_0_arm64.whl
-   ```
-
-   One `--set` per fetched leg; the same vendor repeats, one architecture
-   each, and a duplicate (vendor, architecture) or an arch-less set is
-   refused.
-
-   Writes `python/dist/mojolearn-X.Y.Z-py3-none-linux_x86_64.whl` and
-   `python/dist/SIZES-X.Y.Z-linux.json`, and STOPS over 100 MB with the
-   numbers printed.
-
-4. Audit and check, in docker, one container at a time.
-
-   ```sh
-   bash packaging/linux/audit.sh python/dist/mojolearn-X.Y.Z-py3-none-linux_x86_64.whl \
-     bench/results/wheels/<stamp1>-nvidia/wheels/sets/cuda/<arch>/manifest.json \
-     bench/results/wheels/<stamp3>-amd/wheels/sets/hip/<arch>/manifest.json
-   ```
-
-   One manifest per packed set (they sit under each architecture directory).
-
-   Writes `python/dist/audit/show.txt` (the artifact, and the measured tag),
-   `repair.txt`, `repaired/mojolearn-X.Y.Z-py3-none-manylinux_<measured>_x86_64.whl`
-   and `twine.txt`. The repaired wheel is the one that is uploaded.
-
-5. Hand the repaired wheel to the release workflow. It CANNOT be built in
-   CI (steps 1 and 2 rent GPU boxes), so it is staged on the runner's own
-   disk, outside any checkout, with a digest sidecar:
-
-   ```sh
-   mkdir -p ~/.mojolearn-linux-wheel && rm -f ~/.mojolearn-linux-wheel/*
-   cp python/dist/audit/repaired/mojolearn-X.Y.Z-py3-none-manylinux_*_x86_64.whl \
-      ~/.mojolearn-linux-wheel/
-   ( cd ~/.mojolearn-linux-wheel && shasum -a 256 *.whl > "$(ls *.whl).sha256" )
-   ```
-
-   The build job's "Admit a pre-built, pre-audited Linux wheel" step picks it
-   up and REFUSES it unless exactly one wheel is staged, the sidecar matches
-   its bytes, the version equals the one just built, the tag is a manylinux
-   tag (`linux_x86_64` means `audit.sh` never ran) and `twine check` passes.
-   With nothing staged the release is macOS-only, which is what every release
-   before 0.3.0 was. `MOJOLEARN_LINUX_WHEEL_DIR` in the runner's environment
-   overrides the location.
-
-   The publish job then checks the artifact against a `sha256  filename`
-   manifest the build job emitted, in BOTH directions: every named wheel is
-   present and hashes correctly, and no wheel is present that was not named.
-   `bash packaging/release_workflow_test.sh` runs all three of those shell
-   blocks on the Mac against fabricated wheels, 15 cases, no network; run it
-   after editing any of them.
-
-6. Install-smoke on each vendor, from TestPyPI, in a clean venv on the box.
-
-   ```sh
-   MOJOLEARN_WHEEL_VERSION=X.Y.Z nohup bash packaging/linux/leg.sh nvidia install > bench/results/wheels/nvidia-install.log 2>&1 &
-   disown
-   MOJOLEARN_WHEEL_VERSION=X.Y.Z nohup bash packaging/linux/leg.sh amd install > bench/results/wheels/amd-install.log 2>&1 &
-   disown
-   ```
-
-   Lands in `bench/results/wheels/<stamp>-<vendor>/` with `install.log`,
-   `pip_show.txt`, `gates/smoke_<tier>.json` and `SUMMARY.txt`. Rent the
-   NVIDIA install leg on a GPU model the wheel carries no exact set for but
-   whose family it does (an sm_86 or sm_89 box against a carried sm_80):
-   that is the measurement behind the selector's within-family fallback,
-   which until then rests on NVIDIA's documentation alone
-   (docs/LINUX_WHEEL.md section 9).
-
-7. Then PyPI, by section 4, with both wheels in `python/dist/`.
+If any artifact is wrong, stop. PyPI files cannot be replaced under the same
+version; fix the issue and publish a new version.

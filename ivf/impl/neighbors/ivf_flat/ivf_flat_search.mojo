@@ -241,7 +241,7 @@ def _select_top_k(
     do not live in `impl/`.
 
     `k > SELECT_BLOCK` is REFUSED IN BOTH MODES, which is
-    `UNSUPERVISED_IDENTITY.md`'s owed item 5 reaching this lane unchanged:
+    `archive/research/UNSUPERVISED_IDENTITY.md`'s owed item 5 reaching this lane unchanged:
     the identical selector's rank pass gives one thread to each output slot
     and a larger k needs a loop nobody has written. Refused at the launcher,
     not silent.
@@ -254,7 +254,7 @@ def _select_top_k(
             + String(SELECT_BLOCK)
             + "). The identical selector's rank pass gives one thread to"
             " each output slot; a larger k needs a loop, which is"
-            " UNSUPERVISED_IDENTITY.md's owed item 5 and is not written"
+            " archive/research/UNSUPERVISED_IDENTITY.md's owed item 5 and is not written"
             " until something asks for it."
         )
     if k > length:

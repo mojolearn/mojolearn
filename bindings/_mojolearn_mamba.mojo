@@ -5,7 +5,7 @@
 A FOURTEENTH extension module, and a separate one on purpose, for the
 reason `bindings/_mojolearn_estimators.mojo`'s header gives: an
 independently changing binding must not become a merge point. This file
-closes the "PyPI surface: NONE EXISTS" row of `mamba/FEATURE_PARITY.md`'s
+closes the "PyPI surface: NONE EXISTS" row of `archive/evidence/mamba/FEATURE_PARITY.md`'s
 consumer table -- the certified Mamba-1 block (profile
 `mojolearn.identical.mamba1.fp32.v1`, three-vendor card) and the Mamba-2
 block (profile `mojolearn.identical.mamba2.fp32.v1`, Apple-gated,
@@ -45,7 +45,7 @@ inside a list keeps nothing alive (`python/mojolearn/_arrays.py`).
 
 DEVIATION 792 -- THE STATE CROSSES AS CALLER-OWNED BUFFERS, IN PLACE.
 The recurrent state is EXPLICIT ARGUMENTS, never hidden in an object on
-this side of the boundary (`mamba/FEATURE_PARITY.md` section 3's SHIP
+this side of the boundary (`archive/evidence/mamba/FEATURE_PARITY.md` section 3's SHIP
 NOW row says why: explicit buffers are strictly more testable, and the
 exact-state-handoff requirement is that a consumer can round-trip the
 bytes). Mamba-1 carries TWO pieces (contract section 5): the conv
@@ -292,6 +292,7 @@ def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
     _ = dstate^
     _ = dstages^
     _ = dx^
+    _ = ctx^
 
 
 def _mamba1_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
@@ -476,6 +477,7 @@ def _mamba2_run(
     _ = dstate^
     _ = dstages^
     _ = dx^
+    _ = ctx^
     return out_len
 
 
@@ -717,6 +719,7 @@ def _mamba3_run(
     _ = dstate^
     _ = dstages^
     _ = dx^
+    _ = ctx^
     return out_len
 
 

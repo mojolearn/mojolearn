@@ -10,7 +10,7 @@ not improve.
 
 WHICH FAMILY THIS IS, because this tree already has a different one
 --------------------------------------------------------------------
-`PORTING.md` 91 B: CatBoost has THREE GPU searchers, not two.
+`archive/reference/PORTING.md` 91 B: CatBoost has THREE GPU searchers, not two.
 `TFeatureParallelObliviousTreeSearcher` and
 `TDocParallelObliviousTreeSearcher` share this entire stack --
 `pointwise_optimization_subsets.h`, `pointwise_scores_calcer.h`,
@@ -124,7 +124,7 @@ compressed-bits buffer rather than out of the compressed index. That is
 
 `TStripeMapping` VERSUS `TMirrorMapping`, at one device
 --------------------------------------------------------
-`PORTING.md` 91 A proves line by line that at `GetDeviceCount() == 1` a
+`archive/reference/PORTING.md` 91 A proves line by line that at `GetDeviceCount() == 1` a
 stripe buffer and a mirror buffer are the same single slice `[{0, n}]`
 (`cuda_lib/mapping.h:256-280`). So the distinction costs nothing to honour
 and nothing to ignore -- today. It is honoured in the naming below anyway,
@@ -391,7 +391,7 @@ STATUS: UNWIRED. Nothing in this tree calls `create_subsets` or
 `split_subsets` -- the searcher above them
 (`oblivious_tree_doc_parallel_structure_searcher.{h,cpp}`, 295 lines) and the
 `pointwise_hist2*` histogram family below them are both unported, and they
-are rung 1 of `PORTING.md` 91 E. `PORTING_RULES.md` rule 3 is why this
+are rung 1 of `archive/reference/PORTING.md` 91 E. `PORTING_RULES.md` rule 3 is why this
 sentence is here: a ported file no caller reaches is not done, and the gate
 in `checks/pointwise_subsets_check.mojo` is what stands in for a caller
 until one exists.
@@ -1320,7 +1320,7 @@ def create_subsets(
     `RepeatOnAllDevices(maxPartCount)` gives EVERY device the full partition
     array, where the documents are split between them; at one device it is
     `[{0, maxPartCount}]` and identical to a mirror
-    (`PORTING.md` 91 A). The distinction is kept in the name of the type this
+    (`archive/reference/PORTING.md` 91 A). The distinction is kept in the name of the type this
     port would use, not in the allocation, because there is nothing to
     distinguish at one device.
 

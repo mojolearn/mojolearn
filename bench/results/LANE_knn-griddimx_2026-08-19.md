@@ -167,7 +167,7 @@ And the probe itself: `pixi run mojo run -I . neighbors/mutex_probe_main.mojo`
 
 `knn_method` still defaults to `KNN_METHOD_TILED`. The measured table that
 decided it was taken on the old fixed `1 x ceil(m/16)` geometry and is now
-stale in that respect; its note in `knn_brute_force.mojo` and PORTING.md
+stale in that respect; its note in `knn_brute_force.mojo` and archive/reference/PORTING.md
 entry 36 say so explicitly. The orchestrator decides after timing.
 
 ## What the orchestrator should time
@@ -208,7 +208,7 @@ row tile.
   note updated (merge landed, table stale, default unchanged)
 - `neighbors/mojo_only/knn_check.mojo`, `neighbors/knn_main.mojo` — three
   new checks
-- `neighbors/PORTED_MAP.tsv`, `PORTING.md` (entry 36 corrected, entry 40
+- `neighbors/PORTED_MAP.tsv`, `archive/reference/PORTING.md` (entry 36 corrected, entry 40
   added), `dbscan/gbdt/dbscan/adjgraph/algo.mojo` (DEVIATION 32 sentence
   corrected)
 

@@ -33,7 +33,7 @@ answer stops being zero and nothing would have said so.
 # =========================================================================
 # DEVIATION BLOCK: the device-wide decoupling is written out, exactly as in
 # `reorder_one_bit.mojo` and `segmented_scan.mojo`. CUB does it internally
-# with a decoupled lookback; MAX ships no device-wide scan (VENDOR_LIBS.md
+# with a decoupled lookback; MAX ships no device-wide scan (archive/reference/VENDOR_LIBS.md
 # 3b/3c, re-checked 2026-08-20), so there is nothing to call. Phase 1 is
 # `max.gpu.primitives.block.prefix_sum`, Modular's counterpart to
 # `cub::BlockScan::ExclusiveSum`, which is the collective CUB itself uses

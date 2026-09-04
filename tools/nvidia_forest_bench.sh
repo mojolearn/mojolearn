@@ -22,7 +22,7 @@
 # WHAT HAS NEVER HAPPENED BEFORE THIS SCRIPT RUNS
 #
 # No line of ensemble/ or extratrees/ has ever been compiled for CUDA.
-# The one-source rule (VENDOR_LIBS.md, ALWAYS GPU-agnostic) says the same
+# The one-source rule (archive/reference/VENDOR_LIBS.md, ALWAYS GPU-agnostic) says the same
 # Mojo should build through MAX's CUDA target; this script is the first
 # time that claim meets a compiler. Treat the first run as a BUILD, not a
 # benchmark. If it produces numbers on the first attempt, be suspicious

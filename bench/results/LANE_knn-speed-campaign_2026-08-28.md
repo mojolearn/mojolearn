@@ -24,7 +24,7 @@ since before this lane.
   takes `pinned_distance_tile_kernel` (DEVIATION 505/526), byte for byte
   as before.
 - The substitution is legitimate ONLY on the tiled arm and
-  `VENDOR_LIBS.md`'s banner is the authority: cuVS's dispatch for the
+  `archive/reference/VENDOR_LIBS.md`'s banner is the authority: cuVS's dispatch for the
   bench parameters (`knn_brute_force.cuh:443`, k <= 64 row-major L2) is
   `fusedL2Knn`, which calls NO vendor primitive — a fused tile kernel
   with a register-resident FAISS WarpSelect queue. When they fuse, they

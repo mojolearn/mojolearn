@@ -11,7 +11,7 @@
 #
 # It is NOT here because of a size budget. That was the theory this split was
 # commissioned under and the measurement below falsifies it; see the next
-# comment, and PORTING.md 70, which has been corrected.
+# comment, and archive/reference/PORTING.md 70, which has been corrected.
 set -eu
 
 here=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -27,7 +27,7 @@ mkdir -p python/mojolearn
 # For weeks this build was treated as a lottery over the basename of the entry
 # file: `bindings/build.sh` compiled a copy under a measured stem, checked the
 # artifact, and retried over a list, because byte-identical sources under
-# different names produced 113 / 29 / 0 compiled Metal functions. PORTING.md 70
+# different names produced 113 / 29 / 0 compiled Metal functions. archive/reference/PORTING.md 70
 # recorded that as an upstream defect keyed on the name.
 #
 # THE BASENAME IS INNOCENT. Measured 2026-08-21 on this module, one variable at
@@ -475,7 +475,7 @@ if ! kernels_plausible "$out" || ! minos_matches "$out" || ! run_smoke "$out"; t
       "The cache is regenerable; a poisoned one is not detectable any other" \
       "way, because the build succeeds and the artifact merely does not work." \
       "" \
-      "See the comment at the top of this script and PORTING.md 70." >&2
+      "See the comment at the top of this script and archive/reference/PORTING.md 70." >&2
     exit 1
 fi
 

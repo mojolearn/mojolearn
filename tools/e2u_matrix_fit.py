@@ -4,7 +4,7 @@
 """E2U driver: the UNSUPERVISED sub-feature matrix, one identity card per cell.
 
 The unsupervised analog of `tools/e2_matrix_fit.py` (read that docstring
-first; the discipline is the same and is not repeated here). `E1U_RESULTS.md`
+first; the discipline is the same and is not repeated here). `archive/evidence/E1U_RESULTS.md`
 certified ONE configuration each of k-means, k-NN and DBSCAN across Apple
 and AMD through a Mojo driver, and named what it did NOT cover: k-means++'s
 float scan, the fused/tiled arms at other k, the ball-cover DBSCAN arm, the
@@ -108,7 +108,7 @@ def make_inputs():
     # the rule, not the exception; queries ARE index points (hashed rows),
     # so the self-match at distance 0 and its tie class are in every row.
     # This is the shape on which FAST k-NN returned three different index
-    # sets in three runs (UNSUPERVISED_IDENTITY.md).
+    # sets in three runs (archive/research/UNSUPERVISED_IDENTITY.md).
     X_ties = ((q // 64).astype(np.float64) / 16.0).astype(np.float32)
     tie_rows = (np.arange(500, dtype=np.int64) * 7919) % N_ROWS
     Xq_ties = np.ascontiguousarray(X_ties[tie_rows])

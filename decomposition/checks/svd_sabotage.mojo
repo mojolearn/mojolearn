@@ -30,7 +30,7 @@ records what the arm must move and what it actually moved.
                         `u1 = a_jj - s*normx` becomes a DIFFERENCE OF
                         NEAR-EQUAL NUMBERS whenever the column is already
                         nearly axis-aligned. This is DEVIATION 678's chosen
-                        sign, `arima/SABOTAGES.md` arm (l), and the arm that
+                        sign, `archive/research/arima/SABOTAGES.md` arm (l), and the arm that
                         proves the sign is load bearing rather than
                         cosmetic. It is NOT expected to fail on a
                         well-conditioned fixture -- the reflector is still

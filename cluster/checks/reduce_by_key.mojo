@@ -47,7 +47,7 @@ any optimization:
    that has no histogram in it. `core/` is not secretly tree-shaped, and the
    evidence is that this file imports it and adds nothing.
 
-It also gives `checks/fixed_point.mojo` its first reader. `UNWIRED.md`
+It also gives `checks/fixed_point.mojo` its first reader. `archive/plans/UNWIRED.md`
 listed it as verified in isolation and used by no kernel.
 """
 
@@ -124,7 +124,7 @@ def accumulate_centroid_sums_kernel(
     contributions with a
     global atomic add rather than a vendor segmented reduce, so there is
     nothing here to swap `cub::DeviceSegmentedReduce` into (and that is
-    NOT FOUND anyway; see VENDOR_LIBRARIES.md). The only thing we change is
+    NOT FOUND anyway; see archive/reference/VENDOR_LIBRARIES.md). The only thing we change is
     the accumulator TYPE, and the module docstring says why: not because
     Metal lacks a float atomic, which it does not, but because an integer
     accumulator is order-independent and a float one is not.
@@ -220,7 +220,7 @@ def accumulate_centroid_sums_privatized_kernel[
     order `veclen` cells per thread step.
 
     THE `veclen`-WIDE X READ IS A SECOND DELIBERATE DEVIATION BEYOND
-    UPSTREAM (PORTING.md 46). RAFT's rowmajor kernel reads ONE element per
+    UPSTREAM (archive/reference/PORTING.md 46). RAFT's rowmajor kernel reads ONE element per
     thread (`SumsT val = d_A[j + lda * i]`, `reduce_rows_by_key.cuh:285`;
     no `TxN_t`/`ldg` anywhere in that file) and loses nothing by it on
     NVIDIA, where a warp's 32 scalar reads coalesce into full
@@ -452,7 +452,7 @@ def launch_accumulate_centroid_sums(
     to amortize the flush, direct scatter-add otherwise. The privatized
     arm's X read width comes from the same selection ladder the assignment
     launcher dispatches on (`fused_veclen_for`, fed x's address for both
-    pointer terms because this kernel reads one matrix; PORTING.md 46).
+    pointer terms because this kernel reads one matrix; archive/reference/PORTING.md 46).
     Both arms -- and every `veclen` instantiation of the privatized one --
     produce bit-identical Int32 totals (see the kernels), so this selector
     is SCHEDULING: it can change the time, never the model.
@@ -639,7 +639,7 @@ def sum_partials_kernel(
     # `max.gpu.primitives.block`. The hand-written shared-memory tree
     # reduction this replaced is gone: same arithmetic, one call, and
     # the reduction shape is Modular's to tune rather than ours to
-    # guess. See VENDOR_LIBRARIES.md.
+    # guess. See archive/reference/VENDOR_LIBRARIES.md.
     var s0 = pinned_block_sum[REDUCE_BY_KEY_TPB](acc)
     if tid == 0:
         out_partial.unsafe_store(Int(block_idx.x), s0)
@@ -669,7 +669,7 @@ def copy_f32_kernel(
     their code too, not a pointer swap. A kernel is how a `DeviceBuffer` to
     `DeviceBuffer` copy is spelled here, and 'k x d' is small.
 
-    It is also the second time this tree has needed one: see `UNWIRED.md` on
+    It is also the second time this tree has needed one: see `archive/plans/UNWIRED.md` on
     `enqueue_copy(dst_buf=, src_ptr=device)` being a silent no-op.
     """
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -688,7 +688,7 @@ def finish_sum_kernel(
     version of this port summed the partials in a host loop, which cost a
     drain and a transfer per iteration for a number the host only needed in
     order to make a decision the DEVICE can make. See
-    `HOST_AND_DEVICE.md`.
+    `archive/reference/HOST_AND_DEVICE.md`.
 
     One block, because `n_blocks` is at most 256 by construction.
     """
@@ -705,7 +705,7 @@ def finish_sum_kernel(
     # `max.gpu.primitives.block`. The hand-written shared-memory tree
     # reduction this replaced is gone: same arithmetic, one call, and
     # the reduction shape is Modular's to tune rather than ours to
-    # guess. See VENDOR_LIBRARIES.md.
+    # guess. See archive/reference/VENDOR_LIBRARIES.md.
     var s0 = pinned_block_sum[REDUCE_BY_KEY_TPB](acc)
     if tid == 0:
         out_scalar.unsafe_store(0, s0)

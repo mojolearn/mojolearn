@@ -42,7 +42,7 @@ _DIST_LP_UNEXPANDED = 9
 #:                       identity `||a||^2 + ||b||^2 - 2ab` and the other
 #:                       directly permits a boundary case where a point is
 #:                       inside by one formula and outside by the other
-#:                       (DEVIATION 2 in `ball_cover.mojo`, and `PORTING.md
+#:                       (DEVIATION 2 in `ball_cover.mojo`, and `archive/reference/PORTING.md
 #:                       21` for what the identity costs in float32).
 #:   'sqeuclidean'       is ABSENT. Squared Euclidean distance is not a
 #:                       metric even though Euclidean distance is: on three

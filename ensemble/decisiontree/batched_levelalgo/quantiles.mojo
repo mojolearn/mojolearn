@@ -122,7 +122,7 @@ code too, two lines later, unconditionally. Doing the two-element scan
 on the host removes one launch and one round trip and changes no value:
 integer addition of one number to zero. The structural reason not to
 reach for a device scan here is the harder one -- MAX ships none
-(`VENDOR_LIBS.md`), a general one is being written by another lane in
+(`archive/reference/VENDOR_LIBS.md`), a general one is being written by another lane in
 `core/` this round, and depending on another lane's unfinished work is
 what the lane charter forbids. The scan is written as the loop it is,
 inside this file, and if `core/` lands a scan the two-element case
@@ -181,7 +181,7 @@ DEVIATION 111. `cub::DeviceSegmentedRadixSort::SortKeys`
 WHAT IT COSTS: CUB is OPEN, so under the charter the correct move is to
 port the kernel rather than substitute a vendor primitive -- and there
 is no primitive to substitute in any case, since MAX ships no device
-sort (`VENDOR_LIBS.md`, checked 2026-08-20). The implementation is not a
+sort (`archive/reference/VENDOR_LIBS.md`, checked 2026-08-20). The implementation is not a
 new design: it is `gbdt/gpu_util/kernel/segmented_sort.mojo`, this
 repository's already-checked port of CatBoost's own
 `cub::DeviceSegmentedRadixSort::SortPairs` wrapper, with the value

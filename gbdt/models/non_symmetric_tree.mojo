@@ -39,7 +39,7 @@ need (see `data/leaf_path.mojo`), the next four are the boosting loop's and
 this lane does not own the boosting driver, and `ComputeBins` is the DEVICE
 apply, which lives with its kernel in `models/kernel/add_bin_values.mojo`
 exactly as theirs lives in `add_model_value.cu`. Every one of them is
-recorded in `UNWIRED.md` rather than written and left unreachable.
+recorded in `archive/plans/UNWIRED.md` rather than written and left unreachable.
 """
 
 from gbdt.data.leaf_path import TLeafPath
@@ -66,7 +66,7 @@ struct TVisitedLeaf(Copyable, Movable):
     THE COST IS BOUNDED AND STATED: one `TLeafPath` per leaf, so
     `O(leaves * depth)` host memory, on a host structure whose leaf count is
     `max_leaves` and whose depth is `max_depth`. Nothing row-scaled. That is
-    inside HOST_AND_DEVICE.md's rule one.
+    inside archive/reference/HOST_AND_DEVICE.md's rule one.
     ===================================================
     """
 

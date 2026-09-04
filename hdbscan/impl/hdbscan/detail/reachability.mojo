@@ -92,7 +92,7 @@ DIFFERENT QUESTIONS.
       set), and `knn_search`'s host sort is what repairs it.
 
 WHERE THE GUARANTEE STOPS, and this lane may not assume it away.
-`UNSUPERVISED_IDENTITY.md` records that under **FAST** three consecutive
+`archive/research/UNSUPERVISED_IDENTITY.md` records that under **FAST** three consecutive
 runs of one binary on one device returned three different sorted INDEX
 sets, and that two COLUMNS diverge at `knn.out_dist` with every sorted
 distance equal. So under FAST (b) is not reproducible run to run, and (a)

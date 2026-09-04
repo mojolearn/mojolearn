@@ -151,7 +151,7 @@ does not take, because both fold across threads. The plan here is one thread
 per output cell for every seam except S1 (one thread per token row), S14 and
 S17 (one thread per (batch, head, query) row) and S19 (one thread per output
 cell, whose fold is over the key axis inside that thread). This is an
-EXECUTION plan quantity in `IDENTICAL_GEMM_PLAN.md`'s sense: it decides
+EXECUTION plan quantity in `archive/plans/IDENTICAL_GEMM_PLAN.md`'s sense: it decides
 which thread computes a cell, never the sequence of values accumulated into
 it.
 

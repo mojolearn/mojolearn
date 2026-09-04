@@ -116,7 +116,7 @@ def _csr_digest(
 def _coord(row: Int, feature: Int) -> Float32:
     """A scattered point in a box of side 10.
 
-    Coordinates are kept small on purpose: `PORTING.md 21` records a k-NN
+    Coordinates are kept small on purpose: `archive/reference/PORTING.md 21` records a k-NN
     fixture destroyed by float32 cancellation when the spacing was 100. The
     distances here are computed unexpanded so that trap does not apply, but
     keeping the magnitudes small keeps the host oracle and the device in the

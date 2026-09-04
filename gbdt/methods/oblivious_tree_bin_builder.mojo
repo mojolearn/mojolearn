@@ -23,7 +23,7 @@ PORT OF, in one file because they are one call chain:
 
 at CatBoost `54a8143a`. Transliterated. Do not improve.
 
-WHY THIS FILE EXISTS AT ALL, AND WHY `PORTING.md` 91 B IS WRONG ABOUT IT
+WHY THIS FILE EXISTS AT ALL, AND WHY `archive/reference/PORTING.md` 91 B IS WRONG ABOUT IT
 ------------------------------------------------------------------------
 91 B says the feature-parallel and doc-parallel searchers "share their
 entire stack" and differ in "exactly three lines of `CreateSubsets`". The
@@ -124,7 +124,7 @@ comptime SPLIT_BITS_PER_KEY = 1
 is one bit.
 
 `NCB::IntLog2` is `ceil(log2(v))` (`libs/helpers/math_utils.h:14-16`), the
-same CEIL that `PORTING.md` 107 records costing a day when it was read as
+same CEIL that `archive/reference/PORTING.md` 107 records costing a day when it was read as
 floor. At two unique values ceil and floor agree, so this constant is not
 where that trap lives -- it is recorded because the SPELLING is the same.
 """

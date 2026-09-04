@@ -432,7 +432,7 @@ harness would raise a false contract violation under IDENTICAL.
 as the RECORD of the earlier protocol, and they are SUPERSEDED. The sentence
 here used to say they "are not superseded on Apple: they are the files the
 published Apple numbers came from." Those numbers were retracted on
-2026-09-03 and deleted from `E3_RESULTS.md`, so there is nothing left for
+2026-09-03 and deleted from `archive/evidence/E3_RESULTS.md`, so there is nothing left for
 them to be authoritative about.
 
 The paragraph below already named the disagreement to watch for, and it

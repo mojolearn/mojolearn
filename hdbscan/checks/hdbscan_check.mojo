@@ -10,7 +10,7 @@ distance-derived gates are ASSERTIONS (the device must equal the host
 pinned arithmetic byte for byte); under FAST the same comparisons are
 REPORTS, because the FAST arm's distances come from a vendor matmul and
 no host can replicate that -- `hierarchy/checks/linkage_check.mojo`
-makes the same split for the same reason, and `UNSUPERVISED_IDENTITY.md`
+makes the same split for the same reason, and `archive/research/UNSUPERVISED_IDENTITY.md`
 records the measurement behind it (three consecutive FAST runs of one
 binary on one device returned three different sorted k-NN index sets).
 

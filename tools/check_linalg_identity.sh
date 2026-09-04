@@ -113,5 +113,5 @@ else
   echo "linear-algebra identity: FAST rc=$fast_rc, IDENTICAL rc=$ident_rc -- NOT both green (read each pass's lines above)"
 fi
 echo "Reminder: this is ONE DEVICE. Cross-vendor identity is E1's to"
-echo "measure; see IDENTITY_PATHS.md and E1_RUNBOOK.md."
+echo "measure; see IDENTITY_PATHS.md and archive/evidence/E1_RUNBOOK.md."
 [ $fast_rc = 0 ] && [ $ident_rc = 0 ]

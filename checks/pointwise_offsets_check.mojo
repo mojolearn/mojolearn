@@ -3,7 +3,7 @@
 """Gate for `gbdt/methods/kernel/split_properties_helpers.mojo`.
 
 The pointwise family's offset arithmetic, which is the first thing landing
-from CatBoost's OTHER histogram family (`PORTING.md` 91 B, rung 1).
+from CatBoost's OTHER histogram family (`archive/reference/PORTING.md` 91 B, rung 1).
 
 WHAT EACH GATE CAN CATCH, because a gate that cannot fail is not a gate:
 

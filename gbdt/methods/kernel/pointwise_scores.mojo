@@ -9,7 +9,7 @@ PORT OF `catboost/cuda/methods/kernel/pointwise_scores.cu` (698 lines) and
 WHICH FAMILY THIS IS
 --------------------
 The POINTWISE family, the one BOTH of CatBoost's oblivious tree searchers
-share (`PORTING.md` 91 B): `TFeatureParallelObliviousTreeSearcher` and
+share (`archive/reference/PORTING.md` 91 B): `TFeatureParallelObliviousTreeSearcher` and
 `TDocParallelObliviousTreeSearcher`. It reads the histograms that
 `pointwise_hist2*` produce and `split_properties_helpers.ScanHistogramsImpl`
 scans.
@@ -93,7 +93,7 @@ Everything in both files:
 UNWIRED. Nothing in this repository calls any of it yet. The callers are
 `pointwise_kernels.{h,cpp}` -> `pointwise_scores_calcer.h` ->
 `oblivious_tree_doc_parallel_structure_searcher`, none of which are ported.
-`UNWIRED.md` already carries the whole pointwise family; this file joins it.
+`archive/plans/UNWIRED.md` already carries the whole pointwise family; this file joins it.
 Gated in isolation by `checks/pointwise_scores_check.mojo`.
 
 FOUR THINGS UPSTREAM DOES NOT AGREE WITH ITSELF ABOUT
@@ -1165,7 +1165,7 @@ def _block_argmin_and_store[
         }
 
     THE BARRIER IS OUTSIDE THE `if (tid < s)`, which is what makes it legal
-    and what makes it portable (`PORTING.md` 11 and 92: a threadgroup
+    and what makes it portable (`archive/reference/PORTING.md` 11 and 92: a threadgroup
     barrier reached by only some threads is undefined, and on Metal it does
     not merely warn). Their `ScanHistogramsImpl` in the same family gets
     this wrong; this loop gets it right, so it transliterates unchanged.

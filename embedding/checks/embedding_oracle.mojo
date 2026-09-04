@@ -913,7 +913,7 @@ def emb_backward_oracle(
     second continues it, and the resulting sequence of additions is the
     unsplit one term for term. `dW = ftz(dW_first + dW_second)` does NOT, in
     general, and that is contract 5.4's `R = 4` row again. Set beside
-    `gemm/IDENTICAL_BACKWARD_PLAN.md` 3.2, where `dB` splits reproduce only
+    `archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md` 3.2, where `dB` splits reproduce only
     at an ALIGNED split -- **a chain has no boundaries to align to**. Do NOT
     cite that section's measurement as evidence that an accumulator must be a
     tree; its splits used TWO pieces, and over two pieces a serial running

@@ -24,7 +24,7 @@ clusters, each blob whole, twelve points labelled noise.
 section put points at a spacing of 100 and the expanded identity's float32
 cancellation destroyed it: norms about 1e10 against distances about 1e3.
 Here the largest coordinate is 540, so the largest norm is about 3e5 and the
-float32 ulp there is 0.03, against an `eps^2` of 4. See `PORTING.md 21`.
+float32 ulp there is 0.03, against an `eps^2` of 4. See `archive/reference/PORTING.md 21`.
 
 WHAT IS COMPARED
 ----------------

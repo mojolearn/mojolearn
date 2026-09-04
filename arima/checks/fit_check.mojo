@@ -20,7 +20,7 @@ has to earn its own row.
 =============================================================================
 WHY THESE GATES ARE NOT SHAPED LIKE THE OTHER SIXTEEN
 =============================================================================
-`arima/SABOTAGES.md` opens by saying that this lane's expected values are
+`archive/research/arima/SABOTAGES.md` opens by saying that this lane's expected values are
 OUR OWN TALLY, so every gate needs a sabotage arm before it means anything.
 For a `fit` we can do better than a tally, and three of the gates below take
 values from somewhere this repository does not control:

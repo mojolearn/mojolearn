@@ -4,7 +4,7 @@
 number of cells each sabotage moves.
 
 **WRITTEN AND NEVER RUN.** Not one line below has been compiled, and no
-device has executed a backward call. `gemm/IDENTICAL_BACKWARD_PLAN.md`
+device has executed a backward call. `archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md`
 section 8 says the same about `gemm_backward.mojo`, and this file inherits it
 whole: every count in the ledger table below is a PREDICTION derived on
 paper, and the point of writing the predictions down before the run is that a
@@ -3506,7 +3506,7 @@ def main() raises:
     )
     print(
         "   routing: gemm/checks/gemm_backward.mojo   plan:"
-        " gemm/IDENTICAL_BACKWARD_PLAN.md"
+        " archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md"
     )
     print(
         "   oracle: gemm/checks/gemm_oracle.mojo::gemm_oracle, evaluated"

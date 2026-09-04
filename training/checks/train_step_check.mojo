@@ -6,7 +6,7 @@
 GREEN ON ONE DEVICE.** Until 2026-08-31 this header read "NOTHING IN THIS FILE
 HAS EVER BEEN COMPILED OR EXECUTED", added that no compiler had read it, no
 device had run it and no bit produced by it had been observed, said the same of
-`train_loop.mojo` and `training/TRAINING_LOOP_PLAN.md`, and closed by calling
+`train_loop.mojo` and `archive/plans/training/TRAINING_LOOP_PLAN.md`, and closed by calling
 every "passes" and every "fires" below a PREDICTION. **Commit `5ce6eb17` is
 the first execution and it falsified all of that.** Thirteen stages compared
 device against host oracle BITWISE, four negative controls all firing,

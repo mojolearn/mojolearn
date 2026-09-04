@@ -1877,7 +1877,7 @@ def sample_features_device[
 # ===========================================================================
 # DEVIATION BLOCK -- THE DEVICE SAMPLERS
 #
-# `extratrees/DEVIATIONS.md` is owned by another session this round, so these
+# `archive/research/extratrees/DEVIATIONS.md` is owned by another session this round, so these
 # five live here, in the file they describe, in the same shape the entries
 # above use. They are numbered 195-199 and reserved as such.
 # ===========================================================================
@@ -1895,7 +1895,7 @@ def sample_features_device[
 #   each pair `(i, i ^ j)` touched by exactly the one thread that owns the
 #   lower index.
 #
-#   Why this is a hand-write and not an invention. `VENDOR_LIBRARIES.md` and
+#   Why this is a hand-write and not an invention. `archive/reference/VENDOR_LIBRARIES.md` and
 #   `PORTING_RULES.md` 0b-i say: call the platform's collective, and
 #   hand-write only where there is none. `max.gpu.primitives.block` offers
 #   `sum`, `min`, `max`, `broadcast` and `prefix_sum` and NOTHING ELSE

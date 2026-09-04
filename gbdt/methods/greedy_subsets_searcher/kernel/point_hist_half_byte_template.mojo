@@ -29,7 +29,7 @@ The mechanism, in their words rearranged:
 each, so one load feeds eight histogram updates. That is the read-density
 win: mojotrees issues eight one-byte loads for the same work.
 
-DEVIATION (PORTING.md 1): `BLOCK_SIZE` is 512 rather than their 768 because
+DEVIATION (archive/reference/PORTING.md 1): `BLOCK_SIZE` is 512 rather than their 768 because
 Apple caps threadgroup memory at 32 KB and this accumulator wants 16 floats
 per thread, so 32,768 / (16 * 4) = 512 threads is the largest block that
 fits. Their `tiled_partition<8>::sync()` becomes `turn_sync()`, which is

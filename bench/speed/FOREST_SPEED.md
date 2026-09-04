@@ -69,7 +69,7 @@ training-step lane and it contains no gradient-boosting or forest estimator,
 so there is nothing here to time.
 
 CORRECTED 2026-08-31. This paragraph used to add that
-`training/TRAINING_LOOP_PLAN.md` stated in its own first paragraph that, as of
+`archive/plans/training/TRAINING_LOOP_PLAN.md` stated in its own first paragraph that, as of
 2026-08-25, no `mojo` process had read any of its three files. **Commit
 `5ce6eb17` falsified that**: the lane compiles and `train_step_check.mojo` ran
 green on one device. That plan's banner is corrected in place. The reason

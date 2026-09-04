@@ -115,7 +115,7 @@ import speed_gbdt_arm as spec           # noqa: E402
 #: no entry point here to time.
 #:
 #: CORRECTED 2026-08-31. This comment used to add that, as of 2026-08-25,
-#: `training/TRAINING_LOOP_PLAN.md` stated in its own first paragraph that no
+#: `archive/plans/training/TRAINING_LOOP_PLAN.md` stated in its own first paragraph that no
 #: `mojo` process had ever read any of its three files. Commit `5ce6eb17`
 #: falsified that plan's banner (the lane compiles and its step gate ran green
 #: on one device) and the banner is now corrected in place. The reason

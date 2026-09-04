@@ -147,7 +147,7 @@ FAMILY = "forest"
 _ACC_TOL = 0.02
 
 #: The lanes this file knows. `training/` is deliberately absent: it is the
-#: neural-network training-step lane (`training/TRAINING_LOOP_PLAN.md`) and it
+#: neural-network training-step lane (`archive/plans/training/TRAINING_LOOP_PLAN.md`) and it
 #: has no gradient-boosting or forest surface, so there is no entry point to
 #: time.
 #:

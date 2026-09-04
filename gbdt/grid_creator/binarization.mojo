@@ -359,7 +359,7 @@ def _penalty_min_entropy(weight: Float64) -> Float64:
     ROUNDED product. One ULP, and it lands exactly where it does damage: on
     a plateau the two arms of a symmetric pair stop being equal and the
     tie-break fires on the difference. `@no_inline` restores every
-    symmetric pair bit-identically. Recorded as PORTING.md 54.
+    symmetric pair bit-identically. Recorded as archive/reference/PORTING.md 54.
 
     ## Why this calls libm instead of `std.math.log`
 

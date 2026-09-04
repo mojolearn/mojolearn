@@ -56,7 +56,7 @@ fills every slot with the same value.
 
 THE CONTROL PLANE IS THEIRS, DELIBERATELY
 -----------------------------------------
-HOST_AND_DEVICE.md's rule two: cut our host waits down to THEIR count, not
+archive/reference/HOST_AND_DEVICE.md's rule two: cut our host waits down to THEIR count, not
 below it, not yet. Theirs blocks the host TWICE per level -- `bestProps.Read`
 (`greedy_search_helper.cpp:517`) and `RebuildLeavesSizes`
 (`split_properties_helper.cpp:802`) -- and so does this loop, at exactly
@@ -234,14 +234,14 @@ struct TBinFeatureTable(Copyable, Movable):
 
     So the walk is done once for every bin-feature at the top of the fit and
     the level loop indexes it. That is a change of ALGORITHM on the host and
-    therefore a deviation (PORTING.md 351), and it is bit-inert by
+    therefore a deviation (archive/reference/PORTING.md 351), and it is bit-inert by
     construction: `resolve_split` is the function that fills the table, so
     the table cannot disagree with it. `checks/depthwise_check.mojo`
     claim 1 asserts the two agree cell for cell anyway, because "cannot
     disagree by construction" is exactly the sentence this repository has
     been wrong about before.
 
-    HOST_AND_DEVICE.md rule one holds: `len(feature)` is the total bin
+    archive/reference/HOST_AND_DEVICE.md rule one holds: `len(feature)` is the total bin
     count, which scales with FEATURES times BORDERS and never with rows.
     """
 
@@ -1326,7 +1326,7 @@ def fit_non_symmetric_tree[
         #   * the LEFT child keeps the parent's id (`MakeSplit`, `:861-862`),
         #     so the parent's histogram already sits in the left child's slot
         #     -- when the plan derives the LEFT sibling (`big == left`, which
-        #     includes every exact-size tie, PORTING.md 136), the split-time
+        #     includes every exact-size tie, archive/reference/PORTING.md 136), the split-time
         #     copy was writing a slot that the very next level ZEROED. Copy
         #     deleted, subtraction unchanged: `from` is the left id and its
         #     slot holds the parent's totals, as `substract_histograms`

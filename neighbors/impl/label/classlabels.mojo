@@ -48,7 +48,7 @@ comptime LABEL_TPB = 256
 #   distinct values returned ascending. The unique array goes back to the
 #   device where the kernels below read it.
 # REASON: neither CUB primitive has a counterpart on this stack
-#   (`VENDOR_LIBS.md`: CUB/Thrust are OPEN) and a device radix SORT is not
+#   (`archive/reference/VENDOR_LIBS.md`: CUB/Thrust are OPEN) and a device radix SORT is not
 #   a thing this tree has ported -- `select_radix` is a top-k, not a sort.
 #   The function computed is the same one: the ascending distinct values of
 #   an int32 array, which is a pure function of the multiset and carries no

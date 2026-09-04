@@ -220,5 +220,5 @@ fit; the 1-nn kernel above it in the same build is 6.4x larger, and both are
 `O(m^1.5)`, so the RATIO is fixed and the rank can never overtake the kernel it
 sits under. On a clustered fixture (12 blobs, worst group 4.5x the mean) the
 imbalance costs only 1.42x in `sum|g|^2`. A perfect radix sort buys under 1%. `nn.argsort[target="gpu"]`
-cannot stand in for it — see `PORTING.md`, it is silently wrong above 256
+cannot stand in for it — see `archive/reference/PORTING.md`, it is silently wrong above 256
 elements.

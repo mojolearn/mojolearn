@@ -167,7 +167,7 @@ cpp/src/cluster/detail/kmeans_common.cuh::checkWeight	not ported	RAFT_EXPECTS th
 cpp/src/cluster/detail/kmeans.cuh::kmeans_transform	not ported	same as the .cu above, the header side
 ```
 
-## 5. PROPOSED `PORTING.md` DEVIATION ENTRIES (renumber from 30)
+## 5. PROPOSED `archive/reference/PORTING.md` DEVIATION ENTRIES (renumber from 30)
 
 **30. The k-means stopping rule is theirs, and the device-side one was never
 theirs.** cuVS tests convergence on the host, on a scalar copied back after
@@ -229,19 +229,19 @@ architecture-dependence conclusion survives; the precision number does not.
   exception, applied to a step their dispatch also materializes.
 - **`UNWIRED.md`** — records `use_fused`'s SM/4096 rule as a "REACH fact".
   That rule does not exist in cuVS. The entry should be deleted, not amended.
-- **`HOST_AND_DEVICE.md`** — cited twice by the old `kmeans.mojo` as authority
+- **`archive/reference/HOST_AND_DEVICE.md`** — cited twice by the old `kmeans.mojo` as authority
   for moving the convergence decision onto the device. If it says a
   host-decided per-iteration scalar is an anti-pattern, that is exactly what
   cuVS does at `detail/kmeans.cuh:462`/`:491`/`:492`, and the document needs
   the counter-example.
-- **`PORTING.md 15`** — the old `kmeans.mojo` header pointed at it for "this
+- **`archive/reference/PORTING.md 15`** — the old `kmeans.mojo` header pointed at it for "this
   port tests on the host, which is a deviation". The deviation was the other
   way round. Entry needs deleting or inverting.
-- **`PORTING.md 17`** — cited by `HostRng` with upstream lines `:148`/`:794`
+- **`archive/reference/PORTING.md 17`** — cited by `HostRng` with upstream lines `:148`/`:794`
   that are a `rowNorm` call and a doxygen `@param`. The real lines are
   `detail/kmeans.cuh:152-157` and `:885`,`:890`. The *content* of the
   deviation (no `std::mt19937` counterpart) is correct.
-- **`VENDOR_LIBRARIES.md` / `VENDOR_LIBS.md`** — cited by
+- **`archive/reference/VENDOR_LIBRARIES.md` / `archive/reference/VENDOR_LIBS.md`** — cited by
   `reduce_by_key.mojo:227-231` as the reason `block_sum` replaced a
   hand-written tree reduction. That one survives the rule change (a block
   reduction is not device-wide and fuses fine), but the documents' framing of

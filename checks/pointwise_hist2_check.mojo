@@ -48,7 +48,7 @@ every thread a private tally, so it measures COVERAGE. This one uses the
 real accumulators, where 8 to 32 threads share an inner copy and a barrier is
 the only thing holding their writes apart -- so it measures CONTENTION. The
 difference is not academic: the divergent peel loop recorded in
-`PORTING.md` 92 passed every gate in that file, at every block size, in both
+`archive/reference/PORTING.md` 92 passed every gate in that file, at every block size, in both
 its broken and its fixed form, and failed here on the first run.
 """
 

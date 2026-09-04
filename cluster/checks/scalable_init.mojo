@@ -30,7 +30,7 @@ holds to a host scan element by element. Nothing new to trust in the scan.
 
 The scan runs in Float32, so its counts are exact only while they fit a
 24-bit integer. That bounds `n_samples` at 2^24 and the DRIVER RAISES above
-it rather than silently mis-scattering (PORTING.md 48). The same bound covers
+it rather than silently mis-scattering (archive/reference/PORTING.md 48). The same bound covers
 `count_labels_kernel`: counts are sums of exact 1.0s, so every intermediate
 is an integer below 2^24 and float atomic adds of integers commute EXACTLY,
 which is why the count is deterministic without any ordering guarantee.
@@ -39,15 +39,15 @@ THE RANDOMNESS IS A COUNTER HASH, AND WHY THAT IS THE HONEST CHOICE HERE
 ------------------------------------------------------------------------
 Their per-sample uniforms come from `raft::random::uniform` -- a Philox-style
 COUNTER-BASED generator on device (`raft/random/rng_device.cuh`). No Mojo
-counterpart produces that stream (PORTING.md 17 already prices the host-RNG
+counterpart produces that stream (archive/reference/PORTING.md 17 already prices the host-RNG
 half of this). What must be preserved is the shape of the mechanism: the
-host may not manufacture O(rows) randomness (`HOST_AND_DEVICE.md`), and the
+host may not manufacture O(rows) randomness (`archive/reference/HOST_AND_DEVICE.md`), and the
 draw must be a pure function of (seed, index) so the same seed gives the
 same fit. `scalable_uniform` is splitmix64 -- the same finalizer
 `detail/kmeans.mojo::HostRng` already uses, chosen there because it is short
 enough to audit -- used as a counter hash: the host draws ONE 64-bit seed
 per round, the device hashes (seed, i). Same mechanism class as Philox
-(counter-based, stateless per element), different stream. PORTING.md 47.
+(counter-based, stateless per element), different stream. archive/reference/PORTING.md 47.
 
 `scalable_uniform` and `scalable_keep` are plain `def`s callable from host
 code too, ON PURPOSE: `check_scalable_sampling_selection` replays the exact
@@ -63,7 +63,7 @@ def scalable_uniform(seed_lo: Int32, seed_hi: Int32, i: Int) -> Float32:
     """One uniform in [0, 1) as a pure function of (round seed, sample index).
 
     Replaces `raft::random::uniform` at `detail/kmeans.cuh:689-690` for
-    k-means|| step 3 (PORTING.md 47). splitmix64 of `seed + i * golden`,
+    k-means|| step 3 (archive/reference/PORTING.md 47). splitmix64 of `seed + i * golden`,
     top 24 bits scaled by 2^-24, so the value is exactly representable and
     identical on host and device.
     """
@@ -89,7 +89,7 @@ def scalable_keep(
     pointer. `lk` is `oversampling_factor * n_clusters`, formed ONCE on the
     host in Float64 and passed down as Float32: theirs forms the product in
     double per element and truncates the result to DataT, and Apple silicon
-    has no device Float64 to copy that with (PORTING.md 47). The comparison
+    has no device Float64 to copy that with (archive/reference/PORTING.md 47). The comparison
     is strict `>`, which matters: a zero probability can never be selected,
     whatever the draw.
     """

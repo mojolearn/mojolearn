@@ -4,7 +4,7 @@
 
 NO CUVS COUNTERPART. Same discipline as `cluster/checks/kmeans_check.mojo`
 and for the same reason: a kernel is not ported until it has been enqueued
-(`PORTING.md 9`), and a correct answer is not by itself evidence that a
+(`archive/reference/PORTING.md 9`), and a correct answer is not by itself evidence that a
 kernel ran.
 
 THE FIXTURE IS RANDOM, AND THE FIRST ONE WAS NOT, AND THAT COST A RUN

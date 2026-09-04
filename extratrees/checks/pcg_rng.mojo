@@ -5,7 +5,7 @@
 Host-side. This is the draw machinery ExtraTrees needs so that a threshold is a
 pure function of `(seed, tree_id, node_id, feature_id)` rather than of the order
 in which a parallel builder happened to visit candidates — the reason recorded
-in DEVIATION 130 of `extratrees/DEVIATIONS.md`.
+in DEVIATION 130 of `archive/research/extratrees/DEVIATIONS.md`.
 
 Every arithmetic line below is a transcription of an upstream, pinned:
 
@@ -362,7 +362,7 @@ this define, by design."""
 def key_for(
     seed: UInt64, tree_id: UInt32, node_id: UInt32, feature_id: UInt32
 ) -> SplitKey:
-    """OURS, and it is DEVIATION 130 in `extratrees/DEVIATIONS.md`.
+    """OURS, and it is DEVIATION 130 in `archive/research/extratrees/DEVIATIONS.md`.
 
     cuML chains exactly three components into the subsequence at
     `builder_kernels.cuh:167-170`::

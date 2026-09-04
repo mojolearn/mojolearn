@@ -19,7 +19,7 @@ Three duties, in the order the refactor could have broken them:
    an A100 or an MI250X, the pins merely stop the documented values
    drifting silently.
 
-3. **READERS AGREE WITH THE TABLE** (the `UNWIRED.md` rule: a row nothing
+3. **READERS AGREE WITH THE TABLE** (the `archive/plans/UNWIRED.md` rule: a row nothing
    reads is indistinguishable from one something reads, so every reader is
    diffed against the row it claims to read, and a disagreement RAISES):
    `max_active_blocks_per_core` (the launch computation's occupancy reader),

@@ -35,7 +35,7 @@ column with.
 device answer is gated against in `checks/ctr_device_check.mojo`, and it
 is what `checks/ctr_check.mojo` gates against an independent O(n^2)
 tally. `TWeightedBinFreqCalcer` is still host side and that is what remains
-of `PORTING.md` deviation 52.
+of `archive/reference/PORTING.md` deviation 52.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -893,7 +893,7 @@ def compute_simple_ctrs_gpu(
 
 struct TWeightedBinFreqCalcerGpu(Movable):
     """`TWeightedBinFreqCalcer<TMapping>` ON THE DEVICE, which is the port
-    that retires the last line of `PORTING.md` deviation 52.
+    that retires the last line of `archive/reference/PORTING.md` deviation 52.
 
     Their class (`ctr_calcers.h:285-379`), their buffers, their launch
     order. The `Gpu` suffix is ours for the same reason
@@ -1086,7 +1086,7 @@ def compute_simple_ctrs_device(
     `compute_simple_ctrs_device(ctx, ...)` -- a one-line change in a file
     this lane does not own, the same handoff shape as the ctr_quality
     harness rewire. Until then this driver is reached by
-    `pixi run check-freq-ctr-device` only, and UNWIRED.md carries it.
+    `pixi run check-freq-ctr-device` only, and archive/plans/UNWIRED.md carries it.
     """
     var n = len(cat_codes)
     var order = List[UInt32]()

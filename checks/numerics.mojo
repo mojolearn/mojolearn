@@ -621,7 +621,7 @@ def identical_log(x: Float32) -> Float32:
 # APPROXIMATE PTX sqrt there, where Metal and HIP are correctly rounded,
 # so every `score / sqrt(denum_sqr)` differs on the NVIDIA column only:
 # that is E1's unexplained `tree001.winners.scores` NVIDIA divergence
-# (E1_RESULTS.md), named. Row 10's sentence "IEEE-correct on normals
+# (archive/evidence/E1_RESULTS.md), named. Row 10's sentence "IEEE-correct on normals
 # everywhere measured" was true of two vendors and false of the third.
 #
 # The closure has row 12's shape: ONE arithmetic from the basic ops that
@@ -1114,7 +1114,7 @@ def _fma_f32_simd[
 # ============ DEVIATIONS 740-746 (2026-08-23): THE NEURAL-BLOCK PRIMITIVES
 # ============ -- division CHARACTERIZED and named, rsqrt, log1p, sigmoid,
 # ============ silu, softplus. Built for the Mamba-1 identity block
-# ============ (IDENTICAL_SSM_NOTES.md "build order" item 1, promoted by
+# ============ (archive/research/IDENTICAL_SSM_NOTES.md "build order" item 1, promoted by
 # ============ Andrew 2026-08-23); the mamba lane imports these, nothing
 # ============ else in the tree calls them yet. Gates: check-division (row
 # ============ 49) and check-portable-nn (rows 50-54). No performance work.

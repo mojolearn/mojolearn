@@ -28,7 +28,7 @@
 # Exit code is 0 only when 2, 3 and 4 are all IDENTICAL/REFUSED=, 5 shows no
 # FAIL line the allowlist does not name, and 7 has no divergence, no missing
 # IDENTICAL card and no unexpected phase-8 finding. With --write the tables
-# land as <mac_ref_dir>/e3_verdicts_<label>.md for E3_RESULTS.md to include.
+# land as <mac_ref_dir>/e3_verdicts_<label>.md for archive/evidence/E3_RESULTS.md to include.
 set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"

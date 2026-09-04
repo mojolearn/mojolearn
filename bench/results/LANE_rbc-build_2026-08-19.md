@@ -312,7 +312,7 @@ cuml/cpp/src/dbscan/runner.cuh	the two-loop max_k dispatch	:257, :289, :327, :33
 
 ---
 
-## 5. PROPOSED `PORTING.md` DEVIATION ENTRIES (numbered from 30)
+## 5. PROPOSED `archive/reference/PORTING.md` DEVIATION ENTRIES (numbered from 30)
 
 **30. A BLOCK-SHAPE DEVIATION IS FREE ON THIS DEVICE, AND NOW WE KNOW.**
 `ball_cover/registers.mojo` launches 32 threads and one query per block where

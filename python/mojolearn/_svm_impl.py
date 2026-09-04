@@ -30,7 +30,7 @@ THE LANE'S STANDING: `svm/`'s CLASSIFIER carries a THREE-VENDOR IDENTICAL
 card. THE REGRESSOR DOES NOT, and `SVR`'s own docstring says so rather than
 inheriting the sentence below. Round
 11 of the E3 judge (2026-08-23, commit `144aa5b`) records it in
-`E3_RESULTS.md`: the IDENTICAL card bit-identical on Apple M4 <-> NVIDIA
+`archive/evidence/E3_RESULTS.md`: the IDENTICAL card bit-identical on Apple M4 <-> NVIDIA
 H100 and Apple M4 <-> AMD MI325X, 32 stages. Two thirds of that is
 re-checkable from this repository and was re-checked: the NVIDIA leg's
 `svm.identical.card` and the AMD leg's agree on every recorded line

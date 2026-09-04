@@ -217,7 +217,7 @@ struct TCtrValueTable(Copyable, Movable):
     def calc(self, count_in_class: Float32, total_count: Float32) -> Float32:
         """`TModelCtr::Calc` (`online_ctr.h:289-292`), verbatim.
 
-        **`@no_inline` is not decoration.** Deviation 54 in `PORTING.md`
+        **`@no_inline` is not decoration.** Deviation 54 in `archive/reference/PORTING.md`
         measured Mojo contracting a multiply-then-add across an inlined
         numeric helper where clang at `-ffp-contract=on` contracts only
         within one source expression, which re-decided a tie on a
@@ -383,7 +383,7 @@ def build_ctr_tables(
     categorical feature and handed to every Borders config; only the priors
     differ, and only at `Calc`. What each table then STORES is a copy,
     because this format keys a table by the model COLUMN it feeds -- see
-    `PORTING.md` 58.
+    `archive/reference/PORTING.md` 58.
     """
     if unique_values <= 0:
         raise Error("a categorical feature with no categories has no table")

@@ -48,7 +48,7 @@ The lesson worth keeping: when an instrument and the thing it measures
 disagree, compare their FIXTURES before theorising about their execution.
 This file copied the broken uploader too, which is why it was silent on the
 M4 and would have been silent on a GPU box for the wrong reason. Both are
-fixed. `PORTING.md` item 12 stated the rule from the start.
+fixed. `archive/reference/PORTING.md` item 12 stated the rule from the start.
 
 Same shape as DEVIATION 1944 and as `ensemble/checks/rf_ctx_probe.mojo`,
 which passed two fits in one process because its `one_fit` takes `ctx` as a
@@ -251,7 +251,7 @@ def _one_fit(
     # matrix exactly the way the gate did. That is why it was silent on the
     # M4, where unified memory leaves no DMA to race, and it would have sent
     # a reader of its own stage table to the split-K kernel on a `step1.covA`
-    # move when the cause is upstream of step 1. PORTING.md item 12.
+    # move when the cause is upstream of step 1. archive/reference/PORTING.md item 12.
     var big_b = ctx.enqueue_create_host_buffer[DType.float32](N_ROWS)
     ctx.synchronize()
     for i in range(N_ROWS * N_COLS):

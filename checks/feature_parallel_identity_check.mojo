@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """RUNG 2's GATE: the two POINTWISE searchers, one fixture, one tree, to the bit.
 
-`PORTING.md` 91 A says the feature-parallel and doc-parallel data layouts
+`archive/reference/PORTING.md` 91 A says the feature-parallel and doc-parallel data layouts
 build a bit-identical compressed index at device count 1. 91 B says the two
-searchers share their whole downstream stack. `NEXT_TWO.md` turns those into
+searchers share their whole downstream stack. `archive/plans/NEXT_TWO.md` turns those into
 a prediction: at `FoldBits == 0` and one device
 `TFeatureParallelObliviousTreeSearcher` and `TDocParallelObliviousTreeSearcher`
 are the same program, so one must reproduce the other TO THE BIT.
@@ -122,7 +122,7 @@ express is coverage this file does not have to provide.
 THE FIXTURE is `check-pointwise-vs-greedy`'s, deliberately, so a divergence
 cannot be a fixture difference: ten features spanning binary, half-byte and
 the 5/6/7-bit one-byte ranges, signal on the SIXTH one-byte feature so a
-`group_offset` regression is visible (`PORTING.md` 107), weights 1 and
+`group_offset` regression is visible (`archive/reference/PORTING.md` 107), weights 1 and
 integer gradients so every float32 sum is exact.
 
 IT IS RUN AT TWO ROW COUNTS AND THE SECOND ONE IS THE POINT
@@ -132,7 +132,7 @@ rung 1's 4,000 rows there is exactly ONE block, `blockIdx.x` is always 0,
 and every `+ KEYS_PER_COMPRESS_BLOCK * block` term in both new kernels is
 identically zero -- the block striding, the partial-block guards and the
 `indices`-versus-`compressedIndex` choice of which pointer advances are all
-invisible. That is `PORTING.md` 107's rule verbatim: a fixture must exercise
+invisible. That is `archive/reference/PORTING.md` 107's rule verbatim: a fixture must exercise
 the SECOND of anything the code groups.
 
     4,000  rows   1 block,  block 0 only
@@ -229,7 +229,7 @@ def run_case(ctx: DeviceContext, n_rows: Int) raises -> Int:
         ctx.synchronize()
 
     # signal at three depths; feature 9 is the SIXTH one-byte feature and
-    # lives in the second cindex column of its policy (`PORTING.md` 107)
+    # lives in the second cindex column of its policy (`archive/reference/PORTING.md` 107)
     var hs = ctx.enqueue_create_host_buffer[DType.float32](2 * N_ROWS)
     for r in range(N_ROWS):
         var g = Float64(0.0)

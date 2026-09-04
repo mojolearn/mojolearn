@@ -95,7 +95,7 @@ def scan_blocks_needed(n: Int) -> Int:
 #   `cumsum[dtype, exclusive, reverse, *, axis](output, input)`, the same
 #   shape as the CPU-only `max.algorithm.reduction.cumsum` and unlike
 #   `nn.argsort`/`nn.topk`/`nn.gather`, which take both), so there is no way
-#   to enqueue it. `VENDOR_LIBS.md` already said so; this re-confirms it.
+#   to enqueue it. `archive/reference/VENDOR_LIBS.md` already said so; this re-confirms it.
 #
 #   What this replaced was not a device scan at all: `exclusive_scan_kernel`
 #   was launched with `grid_dim = (1, 1, 1)`, so a single threadgroup walked

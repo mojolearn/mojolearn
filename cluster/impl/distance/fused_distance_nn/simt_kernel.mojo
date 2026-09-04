@@ -65,7 +65,7 @@ its self-neighbor round-off guard. What is NOT theirs is the buffering:
 their `P::SmemSize` is TWO pages (`2 * SmemPage`, `contractions.cuh:104`,
 36,864 bytes at Policy4x4<float> plus the norm rows) and Apple caps a
 threadgroup at 32,768, so this kernel runs one page with a second barrier
-per k-tile where their double buffer needs one. PORTING.md 42. At the
+per k-tile where their double buffer needs one. archive/reference/PORTING.md 42. At the
 shipped k-means shapes `k <= Kblk`, so their main loop body runs zero times
 and nothing is lost; the deviation is priced for large k in the entry.
 
@@ -79,7 +79,7 @@ unportable. Keeping them apart is the whole content of this section.
    combined with `raft::shfl` on the key AND on the value. **That is
    ported.** It used to be a shared-memory transpose plus a serial 16-way
    scan, justified by a claim that Mojo has no lane primitives. **The claim
-   was false** (`PORTING.md` 2): `std.gpu.primitives.warp` has the shuffles,
+   was false** (`archive/reference/PORTING.md` 2): `std.gpu.primitives.warp` has the shuffles,
    and `block.min` was never the answer here because it reduces VALUES ONLY
    and this reduction has to carry the key that achieved the minimum.
 
@@ -112,7 +112,7 @@ unportable. Keeping them apart is the whole content of this section.
    `MinAndDistanceReduceOpImpl` at `helper_structs.cuh:39-62`. That struct is
    at `:47-97` and it is VALUE-ONLY too -- `if (other.value < out->value)`,
    `:52` and `:59` -- so it was never the source of a key tie-break.) That
-   is load-bearing rather than tidiness (`PORTING.md` 14).
+   is load-bearing rather than tidiness (`archive/reference/PORTING.md` 14).
 
    Two things this relies on, both true for BOTH policies: `tc`
    (`P::AccThCols`) is a power of two no larger than the lane width, and
@@ -159,7 +159,7 @@ it per accumulator CELL before the min reduce (`l2_exp.cuh:137-145`); this
 kernel takes it once per ROW at the final write. `sqrt` is monotone and
 injective on `[0, inf)`, so the argmin, the tie set, and the written value
 are all bit-identical, and `AccRowsPerTh * AccColsPerTh` sqrts per thread
-per tile become `AccRowsPerTh` per row. PORTING.md 43.
+per tile become `AccRowsPerTh` per row. archive/reference/PORTING.md 43.
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
@@ -231,7 +231,7 @@ def fused_veclen_for(k: Int, x_addr: Int, y_addr: Int) -> Int:
 
 def fused_smem_bytes(skinny: Bool, veclen: Int) -> Int:
     """The kernel's ACTUAL threadgroup footprint: one X page, one Y page
-    (`SmemStride * (Mblk + Nblk)` floats, single-buffered -- PORTING.md 42),
+    (`SmemStride * (Mblk + Nblk)` floats, single-buffered -- archive/reference/PORTING.md 42),
     plus the two norm rows (`(Mblk + Nblk)` floats, their
     `shared_mem_size()` addend at `l2_exp.cuh:98-101`). Fed to the occupancy
     term of `launch_config_generator`, which is what their
@@ -458,7 +458,7 @@ def fused_distance_nn_kernel[
                             )
                         )
                 # Second barrier per k-tile: the single-buffer deviation
-                # (PORTING.md 42). Their double buffer writes the NEXT page
+                # (archive/reference/PORTING.md 42). Their double buffer writes the NEXT page
                 # while this one is read and needs one sync; one page cannot.
                 barrier()
                 kt += kblk
@@ -471,7 +471,7 @@ def fused_distance_nn_kernel[
                 while i < mblk:
                     var idx = tile_m + i
                     # Explicit `if`, not a conditional expression: the load
-                    # must not be reachable out of bounds (PORTING.md 19).
+                    # must not be reachable out of bounds (archive/reference/PORTING.md 19).
                     var nv = Float32(0.0)
                     if idx < m:
                         nv = xn.unsafe_load(idx)

@@ -10,7 +10,7 @@ reference corpus" section at the end and emitted into `mamba2/`.
 # Mamba-1 reference corpus
 
 An independent reference corpus for the Mamba-1 block identity lane (see
-`IDENTICAL_SSM_NOTES.md` at the repository root). The lane's expected values
+`archive/research/IDENTICAL_SSM_NOTES.md` at the repository root). The lane's expected values
 must not be solely our own tally, so this directory carries small hashed
 Mamba-1 block cases whose per-stage reference outputs are computed by somebody
 else's algorithm. The math is `selective_scan_ref` from state-spaces/mamba,

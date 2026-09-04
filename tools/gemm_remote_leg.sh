@@ -93,7 +93,7 @@
 #     normals. No amount of green on this Mac would have found that. That is
 #     the entire reason this file exists.
 #  3. It says nothing about SPEED. Timing belongs to the identity lane and no
-#     number produced here is a timing number (IDENTICAL_GEMM_PLAN.md, "LANE
+#     number produced here is a timing number (archive/plans/IDENTICAL_GEMM_PLAN.md, "LANE
 #     BOUNDARY", working rules). A rented box under an hour lease, with a
 #     cold pixi cache and a shared host, is the worst timing instrument in
 #     this project.
@@ -102,7 +102,7 @@
 #
 # TWO LANES, TWO PROVIDERS, AND WHY THAT IS NOT AN ACCIDENT
 # =========================================================
-# `IDENTICAL_GEMM_PLAN.md`'s RENTING section, amended by Andrew 2026-08-23:
+# `archive/plans/IDENTICAL_GEMM_PLAN.md`'s RENTING section, amended by Andrew 2026-08-23:
 #
 #     identity / E2 lane   DigitalOcean droplets, their e2_remote_leg.sh
 #     this lane            RunPod, tools/runpod_guard.sh arm FIRST
@@ -426,7 +426,7 @@ RP_HOST_V1="${MOJOLEARN_RUNPOD_API_HOST_V1:-https://rest.runpod.io}"
 # turns out to be rest.runpod.io/v1 instead, the host was already overridable
 # and the path was not, so the leg could be told half of the truth and no
 # more -- which is a knob that cannot fix the thing it is for. Confirm both
-# with the free GETs in gemm/E1G_RUNBOOK.md BEFORE the first paid run; a
+# with the free GETs in archive/evidence/gemm/E1G_RUNBOOK.md BEFORE the first paid run; a
 # wrong path makes the pre-flight GET non-2xx and the leg refuses to create
 # anything, which is the safe direction and is where this will show up.
 # THE GUARD'S OWN ENDPOINTS DO NOT MOVE WITH THIS. The on-pod watchdog walks
@@ -732,7 +732,7 @@ case "$MINUTES" in
 esac
 if [ "$MINUTES" -lt 1 ] || [ "$MINUTES" -gt "$MINUTES_CAP" ]; then
     echo "gemm_remote_leg: REFUSING a ${MINUTES}-minute lease." >&2
-    echo "  ONE HOUR IS A HARD CAP on this lane (IDENTICAL_GEMM_PLAN.md," >&2
+    echo "  ONE HOUR IS A HARD CAP on this lane (archive/plans/IDENTICAL_GEMM_PLAN.md," >&2
     echo "  RENTING rule 2), not a default to extend past casually. It is" >&2
     echo "  refused here rather than clamped, because a clamp turns a" >&2
     echo "  deliberate over-run into a silent under-run and the operator" >&2
@@ -2104,7 +2104,7 @@ leg_arm() {
         sed 's/^/    /' "$_armlog"
         leg_die "ARM REFUSED. The box is not used -- it is terminated.
   A box that cannot be armed is an orphan that has not happened yet
-  (IDENTICAL_GEMM_PLAN.md, RENTING rule 1)."
+  (archive/plans/IDENTICAL_GEMM_PLAN.md, RENTING rule 1)."
     fi
     # READ IT BACK. `arm` succeeding and a lease existing are two claims, and
     # every other gate in this repository checks the second one rather than
@@ -4713,11 +4713,11 @@ if [ "$PAYLOAD" = "speed" ]; then
 elif [ "$PAYLOAD" = "phase8" ]; then
     echo "the column:  $E1_DEST"
     echo "$E1_DEST" > "$OUT/e1_dir.txt"
-    echo "next: gemm/E1G_RUNBOOK.md, 'the phase8 payload'. The verdict is"
-    echo "tools/e3_round_judge.sh and it is recorded in E3_RESULTS.md, not"
+    echo "next: archive/evidence/gemm/E1G_RUNBOOK.md, 'the phase8 payload'. The verdict is"
+    echo "tools/e3_round_judge.sh and it is recorded in archive/evidence/E3_RESULTS.md, not"
     echo "in E1G_RESULTS.md -- one round per entry, never appended to."
 else
-    echo "next: gemm/E1G_RUNBOOK.md, 'reading the result'. Write the row into"
+    echo "next: archive/evidence/gemm/E1G_RUNBOOK.md, 'reading the result'. Write the row into"
     echo "E1G_RESULTS.md before the pod's details are only in this scrollback."
 fi
 # The two reds are separate on purpose. RED is about whether the cards can

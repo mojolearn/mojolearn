@@ -1209,7 +1209,7 @@ def check_quantizer_is_reproducible() raises:
     ONE process, in ONE mode. It cannot see contraction (IDENTITY_PATHS row
     9), the denormal policy (row 10) or the device transcendentals (row
     12), because those need a second backend. The cross-vendor statement
-    for this k-means is `UNSUPERVISED_IDENTITY.md`'s -- Apple, NVIDIA and
+    for this k-means is `archive/research/UNSUPERVISED_IDENTITY.md`'s -- Apple, NVIDIA and
     AMD produce one distinct answer under IDENTICAL -- and this lane
     inherits exactly that and no more.
     """

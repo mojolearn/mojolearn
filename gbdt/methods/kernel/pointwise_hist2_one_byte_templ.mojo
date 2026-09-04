@@ -166,7 +166,7 @@ def get_max_bin_count[
         if (threadIdx.x < 1) smem[tid] = max(smem[tid], smem[tid + 1]);
 
     Every `__syncthreads()` is OUTSIDE the `if`, which is what keeps it
-    legal under a threadgroup barrier (PORTING.md 11).
+    legal under a threadgroup barrier (archive/reference/PORTING.md 11).
 
     It borrows the histogram scratch, which is why it must run and finish
     BEFORE the accumulator is constructed -- the constructor zeroes that
@@ -221,7 +221,7 @@ def pw_bounds[bits: Int]() -> Tuple[Int, Int]:
 def compute_split_properties_nb_kernel[
     bits: Int, full_pass: Bool, m: Int
 ](
-    # `TCFeature*`, flattened to parallel arrays (PORTING.md 9 rule 2).
+    # `TCFeature*`, flattened to parallel arrays (archive/reference/PORTING.md 9 rule 2).
     # `Mask` and `Shift` are absent because this family never reads them:
     # a one-byte feature IS a byte of the word `Offset` selects.
     feature_offset: MutPointer[UInt32, MutAnyOrigin],

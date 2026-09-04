@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The GEMM oracle, and the fixtures that make each of its clauses FALSIFIABLE.
 
-Phase 1 of `IDENTICAL_GEMM_PLAN.md`'s lane charter. The contract is
+Phase 1 of `archive/plans/IDENTICAL_GEMM_PLAN.md`'s lane charter. The contract is
 `gemm/IDENTICAL_FP32_CONTRACT.md`; the oracle is
 `gemm/checks/gemm_oracle.mojo`; this file is the evidence that the
 oracle's clauses are choices rather than defaults.

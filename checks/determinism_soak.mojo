@@ -43,7 +43,7 @@ sums through a fixed-point integer accumulator instead of a float
 silent. **If the pointwise arm still drifts under IDENTICAL, there is a
 second defect and it is not the histogram flush.**
 
-THE MECHANISM, found after this file was written (PORTING.md 134c/134d):
+THE MECHANISM, found after this file was written (archive/reference/PORTING.md 134c/134d):
 not arithmetic on either arm. The pointwise half was a host staging pair
 freed at its last use (`h_po`/`h_ps` in `_estimate_and_apply`), FIXED by
 DEVIATION 1890 and reproduced on demand with the recorded 8/12
@@ -127,7 +127,7 @@ def main() raises:
         print("                window (20-30 concurrent GPU processes), not")
         print("                the lifetime alone, was the missing")
         print("                ingredient -- rerun under the synthetic load")
-        print("                recipe (PORTING.md 134f). 134 STAYS OPEN.")
+        print("                recipe (archive/reference/PORTING.md 134f). 134 STAYS OPEN.")
         print("  =============================================================")
     print()
 
@@ -239,7 +239,7 @@ def main() raises:
         )
         print(
             "  Rerun this control under the synthetic load recipe in"
-            " PORTING.md 134f. DEVIATION 134 STAYS OPEN."
+            " archive/reference/PORTING.md 134f. DEVIATION 134 STAYS OPEN."
         )
         raise Error(
             "134f control stayed quiet: sabotage did not move the model;"

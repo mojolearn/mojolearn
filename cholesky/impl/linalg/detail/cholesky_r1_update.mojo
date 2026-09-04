@@ -45,7 +45,7 @@ row of `A` sits in row `n-1` (lower arm). Then (`:60-118`):
 # DEVIATION 1632: THE THREE cuBLAS CALLS ARE REPLACED BY THIS LANE'S OWN
 # PINNED KERNELS, AND THE HOST ROUND TRIP IS KEPT.
 #
-# `cublasCopy`, `cublastrsm` and `cublasdot` are CLOSED. `VENDOR_LIBS.md`'s
+# `cublasCopy`, `cublastrsm` and `cublasdot` are CLOSED. `archive/reference/VENDOR_LIBS.md`'s
 # surviving exception says call the platform equivalent because there is
 # nothing to port; here the equivalents are already in this tree and are
 # pinned, so:

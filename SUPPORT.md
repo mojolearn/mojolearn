@@ -44,7 +44,7 @@ A report can usually be investigated when it contains:
 1. a `mojolearn bug-report` bundle;
 2. a minimal reproducer using synthetic or publicly shareable data;
 3. expected and actual behavior;
-4. whether it occurs under `FAST`, `IDENTICAL`, or both;
+4. whether it occurs under `FAST`, `DETERMINISTIC`, `IDENTICAL`, or more than one mode;
 5. the last known working release, if it is a regression.
 
 Incomplete reports receive `needs-reproducer`. They remain open for 14 days

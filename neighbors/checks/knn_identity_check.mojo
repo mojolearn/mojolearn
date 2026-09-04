@@ -98,7 +98,7 @@ def _build_index(ctx: DeviceContext) raises -> HostBuffer[DType.float32]:
     the copies are exact.
 
     A `HostBuffer` and not a `List`: `knn_search` takes
-    `MutUntrackedOrigin` pointers, and `UNWIRED.md:31` records that a
+    `MutUntrackedOrigin` pointers, and `archive/plans/UNWIRED.md:31` records that a
     pointer from `enqueue_create_host_buffer` is not interchangeable with
     an arbitrary host pointer on this stack -- SILENTLY. Every other check
     that drives the caller-facing surface uses the runtime's buffers for

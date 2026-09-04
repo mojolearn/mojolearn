@@ -37,7 +37,7 @@ Same full-shape fixture, `use_subtraction` flipped:
 The reach check the digest could never do: the switch demonstrably moves
 the biggest term, and the mse equality held at this shape. (It is a
 MEASURED equality, not implied: the "Int32 makes the subtraction exact"
-argument recorded here originally is false -- PORTING.md 136a, cells
+argument recorded here originally is false -- archive/reference/PORTING.md 136a, cells
 round through float32 before the subtraction.) (CatBoost's policy, for
 the record:
 `BuildNecessaryHistograms` computes the SMALLER sibling and subtracts,

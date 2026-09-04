@@ -7,7 +7,7 @@ left `_NOT_YET`, where it had been withheld over a cross-vendor divergence
 reading WITHDRAWN at `9835094e` (the divergent lines were a sabotage arm's
 own block; `python/mojolearn/_gp_impl.py`'s header carries the history).
 The model for this file is `test_svr_surface.py` and the house standard is
-`gemm/PYTHON_SURFACE_GATE.md`.
+`archive/evidence/gemm/PYTHON_SURFACE_GATE.md`.
 
 WHAT THIS CLOSES. `gaussian_process/estimator.mojo`'s `gpr_fit_host` /
 `gpr_predict_host`, `bindings/_mojolearn_gp.mojo`'s `gpr_fit` /

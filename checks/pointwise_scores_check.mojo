@@ -4,7 +4,7 @@
 
 The POINTWISE SCORER: three split kernels, five score calcers, the
 gather-by-leaves transpose, and the partition-statistics reduce. Nothing in
-this repository calls any of it yet (`UNWIRED.md`), so this file is the only
+this repository calls any of it yet (`archive/plans/UNWIRED.md`), so this file is the only
 thing standing between the port and a wrong tree the day it is wired.
 
 WHY EVERY GATE IS PER CELL AND NEVER A TOTAL

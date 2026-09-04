@@ -36,10 +36,10 @@ packed nibbles to match, and `f = (shift + (i << 1)) & 14` walks each thread
 through all 8 in a different order. On any iteration the 8 threads of a
 parity pair sit on 8 distinct features.
 
-DEVIATION (PORTING.md 11 and 92): their `thread_block_tile<32>::sync()`
+DEVIATION (archive/reference/PORTING.md 11 and 92): their `thread_block_tile<32>::sync()`
 becomes a threadgroup `barrier()`, 16 per point (8 iterations x 2).
 
-DEVIATION (PORTING.md 1): CatBoost launches both kernels at `blockSize = 768`
+DEVIATION (archive/reference/PORTING.md 1): CatBoost launches both kernels at `blockSize = 768`
 (`pointwise_hist2_binary.cu:142`, `pointwise_hist2_half_byte.cu:142`), which
 at 16 floats per thread is 49,152 bytes against Apple's 32,768. The matrix
 row resolves it to 512 -- exactly 32,768. **Unlike every other block in this

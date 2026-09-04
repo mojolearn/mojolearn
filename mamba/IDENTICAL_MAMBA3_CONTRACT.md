@@ -151,7 +151,7 @@ are inputs to this profile.
 | mod-2π reduction | NEW SPELLING, not a new function: composed from `identical_div`, exact `floor`, `pinned_mul`, one subtract (DEVIATION 829). No request to the identity lane needed | S10 |
 | π / 2π constants | `Float32(π) = 0x40490FDB`, `Float32(2π) = 0x40C90FDB`, pinned BY BITS in the oracle and kernels; the upstream float64 literal `3.141592653589793` rounds to these in every f32 context the references use | S10, S13 |
 
-The stale sentence in `IDENTICAL_SSM_NOTES.md` ("only `portable_cosf`
+The stale sentence in `archive/research/IDENTICAL_SSM_NOTES.md` ("only `portable_cosf`
 exists", "`portable_sinf` not asked for") predates DEVIATION 820 and is
 flagged to the orchestrator for the fix-docs-on-discovery pass; that file
 is not this contract's to edit.
@@ -491,7 +491,7 @@ arithmetic lands on it. Then, smallest first, one gate per phase:
 6. **Phase M3-5 — shapes and corpus.** L set, adversarial rows,
    FAST recording, kernel-matrix rows. RUN OWED.
 7. **Phase M3-6 — the E-series leg.** Three vendors, the
-   `gemm/E1G_RUNBOOK.md` shape, reach measured not inferred. The
+   `archive/evidence/gemm/E1G_RUNBOOK.md` shape, reach measured not inferred. The
    completion claim lives or dies here. TWO COLUMNS ARE IN AND AGREE
    (Apple and AMD MI325X/gfx942 at `c6e86966` -- the RUN RECORD at the end
    of this file); the NVIDIA column is RUN OWED.
@@ -570,7 +570,7 @@ UNVERIFIED, RUN OWED with its command):**
   `checks/kernel_matrix.mojo` gains no knob row (stated in row 93, not
   silently omitted). The cross-column READS are the E-leg's.
 - **PHASE M3-6 — the three-vendor E-series leg** the completion claim
-  lives on: `gemm/E1G_RUNBOOK.md` shape, reach measured not inferred.
+  lives on: `archive/evidence/gemm/E1G_RUNBOOK.md` shape, reach measured not inferred.
   ITS SECOND COLUMN ARRIVED AND IS GREEN (the AMD RUN RECORD below); the
   NVIDIA column is still RUN OWED, and the leg itself stays open.
 

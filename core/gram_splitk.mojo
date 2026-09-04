@@ -31,7 +31,7 @@ equivalent is MEASURED unusable at this shape:
   `naive_batched_matmul_kernel` (`bmm.mojo:899-925`) -- a scalar per-thread
   k-loop with no shared-memory tiling whose B accesses under `transpose_b`
   stride by k floats, uncoalesced -- and expressing the Gram as k-chunked
-  batches would ADD a materialized chunk-major copy of X (twice, PORTING.md
+  batches would ADD a materialized chunk-major copy of X (twice, archive/reference/PORTING.md
   24) plus its write-and-re-read traffic. The MAX routes are exhausted.
 
 WHAT THIS KERNEL DOES

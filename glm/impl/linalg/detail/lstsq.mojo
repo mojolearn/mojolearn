@@ -47,7 +47,7 @@ device pointers would be the `linalg.transpose` failure again. The GPU
 counterpart in the same module, `linalg.gemv.gemv_gpu`, is the real mirror of
 `raft::linalg::gemv` and is what runs.
 
-`VENDOR_LIBRARIES.md` used to list `linalg.gemv.gemv` as AVAILABLE, where
+`archive/reference/VENDOR_LIBRARIES.md` used to list `linalg.gemv.gemv` as AVAILABLE, where
 AVAILABLE meant only that the import compiled, which is exactly how the wrong
 symbol got recorded as the finished form. That row and the `linalg.matmul` at
 `n = 1` row are corrected. `bench/results/VENDOR_PATH_2026-08-19.md` carries
@@ -72,7 +72,7 @@ Theirs computes `A^T A` and `A^T b` on TWO CUDA streams concurrently, with
 events to join them (`lstsq.cuh`, `multAbStream`). Mojo's `DeviceContext`
 gives one queue here, so ours runs them in sequence. That is a real
 throughput deviation and not a correctness one, and it is exactly the kind of
-control-plane concurrency `HOST_AND_DEVICE.md` says the incumbents get for
+control-plane concurrency `archive/reference/HOST_AND_DEVICE.md` says the incumbents get for
 free from CUDA and we do not.
 
 WHAT DEVIATION 527 ADDED HERE, AND WHY IT MOVES NO BITS
@@ -343,7 +343,7 @@ def lstsq_eig_traced(
     # `gemv[parallelize: Bool, elementwise_lambda_fn](c_buf, a_buf, b_buf)`
     # with **no `ctx: DeviceContext` and no `target`**, and its own docstring
     # opens "Computes a CPU matrix-vector product". It is the same tell that
-    # caught `nn.cumsum` in `VENDOR_LIBRARIES.md`: the GPU-capable calls in
+    # caught `nn.cumsum` in `archive/reference/VENDOR_LIBRARIES.md`: the GPU-capable calls in
     # this toolchain (`matmul`, `top_k`, `argsort`, `gather`) all carry a
     # context and this one does not. Recorded so nobody re-derives it.
     #

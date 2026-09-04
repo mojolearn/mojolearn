@@ -3,7 +3,7 @@
 """References for the `fit` gates. NOT A PORT, and deliberately NOT a copy
 of the device spelling.
 
-`arima/SABOTAGES.md` opens by saying that this lane's expected values are
+`archive/research/arima/SABOTAGES.md` opens by saying that this lane's expected values are
 OUR OWN TALLY, so an arm that does not bite proves nothing about the gate.
 For `fit` we can do better than a tally, and everything in this file exists
 to make the `fit` gates independent of how the device spells things:

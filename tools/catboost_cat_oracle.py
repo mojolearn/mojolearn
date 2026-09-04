@@ -67,7 +67,7 @@ columns cannot produce comparable bins.
 **AND FEATURE COMBINATIONS ARE NOT PORTED AT ALL.**
 `gbdt/options/catboost_options.mojo`'s `TCatFeatureParams.check()` refuses
 `max_ctr_complexity != 1` by name, where CatBoost's default is 4
-(`cat_feature_options.cpp:231`). That is `PORTING.md` 91 and `NEXT_TWO.md`
+(`cat_feature_options.cpp:231`). That is `archive/reference/PORTING.md` 91 and `archive/plans/NEXT_TWO.md`
 rung 4, and it is a second, independent reason a CTR fixture is not
 comparable today.
 

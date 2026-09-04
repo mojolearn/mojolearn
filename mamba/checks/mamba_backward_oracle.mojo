@@ -6,7 +6,7 @@ profile `mojolearn.identical.mamba1.bwd.fp32.v1`.
 **NORMATIVE.** This file is not a second implementation to cross-check
 against; it DEFINES the answer. When the device backward and this file
 disagree, the device is wrong by definition, per stage and per cell. It is
-`mamba/IDENTICAL_BACKWARD_PLAN.md` sections 2, 3.2, 3.4 and 3.5 written on
+`archive/plans/mamba/IDENTICAL_BACKWARD_PLAN.md` sections 2, 3.2, 3.4 and 3.5 written on
 the CPU through the SAME pinned seam functions the device must call
 (`ftz`, `identical_mul_add`, `pinned_mul`, `identical_exp`,
 `identical_sigmoid`, `identical_silu`, `identical_div`, `identical_rsqrt`,

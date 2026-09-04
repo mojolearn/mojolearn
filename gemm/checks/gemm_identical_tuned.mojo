@@ -7,9 +7,9 @@ written on 2026-08-25 by a lane with no execution rights of any kind -- no
 `mojo`, no `pixi`, no build, no test, no benchmark. Every claim below about
 what it computes is a claim about the SOURCE, and every claim about what it
 costs is a PREDICTION recorded before measurement
-(`gemm/TUNING_PLAN.md` section 6). Nothing here may be quoted as a result.
+(`archive/plans/gemm/TUNING_PLAN.md` section 6). Nothing here may be quoted as a result.
 The first person to build it should expect to fix compile errors, and
-`gemm/TUNING_PLAN.md`'s Appendix names the constructions most likely to be
+`archive/plans/gemm/TUNING_PLAN.md`'s Appendix names the constructions most likely to be
 the ones that fail.
 
 **NOTHING MAY ROUTE TO THIS FILE UNTIL `gemm_device_check.mojo` PASSES ON
@@ -18,7 +18,7 @@ IT.** The gate that judges this kernel is per-cell bits against
 invariance across a dispatch boundary and across composition, and six
 build-define sabotages. Until that gate has been extended to enumerate the
 plans below and has been RUN, this file is a proposal about how to go faster
-and not a realization of the profile. `gemm/TUNING_PLAN.md`'s
+and not a realization of the profile. `archive/plans/gemm/TUNING_PLAN.md`'s
 `OWED, AND WHY I DID NOT DO IT HERE` lists the edits that wiring requires,
 none of which this lane was permitted to make.
 
@@ -27,7 +27,7 @@ WHY THIS FILE EXISTS
 `mojolearn.identical.gemm.fp32.v1` runs at 2 to 5 percent of FP32 peak on
 Apple, on an H100 and on an MI325X. Vendor libraries reach 62 to 94 percent
 at the same precision. The single-variable control arm
-(`gemm/checks/gemm_unpinned.mojo`, `gemm/UNPINNED_CONTROL.md`) measured
+(`gemm/checks/gemm_unpinned.mojo`, `archive/evidence/gemm/UNPINNED_CONTROL.md`) measured
 the whole cost of the fold-order pin at 1.55x at the tiled `t512` rows, of
 which 1.25x is the seams alone and roughly 0x is the fold tree. **So the pin
 is 1.55x of a 12x to 25x gap and the remaining 8x to 16x is kernel
@@ -36,7 +36,7 @@ engineering.** This file is the kernel engineering.
 THE ONE CONSTRAINT: THE BITS MUST NOT MOVE
 --------------------------------------------
 Every technique below moves BYTES. None of them reassociates ARITHMETIC.
-`gemm/TUNING_PLAN.md` argues each one from the contract's own clauses; the
+`archive/plans/gemm/TUNING_PLAN.md` argues each one from the contract's own clauses; the
 three that carry the argument are restated here because a reader of the
 kernel should not have to open another file to know why it is allowed to
 exist.
@@ -94,7 +94,7 @@ the same spelling `checks/numerics.mojo::ftz_simd` and
 `gemm_identical.mojo::_fold_push` use. **It is not a guarantee.** A SIMD of
 width 128 (`FS = 8`, `RPT * CPT = 16`) is a large value and a register
 allocator may still spill it; that is DEVIATION 1253's whole subject and
-`gemm/TUNING_PLAN.md` section 7 says a register or occupancy readout is
+`archive/plans/gemm/TUNING_PLAN.md` section 7 says a register or occupancy readout is
 required before any number from this file is believed.
 
 DEVIATION 1253: THE FOLD STACK IS WHAT BOUNDS THE REGISTER TILE
@@ -102,7 +102,7 @@ DEVIATION 1253: THE FOLD STACK IS WHAT BOUNDS THE REGISTER TILE
 This is the finding of the round and it is a cost of the pin that no timing
 arm has priced.
 
-`gemm/UNPINNED_CONTROL.md` confound C1 records that the pinned kernel
+`archive/evidence/gemm/UNPINNED_CONTROL.md` confound C1 records that the pinned kernel
 carries `GEMM_FOLD_SLOTS = 16` float lanes of fold stack per thread whether
 or not `P` needs them, and calls it an occupancy effect. At one cell per
 thread that is a footnote. **At `RPT * CPT` cells per thread it is a hard
@@ -253,7 +253,7 @@ lane of a SIMD -- and `occ` is cell-independent, so every lane executes
 exactly `_fold_push`'s program. **That is an argument and not a proof.** The
 scalar one has a proof because a hand-written stack fold is exactly the kind
 of thing that is right until it is not, and this one needs the same
-treatment: `gemm/TUNING_PLAN.md` OWED item 3 asks for
+treatment: `archive/plans/gemm/TUNING_PLAN.md` OWED item 3 asks for
 `check_tuned_stack_fold_is_the_contract_tree` over the same `1 .. 2049`
 sweep at every `FS` this file compiles.
 
@@ -276,7 +276,7 @@ flip]]`: read the arm back from the run, never from the source.
 the SPLITK leaf kernel's workspace ADDRESS -- "the partial is written at the
 address its BLOCK arrived in rather than at its logical leaf index" -- and
 this file has no workspace and no split-K arm to sabotage. The other five
-switches are imported and live. `gemm/TUNING_PLAN.md` section 8 says what a
+switches are imported and live. `archive/plans/gemm/TUNING_PLAN.md` section 8 says what a
 gate must therefore assert about a `SAB_NODE_ORDER` build of this file
 (namely: that it is bit-identical to an unsabotaged one, because the switch
 cannot reach it).
@@ -339,7 +339,7 @@ from checks.numerics import ftz, identical_mul_add
 # DEVIATION 1260. Every number below is a kernel-matrix ROW read through a
 # comptime accessor, not a constant chosen in this file, with the single
 # exception of `TUNED_TC` -- which says so in its own docstring and which
-# `gemm/TUNING_PLAN.md` OWED item 10 asks to be moved into the matrix.
+# `archive/plans/gemm/TUNING_PLAN.md` OWED item 10 asks to be moved into the matrix.
 #
 # `[[ALWAYS GPU-agnostic]]`: one source for Metal, CUDA and HIP, and vendor
 # divergence is a kernel-matrix ROW and never an inline `if apple`. There is
@@ -379,7 +379,7 @@ comptime TUNED_VECLEN = PINNED_VECLEN
 #: DEFECT, NOT A DESIGN.** The matrix pins the per-thread tile
 #: (`PINNED_ACC_ROWS_PER_TH`, `PINNED_ACC_COLS_PER_TH`) and the block size,
 #: but has no row for the THREAD GRID that connects them, so there is
-#: nowhere for a vendor measurement of it to land. `gemm/TUNING_PLAN.md`
+#: nowhere for a vendor measurement of it to land. `archive/plans/gemm/TUNING_PLAN.md`
 #: OWED item 6 asks for a `lib_acc_th_cols` row; until it exists this line
 #: is a constant in a kernel, which is what the matrix's own header calls
 #: the failure it was built to prevent.
@@ -388,7 +388,7 @@ comptime TUNED_TC = 16
 #: The default `KS`. `PINNED_KBLK`, RAFT's `Kblk = 32`. Used by the `K32`
 #: plans; the dispatcher's default plans use 16, because 16 is what lets
 #: `lib_smem_pages_for` return 2 on Apple. Which of the two wins is a
-#: MEASUREMENT and `gemm/TUNING_PLAN.md` section 5 predicts neither.
+#: MEASUREMENT and `archive/plans/gemm/TUNING_PLAN.md` section 5 predicts neither.
 comptime TUNED_KBLK = PINNED_KBLK
 
 #: The per-thread register tile of the WIDE plans. `PINNED_ACC_ROWS_PER_TH`

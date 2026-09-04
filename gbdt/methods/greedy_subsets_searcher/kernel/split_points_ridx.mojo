@@ -34,7 +34,7 @@ SAME index register they already load for the compressed-index gather, so
 no new load stream, but the coalescing changes on the hot kernel. The
 recons' answer is that both competitors eat that gather at every row of
 every histogram and win anyway; the orchestrator's A/B is where that claim
-is priced on this port (see LOSSGUIDE.md, DEVIATION 1902 ledger).
+is priced on this port (see archive/research/LOSSGUIDE.md, DEVIATION 1902 ledger).
 
 BIT-EXACT BY CONSTRUCTION (the invariant, stated once and relied on by
 every converted reader): let `D` be the stat plane in the order the

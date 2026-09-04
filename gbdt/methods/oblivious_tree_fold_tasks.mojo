@@ -10,7 +10,7 @@ Do not improve.
 
 **THIS IS RUNG 2, and rung 2 turned out not to be a second searcher.**
 
-`NEXT_TWO.md` priced it as porting `TFeatureParallelObliviousTreeSearcher`,
+`archive/plans/NEXT_TWO.md` priced it as porting `TFeatureParallelObliviousTreeSearcher`,
 713 lines, beside the doc-parallel one already here. Reading it says
 otherwise: their searcher is ONE object with TWO modes on it
 (`:88-100`) --
@@ -25,7 +25,7 @@ and `CreateSubsets` picks between them with a single ternary (`:30-31`):
 
 Everything after that line -- the depth loop, the histograms, the scorer, the
 `TakeBest` fold, the split -- is the same code for both arms. Combined with
-`PORTING.md` 91 A (the two data layouts build a bit-identical compressed
+`archive/reference/PORTING.md` 91 A (the two data layouts build a bit-identical compressed
 index at device count 1) and 91 B (the two searchers share their entire
 stack), what rung 2 actually costs is THIS FILE plus wiring it, not 713
 lines.
@@ -112,7 +112,7 @@ struct FoldLayout(Copyable, Movable):
     var fold_bits: Int
     """`subsets.FoldBits = IntLog2(subsets.FoldCount)` (`:37`), and
     `IntLog2` is CEIL (`libs/helpers/math_utils.h:14-16`) -- the same
-    ceiling that `PORTING.md` 107 records costing a day when it was read as
+    ceiling that `archive/reference/PORTING.md` 107 records costing a day when it was read as
     floor."""
 
 
@@ -363,7 +363,7 @@ def create_fold_based_subsets(
     # THE SAME CLAIM SAID WITHOUT `int_log2_ceil`, and it is not
     # redundant: the line above compares the layout against the very
     # function that produced it, so a FLOOR `IntLog2` agrees with itself
-    # and gets through. `PORTING.md` 107 already cost a day to that
+    # and gets through. `archive/reference/PORTING.md` 107 already cost a day to that
     # reading. With FoldBits 3 and FoldCount 12 the fold stripe is 8, the
     # partition ids run past `1 << (FoldBits + maxDepth)`, and the failure
     # is an out-of-range partition write rather than a wrong answer -- the

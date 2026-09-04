@@ -117,7 +117,7 @@ class DBSCAN(NumericModeMixin):
     the ball cover at all. The ball cover is the default here because it
     measured 2.7x-27x faster at 16k-200k rows on this hardware and
     `check_dbscan_rbc_matches_brute` holds the two labellings identical
-    POINT FOR POINT. `'brute'` is the arm `E1U_RESULTS.md` certified
+    POINT FOR POINT. `'brute'` is the arm `archive/evidence/E1U_RESULTS.md` certified
     bit-identical across Apple and AMD; `'rbc'` has been through the same
     arms-agree gate on both vendors but has no cross-vendor card of its own
     yet. Both arms are cells of `tools/e2u_matrix_fit.py`.

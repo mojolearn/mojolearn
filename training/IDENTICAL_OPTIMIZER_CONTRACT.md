@@ -49,7 +49,7 @@ DEVIATIONS 1170 through 1189 are this lane's.
 **Companion documents, and this contract is not readable without the first.**
 `gemm/IDENTICAL_FP32_CONTRACT.md`, because **this contract DELEGATES every
 reduction it performs to that profile**, so its sections 5, 6, 7 and 9 are
-load bearing here. `gemm/IDENTICAL_BACKWARD_PLAN.md`, whose row T9 is this
+load bearing here. `archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md`, whose row T9 is this
 lane. `IDENTITY_PATHS.md` rows 9, 10, 12, 13, 39, 49 and 50.
 
 ---
@@ -596,7 +596,7 @@ The step imposes NO alignment requirement on its own arithmetic. It imposes
 one on whoever produced the gradient, and without it multi-step identical
 training is not available at all.
 
-**The measured fact this is built on.** `gemm/IDENTICAL_BACKWARD_PLAN.md`,
+**The measured fact this is built on.** `archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md`,
 measured 2026-08-25 by gate G5. A weight gradient contracts over the TOKEN
 dimension, so the token count is the GEMM's `k`, and a split at a boundary
 that is both a LEAF and a SUBTREE boundary of v1's balanced tree, accumulated

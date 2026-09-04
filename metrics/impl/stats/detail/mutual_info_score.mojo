@@ -260,7 +260,7 @@ def mutual_info_score_traced(
     one built beside it. The card driver also records `metrics.contingency`
     from its own `contingency_matrix_host` call, and those two stages
     agreeing is a genuine internal-consistency check of a device kernel run
-    twice; the hazard CARD_GAPS.md names against hierarchy/linkage is a
+    twice; the hazard archive/plans/CARD_GAPS.md names against hierarchy/linkage is a
     card that records a RE-RUN and calls it the buffer the metric used,
     which is what this signature exists to avoid.
 

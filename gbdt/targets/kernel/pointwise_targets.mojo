@@ -1270,7 +1270,7 @@ def launch_approximate[
 # called; the split arm's call sites are byte-for-byte untouched.
 #
 # UNVERIFIED, RUN OWED (the orchestrator's estimation_bench A/B pattern,
-# exact commands in gbdt/UPSTREAM_SURVEY_2026-09.md and PLAN appendix).
+# exact commands in archive/research/gbdt/UPSTREAM_SURVEY_2026-09.md and PLAN appendix).
 # ====================================================
 
 

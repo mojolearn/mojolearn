@@ -39,7 +39,7 @@ Their `SliceOffset` differs to match: `1024 * (threadIdx.x / 32)` gives each
 warp 1024 floats (32 per lane), and the inner offset is masked by the number
 of blocks the inner bits leave.
 
-DEVIATION (PORTING.md 1): CatBoost runs this at `BlockSize = 384`, so
+DEVIATION (archive/reference/PORTING.md 1): CatBoost runs this at `BlockSize = 384`, so
 `384 * 32` floats is 49,152 bytes and Apple gives 32,768. `BLOCK_SIZE = 256`
 asks for exactly 32,768 and keeps their per-warp slice arithmetic intact,
 since 8 warps times 1024 floats is 8192 floats.
@@ -284,7 +284,7 @@ def one_byte_bin(ci: UInt32, tid: Int, i: Int) -> Int:
 
 
 def one_byte_bin_offset[bits: Int](ci: UInt32, tid: Int, i: Int) -> Int:
-    """The slot for iteration `i`, as pure arithmetic (PORTING.md 10).
+    """The slot for iteration `i`, as pure arithmetic (archive/reference/PORTING.md 10).
 
         const int higherBin = (bin >> 5) & mask;
         int offset = 4 * higherBin + f + ((bin & 31) << 5);
@@ -515,7 +515,7 @@ def one_byte_hist_kernel[bits: Int, smem_mode: Int](
 
     var stats_p = stats + Int(block_idx.z) * stat_line_size
 
-    # `TPointHistHalfByteBase`'s constructor, inlined (PORTING.md 10):
+    # `TPointHistHalfByteBase`'s constructor, inlined (archive/reference/PORTING.md 10):
     #     for (i = threadIdx.x; i < histSize; i += BlockSize) buff[i] = 0;
     #     __syncthreads();
     #     Histogram = buff + SliceOffset();
@@ -986,7 +986,7 @@ def one_byte_hist_gather_kernel[
 
     var stats_p = stats + Int(block_idx.z) * stat_line_size
 
-    # `TPointHistHalfByteBase`'s constructor, inlined (PORTING.md 10):
+    # `TPointHistHalfByteBase`'s constructor, inlined (archive/reference/PORTING.md 10):
     #     for (i = threadIdx.x; i < histSize; i += BlockSize) buff[i] = 0;
     #     __syncthreads();
     #     Histogram = buff + SliceOffset();

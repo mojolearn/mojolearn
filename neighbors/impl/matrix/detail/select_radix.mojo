@@ -28,7 +28,7 @@ under `std.gpu.primitives.warp`: `shuffle_down`, `shuffle_idx`,
 `shuffle_xor`, `lane_id`, `prefix_sum`, `reduce`, `sum`, `max`, `broadcast`,
 with `syncwarp` in `max.gpu.sync`. The earlier searches looked under
 `std.gpu`, `max.gpu`, `std.gpu.block` and `max.gpu.block` and missed the
-`primitives` level in all four. `VENDOR_LIBRARIES.md` opens by retracting the
+`primitives` level in all four. `archive/reference/VENDOR_LIBRARIES.md` opens by retracting the
 claim; this file was one of the places it was asserted.
 
 So the 14 occurrences of `__shfl` and `laneId()` in `select_warpsort.cuh` are
@@ -37,7 +37,7 @@ small one: `select_k-inl.cuh:38` routes `k > 256` to radix and `2 < k <= 256`
 to the warp family, so every k a k-NN user actually asks for (10, 50, 100)
 goes to warpsort in RAFT's own dispatch and radix is their second choice
 across the entire practical range. Nothing here has measured the two against
-each other, and warpsort IS now ported (`select_warpsort.mojo`) but cannot yet be instantiated at a launch site without crashing the compiler; see UNWIRED.md.
+each other, and warpsort IS now ported (`select_warpsort.mojo`) but cannot yet be instantiated at a launch site without crashing the compiler; see archive/plans/UNWIRED.md.
 
 What remains TRUE about the choice made here: `select_radix.cuh` has **ZERO**
 warp intrinsics. Counted, not assumed. It synchronizes with
@@ -84,7 +84,7 @@ DEVIATIONS
 1. `BitsPerPass = 8`, so 256 buckets and 4 passes over a 32-bit key. RAFT's
    tuned setting is 11 bits (2048 buckets, 3 passes). Eight keeps the
    histogram at 1 KB against Metal's 32 KB threadgroup budget
-   (`PORTING.md 1`) and makes the block scan exactly one element per thread.
+   (`archive/reference/PORTING.md 1`) and makes the block scan exactly one element per thread.
    A pass costs a full sweep of the survivors, so this trades one extra pass
    for a much smaller scan. Measure before changing it.
 2. `vectorized_process` is not ported. It is a 16-byte-load optimization
@@ -106,7 +106,7 @@ radix pass per row**, against one collective call. The counts are integers,
 so the result is bit-for-bit the same sequence the loop produced and there is
 no fidelity cost anywhere in it. The scan is now the same KIND of thing
 upstream's is, so it is ordinary ported code, not a substitution to declare.
-See `VENDOR_LIBRARIES.md`.
+See `archive/reference/VENDOR_LIBRARIES.md`.
 
 `Atomic.fetch_add` on the SHARED histogram is NOT in that category and stays.
 It is theirs: `select_radix.cuh:1002,1016,1035` in
@@ -328,7 +328,7 @@ def radix_topk_one_block_kernel(
         # one collective call, and the counts are integers so the arithmetic
         # is identical. `SELECT_BLOCK == NUM_BUCKETS`, one count per thread,
         # so this is their `items_per_thread == 1` branch. See
-        # VENDOR_LIBRARIES.md.
+        # archive/reference/VENDOR_LIBRARIES.md.
         var scanned = block_prefix_sum[block_size=SELECT_BLOCK](hist[tid])
         hist[tid] = scanned
         barrier()

@@ -17,7 +17,7 @@ size tie the `else` branch fires and the RIGHT child is the one computed.**
 
 This port had it inverted from the day the planner was written (`409a16c`,
 2026-08-19, host; carried onto the device by DEVIATION 94 at `2bbe6af`,
-2026-08-21): a tie kept the LEFT child as the computed one. PORTING.md 136.
+2026-08-21): a tie kept the LEFT child as the computed one. archive/reference/PORTING.md 136.
 
 WHAT THIS FILE CHECKS, and why each part is here.
 
@@ -85,7 +85,7 @@ def plan_level_inverted_kernel(
     sub_from: MutPointer[UInt32, MutAnyOrigin],
     sub_what: MutPointer[UInt32, MutAnyOrigin],
 ):
-    """THE SABOTAGE: `plan_level_kernel` as it stood before PORTING.md 136.
+    """THE SABOTAGE: `plan_level_kernel` as it stood before archive/reference/PORTING.md 136.
 
     Byte for byte the old body. `small` starts at the LEFT child and only
     moves when the right is STRICTLY smaller, so a tie keeps the left --

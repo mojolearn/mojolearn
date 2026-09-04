@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The NORMATIVE host Float32 oracle of the BACKWARD pass of one Llama-shaped
 decoder block, under profile `mojolearn.identical.transformer.fp32.v1` and
-the routing document `transformer/IDENTICAL_BACKWARD_PLAN.md`.
+the routing document `archive/plans/transformer/IDENTICAL_BACKWARD_PLAN.md`.
 
 **COMPILED AND RUN 2026-09-03, NOT YET GATED.** Written 2026-08-25; this
 file compiled cleanly on the FIRST attempt alongside the device file and
@@ -35,7 +35,7 @@ THE SHAPE OF THIS FILE, AND WHY IT IS NOT `gemm_backward.mojo`'s SHAPE
 `gemm/checks/gemm_backward.mojo` contains NO arithmetic. The gradient of
 a matmul is two more matmuls at a different transpose, so that file is pure
 routing and inherits an already-certified fold. **This file cannot be that
-file**, and `transformer/IDENTICAL_BACKWARD_PLAN.md` section 2 is the table
+file**, and `archive/plans/transformer/IDENTICAL_BACKWARD_PLAN.md` section 2 is the table
 that says where and why. The short version, because it is the finding:
 
   Contract 7.2 licenses routing a fold through gemm v1 when the CONTRACTION
@@ -77,7 +77,7 @@ six-row table. Two reasons and the second is load bearing. First, a lane
 that retypes a transpose table gets a wrong answer that is bit identical on
 three vendors. Second, calling them means this lane's routed gradients
 INHERIT gemm gates G1 and G2 and inherit both `SAB_BWD_*` arms through a new
-entry point -- which is exactly what `gemm/IDENTICAL_BACKWARD_PLAN.md`
+entry point -- which is exactly what `archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md`
 section 5 asks for when it says the forward sabotages must be shown to fail
 through the backward entry points as well as the forward ones.
 
@@ -250,7 +250,7 @@ def _gemm_bwd_b(
 def _ones(n: Int) -> List[Float32]:
     """`n` entries of exactly `Float32(1.0)`, for the norm weight gradients.
 
-    DEVIATION 1410 and `gemm/IDENTICAL_BACKWARD_PLAN.md` section 3.3's
+    DEVIATION 1410 and `archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md` section 3.3's
     trick. **A wrong value here is a wrong gradient with no symptom**,
     because any vector produces a plausible weighted column sum, so the gate
     for it is not "the buffer was allocated" -- it is the exact-integer arm
@@ -284,7 +284,7 @@ def backward_stage_tag(i: Int) raises -> String:
 
     Stage 0 is the INCOMING GRADIENT and it is on the card deliberately.
     Two cards whose inputs differ are diffing their fixtures;
-    `gemm/IDENTICAL_BACKWARD_PLAN.md`'s G9 makes the same point in the same
+    `archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md`'s G9 makes the same point in the same
     words. **Compare stage 0 before comparing any other stage.**
     """
     if i == 0:
@@ -686,7 +686,7 @@ def rms_norm_backward_into(
     **(d) `dprod` EXISTS SO THE WEIGHT GRADIENT CAN BE A GEMM**
     (DEVIATION 1410). `dW[j] = sum_t dy_tj * inner_tj` is a Hadamard then a
     reduce, so the obvious reading is that it needs a new pinned fold. It
-    does not, for the reason `gemm/IDENTICAL_BACKWARD_PLAN.md` section 3.3
+    does not, for the reason `archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md` section 3.3
     gives about `db`: with the product materialized, the reduction is
     `ones . dprod`, an `OP_NN` at `(1, dm, M)` whose leaf is
     `fma(ftz(1.0), ftz(p), acc)`, the contract's ascending flushed chain
@@ -1053,7 +1053,7 @@ def transformer_block_backward_oracle(
       * `d_k_cache`, `d_v_cache` and every WEIGHT gradient are SUMS OVER THE
         QUERIES IN THIS CALL, so a per-call backward computes a PARTIAL and
         the caller must add the partials. That is the transformer form of
-        `gemm/IDENTICAL_BACKWARD_PLAN.md` section 3.2's finding that `dB`'s
+        `archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md` section 3.2's finding that `dB`'s
         `k` is the token count.
 
     Nothing in this function reads `B` except as a loop bound, so batch

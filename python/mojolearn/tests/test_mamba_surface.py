@@ -4,9 +4,9 @@
 Mamba2Block, Mamba3Block).
 
 Written 2026-09-01, the day the surface landed -- the day
-`mamba/FEATURE_PARITY.md`'s "PyPI surface: NONE EXISTS" row closed. The
+`archive/evidence/mamba/FEATURE_PARITY.md`'s "PyPI surface: NONE EXISTS" row closed. The
 model for this file is `test_gp_surface.py` and the house standard is
-`gemm/PYTHON_SURFACE_GATE.md`. The Mamba-3 arms joined later the same
+`archive/evidence/gemm/PYTHON_SURFACE_GATE.md`. The Mamba-3 arms joined later the same
 day, when `Mamba3Block` did.
 
 WHAT THIS CLOSES. `bindings/_mojolearn_mamba.mojo`'s six entry points
@@ -51,7 +51,7 @@ corpus tolerances, the shapes, the state bookkeeping and every refusal
 are asserted in every tier.
 
 RUN LEDGER. The Mamba-1/2 arms PRINTED GREEN in all three tiers on
-2026-09-01 (one box, one vendor; `mamba/FEATURE_PARITY.md`'s PyPI row).
+2026-09-01 (one box, one vendor; `archive/evidence/mamba/FEATURE_PARITY.md`'s PyPI row).
 The Mamba-3 arms have never run: UNVERIFIED, RUN OWED, per tier, with
 the binding REBUILT first.
 

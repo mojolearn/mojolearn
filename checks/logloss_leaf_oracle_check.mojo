@@ -105,7 +105,7 @@ THE BAND, AND WHERE THE NUMBER COMES FROM
     |ours - theirs| <= LEAF_ATOL + LEAF_RTOL * |theirs|
     LEAF_ATOL = 1e-5    LEAF_RTOL = 1e-3
 
-There is no float64 on this device (`PORTING.md` 94) and their CPU arm
+There is no float64 on this device (`archive/reference/PORTING.md` 94) and their CPU arm
 accumulates in double throughout, so the floor is set by our float32:
 
   * the oracle's per-leaf der/der2 reduces are float32 sums over ~375 rows
@@ -124,7 +124,7 @@ above it, which is slack for the CPU/GPU implementation difference above,
 and it is still FOUR TIMES SMALLER than the fixture's minimum intra-tree
 leaf gap (printed), so no permutation of leaves can pass it. The band is
 stated here, derived from that arithmetic, and is NOT to be widened until a
-number passes; a leaf outside it is a finding to price in `PORTING.md`.
+number passes; a leaf outside it is a finding to price in `archive/reference/PORTING.md`.
 
 WHAT IS GATED
 
@@ -171,7 +171,7 @@ taking THEIR width: their walker's acceptance value is a FLOAT32 scalar
 AnyImprovement sub-float32 resolution their GPU does not have. Folding in
 Float32 is the faithful port; where the walk stalls against CatBoost's
 FastLogf-noise CPU walk shifts on two more extreme leaves, and per
-PORTING.md 140 matching their CPU is not the goal.
+archive/reference/PORTING.md 140 matching their CPU is not the goal.
 
 That is the tight-L2 / loose-L1 signature, and the cause is located.
 
@@ -222,7 +222,7 @@ and the audit of `descent_helpers.mojo` against
 `descent_helpers.cpp:128-204` stands. It is a CPU-versus-GPU divergence
 inside CatBoost that any faithful GPU port inherits, and this machine
 cannot run their GPU to check the other side. It is priced as
-`PORTING.md` 140, and the check is left RED rather than given an
+`archive/reference/PORTING.md` 140, and the check is left RED rather than given an
 allowance for the three cells, because an allowance would also swallow the
 next regression. THE NUMBER TO WATCH IS THREE. More than three cells
 outside, or a divergence in a leaf that is NOT an extreme one, is new.
@@ -887,7 +887,7 @@ def main() raises:
             " the band. FIVE cells of ninety-six outside on the"
             " ten-iteration arm, all on extreme leaves, worst 3.5947e-03"
             " at tree 0 leaf 2, is the KNOWN state (2026-08-22):"
-            " PORTING.md 140, CatBoost's CPU walk freezes at its"
+            " archive/reference/PORTING.md 140, CatBoost's CPU walk freezes at its"
             " FastLogf noise floor where ours freezes at the float32"
             " noise floor of THEIR GPU's own function-value accumulator,"
             " whose width the fold now matches. Anything more than that,"

@@ -83,7 +83,7 @@ plus a POSITIVE case where a refusal used to stand:
 includes the three `Borders` descriptions. It used to raise, because the CTR
 estimation permutation was not ported and row order is a different
 estimator rather than a slower one. The permutation landed 2026-08-21
-(`gbdt/data/permutation.mojo`, `PORTING.md` 55) and the apply-time tables
+(`gbdt/data/permutation.mojo`, `archive/reference/PORTING.md` 55) and the apply-time tables
 after it, so `default()` is now what `train()` FALLS BACK TO and the
 `feature_freq_only()` arm is the one passed explicitly. The ordered
 statistic's VALUES are gated in `checks/ctr_device_check.mojo`, not here.
@@ -430,7 +430,7 @@ def check_ctr_train() raises:
     # `TCatFeatureParams.default()` used to raise here, because Borders is
     # permutation dependent and the CTR estimation permutation was not
     # ported. It is ported now (`gbdt/data/permutation.mojo`,
-    # `PORTING.md` 55), so the same call TRAINS and emits FOUR columns per
+    # `archive/reference/PORTING.md` 55), so the same call TRAINS and emits FOUR columns per
     # categorical feature -- three Borders priors and one FeatureFreq --
     # which is CatBoost's own GPU `simple_ctr` default. The values, the
     # ordering and the permutation are gated by

@@ -22,7 +22,7 @@ the function. Three of those differences matter:
 
 WHAT THIS LANE IS CERTIFIED TO BE. The metrics kernels are bit-identical
 across Apple M4, NVIDIA H100 and AMD MI325X, measured at leg 11
-(`E3_RESULTS.md` round 11, commit 144aa5b, `tools/e3_round_judge.sh`
+(`archive/evidence/E3_RESULTS.md` round 11, commit 144aa5b, `tools/e3_round_judge.sh`
 section 7, 34 card stages, both boxes) under `MOJOLEARN_NUMERIC_MODE=
 identical`. That result is for the 34-stage card of that commit; the card
 has since grown to 61 stages and the three-vendor leg on the GROWN card is
@@ -35,11 +35,11 @@ The two BOX cards are committed and are byte-identical to each other:
 `bench/results/e1/2026-08-23_165142-mojolearn-e2-nv/lanes/
 metrics.identical.card` and its `..._172650-mojolearn-e2-amd` sibling, both
 at commit `144aa5b`, 34 stages. **The APPLE reference directory that round
-was judged against is NOT in the repository** -- `E3_RESULTS.md:253` names
+was judged against is NOT in the repository** -- `archive/evidence/E3_RESULTS.md:253` names
 it `<mac 123452>` and no directory under `bench/results/e1/` carries that
 stamp or any other `lanes/metrics.identical.card`. So NVIDIA <-> AMD is
 reproducible from committed artifacts today and the two APPLE comparisons
-rest on the judge output recorded in `E3_RESULTS.md`, not on a file
+rest on the judge output recorded in `archive/evidence/E3_RESULTS.md`, not on a file
 anybody can re-diff.
 
 INPUT VALIDATION LIVES HERE, DELIBERATELY. The Mojo entries do not scan

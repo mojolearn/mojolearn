@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The gate file of the BACKWARD pass of profile
 `mojolearn.identical.transformer.fp32.v1`, the path
-`transformer/IDENTICAL_BACKWARD_PLAN.md` section 6.2 names and section 11
+`archive/plans/transformer/IDENTICAL_BACKWARD_PLAN.md` section 6.2 names and section 11
 lists as owed item (2).
 
 NOT A PORT. It runs the device backward
@@ -3096,7 +3096,7 @@ def clause_f() raises:
     `dS_j = y_j * (dy_j - z)` have products bounded by 64 and sums by 256 at
     the shapes below, all far under `2^24`, so `fma`, `pinned_mul` and the
     subtraction are all EXACT and the answer can be written down. That is
-    `gemm/IDENTICAL_BACKWARD_PLAN.md` G2's method, DEVIATION 1051, lifted --
+    `archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md` G2's method, DEVIATION 1051, lifted --
     and it catches the things identity cannot: a transposed sign, a
     subtraction the wrong way round, a missing `y` factor, a `z` folded over
     the wrong axis.
@@ -4276,10 +4276,10 @@ def main() raises:
 #    reference the lane's largest owed item and this file agrees: **a
 #    transpose error is bit identical on three vendors.**
 #
-# 9. **`IDENTITY_PATHS.md`, `CARD_GAPS.md` AND `UNWIRED.md`.** No row names
+# 9. **`IDENTITY_PATHS.md`, `archive/plans/CARD_GAPS.md` AND `archive/plans/UNWIRED.md`.** No row names
 #    the backward profile. DEVIATION 1400 reserves an IDENTITY_PATHS row and
 #    plan section 11 says it must not be written until a three-vendor leg
-#    runs; `UNWIRED.md` is where "compiled, not yet certified" belongs and
+#    runs; `archive/plans/UNWIRED.md` is where "compiled, not yet certified" belongs and
 #    that is now the state of three files in this directory.
 #
 # 10. **`tools/e1_bootstrap.sh` PHASE 8.** This lane's card is not wired into

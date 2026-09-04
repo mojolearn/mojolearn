@@ -12,7 +12,7 @@ has enough tiles to fill the device, and `core/gram_splitk.mojo` where it
 does not (measured 13x off bandwidth on the vendor kernel at the shipped
 shapes; the closed-library exception, argued in that file's header).
 
-**It is not the rule for a distance step.** `VENDOR_LIBS.md` opens with why:
+**It is not the rule for a distance step.** `archive/reference/VENDOR_LIBS.md` opens with why:
 their dispatch for pairwise distance under an argmin or a top-k does not call
 cuBLAS at all, it calls a FUSED kernel that never materializes the distance
 matrix, and a device-wide matmul cannot be fused into anything. Callers whose
@@ -382,7 +382,7 @@ def gemm_nt(
     the call, **63 of the 64 rows still held the poison afterwards**. Nothing
     was written wrong; 63 rows were not written at all, so a caller reusing a
     buffer reads whatever was in it last time. That is worse than zeros, and
-    `VENDOR_LIBRARIES.md` used to say "returns zeros for some outputs", which
+    `archive/reference/VENDOR_LIBRARIES.md` used to say "returns zeros for some outputs", which
     is why this was mistaken for a benign edge case for as long as it was.
 
     The fault is `transpose_b=True`, not `n == 1`: the same product with
@@ -688,7 +688,7 @@ def gemm_tn_via_transpose(
     # kernel calls: same source, same dims, same launch geometry, different
     # destination. The comment that stood here named the reason correctly and
     # then accepted it -- `matmul` refuses one buffer as two mutable
-    # arguments (PORTING.md 24), and `Xt . Xt^T` names it twice.
+    # arguments (archive/reference/PORTING.md 24), and `Xt . Xt^T` names it twice.
     #
     # THAT IS A LANGUAGE CONSTRAINT, NOT AN ARITHMETIC ONE, and it was being
     # paid for in bandwidth. `gemm_nt` writes only `z`; its two operands are
@@ -774,7 +774,7 @@ def gemv_n(
 
     `raft::linalg::gemv` is what RAFT calls for `w <- covA Ab`, and
     `linalg.gemv.gemv` is HOST-ONLY (no ctx, no target). `gemv_gpu` is the
-    GPU sibling. See VENDOR_LIBRARIES.md.
+    GPU sibling. See archive/reference/VENDOR_LIBRARIES.md.
 
     Orientation read from MAX's `gemv.mojo`, not guessed: `GemmShape.get`
     takes m and n from `c` and k from `a`, ignoring `b` entirely, so

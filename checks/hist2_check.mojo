@@ -155,7 +155,7 @@ comptime FIXED_SCALE = Float32(64.0)
 comptime FINGERPRINT_ROWS = 64
 
 #: Integral sabotage, big enough that a moved cell cannot be mistaken for
-#: noise, small enough that every sum stays exact (PORTING.md 20).
+#: noise, small enough that every sum stays exact (archive/reference/PORTING.md 20).
 comptime POISON = 4096
 
 #: The per-mode `BlockLoadSize`s. The Int32 mode's doubled block doubles its

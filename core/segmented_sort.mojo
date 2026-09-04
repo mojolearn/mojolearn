@@ -17,7 +17,7 @@ Two facts, in this order:
      where the incumbent calls a CLOSED library -- cuBLAS, cuSOLVER --
      because there is nothing to read. CUB is readable, so the correct
      move is to port the kernel, not to swap in someone else's sort.
-  2. MAX ships NO device sort and NO device scan (`VENDOR_LIBS.md`,
+  2. MAX ships NO device sort and NO device scan (`archive/reference/VENDOR_LIBS.md`,
      re-checked 2026-08-20 by another lane and not re-measured here).
      So there is nothing to swap in even if the rule allowed it.
 

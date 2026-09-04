@@ -16,7 +16,7 @@ replaced**, across the board.
 Cause: `stack_allocation` with no address space is thread-local MEMORY, not
 registers, so every accumulator access became a load and a store. Their
 `acc[][]` and `regx[]` are plain C arrays that nvcc keeps in registers.
-Moving the accumulators to `SIMD` values fixed it. `PORTING.md 26`.
+Moving the accumulators to `SIMD` values fixed it. `archive/reference/PORTING.md 26`.
 
 Three measurements, same shapes, same machine, alternating processes:
 
@@ -43,7 +43,7 @@ measured:
   and the work is sized for the cluster count.
 - **`core/column_stats.mojo::covariance_kernel` was STILL the naive 16x16
   tile.** (Fixed later the same day: it is now a port of RAFT's COLUMN-major
-  contraction policy plus a split-K over rows. See VENDOR_LIBRARIES.md.) Only `gemm_nt_kernel` was rewritten. PCA's whole row-scaling cost
+  contraction policy plus a split-K over rows. See archive/reference/VENDOR_LIBRARIES.md.) Only `gemm_nt_kernel` was rewritten. PCA's whole row-scaling cost
   is that kernel, which is exactly why PCA did not move by one millisecond.
 
 That second one is the more embarrassing and the more instructive: there are

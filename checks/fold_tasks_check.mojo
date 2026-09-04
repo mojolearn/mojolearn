@@ -21,7 +21,7 @@ GATES:
       overlap, and covering exactly `total_indices`. Checked by walking a
       per-document ownership array, not by comparing a sum -- a layout that
       double-covers one range and skips another has the right total.
-  G3  `fold_bits` is CEIL of log2, not floor. `PORTING.md` 107 records what
+  G3  `fold_bits` is CEIL of log2, not floor. `archive/reference/PORTING.md` 107 records what
       floor cost when `IntLog2` was read that way, and this is the same
       function in a second place.
   G4  the SINGLE-TASK arm is one partition, fold_count 1, fold_bits 0 --

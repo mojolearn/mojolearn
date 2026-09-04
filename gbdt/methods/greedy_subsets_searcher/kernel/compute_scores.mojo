@@ -843,7 +843,7 @@ def target_variance_blocks(size: Int, sm_count: Int) -> Int:
 # THE LEAFWISE SCORERS -- `EGrowPolicy::Lossguide` and `EGrowPolicy::Region`
 #
 # Added 2026-08-22 by the LOSSGUIDE lane. Everything above this line is the
-# SYMMETRIC arm and is not touched by it; `LOSSGUIDE.md` carries the lane
+# SYMMETRIC arm and is not touched by it; `archive/research/LOSSGUIDE.md` carries the lane
 # boundary and the deviation block 300-349.
 #
 # `compute_scores.cu` holds THREE `__global__`s. The symmetric one above

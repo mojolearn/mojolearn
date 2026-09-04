@@ -6,9 +6,9 @@
 written on 2026-08-25 by a lane with no execution rights at all -- no `mojo`,
 no `pixi`, no build, no test. Every claim below about what it computes is a
 claim about the SOURCE, and every claim about what it costs is a PREDICTION
-recorded before measurement (`gemm/UNPINNED_CONTROL.md` section 5). Nothing
+recorded before measurement (`archive/evidence/gemm/UNPINNED_CONTROL.md` section 5). Nothing
 here may be quoted as a result. The first person to build it should expect to
-fix compile errors, and `gemm/UNPINNED_CONTROL.md`'s Appendix names the five
+fix compile errors, and `archive/evidence/gemm/UNPINNED_CONTROL.md`'s Appendix names the five
 constructions most likely to be the ones that fail.
 
 WHAT THIS IS FOR
@@ -315,7 +315,7 @@ def unpinned_gemm_flat_kernel[
     floats of fold stack per thread whether or not `P` needs them. That is a
     cost OF the pin, so it is attributable rather than confounding -- but it
     is an OCCUPANCY effect and not an arithmetic one, and
-    `gemm/UNPINNED_CONTROL.md` section 4 says so, as confound C1, where a
+    `archive/evidence/gemm/UNPINNED_CONTROL.md` section 4 says so, as confound C1, where a
     reader will find it.
 
     `leaf_in` and `p_in` are still passed and still come from
@@ -417,7 +417,7 @@ def unpinned_gemm_tiled_kernel[
     dispatcher does. **If `gemm_identical.mojo`'s staging loop is ever
     edited, this one has to be edited in the same commit or the arms differ
     in the traffic and the number is worthless.** That is a maintenance
-    hazard and `gemm/UNPINNED_CONTROL.md` section 4 lists it as confound C2
+    hazard and `archive/evidence/gemm/UNPINNED_CONTROL.md` section 4 lists it as confound C2
     rather than pretending it away.
 
     Every thread of the block still reaches every `barrier()`, for the
@@ -746,7 +746,7 @@ def unpinned_gemm_with_plan[
     the SAME `TM, TN, KS, swizzle, two_d` tuples as the pinned dispatcher's
     five. Those five tuples are the one thing in this file that is
     transcribed rather than imported, because they are call-site arguments
-    and not named constants. `gemm/UNPINNED_CONTROL.md` section 4 records
+    and not named constants. `archive/evidence/gemm/UNPINNED_CONTROL.md` section 4 records
     that as confound C3 and section 7 asks the run to print the plan name
     from the imported `gemm_plan_name` so a mismatch is visible.
     """
@@ -931,7 +931,7 @@ def unpinned_gemm_into_one_acc(
     dependency graph held still. The gap between it and
     `unpinned_gemm_into` answers "what does contract 7.1's
     no-sub-partition clause cost", which is a different question.
-    `gemm/UNPINNED_CONTROL.md` prediction 2 says that gap will be under 10%
+    `archive/evidence/gemm/UNPINNED_CONTROL.md` prediction 2 says that gap will be under 10%
     on a GPU, because a GPU hides a dependency chain with thread-level
     parallelism rather than with instruction-level parallelism, and names
     that as the prediction most likely to be wrong.

@@ -4,7 +4,7 @@
 and sabotage it.
 
 NO RAFT COUNTERPART. Same discipline as `neighbors/checks/knn_check.mojo`:
-a kernel is not ported until it has been enqueued (`PORTING.md 9`), and a
+a kernel is not ported until it has been enqueued (`archive/reference/PORTING.md 9`), and a
 correct answer is not by itself evidence that the kernel ran.
 
 WHY THIS FILE EXISTS

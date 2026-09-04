@@ -106,7 +106,7 @@ THIS PORT DOES NOT ACT ON THIS. Their structure is transcribed verbatim,
 non-associativity included, because copying is the charter and because a
 "fix" here would be an invention that silently diverges from their answer
 in the common case too. It is recorded as an OPEN item in
-`ensemble/PLAN.md` to be settled the only way this repository settles
+`archive/plans/ensemble/PLAN.md` to be settled the only way this repository settles
 anything -- by running THEIR binary on a constructed fixture in this tie
 class on the NVIDIA column and reading their per-cell output -- not by
 reasoning, which is what produced the paragraph you are reading.

@@ -506,7 +506,7 @@ def _refuse_missing(colid: Int32, extent: FeatureRange) raises:
             + String(extent.n_missing)
             + " missing (NaN) values in this node. Missing values are"
             " refused, not randomized -- see DEVIATION 136 in"
-            " extratrees/DEVIATIONS.md."
+            " archive/research/extratrees/DEVIATIONS.md."
         )
 
 

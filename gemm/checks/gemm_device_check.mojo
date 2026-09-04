@@ -3,7 +3,7 @@
 """The device GEMM's gates: oracle agreement, launch invariance, batch
 invariance -- and the sabotages that show each of them can fail.
 
-Phase 2b of `IDENTICAL_GEMM_PLAN.md`. The kernel is
+Phase 2b of `archive/plans/IDENTICAL_GEMM_PLAN.md`. The kernel is
 `gemm/checks/gemm_identical.mojo`; the answer is
 `gemm/checks/gemm_oracle.mojo::gemm_oracle`; the contract is
 `gemm/IDENTICAL_FP32_CONTRACT.md`, profile
@@ -11,7 +11,7 @@ Phase 2b of `IDENTICAL_GEMM_PLAN.md`. The kernel is
 
 WHY EVERY GATE HERE HAS A SABOTAGE BESIDE IT
 ---------------------------------------------
-`IDENTICAL_GEMM_PLAN.md`'s Phase 3 brief: *"A passing test whose fixture
+`archive/plans/IDENTICAL_GEMM_PLAN.md`'s Phase 3 brief: *"A passing test whose fixture
 cannot distinguish the alternatives is not evidence."* And row 9's correction
 is the repository's own worst case -- 2^20 patterns that scored a contracting
 backend as unfused because not one of them separated the two spellings. So

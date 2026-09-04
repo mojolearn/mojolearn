@@ -355,7 +355,7 @@ if ! kernels_plausible "$out" || ! minos_matches "$out" || ! run_smoke "$out"; t
       "prints are nonzero but under the floor, the floor is wrong, not the" \
       "artifact -- read the block above it before changing anything else." \
       "" \
-      "See bindings/build.sh and PORTING.md 70." >&2
+      "See bindings/build.sh and archive/reference/PORTING.md 70." >&2
     exit 1
 fi
 

@@ -114,7 +114,7 @@ HOW TO RUN IT
     cd python && MOJOLEARN_LINALG_GATE_ALLOW_FAST=1 \\
         python3 -m mojolearn.tests.test_linalg_identity
 
-`gemm/PYTHON_SURFACE_GATE.md` is the maintainer's page for this file: what it
+`archive/evidence/gemm/PYTHON_SURFACE_GATE.md` is the maintainer's page for this file: what it
 proves, what it does not, and how to regenerate the reference after a
 legitimate profile change.
 
@@ -1305,7 +1305,7 @@ def main(argv=None):
         "bits, through OP_NN, OP_NT and OP_TN, at leaf counts above and "
         "below\n"
         "the fold, from strided operands, into a caller's buffer, and one row\n"
-        "at a time. gemm/PYTHON_SURFACE_GATE.md is what it does NOT prove.\n")
+        "at a time. archive/evidence/gemm/PYTHON_SURFACE_GATE.md is what it does NOT prove.\n")
     return 0
 
 

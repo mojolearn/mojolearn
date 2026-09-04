@@ -12,7 +12,7 @@ processes, 1-min load 18, Metal spamming "Context leak detected"), every
 process's fits went to silent garbage SIMULTANEOUSLY -- enqueues stopped
 executing, host readbacks stopped delivering, and each fit RETURNED a
 coherent-shaped empty model (greedy 0 splits, mse -0.0) as if training
-had succeeded. No call raised. PORTING.md's DEVIATION 2002 entry is the
+had succeeded. No call raised. archive/reference/PORTING.md's DEVIATION 2002 entry is the
 ledger; this file is the fix's shared mechanism.
 
 THE MECHANISM, three legs, all riding the number 2002:

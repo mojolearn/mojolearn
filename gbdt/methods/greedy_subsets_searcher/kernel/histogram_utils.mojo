@@ -216,7 +216,7 @@ def scan_histograms_kernel(
 ):
     """`ScanHistogramsImpl`, restructured for a block scan.
 
-    DEVIATION (PORTING.md 8): CatBoost scans with `cub::WarpScan<double>` and
+    DEVIATION (archive/reference/PORTING.md 8): CatBoost scans with `cub::WarpScan<double>` and
     `cub::ShuffleIndex<32>` (`histogram_utils.cu:381`, `:413`, `:423`). Those
     are the ONLY warp shuffles in the whole oblivious path, and Mojo 1.0 has
     no warp primitives. Substituted with a serial scan by one thread per

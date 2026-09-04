@@ -8,7 +8,7 @@ THE RULE THIS FILE EXISTS TO ENFORCE
 **A signature check proves the GPU is REACHABLE. Only a run against an
 independent oracle proves the answer is RIGHT.**
 
-`VENDOR_LIBRARIES.md` listed `nn.argsort.argsort` as GPU because it takes a
+`archive/reference/VENDOR_LIBRARIES.md` listed `nn.argsort.argsort` as GPU because it takes a
 `ctx` and a `target`. It does take both. It also returns a well-formed
 permutation that is not sorted above 256 elements, raises nothing, and would
 have shipped a DBSCAN that silently drops real neighbours. That was caught by
@@ -551,7 +551,7 @@ def check_matmul(mut rows: List[Verdict]) raises:
             )
         )
 
-    # THE n = 1 COLUMN. `VENDOR_LIBRARIES.md` records this as "returns zeros
+    # THE n = 1 COLUMN. `archive/reference/VENDOR_LIBRARIES.md` records this as "returns zeros
     # for some outputs, no error", and nothing had re-run it. Two things are
     # wrong with that sentence. It does not return zeros: it does not WRITE,
     # which a caller reusing a buffer sees as stale data rather than as zero.
@@ -1051,7 +1051,7 @@ def check_block(mut rows: List[Verdict]) raises:
 # wrong half of a wavefront on the vendor where it matters most.
 #
 # `lane_group_min` is here even though nothing calls it, because
-# `VENDOR_LIBRARIES.md` C7 recommends it as the answer to CUDA's `width`
+# `archive/reference/VENDOR_LIBRARIES.md` C7 recommends it as the answer to CUDA's `width`
 # modulo on the strength of its documentation alone. It is checked at
 # `num_lanes = 8` against a host oracle that folds within 8-lane groups.
 # ---------------------------------------------------------------------------
@@ -1323,7 +1323,7 @@ def check_warp(mut rows: List[Verdict]) raises:
 # ---------------------------------------------------------------------------
 # nn.toppminp_gpu.run_radix_sort_pairs_gpu
 #
-# NOT WIRED. `VENDOR_LIBRARIES.md` Appendix A2 item 1 recommends it as the
+# NOT WIRED. `archive/reference/VENDOR_LIBRARIES.md` Appendix A2 item 1 recommends it as the
 # missing `cub::DeviceRadixSort::SortPairs` AND, because it sorts each batch
 # row independently, as `cub::DeviceSegmentedRadixSort` for equal-length
 # segments. That recommendation rests on the signature and on one import
@@ -1940,7 +1940,7 @@ def check_bmm(mut rows: List[Verdict]) raises:
 # ---------------------------------------------------------------------------
 # linalg.transpose.transpose  --  the standing reminder.
 #
-# `VENDOR_LIBRARIES.md` records it as signalling at runtime inside
+# `archive/reference/VENDOR_LIBRARIES.md` records it as signalling at runtime inside
 # `_copy_with_strides` when handed device pointers, which is why
 # `core/column_stats.mojo::transpose_kernel` exists. Re-run here so the claim
 # has a date and an error string rather than a memory.
@@ -1950,7 +1950,7 @@ def check_bmm(mut rows: List[Verdict]) raises:
 def check_transpose_aborts() raises:
     """NOT part of the table run: this ABORTS the process on the M4.
 
-    `VENDOR_LIBRARIES.md` recorded `linalg.transpose` as "SIGNALS at runtime",
+    `archive/reference/VENDOR_LIBRARIES.md` recorded `linalg.transpose` as "SIGNALS at runtime",
     which reads like something a caller could catch and fall back from. It is
     not. It is a hard abort inside `_copy_with_strides`, so a `try` around it
     does not help and a program that reaches it dies. That is the difference
@@ -2045,7 +2045,7 @@ def _check_transpose(mut rows: List[Verdict]) raises:
 # ---------------------------------------------------------------------------
 # nn.cumsum.cumsum  --  CPU ONLY, re-confirmed cheaply and moved on from.
 #
-# `VENDOR_LIBRARIES.md` already records this and the record is right: the
+# `archive/reference/VENDOR_LIBRARIES.md` already records this and the record is right: the
 # signature carries neither `ctx: DeviceContext` nor `target`. What this adds
 # is a RUN, so the row is not resting on a signature read: the call is made
 # on HOST buffers and its answer is compared against a host oracle, and a
@@ -2197,7 +2197,7 @@ def check_compile_established(mut rows: List[Verdict]) raises:
             V_UNCHECKED,
             (
                 "imports; same reason as softmax. Listed here only because"
-                " VENDOR_LIBRARIES.md had it under 'confirmed available'."
+                " archive/reference/VENDOR_LIBRARIES.md had it under 'confirmed available'."
             ),
             False,
         )

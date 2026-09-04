@@ -27,7 +27,7 @@ opened. Two deviations price it:
   for their `TimerCPU`/`train_time` (declined, DEVIATION 303), at stage
   rather than tree granularity. **A staged run is not a certifiable
   timing**: `stop()` drains the queue to close each stage, which is a
-  control-plane change of exactly the kind `HOST_AND_DEVICE.md` names, and
+  control-plane change of exactly the kind `archive/reference/HOST_AND_DEVICE.md` names, and
   `quiet_window` would rightly refuse to certify a number taken under it.
   Zero cost when unset: the env is read ONCE per fit (constructor), and
   `start`/`stop` return on a single boolean test with no sync and no clock

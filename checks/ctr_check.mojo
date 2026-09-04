@@ -229,7 +229,7 @@ def _check_fan_out(mut failures: List[String]) raises:
 #: measured 30412.210990606218 against 30412.210990606214 at 4001 distinct
 #: values and budget 1, where cuts 1999 and 2000 are mathematically equal.
 #:
-#: `@no_inline` on `_penalty_min_entropy` (PORTING.md 54) fixed it, and this
+#: `@no_inline` on `_penalty_min_entropy` (archive/reference/PORTING.md 54) fixed it, and this
 #: check is what proved it: it was written to FAIL if a known-diverging pair
 #: ever matched exactly, so that the allowance could not outlive the defect it
 #: described. It did fail, on all four pairs at once, which is why there is

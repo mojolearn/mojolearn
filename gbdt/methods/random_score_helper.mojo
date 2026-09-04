@@ -52,7 +52,7 @@ Neither is corrected here. Both are transliterated where their file puts
 them: this one here, `compute_target_std_dev` in `greedy_search_helper`.
 =========================================================================
 
-DEVIATION 137 (also stated in PORTING.md): their `ComputeStdDev` is built
+DEVIATION 137 (also stated in archive/reference/PORTING.md): their `ComputeStdDev` is built
 out of two generic device ops, `DivideVector` then
 `DotProduct(tmp, tmp, &weights)` (`cuda_util/transform.h`,
 `cuda_util/dot_product.h`), NEITHER OF WHICH IS PORTED here. This file

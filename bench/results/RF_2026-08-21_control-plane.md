@@ -47,7 +47,7 @@ All 17 ensemble checks green after each step.
 3. **The two per-tree RowSampler synchronizes are DELETED.** Their
    `sample()` has none: all four arms and `store_bootstrap_mask` are
    stream-ordered and return without a sync (`randomforest.cuh:110-183`).
-   Both syncs were this port's own waits -- exactly HOST_AND_DEVICE.md
+   Both syncs were this port's own waits -- exactly archive/reference/HOST_AND_DEVICE.md
    rule two's case. The host-staging arms (DEVIATION 305) keep their sync
    as the recorded price of staging through `h_rows`.
 

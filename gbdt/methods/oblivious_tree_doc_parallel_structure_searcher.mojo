@@ -10,10 +10,10 @@ Do not improve.
 **THIS IS THE FIRST CALLER OF THE POINTWISE FAMILY.** Everything under it --
 six accumulators, three drivers, the host launch layer, the scorer, the
 subsets, the histogram state machine -- was correct and reached by nothing
-until this file existed (`UNWIRED.md`).
+until this file existed (`archive/plans/UNWIRED.md`).
 
 It is also the learner CatBoost runs for single-target symmetric trees at
-`boosting_type=Plain` (`PORTING.md` 91 F), which is the arm every matched
+`boosting_type=Plain` (`archive/reference/PORTING.md` 91 F), which is the arm every matched
 benchmark in this repository pins CatBoost to. The other symmetric learner
 in this tree, `greedy_subsets_searcher`, is the one CatBoost runs for
 MULTICLASS symmetric trees.
@@ -66,14 +66,14 @@ doc-parallel `CreateSubsets` hard-codes `FoldCount = 0; FoldBits = 0`
 (`pointwise_optimization_subsets.cpp:12-14`) and nothing can give it folds:
 `TDocParallelObliviousTreeSearcher` is built by `TDocParallelObliviousTree`,
 which `TBoosting` (`doc_parallel_boosting.h`) drives, and that is the PLAIN
-learner (`PORTING.md` 91 F). Ordered boosting lives ONLY in
+learner (`archive/reference/PORTING.md` 91 F). Ordered boosting lives ONLY in
 `TFeatureParallelObliviousTreeSearcher`, which is
 `gbdt/methods/oblivious_tree_structure_searcher.mojo`.
 
 So the `folds` parameter below is a DEVIATION to be DELETED, not a feature.
 What is NOT a deviation is everything under it -- `create_fold_based_subsets`,
 `make_fold_doc_indices`, the fold stripe, the histogram fold axis and the
-dynamic scorer -- because both searchers share that stack (`PORTING.md` 91 B)
+dynamic scorer -- because both searchers share that stack (`archive/reference/PORTING.md` 91 B)
 and it is ported from the feature-parallel side. Moving the arm is three
 lines in the other searcher's `Fit`; until someone does, this one refuses at
 DEVIATION 126 anyway and can never grow a tree.

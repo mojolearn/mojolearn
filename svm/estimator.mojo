@@ -61,7 +61,7 @@ All four entries take `IdentityTrace()`, which reads
 `kde/estimator.mojo` does. Unset (the shipping state) it is off and costs
 nothing. Set, a fit and its predicts append their stages to the one file;
 the classifier fit's stages are the 32 the 2026-08-23 three-vendor round
-compared (E3_RESULTS.md round 11). THE SVR STAGES HAVE NOT BEEN IN A
+compared (archive/evidence/E3_RESULTS.md round 11). THE SVR STAGES HAVE NOT BEEN IN A
 THREE-VENDOR ROUND. The SVR gates are 44 of 44 at `fea6becc` on the box
 that ran them, and no cross-vendor card has been diffed for this header.
 """

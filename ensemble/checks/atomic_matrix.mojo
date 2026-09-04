@@ -14,7 +14,7 @@ rows. It is also being edited by other sessions right now, and file
 convergence -- not delegation -- is what predicts integration pain here. So
 these rows are scoped to `ensemble/` for this round and RECONCILING THEM
 INTO `kernel_matrix.mojo` IS AN OPEN MERGE-TIME ITEM, recorded in
-`ensemble/PLAN.md`. The column constants are IMPORTED from the kernel
+`archive/plans/ensemble/PLAN.md`. The column constants are IMPORTED from the kernel
 matrix rather than restated, so the two files cannot drift on what a column
 IS -- only on what it can do.
 

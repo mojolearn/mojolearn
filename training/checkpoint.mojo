@@ -12,7 +12,7 @@ PROPOSED and not yet in the orchestrator's ledger. The specification is
 
 WHAT THIS IS
 ------------
-`training/TRAINING_LOOP_PLAN.md:49` states the gap in one line: *"No
+`archive/plans/training/TRAINING_LOOP_PLAN.md:49` states the gap in one line: *"No
 checkpoint file format, so clause (d) tests resume WITHIN one process."* The
 training loop reaches `h_all = 463245ce6c97e68d` on an Apple M4 and an AMD
 MI325X over eight steps, which is a result about a RUN. It is not a result

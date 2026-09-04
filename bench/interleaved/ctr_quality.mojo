@@ -16,7 +16,7 @@ information and nothing else. 80/20 holdout, test mse per arm.
 WHAT THIS ROUND CAN AND CANNOT CLAIM. It gates that the host-side CTR
 arithmetic and plumbing produce a model in CatBoost's quality band under
 matched information. It says nothing about Borders/target CTRs (their
-GPU default set), which need the device CTR kernels of RECON_CTRS.md
+GPU default set), which need the device CTR kernels of archive/research/RECON_CTRS.md
 steps 3-5; expect BOTH arms here to trail a full-default CatBoost.
 """
 from max.gpu.host import DeviceBuffer, DeviceContext

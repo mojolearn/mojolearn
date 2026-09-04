@@ -8,7 +8,7 @@ of this tree is that a kernel is not ported until it appears here and runs.
 Every "it compiles" claim before the first probe was
 `mojo build --emit=object`, which targets the HOST. Three files reported as
 compiling did not compile at a real use site, and the failures taught the
-signature rules now written in PORTING.md item 9. This file is the smallest
+signature rules now written in archive/reference/PORTING.md item 9. This file is the smallest
 thing that keeps that from happening again.
 
 It checks REACHABILITY, not correctness. A kernel that enqueues can still

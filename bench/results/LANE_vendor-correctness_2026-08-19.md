@@ -39,7 +39,7 @@ touching a call site. The fix is the one RAFT itself uses at `n = 1`: `gemv`.
 tests **GPU, CORRECT** at every m from 1 to 100003. So the change is a size
 guard inside `gemm_nt`, not new code.
 
-`VENDOR_LIBRARIES.md` has recorded "`linalg.matmul` with `n = 1` returns zeros
+`archive/reference/VENDOR_LIBRARIES.md` has recorded "`linalg.matmul` with `n = 1` returns zeros
 for some outputs" since before this round. **That sentence is wrong in the way
 that matters** and I deleted it: it does not return zeros, it does not write,
 and a caller reusing a buffer therefore reads stale data rather than an
@@ -100,20 +100,20 @@ Device Apple M4, `WARP_SIZE = 32`, mojo 1.0.0 / max 26.5.0, 2026-08-19.
 
 ## 2. DIVERGENCES FOUND
 
-"Upstream" here is the MAX kernel library and `VENDOR_LIBRARIES.md`'s account
+"Upstream" here is the MAX kernel library and `archive/reference/VENDOR_LIBRARIES.md`'s account
 of it, not cuVS/cuML — this lane audits the vendor layer.
 
 | what the source/doc says (file:line) | what is actually true | fixed? |
 |---|---|---|
-| `VENDOR_LIBRARIES.md`: "`linalg.matmul` with `n = 1` returns zeros for some outputs, no error" | It does **not write the output at all**. 63 of 64 rows kept their poison value. And it is `transpose_b=True` that fails, not `n = 1`: the N-N form at the identical shape is CORRECT. | Sentence DELETED and replaced in `VENDOR_LIBRARIES.md`. The CODE defect is **NOT fixed** — `core/gemm.mojo` belongs to another lane. Section 0. |
-| `VENDOR_LIBRARIES.md` A1: `nn.argsort.argsort` -> **GPU**, on a signature | **GPU, WRONG** above 256. Independently reproduced this round with a fresh splitmix64 fixture and a host radix-sort oracle: correct at 1/2/255/256, first inversion at output index 256 for 257/512/513/1023/1024/1025/4096/100003. | Row marked WRONG; the standing rule at the top of the file now forbids citing availability. |
-| `VENDOR_LIBRARIES.md` A1/A2 item 2/A3 C3: `algorithm.reductions.reduce_{sum,max,min,mean,product,argmax,argmin}` -> **GPU**, "the plural module", with docs URLs | **The module does not exist.** `from algorithm.reductions import reduce_sum` -> "unable to locate module 'reductions'". This was a documentation crawl that was never compiled, and it produced three separate "correction" paragraphs asserting a capability that is not there. `algorithm.reduce_op` and `algorithm.rowwise.launch` DO compile. | All four sites corrected; the whole `## algorithm.reductions` section rewritten. |
-| `VENDOR_LIBRARIES.md` A2 item 1: `run_radix_sort_pairs_gpu` recommended as the missing `SortPairs`/`SegmentedRadixSort`, on a signature | Correct at `BLOCK_SIZE` 128 and 64. **Its DEFAULT `BLOCK_SIZE=256` cannot run on Apple at all** — "Threadgroup memory size (32900) exceeds the maximum threadgroup memory allowed (32768)", at every size including n=1. Anyone following the recommendation as written would have hit a hard failure on the first call. | Rewritten with the measured facts and the three previously-unsettled caveats resolved. |
-| `VENDOR_LIBRARIES.md`: "`linalg.transpose` **SIGNALS at runtime**" | It **ABORTS the process**. Not a catchable raise; a `try` around it does not help. `_copy_with_strides rank=2 dtype=f32` -> "enqueue_cpu_range is only supported on CPU DeviceContexts". "Signals" reads like something a caller can fall back from. | Corrected. The probe is gated behind `vendor_main --transpose` precisely because it would take the table down. |
-| `VENDOR_LIBRARIES.md`: "## Also confirmed available, unused so far: `gather`, `top_k`, `softmax`, `concat`, `linalg.transpose`, `qr_factorization`" | Two of the six are unusable and one of those ABORTS. Presenting them as a menu is the failure mode this lane exists to close. | Section replaced with a verdict table. |
-| `VENDOR_LIBRARIES.md`: `cuSOLVER syevj` row -> "`linalg.qr_factorization` AVAILABLE", as the device-side consolation prize | **CPU ONLY**, confirmed by compile: passing a `DeviceContext` is an invalid call. (C1 later in the same file said so; the headline row still said otherwise.) | Row corrected. |
+| `archive/reference/VENDOR_LIBRARIES.md`: "`linalg.matmul` with `n = 1` returns zeros for some outputs, no error" | It does **not write the output at all**. 63 of 64 rows kept their poison value. And it is `transpose_b=True` that fails, not `n = 1`: the N-N form at the identical shape is CORRECT. | Sentence DELETED and replaced in `archive/reference/VENDOR_LIBRARIES.md`. The CODE defect is **NOT fixed** — `core/gemm.mojo` belongs to another lane. Section 0. |
+| `archive/reference/VENDOR_LIBRARIES.md` A1: `nn.argsort.argsort` -> **GPU**, on a signature | **GPU, WRONG** above 256. Independently reproduced this round with a fresh splitmix64 fixture and a host radix-sort oracle: correct at 1/2/255/256, first inversion at output index 256 for 257/512/513/1023/1024/1025/4096/100003. | Row marked WRONG; the standing rule at the top of the file now forbids citing availability. |
+| `archive/reference/VENDOR_LIBRARIES.md` A1/A2 item 2/A3 C3: `algorithm.reductions.reduce_{sum,max,min,mean,product,argmax,argmin}` -> **GPU**, "the plural module", with docs URLs | **The module does not exist.** `from algorithm.reductions import reduce_sum` -> "unable to locate module 'reductions'". This was a documentation crawl that was never compiled, and it produced three separate "correction" paragraphs asserting a capability that is not there. `algorithm.reduce_op` and `algorithm.rowwise.launch` DO compile. | All four sites corrected; the whole `## algorithm.reductions` section rewritten. |
+| `archive/reference/VENDOR_LIBRARIES.md` A2 item 1: `run_radix_sort_pairs_gpu` recommended as the missing `SortPairs`/`SegmentedRadixSort`, on a signature | Correct at `BLOCK_SIZE` 128 and 64. **Its DEFAULT `BLOCK_SIZE=256` cannot run on Apple at all** — "Threadgroup memory size (32900) exceeds the maximum threadgroup memory allowed (32768)", at every size including n=1. Anyone following the recommendation as written would have hit a hard failure on the first call. | Rewritten with the measured facts and the three previously-unsettled caveats resolved. |
+| `archive/reference/VENDOR_LIBRARIES.md`: "`linalg.transpose` **SIGNALS at runtime**" | It **ABORTS the process**. Not a catchable raise; a `try` around it does not help. `_copy_with_strides rank=2 dtype=f32` -> "enqueue_cpu_range is only supported on CPU DeviceContexts". "Signals" reads like something a caller can fall back from. | Corrected. The probe is gated behind `vendor_main --transpose` precisely because it would take the table down. |
+| `archive/reference/VENDOR_LIBRARIES.md`: "## Also confirmed available, unused so far: `gather`, `top_k`, `softmax`, `concat`, `linalg.transpose`, `qr_factorization`" | Two of the six are unusable and one of those ABORTS. Presenting them as a menu is the failure mode this lane exists to close. | Section replaced with a verdict table. |
+| `archive/reference/VENDOR_LIBRARIES.md`: `cuSOLVER syevj` row -> "`linalg.qr_factorization` AVAILABLE", as the device-side consolation prize | **CPU ONLY**, confirmed by compile: passing a `DeviceContext` is an invalid call. (C1 later in the same file said so; the headline row still said otherwise.) | Row corrected. |
 | `decomposition/gbdt/linalg/detail/pca.mojo:299` comment: "Only thread 0 is promised the reduction's result by CUB's contract, so it is published through shared memory rather than assumed broadcast." | On this backend `block.sum` / `max` / `min` **do broadcast to all threads**, verified at TPB 32..1024. The comment states CUB's contract, which is a defensible reason to keep the shared-memory publish, but the empirical claim it implies about MAX is not what happens. | **Not edited** — `decomposition/` is another lane's. Reported here. |
-| `VENDOR_LIBRARIES.md` A3 C6: "`lane_id` is not in `std.gpu.primitives.warp`" | `neighbors/.../ball_cover/registers.mojo:78` imports `lane_id` from `std.gpu.primitives.warp` and it compiles, so it is re-exported there. `std.gpu.primitives.id.lane_id` also compiles. Both work; C6 is right about the canonical home and wrong that the other path fails. | Left alone — harmless, and C6's advice (use `.id`) is what this lane's check does. |
+| `archive/reference/VENDOR_LIBRARIES.md` A3 C6: "`lane_id` is not in `std.gpu.primitives.warp`" | `neighbors/.../ball_cover/registers.mojo:78` imports `lane_id` from `std.gpu.primitives.warp` and it compiles, so it is re-exported there. `std.gpu.primitives.id.lane_id` also compiles. Both work; C6 is right about the canonical home and wrong that the other path fails. | Left alone — harmless, and C6's advice (use `.id`) is what this lane's check does. |
 
 ---
 
@@ -154,7 +154,7 @@ Prints the table; exits 1 if a WIRED primitive tested WRONG; `--transpose`
 runs the aborting probe alone. The table is sorted so WIRED-and-WRONG is the
 first row.
 
-### `VENDOR_LIBRARIES.md` (REWRITTEN around a correctness column)
+### `archive/reference/VENDOR_LIBRARIES.md` (REWRITTEN around a correctness column)
 
 - New top section: **the standing rule** ("a signature proves reach, a run
   proves the answer"), the five tiers, and what a `GPU, CORRECT` verdict has
@@ -184,7 +184,7 @@ cub	DeviceRadixSort	cub/device/dispatch/dispatch_radix_sort.cuh	NO LONGER NEEDED
 
 ---
 
-## 5. PROPOSED `PORTING.md` DEVIATION ENTRIES (numbered from 30)
+## 5. PROPOSED `archive/reference/PORTING.md` DEVIATION ENTRIES (numbered from 30)
 
 **30. `nn.argsort[target="gpu"]` IS WRONG ABOVE 256 ELEMENTS. DO NOT USE IT.**
 Correct at n <= 256; non-monotone at 257 and every larger size tried, with the
@@ -350,7 +350,7 @@ p_topk_gpu        COMPILES  (nn.topk.topk_gpu)
 - **Did not time anything.** Forbidden, and this box drifts 2-3x across
   thermal windows. Where a correct primitive might be slower than what it
   replaced, that is noted and left.
-- **Did not edit `VENDOR_LIBS.md`, `PORTING.md`, `UNWIRED.md`, `PORTED_MAP.tsv`,
+- **Did not edit `archive/reference/VENDOR_LIBS.md`, `archive/reference/PORTING.md`, `UNWIRED.md`, `PORTED_MAP.tsv`,
   or any kernel** in `cluster/ dbscan/ decomposition/ glm/ neighbors/ core/
   gbdt/`. `mojo_only/vendor_correctness_check.mojo` IMPORTS
   `core.gemm.gemm_nt` and `mojo_only.kernel_matrix`; it modifies neither.

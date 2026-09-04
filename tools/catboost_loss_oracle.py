@@ -71,7 +71,7 @@ Every option below is pinned on BOTH arms, and the two that are not simply
 
 THE FIXTURE IS CONSTRUCTED AND HASHED, NEVER A REAL DATASET
 -----------------------------------------------------------
-`STANDING_ORDERS.md` rule 4. Feature values come out of splitmix64 so every
+`archive/plans/STANDING_ORDERS.md` rule 4. Feature values come out of splitmix64 so every
 cell differs from its neighbours and a permutation defect cannot hide behind
 a matching total; one column is deliberately low-cardinality (ties on the
 border grid) and one is pure noise the target never sees. The signed target

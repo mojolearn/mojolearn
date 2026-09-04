@@ -10,7 +10,7 @@ and this file re-decides none of it.
 
 **THIS IS NOT WIRED TO `bindings/` AND THERE IS NO PYTHON CLASS YET.**
 Nothing under `bindings/` or `python/` calls it, which makes it an
-`UNWIRED.md` row until the orchestrator wires it; the lane README's
+`archive/plans/UNWIRED.md` row until the orchestrator wires it; the lane README's
 HAND-OFF section says what a `mojolearn.HDBSCAN` would have to map.
 
 THIS PATH DOES EMIT AN IDENTITY CARD, unlike `hierarchy`'s. `fit_hdbscan`

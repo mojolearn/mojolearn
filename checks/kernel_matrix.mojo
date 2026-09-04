@@ -22,7 +22,7 @@ An `arm` column for Mali was added and struck the same day: nobody trains a
 gradient-boosted model on a phone GPU, and a column implies an intent this
 project does not have. The Mali FACTS that are worth keeping -- it advertises
 32 KB of compute shared memory that is not a scratchpad at all -- are kept in
-`VENDOR_COLUMNS.md`, where a warning belongs, rather than as a build target
+`archive/reference/VENDOR_COLUMNS.md`, where a warning belongs, rather than as a build target
 nobody will build.
 
 A declared column is not decoration and it is not a promise of support. It
@@ -261,7 +261,7 @@ comptime K_HIST_2_ONE_BYTE = 7
 #: `TPointHist<0,0,BlockSize>` and its 6/7/8-bit siblings -- CatBoost's OTHER
 #: histogram family, the one BOTH of their oblivious searchers share and the
 #: one this repository runs for single-target symmetric trees once rung 1 of
-#: `NEXT_TWO.md` lands (`PORTING.md` 91 B).
+#: `archive/plans/NEXT_TWO.md` lands (`archive/reference/PORTING.md` 91 B).
 #:
 #: SAME SCRATCH SHAPE as `K_HIST_2_ONE_BYTE` and NOT the same kernel. Both
 #: take `BlockSize * 32` floats at CatBoost's `BlockSize = 384`, and their
@@ -389,7 +389,7 @@ struct KernelSpec(Copyable, Movable):
 # **THE HOLE THIS LEAVES, AND IT IS REAL: the serialized model does not carry
 # the profile id yet.** Until it does, profile 1 and a future profile 2 model
 # are distinguishable only by provenance, which is exactly the kind of thing
-# that gets lost. Recorded in `UNWIRED.md`; it is a header field and an hour's
+# that gets lost. Recorded in `archive/plans/UNWIRED.md`; it is a header field and an hour's
 # work, and it should be done before any second profile exists rather than
 # after.
 
@@ -577,7 +577,7 @@ def column_has_float_atomics(column: Int) -> Bool:
 
     Intel is `True` because float atomics are broadly available on Xe; it is
     the one entry here that should be re-checked against a device rather than
-    a document, and it is marked so in `VENDOR_COLUMNS.md`.
+    a document, and it is marked so in `archive/reference/VENDOR_COLUMNS.md`.
     """
     return (
         column == COLUMN_BIT_IDENTICAL
@@ -899,7 +899,7 @@ def column_lane_width_is_fixed(column: Int) -> Bool:
     JUSTIFICATION. Two sentences stood here and above: that Mojo exposes no
     warp primitive on any vendor, and that nothing in this tree indexes by
     hardware lane. BOTH ARE FALSE. Thirteen files import `shuffle_xor` or
-    `lane_id` (see VENDOR_COLUMNS.md, which now names them), `split_warp_reduce`
+    `lane_id` (see archive/reference/VENDOR_COLUMNS.md, which now names them), `split_warp_reduce`
     sizes its butterfly by `WARP_SIZE`, and DEVIATION BLOCK 30 in
     `dbscan/impl/dbscan/detail/epsilon_neighborhood.mojo` says in its own
     source that its width-16 reduction is correct only at a lane width of 32.
@@ -1303,7 +1303,7 @@ def sync_granularity_for[column: Int]() -> Int:
 
     CORRECTED 2026-09-01. THIS DOCSTRING SAID MOJO EXPOSES NO WARP PRIMITIVE
     ON ANY VENDOR. THAT IS FALSE, and it is the third copy of a claim already
-    retracted elsewhere in this file and in VENDOR_COLUMNS.md; commit 858f9811
+    retracted elsewhere in this file and in archive/reference/VENDOR_COLUMNS.md; commit 858f9811
     fixed two and missed this one. Twenty-four files import `shuffle_xor` from
     `std.gpu.primitives.warp`, and four gbdt kernels import and call
     `syncwarp` from `max.gpu.sync`, which is precisely a lane-group barrier.
@@ -1372,7 +1372,7 @@ def sub_byte_lane_sync_for[column: Int]() -> Int:
     WHY 32 IS RIGHT ONLY WHEN THE WAVE IS 32. `syncwarp` orders one warp.
     On a 32-wide machine that is a strict SUPERSET of the 8 lanes theirs
     orders, which is why the port has always been correct on Apple and
-    NVIDIA and why swapping it in bought 21% (VENDOR_LIBS.md section 4).
+    NVIDIA and why swapping it in bought 21% (archive/reference/VENDOR_LIBS.md section 4).
     Two directions break that:
 
     - NARROWER THAN 32 (`qualcomm` 8, `intel` 8, the spec baseline 1, and
@@ -2261,7 +2261,7 @@ def replicas_for(hist_cells: Int) -> Int:
 # across kernels" this table opens by refusing.
 #
 # The rows below DECLARE the truth. Wiring the call sites is a separate step
-# and is tracked in `UNWIRED.md`; a declared row that no kernel reads is not
+# and is tracked in `archive/plans/UNWIRED.md`; a declared row that no kernel reads is not
 # done, and saying so here is better than implying otherwise.
 #
 # WHY A SECOND SPEC STRUCT RATHER THAN MORE FIELDS ON `KernelSpec`
@@ -2484,7 +2484,7 @@ def lib_spec_for(
 # bit-identical across all three with Apple single-buffered and the other two
 # double-buffered.
 #
-# Not wired. `UNWIRED.md` tracks it. The row below is what a kernel should
+# Not wired. `archive/plans/UNWIRED.md` tracks it. The row below is what a kernel should
 # ask, so that the answer is a table lookup rather than a fresh decision by
 # whoever is next in that file.
 

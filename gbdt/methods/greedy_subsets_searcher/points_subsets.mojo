@@ -156,7 +156,7 @@ struct TPointsSubsets(Movable):
     `EPtrType::CudaHost`. Measured 2026-08-19: a Mojo kernel handed an
     `enqueue_create_host_buffer` pointer writes nothing, silently, and
     `map_to_host` is 2x slower than the copy it would replace. So this one
-    is filled by an explicit copy. See `gbdt/gpu_lib/NOT_PORTED.md`.
+    is filled by an explicit copy. See `archive/reference/gbdt/NOT_PORTED.md`.
 
     Their `Partitions` is one `TDataPartition` array of `{Offset, Size}`
     pairs; ours is two parallel `UInt32` buffers, which is how

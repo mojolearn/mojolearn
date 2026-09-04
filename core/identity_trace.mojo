@@ -61,7 +61,7 @@ the other".
 
 4. **A TRACED RUN IS NOT A MEASUREMENT.** Every record drains the queue and
    copies a buffer to the host. That is a control-plane change of exactly
-   the kind `HOST_AND_DEVICE.md` is about, and `quiet_window` would rightly
+   the kind `archive/reference/HOST_AND_DEVICE.md` is about, and `quiet_window` would rightly
    refuse to certify a timing taken under it. Trace runs are trace subjects.
 
 ## What a matching hash does NOT prove

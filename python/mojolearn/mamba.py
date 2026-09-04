@@ -4,7 +4,7 @@
 cross-checking.
 
 The public face of `_mamba_impl.py`, which carries every contract detail
-on its classes; this module exists because `mamba/FEATURE_PARITY.md`'s
+on its classes; this module exists because `archive/evidence/mamba/FEATURE_PARITY.md`'s
 consumer table names `mojolearn.mamba` as the surface a downstream user
 imports, and because the block classes are not estimators -- they have no
 `fit`, so they live beside the sklearn-shaped names rather than among

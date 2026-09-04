@@ -7,7 +7,7 @@ WHAT THIS FILE IS, AND WHAT IT IS NOT
 The split RULE this file serves is a PORT FROM PAPER — Geurts, Ernst &
 Wehenkel 2006, "Extremely randomized trees" — by way of scikit-learn's
 `RandomSplitter`. It is **not** a port of a cuML kernel: no GPU library ships
-the histogram-free formulation (`extratrees/PLAN.md` re-verified this on
+the histogram-free formulation (`archive/plans/extratrees/PLAN.md` re-verified this on
 2026-08-21). Two upstreams are therefore mirrored for two different things,
 and every function below says which:
 
@@ -130,7 +130,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
 #   pointers are the left child's accumulators and the node's totals; the
 #   right child is still recovered as total minus left, exactly as theirs is.
 #   `i` and `n_bins` are gone.
-# WHY. This directory exists to delete the histogram (`extratrees/PLAN.md`,
+# WHY. This directory exists to delete the histogram (`archive/plans/extratrees/PLAN.md`,
 #   and `quantiles.cuh` is permanently absent per `NOT_IMPLEMENTED.tsv`). A random
 #   threshold is drawn per (node, feature) from the feature's range over that
 #   node's rows; there is no bin index to pass and no bin dimension to stride.
@@ -207,7 +207,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
 # PRICE. The classification reduction carries the four accumulator fields
 #   (`sq_L`, `nL`, `sq_R`, `nR`) alongside the `Split`, not just the score.
 #   Cost unmeasured, deliberately: this lane is not taking timing numbers yet
-#   (`extratrees/PLAN.md`).
+#   (`archive/plans/extratrees/PLAN.md`).
 # ==========================================================================
 
 
@@ -296,7 +296,7 @@ struct AggregateBin[dtype: DType](ImplicitlyCopyable, Movable):
     throughout. Neither is available on device here, and choosing between
     `Float32`, a Kahan pair, and the fixed-point label scaling `gbdt/` already
     uses (`checks/fixed_point.mojo`, `choose_scale`) is **DEVIATION 135,
-    which is OPEN** -- see `extratrees/DEVIATIONS.md`. This file must not
+    which is OPEN** -- see `archive/research/extratrees/DEVIATIONS.md`. This file must not
     settle it, so it does not name a type: instantiate
     `AggregateBin[DType.float64]` on the host oracle and whatever 135 decides
     on the device, and the arithmetic below is identical either way.

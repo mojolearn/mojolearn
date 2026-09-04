@@ -6,7 +6,7 @@
 Written 2026-09-02, the day the surface landed -- the day profile
 `mojolearn.identical.transformer.fp32.v1` got its first Python symbol.
 The model for this file is `test_mamba_surface.py` and the house
-standard is `gemm/PYTHON_SURFACE_GATE.md`.
+standard is `archive/evidence/gemm/PYTHON_SURFACE_GATE.md`.
 
 WHAT THIS CLOSES. `bindings/_mojolearn_transformer.mojo`'s two entry
 points and `python/mojolearn/_transformer_impl.py` put the certified

@@ -84,7 +84,7 @@ def main() -> int:
     # exactly `bench/oracle.txt`.
     #
     # ORACLE_DEPTH and ORACLE_FEATS are the DEPTH AND FEATURE-COUNT SWEEP
-    # (`NEXT_TWO.md` rung 5). They are the same shape of change as
+    # (`archive/plans/NEXT_TWO.md` rung 5). They are the same shape of change as
     # ORACLE_BORDERS, which was already here, and they are read here rather
     # than passed on the command line so the generator and the Mojo reader
     # agree on one mechanism.

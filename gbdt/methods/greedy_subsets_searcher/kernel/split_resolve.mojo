@@ -185,7 +185,7 @@ def plan_level_kernel(
     and the strict `<` is on the LEFT. **ON AN EXACT TIE THE `else`
     BRANCH FIRES AND THE RIGHT CHILD IS COMPUTED**, which is why the
     condition below is `left_sz < right_sz` and `small` starts on the
-    right. PORTING.md 136: it was the other way round from `409a16c`
+    right. archive/reference/PORTING.md 136: it was the other way round from `409a16c`
     until 2026-08-21.
 
     The host used to make this choice from a per-level size read;

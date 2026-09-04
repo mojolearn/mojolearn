@@ -27,13 +27,13 @@ the port does" and every row is a decision that was made against their file.
 | D0 | `ball_cover.hpp:62` `n_landmarks = raft::sqrt(m)`, truncated into `int64_t` | `rbc_n_landmarks` = `floor(sqrt(m))` with an integer correction loop | SAME. Confirmed against their file; the brief said "do not assume" and it was checked. |
 | D1 | `ball_cover.cuh:89-97` `sampleWithoutReplacement(rng 12345, weights all 1)`, which is `rng_impl.cuh:292-325`: random key per element, FULL device sort of all m, take first sqrt(m) | Floyd's algorithm on the host, splitmix64 keyed on the same seed | DIVERGES DELIBERATELY. With equal weights their three steps *are* "a uniform subset of size sqrt(m)"; Floyd's draws that directly in O(sqrt(m)). The subset differs; **the answer cannot**, because the triangle-inequality prune is exact for any landmark set. Their version also needs a device sort, which does not work here (D3). |
 | D2 | `ball_cover.cuh:188-200` `k_closest_landmarks` calls `brute_force::build`+`search` at k=1 (GEMM + `select_k`) | `rbc_landmark_1nn_kernel`, a fused argmin, no distance matrix | DIVERGES DELIBERATELY. Their path materializes `m x sqrt(m)` floats — 357 MB at m=200k — for an argmin that keeps two values. RAFT's own k=1 form is `fusedDistanceNN`, already ported in this repo. This is the exact shape the k-NN lane measured a 20x loss on. |
-| D2b | their build metric is `L2SqrtExpanded` (`cuml runner.cuh:152`), i.e. the EXPANDED identity, while their query uses `EuclideanSqFunc`, unexpanded | ours is unexpanded in both | DIVERGES, AND OURS IS SAFER. `PORTING.md 21` already records what the expanded identity costs in float32, and here the two formulas are being compared to EACH OTHER — `R_radius` from one against `cur_R_dist` from the other. Their pairing permits a point inside eps by one formula and outside by the other, exactly at the boundary the radius test straddles. |
+| D2b | their build metric is `L2SqrtExpanded` (`cuml runner.cuh:152`), i.e. the EXPANDED identity, while their query uses `EuclideanSqFunc`, unexpanded | ours is unexpanded in both | DIVERGES, AND OURS IS SAFER. `archive/reference/PORTING.md 21` already records what the expanded identity costs in float32, and here the two formulas are being compared to EACH OTHER — `R_radius` from one against `cur_R_dist` from the other. Their pairing permits a point inside eps by one formula and outside by the other, exactly at the boundary the radius test straddles. |
 | D3 | `ball_cover.cuh:148-152` `thrust::sort_by_key` with `NNComp` over `(landmark, distance)`, then `sorted_coo_to_csr` at `:155` | counting sort by landmark (`rbc_count_landmarks_kernel` + exclusive scan, which IS `sorted_coo_to_csr`), then `rbc_scatter_kernel`, then exact rank-by-counting per group in `rbc_rank_kernel` | DIVERGES. **`nn.argsort[target="gpu"]` is measurably WRONG above 256 elements** — see section 6 — so there was never a substitution available, and CUB's radix sort is a port that does not fit this lane. Ours produces the same order theirs does, with ties broken deterministically by point index where `thrust::sort_by_key` leaves them arbitrary. |
 | D4 | `ball_cover.cuh:224` `R_radius[r] = R_1nn_dists[R_indptr[r+1] - 1]` with no emptiness guard | radius 0 when the group is empty | FIXED, THEIRS IS A LATENT OOB. An empty landmark 0 reads `R_1nn_dists[-1]` in their code. It is unreachable in practice (a landmark is its own nearest landmark except against a duplicate point with a lower index), but 0 is also the exact answer: an empty ball can hold no neighbor, so pruning it always is correct. |
 | D5 | `registers.cuh:498,536` sentinel is `std::numeric_limits<value_idx>::max()` — int64 max, ~9.2e18, used as a FLOAT distance | `Float32` max | SAME BEHAVIOR, cleaner type. Both are larger than any real squared distance in both comparisons that consume them. Theirs is an accident of their template parameter. |
 | D6 | `registers.cuh:629-636` `raft::ballot` then `__brev` then `__clz`; bit cleared with `mask &= (0x7fffffff >> k_offset)` | `std.gpu.primitives.warp.vote` then `std.bit.count_trailing_zeros`; bit cleared with `mask &= mask - 1` | SAME ORDER, different instructions. `__brev` exists only so their loop can use `__clz` instead of `__ffs`. Both walk set landmarks ascending, so the column order in `adj_ja` is theirs too. `vote` was probed working on this M4 (section 6). |
 | D7 | `registers.cuh:1332-1335` launches `tpb = 64`, two warps per block, `ceildiv(n_queries, 2)` blocks | `tpb = 32`, one query per block, `n_queries` blocks | DIVERGES, FOR CORRECTNESS ON NON-32-LANE HARDWARE. `vote` returns a mask over the whole warp; two 32-lane query groups inside one 64-lane AMD wavefront would merge their ballots and corrupt both rows. One query per block makes the lane group and the warp the same set. Their `query_id >= n_queries` early-out is kept and is dead at this shape. |
-| D8 | `registers.cuh:1376,1470` `thrust::exclusive_scan`; `:1453` `thrust::reduce(maximum)` | `rbc_exclusive_scan_kernel`, `rbc_max_reduce_kernel` in `ball_cover/scan.mojo` | PORTED, not substituted. Both are standalone device-wide steps between separate launches in their code too. There is also nothing to substitute: `nn.cumsum` and `max.algorithm.reduction.cumsum` are both host-only (`VENDOR_LIBRARIES.md`). |
+| D8 | `registers.cuh:1376,1470` `thrust::exclusive_scan`; `:1453` `thrust::reduce(maximum)` | `rbc_exclusive_scan_kernel`, `rbc_max_reduce_kernel` in `ball_cover/scan.mojo` | PORTED, not substituted. Both are standalone device-wide steps between separate launches in their code too. There is also nothing to substitute: `nn.cumsum` and `max.algorithm.reduction.cumsum` are both host-only (`archive/reference/VENDOR_LIBRARIES.md`). |
 | D9 | `registers.cuh:714` `block_rbc_kernel_eps_csr_pass_xd`, taken when `index.n == 2 \|\| index.n == 3` (`:1331`) | not ported; the generic kernel runs at every dimension | NOT FIXED, and it is not a semantic difference: it is the same kernel with the query row copied into a `local_x_ptr[MAX_COL_Q]` register array, which needs the dimension at compile time. Proposed `UNPORTED.tsv` row in section 3. |
 | D10 | `registers.cuh:305,64,153` the k-NN query passes | not ported | OUT OF SCOPE (brief priority 3, reached only if 1 and 2 landed; they landed with no room left). Proposed `UNPORTED.tsv` row in section 3. |
 
@@ -185,7 +185,7 @@ cub	DeviceRadixSort	cub/device/dispatch/dispatch_radix_sort.cuh	the device-wide 
 
 ---
 
-## 4. PROPOSED `PORTING.md` DEVIATION ENTRIES (numbered from 30)
+## 4. PROPOSED `archive/reference/PORTING.md` DEVIATION ENTRIES (numbered from 30)
 
 **30. `nn.argsort[target="gpu"]` IS WRONG ABOVE 256 ELEMENTS. DO NOT USE IT.**
 Measured 2026-08-19 on the M4 with the pinned toolchain: correct at n=256,
@@ -194,14 +194,14 @@ non-monotone at n=257 and at every larger size tried (512, 1024, 1025, 1200,
 `int64` index outputs. The first inversion is always at output position 256,
 which reads as a single-block sort with no merge across blocks. It raises
 nothing and returns a well-formed permutation, so it fails silently. It is
-listed as **GPU** in `VENDOR_LIBRARIES.md`'s availability table on the
+listed as **GPU** in `archive/reference/VENDOR_LIBRARIES.md`'s availability table on the
 strength of its signature (`ctx` + `target`), which is a test of whether the
 GPU is *reachable*, not of whether the answer is *right*. That table needs a
 correctness column. The probe is `bench/results/` section 6 of this file.
 Also: `argsort` rejects a rank-2 `TileTensor` (`nn/argsort.mojo:547`
 constraint), so it is 1-D only.
 
-**31. `std.gpu.primitives.warp.vote` WORKS ON APPLE SILICON.** `PORTING.md 2`
+**31. `std.gpu.primitives.warp.vote` WORKS ON APPLE SILICON.** `archive/reference/PORTING.md 2`
 corrected the claim that Mojo has no warp primitives and listed the ones
 probed; `vote` was not among them. It is real and it works: probed on the M4
 returning a `uint32` mask, and used in production in
@@ -231,7 +231,7 @@ a `raft::ballot` kernel has to make the same decision explicitly.
    200k, exactly quadratic) and the index is now ported. **Delete the row**
    and replace it with the `PORTED_MAP.tsv` rows in section 3.
 
-2. **`VENDOR_LIBRARIES.md`** lists `nn.argsort.argsort` as **GPU** with the
+2. **`archive/reference/VENDOR_LIBRARIES.md`** lists `nn.argsort.argsort` as **GPU** with the
    verdict derived from its signature, and item **1** of A2 recommends
    `nn.toppminp_gpu.run_radix_sort_pairs_gpu` as "a GPU key/value radix sort
    [that] exists". The `argsort` row is not false about availability but is
@@ -351,7 +351,7 @@ int64 index output, float32 keys, m = 257  monotone: False
 Rank-2 input is rejected outright (`nn/argsort.mojo:547` constraint failed),
 so a `(1, m)` batched shape is not a workaround.
 
-**Two things follow.** First, `PORTING.md 30` above. Second, and this is the
+**Two things follow.** First, `archive/reference/PORTING.md 30` above. Second, and this is the
 part worth arguing about: substituting this call would have shipped an index
 whose groups are unsorted, which makes the query kernel's early stop drop
 real neighbors, which makes DBSCAN produce a plausible and wrong clustering.
@@ -366,7 +366,7 @@ still returns everything.
 `vote`, `lane_id`, `shuffle_idx`, `warp.sum`, `pop_count`,
 `count_trailing_zeros` and `WARP_SIZE` were probed together in one kernel
 before any of them was used. `WARP_SIZE == 32` on this M4. `vote` returns a
-correct `uint32` ballot mask. This is `PORTING.md 31` above.
+correct `uint32` ballot mask. This is `archive/reference/PORTING.md 31` above.
 
 ---
 
@@ -396,7 +396,7 @@ correct `uint32` ballot mask. This is `PORTING.md 31` above.
   full check suite was rebuilt and re-run after that question and is green,
   so whatever happened to those kernels did not break this lane and this lane
   did not cause it.
-- **Did not edit any shared file.** `PORTING.md`, `VENDOR_LIBRARIES.md`,
+- **Did not edit any shared file.** `archive/reference/PORTING.md`, `archive/reference/VENDOR_LIBRARIES.md`,
   `neighbors/PORTED_MAP.tsv`, `neighbors/UNPORTED.tsv`,
   `neighbors/README.md`, `core/**`, `dbscan/**` are all untouched;
   everything that would have gone in them is in sections 3, 4 and 5.

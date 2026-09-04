@@ -37,7 +37,7 @@ Also owed and absent. No `pixi.toml` task, so the gate runs by path only. No
 `embedding/README.md`, no `DERIVATION_MAP.tsv`, no `NOT_IMPLEMENTED.tsv`;
 every other lane in this tree carries all three. No `IDENTITY_PATHS.md` row
 for this profile, which DEVIATION 1300 names. And `SUPPORT_MATRIX.md`,
-`CARD_GAPS.md` and `UNWIRED.md` do not mention `embedding/` at all.
+`archive/plans/CARD_GAPS.md` and `archive/plans/UNWIRED.md` do not mention `embedding/` at all.
 
 The five files on disk are this contract,
 `embedding/checks/embedding_oracle.mojo` (the NORMATIVE host answer),
@@ -74,7 +74,7 @@ implementation, PyTorch's included, does this with an **atomic float add**,
 which is arrival order, which is not associative, and which is therefore not
 reproducible even run to run on one device. That is what IDENTITY_PATHS rows 1
 and 2 closed everywhere else in this tree and what
-`gemm/IDENTICAL_BACKWARD_PLAN.md` names as T10.
+`archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md` names as T10.
 
 **The finding of this lane is that the no-float-crosses-a-thread construction
 DOES survive**, once the run structure is materialized. Section 6 pins one
@@ -589,7 +589,7 @@ alignment condition. Any `t0`.**
 **ADD does not**, in general, which is 5.4's `R = 4` row again.
 
 Set beside the GEMM lane's finding, because the contrast is instructive.
-`gemm/IDENTICAL_BACKWARD_PLAN.md` MEASURED that `dB` at `T` tokens equals two
+`archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md` MEASURED that `dB` at `T` tokens equals two
 `dB` calls at `T/2` summed **only at an ALIGNED split**, one that is both a
 leaf boundary and a subtree boundary. That is a property of the tree. **The
 chain has no boundaries to align to**, so every split works, and it works
@@ -955,7 +955,7 @@ Cited from elsewhere and never redefined: 621, 1505, 1938.
 5. **An `IDENTITY_PATHS.md` row**, DEVIATION 1300. It must record exactly what
    the 2026-08-28 round did and did not close, which is clause (a) only, on
    Apple and AMD, cards byte-identical, NO NVIDIA, no sabotage arm built.
-6. **`SUPPORT_MATRIX.md`, `CARD_GAPS.md` and `UNWIRED.md` do not mention
+6. **`SUPPORT_MATRIX.md`, `archive/plans/CARD_GAPS.md` and `archive/plans/UNWIRED.md` do not mention
    `embedding/`.** What they should say is not "specified, never compiled",
    which is false, but "carded on Apple and AMD at clause (a), NVIDIA owed, no
    sabotage arm ever built".
@@ -979,7 +979,7 @@ Cited from elsewhere and never redefined: 621, 1505, 1938.
    those sentences claim.
 10. **`core/pinned_reduce.mojo::pinned_block_max`'s combine step**, wanted by
     three lanes now. That file owner's call.
-11. **`gemm/IDENTICAL_BACKWARD_PLAN.md`'s T10 recommends "sort by index, then
+11. **`archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md`'s T10 recommends "sort by index, then
     a segmented v1 fold"**, and this contract REFUSES the v1-fold half for
     4.2's reasons. Its recommendation is not wrong about the SORT and is wrong
     about the FOLD, and the difference is 5.3(i): **a run length is DATA and a

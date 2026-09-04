@@ -33,7 +33,7 @@ whole reason this piece is worth landing on its own, ahead of the
 
 WHAT THE FOLDS TURN INTO, AND WHY `fold_bits` IS THE LINK
 ---------------------------------------------------------
-`PORTING.md` 91 B: the fold id occupies the LOW BITS of a document's bin and
+`archive/reference/PORTING.md` 91 B: the fold id occupies the LOW BITS of a document's bin and
 the depth bits sit above it. The bridge is two lines of
 `TFeatureParallelObliviousTreeSearcher::CreateSubsets`
 (`oblivious_tree_structure_searcher.cpp:36-37`):
@@ -605,7 +605,7 @@ def fold_bits_for_folds(fold_list_size: Int, boosting_type: EBoostingType) -> In
     """`subsets.FoldBits = NCB::IntLog2(subsets.FoldCount)`
     (`oblivious_tree_structure_searcher.cpp:37`).
 
-    This is the number the whole of `PORTING.md` 91 B is about: the fold id
+    This is the number the whole of `archive/reference/PORTING.md` 91 B is about: the fold id
     lives in bits `[0, FoldBits)` of a document's bin and the depth bits sit
     above it, which is why every index downstream reads
     `CurrentDepth + FoldBits`. `1 << FoldBits` is also the stripe

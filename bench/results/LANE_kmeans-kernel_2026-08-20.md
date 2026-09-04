@@ -13,7 +13,7 @@ orchestrator re-verdicts.
 decisions) were found and fixed, all on the brief's suspect list, plus one
 dropped epilog guard. The accumulate side (`reduce_by_key.mojo`) came back
 CLEAN on the veclen question. Two deliberate differences are newly priced as
-PORTING.md 42 and 43.
+archive/reference/PORTING.md 42 and 43.
 
 ## The diff table
 
@@ -29,7 +29,7 @@ PORTING.md 42 and 43.
 | 5 | Epilogue norms | staged through smem, `load_norms` (`pairwise_distance_base.cuh:243-274`), X row only on the first column tile | `xn`/`yn` read from GLOBAL per cell/column-tile (xn re-read from global for every column tile) | **FIXED**: ported `load_norms` including its first-tile guard; +512 B smem |
 | 5b | Epilogue op | `l2_exp_distance_op::epilog` (`l2_exp.cuh:117-136`): positivity clamp AND self-neighbor round-off guard `!((val*val < 1e-6) * (xn == yn))` | sign clamp only; the guard was dropped (recorded in the old PORTED_MAP row) | **FIXED**: full guard ported, `FUSED_CLAMP_PRECISION = 1e-6` = their `get_clamp_precision<float>` (`l2_exp.cuh:36`) |
 | 5c | `sqrt` placement | per accumulator cell before the min reduce (`l2_exp.cuh:137-145`) | once per row at the final write | **KEPT, now priced**: monotone + injective on `[0, inf)`, so argmin, tie set, and written value are bit-identical; 16 sqrts/thread/tile -> 4/row. **DEVIATION 45** |
-| 5d | Tie-break | fused: `KVPMinReduceImpl` value-only (`helper_structs.cuh:39-44`, shuffle-shape dependent); unfused: `raft::argmin_op` total order | argmin_op total order in both arms | UNCHANGED -- pre-existing documented deviation, PORTING.md 14 |
+| 5d | Tie-break | fused: `KVPMinReduceImpl` value-only (`helper_structs.cuh:39-44`, shuffle-shape dependent); unfused: `raft::argmin_op` total order | argmin_op total order in both arms | UNCHANGED -- pre-existing documented deviation, archive/reference/PORTING.md 14 |
 | 6 | Accumulate side | `reduce_rows_by_key.cuh` reads `d_A` ONE element per thread, no veclen anywhere (rowmajor `:280-287`, colmajor `:213-227`; `reduce_cols_by_key.cuh` likewise); privatization structure = their cached/colmajor arms | scalar reads, same flat cell indexing, Int32 fixed-point (documented) | **CLEAN. No change.** The veclen suspicion does not apply: upstream's own accumulate is scalar |
 | 6b | Cross-thread merge | `raft::shfl` rotate in width-`AccThCols` subgroups (`simt_kernel.cuh:119-130`) | `shuffle_xor` butterfly, identical result over the total order | UNCHANGED -- already ported and argued in the module docstring |
 
@@ -52,7 +52,7 @@ story.
 Deliberate differences, all priced: single smem page (DEVIATION 44, forced
 by Apple's 32 KB threadgroup cap, free at `k <= 32`), sqrt at the write
 (DEVIATION 45, provably bit-identical), grid.x pinned 1 + no mutex
-(pre-existing `replaced` row, updated), argmin_op total order (PORTING.md
+(pre-existing `replaced` row, updated), argmin_op total order (archive/reference/PORTING.md
 14, pre-existing).
 
 ## Summation-order caveat
@@ -114,4 +114,4 @@ plus the report commit that follows it.
 Files: `cluster/gbdt/distance/fused_distance_nn/simt_kernel.mojo`,
 `cluster/gbdt/cluster/detail/min_cluster_distance_compute.mojo`,
 `cluster/mojo_only/kmeans_check.mojo`, `cluster/kmeans_main.mojo`,
-`cluster/PORTED_MAP.tsv`, `PORTING.md` (deviations 42, 43), this report.
+`cluster/PORTED_MAP.tsv`, `archive/reference/PORTING.md` (deviations 42, 43), this report.

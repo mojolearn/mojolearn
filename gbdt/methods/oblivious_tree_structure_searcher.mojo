@@ -8,8 +8,8 @@ CatBoost `54a8143a` -- `TFeatureParallelObliviousTreeSearcher::Fit`
 `TSubsetsHelper<NCudaLib::TMirrorMapping>::Split`
 (`pointwise_optimization_subsets.h:74-93`). Transliterated. Do not improve.
 
-RUNG 2. `NEXT_TWO.md` and `PORTING.md` 119 both priced this as "the fold
-layout plus wiring, not a second searcher", on the strength of `PORTING.md`
+RUNG 2. `archive/plans/NEXT_TWO.md` and `archive/reference/PORTING.md` 119 both priced this as "the fold
+layout plus wiring, not a second searcher", on the strength of `archive/reference/PORTING.md`
 91 B. **THAT PRICING IS WRONG AND THIS FILE IS WHY.** The correction is
 below and it is the main result of this rung; the identity gate is the
 second.
@@ -306,7 +306,7 @@ def fit_feature_parallel_oblivious_tree_structure(
     defect, and a permanently wired defect selector is one. The reach
     evidence for this file is five defects planted by EDITING it and re-run,
     tabulated in `checks/feature_parallel_identity_check.mojo`'s
-    docstring and in `PORTING.md` 120.
+    docstring and in `archive/reference/PORTING.md` 120.
     """
     # `CB_ENSURE(FoldBasedTasks.size() || SingleTaskTarget);` (`:47`)
     if n_rows <= 0:
@@ -411,7 +411,7 @@ def fit_feature_parallel_oblivious_tree_structure(
         # then `TakeBest(bestSplitProp, calcer->ReadOptimalSplit())`
         # (`:188-195`) -- incumbent FIRST, so a full tie takes the NEW
         # candidate. The calcer's own fold goes the other way; both are
-        # theirs (`NEXT_TWO.md` TRAPS).
+        # theirs (`archive/plans/NEXT_TWO.md` TRAPS).
         var best = TBestSplitProperties()
         best = take_best(best, calcer.read_optimal_split(ctx))
 

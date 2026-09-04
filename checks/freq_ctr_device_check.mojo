@@ -8,7 +8,7 @@
 (`gbdt/ctrs/ctr_calcers.mojo`) against the host driver
 `compute_simple_ctrs`, which `checks/ctr_check.mojo` already gates
 against PLANTED counts and an independent O(n^2) tally. This check closes
-`PORTING.md` deviation 52: the last host-side piece of the CTR block now
+`archive/reference/PORTING.md` deviation 52: the last host-side piece of the CTR block now
 has a device arm, and this file is what makes that a measurement.
 
 ## Why BIT-equality and not a tolerance

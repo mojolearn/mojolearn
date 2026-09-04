@@ -10,7 +10,7 @@ was bit-identical Apple M4 (Metal) to NVIDIA H100 (PTX) and Apple M4 to AMD
 MI325X (HIP), 60 stages each, judged by `tools/e3_round_judge.sh` section 7
 (`bench/results/e1/2026-08-23_165142-mojolearn-e2-nv/lanes/gemm.identical.card`
 and its MI325X sibling under `2026-08-23_172650-mojolearn-e2-amd`,
-`E3_RESULTS.md` round 11). IDENTITY_PATHS row 40. **The charter's completion
+`archive/evidence/E3_RESULTS.md` round 11). IDENTITY_PATHS row 40. **The charter's completion
 sentence is EARNED for the 62 shapes and eight plans the card covers, and for
 nothing outside them.**
 
@@ -827,7 +827,7 @@ separate kernels, or through exposed latency when there are too few
 independent output cells to hide the dependency chain (tall-skinny Gram, a
 covariance `AᵀA` over millions of rows, a batch-1 token GEMM). That sentence
 is about the ARITHMETIC and does not cover the REGISTER BUDGET, which
-`gemm/TUNING_PLAN.md` DEVIATION 1253 prices separately and at more than zero.
+`archive/plans/gemm/TUNING_PLAN.md` DEVIATION 1253 prices separately and at more than zero.
 
 ### 13.4 The cost clause 6 warns about does not arise at any legal `k`
 

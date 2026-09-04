@@ -7,7 +7,7 @@ PRIVATE MODULE. `Mamba1Block`, `Mamba2Block`, `Mamba3Block` and their
 state classes are re-exported from `mojolearn/__init__.py` and from
 `mojolearn.mamba`.
 
-WRITTEN 2026-09-01, closing `mamba/FEATURE_PARITY.md`'s consumer table
+WRITTEN 2026-09-01, closing `archive/evidence/mamba/FEATURE_PARITY.md`'s consumer table
 row "PyPI surface: NONE EXISTS" -- until this file, the certified Mamba-1
 block (profile `mojolearn.identical.mamba1.fp32.v1`, three-vendor
 identity card, IDENTITY_PATHS row 55) and the Mamba-2 block (profile
@@ -48,7 +48,7 @@ FLOAT32 ONLY, AND LOUDLY (DEVIATION 793). This surface REFUSES any
 non-float32 dtype BY NAME -- bfloat16 and float16 because the reference
 implementations' reduced-precision runs are a MIXTURE of cast boundaries
 that is not this profile (a certified bf16 profile is SHIP LATER under
-its own version name; `mamba/FEATURE_PARITY.md` section 7's paragraph),
+its own version name; `archive/evidence/mamba/FEATURE_PARITY.md` section 7's paragraph),
 and float64 because a silent downcast would make the bits that ran bits
 you did not make. This DIFFERS from the classical estimators' `as_f32_c`
 convenience conversion, deliberately: those surfaces summarize data,
@@ -82,7 +82,7 @@ measurement cannot be correctly labelled by accident.
 
 RUN LEDGER. The Mamba-1/Mamba-2 surface BUILT AND GATED 2026-09-01: all
 three tiers green through `tests/test_mamba_surface.py`, bitwise arms
-asserted under identical (`mamba/FEATURE_PARITY.md`'s consumer-table
+asserted under identical (`archive/evidence/mamba/FEATURE_PARITY.md`'s consumer-table
 PyPI row; one box, one vendor). `Mamba3Block`/`Mamba3State`, added
 later the same day, are BUILT AND GATED: green at `08a38a13`
 (2026-09-02) in all three tiers, bitwise-asserted, corpus arm added
@@ -149,7 +149,7 @@ def _f32_strict(a, what, name):
             "reduced-precision runs are a mixture of cast boundaries "
             "that is not this profile, and a certified bf16 profile is "
             "SHIP LATER under its own version name "
-            "(mamba/FEATURE_PARITY.md section 7). float64 is refused "
+            "(archive/evidence/mamba/FEATURE_PARITY.md section 7). float64 is refused "
             "rather than downcast so the bits that ran are bits you "
             "made. Convert yourself and pass float32."
         )
@@ -348,7 +348,7 @@ class Mamba1Block(_MambaBase):
         out_proj.weight  (d_model, d_inner)
 
     WHAT IS HONORED, WHAT IS FIXED, WHAT IS REFUSED -- the parity table
-    (`mamba/FEATURE_PARITY.md` section 1) is normative; one line each:
+    (`archive/evidence/mamba/FEATURE_PARITY.md` section 1) is normative; one line each:
 
         d_model         honored   free (the arithmetic reads no shape);
                                   gated at 8 and 16, wider is UNVERIFIED
@@ -532,7 +532,7 @@ class Mamba2Block(_MambaBase):
         out_proj.weight    (d_model, d_inner)
 
     WHAT IS HONORED, WHAT IS FIXED, WHAT IS REFUSED -- the parity table
-    (`mamba/FEATURE_PARITY.md` section 2) and the contract's section 3
+    (`archive/evidence/mamba/FEATURE_PARITY.md` section 2) and the contract's section 3
     are normative:
 
         d_model         honored   any MULTIPLE OF 32 (headdim 64 with
@@ -844,7 +844,7 @@ class Mamba3Block(_MambaBase):
         out_proj.weight    (d_model, d_inner)
 
     WHAT IS HONORED, WHAT IS FIXED, WHAT IS REFUSED -- the parity
-    addendum row (`mamba/FEATURE_PARITY.md`, "Mamba-3 SURFACE KNOBS")
+    addendum row (`archive/evidence/mamba/FEATURE_PARITY.md`, "Mamba-3 SURFACE KNOBS")
     and the contract's section 3 are normative:
 
         d_model         honored   any MULTIPLE OF 32 (headdim 64 with

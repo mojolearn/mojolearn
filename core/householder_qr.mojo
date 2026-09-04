@@ -25,7 +25,7 @@ made and wrote down live here now, ONCE, and nowhere else:
                          and the `u1` below ADDS two same-signed terms
                          instead of subtracting near-equal ones. This is the
                          classical cancellation the formulation exists to
-                         avoid; `arima/SABOTAGES.md` arm (l) flips it and
+                         avoid; `archive/research/arima/SABOTAGES.md` arm (l) flips it and
                          `check_full_reflector_sign_earns_its_place` in this
                          tree's decomposition lane flips it again on a
                          near-collinear fixture.

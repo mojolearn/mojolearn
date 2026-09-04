@@ -4,7 +4,7 @@
 
     Writes:    extratrees/tools/sklearn_reference.txt
     Reads:     a dump produced by extratrees/checks/fixture_parity_check.mojo
-    Explained: extratrees/tools/README_sklearn_reference.md
+    Explained: archive/evidence/extratrees/README_sklearn_reference.md
 
 THIS IS NOT A CORRECTNESS GATE, AND READING IT AS ONE IS A MISTAKE
 ------------------------------------------------------------------
@@ -36,7 +36,7 @@ seed changes". A number outside that range is a FINDING TO REPORT. It is not a
 target to tune toward, and nothing in this lane may be adjusted to hit it --
 that would be fitting our learner to a second learner's noise.
 
-It is also, per `STANDING_ORDERS.md` rule 4, never run on a real dataset.
+It is also, per `archive/plans/STANDING_ORDERS.md` rule 4, never run on a real dataset.
 Every fixture here is constructed, adversarial, and hand-describable.
 
 STEP 1 IS FIXTURE PARITY, AND IT IS THE LOAD-BEARING ONE
@@ -742,7 +742,7 @@ def write_reference(
     w("# gap further. A number outside a band below is a FINDING TO REPORT, never")
     w("# a target to tune toward.")
     w("#")
-    w("# Regenerate:  see extratrees/tools/README_sklearn_reference.md")
+    w("# Regenerate:  see archive/evidence/extratrees/README_sklearn_reference.md")
     w("#")
     w("# Every float is written as <decimal>/<hexbits>, the hexbits being the")
     w("# big-endian IEEE-754 float64 bit pattern. READ THE HEX. `String(Float32)`")

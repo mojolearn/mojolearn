@@ -140,7 +140,7 @@ comptime IF_BUILD_TPB = 128
 (`:397`). A scheduling width: only the gather uses the block's threads."""
 
 comptime IF_DECISION_WORDS = 6
-"""Int32 words of RECORDED DECISION per node (CARD_GAPS.md's isolation
+"""Int32 words of RECORDED DECISION per node (archive/plans/CARD_GAPS.md's isolation
 forest items 1-4). See `build_tree_iterative_global` for the layout.
 
 These are decisions the ALGORITHM makes, never ones the scheduler makes:
@@ -400,7 +400,7 @@ def build_tree_iterative_global(
             # proof is short enough to keep next to it so nobody writes a
             # gate that can never fire (adjudicated 2026-08-24; the
             # repo-wide card audit flagged it as a possible dangling-node
-            # defect, CARD_GAPS.md:232-236).
+            # defect, archive/plans/CARD_GAPS.md:232-236).
             #
             #   `max_nodes_per_tree = min(2*max_samples - 1,
             #   2^(max_depth+1) - 1)` with `max_samples >= 1` and

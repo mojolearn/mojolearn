@@ -5,7 +5,7 @@
 `tools/e1_traced_fit.py` is the GBDT/ET/RF driver and it goes through the
 Python bindings. There is no binding for `cluster/`, `neighbors/` or
 `dbscan/`, so the unsupervised half of the ledger had no way to produce a
-card at all -- which is why `UNSUPERVISED_IDENTITY.md`'s first owed item
+card at all -- which is why `archive/research/UNSUPERVISED_IDENTITY.md`'s first owed item
 ("a second vendor") could not even be attempted. This main is that way.
 
 ONE ARM PER PROCESS, AND THAT IS THE DIFFER'S CONTRACT, NOT A CONVENIENCE.
@@ -16,7 +16,7 @@ restart. `MOJOLEARN_UNSUP_ARM` selects `kmeans`, `knn` or `dbscan` and the
 process ends.
 
 THE FIXTURE IS AN INTEGER-EXACT FUNCTION OF A CONSTANT SEED, for the same
-reason E1's is (`E1_RESULTS.md`, "Inputs are a pure function of a fixed seed
+reason E1's is (`archive/evidence/E1_RESULTS.md`, "Inputs are a pure function of a fixed seed
 with integer-exact target construction"): a cross-vendor claim about a fit
 is worth nothing until both machines are proven to have fitted the SAME
 BYTES. Every coordinate here is `<small integer> / <power of two>`, which

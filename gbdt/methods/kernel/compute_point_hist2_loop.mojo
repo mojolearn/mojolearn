@@ -5,7 +5,7 @@
 PORT OF `catboost/cuda/methods/kernel/compute_point_hist2_loop.cuh` at
 CatBoost `54a8143a`. Transliterated. Do not improve.
 
-This is the spine of the pointwise family (`PORTING.md` 91 B, `NEXT_TWO.md`
+This is the spine of the pointwise family (`archive/reference/PORTING.md` 91 B, `archive/plans/NEXT_TWO.md`
 rung 1). Every one of their `pointwise_hist2*` kernels is this loop
 instantiated with a different accumulator; the loop knows nothing about bin
 widths, shared-memory layouts or writeback, and the accumulator knows nothing
@@ -13,7 +13,7 @@ about striping, alignment or block-per-feature splitting.
 
 WHY IT IS SHARED HERE AND DUPLICATED IN THE OTHER FAMILY
 --------------------------------------------------------
-`PORTING.md` 13 records that the greedy-subsets family carries a COPY of its
+`archive/reference/PORTING.md` 13 records that the greedy-subsets family carries a COPY of its
 loop in every kernel, and that the duplication once shipped a silently wrong
 histogram because a fix landed in one copy and not the other. The stated
 reason was that Mojo could not pass a shared-memory pointer across a function
@@ -74,7 +74,7 @@ from checks.kernel_matrix import (
 )
 
 
-#: PORTING.md 11's row, and here it is a PRECONDITION rather than a tuning
+#: archive/reference/PORTING.md 11's row, and here it is a PRECONDITION rather than a tuning
 #: knob. CatBoost's accumulators sync a `tiled_partition<8>` INSIDE
 #: `AddPoint` (`pointwise_hist2_one_byte_5bit.cu:79`, `:108`, `:147`), which
 #: is lane-local, so lanes with different iteration counts never wait on
@@ -115,7 +115,7 @@ trait PointHist2(Movable):
       `add_point_4` must be `add_point` four times in the order (x, y, z, w).
       The wide variants exist to widen the LOAD, not to change the sum.
       An accumulator that reorders them makes vector width a numeric knob
-      and breaks the identity `NEXT_TWO.md` rung 2 is gated on.
+      and breaks the identity `archive/plans/NEXT_TWO.md` rung 2 is gated on.
     * `reduce` is called with every thread of the block present and after a
       `barrier()`, because theirs is (`:126`, `:234`, `:344`).
     * a bin of 0 with a target and weight of 0 must be a no-op, since that
@@ -125,7 +125,7 @@ trait PointHist2(Movable):
     def add_point(mut self, ci: UInt32, t: Float32, w: Float32, row: UInt32):
         """`AddPoint(ci, wt, w)`, plus a row id CatBoost does not pass.
 
-        ============== DEVIATION BLOCK (PORTING.md 93) ==============
+        ============== DEVIATION BLOCK (archive/reference/PORTING.md 93) ==============
         `row` is `indices[position]` -- the gathered document id, NOT the
         position. It exists for exactly one implementor: `PointHist8`
         accumulates in FIXED POINT because its design calls `atomicAdd` on
@@ -203,7 +203,7 @@ def _peel[
     """Their striding peel loop (`:150-157`, `:176-184`, `:262-269`,
     `:288-296`), CONVERGED for the whole block.
 
-    ============== DEVIATION BLOCK (PORTING.md 11 and 92) ==============
+    ============== DEVIATION BLOCK (archive/reference/PORTING.md 11 and 92) ==============
     Theirs is `for (; colId < span; colId += blockDim.x / HIST_BLOCK_COUNT)`,
     and at any block wider than `span` the threads with `colId >= span`
     never enter it at all. Under an 8-lane tile sync that is harmless: the
@@ -331,7 +331,7 @@ def compute_histogram[
     comptime stripe = stripe_size * blocks_per_feature
 
     if ds_size != 0:
-        # ============== DEVIATION BLOCK (PORTING.md 11 and 92) ==========
+        # ============== DEVIATION BLOCK (archive/reference/PORTING.md 11 and 92) ==========
         # THEIRS IS PER-THREAD, OURS IS PER-BLOCK, and this is forced:
         #
         #     iteration_count        = (dsSize - i + stripe - 1) / stripe
@@ -358,7 +358,7 @@ def compute_histogram[
             " written. A column whose sync_granularity_for is not"
             " SYNC_BLOCK could run CatBoost's per-thread counts directly,"
             " but that path does not exist here -- write it rather than"
-            " letting this fall through (PORTING.md 11)."
+            " letting this fall through (archive/reference/PORTING.md 11)."
         )
         var max_iters = (ds_size + (stripe - 1)) // stripe
         var own_iters = 0
@@ -487,7 +487,7 @@ def compute_histogram_2[
         # `compute_histogram` -- same reason, same zero-point filler
         comptime assert UNIFORM_ITERATION, (
             "compute_histogram_2 only has the uniform-iteration path"
-            " written (PORTING.md 11)"
+            " written (archive/reference/PORTING.md 11)"
         )
         var i = 2 * _column_of_thread[hist_block_count](Int(thread_idx.x))
         var max_iters = (ds_size + (stripe - 1)) // stripe
@@ -599,7 +599,7 @@ def compute_histogram_4[
         # `compute_histogram`
         comptime assert UNIFORM_ITERATION, (
             "compute_histogram_4 only has the uniform-iteration path"
-            " written (PORTING.md 11)"
+            " written (archive/reference/PORTING.md 11)"
         )
         var i = 4 * _column_of_thread[hist_block_count](Int(thread_idx.x))
         var max_iters = (ds_size + (stripe - 1)) // stripe

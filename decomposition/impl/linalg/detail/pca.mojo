@@ -409,7 +409,7 @@ def pca_fit(
     """
     pca_validate(n_rows, n_cols, n_components)
 
-    # Mojo refuses one buffer as two mutable kernel arguments (PORTING.md 24),
+    # Mojo refuses one buffer as two mutable kernel arguments (archive/reference/PORTING.md 24),
     # and X^T X names X twice, so the caller supplies an aliased copy.
     compute_covariance(
         ctx, x, x_alias, x_alias2, mu, cov, n_rows, n_cols, restore_input
@@ -464,7 +464,7 @@ def sign_flip_kernel(
     WHY TWO PASSES AND NOT `cub::BlockReduce<cub::KeyValuePair<int, T>>`.
     Theirs reduces a (index, value) pair with `cub::ArgMax`.
     `max.gpu.primitives.block.max` reduces VALUES only, and
-    VENDOR_LIBRARIES.md records no block reduce over a custom operator or a
+    archive/reference/VENDOR_LIBRARIES.md records no block reduce over a custom operator or a
     pair type, so the argmax is split: `block_max` over `|entry|`, then
     `block_min` over the indices that attain it. The alternative was a
     warp-shuffle reduction carrying the index alongside the value, which
@@ -635,7 +635,7 @@ def order_truncate_spectrum(
     # n_cols = 128 and 32640 at 256, against an eigendecomposition that
     # already cost O(n_cols^3) on the device. It is a permutation of INDICES
     # with no arithmetic in it, so nothing here can move a number, and
-    # `HOST_AND_DEVICE.md`'s rule is about O(rows), which this is not.
+    # `archive/reference/HOST_AND_DEVICE.md`'s rule is about O(rows), which this is not.
     #
     # It stops being the right shape when `n_cols` reaches the low thousands.
     #
@@ -644,7 +644,7 @@ def order_truncate_spectrum(
     # non-monotone at 257 and every larger size tried, with the first
     # inversion always at output position 256; it raises nothing and returns a
     # well-formed permutation, so it would silently reorder the components at
-    # exactly the sizes this note is about. VENDOR_LIBRARIES.md listed it as
+    # exactly the sizes this note is about. archive/reference/VENDOR_LIBRARIES.md listed it as
     # device-capable on the strength of its signature. OPEN, and it needs a
     # device sort we can trust, not this one.
     var order = List[Int]()
@@ -724,7 +724,7 @@ def eig_and_truncate(
     """
     # `calEig` -> cuSOLVER `syevj`, WHICH RUNS ON THE DEVICE. So this runs
     # on the device too. The first version of this port put it on the host,
-    # which was inside HOST_AND_DEVICE.md's O(rows) rule but was NOT a mirror
+    # which was inside archive/reference/HOST_AND_DEVICE.md's O(rows) rule but was NOT a mirror
     # of their host/device split, and mirroring that split is the standing
     # rule. `jacobi_eigh.mojo` survives as the reference this is checked
     # against.
@@ -796,7 +796,7 @@ def eig_and_truncate(
     # Only the O(n_cols^2) post-processing comes back: ordering, truncation
     # and the variance ratios. RAFT does that part on device too
     # (`colReverse`, `truncZeroOrigin`, `matrix::ratio`), so this is still
-    # a departure and it is named in UNWIRED.md rather than glossed. It is
+    # a departure and it is named in archive/plans/UNWIRED.md rather than glossed. It is
     # O(cols^2), never O(rows).
     #
     # The SIGN convention is no longer in that list: `sign_flip_kernel` above
@@ -927,7 +927,7 @@ def pca_transform(
 # reasons that both matter here: it is the design source this file mirrors,
 # and it is `O(n_components * n_cols)` where scikit-learn's is
 # `O(n_rows * n_components)` -- the components matrix is the small one, and
-# `HOST_AND_DEVICE.md`'s rule is about what scales with rows.
+# `archive/reference/HOST_AND_DEVICE.md`'s rule is about what scales with rows.
 #
 # SO THE PROJECTION KERNEL IS UNCHANGED. `pca_transform` still calls
 # `gemm_nt` on a components buffer; whitening only decides WHICH components

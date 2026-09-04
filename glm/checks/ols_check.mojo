@@ -780,7 +780,7 @@ def _fit_bits(
     #
     # `emit_ols_card`'s fixture (`ols_trace.mojo`) always used two host
     # buffers, which is why the traced repro never reproduced and every leg
-    # reported that the card fixture's two fits agreed. PORTING.md item 12
+    # reported that the card fixture's two fits agreed. archive/reference/PORTING.md item 12
     # states the rule this violated, and records that the last time it cost
     # an hour and "presented as a broken kernel".
     var big_b = ctx.enqueue_create_host_buffer[DType.float32](n)

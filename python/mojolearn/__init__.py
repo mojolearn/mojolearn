@@ -1,104 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""mojolearn: GPU machine-learning algorithms in Mojo, running on Apple Silicon.
+"""GPU machine learning in Mojo with explicit numerical contracts.
 
-The algorithms here mirror the designs of the CUDA implementations that
-established them -- CatBoost, cuVS, cuML, RAFT -- and run on hardware none of
-those can reach. See NOTICE for the attribution each carries.
+The same source tree targets Apple Metal, NVIDIA CUDA, and AMD HIP. Public
+estimators offer ``fast``, ``deterministic``, and ``identical`` modes; the
+last promises cross-vendor bit identity only for configurations certified in
+the project's support matrix. A GPU is required and there is no CPU fallback.
 
-WHAT IS IN THIS ALPHA, AND WHAT IS NOT
----------------------------------------
-Twenty-seven estimators, three submodules, two functions and (since
-2026-09-01) the three Mamba block classes: `NearestNeighbors`, `KNeighborsClassifier`,
-`KNeighborsRegressor`, `RadiusNeighbors`, `KMeans`, `DBSCAN`, `PCA`, `TruncatedSVD`,
-`LinearRegression`, `Ridge`, `LogisticRegression` (binary, L-BFGS),
-`GradientBoosting`, `RandomForestClassifier`, `RandomForestRegressor`,
-`ExtraTreesClassifier` and `ExtraTreesRegressor`.
-All are backed by kernels verified against hand-computed expectations and,
-for k-means, k-NN classification and regression, the forests and the
-ensemble, against cuVS, cuML, scikit-learn and CatBoost's own output. Each
-class docstring carries a WHAT IS HONORED / REFUSED table: a parameter the
-kernel does not carry is refused BY NAME with the reason, never accepted
-and ignored, and `tools/e2u_matrix_fit.py` measures that every honored
-parameter moves the answer on a fixture that should move.
-
-`GradientBoosting` is the CatBoost GPU tree learner -- all three of its
-growth policies (`grow_policy`: the oblivious SymmetricTree default,
-Depthwise and Lossguide, the last two building non-symmetric trees) -- and
-trains thirteen of their loss functions -- RMSE, Logloss, CrossEntropy,
-Quantile, MAE, LogLinQuantile, MAPE, Poisson, Lq, Expectile, Tweedie, Huber,
-MultiClass -- with the leaf estimator CatBoost itself picks per loss.
-`MultiClassOneVsAll` is NOT on this surface and is named rather than left out
-silently (see `ensemble.py`'s `_UNREACHABLE_LOSSES` for why). The
-non-symmetric policies accept exactly the losses CatBoost's GPU registers a
-non-symmetric trainer for, and refuse the rest by name.
-
-**`DBSCAN`, `PCA`, `TruncatedSVD` and `LinearRegression` ARE here** (since
-2026-08-23). This docstring used to say they were not, and that sentence
-outlived the fact by a day: `density.py`, `decomposition.py` and
-`linear_model.py` had been bound through `_mojolearn_estimators` with the
-policy each needs stated on the class, and were reachable only as
-submodules while `__getattr__` still told a caller they had no surface.
-**`ARIMA` IS here** (since 2026-09-01), and `_NOT_YET` below, which existed
-to explain its absence, is now empty. It is the one estimator in this package
-whose `y` is 2-D: the lane is BATCHED, one series per row, each with its own
-parameters, and `_arima_impl.py` says on the class what else follows from
-that. Its surface gate `tests/test_arima_surface.py` printed green in both
-of its tiers on 2026-09-02, 88 checks and 0 failed in each, on ONE APPLE
-M4 -- the fit itself has still never run on a second vendor and the class
-says so rather than inheriting the lane's Kalman-filter card.
-**THE MAMBA BLOCKS ARE here** (since 2026-09-01): `Mamba1Block`,
-`Mamba2Block` and `Mamba3Block` (also as the `mojolearn.mamba`
-submodule), reference-pinned SSM blocks with explicit caller-owned state
-for prefill, continuation and single-token decode. They are NOT
-estimators -- no `fit` -- and they exist for cross-checking:
-`_mamba_impl.py` carries the contracts. The Mamba-1/2 surface gate
-printed green in all three tiers on 2026-09-01 (one box, one vendor);
-the Mamba-3 arms printed green the same evening at `08a38a13` in all
-three tiers, identical bitwise-asserted (`mamba/FEATURE_PARITY.md`'s
-RUN LEDGER; still one box, one vendor).
-**THE TRANSFORMER BLOCK IS here** (since 2026-09-02): `TransformerBlock`
-(also as the `mojolearn.transformer` submodule), the reference-pinned
-Llama-shaped decoder layer with an explicit caller-owned KV cache
-(`TransformerState`) for prefill, continuation and single-token decode.
-Not an estimator -- no `fit` -- and it exists for cross-checking:
-`_transformer_impl.py` carries the contract on the class. Its surface
-gate printed green in all three tiers on 2026-09-02, the day the binding
-first compiled -- one box, one vendor, APPLE ONLY, with the NVIDIA and
-AMD columns of this surface OWED; the LANE underneath is recorded
-byte-identical Apple/NVIDIA/AMD for the forward's clauses (a) and (d)
-(transformer/README.md).
-**`GaussianProcessRegressor` IS here** (since 2026-09-01, later the same
-day), with its four kernel classes `RBF`, `Matern`, `ConstantKernel` and
-`WhiteKernel`. It was the one `_NOT_YET` entry ever held back for a reason
-OTHER than a missing surface: its IDENTICAL card was believed to diverge
-Apple against AMD on 8 of 3,494 stages. That reading was WITHDRAWN at
-`9835094e` -- the eight lines are the sabotaged half of one
-`GP_SAB_STD_EXP` clean-then-sabotaged pair, an arm built to make a device
-`exp` differ, and the shipped path is byte-identical on the other 3,486
-lines -- and with the sole blocker withdrawn the withholding text
-contradicted the evidence, so the surface was written (`_gp_impl.py`,
-whose header carries the history).
-
-WHAT THIS IS NOT
-----------------
-Not a drop-in scikit-learn replacement. The estimators take scikit-learn's
-shapes and return scikit-learn's layouts, but **the defaults follow the
-upstream each algorithm mirrors, not scikit-learn's**, and where those differ
-it is documented on the class. `KMeans.n_init` is the one that will surprise
-you: cuVS's default is 1 and scikit-learn's is 10.
-
-Not validated outside Apple Silicon. One source targets Metal, CUDA and ROCm,
-and this has been measured on exactly one M4. Support is not validation.
-
-**There is no CPU path, and this docstring used to say there was.** The
-sentence read "One source targets CPU, Metal, CUDA and ROCm", which was true
-of the predecessor library and was carried across the rename. It is false
-here: every estimator in this package requires a GPU, `kernel_matrix.mojo`
-states "There is no CPU column. This tree has no CPU path," and no CPU kernel
-exists to fall back to. A user reading a promise of CPU support in the
-package's own docstring would discover otherwise at the first call, which is
-the worst place in the tree for that sentence to have been.
+The API uses familiar scikit-learn shapes but is not a drop-in replacement.
+Defaults may follow the mirrored GPU implementation, and unsupported behavior
+is refused explicitly. See each class docstring and the project README for
+the current surface and limitations.
 """
 
 from ._version import __version__
@@ -215,7 +127,7 @@ from ._gp_impl import (
 )
 
 # `Mamba1Block` / `Mamba2Block` JOINED 2026-09-01 (later the same day
-# again), closing `mamba/FEATURE_PARITY.md`'s "PyPI surface: NONE
+# again), closing `archive/evidence/mamba/FEATURE_PARITY.md`'s "PyPI surface: NONE
 # EXISTS" row -- the single largest parity gap: both blocks were
 # certified at the kernel level (Mamba-1 three-vendor, Mamba-2 gated on
 # Apple) and exported no Python symbol at all. Not estimators -- no
@@ -227,7 +139,7 @@ from ._gp_impl import (
 # on 2026-09-01; `Mamba3Block` joined later the same day and its
 # `tests/test_mamba_surface.py` arms printed green that evening at
 # `08a38a13`, all three tiers, identical bitwise-asserted
-# (`mamba/FEATURE_PARITY.md` RUN LEDGER -- one box, one vendor; the
+# (`archive/evidence/mamba/FEATURE_PARITY.md` RUN LEDGER -- one box, one vendor; the
 # NVIDIA/AMD columns stay OWED there).
 # `_mojolearn_training.so` SHIPS IN THE WHEEL, so its Python half must be
 # reachable from the package. The release workflow's "nothing ships that

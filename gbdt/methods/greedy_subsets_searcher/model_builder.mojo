@@ -28,7 +28,7 @@ Theirs has `BuildTreeLikeModel<TObliviousTreeModel>`,
   `TLeafPath`s to fold back (`run_tree_layout` returns the split list
   directly, which is what their specialization spends its body recovering
   -- `structure.Splits = leaves[0].Splits`). Porting it now would mean
-  writing a function with no caller. `UNWIRED.md` records it.
+  writing a function with no caller. `archive/plans/UNWIRED.md` records it.
 * The REGION one belongs to `EGrowPolicy::Region`, which no lane owns.
 
 `EDuplicateTerminalLeavesPolicy` IS ported, both arms, because their
@@ -285,7 +285,7 @@ def _to_ui16(value: Int, what: String) raises -> UInt16:
     `ui32`. A dataset with more than 65,535 features, or a tree wider than
     65,535 leaves on one side, would wrap and produce a model that applies
     cleanly and answers wrong. This raises instead, which is a DEVIATION
-    (PORTING.md 350) and the only kind that is free: it cannot change any
+    (archive/reference/PORTING.md 350) and the only kind that is free: it cannot change any
     model their code would have built correctly.
     """
     if value < 0 or value > 65535:

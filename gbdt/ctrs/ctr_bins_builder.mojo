@@ -36,7 +36,7 @@ host arm at all.
 `TCtrBinBuilder` above it is the HOST reference. It computes the same
 thing in host loops, it is what `checks/ctr_check.mojo` gates the device
 answer against cell by cell, and the FeatureFreq calcer still runs on it.
-That half is what remains of `PORTING.md` deviation 52; the bin ordering
+That half is what remains of `archive/reference/PORTING.md` deviation 52; the bin ordering
 half is retired.
 
 `_stable_sort_by_bin` stands in for `ReorderBins` in the host builder. It
@@ -57,7 +57,7 @@ gather reads through `Indices`, the stable sort preserves the tie order,
 and the segmented scan sums "the rows of my bin that came before me" in
 whatever order the initial `Indices` established. So both builders take an
 ORDER rather than a row count, `order[i]` being the original row at
-position `i` -- `gbdt/data/permutation.mojo` and `PORTING.md` 55.
+position `i` -- `gbdt/data/permutation.mojo` and `archive/reference/PORTING.md` 55.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -228,7 +228,7 @@ struct TCtrBinBuilder(Movable):
         `binBuilder.GetIndices()` from it. This is the seam
         `TCtrBinBuilderGpu.read_indices` writes into, and it exists only
         because the freq calcer has not moved to the device yet
-        (`PORTING.md` 52). `Bins` and `CurrentBins` are left empty because
+        (`archive/reference/PORTING.md` 52). `Bins` and `CurrentBins` are left empty because
         no freq arm reads either: both walk `Indices` alone.
         """
         var b = Self(0)
@@ -630,7 +630,7 @@ struct TCtrBinBuilderGpu(Movable):
         two callers, and both are named here so this cannot quietly become a
         third: `checks/ctr_device_check.mojo`, which compares the device
         ordering against the host one cell by cell, and the FeatureFreq
-        calcer, which is the half of `PORTING.md` 52 that is still host
+        calcer, which is the half of `archive/reference/PORTING.md` 52 that is still host
         side.
         """
         var h = ctx.enqueue_create_host_buffer[DType.uint32](self.size)

@@ -166,7 +166,7 @@ def host_distance_weights(
 
     HOST LISTS IN AND OUT, not pointers, and that is a deliberate
     narrowing: this function is host-only, its caller already has the
-    distances in host memory, and `UNWIRED.md:31` records that a pointer
+    distances in host memory, and `archive/plans/UNWIRED.md:31` records that a pointer
     from `enqueue_create_host_buffer` is not interchangeable with an
     arbitrary host pointer on this stack -- SILENTLY. A `List` boundary
     cannot express that mistake.
