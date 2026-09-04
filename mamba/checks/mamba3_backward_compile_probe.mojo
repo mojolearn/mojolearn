@@ -64,6 +64,7 @@ from mamba.checks.mamba3_backward import (
     mamba3_rope_pair_is_rotated,
 )
 from mamba.impl.mamba_ssm.modules.mamba3_backward import (
+    mamba3_backward_block_norm_into,
     mamba3_backward_pack_in_proj_into,
 )
 
@@ -92,6 +93,9 @@ def _force_elaborate(
     mamba3_backward_reduce_into(ctx, a, b, c, ws, RED3_D, dims, m)
     mamba3_backward_pack_in_proj_into(
         ctx, p0, p1, p2, p3, p4, p5, p6, p7, p8, m, dims
+    )
+    mamba3_backward_block_norm_into(
+        ctx, p0, p1, p2, p3, p4, p5, p6, m, dims
     )
 
 

@@ -10,7 +10,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.identity_trace import IdentityTrace
 from mamba.checks.mamba3_backward import (
     PROJ3_IN, PROJ3_OUT,
-    RED3_D,
+    RED3_D, RED3_NORM_W,
     RED3_DT_BIAS,
     RED3_BNORM_W, RED3_CNORM_W, RED3_B_BIAS, RED3_C_BIAS,
     mamba3_backward_ones_floats,
@@ -54,6 +54,7 @@ from mamba.impl.mamba_ssm.modules.mamba3_backward import (
     mamba3_backward_a_heavy_tail_into,
     mamba3_backward_bcnorm_into,
     mamba3_backward_pack_in_proj_into,
+    mamba3_backward_block_norm_into,
 )
 from mamba.impl.transformers.models.mamba.modeling_mamba import (
     mamba_download,
@@ -250,6 +251,9 @@ def main() raises:
     mamba3_backward_pack_in_proj_into(ctx,d_in_proj,d_z,d_v_join,d_b_raw,d_c_raw,d_dt_raw_join,d_a_raw_join,d_trap_join,d_angle_raw_join,m,dims)
     mamba3_backward_proj_a_into(ctx,d_norm,d_in_proj,device_weights.w_in,workspace,PROJ3_IN,dims,m)
     mamba3_backward_proj_b_into(ctx,d_w_in,d_in_proj,stages.norm_out,workspace,PROJ3_IN,dims,m)
+    var d_x=mamba_zeros(ctx,m*dims.d_model);var d_norm_w_rows=mamba_zeros(ctx,m*dims.d_model);var d_norm_w=mamba_zeros(ctx,dims.d_model)
+    mamba3_backward_block_norm_into(ctx,d_x,d_norm_w_rows,d_norm,d_output,x,stages.norm_sumsq,device_weights.norm_w,m,dims)
+    mamba3_backward_reduce_into(ctx,d_norm_w,d_norm_w_rows,ones,workspace,RED3_NORM_W,dims,m)
     ctx.synchronize()
 
     _write_f32(
@@ -334,6 +338,8 @@ def main() raises:
     _write_f32(output + "/grad.partial.join.in_proj.packed.f32",mamba_download(ctx,d_in_proj,m*dims.d_in_proj()))
     _write_f32(output + "/grad.stage.norm.out.f32",mamba_download(ctx,d_norm,m*dims.d_model))
     _write_f32(output + "/grad.in_proj.weight.f32",mamba_download(ctx,d_w_in,dims.d_in_proj()*dims.d_model))
+    _write_f32(output + "/grad.x.f32",mamba_download(ctx,d_x,m*dims.d_model))
+    _write_f32(output + "/grad.block_norm.weight.f32",mamba_download(ctx,d_norm_w,dims.d_model))
     if case_k == 5:
         with open(output + "/dump_manifest.json", "w") as fh:
             fh.write(
@@ -389,7 +395,8 @@ def main() raises:
             + "\"partial.join.angle.dt\",\"partial.join.dt.available_total\","
             + "\"partial.join.dt.raw\",\"partial.join.dt_bias\",\"partial.join.B.raw\",\"partial.join.C.raw\","
             + "\"partial.join.B_norm.weight\",\"partial.join.C_norm.weight\",\"partial.join.B_bias\",\"partial.join.C_bias\","
-            + "\"partial.join.in_proj.packed\",\"stage.norm.out\",\"in_proj.weight\"]}\n"
+            + "\"partial.join.in_proj.packed\",\"stage.norm.out\",\"in_proj.weight\","
+            + "\"x\",\"block_norm.weight\"]}\n"
         )
 
     _ = d_gamma_qk^

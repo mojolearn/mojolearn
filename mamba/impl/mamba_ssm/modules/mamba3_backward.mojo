@@ -655,6 +655,91 @@ def mamba3_backward_pack_in_proj_into(
     )
 
 
+def mamba3_block_norm_backward_kernel(
+    dx: MutPointer[Float32, MutAnyOrigin],
+    dw_rows: MutPointer[Float32, MutAnyOrigin],
+    dy: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    sumsq: MutPointer[Float32, MutAnyOrigin],
+    weight: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    width_in: Int32,
+):
+    """Reverse the block RMSNorm; one owner serially folds each row."""
+    var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var m = Int(m_in)
+    var width = Int(width_in)
+    if row >= m:
+        return
+    var rstd = ftz(identical_rsqrt(ftz(
+        ftz(identical_div(sumsq.unsafe_load(row), Float32(width)))
+        + M3_RMS_EPS
+    )))
+    var dot = Float32(0.0)
+    for col in range(width):
+        var cell = row * width + col
+        var weighted = ftz(pinned_mul(
+            ftz(dy.unsafe_load(cell)), ftz(weight.unsafe_load(col))
+        ))
+        dot = ftz(identical_mul_add(
+            weighted, ftz(x.unsafe_load(cell)), dot
+        ))
+    var correction = ftz(pinned_mul(
+        ftz(pinned_mul(rstd, rstd)),
+        ftz(identical_div(dot, Float32(width))),
+    ))
+    for col in range(width):
+        var cell = row * width + col
+        var xv = ftz(x.unsafe_load(cell))
+        var dyv = ftz(dy.unsafe_load(cell))
+        var weighted = ftz(pinned_mul(dyv, ftz(weight.unsafe_load(col))))
+        dx.unsafe_store(cell, ftz(pinned_mul(
+            rstd, ftz(weighted - ftz(pinned_mul(xv, correction)))
+        )))
+        dw_rows.unsafe_store(cell, ftz(pinned_mul(
+            dyv, ftz(pinned_mul(xv, rstd))
+        )))
+
+
+def mamba3_residual_join_kernel(
+    dx: MutPointer[Float32, MutAnyOrigin],
+    residual_cotangent: MutPointer[Float32, MutAnyOrigin],
+    cells_in: Int32,
+):
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell < Int(cells_in):
+        dx.unsafe_store(cell, ftz(
+            ftz(dx.unsafe_load(cell))
+            + ftz(residual_cotangent.unsafe_load(cell))
+        ))
+
+
+def mamba3_backward_block_norm_into(
+    ctx: DeviceContext,
+    mut dx: DeviceBuffer[DType.float32],
+    mut dw_rows: DeviceBuffer[DType.float32],
+    mut dy: DeviceBuffer[DType.float32],
+    mut residual_cotangent: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut sumsq: DeviceBuffer[DType.float32],
+    mut weight: DeviceBuffer[DType.float32],
+    m: Int,
+    dims: Mamba3Dims,
+) raises:
+    ctx.enqueue_function[mamba3_block_norm_backward_kernel](
+        dx.unsafe_ptr(), dw_rows.unsafe_ptr(), dy.unsafe_ptr(), x.unsafe_ptr(),
+        sumsq.unsafe_ptr(), weight.unsafe_ptr(), Int32(m),
+        Int32(dims.d_model), grid_dim=(_grid(m), 1, 1),
+        block_dim=(M3_BWD_TPB, 1, 1),
+    )
+    ctx.enqueue_function[mamba3_residual_join_kernel](
+        dx.unsafe_ptr(), residual_cotangent.unsafe_ptr(),
+        Int32(m * dims.d_model),
+        grid_dim=(_grid(m * dims.d_model), 1, 1),
+        block_dim=(M3_BWD_TPB, 1, 1),
+    )
+
+
 def mamba3_s17_reverse_state_kernel(
     d_state_direct:MutPointer[Float32,MutAnyOrigin],d_state_total:MutPointer[Float32,MutAnyOrigin],d_initial:MutPointer[Float32,MutAnyOrigin],
     d_y:MutPointer[Float32,MutAnyOrigin],q:MutPointer[Float32,MutAnyOrigin],dacs:MutPointer[Float32,MutAnyOrigin],

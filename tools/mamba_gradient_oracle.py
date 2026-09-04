@@ -449,6 +449,10 @@ def generate(args):
         normj32=stages["norm.out"].detach().to(torch.float32).reshape(bsz*length,-1).requires_grad_(True);winj32=params["in_proj.weight"].detach().to(torch.float32).requires_grad_(True)
         dnormj32,_=torch.autograd.grad((torch.nn.functional.linear(normj32,winj32)*packedj32.detach()).sum(),(normj32,winj32))
         reference32.update({"partial.join.in_proj.packed":packedj32,"stage.norm.out":dnormj32,"in_proj.weight":_ordered_gemm_tn32(packedj32,normj32)})
+        blockx32=x.detach().to(torch.float32).requires_grad_(True);blockw32=params["block_norm.weight"].detach().to(torch.float32).requires_grad_(True)
+        blockss32=blockx32.square().sum(-1,keepdim=True);blockout32=blockx32*torch.rsqrt(blockss32/blockx32.shape[-1]+GEN.M3_EPS)*blockw32
+        dx32,dblockw32=torch.autograd.grad((blockout32.reshape_as(dnormj32)*dnormj32.detach()).sum()+_objective(blockx32),(blockx32,blockw32))
+        reference32.update({"x":dx32,"block_norm.weight":dblockw32})
     if args.family == "mamba2":
         tail_input = stages["gnorm.out"].detach().requires_grad_(True)
         tail_output = torch.nn.functional.linear(
