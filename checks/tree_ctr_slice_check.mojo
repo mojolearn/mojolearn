@@ -364,4 +364,29 @@ def main() raises:
             regenerated.table, x, extended_cindex, 6, r
         ):
             raise Error("regenerated tensor candidate value mismatch")
+
+    # A synchronized dynamic driver pins the ephemeral column capacity, so
+    # regeneration rewrites only its bits and never invalidates histogram or
+    # workspace sizing established before the tree loop.
+    var pinned_initial = stage_tensor_candidate_host(
+        base_columns, base_folds, List[Bool](),
+        dynamic_stage.candidate.copy(), fold_capacity=255,
+    )
+    var pinned_next = stage_tensor_candidate_host(
+        base_columns, base_folds, List[Bool](), regenerated^,
+        fold_capacity=255,
+    )
+    ref initial_cf = pinned_initial.compressed.layout.features[
+        pinned_initial.feature_id
+    ]
+    ref next_cf = pinned_next.compressed.layout.features[pinned_next.feature_id]
+    if (
+        pinned_initial.feature_id != pinned_next.feature_id
+        or initial_cf.offset != next_cf.offset
+        or initial_cf.mask != next_cf.mask
+        or initial_cf.shift != next_cf.shift
+        or initial_cf.first_fold_index != next_cf.first_fold_index
+        or initial_cf.folds != next_cf.folds
+    ):
+        raise Error("pinned tensor regeneration changed the search layout")
     print("tree CTR slice: deterministic pair FeatureFreq + text round trip PASS")

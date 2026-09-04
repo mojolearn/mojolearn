@@ -47,6 +47,7 @@ from mamba.impl.mamba_ssm.ops.mamba2_ssd_backward import (
     Mamba2SSDScaleReduction,
     mamba2_reduce_scale_product_into,
     mamba2_reverse_cumsum_and_da_into,
+    mamba2_ydiag_xd_and_partial_dt_into,
     mamba2_reverse_chunk_state_into,
     mamba2_s18_direct_dpass_into,
 )
@@ -204,9 +205,14 @@ def main() raises:
     )
     mamba2_reverse_cumsum_and_da_into(
         ctx, discretize_backward, scale_reduction.d_dacs_total,
-        stages.dt_work, stages.a_out, stages.dtraw_work, dweights.dt_bias,
-        fixture.b, stages.t_work, dims.nheads, stages.nc, m2_q_eff(),
-        fixture.dt_lo, fixture.dt_hi,
+        stages.dt_work, stages.a_out, fixture.b, stages.t_work,
+        dims.nheads, stages.nc, m2_q_eff(),
+    )
+    mamba2_ydiag_xd_and_partial_dt_into(
+        ctx, discretize_backward, tail.d_scan, stages.cb_g, stages.seg_l,
+        stages.xbc_work, stages.dt_work, stages.dtraw_work, dweights.dt_bias,
+        fixture.b, stages.t_work, dims.nheads, dims.d_inner,
+        dims.conv_dim(), stages.nc, m2_q_eff(), fixture.dt_lo, fixture.dt_hi,
     )
     ctx.synchronize()
     _write_f32(
@@ -328,14 +334,42 @@ def main() raises:
         ),
     )
     _write_f32(
-        dump_dir + "/grad.partial.dt_raw.from_da.f32",
+        dump_dir + "/grad.partial.xd.from_ydiag.f32",
+        mamba_download(
+            ctx, discretize_backward.d_xd_ydiag,
+            fixture.b * stages.t_work * dims.d_inner,
+        ),
+    )
+    _write_f32(
+        dump_dir + "/grad.partial.x.from_xd.f32",
+        mamba_download(
+            ctx, discretize_backward.d_x_from_xd,
+            fixture.b * stages.t_work * dims.d_inner,
+        ),
+    )
+    _write_f32(
+        dump_dir + "/grad.partial.dt.from_xd.f32",
+        mamba_download(
+            ctx, discretize_backward.d_dt_from_xd,
+            fixture.b * stages.t_work * dims.nheads,
+        ),
+    )
+    _write_f32(
+        dump_dir + "/grad.partial.dt.merged.f32",
+        mamba_download(
+            ctx, discretize_backward.d_dt_merged,
+            fixture.b * stages.t_work * dims.nheads,
+        ),
+    )
+    _write_f32(
+        dump_dir + "/grad.partial.dt_raw.merged.f32",
         mamba_download(
             ctx, discretize_backward.d_dtraw,
             fixture.b * stages.t_work * dims.nheads,
         ),
     )
     _write_f32(
-        dump_dir + "/grad.partial.dt_bias.from_da.f32",
+        dump_dir + "/grad.partial.dt_bias.merged.f32",
         mamba_download(ctx, discretize_backward.d_dt_bias, dims.nheads),
     )
     with open(dump_dir + "/dump_manifest.json", "w") as fh:
@@ -355,7 +389,9 @@ def main() raises:
             "\"partial.C.from_yoff\",\"partial.dacs.from_yoff\","
             "\"partial.dacs.total\",\"partial.da.total\","
             "\"partial.A.from_da\",\"partial.dt.from_da\","
-            "\"partial.dt_raw.from_da\",\"partial.dt_bias.from_da\"]}\n"
+            "\"partial.xd.from_ydiag\",\"partial.x.from_xd\","
+            "\"partial.dt.from_xd\",\"partial.dt.merged\","
+            "\"partial.dt_raw.merged\",\"partial.dt_bias.merged\"]}\n"
         )
     print(
         "MAMBA2 BACKWARD PARTIAL: emitted output projection + gated RMSNorm"

@@ -293,6 +293,10 @@ struct Mamba2SSDDiscretizeBackward(Movable):
     var d_dt: DeviceBuffer[DType.float32]  # [B,T,H], S10 contribution
     var d_dtraw: DeviceBuffer[DType.float32]  # [B,T,H], current partial
     var d_dt_bias: DeviceBuffer[DType.float32]  # [H], current partial
+    var d_xd_ydiag: DeviceBuffer[DType.float32]  # [B,T,H,P]
+    var d_x_from_xd: DeviceBuffer[DType.float32]  # [B,T,H,P]
+    var d_dt_from_xd: DeviceBuffer[DType.float32]  # [B,T,H]
+    var d_dt_merged: DeviceBuffer[DType.float32]  # current partial sum
 
     def __init__(out self, ctx: DeviceContext, b: Int, t: Int, nh: Int) raises:
         self.d_da = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
@@ -300,6 +304,14 @@ struct Mamba2SSDDiscretizeBackward(Movable):
         self.d_dt = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
         self.d_dtraw = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
         self.d_dt_bias = ctx.enqueue_create_buffer[DType.float32](nh)
+        self.d_xd_ydiag = ctx.enqueue_create_buffer[DType.float32](
+            b * t * nh * M2_HEADDIM
+        )
+        self.d_x_from_xd = ctx.enqueue_create_buffer[DType.float32](
+            b * t * nh * M2_HEADDIM
+        )
+        self.d_dt_from_xd = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
+        self.d_dt_merged = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
 
 
 def mamba2_reverse_cumsum_kernel(
@@ -395,17 +407,76 @@ def mamba2_dt_backward_kernel(
     d_dt_bias.unsafe_store(hh, dbias)
 
 
+def mamba2_ydiag_xd_backward_kernel(
+    d_xd: MutPointer[Float32, MutAnyOrigin],
+    d_x: MutPointer[Float32, MutAnyOrigin],
+    d_dt_xd: MutPointer[Float32, MutAnyOrigin],
+    d_dt_merged: MutPointer[Float32, MutAnyOrigin],
+    d_y: MutPointer[Float32, MutAnyOrigin],
+    cb_g: MutPointer[Float32, MutAnyOrigin],
+    seg_l: MutPointer[Float32, MutAnyOrigin],
+    xbc: MutPointer[Float32, MutAnyOrigin],
+    dt: MutPointer[Float32, MutAnyOrigin],
+    d_dt_da: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, t_in: Int32, nh_in: Int32, di_in: Int32,
+    cd_in: Int32, nc_in: Int32, q_in: Int32,
+):
+    """Reverse ydiag only, then reverse xd=dt*x and merge current d_dt."""
+    var b = Int(b_in)
+    var t_work = Int(t_in)
+    var nh = Int(nh_in)
+    var di = Int(di_in)
+    var cd = Int(cd_in)
+    var nc = Int(nc_in)
+    var qv = Int(q_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= b * t_work * nh:
+        return
+    var bb = cell // (t_work * nh)
+    var rem = cell - bb * t_work * nh
+    var tt = rem // nh
+    var hh = rem - tt * nh
+    var cc = tt // qv
+    var jj = tt - cc * qv
+    var real = t_work - cc * qv
+    if real > qv:
+        real = qv
+    var ddt = Float32(0.0)
+    var dtv = ftz(dt.unsafe_load(cell))
+    for pp in range(M2_HEADDIM):
+        var dxd = Float32(0.0)
+        for ii in range(jj, real):
+            var m = ftz(pinned_mul(
+                ftz(cb_g.unsafe_load(((bb * nc + cc) * qv + ii) * qv + jj)),
+                ftz(seg_l.unsafe_load(
+                    (((bb * nc + cc) * nh + hh) * qv + ii) * qv + jj
+                )),
+            ))
+            var dy = ftz(d_y.unsafe_load(
+                ((bb * t_work + cc * qv + ii) * nh + hh)
+                * M2_HEADDIM + pp
+            ))
+            dxd = ftz(identical_mul_add(m, dy, dxd))
+        var xp = ftz(xbc.unsafe_load(
+            (bb * t_work + tt) * cd + hh * M2_HEADDIM + pp
+        ))
+        var out_idx = cell * M2_HEADDIM + pp
+        d_xd.unsafe_store(out_idx, dxd)
+        d_x.unsafe_store(out_idx, ftz(pinned_mul(dxd, dtv)))
+        ddt = ftz(identical_mul_add(xp, dxd, ddt))
+    d_dt_xd.unsafe_store(cell, ddt)
+    d_dt_merged.unsafe_store(
+        cell, ftz(ftz(d_dt_da.unsafe_load(cell)) + ddt)
+    )
+
+
 def mamba2_reverse_cumsum_and_da_into(
     ctx: DeviceContext,
     mut out: Mamba2SSDDiscretizeBackward,
     mut d_dacs: DeviceBuffer[DType.float32],
     mut dt: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32],
-    mut dtraw: DeviceBuffer[DType.float32],
-    mut dt_bias: DeviceBuffer[DType.float32],
     b: Int, t_work: Int, nh: Int, nc: Int, qv: Int,
-    dt_lo: Float32,
-    dt_hi: Float32,
 ) raises:
     ctx.enqueue_function[mamba2_reverse_cumsum_kernel](
         out.d_da.unsafe_ptr(), d_dacs.unsafe_ptr(), Int32(b), Int32(t_work),
@@ -417,9 +488,33 @@ def mamba2_reverse_cumsum_and_da_into(
         dt.unsafe_ptr(), a.unsafe_ptr(), Int32(b * t_work), Int32(nh),
         grid_dim=(_grid(nh), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
     )
+
+
+def mamba2_ydiag_xd_and_partial_dt_into(
+    ctx: DeviceContext,
+    mut out: Mamba2SSDDiscretizeBackward,
+    mut d_y: DeviceBuffer[DType.float32],
+    mut cb_g: DeviceBuffer[DType.float32],
+    mut seg_l: DeviceBuffer[DType.float32],
+    mut xbc: DeviceBuffer[DType.float32],
+    mut dt: DeviceBuffer[DType.float32],
+    mut dtraw: DeviceBuffer[DType.float32],
+    mut dt_bias: DeviceBuffer[DType.float32],
+    b: Int, t_work: Int, nh: Int, di: Int, cd: Int, nc: Int, qv: Int,
+    dt_lo: Float32, dt_hi: Float32,
+) raises:
+    ctx.enqueue_function[mamba2_ydiag_xd_backward_kernel](
+        out.d_xd_ydiag.unsafe_ptr(), out.d_x_from_xd.unsafe_ptr(),
+        out.d_dt_from_xd.unsafe_ptr(), out.d_dt_merged.unsafe_ptr(),
+        d_y.unsafe_ptr(), cb_g.unsafe_ptr(), seg_l.unsafe_ptr(),
+        xbc.unsafe_ptr(), dt.unsafe_ptr(), out.d_dt.unsafe_ptr(),
+        Int32(b), Int32(t_work), Int32(nh), Int32(di), Int32(cd),
+        Int32(nc), Int32(qv), grid_dim=(_grid(b * t_work * nh), 1, 1),
+        block_dim=(M2_SSD_BWD_TPB, 1, 1),
+    )
     ctx.enqueue_function[mamba2_dt_backward_kernel](
         out.d_dtraw.unsafe_ptr(), out.d_dt_bias.unsafe_ptr(),
-        out.d_dt.unsafe_ptr(), dtraw.unsafe_ptr(), dt_bias.unsafe_ptr(),
+        out.d_dt_merged.unsafe_ptr(), dtraw.unsafe_ptr(), dt_bias.unsafe_ptr(),
         Int32(b * t_work), Int32(nh), dt_lo, dt_hi,
         grid_dim=(_grid(nh), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
     )

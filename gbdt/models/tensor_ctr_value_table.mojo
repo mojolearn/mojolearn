@@ -375,8 +375,16 @@ def stage_tensor_candidate_host(
     base_fold_counts: List[Int],
     base_one_hot: List[Bool],
     var candidate: TTensorCtrCandidate,
+    fold_capacity: Int = 0,
 ) raises -> TStagedTensorCandidate:
-    """Assign a dynamic tensor the next feature id and pack it for ranking."""
+    """Assign a dynamic tensor the next feature id and pack it for ranking.
+
+    A positive `fold_capacity` pins the dynamic feature's search layout
+    across per-level regeneration. Empty folds carry zero statistics, while
+    the real candidate bins remain bounded by its learned borders. This is
+    the layout invariant needed by the synchronized tensor-CTR driver: it
+    can replace column bits without reallocating histogram/workspace state.
+    """
     if len(base_columns) != len(base_fold_counts):
         raise Error("tensor candidate base columns/folds mismatch")
     if len(base_one_hot) != 0 and len(base_one_hot) != len(base_columns):
@@ -385,13 +393,20 @@ def stage_tensor_candidate_host(
         raise Error("tensor candidate identity disagrees with its apply table")
     if len(candidate.borders) == 0:
         raise Error("tensor candidate has no rankable border")
+    var dynamic_folds = len(candidate.borders)
+    if fold_capacity > 0:
+        if fold_capacity < dynamic_folds:
+            raise Error("tensor candidate exceeds its pinned fold capacity")
+        if fold_capacity > 255:
+            raise Error("tensor candidate fold capacity exceeds UInt8 storage")
+        dynamic_folds = fold_capacity
     var feature_id = len(base_columns)
     var columns = List[List[UInt32]]()
     for i in range(len(base_columns)):
         columns.append(base_columns[i].copy())
     columns.append(candidate.bins.copy())
     var folds = base_fold_counts.copy()
-    folds.append(len(candidate.borders))
+    folds.append(dynamic_folds)
     var one_hot = List[Bool]()
     if len(base_one_hot) != 0:
         one_hot = base_one_hot.copy()

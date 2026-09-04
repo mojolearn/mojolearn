@@ -166,6 +166,33 @@ def generate(args):
             ("partial.in_proj.x.from_skip", d_value),
             ("stage.qkdot.out", d_qkdot),
         ))
+        # The SISO corpus retains the singleton group axis [M, G=1, N].
+        # Remove it before expanding to heads; adding another axis without
+        # this reshape produces [M, 1, H, N] and later cross-broadcasts M.
+        q_base = stages["bcnorm.C"].detach().reshape(qkdot.shape[0], -1)
+        k_base = stages["bcnorm.B"].detach().reshape(qkdot.shape[0], -1)
+        q_biased = (q_base[:, None, :] + params["C_bias"].detach()[None, :, :]).requires_grad_(True)
+        k_biased = (k_base[:, None, :] + params["B_bias"].detach()[None, :, :]).requires_grad_(True)
+        # Card stages retain [B, L, H], while q_biased/k_biased and the Mojo
+        # kernel use flattened token rows [M, H].  Flatten explicitly: relying
+        # on broadcasting here creates [B, L, M] and silently cross-couples
+        # every token to every other token.
+        dt_qk = stages["dt.out"].detach().reshape(qkdot.shape).requires_grad_(True)
+        sig_qk = stages["trap.sigma"].detach().reshape(qkdot.shape).requires_grad_(True)
+        gamma = dt_qk * sig_qk
+        qk_isolated = (q_biased * k_biased).sum(-1) * gamma
+        dq_biased, dk_biased, d_dt_qk, d_sig_qk = torch.autograd.grad(
+            (qk_isolated * d_qkdot.detach()).sum(),
+            (q_biased, k_biased, dt_qk, sig_qk),
+        )
+        d_gamma = (q_biased.detach() * k_biased.detach()).sum(-1) * d_qkdot.detach()
+        intermediate_gradients.extend((
+            ("partial.qkdot.C_biased", dq_biased),
+            ("partial.qkdot.B_biased", dk_biased),
+            ("partial.qkdot.gamma", d_gamma),
+            ("partial.qkdot.dt", d_dt_qk),
+            ("partial.qkdot.trap_raw", d_sig_qk * sig_qk * (1 - sig_qk)),
+        ))
 
         gate32 = stages["gate.out"].detach().to(torch.float32)
         gate32.requires_grad_(True)
@@ -201,6 +228,24 @@ def generate(args):
         reference32["partial.in_proj.x.from_skip"] = dv32
         reference32["stage.qkdot.out"] = dqk32
         reference32["D"] = dd32
+        q32_base = stages["bcnorm.C"].detach().to(torch.float32).reshape(qk32.shape[0], -1)
+        k32_base = stages["bcnorm.B"].detach().to(torch.float32).reshape(qk32.shape[0], -1)
+        q32_biased = (q32_base[:, None, :] + params["C_bias"].detach().to(torch.float32)[None, :, :]).requires_grad_(True)
+        k32_biased = (k32_base[:, None, :] + params["B_bias"].detach().to(torch.float32)[None, :, :]).requires_grad_(True)
+        dt32_qk = stages["dt.out"].detach().to(torch.float32).reshape(qk32.shape).requires_grad_(True)
+        sig32_qk = stages["trap.sigma"].detach().to(torch.float32).reshape(qk32.shape).requires_grad_(True)
+        gamma32 = dt32_qk * sig32_qk
+        qk_isolated32 = (q32_biased * k32_biased).sum(-1) * gamma32
+        dq32_biased, dk32_biased, ddt32_qk, dsig32_qk = torch.autograd.grad(
+            (qk_isolated32 * dqk32.detach()).sum(),
+            (q32_biased, k32_biased, dt32_qk, sig32_qk),
+        )
+        dgamma32 = (q32_biased.detach() * k32_biased.detach()).sum(-1) * dqk32.detach()
+        reference32["partial.qkdot.C_biased"] = dq32_biased
+        reference32["partial.qkdot.B_biased"] = dk32_biased
+        reference32["partial.qkdot.gamma"] = dgamma32
+        reference32["partial.qkdot.dt"] = ddt32_qk
+        reference32["partial.qkdot.trap_raw"] = dsig32_qk * sig32_qk * (1 - sig32_qk)
     if args.family == "mamba2":
         tail_input = stages["gnorm.out"].detach().requires_grad_(True)
         tail_output = torch.nn.functional.linear(
@@ -321,6 +366,36 @@ def generate(args):
             ("partial.A.from_da", da_param),
             ("partial.dt.from_da", ddt),
         ))
+        xd_leaf = stages["xd.out"].reshape(
+            bsz, length, nheads, headdim
+        ).detach().requires_grad_(True)
+        ydiag_parts = []
+        for chunk in range(stages["dacs.out"].shape[2]):
+            start = chunk * qsize
+            real = min(qsize, length - start)
+            matrix = (
+                stages["cb.G"][:, chunk, 0, :real, :real, None]
+                * stages["seg.L"][:, chunk, :, :real, :real].permute(0, 2, 3, 1)
+            )
+            ydiag_parts.append(torch.einsum(
+                "bijh,bjhp->bihp", matrix, xd_leaf[:, start : start + real]
+            ))
+        rebuilt_ydiag = torch.cat(ydiag_parts, dim=1)
+        dxd_ydiag = torch.autograd.grad(
+            (rebuilt_ydiag * d_scan_ssd.detach()).sum(), xd_leaf
+        )[0]
+        x_discrete = stages["silu.out"].reshape(bsz, length, conv_dim)[
+            ..., : nheads * headdim
+        ].reshape(bsz, length, nheads, headdim).detach()
+        dx_from_xd = dxd_ydiag * dt_leaf.detach().unsqueeze(-1)
+        ddt_xd = (dxd_ydiag * x_discrete).sum(-1)
+        ddt_merged = ddt + ddt_xd
+        intermediate_gradients.extend((
+            ("partial.xd.from_ydiag", dxd_ydiag),
+            ("partial.x.from_xd", dx_from_xd),
+            ("partial.dt.from_xd", ddt_xd),
+            ("partial.dt.merged", ddt_merged),
+        ))
         raw_start = nheads * headdim + conv_dim
         dtraw_leaf = stages["in_proj.out"][..., raw_start:].reshape(
             bsz, length, nheads
@@ -333,11 +408,11 @@ def generate(args):
             max=dt_hi,
         )
         ddtraw, ddtbias = torch.autograd.grad(
-            (rebuilt_dt * ddt.detach()).sum(), (dtraw_leaf, dtbias_leaf)
+            (rebuilt_dt * ddt_merged.detach()).sum(), (dtraw_leaf, dtbias_leaf)
         )
         intermediate_gradients.extend((
-            ("partial.dt_raw.from_da", ddtraw),
-            ("partial.dt_bias.from_da", ddtbias),
+            ("partial.dt_raw.merged", ddtraw),
+            ("partial.dt_bias.merged", ddtbias),
         ))
 
         # The RMSNorm subtraction is ill-conditioned on this fixture
@@ -464,6 +539,33 @@ def generate(args):
         reference32["partial.da.total"] = dda32
         reference32["partial.A.from_da"] = dapar32
         reference32["partial.dt.from_da"] = ddt32
+        xd32 = stages32["xd.out"].reshape(
+            b32, l32, h32, p_dim32
+        ).detach().requires_grad_(True)
+        ydiag32_parts = []
+        for chunk in range(stages32["dacs.out"].shape[2]):
+            start = chunk * q32
+            real = min(q32, l32 - start)
+            matrix32 = (
+                stages32["cb.G"][:, chunk, 0, :real, :real, None]
+                * stages32["seg.L"][:, chunk, :, :real, :real].permute(0, 2, 3, 1)
+            )
+            ydiag32_parts.append(torch.einsum(
+                "bijh,bjhp->bihp", matrix32, xd32[:, start : start + real]
+            ))
+        dxd32 = torch.autograd.grad(
+            (torch.cat(ydiag32_parts, dim=1) * dscan_ssd32.detach()).sum(), xd32
+        )[0]
+        xdisc32 = stages32["silu.out"].reshape(b32, l32, cd32)[
+            ..., : h32 * p_dim32
+        ].reshape(b32, l32, h32, p_dim32).detach()
+        dx_xd32 = dxd32 * dt32.detach().unsqueeze(-1)
+        ddt_xd32 = (dxd32 * xdisc32).sum(-1)
+        ddt_merged32 = ddt32 + ddt_xd32
+        reference32["partial.xd.from_ydiag"] = dxd32
+        reference32["partial.x.from_xd"] = dx_xd32
+        reference32["partial.dt.from_xd"] = ddt_xd32
+        reference32["partial.dt.merged"] = ddt_merged32
         raw_start32 = h32 * p_dim32 + cd32
         dtraw32 = stages32["in_proj.out"][..., raw_start32:].reshape(
             b32, l32, h32
@@ -475,10 +577,10 @@ def generate(args):
             max=dt_hi,
         )
         ddtraw32, ddtbias32 = torch.autograd.grad(
-            (rebuilt_dt32 * ddt32.detach()).sum(), (dtraw32, dtbias32)
+            (rebuilt_dt32 * ddt_merged32.detach()).sum(), (dtraw32, dtbias32)
         )
-        reference32["partial.dt_raw.from_da"] = ddtraw32
-        reference32["partial.dt_bias.from_da"] = ddtbias32
+        reference32["partial.dt_raw.merged"] = ddtraw32
+        reference32["partial.dt_bias.merged"] = ddtbias32
     leaf_gradients = torch.autograd.grad(loss, [v for _, v in leaves])
     named_gradients = [*intermediate_gradients, *zip(
         (name for name, _ in leaves), leaf_gradients
