@@ -24,6 +24,10 @@ from gbdt.ctrs.ctr_binarization import (
     TBinarizationOptions,
     compute_ctr_borders,
 )
+from gbdt.gpu_data.compressed_index_builder import (
+    HostCompressedIndex,
+    pack_quantized_columns_host,
+)
 
 
 def split_tensor_hash(hash: UInt64) -> Tuple[UInt32, UInt32]:
@@ -339,6 +343,56 @@ struct TTensorCtrCandidate(Copyable, Movable):
         self.values = values^
         self.borders = borders^
         self.bins = bins^
+
+
+struct TStagedTensorCandidate(Copyable, Movable):
+    """Ephemeral candidate registered in a structure-search layout."""
+
+    var feature_id: Int
+    var candidate: TTensorCtrCandidate
+    var compressed: HostCompressedIndex
+
+    def __init__(
+        out self,
+        feature_id: Int,
+        var candidate: TTensorCtrCandidate,
+        var compressed: HostCompressedIndex,
+    ):
+        self.feature_id = feature_id
+        self.candidate = candidate^
+        self.compressed = compressed^
+
+
+def stage_tensor_candidate_host(
+    base_columns: List[List[UInt32]],
+    base_fold_counts: List[Int],
+    base_one_hot: List[Bool],
+    var candidate: TTensorCtrCandidate,
+) raises -> TStagedTensorCandidate:
+    """Assign a dynamic tensor the next feature id and pack it for ranking."""
+    if len(base_columns) != len(base_fold_counts):
+        raise Error("tensor candidate base columns/folds mismatch")
+    if len(base_one_hot) != 0 and len(base_one_hot) != len(base_columns):
+        raise Error("tensor candidate base one-hot flags mismatch")
+    if candidate.tensor_hash != candidate.table.tensor_hash:
+        raise Error("tensor candidate identity disagrees with its apply table")
+    if len(candidate.borders) == 0:
+        raise Error("tensor candidate has no rankable border")
+    var feature_id = len(base_columns)
+    var columns = List[List[UInt32]]()
+    for i in range(len(base_columns)):
+        columns.append(base_columns[i].copy())
+    columns.append(candidate.bins.copy())
+    var folds = base_fold_counts.copy()
+    folds.append(len(candidate.borders))
+    var one_hot = List[Bool]()
+    if len(base_one_hot) != 0:
+        one_hot = base_one_hot.copy()
+        one_hot.append(False)
+    var compressed = pack_quantized_columns_host(columns^, folds^, one_hot^)
+    if compressed.layout.features[feature_id].one_hot_feature:
+        raise Error("a tensor CTR was registered as a one-hot feature")
+    return TStagedTensorCandidate(feature_id, candidate^, compressed^)
 
 
 def materialize_tensor_candidate(
@@ -734,3 +788,16 @@ struct TTensorCtrRegistry(Copyable, Movable):
                         feature.table, x_raw, cindex, n_rows, r
                     ))
         return out^
+
+
+def persist_winning_tensor_candidate(
+    staged: TStagedTensorCandidate, mut registry: TTensorCtrRegistry
+) raises -> Int:
+    """Move only a selected search candidate into model apply state."""
+    if staged.feature_id != registry.first_model_column + len(
+        registry.features
+    ):
+        raise Error(
+            "winning tensor feature id is not the registry's next model column"
+        )
+    return registry.register(staged.candidate.table.copy())

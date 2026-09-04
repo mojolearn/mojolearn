@@ -9,7 +9,9 @@ from gbdt.models.tensor_ctr_value_table import (
     join_tensor_hash,
     materialize_tensor_candidate,
     parse_feature_freq_tensor_table,
+    persist_winning_tensor_candidate,
     split_tensor_hash,
+    stage_tensor_candidate_host,
     TTensorCtrRegistry,
     value_for_split_tensor_row,
 )
@@ -194,4 +196,33 @@ def main() raises:
         )
         if decoded != candidate.bins[r]:
             raise Error("compressed tensor candidate bin mismatch")
+
+    # Candidate feature ids are ephemeral until ranking chooses one. Stage
+    # two candidates at the same next id, persist only the selected Borders
+    # candidate, and prove the losing FeatureFreq table never enters model
+    # apply state.
+    var freq_candidate = materialize_tensor_candidate(
+        loaded.copy(), want.copy(), grid
+    )
+    var base_columns = List[List[UInt32]]()
+    base_columns.append(cindex.copy())
+    var base_folds: List[Int] = [1]
+    var staged_freq = stage_tensor_candidate_host(
+        base_columns, base_folds, List[Bool](), freq_candidate^
+    )
+    var staged_borders = stage_tensor_candidate_host(
+        base_columns, base_folds, List[Bool](), candidate^
+    )
+    if staged_freq.feature_id != 1 or staged_borders.feature_id != 1:
+        raise Error("dynamic tensor candidates did not share the next feature id")
+    var winner_registry = TTensorCtrRegistry(1)
+    var winning_column = persist_winning_tensor_candidate(
+        staged_borders, winner_registry
+    )
+    if winning_column != 1 or len(winner_registry.features) != 1:
+        raise Error("winning tensor was not persisted at its ranked feature id")
+    if winner_registry.features[0].table.tensor_hash != (
+        staged_borders.candidate.tensor_hash
+    ):
+        raise Error("model registry persisted the losing tensor candidate")
     print("tree CTR slice: deterministic pair FeatureFreq + text round trip PASS")
