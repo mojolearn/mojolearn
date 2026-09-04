@@ -3511,6 +3511,132 @@ struct TSynchronizedSymmetricLevelState(Movable):
                 block_dim=(SCORE_BLOCK_SIZE, 1, 1),
             )
 
+    def enqueue_pre_score[hist2_smem_mode: Int = HIST2_SMEM_MODE](
+        mut self,
+        ctx: DeviceContext,
+        mut row_index: DeviceBuffer[DType.uint32],
+        mut stats: DeviceBuffer[DType.float32],
+        use_subtraction: Bool,
+        mut trace: IdentityTrace,
+        mut times: StageTimes,
+        tree_tag: String,
+    ) raises -> Int:
+        """Enqueue histogram, scan, subtraction, and partition statistics.
+
+        Returns the same logical manager-accounting count used by the
+        baseline: histogram group, scan, optional subtraction, and pstats.
+        Trace checkpoints retain the baseline names and live-prefix bounds.
+        """
+        ref workspace = self.workspace[0]
+        var n_live = self.live_leaves
+        var half = n_live // 2
+        var planned = use_subtraction and self.level > 0
+        var n_compute = half if planned else n_live
+        var fixed_scale = rebind[MutPointer[Float32, MutAnyOrigin]](
+            workspace.scale_dev.unsafe_ptr()
+        )
+        times.begin(ctx)
+        if planned:
+            launch_histograms_for_blocks[
+                hist2_smem_mode, SYM_RIDX_SPLITS_2031
+            ](
+                ctx, workspace.dblocks, self.level, n_compute, self.n_rows,
+                self.stat_count, workspace.max_leaves_key,
+                workspace.sm_count, fixed_scale, self.active_cindex,
+                row_index, stats, workspace.p_off, workspace.p_sz,
+                workspace.ids_compute, workspace.dense_ids, workspace.hist,
+                workspace.acc_i32, workspace.block_hist,
+                self.layout.hist_cells,
+            )
+        else:
+            launch_histograms_for_blocks[
+                hist2_smem_mode, SYM_RIDX_SPLITS_2031
+            ](
+                ctx, workspace.dblocks, self.level, n_compute, self.n_rows,
+                self.stat_count, workspace.max_leaves_key,
+                workspace.sm_count, fixed_scale, self.active_cindex,
+                row_index, stats, workspace.p_off, workspace.p_sz,
+                workspace.zero_ids, workspace.dense_ids, workspace.hist,
+                workspace.acc_i32, workspace.block_hist,
+                self.layout.hist_cells,
+            )
+        var level_ids = workspace.zero_ids.unsafe_ptr()
+        if planned:
+            level_ids = rebind[type_of(level_ids)](
+                workspace.ids_compute.unsafe_ptr()
+            )
+        ctx.enqueue_function[scan_histograms_kernel](
+            level_ids,
+            workspace.flat_first.unsafe_ptr(),
+            workspace.flat_folds.unsafe_ptr(),
+            workspace.flat_one_hot.unsafe_ptr(),
+            Int32(len(self.layout.features)), Int32(self.layout.hist_cells),
+            workspace.hist.unsafe_ptr(),
+            grid_dim=(
+                (len(self.layout.features) + 255) // 256,
+                n_compute, self.stat_count,
+            ),
+            block_dim=(256, 1, 1),
+        )
+        var accounting = 2
+        if planned and half > 0:
+            if self.layout.hist_cells % 4 == 0:
+                ctx.enqueue_function[substract_histograms_vec4_kernel](
+                    workspace.sub_from.unsafe_ptr(),
+                    workspace.sub_what.unsafe_ptr(),
+                    Int32(self.layout.hist_cells), workspace.hist.unsafe_ptr(),
+                    grid_dim=(
+                        (self.layout.hist_cells // 4 + 255) // 256,
+                        half, self.stat_count,
+                    ),
+                    block_dim=(256, 1, 1),
+                )
+            else:
+                ctx.enqueue_function[substract_histograms_kernel](
+                    workspace.sub_from.unsafe_ptr(),
+                    workspace.sub_what.unsafe_ptr(),
+                    Int32(self.layout.hist_cells), workspace.hist.unsafe_ptr(),
+                    grid_dim=(
+                        (self.layout.hist_cells + 255) // 256,
+                        half, self.stat_count,
+                    ),
+                    block_dim=(256, 1, 1),
+                )
+            accounting += 1
+        times.end(ctx, "sym.hist")
+        if trace.enabled:
+            trace.record_device(
+                ctx,
+                tree_tag + ".depth" + _sym_dd2(self.level) + ".hist",
+                workspace.hist,
+                count=n_live * self.stat_count * self.layout.hist_cells,
+            )
+        times.begin(ctx)
+        comptime if SYM_RIDX_SPLITS_2031:
+            compute_partition_stats_gather(
+                ctx, n_live, self.n_rows, self.stat_count, self.n_rows,
+                workspace.dense_ids, workspace.p_off, workspace.p_sz,
+                stats, row_index, workspace.stat_partials,
+                workspace.part_stats, sm_count=workspace.sm_count,
+            )
+        else:
+            compute_partition_stats(
+                ctx, n_live, self.n_rows, self.stat_count, self.n_rows,
+                workspace.dense_ids, workspace.p_off, workspace.p_sz,
+                stats, workspace.stat_partials, workspace.part_stats,
+                sm_count=workspace.sm_count,
+            )
+        accounting += 1
+        times.end(ctx, "sym.pstats")
+        if trace.enabled:
+            trace.record_device(
+                ctx,
+                tree_tag + ".depth" + _sym_dd2(self.level) + ".pstats",
+                workspace.part_stats,
+                count=n_live * self.stat_count,
+            )
+        return accounting
+
     def drain_winner(
         mut self, ctx: DeviceContext
     ) raises -> Tuple[Float32, UInt32]:

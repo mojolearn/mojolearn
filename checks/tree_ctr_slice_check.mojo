@@ -32,9 +32,14 @@ from gbdt.models.oblivious_model import (
 from gbdt.gpu_data.compressed_index_builder import pack_quantized_columns_host
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     accept_symmetric_level_winner,
+    TSynchronizedSymmetricLevelState,
     TTreeWorkspace,
     run_tree_layout,
 )
+from gbdt.gpu_data.feature_blocks import blocks_for
+from core.identity_trace import IdentityTrace
+from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import StageTimes
+from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
 
 
 def main() raises:
@@ -328,13 +333,49 @@ def main() raises:
     _ = run_tree_layout(
         ctx, 6, base_folds, 1, base_device, stats, rows, cursor,
         Float32(6.0), grad_mag, splits, leaves, offsets, workspace,
-        dynamic_cindex=Optional(dynamic_device^),
+        dynamic_cindex=Optional(dynamic_device.copy()),
         dynamic_fold_counts=dynamic_folds,
     )
     if len(splits) != 1 or Int(splits[0].feature_id) != (
         dynamic_stage.feature_id
     ):
         raise Error("symmetric search did not rank the staged tensor feature")
+
+    # Opt-in synchronized driver, one complete level over the same planted
+    # tensor-only signal. Baseline above remains its independent oracle.
+    var sync_rows = ctx.enqueue_create_buffer[DType.uint32](6)
+    var sync_stats = ctx.enqueue_create_buffer[DType.float32](12)
+    ctx.enqueue_copy(dst_buf=sync_rows, src_ptr=h_rows.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=sync_stats, src_ptr=h_stats.unsafe_ptr())
+    var sync_layout = dynamic_stage.compressed.layout.copy()
+    var sync_blocks = blocks_for(sync_layout, 6)
+    var sync_state = TSynchronizedSymmetricLevelState(
+        ctx, sync_layout^, sync_blocks^, dynamic_device^, 6, 2, 1, False
+    )
+    sync_state.initialize_tree(ctx, Float32(6.0), grad_mag)
+    var no_trace = IdentityTrace.disabled()
+    var no_times = StageTimes()
+    no_times.enabled = False
+    _ = sync_state.enqueue_pre_score(
+        ctx, sync_rows, sync_stats, True, no_trace, no_times, "tensor_sync"
+    )
+    var sync_argmax = (sync_state.layout.hist_cells + 255) // 256
+    if sync_argmax > 64:
+        sync_argmax = 64
+    sync_state.enqueue_score(
+        ctx, sync_argmax, SCORE_FUNCTION_COSINE, False,
+        Float32(3.0), Float32(0.0), UInt64(0)
+    )
+    sync_state.enqueue_winner_reduction(ctx, sync_argmax)
+    var sync_splits = List[TBinarySplit]()
+    if not sync_state.drain_and_accept_current_winner(ctx, sync_splits):
+        raise Error("synchronized tensor driver rejected its planted winner")
+    _ = sync_state.enqueue_post_winner(ctx, sync_rows, sync_stats)
+    ctx.synchronize()
+    if len(sync_splits) != 1 or sync_splits[0].feature_id != splits[0].feature_id:
+        raise Error("synchronized tensor driver disagrees with baseline winner")
+    if sync_state.level != 1 or sync_state.live_leaves != 2:
+        raise Error("synchronized tensor driver did not advance level state")
 
     # Persist from the real ranked split list, rather than from the candidate
     # batch. This is the model-state boundary that prevents losing candidates
