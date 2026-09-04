@@ -433,6 +433,8 @@ struct Mamba2SSDDiscretizeBackward(Movable):
     var d_xd_total: DeviceBuffer[DType.float32]
     var d_b_cstate: DeviceBuffer[DType.float32]  # [B,T,N]
     var d_b_total: DeviceBuffer[DType.float32]  # cb + cstate
+    var d_c_total: DeviceBuffer[DType.float32]  # yoff + cb
+    var d_x_total: DeviceBuffer[DType.float32]  # D skip + xd
     var d_da_seg: DeviceBuffer[DType.float32]  # [B,T,H]
     var d_da_total: DeviceBuffer[DType.float32]  # S11 + segment
 
@@ -464,10 +466,47 @@ struct Mamba2SSDDiscretizeBackward(Movable):
         self.d_xd_total = ctx.enqueue_create_buffer[DType.float32](b*t*nh*M2_HEADDIM)
         self.d_b_cstate = ctx.enqueue_create_buffer[DType.float32](b*t*M2_D_STATE)
         self.d_b_total = ctx.enqueue_create_buffer[DType.float32](b*t*M2_D_STATE)
+        self.d_c_total = ctx.enqueue_create_buffer[DType.float32](b*t*M2_D_STATE)
+        self.d_x_total = ctx.enqueue_create_buffer[DType.float32](b*t*nh*M2_HEADDIM)
         self.d_da_seg = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
         self.d_da_total = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
 
 
+def mamba2_postconv_merge_kernel(
+    d_c_total: MutPointer[Float32, MutAnyOrigin],
+    d_x_total: MutPointer[Float32, MutAnyOrigin],
+    d_c_yoff: MutPointer[Float32, MutAnyOrigin],
+    d_c_cb: MutPointer[Float32, MutAnyOrigin],
+    d_x_d: MutPointer[Float32, MutAnyOrigin],
+    d_x_xd: MutPointer[Float32, MutAnyOrigin],
+    c_cells_in: Int32,
+    x_cells_in: Int32,
+):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(c_cells_in):
+        d_c_total.unsafe_store(i, ftz(ftz(d_c_yoff.unsafe_load(i)) + ftz(d_c_cb.unsafe_load(i))))
+    if i < Int(x_cells_in):
+        d_x_total.unsafe_store(i, ftz(ftz(d_x_d.unsafe_load(i)) + ftz(d_x_xd.unsafe_load(i))))
+
+
+def mamba2_postconv_merge_into(
+    ctx: DeviceContext,
+    mut out: Mamba2SSDDiscretizeBackward,
+    mut ssd: Mamba2SSDBackwardState,
+    mut d_x_d: DeviceBuffer[DType.float32],
+    b: Int, t: Int, nh: Int,
+) raises:
+    var cc = b * t * M2_D_STATE
+    var xc = b * t * nh * M2_HEADDIM
+    var cells = xc
+    if cc > cells:
+        cells = cc
+    ctx.enqueue_function[mamba2_postconv_merge_kernel](
+        out.d_c_total.unsafe_ptr(), out.d_x_total.unsafe_ptr(),
+        ssd.d_c_yoff.unsafe_ptr(), out.d_c_cb.unsafe_ptr(),
+        d_x_d.unsafe_ptr(), out.d_x_from_xd.unsafe_ptr(), Int32(cc), Int32(xc),
+        grid_dim=(_grid(cells), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
+    )
 def mamba2_cstate_dxd_db_kernel(
     d_xd: MutPointer[Float32, MutAnyOrigin], d_b: MutPointer[Float32, MutAnyOrigin],
     d_b_total: MutPointer[Float32, MutAnyOrigin], d_b_cb: MutPointer[Float32, MutAnyOrigin],

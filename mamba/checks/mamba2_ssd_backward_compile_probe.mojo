@@ -13,6 +13,7 @@ from mamba.impl.mamba_ssm.ops.mamba2_ssd_backward import (
     mamba2_reverse_chunk_state_into,
     mamba2_s18_direct_dpass_into,
     mamba2_cstate_ddecay_into,
+    mamba2_postconv_merge_into,
 )
 
 
@@ -59,4 +60,5 @@ def main() raises:
         out.d_cstate, dacs,
         2, 513, 1, 32, 40, 3, 256, 0.0, 1.0
     )
+    mamba2_postconv_merge_into(ctx, discretize, out, d_y, 2, 513, 1)
     print("mamba2 SSD backward reverse-chunk recurrence compile probe")

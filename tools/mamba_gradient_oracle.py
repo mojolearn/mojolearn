@@ -260,6 +260,13 @@ def generate(args):
         a_seg=stages["A.out"].detach().reshape_as(dadt).requires_grad_(True);dt_seg=stages["dt.out"].detach().reshape_as(dadt).requires_grad_(True)
         da_seg,ddt_seg=torch.autograd.grad(((a_seg*dt_seg)*dadt.detach()).sum(),(a_seg,dt_seg))
         intermediate_gradients.extend((("partial.A.from_seg",da_seg),("partial.dt.from_seg",ddt_seg),("partial.dt.with_seg",dt_available.reshape_as(ddt_seg)+ddt_seg)))
+        direct_states=torch.zeros(bsz,chunks,qrot.shape[2],64,qrot.shape[-1],dtype=qrot.dtype,device=qrot.device);total_states=torch.zeros_like(direct_states);carry_state=torch.zeros_like(direct_states[:,0])
+        dy_state=d_skip.detach().reshape(bsz,length,qrot.shape[2],64);dacs_state=stages["dacs.out"].detach()
+        for cc in range(chunks-1,-1,-1):
+            lo=cc*qsize;hi=min(length,lo+qsize);ev=torch.exp(dacs_state[:,:,cc,:hi-lo]).permute(0,2,1)
+            direct=torch.einsum("bthp,bthn,bth->bhpn",dy_state[:,lo:hi],qrot.detach()[:,lo:hi],ev)
+            direct_states[:,cc]=direct;carry_state=direct+carry_state*torch.exp(dacs_state[:,:,cc,-1])[:,:,None,None];total_states[:,cc]=carry_state
+        intermediate_gradients.extend((("partial.s17.state.direct",direct_states),("partial.s17.state.total",total_states),("partial.s17.initial_state",carry_state)))
 
         gate32 = stages["gate.out"].detach().to(torch.float32)
         gate32.requires_grad_(True)
@@ -349,6 +356,10 @@ def generate(args):
             if ss:dadt32[:,tt]=((dseg32[:,cc,:,:, :ss]*seg32.detach()[:,cc,:,:, :ss])[:,:,ss:,:].sum(dim=(-1,-2)))
         reference32.update({"partial.s16.seg.L":dseg32,"partial.seg.adt":dadt32})
         as32=stages["A.out"].detach().to(torch.float32).reshape_as(dadt32).requires_grad_(True);dtsg32=stages["dt.out"].detach().to(torch.float32).reshape_as(dadt32).requires_grad_(True);das32,ddts32=torch.autograd.grad(((as32*dtsg32)*dadt32.detach()).sum(),(as32,dtsg32));reference32.update({"partial.A.from_seg":das32,"partial.dt.from_seg":ddts32,"partial.dt.with_seg":dtavail32.reshape_as(ddts32)+ddts32})
+        dsdir32=torch.zeros(bsz,chunks,qrot32.shape[2],64,qrot32.shape[-1],dtype=torch.float32,device=qrot32.device);dstot32=torch.zeros_like(dsdir32);car32=torch.zeros_like(dsdir32[:,0]);dys32=dskip32.detach().reshape(bsz,length,qrot32.shape[2],64);dacs_s32=stages["dacs.out"].detach().to(torch.float32)
+        for cc in range(chunks-1,-1,-1):
+            lo=cc*qsize;hi=min(length,lo+qsize);ev32=torch.exp(dacs_s32[:,:,cc,:hi-lo]).permute(0,2,1);dr32=torch.einsum("bthp,bthn,bth->bhpn",dys32[:,lo:hi],qrot32.detach()[:,lo:hi],ev32);dsdir32[:,cc]=dr32;car32=dr32+car32*torch.exp(dacs_s32[:,:,cc,-1])[:,:,None,None];dstot32[:,cc]=car32
+        reference32.update({"partial.s17.state.direct":dsdir32,"partial.s17.state.total":dstot32,"partial.s17.initial_state":car32})
     if args.family == "mamba2":
         tail_input = stages["gnorm.out"].detach().requires_grad_(True)
         tail_output = torch.nn.functional.linear(
@@ -580,6 +591,8 @@ def generate(args):
             ("partial.B.from_cb", db_cb), ("partial.C.from_cb", dc_cb),
             ("partial.B.from_cstate", db_cstate),
             ("partial.B.total", db_cb + db_cstate),
+            ("partial.C.total", direct_d_c + dc_cb),
+            ("partial.silu.x.total", d_x_from_d.reshape_as(dx_from_xd) + dx_from_xd),
         ))
         raw_start = nheads * headdim + conv_dim
         dtraw_leaf = stages["in_proj.out"][..., raw_start:].reshape(
@@ -834,6 +847,10 @@ def generate(args):
         reference32["partial.C.from_cb"] = dc_cb32
         reference32["partial.B.from_cstate"] = db_cstate32
         reference32["partial.B.total"] = db32 + db_cstate32
+        reference32["partial.C.total"] = dc32 + dc_cb32
+        reference32["partial.silu.x.total"] = (
+            reference32["partial.silu.x.from_D"].reshape_as(dx_xd32) + dx_xd32
+        )
         raw_start32 = h32 * p_dim32 + cd32
         dtraw32 = stages32["in_proj.out"][..., raw_start32:].reshape(
             b32, l32, h32

@@ -4,7 +4,7 @@
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
 
-from checks.numerics import ftz, identical_mul_add, identical_sigmoid, identical_silu, identical_tanh, portable_cosf, portable_sinf
+from checks.numerics import ftz, identical_exp, identical_mul_add, identical_sigmoid, identical_silu, identical_tanh, portable_cosf, portable_sinf
 from mamba.checks.mamba3_fixture import M3_D_STATE, M3_HEADDIM, M3_NUM_ROPE_ANGLES, M3_PI, Mamba3Dims
 from mamba.impl.transformers.models.mamba.modeling_mamba import pinned_mul
 
@@ -538,3 +538,39 @@ def mamba3_backward_adt_product_into(
     mut d_adt:DeviceBuffer[DType.float32],mut a:DeviceBuffer[DType.float32],mut dt:DeviceBuffer[DType.float32],mut d_dt_available:DeviceBuffer[DType.float32],cells:Int,
 ) raises:
     ctx.enqueue_function[mamba3_adt_product_backward_kernel](d_a.unsafe_ptr(),d_dt_from_adt.unsafe_ptr(),d_dt_with_seg.unsafe_ptr(),d_adt.unsafe_ptr(),a.unsafe_ptr(),dt.unsafe_ptr(),d_dt_available.unsafe_ptr(),Int32(cells),grid_dim=(_grid(cells),1,1),block_dim=(M3_BWD_TPB,1,1))
+
+
+def mamba3_s17_reverse_state_kernel(
+    d_state_direct:MutPointer[Float32,MutAnyOrigin],d_state_total:MutPointer[Float32,MutAnyOrigin],d_initial:MutPointer[Float32,MutAnyOrigin],
+    d_y:MutPointer[Float32,MutAnyOrigin],q:MutPointer[Float32,MutAnyOrigin],dacs:MutPointer[Float32,MutAnyOrigin],
+    b_in:Int32,l_in:Int32,nh_in:Int32,qs_in:Int32,
+):
+    """Direct S17 readout adjoint plus descending chunk-state carry."""
+    var b=Int(b_in);var l=Int(l_in);var nh=Int(nh_in);var qs=Int(qs_in);var nc=(l+qs-1)//qs
+    var cell=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if cell>=b*nh*M3_HEADDIM*M3_D_STATE:return
+    var n=cell%M3_D_STATE;var z=cell//M3_D_STATE;var p=z%M3_HEADDIM;z=z//M3_HEADDIM;var h=z%nh;var bb=z//nh
+    var carry=Float32(0.0)
+    for rev in range(nc):
+        var c=nc-1-rev;var direct=Float32(0.0)
+        for i in range(qs):
+            var t=c*qs+i
+            if t<l:
+                var dy=ftz(d_y.unsafe_load(((bb*l+t)*nh+h)*M3_HEADDIM+p))
+                var qv=ftz(q.unsafe_load(((bb*l+t)*nh+h)*M3_D_STATE+n))
+                var ev=ftz(identical_exp(ftz(dacs.unsafe_load(((bb*nh+h)*nc+c)*qs+i))))
+                direct=ftz(identical_mul_add(dy,ftz(pinned_mul(qv,ev)),direct))
+        var idx=((((bb*nc+c)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n)
+        d_state_direct.unsafe_store(idx,direct)
+        var last=ftz(dacs.unsafe_load(((bb*nh+h)*nc+c)*qs+(qs-1)))
+        var total=ftz(direct+ftz(pinned_mul(carry,ftz(identical_exp(last)))))
+        d_state_total.unsafe_store(idx,total);carry=total
+    d_initial.unsafe_store(((bb*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n,carry)
+
+
+def mamba3_backward_s17_state_into(
+    ctx:DeviceContext,mut d_direct:DeviceBuffer[DType.float32],mut d_total:DeviceBuffer[DType.float32],mut d_initial:DeviceBuffer[DType.float32],
+    mut d_y:DeviceBuffer[DType.float32],mut q:DeviceBuffer[DType.float32],mut dacs:DeviceBuffer[DType.float32],b:Int,l:Int,dims:Mamba3Dims,qs:Int,
+) raises:
+    var cells=b*dims.nheads*M3_HEADDIM*M3_D_STATE
+    ctx.enqueue_function[mamba3_s17_reverse_state_kernel](d_direct.unsafe_ptr(),d_total.unsafe_ptr(),d_initial.unsafe_ptr(),d_y.unsafe_ptr(),q.unsafe_ptr(),dacs.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(_grid(cells),1,1),block_dim=(M3_BWD_TPB,1,1))

@@ -50,6 +50,7 @@ from mamba.impl.mamba_ssm.ops.mamba2_ssd_backward import (
     mamba2_ydiag_xd_and_partial_dt_into,
     mamba2_reverse_chunk_state_into,
     mamba2_cstate_ddecay_into,
+    mamba2_postconv_merge_into,
     mamba2_s18_direct_dpass_into,
 )
 from mamba.impl.transformers.models.mamba.modeling_mamba import (
@@ -222,6 +223,10 @@ def main() raises:
         ssd_backward.d_cstate, stages.decay,
         fixture.b, stages.t_work, dims.nheads, dims.d_inner,
         dims.conv_dim(), stages.nc, m2_q_eff(), fixture.dt_lo, fixture.dt_hi,
+    )
+    mamba2_postconv_merge_into(
+        ctx, discretize_backward, ssd_backward, tail.d_x_from_d,
+        fixture.b, stages.t_work, dims.nheads,
     )
     ctx.synchronize()
     _write_f32(
@@ -419,6 +424,10 @@ def main() raises:
         mamba_download(ctx, discretize_backward.d_c_cb,
             fixture.b * stages.t_work * M2_D_STATE),
     )
+    _write_f32(dump_dir + "/grad.partial.C.total.f32",
+        mamba_download(ctx, discretize_backward.d_c_total, fixture.b*stages.t_work*M2_D_STATE))
+    _write_f32(dump_dir + "/grad.partial.silu.x.total.f32",
+        mamba_download(ctx, discretize_backward.d_x_total, fixture.b*stages.t_work*dims.d_inner))
     _write_f32(
         dump_dir + "/grad.partial.dt_raw.merged.f32",
         mamba_download(
@@ -454,6 +463,7 @@ def main() raises:
             "\"partial.B.from_cb\",\"partial.C.from_cb\","
             "\"partial.xd.from_cstate\",\"partial.xd.total\","
             "\"partial.B.from_cstate\",\"partial.B.total\","
+            "\"partial.C.total\",\"partial.silu.x.total\","
             "\"partial.dt.from_xd\",\"partial.dt.merged\","
             "\"partial.dt_raw.merged\",\"partial.dt_bias.merged\"]}\n"
         )
