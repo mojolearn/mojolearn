@@ -15,9 +15,15 @@ def main() raises:
     var folds: List[Int] = [1, 255]
     var layout = build_layout(folds)
     var blocks = blocks_for(layout, 8)
+    var cindex = ctx.enqueue_create_buffer[DType.uint32](16)
+    ctx.enqueue_memset(cindex, UInt32(0))
     var state = TSynchronizedSymmetricLevelState(
-        ctx, layout^, blocks^, 8, 2, 2, False
+        ctx, layout^, blocks^, cindex^, 8, 2, 2, False
     )
+    state.initialize_tree(ctx, Float32(8.0), Float32(8.0))
+    var regenerated = ctx.enqueue_create_buffer[DType.uint32](16)
+    ctx.enqueue_memset(regenerated, UInt32(0))
+    state.replace_active_cindex(ctx, regenerated^)
     if state.level != 0 or state.live_leaves != 1 or (
         state.max_depth != 2 or len(state.workspace) != 1
     ):

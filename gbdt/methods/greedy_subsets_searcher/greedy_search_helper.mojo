@@ -3367,6 +3367,9 @@ struct TSynchronizedSymmetricLevelState(Movable):
 
     var layout: CompressedIndexLayout
     var workspace: List[TTreeWorkspace]
+    var active_cindex: DeviceBuffer[DType.uint32]
+    var n_rows: Int
+    var stat_count: Int
     var max_depth: Int
     var level: Int
     var live_leaves: Int
@@ -3376,6 +3379,7 @@ struct TSynchronizedSymmetricLevelState(Movable):
         ctx: DeviceContext,
         var layout: CompressedIndexLayout,
         var blocks: List[PolicyBlock],
+        var active_cindex: DeviceBuffer[DType.uint32],
         n_rows: Int,
         stat_count: Int,
         max_depth: Int,
@@ -3389,9 +3393,123 @@ struct TSynchronizedSymmetricLevelState(Movable):
             acc_live,
         ))
         self.layout = layout^
+        self.active_cindex = active_cindex^
+        self.n_rows = n_rows
+        self.stat_count = stat_count
         self.max_depth = max_depth
         self.level = 0
         self.live_leaves = 1
+
+    def initialize_tree(
+        mut self,
+        ctx: DeviceContext,
+        weight_magnitude: Float32,
+        gradient_magnitude: Float32,
+    ) raises:
+        """Initialize per-tree roots and scale without baseline ownership."""
+        ref workspace = self.workspace[0]
+        for i in range(workspace.max_leaves_key):
+            workspace.h_off.unsafe_ptr().unsafe_store(i, UInt32(0))
+            workspace.h_sz.unsafe_ptr().unsafe_store(i, UInt32(0))
+        workspace.h_sz.unsafe_ptr().unsafe_store(0, UInt32(self.n_rows))
+        ctx.enqueue_copy(
+            dst_buf=workspace.p_off, src_ptr=workspace.h_off.unsafe_ptr()
+        )
+        ctx.enqueue_copy(
+            dst_buf=workspace.p_sz, src_ptr=workspace.h_sz.unsafe_ptr()
+        )
+        if workspace.acc_live_key:
+            ctx.enqueue_memset(workspace.acc_i32, Int32(0))
+        var magnitude = Float64(weight_magnitude)
+        if magnitude < 0.0:
+            magnitude = -magnitude
+        var gradient = Float64(gradient_magnitude)
+        if gradient < 0.0:
+            gradient = -gradient
+        if gradient > magnitude:
+            magnitude = gradient
+        workspace.h_scale.unsafe_ptr().unsafe_store(
+            0, Float32(choose_scale(magnitude, self.n_rows))
+        )
+        ctx.enqueue_copy(
+            dst_buf=workspace.scale_dev,
+            src_ptr=workspace.h_scale.unsafe_ptr(),
+        )
+        self.level = 0
+        self.live_leaves = 1
+
+    def replace_active_cindex(
+        mut self,
+        ctx: DeviceContext,
+        var replacement: DeviceBuffer[DType.uint32],
+    ) raises:
+        """Install a regenerated pinned-layout tensor column between levels."""
+        # Finish post-winner readers before releasing the old buffer handle.
+        # This extra drain belongs only to the synchronized tensor path.
+        ctx.synchronize()
+        self.active_cindex = replacement^
+
+    def enqueue_winner_reduction(
+        mut self, ctx: DeviceContext, argmax_blocks: Int
+    ) raises:
+        """Resolve the current level's already-computed score blocks."""
+        if self.level >= self.max_depth:
+            raise Error("synchronized symmetric tree is already complete")
+        ref workspace = self.workspace[0]
+        enqueue_symmetric_level_winner(
+            ctx, workspace.out_score, workspace.out_bin, argmax_blocks,
+            workspace.bfr_off, workspace.bfr_mask, workspace.bfr_shift,
+            workspace.bfr_first, workspace.bfr_folds, workspace.bfr_oh,
+            workspace.bfr_bin, self.level, self.live_leaves,
+            workspace.winners_score, workspace.winners_bf,
+            workspace.sp_feats, workspace.sp_bins, workspace.ids_c,
+        )
+
+    def enqueue_score(
+        mut self,
+        ctx: DeviceContext,
+        argmax_blocks: Int,
+        score_function: Int,
+        multiclass_optimization: Bool,
+        l2_leaf_reg: Float32,
+        score_std_dev: Float32,
+        level_seed: UInt64,
+    ) raises:
+        """Score current histograms into the persistent winner scratch."""
+        ref workspace = self.workspace[0]
+        if (
+            score_function == SCORE_FUNCTION_L2
+            or score_function == SCORE_FUNCTION_NEWTON_L2
+        ):
+            ctx.enqueue_function[
+                compute_optimal_splits_kernel[SCORE_FUNCTION_L2]
+            ](
+                workspace.skip.unsafe_ptr(), Int32(self.layout.hist_cells),
+                workspace.bff.unsafe_ptr(), workspace.ffw.unsafe_ptr(),
+                workspace.hist.unsafe_ptr(), workspace.part_stats.unsafe_ptr(),
+                Int32(self.stat_count), workspace.dense_ids.unsafe_ptr(),
+                Int32(self.live_leaves),
+                Int32(1) if multiclass_optimization else Int32(0),
+                l2_leaf_reg, Float32(0.0), level_seed,
+                workspace.out_score.unsafe_ptr(), workspace.out_bin.unsafe_ptr(),
+                grid_dim=(argmax_blocks, 1, 1),
+                block_dim=(SCORE_BLOCK_SIZE, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[
+                compute_optimal_splits_kernel[SCORE_FUNCTION_COSINE]
+            ](
+                workspace.skip.unsafe_ptr(), Int32(self.layout.hist_cells),
+                workspace.bff.unsafe_ptr(), workspace.ffw.unsafe_ptr(),
+                workspace.hist.unsafe_ptr(), workspace.part_stats.unsafe_ptr(),
+                Int32(self.stat_count), workspace.dense_ids.unsafe_ptr(),
+                Int32(self.live_leaves),
+                Int32(1) if multiclass_optimization else Int32(0),
+                l2_leaf_reg, score_std_dev, level_seed,
+                workspace.out_score.unsafe_ptr(), workspace.out_bin.unsafe_ptr(),
+                grid_dim=(argmax_blocks, 1, 1),
+                block_dim=(SCORE_BLOCK_SIZE, 1, 1),
+            )
 
     def drain_winner(
         mut self, ctx: DeviceContext
@@ -3426,14 +3544,12 @@ struct TSynchronizedSymmetricLevelState(Movable):
         best_bin_feature: UInt32,
         mut out_splits: List[TBinarySplit],
     ) raises -> Bool:
-        """Apply shared gates, then advance persistent level ownership."""
+        """Apply shared gates; post-winner enqueue advances ownership."""
         if not accept_symmetric_level_winner(
             self.layout, best_score, best_bin_feature,
             self.layout.hist_cells, self.level, self.live_leaves, out_splits,
         ):
             return False
-        self.level += 1
-        self.live_leaves *= 2
         return True
 
     def drain_and_accept_current_winner(
@@ -3444,6 +3560,66 @@ struct TSynchronizedSymmetricLevelState(Movable):
         """Bounded synchronized boundary used between two tensor levels."""
         var winner = self.drain_winner(ctx)
         return self.accept_current_winner(winner[0], winner[1], out_splits)
+
+    def enqueue_post_winner(
+        mut self,
+        ctx: DeviceContext,
+        mut row_index: DeviceBuffer[DType.uint32],
+        mut stats: DeviceBuffer[DType.float32],
+    ) raises -> Int:
+        """Enqueue the extracted split/reorder/update group for this level.
+
+        Returns the reorder launch count for a future manager/accounting
+        wrapper. It deliberately performs no synchronization.
+        """
+        ref workspace = self.workspace[0]
+        var n_live = self.live_leaves
+        var sm_count = workspace.sm_count
+        enqueue_symmetric_split_flags(
+            ctx, self.active_cindex, row_index,
+            workspace.p_off, workspace.p_sz, workspace.dense_ids,
+            workspace.sp_feats, workspace.sp_bins,
+            workspace.flags, workspace.seq, n_live, sm_count,
+        )
+        launch_stable_partition_routed[HIST_BUILD_MODE == NUMERIC_IDENTICAL](
+            ctx, n_live, self.n_rows, workspace.dense_ids,
+            workspace.p_off, workspace.p_sz, workspace.flags,
+            workspace.chunk_zeros, workspace.chunk_offsets,
+            workspace.leaf_zeros, workspace.gmap, workspace.sflags,
+            sm_count=sm_count,
+        )
+        var reorder_launches = 0
+        comptime if SYM_RIDX_SPLITS_2031:
+            reorder_launches = launch_reorder_index_only(
+                ctx, n_live, self.n_rows, workspace.dense_ids,
+                workspace.p_off, workspace.p_sz, row_index,
+                workspace.new_index, workspace.gmap, sm_count=sm_count,
+            )
+        else:
+            var wide = (self.n_rows + 255) // 256
+            if wide > 256:
+                wide = 256
+            if wide < 1:
+                wide = 1
+            reorder_launches = launch_reorder_in_leaves(
+                ctx, n_live, wide, self.n_rows, self.stat_count, self.n_rows,
+                workspace.dense_ids, workspace.p_off, workspace.p_sz,
+                stats, workspace.new_stats, row_index, workspace.new_index,
+                workspace.gmap, sm_count=sm_count,
+            )
+        enqueue_symmetric_parent_histogram_copy(
+            ctx, workspace.dense_ids, workspace.ids_c, self.stat_count,
+            self.layout.hist_cells, n_live, workspace.hist,
+        )
+        enqueue_symmetric_partition_update(
+            ctx, workspace.dense_ids, workspace.ids_c, n_live,
+            workspace.sflags, workspace.p_off, workspace.p_sz,
+            workspace.hp_off, workspace.hp_sz, workspace.ids_compute,
+            workspace.sub_from, workspace.sub_what, sm_count,
+        )
+        self.level += 1
+        self.live_leaves *= 2
+        return reorder_launches
 
 
 def run_tree_layout_traced[
