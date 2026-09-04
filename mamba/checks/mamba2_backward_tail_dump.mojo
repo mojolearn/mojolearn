@@ -380,6 +380,10 @@ def main() raises:
         mamba_download(ctx, discretize_backward.d_a_log, dims.nheads),
     )
     _write_f32(
+        dump_dir + "/grad.A_log.f32",
+        mamba_download(ctx, discretize_backward.d_a_log, dims.nheads),
+    )
+    _write_f32(
         dump_dir + "/grad.partial.dt.from_da.f32",
         mamba_download(
             ctx, discretize_backward.d_dt,
@@ -487,6 +491,7 @@ def main() raises:
             "\"partial.C.from_yoff\",\"partial.dacs.from_yoff\","
             "\"partial.dacs.total\",\"partial.da.from_seg\",\"partial.da.total\","
             "\"partial.A.from_da\",\"partial.A_log.from_current_ssd\","
+            "\"A_log\","
             "\"partial.dt.from_da\","
             "\"partial.xd.from_ydiag\",\"partial.x.from_xd\","
             "\"partial.cb.G.from_ydiag\",\"partial.seg.L.from_ydiag\","
@@ -502,10 +507,9 @@ def main() raises:
             "\"dt_bias\"]}\n"
         )
     print(
-        "MAMBA2 BACKWARD PARTIAL: emitted output projection + gated RMSNorm"
-        " + SiLU gate + D-skip + S18/S17 pass-state gradients;"
-        " intra-chunk SSD, convolution, input projection, block norm, and"
-        " full dx remain"
+        "MAMBA2 BACKWARD: all ten public parameter/input leaves emitted for"
+        " prefill; internal stage tensors remain diagnostic partials and"
+        " decode/window backward remains explicitly unsupported"
     )
     _ = tail^
     _ = ssd_backward^

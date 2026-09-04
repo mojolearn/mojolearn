@@ -288,7 +288,7 @@ def generate(args):
         dadt_dacs=torch.zeros_like(dadt);dj=dacs_join.reshape(bsz,length,-1)
         for cc in range(chunks):
             lo=cc*qsize;hi=min(length,lo+qsize);dadt_dacs[:,lo:hi]=torch.flip(torch.cumsum(torch.flip(dj[:,lo:hi],dims=[1]),dim=1),dims=[1])
-        dadt_join=dadt+dadt_dacs;a_join=stages["A.out"].detach().reshape_as(dadt_join).requires_grad_(True);dt_join=stages["dt.out"].detach().reshape_as(dadt_join).requires_grad_(True);da_join,ddt_join=torch.autograd.grad(((a_join*dt_join)*dadt_join.detach()).sum(),(a_join,dt_join));intermediate_gradients.extend((("partial.join.adt.from_dacs",dadt_dacs),("partial.join.adt.total",dadt_join),("partial.join.A.from_adt",da_join),("partial.join.dt.from_adt",ddt_join)))
+        dadt_join=dadt+dadt_dacs;a_join=stages["A.out"].detach().reshape_as(dadt_join).requires_grad_(True);dt_join=stages["dt.out"].detach().reshape_as(dadt_join).requires_grad_(True);da_join,ddt_join=torch.autograd.grad(((a_join*dt_join)*dadt_join.detach()).sum(),(a_join,dt_join));a_raw_join=stages["in_proj.out"].detach()[:,2*di+2*128+h:2*di+2*128+2*h].reshape_as(da_join).requires_grad_(True);a_ht_join=torch.where(a_raw_join>=0,1+a_raw_join,torch.reciprocal(1-a_raw_join));a_param_join=torch.clamp(-a_ht_join,max=-GEN.M3_A_FLOOR);da_raw_join=torch.autograd.grad((a_param_join*da_join.detach()).sum(),a_raw_join)[0];intermediate_gradients.extend((("partial.join.adt.from_dacs",dadt_dacs),("partial.join.adt.total",dadt_join),("partial.join.A.from_adt",da_join),("partial.join.A.raw",da_raw_join),("partial.join.dt.from_adt",ddt_join)))
         beta_join=dscj.reshape(bsz,length,-1);beta_dt_join=torch.zeros_like(beta_join);beta_trap_join=torch.zeros_like(beta_join);beta_dt_join[:,1:]=beta_join[:,:-1]*(1-sig_stage[:,1:]);dsig_join=-beta_join[:,:-1]*dt_stage[:,1:];beta_trap_join[:,1:]=dsig_join*sig_stage[:,1:]*(1-sig_stage[:,1:])
         dt_current_join=d_dt_qk+beta_dt_join.reshape_as(d_dt_qk);trap_join=d_sig_qk*sig_qk*(1-sig_qk)+beta_trap_join.reshape_as(d_sig_qk);gamma_join=d_gamma+dscj.reshape_as(d_gamma)
         angle_raw_join=stages["in_proj.out"].detach()[:,-32:].reshape(bsz,length,32).requires_grad_(True);dt_angle_leaf=stages["dt.out"].detach().reshape(bsz,length,-1).requires_grad_(True);theta_state_join=torch.zeros(bsz,dt_angle_leaf.shape[-1],32,dtype=angle_raw_join.dtype,device=angle_raw_join.device);theta_rows_join=[];rate_join=torch.tanh(angle_raw_join)*torch.pi
@@ -405,7 +405,7 @@ def generate(args):
         dadc32=torch.zeros_like(dadt32);dj32=daj32.reshape(bsz,length,-1)
         for cc in range(chunks):
             lo=cc*qsize;hi=min(length,lo+qsize);dadc32[:,lo:hi]=torch.flip(torch.cumsum(torch.flip(dj32[:,lo:hi],dims=[1]),dim=1),dims=[1])
-        dat32=dadt32+dadc32;aj32=stages["A.out"].detach().to(torch.float32).reshape_as(dat32).requires_grad_(True);dtaj32=stages["dt.out"].detach().to(torch.float32).reshape_as(dat32).requires_grad_(True);dajoin32,ddtjoin32=torch.autograd.grad(((aj32*dtaj32)*dat32.detach()).sum(),(aj32,dtaj32));reference32.update({"partial.join.adt.from_dacs":dadc32,"partial.join.adt.total":dat32,"partial.join.A.from_adt":dajoin32,"partial.join.dt.from_adt":ddtjoin32})
+        dat32=dadt32+dadc32;aj32=stages["A.out"].detach().to(torch.float32).reshape_as(dat32).requires_grad_(True);dtaj32=stages["dt.out"].detach().to(torch.float32).reshape_as(dat32).requires_grad_(True);dajoin32,ddtjoin32=torch.autograd.grad(((aj32*dtaj32)*dat32.detach()).sum(),(aj32,dtaj32));arawj32=stages["in_proj.out"].detach().to(torch.float32)[:,2*di+2*128+h:2*di+2*128+2*h].reshape_as(dajoin32).requires_grad_(True);ahtj32=torch.where(arawj32>=0,1+arawj32,torch.reciprocal(1-arawj32));apj32=torch.clamp(-ahtj32,max=-GEN.M3_A_FLOOR);darawj32=torch.autograd.grad((apj32*dajoin32.detach()).sum(),arawj32)[0];reference32.update({"partial.join.adt.from_dacs":dadc32,"partial.join.adt.total":dat32,"partial.join.A.from_adt":dajoin32,"partial.join.A.raw":darawj32,"partial.join.dt.from_adt":ddtjoin32})
         betaj32=dscj32.reshape(bsz,length,-1);bdtj32=torch.zeros_like(betaj32);btrj32=torch.zeros_like(betaj32);bdtj32[:,1:]=betaj32[:,:-1]*(1-sg32[:,1:]);dsgj32=-betaj32[:,:-1]*dts32[:,1:];btrj32[:,1:]=dsgj32*sg32[:,1:]*(1-sg32[:,1:]);dtcj32=ddt32_qk+bdtj32.reshape_as(ddt32_qk);trj32=dsig32_qk*sig32_qk*(1-sig32_qk)+btrj32.reshape_as(dsig32_qk);gmj32=dgamma32+dscj32.reshape_as(dgamma32)
         arj32=angle_raw.detach().to(torch.float32).requires_grad_(True);dtlj32=dt_angle.detach().to(torch.float32).requires_grad_(True);tsj32=torch.zeros(bsz,dtlj32.shape[-1],32,dtype=torch.float32,device=arj32.device);trsj32=[];rtj32=torch.tanh(arj32)*torch.pi
         for ti in range(length):
@@ -885,6 +885,7 @@ def generate(args):
         reference32["partial.A_log.from_current_ssd"] = (
             dapar32 * a32.detach()
         )
+        reference32["A_log"] = dapar32 * a32.detach()
         reference32["partial.dt.from_da"] = ddt32
         xdisc32 = stages32["silu.out"].reshape(b32, l32, cd32)[
             ..., : h32 * p_dim32
