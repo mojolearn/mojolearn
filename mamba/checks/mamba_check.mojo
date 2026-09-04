@@ -456,6 +456,7 @@ from mamba.checks.mamba_fixture import (
     mode_name,
 )
 from mamba.checks.mamba_oracle import MambaState, MambaStages, mamba_block_oracle
+from mamba.checks.mamba_backward_oracle import mamba_block_backward_oracle
 from checks.numerics import ftz
 from mamba.impl.transformers.models.mamba.modeling_mamba import (
     BLOCK_ANY_SABOTAGE,
@@ -1707,6 +1708,64 @@ def dump_corpus_case(
     _ = dstate^
 
 
+def objective_cotangent(n: Int) -> List[Float32]:
+    """The exact signed-dyadic objective used by mamba_gradient_oracle.py."""
+    var out = List[Float32]()
+    for i in range(n):
+        var numer = (i * 37 + 11) % 31 - 15
+        if numer == 0:
+            numer = 1
+        out.append(Float32(numer) / Float32(16.0))
+    return out^
+
+
+def dump_mamba1_host_gradients(k: Int, dump_dir: String) raises:
+    """Export the Mamba-1 host backward on the exact external corpus fixture.
+
+    This closes the interchange and host-oracle validation half of the lane.
+    It intentionally says ``host``: the device whole-pass composer remains a
+    separate implementation seam and must not be represented by this dump.
+    """
+    var c = corpus_case(k)
+    var dims = MambaDims.of(c.d_model)
+    var w = corpus_case_weights(k)
+    var x = corpus_case_x(k)
+    var state_in = MambaState(c.b, dims)
+    var state_for_forward = MambaState(c.b, dims)
+    var stages = mamba_block_oracle(w, x, c.b, c.l, state_for_forward)
+    var dres = objective_cotangent(c.b * c.l * dims.d_model)
+    var grad = mamba_block_backward_oracle(
+        w, x, dres, stages, state_in, c.b, c.l
+    )
+
+    write_f32(dump_dir + "/grad.x.f32", grad.dx)
+    write_f32(dump_dir + "/grad.norm.weight.f32", grad.dw_norm)
+    write_f32(dump_dir + "/grad.in_proj.weight.f32", grad.dw_in)
+    write_f32(dump_dir + "/grad.conv1d.weight.f32", grad.dcw)
+    write_f32(dump_dir + "/grad.conv1d.bias.f32", grad.dcb)
+    write_f32(dump_dir + "/grad.x_proj.weight.f32", grad.dw_x)
+    write_f32(dump_dir + "/grad.dt_proj.weight.f32", grad.dw_dt)
+    write_f32(dump_dir + "/grad.dt_proj.bias.f32", grad.db_dt)
+    write_f32(dump_dir + "/grad.A_log.f32", grad.da_log)
+    write_f32(dump_dir + "/grad.D.f32", grad.dd_skip)
+    write_f32(dump_dir + "/grad.out_proj.weight.f32", grad.dw_out)
+    with open(dump_dir + "/dump_manifest.json", "w") as fh:
+        fh.write(
+            "{\n  \"schema\": \"mojolearn.mamba.gradient-dump.v1\",\n"
+            + "  \"family\": \"mamba1\",\n"
+            + "  \"case\": \""
+            + String(c.name)
+            + "\",\n  \"objective\": \"signed_dyadic_weight_v1\",\n"
+            + "  \"producer\": \"mamba_block_backward_oracle\",\n"
+            + "  \"tensors\": [\"x\", \"norm.weight\","
+            + " \"in_proj.weight\", \"conv1d.weight\","
+            + " \"conv1d.bias\", \"x_proj.weight\","
+            + " \"dt_proj.weight\", \"dt_proj.bias\", \"A_log\","
+            + " \"D\", \"out_proj.weight\"]\n}\n"
+        )
+    print("wrote Mamba-1 HOST gradient dump to " + dump_dir)
+
+
 # ===========================================================================
 
 
@@ -1783,6 +1842,14 @@ def main() raises:
         dump_corpus_case(
             ctx, k, dd, env_on("MOJOLEARN_MAMBA_CORPUS_TRANSPOSE_CONTROL")
         )
+
+    # Independent-gradient interchange. Case 1 is the external oracle's
+    # default `base_b2_l4_d8`; callers may select another corpus case with
+    # MOJOLEARN_MAMBA_GRADIENT_CASE. The directory must already exist.
+    if env_on("MOJOLEARN_MAMBA_GRADIENT_DUMP"):
+        var gd = String(getenv("MOJOLEARN_MAMBA_GRADIENT_DUMP"))
+        var gk = env_int("MOJOLEARN_MAMBA_GRADIENT_CASE", 1)
+        dump_mamba1_host_gradients(gk, gd)
 
     comptime if BLOCK_ANY_SABOTAGE:
         if n_moved == 0:

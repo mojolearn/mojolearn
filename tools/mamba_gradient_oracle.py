@@ -92,13 +92,13 @@ def _prepare(tensors, device):
     return x, leaves
 
 
-def _forward_stages(family, case, forward, params, x):
+def _forward_stages(family, case, forward, params, x, dtype=torch.float64):
     if family == "mamba1":
-        return forward(params, x, torch.float64)
+        return forward(params, x, dtype)
     if family == "mamba2":
         lim = GEN.m2_effective_dt_limit(case)
-        return forward(params, x, torch.float64, dt_limit=lim)
-    return forward(params, x, torch.float64)
+        return forward(params, x, dtype, dt_limit=lim)
+    return forward(params, x, dtype)
 
 
 def _forward(family, case, forward, params, x):
@@ -131,6 +131,7 @@ def generate(args):
     # Rebuild only this isolated, independently specified linear seam rather
     # than asking autograd for a mathematically-related but graph-unused view.
     intermediate_gradients = []
+    reference32 = {}
     if args.family == "mamba2":
         tail_input = stages["gnorm.out"].detach().requires_grad_(True)
         tail_output = torch.nn.functional.linear(
@@ -138,6 +139,77 @@ def generate(args):
         )
         d_tail = torch.autograd.grad(_objective(tail_output), tail_input)[0]
         intermediate_gradients.append(("stage.gnorm.out", d_tail))
+        gate_input = stages["gnorm.gate"].detach().requires_grad_(True)
+        gate_sumsq = gate_input.pow(2).sum(-1, keepdim=True)
+        gate_rstd = 1.0 / torch.sqrt(gate_sumsq / gate_input.shape[-1] + GEN.M2_EPS)
+        gate_output = gate_input * gate_rstd * params["norm.weight"]
+        projected = torch.nn.functional.linear(
+            gate_output, params["out_proj.weight"].detach()
+        )
+        d_gate = torch.autograd.grad(_objective(projected), gate_input)[0]
+        intermediate_gradients.append(("stage.gnorm.gate", d_gate))
+        skip_input = stages["skip.out"].detach().reshape(
+            -1, stages["gnorm.gate"].shape[-1]
+        ).requires_grad_(True)
+        z_input = stages["in_proj.out"].detach()[:, :skip_input.shape[-1]].requires_grad_(True)
+        gated = skip_input * torch.nn.functional.silu(z_input)
+        gated_rstd = 1.0 / torch.sqrt(
+            gated.pow(2).sum(-1, keepdim=True) / gated.shape[-1] + GEN.M2_EPS
+        )
+        gated_norm = gated * gated_rstd * params["norm.weight"].detach()
+        gated_out = torch.nn.functional.linear(
+            gated_norm, params["out_proj.weight"].detach()
+        )
+        d_skip, d_z = torch.autograd.grad(
+            _objective(gated_out), (skip_input, z_input)
+        )
+        intermediate_gradients.append(("stage.skip.out", d_skip))
+        intermediate_gradients.append(("stage.in_proj.z", d_z))
+        d_scan = d_skip.reshape(stages["scan.y"].shape)
+        d_x_from_d = d_scan * params["D"].detach()[None, :, None]
+        intermediate_gradients.append(("stage.scan.y", d_scan))
+        intermediate_gradients.append(("partial.silu.x.from_D", d_x_from_d))
+
+        # The RMSNorm subtraction is ill-conditioned on this fixture
+        # (rstd ~= 222). Preserve the float64 oracle above, but also record an
+        # independent PyTorch-float32 calibration for native-f32 dumps. This
+        # distinguishes expected precision loss from an ordering/layout bug.
+        p32 = {
+            k: torch.from_numpy(np.array(v, copy=True)).to(device, torch.float32)
+            for k, v in tensors.items() if k != "x"
+        }
+        x32 = torch.from_numpy(np.array(tensors["x"], copy=True)).to(
+            device, torch.float32
+        )
+        stages32 = _forward_stages(
+            args.family, case, forward, p32, x32, torch.float32
+        )
+        gate32 = stages32["gnorm.gate"].detach().requires_grad_(True)
+        ss32 = gate32.pow(2).sum(-1, keepdim=True)
+        rs32 = 1.0 / torch.sqrt(ss32 / gate32.shape[-1] + GEN.M2_EPS)
+        gout32 = gate32 * rs32 * p32["norm.weight"]
+        projected32 = torch.nn.functional.linear(gout32, p32["out_proj.weight"])
+        reference32["stage.gnorm.gate"] = torch.autograd.grad(
+            _objective(projected32), gate32
+        )[0]
+        skip32 = stages32["skip.out"].detach().reshape(
+            -1, stages32["gnorm.gate"].shape[-1]
+        ).requires_grad_(True)
+        z32 = stages32["in_proj.out"].detach()[:, :skip32.shape[-1]].requires_grad_(True)
+        gated32 = skip32 * torch.nn.functional.silu(z32)
+        grstd32 = 1.0 / torch.sqrt(
+            gated32.pow(2).sum(-1, keepdim=True) / gated32.shape[-1] + GEN.M2_EPS
+        )
+        gnorm32 = gated32 * grstd32 * p32["norm.weight"]
+        gout32 = torch.nn.functional.linear(gnorm32, p32["out_proj.weight"])
+        dskip32, dz32 = torch.autograd.grad(_objective(gout32), (skip32, z32))
+        reference32["stage.skip.out"] = dskip32
+        reference32["stage.in_proj.z"] = dz32
+        dscan32 = dskip32.reshape(stages32["scan.y"].shape)
+        reference32["stage.scan.y"] = dscan32
+        reference32["partial.silu.x.from_D"] = (
+            dscan32 * p32["D"][None, :, None]
+        )
     leaf_gradients = torch.autograd.grad(loss, [v for _, v in leaves])
     named_gradients = [*intermediate_gradients, *zip(
         (name for name, _ in leaves), leaf_gradients
@@ -150,6 +222,15 @@ def generate(args):
         filename = "grad." + name + ".f64"
         shape, digest = _write_array(out / filename, grad)
         files[name] = {"file": filename, "shape": shape, "sha256": digest}
+        if name in reference32:
+            ref32_name = "grad." + name + ".ref32.f32"
+            arr32 = np.asarray(
+                reference32[name].detach().cpu(), dtype="<f4", order="C"
+            )
+            data32 = arr32.tobytes(order="C")
+            (out / ref32_name).write_bytes(data32)
+            files[name]["ref32_file"] = ref32_name
+            files[name]["ref32_sha256"] = _sha256(data32)
 
     # Audit deterministic cells in x and every parameter. Central finite
     # differences use fresh forward graphs and never inspect autograd internals.
@@ -246,6 +327,10 @@ def compare(args):
             continue
         dtype = "<f4" if path.suffix == ".f32" else "<f8"
         actual = np.fromfile(path, dtype=dtype).astype(np.float64)
+        if dtype == "<f4" and "ref32_file" in entry:
+            expected = np.fromfile(
+                oracle_dir / entry["ref32_file"], dtype="<f4"
+            ).astype(np.float64).reshape(entry["shape"])
         if actual.size != expected.size:
             failures.append(f"{name}: cells {actual.size}, expected {expected.size}")
             continue

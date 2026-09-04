@@ -22,6 +22,15 @@ download. This is required on every backend and is especially important on
 AMD, where premature context destruction previously presented as a GPU memory
 access fault.
 
+Local identity gates must be wrapped explicitly; the Pixi tasks remain
+mode-neutral because the multi-vendor harness supplies FAST and IDENTICAL:
+
+```sh
+tools/with_identical_mode.sh pixi run check-mamba-block
+tools/with_identical_mode.sh pixi run check-mamba2-block
+tools/with_identical_mode.sh pixi run check-mamba3-block
+```
+
 ## Contracts and evidence
 
 - [Mamba 1 contract](IDENTICAL_MAMBA_CONTRACT.md)
@@ -73,10 +82,11 @@ python tools/mamba_gradient_oracle.py \
   --compare /tmp/mamba1-grad /tmp/mamba1-mojo-grad
 ```
 
-Mamba 2 currently has one implemented, explicitly partial device segment: the
-residual/output-projection tail computes `d_gnorm` and
-`d(out_proj.weight)`. Its runner emits only the independently comparable
-weight gradient and names every remaining seam:
+Mamba 2 currently has an explicitly partial device tail covering the residual
+output projection, gated RMSNorm, the SiLU gate, and the D-skip join. It emits
+`d_gnorm`, `d_gate`, `d_skip`, `d_scan`, the z-slice gradient, `dD`, the
+D-path partial x gradient, and both tail weight gradients. It names every
+remaining seam:
 
 ```sh
 pixi run -e skgpu mamba-grad-m2
@@ -85,5 +95,6 @@ pixi run -e skgpu python tools/mamba_gradient_oracle.py --allow-partial \
   --compare /tmp/mojolearn-mamba2-grad /tmp/mojolearn-mamba2-mojo-grad
 ```
 
-Passing this comparison certifies only the output-projection weight derivative,
-not a whole Mamba 2 backward pass.
+Passing this comparison certifies only the output projection, gated RMSNorm,
+SiLU gate, and D-skip derivatives, not the SSD recurrence or a whole Mamba 2
+backward pass.

@@ -30,6 +30,9 @@ from mamba.impl.mamba_ssm.modules.mamba2 import (
 )
 from mamba.impl.mamba_ssm.modules.mamba2_backward import (
     Mamba2BackwardTail,
+    mamba2_backward_d_skip_into,
+    mamba2_backward_gnorm_into,
+    mamba2_backward_silu_gate_into,
     mamba2_backward_tail_into,
 )
 from mamba.impl.transformers.models.mamba.modeling_mamba import (
@@ -107,6 +110,21 @@ def main() raises:
         dims,
         m,
     )
+    mamba2_backward_gnorm_into(
+        ctx,
+        tail,
+        stages.gnorm_gate,
+        stages.gnorm_sumsq,
+        dweights.gnorm_w,
+        dims,
+        m,
+    )
+    mamba2_backward_silu_gate_into(
+        ctx, tail, stages.skip_out, stages.in_proj, dims, m
+    )
+    mamba2_backward_d_skip_into(
+        ctx, tail, stages.silu_out, dweights.d_skip, dims, m
+    )
     ctx.synchronize()
     _write_f32(
         dump_dir + "/grad.out_proj.weight.f32",
@@ -116,16 +134,48 @@ def main() raises:
         dump_dir + "/grad.stage.gnorm.out.f32",
         mamba_download(ctx, tail.d_gnorm, m * dims.d_inner),
     )
+    _write_f32(
+        dump_dir + "/grad.stage.gnorm.gate.f32",
+        mamba_download(ctx, tail.d_gate, m * dims.d_inner),
+    )
+    _write_f32(
+        dump_dir + "/grad.norm.weight.f32",
+        mamba_download(ctx, tail.d_gnorm_w, dims.d_inner),
+    )
+    _write_f32(
+        dump_dir + "/grad.stage.skip.out.f32",
+        mamba_download(ctx, tail.d_skip, m * dims.d_inner),
+    )
+    _write_f32(
+        dump_dir + "/grad.stage.in_proj.z.f32",
+        mamba_download(ctx, tail.d_z, m * dims.d_inner),
+    )
+    _write_f32(
+        dump_dir + "/grad.stage.scan.y.f32",
+        mamba_download(ctx, tail.d_scan, m * dims.d_inner),
+    )
+    _write_f32(
+        dump_dir + "/grad.partial.silu.x.from_D.f32",
+        mamba_download(ctx, tail.d_x_from_d, m * dims.d_inner),
+    )
+    _write_f32(
+        dump_dir + "/grad.D.f32",
+        mamba_download(ctx, tail.d_d, dims.nheads),
+    )
     with open(dump_dir + "/dump_manifest.json", "w") as fh:
         fh.write(
             "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
             "\"family\":\"mamba2\",\"case\":\"m2_base_b2_l4_d32\","
             "\"objective\":\"signed_dyadic_weight_v1\","
-            "\"tensors\":[\"out_proj.weight\",\"stage.gnorm.out\"]}\n"
+            "\"tensors\":[\"out_proj.weight\",\"stage.gnorm.out\","
+            "\"stage.gnorm.gate\",\"norm.weight\",\"stage.skip.out\","
+            "\"stage.in_proj.z\",\"stage.scan.y\","
+            "\"partial.silu.x.from_D\",\"D\"]}\n"
         )
     print(
-        "MAMBA2 BACKWARD PARTIAL: emitted d_gnorm and out_proj.weight; SSD, gated"
-        " norm, convolution, input projection, block norm, and full dx remain"
+        "MAMBA2 BACKWARD PARTIAL: emitted output projection + gated RMSNorm"
+        " + SiLU gate + D-skip; SSD recurrence, convolution, input projection, block norm, and"
+        " full dx remain"
     )
     _ = tail^
     _ = d_residual^
