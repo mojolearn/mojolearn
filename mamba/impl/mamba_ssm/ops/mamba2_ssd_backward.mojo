@@ -281,6 +281,97 @@ struct Mamba2SSDScaleReduction(Movable):
         self.d_dacs_total = ctx.enqueue_create_buffer[DType.float32](rows * qv)
 
 
+struct Mamba2SSDDiscretizeBackward(Movable):
+    var d_da: DeviceBuffer[DType.float32]  # [B,T,H]
+    var d_a: DeviceBuffer[DType.float32]  # [H]
+    var d_dt: DeviceBuffer[DType.float32]  # [B,T,H], S10 contribution
+
+    def __init__(out self, ctx: DeviceContext, b: Int, t: Int, nh: Int) raises:
+        self.d_da = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
+        self.d_a = ctx.enqueue_create_buffer[DType.float32](nh)
+        self.d_dt = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
+
+
+def mamba2_reverse_cumsum_kernel(
+    d_da: MutPointer[Float32, MutAnyOrigin],
+    d_dacs: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, t_in: Int32, nh_in: Int32, nc_in: Int32, q_in: Int32,
+):
+    """Reverse S11, including padded-copy gradients at the last real cell."""
+    var b = Int(b_in)
+    var t_work = Int(t_in)
+    var nh = Int(nh_in)
+    var nc = Int(nc_in)
+    var qv = Int(q_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= b * nh * nc:
+        return
+    var bb = cell // (nh * nc)
+    var rem = cell - bb * nh * nc
+    var hh = rem // nc
+    var cc = rem - hh * nc
+    var real = t_work - cc * qv
+    if real > qv:
+        real = qv
+    var carry = Float32(0.0)
+    var ii = qv - 1
+    while ii >= 0:
+        carry = ftz(carry + ftz(d_dacs.unsafe_load(
+            ((bb * nh + hh) * nc + cc) * qv + ii
+        )))
+        if ii < real:
+            d_da.unsafe_store(
+                ((bb * t_work + cc * qv + ii) * nh + hh), carry
+            )
+        ii -= 1
+
+
+def mamba2_da_product_backward_kernel(
+    d_a: MutPointer[Float32, MutAnyOrigin],
+    d_dt: MutPointer[Float32, MutAnyOrigin],
+    d_da: MutPointer[Float32, MutAnyOrigin],
+    dt: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Float32, MutAnyOrigin],
+    bt_in: Int32, nh_in: Int32,
+):
+    """Reverse S10 da=dt*A; one thread owns each head's dA reduction."""
+    var bt = Int(bt_in)
+    var nh = Int(nh_in)
+    var hh = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if hh >= nh:
+        return
+    var av = ftz(a.unsafe_load(hh))
+    var acc = Float32(0.0)
+    for row in range(bt):
+        var idx = row * nh + hh
+        var upstream = ftz(d_da.unsafe_load(idx))
+        d_dt.unsafe_store(idx, ftz(pinned_mul(upstream, av)))
+        acc = ftz(identical_mul_add(
+            ftz(dt.unsafe_load(idx)), upstream, acc
+        ))
+    d_a.unsafe_store(hh, acc)
+
+
+def mamba2_reverse_cumsum_and_da_into(
+    ctx: DeviceContext,
+    mut out: Mamba2SSDDiscretizeBackward,
+    mut d_dacs: DeviceBuffer[DType.float32],
+    mut dt: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    b: Int, t_work: Int, nh: Int, nc: Int, qv: Int,
+) raises:
+    ctx.enqueue_function[mamba2_reverse_cumsum_kernel](
+        out.d_da.unsafe_ptr(), d_dacs.unsafe_ptr(), Int32(b), Int32(t_work),
+        Int32(nh), Int32(nc), Int32(qv), grid_dim=(_grid(b * nh * nc), 1, 1),
+        block_dim=(M2_SSD_BWD_TPB, 1, 1),
+    )
+    ctx.enqueue_function[mamba2_da_product_backward_kernel](
+        out.d_a.unsafe_ptr(), out.d_dt.unsafe_ptr(), out.d_da.unsafe_ptr(),
+        dt.unsafe_ptr(), a.unsafe_ptr(), Int32(b * t_work), Int32(nh),
+        grid_dim=(_grid(nh), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
+    )
+
+
 def mamba2_merge_dacs_kernel(
     dst: MutPointer[Float32, MutAnyOrigin],
     yoff: MutPointer[Float32, MutAnyOrigin],

@@ -132,6 +132,29 @@ def generate(args):
     # than asking autograd for a mathematically-related but graph-unused view.
     intermediate_gradients = []
     reference32 = {}
+    if args.family == "mamba3":
+        # Isolate the first implemented native backward boundary.  The block
+        # output is residual + linear(gate, out_proj.weight), so its incoming
+        # cotangent is exactly the objective cotangent.  Rebuilding this one
+        # linear seam keeps the reference independent of the Mojo composer.
+        gate_input = stages["gate.out"].detach().requires_grad_(True)
+        out_weight = params["out_proj.weight"].detach().requires_grad_(True)
+        projected = torch.nn.functional.linear(gate_input, out_weight)
+        d_gate, _ = torch.autograd.grad(
+            _objective(projected), (gate_input, out_weight)
+        )
+        intermediate_gradients.append(("stage.gate.out", d_gate))
+
+        gate32 = stages["gate.out"].detach().to(torch.float32)
+        gate32.requires_grad_(True)
+        weight32 = params["out_proj.weight"].detach().to(torch.float32)
+        weight32.requires_grad_(True)
+        projected32 = torch.nn.functional.linear(gate32, weight32)
+        d_gate32, d_weight32 = torch.autograd.grad(
+            _objective(projected32), (gate32, weight32)
+        )
+        reference32["stage.gate.out"] = d_gate32
+        reference32["out_proj.weight"] = d_weight32
     if args.family == "mamba2":
         tail_input = stages["gnorm.out"].detach().requires_grad_(True)
         tail_output = torch.nn.functional.linear(
@@ -227,6 +250,30 @@ def generate(args):
         intermediate_gradients.append(("partial.dacs.from_state", d_dacs_state))
         intermediate_gradients.append((
             "partial.dacs.total", d_dacs_yoff + d_dacs_state
+        ))
+        dacs_total = (d_dacs_yoff + d_dacs_state).detach()
+        a_leaf = stages["A.out"].detach().requires_grad_(True)
+        dt_leaf = stages["dt.out"].reshape(bsz, length, nheads).detach().requires_grad_(True)
+        da_leaf = (dt_leaf * a_leaf).requires_grad_(True)
+        qsize = dacs_total.shape[-1]
+        chunk_prefixes = []
+        for chunk in range(dacs_total.shape[2]):
+            start = chunk * qsize
+            real = min(qsize, length - start)
+            prefix = torch.cumsum(da_leaf[:, start : start + real], dim=1)
+            if real < qsize:
+                prefix = torch.cat(
+                    (prefix, prefix[:, -1:].expand(-1, qsize - real, -1)), dim=1
+                )
+            chunk_prefixes.append(prefix.permute(0, 2, 1))
+        rebuilt_dacs = torch.stack(chunk_prefixes, dim=2)
+        dda, da_param, ddt = torch.autograd.grad(
+            (rebuilt_dacs * dacs_total).sum(), (da_leaf, a_leaf, dt_leaf)
+        )
+        intermediate_gradients.extend((
+            ("partial.da.total", dda),
+            ("partial.A.from_da", da_param),
+            ("partial.dt.from_da", ddt),
         ))
 
         # The RMSNorm subtraction is ill-conditioned on this fixture
@@ -331,6 +378,28 @@ def generate(args):
         )
         reference32["partial.dacs.from_state"] = ddacs_state32
         reference32["partial.dacs.total"] = ddacs_yoff32 + ddacs_state32
+        dacs_total32 = reference32["partial.dacs.total"].detach()
+        a32 = stages32["A.out"].detach().requires_grad_(True)
+        dt32 = stages32["dt.out"].reshape(b32, l32, h32).detach().requires_grad_(True)
+        da32 = (dt32 * a32).requires_grad_(True)
+        rebuilt32 = []
+        for chunk in range(dacs_total32.shape[2]):
+            start = chunk * q32
+            real = min(q32, l32 - start)
+            prefix32 = torch.cumsum(da32[:, start : start + real], dim=1)
+            if real < q32:
+                prefix32 = torch.cat(
+                    (prefix32, prefix32[:, -1:].expand(-1, q32 - real, -1)),
+                    dim=1,
+                )
+            rebuilt32.append(prefix32.permute(0, 2, 1))
+        rebuilt_dacs32 = torch.stack(rebuilt32, dim=2)
+        dda32, dapar32, ddt32 = torch.autograd.grad(
+            (rebuilt_dacs32 * dacs_total32).sum(), (da32, a32, dt32)
+        )
+        reference32["partial.da.total"] = dda32
+        reference32["partial.A.from_da"] = dapar32
+        reference32["partial.dt.from_da"] = ddt32
     leaf_gradients = torch.autograd.grad(loss, [v for _, v in leaves])
     named_gradients = [*intermediate_gradients, *zip(
         (name for name, _ in leaves), leaf_gradients

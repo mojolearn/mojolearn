@@ -6,7 +6,9 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from mamba.impl.mamba_ssm.ops.mamba2_ssd_backward import (
     Mamba2SSDBackwardState,
     Mamba2SSDScaleReduction,
+    Mamba2SSDDiscretizeBackward,
     mamba2_reduce_scale_product_into,
+    mamba2_reverse_cumsum_and_da_into,
     mamba2_reverse_chunk_state_into,
     mamba2_s18_direct_dpass_into,
 )
@@ -16,6 +18,7 @@ def _force_elaborate(
     ctx: DeviceContext,
     mut out: Mamba2SSDBackwardState,
     mut reduction: Mamba2SSDScaleReduction,
+    mut discretize: Mamba2SSDDiscretizeBackward,
     mut a: DeviceBuffer[DType.float32],
     mut b: DeviceBuffer[DType.float32],
     mut c: DeviceBuffer[DType.float32],
@@ -26,6 +29,9 @@ def _force_elaborate(
     )
     mamba2_reverse_chunk_state_into(ctx, out, b, c, d, 2, 1, 3, 256)
     mamba2_reduce_scale_product_into(ctx, reduction, out, d, 2, 3, 1, 256)
+    mamba2_reverse_cumsum_and_da_into(
+        ctx, discretize, reduction.d_dacs_total, a, b, 2, 513, 1, 3, 256
+    )
 
 
 def main():

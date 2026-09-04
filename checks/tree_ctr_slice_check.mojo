@@ -10,11 +10,14 @@ from gbdt.models.tensor_ctr_value_table import (
     insert_staged_tensor_candidate_device,
     materialize_tensor_candidate,
     parse_feature_freq_tensor_table,
+    persist_ranked_tensor_winners,
     persist_winning_tensor_candidate,
     split_tensor_hash,
     stage_tensor_candidate_host,
+    TStagedTensorCandidate,
     TTensorCtrRegistry,
     value_for_split_tensor_row,
+    next_tensor_base_from_winner,
 )
 from max.gpu.host import DeviceContext
 from gbdt.ctrs.ctr_binarization import (
@@ -314,4 +317,31 @@ def main() raises:
         dynamic_stage.feature_id
     ):
         raise Error("symmetric search did not rank the staged tensor feature")
+
+    # Persist from the real ranked split list, rather than from the candidate
+    # batch. This is the model-state boundary that prevents losing candidates
+    # from leaking into inference state.
+    var ranked_registry = TTensorCtrRegistry(dynamic_stage.feature_id)
+    var ranked_candidates = List[TStagedTensorCandidate]()
+    ranked_candidates.append(dynamic_stage.copy())
+    var persisted = persist_ranked_tensor_winners(
+        splits.copy(), ranked_candidates, ranked_registry
+    )
+    if len(persisted) != 1 or persisted[0] != dynamic_stage.feature_id:
+        raise Error("ranked tensor winner was not persisted")
+    if len(ranked_registry.features) != 1 or (
+        ranked_registry.features[0].table.tensor_hash
+        != dynamic_stage.candidate.table.tensor_hash
+    ):
+        raise Error("persisted tensor winner does not match ranked candidate")
+
+    # The selected split deterministically advances the tensor projection for
+    # candidate regeneration at the next tree level.
+    var next_tensor = next_tensor_base_from_winner(dynamic_stage, splits[0])
+    if len(next_tensor.splits) != len(
+        dynamic_stage.candidate.table.splits
+    ) + 1:
+        raise Error("winning tensor split did not advance split history")
+    if next_tensor.get_hash() == dynamic_stage.candidate.table.tensor_hash:
+        raise Error("next-level tensor identity did not change")
     print("tree CTR slice: deterministic pair FeatureFreq + text round trip PASS")

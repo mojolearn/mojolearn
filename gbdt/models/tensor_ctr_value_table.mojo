@@ -860,3 +860,49 @@ def persist_winning_tensor_candidate(
             "winning tensor feature id is not the registry's next model column"
         )
     return registry.register(staged.candidate.table.copy())
+
+
+def persist_ranked_tensor_winners(
+    ranked_splits: List[TBinarySplit],
+    staged_candidates: List[TStagedTensorCandidate],
+    mut registry: TTensorCtrRegistry,
+) raises -> List[Int]:
+    """Persist tensor tables selected by the real structure-search output."""
+    # One feature id must identify one candidate. Search batches that reuse
+    # an id are valid only serially; handing such a batch here loses which
+    # table the score belonged to and is therefore refused.
+    for i in range(len(staged_candidates)):
+        for j in range(i):
+            if staged_candidates[i].feature_id == staged_candidates[j].feature_id:
+                raise Error("ranked tensor candidate feature ids are ambiguous")
+    var columns = List[Int]()
+    for level in range(len(ranked_splits)):
+        var feature_id = Int(ranked_splits[level].feature_id)
+        for i in range(len(staged_candidates)):
+            if staged_candidates[i].feature_id != feature_id:
+                continue
+            var column = persist_winning_tensor_candidate(
+                staged_candidates[i], registry
+            )
+            columns.append(column)
+            break
+    return columns^
+
+
+def next_tensor_base_from_winner(
+    staged: TStagedTensorCandidate, winning_split: TBinarySplit
+) raises -> TFeatureTensor:
+    """Canonical tensor tracker state used to generate the next level."""
+    if Int(winning_split.feature_id) != staged.feature_id:
+        raise Error("winning split does not name the staged tensor candidate")
+    var tensor = TFeatureTensor()
+    for i in range(len(staged.candidate.table.source_features)):
+        tensor.add_cat_feature(UInt32(
+            staged.candidate.table.source_features[i]
+        ))
+    tensor.add_binary_splits(staged.candidate.table.splits.copy())
+    var before = tensor.get_hash()
+    tensor.add_binary_split(winning_split)
+    if tensor.get_hash() == before:
+        raise Error("winning split did not advance tensor tracker state")
+    return tensor^

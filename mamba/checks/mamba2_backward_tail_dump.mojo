@@ -43,8 +43,10 @@ from mamba.impl.mamba_ssm.modules.mamba2_backward import (
 from mamba.impl.mamba_ssm.modules.ssd_minimal import m2_q_eff
 from mamba.impl.mamba_ssm.ops.mamba2_ssd_backward import (
     Mamba2SSDBackwardState,
+    Mamba2SSDDiscretizeBackward,
     Mamba2SSDScaleReduction,
     mamba2_reduce_scale_product_into,
+    mamba2_reverse_cumsum_and_da_into,
     mamba2_reverse_chunk_state_into,
     mamba2_s18_direct_dpass_into,
 )
@@ -197,6 +199,14 @@ def main() raises:
         dims.nheads,
         m2_q_eff(),
     )
+    var discretize_backward = Mamba2SSDDiscretizeBackward(
+        ctx, fixture.b, stages.t_work, dims.nheads
+    )
+    mamba2_reverse_cumsum_and_da_into(
+        ctx, discretize_backward, scale_reduction.d_dacs_total,
+        stages.dt_work, stages.a_out, fixture.b, stages.t_work,
+        dims.nheads, stages.nc, m2_q_eff(),
+    )
     ctx.synchronize()
     _write_f32(
         dump_dir + "/grad.out_proj.weight.f32",
@@ -298,6 +308,24 @@ def main() raises:
             fixture.b * dims.nheads * stages.nc * m2_q_eff(),
         ),
     )
+    _write_f32(
+        dump_dir + "/grad.partial.da.total.f32",
+        mamba_download(
+            ctx, discretize_backward.d_da,
+            fixture.b * stages.t_work * dims.nheads,
+        ),
+    )
+    _write_f32(
+        dump_dir + "/grad.partial.A.from_da.f32",
+        mamba_download(ctx, discretize_backward.d_a, dims.nheads),
+    )
+    _write_f32(
+        dump_dir + "/grad.partial.dt.from_da.f32",
+        mamba_download(
+            ctx, discretize_backward.d_dt,
+            fixture.b * stages.t_work * dims.nheads,
+        ),
+    )
     with open(dump_dir + "/dump_manifest.json", "w") as fh:
         fh.write(
             "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
@@ -313,7 +341,8 @@ def main() raises:
             "\"stage.cstate.out\",\"stage.initial_state\","
             "\"stage.scale.product\",\"partial.dacs.from_state\","
             "\"partial.C.from_yoff\",\"partial.dacs.from_yoff\","
-            "\"partial.dacs.total\"]}\n"
+            "\"partial.dacs.total\",\"partial.da.total\","
+            "\"partial.A.from_da\",\"partial.dt.from_da\"]}\n"
         )
     print(
         "MAMBA2 BACKWARD PARTIAL: emitted output projection + gated RMSNorm"
@@ -325,6 +354,7 @@ def main() raises:
     _ = ssd_backward^
     _ = d_final^
     _ = scale_reduction^
+    _ = discretize_backward^
     _ = d_residual^
     _ = stages^
     _ = state^
