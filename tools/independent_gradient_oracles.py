@@ -63,9 +63,15 @@ def compare_bundle(expected, actual_dir, atol, rtol, family):
     nonfinite, and numerically different results are separate failures.
     """
     failures = []
+    selected = None
+    actual_manifest = actual_dir / "dump_manifest.json"
+    if actual_manifest.is_file():
+        selected = set(json.loads(actual_manifest.read_text())["arrays"])
     compared = 0
     for key, value in sorted(expected.items()):
         if family != "all" and not key.startswith(family + "."):
+            continue
+        if selected is not None and key not in selected:
             continue
         stem = file_stem(key)
         path32, path64 = actual_dir / (stem + ".f32"), actual_dir / (stem + ".f64")
@@ -224,9 +230,10 @@ def loss_references(out):
 
 
 def embedding_references(out):
-    weight = hashed((6, 5), 30, 0.9)
+    weight = tensor(np.arange(30, dtype=np.float64) / 32.0 - 0.5, (6, 5))
     ids = torch.tensor([[4, 1, 4, 0], [2, 4, 3, 1]], dtype=torch.int64)
-    upstream = hashed((2, 4, 5), 31, 1.1, grad=False)
+    upstream = tensor(np.arange(40, dtype=np.float64) / 16.0 - 1.0,
+                      (2, 4, 5), grad=False)
     out["embedding.input.weight"] = weight.detach().numpy()
     out["embedding.input.ids"] = ids.numpy().astype(np.float64)
     out["embedding.input.d_out"] = upstream.numpy()
@@ -243,6 +250,25 @@ def embedding_references(out):
         raise AssertionError("embedding repeated-index accumulation disagrees with closed form")
     if not torch.equal(weight.grad[0], torch.zeros_like(weight.grad[0])):
         raise AssertionError("embedding padding row received a gradient")
+
+    # Public accumulate=True behavior is deliberately stronger than assigning
+    # into a fresh gradient: ordinary rows add to caller-owned state, while
+    # padding_idx is still overwritten with canonical +0.0.
+    initial_grad = tensor(np.arange(30, dtype=np.float64) / 32.0 - 0.25,
+                          (6, 5), grad=False)
+    accumulated = initial_grad.clone()
+    for i in range(ids.shape[0]):
+        for j in range(ids.shape[1]):
+            if ids[i, j] != 0:
+                accumulated[ids[i, j]] += upstream[i, j]
+    accumulated[0] = 0.0
+    out["embedding.input.initial_d_weight"] = initial_grad.numpy()
+    out["embedding.d_weight_accumulate"] = accumulated.numpy()
+    if not torch.equal(accumulated[4], initial_grad[4] + upstream[0, 0]
+                       + upstream[0, 2] + upstream[1, 1]):
+        raise AssertionError("embedding accumulated repeated-id row is not an ordered sum")
+    if not torch.equal(accumulated[0], torch.zeros_like(accumulated[0])):
+        raise AssertionError("embedding accumulated padding row was not canonicalized")
 
 
 def optimizer_references(out):

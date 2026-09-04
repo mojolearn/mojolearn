@@ -568,6 +568,24 @@ struct EmbDump(Movable):
             self.i.append(List[Int32]())
 
 
+def _write_independent_f32(path:String,values:List[Float32]) raises:
+    var bytes=List[UInt8]()
+    for v in values:
+        var u=bitcast[DType.uint32](v);bytes.append(UInt8(Int(u&UInt32(255))));bytes.append(UInt8(Int((u>>UInt32(8))&UInt32(255))));bytes.append(UInt8(Int((u>>UInt32(16))&UInt32(255))));bytes.append(UInt8(Int((u>>UInt32(24))&UInt32(255))))
+    with open(path,"w") as fh:fh.write_bytes(Span(bytes))
+
+
+def export_independent_accumulate(ctx:DeviceContext,path:String) raises:
+    var cfg=EmbConfig(6,5,0,True);var ids=List[Int32]();var dy=List[Float32]();var prev=List[Float32]()
+    ids.append(4);ids.append(1);ids.append(4);ids.append(0);ids.append(2);ids.append(4);ids.append(3);ids.append(1)
+    for i in range(40):dy.append(Float32(i)/Float32(16)-Float32(1))
+    for i in range(30):prev.append(Float32(i)/Float32(32)-Float32(0.25))
+    var dw=_upload_f32(ctx,prev);var ddy=_upload_f32(ctx,dy);var dids=_upload_i32(ctx,ids);var counts=_upload_i32(ctx,_zeros_i32_list(6));var begins=_upload_i32(ctx,_zeros_i32_list(7));var perm=_upload_i32(ctx,_zeros_i32_list(8))
+    identical_embedding_backward_into(ctx,dw,ddy,dids,counts,begins,perm,8,cfg);ctx.synchronize();_write_independent_f32(path+"/embedding__d_weight_accumulate.f32",_download_f32(ctx,dw,30))
+    with open(path+"/dump_manifest.json","w") as fh:fh.write("{\"arrays\":[\"embedding.d_weight_accumulate\"]}\n")
+    _=dw^;_=ddy^;_=dids^;_=counts^;_=begins^;_=perm^
+
+
 def host_dump(c: EmbCase) raises -> EmbDump:
     """The oracle's nine stages for one case.
 
@@ -2960,6 +2978,9 @@ def clause_g(
 
 def main() raises:
     var armed = emb_sabotage_name()
+    var independent_dump=env_str("MOJOLEARN_INDEPENDENT_GRADIENT_DUMP")
+    if independent_dump != "":
+        var export_ctx=DeviceContext();export_independent_accumulate(export_ctx,independent_dump);return
 
     print(
         "=== embedding identity gate, profile"
