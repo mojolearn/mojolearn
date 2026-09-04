@@ -69,6 +69,10 @@ from gbdt.models.model_text import (
     save_model,
 )
 from gbdt.models.ctr_value_table import TCtrValueTable
+from gbdt.models.tensor_ctr_value_table import (
+    TTensorCtrRegistry,
+    build_feature_freq_tensor_table,
+)
 from gbdt.models.oblivious_model import (
     BIN_SPLIT_TAKE_BIN,
     BIN_SPLIT_TAKE_GREATER,
@@ -345,6 +349,17 @@ def compare_models(a: TrainedModel, b: TrainedModel, label: String) raises:
                             + " category " + String(c) + " count "
                             + String(ta.counts[c]) + " vs "
                             + String(tb.counts[c]))
+    if a.tensor_ctr_registry.first_model_column != (
+        b.tensor_ctr_registry.first_model_column
+    ) or len(a.tensor_ctr_registry.features) != len(
+        b.tensor_ctr_registry.features
+    ):
+        raise Error(label + ": tensor CTR registry shape differs")
+    for k in range(len(a.tensor_ctr_registry.features)):
+        if a.tensor_ctr_registry.features[k].table.to_text() != (
+            b.tensor_ctr_registry.features[k].table.to_text()
+        ):
+            raise Error(label + ": tensor CTR table " + String(k) + " differs")
 
 
 def assert_not_degenerate(tm: TrainedModel, label: String) raises -> Int:
@@ -519,7 +534,8 @@ def build_synthetic(ctr_columns: Int = 0) raises -> TrainedModel:
     return TrainedModel(m^, fold_counts^, one_hot^, borders^,
                         nan_treatment^, losses^,
                         List[Float64](), -1, False,
-                        ctr_columns, List[TCtrValueTable]())
+                        ctr_columns, List[TCtrValueTable](),
+                        TTensorCtrRegistry(len(fold_counts)))
 
 
 def check_synthetic_roundtrip(ctx: DeviceContext) raises:
@@ -561,6 +577,32 @@ def check_synthetic_roundtrip(ctx: DeviceContext) raises:
         raise Error("every prediction is the same value; the fixture cannot"
                     " see a permutation")
     _print_excerpt(text)
+
+
+def check_tensor_registry_roundtrip() raises:
+    """A persisted winning tensor survives actual TrainedModel text IO."""
+    var tm = build_synthetic()
+    var x: List[Float32] = [
+        0, 0, 1, 1,
+        0, 1, 0, 1,
+        4, 3, 2, 1,
+    ]
+    var sources: List[Int] = [0, 1]
+    var table = build_feature_freq_tensor_table(x, 4, 3, sources^)
+    var column = tm.tensor_ctr_registry.register(table^)
+    if column != len(tm.fold_counts):
+        raise Error("tensor model registry did not assign the next column")
+    tm.fold_counts.append(1)
+    tm.one_hot.append(False)
+    var tensor_borders: List[Float32] = [Float32(0.2)]
+    tm.borders.append(tensor_borders^)
+    tm.nan_treatment.append(NAN_TREATMENT_AS_IS)
+    var text = model_text(tm)
+    var back = load_model_text(text)
+    compare_models(tm, back, String("tensor CTR registry round trip"))
+    if model_text(back) != text:
+        raise Error("tensor CTR TrainedModel text is not canonical")
+    print("    winning tensor registry survives TrainedModel text IO")
 
 
 def _print_excerpt(text: String) raises:
@@ -1207,6 +1249,7 @@ def main() raises:
     check_float_tokens()
     var ctx = DeviceContext()
     check_synthetic_roundtrip(ctx)
+    check_tensor_registry_roundtrip()
     check_trained_roundtrip(ctx)
     check_ctr_column_count_travels(ctx)
     check_evaluator_agrees(ctx)

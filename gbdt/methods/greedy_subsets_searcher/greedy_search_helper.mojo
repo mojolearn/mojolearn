@@ -1,34 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""One complete oblivious level, end to end, on the GPU.
-
-PORT OF `TGreedySearchHelper::ComputeOptimalSplits` followed by `SplitLeaves`
-(`catboost/cuda/methods/greedy_subsets_searcher/greedy_search_helper.cpp:398`
-and `:534`) at CatBoost `54a8143a`.
-
-Ported as a FUNCTION where theirs is a helper class, because we have no
-`TPointsSubsets` object yet and the launch sequence is the part worth having
-first. That is a deviation of shape, not of behavior: the order of kernels
-and the data each one reads is theirs.
-
-It lived in `checks/` for one commit, which was wrong. This is a port of
-their file, so it belongs beside the other ports; `checks/` is for things
-CatBoost never had to write at all.
-
-**Every kernel it calls is already verified in isolation.** This is the first
-code that runs them in ORDER, so a wrong answer here is in the wiring, not in
-one of nine unknowns. That was the point of checking them separately.
-
-The order is not free choice, and two of the constraints were discovered
-while porting rather than read from their source:
-
-1. `copy` must precede `subtract`, because subtract overwrites `from` in
-   place with `from - what` and `from` has to already hold the parent totals.
-2. `scan` must precede `score` in its OWN kernel, or the score kernel loses
-   its parallel shape: it reads a leaf's cumulative sum at one bin directly,
-   and a kernel that re-derived the prefix would have to walk bins in order,
-   forcing the bin loop innermost and the leaf loop outward.
-"""
+"""One complete CatBoost-compatible oblivious-tree level on the GPU. Kernel ordering is contractual: copy precedes subtract, and scan precedes scoring."""
 
 from std.math import sqrt
 

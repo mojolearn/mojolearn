@@ -46,6 +46,7 @@ from gbdt.models.ctr_value_table import (
     dense_category_code,
     expand_raw_columns,
 )
+from gbdt.models.tensor_ctr_value_table import TTensorCtrRegistry
 from std.math import log2
 
 # DEVIATION 258: the probability links (double, as CatBoost computes them)
@@ -151,6 +152,10 @@ struct TrainedModel(Movable):
     raw category to the statistic the LEARN pool produced and scores the
     row; without them it refuses. See
     `gbdt/models/ctr_value_table.mojo`."""
+    var tensor_ctr_registry: TTensorCtrRegistry
+    """Winning combination/tree CTR tables. Empty while
+    `max_ctr_complexity > 1` remains refused; serialized now so enabling the
+    trainer cannot create models whose dynamic feature identity is lost."""
 
 
 def _build_cindex_from_floats(
@@ -1787,6 +1792,7 @@ def train(
         fit_result.stopped_early,
         ctr_column_count,
         ctr_tables^,
+        TTensorCtrRegistry(len(fold_counts)),
     )
 
 
@@ -1838,6 +1844,12 @@ def predict_floats(
     missing, which is why `ctr_column_count` travels through save and load
     beside them."""
     var n_features = len(tm.fold_counts)
+    if len(tm.tensor_ctr_registry.features) != 0:
+        raise Error(
+            "tensor CTR model apply is not wired into device quantization yet;"
+            " the registry is preserved by model IO, but scoring it through"
+            " the simple-CTR expansion would ignore split history"
+        )
     if tm.ctr_column_count != len(tm.ctr_tables):
         raise Error(
             "predict_floats cannot apply a model with "

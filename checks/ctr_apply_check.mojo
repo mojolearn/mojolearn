@@ -74,6 +74,7 @@ from gbdt.models.ctr_value_table import (
     TCtrValueTable,
     expand_raw_columns,
 )
+from gbdt.models.tensor_ctr_value_table import TTensorCtrRegistry
 from gbdt.models.model_text import (
     f32_token,
     load_model,
@@ -954,7 +955,8 @@ def build_categorical_model(with_tables: Bool = True) raises -> TrainedModel:
         nan_treatment.append(NAN_TREATMENT_AS_IS)
     return TrainedModel(
         m^, fold_counts^, one_hot^, borders^, nan_treatment^, losses^,
-        List[Float64](), -1, False, 1, tables^
+        List[Float64](), -1, False, 1, tables^,
+        TTensorCtrRegistry(len(fold_counts))
     )
 
 

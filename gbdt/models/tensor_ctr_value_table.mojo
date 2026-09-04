@@ -28,6 +28,7 @@ from gbdt.gpu_data.compressed_index_builder import (
     HostCompressedIndex,
     pack_quantized_columns_host,
 )
+from std.memory import bitcast
 
 
 def split_tensor_hash(hash: UInt64) -> Tuple[UInt32, UInt32]:
@@ -149,7 +150,8 @@ struct TFeatureFreqTensorTable(Copyable, Movable):
             out += " " + String(Int(self.splits[i].split_type))
         out += " classes " + String(self.target_classes_count)
         out += " target_border " + String(self.target_border_idx)
-        out += " prior " + String(self.prior_num) + " " + String(self.prior_denom)
+        out += " prior_bits " + String(bitcast[DType.uint32](self.prior_num))
+        out += " " + String(bitcast[DType.uint32](self.prior_denom))
         out += " denominator " + String(self.denominator)
         out += " counts " + String(len(self.counts))
         for i in range(len(self.counts)):
@@ -579,13 +581,19 @@ def parse_feature_freq_tensor_table(line: String) raises -> TFeatureFreqTensorTa
         classes > 0 and (target_border < 0 or target_border >= classes - 1)
     ):
         raise Error("invalid tensor target border")
-    if String(t[p]) != "prior":
-        raise Error("expected tensor prior")
+    if String(t[p]) != "prior_bits":
+        raise Error("expected tensor prior bits")
     p += 1
-    var pn = Float32(Float64(String(t[p])))
+    var pn_word = Int(String(t[p]))
     p += 1
-    var pd = Float32(Float64(String(t[p])))
+    var pd_word = Int(String(t[p]))
     p += 1
+    if pn_word < 0 or pn_word > 4294967295 or pd_word < 0 or (
+        pd_word > 4294967295
+    ):
+        raise Error("tensor prior bit pattern exceeds UInt32")
+    var pn = bitcast[DType.float32](UInt32(pn_word))
+    var pd = bitcast[DType.float32](UInt32(pd_word))
     if classes > 0 and pd == Float32(0.0):
         raise Error("Borders tensor prior denominator must be non-zero")
     if String(t[p]) != "denominator":

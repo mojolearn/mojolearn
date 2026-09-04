@@ -193,6 +193,11 @@ from gbdt.models.ctr_value_table import (
     TCtrValueTable,
     ctr_type_from_name,
 )
+from gbdt.models.tensor_ctr_value_table import (
+    TFeatureFreqTensorTable,
+    TTensorCtrRegistry,
+    parse_feature_freq_tensor_table,
+)
 from gbdt.ctrs.ctr import ctr_type_name
 from gbdt.data.quantization import (
     NAN_TREATMENT_AS_FALSE,
@@ -416,6 +421,18 @@ def model_text(tm: TrainedModel) raises -> String:
     # is worse than losing a leaf.
     if tm.ctr_column_count != 0:
         out += String("ctr_columns ") + String(tm.ctr_column_count) + "\n"
+    if len(tm.tensor_ctr_registry.features) != 0:
+        if tm.tensor_ctr_registry.first_model_column + len(
+            tm.tensor_ctr_registry.features
+        ) > n_features:
+            raise Error("tensor CTR registry exceeds model feature columns")
+        out += (
+            String("tensor_ctr_registry ")
+            + String(tm.tensor_ctr_registry.first_model_column) + " "
+            + String(len(tm.tensor_ctr_registry.features)) + "\n"
+        )
+        for i in range(len(tm.tensor_ctr_registry.features)):
+            out += tm.tensor_ctr_registry.features[i].table.to_text() + "\n"
 
     # which columns a CTR table stands behind, so the `type` token can say
     # so. A column is `ctr` iff a table names it; the count in the header is
@@ -438,7 +455,17 @@ def model_text(tm: TrainedModel) raises -> String:
         var is_one_hot = len(tm.one_hot) != 0 and tm.one_hot[f]
         var flag = 1 if is_one_hot else 0
         var kind = String("float")
-        if table_of_column[f] >= 0:
+        var is_tensor_ctr = (
+            len(tm.tensor_ctr_registry.features) != 0
+            and f >= tm.tensor_ctr_registry.first_model_column
+            and f < tm.tensor_ctr_registry.first_model_column
+                + len(tm.tensor_ctr_registry.features)
+        )
+        if is_tensor_ctr:
+            if is_one_hot:
+                raise Error("a tensor CTR feature cannot be one-hot")
+            kind = String("tensor_ctr")
+        elif table_of_column[f] >= 0:
             if is_one_hot:
                 raise Error(
                     "column " + String(f) + " is flagged one-hot AND carries"
@@ -726,6 +753,9 @@ def load_model_text(text: String) raises -> TrainedModel:
     var ctr_declared = List[Int]()
     var ctr_entries_seen = List[Int]()
     var ctr_counts = List[List[Int]]()
+    var tensor_registry_first = -1
+    var tensor_registry_declared = 0
+    var tensor_tables = List[TFeatureFreqTensorTable]()
 
     for raw in text.split("\n"):
         line_no += 1
@@ -791,6 +821,17 @@ def load_model_text(text: String) raises -> TrainedModel:
                 if header_seen != 4:
                     raise Error("`ctr_columns` must follow `losses`")
                 ctr_column_count = Int(t[1])
+            elif kind == String("tensor_ctr_registry"):
+                if len(t) != 3 or tensor_registry_first != -1:
+                    raise Error("malformed or duplicate tensor_ctr_registry")
+                tensor_registry_first = Int(t[1])
+                tensor_registry_declared = Int(t[2])
+                if tensor_registry_first < 0 or tensor_registry_declared < 0:
+                    raise Error("negative tensor CTR registry field")
+            elif kind == String("feature_freq_tensor"):
+                if tensor_registry_first < 0:
+                    raise Error("tensor table appears before its registry")
+                tensor_tables.append(parse_feature_freq_tensor_table(line))
             elif kind == String("feature"):
                 if header_seen != 4:
                     raise Error("a `feature` record before the header ended")
@@ -806,6 +847,7 @@ def load_model_text(text: String) raises -> TrainedModel:
                     t[7] != String("float")
                     and t[7] != String("cat")
                     and t[7] != String("ctr")
+                    and t[7] != String("tensor_ctr")
                 ):
                     raise Error(
                         "feature " + String(t[1]) + " has type '" + t[7]
@@ -1366,6 +1408,32 @@ def load_model_text(text: String) raises -> TrainedModel:
                     + ", whose type is '" + feature_kinds[fid] + "'"
                 )
 
+    if len(tensor_tables) != tensor_registry_declared:
+        raise Error(
+            "tensor CTR registry declares " + String(tensor_registry_declared)
+            + " tables and carries " + String(len(tensor_tables))
+        )
+    if tensor_registry_first >= 0 and (
+        tensor_registry_first + tensor_registry_declared > n_features
+    ):
+        raise Error("tensor CTR registry exceeds model feature columns")
+    var tensor_registry = TTensorCtrRegistry(
+        n_features if tensor_registry_first < 0 else tensor_registry_first
+    )
+    for i in range(len(tensor_tables)):
+        var column = tensor_registry.register(tensor_tables[i].copy())
+        if column != tensor_registry_first + i:
+            raise Error("tensor CTR registry column order is not canonical")
+        if feature_kinds[column] != String("tensor_ctr"):
+            raise Error("tensor CTR registry column lacks tensor_ctr feature type")
+    for f in range(n_features):
+        if feature_kinds[f] == String("tensor_ctr") and (
+            tensor_registry_first < 0 or f < tensor_registry_first or (
+                f >= tensor_registry_first + tensor_registry_declared
+            )
+        ):
+            raise Error("tensor_ctr feature has no registry table")
+
     # THE HELD-OUT FIELDS ARE NOT IN THE TEXT AND ARE NOT INVENTED HERE.
     # `test_losses` is empty, `stopped_early` is False and
     # `best_iteration` is -1 meaning NOT RECORDED -- a loaded model has no
@@ -1376,7 +1444,7 @@ def load_model_text(text: String) raises -> TrainedModel:
     return TrainedModel(
         model^, fold_counts^, one_hot^, borders^, nan_treatment^, losses^,
         List[Float64](), -1, False, ctr_column_count,
-        ctr_tables^,
+        ctr_tables^, tensor_registry^,
     )
 
 
