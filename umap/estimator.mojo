@@ -5,6 +5,7 @@
 from max.gpu.host import DeviceContext
 from neighbors.estimator import knn_search
 from umap.graph import FuzzySimplicialGraph, fuzzy_simplicial_graph
+from umap.curve import fit_umap_curve
 from umap.optimizer import optimize_layout
 from umap.params import UMAPParams
 from umap.spectral_init import spectral_initialize
@@ -67,11 +68,6 @@ def fit_transform(
         raise Error("UMAP input does not match its declared shape")
     if params.n_components != 2 and params.n_components != 3:
         raise Error("UMAP fit_transform currently supports only 2D or 3D")
-    if params.min_dist != Float32(0.1) or params.spread != Float32(1.0):
-        raise Error(
-            "UMAP fit_transform currently supports only min_dist=0.1 and "
-            "spread=1.0; fitting arbitrary a/b curves is not implemented"
-        )
     if n_samples < 2 * params.n_components + 4:
         raise Error("UMAP fit_transform has too few samples for spectral init")
     var graph = fuzzy_graph_from_data(
@@ -83,7 +79,9 @@ def fit_transform(
     var epochs = params.n_epochs
     if epochs == 0:
         epochs = 200
+    var curve = fit_umap_curve(params.min_dist, params.spread)
     return optimize_layout(
         ctx, initial^, graph.weights, n_samples, params.n_components, epochs,
+        a=curve.a, b=curve.b,
         seed=params.random_seed,
     )

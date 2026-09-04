@@ -1248,6 +1248,7 @@ check-umap-identical = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . umap/chec
 check-umap-spectral = "mojo run -I . umap/checks/spectral_init_check.mojo"
 check-umap-optimizer = "mojo run -I . umap/checks/optimizer_check.mojo"
 check-umap-estimator = "mojo run -I . umap/checks/estimator_check.mojo"
+check-umap-curve = "mojo run -I . umap/checks/curve_check.mojo"
 bench-umap-optimizer = "mojo run -I . umap/bench/optimizer_bench.mojo"
 check-if = "mojo run -I . isolation_forest/checks/if_check.mojo"
 
