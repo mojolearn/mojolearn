@@ -56,6 +56,7 @@ def main() raises:
     )
     mamba2_ydiag_xd_and_partial_dt_into(
         ctx, discretize, d_y, cb_g, seg_l, xd, xbc, dt, a_out, dtraw, dt_bias,
+        out.d_cstate, dacs,
         2, 513, 1, 32, 40, 3, 256, 0.0, 1.0
     )
     print("mamba2 SSD backward reverse-chunk recurrence compile probe")

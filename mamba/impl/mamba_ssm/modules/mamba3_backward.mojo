@@ -469,3 +469,51 @@ def mamba3_backward_dt_partial_into(
 ) raises:
     var cells=m*dims.nheads
     ctx.enqueue_function[mamba3_dt_softplus_partial_kernel](d_dt_total.unsafe_ptr(),d_dt_raw.unsafe_ptr(),d_dt_bias_rows.unsafe_ptr(),d_dt_current.unsafe_ptr(),d_dt_angle.unsafe_ptr(),in_proj.unsafe_ptr(),dt_bias.unsafe_ptr(),Int32(cells),Int32(dims.nheads),Int32(dims.d_in_proj()),Int32(dims.col_dt()),grid_dim=(_grid(cells),1,1),block_dim=(M3_BWD_TPB,1,1))
+
+
+def mamba3_s16_dseg_kernel(
+    d_seg:MutPointer[Float32,MutAnyOrigin],d_y:MutPointer[Float32,MutAnyOrigin],
+    q:MutPointer[Float32,MutAnyOrigin],k:MutPointer[Float32,MutAnyOrigin],v:MutPointer[Float32,MutAnyOrigin],
+    b_in:Int32,l_in:Int32,nh_in:Int32,qs_in:Int32,
+):
+    var b=Int(b_in);var l=Int(l_in);var nh=Int(nh_in);var qs=Int(qs_in);var nc=(l+qs-1)//qs
+    var cell=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if cell>=b*nc*nh*qs*qs:return
+    var j=cell%qs;var z=cell//qs;var i=z%qs;z=z//qs;var h=z%nh;z=z//nh;var c=z%nc;var bb=z//nc
+    var ti=c*qs+i;var tj=c*qs+j
+    if j>=i or ti>=l or tj>=l:
+        d_seg.unsafe_store(cell,Float32(0.0));return
+    var dot=Float32(0.0)
+    for n in range(M3_D_STATE):
+        dot=ftz(identical_mul_add(ftz(q.unsafe_load(((bb*l+ti)*nh+h)*M3_D_STATE+n)),ftz(k.unsafe_load(((bb*l+tj)*nh+h)*M3_D_STATE+n)),dot))
+    var acc=Float32(0.0)
+    for p in range(M3_HEADDIM):
+        var dy=ftz(d_y.unsafe_load(((bb*l+ti)*nh+h)*M3_HEADDIM+p));var vv=ftz(v.unsafe_load(((bb*l+tj)*nh+h)*M3_HEADDIM+p))
+        acc=ftz(identical_mul_add(dy,ftz(pinned_mul(dot,vv)),acc))
+    d_seg.unsafe_store(cell,acc)
+
+
+def mamba3_seg_to_adt_kernel(
+    d_adt:MutPointer[Float32,MutAnyOrigin],d_seg:MutPointer[Float32,MutAnyOrigin],seg:MutPointer[Float32,MutAnyOrigin],
+    b_in:Int32,l_in:Int32,nh_in:Int32,qs_in:Int32,
+):
+    var b=Int(b_in);var l=Int(l_in);var nh=Int(nh_in);var qs=Int(qs_in);var nc=(l+qs-1)//qs
+    var cell=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if cell>=b*l*nh:return
+    var h=cell%nh;var token=(cell//nh)%l;var bb=cell//(nh*l);var c=token//qs;var s=token%qs;var acc=Float32(0.0)
+    for i in range(s,qs):
+        if c*qs+i<l:
+            for j in range(s):
+                var idx=((((bb*nc+c)*nh+h)*qs+i)*qs+j)
+                acc=ftz(identical_mul_add(ftz(d_seg.unsafe_load(idx)),ftz(seg.unsafe_load(idx)),acc))
+    d_adt.unsafe_store(cell,acc)
+
+
+def mamba3_backward_seg_adt_into(
+    ctx:DeviceContext,mut d_seg:DeviceBuffer[DType.float32],mut d_adt:DeviceBuffer[DType.float32],mut d_y:DeviceBuffer[DType.float32],
+    mut q:DeviceBuffer[DType.float32],mut k:DeviceBuffer[DType.float32],mut v:DeviceBuffer[DType.float32],mut seg:DeviceBuffer[DType.float32],
+    b:Int,l:Int,dims:Mamba3Dims,qs:Int,
+) raises:
+    var nc=(l+qs-1)//qs;var segcells=b*nc*dims.nheads*qs*qs;var hcells=b*l*dims.nheads
+    ctx.enqueue_function[mamba3_s16_dseg_kernel](d_seg.unsafe_ptr(),d_y.unsafe_ptr(),q.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(_grid(segcells),1,1),block_dim=(M3_BWD_TPB,1,1))
+    ctx.enqueue_function[mamba3_seg_to_adt_kernel](d_adt.unsafe_ptr(),d_seg.unsafe_ptr(),seg.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(_grid(hcells),1,1),block_dim=(M3_BWD_TPB,1,1))

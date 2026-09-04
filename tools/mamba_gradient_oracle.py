@@ -246,6 +246,17 @@ def generate(args):
         dt_iso=torch.nn.functional.softplus(dt_raw+dt_bias_leaf)
         ddraw,ddbias=torch.autograd.grad((dt_iso*dt_available.detach()).sum(),(dt_raw,dt_bias_leaf))
         intermediate_gradients.extend((("partial.dt.available_total",dt_available),("partial.dt.raw",ddraw),("partial.dt_bias",ddbias)))
+        seg_leaf=stages["seg.L"].detach().requires_grad_(True)
+        strict=torch.tril(torch.ones(qsize,qsize,dtype=torch.bool,device=seg_leaf.device),diagonal=-1)
+        scores_seg=torch.einsum("bcihn,bcjhn->bchij",qpad.detach(),kpad.detach())
+        yi_seg=torch.einsum("bchij,bcjhp->bcihp",scores_seg*torch.where(strict,seg_leaf,torch.zeros_like(seg_leaf)),vpad.detach()).reshape(bsz,chunks*qsize,qrot.shape[2],64)[:,:length]
+        dseg=torch.autograd.grad((yi_seg*d_skip.detach().reshape_as(yi_seg)).sum(),seg_leaf)[0]
+        dadt=torch.zeros(bsz,length,qrot.shape[2],dtype=dseg.dtype,device=dseg.device)
+        for tt in range(length):
+            cc,ss=divmod(tt,qsize)
+            if ss:
+                dadt[:,tt]=((dseg[:,cc,:,:, :ss]*seg_leaf.detach()[:,cc,:,:, :ss])[:,:,ss:,:].sum(dim=(-1,-2)))
+        intermediate_gradients.extend((("partial.s16.seg.L",dseg),("partial.seg.adt",dadt)))
 
         gate32 = stages["gate.out"].detach().to(torch.float32)
         gate32.requires_grad_(True)
@@ -328,6 +339,12 @@ def generate(args):
         thi32=torch.stack(trs32,1);dar32,dda32=torch.autograd.grad((thi32*dth32.detach().reshape_as(thi32)).sum(),(ar32,dta32));reference32.update({"partial.angle.raw":dar32,"partial.angle.dt":dda32})
         dtavail32=dtcur32+dda32.reshape_as(dtcur32);dtr32=stages["in_proj.out"].detach().to(torch.float32)[:,dt_col:dt_col+h].requires_grad_(True);dtb32=params["dt_bias"].detach().to(torch.float32).requires_grad_(True)
         dto32=torch.nn.functional.softplus(dtr32+dtb32);ddraw32,ddbias32=torch.autograd.grad((dto32*dtavail32.detach()).sum(),(dtr32,dtb32));reference32.update({"partial.dt.available_total":dtavail32,"partial.dt.raw":ddraw32,"partial.dt_bias":ddbias32})
+        seg32=stages["seg.L"].detach().to(torch.float32).requires_grad_(True);sscore32=torch.einsum("bcihn,bcjhn->bchij",qp32.detach(),kp32.detach());yseg32=torch.einsum("bchij,bcjhp->bcihp",sscore32*torch.where(strict,seg32,torch.zeros_like(seg32)),vp32.detach()).reshape(bsz,chunks*qsize,qrot32.shape[2],64)[:,:length];dseg32=torch.autograd.grad((yseg32*dskip32.detach().reshape_as(yseg32)).sum(),seg32)[0]
+        dadt32=torch.zeros(bsz,length,qrot32.shape[2],dtype=torch.float32,device=seg32.device)
+        for tt in range(length):
+            cc,ss=divmod(tt,qsize)
+            if ss:dadt32[:,tt]=((dseg32[:,cc,:,:, :ss]*seg32.detach()[:,cc,:,:, :ss])[:,:,ss:,:].sum(dim=(-1,-2)))
+        reference32.update({"partial.s16.seg.L":dseg32,"partial.seg.adt":dadt32})
     if args.family == "mamba2":
         tail_input = stages["gnorm.out"].detach().requires_grad_(True)
         tail_output = torch.nn.functional.linear(
@@ -490,6 +507,19 @@ def generate(args):
             (rebuilt_ydiag * d_scan_ssd.detach()).sum(),
             (xd_leaf, cb_leaf, seg_leaf),
         )
+        dxd_cstate = torch.zeros_like(dxd_ydiag)
+        db_cstate = torch.zeros_like(b_recorded)
+        for chunk in range(d_cstate.shape[1]):
+            start = chunk * qsize
+            real = min(qsize, length - start)
+            dec = stages["decay.states"][:, :, chunk, :real]
+            dxd_cstate[:, start:start+real] = torch.einsum(
+                "bhpn,btn,bht->bthp", d_cstate[:, chunk],
+                b_recorded[:, start:start+real], dec)
+            db_cstate[:, start:start+real] = torch.einsum(
+                "bhpn,bthp,bht->btn", d_cstate[:, chunk],
+                xd_recorded[:, start:start+real], dec)
+        dxd_total = dxd_ydiag + dxd_cstate
         dda_seg = torch.zeros_like(dda)
         for chunk in range(dseg_ydiag.shape[1]):
             start = chunk * qsize
@@ -511,11 +541,13 @@ def generate(args):
         x_discrete = stages["silu.out"].reshape(bsz, length, conv_dim)[
             ..., : nheads * headdim
         ].reshape(bsz, length, nheads, headdim).detach()
-        dx_from_xd = dxd_ydiag * dt_leaf.detach().unsqueeze(-1)
-        ddt_xd = (dxd_ydiag * x_discrete).sum(-1)
+        dx_from_xd = dxd_total * dt_leaf.detach().unsqueeze(-1)
+        ddt_xd = (dxd_total * x_discrete).sum(-1)
         ddt_merged = ddt + ddt_xd
         intermediate_gradients.extend((
             ("partial.xd.from_ydiag", dxd_ydiag),
+            ("partial.xd.from_cstate", dxd_cstate),
+            ("partial.xd.total", dxd_total),
             ("partial.x.from_xd", dx_from_xd),
             ("partial.dt.from_xd", ddt_xd),
             ("partial.dt.merged", ddt_merged),
@@ -540,7 +572,9 @@ def generate(args):
         )
         db_cb, dc_cb = torch.autograd.grad(cb_loss, (b_leaf, c_leaf))
         intermediate_gradients.extend((
-            ("partial.B.from_cb", db_cb), ("partial.C.from_cb", dc_cb)
+            ("partial.B.from_cb", db_cb), ("partial.C.from_cb", dc_cb),
+            ("partial.B.from_cstate", db_cstate),
+            ("partial.B.total", db_cb + db_cstate),
         ))
         raw_start = nheads * headdim + conv_dim
         dtraw_leaf = stages["in_proj.out"][..., raw_start:].reshape(
@@ -728,6 +762,19 @@ def generate(args):
             (torch.cat(ydiag32_parts, dim=1) * dscan_ssd32.detach()).sum(),
             (xd32, cb32, seg32),
         )
+        dxd_cstate32 = torch.zeros_like(dxd32)
+        db_cstate32 = torch.zeros_like(b_recorded32)
+        for chunk in range(dcstate32.shape[1]):
+            start = chunk * q32
+            real = min(q32, l32 - start)
+            dec32 = stages32["decay.states"][:, :, chunk, :real]
+            dxd_cstate32[:, start:start+real] = torch.einsum(
+                "bhpn,btn,bht->bthp", dcstate32[:, chunk],
+                b_recorded32[:, start:start+real], dec32)
+            db_cstate32[:, start:start+real] = torch.einsum(
+                "bhpn,bthp,bht->btn", dcstate32[:, chunk],
+                xd_recorded32[:, start:start+real], dec32)
+        dxd_total32 = dxd32 + dxd_cstate32
         dda_seg32 = torch.zeros_like(dda32)
         for chunk in range(dseg32.shape[1]):
             start = chunk * q32
@@ -747,10 +794,12 @@ def generate(args):
         xdisc32 = stages32["silu.out"].reshape(b32, l32, cd32)[
             ..., : h32 * p_dim32
         ].reshape(b32, l32, h32, p_dim32).detach()
-        dx_xd32 = dxd32 * dt32.detach().unsqueeze(-1)
-        ddt_xd32 = (dxd32 * xdisc32).sum(-1)
+        dx_xd32 = dxd_total32 * dt32.detach().unsqueeze(-1)
+        ddt_xd32 = (dxd_total32 * xdisc32).sum(-1)
         ddt_merged32 = ddt32 + ddt_xd32
         reference32["partial.xd.from_ydiag"] = dxd32
+        reference32["partial.xd.from_cstate"] = dxd_cstate32
+        reference32["partial.xd.total"] = dxd_total32
         reference32["partial.x.from_xd"] = dx_xd32
         reference32["partial.dt.from_xd"] = ddt_xd32
         reference32["partial.dt.merged"] = ddt_merged32
@@ -775,6 +824,8 @@ def generate(args):
         db32, dc_cb32 = torch.autograd.grad(cb32_loss, (b32_leaf, c32_leaf))
         reference32["partial.B.from_cb"] = db32
         reference32["partial.C.from_cb"] = dc_cb32
+        reference32["partial.B.from_cstate"] = db_cstate32
+        reference32["partial.B.total"] = db32 + db_cstate32
         raw_start32 = h32 * p_dim32 + cd32
         dtraw32 = stages32["in_proj.out"][..., raw_start32:].reshape(
             b32, l32, h32

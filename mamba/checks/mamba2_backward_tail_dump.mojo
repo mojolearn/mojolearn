@@ -219,6 +219,7 @@ def main() raises:
         ctx, discretize_backward, tail.d_scan, stages.cb_g, stages.seg_l,
         stages.xd_work,
         stages.xbc_work, stages.dt_work, stages.a_out, stages.dtraw_work, dweights.dt_bias,
+        ssd_backward.d_cstate, stages.decay,
         fixture.b, stages.t_work, dims.nheads, dims.d_inner,
         dims.conv_dim(), stages.nc, m2_q_eff(), fixture.dt_lo, fixture.dt_hi,
     )
@@ -401,6 +402,14 @@ def main() raises:
         mamba_download(ctx, discretize_backward.d_b_cb,
             fixture.b * stages.t_work * M2_D_STATE),
     )
+    _write_f32(dump_dir + "/grad.partial.xd.from_cstate.f32",
+        mamba_download(ctx, discretize_backward.d_xd_cstate, fixture.b*stages.t_work*dims.d_inner))
+    _write_f32(dump_dir + "/grad.partial.xd.total.f32",
+        mamba_download(ctx, discretize_backward.d_xd_total, fixture.b*stages.t_work*dims.d_inner))
+    _write_f32(dump_dir + "/grad.partial.B.from_cstate.f32",
+        mamba_download(ctx, discretize_backward.d_b_cstate, fixture.b*stages.t_work*M2_D_STATE))
+    _write_f32(dump_dir + "/grad.partial.B.total.f32",
+        mamba_download(ctx, discretize_backward.d_b_total, fixture.b*stages.t_work*M2_D_STATE))
     _write_f32(
         dump_dir + "/grad.partial.C.from_cb.f32",
         mamba_download(ctx, discretize_backward.d_c_cb,
@@ -438,6 +447,8 @@ def main() raises:
             "\"partial.xd.from_ydiag\",\"partial.x.from_xd\","
             "\"partial.cb.G.from_ydiag\",\"partial.seg.L.from_ydiag\","
             "\"partial.B.from_cb\",\"partial.C.from_cb\","
+            "\"partial.xd.from_cstate\",\"partial.xd.total\","
+            "\"partial.B.from_cstate\",\"partial.B.total\","
             "\"partial.dt.from_xd\",\"partial.dt.merged\","
             "\"partial.dt_raw.merged\",\"partial.dt_bias.merged\"]}\n"
         )

@@ -40,6 +40,7 @@ from mamba.impl.mamba_ssm.modules.mamba3_backward import (
     mamba3_backward_join_current_into,
     mamba3_backward_angle_into,
     mamba3_backward_dt_partial_into,
+    mamba3_backward_seg_adt_into,
 )
 from mamba.impl.transformers.models.mamba.modeling_mamba import (
     mamba_download,
@@ -183,6 +184,9 @@ def main() raises:
     var d_dt_available=mamba_zeros(ctx,head_cells);var d_dt_raw=mamba_zeros(ctx,head_cells);var d_dt_bias_rows=mamba_zeros(ctx,head_cells);var d_dt_bias=mamba_zeros(ctx,dims.nheads)
     mamba3_backward_dt_partial_into(ctx,d_dt_available,d_dt_raw,d_dt_bias_rows,d_dt_total,d_dt_angle,stages.in_proj,device_weights.dt_bias,m,dims)
     mamba3_backward_reduce_into(ctx,d_dt_bias,d_dt_bias_rows,ones,workspace,RED3_DT_BIAS,dims,m)
+    var seg_cells=fixture.b*stages.nc*dims.nheads*M3_CHUNK_SIZE*M3_CHUNK_SIZE
+    var d_seg=mamba_zeros(ctx,seg_cells);var d_adt_seg=mamba_zeros(ctx,head_cells)
+    mamba3_backward_seg_adt_into(ctx,d_seg,d_adt_seg,d_skip,stages.rotq_work,stages.kscale_work,stages.v_work,stages.seg_l,fixture.b,fixture.l,dims,M3_CHUNK_SIZE)
     ctx.synchronize()
 
     _write_f32(
@@ -224,6 +228,8 @@ def main() raises:
     _write_f32(output + "/grad.partial.dt.available_total.f32",mamba_download(ctx,d_dt_available,head_cells))
     _write_f32(output + "/grad.partial.dt.raw.f32",mamba_download(ctx,d_dt_raw,head_cells))
     _write_f32(output + "/grad.partial.dt_bias.f32",mamba_download(ctx,d_dt_bias,dims.nheads))
+    _write_f32(output + "/grad.partial.s16.seg.L.f32",mamba_download(ctx,d_seg,seg_cells))
+    _write_f32(output + "/grad.partial.seg.adt.f32",mamba_download(ctx,d_adt_seg,head_cells))
     with open(output + "/dump_manifest.json", "w") as fh:
         fh.write(
             "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
@@ -245,7 +251,8 @@ def main() raises:
             + "\"partial.gamma.total\",\"partial.dt.current_total\","
             + "\"partial.trap.current_total\",\"partial.angle.raw\","
             + "\"partial.angle.dt\",\"partial.dt.available_total\","
-            + "\"partial.dt.raw\",\"partial.dt_bias\"]}\n"
+            + "\"partial.dt.raw\",\"partial.dt_bias\","
+            + "\"partial.s16.seg.L\",\"partial.seg.adt\"]}\n"
         )
 
     _ = d_gamma_qk^
@@ -293,3 +300,5 @@ def main() raises:
     _ = d_dt_bias_rows^
     _ = d_dt_raw^
     _ = d_dt_available^
+    _ = d_adt_seg^
+    _ = d_seg^
