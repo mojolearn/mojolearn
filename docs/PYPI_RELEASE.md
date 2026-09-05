@@ -103,9 +103,11 @@ gh workflow run release-provenance.yml --ref <release-commit-or-tag> -f publish=
 gh run watch
 ```
 
-Never rebuild after a successful qualification and silently call the new
-artifact equivalent. The workflow records and rechecks wheel digests before
-upload.
+Each dispatch builds a fresh artifact. Its own interpreter smoke, installed
+UMAP fit/transform/held-out quality checks and digest gates must pass before
+publication. Never label that artifact as byte-equivalent to an earlier
+candidate without comparing the digests. The workflow retains the UMAP
+qualification manifest and rechecks wheel digests before upload.
 
 ## 5. Close the release
 

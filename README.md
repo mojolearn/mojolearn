@@ -27,12 +27,12 @@ source .venv/bin/activate
 pip install mojolearn
 ```
 
-The current published 0.5.0 wheel is qualified on Apple silicon macOS.
-The 0.6.0 release candidate adds UMAP transformation and CSR graph storage;
-its macOS candidate wheel has passed clean installed-artifact qualification.
-Publication remains pending. Current
-NVIDIA/AMD support is qualified through source builds; historical Linux
-wheels do not establish support for these additions. There is no CPU fallback.
+Version 0.6.0 adds UMAP transformation and CSR graph storage. Its macOS
+wheel qualification covers Apple silicon, Python 3.10–3.14 and all three
+numeric modes, with additional installed UMAP fit/transform and quality
+checks on Python 3.12. Current NVIDIA/AMD qualification uses source builds;
+historical Linux wheels do not establish support for these additions.
+There is no CPU fallback.
 Run the diagnostic command before depending on a new machine:
 
 ```sh
@@ -83,7 +83,7 @@ Classical estimators include:
 - SVC, SVR, kernel density, isolation forest, and Gaussian-process regression
 - Exponential smoothing and batched ARIMA
 - UMAP embeddings with dense Euclidean input and 2D/3D spectral initialization;
-  the 0.6.0 source candidate adds unseen-sample transformation and CSR graph storage
+  version 0.6.0 adds unseen-sample transformation and CSR graph storage
 
 Additional modules provide scoring metrics, FP32 matrix multiplication,
 optimizer/training primitives, and reference-pinned Mamba and transformer
@@ -100,8 +100,8 @@ embedding = mojolearn.UMAP(
 ).fit_transform(X)
 ```
 
-The published 0.5.0 implementation stores a dense graph and does not support
-`transform`. In the **0.6.0 source release candidate**, public fitting stores
+The 0.5.0 implementation stores a dense graph and does not support
+`transform`. In **0.6.0**, public fitting stores
 the graph in CSR form, using O(n_samples × n_neighbors) graph space, and
 `transform(X_new)` embeds unseen samples against a frozen fitted model. Input
 remains a dense Euclidean array; CSR describes internal graph storage.
@@ -110,7 +110,7 @@ Exact neighbor search still performs quadratic pair comparisons.
 Source checks for the integrated fit/transform API passed all three numeric
 modes on Apple, NVIDIA and AMD. The named IDENTICAL held-out embeddings
 match across all three vendors. The macOS 0.6.0 candidate also passed clean
-installed fit/transform and quality checks; it has not yet been published. See the [release-candidate evidence](SUPPORT_MATRIX.md#umap-060-release-candidate).
+installed fit/transform and quality checks. See the [version-specific evidence](SUPPORT_MATRIX.md#umap-060-release-candidate).
 
 Transformation retains private training data and embedding copies. Changing
 parameters or numeric mode requires refitting, and changing query batching
