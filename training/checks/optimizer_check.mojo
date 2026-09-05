@@ -295,17 +295,8 @@ from training.checks.optimizer_oracle import (
 )
 
 
-# ===========================================================================
-# THE CARD PATH IS THE CALLER'S WHEN THE CALLER NAMES ONE.
-#
-# DEVIATION 1471, and it is the mamba lane's DEVIATION 970 not repeated:
-# there, every write site read a `comptime TRACE_PATH` directly, so the card
-# always landed in /tmp no matter what the caller asked for, and a leg's
-# judge reported "NO CARD written" for a lane that had just run GREEN. **A
-# green check with no card is INDISTINGUISHABLE FROM SUCCESS to the gate
-# above it.** So the path is read from the environment at RUN time and the
-# constant below is only the fallback for a standalone run by hand.
-# ===========================================================================
+# Card output follows the caller-selected runtime path; standalone runs use
+# the fallback below.
 
 comptime TRACE_PATH = "/tmp/mojolearn_optimizer_step.trace"
 
@@ -505,17 +496,7 @@ def expected_card_records(cfg: OptimizerConfig) -> Int:
     return n
 
 
-# ===========================================================================
-# THE DEVICE SIDE
-#
-# DEVIATION 1475. `optimizer.mojo` exports no `_upload` and no `_download`,
-# so unlike `transformer_check.mojo` -- which imports the block's own copies
-# specifically so that the gate's plumbing IS the code's plumbing -- this
-# file spells its own. That is a real weakness and it is named rather than
-# hidden. What limits the damage is that `identical_optimizer_step` has NO
-# plumbing of its own to differ from: every buffer is the caller's, so the
-# caller's upload and download are the only ones there are.
-# ===========================================================================
+# Device transfer helpers for caller-owned optimizer buffers.
 
 
 def _upload_f32(
@@ -1865,23 +1846,8 @@ def clause_d(ctx: DeviceContext, c: OptCase) raises -> Int:
     )
 
     # ---- CONTROL 1: a resume that FORGOT `t` ---------------------------
-    # DEVIATION 1494, AND THE FIRST RUN OF THIS CLAUSE FOUND IT. Control 1
-    # restarts the step index at 1 and requires the state to move. It fired
-    # correctly on `adam_t8` (372 cells) and CANNOT FIRE ON SGD AT ALL, and
-    # the clause correctly raised VACUOUS there.
-    #
-    # The control's own stated premise is the reason: "and therefore used the
-    # wrong bias correction on every remaining step". BIAS CORRECTION IS AN
-    # ADAM MECHANISM. Contract 4.2's SGD update reads `lr`, the gradient, the
-    # momentum buffer and the dampening flag, and NEVER READS `t`. So
-    # restarting the step index is a no-op for SGD no matter how broken the
-    # resume is, and a control that cannot move is not a control.
-    #
-    # This file ALREADY handles the mirror image correctly -- control 2 needs
-    # SGD-with-momentum and is skipped for Adam, and says so. Control 1 needs
-    # bias correction and was not skipped for SGD. The guard below makes the
-    # pair symmetric. `t` remains a checkpoint field contract 11(d) lists;
-    # what changes is only WHICH case can falsify its absence.
+    # Restarting `t` tests Adam bias correction. SGD never reads `t`, so its
+    # corresponding resume falsifier is the momentum-state control below.
     if cfg.kind == OPT_SGD:
         print(
             "  clause (d) control 1: SKIPPED -- it corrupts the step index,"
@@ -2390,25 +2356,8 @@ def clause_f(ctx: DeviceContext) raises:
             + String(nonfinite_cells(back))
             + " non-finite cells read back, expected exactly 1)."
         )
-    # DEVIATION 1497. This arm USED to measure a leak and it now asserts a
-    # refusal, which is the branch the message below anticipated in writing:
-    # "Either `optimizer.mojo` has grown a refusal since this file was
-    # written (in which case DEVIATION 1478 is closed and this arm must be
-    # rewritten as an assertion that it refuses BY NAME), or the NaN was
-    # LAUNDERED."
-    #
-    # It grew one. DEVIATION 1496 added `opt_refuse_device_inputs` to
-    # `identical_optimizer_step`, covering `param`, `grad`, `m` and `v`,
-    # after THIS CLAUSE measured a NaN in a parameter reaching `param.out`
-    # on a run with clipping off. So 1478 is CLOSED and the arm is inverted.
-    #
-    # **THE DISTINCTION THE OLD MESSAGE DREW IS THE WHOLE REASON THIS IS NOT
-    # A `try` AND A SHRUG.** A finite `param.out` has two causes and they are
-    # opposite in severity: a REFUSAL (good, and what we now require) or a
-    # LAUNDERED NaN (much worse than propagation, because it means a stage is
-    # not a function of its input). Catching the raise and reading the NAME
-    # out of it separates them; merely observing that nothing was non-finite
-    # does not.
+    # Require a named refusal. Merely seeing finite output cannot distinguish
+    # a valid refusal from a laundered NaN.
     var refused = False
     var refuse_msg = String("")
     var leaked = -1
