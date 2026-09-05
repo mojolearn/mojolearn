@@ -1140,7 +1140,27 @@ LEG_SOURCE_PATHS_PHASE8="tools/e1_bootstrap.sh tools/repeat_run_stability.py too
 # millisecond. But a benchmark driver, a lane it imports, or a vendor arm
 # script CAN, so all three are in here.
 LEG_SOURCE_PATHS_SPEED="bench/speed tools/speed_gemm_arm.py tools/speed_cuml_arm.py tools/speed_torch_seq.py tools/speed_gbdt_arm.py tools/vendor_gemm_price.py tools/fast_speed_table.py tools/leg_status.py bench/gemm_shapes.mojo core gemm original bindings python/mojolearn pixi.toml pixi.lock"
-LEG_SOURCE_PATHS_MAMBA="tools/mamba_backward_certify.sh tools/mamba_gradient_oracle.py tools/with_identical_mode.sh mamba checks core gemm original pixi.toml pixi.lock"
+LEG_SOURCE_PATHS_MAMBA="tools/mamba_backward_certify.sh tools/mamba_gradient_oracle.py tools/with_identical_mode.sh mamba :(exclude)mamba/corpus checks/__init__.mojo checks/numerics.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock"
+# The certificate needs the Mamba implementation plus three small shared
+# numerical modules. In particular it does not read mamba/corpus: the Python
+# oracle constructs its fixtures directly. That tracked corpus is tens of MB
+# and made the first paid source upload larger than the work payload itself.
+# Keep this a git-archive pathspec so every shipped byte still comes from the
+# pinned commit; do not replace it with a working-tree tar.
+LEG_ARCHIVE_PATHS_MAMBA="mamba :(exclude)mamba/corpus tools/mamba_backward_certify.sh tools/mamba_gradient_oracle.py tools/with_identical_mode.sh checks/__init__.mojo checks/numerics.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock"
+LEG_MAMBA_ARCHIVE_MAX_BYTES=10485760
+
+leg_git_archive() {
+    _archive_ref=$1
+    if [ "$PAYLOAD" = "mamba" ]; then
+        # Deliberate word-list pathspec; none of these names contain spaces.
+        # shellcheck disable=SC2086
+        git archive --format=tar "$_archive_ref" -- $LEG_ARCHIVE_PATHS_MAMBA
+    else
+        git archive --format=tar "$_archive_ref" -- . \
+            ':!bench/results/e1' ':!bench/results/e1g' ':!bench/results/fast_speed'
+    fi
+}
 
 leg_check_tree_clean() {
     # THE LOCAL CARD COMES FROM THE WORKING TREE AND THE REMOTE CARD COMES
@@ -3400,11 +3420,22 @@ leg_ship_and_run() {
     # fast_speed are 840 MB of OTHER legs' output the box never reads (every
     # diff and table runs on the Mac after the fetch). Without them: 115 MB
     # before fast_speed, less after. The commit is still exact for the source.
-    git archive --format=tar "$COMMIT" -- . ':!bench/results/e1' ':!bench/results/e1g' ':!bench/results/fast_speed' | gzip > "$TMPD/src.tgz"
+    leg_git_archive "$COMMIT" | gzip > "$TMPD/src.tgz"
+    if [ "$PAYLOAD" = "mamba" ]; then
+        _ship_bytes=$(wc -c < "$TMPD/src.tgz" | tr -d ' ')
+        [ "$_ship_bytes" -le "$LEG_MAMBA_ARCHIVE_MAX_BYTES" ] || leg_die \
+"REFUSING TO SHIP AN OVERSIZED MAMBA ARCHIVE: $_ship_bytes bytes.
+  The strict certificate source cap is $LEG_MAMBA_ARCHIVE_MAX_BYTES bytes;
+  a broad path was likely added to LEG_ARCHIVE_PATHS_MAMBA."
+        leg_say "  bounded Mamba source archive: $_ship_bytes bytes compressed"
+    fi
     # The Mac's half of the two-sided source hash, computed from the ARCHIVE
     # so that what is compared is what was SHIPPED.
     mkdir -p "$TMPD/archive"
     gzip -dc "$TMPD/src.tgz" | ( cd "$TMPD/archive" && tar xf - )
+    if [ "$PAYLOAD" = "mamba" ] && [ -e "$TMPD/archive/mamba/corpus" ]; then
+        leg_die "REFUSING TO SHIP mamba/corpus: strict backward fixtures are constructed by the oracle."
+    fi
     # A PIPELINE'S STATUS IS ITS LAST COMMAND'S, so neither `git archive` nor
     # the untar above can report a failure through `set -e`. Check the
     # RESULT instead: the file the leg is entirely about has to be in there.
@@ -4329,7 +4360,7 @@ leg_rehearse() {
     fi
 
     # -- G. source shipping --------------------------------------------------
-    if git archive --format=tar HEAD > "$TMPD/dry.tar" 2>"$TMPD/g1.err"; then
+    if leg_git_archive HEAD > "$TMPD/dry.tar" 2>"$TMPD/g1.err"; then
         mkdir -p "$TMPD/dryarch"
         ( cd "$TMPD/dryarch" && tar xf "$TMPD/dry.tar" )
         _h=$(leg_source_sha_recipe "$TMPD/dryarch")
@@ -4346,6 +4377,19 @@ leg_rehearse() {
             rok "G2 the archive contains everything the $PAYLOAD payload runs ($(leg_archive_required))"
         else
             rbad "G2 the archive contains what the $PAYLOAD payload runs" "MISSING:$_miss -- the leg would rent a box to build nothing"
+        fi
+        if [ "$PAYLOAD" = "mamba" ]; then
+            _archive_bytes=$(wc -c < "$TMPD/dry.tar" | tr -d ' ')
+            _archive_gzip_bytes=$(gzip -c "$TMPD/dry.tar" | wc -c | tr -d ' ')
+            if [ "$_archive_gzip_bytes" -gt "$LEG_MAMBA_ARCHIVE_MAX_BYTES" ]; then
+                rbad "G2b the Mamba source archive is bounded" \
+                    "$_archive_gzip_bytes compressed bytes exceeds $LEG_MAMBA_ARCHIVE_MAX_BYTES; a broad path was likely added"
+            elif [ -e "$TMPD/dryarch/mamba/corpus" ]; then
+                rbad "G2b the Mamba source archive excludes its offline corpus" \
+                    "mamba/corpus was shipped even though the strict gates construct fixtures directly"
+            else
+                rok "G2b the Mamba source archive is $_archive_gzip_bytes compressed bytes ($_archive_bytes tar) and excludes mamba/corpus"
+            fi
         fi
     else
         rbad "G1 git archive" "$(cat "$TMPD/g1.err")"
