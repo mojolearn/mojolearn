@@ -33,6 +33,11 @@ import torch
 
 ROOT = Path(__file__).resolve().parents[1]
 GEN_PATH = ROOT / "mamba" / "corpus" / "gen_corpus.py"
+MAMBA3_PUBLIC_PREFILL_LEAVES = (
+    "x", "block_norm.weight", "in_proj.weight", "dt_bias",
+    "B_norm.weight", "C_norm.weight", "B_bias", "C_bias", "D",
+    "out_proj.weight",
+)
 
 
 def _load_generator():
@@ -1101,6 +1106,8 @@ def generate(args):
             "hip": getattr(torch.version, "hip", None),
         },
     }
+    if args.family == "mamba3":
+        manifest["public_prefill_leaves"] = list(MAMBA3_PUBLIC_PREFILL_LEAVES)
     (out / "manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
@@ -1123,6 +1130,45 @@ def compare(args):
     if not dump_manifest_path.exists():
         raise SystemExit(f"missing dump provenance: {dump_manifest_path}")
     dump_manifest = json.loads(dump_manifest_path.read_text())
+    required_public = set()
+    if args.require_public_prefill:
+        if manifest.get("family") != "mamba3":
+            failures.append("public-prefill policy is defined only for mamba3")
+        oracle_public = manifest.get("public_prefill_leaves")
+        dump_public = dump_manifest.get("public_prefill_leaves")
+        canonical_public = list(MAMBA3_PUBLIC_PREFILL_LEAVES)
+        if oracle_public != canonical_public:
+            failures.append(
+                f"oracle public-prefill leaves: {oracle_public!r}, "
+                f"expected {canonical_public!r}"
+            )
+        if dump_public != canonical_public:
+            failures.append(
+                f"dump public-prefill leaves: {dump_public!r}, "
+                f"expected {canonical_public!r}"
+            )
+        required_public = set(canonical_public)
+        dump_tensors = dump_manifest.get("tensors", [])
+        if not isinstance(dump_tensors, list):
+            failures.append("dump tensors must be a list")
+            dump_tensors = []
+        if len(dump_tensors) != len(set(dump_tensors)):
+            failures.append("dump tensors contain duplicate names")
+        unknown_dump = set(dump_tensors).difference(manifest["gradients"])
+        if unknown_dump:
+            failures.append(
+                "dump names diagnostics absent from oracle: "
+                + ", ".join(sorted(unknown_dump))
+            )
+        missing_oracle = required_public.difference(manifest["gradients"])
+        if missing_oracle:
+            failures.append(
+                "oracle lacks public-prefill gradients: "
+                + ", ".join(sorted(missing_oracle))
+            )
+        selected_policies.append(
+            "manifest policy=mamba3.public_prefill_leaves.exact10.v1"
+        )
     expected_provenance = {
         "schema": "mojolearn.mamba.gradient-dump.v1",
         "family": manifest["family"],
@@ -1138,7 +1184,9 @@ def compare(args):
         compositional_leaf = False
         policy = "default"
         if name not in dump_manifest.get("tensors", []):
-            if not args.allow_partial:
+            if (args.require_public_prefill and name in required_public) or (
+                not args.allow_partial and not args.require_public_prefill
+            ):
                 failures.append(f"{name}: dump manifest does not name gradient")
             continue
         expected = np.fromfile(oracle_dir / entry["file"], dtype="<f8").reshape(entry["shape"])
@@ -1148,7 +1196,9 @@ def compare(args):
             # float64 and accept the same stem with an explicit .f32 suffix.
             path = actual_dir / entry["file"].replace(".f64", ".f32")
             if not path.exists():
-                if not args.allow_partial:
+                if (args.require_public_prefill and name in required_public) or (
+                    not args.allow_partial and not args.require_public_prefill
+                ):
                     failures.append(f"{name}: missing gradient dump")
                 continue
         dtype = "<f4" if path.suffix == ".f32" else "<f8"
@@ -1256,7 +1306,10 @@ def compare(args):
         print("Mamba gradient comparison FAILED", file=sys.stderr)
         print("\n".join("  " + f for f in failures), file=sys.stderr)
         raise SystemExit(1)
-    qualifier = "partial " if args.allow_partial else ""
+    qualifier = (
+        "public-prefill " if args.require_public_prefill
+        else "partial " if args.allow_partial else ""
+    )
     print(f"Mamba gradient {qualifier}comparison passed: {compared} tensors")
     for selected in selected_policies:
         print("  selected " + selected)
@@ -1281,7 +1334,14 @@ def main():
     parser.add_argument("--atol", type=float, default=1e-6)
     parser.add_argument("--allow-partial", action="store_true",
                         help="compare present tensors but still require at least one")
+    parser.add_argument(
+        "--require-public-prefill", action="store_true",
+        help=("require the exact declared Mamba3 public-prefill leaf set; "
+              "also compare every diagnostic tensor present in the dump"),
+    )
     args = parser.parse_args()
+    if args.allow_partial and args.require_public_prefill:
+        parser.error("--allow-partial and --require-public-prefill are exclusive")
     if args.compare:
         compare(args)
     else:
