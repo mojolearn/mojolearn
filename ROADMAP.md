@@ -3,6 +3,25 @@
 This is the only live project plan. Historical plans and handoffs are not
 current instructions; git history and `archive/` retain their evidence.
 
+## Resumed implementation and identity checks (2026-09-05)
+
+- CatBoost's experimental two-level FeatureFreq fit now accepts sample
+  weights. Native and Python checks cover unequal weights, unit-weight
+  equivalence, and occupied zero-weight leaves with zero regularization.
+- Mamba2 exposes an incoming-state cotangent at the L257 chunk boundary.
+  Mamba2/3 backward gates separate independent calculus checks from pinned
+  reduction checks; the certificate retains native gradient bytes for
+  comparisons across matching source snapshots and named devices.
+- UMAP now has an end-to-end eight-stage bit capture, with finite-parameter
+  refusal checks. Local repeatability is measured; cross-vendor status must
+  come from the captured stage comparison, not a repeated local run.
+- Stale optimizer comments and startup messages have been corrected while
+  preserving independent-corpus limitations and historical evidence.
+
+The active next step is the guarded NVIDIA backward/UMAP capture and its
+comparison with Apple, then AMD when an instance is available. These source
+checks do not replace the installed-wheel release gates below.
+
 ## Now: release truth and artifact closure
 
 1. Build a clean wheel and verify all 15 native extensions in `fast`,

@@ -1134,7 +1134,7 @@ LEG_SOURCE_PATHS_PHASE8="tools/e1_bootstrap.sh tools/repeat_run_stability.py too
 # millisecond. But a benchmark driver, a lane it imports, or a vendor arm
 # script CAN, so all three are in here.
 LEG_SOURCE_PATHS_SPEED="bench/speed tools/speed_gemm_arm.py tools/speed_cuml_arm.py tools/speed_torch_seq.py tools/speed_gbdt_arm.py tools/vendor_gemm_price.py tools/fast_speed_table.py tools/leg_status.py bench/gemm_shapes.mojo core gemm original bindings python/mojolearn pixi.toml pixi.lock"
-LEG_SOURCE_PATHS_MAMBA=".gitattributes tools/mamba_backward_certify.sh tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock"
+LEG_SOURCE_PATHS_MAMBA=".gitattributes tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock umap neighbors spectral core checks/hardware_matrix.mojo tools/umap_identity_compare.py"
 # The certificate needs the Mamba implementation plus three small shared
 # numerical modules. The Python oracle imports the forward definitions from
 # mamba/corpus/gen_corpus.py, but it constructs fixtures directly and reads
@@ -1142,7 +1142,7 @@ LEG_SOURCE_PATHS_MAMBA=".gitattributes tools/mamba_backward_certify.sh tools/mam
 # larger than the work payload itself.
 # Keep this a git-archive pathspec so every shipped byte still comes from the
 # pinned commit; do not replace it with a working-tree tar.
-LEG_ARCHIVE_PATHS_MAMBA=".gitattributes mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py tools/mamba_backward_certify.sh tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock"
+LEG_ARCHIVE_PATHS_MAMBA=".gitattributes mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock umap neighbors spectral core checks/hardware_matrix.mojo tools/umap_identity_compare.py"
 LEG_MAMBA_ARCHIVE_MAX_BYTES=10485760
 
 leg_git_archive() {
@@ -1474,7 +1474,7 @@ leg_mamba_artifacts() {
             _bad=1
         fi
         if ! grep -q "^vendor=$VENDOR$" "$_md/environment.txt" ||
-           ! grep -q "^schema=mojolearn.mamba.backward-certificate.${VENDOR}.v1$" \
+           ! grep -q "^schema=mojolearn.mamba.backward-certificate.${VENDOR}.v2$" \
                 "$_md/environment.txt"; then
             echo "  MAMBA CERT VENDOR/SCHEMA DOES NOT MATCH $VENDOR."
             _bad=1
@@ -1485,11 +1485,11 @@ leg_mamba_artifacts() {
         fi
         _green=$(awk -F '\t' '$2=="GREEN" {n++} END {print n+0}' "$_md/results.tsv")
         _red=$(awk -F '\t' '$2=="RED" {n++} END {print n+0}' "$_md/results.tsv")
-        if [ "$_green" != "3" ] || [ "$_red" != "0" ]; then
-            echo "  MAMBA CERT IS INCOMPLETE: green=$_green red=$_red (expected 3/0)."
+        if [ "$_green" != "5" ] || [ "$_red" != "0" ]; then
+            echo "  MAMBA CERT IS INCOMPLETE: green=$_green red=$_red (expected 5/0)."
             _bad=1
         fi
-        for _family in mamba1 mamba2 mamba3; do
+        for _family in mamba1 mamba2 mamba3 mamba2-l257 mamba2-state; do
             if ! awk -F '\t' -v family="$_family" '
                 $1 == family && $2 == "GREEN" && $3 == "0" && NF == 5 &&
                 length($4) == 64 && $4 !~ /[^0-9a-f]/ &&
@@ -1504,7 +1504,19 @@ leg_mamba_artifacts() {
             echo "  MAMBA CERT SHA256SUMS VERIFICATION FAILED."
             _bad=1
         fi
+        if ! python3 tools/mamba_backward_identity.py validate "$_md"; then
+            echo "  MAMBA CERT NATIVE GRADIENT VALIDATION FAILED."
+            _bad=1
+        fi
         cat "$_md/results.tsv"
+    fi
+    grep -q '^umap_identity_exit=0$' "$OUT/remote/leg.txt" 2>/dev/null || {
+        echo "  remote UMAP identity witness failed or did not finish."
+        _bad=1
+    }
+    if ! python3 tools/umap_identity_compare.py \
+        "$OUT/remote/umap.identity.log" "$OUT/remote/umap.identity.log"; then
+        _bad=1
     fi
     grep -q '^mamba_cert_exit=0$' "$OUT/remote/leg.txt" 2>/dev/null || {
         echo "  remote Mamba payload exited non-zero or did not finish."
@@ -1679,7 +1691,7 @@ leg_archive_required() {
         # on this vendor.
         echo "tools/e1_bootstrap.sh tools/repeat_run_stability.py bench/gemm_card_main.mojo gemm/checks/gemm_identical.mojo solver/cd_main.mojo kde/kde_main.mojo hierarchy/linkage_main.mojo svm/svc_main.mojo metrics/metrics_main.mojo mamba/checks/mamba_check.mojo"
     elif [ "$PAYLOAD" = "mamba" ]; then
-        echo "tools/mamba_backward_certify.sh tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh mamba/corpus/gen_corpus.py checks/kernel_matrix.mojo mamba/checks/mamba_backward_device_tail_dump.mojo mamba/checks/mamba2_backward_tail_dump.mojo mamba/checks/mamba3_backward_tail_dump.mojo"
+        echo "tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh mamba/corpus/gen_corpus.py checks/kernel_matrix.mojo mamba/checks/mamba_backward_device_tail_dump.mojo mamba/checks/mamba2_backward_tail_dump.mojo mamba/checks/mamba3_backward_tail_dump.mojo"
     else
         echo "gemm/checks/gemm_identical.mojo"
     fi
@@ -2285,17 +2297,28 @@ PATH="$HOME/.pixi/bin:$PATH"
 export PATH
 pixi install > "$OUT/pixi_env.log" 2>&1
 echo "pixi_install_exit=$?" >> "$OUT/leg.txt"
-if command -v timeout >/dev/null 2>&1; then
-    MOJOLEARN_COMMIT="@COMMIT@" MOJOLEARN_MAMBA_CERT_OUT="$OUT/mamba-cert" \
-      MOJOLEARN_MAMBA_CERT_VENDOR="@VENDOR@" \
-      timeout -k 30 @WORKTIMEOUT@ pixi run mamba-backward-cert-@VENDOR@ \
-      > "$OUT/mamba_cert_console.log" 2>&1
-    cert_rc=$?
+# Both witnesses share one work deadline, preserving the fetch reserve.
+# Refuse without timeout instead of silently running an unbounded payload.
+work_started=$(date +%s)
+if ! command -v timeout >/dev/null 2>&1; then
+    echo "umap_identity_exit=127" >> "$OUT/leg.txt"
+    echo "timeout is required for the guarded payload" > "$OUT/mamba_cert_console.log"
+    cert_rc=127
 else
-    MOJOLEARN_COMMIT="@COMMIT@" MOJOLEARN_MAMBA_CERT_OUT="$OUT/mamba-cert" \
-      MOJOLEARN_MAMBA_CERT_VENDOR="@VENDOR@" \
-      pixi run mamba-backward-cert-@VENDOR@ > "$OUT/mamba_cert_console.log" 2>&1
-    cert_rc=$?
+    timeout -k 30 180 pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 \
+      -I . umap/checks/identity_check.mojo > "$OUT/umap.identity.log" 2>&1
+    echo "umap_identity_exit=$?" >> "$OUT/leg.txt"
+    work_remaining=$((@WORKTIMEOUT@ - $(date +%s) + work_started))
+    if [ "$work_remaining" -gt 0 ]; then
+        MOJOLEARN_COMMIT="@COMMIT@" MOJOLEARN_MAMBA_CERT_OUT="$OUT/mamba-cert" \
+          MOJOLEARN_MAMBA_CERT_VENDOR="@VENDOR@" \
+          timeout -k 30 "$work_remaining" pixi run mamba-backward-cert-@VENDOR@ \
+          > "$OUT/mamba_cert_console.log" 2>&1
+        cert_rc=$?
+    else
+        echo "shared work deadline expired" > "$OUT/mamba_cert_console.log"
+        cert_rc=124
+    fi
 fi
 echo "mamba_cert_exit=$cert_rc" >> "$OUT/leg.txt"
 echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/leg.txt"
@@ -4474,7 +4497,7 @@ fi
 mkdir -p "$OUT"
 echo "== gemm.fp32.v1 remote leg (DEVIATION 536) =="
 if [ "$PAYLOAD" = "mamba" ]; then
-echo "   profile:  strict Mamba 1/2/3 public-prefill backward certificate"
+echo "   profile:  strict Mamba backward certificate with retained native bytes"
 else
 echo "   profile:  mojolearn.identical.gemm.fp32.v1"
 fi
@@ -4496,7 +4519,7 @@ echo "             payload. This leg measures the arm a user gets and makes"
 echo "             NO identity claim about it."
 elif [ "$PAYLOAD" = "mamba" ]; then
 echo "   MODE:     IDENTICAL. Strict public-prefill backward gates for"
-echo "             Mamba 1/2/3; no training and no timing claim."
+echo "             Mamba 1/2/3 plus Mamba2 multichunk/state; no timing claim."
 fi
 echo "   mode:     $MODE$( [ "$MODE" = dry ] && echo '  (nothing is rented; --rent opts in)' )"
 echo "   gpu:      $GPU_ID"
@@ -4868,7 +4891,7 @@ echo "  precision cut. That is written at length in"
 echo "  bench/speed/gemm_speed_main.mojo's docstring."
 elif [ "$PAYLOAD" = "mamba" ]; then
 echo "== step 9: Mamba backward certificate =="
-echo "  Strict public-prefill results and manifests:"
+echo "  Strict backward results, manifests, and native gradient bytes:"
 echo "    $OUT/remote/mamba-cert"
 echo "  This payload ran no training and produced no timing claim."
 elif [ "$PAYLOAD" = "phase8" ]; then

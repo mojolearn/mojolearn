@@ -50,6 +50,14 @@ PUBLIC_PREFILL_LEAVES = {
         "out_proj.weight",
     ),
 }
+STATE_BOUNDARY_LEAVES = {
+    # Mamba2's initial_states input is the state immediately before chunk 0.
+    # Its cotangent is the carry leaving the reverse S17 recurrence.
+    "mamba2": ("initial_state",),
+}
+STATE_BOUNDARY_DIAGNOSTICS = {
+    "mamba2": ("stage.initial_state",),
+}
 
 
 def _load_generator():
@@ -157,9 +165,22 @@ def _ordered_gemm_tn32(left, right):
                 parts = [np.float32(parts[k] + parts[k + 1]) if k + 1 < len(parts)
                          else parts[k] for k in range(0, len(parts), 2)]
             out[i, j] = parts[0]
-    if hasattr(left, "device"):
+    if isinstance(left, torch.Tensor):
         return torch.from_numpy(out).to(left.device)
     return out
+
+
+def _reduction32(products, *, balanced):
+    """Pinned native parameter sum; products must already be rounded f32."""
+    products = np.asarray(products, dtype=np.float32)
+    if balanced:
+        return _ordered_gemm_tn32(
+            products, np.ones((products.shape[0], 1), dtype=np.float32)
+        ).reshape(-1)
+    total = np.zeros(products.shape[1], dtype=np.float32)
+    for row in products:
+        total = (total + row).astype(np.float32)
+    return total
 
 
 def generate(args):
@@ -539,6 +560,34 @@ def generate(args):
             (isolated_yoff * d_scan_ssd.detach()).sum(),
             (pass_input, c_input, dacs_input),
         )
+        # Independent semantic initial-state oracle: rebuild the forward S17
+        # pass from an explicit leaf, then differentiate the complete S18
+        # readout. This does not reuse the manual reverse recurrence below.
+        initial_leaf = torch.zeros_like(pass_input[:, 0], requires_grad=True)
+        cstate_recorded = stages["cstate.out"].detach()
+        rebuilt_pass = []
+        hstate = initial_leaf
+        for chunk in range(pass_input.shape[1]):
+            rebuilt_pass.append(hstate)
+            scale = torch.exp(
+                stages["dacs.out"][:, :, chunk, -1]
+            ).unsqueeze(-1).unsqueeze(-1)
+            hstate = scale * hstate + cstate_recorded[:, chunk]
+        rebuilt_yoff = []
+        for token in range(length):
+            chunk, inner = divmod(token, qsize)
+            dot = (
+                c_input[:, token, None, None, :]
+                * rebuilt_pass[chunk]
+            ).sum(-1)
+            scale = torch.exp(
+                dacs_input[:, :, chunk, inner]
+            ).unsqueeze(-1)
+            rebuilt_yoff.append(dot * scale)
+        semantic_d_initial = torch.autograd.grad(
+            (torch.stack(rebuilt_yoff, dim=1) * d_scan_ssd.detach()).sum(),
+            initial_leaf,
+        )[0]
         intermediate_gradients.append(("stage.pass.states.direct", direct_d_pass))
         intermediate_gradients.append(("partial.C.from_yoff", direct_d_c))
         intermediate_gradients.append(("partial.dacs.from_yoff", d_dacs_yoff))
@@ -556,6 +605,7 @@ def generate(args):
             ("stage.pass.states.total", d_pass),
             ("stage.cstate.out", d_cstate),
             ("stage.initial_state", carry),
+            ("initial_state", semantic_d_initial),
             ("stage.scale.product", d_scale_product),
         ))
         xd_recorded = stages["xd.out"].reshape(bsz, length, nheads, headdim)
@@ -720,9 +770,14 @@ def generate(args):
         ), dim=-1)
         din_conv, dw_conv, dbias_conv = torch.autograd.grad(
             (torch.nn.functional.silu(conv_pre) * upstream_conv.detach()).sum(),
-            (conv_input, conv_w, conv_b),
+            (conv_input, conv_w, conv_b), retain_graph=True,
         )
         intermediate_gradients.append(("partial.conv.input", din_conv))
+        dconv_pre = torch.autograd.grad(
+            (torch.nn.functional.silu(conv_pre) * upstream_conv.detach()).sum(),
+            conv_pre,
+        )[0]
+        intermediate_gradients.append(("diagnostic.conv.bias_operand", dconv_pre))
         raw_start = nheads * headdim + conv_dim
         dtraw_leaf = stages["in_proj.out"][..., raw_start:].reshape(
             bsz, length, nheads
@@ -748,6 +803,13 @@ def generate(args):
         intermediate_gradients.extend((("partial.in_proj.packed",packed_inproj),("stage.norm.out",dnrm)))
         intermediate_gradients.append((
             "diagnostic.in_proj.norm_operand", stages["norm.out"].detach()
+        ))
+        block_normalized = x.detach() * torch.rsqrt(
+            x.detach().square().mean(-1, keepdim=True) + GEN.M2_EPS
+        )
+        intermediate_gradients.append((
+            "diagnostic.block_norm.weight_operand",
+            dnrm.reshape_as(x) * block_normalized,
         ))
 
         # The RMSNorm subtraction is ill-conditioned on this fixture
@@ -844,6 +906,9 @@ def generate(args):
         reference32["stage.pass.states.total"] = dpass32
         reference32["stage.cstate.out"] = dcstate32
         reference32["stage.initial_state"] = carry32
+        # Keep the promoted leaf on the independent float64 semantic oracle.
+        # stage.initial_state is the separate schedule-matched ref32 check;
+        # using it for both would make the strict leaf non-independent.
         reference32["stage.scale.product"] = dscale_product32
         xd_recorded32 = stages32["xd.out"].reshape(b32, l32, h32, p_dim32)
         b_recorded32 = stages32["silu.out"].reshape(b32, l32, cd32)[
@@ -999,13 +1064,14 @@ def generate(args):
         reference32["conv1d.weight"] = cwg32
         sig_conv32 = torch.sigmoid(cp32.detach())
         gconv32 = cup32.detach() * (
-            sig_conv32 + cp32.detach() * sig_conv32 * (1 - sig_conv32)
+            sig_conv32 + cp32.detach() * (sig_conv32 * (1 - sig_conv32))
         )
         ordered_bias32 = torch.zeros(cd32, dtype=torch.float32, device=device)
         for bb in range(b32):
             for tt in range(l32):
                 ordered_bias32 = (ordered_bias32 + gconv32[bb, tt]).float()
         reference32["conv1d.bias"] = ordered_bias32
+        reference32["diagnostic.conv.bias_operand"] = gconv32
         raw_start32 = h32 * p_dim32 + cd32
         dtraw32 = stages32["in_proj.out"][..., raw_start32:].reshape(
             b32, l32, h32
@@ -1043,7 +1109,16 @@ def generate(args):
             (block_x32, block_w32),
         )
         reference32["x"] = full_dx32
-        reference32["block_norm.weight"] = dblock_w32
+        # Match the native materialized dy * (x * rstd) and GEMM-v1 token
+        # reduction without taking any values from the native dump.
+        block_product32 = dn32.reshape_as(block_x32) * (block_x32.detach() * torch.rsqrt(
+            block_ss32.detach() / block_x32.shape[-1] + GEN.M2_EPS
+        ))
+        reference32["block_norm.weight"] = _ordered_gemm_tn32(
+            block_product32.reshape(-1, block_x32.shape[-1]),
+            torch.ones((b32*l32, 1), dtype=torch.float32, device=device),
+        ).reshape_as(dblock_w32)
+        reference32["diagnostic.block_norm.weight_operand"] = block_product32
     leaf_gradients = torch.autograd.grad(loss, [v for _, v in leaves])
     named_gradients = [*intermediate_gradients, *zip(
         (name for name, _ in leaves), leaf_gradients
@@ -1068,6 +1143,8 @@ def generate(args):
             if name == "conv1d.bias":
                 files[name]["ref32_policy"] = "serial_batch_token_v1"
             elif name == "in_proj.weight":
+                files[name]["ref32_policy"] = "gemm_fp32_v1_leaf128_balanced"
+            elif args.family == "mamba2" and name == "block_norm.weight":
                 files[name]["ref32_policy"] = "gemm_fp32_v1_leaf128_balanced"
 
     # Audit deterministic cells in x and every parameter. Central finite
@@ -1122,6 +1199,17 @@ def generate(args):
         manifest["public_prefill_leaves"] = list(
             PUBLIC_PREFILL_LEAVES[args.family]
         )
+    if args.family in STATE_BOUNDARY_LEAVES:
+        manifest["state_boundary_leaves"] = list(
+            STATE_BOUNDARY_LEAVES[args.family]
+        )
+        manifest["state_boundary_policy"] = (
+            "incoming_state_before_chunk0; block_output_objective; "
+            "final_state_cotangent=zero"
+        )
+        manifest["state_boundary_diagnostics"] = list(
+            STATE_BOUNDARY_DIAGNOSTICS[args.family]
+        )
     (out / "manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
@@ -1145,6 +1233,15 @@ def compare(args):
         raise SystemExit(f"missing dump provenance: {dump_manifest_path}")
     dump_manifest = json.loads(dump_manifest_path.read_text())
     required_public = set()
+    required_state_tensors = set()
+    if args.require_public_prefill or args.require_state_boundary:
+        dump_tensors = dump_manifest.get("tensors", [])
+        if not isinstance(dump_tensors, list) or not all(
+            isinstance(name, str) for name in dump_tensors
+        ):
+            raise SystemExit("dump tensors must be a list of names")
+        if len(dump_tensors) != len(set(dump_tensors)):
+            failures.append("dump tensors contain duplicate names")
     if args.require_public_prefill:
         family = manifest.get("family")
         if family not in PUBLIC_PREFILL_LEAVES:
@@ -1166,11 +1263,6 @@ def compare(args):
             )
         required_public = set(canonical_public)
         dump_tensors = dump_manifest.get("tensors", [])
-        if not isinstance(dump_tensors, list):
-            failures.append("dump tensors must be a list")
-            dump_tensors = []
-        if len(dump_tensors) != len(set(dump_tensors)):
-            failures.append("dump tensors contain duplicate names")
         declared_diagnostics = dump_manifest.get("diagnostics", [])
         if family == "mamba1":
             expected_diagnostics = ["stage.dB", "stage.dC"]
@@ -1216,6 +1308,63 @@ def compare(args):
             f"manifest policy={family}.public_prefill_leaves."
             f"exact{len(canonical_public)}.v1"
         )
+    if args.require_state_boundary:
+        family = manifest.get("family")
+        canonical_state = list(STATE_BOUNDARY_LEAVES.get(family, ()))
+        if not canonical_state:
+            failures.append(
+                f"state-boundary policy is not defined for {family!r}"
+            )
+        if manifest.get("state_boundary_leaves") != canonical_state:
+            failures.append(
+                f"oracle state-boundary leaves: "
+                f"{manifest.get('state_boundary_leaves')!r}, "
+                f"expected {canonical_state!r}"
+            )
+        if dump_manifest.get("state_boundary_leaves") != canonical_state:
+            failures.append(
+                f"dump state-boundary leaves: "
+                f"{dump_manifest.get('state_boundary_leaves')!r}, "
+                f"expected {canonical_state!r}"
+            )
+        canonical_state_diagnostics = list(
+            STATE_BOUNDARY_DIAGNOSTICS.get(family, ())
+        )
+        if (
+            manifest.get("state_boundary_diagnostics")
+            != canonical_state_diagnostics
+            or dump_manifest.get("state_boundary_diagnostics")
+            != canonical_state_diagnostics
+        ):
+            failures.append(
+                "state-boundary diagnostic manifest mismatch: expected "
+                f"{canonical_state_diagnostics!r}"
+            )
+        expected_state_policy = (
+            "incoming_state_before_chunk0; block_output_objective; "
+            "final_state_cotangent=zero"
+        )
+        if manifest.get("state_boundary_policy") != expected_state_policy or \
+           dump_manifest.get("state_boundary_policy") != expected_state_policy:
+            failures.append("state-boundary objective/policy provenance mismatch")
+        dump_tensors = dump_manifest.get("tensors", [])
+        for name in canonical_state:
+            if name not in manifest.get("gradients", {}):
+                failures.append(f"oracle lacks state-boundary gradient: {name}")
+            if name not in dump_tensors:
+                failures.append(f"dump lacks state-boundary gradient: {name}")
+        for name in canonical_state_diagnostics:
+            if name not in manifest.get("gradients", {}):
+                failures.append(f"oracle lacks state-boundary diagnostic: {name}")
+            if name not in dump_tensors:
+                failures.append(f"dump lacks state-boundary diagnostic: {name}")
+        required_public.update(canonical_state)
+        required_state_tensors.update(canonical_state)
+        required_state_tensors.update(canonical_state_diagnostics)
+        selected_policies.append(
+            f"manifest policy={family}.state_boundary_leaves."
+            f"exact{len(canonical_state)}.v1"
+        )
     expected_provenance = {
         "schema": "mojolearn.mamba.gradient-dump.v1",
         "family": manifest["family"],
@@ -1228,6 +1377,15 @@ def compare(args):
                 f"provenance {key}: {dump_manifest.get(key)!r}, expected {expected_value!r}"
             )
     for name, entry in manifest["gradients"].items():
+        # This gate certifies one state API boundary, not all public parameter
+        # contractions at L257. Those have their own strict public-prefill
+        # gate and, for long reductions, their own compositional policies.
+        if (
+            args.require_state_boundary
+            and not args.require_public_prefill
+            and name not in required_state_tensors
+        ):
+            continue
         compositional_leaf = False
         policy = "default"
         if name not in dump_manifest.get("tensors", []):
@@ -1263,7 +1421,13 @@ def compare(args):
         dtype = "<f4" if path.suffix == ".f32" else "<f8"
         chosen_oracle = "float64"
         actual = np.fromfile(path, dtype=dtype).astype(np.float64)
-        compositional_leaf = (
+        reduction_leaf = (
+            dtype == "<f4"
+            and manifest["family"] == "mamba2"
+            and manifest["case"] == "m2_base_b1_l257_d64"
+            and name in ("conv1d.bias", "block_norm.weight")
+        )
+        compositional_leaf = reduction_leaf or (
             dtype == "<f4"
             and manifest["family"] == "mamba2"
             and manifest["case"] == "m2_base_b1_l257_d64"
@@ -1276,7 +1440,48 @@ def compare(args):
             chosen_oracle = "pytorch-float32"
             if "ref32_policy" in entry:
                 chosen_oracle += "/" + entry["ref32_policy"]
-        if compositional_leaf:
+        if reduction_leaf:
+            balanced = name == "block_norm.weight"
+            operand_name = (
+                "diagnostic.block_norm.weight_operand" if balanced
+                else "diagnostic.conv.bias_operand"
+            )
+            reduction = "leaf128_balanced" if balanced else "serial_batch_token"
+            policy = f"mamba2.{name}.semantic_operand_plus_bitwise_{reduction}.v1"
+            operand_entry = manifest["gradients"].get(operand_name)
+            operand_path = actual_dir / f"grad.{operand_name}.f32"
+            if (
+                operand_entry is None
+                or operand_name not in dump_manifest.get("tensors", [])
+                or not operand_path.exists()
+            ):
+                failures.append(f"{name}: missing required semantic reduction operand")
+            else:
+                operand_actual = np.fromfile(operand_path, "<f4")
+                reference_file = operand_entry.get("ref32_file", operand_entry["file"])
+                reference_dtype = "<f4" if "ref32_file" in operand_entry else "<f8"
+                operand_expected = np.fromfile(oracle_dir / reference_file, reference_dtype)
+                if operand_actual.size != operand_expected.size:
+                    failures.append(f"{name}: reduction operand cell count mismatch")
+                else:
+                    semantic64 = np.fromfile(oracle_dir / operand_entry["file"], "<f8")
+                    if semantic64.size != operand_actual.size or not np.allclose(
+                        operand_actual.astype(np.float64), semantic64,
+                        rtol=args.rtol, atol=args.atol, equal_nan=False,
+                    ):
+                        failures.append(f"{name}: float64 reduction operand semantics failed")
+                    if not np.allclose(
+                        operand_actual.astype(np.float64), operand_expected.astype(np.float64),
+                        rtol=args.rtol, atol=args.atol, equal_nan=False,
+                    ):
+                        failures.append(f"{name}: independent reduction operand semantics failed")
+                    width = operand_entry["shape"][-1]
+                    arithmetic = _reduction32(operand_actual.reshape(-1, width), balanced=balanced)
+                    equal = np.array_equal(actual.astype(np.float32).view(np.uint32), arithmetic.view(np.uint32))
+                    arithmetic_reports.append(f"{name} exact-operand reduction: bitwise={equal}")
+                    if not equal:
+                        failures.append(arithmetic_reports[-1])
+        if compositional_leaf and name == "in_proj.weight":
             policy = "mamba2.in_proj_weight.compositional_operands_plus_bitwise_gemm.v1"
             packed_entry = manifest["gradients"]["partial.in_proj.packed"]
             packed_path = actual_dir / "grad.partial.in_proj.packed.f32"
@@ -1347,7 +1552,7 @@ def compare(args):
             selected_policies.append(
                 f"{name}: policy={policy}, direct-f64-reported-only "
                 f"maxabs={float(delta.max()):.3e}; operand semantic gates + "
-                "exact-operand bitwise GEMM are normative"
+                "exact-operand bitwise arithmetic are normative"
             )
         elif not direct_close:
             delta = np.abs(actual - expected)
@@ -1367,6 +1572,7 @@ def compare(args):
         raise SystemExit(1)
     qualifier = (
         "public-prefill " if args.require_public_prefill
+        else "state-boundary " if args.require_state_boundary
         else "partial " if args.allow_partial else ""
     )
     print(f"Mamba gradient {qualifier}comparison passed: {compared} tensors")
@@ -1398,9 +1604,15 @@ def main():
         help=("require the exact declared public-prefill leaf set; "
               "also compare every diagnostic tensor present in the dump"),
     )
+    parser.add_argument(
+        "--require-state-boundary", action="store_true",
+        help="require the exact declared incoming-state gradient leaf set",
+    )
     args = parser.parse_args()
-    if args.allow_partial and args.require_public_prefill:
-        parser.error("--allow-partial and --require-public-prefill are exclusive")
+    if args.allow_partial and (
+        args.require_public_prefill or args.require_state_boundary
+    ):
+        parser.error("--allow-partial is exclusive with strict manifest policies")
     if args.compare:
         compare(args)
     else:

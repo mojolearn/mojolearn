@@ -9,8 +9,8 @@ state, not trainable estimator or complete language-model APIs.
 | family | forward | decode/continuation | Python binding | backward |
 |---|---|---|---|---|
 | Mamba 1 | implemented | implemented | implemented | complete whole-pass validation for public gradients |
-| Mamba 2 | implemented | implemented | implemented | complete for short prefill; decode/window backward is unsupported |
-| Mamba 3 | implemented | implemented | implemented | active partial implementation with independent gradient oracles |
+| Mamba 2 | implemented | implemented | implemented | all ten public prefill leaves; explicit incoming-state gradient; decode/window backward unsupported |
+| Mamba 3 | implemented | implemented | implemented | all ten public prefill leaves; decode/window backward unsupported |
 
 All forward families expose `fast`, `deterministic`, and `identical` builds.
 FAST is allowed to differ from the IDENTICAL oracle; recording that difference
@@ -42,10 +42,11 @@ The contracts define the profile; executable checks are the status source.
 
 ## Backward implementation order
 
-1. Close the remaining Mamba 3 public gradients against independent oracles.
-2. Define a differentiable continuation-state contract before implementing
-   Mamba 2 decode/window backward.
-3. Re-run IDENTICAL certification on named NVIDIA and AMD devices.
+1. Validate Mamba 2's explicit incoming-state gradient at a multichunk
+   boundary.
+2. Define cotangents for mutable convolution windows before implementing
+   token-at-a-time decode backward.
+3. Extend that state-boundary contract to Mamba 1 and Mamba 3.
 
 ## Independent gradient oracle
 
@@ -66,35 +67,60 @@ PyTorch build; the manifest records CUDA versus HIP. These are tolerance
 references. IDENTICAL validation still requires a Mojo device card to match
 the pinned Mojo host oracle bit for bit.
 
-Once a whole-pass Mojo backward runner emits matching files, compare it with:
+Strict public-prefill gates are:
 
 ```sh
-python tools/mamba_gradient_oracle.py \
-  --compare /tmp/mamba1-grad /tmp/mamba1-mojo-grad
+pixi run -e skgpu mamba-grad-m1-public
+pixi run -e skgpu mamba-grad-m2-public
+pixi run -e skgpu mamba-grad-m3-public
 ```
 
-Mamba 2 currently has an explicitly partial device tail covering the residual
-output projection, gated RMSNorm, the SiLU gate, and the D-skip join. It emits
-`d_gnorm`, `d_gate`, `d_skip`, `d_scan`, the z-slice gradient, `dD`, the
-D-path partial x gradient, and both tail weight gradients. It names every
-remaining seam:
+Mamba 2 additionally exposes the cotangent of `initial_states` immediately
+before chunk zero. The strict witness uses L257 so the reverse recurrence
+crosses a chunk boundary; the block-output objective has an explicit zero
+final-state cotangent:
 
 ```sh
-pixi run -e skgpu mamba-grad-m2
-pixi run dump-mamba2-backward-tail
-pixi run -e skgpu python tools/mamba_gradient_oracle.py --allow-partial \
-  --compare /tmp/mojolearn-mamba2-grad /tmp/mojolearn-mamba2-mojo-grad
+pixi run -e skgpu mamba-grad-m2-initial-state
 ```
 
-Passing this comparison certifies only the output projection, gated RMSNorm,
-SiLU gate, and D-skip derivatives, not the SSD recurrence or a whole Mamba 2
-backward pass.
+The incoming-state leaf is compared with float64 autograd through a rebuilt
+forward recurrence. Its separate `stage.initial_state` diagnostic uses the
+float32 schedule reference. The state gate checks those two tensors; run
+`mamba-grad-m2-l257` to check the public parameter/input gradients for the same
+multi-chunk fixture. Both strict policies can also be passed together to
+`tools/mamba_gradient_oracle.py --compare`.
 
-The first pinned SSD-backward kernel now exists separately in
-`impl/mamba_ssm/ops/mamba2_ssd_backward.mojo`: it implements the descending
-inter-chunk state recurrence and emits chunk-increment, incoming-state,
-initial-state, and per-cell scale-product gradients. The scale products are
-now reduced by GEMM-v1 over the exact p-major `P*N=8192` layout, then chained
-through `exp(dacs[last])` into a sparse per-chunk `d_dacs` contribution. It is
-compile-probed but not yet connected to S18, which must produce its direct
-incoming-state gradient before the recurrence can join the partial composer.
+At L257, `conv1d.bias` and `block_norm.weight` use named compositional
+policies: each per-token operand must match both the independent float64
+reference and the float32 reference at the default tolerances, then the
+public gradient must match the pinned reduction of the native operands bit
+for bit. Bias uses the serial batch/token sum; block norm uses GEMM-v1's
+128-cell leaves and balanced fold. Direct float64 public-gradient errors
+remain reported. This separates accumulated trajectory rounding from an
+incorrect reduction without widening the numerical tolerances.
+
+Strict-policy sabotage tests cover missing tensors, altered provenance,
+nonfinite values, and corrupted public gradients with both policies enabled:
+
+```sh
+pixi run -e skgpu python tools/test_mamba_gradient_oracle.py
+```
+
+This does not claim token-at-a-time decode backward: the convolution-window
+cotangent and mutable cache update contract remain undefined.
+
+Backward certificates retain native public-gradient bytes for all three short
+prefill fixtures and the Mamba 2 L257 public/state gates (five result rows):
+
+```sh
+pixi run -e skgpu mamba-backward-cert-apple
+# Use mamba-backward-cert-nvidia or mamba-backward-cert-amd on those devices.
+python tools/mamba_backward_identity.py compare CERT_A CERT_B
+```
+
+Schema v2 stores raw public gradients under each case's `native/` directory
+and fingerprints the source, rejecting source changes during a run. The
+comparison requires every semantic gate to be GREEN before comparing native
+bytes and provenance. Cross-device identity is established only when actual
+captures from the named hardware agree.

@@ -323,6 +323,17 @@ def main() raises:
             fixture.b * dims.nheads * M2_HEADDIM * M2_D_STATE,
         ),
     )
+    # Public state-boundary spelling. This is the same reverse-S17 carry as
+    # the diagnostic above: the cotangent of initial_states immediately
+    # before chunk 0, for the block-output objective (d_final = 0).
+    _write_f32(
+        dump_dir + "/grad.initial_state.f32",
+        mamba_download(
+            ctx,
+            ssd_backward.d_initial,
+            fixture.b * dims.nheads * M2_HEADDIM * M2_D_STATE,
+        ),
+    )
     _write_f32(
         dump_dir + "/grad.partial.dacs.from_state.f32",
         mamba_download(
@@ -460,6 +471,7 @@ def main() raises:
     _write_f32(dump_dir + "/grad.partial.conv.input.f32", mamba_download(ctx, conv_backward.d_in_xbc, m*dims.conv_dim()))
     _write_f32(dump_dir + "/grad.conv1d.weight.f32", mamba_download(ctx, conv_backward.d_w, dims.conv_dim()*4))
     _write_f32(dump_dir + "/grad.conv1d.bias.f32", mamba_download(ctx, conv_backward.d_b, dims.conv_dim()))
+    _write_f32(dump_dir + "/grad.diagnostic.conv.bias_operand.f32", mamba_download(ctx, conv_backward.d_conv, m*dims.conv_dim()))
     _write_f32(dump_dir + "/grad.partial.in_proj.packed.f32", mamba_download(ctx, tail.d_in_proj, m*dims.d_in_proj()))
     _write_f32(dump_dir + "/operand.in_proj.norm.out.f32", mamba_download(ctx, stages.norm_out, m*dims.d_model))
     _write_f32(dump_dir + "/grad.diagnostic.in_proj.norm_operand.f32", mamba_download(ctx, stages.norm_out, m*dims.d_model))
@@ -467,6 +479,7 @@ def main() raises:
     _write_f32(dump_dir + "/grad.in_proj.weight.f32", mamba_download(ctx, tail.d_w_in, dims.d_in_proj()*dims.d_model))
     _write_f32(dump_dir + "/grad.x.f32", mamba_download(ctx, tail.d_block_x, m*dims.d_model))
     _write_f32(dump_dir + "/grad.block_norm.weight.f32", mamba_download(ctx, tail.d_block_w, dims.d_model))
+    _write_f32(dump_dir + "/grad.diagnostic.block_norm.weight_operand.f32", mamba_download(ctx, tail.block_product, m*dims.d_model))
     _write_f32(
         dump_dir + "/grad.partial.dt_bias.merged.f32",
         mamba_download(ctx, discretize_backward.d_dt_bias, dims.nheads),
@@ -486,12 +499,16 @@ def main() raises:
             "\"in_proj.weight\",\"conv1d.weight\",\"conv1d.bias\","
             "\"dt_bias\",\"A_log\",\"D\",\"norm.weight\","
             "\"out_proj.weight\"],"
+            "\"state_boundary_leaves\":[\"initial_state\"],"
+            "\"state_boundary_diagnostics\":[\"stage.initial_state\"],"
+            "\"state_boundary_policy\":\"incoming_state_before_chunk0; "
+            "block_output_objective; final_state_cotangent=zero\","
             "\"tensors\":[\"out_proj.weight\",\"stage.gnorm.out\","
             "\"stage.gnorm.gate\",\"norm.weight\",\"stage.skip.out\","
             "\"stage.in_proj.z\",\"stage.scan.y\","
             "\"partial.silu.x.from_D\",\"D\","
             "\"stage.pass.states.direct\",\"stage.pass.states.total\","
-            "\"stage.cstate.out\",\"stage.initial_state\","
+            "\"stage.cstate.out\",\"stage.initial_state\",\"initial_state\","
             "\"stage.scale.product\",\"partial.decay.from_cstate\","
             "\"partial.dacs.from_state\",\"partial.dacs.from_decay\","
             "\"partial.C.from_yoff\",\"partial.dacs.from_yoff\","
@@ -508,6 +525,7 @@ def main() raises:
             "\"partial.conv.input\",\"conv1d.weight\",\"conv1d.bias\","
             "\"partial.in_proj.packed\",\"stage.norm.out\",\"in_proj.weight\","
             "\"diagnostic.in_proj.norm_operand\","
+            "\"diagnostic.conv.bias_operand\",\"diagnostic.block_norm.weight_operand\","
             "\"x\",\"block_norm.weight\","
             "\"partial.dt.from_xd\",\"partial.dt.merged\","
             "\"partial.dt_raw.merged\",\"partial.dt_bias.merged\","
@@ -515,7 +533,8 @@ def main() raises:
         )
     print(
         "MAMBA2 BACKWARD: all ten public parameter/input leaves emitted for"
-        " prefill; internal stage tensors remain diagnostic partials and"
+        " prefill plus the explicit incoming initial_state cotangent;"
+        " internal stage tensors remain diagnostic partials and"
         " decode/window backward remains explicitly unsupported"
     )
     _ = tail^
