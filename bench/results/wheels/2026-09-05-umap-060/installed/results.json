@@ -1,0 +1,284 @@
+{
+  "status": "PASSED",
+  "started_at": "2026-09-05T15:03:29.180388+00:00",
+  "wheel": "/Users/andrewhendel/.mojolearn-runner/_work/mojolearn/mojolearn/python/dist/mojolearn-0.6.0-py3-none-macosx_11_0_arm64.whl",
+  "wheel_sha256": "4b7e75e170d1a3855d8d2723a7438d36645c4d8d3b3a9688391e8194656c3b7b",
+  "source_root": "/Users/andrewhendel/.mojolearn-runner/_work/mojolearn/mojolearn",
+  "expected_version": "0.6.0",
+  "device": "Apple M4",
+  "python_requested": "/opt/homebrew/bin/python3.12",
+  "source_files": {
+    "python/mojolearn/_umap_impl.py": "5c0e05cfbbea4c55a5183a62bce959769dae50f0e82231256788cc76facaf117",
+    "python/mojolearn/tests/test_umap_surface.py": "aef53d85f4016fe3457317794c9dc216a7dceb4bf7d646974d6a8d63de992153",
+    "python/mojolearn/tests/test_umap_transform.py": "2652c7b81c2d8b0abbfd53dee866965ec53e8177a8ac06dd9898477629e759bc",
+    "tools/umap_transform_quality_check.py": "e845455a02bcc5edf1ea8974bc6cfb439fe6ab7c315f0e7037f66787f24208e4"
+  },
+  "timeout_seconds": 180,
+  "jobs": [
+    {
+      "name": "create-venv",
+      "command": [
+        "/opt/homebrew/bin/python3.12",
+        "-m",
+        "venv",
+        "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv"
+      ],
+      "exit_code": 0,
+      "timed_out": false,
+      "seconds": 1.1261827499838546,
+      "log": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/wheels/2026-09-05-umap-060/installed/create-venv.log"
+    },
+    {
+      "name": "install-wheel",
+      "command": [
+        "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/bin/python",
+        "-m",
+        "pip",
+        "install",
+        "--disable-pip-version-check",
+        "--no-input",
+        "--only-binary=:all:",
+        "/Users/andrewhendel/.mojolearn-runner/_work/mojolearn/mojolearn/python/dist/mojolearn-0.6.0-py3-none-macosx_11_0_arm64.whl"
+      ],
+      "exit_code": 0,
+      "timed_out": false,
+      "seconds": 1.4255660419585183,
+      "log": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/wheels/2026-09-05-umap-060/installed/install-wheel.log"
+    },
+    {
+      "name": "fit-fast",
+      "command": [
+        "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/bin/python",
+        "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/run_installed.py",
+        "/Users/andrewhendel/.mojolearn-runner/_work/mojolearn/mojolearn/python/mojolearn/tests/test_umap_surface.py"
+      ],
+      "exit_code": 0,
+      "timed_out": false,
+      "seconds": 11.847476374940015,
+      "log": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/wheels/2026-09-05-umap-060/installed/fit-fast.log",
+      "installed": {
+        "package": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+        "version": "0.6.0",
+        "wrapper": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/_umap_impl.py",
+        "wrapper_sha256": "5c0e05cfbbea4c55a5183a62bce959769dae50f0e82231256788cc76facaf117",
+        "binding_file": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/_mojolearn_metrics.so",
+        "binding_sha256": "8706ed2f6466c7d8263a5a8454b25a80c030b1610433a5c9d5497780ab01983c",
+        "mode": "fast",
+        "binding_mode_code": 0,
+        "python": "3.12.11 (main, Jun  3 2025, 15:41:47) [Clang 17.0.0 (clang-1700.0.13.3)]"
+      }
+    },
+    {
+      "name": "transform-fast",
+      "command": [
+        "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/bin/python",
+        "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/run_installed.py",
+        "/Users/andrewhendel/.mojolearn-runner/_work/mojolearn/mojolearn/python/mojolearn/tests/test_umap_transform.py"
+      ],
+      "exit_code": 0,
+      "timed_out": false,
+      "seconds": 6.432384082931094,
+      "log": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/wheels/2026-09-05-umap-060/installed/transform-fast.log",
+      "installed": {
+        "package": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+        "version": "0.6.0",
+        "wrapper": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/_umap_impl.py",
+        "wrapper_sha256": "5c0e05cfbbea4c55a5183a62bce959769dae50f0e82231256788cc76facaf117",
+        "binding_file": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/_mojolearn_metrics.so",
+        "binding_sha256": "8706ed2f6466c7d8263a5a8454b25a80c030b1610433a5c9d5497780ab01983c",
+        "mode": "fast",
+        "binding_mode_code": 0,
+        "python": "3.12.11 (main, Jun  3 2025, 15:41:47) [Clang 17.0.0 (clang-1700.0.13.3)]"
+      }
+    },
+    {
+      "name": "quality-fast",
+      "command": [
+        "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/bin/python",
+        "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/run_installed.py",
+        "/Users/andrewhendel/.mojolearn-runner/_work/mojolearn/mojolearn/tools/umap_transform_quality_check.py",
+        "--mode",
+        "fast",
+        "--device",
+        "Apple M4",
+        "--source-root",
+        "/Users/andrewhendel/.mojolearn-runner/_work/mojolearn/mojolearn",
+        "--output",
+        "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/wheels/2026-09-05-umap-060/installed/quality-fast.json"
+      ],
+      "exit_code": 0,
+      "timed_out": false,
+      "seconds": 6.67066933400929,
+      "log": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/wheels/2026-09-05-umap-060/installed/quality-fast.log",
+      "installed": {
+        "package": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+        "version": "0.6.0",
+        "wrapper": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/_umap_impl.py",
+        "wrapper_sha256": "5c0e05cfbbea4c55a5183a62bce959769dae50f0e82231256788cc76facaf117",
+        "binding_file": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/_mojolearn_metrics.so",
+        "binding_sha256": "8706ed2f6466c7d8263a5a8454b25a80c030b1610433a5c9d5497780ab01983c",
+        "mode": "fast",
+        "binding_mode_code": 0,
+        "python": "3.12.11 (main, Jun  3 2025, 15:41:47) [Clang 17.0.0 (clang-1700.0.13.3)]"
+      }
+    },
+    {
+      "name": "fit-deterministic",
+      "command": [
+        "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/bin/python",
+        "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/run_installed.py",
+        "/Users/andrewhendel/.mojolearn-runner/_work/mojolearn/mojolearn/python/mojolearn/tests/test_umap_surface.py"
+      ],
+      "exit_code": 0,
+      "timed_out": false,
+      "seconds": 16.20134633302223,
+      "log": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/wheels/2026-09-05-umap-060/installed/fit-deterministic.log",
+      "installed": {
+        "package": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+        "version": "0.6.0",
+        "wrapper": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/_umap_impl.py",
+        "wrapper_sha256": "5c0e05cfbbea4c55a5183a62bce959769dae50f0e82231256788cc76facaf117",
+        "binding_file": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/deterministic/_mojolearn_metrics.so",
+        "binding_sha256": "cf984c87d7b5bb125b0f741a3122e2edf2decc7e9c1f175e2f5698ad36716dfd",
+        "mode": "deterministic",
+        "binding_mode_code": 2,
+        "python": "3.12.11 (main, Jun  3 2025, 15:41:47) [Clang 17.0.0 (clang-1700.0.13.3)]"
+      }
+    },
+    {
+      "name": "transform-deterministic",
+      "command": [
+        "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/bin/python",
+        "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/run_installed.py",
+        "/Users/andrewhendel/.mojolearn-runner/_work/mojolearn/mojolearn/python/mojolearn/tests/test_umap_transform.py"
+      ],
+      "exit_code": 0,
+      "timed_out": false,
+      "seconds": 6.495335250045173,
+      "log": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/wheels/2026-09-05-umap-060/installed/transform-deterministic.log",
+      "installed": {
+        "package": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+        "version": "0.6.0",
+        "wrapper": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/_umap_impl.py",
+        "wrapper_sha256": "5c0e05cfbbea4c55a5183a62bce959769dae50f0e82231256788cc76facaf117",
+        "binding_file": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/deterministic/_mojolearn_metrics.so",
+        "binding_sha256": "cf984c87d7b5bb125b0f741a3122e2edf2decc7e9c1f175e2f5698ad36716dfd",
+        "mode": "deterministic",
+        "binding_mode_code": 2,
+        "python": "3.12.11 (main, Jun  3 2025, 15:41:47) [Clang 17.0.0 (clang-1700.0.13.3)]"
+      }
+    },
+    {
+      "name": "quality-deterministic",
+      "command": [
+        "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/bin/python",
+        "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/run_installed.py",
+        "/Users/andrewhendel/.mojolearn-runner/_work/mojolearn/mojolearn/tools/umap_transform_quality_check.py",
+        "--mode",
+        "deterministic",
+        "--device",
+        "Apple M4",
+        "--source-root",
+        "/Users/andrewhendel/.mojolearn-runner/_work/mojolearn/mojolearn",
+        "--output",
+        "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/wheels/2026-09-05-umap-060/installed/quality-deterministic.json"
+      ],
+      "exit_code": 0,
+      "timed_out": false,
+      "seconds": 6.66610520798713,
+      "log": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/wheels/2026-09-05-umap-060/installed/quality-deterministic.log",
+      "installed": {
+        "package": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+        "version": "0.6.0",
+        "wrapper": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/_umap_impl.py",
+        "wrapper_sha256": "5c0e05cfbbea4c55a5183a62bce959769dae50f0e82231256788cc76facaf117",
+        "binding_file": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/deterministic/_mojolearn_metrics.so",
+        "binding_sha256": "cf984c87d7b5bb125b0f741a3122e2edf2decc7e9c1f175e2f5698ad36716dfd",
+        "mode": "deterministic",
+        "binding_mode_code": 2,
+        "python": "3.12.11 (main, Jun  3 2025, 15:41:47) [Clang 17.0.0 (clang-1700.0.13.3)]"
+      }
+    },
+    {
+      "name": "fit-identical",
+      "command": [
+        "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/bin/python",
+        "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/run_installed.py",
+        "/Users/andrewhendel/.mojolearn-runner/_work/mojolearn/mojolearn/python/mojolearn/tests/test_umap_surface.py"
+      ],
+      "exit_code": 0,
+      "timed_out": false,
+      "seconds": 17.034106333972886,
+      "log": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/wheels/2026-09-05-umap-060/installed/fit-identical.log",
+      "installed": {
+        "package": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+        "version": "0.6.0",
+        "wrapper": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/_umap_impl.py",
+        "wrapper_sha256": "5c0e05cfbbea4c55a5183a62bce959769dae50f0e82231256788cc76facaf117",
+        "binding_file": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_metrics.so",
+        "binding_sha256": "0d9db23233297b68319fae0cc5fdc7107bec34c84fbb5383790e2194be2abae7",
+        "mode": "identical",
+        "binding_mode_code": 1,
+        "python": "3.12.11 (main, Jun  3 2025, 15:41:47) [Clang 17.0.0 (clang-1700.0.13.3)]"
+      }
+    },
+    {
+      "name": "transform-identical",
+      "command": [
+        "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/bin/python",
+        "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/run_installed.py",
+        "/Users/andrewhendel/.mojolearn-runner/_work/mojolearn/mojolearn/python/mojolearn/tests/test_umap_transform.py"
+      ],
+      "exit_code": 0,
+      "timed_out": false,
+      "seconds": 7.279301833943464,
+      "log": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/wheels/2026-09-05-umap-060/installed/transform-identical.log",
+      "installed": {
+        "package": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+        "version": "0.6.0",
+        "wrapper": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/_umap_impl.py",
+        "wrapper_sha256": "5c0e05cfbbea4c55a5183a62bce959769dae50f0e82231256788cc76facaf117",
+        "binding_file": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_metrics.so",
+        "binding_sha256": "0d9db23233297b68319fae0cc5fdc7107bec34c84fbb5383790e2194be2abae7",
+        "mode": "identical",
+        "binding_mode_code": 1,
+        "python": "3.12.11 (main, Jun  3 2025, 15:41:47) [Clang 17.0.0 (clang-1700.0.13.3)]"
+      }
+    },
+    {
+      "name": "quality-identical",
+      "command": [
+        "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/bin/python",
+        "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/run_installed.py",
+        "/Users/andrewhendel/.mojolearn-runner/_work/mojolearn/mojolearn/tools/umap_transform_quality_check.py",
+        "--mode",
+        "identical",
+        "--device",
+        "Apple M4",
+        "--source-root",
+        "/Users/andrewhendel/.mojolearn-runner/_work/mojolearn/mojolearn",
+        "--output",
+        "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/wheels/2026-09-05-umap-060/installed/quality-identical.json"
+      ],
+      "exit_code": 0,
+      "timed_out": false,
+      "seconds": 7.399514166987501,
+      "log": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/wheels/2026-09-05-umap-060/installed/quality-identical.log",
+      "installed": {
+        "package": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+        "version": "0.6.0",
+        "wrapper": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/_umap_impl.py",
+        "wrapper_sha256": "5c0e05cfbbea4c55a5183a62bce959769dae50f0e82231256788cc76facaf117",
+        "binding_file": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_metrics.so",
+        "binding_sha256": "0d9db23233297b68319fae0cc5fdc7107bec34c84fbb5383790e2194be2abae7",
+        "mode": "identical",
+        "binding_mode_code": 1,
+        "python": "3.12.11 (main, Jun  3 2025, 15:41:47) [Clang 17.0.0 (clang-1700.0.13.3)]"
+      }
+    }
+  ],
+  "source_commit": "b85aa1c91687862999dee17675e5bcda690514c6",
+  "temporary_venv": "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv",
+  "temporary_venv_removed": true,
+  "completed_at": "2026-09-05T15:04:57.901930+00:00"
+}

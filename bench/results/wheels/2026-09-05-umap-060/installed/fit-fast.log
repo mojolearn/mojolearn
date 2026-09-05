@@ -1,0 +1,6 @@
+{"package": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/__init__.py", "version": "0.6.0", "wrapper": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/_umap_impl.py", "wrapper_sha256": "5c0e05cfbbea4c55a5183a62bce959769dae50f0e82231256788cc76facaf117", "binding_file": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-zymrzm_h/venv/lib/python3.12/site-packages/mojolearn/_mojolearn_metrics.so", "binding_sha256": "8706ed2f6466c7d8263a5a8454b25a80c030b1610433a5c9d5497780ab01983c", "mode": "fast", "binding_mode_code": 0, "python": "3.12.11 (main, Jun  3 2025, 15:41:47) [Clang 17.0.0 (clang-1700.0.13.3)]"}
+.......
+----------------------------------------------------------------------
+Ran 7 tests in 7.805s
+
+OK

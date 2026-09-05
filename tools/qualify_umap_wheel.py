@@ -158,7 +158,19 @@ def main():
                         command += ['--mode', mode, '--device', args.device,
                                     '--source-root', str(root),
                                     '--output', str(output / (name + '.json'))]
-                    passed = run(name, command, work, extra) and passed
+                    job_passed = run(name, command, work, extra)
+                    if job_passed:
+                        installed_record = json.loads(Path(extra['UMAP_GUARD_OUTPUT']).read_text())
+                        manifest['jobs'][-1]['installed'] = installed_record
+                        if surface == 'quality':
+                            quality = json.loads((output / (name + '.json')).read_text())
+                            if quality.get('status') != 'PASS' or not quality.get('results'):
+                                raise RuntimeError('Quality job returned without complete passing evidence')
+                            for result in quality['results']:
+                                if (not result.get('passed') or
+                                    result.get('binding_sha256') != installed_record['binding_sha256']):
+                                    raise RuntimeError('Quality binding provenance/admission mismatch')
+                    passed = job_passed and passed
             if sha(wheel) != manifest['wheel_sha256']:
                 raise RuntimeError('Wheel changed during qualification')
             for relative, expected in manifest['source_files'].items():
@@ -169,7 +181,9 @@ def main():
         manifest['status'] = 'FAILED'
         manifest['reason'] = repr(exc)
     finally:
-        manifest['temporary_venv_removed'] = True
+        manifest['temporary_venv_removed'] = not Path(
+            manifest.get('temporary_venv', '/nonexistent-umap-qualification-venv')
+        ).exists()
         manifest['completed_at'] = datetime.now(timezone.utc).isoformat()
         save()
     return 0 if manifest['status'] == 'PASSED' else 1
