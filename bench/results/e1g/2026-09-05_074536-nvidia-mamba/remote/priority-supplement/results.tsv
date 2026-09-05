@@ -1,0 +1,8 @@
+smallk	0
+random-distance-32	0
+random-distance-128	0
+rapids-retry	124
+public-knn-32	1
+public-knn-128	1
+public-knn-1000	1
+public-umap	1

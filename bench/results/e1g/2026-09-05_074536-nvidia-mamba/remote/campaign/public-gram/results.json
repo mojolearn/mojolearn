@@ -1,0 +1,474 @@
+{
+  "status": "PASSED",
+  "scope": "host-array public APIs, including transfers and outputs; not historical kernel-only fixtures",
+  "args": {
+    "worker": null,
+    "lane": "gram",
+    "out": "/root/gemm_leg_out/campaign/public-gram",
+    "rounds": 7,
+    "index": 10000,
+    "queries": 128,
+    "k": 10,
+    "dim": 2048,
+    "rows": 16384,
+    "gram_rows": 65536,
+    "rtol": 0.0005,
+    "umap_rows": 256,
+    "umap_epochs": 50,
+    "quality_min": 0.85,
+    "quality_gap": 0.05
+  },
+  "metadata": {
+    "fast": {
+      "arm": "fast",
+      "lane": "gram",
+      "inputs": [
+        "67020648261b54726a43d80bc61c8e330f938242f39518d0f2461bf0aa2e4b63",
+        "67020648261b54726a43d80bc61c8e330f938242f39518d0f2461bf0aa2e4b63"
+      ],
+      "shapes": [
+        [
+          65536,
+          32
+        ],
+        [
+          65536,
+          32
+        ]
+      ],
+      "device": "NVIDIA GeForce RTX 4090",
+      "torch": "2.4.1+cu124",
+      "cuda": "12.4",
+      "precision": "mojolearn FAST; backend precision policy not inferred",
+      "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
+      "numpy": "1.26.3",
+      "source_commit": "1d1f8fdd37022dad1c9e5752311296580e7762dd",
+      "nvidia_smi": "580.126.20, NVIDIA GeForce RTX 4090",
+      "mojolearn": "0.5.0",
+      "package": "/root/mojolearn/python/mojolearn/__init__.py",
+      "mode": "fast"
+    },
+    "identical": {
+      "arm": "identical",
+      "lane": "gram",
+      "inputs": [
+        "67020648261b54726a43d80bc61c8e330f938242f39518d0f2461bf0aa2e4b63",
+        "67020648261b54726a43d80bc61c8e330f938242f39518d0f2461bf0aa2e4b63"
+      ],
+      "shapes": [
+        [
+          65536,
+          32
+        ],
+        [
+          65536,
+          32
+        ]
+      ],
+      "device": "NVIDIA GeForce RTX 4090",
+      "torch": "2.4.1+cu124",
+      "cuda": "12.4",
+      "precision": "mojolearn IDENTICAL FP32",
+      "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
+      "numpy": "1.26.3",
+      "source_commit": "1d1f8fdd37022dad1c9e5752311296580e7762dd",
+      "nvidia_smi": "580.126.20, NVIDIA GeForce RTX 4090",
+      "mojolearn": "0.5.0",
+      "package": "/root/mojolearn/python/mojolearn/__init__.py",
+      "mode": "identical"
+    },
+    "external": {
+      "arm": "external",
+      "lane": "gram",
+      "inputs": [
+        "67020648261b54726a43d80bc61c8e330f938242f39518d0f2461bf0aa2e4b63",
+        "67020648261b54726a43d80bc61c8e330f938242f39518d0f2461bf0aa2e4b63"
+      ],
+      "shapes": [
+        [
+          65536,
+          32
+        ],
+        [
+          65536,
+          32
+        ]
+      ],
+      "device": "NVIDIA GeForce RTX 4090",
+      "torch": "2.4.1+cu124",
+      "cuda": "12.4",
+      "precision": "float32; TF32 disabled in torch",
+      "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
+      "numpy": "1.26.3",
+      "source_commit": "1d1f8fdd37022dad1c9e5752311296580e7762dd",
+      "nvidia_smi": "580.126.20, NVIDIA GeForce RTX 4090",
+      "arm_label": "torch-cublas-fp32-host-request"
+    }
+  },
+  "records": [
+    {
+      "ms": 6.738074,
+      "hashes": [
+        "2cd78f90dd9c29382fb29a4fea0a805f839abf01696b385eca366e9e425db74e"
+      ],
+      "arm": "fast",
+      "round": 0,
+      "warmup": true
+    },
+    {
+      "ms": 6.791394,
+      "hashes": [
+        "2cd78f90dd9c29382fb29a4fea0a805f839abf01696b385eca366e9e425db74e"
+      ],
+      "arm": "identical",
+      "round": 0,
+      "warmup": true
+    },
+    {
+      "ms": 70.294263,
+      "hashes": [
+        "182e743c44b54016e945e65f9d111f5529159e8bbcc8ee371d5ffff0c4a01eca"
+      ],
+      "arm": "external",
+      "round": 0,
+      "warmup": true
+    },
+    {
+      "ms": 4.306063,
+      "hashes": [
+        "2cd78f90dd9c29382fb29a4fea0a805f839abf01696b385eca366e9e425db74e"
+      ],
+      "arm": "identical",
+      "round": 1,
+      "warmup": false
+    },
+    {
+      "ms": 1.322231,
+      "hashes": [
+        "182e743c44b54016e945e65f9d111f5529159e8bbcc8ee371d5ffff0c4a01eca"
+      ],
+      "arm": "external",
+      "round": 1,
+      "warmup": false
+    },
+    {
+      "ms": 3.957183,
+      "hashes": [
+        "2cd78f90dd9c29382fb29a4fea0a805f839abf01696b385eca366e9e425db74e"
+      ],
+      "arm": "fast",
+      "round": 1,
+      "warmup": false
+    },
+    {
+      "ms": 1.145061,
+      "hashes": [
+        "182e743c44b54016e945e65f9d111f5529159e8bbcc8ee371d5ffff0c4a01eca"
+      ],
+      "arm": "external",
+      "round": 2,
+      "warmup": false
+    },
+    {
+      "ms": 3.802842,
+      "hashes": [
+        "2cd78f90dd9c29382fb29a4fea0a805f839abf01696b385eca366e9e425db74e"
+      ],
+      "arm": "fast",
+      "round": 2,
+      "warmup": false
+    },
+    {
+      "ms": 3.846392,
+      "hashes": [
+        "2cd78f90dd9c29382fb29a4fea0a805f839abf01696b385eca366e9e425db74e"
+      ],
+      "arm": "identical",
+      "round": 2,
+      "warmup": false
+    },
+    {
+      "ms": 3.776533,
+      "hashes": [
+        "2cd78f90dd9c29382fb29a4fea0a805f839abf01696b385eca366e9e425db74e"
+      ],
+      "arm": "fast",
+      "round": 3,
+      "warmup": false
+    },
+    {
+      "ms": 3.774982,
+      "hashes": [
+        "2cd78f90dd9c29382fb29a4fea0a805f839abf01696b385eca366e9e425db74e"
+      ],
+      "arm": "identical",
+      "round": 3,
+      "warmup": false
+    },
+    {
+      "ms": 1.31076,
+      "hashes": [
+        "182e743c44b54016e945e65f9d111f5529159e8bbcc8ee371d5ffff0c4a01eca"
+      ],
+      "arm": "external",
+      "round": 3,
+      "warmup": false
+    },
+    {
+      "ms": 3.882722,
+      "hashes": [
+        "2cd78f90dd9c29382fb29a4fea0a805f839abf01696b385eca366e9e425db74e"
+      ],
+      "arm": "identical",
+      "round": 4,
+      "warmup": false
+    },
+    {
+      "ms": 1.094291,
+      "hashes": [
+        "182e743c44b54016e945e65f9d111f5529159e8bbcc8ee371d5ffff0c4a01eca"
+      ],
+      "arm": "external",
+      "round": 4,
+      "warmup": false
+    },
+    {
+      "ms": 3.829613,
+      "hashes": [
+        "2cd78f90dd9c29382fb29a4fea0a805f839abf01696b385eca366e9e425db74e"
+      ],
+      "arm": "fast",
+      "round": 4,
+      "warmup": false
+    },
+    {
+      "ms": 1.04024,
+      "hashes": [
+        "182e743c44b54016e945e65f9d111f5529159e8bbcc8ee371d5ffff0c4a01eca"
+      ],
+      "arm": "external",
+      "round": 5,
+      "warmup": false
+    },
+    {
+      "ms": 3.742162,
+      "hashes": [
+        "2cd78f90dd9c29382fb29a4fea0a805f839abf01696b385eca366e9e425db74e"
+      ],
+      "arm": "fast",
+      "round": 5,
+      "warmup": false
+    },
+    {
+      "ms": 3.776442,
+      "hashes": [
+        "2cd78f90dd9c29382fb29a4fea0a805f839abf01696b385eca366e9e425db74e"
+      ],
+      "arm": "identical",
+      "round": 5,
+      "warmup": false
+    },
+    {
+      "ms": 3.730572,
+      "hashes": [
+        "2cd78f90dd9c29382fb29a4fea0a805f839abf01696b385eca366e9e425db74e"
+      ],
+      "arm": "fast",
+      "round": 6,
+      "warmup": false
+    },
+    {
+      "ms": 3.773223,
+      "hashes": [
+        "2cd78f90dd9c29382fb29a4fea0a805f839abf01696b385eca366e9e425db74e"
+      ],
+      "arm": "identical",
+      "round": 6,
+      "warmup": false
+    },
+    {
+      "ms": 1.09663,
+      "hashes": [
+        "182e743c44b54016e945e65f9d111f5529159e8bbcc8ee371d5ffff0c4a01eca"
+      ],
+      "arm": "external",
+      "round": 6,
+      "warmup": false
+    },
+    {
+      "ms": 3.769172,
+      "hashes": [
+        "2cd78f90dd9c29382fb29a4fea0a805f839abf01696b385eca366e9e425db74e"
+      ],
+      "arm": "identical",
+      "round": 7,
+      "warmup": false
+    },
+    {
+      "ms": 1.059981,
+      "hashes": [
+        "182e743c44b54016e945e65f9d111f5529159e8bbcc8ee371d5ffff0c4a01eca"
+      ],
+      "arm": "external",
+      "round": 7,
+      "warmup": false
+    },
+    {
+      "ms": 3.785673,
+      "hashes": [
+        "2cd78f90dd9c29382fb29a4fea0a805f839abf01696b385eca366e9e425db74e"
+      ],
+      "arm": "fast",
+      "round": 7,
+      "warmup": false
+    }
+  ],
+  "accuracy": [
+    {
+      "round": 0,
+      "arm": "fast",
+      "relative_l2": 2.0579897429692315e-07,
+      "max_abs": 0.009765625,
+      "passed": true
+    },
+    {
+      "round": 0,
+      "arm": "identical",
+      "relative_l2": 2.0579897429692315e-07,
+      "max_abs": 0.009765625,
+      "passed": true
+    },
+    {
+      "round": 1,
+      "arm": "fast",
+      "relative_l2": 2.0579897429692315e-07,
+      "max_abs": 0.009765625,
+      "passed": true
+    },
+    {
+      "round": 1,
+      "arm": "identical",
+      "relative_l2": 2.0579897429692315e-07,
+      "max_abs": 0.009765625,
+      "passed": true
+    },
+    {
+      "round": 2,
+      "arm": "fast",
+      "relative_l2": 2.0579897429692315e-07,
+      "max_abs": 0.009765625,
+      "passed": true
+    },
+    {
+      "round": 2,
+      "arm": "identical",
+      "relative_l2": 2.0579897429692315e-07,
+      "max_abs": 0.009765625,
+      "passed": true
+    },
+    {
+      "round": 3,
+      "arm": "fast",
+      "relative_l2": 2.0579897429692315e-07,
+      "max_abs": 0.009765625,
+      "passed": true
+    },
+    {
+      "round": 3,
+      "arm": "identical",
+      "relative_l2": 2.0579897429692315e-07,
+      "max_abs": 0.009765625,
+      "passed": true
+    },
+    {
+      "round": 4,
+      "arm": "fast",
+      "relative_l2": 2.0579897429692315e-07,
+      "max_abs": 0.009765625,
+      "passed": true
+    },
+    {
+      "round": 4,
+      "arm": "identical",
+      "relative_l2": 2.0579897429692315e-07,
+      "max_abs": 0.009765625,
+      "passed": true
+    },
+    {
+      "round": 5,
+      "arm": "fast",
+      "relative_l2": 2.0579897429692315e-07,
+      "max_abs": 0.009765625,
+      "passed": true
+    },
+    {
+      "round": 5,
+      "arm": "identical",
+      "relative_l2": 2.0579897429692315e-07,
+      "max_abs": 0.009765625,
+      "passed": true
+    },
+    {
+      "round": 6,
+      "arm": "fast",
+      "relative_l2": 2.0579897429692315e-07,
+      "max_abs": 0.009765625,
+      "passed": true
+    },
+    {
+      "round": 6,
+      "arm": "identical",
+      "relative_l2": 2.0579897429692315e-07,
+      "max_abs": 0.009765625,
+      "passed": true
+    },
+    {
+      "round": 7,
+      "arm": "fast",
+      "relative_l2": 2.0579897429692315e-07,
+      "max_abs": 0.009765625,
+      "passed": true
+    },
+    {
+      "round": 7,
+      "arm": "identical",
+      "relative_l2": 2.0579897429692315e-07,
+      "max_abs": 0.009765625,
+      "passed": true
+    }
+  ],
+  "summary": {
+    "fast": {
+      "median_ms": 3.785673,
+      "iqr_ms": 0.05688000000000004
+    },
+    "identical": {
+      "median_ms": 3.776442,
+      "iqr_ms": 0.09045449999999944
+    },
+    "external": {
+      "median_ms": 1.09663,
+      "iqr_ms": 0.15077450000000026
+    }
+  },
+  "ratios": {
+    "identical/fast": {
+      "median_paired": 1.011432831211943,
+      "min_paired": 0.9956411977474019,
+      "max_paired": 1.0881637265701383,
+      "separated_from_one": false
+    },
+    "identical/external": {
+      "median_paired": 3.440743915450061,
+      "min_paired": 2.879994812170039,
+      "max_paired": 3.6303564562024144,
+      "separated_from_one": true
+    },
+    "fast/external": {
+      "median_paired": 3.401851125721529,
+      "min_paired": 2.881178095150905,
+      "max_paired": 3.5974025224948085,
+      "separated_from_one": true
+    }
+  }
+}

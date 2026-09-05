@@ -1,0 +1,5 @@
+Collecting mamba-ssm==2.2.4+cu12torch2.4cxx11abiFALSE
+  Downloading https://github.com/state-spaces/mamba/releases/download/v2.2.4/mamba_ssm-2.2.4%2Bcu12torch2.4cxx11abiFALSE-cp311-cp311-linux_x86_64.whl (323.7 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 323.7/323.7 MB 5.4 MB/s eta 0:00:00
+Installing collected packages: mamba-ssm
+Successfully installed mamba-ssm-2.2.4

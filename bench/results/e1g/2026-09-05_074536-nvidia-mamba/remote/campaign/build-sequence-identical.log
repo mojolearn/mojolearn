@@ -1,0 +1,28 @@
+Imported from /root/mojolearn/bench/speed/seq_speed_main.mojo:164:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/root/mojolearn/bench/speed/seq_speed_main.mojo:552:56: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var h = fnv1a64_bytes(FNV_OFFSET, host.unsafe_ptr().bitcast[UInt8](), n * 4)
+                                      ~~~~~~~~~~~~~~~~~^~~~~~~~
+                                                        unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+/root/mojolearn/bench/speed/seq_speed_main.mojo:635:32: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var raw = host.unsafe_ptr().bitcast[UInt8]()
+              ~~~~~~~~~~~~~~~~~^~~~~~~~
+                                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bench/speed/seq_speed_main.mojo:164:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bench/speed/seq_speed_main.mojo:164:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here

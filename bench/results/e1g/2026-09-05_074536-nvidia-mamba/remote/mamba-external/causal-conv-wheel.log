@@ -1,0 +1,8 @@
+Collecting causal-conv1d==1.5.0.post8+cu12torch2.4cxx11abiFALSE
+  Downloading https://github.com/Dao-AILab/causal-conv1d/releases/download/v1.5.0.post8/causal_conv1d-1.5.0.post8%2Bcu12torch2.4cxx11abiFALSE-cp311-cp311-linux_x86_64.whl (104.0 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 104.0/104.0 MB 10.1 MB/s eta 0:00:00
+Installing collected packages: causal-conv1d
+Successfully installed causal-conv1d-1.5.0.post8
+
+[notice] A new release of pip is available: 24.0 -> 26.2.1
+[notice] To update, run: python -m pip install --upgrade pip

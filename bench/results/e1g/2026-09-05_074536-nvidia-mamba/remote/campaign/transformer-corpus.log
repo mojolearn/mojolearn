@@ -1,0 +1,52 @@
+/root/mojolearn/transformer/corpus/gen_corpus.py:1041: RuntimeWarning: overflow encountered in cast
+  rn32 = a64.astype(np.float32)
+torch 2.13.0 numpy 2.5.2 python 3.14.7
+profile mojolearn.identical.transformer.fp32.v1  hash spec mojolearn.transformer.corpus.hash.v1  corpus transformer-corpus-v1
+wrote 17 case directories to /root/mojolearn/transformer/corpus, 2.474 MB of tensor and manifest files
+corpus sha256 (.f32 .f64 .i32 .json): f018c1dea273e5f561f5eb4651bcdc604144d6a0cd66551483fe0614ae819059
+
+== tolerance calibration: a plain FP32 run vs this corpus's float64 reference ==
+   smallest ladder rung at which the FP32 arm passes, atol 1e-06. NONE means it cannot pass at 0.1, which is a finding about the case, not a licence to widen the ladder.
+   case                                   stage                fp32     best     gate    max_rel
+   base_b1_l1_d32_kv2                     (every stage)       1e-07             1e-06
+   base_b2_l4_d32_kv2                     attn.scores         1e-06    1e-07    1e-05  1.166e-05
+   base_b2_l4_d32_kv2                     attn.masked         1e-06    1e-07    1e-05  8.193e-06
+   comp_row0_b1_l4_d32_kv2                (every stage)       1e-07             1e-06
+   comp_row1_b1_l4_d32_kv2                attn.scores         1e-06    1e-07    1e-05  1.166e-05
+   comp_row1_b1_l4_d32_kv2                attn.masked         1e-06    1e-07    1e-05  5.546e-06
+   base_b1_l4_d32_kv1                     (every stage)       1e-07             1e-06
+   base_b2_l16_d32_kv1_i300               norm1.sumsq         1e-06    1e-07    1e-05  1.505e-07
+   base_b2_l16_d32_kv1_i300               attn.denom          1e-06    1e-07    1e-05  7.415e-07
+   base_b2_l16_d32_kv1_i300               attn.ctx           0.0001    1e-07    0.001  2.527e-03
+   base_b2_l16_d32_kv1_i300               norm2.sumsq         1e-06    1e-07    1e-05  1.360e-07
+   base_b2_l16_d32_kv1_i300               mlp.gated           1e-06    1e-07    1e-05  1.279e-03
+   base_b1_l4_d48_hd24_kv1                attn.scores         1e-06    1e-07    1e-05  1.102e-04
+   base_b1_l4_d48_hd24_kv1                attn.masked         1e-06    1e-07    1e-05  1.102e-04
+   base_b1_l4_d48_hd24_kv1                attn.max            1e-06    1e-07    1e-05  1.102e-04
+   base_b1_l4_d48_hd24_kv1                norm2.sumsq         1e-06    1e-07    1e-05  1.562e-07
+   adv_mask_extreme_b1_l4_d32_kv2         q_proj.out          1e-05    1e-07   0.0001  6.203e-06
+   adv_mask_extreme_b1_l4_d32_kv2         k_proj.out          1e-05    1e-07   0.0001  1.697e-06
+   adv_mask_extreme_b1_l4_d32_kv2         q_rope.out          1e-05    1e-07   0.0001  6.203e-06
+   adv_mask_extreme_b1_l4_d32_kv2         k_rope.out          1e-05    1e-07   0.0001  9.813e-06
+   adv_mask_extreme_b1_l4_d32_kv2         kv.k_cache          1e-05    1e-07   0.0001  9.813e-06
+   adv_mask_extreme_b1_l4_d32_kv2         attn.scores         1e-05    1e-07   0.0001  1.289e-06
+   adv_mask_extreme_b1_l4_d32_kv2         attn.masked         1e-05    1e-07   0.0001  1.289e-06
+   adv_mask_extreme_b1_l4_d32_kv2         attn.max            1e-06    1e-07    1e-05  1.820e-07
+   adv_subnormal_scores_b1_l4_d32_kv2     (every stage)       1e-07             1e-06
+   adv_signed_zeros_b2_l4_d32_kv2         (every stage)       1e-07             1e-06
+   adv_rope_far_pos_b1_l4_d32_kv2         attn.scores         1e-06    1e-07    1e-05  4.162e-06
+   adv_rope_far_pos_b1_l4_d32_kv2         attn.masked         1e-06    1e-07    1e-05  4.162e-06
+   adv_rope_far_pos_b1_l4_d32_kv2         mlp.gated           1e-06    1e-07    1e-05  1.392e-05
+   adv_softmax_saturation_b1_l8_d32_kv1   attn.scores         1e-05    1e-07   0.0001  1.242e-05
+   adv_softmax_saturation_b1_l8_d32_kv1   attn.masked         1e-05    1e-07   0.0001  1.242e-05
+   adv_softmax_saturation_b1_l8_d32_kv1   norm2.sumsq         1e-06    1e-07    1e-05  2.134e-07
+   decode_b1_l4_d32_kv1                   attn.scores         1e-05    1e-07   0.0001  6.353e-06
+   decode_b1_l4_d32_kv1                   attn.masked         1e-06    1e-07    1e-05  3.413e-06
+   decode_b1_l4_d32_kv1                   attn.ctx            1e-05    1e-07   0.0001  6.187e-04
+   decode_b1_l4_d32_kv1_step0             (every stage)       1e-07             1e-06
+   decode_b1_l4_d32_kv1_step1             (every stage)       1e-07             1e-06
+   decode_b1_l4_d32_kv1_step2             (every stage)       1e-07             1e-06
+   decode_b1_l4_d32_kv1_step3             attn.scores         1e-06    1e-07    1e-05  3.413e-06
+   decode_b1_l4_d32_kv1_step3             attn.masked         1e-06    1e-07    1e-05  3.413e-06
+   decode_b1_l4_d32_kv1_step3             attn.ctx            1e-05    1e-07   0.0001  6.187e-04
+   fp32 = the reference arm's rung; best = the same value rounded once to float32, which is the floor no implementation beats; gate = the checker's default, one rung looser than fp32. fp32 far above best means the REFERENCE arm is the limit.

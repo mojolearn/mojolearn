@@ -1,0 +1,17 @@
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/nvidia_public_compare.py", line 334, in <module>
+    worker(arguments) if arguments.worker else main(arguments)
+    ^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/nvidia_public_compare.py", line 111, in worker
+    import cupy as cp
+ModuleNotFoundError: No module named 'cupy'
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/nvidia_public_compare.py", line 334, in <module>
+    worker(arguments) if arguments.worker else main(arguments)
+                                               ^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/nvidia_public_compare.py", line 230, in main
+    metadata[arm] = receive(processes[arm])['ready']
+                    ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/nvidia_public_compare.py", line 173, in receive
+    raise RuntimeError('Worker exited: ' + str(proc.wait()))
+RuntimeError: Worker exited: 1

@@ -1,0 +1,85 @@
+{
+  "status": "REFUSED",
+  "scope": "host-array public APIs, including transfers and outputs; not historical kernel-only fixtures",
+  "args": {
+    "worker": null,
+    "lane": "knn",
+    "out": "/root/gemm_leg_out/campaign/public-knn",
+    "rounds": 7,
+    "index": 10000,
+    "queries": 128,
+    "k": 10,
+    "dim": 2048,
+    "rows": 16384,
+    "gram_rows": 65536,
+    "rtol": 0.0005,
+    "umap_rows": 256,
+    "umap_epochs": 50,
+    "quality_min": 0.85,
+    "quality_gap": 0.05
+  },
+  "metadata": {
+    "fast": {
+      "arm": "fast",
+      "lane": "knn",
+      "inputs": [
+        "0e42acd1e933a01b1596eae2b2f3460736dc9f6c6438a5ab731fcdf488b218f3",
+        "d9ac6780d0c085c335db5c488b872601d0161bdea97b70fcc78f17dc4a0da9d4"
+      ],
+      "shapes": [
+        [
+          10000,
+          32
+        ],
+        [
+          128,
+          32
+        ]
+      ],
+      "device": "NVIDIA GeForce RTX 4090",
+      "torch": "2.4.1+cu124",
+      "cuda": "12.4",
+      "precision": "mojolearn FAST; backend precision policy not inferred",
+      "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
+      "numpy": "1.26.3",
+      "source_commit": "1d1f8fdd37022dad1c9e5752311296580e7762dd",
+      "nvidia_smi": "580.126.20, NVIDIA GeForce RTX 4090",
+      "mojolearn": "0.5.0",
+      "package": "/root/mojolearn/python/mojolearn/__init__.py",
+      "mode": "fast",
+      "binding_file": "/root/mojolearn/python/mojolearn/_mojolearn.so"
+    },
+    "identical": {
+      "arm": "identical",
+      "lane": "knn",
+      "inputs": [
+        "0e42acd1e933a01b1596eae2b2f3460736dc9f6c6438a5ab731fcdf488b218f3",
+        "d9ac6780d0c085c335db5c488b872601d0161bdea97b70fcc78f17dc4a0da9d4"
+      ],
+      "shapes": [
+        [
+          10000,
+          32
+        ],
+        [
+          128,
+          32
+        ]
+      ],
+      "device": "NVIDIA GeForce RTX 4090",
+      "torch": "2.4.1+cu124",
+      "cuda": "12.4",
+      "precision": "mojolearn IDENTICAL FP32",
+      "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
+      "numpy": "1.26.3",
+      "source_commit": "1d1f8fdd37022dad1c9e5752311296580e7762dd",
+      "nvidia_smi": "580.126.20, NVIDIA GeForce RTX 4090",
+      "mojolearn": "0.5.0",
+      "package": "/root/mojolearn/python/mojolearn/__init__.py",
+      "mode": "identical",
+      "binding_file": "/root/mojolearn/python/mojolearn/identical/_mojolearn.so"
+    }
+  },
+  "records": [],
+  "reason": "RuntimeError('Worker exited: 1')"
+}

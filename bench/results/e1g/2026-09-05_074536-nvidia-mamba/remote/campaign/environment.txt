@@ -1,0 +1,6 @@
+commit=1d1f8fdd37022dad1c9e5752311296580e7762dd
+artifact_kind=source-built CUDA bindings; not an installed release wheel
+serial_main_lane=true
+work_seconds=2733
+Python 3.11.10
+NVIDIA GeForce RTX 4090, 580.126.20

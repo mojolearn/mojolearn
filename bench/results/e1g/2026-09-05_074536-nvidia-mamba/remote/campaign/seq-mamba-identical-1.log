@@ -1,0 +1,18 @@
+FSPEED-HEADER family=seq lane=mamba arm=ours mode=IDENTICAL device=unset rounds=1 size=shipped
+FSPEED-NOTE lane=mamba arm=ours entry costs the port pays and the opponent does not: llama_refuse_bad_inputs / mamba_refuse_bad_inputs download every weight per call, and eager_attention_forward synchronizes per (batch, head). See bench/speed/README.md.
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=norm.weight n=768 hash=8ca9a62b03bb0b69
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=in_proj.weight n=2359296 hash=e5e828782fc4c377
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=conv1d.weight n=6144 hash=1fe9d376751939c2
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=conv1d.bias n=1536 hash=284b95c47159d2e2
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=x_proj.weight n=122880 hash=58fc41a3c66083f9
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=dt_proj.weight n=73728 hash=354e3487a0f90c0b
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=dt_proj.bias n=1536 hash=1729f7678a315600
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=A_log n=24576 hash=71d966732193f1fb
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=D n=1536 hash=146d24138daf5ed0
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=out_proj.weight n=1179648 hash=5f7e08294f2017f1
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=x n=6144 hash=aea97b3003677e03
+FSPEED-NOTE lane=mamba arm=ours mamba_refuse_bad_inputs alone shape=mamba130m.prefill.t8 ms=0.09696 (inside the mamba lane's round, not inside selective_scan)
+FSPEED-WARMUP lane=mamba arm=ours shape=mamba130m.prefill.t8 ms=0.47812
+FSPEED lane=mamba arm=ours shape=mamba130m.prefill.t8 round=1 ms=0.46386 hash=57affc99141893ea
+FSPEED-NOTE lane=mamba arm=ours dump shape=mamba130m.prefill.t8 n=6144 path=/root/gemm_leg_out/campaign/seq-identical/seq.mamba.mamba130m.prefill.t8.f32.bin
+FSPEED-DONE lane=mamba mode=IDENTICAL

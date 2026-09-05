@@ -1,0 +1,17 @@
+FSPEED-HEADER family=seq lane=transformer arm=ours mode=IDENTICAL device=unset rounds=1 size=shipped
+FSPEED-NOTE lane=transformer arm=ours entry costs the port pays and the opponent does not: llama_refuse_bad_inputs / mamba_refuse_bad_inputs download every weight per call, and eager_attention_forward synchronizes per (batch, head). See bench/speed/README.md.
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=norm1.weight n=4096 hash=2554a09c79b9bec3
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=norm2.weight n=4096 hash=54e8bdb50be343e8
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=q_proj.weight n=16777216 hash=7f5e346f0f234ca1
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=k_proj.weight n=4194304 hash=628683891b4ef505
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=v_proj.weight n=4194304 hash=a6e71091674bf598
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=o_proj.weight n=16777216 hash=f322159c55f94428
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=gate_proj.weight n=58720256 hash=e4ae7d5f3c49e108
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=up_proj.weight n=58720256 hash=e1e76c5d8ad14599
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=down_proj.weight n=58720256 hash=cd680ef665764882
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=x n=32768 hash=5fae3cdceecdb9e2
+FSPEED-NOTE lane=transformer arm=ours llama_refuse_bad_inputs alone shape=llama8b.prefill.t8 ms=934.314338 (inside the transformer lane's round, not inside attention/mlp/rmsnorm)
+FSPEED-WARMUP lane=transformer arm=ours shape=llama8b.prefill.t8 ms=7.606213
+FSPEED lane=transformer arm=ours shape=llama8b.prefill.t8 round=1 ms=7.516743 hash=8e1e6f6c0423fed4
+FSPEED-NOTE lane=transformer arm=ours dump shape=llama8b.prefill.t8 n=32768 path=/root/gemm_leg_out/campaign/seq-identical/seq.transformer.llama8b.prefill.t8.f32.bin
+FSPEED-DONE lane=transformer mode=IDENTICAL

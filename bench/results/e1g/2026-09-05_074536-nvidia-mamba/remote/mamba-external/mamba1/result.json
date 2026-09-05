@@ -1,0 +1,120 @@
+{
+  "schema": "mojolearn.mamba.external-cuda.v1",
+  "family": "mamba1",
+  "rtol": 0.0005,
+  "atol": 1e-05,
+  "scope": "zero-state whole-block forward and all native public-prefill backward leaves",
+  "cross_library_bitwise_identity_claim": false,
+  "environment": {
+    "torch": "2.4.1+cu124",
+    "cuda": "12.4",
+    "gpu": "NVIDIA GeForce RTX 4090",
+    "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
+    "torch_matmul_cudnn_tf32": false,
+    "cpu_threads": 2
+  },
+  "packages": {
+    "mamba-ssm": "2.2.4",
+    "causal-conv1d": "1.5.0.post8",
+    "triton": "3.0.0"
+  },
+  "native_manifest_sha256": "a3cd849c67c4df9a42f6826cc5fcc9a0b4c74a51195e45b8e57fe99bf849766e",
+  "native_source_sha256": "785e324b9604dd6849d8291694934a47ce941ed1e93ac0ea610b5cdda4890ae0",
+  "case": "base_b2_l4_d8",
+  "inputs": {
+    "x": {
+      "file": "input.x.f32",
+      "shape": [
+        2,
+        4,
+        8
+      ],
+      "sha256": "3ff6704203eb2471cac3972c86a59545cde2c83b5d2344eeea9b29b80b9ff25c"
+    },
+    "in_proj.weight": {
+      "file": "input.in_proj.weight.f32",
+      "shape": [
+        32,
+        8
+      ],
+      "sha256": "0da5d096dc94ef8ebe0776c5996bb4df22c7a7e3bd99c046e1247295d5213f61"
+    },
+    "conv1d.weight": {
+      "file": "input.conv1d.weight.f32",
+      "shape": [
+        16,
+        1,
+        4
+      ],
+      "sha256": "cfc0546d58aea610fbaf8db5250fb69a60a77a7e613164c91fc2e11e0ad341b1"
+    },
+    "conv1d.bias": {
+      "file": "input.conv1d.bias.f32",
+      "shape": [
+        16
+      ],
+      "sha256": "1de39decc6c95faa1855d33c27cb0255a5369802a0c937ca57ced7f6ea0d7232"
+    },
+    "x_proj.weight": {
+      "file": "input.x_proj.weight.f32",
+      "shape": [
+        33,
+        16
+      ],
+      "sha256": "a455a008cbcd0ab936e27e6f9768490d80ecad02fa205da45af5d76d906c1793"
+    },
+    "dt_proj.weight": {
+      "file": "input.dt_proj.weight.f32",
+      "shape": [
+        16,
+        1
+      ],
+      "sha256": "3669db32cdf4ed20a1e04dfb7099f9fbd540631ca62918b24897456e8a989cc2"
+    },
+    "dt_proj.bias": {
+      "file": "input.dt_proj.bias.f32",
+      "shape": [
+        16
+      ],
+      "sha256": "ed8e221f6a978197a7f200721626355f973b7afe40b3cffee7533ceb32504ea3"
+    },
+    "A_log": {
+      "file": "input.A_log.f32",
+      "shape": [
+        16,
+        16
+      ],
+      "sha256": "97a49a06c22fbc7813bd383c4c3e62ceb6bcff262ae72e01ef225777b3c1b690"
+    },
+    "D": {
+      "file": "input.D.f32",
+      "shape": [
+        16
+      ],
+      "sha256": "efe87daa5a7a86925a97c01a9cb401965bb842c0cfe4f855cdbe126f184c2d1f"
+    },
+    "out_proj.weight": {
+      "file": "input.out_proj.weight.f32",
+      "shape": [
+        8,
+        16
+      ],
+      "sha256": "24584d887a74f2bad8ecf72b30533aaa383dfa471b025669248f9e00b65eeed2"
+    },
+    "norm.weight": {
+      "file": "input.norm.weight.f32",
+      "shape": [
+        8
+      ],
+      "sha256": "82b6d2833d7a1d04c7a962c4a1fd2f3319d2a866f8ff57d4b9b1e7eab0773bba"
+    }
+  },
+  "upstream_module": {
+    "path": "/root/mojolearn/.nvidia-comparator-venv/lib/python3.11/site-packages/mamba_ssm/modules/mamba_simple.py",
+    "sha256": "a17e4c51b582dc0d4d690a649eba521cd0c1ee3dc8f0473a0967cdc9ec0874e3"
+  },
+  "external_precision": "FP32; official fused selective_scan CUDA",
+  "status": "ERROR",
+  "error": "Deterministic behavior was enabled with either `torch.use_deterministic_algorithms(True)` or `at::Context::setDeterministicAlgorithms(true)`, but this operation is not deterministic because it uses CuBLAS and you have CUDA >= 10.2. To enable deterministic behavior in this case, you must set an environment variable before running your PyTorch application: CUBLAS_WORKSPACE_CONFIG=:4096:8 or CUBLAS_WORKSPACE_CONFIG=:16:8. For more information, go to https://docs.nvidia.com/cuda/cublas/index.html#results-reproducibility",
+  "traceback": "Traceback (most recent call last):\n  File \"/root/mojolearn/tools/mamba_external_compare.py\", line 288, in main\n    code = run(args, result)\n           ^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/mamba_external_compare.py\", line 203, in run\n    y = forward()\n        ^^^^^^^^^\n  File \"/root/mojolearn/tools/mamba_external_compare.py\", line 201, in forward\n    return x + upstream(normalized)\n               ^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/dist-packages/torch/nn/modules/module.py\", line 1553, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/dist-packages/torch/nn/modules/module.py\", line 1562, in _call_impl\n    return forward_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/.nvidia-comparator-venv/lib/python3.11/site-packages/mamba_ssm/modules/mamba_simple.py\", line 136, in forward\n    self.in_proj.weight @ rearrange(hidden_states, \"b l d -> d (b l)\"),\n    ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\nRuntimeError: Deterministic behavior was enabled with either `torch.use_deterministic_algorithms(True)` or `at::Context::setDeterministicAlgorithms(true)`, but this operation is not deterministic because it uses CuBLAS and you have CUDA >= 10.2. To enable deterministic behavior in this case, you must set an environment variable before running your PyTorch application: CUBLAS_WORKSPACE_CONFIG=:4096:8 or CUBLAS_WORKSPACE_CONFIG=:16:8. For more information, go to https://docs.nvidia.com/cuda/cublas/index.html#results-reproducibility\n"
+}

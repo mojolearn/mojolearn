@@ -1,0 +1,508 @@
+{
+  "status": "PASSED",
+  "scope": "host-array public APIs, including transfers and outputs; not historical kernel-only fixtures",
+  "args": {
+    "worker": null,
+    "lane": "knn",
+    "out": "/root/gemm_leg_out/final-supplement/torch-knn-1000",
+    "rounds": 7,
+    "index": 100000,
+    "queries": 1000,
+    "k": 10,
+    "knn_external": "torch",
+    "dim": 2048,
+    "rows": 16384,
+    "gram_rows": 65536,
+    "rtol": 0.0005,
+    "umap_rows": 256,
+    "umap_epochs": 50,
+    "quality_min": 0.85,
+    "quality_gap": 0.05
+  },
+  "metadata": {
+    "fast": {
+      "arm": "fast",
+      "lane": "knn",
+      "inputs": [
+        "df05a5833e6277a33bf3110867f760454322de3ce95d33f5a99a649842bbad7a",
+        "963ecdf80f5baa1608a68bd8a2e24f3a992e78dee16ded88a9a77f16d04be244"
+      ],
+      "shapes": [
+        [
+          100000,
+          32
+        ],
+        [
+          1000,
+          32
+        ]
+      ],
+      "device": "NVIDIA GeForce RTX 4090",
+      "torch": "2.4.1+cu124",
+      "cuda": "12.4",
+      "precision": "mojolearn FAST; backend precision policy not inferred",
+      "knn_external": "torch",
+      "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
+      "numpy": "1.26.3",
+      "source_commit": "1d1f8fdd37022dad1c9e5752311296580e7762dd",
+      "nvidia_smi": "580.126.20, NVIDIA GeForce RTX 4090",
+      "mojolearn": "0.5.0",
+      "package": "/root/mojolearn/python/mojolearn/__init__.py",
+      "mode": "fast",
+      "binding_file": "/root/mojolearn/python/mojolearn/_mojolearn.so"
+    },
+    "identical": {
+      "arm": "identical",
+      "lane": "knn",
+      "inputs": [
+        "df05a5833e6277a33bf3110867f760454322de3ce95d33f5a99a649842bbad7a",
+        "963ecdf80f5baa1608a68bd8a2e24f3a992e78dee16ded88a9a77f16d04be244"
+      ],
+      "shapes": [
+        [
+          100000,
+          32
+        ],
+        [
+          1000,
+          32
+        ]
+      ],
+      "device": "NVIDIA GeForce RTX 4090",
+      "torch": "2.4.1+cu124",
+      "cuda": "12.4",
+      "precision": "mojolearn IDENTICAL FP32",
+      "knn_external": "torch",
+      "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
+      "numpy": "1.26.3",
+      "source_commit": "1d1f8fdd37022dad1c9e5752311296580e7762dd",
+      "nvidia_smi": "580.126.20, NVIDIA GeForce RTX 4090",
+      "mojolearn": "0.5.0",
+      "package": "/root/mojolearn/python/mojolearn/__init__.py",
+      "mode": "identical",
+      "binding_file": "/root/mojolearn/python/mojolearn/identical/_mojolearn.so"
+    },
+    "external": {
+      "arm": "external",
+      "lane": "knn",
+      "inputs": [
+        "df05a5833e6277a33bf3110867f760454322de3ce95d33f5a99a649842bbad7a",
+        "963ecdf80f5baa1608a68bd8a2e24f3a992e78dee16ded88a9a77f16d04be244"
+      ],
+      "shapes": [
+        [
+          100000,
+          32
+        ],
+        [
+          1000,
+          32
+        ]
+      ],
+      "device": "NVIDIA GeForce RTX 4090",
+      "torch": "2.4.1+cu124",
+      "cuda": "12.4",
+      "precision": "torch CUDA FP32 cdist matrix-product path; TF32 disabled",
+      "knn_external": "torch",
+      "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
+      "numpy": "1.26.3",
+      "source_commit": "1d1f8fdd37022dad1c9e5752311296580e7762dd",
+      "nvidia_smi": "580.126.20, NVIDIA GeForce RTX 4090",
+      "arm_label": "torch-cuda-cdist-topk-host-request",
+      "cdist_compute_mode": "use_mm_for_euclid_dist",
+      "topk_sorted": true,
+      "distance_workspace_bytes": 400000000,
+      "transfer_scope": "host index + query uploaded and distances + indices downloaded each request"
+    }
+  },
+  "records": [
+    {
+      "ms": 927.783066,
+      "hashes": [
+        "010447a89d37ed0952e853d84c2c966598f22468a83c20f06191ef07b6afb237",
+        "b9b6053957743eeeefa63e27c4d604ec36b07f41239b5010d15bc7edfbe93c2b"
+      ],
+      "arm": "fast",
+      "round": 0,
+      "warmup": true
+    },
+    {
+      "ms": 1061.560135,
+      "hashes": [
+        "ca43011803cd7dc562628c9da501bb982d3b1ab6db01f585d454d9029e1dfe9f",
+        "b9b6053957743eeeefa63e27c4d604ec36b07f41239b5010d15bc7edfbe93c2b"
+      ],
+      "arm": "identical",
+      "round": 0,
+      "warmup": true
+    },
+    {
+      "ms": 172.367652,
+      "hashes": [
+        "af2191e4c0e265a51c768f1205f03eb5d6fd45e55d82058ad951ba518d7d8ae4",
+        "b9b6053957743eeeefa63e27c4d604ec36b07f41239b5010d15bc7edfbe93c2b"
+      ],
+      "arm": "external",
+      "round": 0,
+      "warmup": true
+    },
+    {
+      "ms": 216.843742,
+      "hashes": [
+        "ca43011803cd7dc562628c9da501bb982d3b1ab6db01f585d454d9029e1dfe9f",
+        "b9b6053957743eeeefa63e27c4d604ec36b07f41239b5010d15bc7edfbe93c2b"
+      ],
+      "arm": "identical",
+      "round": 1,
+      "warmup": false
+    },
+    {
+      "ms": 5.859656,
+      "hashes": [
+        "af2191e4c0e265a51c768f1205f03eb5d6fd45e55d82058ad951ba518d7d8ae4",
+        "b9b6053957743eeeefa63e27c4d604ec36b07f41239b5010d15bc7edfbe93c2b"
+      ],
+      "arm": "external",
+      "round": 1,
+      "warmup": false
+    },
+    {
+      "ms": 7.095605,
+      "hashes": [
+        "010447a89d37ed0952e853d84c2c966598f22468a83c20f06191ef07b6afb237",
+        "b9b6053957743eeeefa63e27c4d604ec36b07f41239b5010d15bc7edfbe93c2b"
+      ],
+      "arm": "fast",
+      "round": 1,
+      "warmup": false
+    },
+    {
+      "ms": 5.470507,
+      "hashes": [
+        "af2191e4c0e265a51c768f1205f03eb5d6fd45e55d82058ad951ba518d7d8ae4",
+        "b9b6053957743eeeefa63e27c4d604ec36b07f41239b5010d15bc7edfbe93c2b"
+      ],
+      "arm": "external",
+      "round": 2,
+      "warmup": false
+    },
+    {
+      "ms": 6.651696,
+      "hashes": [
+        "010447a89d37ed0952e853d84c2c966598f22468a83c20f06191ef07b6afb237",
+        "b9b6053957743eeeefa63e27c4d604ec36b07f41239b5010d15bc7edfbe93c2b"
+      ],
+      "arm": "fast",
+      "round": 2,
+      "warmup": false
+    },
+    {
+      "ms": 210.628306,
+      "hashes": [
+        "ca43011803cd7dc562628c9da501bb982d3b1ab6db01f585d454d9029e1dfe9f",
+        "b9b6053957743eeeefa63e27c4d604ec36b07f41239b5010d15bc7edfbe93c2b"
+      ],
+      "arm": "identical",
+      "round": 2,
+      "warmup": false
+    },
+    {
+      "ms": 6.807815,
+      "hashes": [
+        "010447a89d37ed0952e853d84c2c966598f22468a83c20f06191ef07b6afb237",
+        "b9b6053957743eeeefa63e27c4d604ec36b07f41239b5010d15bc7edfbe93c2b"
+      ],
+      "arm": "fast",
+      "round": 3,
+      "warmup": false
+    },
+    {
+      "ms": 215.301393,
+      "hashes": [
+        "ca43011803cd7dc562628c9da501bb982d3b1ab6db01f585d454d9029e1dfe9f",
+        "b9b6053957743eeeefa63e27c4d604ec36b07f41239b5010d15bc7edfbe93c2b"
+      ],
+      "arm": "identical",
+      "round": 3,
+      "warmup": false
+    },
+    {
+      "ms": 5.811876,
+      "hashes": [
+        "af2191e4c0e265a51c768f1205f03eb5d6fd45e55d82058ad951ba518d7d8ae4",
+        "b9b6053957743eeeefa63e27c4d604ec36b07f41239b5010d15bc7edfbe93c2b"
+      ],
+      "arm": "external",
+      "round": 3,
+      "warmup": false
+    },
+    {
+      "ms": 216.259792,
+      "hashes": [
+        "ca43011803cd7dc562628c9da501bb982d3b1ab6db01f585d454d9029e1dfe9f",
+        "b9b6053957743eeeefa63e27c4d604ec36b07f41239b5010d15bc7edfbe93c2b"
+      ],
+      "arm": "identical",
+      "round": 4,
+      "warmup": false
+    },
+    {
+      "ms": 5.638816,
+      "hashes": [
+        "af2191e4c0e265a51c768f1205f03eb5d6fd45e55d82058ad951ba518d7d8ae4",
+        "b9b6053957743eeeefa63e27c4d604ec36b07f41239b5010d15bc7edfbe93c2b"
+      ],
+      "arm": "external",
+      "round": 4,
+      "warmup": false
+    },
+    {
+      "ms": 6.984015,
+      "hashes": [
+        "010447a89d37ed0952e853d84c2c966598f22468a83c20f06191ef07b6afb237",
+        "b9b6053957743eeeefa63e27c4d604ec36b07f41239b5010d15bc7edfbe93c2b"
+      ],
+      "arm": "fast",
+      "round": 4,
+      "warmup": false
+    },
+    {
+      "ms": 5.417417,
+      "hashes": [
+        "af2191e4c0e265a51c768f1205f03eb5d6fd45e55d82058ad951ba518d7d8ae4",
+        "b9b6053957743eeeefa63e27c4d604ec36b07f41239b5010d15bc7edfbe93c2b"
+      ],
+      "arm": "external",
+      "round": 5,
+      "warmup": false
+    },
+    {
+      "ms": 6.609666,
+      "hashes": [
+        "010447a89d37ed0952e853d84c2c966598f22468a83c20f06191ef07b6afb237",
+        "b9b6053957743eeeefa63e27c4d604ec36b07f41239b5010d15bc7edfbe93c2b"
+      ],
+      "arm": "fast",
+      "round": 5,
+      "warmup": false
+    },
+    {
+      "ms": 217.379211,
+      "hashes": [
+        "ca43011803cd7dc562628c9da501bb982d3b1ab6db01f585d454d9029e1dfe9f",
+        "b9b6053957743eeeefa63e27c4d604ec36b07f41239b5010d15bc7edfbe93c2b"
+      ],
+      "arm": "identical",
+      "round": 5,
+      "warmup": false
+    },
+    {
+      "ms": 6.854685,
+      "hashes": [
+        "010447a89d37ed0952e853d84c2c966598f22468a83c20f06191ef07b6afb237",
+        "b9b6053957743eeeefa63e27c4d604ec36b07f41239b5010d15bc7edfbe93c2b"
+      ],
+      "arm": "fast",
+      "round": 6,
+      "warmup": false
+    },
+    {
+      "ms": 215.070733,
+      "hashes": [
+        "ca43011803cd7dc562628c9da501bb982d3b1ab6db01f585d454d9029e1dfe9f",
+        "b9b6053957743eeeefa63e27c4d604ec36b07f41239b5010d15bc7edfbe93c2b"
+      ],
+      "arm": "identical",
+      "round": 6,
+      "warmup": false
+    },
+    {
+      "ms": 5.770886,
+      "hashes": [
+        "af2191e4c0e265a51c768f1205f03eb5d6fd45e55d82058ad951ba518d7d8ae4",
+        "b9b6053957743eeeefa63e27c4d604ec36b07f41239b5010d15bc7edfbe93c2b"
+      ],
+      "arm": "external",
+      "round": 6,
+      "warmup": false
+    },
+    {
+      "ms": 215.468543,
+      "hashes": [
+        "ca43011803cd7dc562628c9da501bb982d3b1ab6db01f585d454d9029e1dfe9f",
+        "b9b6053957743eeeefa63e27c4d604ec36b07f41239b5010d15bc7edfbe93c2b"
+      ],
+      "arm": "identical",
+      "round": 7,
+      "warmup": false
+    },
+    {
+      "ms": 5.598116,
+      "hashes": [
+        "af2191e4c0e265a51c768f1205f03eb5d6fd45e55d82058ad951ba518d7d8ae4",
+        "b9b6053957743eeeefa63e27c4d604ec36b07f41239b5010d15bc7edfbe93c2b"
+      ],
+      "arm": "external",
+      "round": 7,
+      "warmup": false
+    },
+    {
+      "ms": 6.850315,
+      "hashes": [
+        "010447a89d37ed0952e853d84c2c966598f22468a83c20f06191ef07b6afb237",
+        "b9b6053957743eeeefa63e27c4d604ec36b07f41239b5010d15bc7edfbe93c2b"
+      ],
+      "arm": "fast",
+      "round": 7,
+      "warmup": false
+    }
+  ],
+  "accuracy": [
+    {
+      "round": 0,
+      "arm": "fast",
+      "relative_l2": 7.52677769191854e-08,
+      "max_abs": 7.152557373046875e-07,
+      "passed": true
+    },
+    {
+      "round": 0,
+      "arm": "identical",
+      "relative_l2": 7.153726807178705e-08,
+      "max_abs": 7.152557373046875e-07,
+      "passed": true
+    },
+    {
+      "round": 1,
+      "arm": "fast",
+      "relative_l2": 7.52677769191854e-08,
+      "max_abs": 7.152557373046875e-07,
+      "passed": true
+    },
+    {
+      "round": 1,
+      "arm": "identical",
+      "relative_l2": 7.153726807178705e-08,
+      "max_abs": 7.152557373046875e-07,
+      "passed": true
+    },
+    {
+      "round": 2,
+      "arm": "fast",
+      "relative_l2": 7.52677769191854e-08,
+      "max_abs": 7.152557373046875e-07,
+      "passed": true
+    },
+    {
+      "round": 2,
+      "arm": "identical",
+      "relative_l2": 7.153726807178705e-08,
+      "max_abs": 7.152557373046875e-07,
+      "passed": true
+    },
+    {
+      "round": 3,
+      "arm": "fast",
+      "relative_l2": 7.52677769191854e-08,
+      "max_abs": 7.152557373046875e-07,
+      "passed": true
+    },
+    {
+      "round": 3,
+      "arm": "identical",
+      "relative_l2": 7.153726807178705e-08,
+      "max_abs": 7.152557373046875e-07,
+      "passed": true
+    },
+    {
+      "round": 4,
+      "arm": "fast",
+      "relative_l2": 7.52677769191854e-08,
+      "max_abs": 7.152557373046875e-07,
+      "passed": true
+    },
+    {
+      "round": 4,
+      "arm": "identical",
+      "relative_l2": 7.153726807178705e-08,
+      "max_abs": 7.152557373046875e-07,
+      "passed": true
+    },
+    {
+      "round": 5,
+      "arm": "fast",
+      "relative_l2": 7.52677769191854e-08,
+      "max_abs": 7.152557373046875e-07,
+      "passed": true
+    },
+    {
+      "round": 5,
+      "arm": "identical",
+      "relative_l2": 7.153726807178705e-08,
+      "max_abs": 7.152557373046875e-07,
+      "passed": true
+    },
+    {
+      "round": 6,
+      "arm": "fast",
+      "relative_l2": 7.52677769191854e-08,
+      "max_abs": 7.152557373046875e-07,
+      "passed": true
+    },
+    {
+      "round": 6,
+      "arm": "identical",
+      "relative_l2": 7.153726807178705e-08,
+      "max_abs": 7.152557373046875e-07,
+      "passed": true
+    },
+    {
+      "round": 7,
+      "arm": "fast",
+      "relative_l2": 7.52677769191854e-08,
+      "max_abs": 7.152557373046875e-07,
+      "passed": true
+    },
+    {
+      "round": 7,
+      "arm": "identical",
+      "relative_l2": 7.153726807178705e-08,
+      "max_abs": 7.152557373046875e-07,
+      "passed": true
+    }
+  ],
+  "summary": {
+    "fast": {
+      "median_ms": 6.850315,
+      "iqr_ms": 0.1895945000000001
+    },
+    "identical": {
+      "median_ms": 215.468543,
+      "iqr_ms": 1.3657039999999938
+    },
+    "external": {
+      "median_ms": 5.638816,
+      "iqr_ms": 0.25706950000000006
+    }
+  },
+  "ratios": {
+    "identical/fast": {
+      "median_paired": 31.453815335499172,
+      "min_paired": 30.56028936221788,
+      "max_paired": 32.88807800575702,
+      "separated_from_one": true
+    },
+    "identical/external": {
+      "median_paired": 38.3519859488233,
+      "min_paired": 37.00622391485097,
+      "max_paired": 40.125988270794,
+      "separated_from_one": true
+    },
+    "fast/external": {
+      "median_paired": 1.215919475105324,
+      "min_paired": 1.1713627407054108,
+      "max_paired": 1.2385605417874959,
+      "separated_from_one": true
+    }
+  }
+}

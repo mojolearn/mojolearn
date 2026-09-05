@@ -1,0 +1,41 @@
+FSPEED-HEADER family=seq lane=mamba arm=torch mode=FAST device=NVIDIA_GeForce_RTX_4090 rounds=1 size=shipped
+FSPEED-NOTE lane=mamba arm=torch build=CUDA 12.4 torch=2.4.1+cu124 tf32_switches=cuda.matmul.allow_tf32,cudnn.allow_tf32 deterministic=off
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=norm.weight n=768 hash=8ca9a62b03bb0b69
+FSPEED-INPUT-SHA256 lane=mamba shape=mamba130m.prefill.t8 tensor=norm.weight bytes=3072 sha256=915a564811a1d153a967b2ebbc64383f2156c9fc1a83e328d107e02a3713acbb
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=in_proj.weight n=2359296 hash=e5e828782fc4c377
+FSPEED-INPUT-SHA256 lane=mamba shape=mamba130m.prefill.t8 tensor=in_proj.weight bytes=9437184 sha256=d31fc051f82c51111ebf4b1304749bc536ee91c95b5e2417dec37f8c87d00451
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=conv1d.weight n=6144 hash=1fe9d376751939c2
+FSPEED-INPUT-SHA256 lane=mamba shape=mamba130m.prefill.t8 tensor=conv1d.weight bytes=24576 sha256=64a6dc2cb1c51aee1069bb7ea882c184f22eee66bfc901fac77672ce75526143
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=conv1d.bias n=1536 hash=284b95c47159d2e2
+FSPEED-INPUT-SHA256 lane=mamba shape=mamba130m.prefill.t8 tensor=conv1d.bias bytes=6144 sha256=92370ef99c75d4d264a28452749060922b78b48128706d3fcb9611ab9296cd7c
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=x_proj.weight n=122880 hash=58fc41a3c66083f9
+FSPEED-INPUT-SHA256 lane=mamba shape=mamba130m.prefill.t8 tensor=x_proj.weight bytes=491520 sha256=778cda1ea1f8ba32c65d10d60eec8b9ed7e07f8f2f921c6bae17960aef238634
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=dt_proj.weight n=73728 hash=354e3487a0f90c0b
+FSPEED-INPUT-SHA256 lane=mamba shape=mamba130m.prefill.t8 tensor=dt_proj.weight bytes=294912 sha256=a6b0db5b90d7269e6ba855a0d0252001a8634e40c04146b13fbe294337aa06c7
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=dt_proj.bias n=1536 hash=1729f7678a315600
+FSPEED-INPUT-SHA256 lane=mamba shape=mamba130m.prefill.t8 tensor=dt_proj.bias bytes=6144 sha256=7f4b4feecd3b5998bc9c3a3704396058e50f4ee27962f9ed741ffdd50892febd
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=A_log n=24576 hash=71d966732193f1fb
+FSPEED-INPUT-SHA256 lane=mamba shape=mamba130m.prefill.t8 tensor=A_log bytes=98304 sha256=7cb4db3957450779852fe681b28115457426fb7fe953a92e966212edca0623d4
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=D n=1536 hash=146d24138daf5ed0
+FSPEED-INPUT-SHA256 lane=mamba shape=mamba130m.prefill.t8 tensor=D bytes=6144 sha256=bada7a49241e8b8bc50ac7ee6dfd813556ad5ceb2de9e1f62e7651031adf47a4
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=out_proj.weight n=1179648 hash=5f7e08294f2017f1
+FSPEED-INPUT-SHA256 lane=mamba shape=mamba130m.prefill.t8 tensor=out_proj.weight bytes=4718592 sha256=649c7349b4e8a63f42e280eba4de5a9f38277cd46f70ddee85d562d3883dd8a1
+FSPEED-WEIGHTS lane=mamba shape=mamba130m.prefill.t8 tensor=x n=6144 hash=aea97b3003677e03
+FSPEED-INPUT-SHA256 lane=mamba shape=mamba130m.prefill.t8 tensor=x bytes=24576 sha256=6b4fc6f3a41c2a2a5956a34de5e22ae6b2e2fd984a820e27aab8fa7c6636ff44
+FSPEED-WARMUP lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t8 ms=1.526471
+FSPEED lane=mamba arm=torch-ref-scan-gpu shape=mamba130m.prefill.t8 round=1 ms=1.279241 hash=e4ec1d68618feb74
+FSPEED-NOTE lane=mamba arm=torch-ref-scan-gpu output witness shape=mamba130m.prefill.t8 n=6144 hash=bb87b869c3141aac
+FSPEED-WARMUP lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t8 ms=1.259520
+FSPEED lane=mamba arm=torch-ref-scan-gpu-tf32 shape=mamba130m.prefill.t8 round=1 ms=1.257211 hash=4e070b3ced2ff102
+FSPEED-NOTE lane=mamba arm=torch-ref-scan-gpu-tf32 output witness shape=mamba130m.prefill.t8 n=6144 hash=d8995576cee8426a
+FSPEED-NOTE lane=mamba arm=mamba-ssm-cuda this arm fuses the z gate into selective_scan_cuda; our port keeps S12 as its own kernel (DEVIATION 723)
+FSPEED-WARMUP lane=mamba arm=mamba-ssm-cuda shape=mamba130m.prefill.t8 ms=0.646740
+FSPEED lane=mamba arm=mamba-ssm-cuda shape=mamba130m.prefill.t8 round=1 ms=0.519590 hash=3306e14d4aaa3f22
+FSPEED-NOTE lane=mamba arm=mamba-ssm-cuda output witness shape=mamba130m.prefill.t8 n=6144 hash=0af1e1f3ffe5776a
+FSPEED-AGREE lane=mamba max_abs_diff=1.19209e-07 max_rel_diff=5.16238e-06 n=6144
+FSPEED-AGREE-GATE lane=mamba shape=mamba130m.prefill.t8 arm=mamba-ssm-cuda passed=true rtol=0.0005 atol=1e-05
+FSPEED-AGREE lane=mamba max_abs_diff=1.19209e-07 max_rel_diff=8.604e-06 n=6144
+FSPEED-AGREE-GATE lane=mamba shape=mamba130m.prefill.t8 arm=reference-fp32 passed=true rtol=0.0005 atol=1e-05
+FSPEED-DONE lane=mamba arm=torch
+FSPEED-INPUT-GATE passed=true tensors=11 path=/root/gemm_leg_out/campaign/seq-mamba-fast-setup.log
+FSPEED-INPUT-GATE passed=true tensors=11 path=/root/gemm_leg_out/campaign/seq-mamba-identical-setup.log

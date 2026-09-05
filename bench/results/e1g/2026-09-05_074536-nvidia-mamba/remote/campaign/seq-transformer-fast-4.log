@@ -1,0 +1,18 @@
+FSPEED-HEADER family=seq lane=transformer arm=ours mode=FAST device=unset rounds=1 size=shipped
+FSPEED-NOTE lane=transformer arm=ours entry costs the port pays and the opponent does not: llama_refuse_bad_inputs / mamba_refuse_bad_inputs download every weight per call, and eager_attention_forward synchronizes per (batch, head). See bench/speed/README.md.
+FSPEED-NOTE lane=transformer arm=ours PRECISION: FAST routes every GEMM through MAX matmul, which on NVIDIA is a TENSOR-CORE (TF32-class, 10 mantissa bits) path -- measured 200 TFLOP/s against cublas-fp32 44.4 and cublas-tf32 207.5 on an H100. The fair vendor opponent for a lane that routes a GEMM is therefore a TF32 arm (torch-gpu-tf32), NOT an fp32 one, and an FSPEED-AGREE line computed against an fp32 reference is measuring THIS CUT and not a defect. Lanes routing no GEMM (rmsnorm) are unaffected and are the control. DEVIATION 1885.
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=norm1.weight n=4096 hash=2554a09c79b9bec3
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=norm2.weight n=4096 hash=54e8bdb50be343e8
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=q_proj.weight n=16777216 hash=7f5e346f0f234ca1
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=k_proj.weight n=4194304 hash=628683891b4ef505
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=v_proj.weight n=4194304 hash=a6e71091674bf598
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=o_proj.weight n=16777216 hash=f322159c55f94428
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=gate_proj.weight n=58720256 hash=e4ae7d5f3c49e108
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=up_proj.weight n=58720256 hash=e1e76c5d8ad14599
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=down_proj.weight n=58720256 hash=cd680ef665764882
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=x n=32768 hash=5fae3cdceecdb9e2
+FSPEED-NOTE lane=transformer arm=ours llama_refuse_bad_inputs alone shape=llama8b.prefill.t8 ms=906.467316 (inside the transformer lane's round, not inside attention/mlp/rmsnorm)
+FSPEED-WARMUP lane=transformer arm=ours shape=llama8b.prefill.t8 ms=31.366653
+FSPEED lane=transformer arm=ours shape=llama8b.prefill.t8 round=1 ms=31.091643 hash=68ae917cf874eaff
+FSPEED-NOTE lane=transformer arm=ours dump shape=llama8b.prefill.t8 n=32768 path=/root/gemm_leg_out/campaign/seq-fast/seq.transformer.llama8b.prefill.t8.f32.bin
+FSPEED-DONE lane=transformer mode=FAST

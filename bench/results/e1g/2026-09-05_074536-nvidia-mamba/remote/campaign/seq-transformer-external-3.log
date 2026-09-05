@@ -1,0 +1,69 @@
+/root/mojolearn/tools/speed_torch_seq.py:595: UserWarning: Memory efficient kernel not used because: (Triggered internally at ../aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:723.)
+  o = self.t.nn.functional.scaled_dot_product_attention(
+/root/mojolearn/tools/speed_torch_seq.py:595: UserWarning: Memory Efficient attention has been runtime disabled. (Triggered internally at ../aten/src/ATen/native/transformers/sdp_utils_cpp.h:495.)
+  o = self.t.nn.functional.scaled_dot_product_attention(
+/root/mojolearn/tools/speed_torch_seq.py:595: UserWarning: Flash attention kernel not used because: (Triggered internally at ../aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:725.)
+  o = self.t.nn.functional.scaled_dot_product_attention(
+/root/mojolearn/tools/speed_torch_seq.py:595: UserWarning: Flash Attention does not support non-null attn_mask. (Triggered internally at ../aten/src/ATen/native/transformers/sdp_utils_cpp.h:269.)
+  o = self.t.nn.functional.scaled_dot_product_attention(
+/root/mojolearn/tools/speed_torch_seq.py:595: UserWarning: CuDNN attention kernel not used because: (Triggered internally at ../aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:727.)
+  o = self.t.nn.functional.scaled_dot_product_attention(
+/root/mojolearn/tools/speed_torch_seq.py:595: UserWarning: The CuDNN backend needs to be enabled by setting the enviornment variable`TORCH_CUDNN_SDPA_ENABLED=1` (Triggered internally at ../aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:496.)
+  o = self.t.nn.functional.scaled_dot_product_attention(
+FSPEED-HEADER family=seq lane=transformer arm=torch mode=FAST device=NVIDIA_GeForce_RTX_4090 rounds=1 size=shipped
+FSPEED-NOTE lane=transformer arm=torch build=CUDA 12.4 torch=2.4.1+cu124 tf32_switches=cuda.matmul.allow_tf32,cudnn.allow_tf32 deterministic=off
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=norm1.weight n=32 hash=10553ebe1cacb130
+FSPEED-INPUT-SHA256 lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=norm1.weight bytes=128 sha256=5c845fb75092b2510f34c3e7674c075409f44fde4992d06fad854d768de0a1af
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=norm2.weight n=32 hash=43392443a35b61f3
+FSPEED-INPUT-SHA256 lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=norm2.weight bytes=128 sha256=e11fd7f92db09849ac71ddc1768c07d494b066c2cb3f71a8ab5c56ea2dc207f3
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=q_proj.weight n=1024 hash=b73a1a48e0c0d9f7
+FSPEED-INPUT-SHA256 lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=q_proj.weight bytes=4096 sha256=ecee8abd7ae81231cc26360a1c6267287754e8017e4ef152c8ba43c213cc75d3
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=k_proj.weight n=1024 hash=de208e4e2a16ff1f
+FSPEED-INPUT-SHA256 lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=k_proj.weight bytes=4096 sha256=3279146eb634a6a5cade3ed16662e84ff267a19b66b13d686124cf050871e4e8
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=v_proj.weight n=1024 hash=427375797d9ef375
+FSPEED-INPUT-SHA256 lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=v_proj.weight bytes=4096 sha256=6345ed2f4037829a1ab9fdcd9de7194dd876c1ee0d67618679587c95aff5308a
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=o_proj.weight n=1024 hash=1947e064f026cb25
+FSPEED-INPUT-SHA256 lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=o_proj.weight bytes=4096 sha256=6863355e103da48693a328efab296a62ca1ed8f5c35b2a4446647272beb9a8e4
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=gate_proj.weight n=2048 hash=284aeae6d05c4f7c
+FSPEED-INPUT-SHA256 lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=gate_proj.weight bytes=8192 sha256=87a79f487b655df211a5eb84b098d6c1c7d8cd55309f165cbd99d4bc75e264e4
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=up_proj.weight n=2048 hash=b2fdf8deeea86017
+FSPEED-INPUT-SHA256 lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=up_proj.weight bytes=8192 sha256=6cb501ae0098eab61db80688a6bb783562a549b803d2cac251182bcb6c889f9a
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=down_proj.weight n=2048 hash=d1d0e3eb84d5f951
+FSPEED-INPUT-SHA256 lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=down_proj.weight bytes=8192 sha256=6d863069cc99789f56b26997745d2bb1d48f5b3fc423c9b84d78906395df26c1
+FSPEED-WEIGHTS lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=x n=256 hash=a55d417a40e61d75
+FSPEED-INPUT-SHA256 lane=transformer.crosscheck shape=lane.b2_l4_d32_kv2 tensor=x bytes=1024 sha256=2dc12e331c3d53ca3d334ae220e61a02c972ff9c172460f0b9ac61daeb0539df
+FSPEED-NOTE lane=transformer arm=torch crosscheck LlamaEager vs transformer/corpus block_forward at lane.b2_l4_d32_kv2: max_abs_diff=1.5878e-08
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=norm1.weight n=4096 hash=2554a09c79b9bec3
+FSPEED-INPUT-SHA256 lane=transformer shape=llama8b.prefill.t8 tensor=norm1.weight bytes=16384 sha256=e9f12fca09f9dc647037ea6a367684a8db72b236d971697a788aabde2148b5a2
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=norm2.weight n=4096 hash=54e8bdb50be343e8
+FSPEED-INPUT-SHA256 lane=transformer shape=llama8b.prefill.t8 tensor=norm2.weight bytes=16384 sha256=f5d33729cbfb52bf4d376d3f06585b5799c8d6428a290ea28a9bdcac7948ee15
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=q_proj.weight n=16777216 hash=7f5e346f0f234ca1
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=k_proj.weight n=4194304 hash=628683891b4ef505
+FSPEED-INPUT-SHA256 lane=transformer shape=llama8b.prefill.t8 tensor=k_proj.weight bytes=16777216 sha256=21d8d01123b8d291e95665625f426bb071c724f3ab43af566dca81fbbfc40b93
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=v_proj.weight n=4194304 hash=a6e71091674bf598
+FSPEED-INPUT-SHA256 lane=transformer shape=llama8b.prefill.t8 tensor=v_proj.weight bytes=16777216 sha256=752b44e079e16a768c9956cb625f8de2820db464d2f663b2a0d8c8a1fbf1d8cc
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=o_proj.weight n=16777216 hash=f322159c55f94428
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=gate_proj.weight n=58720256 hash=e4ae7d5f3c49e108
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=up_proj.weight n=58720256 hash=e1e76c5d8ad14599
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=down_proj.weight n=58720256 hash=cd680ef665764882
+FSPEED-WEIGHTS lane=transformer shape=llama8b.prefill.t8 tensor=x n=32768 hash=5fae3cdceecdb9e2
+FSPEED-INPUT-SHA256 lane=transformer shape=llama8b.prefill.t8 tensor=x bytes=131072 sha256=5c446cd763f6145d7e29330f80145dca136f1c955ef489298514cd6ffd4c48cf
+FSPEED-WARMUP lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t8 ms=1.901201
+FSPEED lane=transformer arm=torch-gpu-fp32 shape=llama8b.prefill.t8 round=1 ms=1.634960 hash=325629fb24520e63
+FSPEED-NOTE lane=transformer arm=torch-gpu-fp32 output witness shape=llama8b.prefill.t8 n=32768 hash=4a38b87e30078ac0
+FSPEED-WARMUP lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t8 ms=1.622191
+FSPEED lane=transformer arm=torch-gpu-tf32 shape=llama8b.prefill.t8 round=1 ms=1.612821 hash=633325d3b07b327e
+FSPEED-NOTE lane=transformer arm=torch-gpu-tf32 output witness shape=llama8b.prefill.t8 n=32768 hash=2972f79221a81c4a
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t8 ms=1.591041
+FSPEED lane=transformer arm=torch-gpu-sdpa-math-fp32 shape=llama8b.prefill.t8 round=1 ms=1.541091 hash=b3f3029985807d49
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-math-fp32 output witness shape=llama8b.prefill.t8 n=32768 hash=d186f8be67bd3392
+FSPEED-WARMUP lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t8 ms=1.443661
+FSPEED lane=transformer arm=torch-gpu-sdpa-efficient-fp32 shape=llama8b.prefill.t8 round=1 ms=1.422890 hash=d472e67ec2a3cee0
+FSPEED-NOTE lane=transformer arm=torch-gpu-sdpa-efficient-fp32 output witness shape=llama8b.prefill.t8 n=32768 hash=e0f27204c3829417
+FSPEED-REFUSED lane=transformer arm=torch-gpu-flash-fp32 reason=RuntimeError at shape llama8b.prefill.t8: No available kernel. Aborting execution.
+FSPEED-AGREE lane=transformer max_abs_diff=0.000638485 max_rel_diff=0.0384615 n=32768
+FSPEED-AGREE-GATE lane=transformer shape=llama8b.prefill.t8 arm=reference-fp32 passed=false rtol=0.0005 atol=1e-05
+FSPEED-DONE lane=transformer arm=torch
+FSPEED-INPUT-GATE passed=true tensors=10 path=/root/gemm_leg_out/campaign/seq-transformer-fast-setup.log
+FSPEED-INPUT-GATE passed=true tensors=10 path=/root/gemm_leg_out/campaign/seq-transformer-identical-setup.log
+FSPEED-ADMISSION-FAILED transformer/llama8b.prefill.t8/reference-fp32 numerical agreement failed

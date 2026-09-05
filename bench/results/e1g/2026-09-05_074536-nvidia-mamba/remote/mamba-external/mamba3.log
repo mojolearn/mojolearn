@@ -1,0 +1,3 @@
+/root/mamba3-source/mamba_ssm/utils/determinism.py:73: UserWarning: Deterministic mode: set TRITON_CACHE_AUTOTUNING=1 for cached autotuning.
+  warnings.warn(msg)
+{"status": "ERROR", "result": "/root/gemm_leg_out/mamba-external/mamba3/result.json"}
