@@ -1,0 +1,7 @@
+torch 2.13.0 numpy 2.5.2 python 3.14.7
+wrote 16 cases to /root/mojolearn/mamba/corpus, 1.696 MB of tensor and manifest files
+mamba1 corpus sha256 (files .f32 .f64 .json, mamba2/ and mamba3/ excluded): 2959cf165c9ecfa4c366bf90795a543e6b26965bb3ec1bafc8b8d7b624239f78
+wrote 17 mamba2 cases to /root/mojolearn/mamba/corpus/mamba2, 41.424 MB of tensor and manifest files
+mamba2 corpus sha256 (files .f32 .f64 .json): 43ee7bc4d57274a73de0e710912027ab1265d23ebb5dcdf3d05678ab7ecd6c65
+wrote 18 mamba3 cases to /root/mojolearn/mamba/corpus/mamba3, 22.345 MB of tensor and manifest files
+mamba3 corpus sha256 (files .f32 .f64 .json): 571132819814811231b80d3c3b6042f1b703463feb6fd290203b46b8036d1c15

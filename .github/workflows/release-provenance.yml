@@ -223,6 +223,25 @@ jobs:
           grep -q '^all interpreters passed' build.log
           rm -f build.log
 
+      - name: Qualify installed UMAP fit, transform and held-out quality
+        run: |
+          set -eu
+          set -- python/dist/mojolearn-*.whl
+          test "$#" -eq 1 && test -f "$1"
+          version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' python/mojolearn/_version.py)
+          python3 tools/qualify_umap_wheel.py "$1" \
+            --source-root "$GITHUB_WORKSPACE" --expected-version "$version" \
+            --output "$RUNNER_TEMP/umap-qualification-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+
+      - name: Retain installed UMAP qualification
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: umap-wheel-qualification
+          path: ${{ runner.temp }}/umap-qualification-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 30
+
       # THE LINUX WHEEL IS NOT BUILT HERE AND CANNOT BE. It is compiled on a
       # rented CUDA box and a rented HIP box (`packaging/linux/leg.sh`),
       # packed on the Mac by `packaging/linux/pack_wheel.py`, and retagged by

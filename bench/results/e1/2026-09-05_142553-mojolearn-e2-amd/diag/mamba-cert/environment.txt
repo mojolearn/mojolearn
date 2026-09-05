@@ -1,0 +1,9 @@
+schema=mojolearn.mamba.backward-certificate.amd.v2
+created_utc=2026-09-05T14:26:21Z
+host=mojolearn-e2-amd
+kernel=Linux 6.8.0-59-generic x86_64
+mode=IDENTICAL
+vendor=amd
+mode_injector=tools/with_identical_mode.sh
+commit=e2cfe1ac7cc76803895f80b8ca2a99bc572b8ef7
+source_sha256=785e324b9604dd6849d8291694934a47ce941ed1e93ac0ea610b5cdda4890ae0

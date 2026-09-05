@@ -27,9 +27,12 @@ source .venv/bin/activate
 pip install mojolearn
 ```
 
-Published wheels target Apple silicon on macOS and selected NVIDIA/AMD
-architectures on Linux x86-64. There is no CPU fallback. Run the diagnostic
-command before depending on a new machine:
+The current published 0.5.0 wheel is qualified on Apple silicon macOS.
+The 0.6.0 release candidate adds UMAP transformation and CSR graph storage;
+its wheel build and installed-artifact qualification are pending. Current
+NVIDIA/AMD support is qualified through source builds; historical Linux
+wheels do not establish support for these additions. There is no CPU fallback.
+Run the diagnostic command before depending on a new machine:
 
 ```sh
 mojolearn doctor
@@ -78,7 +81,8 @@ Classical estimators include:
 - PCA, truncated SVD, linear and logistic regression, ridge, lasso, and elastic net
 - SVC, SVR, kernel density, isolation forest, and Gaussian-process regression
 - Exponential smoothing and batched ARIMA
-- UMAP embeddings with dense Euclidean input and 2D/3D spectral initialization
+- UMAP embeddings with dense Euclidean input and 2D/3D spectral initialization;
+  the 0.6.0 source candidate adds unseen-sample transformation and CSR graph storage
 
 Additional modules provide scoring metrics, FP32 matrix multiplication,
 optimizer/training primitives, and reference-pinned Mamba and transformer
@@ -95,8 +99,23 @@ embedding = mojolearn.UMAP(
 ).fit_transform(X)
 ```
 
-Its graph uses quadratic memory. Transforming new samples, supervised targets,
-alternate metrics, and alternate initialization are not yet supported.
+The published 0.5.0 implementation stores a dense graph and does not support
+`transform`. In the **0.6.0 source release candidate**, public fitting stores
+the graph in CSR form, using O(n_samples × n_neighbors) graph space, and
+`transform(X_new)` embeds unseen samples against a frozen fitted model. Input
+remains a dense Euclidean array; CSR describes internal graph storage.
+Exact neighbor search still performs quadratic pair comparisons.
+
+Source checks for the integrated fit/transform API passed all three numeric
+modes on Apple and AMD; NVIDIA qualification of this integration is in
+progress. Earlier named IDENTICAL transform fixtures have matching held-out
+embeddings across Apple, NVIDIA and AMD. These are source results, not
+qualification of a published 0.6.0 wheel. See the [release-candidate evidence](SUPPORT_MATRIX.md#umap-060-release-candidate).
+
+Transformation retains private training data and embedding copies. Changing
+parameters or numeric mode requires refitting, and changing query batching
+can change results. Supervised targets, alternate metrics and alternate
+initialization remain unsupported.
 
 The APIs intentionally resemble scikit-learn, but mojolearn is not a drop-in
 replacement. Defaults follow the upstream GPU implementation mirrored by an
@@ -131,6 +150,8 @@ under `bench/results/` and `archive/` are evidence, not current guidance.
 - `identical` covers certified profiles and fixtures, not arbitrary untested shapes or future toolchains.
 - Some recent Python and neural-operator surfaces still have vendor legs or independent-reference checks pending.
 - Parameter coverage is intentionally smaller than scikit-learn, CatBoost, or cuML.
+- The experimental k-NN selector remains behind an explicit build flag; normal
+  wheel builds retain the existing dispatch.
 
 mojolearn is beta software. Pin the package version and numerical profile for
 production or archival work.

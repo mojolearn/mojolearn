@@ -1,0 +1,10 @@
+pid 3229's current affinity list: 0-19
+pid 3229's new affinity list: 0-3
+smallk-specialized	0
+umap-mamba	0
+transformer-forward	0
+transformer-backward	0
+build-transformer	0
+transformer-api	0
+gemv-candidate	0
+knn-candidate	0

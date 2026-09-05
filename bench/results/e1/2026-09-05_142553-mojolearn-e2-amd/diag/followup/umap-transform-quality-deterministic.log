@@ -1,0 +1,3 @@
+fatal: not a git repository (or any of the parent directories): .git
+cubic128_interleaved64_64 deterministic {'trustworthiness': 0.9976973684210526, 'retention': 0.903125, 'rank_penalty': 42} control_margins {'trustworthiness': 0.47012061403508776, 'retention': 0.825} PASS
+saddle_grid64_cellcenters49 deterministic {'trustworthiness': 0.9903329752953813, 'retention': 0.8326530612244898, 'rank_penalty': 135} control_margins {'trustworthiness': 0.42620837808807743, 'retention': 0.7346938775510204} PASS
