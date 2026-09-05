@@ -19,7 +19,7 @@ from gbdt.models.oblivious_model import (
     TBinarySplit,
 )
 from gbdt.models.tensor_ctr_value_table import (
-    persist_synchronized_tensor_path,
+    persist_synchronized_mixed_path,
     TStagedTensorCandidate,
     TTensorCtrRegistry,
 )
@@ -3903,17 +3903,16 @@ def run_bounded_synchronized_tensor_tree[
             trace, times, tree_tag,
         ):
             raise Error("bounded synchronized tensor level had no accepted winner")
-        if Int(splits[level].feature_id) != staged_by_level[level].feature_id:
-            raise Error("bounded tensor path winner was not its staged candidate")
-
     var registry = TTensorCtrRegistry(first_tensor_model_column)
     var retained = staged_by_level.copy()
-    _ = persist_synchronized_tensor_path(splits, retained.copy(), registry)
-    if len(registry.features) != depth:
-        raise Error("bounded tensor path did not retain one table per level")
+    var tensor_columns = persist_synchronized_mixed_path(
+        splits, retained.copy(), registry
+    )
     var stable_borders = base_borders.copy()
     var stable_folds = base_fold_counts.copy()
     for level in range(depth):
+        if tensor_columns[level] < 0:
+            continue
         stable_borders.append(retained[level].candidate.borders.copy())
         stable_folds.append(len(retained[level].candidate.borders))
     var leaf_offsets = List[Int]()

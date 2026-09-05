@@ -1029,6 +1029,47 @@ def persist_synchronized_tensor_path(
     return columns^
 
 
+def persist_synchronized_mixed_path(
+    mut accepted_splits: List[TBinarySplit],
+    staged_by_level: List[TStagedTensorCandidate],
+    mut registry: TTensorCtrRegistry,
+) raises -> List[Int]:
+    """Persist only tensor candidates that actually won their level.
+
+    Returns one entry per level, `-1` for an ordinary-feature winner.
+    """
+    if len(accepted_splits) != len(staged_by_level):
+        raise Error("mixed tensor winners/candidates length mismatch")
+    var original = accepted_splits.copy()
+    var columns = List[Int]()
+    for level in range(len(staged_by_level)):
+        ref staged = staged_by_level[level]
+        if Int(original[level].feature_id) != staged.feature_id:
+            columns.append(-1)
+            continue
+        var table = staged.candidate.table.copy()
+        for s in range(len(table.splits)):
+            for prior in range(level):
+                if columns[prior] < 0:
+                    continue
+                if (
+                    table.splits[s].feature_id == original[prior].feature_id
+                    and table.splits[s].bin_idx == original[prior].bin_idx
+                    and table.splits[s].split_type == original[prior].split_type
+                ):
+                    table.splits[s].feature_id = accepted_splits[prior].feature_id
+                    break
+        var stable_tensor = TFeatureTensor()
+        for source in range(len(table.source_features)):
+            stable_tensor.add_cat_feature(UInt32(table.source_features[source]))
+        stable_tensor.add_binary_splits(table.splits.copy())
+        table.tensor_hash = stable_tensor.get_hash()
+        var column = registry.register(table^)
+        accepted_splits[level].feature_id = Int32(column)
+        columns.append(column)
+    return columns^
+
+
 def next_tensor_base_from_winner(
     staged: TStagedTensorCandidate, winning_split: TBinarySplit
 ) raises -> TFeatureTensor:
@@ -1115,10 +1156,28 @@ def stage_next_feature_freq_after_winner(
     var extended = base_quantized_cindex.copy()
     for r in range(n_rows):
         extended.append(staged.candidate.bins[r])
-    var candidate = regenerate_feature_freq_after_winner(
-        staged, winning_split, x_colmajor, extended^,
-        n_rows, n_raw_features, grid,
+    var tensor = TFeatureTensor()
+    for i in range(len(staged.candidate.table.source_features)):
+        tensor.add_cat_feature(UInt32(
+            staged.candidate.table.source_features[i]
+        ))
+    tensor.add_binary_splits(staged.candidate.table.splits.copy())
+    tensor.add_binary_split(winning_split)
+    var sources = List[Int]()
+    for i in range(len(tensor.cat_features)):
+        sources.append(Int(tensor.cat_features[i]))
+    var table = build_split_feature_freq_tensor_table(
+        x_colmajor, extended, n_rows, n_raw_features, sources^,
+        tensor.splits.copy(), staged.candidate.table.prior_num,
+        staged.candidate.table.prior_denom,
     )
+    var values = List[Float32]()
+    values.resize(n_rows, Float32(0.0))
+    for row in range(n_rows):
+        values[row] = value_for_split_tensor_row(
+            table, x_colmajor, extended, n_rows, row
+        )
+    var candidate = materialize_tensor_candidate(table^, values^, grid)
     return stage_tensor_candidate_host(
         base_columns, base_fold_counts, base_one_hot, candidate^,
         fold_capacity=fold_capacity,
