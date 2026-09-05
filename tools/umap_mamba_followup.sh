@@ -55,6 +55,6 @@ fi
 # Spend this serial certification leg on uncovered sequence lengths instead.
 run mamba-long-backward env MOJOLEARN_MAMBA_CERT_PROFILE=long-sequence-v1 \
     MOJOLEARN_MAMBA_CERT_VENDOR="${MOJOLEARN_MAMBA_CERT_VENDOR:?}" \
-    MOJOLEARN_MAMBA_CERT_OUT="$OUT/mamba-long-cert" bash tools/mamba_backward_certify.sh
+    MOJOLEARN_MAMBA_CERT_OUT="$OUT/mamba-long-cert" pixi run bash tools/mamba_backward_certify.sh
 printf '%s\n' "$rc" > "$OUT/exit_code"
 exit "$rc"
