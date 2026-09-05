@@ -18,8 +18,8 @@ Public API, native sparse graph/fit, native transform and the two public kNN
 dispatch checks passed. The fresh Mamba forward/state Python API also passed.
 
 Classification: `ALGORITHM_FAILURE` for UMAP's same-data neighbor convention;
-`HARNESS_FAILURE` for the obsolete Mamba3 L65 manifest. Neither is an
-infrastructure excuse or a passing expanded certificate. Raw failing JSON,
+`INFRA_FAILURE` (qualification harness) for the obsolete Mamba3 L65 manifest.
+Neither is a passing expanded certificate. Raw failing JSON,
 logs, manifests and the successful native captures are retained under `remote/`.
 
 The archive has no `.git` directory. Before the supplementary certificate,
