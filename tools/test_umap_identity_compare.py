@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from umap_identity_compare import COUNTS, PROFILE
+from umap_identity_compare import COUNTS, PROFILE, PROFILES
 
 
 class IdentityComparatorTest(unittest.TestCase):
@@ -32,6 +32,19 @@ class IdentityComparatorTest(unittest.TestCase):
 
     def test_complete_equal(self):
         self.compare(self.lines, 0)
+
+    def test_broader_profile(self):
+        profile = next(p for p in PROFILES if p != PROFILE)
+        lines = [profile] + [f"UMAP_BITS {stage} {i} 0"
+                 for stage, count in PROFILES[profile].items() for i in range(count)]
+        lines += ["UMAP identity fixture PASS"]
+        self.compare(lines, 2)  # Different fixtures cannot certify each other.
+        self.left.write_text("\n".join(lines) + "\n")
+        self.compare(lines, 0)
+        changed = lines.copy()
+        changed[-2] = "UMAP_BITS layout 47 1"
+        self.compare(changed, 1)
+        self.compare(lines[:-2] + lines[-1:], 2)
 
     def test_one_bit_mismatch(self):
         lines = self.lines.copy()

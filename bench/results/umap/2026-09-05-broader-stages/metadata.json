@@ -1,0 +1,21 @@
+{
+  "status": "PASS",
+  "device": "Apple M4",
+  "base_commit": "af377e6136692a8c84b011fc29203b8c6bfa7a54",
+  "profile": "umap.identical.16x3.3d.e12.seed7.mix05.v1",
+  "scope": "Local native composed/public agreement and repeatability only. NVIDIA and DigitalOcean AMD pending.",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "build_command": "pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . umap/checks/identity_broader_check.mojo",
+  "fixture_sha256": "88a8e3d9eead2ea114d110c5894b57e0479dd8d11b19bb1d2c9a935480d12616",
+  "binary_sha256": "3832b61791d91f224e79724e6fbc97374d2ca1c77a0ec25274a6bec4eb27b4d7",
+  "testing_lane": "main only; serialized",
+  "installed_api": {
+    "version": "0.5.0",
+    "mode": "identical",
+    "status": "PASS",
+    "layout_cells": 48,
+    "test_sha256": "a2ff164cd43f1720cf7be888af2dcb4d73017712894418901f6a92eaf66e8dcc",
+    "wheel_sha256": "4652f8ecbf8f131f7707e08972af3126f12ef0ebb93f05230d389075c6ea64cc",
+    "log": "installed-identical.log"
+  }
+}

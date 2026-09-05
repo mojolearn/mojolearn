@@ -1,0 +1,53 @@
+{
+  "status": "PASS",
+  "artifact": "mojolearn 0.5.0 macOS arm64",
+  "wheel_sha256": "4652f8ecbf8f131f7707e08972af3126f12ef0ebb93f05230d389075c6ea64cc",
+  "device": "Apple M4",
+  "testing_lane": "main only; serialized",
+  "metric_reference": "https://scikit-learn.org/stable/modules/generated/sklearn.manifold.trustworthiness.html",
+  "scope": "Two synthetic 64x3 fixtures; no broad dataset, upstream-equivalence, performance or cross-vendor claim",
+  "results": [
+    {
+      "profile": "cubic64x3",
+      "trustworthiness": 0.9963727678571429,
+      "permuted_control": 0.42527901785714284,
+      "passed": true,
+      "mode": "fast"
+    },
+    {
+      "profile": "saddle64x3",
+      "trustworthiness": 0.9928571428571429,
+      "permuted_control": 0.45820312500000004,
+      "passed": true,
+      "mode": "fast"
+    },
+    {
+      "profile": "cubic64x3",
+      "trustworthiness": 0.9963727678571429,
+      "permuted_control": 0.42527901785714284,
+      "passed": true,
+      "mode": "deterministic"
+    },
+    {
+      "profile": "saddle64x3",
+      "trustworthiness": 0.9928571428571429,
+      "permuted_control": 0.45820312500000004,
+      "passed": true,
+      "mode": "deterministic"
+    },
+    {
+      "profile": "cubic64x3",
+      "trustworthiness": 0.9977678571428571,
+      "permuted_control": 0.4384486607142858,
+      "passed": true,
+      "mode": "identical"
+    },
+    {
+      "profile": "saddle64x3",
+      "trustworthiness": 0.994921875,
+      "permuted_control": 0.4537946428571429,
+      "passed": true,
+      "mode": "identical"
+    }
+  ]
+}

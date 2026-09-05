@@ -1254,6 +1254,7 @@ check-umap-finite-params = "mojo run -I . umap/checks/finite_params_check.mojo"
 check-umap-finite-optimizer = "mojo run -I . umap/checks/finite_optimizer_check.mojo"
 check-umap-finite-optimizer-identical = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . umap/checks/finite_optimizer_check.mojo"
 check-umap-stage-identity = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . umap/checks/identity_check.mojo"
+check-umap-stage-identity-broader = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . umap/checks/identity_broader_check.mojo"
 bench-umap-optimizer = "mojo run -I . umap/bench/optimizer_bench.mojo"
 check-if = "mojo run -I . isolation_forest/checks/if_check.mojo"
 

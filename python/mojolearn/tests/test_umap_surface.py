@@ -19,6 +19,19 @@ LAYOUT_BITS = np.array([
 ], dtype=np.uint32).reshape(8, 2)
 
 
+# Apple native umap.identical.16x3.3d.e12.seed7.mix05.v1 capture.
+# Remote qualification is pending; this checks the installed binding boundary.
+BROADER_LAYOUT_BITS = np.array([
+    3227671630, 1085957826, 3227285893, 1063840041, 1093143146, 3186602476,
+    1082415745, 1083589910, 3220782294, 3237698616, 3230761386, 1059402627,
+    1058885756, 1092387491, 3202367524, 3236803882, 3231770898, 1069795397,
+    3188763299, 1092888718, 1045782766, 1093046885, 3231260368, 3222673723,
+    3234807866, 3234147693, 1079673982, 1086968855, 3224419085, 3213198565,
+    3234740479, 3235016532, 1082260038, 1088114859, 3227469230, 3201016678,
+    1093730512, 3232579432, 3225043806, 3226820677, 1085415785, 1092196396,
+    1085848643, 3224662453, 3198049406, 3224287304, 1084327978, 1091562048,
+], dtype=np.uint32).reshape(16, 3)
+
 class UMAPSurfaceTests(unittest.TestCase):
     def setUp(self):
         self.x = np.array([0, 1, 2.2, 4, 6.5, 10, 14.5, 20],
@@ -84,6 +97,9 @@ class UMAPSurfaceTests(unittest.TestCase):
                 self.assertEqual(model.n_features_in_, 3)
                 self.assertTrue(np.isfinite(layout).all())
                 self.assertGreater(float(np.ptp(layout)), 0.0)
+                if self.mode == "identical" and config["n_components"] == 3:
+                    np.testing.assert_array_equal(layout.view(np.uint32),
+                                                  BROADER_LAYOUT_BITS)
                 np.testing.assert_array_equal(x, before)
                 if self.mode in ("identical", "deterministic"):
                     again = UMAP(n_epochs=12, numeric_mode=self.mode,

@@ -56,6 +56,13 @@ multiple seeds and parameter settings, alongside independent embedding-quality
 checks. Use RunPod for NVIDIA and **DigitalOcean for AMD**, with tests and
 measurements in the main lane only.
 
+Local follow-up now covers two 64x3 synthetic quality fixtures in all three
+installed-wheel modes, with independent trustworthiness and permutation
+controls. A second 16x3/3D stage profile repeats all 690 cells on Apple M4;
+its installed API gate pins the 48 final coordinates. These are local gates,
+not new remote certification. Run both profiles on matching-source NVIDIA
+and DigitalOcean AMD next; extend quality coverage to less regular datasets.
+
 Then add fitted-state `transform` following the pinned cuML implementation:
 new-to-training k-NN, membership weights, weighted initialization from the
 training embedding, and layout optimization against the retained embedding.

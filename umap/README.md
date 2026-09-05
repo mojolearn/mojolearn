@@ -83,3 +83,41 @@ groups pass in each mode. See the
 [local results](../bench/results/umap/2026-09-05-api-broader/results.json).
 These checks do not establish embedding quality or add remote identity
 coverage. NVIDIA and DigitalOcean AMD runs remain pending.
+
+## Quality and broader stage capture
+
+`tools/umap_quality_check.py` evaluates two exact-input 64x3 synthetic
+fixtures against scikit-learn's independent trustworthiness metric at k=5.
+The predefined gate requires a score of at least 0.90 and a margin of at
+least 0.20 over a fixed row-permutation control. On the installed macOS
+0.5.0 wheel, all six fixture/mode cases passed (0.993–0.998); the scrambled
+controls scored 0.425–0.458. See the
+[quality record](../bench/results/umap/2026-09-05-quality/summary.json).
+This is a small synthetic quality check, not upstream coordinate parity,
+a general quality benchmark, or a performance result.
+
+Run in an environment with the wheel, NumPy and scikit-learn installed:
+
+```sh
+tools/with_build_lock.sh python tools/umap_quality_check.py \
+  --mode identical --device 'actual device name' --output quality.json
+```
+
+The second native identity profile,
+`umap.identical.16x3.3d.e12.seed7.mix05.v1`, varies neighbors, seed,
+min_dist, spread and graph mixing as well as input/output dimensionality.
+All 690 cells across eight stages repeated exactly on Apple M4, with
+composed/public agreement. Its 48 final layout cells are also pinned in the
+installed Python IDENTICAL gate. See the
+[stage record](../bench/results/umap/2026-09-05-broader-stages/metadata.json).
+NVIDIA and DigitalOcean AMD remain pending for this profile.
+
+```sh
+tools/with_build_lock.sh pixi run check-umap-stage-identity-broader > broader.log
+python3 tools/umap_identity_compare.py broader.log other-broader.log
+```
+
+The comparator accepts only registered profiles and complete finite captures,
+and refuses comparisons between the original and broader fixtures. Its
+negative controls cover a changed bit, signed zero, missing/duplicate cells,
+unknown stages, non-finite values and incomplete runs.
