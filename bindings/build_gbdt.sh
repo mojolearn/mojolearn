@@ -262,7 +262,7 @@ out="$tmpdir/_mojolearn_gbdt.so"
 # has left a diagnostic binary installed under the shipped name.
 #
 # shellcheck disable=SC2086  # both flag strings are deliberately word-split
-pixi run mojo build --emit shared-lib \
+pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib \
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE ${MOJOLEARN_EXTRA_DEFINES:-} \
     $LINK_FLAGS \
     -I . -I bindings \

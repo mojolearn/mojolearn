@@ -115,7 +115,7 @@ trap 'rm -rf "$tmpdir"' EXIT INT TERM
 out="$tmpdir/_mojolearn_rf.so"
 
 # shellcheck disable=SC2086  # both flag strings are deliberately word-split
-pixi run mojo build --emit shared-lib \
+pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib \
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
     $LINK_FLAGS \
     -I . -I bindings \

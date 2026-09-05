@@ -180,7 +180,7 @@ out="$tmpdir/_mojolearn_linalg.so"
 # `-I .` is the mojolearn package root, so `gemm.host_entry` and
 # `original.numerics` resolve. `-I bindings` is this directory.
 # shellcheck disable=SC2086  # the flag strings are deliberately word-split
-pixi run mojo build --emit shared-lib \
+pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib \
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
     $LINK_FLAGS \
     -I . -I bindings \
