@@ -35,6 +35,14 @@ run umap-sparse-fast env MOJOLEARN_UMAP_SPARSE_FAST_LARGE=1 pixi run mojo run -j
 run umap-sparse-deterministic pixi run mojo run -j 4 -D MOJOLEARN_NUMERIC_DETERMINISTIC=1 -I . umap/checks/sparse_estimator_check.mojo
 run knn-dispatch-legacy pixi run mojo run -j 4 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . bench/knn_smallk_dispatch_check.mojo
 run knn-dispatch-experimental pixi run mojo run -j 4 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL=1 -I . bench/knn_smallk_dispatch_check.mojo
+# Qualify the complete public UMAP fit/transform surface in every numeric mode.
+# IDENTICAL was built and checked above; the other builds run one at a time.
+for mode in fast deterministic; do
+    if run "build-metrics-$mode" env MOJOLEARN_NUMERIC_MODE="$mode" bash bindings/build_metrics.sh; then
+        run "umap-api-$mode" env MOJOLEARN_NUMERIC_MODE="$mode" pixi run -e skgpu python -m unittest discover -s python/mojolearn/tests -p 'test_umap*.py'
+        run "umap-transform-quality-$mode" env MOJOLEARN_NUMERIC_MODE="$mode" pixi run -e skgpu python tools/umap_transform_quality_check.py --mode "$mode" --device "${MOJOLEARN_MAMBA_CERT_VENDOR:-remote}" --output "$OUT/transform-quality-$mode.json"
+    fi
+done
 # The independent corpus generator is shipped; fixture bytes are generated
 # on the remote host rather than silently borrowed from an unrelated build.
 if run corpus pixi run -e skgpu python mamba/corpus/gen_corpus.py --family all; then
