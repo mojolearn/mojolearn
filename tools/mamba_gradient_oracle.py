@@ -33,11 +33,18 @@ import torch
 
 ROOT = Path(__file__).resolve().parents[1]
 GEN_PATH = ROOT / "mamba" / "corpus" / "gen_corpus.py"
-MAMBA3_PUBLIC_PREFILL_LEAVES = (
-    "x", "block_norm.weight", "in_proj.weight", "dt_bias",
-    "B_norm.weight", "C_norm.weight", "B_bias", "C_bias", "D",
-    "out_proj.weight",
-)
+PUBLIC_PREFILL_LEAVES = {
+    "mamba2": (
+        "x", "block_norm.weight", "in_proj.weight", "conv1d.weight",
+        "conv1d.bias", "dt_bias", "A_log", "D", "norm.weight",
+        "out_proj.weight",
+    ),
+    "mamba3": (
+        "x", "block_norm.weight", "in_proj.weight", "dt_bias",
+        "B_norm.weight", "C_norm.weight", "B_bias", "C_bias", "D",
+        "out_proj.weight",
+    ),
+}
 
 
 def _load_generator():
@@ -1106,8 +1113,10 @@ def generate(args):
             "hip": getattr(torch.version, "hip", None),
         },
     }
-    if args.family == "mamba3":
-        manifest["public_prefill_leaves"] = list(MAMBA3_PUBLIC_PREFILL_LEAVES)
+    if args.family in PUBLIC_PREFILL_LEAVES:
+        manifest["public_prefill_leaves"] = list(
+            PUBLIC_PREFILL_LEAVES[args.family]
+        )
     (out / "manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
@@ -1132,11 +1141,14 @@ def compare(args):
     dump_manifest = json.loads(dump_manifest_path.read_text())
     required_public = set()
     if args.require_public_prefill:
-        if manifest.get("family") != "mamba3":
-            failures.append("public-prefill policy is defined only for mamba3")
+        family = manifest.get("family")
+        if family not in PUBLIC_PREFILL_LEAVES:
+            failures.append(
+                f"public-prefill policy is not defined for {family!r}"
+            )
         oracle_public = manifest.get("public_prefill_leaves")
         dump_public = dump_manifest.get("public_prefill_leaves")
-        canonical_public = list(MAMBA3_PUBLIC_PREFILL_LEAVES)
+        canonical_public = list(PUBLIC_PREFILL_LEAVES.get(family, ()))
         if oracle_public != canonical_public:
             failures.append(
                 f"oracle public-prefill leaves: {oracle_public!r}, "
@@ -1167,7 +1179,7 @@ def compare(args):
                 + ", ".join(sorted(missing_oracle))
             )
         selected_policies.append(
-            "manifest policy=mamba3.public_prefill_leaves.exact10.v1"
+            f"manifest policy={family}.public_prefill_leaves.exact10.v1"
         )
     expected_provenance = {
         "schema": "mojolearn.mamba.gradient-dump.v1",
@@ -1184,7 +1196,10 @@ def compare(args):
         compositional_leaf = False
         policy = "default"
         if name not in dump_manifest.get("tensors", []):
-            if (args.require_public_prefill and name in required_public) or (
+            if (
+                args.require_public_prefill
+                and (name in required_public or manifest["family"] == "mamba2")
+            ) or (
                 not args.allow_partial and not args.require_public_prefill
             ):
                 failures.append(f"{name}: dump manifest does not name gradient")
@@ -1196,7 +1211,10 @@ def compare(args):
             # float64 and accept the same stem with an explicit .f32 suffix.
             path = actual_dir / entry["file"].replace(".f64", ".f32")
             if not path.exists():
-                if (args.require_public_prefill and name in required_public) or (
+                if (
+                    args.require_public_prefill
+                    and (name in required_public or manifest["family"] == "mamba2")
+                ) or (
                     not args.allow_partial and not args.require_public_prefill
                 ):
                     failures.append(f"{name}: missing gradient dump")
@@ -1336,7 +1354,7 @@ def main():
                         help="compare present tensors but still require at least one")
     parser.add_argument(
         "--require-public-prefill", action="store_true",
-        help=("require the exact declared Mamba3 public-prefill leaf set; "
+        help=("require the exact declared public-prefill leaf set; "
               "also compare every diagnostic tensor present in the dump"),
     )
     args = parser.parse_args()

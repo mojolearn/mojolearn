@@ -482,6 +482,10 @@ def main() raises:
             + case_name
             + "\","
             "\"objective\":\"signed_dyadic_weight_v1\","
+            "\"public_prefill_leaves\":[\"x\",\"block_norm.weight\","
+            "\"in_proj.weight\",\"conv1d.weight\",\"conv1d.bias\","
+            "\"dt_bias\",\"A_log\",\"D\",\"norm.weight\","
+            "\"out_proj.weight\"],"
             "\"tensors\":[\"out_proj.weight\",\"stage.gnorm.out\","
             "\"stage.gnorm.gate\",\"norm.weight\",\"stage.skip.out\","
             "\"stage.in_proj.z\",\"stage.scan.y\","
