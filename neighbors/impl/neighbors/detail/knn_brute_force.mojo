@@ -67,6 +67,7 @@ merge (`knn_merge_parts`). See `neighbors/NOT_IMPLEMENTED.tsv`.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from std.sys.compile import is_defined
 
 from core.expand_distances import expand_distances_kernel
 from core.gemm import gemm_nt
@@ -92,9 +93,22 @@ from neighbors.checks.pinned_distance_tile import (
 from neighbors.checks.select_radix_identical import (
     radix_topk_identical_kernel,
 )
+from neighbors.checks.select_smallk_identical_candidate import (
+    SMALLK_BLOCK,
+    smallk_specialized_kernel,
+)
 from layout import TileTensor
 from layout.tile_layout import row_major
 from nn.topk import top_k
+
+# Explicit experiment only. Omitting this define preserves the production
+# selector. Presence enables it (including a value of 0), as with is_defined
+# elsewhere in the tree. FAST and DETERMINISTIC cannot enter the experiment.
+# See neighbors/checks/SMALLK_DISPATCH_EXPERIMENT.md before measuring it.
+comptime EXPERIMENTAL_SMALLK_IDENTICAL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL"]()
+)
 
 from neighbors.impl.matrix.detail.select_radix import (
     SELECT_BLOCK,
@@ -573,19 +587,55 @@ def tiled_brute_force_knn(
                         " each output slot; a larger k needs a loop, which"
                         " is not written until something asks for it."
                     )
-                ctx.enqueue_function[radix_topk_identical_kernel](
-                    dist_tile.unsafe_ptr(),
-                    out_dist.unsafe_ptr().unsafe_offset(q * k),
-                    out_idx.unsafe_ptr().unsafe_offset(q * k),
-                    buf_val.unsafe_ptr(),
-                    buf_idx.unsafe_ptr(),
-                    Int32(n_index),
-                    Int32(k),
-                    Int32(buf_len),
-                    Int32(1),
-                    grid_dim=(rows, 1, 1),
-                    block_dim=(SELECT_BLOCK, 1, 1),
-                )
+                var selected_smallk = False
+                comptime if EXPERIMENTAL_SMALLK_IDENTICAL:
+                    # Direct output offsets retain the outer query-tile layout
+                    # without temporary DeviceBuffer views. No distance, norm,
+                    # sqrt, query tiling or FAST dispatch changes here.
+                    # Short index rows keep radix's existing padding behavior;
+                    # the candidate requires k real keys to avoid its sentinel.
+                    if n_index >= k and n_index <= 2147483647:
+                        if k == 8:
+                            ctx.enqueue_function[smallk_specialized_kernel[8]](
+                                dist_tile.unsafe_ptr(),
+                                out_dist.unsafe_ptr().unsafe_offset(q * k),
+                                out_idx.unsafe_ptr().unsafe_offset(q * k),
+                                Int32(n_index), Int32(k), Int32(1),
+                                grid_dim=(rows, 1, 1), block_dim=(SMALLK_BLOCK, 1, 1),
+                            )
+                            selected_smallk = True
+                        elif k == 10:
+                            ctx.enqueue_function[smallk_specialized_kernel[10]](
+                                dist_tile.unsafe_ptr(),
+                                out_dist.unsafe_ptr().unsafe_offset(q * k),
+                                out_idx.unsafe_ptr().unsafe_offset(q * k),
+                                Int32(n_index), Int32(k), Int32(1),
+                                grid_dim=(rows, 1, 1), block_dim=(SMALLK_BLOCK, 1, 1),
+                            )
+                            selected_smallk = True
+                        elif k == 16:
+                            ctx.enqueue_function[smallk_specialized_kernel[16]](
+                                dist_tile.unsafe_ptr(),
+                                out_dist.unsafe_ptr().unsafe_offset(q * k),
+                                out_idx.unsafe_ptr().unsafe_offset(q * k),
+                                Int32(n_index), Int32(k), Int32(1),
+                                grid_dim=(rows, 1, 1), block_dim=(SMALLK_BLOCK, 1, 1),
+                            )
+                            selected_smallk = True
+                if not selected_smallk:
+                    ctx.enqueue_function[radix_topk_identical_kernel](
+                        dist_tile.unsafe_ptr(),
+                        out_dist.unsafe_ptr().unsafe_offset(q * k),
+                        out_idx.unsafe_ptr().unsafe_offset(q * k),
+                        buf_val.unsafe_ptr(),
+                        buf_idx.unsafe_ptr(),
+                        Int32(n_index),
+                        Int32(k),
+                        Int32(buf_len),
+                        Int32(1),
+                        grid_dim=(rows, 1, 1),
+                        block_dim=(SELECT_BLOCK, 1, 1),
+                    )
             else:
                 # DEVIATION 1922 (kernel-matrix row `knn_warpsort_select_for`):
                 # RAFT's OWN `select_k` dispatch sends `2 < k <= 256` to the

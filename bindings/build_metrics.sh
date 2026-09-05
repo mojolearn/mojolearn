@@ -176,7 +176,7 @@ fi
 # directory, so a capability module placed beside the entry point resolves as
 # a top-level import.
 # shellcheck disable=SC2086
-pixi run mojo build --emit shared-lib \
+pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib \
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
     $LINK_FLAGS \
     -I . -I bindings \

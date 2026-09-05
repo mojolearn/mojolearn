@@ -24,8 +24,17 @@ run() {
 run umap-broader pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . umap/checks/identity_broader_check.mojo
 if run build-metrics bash bindings/build_metrics.sh; then
     run umap-api pixi run -e skgpu python python/mojolearn/tests/test_umap_surface.py
+    run umap-transform-api pixi run -e skgpu python python/mojolearn/tests/test_umap_transform.py
+    run umap-transform-quality pixi run -e skgpu python tools/umap_transform_quality_check.py --mode identical --device "${MOJOLEARN_MAMBA_CERT_VENDOR:-remote}" --output "$OUT/transform-quality.json"
     run umap-quality pixi run -e skgpu python tools/umap_quality_check.py --mode identical --device "${MOJOLEARN_MAMBA_CERT_VENDOR:-remote}" --output "$OUT/quality.json"
 fi
+run umap-transform-native pixi run mojo run -j 4 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . umap/checks/transform_check.mojo
+run umap-sparse-graph pixi run mojo run -j 4 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . umap/checks/sparse_graph_check.mojo
+run umap-sparse-fit pixi run mojo run -j 4 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . umap/checks/sparse_estimator_check.mojo
+run umap-sparse-fast env MOJOLEARN_UMAP_SPARSE_FAST_LARGE=1 pixi run mojo run -j 4 -I . umap/checks/sparse_estimator_check.mojo
+run umap-sparse-deterministic pixi run mojo run -j 4 -D MOJOLEARN_NUMERIC_DETERMINISTIC=1 -I . umap/checks/sparse_estimator_check.mojo
+run knn-dispatch-legacy pixi run mojo run -j 4 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . bench/knn_smallk_dispatch_check.mojo
+run knn-dispatch-experimental pixi run mojo run -j 4 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL=1 -I . bench/knn_smallk_dispatch_check.mojo
 # The independent corpus generator is shipped; fixture bytes are generated
 # on the remote host rather than silently borrowed from an unrelated build.
 if run corpus pixi run -e skgpu python mamba/corpus/gen_corpus.py --family all; then

@@ -21,15 +21,7 @@ run() {
 # Run the highest-value optimization gate first; all work remains serial.
 run smallk-specialized 360 env MOJOLEARN_SMALLK_LARGE=1 \
     pixi run mojo run -j 4 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . bench/knn_smallk_selection_main.mojo
-run umap-transform-native 240 pixi run mojo run -j 4 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . umap/checks/transform_check.mojo
-run umap-sparse-graph 240 env MOJOLEARN_UMAP_SPARSE_LARGE=1 \
-    pixi run mojo run -j 4 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . umap/checks/sparse_graph_check.mojo
-run umap-sparse-fit 240 pixi run mojo run -j 4 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . umap/checks/sparse_estimator_check.mojo
-run umap-mamba 1200 bash tools/umap_mamba_do_diag.sh
-# Follow-up builds the current IDENTICAL metrics binding before these checks.
-run umap-transform-api 180 pixi run -e skgpu python python/mojolearn/tests/test_umap_transform.py
-run umap-transform-quality 180 pixi run -e skgpu python tools/umap_transform_quality_check.py \
-    --mode identical --device AMD --output "$OUT/diag/transform-quality.json"
+run umap-mamba 1500 bash tools/umap_mamba_do_diag.sh
 run transformer-forward 300 env MOJOLEARN_IDENTITY_TRACE="$OUT/diag/transformer.forward.card" \
     pixi run mojo run -j 4 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . transformer/checks/transformer_check.mojo
 run transformer-backward 300 env MOJOLEARN_IDENTITY_TRACE="$OUT/diag/transformer.backward.card" \
