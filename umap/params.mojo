@@ -2,6 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
 
+from std.math import isfinite
+
+
 struct UMAPParams(Copyable, Movable):
     var n_neighbors: Int
     var n_components: Int
@@ -41,6 +44,10 @@ struct UMAPParams(Copyable, Movable):
             raise Error("UMAP n_components must be positive")
         if self.local_connectivity != Float32(1.0):
             raise Error("UMAP local_connectivity != 1 is not implemented")
+        if not isfinite(self.set_op_mix_ratio):
+            raise Error("UMAP set_op_mix_ratio must be finite")
+        if not isfinite(self.min_dist) or not isfinite(self.spread):
+            raise Error("UMAP min_dist and spread must be finite")
         if self.set_op_mix_ratio < Float32(0.0) or (
             self.set_op_mix_ratio > Float32(1.0)
         ):

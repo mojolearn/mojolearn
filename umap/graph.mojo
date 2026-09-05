@@ -123,6 +123,8 @@ def fuzzy_simplicial_graph(
         knn_distances
     ) != n_samples * n_neighbors:
         raise Error("UMAP k-NN arrays do not match their shape")
+    if not _finite(set_op_mix_ratio):
+        raise Error("UMAP set operation mix ratio must be finite")
     if set_op_mix_ratio < Float32(0.0) or set_op_mix_ratio > Float32(1.0):
         raise Error("UMAP set operation mix ratio must be in [0, 1]")
     var rhos = List[Float32]()

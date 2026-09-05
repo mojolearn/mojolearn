@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Deterministic fit of UMAP's differentiable distance curve."""
 
-from std.math import exp, log, pow
+from std.math import exp, isfinite, log, pow
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 
@@ -45,6 +45,8 @@ def fit_umap_curve(
     order using Float64. IDENTICAL performs exactly 64 proposals. FAST may
     return after an accepted update has max magnitude below 1e-10.
     """
+    if not isfinite(min_dist_in) or not isfinite(spread_in):
+        raise Error("UMAP curve min_dist and spread must be finite")
     if min_dist_in < Float32(0.0) or not (spread_in > Float32(0.0)) or (
         min_dist_in > spread_in
     ):

@@ -23,4 +23,13 @@ def main() raises:
         raise Error("UMAP custom curve fit is not positive")
     if custom.a == default_curve.a and custom.b == default_curve.b:
         raise Error("UMAP curve fit ignored min_dist/spread")
+    # tools/umap_curve_oracle.py independently evaluates this custom fit.
+    var custom_a_error = custom.a - Float32(0.4265052371)
+    var custom_b_error = custom.b - Float32(1.0093838144)
+    if custom_a_error < Float32(0.0):
+        custom_a_error = -custom_a_error
+    if custom_b_error < Float32(0.0):
+        custom_b_error = -custom_b_error
+    if custom_a_error > Float32(2.0e-4) or custom_b_error > Float32(2.0e-4):
+        raise Error("UMAP custom curve disagrees with scalar LM reference")
     print("UMAP curve parameter fit PASS")
