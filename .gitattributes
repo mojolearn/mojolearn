@@ -1,2 +1,3 @@
 /bench/results export-ignore
-/mamba/corpus export-ignore
+/mamba/corpus/** export-ignore
+/mamba/corpus/gen_corpus.py -export-ignore

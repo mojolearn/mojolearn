@@ -1140,14 +1140,15 @@ LEG_SOURCE_PATHS_PHASE8="tools/e1_bootstrap.sh tools/repeat_run_stability.py too
 # millisecond. But a benchmark driver, a lane it imports, or a vendor arm
 # script CAN, so all three are in here.
 LEG_SOURCE_PATHS_SPEED="bench/speed tools/speed_gemm_arm.py tools/speed_cuml_arm.py tools/speed_torch_seq.py tools/speed_gbdt_arm.py tools/vendor_gemm_price.py tools/fast_speed_table.py tools/leg_status.py bench/gemm_shapes.mojo core gemm original bindings python/mojolearn pixi.toml pixi.lock"
-LEG_SOURCE_PATHS_MAMBA="tools/mamba_backward_certify.sh tools/mamba_gradient_oracle.py tools/with_identical_mode.sh mamba :(exclude)mamba/corpus checks/__init__.mojo checks/numerics.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock"
+LEG_SOURCE_PATHS_MAMBA=".gitattributes tools/mamba_backward_certify.sh tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py checks/__init__.mojo checks/numerics.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock"
 # The certificate needs the Mamba implementation plus three small shared
-# numerical modules. In particular it does not read mamba/corpus: the Python
-# oracle constructs its fixtures directly. That tracked corpus is tens of MB
-# and made the first paid source upload larger than the work payload itself.
+# numerical modules. The Python oracle imports the forward definitions from
+# mamba/corpus/gen_corpus.py, but it constructs fixtures directly and reads
+# none of the tracked corpus data. That data made the first paid source upload
+# larger than the work payload itself.
 # Keep this a git-archive pathspec so every shipped byte still comes from the
 # pinned commit; do not replace it with a working-tree tar.
-LEG_ARCHIVE_PATHS_MAMBA="mamba :(exclude)mamba/corpus tools/mamba_backward_certify.sh tools/mamba_gradient_oracle.py tools/with_identical_mode.sh checks/__init__.mojo checks/numerics.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock"
+LEG_ARCHIVE_PATHS_MAMBA=".gitattributes mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py tools/mamba_backward_certify.sh tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh checks/__init__.mojo checks/numerics.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock"
 LEG_MAMBA_ARCHIVE_MAX_BYTES=10485760
 
 leg_git_archive() {
@@ -1676,7 +1677,7 @@ leg_archive_required() {
         # on this vendor.
         echo "tools/e1_bootstrap.sh tools/repeat_run_stability.py bench/gemm_card_main.mojo gemm/checks/gemm_identical.mojo solver/cd_main.mojo kde/kde_main.mojo hierarchy/linkage_main.mojo svm/svc_main.mojo metrics/metrics_main.mojo mamba/checks/mamba_check.mojo"
     elif [ "$PAYLOAD" = "mamba" ]; then
-        echo "tools/mamba_backward_certify.sh tools/mamba_gradient_oracle.py tools/with_identical_mode.sh mamba/checks/mamba_backward_device_tail_dump.mojo mamba/checks/mamba2_backward_tail_dump.mojo mamba/checks/mamba3_backward_tail_dump.mojo"
+        echo "tools/mamba_backward_certify.sh tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh mamba/corpus/gen_corpus.py mamba/checks/mamba_backward_device_tail_dump.mojo mamba/checks/mamba2_backward_tail_dump.mojo mamba/checks/mamba3_backward_tail_dump.mojo"
     else
         echo "gemm/checks/gemm_identical.mojo"
     fi
@@ -3433,8 +3434,11 @@ leg_ship_and_run() {
     # so that what is compared is what was SHIPPED.
     mkdir -p "$TMPD/archive"
     gzip -dc "$TMPD/src.tgz" | ( cd "$TMPD/archive" && tar xf - )
-    if [ "$PAYLOAD" = "mamba" ] && [ -e "$TMPD/archive/mamba/corpus" ]; then
-        leg_die "REFUSING TO SHIP mamba/corpus: strict backward fixtures are constructed by the oracle."
+    if [ "$PAYLOAD" = "mamba" ] &&
+       find "$TMPD/archive/mamba/corpus" -type f \
+           ! -path "$TMPD/archive/mamba/corpus/gen_corpus.py" -print \
+           | grep -q .; then
+        leg_die "REFUSING TO SHIP CORPUS DATA: only mamba/corpus/gen_corpus.py is a certificate dependency."
     fi
     # A PIPELINE'S STATUS IS ITS LAST COMMAND'S, so neither `git archive` nor
     # the untar above can report a failure through `set -e`. Check the
@@ -4379,16 +4383,25 @@ leg_rehearse() {
             rbad "G2 the archive contains what the $PAYLOAD payload runs" "MISSING:$_miss -- the leg would rent a box to build nothing"
         fi
         if [ "$PAYLOAD" = "mamba" ]; then
+            if [ -f "$TMPD/dryarch/mamba/corpus/gen_corpus.py" ] &&
+               [ -f "$TMPD/dryarch/tools/with_build_lock.sh" ]; then
+                rok "G2a the Mamba oracle and mode injector transitive dependencies are present"
+            else
+                rbad "G2a Mamba transitive dependencies are present" \
+                    "requires mamba/corpus/gen_corpus.py and tools/with_build_lock.sh"
+            fi
             _archive_bytes=$(wc -c < "$TMPD/dry.tar" | tr -d ' ')
             _archive_gzip_bytes=$(gzip -c "$TMPD/dry.tar" | wc -c | tr -d ' ')
             if [ "$_archive_gzip_bytes" -gt "$LEG_MAMBA_ARCHIVE_MAX_BYTES" ]; then
                 rbad "G2b the Mamba source archive is bounded" \
                     "$_archive_gzip_bytes compressed bytes exceeds $LEG_MAMBA_ARCHIVE_MAX_BYTES; a broad path was likely added"
-            elif [ -e "$TMPD/dryarch/mamba/corpus" ]; then
-                rbad "G2b the Mamba source archive excludes its offline corpus" \
-                    "mamba/corpus was shipped even though the strict gates construct fixtures directly"
+            elif find "$TMPD/dryarch/mamba/corpus" -type f \
+                    ! -path "$TMPD/dryarch/mamba/corpus/gen_corpus.py" -print \
+                    | grep -q .; then
+                rbad "G2b the Mamba source archive excludes corpus data" \
+                    "only mamba/corpus/gen_corpus.py may be shipped for the oracle"
             else
-                rok "G2b the Mamba source archive is $_archive_gzip_bytes compressed bytes ($_archive_bytes tar) and excludes mamba/corpus"
+                rok "G2b the Mamba source archive is $_archive_gzip_bytes compressed bytes ($_archive_bytes tar) and ships no corpus data"
             fi
         fi
     else
