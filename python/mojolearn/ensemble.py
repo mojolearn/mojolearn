@@ -1336,9 +1336,9 @@ class GradientBoosting(NumericModeMixin):
 class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
     """Experimental one-tree, depth-two FeatureFreq combination estimator.
 
-    This intentionally narrow surface accepts only dense categorical codes
-    in every column and at least two explicit source columns. It is separate
-    from :class:`GradientBoosting`; selecting it cannot change standard fit
+    Source columns must hold dense categorical codes; non-source columns are
+    ordinary numeric split candidates. It is separate from
+    :class:`GradientBoosting`; selecting it cannot change standard fit
     behavior or imply support for deeper/general CatBoost combinations.
     """
 
@@ -1367,21 +1367,32 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
             raise ValueError(
                 f"mojolearn: sources {self.sources!r} outside {n_features} features"
             )
-        if not np.isfinite(Xa).all() or (Xa < 0).any() or not np.equal(
-            Xa, np.floor(Xa)
-        ).all():
+        if not np.isfinite(Xa).all():
             raise ValueError(
-                "mojolearn: experimental FeatureFreq X must contain finite "
-                "non-negative integer category codes"
+                "mojolearn: experimental FeatureFreq X must be finite"
             )
-        for f in range(n_features):
-            values = np.unique(Xa[:, f])
+        for f in self.sources:
+            column = Xa[:, f]
+            if (column < 0).any() or not np.equal(
+                column, np.floor(column)
+            ).all():
+                raise ValueError(
+                    "mojolearn: experimental FeatureFreq source columns must "
+                    "contain non-negative integer category codes"
+                )
+            values = np.unique(column)
             if values.size < 2 or not np.array_equal(
                 values, np.arange(values.size, dtype=values.dtype)
             ):
                 raise ValueError(
-                    "mojolearn: every experimental FeatureFreq column must "
+                    "mojolearn: every experimental FeatureFreq source must "
                     f"be densely coded 0..k-1; column {f} has {values!r}"
+                )
+        for f in set(range(n_features)).difference(self.sources):
+            if np.unique(Xa[:, f]).size < 2:
+                raise ValueError(
+                    "mojolearn: experimental FeatureFreq numeric columns "
+                    f"must vary; column {f} is constant"
                 )
         ya = np.ascontiguousarray(np.asarray(y).ravel(), dtype=np.float32)
         if ya.shape[0] != n_rows or not np.isfinite(ya).all():

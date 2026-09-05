@@ -444,10 +444,11 @@ def gbdt_fit_two_level_feature_freq_binding(
     sources_addr: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
-    """Explicit dense-categorical two-level FeatureFreq fit.
+    """Explicit mixed numeric/categorical two-level FeatureFreq fit.
 
     `params` is `[n_rows, n_features, n_sources, learning_rate,
-    l2_leaf_reg, random_seed]`; source indices are UInt32.
+    l2_leaf_reg, random_seed]`; UInt32 source indices identify the dense
+    categorical columns and every other column is numeric.
     """
     if len(params) != 6:
         raise Error("two-level FeatureFreq params must have six values")

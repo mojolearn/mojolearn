@@ -56,6 +56,7 @@ THE POLICY CHOICES
 
 from max.gpu.host import DeviceContext
 from std.memory import memcpy
+from std.math import isfinite
 
 from gbdt.models.model_text import load_model_text, model_text
 from gbdt.options.catboost_options import (
@@ -75,6 +76,7 @@ from gbdt.models.ctr_value_table import dense_category_code, TCtrValueTable
 from gbdt.ctrs.ctr_binarization import (
     BORDER_SELECTION_UNIFORM,
     TBinarizationOptions,
+    compute_ctr_borders,
 )
 from gbdt.options.overfitting_detector_options import (
     load_overfitting_detector_options,
@@ -106,9 +108,10 @@ def gbdt_fit_two_level_feature_freq(
 ) raises -> String:
     """Explicit two-level FeatureFreq fit for dense categorical inputs.
 
-    Every raw column is a dense category code and remains a one-hot model
-    prefix column. At least two distinct source columns define the initial
-    combination tensor. This separate entry cannot alter ordinary GBDT fit.
+    Source columns are dense category codes and remain one-hot model prefix
+    columns. Non-source columns are ordinary numeric candidates quantized on
+    a deterministic Uniform-3 grid. This separate entry cannot alter the
+    ordinary GBDT fit.
     """
     if n_rows < 1 or n_features < 2 or n_sources < 2:
         raise Error("two-level FeatureFreq fit needs rows and two sources")
@@ -118,6 +121,9 @@ def gbdt_fit_two_level_feature_freq(
     var target = List[Float32]()
     target.resize(n_rows, Float32(0.0))
     memcpy(dest=target.unsafe_ptr(), src=y, count=n_rows)
+    for r in range(n_rows):
+        if not isfinite(target[r]):
+            raise Error("two-level FeatureFreq target is not finite")
     var source_ids = List[Int]()
     var seen_source = List[Bool]()
     seen_source.resize(n_features, False)
@@ -135,27 +141,53 @@ def gbdt_fit_two_level_feature_freq(
     var flat_bins = List[UInt32]()
     for f in range(n_features):
         var col = List[UInt32]()
-        var max_code = -1
-        var seen_codes = List[Bool]()
-        for r in range(n_rows):
-            var code = dense_category_code(raw[f * n_rows + r], f, r)
-            if code > max_code:
-                max_code = code
-                seen_codes.resize(max_code + 1, False)
-            seen_codes[code] = True
-            col.append(UInt32(code))
-            flat_bins.append(UInt32(code))
-        if max_code < 1:
-            raise Error("two-level FeatureFreq raw column is constant")
-        for code in range(max_code + 1):
-            if not seen_codes[code]:
-                raise Error("two-level FeatureFreq categories must be dense")
-        columns.append(col^)
-        folds.append(max_code + 1)
-        one_hot.append(True)
         var feature_borders = List[Float32]()
-        for code in range(max_code):
-            feature_borders.append(Float32(code) + Float32(0.5))
+        if seen_source[f]:
+            var max_code = -1
+            var seen_codes = List[Bool]()
+            for r in range(n_rows):
+                var code = dense_category_code(raw[f * n_rows + r], f, r)
+                if code > max_code:
+                    max_code = code
+                    seen_codes.resize(max_code + 1, False)
+                seen_codes[code] = True
+                col.append(UInt32(code))
+            if max_code < 1:
+                raise Error("two-level FeatureFreq source column is constant")
+            for code in range(max_code + 1):
+                if not seen_codes[code]:
+                    raise Error("two-level FeatureFreq categories must be dense")
+            folds.append(max_code + 1)
+            one_hot.append(True)
+            for code in range(max_code):
+                feature_borders.append(Float32(code) + Float32(0.5))
+        else:
+            var numeric_values = List[Float32]()
+            var numeric_changes = False
+            for r in range(n_rows):
+                var value = raw[f * n_rows + r]
+                if not isfinite(value):
+                    raise Error("two-level FeatureFreq numeric column is not finite")
+                if r > 0 and value != numeric_values[0]:
+                    numeric_changes = True
+                numeric_values.append(value)
+            if not numeric_changes:
+                raise Error("two-level FeatureFreq numeric column is constant")
+            feature_borders = compute_ctr_borders(
+                numeric_values,
+                TBinarizationOptions(BORDER_SELECTION_UNIFORM, 3),
+            )
+            for r in range(n_rows):
+                var bin = 0
+                for b in range(len(feature_borders)):
+                    if numeric_values[r] > feature_borders[b]:
+                        bin += 1
+                col.append(UInt32(bin))
+            folds.append(len(feature_borders))
+            one_hot.append(False)
+        for r in range(n_rows):
+            flat_bins.append(col[r])
+        columns.append(col^)
         borders.append(feature_borders^)
 
     var table = build_feature_freq_tensor_table(

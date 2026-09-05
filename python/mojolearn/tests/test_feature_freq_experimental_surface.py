@@ -19,7 +19,8 @@ class _FakeBinding:
 
 def test_experimental_feature_freq_validates_and_forwards():
     X = np.asarray(
-        [[0, 0], [0, 1], [1, 0], [1, 1]], dtype=np.float32
+        [[0, 0, -2.5], [0, 1, 0.25], [1, 0, 3.5], [1, 1, 8.0]],
+        dtype=np.float32,
     )
     y = np.asarray([-5, -3, 3, 5], dtype=np.float32)
     binding = _FakeBinding()
@@ -29,8 +30,8 @@ def test_experimental_feature_freq_validates_and_forwards():
     est._bind = lambda _name: binding
     assert est.fit(X, y) is est
     assert est.model_ == "tensor-model-text"
-    assert binding.params == [4, 2, 2, 0.2, 4.0, 7]
-    assert est.n_features_in_ == 2
+    assert binding.params == [4, 3, 2, 0.2, 4.0, 7]
+    assert est.n_features_in_ == 3
 
 
 @pytest.mark.parametrize(
