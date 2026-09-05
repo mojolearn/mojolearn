@@ -1140,7 +1140,7 @@ LEG_SOURCE_PATHS_PHASE8="tools/e1_bootstrap.sh tools/repeat_run_stability.py too
 # millisecond. But a benchmark driver, a lane it imports, or a vendor arm
 # script CAN, so all three are in here.
 LEG_SOURCE_PATHS_SPEED="bench/speed tools/speed_gemm_arm.py tools/speed_cuml_arm.py tools/speed_torch_seq.py tools/speed_gbdt_arm.py tools/vendor_gemm_price.py tools/fast_speed_table.py tools/leg_status.py bench/gemm_shapes.mojo core gemm original bindings python/mojolearn pixi.toml pixi.lock"
-LEG_SOURCE_PATHS_MAMBA=".gitattributes tools/mamba_backward_certify.sh tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py checks/__init__.mojo checks/numerics.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock"
+LEG_SOURCE_PATHS_MAMBA=".gitattributes tools/mamba_backward_certify.sh tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock"
 # The certificate needs the Mamba implementation plus three small shared
 # numerical modules. The Python oracle imports the forward definitions from
 # mamba/corpus/gen_corpus.py, but it constructs fixtures directly and reads
@@ -1148,7 +1148,7 @@ LEG_SOURCE_PATHS_MAMBA=".gitattributes tools/mamba_backward_certify.sh tools/mam
 # larger than the work payload itself.
 # Keep this a git-archive pathspec so every shipped byte still comes from the
 # pinned commit; do not replace it with a working-tree tar.
-LEG_ARCHIVE_PATHS_MAMBA=".gitattributes mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py tools/mamba_backward_certify.sh tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh checks/__init__.mojo checks/numerics.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock"
+LEG_ARCHIVE_PATHS_MAMBA=".gitattributes mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py tools/mamba_backward_certify.sh tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock"
 LEG_MAMBA_ARCHIVE_MAX_BYTES=10485760
 
 leg_git_archive() {
@@ -1677,7 +1677,7 @@ leg_archive_required() {
         # on this vendor.
         echo "tools/e1_bootstrap.sh tools/repeat_run_stability.py bench/gemm_card_main.mojo gemm/checks/gemm_identical.mojo solver/cd_main.mojo kde/kde_main.mojo hierarchy/linkage_main.mojo svm/svc_main.mojo metrics/metrics_main.mojo mamba/checks/mamba_check.mojo"
     elif [ "$PAYLOAD" = "mamba" ]; then
-        echo "tools/mamba_backward_certify.sh tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh mamba/corpus/gen_corpus.py mamba/checks/mamba_backward_device_tail_dump.mojo mamba/checks/mamba2_backward_tail_dump.mojo mamba/checks/mamba3_backward_tail_dump.mojo"
+        echo "tools/mamba_backward_certify.sh tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh mamba/corpus/gen_corpus.py checks/kernel_matrix.mojo mamba/checks/mamba_backward_device_tail_dump.mojo mamba/checks/mamba2_backward_tail_dump.mojo mamba/checks/mamba3_backward_tail_dump.mojo"
     else
         echo "gemm/checks/gemm_identical.mojo"
     fi
@@ -4384,11 +4384,12 @@ leg_rehearse() {
         fi
         if [ "$PAYLOAD" = "mamba" ]; then
             if [ -f "$TMPD/dryarch/mamba/corpus/gen_corpus.py" ] &&
-               [ -f "$TMPD/dryarch/tools/with_build_lock.sh" ]; then
-                rok "G2a the Mamba oracle and mode injector transitive dependencies are present"
+               [ -f "$TMPD/dryarch/tools/with_build_lock.sh" ] &&
+               [ -f "$TMPD/dryarch/checks/kernel_matrix.mojo" ]; then
+                rok "G2a the Mamba transitive dependencies are present"
             else
                 rbad "G2a Mamba transitive dependencies are present" \
-                    "requires mamba/corpus/gen_corpus.py and tools/with_build_lock.sh"
+                    "requires gen_corpus.py, with_build_lock.sh and checks/kernel_matrix.mojo"
             fi
             _archive_bytes=$(wc -c < "$TMPD/dry.tar" | tr -d ' ')
             _archive_gzip_bytes=$(gzip -c "$TMPD/dry.tar" | wc -c | tr -d ' ')
