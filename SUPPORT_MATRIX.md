@@ -1,8 +1,8 @@
 # Support and certification
 
 This page covers the published mojolearn 0.5.0 artifact and the 0.6.0 source
-release candidate. The 0.6.0 wheel build and installed-artifact qualification
-are pending. It separates API availability, packaging, and numerical certification. A feature
+release candidate. The macOS 0.6.0 candidate passed installed-artifact qualification;
+publication and refreshed Linux wheels remain pending. It separates API availability, packaging, and numerical certification. A feature
 being importable does not mean that every hardware column or numeric mode has
 been certified.
 
@@ -33,7 +33,7 @@ device.
 
 | Platform | Status | Qualification |
 |---|---|---|
-| macOS arm64 / Apple silicon | Primary packaged platform | Built at the Apple M1 ISA floor. Current packaging inventory contains 15 extensions in each of three modes. The 0.5.0 wheel passed every Python 3.10–3.14/mode combination on Apple M4 and fresh PyPI-install API checks. The 0.6.0 source candidate is not yet a qualified published wheel. |
+| macOS arm64 / Apple silicon | Primary packaged platform | Built at the Apple M1 ISA floor. Current packaging inventory contains 15 extensions in each of three modes. The 0.5.0 wheel passed every Python 3.10–3.14/mode combination on Apple M4 and fresh PyPI-install API checks. The 0.6.0 macOS candidate passed installed checks; publication is pending. |
 | Linux x86-64 / NVIDIA CUDA | Source builds; refreshed wheel pending | Device code is architecture-specific. Certification on one NVIDIA architecture does not certify another. Release 0.3.0 had an AVX-512 host-code defect; it is historical and must not be used as current evidence. |
 | Linux x86-64 / AMD HIP | Source builds; refreshed wheel pending | Measured chiefly on `gfx942`. That is not evidence for every AMD architecture. |
 | CPU-only and other accelerators | Unsupported | There is no CPU implementation. |
@@ -63,7 +63,7 @@ cards on Apple, NVIDIA, and AMD; it does not extend beyond that fixture.
 | Mamba 2 | Experimental | Three-vendor backward certificate at `718495cd`, including L257 and incoming state | Newer NVIDIA/AMD source forward/state checks passed, including the AMD binding fix. Broader fixtures, Linux installed-wheel checks and Python backward exposure remain. |
 | Mamba 3 | Experimental | Three-vendor backward certificate at `718495cd` | Newer NVIDIA/AMD source forward/state checks passed. Linux installed-wheel checks and Python backward exposure remain. |
 | Transformer block | Experimental | Three-vendor operator card for an earlier fixture | Newer AMD source API checks passed; NVIDIA Python API qualification and the independent corpus API oracle remain open. Native certificates do not close those gates. |
-| UMAP | Published 0.5.0: dense `fit`/`fit_transform`. Source 0.6.0 candidate: `transform` and CSR graph storage for public fitting | Original three-vendor fixture: 186 stage cells at `718495cd`; separate newer source transform fixtures match across three vendors | Integrated CSR fit/transform API passed all modes on Apple/AMD; NVIDIA integration and 0.6.0 installed-wheel qualification remain pending. |
+| UMAP | Published 0.5.0: dense `fit`/`fit_transform`. Source 0.6.0 candidate: `transform` and CSR graph storage for public fitting | Original three-vendor fixture: 186 stage cells at `718495cd`; separate newer source transform fixtures match across three vendors | Integrated CSR fit/transform API passed all modes on Apple/NVIDIA/AMD; macOS 0.6.0 installed checks passed. Publication and Linux wheels remain pending. |
 | Training primitives and checkpointing | Experimental | Local correctness gates | Cross-vendor public-surface qualification remains open. |
 
 ## What counts as certification
@@ -90,7 +90,7 @@ cross-vendor claim. See [verification](docs/VERIFY.md) and
 - Treat Mamba 1/2/3 forward and backward as a dedicated lane with independent
   calculus/oracle checks and same-commit vendor cards.
 - Build and qualify the 0.6.0 artifact with UMAP transform and CSR graph storage;
-  complete NVIDIA public integration and fresh Linux installed-wheel checks.
+  complete publication and fresh Linux installed-wheel checks.
 - Add build/source provenance to native artifacts so stale binaries cannot be
   mistaken for current results.
 - Close pending NVIDIA and AMD legs for already-public APIs before adding more
@@ -135,8 +135,8 @@ or initialization remain unsupported.
 |---|---|---|
 | Published 0.5.0 macOS artifact | Dense fit/fit_transform installed-wheel checks | Transform and CSR are not in this published artifact |
 | Source transform and sparse native paths before public CSR integration | Named held-out transform embeddings match Apple, NVIDIA and AMD; separate sparse native gates passed | This earlier source does not certify the later public integration |
-| Integrated public CSR fit/transform source | All three numeric modes passed API checks on Apple and AMD; original IDENTICAL fit-layout checks remain | NVIDIA integration qualification is in progress |
-| 0.6.0 release candidate artifact | Source version and release preparation only | Wheel build, clean installed-artifact checks and publication |
+| Integrated public CSR fit/transform source | All three numeric modes passed API and held-out quality checks on Apple, NVIDIA and AMD; named IDENTICAL held-out layouts match | Broader shapes and metrics remain outside this evidence |
+| 0.6.0 release candidate artifact | macOS candidate passed Python 3.10–3.14/mode smoke and clean Python 3.12 UMAP fit/transform/quality checks in all modes | Publication and Linux installed-artifact checks |
 
 Evidence: [Apple public integration](bench/results/umap/2026-09-05-public-sparse/README.md),
 [AMD integrated API results](bench/results/e1/2026-09-05_142553-mojolearn-e2-amd/diag/followup/results.tsv),
@@ -151,3 +151,9 @@ certificate above retain their original counts and scope. New transform
 quality/identity checks are separate evidence, not additions to those totals.
 The k-NN optimization remains experimental and is not enabled in normal
 wheel builds.
+
+Latest evidence: [integrated NVIDIA qualification and native public k-NN pricing](bench/results/e1g/2026-09-05_103918-nvidia-mamba/README.md),
+and [exact macOS 0.6.0 candidate qualification](bench/results/wheels/2026-09-05-umap-060/README.md).
+The flag-gated k-NN selector improved paired median native request times by
+2.99x/5.99x/18.86x on the named NVIDIA 32/128/1000-query fixtures; these are
+not cuML comparisons or a claim that every algorithm improved.

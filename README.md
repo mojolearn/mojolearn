@@ -29,7 +29,8 @@ pip install mojolearn
 
 The current published 0.5.0 wheel is qualified on Apple silicon macOS.
 The 0.6.0 release candidate adds UMAP transformation and CSR graph storage;
-its wheel build and installed-artifact qualification are pending. Current
+its macOS candidate wheel has passed clean installed-artifact qualification.
+Publication remains pending. Current
 NVIDIA/AMD support is qualified through source builds; historical Linux
 wheels do not establish support for these additions. There is no CPU fallback.
 Run the diagnostic command before depending on a new machine:
@@ -107,10 +108,9 @@ remains a dense Euclidean array; CSR describes internal graph storage.
 Exact neighbor search still performs quadratic pair comparisons.
 
 Source checks for the integrated fit/transform API passed all three numeric
-modes on Apple and AMD; NVIDIA qualification of this integration is in
-progress. Earlier named IDENTICAL transform fixtures have matching held-out
-embeddings across Apple, NVIDIA and AMD. These are source results, not
-qualification of a published 0.6.0 wheel. See the [release-candidate evidence](SUPPORT_MATRIX.md#umap-060-release-candidate).
+modes on Apple, NVIDIA and AMD. The named IDENTICAL held-out embeddings
+match across all three vendors. The macOS 0.6.0 candidate also passed clean
+installed fit/transform and quality checks; it has not yet been published. See the [release-candidate evidence](SUPPORT_MATRIX.md#umap-060-release-candidate).
 
 Transformation retains private training data and embedding copies. Changing
 parameters or numeric mode requires refitting, and changing query batching
