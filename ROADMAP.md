@@ -109,6 +109,18 @@ have regression controls; the unchanged raw evidence passes revalidation.
 
 ## Now: release truth and artifact closure
 
+Crash-resume checkpoint (2026-09-05): the release workflow now refuses a
+macOS upload candidate that differs from its passing UMAP qualification.
+The new read-only `tools/verify_umap_qualification.py` gate checks the wheel
+digest, complete successful job inventory, frozen qualification sources,
+and installed wrapper/binding hashes in all three numeric modes. The retained
+0.6.0 recovery candidate (`dab65d03...18ea02`) passes; nine new artifact and
+workflow controls, three existing qualification command tests, and 15 release
+artifact controls pass. No build or GPU measurement was run for this checkpoint.
+GitHub runs 33974940904 and 33972158535 remain failed. This closes the gap
+between qualification and upload hashing; native source/build identity stamps
+and the remaining release/remote gates below are still open.
+
 1. Complete 0.6.0 artifact delivery/publication and refreshed Linux wheel and
    installed-API gates on NVIDIA and DigitalOcean AMD. The exact macOS 0.6.0
    candidate's installed checks passed; its upload workflow failed.

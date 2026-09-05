@@ -365,6 +365,17 @@ jobs:
       - name: Metadata check
         run: pixi run -e pkg twine check python/dist/*.whl
 
+      - name: Verify qualified UMAP artifact before recording upload digests
+        run: |
+          set -euo pipefail
+          set -- python/dist/mojolearn-*-macosx_*.whl
+          test "$#" -eq 1
+          test -f "$1"
+          version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' python/mojolearn/_version.py)
+          python3 tools/verify_umap_qualification.py "$1" \
+            --results "$RUNNER_TEMP/umap-qualification-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT/results.json" \
+            --source-root "$GITHUB_WORKSPACE" --expected-version "$version"
+
       # The digests are recorded so the artifacts that get published can be
       # matched against the ones that were built, by anyone, later.
       - name: Digest

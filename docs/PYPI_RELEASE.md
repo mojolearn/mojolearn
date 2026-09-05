@@ -126,6 +126,22 @@ publication. Never label that artifact as byte-equivalent to an earlier
 candidate without comparing the digests. The workflow retains the UMAP
 qualification manifest and rechecks wheel digests before upload.
 
+Immediately before recording upload digests, the workflow also checks that
+the macOS wheel matches the successful UMAP qualification digest, all nine
+installed GPU jobs and four setup jobs succeeded, the qualification sources
+are unchanged, and the wrapper and per-mode binding hashes match the wheel.
+This prevents a replaced candidate from acquiring a new upload digest after
+qualification. Retained evidence can be checked without GPU work:
+
+```sh
+python3 tools/verify_umap_qualification.py /path/to/candidate.whl \
+  --results /path/to/qualification/results.json \
+  --source-root . --expected-version 0.6.0
+```
+
+This reads the existing evidence and artifact only. It neither reruns the
+installed checks nor certifies a different source state or Linux wheel.
+
 ## 5. Close the release
 
 Confirm the project page exposes the intended files and hashes, then install
