@@ -2,16 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The fixture of profile `mojolearn.identical.optimizer.fp32.v1`.
 
-**THIS BANNER WAS FALSE AND IS CORRECTED. COMPILED AND CONSUMED ON ONE
-DEVICE.** Until 2026-08-31 this header read "NOTHING IN THIS FILE HAS EVER
-BEEN COMPILED OR EXECUTED", added that no `mojo` process had read it and no
-device had consumed a case from it, and called every "separates" below a
-PREDICTION. **`training/checks/optimizer_check.mojo` was written at
-`ecd1a436` and ran at `b90f52ab`**, which turned those predictions into
-measurements and produced a real kernel defect: with clipping off, a NaN
-planted in a PARAMETER reached `param.out` (DEVIATION 1496). Written
-2026-08-25 by the training-gate lane, DEVIATIONS 1470-1489. **ONE DEVICE, and
-no other vendor has consumed a case from this file.**
+`optimizer_check.mojo` consumes these cases and records stage comparisons
+at every step. Execution evidence belongs to the corresponding logs and
+cards under `bench/results/`, scoped to their build, fixture and device.
+The fixture alone does not establish numerical correctness or cross-vendor
+identity.
 
 WHAT IT IS FOR
 ---------------
@@ -100,9 +95,8 @@ TRAPS THIS FILE IS WRITTEN AROUND
   runs are comparable only when the patterns are equal.
 * `[[mojo-int-widening-sign-extends]]`. Every hash shift is on `UInt64`.
 
-WHAT IS OWED, AND THIS FILE COVERS NONE OF IT
-------------------------------------------------
-* **A COMPILE AND A RUN.** Zero bits observed on any column.
+LIMITATIONS
+-----------
 * **A corpus.** Contract 16.10 lists five adversarial cases by name
   (`adv_subnormal_square`, `adv_dead_unit_v`, `adv_dampening_first_step`,
   `adv_param_order_five`, `adv_pow_step_1000`). All five exist HERE as
@@ -240,7 +234,6 @@ def bits32_hex(v: Float32) -> String:
         var nib = Int((u >> shift) & UInt32(0xF))
         out += String(digits[byte=nib])
     return out^
-
 
 def is_nonfinite_bits(v: Float32) -> Bool:
     """NaN or infinity, BY BITS AND NEVER BY A COMPARE. Metal flushes
@@ -1440,36 +1433,3 @@ def describe_case(c: OptCase) raises -> String:
     else:
         out += " clip=OFF"
     return out^
-
-
-# ===========================================================================
-# OWED, AND WHY IT IS NOT HERE
-#
-# 1. **A COMPILE AND A RUN.** Nothing here has been through the front end.
-#
-# 2. **`OPT_SAB_RECIP_MUL` HAS NO INERT CASE.** Constructing one needs the
-#    Adam denominator to come out an exact power of two, and every term in
-#    it is data dependent. The arm is a SMOKE TEST in this file and
-#    `optimizer_check.mojo` prints that word where its verdict appears.
-#
-# 3. **`OPT_SAB_MHAT_FORM` has no inert case either**, and contract section
-#    12 says so about itself. The check reports the moved-cell count.
-#
-# 4. **A CORPUS.** Contract 16.10's five named adversarial cases all exist
-#    here as FIXTURE cases and none exists as a corpus record with an
-#    independently produced expected value. A fixture case says "run this
-#    shape"; a corpus record says "and this is the answer, from outside".
-#
-# 5. **A FOURTH splitmix64.** `opt_splitmix64` is the fourth copy in this
-#    repository. The lift into `core/` is somebody's.
-#
-# 6. **`adam.gwd` AND `adamw.pdec`.** Contract section 10 lists both as
-#    card stages and NEITHER `optimizer_oracle.mojo` NOR `optimizer.mojo`
-#    produces either -- `AdamElement` carries `p`, `m`, `v`, `denom` and
-#    `q`, and the decayed gradient and the decayed parameter are locals
-#    inside `adam_element_oracle` and `adam_update_kernel`. So two of the
-#    contract's stages have no producer, and a card written to the contract
-#    would be two records short of the contract. Recorded here and in
-#    `optimizer_check.mojo`; adding the outputs is an edit to two files
-#    this lane may not touch.
-# ===========================================================================

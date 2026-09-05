@@ -9,27 +9,14 @@ NOT A PORT. It runs the device optimizer step
 (`training/checks/optimizer_oracle.mojo`) and compares every recorded
 stage BY BITS, at every step of a multi-step run.
 
-**THIS BANNER WAS FALSE AND IS CORRECTED. THIS GATE HAS RUN ON ONE
-DEVICE.** Until 2026-08-31 this header read "NOTHING IN THIS FILE HAS EVER
-BEEN COMPILED OR EXECUTED", added that no `mojo` process had read it, no
-device had run it and no bit produced by it had been observed, said the same
-of `optimizer.mojo` and `optimizer_oracle.mojo`, and called every "passes"
-and every "bites" below a PREDICTION. Written 2026-08-25, DEVIATIONS
-1470-1489. **It was compiled at `ecd1a436` and RAN at `b90f52ab`**, where it
-falsified all of that and measured a real device-side defect: with clipping
-OFF, a non-finite planted in a PARAMETER reached `param.out`, because the only
-device-side refusal lived in `identical_clip_grad_norm`, which does not run
-when clipping is off, and covered `grad` alone. `param`, `grad`, `m` and `v`
-are all inputs and `m` / `v` are CARRIED STATE, so a non-finite entering `v`
-is permanent. DEVIATION 1496 is the fix. Running this gate also produced
-DEVIATIONS 1493 and 1613, both about arms it could NOT make non-vacuous, which
-are recorded rather than hidden.
+Recorded executions and stage cards live under `bench/results/`. Each run
+establishes evidence only for its build, selected fixtures, enabled clauses
+and device. A device-to-oracle comparison does not independently validate
+the mathematics or establish cross-vendor identity.
 
-Contract section 16 item 1's sentence, that without this file "this contract
-is prose and nothing in it has been falsified", no longer applies. A
-fabricated ledger still reads exactly like evidence, so the ledger below is
-whatever the run prints. **ONE DEVICE. Nothing below has run on a second
-vendor.**
+The gate's non-finite-input audit exposed the clipping-off parameter
+refusal defect recorded in DEVIATION 1496. Sabotage arms without a
+non-vacuous control remain limited as described below.
 
 WHY THE CASES CARRY A **STEP COUNT** AND THE GATE COMPARES AT EVERY STEP
 --------------------------------------------------------------------------
@@ -222,8 +209,6 @@ ENVIRONMENT
 Clause (e) is ALWAYS ON: it is host-only, it costs nothing, and it is the
 one clause whose answer contract 9.3 says the existing measurement CANNOT
 supply.
-
-OWED -- see the block at the foot.
 """
 
 from std.memory import bitcast
@@ -3047,9 +3032,9 @@ def main() raises:
         " mojolearn.identical.optimizer.fp32.v1"
     )
     print(
-        "=== NOTHING IN THIS FILE, IN optimizer.mojo, IN"
-        " optimizer_oracle.mojo OR IN optimizer_fixture.mojo HAD EVER BEEN"
-        " COMPILED OR RUN BEFORE THIS PROCESS. Read the header."
+        "=== Fixture-based device-to-oracle comparisons for this build"
+        " and device. No independent corpus reference; cross-vendor"
+        " identity requires matching recorded runs."
     )
     print(
         "mode "
