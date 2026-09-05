@@ -121,3 +121,25 @@ The comparator accepts only registered profiles and complete finite captures,
 and refuses comparisons between the original and broader fixtures. Its
 negative controls cover a changed bit, signed zero, missing/duplicate cells,
 unknown stages, non-finite values and incomplete runs.
+
+## Source transform and sparse candidates (2026-09-05)
+
+The source Python API now implements `transform(X)` against a frozen fitted
+embedding. It retains private training/model copies and requires refitting
+after parameter or mode changes. Query batching may change results. This is
+not yet available in the published 0.5.0 wheel.
+
+Initial Apple IDENTICAL qualification passed the native transform gate, five
+transform API groups, all seven existing fit API groups with unchanged pinned
+fit layouts, and two held-out quality fixtures. The quality record retains
+exact source hashes and inputs; its source matches this implementation.
+These initial checks do not establish cross-vendor transform identity.
+
+The separate sparse estimator candidate builds CSR graph storage directly
+from neighbors and shares the spectral solver. Apple dense/sparse graph and
+fit comparisons passed initial fixtures. Public fit still uses dense storage;
+the sparse candidate is not yet enabled. Exact neighbor computation remains
+quadratic even when persistent graph storage is sparse.
+
+See [retained Apple evidence](../bench/results/umap/2026-09-05-sparse-transform/).
+Broader modes, remote qualification and installed-artifact checks remain open.

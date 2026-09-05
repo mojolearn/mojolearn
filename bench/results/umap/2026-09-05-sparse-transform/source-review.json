@@ -1,0 +1,17 @@
+{
+  "schema": "umap.initial-source-review.v1",
+  "note": "Hashes reviewed after initial Apple runs. sparse_estimator_check now uses explicit dense reference; its rerun is apple-sparse-fit-independent.log. Initial runs used dirty source and are not installed wheel qualification.",
+  "sha256": {
+    "umap/transform.mojo": "534692b90ff5110c334cc568c13fde11f211086a7050c0e898cf8eb45a6d7883",
+    "umap/checks/transform_check.mojo": "f21f93f8198d938588adf642dc57a20e9189f4c3da8db1652653217aed24ebbc",
+    "umap/sparse_graph.mojo": "7e2c0befd5ece810d83f80467d8060c467a303e74fea8162dfd81fd85b72730d",
+    "umap/checks/sparse_graph_check.mojo": "fa1bd5820c42341cf7d40371f812874ad7aa7184f37835f47f7703aec7c9dbb9",
+    "umap/sparse_estimator.mojo": "5cdca0a98cbe9189ac0c2ad54d0693f19fc03abaa89aa19e9e090b7a8bd2af4e",
+    "umap/sparse_optimizer.mojo": "80fb05ba42234ae83e3328725490ac21725833a77827f3bacd079cd6b74c1349",
+    "umap/checks/sparse_estimator_check.mojo": "e910768d047a5b696f5ea46fb0cca60b6ade9487a0a0e5f08059b29134667f5b",
+    "umap/spectral_init.mojo": "c29ea232bdae3352200551f678b117b77cf35312a547f0eb82c4a7d470f62076",
+    "bindings/_mojolearn_metrics.mojo": "f73ad32457c685c12e3853eb48b4732d71d5c7e004c323d1da5a493b169353d6",
+    "python/mojolearn/_umap_impl.py": "000b435e13e4cc3717f4a869d8a4f0bb3c780fb60ea177be6b7ed66d57d80dae",
+    "tools/umap_transform_quality_check.py": "8b4fca4a8d5475899ebd221655f9cf786ddbe98a2b421dbb8dfbd76bcb5deda3"
+  }
+}

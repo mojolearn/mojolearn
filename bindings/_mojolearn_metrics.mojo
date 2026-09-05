@@ -52,6 +52,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from max.gpu.host import DeviceContext
 from std.math import isfinite
 from umap.estimator import fit_transform as umap_fit_transform
+from umap.transform import transform as umap_transform
 from umap.params import UMAPParams
 
 from metrics.estimator import (
@@ -641,6 +642,48 @@ def umap_fit_transform_binding(
     return PythonObject(config.n_components)
 
 
+def umap_transform_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """Addresses: training X, frozen embedding, query X, output.
+
+    Scalars: n_train, n_queries, n_features, then the eight fit parameters.
+    The training arrays are read-only; only output is written.
+    """
+    _want(String("umap_transform addresses"), addrs, 4)
+    _want(String("umap_transform parameters"), params, 11)
+    var n = Int(py=params[0])
+    var rows = Int(py=params[1])
+    var d = Int(py=params[2])
+    var seed = Int(py=params[10])
+    if n < 2 or rows < 1 or d < 1 or seed < 0:
+        raise Error("UMAP transform requires positive dimensions and a nonnegative seed")
+    var config = UMAPParams(
+        n_neighbors=Int(py=params[3]), n_components=Int(py=params[4]),
+        n_epochs=Int(py=params[5]), min_dist=Float32(Float64(py=params[6])),
+        spread=Float32(Float64(py=params[7])),
+        set_op_mix_ratio=Float32(Float64(py=params[8])),
+        local_connectivity=Float32(Float64(py=params[9])), random_seed=UInt64(seed),
+    )
+    config.validate(n)
+    if config.n_components != 2 and config.n_components != 3:
+        raise Error("UMAP transform supports only 2D or 3D")
+    var training = _load_f32(Int(py=addrs[0]), n * d)
+    var fitted = _load_f32(Int(py=addrs[1]), n * config.n_components)
+    var queries = _load_f32(Int(py=addrs[2]), rows * d)
+    var output = _f32_ptr(Int(py=addrs[3]))
+    var embedding = List[Float32]()
+    with GILReleased(Python()):
+        with DeviceContext() as ctx:
+            embedding = umap_transform(ctx, training, fitted, queries, n, rows, d, config)
+    if len(embedding) != rows * config.n_components:
+        raise Error("UMAP transform returned an unexpected shape")
+    for value in embedding:
+        if not isfinite(value):
+            raise Error("UMAP transform returned a non-finite embedding")
+    for i in range(len(embedding)):
+        output.unsafe_store(i, embedding[i])
+    return PythonObject(config.n_components)
+
+
 def umap_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -662,6 +705,7 @@ def PyInit__mojolearn_metrics() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_metrics")
         m.def_function[metrics_vendor_binding]("metrics_vendor")
         m.def_function[umap_fit_transform_binding]("umap_fit_transform")
+        m.def_function[umap_transform_binding]("umap_transform")
         m.def_function[umap_numeric_mode_binding]("umap_numeric_mode")
         m.def_function[accuracy_score_binding]("accuracy_score")
         m.def_function[rand_score_binding]("rand_score")

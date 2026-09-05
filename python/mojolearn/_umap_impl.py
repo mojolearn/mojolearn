@@ -36,16 +36,21 @@ def _scalar(value, name):
 class UMAP(NumericModeMixin):
     """UMAP embedding with exact Euclidean neighbors and spectral init.
 
-    Supports fit/fit_transform, 2D or 3D output, and local_connectivity=1.
+    Supports fit/fit_transform/transform, 2D or 3D output, and local_connectivity=1.
     Dense graph storage uses O(n_samples**2) memory. At least
     2*n_components+4 samples are required. n_epochs=None uses 200 epochs;
     random_state defaults to 0. Input is converted to C-order float32;
     input_copied_ records whether a copy was needed.
 
-    numeric_mode selects the shipped binary at each fit. Cross-vendor source
-    evidence covers the named 8x1, 2D, four-epoch, seed-19 fixture only.
-    transform of new samples, supervised UMAP, and alternate metrics/init
-    are not implemented. See umap/README.md for the evidence and limits.
+    transform retains private copies of training data, embedding, parameters
+    and mode from the last successful fit. It computes query-to-training
+    neighbors, memberships, weighted initialization and seeded refinement
+    against the frozen training embedding. Default refinement is 100 epochs
+    (30 above 10,000 queries), or max(1, n_epochs//3) when explicitly set;
+    learning rate is 0.25 and the negative sample rate is 5. Query batching
+    can change results. This path has its own qualification requirements;
+    existing fit certificates do not certify transform or upstream RNG bits.
+    Supervised UMAP and alternate metrics/init are unsupported.
     """
 
     _BINDING = "_mojolearn_metrics"
@@ -111,13 +116,55 @@ class UMAP(NumericModeMixin):
             _addr_ro(x), _addr(embedding), [n, d, *config])
         if columns != config[1] or not np.isfinite(embedding).all():
             raise RuntimeError("UMAP returned an invalid embedding")
+        # Prepare all retained state before publishing a successful fit. Copies
+        # prevent caller edits of X or embedding_ from changing transform's model.
+        training = np.array(x, dtype=np.float32, order="C", copy=True)
+        frozen_embedding = embedding.copy()
+        training.setflags(write=False)
+        frozen_embedding.setflags(write=False)
         self.embedding_ = embedding
         self.n_features_in_ = d
         self.input_copied_ = copied
+        self._transform_training = training
+        self._transform_embedding = frozen_embedding
+        self._transform_config = tuple(config)
+        self._transform_mode = mode
         return self
 
     def fit_transform(self, X, y=None):
         return self.fit(X, y).embedding_
 
     def transform(self, X):
-        raise NotImplementedError("UMAP transform of new samples is not implemented; use fit_transform")
+        """Embed new rows in the last fitted coordinate system without refitting.
+
+        Identical training-input bytes return a copy of the saved embedding.
+        Parameter or mode changes require a successful refit. Later edits of
+        public embedding_ or the original X do not alter the retained model.
+        """
+        if not hasattr(self, "_transform_training"):
+            raise ValueError("UMAP transform requires a successful fit")
+        config = self._parameters()
+        mode = (self.numeric_mode or _backend.default_mode()).strip().lower()
+        if tuple(config) != self._transform_config or mode != self._transform_mode:
+            raise ValueError("UMAP parameters or numeric mode changed after fit; refit before transform")
+        x, _ = as_f32_c(X, "X")
+        training = self._transform_training
+        fitted_embedding = self._transform_embedding
+        if x.shape[1] != training.shape[1]:
+            raise ValueError("UMAP transform feature count differs from fitted data")
+        if not np.isfinite(x).all():
+            raise ValueError("UMAP transform input coordinates must be finite")
+        if x.shape == training.shape and x.tobytes() == training.tobytes():
+            return fitted_embedding.copy()
+        binding = self._bind()
+        if binding.umap_numeric_mode() != {"fast": 0, "identical": 1,
+                                           "deterministic": 2}[mode]:
+            raise RuntimeError("UMAP binary numeric mode disagrees with fitted mode")
+        output = np.empty((x.shape[0], config[1]), dtype=np.float32)
+        columns = binding.umap_transform(
+            [_addr_ro(training), _addr_ro(fitted_embedding), _addr_ro(x),
+             _addr(output)],
+            [training.shape[0], x.shape[0], training.shape[1], *config])
+        if columns != config[1] or not np.isfinite(output).all():
+            raise RuntimeError("UMAP transform returned an invalid embedding")
+        return output

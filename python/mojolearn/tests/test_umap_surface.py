@@ -143,7 +143,7 @@ class UMAPSurfaceTests(unittest.TestCase):
         model.n_components = 4
         with self.assertRaises(ValueError):
             model.fit(self.x)
-        with self.assertRaises(NotImplementedError):
+        with self.assertRaisesRegex(ValueError, "successful fit"):
             self.estimator().transform(self.x)
 
 

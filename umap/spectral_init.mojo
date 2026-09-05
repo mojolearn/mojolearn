@@ -64,6 +64,31 @@ def spectral_initialize_weights(
     if n_samples < 2 * n_components + 4:
         raise Error("UMAP spectral initialization has too few samples")
     var graph = _weights_to_coo(weights, n_samples)
+    return spectral_initialize_coo(
+        ctx, graph^, n_samples, n_components, n_neighbors, seed
+    )
+
+
+def spectral_initialize_coo(
+    ctx: DeviceContext,
+    var graph: CooGraph,
+    n_samples: Int,
+    n_components: Int,
+    n_neighbors: Int,
+    seed: UInt64,
+) raises -> List[Float32]:
+    """Shared solver/post-pass for dense-converted and CSR-origin COO.
+
+    Caller supplies the same positive edges in row-major order. Lanczos
+    uses ncv=min(n-k,max(2k+1,20)); UMAP2D/3D basis size is at most20*n,
+    not n*n. This changes neither the solver nor its arithmetic.
+    """
+    if n_components != 2 and n_components != 3:
+        raise Error("UMAP spectral initialization supports only 2D or 3D")
+    if n_samples < 2 * n_components + 4:
+        raise Error("UMAP spectral initialization has too few samples")
+    if graph.n != n_samples:
+        raise Error("UMAP spectral COO shape disagrees with n_samples")
     var config = MLSpectralEmbeddingParams(
         n_components=n_components + 1,
         n_neighbors=n_neighbors,
@@ -110,4 +135,3 @@ def spectral_initialize(
         ctx, graph.weights, graph.n_samples, n_components,
         graph.n_neighbors, seed,
     )
-
