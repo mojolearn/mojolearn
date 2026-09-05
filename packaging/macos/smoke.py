@@ -274,6 +274,20 @@ else:
 mode = mojolearn.numeric_mode()
 assert mode == os.environ.get("MOJOLEARN_NUMERIC_MODE", "fast"), mode
 
+# Run the public UMAP suite against the installed package, including the
+# certified layout bits in IDENTICAL mode and refusal controls in every mode.
+import unittest
+import importlib.util
+from pathlib import Path
+_umap_spec = importlib.util.spec_from_file_location(
+    "test_umap_surface", Path(__file__).resolve().parents[2]
+    / "python/mojolearn/tests/test_umap_surface.py")
+test_umap_surface = importlib.util.module_from_spec(_umap_spec)
+_umap_spec.loader.exec_module(test_umap_surface)
+_umap_result = unittest.TextTestRunner(verbosity=1).run(
+    unittest.defaultTestLoader.loadTestsFromModule(test_umap_surface))
+assert _umap_result.wasSuccessful(), "installed UMAP surface failed"
+
 # THE VENDOR THAT ACTUALLY LOADED, read back from the binary (2026-08-29,
 # docs/LINUX_WHEEL.md). On the macOS wheel it is 'metal'; the Linux smoke
 # (packaging/linux/smoke.py) asserts 'cuda' or 'hip' the same way.

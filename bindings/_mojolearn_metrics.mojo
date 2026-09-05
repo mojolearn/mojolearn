@@ -7,10 +7,13 @@ independently changing binding does not become a merge point. Arrays cross
 as borrowed NumPy addresses; every device buffer and context lives for one
 call and no pointer is retained past the call that was handed it.
 
-TWO LANES, ONE EXTENSION, DELIBERATELY. `metrics/` and `spectral/` both got
+`metrics/` and `spectral/` both got
 their Python surface in the same round and neither is large enough to earn a
 build script of its own. They share nothing but this file and
 `bindings/build_metrics.sh`.
+UMAP shares this extension because its pipeline uses the same neighbor and
+spectral primitives. Its source fixture evidence is recorded in umap/README.md;
+its Python surface is gated separately by tests/test_umap_surface.py.
 
 WHY THE SCALARS ARRIVE AS ONE LIST. `PythonModuleBuilder.def_function`
 infers its signature from arity and stops working above roughly nine
@@ -45,6 +48,11 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from checks.vendor import COMPILED_VENDOR
+from checks.numerics import GLOBAL_NUMERIC_MODE
+from max.gpu.host import DeviceContext
+from std.math import isfinite
+from umap.estimator import fit_transform as umap_fit_transform
+from umap.params import UMAPParams
 
 from metrics.estimator import (
     accuracy_score_host,
@@ -587,6 +595,56 @@ def spectral_fit_predict_graph_binding(
     return PythonObject(n_out)
 
 
+def umap_fit_transform_binding(
+    x_addr: PythonObject,
+    embedding_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Borrow input/output buffers for the supported UMAP slice.
+
+    params order (mirrored in _umap_impl.py): n_samples, n_features,
+    n_neighbors, n_components, n_epochs, min_dist, spread,
+    set_op_mix_ratio, local_connectivity, random_state.
+    """
+    _want(String("umap_fit_transform"), params, 10)
+    var n = Int(py=params[0])
+    var d = Int(py=params[1])
+    var seed = Int(py=params[9])
+    if d < 1 or seed < 0:
+        raise Error("UMAP requires positive features and a nonnegative seed")
+    var config = UMAPParams(
+        n_neighbors=Int(py=params[2]), n_components=Int(py=params[3]),
+        n_epochs=Int(py=params[4]), min_dist=Float32(Float64(py=params[5])),
+        spread=Float32(Float64(py=params[6])),
+        set_op_mix_ratio=Float32(Float64(py=params[7])),
+        local_connectivity=Float32(Float64(py=params[8])),
+        random_seed=UInt64(seed),
+    )
+    config.validate(n)
+    if (config.n_components != 2 and config.n_components != 3) or (
+        n < 2 * config.n_components + 4
+    ):
+        raise Error("UMAP requires 2D/3D output and enough samples for spectral init")
+    var x = _load_f32(Int(py=x_addr), n * d)
+    var output = _f32_ptr(Int(py=embedding_addr))
+    var embedding = List[Float32]()
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        embedding = umap_fit_transform(ctx, x, n, d, config)
+    if len(embedding) != n * config.n_components:
+        raise Error("UMAP returned an unexpected embedding shape")
+    for value in embedding:
+        if not isfinite(value):
+            raise Error("UMAP returned a non-finite embedding")
+    for i in range(len(embedding)):
+        output.unsafe_store(i, embedding[i])
+    return PythonObject(config.n_components)
+
+
+def umap_numeric_mode_binding() raises -> PythonObject:
+    return PythonObject(Int(GLOBAL_NUMERIC_MODE))
+
+
 def metrics_vendor_binding() raises -> PythonObject:
     """THE ACCELERATOR API THIS BINARY WAS COMPILED FOR: 'metal', 'cuda',
     'hip' or 'none'. A compile-time constant folded in from
@@ -603,6 +661,8 @@ def PyInit__mojolearn_metrics() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_metrics")
         m.def_function[metrics_vendor_binding]("metrics_vendor")
+        m.def_function[umap_fit_transform_binding]("umap_fit_transform")
+        m.def_function[umap_numeric_mode_binding]("umap_numeric_mode")
         m.def_function[accuracy_score_binding]("accuracy_score")
         m.def_function[rand_score_binding]("rand_score")
         m.def_function[adjusted_rand_score_binding]("adjusted_rand_score")

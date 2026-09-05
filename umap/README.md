@@ -1,5 +1,14 @@
 # UMAP
 
+The Python API is `mojolearn.UMAP(...).fit(X)` / `.fit_transform(X)`.
+It uses the existing metrics/spectral extension in all three numeric modes.
+`embedding_`, `n_features_in_`, and `input_copied_` describe a completed fit.
+The supported slice is dense Euclidean input, spectral initialization,
+2D/3D output, and `local_connectivity=1`; graph memory is quadratic in the
+sample count. `transform` of new data and supervised fitting are not implemented.
+The installed-wheel gate exercises the public surface in each shipped mode
+and compares IDENTICAL layout bits to the named source fixture below.
+
 The host-list estimator composes exact k-NN, fuzzy graph construction,
 spectral initialization, curve fitting and 2D/3D layout optimization.
 IDENTICAL uses serial layout updates; FAST uses the GPU Jacobi trajectory.

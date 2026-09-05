@@ -78,11 +78,25 @@ Classical estimators include:
 - PCA, truncated SVD, linear and logistic regression, ridge, lasso, and elastic net
 - SVC, SVR, kernel density, isolation forest, and Gaussian-process regression
 - Exponential smoothing and batched ARIMA
+- UMAP embeddings with dense Euclidean input and 2D/3D spectral initialization
 
 Additional modules provide scoring metrics, FP32 matrix multiplication,
 optimizer/training primitives, and reference-pinned Mamba and transformer
 blocks. These surfaces do not all have the same validation depth; consult the
 support matrix before treating an experimental surface as release-qualified.
+
+UMAP in the 0.5.0 API supports fitting and embedding the supplied samples:
+
+```python
+X = np.array([0, 1, 2.2, 4, 6.5, 10, 14.5, 20], dtype=np.float32)[:, None]
+embedding = mojolearn.UMAP(
+    n_neighbors=3, n_components=2, n_epochs=4, random_state=19,
+    numeric_mode="identical",
+).fit_transform(X)
+```
+
+Its graph uses quadratic memory. Transforming new samples, supervised targets,
+alternate metrics, and alternate initialization are not yet supported.
 
 The APIs intentionally resemble scikit-learn, but mojolearn is not a drop-in
 replacement. Defaults follow the upstream GPU implementation mirrored by an

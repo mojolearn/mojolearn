@@ -5,6 +5,17 @@ contain the detailed investigation record.
 
 ## Unreleased
 
+## 0.5.0 — release candidate
+
+- Added `mojolearn.UMAP.fit` and `fit_transform` for dense Euclidean input,
+  spectral initialization, and 2D/3D embeddings, with per-estimator numeric modes.
+- Reject non-finite UMAP inputs and optimizer parameters before numerical work;
+  gate the installed API against the named IDENTICAL layout fixture.
+- Retained three-vendor Mamba backward and UMAP source certificates: five Mamba
+  cases, 54 gradient tensors, and 186 UMAP stage cells match bitwise on Apple M4,
+  NVIDIA RTX 4090, and AMD MI300X at `718495cd`. These are source-fixture claims,
+  separate from installed-wheel platform coverage.
+
 - Consolidated active documentation around one roadmap, support matrix, verification guide, and
   normative numerical contracts.
 - Added and expanded Mamba, Transformer, training, embedding, and packaging validation lanes.

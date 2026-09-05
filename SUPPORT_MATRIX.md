@@ -1,6 +1,6 @@
 # Support and certification
 
-This page is the current support snapshot for mojolearn 0.4.0. It deliberately
+This page is the current support snapshot for the mojolearn 0.5.0 release candidate. It deliberately
 separates API availability, packaging, and numerical certification. A feature
 being importable does not mean that every hardware column or numeric mode has
 been certified.
@@ -96,3 +96,15 @@ cross-vendor claim. See [verification](docs/VERIFY.md) and
 The project-level sequencing lives in [ROADMAP.md](ROADMAP.md). Update this
 page only from recorded evidence; do not turn planned or in-progress runs into
 support claims.
+
+## UMAP and Mamba closure (2026-09-05)
+
+`UMAP.fit` and `fit_transform` expose the supported dense Euclidean 2D/3D
+slice in the 0.5.0 candidate. Installed-wheel qualification is required before
+publishing; no Linux wheel is inferred from the Apple build.
+
+At `718495cd`, Apple M4, NVIDIA RTX 4090, and AMD MI300X matched all 54
+native Mamba backward gradient tensors across five cases and all 186 cells
+in the named UMAP fixture. See the [three-vendor record](bench/results/e1g/2026-09-05_042552-amd-mamba/cross-device.json).
+These source certificates do not resolve the separately recorded AMD Mamba
+Python binding fault or certify other shapes and installed artifacts.

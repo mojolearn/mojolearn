@@ -104,6 +104,7 @@ from ._hierarchy_impl import AgglomerativeClustering
 from ._iforest_impl import IsolationForest
 from ._solver_impl import ElasticNet, Lasso
 from ._spectral_impl import SpectralClustering
+from ._umap_impl import UMAP
 from ._svm_impl import SVC, SVR
 from ._arima_impl import ARIMA
 from ._tsa_impl import ExponentialSmoothing, kpss_test, select_d
@@ -228,6 +229,7 @@ __all__ = [
     "RandomForestRegressor",
     "Ridge",
     "TruncatedSVD",
+    "UMAP",
     "kpss_test",
     "linalg",
     "mamba",
