@@ -44,10 +44,14 @@ from gbdt.methods.oblivious_tree_doc_parallel_structure_searcher import (
     split_stat_planes,
 )
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
+    run_sequential_two_level_feature_freq_tree,
     run_tree_layout,
     run_tree_layout_traced,
+    TSynchronizedTensorTreeResult,
     TTreeWorkspace,
 )
+from gbdt.models.tensor_ctr_value_table import TStagedTensorCandidate, TTensorCtrRegistry
+from gbdt.ctrs.ctr_binarization import TBinarizationOptions
 # ---- the NON-SYMMETRIC arm (DEVIATION 259): CatBoost's
 # `TGreedyTreeLikeStructureSearcher<TNonSymmetricTree>`, the searcher their
 # `pointwise_non_symmetric.cpp:7-29` registers for every single-target
@@ -395,6 +399,99 @@ struct FitResult(Movable):
     var best_iteration: Int
     #: True when the detector fired before `n_estimators` was reached
     var stopped_early: Bool
+
+
+@fieldwise_init
+struct TTwoLevelTensorFitResult(Movable):
+    """One-tree opt-in fit result with complete tensor model metadata."""
+
+    var model: TAdditiveModel
+    var borders: List[List[Float32]]
+    var fold_counts: List[Int]
+    var one_hot: List[Bool]
+    var registry: TTensorCtrRegistry
+    var leaf_sizes: List[Int]
+
+
+def fit_two_level_feature_freq_tree(
+    ctx: DeviceContext,
+    initial: TStagedTensorCandidate,
+    x_colmajor: List[Float32],
+    y: List[Float32],
+    base_quantized_cindex: List[UInt32],
+    base_columns: List[List[UInt32]],
+    base_fold_counts: List[Int],
+    base_one_hot: List[Bool],
+    base_borders: List[List[Float32]],
+    n_rows: Int,
+    n_raw_features: Int,
+    grid: TBinarizationOptions,
+    learning_rate: Float32 = Float32(0.03),
+    l2_leaf_reg: Float32 = Float32(3.0),
+    random_seed: UInt64 = UInt64(0),
+) raises -> TTwoLevelTensorFitResult:
+    """Fit the supported two-level, one-tree RMSE tensor arm.
+
+    This entry is intentionally separate from ordinary `fit_with_test` so
+    its fixed depth, unit weights, single target, and one-tree contract are
+    impossible to select accidentally.
+    """
+    if n_rows < 1 or len(y) != n_rows:
+        raise Error("two-level tensor fit target shape mismatch")
+    if len(x_colmajor) != n_rows * n_raw_features:
+        raise Error("two-level tensor fit raw shape mismatch")
+    if len(base_one_hot) != 0 and len(base_one_hot) != n_raw_features:
+        raise Error("two-level tensor fit one-hot shape mismatch")
+    var rows = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var h_rows = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    var stats = ctx.enqueue_create_buffer[DType.float32](2 * n_rows)
+    var h_stats = ctx.enqueue_create_host_buffer[DType.float32](2 * n_rows)
+    var grad_mag = Float32(0.0)
+    for r in range(n_rows):
+        h_rows.unsafe_ptr().unsafe_store(r, UInt32(r))
+        h_stats.unsafe_ptr().unsafe_store(r, Float32(1.0))
+        h_stats.unsafe_ptr().unsafe_store(n_rows + r, y[r])
+        grad_mag += -y[r] if y[r] < Float32(0.0) else y[r]
+    ctx.enqueue_copy(dst_buf=rows, src_ptr=h_rows.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=stats, src_ptr=h_stats.unsafe_ptr())
+    var trace = IdentityTrace.disabled()
+    var times = StageTimes()
+    times.enabled = False
+    var tree = run_sequential_two_level_feature_freq_tree(
+        ctx, initial, x_colmajor, base_quantized_cindex,
+        base_columns, base_fold_counts, base_one_hot,
+        n_rows, n_raw_features, 2, grid, rows, stats,
+        Float32(n_rows), grad_mag, SCORE_FUNCTION_COSINE, False,
+        l2_leaf_reg, Float32(0.0), random_seed, True,
+        n_raw_features, base_borders, trace, times, "tensor_fit",
+    )
+    var h_final_rows = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    ctx.enqueue_copy(dst_ptr=h_final_rows.unsafe_ptr(), src_buf=rows)
+    ctx.synchronize()
+    var structure = TObliviousTreeStructure()
+    for level in range(len(tree.splits)):
+        structure.splits.append(tree.splits[level])
+    var weak = TObliviousTreeModel(structure^)
+    weak.dim = 1
+    for leaf in range(len(tree.leaf_sizes)):
+        var total = Float32(0.0)
+        var begin = tree.leaf_offsets[leaf]
+        for i in range(tree.leaf_sizes[leaf]):
+            var row = Int(h_final_rows.unsafe_ptr().unsafe_load(begin + i))
+            total += y[row]
+        weak.leaf_values.append(
+            learning_rate * total
+            / (Float32(tree.leaf_sizes[leaf]) + l2_leaf_reg)
+        )
+    var model = TAdditiveModel()
+    model.add_weak_model(weak^)
+    var output_one_hot = base_one_hot.copy()
+    while len(output_one_hot) < len(tree.stable_fold_counts):
+        output_one_hot.append(False)
+    return TTwoLevelTensorFitResult(
+        model^, tree.stable_borders.copy(), tree.stable_fold_counts.copy(),
+        output_one_hot^, tree.registry.copy(), tree.leaf_sizes.copy(),
+    )
 
 
 

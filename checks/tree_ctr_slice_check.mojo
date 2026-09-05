@@ -32,6 +32,7 @@ from gbdt.models.oblivious_model import (
     BIN_SPLIT_TAKE_GREATER,
     TBinarySplit,
 )
+from gbdt.models.ctr_value_table import TCtrValueTable
 from gbdt.gpu_data.compressed_index_builder import pack_quantized_columns_host
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     accept_symmetric_level_winner,
@@ -45,6 +46,8 @@ from gbdt.gpu_data.feature_blocks import blocks_for
 from core.identity_trace import IdentityTrace
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import StageTimes
 from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
+from gbdt.methods.doc_parallel_boosting import fit_two_level_feature_freq_tree
+from gbdt.train import TrainedModel, predict_floats
 
 
 def main() raises:
@@ -467,6 +470,30 @@ def main() raises:
         production_rows_total += production_result.leaf_sizes[leaf]
     if production_rows_total != 6:
         raise Error("bounded tensor production result lost rows")
+    var production_y = List[Float32]()
+    for r in range(6):
+        production_y.append(
+            (Float32(-4.0) if dynamic_stage.candidate.bins[r] == UInt32(0)
+             else Float32(4.0))
+            + (Float32(-1.0) if secondary[r] == UInt32(0)
+               else Float32(1.0))
+        )
+    var fitted = fit_two_level_feature_freq_tree(
+        ctx, production_initial, x, production_y,
+        production_base_cindex, production_columns, production_folds,
+        production_one_hot, production_borders, 6, 3, grid,
+        learning_rate=Float32(0.1),
+    )
+    var fitted_nan = List[Int]()
+    fitted_nan.resize(len(fitted.fold_counts), 0)
+    var fitted_model = TrainedModel(
+        fitted.model.copy(), fitted.fold_counts.copy(), fitted.one_hot.copy(),
+        fitted.borders.copy(), fitted_nan^, List[Float64](), List[Float64](),
+        0, False, 0, List[TCtrValueTable](), fitted.registry.copy(),
+    )
+    var fitted_prediction = predict_floats(ctx, fitted_model, x, 6)
+    if len(fitted_prediction) != 6:
+        raise Error("two-level tensor fit did not produce usable predictions")
     var sync_splits = List[TBinarySplit]()
     var reference_splits = List[TBinarySplit]()
     if not run_synchronized_symmetric_level(
