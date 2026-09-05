@@ -1,0 +1,4 @@
+commit=6476a35c1f6937a8f46178989fa6faed026e266d
+cpu_affinity=0,1,2,3
+price_budget_seconds=480
+scope=native-public-upload-search-download-synchronize
