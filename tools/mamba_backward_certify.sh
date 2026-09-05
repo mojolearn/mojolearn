@@ -116,6 +116,13 @@ run_family() {
         "$actual" "$oracle" "$family_out/native" "$SOURCE_SHA" \
         > "$family_out/capture.log" 2>&1
     capture_rc=$?
+    if [ "$capture_rc" -ne 0 ]; then
+        # A rejected manifest must not discard the diagnostic bytes that
+        # could explain it when the rental is deleted after collection.
+        mkdir -p "$family_out/failed-actual" "$family_out/failed-oracle"
+        cp -a "$actual/." "$family_out/failed-actual/" || RC=1
+        cp -a "$oracle/." "$family_out/failed-oracle/" || RC=1
+    fi
     verdict=GREEN
     if [ "$gate_rc" -ne 0 ] || [ "$capture_rc" -ne 0 ]; then
         verdict=RED

@@ -345,26 +345,12 @@ def main() raises:
     _write_f32(output + "/grad.C_norm.weight.f32",mamba_download(ctx,d_cw,M3_D_STATE))
     _write_f32(output + "/grad.B_bias.f32",mamba_download(ctx,d_bb,dims.nheads*M3_D_STATE))
     _write_f32(output + "/grad.C_bias.f32",mamba_download(ctx,d_cb,dims.nheads*M3_D_STATE))
-    if case_k == 5:
-        with open(output + "/dump_manifest.json", "w") as fh:
-            fh.write(
-                "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
-                + "\"family\":\"mamba3\",\"case\":\"" + case_name + "\","
-                + "\"objective\":\"signed_dyadic_weight_v1\","
-                + "\"mode\":\"partial-s17-recurrence-l65\","
-                + "\"tensors\":[\"partial.s17.state.direct\","
-                + "\"partial.s17.state.total\",\"partial.s17.initial_state\","
-                + "\"partial.s17.readout.rot.q\",\"partial.s17.readout.dacs\","
-                + "\"partial.s17.recur.kscale\",\"partial.s17.recur.value\","
-                + "\"partial.s17.recur.dacs\"]}\n"
-            )
-        return
     with open(output + "/dump_manifest.json", "w") as fh:
         fh.write(
             "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
             + "\"family\":\"mamba3\",\"case\":\"" + case_name + "\","
             + "\"objective\":\"signed_dyadic_weight_v1\","
-            + "\"mode\":\"complete-public-prefill-l4\","
+            + "\"mode\":\"complete-public-prefill\","
             + "\"public_prefill_leaves\":[\"x\",\"block_norm.weight\","
             + "\"in_proj.weight\",\"dt_bias\",\"B_norm.weight\","
             + "\"C_norm.weight\",\"B_bias\",\"C_bias\",\"D\","

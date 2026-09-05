@@ -69,7 +69,14 @@ workloads; AMD on DigitalOcean, NVIDIA on RunPod):
    cursors, prefix-only gradients and leaf estimation remain implementation
    work. Keep comparator runs pinned to plain boosting until then.
 
-The longer Mamba and expanded UMAP fixtures are prepared, not yet certified.
+The first expanded NVIDIA run at `5658d28e` passed all five baseline Mamba
+cases and Mamba1 L64, but exposed an obsolete partial manifest in the Mamba3
+L65 driver. Expanded UMAP passed all six IDENTICAL cases; the larger cubic
+fixtures failed in FAST and DETERMINISTIC because the raw same-data kNN result
+did not put self first. See the
+[retained failures](bench/results/e1g/2026-09-05_175405-nvidia-mamba/README.md).
+The fixes normalize UMAP's self slot in both graph adapters and expose the
+already-computed Mamba3 public gradients; fresh AMD/NVIDIA gates remain required.
 The serial follow-up payload uses its former two-arm kNN timing slot for the
 long-sequence certificate; kNN timings belong to the dedicated four-arm leg.
 

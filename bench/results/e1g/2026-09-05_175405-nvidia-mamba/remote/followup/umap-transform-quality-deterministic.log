@@ -1,0 +1,8 @@
+1941 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x713700000000, nodemask=1)
+fatal: not a git repository (or any of the parent directories): .git
+cubic128_interleaved64_64 deterministic {'trustworthiness': 0.9983004385964912, 'retention': 0.91875, 'rank_penalty': 31} control_margins {'trustworthiness': 0.45729166666666665, 'retention': 0.840625} PASS
+saddle_grid64_cellcenters49 deterministic {'trustworthiness': 0.9902613677049767, 'retention': 0.8326530612244898, 'rank_penalty': 136} control_margins {'trustworthiness': 0.43172216254923024, 'retention': 0.7387755102040816} PASS
+cubic256_interleaved128_128_seed3 ERROR {'type': 'Exception', 'message': 'UMAP expects self in k-NN slot zero'}
+cubic256_interleaved128_128_seed41 ERROR {'type': 'Exception', 'message': 'UMAP expects self in k-NN slot zero'}
+saddle_grid128_cellcenters105_seed11 deterministic {'trustworthiness': 0.9972451790633609, 'retention': 0.8380952380952381, 'rank_penalty': 175} control_margins {'trustworthiness': 0.4397481306572215, 'retention': 0.7942857142857143} PASS
+saddle_grid128_cellcenters105_seed29 deterministic {'trustworthiness': 0.9961589925226288, 'retention': 0.8171428571428572, 'rank_penalty': 244} control_margins {'trustworthiness': 0.4404092876820149, 'retention': 0.7714285714285715} PASS
