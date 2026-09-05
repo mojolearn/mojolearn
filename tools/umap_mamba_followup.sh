@@ -50,5 +50,6 @@ if run corpus pixi run -e skgpu python mamba/corpus/gen_corpus.py --family all; 
         run mamba-api pixi run -e skgpu python python/mojolearn/tests/test_mamba_surface.py
     fi
 fi
+run knn-public-price env MOJOLEARN_SMALLK_PRICE_OUT="$OUT/knn-public-price" bash tools/knn_smallk_dispatch_price.sh
 printf '%s\n' "$rc" > "$OUT/exit_code"
 exit "$rc"
