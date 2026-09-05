@@ -84,36 +84,10 @@ from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
 #: Same build mode as `hist_binary.mojo`; the flush follows the matrix.
 comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
 
-#: The LOGICAL width of one private replica group. READ FROM THE MATRIX, not
-#: pinned here, and read from the row that means what this file needs.
-#:
-#: This used to be a literal 32 in this file and in three others, with a
-#: comment pointing at `kernel_matrix.column_lane_width` for why AMD's 64
-#: must not reach it. That is a matrix row that EXISTS and was bypassed, and
-#: routing it through `lane_width_for` fixed the bypass while picking the
-#: WRONG ROW (corrected 2026-09-01, DEVIATION 1947): under FAST that row
-#: hands back the HARDWARE width, 64 on CDNA, and this file's slice
-#: arithmetic is not asking about hardware.
-#:
-#: TWO USES, AND NEITHER IS A LOCKSTEP CLAIM.
-#:
-#: 1. `warp_offset = 1024 * (tid // LANE_WIDTH)` in `one_byte_slice_offset`.
-#:    That partitions THREAD INDICES into groups of 32, each with a private
-#:    1024-float replica, and `Reduce`'s stage 1 folds at a LITERAL 1024
-#:    that never moved. At the hardware 64 the replicas halved in number
-#:    while the fold stride did not, which is the whole defect. At the
-#:    logical 32 the two agree on every column, exactly as they already do
-#:    under IDENTICAL, where this row has always returned 32 and this family
-#:    has always elaborated on AMD.
-#: 2. The LOAD side (`min_docs_per_block`, `ALIGN_SIZE`, `warps_per_block`,
-#:    `entries_per_warp`, `local_idx`). A self-consistent partition of the
-#:    row axis at any value; see the same note in `hist_binary.mojo` for the
-#:    line-by-line reading and for what a logical 32 costs a 64-wide wave in
-#:    coalescing.
-#:
-#: The write-turn sync is the one thing that does NOT follow from this, and
-#: it lives in its own row (`sub_byte_lane_sync_for`, via
-#: `lane_sync.turn_sync`).
+#: Logical private-replica width from the kernel matrix. It partitions thread
+#: indices into 1024-float replicas consistently with the reduction stride;
+#: load-side uses partition rows independently. Write-turn synchronization is
+#: selected separately by `sub_byte_lane_sync_for` via `lane_sync.turn_sync`.
 comptime LANE_WIDTH = replication_lanes_for[
     TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
 ]()
@@ -515,7 +489,7 @@ def one_byte_hist_kernel[bits: Int, smem_mode: Int](
 
     var stats_p = stats + Int(block_idx.z) * stat_line_size
 
-    # `TPointHistHalfByteBase`'s constructor, inlined (archive/reference/PORTING.md 10):
+    # `TPointHistHalfByteBase`'s constructor, inlined:
     #     for (i = threadIdx.x; i < histSize; i += BlockSize) buff[i] = 0;
     #     __syncthreads();
     #     Histogram = buff + SliceOffset();
@@ -986,7 +960,7 @@ def one_byte_hist_gather_kernel[
 
     var stats_p = stats + Int(block_idx.z) * stat_line_size
 
-    # `TPointHistHalfByteBase`'s constructor, inlined (archive/reference/PORTING.md 10):
+    # `TPointHistHalfByteBase`'s constructor, inlined:
     #     for (i = threadIdx.x; i < histSize; i += BlockSize) buff[i] = 0;
     #     __syncthreads();
     #     Histogram = buff + SliceOffset();
