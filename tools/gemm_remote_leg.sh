@@ -769,16 +769,10 @@ case "$PAYLOAD" in
         echo "                   brings the FSPEED lines home for" >&2
         echo "                   tools/fast_speed_table.py. One --family" >&2
         echo "                   per leg; it does not fit in one lease." >&2
-        echo "  mamba            NVIDIA-only strict Mamba 1/2/3 backward" >&2
+        echo "  mamba            NVIDIA/AMD strict Mamba 1/2/3 backward" >&2
         echo "                   public-prefill certificate; no training." >&2
         exit 2 ;;
 esac
-
-if [ "$PAYLOAD" = "mamba" ] && [ "$VENDOR" != "nvidia" ]; then
-    echo "gemm_remote_leg: --payload mamba currently certifies NVIDIA only." >&2
-    echo "  Use: tools/gemm_remote_leg.sh nvidia --payload mamba [--rent]" >&2
-    exit 2
-fi
 
 if [ "$PAYLOAD" = "speed" ]; then
     # THE ALIAS IS RESOLVED HERE, after the argument loop, so that BOTH the
@@ -1470,11 +1464,19 @@ leg_mamba_artifacts() {
         "the Mamba certificate produced no results.tsv" || _bad=1
     leg_require_file "$_md/environment.txt" \
         "the Mamba certificate produced no environment.txt" || _bad=1
+    leg_require_file "$_md/device.csv" \
+        "the Mamba certificate produced no device inventory" || _bad=1
     leg_require_file "$_md/SHA256SUMS" \
         "the Mamba certificate produced no SHA256SUMS" || _bad=1
     if [ "$_bad" = "0" ]; then
         if ! grep -q '^mode=IDENTICAL$' "$_md/environment.txt"; then
             echo "  MAMBA CERT MODE IS NOT IDENTICAL."
+            _bad=1
+        fi
+        if ! grep -q "^vendor=$VENDOR$" "$_md/environment.txt" ||
+           ! grep -q "^schema=mojolearn.mamba.backward-certificate.${VENDOR}.v1$" \
+                "$_md/environment.txt"; then
+            echo "  MAMBA CERT VENDOR/SCHEMA DOES NOT MATCH $VENDOR."
             _bad=1
         fi
         if ! grep -q "^commit=$COMMIT$" "$_md/environment.txt"; then
@@ -2285,12 +2287,14 @@ pixi install > "$OUT/pixi_env.log" 2>&1
 echo "pixi_install_exit=$?" >> "$OUT/leg.txt"
 if command -v timeout >/dev/null 2>&1; then
     MOJOLEARN_COMMIT="@COMMIT@" MOJOLEARN_MAMBA_CERT_OUT="$OUT/mamba-cert" \
-      timeout -k 30 @WORKTIMEOUT@ pixi run mamba-backward-cert-nvidia \
+      MOJOLEARN_MAMBA_CERT_VENDOR="@VENDOR@" \
+      timeout -k 30 @WORKTIMEOUT@ pixi run mamba-backward-cert-@VENDOR@ \
       > "$OUT/mamba_cert_console.log" 2>&1
     cert_rc=$?
 else
     MOJOLEARN_COMMIT="@COMMIT@" MOJOLEARN_MAMBA_CERT_OUT="$OUT/mamba-cert" \
-      pixi run mamba-backward-cert-nvidia > "$OUT/mamba_cert_console.log" 2>&1
+      MOJOLEARN_MAMBA_CERT_VENDOR="@VENDOR@" \
+      pixi run mamba-backward-cert-@VENDOR@ > "$OUT/mamba_cert_console.log" 2>&1
     cert_rc=$?
 fi
 echo "mamba_cert_exit=$cert_rc" >> "$OUT/leg.txt"
@@ -3402,7 +3406,7 @@ leg_check_remote_body() {
         fi
     fi
     if [ "$PAYLOAD" = "mamba" ]; then
-        if ! grep -q 'pixi run mamba-backward-cert-nvidia' "$_body"; then
+        if ! grep -q "pixi run mamba-backward-cert-$VENDOR" "$_body"; then
             echo "  the mamba body does not invoke its certification payload."
             return 1
         fi
@@ -4525,7 +4529,7 @@ if [ "$PAYLOAD" = "speed" ] || [ "$PAYLOAD" = "mamba" ]; then
 echo "== step 1: THERE IS NO APPLE REFERENCE, AND THAT IS THE POINT =="
 echo "   This payload builds NOTHING on this Mac and compares nothing to it."
 if [ "$PAYLOAD" = "mamba" ]; then
-echo "   The semantic oracle and NVIDIA dumps are generated together on"
+echo "   The semantic oracle and $VLABEL dumps are generated together on"
 echo "   the pod; the fetched strict certificate is self-contained."
 else
 echo "   A wall-clock number is a property of ONE box, and the comparison"
@@ -4674,7 +4678,7 @@ if [ "$MODE" = "dry" ]; then
     echo "   9. NO DIFF HERE. tools/e3_round_judge.sh section 7 judges it"
     else
     if [ "$PAYLOAD" = "mamba" ]; then
-    echo "   7. mamba-backward-cert-nvidia, bounded at ${WORK_TIMEOUT}s"
+    echo "   7. mamba-backward-cert-$VENDOR, bounded at ${WORK_TIMEOUT}s"
     echo "   8. fetch strict public manifests, logs and SHA256SUMS"
     echo "   9. require three GREEN rows and an IDENTICAL mode witness"
     elif [ "$PAYLOAD" = "speed" ]; then
@@ -4703,7 +4707,7 @@ if [ "$MODE" = "dry" ]; then
     if [ "$PAYLOAD" = "phase8" ]; then
     echo "     tools/gemm_remote_leg.sh $VENDOR --payload phase8 --rent --minutes $MINUTES"
     elif [ "$PAYLOAD" = "mamba" ]; then
-    echo "     tools/gemm_remote_leg.sh nvidia --payload mamba --rent --minutes $MINUTES"
+    echo "     tools/gemm_remote_leg.sh $VENDOR --payload mamba --rent --minutes $MINUTES"
     else
     echo "     tools/gemm_remote_leg.sh $VENDOR --rent --minutes $MINUTES"
     fi

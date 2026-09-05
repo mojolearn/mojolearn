@@ -1,25 +1,48 @@
 #!/usr/bin/env bash
-# Lightweight NVIDIA certificate for the three strict public-prefill backward
+# Lightweight GPU certificate for the three strict public-prefill backward
 # gates. This performs no training or timing and never provisions hardware.
 set -u
 set -o pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 STAMP=$(date -u +%Y-%m-%d_%H%M%S)
-OUT=${MOJOLEARN_MAMBA_CERT_OUT:-$ROOT/bench/results/mamba_backward_cert/${STAMP}-nvidia}
+VENDOR=${MOJOLEARN_MAMBA_CERT_VENDOR:-nvidia}
+case "$VENDOR" in
+    nvidia|amd) ;;
+    *)
+        echo "MAMBA-BACKWARD-CERT REFUSED: unsupported vendor '$VENDOR'" >&2
+        exit 2 ;;
+esac
+OUT=${MOJOLEARN_MAMBA_CERT_OUT:-$ROOT/bench/results/mamba_backward_cert/${STAMP}-${VENDOR}}
 mkdir -p "$OUT"
 
-if ! command -v nvidia-smi >/dev/null 2>&1; then
-    echo "MAMBA-BACKWARD-CERT REFUSED: nvidia-smi is unavailable" >&2
-    exit 2
-fi
-if ! nvidia-smi --query-gpu=index,name,uuid,driver_version \
-        --format=csv,noheader > "$OUT/device.csv" 2>/dev/null; then
-    echo "MAMBA-BACKWARD-CERT REFUSED: NVIDIA device query failed" >&2
-    exit 2
+if [ "$VENDOR" = nvidia ]; then
+    command -v nvidia-smi >/dev/null 2>&1 || {
+        echo "MAMBA-BACKWARD-CERT REFUSED: nvidia-smi is unavailable" >&2
+        exit 2
+    }
+    nvidia-smi --query-gpu=index,name,uuid,driver_version \
+        --format=csv,noheader > "$OUT/device.csv" 2>/dev/null || {
+        echo "MAMBA-BACKWARD-CERT REFUSED: NVIDIA device query failed" >&2
+        exit 2
+    }
+else
+    command -v rocm-smi >/dev/null 2>&1 || {
+        echo "MAMBA-BACKWARD-CERT REFUSED: rocm-smi is unavailable" >&2
+        exit 2
+    }
+    rocm-smi --showproductname > "$OUT/device.csv" 2>/dev/null || {
+        echo "MAMBA-BACKWARD-CERT REFUSED: AMD device query failed" >&2
+        exit 2
+    }
 fi
 if [ ! -s "$OUT/device.csv" ]; then
-    echo "MAMBA-BACKWARD-CERT REFUSED: no NVIDIA device was reported" >&2
+    echo "MAMBA-BACKWARD-CERT REFUSED: no $VENDOR device was reported" >&2
+    exit 2
+fi
+if [ "$VENDOR" = amd ] &&
+   ! grep -Eqi 'card series|card model' "$OUT/device.csv"; then
+    echo "MAMBA-BACKWARD-CERT REFUSED: rocm-smi reported no AMD card" >&2
     exit 2
 fi
 
@@ -32,11 +55,12 @@ else
 fi
 printf '%s\n' "$COMMIT" > "$OUT/commit.txt"
 {
-    echo "schema=mojolearn.mamba.backward-certificate.nvidia.v1"
+    echo "schema=mojolearn.mamba.backward-certificate.${VENDOR}.v1"
     echo "created_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "host=$(hostname)"
     echo "kernel=$(uname -srmo)"
     echo "mode=IDENTICAL"
+    echo "vendor=$VENDOR"
     echo "mode_injector=tools/with_identical_mode.sh"
     echo "commit=$COMMIT"
 } > "$OUT/environment.txt"
