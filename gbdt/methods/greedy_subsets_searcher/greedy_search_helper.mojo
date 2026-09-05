@@ -19,10 +19,13 @@ from gbdt.models.oblivious_model import (
     TBinarySplit,
 )
 from gbdt.models.tensor_ctr_value_table import (
+    materialize_staged_tensor_cindex_device,
     persist_synchronized_mixed_path,
+    stage_next_feature_freq_after_winner,
     TStagedTensorCandidate,
     TTensorCtrRegistry,
 )
+from gbdt.ctrs.ctr_binarization import TBinarizationOptions
 from gbdt.methods.greedy_subsets_searcher.split_properties_helper import (
     HISTOGRAMS_CURRENT_PATH,
     HISTOGRAMS_PREVIOUS_PATH,
@@ -3840,6 +3843,107 @@ struct TSynchronizedTensorTreeResult(Movable):
     var stable_borders: List[List[Float32]]
     var stable_fold_counts: List[Int]
     var registry: TTensorCtrRegistry
+
+
+def run_sequential_two_level_feature_freq_tree[
+    hist2_smem_mode: Int = HIST2_SMEM_MODE
+](
+    ctx: DeviceContext,
+    initial: TStagedTensorCandidate,
+    x_colmajor: List[Float32],
+    base_quantized_cindex: List[UInt32],
+    base_columns: List[List[UInt32]],
+    base_fold_counts: List[Int],
+    base_one_hot: List[Bool],
+    n_rows: Int,
+    n_raw_features: Int,
+    stat_count: Int,
+    grid: TBinarizationOptions,
+    mut row_index: DeviceBuffer[DType.uint32],
+    mut stats: DeviceBuffer[DType.float32],
+    weight_magnitude: Float32,
+    gradient_magnitude: Float32,
+    score_function: Int,
+    multiclass_optimization: Bool,
+    l2_leaf_reg: Float32,
+    score_std_dev: Float32,
+    level_seed_base: UInt64,
+    use_subtraction: Bool,
+    first_tensor_model_column: Int,
+    base_borders: List[List[Float32]],
+    mut trace: IdentityTrace,
+    mut times: StageTimes,
+    tree_tag: String,
+) raises -> TSynchronizedTensorTreeResult:
+    """Grow two levels, materializing level two from the actual winner."""
+    if first_tensor_model_column != len(base_borders) or (
+        len(base_borders) != len(base_fold_counts)
+    ):
+        raise Error("sequential tensor tree stable model prefix mismatch")
+    if first_tensor_model_column != n_raw_features or (
+        len(base_columns) != n_raw_features
+    ):
+        raise Error("sequential tensor apply requires raw/model prefix parity")
+    if initial.feature_id != len(base_columns):
+        raise Error("initial tensor candidate is not the next search column")
+    var initial_device = materialize_staged_tensor_cindex_device(ctx, initial)
+    var layout = initial.compressed.layout.copy()
+    var blocks = blocks_for(layout, n_rows)
+    var state = TSynchronizedSymmetricLevelState(
+        ctx, layout.copy(), blocks^, initial_device^,
+        n_rows, stat_count, 2, False,
+    )
+    state.initialize_tree(ctx, weight_magnitude, gradient_magnitude)
+    var splits = List[TBinarySplit]()
+    if not run_synchronized_symmetric_level[hist2_smem_mode](
+        state, ctx, row_index, stats, splits, score_function,
+        multiclass_optimization, l2_leaf_reg, score_std_dev,
+        level_seed_base, use_subtraction, trace, times, tree_tag,
+    ):
+        raise Error("sequential tensor tree rejected level-one winner")
+    var next = stage_next_feature_freq_after_winner(
+        initial, splits[0], x_colmajor, base_quantized_cindex,
+        n_rows, n_raw_features, base_columns, base_fold_counts,
+        base_one_hot, grid, grid.border_count,
+    )
+    if next.compressed.layout.hist_cells != layout.hist_cells:
+        raise Error("generated level-two tensor changed pinned layout")
+    var next_device = materialize_staged_tensor_cindex_device(ctx, next)
+    state.replace_active_cindex(ctx, next_device^)
+    if not run_synchronized_symmetric_level[hist2_smem_mode](
+        state, ctx, row_index, stats, splits, score_function,
+        multiclass_optimization, l2_leaf_reg, score_std_dev,
+        level_seed_base + UInt64(1), use_subtraction,
+        trace, times, tree_tag,
+    ):
+        raise Error("sequential tensor tree rejected level-two winner")
+
+    var retained = List[TStagedTensorCandidate]()
+    retained.append(initial.copy())
+    retained.append(next^)
+    var registry = TTensorCtrRegistry(first_tensor_model_column)
+    var tensor_columns = persist_synchronized_mixed_path(
+        splits, retained.copy(), registry
+    )
+    var stable_borders = base_borders.copy()
+    var stable_folds = base_fold_counts.copy()
+    for level in range(2):
+        if tensor_columns[level] >= 0:
+            stable_borders.append(retained[level].candidate.borders.copy())
+            stable_folds.append(len(retained[level].candidate.borders))
+    ref workspace = state.workspace[0]
+    ctx.enqueue_copy(dst_ptr=workspace.h_off.unsafe_ptr(), src_buf=workspace.p_off)
+    ctx.enqueue_copy(dst_ptr=workspace.h_sz.unsafe_ptr(), src_buf=workspace.p_sz)
+    ctx.synchronize()
+    var offsets = List[Int]()
+    var sizes = List[Int]()
+    for leaf in range(state.live_leaves):
+        offsets.append(Int(workspace.h_off.unsafe_ptr().unsafe_load(leaf)))
+        sizes.append(Int(workspace.h_sz.unsafe_ptr().unsafe_load(leaf)))
+    return TSynchronizedTensorTreeResult(
+        splits^, offsets^, sizes^, retained^, stable_borders^,
+        stable_folds^, registry^,
+    )
 
 def run_bounded_synchronized_tensor_tree[
     hist2_smem_mode: Int = HIST2_SMEM_MODE
