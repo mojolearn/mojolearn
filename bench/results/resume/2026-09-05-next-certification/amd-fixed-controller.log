@@ -1,0 +1,72 @@
+[18:29:54 amd] dead-man timer pid 47851 (3600 s, keyed by tag e2 + name mojolearn-e2-amd)
+[18:29:54 amd] creating mojolearn-e2-amd (gpu-mi325x1-256gb, tor1)
+[18:29:56 amd] droplet id 598106166
+[18:30:40 amd] active at 68.183.201.230
+[18:31:05 amd] arming a second dead-man ON THE DROPLET (3600s), which the local one cannot guarantee
+[amd] ON_DROPLET_DEADMAN_ARMED
+[amd gpu] GPU[0]		: Card Series: 		AMD Instinct Mi325X VF
+[18:31:33 amd] ssh settled after 3 probe(s)
+[18:31:33 amd] cloning 6a3a2d30ab53e9207d327df38f4d22fb5111535e ON THE BOX from https://github.com/mojolearn/mojolearn.git (bench/results excluded), attempt 1
+CLONE-COMMIT-OK 6a3a2d30ab53e9207d327df38f4d22fb5111535e
+1
+[18:31:41 amd] wave 1: phases=9 lanes=all, bound 3073s
+WAVE-1-EXIT=0  (124 = hit the work bound)
+concurrent probe SKIPPED: needs all three tiers, P9_TIERS=<none>
+
+=== phase 9 diag: tools/umap_mamba_do_diag.sh === 22:31:49
+PHASE9-FINDING: diag script returned non-zero (see diag/console.log)
+    umap-transform-api	0
+    umap-transform-quality	0
+    umap-quality	0
+    umap-transform-native	0
+    umap-sparse-graph	0
+    umap-sparse-fit	0
+    umap-sparse-fast	0
+    umap-sparse-deterministic	0
+    knn-dispatch-legacy	0
+    knn-dispatch-experimental	0
+    build-metrics-fast	0
+    umap-api-fast	0
+    umap-transform-quality-fast	0
+    build-metrics-deterministic	0
+    umap-api-deterministic	0
+    umap-transform-quality-deterministic	0
+    corpus	0
+    build-mamba	0
+    mamba-api	0
+    mamba-long-backward	2
+
+=== done === 22:38:21
+artifacts in /root/mojolearn/bench/results/e1/2026-09-05_223146-mojolearn-e2-amd
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card
+[18:38:21 amd] extra check: tree-ctr-slice (bound 2673s)
+EXTRA-tree-ctr-slice-EXIT=1
+Included from /root/mojolearn/checks/tree_ctr_slice_check.mojo:39:
+Included from /root/mojolearn/gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:209:
+/root/mojolearn/gbdt/methods/greedy_subsets_searcher/kernel/split_points.mojo:1242:23: warning: assignment to 'dst' was never used; assign to '_' instead?
+            var dst = 0
+                      ^
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: weighted tensor fixture did not cover a zero-weight leaf
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+[18:38:49 amd] extra check: ordered-boosting (bound 2645s)
+EXTRA-ordered-boosting-EXIT=0
+  ok   O2 -- 1463 doc ids, identity and permuted ( 1463 moved )
+  ok   O3 -- 12 partitions, 1463 positions: bin, index, both gathered columns, offset, size, weight and sum, all per cell
+  ok   O5 -- 3072 histogram cells exact at FoldCount 12 ( stripe 16 , stride 12 ), scanned
+  ok   O6 -- 3 of 7 score functions run at FoldCount 12 , the other 4 raise and all 4 still run at 1
+  ok   O4 -- two splits at FoldBits 4 : 1463 positions in order, 48 non-empty partitions of 64 , fold id intact ( 1463 positions moved )
+  ok   O5b -- 12288 cells exact at 4 leaves x 12 folds: partition stride 16 , histogram stride 12
+  ok   O7 -- the 4-of-7 score refusal fires with folds and not without; A FOLD-BASED TREE GROWS at FoldCount 12 ( 1 splits, against 1 for the single-task control at the same depth ). The split counts are NOT required to match: the fold arm scores each split on a different partition of the data, which is the point of ordered scoring.
+ordered boosting: OK
+[18:39:06 amd] fetch artifacts
+[18:39:22 amd] fetched: 2026-09-05_223146-mojolearn-e2-amd
+[18:39:33 amd] leg done; destroying
+[18:39:33 amd] teardown (rc=0)
+[18:39:34 amd] DELETE droplet 598106166 -> HTTP 204
+[18:39:35 amd] post-destroy GET droplet 598106166 -> HTTP 200
+[18:39:41 amd] post-destroy GET droplet 598106166 -> HTTP 200
+[18:39:47 amd] post-destroy GET droplet 598106166 -> HTTP 404
+[18:39:47 amd] dead-man timer cancelled

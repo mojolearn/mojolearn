@@ -1,0 +1,51 @@
+Imported from /root/mojolearn/checks/ordered_boosting_check.mojo:97:
+Imported from /root/mojolearn/gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo:92:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/checks/ordered_boosting_check.mojo:97:
+Imported from /root/mojolearn/gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo:92:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/checks/ordered_boosting_check.mojo:97:
+Imported from /root/mojolearn/gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo:92:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/checks/ordered_boosting_check.mojo:97:
+Imported from /root/mojolearn/gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo:92:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/checks/ordered_boosting_check.mojo:97:
+Imported from /root/mojolearn/gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo:92:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/root/mojolearn/checks/ordered_boosting_check.mojo:481:9: warning: ref 'j' was never used, remove it?
+    for j in range(N_HB):
+        ^
+Included from /root/mojolearn/checks/ordered_boosting_check.mojo:105:
+/root/mojolearn/gbdt/methods/pointwise_optimization_subsets.mojo:481:24: warning: assignment to 'adapt_blocks' was never used; assign to '_' instead?
+        adapt_blocks = 1
+                       ^
+  ok   O1 -- 6 folds, FoldCount 12 FoldBits 4 stripe 16 ,  1463 positions over 600 rows
+  ok   O2 -- 1463 doc ids, identity and permuted ( 1463 moved )
+  ok   O3 -- 12 partitions, 1463 positions: bin, index, both gathered columns, offset, size, weight and sum, all per cell
+  ok   O5 -- 3072 histogram cells exact at FoldCount 12 ( stripe 16 , stride 12 ), scanned
+  ok   O6 -- 3 of 7 score functions run at FoldCount 12 , the other 4 raise and all 4 still run at 1
+  ok   O4 -- two splits at FoldBits 4 : 1463 positions in order, 48 non-empty partitions of 64 , fold id intact ( 1463 positions moved )
+  ok   O5b -- 12288 cells exact at 4 leaves x 12 folds: partition stride 16 , histogram stride 12
+  ok   O7 -- the 4-of-7 score refusal fires with folds and not without; A FOLD-BASED TREE GROWS at FoldCount 12 ( 1 splits, against 1 for the single-task control at the same depth ). The split counts are NOT required to match: the fold arm scores each split on a different partition of the data, which is the point of ordered scoring.
+ordered boosting: OK

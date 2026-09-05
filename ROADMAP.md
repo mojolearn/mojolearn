@@ -77,6 +77,14 @@ did not put self first. See the
 [retained failures](bench/results/e1g/2026-09-05_175405-nvidia-mamba/README.md).
 The fixes normalize UMAP's self slot in both graph adapters and expose the
 already-computed Mamba3 public gradients; fresh AMD/NVIDIA gates remain required.
+AMD at `6a3a2d30` passed the self-neighbor regression and all six expanded
+UMAP cases in every mode, plus all five baseline backward cases. Its long
+certificate failed before execution because host `python` was absent from
+PATH; the launcher now runs inside pixi. The weighted CatBoost fixture did
+not exercise its required zero-weight leaf and remains RED; the fold-axis
+gate passed. See the [AMD record](bench/results/e1/2026-09-05_223146-mojolearn-e2-amd/README.md).
+The next matching AMD/NVIDIA source snapshot is `d88c7883`; no numerical
+threshold was changed in response to either failure.
 The serial follow-up payload uses its former two-arm kNN timing slot for the
 long-sequence certificate; kNN timings belong to the dedicated four-arm leg.
 

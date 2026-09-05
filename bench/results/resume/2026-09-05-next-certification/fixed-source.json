@@ -1,0 +1,7 @@
+{
+  "source_commit": "6a3a2d30ab53e9207d327df38f4d22fb5111535e",
+  "implementation_commit": "f31f60d5ae5c093c3fb3b4c16949d0504f453ba1",
+  "base_commit": "5658d28e357b293540263a0de062caf2cfcc5d50",
+  "excluded_new_files": "bench/results/**",
+  "all_other_tracked_files_match": true
+}
