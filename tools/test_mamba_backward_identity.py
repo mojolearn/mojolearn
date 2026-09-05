@@ -37,6 +37,10 @@ CASES = {
     "mamba2-l257": ("mamba2", "m2_base_b1_l257_d64"),
     "mamba2-state": ("mamba2", "m2_base_b1_l257_d64"),
 }
+LONG_CASES = {
+    "mamba1-l64": ("mamba1", "base_b1_l64_d8"),
+    "mamba3-l65": ("mamba3", "m3_base_b1_l65_d64"),
+}
 SOURCE = "a" * 64
 POLICY = "incoming_state_before_chunk0; block_output_objective; final_state_cotangent=zero"
 
@@ -68,13 +72,13 @@ class BackwardIdentityTests(unittest.TestCase):
         values.update(updates)
         path.write_text("".join(f"{k}={v}\n" for k, v in values.items()))
 
-    def make_certificate(self, root, vendor):
+    def make_certificate(self, root, vendor, cases=CASES):
         root.mkdir()
         (root / "environment.txt").write_text(
             f"commit={'b' * 40}\nsource_sha256={SOURCE}\nmode=IDENTICAL\nvendor={vendor}\n"
         )
         (root / "device.csv").write_text("name,vendor\nsynthetic-test-device," + vendor + "\n")
-        for label, (family, case) in CASES.items():
+        for label, (family, case) in cases.items():
             directory = root / label
             actual = directory / "actual"
             oracle = directory / "oracle"
@@ -99,11 +103,11 @@ class BackwardIdentityTests(unittest.TestCase):
             identity.capture(actual, oracle, directory / "native", SOURCE)
             shutil.copyfile(actual / "dump_manifest.json", directory / "dump_manifest.json")
             shutil.copyfile(oracle / "manifest.json", directory / "oracle_manifest.json")
-        self.rehash_results(root)
+        self.rehash_results(root, cases)
 
-    def rehash_results(self, root):
+    def rehash_results(self, root, cases=CASES):
         rows = ["family\tverdict\texit_code\toracle_sha256\tdump_sha256"]
-        for label in CASES:
+        for label in cases:
             directory = root / label
             rows.append("\t".join([label, "GREEN", "0",
                                   identity.digest(directory / "oracle_manifest.json"),
@@ -119,6 +123,28 @@ class BackwardIdentityTests(unittest.TestCase):
             identity.compare([self.baseline, self.other])
         self.assertIn("BITWISE PASS", output.getvalue())
         self.assertEqual(set(identity.load_certificate(self.other)[1]), set(CASES))
+
+    def test_long_sequence_profile_requires_both_named_cases(self):
+        first, second = self.root / 'long-amd', self.root / 'long-nvidia'
+        self.make_certificate(first, 'amd', LONG_CASES)
+        self.environment(first, profile='long-sequence-v1')
+        shutil.copytree(first, second)
+        self.environment(second, vendor='nvidia')
+        with redirect_stdout(io.StringIO()) as output:
+            identity.compare([first, second])
+        self.assertIn('21 gradient tensors', output.getvalue())
+        with self.assertRaisesRegex(ValueError, 'profile differs'):
+            identity.compare([self.baseline, first])
+        path = second / 'results.tsv'
+        path.write_text('\n'.join(path.read_text().splitlines()[:-1]) + '\n')
+        with self.assertRaisesRegex(ValueError, 'expected exactly'):
+            identity.load_certificate(second)
+
+    def test_profile_cannot_relabel_existing_fixtures(self):
+        for profile in ('long-sequence-v1', 'unknown'):
+            with self.subTest(profile=profile):
+                self.environment(self.other, profile=profile)
+                self.assert_rejected()
 
     def test_changed_gradient_byte_rejected(self):
         path = self.other / "mamba2/native/grad.x.f32"

@@ -1,11 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Execute and dump the first composed Mamba-1 device-backward segment.
-
-The segment is real device arithmetic: forward -> output-projection dA/dB ->
-gate derivative -> D-skip token reduction. It emits the two complete parameter
-gradients this segment owns. Everything before the scan remains explicitly
-absent from the partial manifest.
-"""
+"""Dump complete Mamba-1 public-prefill gradients for named corpus fixtures."""
 
 from std.memory import bitcast
 from std.os import getenv
@@ -101,8 +95,14 @@ def _write_f32(path: String, values: List[Float32]) raises:
 
 
 def main() raises:
-    # tools/mamba_gradient_oracle.py's Mamba-1 default.
-    comptime case_k = 1  # base_b2_l4_d8
+    var case_k = 1
+    var case_name = String("base_b2_l4_d8")
+    var requested_case = String(getenv("MOJOLEARN_MAMBA1_GRAD_CASE"))
+    if requested_case != "":
+        if requested_case != "base_b1_l64_d8":
+            raise Error("MOJOLEARN_MAMBA1_GRAD_CASE supports only base_b1_l64_d8")
+        case_k = 3
+        case_name = requested_case
     var fixture = corpus_case(case_k)
     var weights = corpus_case_weights(case_k)
     var dims = MambaDims.of(fixture.d_model)
@@ -382,7 +382,7 @@ def main() raises:
     with open(output + "/dump_manifest.json", "w") as fh:
         fh.write(
             "{\"schema\":\"mojolearn.mamba.gradient-dump.v1\","
-            "\"family\":\"mamba1\",\"case\":\"base_b2_l4_d8\","
+            "\"family\":\"mamba1\",\"case\":\"" + case_name + "\","
             "\"objective\":\"signed_dyadic_weight_v1\","
             "\"producer\":\"mamba1-device-whole-pass-v1\","
             "\"partial\":false,"

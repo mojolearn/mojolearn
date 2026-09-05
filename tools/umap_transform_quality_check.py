@@ -48,7 +48,7 @@ SOURCE_FILES = (
 )
 
 
-def fixtures():
+def fixtures(profile="baseline"):
     # Dyadic coordinates make the fixture bytes independent of libm/RNG.
     t = (np.arange(128, dtype=np.float32) - 64) / np.float32(64)
     curve = np.column_stack((t, t * t, t * t * t)).astype(np.float32)
@@ -63,6 +63,21 @@ def fixtures():
     qv = (j // 7 - np.float32(3)) / np.float32(4)
     query = np.column_stack((qu, qv, (qu * qu - qv * qv) / np.float32(2)))
     yield "saddle_grid64_cellcenters49", train.astype(np.float32), query.astype(np.float32), 3, 7
+    if profile == "expanded":
+        t = (np.arange(256, dtype=np.float32) - 128) / np.float32(128)
+        curve = np.column_stack((t, t * t, t * t * t)).astype(np.float32)
+        for seed in (3, 41):
+            yield f"cubic256_interleaved128_128_seed{seed}", curve[::2].copy(), curve[1::2].copy(), 2, seed
+        i = np.arange(128, dtype=np.float32)
+        u = (i % 16 - np.float32(7.5)) / np.float32(8)
+        v = (i // 16 - np.float32(3.5)) / np.float32(4)
+        train = np.column_stack((u, v, (u * u - v * v) / np.float32(2)))
+        j = np.arange(105, dtype=np.float32)
+        qu = (j % 15 - np.float32(7)) / np.float32(8)
+        qv = (j // 15 - np.float32(3)) / np.float32(4)
+        query = np.column_stack((qu, qv, (qu * qu - qv * qv) / np.float32(2)))
+        for seed in (11, 29):
+            yield f"saddle_grid128_cellcenters105_seed{seed}", train.copy(), query.copy(), 3, seed
 
 
 def neighbor_order(query, train):
@@ -135,11 +150,14 @@ def main():
     parser.add_argument("--device", required=True, help="Actual device reported by the main operator")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--source-root", type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument("--profile", choices=("baseline", "expanded"), default="baseline",
+                        help="Expanded adds larger held-out fixtures, seeds and parameter settings")
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     record = {"schema": "umap.transform.heldout-quality.v1", "status": "RUNNING",
               "started_utc": datetime.now(timezone.utc).isoformat(),
-              "mode": args.mode, "device": args.device, "platform": platform.platform(),
+              "mode": args.mode, "device": args.device, "profile": args.profile,
+              "platform": platform.platform(),
               "python": platform.python_version(), "numpy": np.__version__,
               "mojolearn": mojolearn.__version__, "package_file": mojolearn.__file__,
               "harness_sha256": sha(Path(__file__)), "source": provenance(args.source_root.resolve()),
@@ -151,11 +169,13 @@ def main():
               "scope": "Named held-out quality cases; not identity, upstream parity or performance",
               "results": []}
     save(args.output, record)
-    for name, train, query, dimensions, seed in fixtures():
+    for name, train, query, dimensions, seed in fixtures(args.profile):
         config = dict(n_neighbors=8, n_components=dimensions, n_epochs=200,
                       random_state=seed, min_dist=0.1, spread=1.0,
                       set_op_mix_ratio=1.0, local_connectivity=1.0,
                       metric="euclidean", init="spectral")
+        if len(train) == 128:
+            config.update(n_neighbors=15, min_dist=0.2)
         row = {"profile": name, "parameters": config, "passed": False,
                "training_input": bits(train), "query_input": bits(query),
                "transform_schedule": {"epochs": 66, "initial_learning_rate": 0.25,
@@ -186,7 +206,7 @@ def main():
                     or model._transform_embedding.tobytes() != fitted.tobytes()):
                 raise RuntimeError("transform mutated training/query data or fitted coordinates")
             measured = quality(original, transformed, fitted)
-            # Both lengths (64 and 49) are coprime to 37; these are bijections.
+            # Every fixture length is coprime to 37; these are bijections.
             qp = (np.arange(len(query)) * 37 + 11) % len(query)
             tp = (np.arange(len(train)) * 37 + 11) % len(train)
             controls = {

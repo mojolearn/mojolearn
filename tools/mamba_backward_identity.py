@@ -44,6 +44,11 @@ CASES = {
     "mamba2-l257": ("mamba2", "m2_base_b1_l257_d64"),
     "mamba2-state": ("mamba2", "m2_base_b1_l257_d64"),
 }
+LONG_CASES = {
+    "mamba1-l64": ("mamba1", "base_b1_l64_d8"),
+    "mamba3-l65": ("mamba3", "m3_base_b1_l65_d64"),
+}
+PROFILES = {"baseline-v1": CASES, "long-sequence-v1": LONG_CASES}
 STATE_POLICY = (
     "incoming_state_before_chunk0; block_output_objective; "
     "final_state_cotangent=zero"
@@ -137,6 +142,10 @@ def capture(actual, oracle, output, source_sha256):
 def load_certificate(root):
     env = dict(line.split("=", 1) for line in
                (root / "environment.txt").read_text().splitlines() if "=" in line)
+    profile = env.get("profile", "baseline-v1")
+    if profile not in PROFILES:
+        raise ValueError(f"{root}: unknown certificate profile")
+    expected_cases = PROFILES[profile]
     if env.get("mode") != "IDENTICAL":
         raise ValueError(f"{root}: not an IDENTICAL certificate")
     if env.get("source_changed") or len(env.get("source_sha256", "")) != 64:
@@ -173,7 +182,7 @@ def load_certificate(root):
         dump = json.loads((root / name / "dump_manifest.json").read_text())
         reference = json.loads((root / name / "oracle_manifest.json").read_text())
         validate_metadata(dump, reference)
-        if name not in CASES or (dump["family"], dump["case"]) != CASES[name]:
+        if name not in expected_cases or (dump["family"], dump["case"]) != expected_cases[name]:
             raise ValueError(f"{name}: wrong certificate fixture")
         for key in ("family", "case", "objective", "public_prefill_leaves"):
             if manifest.get(key) != dump.get(key):
@@ -194,7 +203,7 @@ def load_certificate(root):
             if digest(path) != entry["sha256"]:
                 raise ValueError(f"{name}/{tensor}: retained bytes changed")
         cases[name] = manifest
-    expected = set(CASES)
+    expected = set(expected_cases)
     if set(cases) != expected:
         raise ValueError(f"{root}: expected exactly {sorted(expected)}")
     return env, cases
@@ -204,6 +213,8 @@ def compare(roots):
     baseline_env, baseline = load_certificate(roots[0])
     for root in roots[1:]:
         env, cases = load_certificate(root)
+        if env.get("profile", "baseline-v1") != baseline_env.get("profile", "baseline-v1"):
+            raise ValueError(f"{root}: profile differs from baseline")
         for key in ("commit", "source_sha256", "mode"):
             if not env.get(key) or env[key] != baseline_env.get(key):
                 raise ValueError(f"{root}: {key} differs from baseline")

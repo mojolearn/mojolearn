@@ -50,6 +50,29 @@ Linux installed-wheel qualification remains separate.
 
 ## UMAP follow-up priority
 
+Current execution order after the crash (main operator only; serial GPU
+workloads; AMD on DigitalOcean, NVIDIA on RunPod):
+
+1. Close AMD's missing four-arm kNN layout qualification against the retained
+   Apple/NVIDIA evidence. Keep the selector and transpose flags opt-in.
+2. Run the five existing Mamba backward cases and a separate
+   `long-sequence-v1` certificate: Mamba1 `base_b1_l64_d8` and Mamba3
+   `m3_base_b1_l65_d64`, requiring every public-prefill gradient. These 21
+   additional tensors must not be folded into the historical 54-tensor claim.
+3. Run UMAP's opt-in `expanded` held-out quality profile in all three modes:
+   the original two cases plus 128-training-row cubic and saddle fixtures,
+   each at two additional seeds, 15 neighbors and min_dist 0.2. Retain the
+   original thresholds and both correspondence-breaking controls. Compare
+   IDENTICAL inputs and embeddings only after both hardware legs finish.
+4. Revisit CatBoost's weighted two-level FeatureFreq slice and ordered-boosting
+   gaps. The fold-axis gate is not an end-to-end ordered booster: per-fold
+   cursors, prefix-only gradients and leaf estimation remain implementation
+   work. Keep comparator runs pinned to plain boosting until then.
+
+The longer Mamba and expanded UMAP fixtures are prepared, not yet certified.
+The serial follow-up payload uses its former two-arm kNN timing slot for the
+long-sequence certificate; kNN timings belong to the dedicated four-arm leg.
+
 UMAP is the next feature focus after the wheel release. Extend the identity
 fixtures beyond the current 8x1 case to multidimensional data, 3D output,
 multiple seeds and parameter settings, alongside independent embedding-quality
