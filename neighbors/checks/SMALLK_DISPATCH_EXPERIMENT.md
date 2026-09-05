@@ -66,7 +66,12 @@ the largest request's median from 17.241 ms selector-only to 9.273 ms;
 Apple did not reproduce that gain and regressed on the smallest request.
 See the [full comparison](../../bench/results/resume/2026-09-05-layout-apple-price/README.md)
 and its raw samples. These results do not justify changing all-vendor defaults.
-AMD, broader data distributions and installed-wheel qualification remain open.
+AMD MI325X subsequently passed the complete four-arm campaign at `64e70035`,
+with unchanged kNN code and toolchain files. Its outputs match NVIDIA and
+Apple; at 1,000 queries the baseline/selector/transpose/combined medians were
+66.968/65.703/6.671/5.522 ms. See the
+[AMD evidence](../../bench/results/e1/2026-09-05_215006-mojolearn-e2-amd/README.md).
+Broader data distributions and installed-wheel qualification remain open.
 
 The four-arm parser accepts ordinary runtime diagnostics before the first
 benchmark record, while requiring `LAYOUT_FLAGS` to be the first protocol

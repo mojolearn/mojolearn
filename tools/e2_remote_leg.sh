@@ -421,6 +421,10 @@ if [ "$CLONE_OK" != 1 ]; then
   if [ "${E2_SOURCE_PROFILE:-}" = "umap-mamba" ]; then
     # Match the bounded RunPod certificate source, plus the DO bootstrap.
     # No old result trees or generated corpus payloads cross the network.
+    EXTRA_CERT_SOURCE=()
+    case " ${E2_EXTRA_CHECKS:-} " in
+      *" tree-ctr-slice "*|*" ordered-boosting "*) EXTRA_CERT_SOURCE=(gbdt) ;;
+    esac
     git -C "$REPO" archive --format=tar "$COMMIT" -- \
       .gitattributes pixi.toml pixi.lock umap neighbors spectral core metrics cluster \
       checks bindings python gemm/__init__.mojo gemm/checks \
@@ -437,7 +441,7 @@ if [ "$CLONE_OK" != 1 ]; then
       tools/with_build_lock.sh tools/umap_identity_compare.py \
       tools/umap_mamba_followup.sh tools/umap_quality_check.py tools/umap_transform_quality_check.py \
       tools/umap_mamba_do_diag.sh tools/gpu_optimization_do_diag.sh tools/e1_bootstrap.sh \
-      bench/external/record_environment.sh | gzip > "$BUNDLE" \
+      bench/external/record_environment.sh "${EXTRA_CERT_SOURCE[@]}" | gzip > "$BUNDLE" \
       || { log "bounded archive failed"; exit 6; }
   else
     git -C "$REPO" archive --format=tar "$COMMIT" -- . ':!bench/results' \
@@ -542,6 +546,13 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
     # construction. That is DEVIATION 1091 in a different costume.
     WRAP=1
     case "$chk" in
+      # Focused correctness only: two compiler workers, one child at a time,
+      # with a five-minute sub-budget inside the existing lease/fetch bound.
+      # These gates do not certify an end-to-end ordered CatBoost booster.
+      tree-ctr-slice)
+        CMD='env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 timeout -k 10 300 pixi run mojo run -j 2 -I . checks/tree_ctr_slice_check.mojo' ;;
+      ordered-boosting)
+        CMD='env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 timeout -k 10 300 pixi run mojo run -j 2 -I . checks/ordered_boosting_check.mojo' ;;
       gemm-backward) CMD='pixi run mojo run -I . gemm/checks/gemm_backward_check.mojo' ;;
       # THE SPEED LANE. Both sides run under ONE MAC cap so a row is either
       # measured on both arms or skipped on both; a full-shape vendor number

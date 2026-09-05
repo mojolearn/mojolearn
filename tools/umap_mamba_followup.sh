@@ -21,6 +21,7 @@ run() {
     return "$status"
 }
 : > "$OUT/results.tsv"
+run umap-self-neighbors pixi run mojo run -j 2 -I . umap/checks/self_neighbor_check.mojo
 run umap-broader pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . umap/checks/identity_broader_check.mojo
 if run build-metrics bash bindings/build_metrics.sh; then
     run umap-api pixi run -e skgpu python python/mojolearn/tests/test_umap_surface.py

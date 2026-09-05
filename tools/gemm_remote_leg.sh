@@ -2428,7 +2428,7 @@ if [ "$work_remaining" -gt 60 ]; then
       > "$OUT/campaign-console.log" 2>&1
     followup_rc=$?
   else
-    MOJOLEARN_FOLLOWUP_OUT="$OUT/followup" MOJOLEARN_MAMBA_CERT_VENDOR="@VENDOR@" \
+    MOJOLEARN_COMMIT="@COMMIT@" MOJOLEARN_FOLLOWUP_OUT="$OUT/followup" MOJOLEARN_MAMBA_CERT_VENDOR="@VENDOR@" \
       timeout -k 30 "$work_remaining" bash tools/umap_mamba_followup.sh \
       > "$OUT/followup-console.log" 2>&1
     followup_rc=$?

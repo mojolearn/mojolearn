@@ -12,6 +12,39 @@ def _finite(v: Float32) -> Bool:
     return ((bits >> UInt32(23)) & UInt32(0xFF)) != UInt32(0xFF)
 
 
+def canonicalize_self_neighbors(
+    mut indices: List[UInt32], mut distances: List[Float32],
+    n_samples: Int, n_neighbors: Int,
+) raises:
+    """Adapt same-data kNN to UMAP's self-first graph convention.
+
+    Generic kNN sorts by computed distance and index. Duplicate rows, or
+    cancellation in expanded L2, can put another row before self. Self has
+    exact mathematical distance zero: insert it once, preserving the first
+    k-1 non-self candidates in their original order. Query-to-training
+    transform neighbors must never use this adapter.
+    """
+    if n_samples < 2 or n_neighbors < 2 or n_neighbors > n_samples:
+        raise Error("invalid UMAP self-neighbor shape")
+    if len(indices) != n_samples * n_neighbors or len(distances) != len(indices):
+        raise Error("UMAP self-neighbor arrays do not match their shape")
+    for row in range(n_samples):
+        var base = row * n_neighbors
+        var self_slot = -1
+        for col in range(n_neighbors):
+            if Int(indices[base + col]) == row:
+                if self_slot >= 0:
+                    raise Error("duplicate self index in UMAP neighbors")
+                self_slot = col
+        if self_slot < 0:
+            self_slot = n_neighbors - 1
+        for col in range(self_slot, 0, -1):
+            indices[base + col] = indices[base + col - 1]
+            distances[base + col] = distances[base + col - 1]
+        indices[base] = UInt32(row)
+        distances[base] = Float32(0.0)
+
+
 struct FuzzySimplicialGraph(Copyable, Movable):
     var n_samples: Int
     var n_neighbors: Int
