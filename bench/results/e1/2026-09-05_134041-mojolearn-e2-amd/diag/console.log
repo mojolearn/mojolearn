@@ -1,0 +1,15 @@
+pid 3240's current affinity list: 0-19
+pid 3240's new affinity list: 0-3
+smallk-specialized	0
+umap-transform-native	0
+umap-sparse-graph	0
+umap-sparse-fit	0
+umap-mamba	0
+umap-transform-api	0
+umap-transform-quality	0
+transformer-forward	0
+transformer-backward	0
+build-transformer	0
+transformer-api	0
+gemv-candidate	0
+knn-candidate	0

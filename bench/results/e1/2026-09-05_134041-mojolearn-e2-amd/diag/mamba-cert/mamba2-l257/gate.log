@@ -1,0 +1,43 @@
+✨ Pixi task (mamba-grad-m2-l257 in skgpu): oracle=/tmp/mojolearn-mamba2-l257-grad && actual=/tmp/mojolearn-mamba2-l257-actual && mkdir -p $oracle $actual && find $oracle -maxdepth 1 -type f -delete && find $actual -maxdepth 1 -type f -delete && python tools/mamba_gradient_oracle.py --family mamba2 --case m2_base_b1_l257_d64 --out $oracle && MOJOLEARN_MAMBA2_GRAD_CASE=m2_base_b1_l257_d64 MOJOLEARN_MAMBA_GRAD_DUMP=$actual tools/with_identical_mode.sh mojo run -I . mamba/checks/mamba2_backward_tail_dump.mojo && python tools/mamba_gradient_oracle.py --compare $oracle $actual --require-public-prefill
+wrote mamba2/m2_base_b1_l257_d64 gradients to /tmp/mojolearn-mamba2-l257-grad
+finite-difference worst relative-scale error: 2.906e-09
+Imported from /root/mojolearn/mamba/checks/mamba2_backward_tail_dump.mojo:22:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba2_backward_tail_dump.mojo:22:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/mamba/checks/mamba2_backward_tail_dump.mojo:22:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba2_backward_tail_dump.mojo:22:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba2_backward_tail_dump.mojo:22:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+MAMBA2 BACKWARD: all ten public parameter/input leaves emitted for prefill plus the explicit incoming initial_state cotangent; internal stage tensors remain diagnostic partials and decode/window backward remains explicitly unsupported
+  block_norm.weight exact-operand reduction: bitwise=True
+  conv1d.bias exact-operand reduction: bitwise=True
+  in_proj.weight exact-operands: bitwise=True, maxabs=0.000e+00
+Mamba gradient public-prefill comparison passed: 55 tensors
+  selected manifest policy=mamba2.public_prefill_leaves.exact10.v1
+  selected block_norm.weight: policy=mamba2.block_norm.weight.semantic_operand_plus_bitwise_leaf128_balanced.v1, direct-f64-reported-only maxabs=2.507e-06; operand semantic gates + exact-operand bitwise arithmetic are normative
+  selected conv1d.bias: policy=mamba2.conv1d.bias.semantic_operand_plus_bitwise_serial_batch_token.v1, direct-f64-reported-only maxabs=1.337e-05; operand semantic gates + exact-operand bitwise arithmetic are normative
+  selected in_proj.weight: policy=mamba2.in_proj_weight.compositional_operands_plus_bitwise_gemm.v1, direct-f64-reported-only maxabs=1.129e-05; operand semantic gates + exact-operand bitwise arithmetic are normative
+  selected out_proj.weight: oracle=pytorch-float32, policy=mamba2.l257.out_proj.row257_contraction.v1, rtol=1e-05, atol=3.2e-05
