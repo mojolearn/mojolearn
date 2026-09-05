@@ -856,6 +856,12 @@ if [ "$PAYLOAD" = "phase8" ]; then
     fi
 fi
 
+NVIDIA_CAMPAIGN=${MOJOLEARN_NVIDIA_CAMPAIGN:-0}
+case "$NVIDIA_CAMPAIGN" in 0|1) ;; *) leg_die "MOJOLEARN_NVIDIA_CAMPAIGN must be 0 or 1" ;; esac
+if [ "$NVIDIA_CAMPAIGN" = 1 ]; then
+    [ "$PAYLOAD" = mamba ] && [ "$VENDOR" = nvidia ] || leg_die "NVIDIA campaign requires nvidia --payload mamba"
+fi
+
 case "$WORK_TIMEOUT" in
     ''|*[!0-9]*) leg_die "gemm_remote_leg: --work-timeout must be seconds, got '$WORK_TIMEOUT'." ;;
 esac
@@ -1144,10 +1150,7 @@ LEG_SOURCE_PATHS_MAMBA=".gitattributes tools/mamba_backward_certify.sh tools/mam
 # pinned commit; do not replace it with a working-tree tar.
 LEG_ARCHIVE_PATHS_MAMBA=".gitattributes mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock umap neighbors spectral core checks/hardware_matrix.mojo tools/umap_identity_compare.py tools/umap_mamba_followup.sh tools/umap_quality_check.py bindings python metrics checks/vendor.mojo cluster checks"
 LEG_MAMBA_ARCHIVE_MAX_BYTES=10485760
-NVIDIA_CAMPAIGN=${MOJOLEARN_NVIDIA_CAMPAIGN:-0}
-case "$NVIDIA_CAMPAIGN" in 0|1) ;; *) leg_die "MOJOLEARN_NVIDIA_CAMPAIGN must be 0 or 1" ;; esac
 if [ "$NVIDIA_CAMPAIGN" = 1 ]; then
-    [ "$PAYLOAD" = mamba ] && [ "$VENDOR" = nvidia ] || leg_die "NVIDIA campaign requires nvidia --payload mamba"
     LEG_ARCHIVE_PATHS_MAMBA="$LEG_ARCHIVE_PATHS_MAMBA gemm transformer/__init__.mojo transformer/checks transformer/impl transformer/corpus/gen_corpus.py bench/__init__.mojo bench/gemv_serial_layout_main.mojo bench/knn_index_layout_main.mojo bench/speed bench/gemm_shapes.mojo tools/nvidia_campaign.sh tools/nvidia_public_compare.py tools/speed_torch_seq.py tools/transformer_corpus_check.py"
 fi
 
@@ -3787,7 +3790,7 @@ leg_rehearse() {
         rbad "A3 --minutes 90 is refused" "got exit $_rc: $_out"
     fi
 
-    _out=$( ( unset RUNPOD_API_KEY MOJOLEARN_RUNPOD_KEY_FILE; MOJOLEARN_GEMM_LEG_REHEARSAL=1 "$0" nvidia --rent 2>&1 ) ) && _rc=0 || _rc=$?
+    _out=$( ( unset RUNPOD_API_KEY MOJOLEARN_RUNPOD_KEY_FILE MOJOLEARN_NVIDIA_CAMPAIGN; MOJOLEARN_GEMM_LEG_REHEARSAL=1 "$0" nvidia --rent 2>&1 ) ) && _rc=0 || _rc=$?
     if [ "$_rc" != "0" ] && echo "$_out" | grep -q "RUNPOD_API_KEY"; then
         rok "A4 --rent without a key refuses and rents nothing"
     else
