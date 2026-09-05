@@ -1,0 +1,12 @@
+{
+  "source_commit": "9d6f4a0bdd40144d4b10965a003225ccf42d0a76",
+  "fix_commit": "6dc93269",
+  "binding_sha256": "542c8209eba3d42f231d7b6cd83925d2c5468aace48463519214e1566a9f74d6",
+  "device": "Apple M4",
+  "mode": "identical",
+  "compiler_workers": 4,
+  "blas_threads": 1,
+  "mamba_api_checks": 102,
+  "mamba_api_failures": 0,
+  "gemv_scope": "18 small exact legacy/candidate cases; no performance measurement; production dispatch unchanged"
+}
