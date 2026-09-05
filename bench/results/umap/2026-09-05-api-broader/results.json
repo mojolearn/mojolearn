@@ -1,0 +1,29 @@
+{
+  "artifact_version": "0.5.0",
+  "device": "Apple M4",
+  "scope": "Local installed API validation; multidimensional repeats are not cross-vendor certification or embedding quality evidence",
+  "results": [
+    {
+      "mode": "fast",
+      "exit_code": 0
+    },
+    {
+      "mode": "deterministic",
+      "exit_code": 0
+    },
+    {
+      "mode": "identical",
+      "exit_code": 0
+    }
+  ],
+  "source_base_commit": "381137f57150689e76adc50bfb418f2ec4c8bafb",
+  "test_file": "python/mojolearn/tests/test_umap_surface.py",
+  "test_sha256": "358a91bbfd7afe5262bbd8b11440ca5ba1db769ac32231461829edd1d93662ec",
+  "wheel_sha256": "4652f8ecbf8f131f7707e08972af3126f12ef0ebb93f05230d389075c6ea64cc",
+  "new_profiles": 3,
+  "input_shape": [
+    16,
+    3
+  ],
+  "testing_lane": "main only; serialized with tools/with_build_lock.sh"
+}

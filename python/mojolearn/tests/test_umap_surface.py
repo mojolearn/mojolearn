@@ -62,6 +62,35 @@ class UMAPSurfaceTests(unittest.TestCase):
         self.assertEqual(layout.shape, (12, 3))
         self.assertTrue(np.isfinite(layout).all())
 
+    def test_multidimensional_parameter_profiles(self):
+        # Exact dyadic inputs avoid platform-dependent fixture generation.
+        i = np.arange(16, dtype=np.float32)
+        x = np.column_stack((i / 8, ((i * 7) % 17) / 8,
+                             ((i * i + 3) % 19) / 8))
+        profiles = [
+            dict(n_components=2, random_state=0, n_neighbors=4,
+                 min_dist=0.0, spread=1.0, set_op_mix_ratio=1.0),
+            dict(n_components=3, random_state=7, n_neighbors=5,
+                 min_dist=0.25, spread=1.5, set_op_mix_ratio=0.5),
+            dict(n_components=2, random_state=31, n_neighbors=6,
+                 min_dist=0.5, spread=2.0, set_op_mix_ratio=0.75),
+        ]
+        for config in profiles:
+            with self.subTest(**config):
+                before = x.copy()
+                model = UMAP(n_epochs=12, numeric_mode=self.mode, **config)
+                layout = model.fit_transform(x)
+                self.assertEqual(layout.shape, (16, config["n_components"]))
+                self.assertEqual(model.n_features_in_, 3)
+                self.assertTrue(np.isfinite(layout).all())
+                self.assertGreater(float(np.ptp(layout)), 0.0)
+                np.testing.assert_array_equal(x, before)
+                if self.mode in ("identical", "deterministic"):
+                    again = UMAP(n_epochs=12, numeric_mode=self.mode,
+                                 **config).fit_transform(x)
+                    np.testing.assert_array_equal(layout.view(np.uint32),
+                                                  again.view(np.uint32))
+
     def test_nonfinite_input(self):
         for value in (np.nan, np.inf, -np.inf):
             with self.subTest(value=value):

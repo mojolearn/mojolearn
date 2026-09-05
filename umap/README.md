@@ -72,3 +72,14 @@ The latter two tasks each cover 42 cases: NaN, positive infinity and negative
 infinity across six arguments in each optimizer and the two public data
 entries. `check-umap-stage-identity` captures the named IDENTICAL fixture for
 comparison with the command above.
+
+## Broader local API coverage (2026-09-05)
+
+The installed macOS 0.5.0 wheel also passes three 16x3 input profiles varying
+neighbors, seed, output dimension, min_dist, spread and graph mixing. All
+three modes produce finite noncollapsed output without changing the input;
+DETERMINISTIC and IDENTICAL repeat by raw layout bits. The seven API test
+groups pass in each mode. See the
+[local results](../bench/results/umap/2026-09-05-api-broader/results.json).
+These checks do not establish embedding quality or add remote identity
+coverage. NVIDIA and DigitalOcean AMD runs remain pending.
