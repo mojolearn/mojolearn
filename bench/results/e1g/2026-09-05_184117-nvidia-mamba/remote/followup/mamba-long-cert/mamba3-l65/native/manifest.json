@@ -1,0 +1,110 @@
+{
+  "case": "m3_base_b1_l65_d64",
+  "family": "mamba3",
+  "mode": "IDENTICAL",
+  "objective": "signed_dyadic_weight_v1",
+  "public_prefill_leaves": [
+    "x",
+    "block_norm.weight",
+    "in_proj.weight",
+    "dt_bias",
+    "B_norm.weight",
+    "C_norm.weight",
+    "B_bias",
+    "C_bias",
+    "D",
+    "out_proj.weight"
+  ],
+  "schema": "mojolearn.mamba.backward-bytes.v1",
+  "source_sha256": "dff66901fb50672621e32f3b415dd8f98d497df54b661cbd1af031e5f0fcf0a4",
+  "state_boundary_leaves": [],
+  "state_boundary_policy": null,
+  "tensors": {
+    "B_bias": {
+      "dtype": "<f4",
+      "file": "grad.B_bias.f32",
+      "sha256": "ce3ef97baf68aed27e9b62da5b97bed5ec8803e8517c3c8825944176335702f1",
+      "shape": [
+        2,
+        128
+      ]
+    },
+    "B_norm.weight": {
+      "dtype": "<f4",
+      "file": "grad.B_norm.weight.f32",
+      "sha256": "5a8431331bcde3224038a35694c7a887dfe56ca46ce7440ed6df0f64f413610a",
+      "shape": [
+        128
+      ]
+    },
+    "C_bias": {
+      "dtype": "<f4",
+      "file": "grad.C_bias.f32",
+      "sha256": "51f8a541e351d8a1433665dbd9f82106e4e7e2673fc41e009a9997447896741d",
+      "shape": [
+        2,
+        128
+      ]
+    },
+    "C_norm.weight": {
+      "dtype": "<f4",
+      "file": "grad.C_norm.weight.f32",
+      "sha256": "a60efbb8a0f5dcef6b51d1553633631d55b02f81d8f2e131ae7649aa1f4268d3",
+      "shape": [
+        128
+      ]
+    },
+    "D": {
+      "dtype": "<f4",
+      "file": "grad.D.f32",
+      "sha256": "82018d15ff60f04ca2a372ff6021a4d30878118fabce29bf79c6d44a7c9d08b5",
+      "shape": [
+        2
+      ]
+    },
+    "block_norm.weight": {
+      "dtype": "<f4",
+      "file": "grad.block_norm.weight.f32",
+      "sha256": "73aca7d501c6620f1bf7d7e09e06d5b0ab1a5713f39d3aae83e76f353cd0a6c0",
+      "shape": [
+        64
+      ]
+    },
+    "dt_bias": {
+      "dtype": "<f4",
+      "file": "grad.dt_bias.f32",
+      "sha256": "cc5812ad9eb21dd8d07487dcc42e5abb6b6080f0d77ec8ac00f56ca633a508b6",
+      "shape": [
+        2
+      ]
+    },
+    "in_proj.weight": {
+      "dtype": "<f4",
+      "file": "grad.in_proj.weight.f32",
+      "sha256": "901e9ff84241eed6d574d9b22d35810efd1cef057fe9fd1063004d3accdb3a5a",
+      "shape": [
+        550,
+        64
+      ]
+    },
+    "out_proj.weight": {
+      "dtype": "<f4",
+      "file": "grad.out_proj.weight.f32",
+      "sha256": "be9acb05d37b9f40b5bf4985196ae5afac4b0ea050e9ac5d0f015624432fbc4b",
+      "shape": [
+        64,
+        128
+      ]
+    },
+    "x": {
+      "dtype": "<f4",
+      "file": "grad.x.f32",
+      "sha256": "f442d2d0ff1ec41703e6c44f01c8a56039e2671edb402a40dcacfdf6a767027b",
+      "shape": [
+        1,
+        65,
+        64
+      ]
+    }
+  }
+}

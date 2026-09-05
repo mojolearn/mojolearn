@@ -1,0 +1,47 @@
+✨ Pixi task (mamba-grad-m3-l65 in skgpu): oracle=/tmp/mojolearn-mamba3-l65-grad && actual=/tmp/mojolearn-mamba3-l65-actual && mkdir -p $oracle $actual && find $oracle -maxdepth 1 -type f -delete && find $actual -maxdepth 1 -type f -delete && python tools/mamba_gradient_oracle.py --family mamba3 --case m3_base_b1_l65_d64 --out $oracle && MOJOLEARN_MAMBA3_GRAD_CASE=m3_base_b1_l65_d64 MOJOLEARN_MAMBA_GRAD_DUMP=$actual tools/with_identical_mode.sh mojo run -I . mamba/checks/mamba3_backward_tail_dump.mojo && python tools/mamba_gradient_oracle.py --compare $oracle $actual --require-public-prefill
+wrote mamba3/m3_base_b1_l65_d64 gradients to /tmp/mojolearn-mamba3-l65-grad
+finite-difference worst relative-scale error: 1.587e-09
+Imported from /root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:10:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:10:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:10:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:10:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:10:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Mamba gradient comparison FAILED
+  partial.dt.available_total: maxabs=1.907e-05, bad=1; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06
+  partial.dt.current_total: maxabs=1.907e-05, bad=1; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06
+  partial.dt.with_seg: maxabs=1.907e-05, bad=1; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06
+  partial.gamma.total: maxabs=4.578e-05, bad=2; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06
+  partial.join.dt.available_total: maxabs=1.144e-05, bad=1; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06
+  partial.join.dt.current_total: maxabs=1.144e-05, bad=2; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06
+  partial.join.gamma.total: maxabs=2.384e-05, bad=1; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06
+  partial.join.kscale: maxabs=2.503e-06, bad=2; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06
+  partial.join.s15.scale: maxabs=2.289e-05, bad=3; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06
+  partial.qkdot.gamma: maxabs=5.245e-06, bad=1; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06
+  partial.s15.scale: maxabs=4.578e-05, bad=3; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06
+  partial.scale.beta: maxabs=4.578e-05, bad=3; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06
+  partial.scale.gamma: maxabs=4.578e-05, bad=3; oracle=pytorch-float32, policy=default, rtol=1e-05, atol=1e-06

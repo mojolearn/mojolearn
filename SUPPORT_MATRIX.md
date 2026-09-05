@@ -52,7 +52,8 @@ cards on Apple, NVIDIA, and AMD; it does not extend beyond that fixture.
 |---|---|---|---|
 | Gradient boosting | Beta | Three-vendor cards for recorded configurations | Complete ordered boosting and categorical/CTR coverage; improve FAST performance without weakening checks. |
 | Random Forest / Extra Trees | Beta | Three-vendor cards for recorded configurations | Keep sklearn `max_leaf_nodes` semantics distinct from cuML-style level-order `max_leaves`; extend NVIDIA performance coverage. |
-| k-means, k-NN, DBSCAN | Beta | Three-vendor cards for recorded fixtures | The newer k-NN selector is experimental and is not the normal dispatch; component and public identity gates do not imply an end-to-end speedup. |
+| k-means, DBSCAN | Beta | Three-vendor cards for recorded fixtures | Broaden shapes and public-surface wheel smoke. |
+| k-NN | Beta | Three-vendor cards; the completed AMD four-arm layout outputs also match retained NVIDIA outputs and Apple hashes | Selector and transposed-distance flags remain opt-in. Broaden distributions and installed/external comparisons before changing normal dispatch. |
 | PCA, truncated SVD, OLS, Ridge, logistic regression | Beta | Three-vendor matrix for recorded fixtures | Broaden shapes and public-surface wheel smoke. |
 | FP32 matrix multiplication | Beta | Three-vendor frozen-profile sweep | Shapes and plans outside the recorded profile remain uncertified. |
 | Isolation Forest | Beta | Three-vendor card for the recorded fixture | Re-run current bindings on NVIDIA architectures affected by earlier context-lifetime failures. |
@@ -65,6 +66,11 @@ cards on Apple, NVIDIA, and AMD; it does not extend beyond that fixture.
 | Transformer block | Experimental | Three-vendor operator card for an earlier fixture | Newer AMD source API checks passed; NVIDIA Python API qualification and the independent corpus API oracle remain open. Native certificates do not close those gates. |
 | UMAP | Published 0.5.0: dense `fit`/`fit_transform`. Source 0.6.0 candidate: `transform` and CSR graph storage for public fitting | Original three-vendor fixture: 186 stage cells at `718495cd`; separate newer source transform fixtures match across three vendors | Integrated CSR fit/transform API passed all modes on Apple/NVIDIA/AMD; macOS 0.6.0 installed checks passed. Publication and Linux wheels remain pending. |
 | Training primitives and checkpointing | Experimental | Local correctness gates | Cross-vendor public-surface qualification remains open. |
+
+The [AMD k-NN layout record](bench/results/e1/2026-09-05_215006-mojolearn-e2-amd/README.md)
+retains all four arms, correctness bytes, rotating timing rounds and the
+comparison with earlier NVIDIA and Apple evidence. Its speedups are scoped
+to those fixtures and devices, not a general dispatch or scalability claim.
 
 ## What counts as certification
 
