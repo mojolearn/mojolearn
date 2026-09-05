@@ -443,6 +443,8 @@ LEASE_DIR="${MOJOLEARN_LEASE_DIR:-bench/results/runpod_leases}"
 # `phase8` runs tools/e1_bootstrap.sh so that phase 8's seven lanes come home
 # for tools/e3_round_judge.sh section 7.
 PAYLOAD="${MOJOLEARN_GEMM_LEG_PAYLOAD:-gemm}"
+# Optional numerical-source pin; the orchestration script still snapshots itself.
+SOURCE_REF=""
 # speed only. ONE FAMILY PER LEASE; see the refusal above for why that is
 # arithmetic rather than taste.
 #   gemmseq    gemm + transformer + mamba. torch is already in the image, so
@@ -637,6 +639,7 @@ leg_usage() {
     echo "         --ssh TARGET --local-card PATH --column-sweep"
     echo "         --ready-timeout SECONDS"
     echo "         --payload gemm|phase8|speed|mamba"
+    echo "         --source-ref REF        mamba: archive this commit (default HEAD)"
     echo "         --apple-dir DIR         phase8: the Apple column to be"
     echo "                                 judged against"
     echo "         --work-timeout SECONDS  phase8/speed/mamba: bound the work"
@@ -675,6 +678,12 @@ while [ $# -gt 0 ]; do
         --ready-timeout) shift; READY_TIMEOUT="${1:-}" ;;
         --column-sweep)  SWEEP=1 ;;
         --payload)       shift; PAYLOAD="${1:-}" ;;
+        --source-ref)
+            if [ $# -lt 2 ] || [ -z "$2" ]; then
+                echo "gemm_remote_leg: --source-ref requires a commit ref." >&2
+                exit 2
+            fi
+            shift; SOURCE_REF="$1" ;;
         --phase8)        PAYLOAD="phase8" ;;
         --speed)         PAYLOAD="speed" ;;
         --family)        shift; SPEED_FAMILY="${1:-}" ;;
@@ -753,6 +762,17 @@ case "$PAYLOAD" in
         echo "                   public-prefill certificate; no training." >&2
         exit 2 ;;
 esac
+
+# Resolve once before any rental or rehearsal can run. Quoting and
+# --end-of-options keep refs as data, including refs beginning with '-'.
+if [ -n "$SOURCE_REF" ] && [ "$PAYLOAD" != "mamba" ]; then
+    echo "gemm_remote_leg: --source-ref is supported only with --payload mamba." >&2
+    exit 2
+fi
+if ! COMMIT=$(git rev-parse --verify --end-of-options "${SOURCE_REF:-HEAD}^{commit}" 2>/dev/null); then
+    echo "gemm_remote_leg: invalid source ref '${SOURCE_REF:-HEAD}'; expected a commit." >&2
+    exit 2
+fi
 
 if [ "$PAYLOAD" = "speed" ]; then
     # THE ALIAS IS RESOLVED HERE, after the argument loop, so that BOTH the
@@ -1153,8 +1173,13 @@ leg_check_tree_clean() {
     # shellcheck disable=SC2086
     _dirty=$(git status --porcelain -- $_paths 2>/dev/null || true)
     if [ -n "$_dirty" ]; then
-        echo "  the working tree is DIRTY for paths the $PAYLOAD payload's"
-        echo "  numbers can reach:"
+        if [ -n "$SOURCE_REF" ]; then
+            echo "  conservative clean-tree gate: modified $PAYLOAD source paths."
+            echo "  The remote payload uses pinned commit $COMMIT, not these edits:"
+        else
+            echo "  the working tree is DIRTY for paths the $PAYLOAD payload's"
+            echo "  numbers can reach:"
+        fi
         echo "$_dirty" | sed 's/^/    /'
         # AN UNTRACKED FILE COUNTS TOO, and that is the half people argue
         # with. `git archive` does not ship it, so the BOX never sees it --
@@ -4379,8 +4404,22 @@ leg_rehearse() {
         rok "L1 the Apple reference card is a real measurement"
     fi
 
+    # Explicit pins must fail closed before the paid path can be reached.
+    _out=$(MOJOLEARN_GEMM_LEG_REHEARSAL=1 "$0" nvidia --payload mamba --source-ref refs/mojolearn-missing-source-ref-test --rent 2>&1) && _rc=0 || _rc=$?
+    if [ "$_rc" = "2" ] && echo "$_out" | grep -q "invalid source ref"; then
+        rok "G0a an unknown --source-ref refuses before rental"
+    else
+        rbad "G0a an unknown --source-ref refuses before rental" "got exit $_rc: $_out"
+    fi
+    _out=$(MOJOLEARN_GEMM_LEG_REHEARSAL=1 "$0" nvidia --payload gemm --source-ref "$COMMIT" --rent 2>&1) && _rc=0 || _rc=$?
+    if [ "$_rc" = "2" ] && echo "$_out" | grep -q "only with --payload mamba"; then
+        rok "G0b --source-ref refuses other payloads"
+    else
+        rbad "G0b --source-ref refuses other payloads" "got exit $_rc: $_out"
+    fi
+
     # -- G. source shipping --------------------------------------------------
-    if leg_git_archive HEAD > "$TMPD/dry.tar" 2>"$TMPD/g1.err"; then
+    if leg_git_archive "$COMMIT" > "$TMPD/dry.tar" 2>"$TMPD/g1.err"; then
         mkdir -p "$TMPD/dryarch"
         ( cd "$TMPD/dryarch" && tar xf "$TMPD/dry.tar" )
         _h=$(leg_source_sha_recipe "$TMPD/dryarch")
@@ -4517,13 +4556,13 @@ echo "   lease:    $MINUTES minutes (hard cap $MINUTES_CAP)"
 echo "   out:      $OUT"
 echo
 
-COMMIT=$(git rev-parse HEAD 2>/dev/null || echo unknown)
-COMMIT_LINE=$(git log -1 --format='%h parent %p' 2>/dev/null || echo unknown)
+COMMIT_LINE=$(git log -1 --format='%h parent %p' "$COMMIT" -- 2>/dev/null || echo unknown)
 {
     echo "$COMMIT"
 } > "$OUT/commit.txt"
 {
     echo "commit=$COMMIT_LINE"
+    if [ -n "$SOURCE_REF" ]; then echo "source_ref=$SOURCE_REF"; fi
     echo "vendor=$VENDOR"
     echo "gpu_requested=$GPU_ID"
     echo "image=$IMAGE"
@@ -4534,6 +4573,9 @@ COMMIT_LINE=$(git log -1 --format='%h parent %p' 2>/dev/null || echo unknown)
     echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$OUT/leg.txt"
 echo "   commit:   $COMMIT_LINE"
+if [ -n "$SOURCE_REF" ]; then
+    echo "   source:   archive of $SOURCE_REF; working-tree edits are not shipped"
+fi
 echo
 
 if [ "$PAYLOAD" = "speed" ] || [ "$PAYLOAD" = "mamba" ]; then
@@ -4719,7 +4761,11 @@ if [ "$MODE" = "dry" ]; then
     if [ "$PAYLOAD" = "phase8" ]; then
     echo "     tools/gemm_remote_leg.sh $VENDOR --payload phase8 --rent --minutes $MINUTES"
     elif [ "$PAYLOAD" = "mamba" ]; then
-    echo "     tools/gemm_remote_leg.sh $VENDOR --payload mamba --rent --minutes $MINUTES"
+    if [ -n "$SOURCE_REF" ]; then
+        echo "     tools/gemm_remote_leg.sh $VENDOR --payload mamba --source-ref $COMMIT --rent --minutes $MINUTES"
+    else
+        echo "     tools/gemm_remote_leg.sh $VENDOR --payload mamba --rent --minutes $MINUTES"
+    fi
     else
     echo "     tools/gemm_remote_leg.sh $VENDOR --rent --minutes $MINUTES"
     fi
@@ -4747,11 +4793,16 @@ echo
 echo "== step 2: pre-flight =="
 leg_curlrc
 
-leg_check_tree_clean || leg_die "REFUSING to rent against a dirty tree.
-  The local card came from the WORKING TREE and the remote card will come
-  from the COMMIT. If they differ, the device is not the variable being
-  measured and the diff is uninterpretable. Commit, stash, or pass
-  --local-card pointing at a card generated at this exact commit."
+if ! leg_check_tree_clean; then
+    if [ -n "$SOURCE_REF" ]; then
+        leg_die "REFUSING to rent: the conservative source-path clean-tree gate failed.
+  The payload is pinned to $COMMIT via --source-ref; working-tree edits
+  are not included in its archive. Resolve the listed edits before renting."
+    fi
+    leg_die "REFUSING to rent against a dirty tree.
+  Payload source paths must be clean before the pinned commit is shipped.
+  Resolve the listed edits before renting."
+fi
 leg_build_remote_body || leg_die "the remote body did not build. Nothing rented."
 leg_preflight
 
