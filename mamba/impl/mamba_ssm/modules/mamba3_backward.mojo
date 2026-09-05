@@ -358,9 +358,15 @@ def mamba3_beta_join_kernel(
     var i=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
     if i>=b*l*nh:return
     var li=(i//nh)%l
-    var ddt=ftz(qk_dt.unsafe_load(i));var dtr=ftz(qk_trap.unsafe_load(i))
+    # scale = gamma + beta, gamma = dt * sigma. Both the diagonal qk
+    # branch and the off-diagonal scale branch reach dt and trap_raw.
+    var sig=ftz(sigma.unsafe_load(i));var dtv=ftz(dt.unsafe_load(i))
+    var ds_gamma=ftz(scale_gamma.unsafe_load(i))
+    var ddt=ftz(ftz(qk_dt.unsafe_load(i))+ftz(pinned_mul(ds_gamma,sig)))
+    var scale_trap=ftz(pinned_mul(ftz(pinned_mul(ftz(pinned_mul(ds_gamma,dtv)),sig)),ftz(Float32(1.0)-sig)))
+    var dtr=ftz(ftz(qk_trap.unsafe_load(i))+scale_trap)
     if li>0:
-        var db=ftz(d_beta.unsafe_load(i-nh));var sig=ftz(sigma.unsafe_load(i));var dtv=ftz(dt.unsafe_load(i))
+        var db=ftz(d_beta.unsafe_load(i-nh))
         ddt=ftz(ddt+ftz(pinned_mul(db,ftz(Float32(1.0)-sig))))
         var ds=ftz(-ftz(pinned_mul(db,dtv)))
         dtr=ftz(dtr+ftz(pinned_mul(ftz(pinned_mul(ds,sig)),ftz(Float32(1.0)-sig))))

@@ -5,6 +5,17 @@ current instructions; git history and `archive/` retain their evidence.
 
 ## Resumed implementation and identity checks (2026-09-05)
 
+**Mamba3 certification correction:** the L65 diagnostic investigation found
+a missing `trap.scale -> gamma -> dt/sigma` contribution in the backward
+join. The staged float32 reference repeated it, so previous Mamba3 byte
+matches and staged-reference passes do not establish a correct full gradient.
+The independently differentiated float64 forward rejects the retained old
+`x`, `block_norm.weight`, `in_proj.weight` and `dt_bias` outputs. The native
+join and staged references are being corrected, and every public Mamba3
+leaf now also has to pass that independent whole-forward gate at unchanged
+tolerances. Corrective AMD/NVIDIA backward-only runs are required; Apple
+has not been rerun. Mamba1/2 and the completed UMAP/kNN evidence are separate.
+
 - CatBoost's experimental two-level FeatureFreq fit now accepts sample
   weights. Native and Python checks cover unequal weights, unit-weight
   equivalence, and occupied zero-weight leaves with zero regularization.
@@ -77,6 +88,14 @@ did not put self first. See the
 [retained failures](bench/results/e1g/2026-09-05_175405-nvidia-mamba/README.md).
 The fixes normalize UMAP's self slot in both graph adapters and expose the
 already-computed Mamba3 public gradients; fresh AMD/NVIDIA gates remain required.
+AMD at `6a3a2d30` passed the self-neighbor regression and all six expanded
+UMAP cases in every mode, plus all five baseline backward cases. Its long
+certificate failed before execution because host `python` was absent from
+PATH; the launcher now runs inside pixi. The weighted CatBoost fixture did
+not exercise its required zero-weight leaf and remains RED; the fold-axis
+gate passed. See the [AMD record](bench/results/e1/2026-09-05_223146-mojolearn-e2-amd/README.md).
+The next matching AMD/NVIDIA source snapshot is `d88c7883`; no numerical
+threshold was changed in response to either failure.
 The serial follow-up payload uses its former two-arm kNN timing slot for the
 long-sequence certificate; kNN timings belong to the dedicated four-arm leg.
 

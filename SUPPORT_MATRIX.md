@@ -52,7 +52,8 @@ cards on Apple, NVIDIA, and AMD; it does not extend beyond that fixture.
 |---|---|---|---|
 | Gradient boosting | Beta | Three-vendor cards for recorded configurations | Complete ordered boosting and categorical/CTR coverage; improve FAST performance without weakening checks. |
 | Random Forest / Extra Trees | Beta | Three-vendor cards for recorded configurations | Keep sklearn `max_leaf_nodes` semantics distinct from cuML-style level-order `max_leaves`; extend NVIDIA performance coverage. |
-| k-means, k-NN, DBSCAN | Beta | Three-vendor cards for recorded fixtures | The newer k-NN selector is experimental and is not the normal dispatch; component and public identity gates do not imply an end-to-end speedup. |
+| k-means, DBSCAN | Beta | Three-vendor cards for recorded fixtures | Broaden shapes and public-surface wheel smoke. |
+| k-NN | Beta | Three-vendor cards; the completed AMD four-arm layout outputs also match retained NVIDIA outputs and Apple hashes | Selector and transposed-distance flags remain opt-in. Broaden distributions and installed/external comparisons before changing normal dispatch. |
 | PCA, truncated SVD, OLS, Ridge, logistic regression | Beta | Three-vendor matrix for recorded fixtures | Broaden shapes and public-surface wheel smoke. |
 | FP32 matrix multiplication | Beta | Three-vendor frozen-profile sweep | Shapes and plans outside the recorded profile remain uncertified. |
 | Isolation Forest | Beta | Three-vendor card for the recorded fixture | Re-run current bindings on NVIDIA architectures affected by earlier context-lifetime failures. |
@@ -61,10 +62,15 @@ cards on Apple, NVIDIA, and AMD; it does not extend beyond that fixture.
 | Gaussian process | Experimental | Apple–AMD IDENTICAL card for recorded fixture | Complete current-wheel and NVIDIA qualification; no performance claim. |
 | Mamba 1 | Experimental | Three-vendor operator card and backward certificate at `718495cd` | Published macOS forward/state API gate passed; newer NVIDIA/AMD source API checks passed. Linux installed-wheel checks and Python backward exposure remain. |
 | Mamba 2 | Experimental | Three-vendor backward certificate at `718495cd`, including L257 and incoming state | Newer NVIDIA/AMD source forward/state checks passed, including the AMD binding fix. Broader fixtures, Linux installed-wheel checks and Python backward exposure remain. |
-| Mamba 3 | Experimental | Three-vendor backward certificate at `718495cd` | Newer NVIDIA/AMD source forward/state checks passed. Linux installed-wheel checks and Python backward exposure remain. |
+| Mamba 3 | Experimental | Historical backward byte matches are superseded: a staged-reference omission hid a missing scale/gamma chain-rule contribution | Corrective native AMD/NVIDIA gates must include independent whole-forward gradients. Apple rerun, Linux installed-wheel checks and Python backward exposure remain. |
 | Transformer block | Experimental | Three-vendor operator card for an earlier fixture | Newer AMD source API checks passed; NVIDIA Python API qualification and the independent corpus API oracle remain open. Native certificates do not close those gates. |
 | UMAP | Published 0.5.0: dense `fit`/`fit_transform`. Source 0.6.0 candidate: `transform` and CSR graph storage for public fitting | Original three-vendor fixture: 186 stage cells at `718495cd`; separate newer source transform fixtures match across three vendors | Integrated CSR fit/transform API passed all modes on Apple/NVIDIA/AMD; macOS 0.6.0 installed checks passed. Publication and Linux wheels remain pending. |
 | Training primitives and checkpointing | Experimental | Local correctness gates | Cross-vendor public-surface qualification remains open. |
+
+The [AMD k-NN layout record](bench/results/e1/2026-09-05_215006-mojolearn-e2-amd/README.md)
+retains all four arms, correctness bytes, rotating timing rounds and the
+comparison with earlier NVIDIA and Apple evidence. Its speedups are scoped
+to those fixtures and devices, not a general dispatch or scalability claim.
 
 ## What counts as certification
 

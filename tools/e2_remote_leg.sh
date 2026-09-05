@@ -766,6 +766,15 @@ if [ -n "${MAC_REF_DIR:-}" ] && [ -d "$MAC_REF_DIR" ]; then
     || log "cross-infer on box FAILED (see above)"
 fi
 
+# Optional diagnostic retention for the named long-sequence campaign. Copy
+# temporary native/oracle bytes before collection and teardown even when a
+# numerical gate failed but its public byte inventory was complete.
+if [ "${E2_RETAIN_MAMBA_LONG:-0}" = 1 ]; then
+  log "retain long-sequence diagnostic bytes before teardown"
+  $SSH 'cd /root/mojolearn && OUT=$(ls -td bench/results/e1/*/ | head -1) && dest="$OUT/diag/followup/mamba-long-cert/mamba3-l65" && mkdir -p "$dest/diagnostic-actual" "$dest/diagnostic-oracle" && cp -a /tmp/mojolearn-mamba3-l65-actual/. "$dest/diagnostic-actual/" && cp -a /tmp/mojolearn-mamba3-l65-grad/. "$dest/diagnostic-oracle/"' \
+    || log "long-sequence diagnostic retention FAILED"
+fi
+
 log "fetch artifacts"
 mkdir -p "$REPO/bench/results/e1"
 rsync -az "root@$IP:/root/mojolearn/bench/results/e1/" "$REPO/bench/results/e1/" \

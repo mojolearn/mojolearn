@@ -858,6 +858,8 @@ if [ "$PAYLOAD" = "phase8" ]; then
 fi
 
 NVIDIA_CAMPAIGN=${MOJOLEARN_NVIDIA_CAMPAIGN:-0}
+MAMBA_CERT_ONLY=${MOJOLEARN_MAMBA_CERT_ONLY:-0}
+case "$MAMBA_CERT_ONLY" in 0|1) ;; *) echo 'MOJOLEARN_MAMBA_CERT_ONLY must be 0 or 1' >&2; exit 2 ;; esac
 case "$NVIDIA_CAMPAIGN" in 0|1) ;; *) leg_die "MOJOLEARN_NVIDIA_CAMPAIGN must be 0 or 1" ;; esac
 if [ "$NVIDIA_CAMPAIGN" = 1 ]; then
     [ "$PAYLOAD" = mamba ] && [ "$VENDOR" = nvidia ] || leg_die "NVIDIA campaign requires nvidia --payload mamba"
@@ -2427,6 +2429,13 @@ if [ "$work_remaining" -gt 60 ]; then
       timeout -k 30 "$work_remaining" bash tools/nvidia_campaign.sh \
       > "$OUT/campaign-console.log" 2>&1
     followup_rc=$?
+  elif [ "@MAMBACERTONLY@" = 1 ]; then
+    MOJOLEARN_COMMIT="@COMMIT@" MOJOLEARN_MAMBA_CERT_VENDOR="@VENDOR@" \
+      MOJOLEARN_MAMBA_CERT_PROFILE=long-sequence-v1 \
+      MOJOLEARN_MAMBA_CERT_OUT="$OUT/followup/mamba-long-cert" \
+      timeout -k 30 "$work_remaining" pixi run bash tools/mamba_backward_certify.sh \
+      > "$OUT/followup-console.log" 2>&1
+    followup_rc=$?
   else
     MOJOLEARN_COMMIT="@COMMIT@" MOJOLEARN_FOLLOWUP_OUT="$OUT/followup" MOJOLEARN_MAMBA_CERT_VENDOR="@VENDOR@" \
       timeout -k 30 "$work_remaining" bash tools/umap_mamba_followup.sh \
@@ -3460,6 +3469,7 @@ leg_check_remote_body() {
         -e "s|@DUMP@|$LEG_DUMP|g" \
         -e "s|@WORKTIMEOUT@|$WORK_TIMEOUT|g" \
         -e "s|@NVIDIACAMPAIGN@|$NVIDIA_CAMPAIGN|g" \
+        -e "s|@MAMBACERTONLY@|$MAMBA_CERT_ONLY|g" \
         -e "s|@KNNLAYOUTONLY@|$KNN_LAYOUT_ONLY|g" \
         -e "s|@E1PHASES@|$E1_PHASES|g" \
         -e "s|@E1LANES@|$E1_LANES|g" \
