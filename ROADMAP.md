@@ -72,6 +72,16 @@ and smoke checks passed; see the
 Complete artifact delivery, publication and fresh Linux installed-wheel
 qualification next. Broaden quality fixtures and measure scalability separately.
 
+The later build-only workflow `33974940904` passed its standard smoke matrix
+but failed the additional UMAP installation when the dependency index could
+not resolve. The preserved exact wheel now passes all nine installed UMAP
+checks using an offline dependency wheelhouse, with unchanged named IDENTICAL
+inputs and embeddings versus the prior candidate. See the
+[recovery evidence](bench/results/wheels/2026-09-05-umap-060-install-recovery/README.md).
+The qualifier records dependency hashes/versions and checks dependency
+consistency; the workflow also now refuses multiple candidate wheels correctly.
+This local recovery does not turn either failed workflow into a publication.
+
 The latest k-NN work adds opt-in transposed distances alongside the opt-in
 small-k selector. Qualify baseline, selector-only, transpose-only and combined
 builds with the four-arm public driver before changing dispatch defaults.

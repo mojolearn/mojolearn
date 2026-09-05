@@ -72,6 +72,23 @@ builds on real Metal hardware, checks embedded GPU code and ISA/minimum-OS
 requirements, installs the wheel into clean environments, and runs every
 claimed interpreter and numeric mode.
 
+For the additional Python 3.12 UMAP qualification, dependencies can be staged
+before starting the runner to avoid an index outage after the build:
+
+```sh
+python3.12 -m pip download --only-binary=:all: --no-deps \
+  --dest "$HOME/.mojolearn-qualification-wheelhouse" 'numpy>=1.24'
+MOJOLEARN_QUALIFICATION_WHEELHOUSE="$HOME/.mojolearn-qualification-wheelhouse" \
+  tools/release_runner.sh
+```
+
+When configured, that gate uses `--no-index` and the supplied wheelhouse;
+missing or incompatible dependencies fail installation. It records dependency
+wheel hashes, installed versions and `pip check`, while retaining the exact
+candidate wheel and all GPU checks. Other build and smoke steps may still
+need network access. The standalone qualifier accepts the same directory via
+`--wheelhouse`.
+
 ## 4. Dispatch
 
 From another terminal, first build without publishing:

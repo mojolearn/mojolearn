@@ -64,8 +64,13 @@ def main():
     parser.add_argument('--python', default='/opt/homebrew/bin/python3.12')
     parser.add_argument('--expected-version', required=True)
     parser.add_argument('--device', default='Apple M4')
+    parser.add_argument('--wheelhouse', type=Path,
+                        help='Install dependencies only from this local directory, without an index')
     args = parser.parse_args()
     wheel, root, output = args.wheel.resolve(), args.source_root.resolve(), args.output.resolve()
+    wheelhouse = args.wheelhouse.resolve() if args.wheelhouse else None
+    if wheelhouse is not None and not wheelhouse.is_dir():
+        raise SystemExit('Missing dependency wheelhouse: ' + str(wheelhouse))
     output.mkdir(parents=True, exist_ok=True)
     if (output / 'results.json').exists():
         raise SystemExit('Refusing to overwrite previous qualification results')
@@ -85,6 +90,9 @@ def main():
         'device': args.device, 'python_requested': args.python,
         'source_files': {str(p.relative_to(root)): sha(p) for p in (wrapper, *tests.values())},
         'timeout_seconds': 180, 'jobs': [],
+        'dependency_wheelhouse': str(wheelhouse) if wheelhouse else None,
+        'dependency_wheels': {p.name: sha(p) for p in sorted(wheelhouse.glob('*.whl'))}
+                             if wheelhouse else {},
     }
     source_commit = subprocess.run(['git', '-C', str(root), 'rev-parse', 'HEAD'],
                                    capture_output=True, text=True, timeout=10)
@@ -142,9 +150,16 @@ def main():
             if not run('create-venv', [args.python, '-m', 'venv', str(venv)], work):
                 raise RuntimeError('Could not create isolated venv')
             python = str(venv / 'bin/python')
+            install_options = (['--no-index', '--find-links', str(wheelhouse)]
+                               if wheelhouse else [])
             if not run('install-wheel', [python, '-m', 'pip', 'install', '--disable-pip-version-check',
-                       '--no-input', '--only-binary=:all:', str(wheel)], work):
+                       '--no-input', '--only-binary=:all:', *install_options, str(wheel)], work):
                 raise RuntimeError('Exact wheel installation failed')
+            if not run('check-dependencies', [python, '-m', 'pip', 'check'], work):
+                raise RuntimeError('Installed wheel dependencies are inconsistent')
+            if not run('installed-packages', [python, '-m', 'pip', 'list', '--format=json',
+                       '--disable-pip-version-check'], work):
+                raise RuntimeError('Could not retain installed dependency versions')
             guard = work / 'run_installed.py'
             guard.write_text(GUARD)
             passed = True
@@ -173,6 +188,10 @@ def main():
                     passed = job_passed and passed
             if sha(wheel) != manifest['wheel_sha256']:
                 raise RuntimeError('Wheel changed during qualification')
+            if wheelhouse is not None:
+                for name, expected in manifest['dependency_wheels'].items():
+                    if sha(wheelhouse / name) != expected:
+                        raise RuntimeError('Dependency wheel changed during qualification: ' + name)
             for relative, expected in manifest['source_files'].items():
                 if sha(root / relative) != expected:
                     raise RuntimeError('Frozen qualification source changed: ' + relative)

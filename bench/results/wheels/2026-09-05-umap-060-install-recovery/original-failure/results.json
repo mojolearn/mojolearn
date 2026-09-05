@@ -1,0 +1,54 @@
+{
+  "status": "FAILED",
+  "started_at": "2026-09-05T16:05:23.507302+00:00",
+  "wheel": "/Users/andrewhendel/.mojolearn-runner/_work/mojolearn/mojolearn/python/dist/mojolearn-0.6.0-py3-none-macosx_11_0_arm64.whl",
+  "wheel_sha256": "dab65d03c546169d285a92b2ff3ac2247c77d2288b81495cb9a7b34ba318ea02",
+  "source_root": "/Users/andrewhendel/.mojolearn-runner/_work/mojolearn/mojolearn",
+  "expected_version": "0.6.0",
+  "device": "Apple M4",
+  "python_requested": "/opt/homebrew/bin/python3.12",
+  "source_files": {
+    "python/mojolearn/_umap_impl.py": "5c0e05cfbbea4c55a5183a62bce959769dae50f0e82231256788cc76facaf117",
+    "python/mojolearn/tests/test_umap_surface.py": "aef53d85f4016fe3457317794c9dc216a7dceb4bf7d646974d6a8d63de992153",
+    "python/mojolearn/tests/test_umap_transform.py": "2652c7b81c2d8b0abbfd53dee866965ec53e8177a8ac06dd9898477629e759bc",
+    "tools/umap_transform_quality_check.py": "e845455a02bcc5edf1ea8974bc6cfb439fe6ab7c315f0e7037f66787f24208e4"
+  },
+  "timeout_seconds": 180,
+  "jobs": [
+    {
+      "name": "create-venv",
+      "command": [
+        "/opt/homebrew/bin/python3.12",
+        "-m",
+        "venv",
+        "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-z3_sfq1e/venv"
+      ],
+      "exit_code": 0,
+      "timed_out": false,
+      "seconds": 5.813755040988326,
+      "log": "/Users/andrewhendel/.mojolearn-runner/_work/_temp/umap-qualification-33974940904-1/create-venv.log"
+    },
+    {
+      "name": "install-wheel",
+      "command": [
+        "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-z3_sfq1e/venv/bin/python",
+        "-m",
+        "pip",
+        "install",
+        "--disable-pip-version-check",
+        "--no-input",
+        "--only-binary=:all:",
+        "/Users/andrewhendel/.mojolearn-runner/_work/mojolearn/mojolearn/python/dist/mojolearn-0.6.0-py3-none-macosx_11_0_arm64.whl"
+      ],
+      "exit_code": 1,
+      "timed_out": false,
+      "seconds": 8.264417583006434,
+      "log": "/Users/andrewhendel/.mojolearn-runner/_work/_temp/umap-qualification-33974940904-1/install-wheel.log"
+    }
+  ],
+  "source_commit": "4e303aed75a94868d305daedbaa7fa4418ea644f",
+  "temporary_venv": "/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-umap-wheel-z3_sfq1e/venv",
+  "reason": "RuntimeError('Exact wheel installation failed')",
+  "temporary_venv_removed": true,
+  "completed_at": "2026-09-05T16:05:37.783462+00:00"
+}
