@@ -580,36 +580,16 @@ GPU_ARCHS="${MOJOLEARN_GPU_ARCHS:-}"
 # narrowed column can never read as a full one.
 E1_LANES="${MOJOLEARN_GEMM_LEG_E1_LANES:-}"
 
-# DEVIATION 974: THE HOST'S CUDA VERSION IS A RENTAL CRITERION, NOT LUCK.
+# The pinned MAX compiler requires NVIDIA driver >= 580 (CUDA >= 13.0).
+# The Mamba certificate failed on driver 570 with the broader allow-list;
+# retrying with only 13.0 passed all 54 retained backward tensors against
+# Apple. The container's CUDA 12.4 toolkit does not establish compatibility
+# with the compiler's host-driver requirement.
 #
-# MAX refuses to run at all below a floor, and says so precisely:
-#
-#   Your current NVIDIA GPU driver version is not supported.
-#     Required: driver version >= 580 (CUDA >= 13.0)
-#     Detected: 570.169 (CUDA 12.8)
-#
-# RunPod hosts differ. Leg 12 rented the SAME gpu type from the SAME image
-# twice: the first box ran gemm and cd to byte-identical cards against the
-# M4, and the second refused every kernel launch on a 570.169 host. That is a
-# machine lottery, and losing it costs a whole lease and produces a column
-# that looks like a failure of ours.
-#
-# `allowedCudaVersions` is a create-time constraint in the v1 schema
-# (/v1/openapi.json, enum 13.0 down to 11.8), so the pod is only placed on a
-# host that satisfies it. Defaulting to 13.0 makes an incompatible host a
-# CREATE failure, which is free and instant, rather than a launch failure
-# fifty minutes in on a paid box.
-#
-# Set MOJOLEARN_GEMM_LEG_CUDA to widen it if MAX's floor ever drops. Widening
-# it below MAX's actual floor just moves the failure back to where it was.
-# EVERY DRIVER THAT CAN RUN THE IMAGE, not just the newest. The default was
-# `"13.0"` alone, which asks RunPod for hosts carrying one specific driver
-# generation. The images this leg uses are CUDA 12.4, and a 12.4 container
-# runs on any driver at or above it, so pinning the newest only narrows the
-# pool of machines that can satisfy the request -- and on a scarce GPU type
-# that is the difference between a box and a wait. Listed newest first
-# because the API reads it as an acceptable set, not a preference order.
-CUDA_VERSIONS="${MOJOLEARN_GEMM_LEG_CUDA:-\"13.0\",\"12.9\",\"12.8\",\"12.7\",\"12.6\",\"12.5\",\"12.4\"}"
+# RunPod's allowedCudaVersions filters hosts before provisioning. Keep the
+# default at the verified compiler floor; override MOJOLEARN_GEMM_LEG_CUDA
+# only for a compiler/driver combination that has been validated separately.
+CUDA_VERSIONS="${MOJOLEARN_GEMM_LEG_CUDA:-\"13.0\"}"
 WORK_RESERVE=600
 # phase8 only: where the box's bootstrap directory lands on this Mac.
 E1_DEST=""
@@ -2051,6 +2031,34 @@ leg_preflight() {
     echo "    none named mojolearn-gemm-*"
 }
 
+# Render structured API fields without interpreting image names or bootstrap
+# text as shell code. Plain ROCm images need their own SSH entrypoint;
+# RunPod templates retain their existing startup command.
+leg_write_create_request() {
+    python3 - "$1" "$POD_NAME" "$IMAGE" "$GPU_ID" "$CUDA_VERSIONS" \
+        "$VENDOR" "$REPO/tools/runpod_ssh_bootstrap.sh" <<'PY_CREATE_REQUEST'
+import json
+from pathlib import Path
+import sys
+
+output, name, image, gpu, cuda, vendor, bootstrap = sys.argv[1:]
+request = {
+    "name": name, "imageName": image, "gpuTypeIds": [gpu], "gpuCount": 1,
+    "cloudType": "SECURE", "containerDiskInGb": 60, "volumeInGb": 0,
+    "ports": ["22/tcp"], "supportPublicIp": True, "interruptible": False,
+}
+if cuda:
+    versions = json.loads("[" + cuda + "]")
+    if not versions or not all(isinstance(version, str) for version in versions):
+        raise ValueError("allowed CUDA versions must be nonempty strings")
+    request["allowedCudaVersions"] = versions
+if vendor == "amd" and image.startswith("rocm/dev-"):
+    request["dockerEntrypoint"] = ["/bin/bash", "-lc"]
+    request["dockerStartCmd"] = [Path(bootstrap).read_text()]
+Path(output).write_text(json.dumps(request, indent=2) + "\n")
+PY_CREATE_REQUEST
+}
+
 leg_create_pod() {
     # THE INTERLOCK. The dry run spawns children of this script to exercise
     # its refusal paths; not one of them may reach a paid call even if the
@@ -2064,28 +2072,9 @@ leg_create_pod() {
     # the create would leave uncovered the one instant it exists for -- the
     # create that succeeds and is never parsed.
     leg_arm_deadman
-    # An empty CUDA_VERSIONS (the AMD default) omits the field entirely --
-    # "allowedCudaVersions": [] is a constraint no host satisfies, not the
-    # absence of one.
-    CUDA_LINE=""
-    if [ -n "$CUDA_VERSIONS" ]; then
-        CUDA_LINE="\"allowedCudaVersions\": [$CUDA_VERSIONS],"
-    fi
-    cat > "$TMPD/create.json" <<JSONEOF
-{
-  "name": "$POD_NAME",
-  "imageName": "$IMAGE",
-  "gpuTypeIds": ["$GPU_ID"],
-  "gpuCount": 1,
-  $CUDA_LINE
-  "cloudType": "SECURE",
-  "containerDiskInGb": 60,
-  "volumeInGb": 0,
-  "ports": ["22/tcp"],
-  "supportPublicIp": true,
-  "interruptible": false
-}
-JSONEOF
+    # An empty CUDA allow-list omits the constraint for AMD hosts.
+    leg_write_create_request "$TMPD/create.json" || \
+        leg_die "could not serialize the pod create request"
     cp "$TMPD/create.json" "$OUT/create_request.json"
     leg_say "creating $POD_NAME ($GPU_ID, $IMAGE)"
     leg_say "  THE BILL STARTS HERE and the box is NOT YET ARMED."
@@ -4702,8 +4691,8 @@ if [ "$MODE" = "dry" ]; then
     else
     if [ "$PAYLOAD" = "mamba" ]; then
     echo "   7. mamba-backward-cert-$VENDOR, bounded at ${WORK_TIMEOUT}s"
-    echo "   8. fetch strict public manifests, logs and SHA256SUMS"
-    echo "   9. require three GREEN rows and an IDENTICAL mode witness"
+    echo "   8. fetch manifests, native gradient bytes, logs and SHA256SUMS"
+    echo "   9. require five GREEN rows, valid native bytes and IDENTICAL mode"
     elif [ "$PAYLOAD" = "speed" ]; then
     echo "   7. the bench/speed/ drivers, FAST (NO -D define), and the"
     echo "      vendor arms, on the box, one arm per process, each bounded"
