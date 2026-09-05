@@ -77,121 +77,16 @@ comptime CLASSIFICATION_MODEL: Int = 2
 # Python sends for `max_depth=None`.
 comptime INT32_MAX: Int32 = 2147483647
 
-# DEVIATION 2001 -- SAMPLED-ORDER LABELS, THE ONE FLAG (2026-09-01).
-# cuML's histogram/leaf inner loops gather `labels[row_ids[i]]` (and,
-# weighted, `sample_weight[row_ids[i]]`) per element per level; both GPU
-# competitors keep permuted stat streams instead. True keeps
-# `labels_s[i] = labels[row_ids[i]]` per tree (gathered by
-# `Builder.stage_sampled_order` below, re-permuted WITH `row_ids` at
-# every split) so those loops read sequentially at the loop index --
-# address-only, same value at the same iteration on the same thread,
-# accumulation integer-atomic either way, so the fingerprints must not
-# move. The full argument and the sabotage hook live with the mechanism
-# in `builder_kernels_impl.mojo` (DEVIATION 2001 block).
-#
-# DEFAULT TRUE SINCE 2026-09-01 EVENING (house rule 11's both halves
-# finally in hand). The identity half ran that morning: fingerprint
-# pair flag-off vs flag-on EQUAL on all five configs + K1/K4 twins,
-# gather sabotage moved every downstream line. The speed half ran that
-# evening at the 1M/2M floor (bench/results/ab_large_2026-09-01/,
-# interleaved rounds, canary-bracketed): flag-on won BOTH shapes BOTH
-# rounds — ~2.9% at rf@1000000, 6.7-8.9% at rf@2000000, the gather's
-# cost growing with rows exactly as the mechanism predicts. Sub-1M
-# shapes were not measured and do not vote (the 1M floor is policy).
-# The A/B pair remains two builds of this ONE source with this ONE
-# line flipped.
+# Keep labels and sample weights in sampled-row order so histogram and leaf
+# loops read them sequentially. They must be re-permuted with `row_ids` at
+# every split; only addresses change, while integer/fixed-point accumulation
+# and forest fingerprints remain unchanged.
 comptime LABELS_SAMPLED_ORDER = True
 
-# ================= DEVIATION BLOCK 2010 =================
-# SORTED SAMPLED ROWS -- NOT theirs (2026-09-01). OFF BY DEFAULT.
-#
-# WHAT UPSTREAM DOES. cuML's bootstrap draws are raw `uniformInt` output
-# (`randomforest.cuh:140-143`): unsorted, with duplicates. `row_ids` is
-# never re-sorted anywhere in their tree (`grep sort` over
-# `cpp/src/decisiontree/` finds only the quantile sort), and their node
-# partition is a STABLE segmented scan (`builder_kernels_impl.cuh:
-# 111-115`), so the root's random draw order is PRESERVED into every
-# node's instance range at every depth. Every per-element read the
-# histogram, count and partition kernels make through `row_ids[i]` --
-# `bin_of(row, col)` / `value(row, col)`, and pre-2001 `labels[row]` --
-# is therefore a RANDOM-INDEX gather for the whole life of the tree.
-# The gather probe (archive/research/extratrees/DEVIATIONS.md ~:2470) priced exactly this
-# access on this device: permuted gather 6.7-9.0x slower than
-# sequential, and the launch-log attribution puts the gathering kernel
-# (histogram) at 85.3% of device time at the large bench shape.
-#
-# WHAT THE COMPETITORS DO. LightGBM's leaf index array starts ascending
-# (bagging preserves index order) and its partition is stable, so its
-# histogram gathers walk ASCENDING row ids at every depth
-# (cuda_data_partition.cu:917-943 -- stable within block, left then
-# right contiguous). CatBoost goes further and pre-gathers the
-# compressed index into contiguous per-leaf buffers when profitable
-# (greedy_subsets_searcher/kernel/gather_bins.cu). cuML alone pays the
-# random order.
-#
-# WHAT THIS DEVIATION DOES. Under `ROWS_SORTED_SAMPLE = True`, the
-# bootstrap arms' `selected_rows_` buffer is sorted ASCENDING on the
-# device, once per tree, immediately after `sample()`'s dispatch+mask
-# (sort_selected_rows below: LSD one-bit radix over just enough bits to
-# cover `n_rows`, reusing `core/segmented_sort`'s four pass kernels
-# with ONE segment). The stable partition then keeps every node's range
-# ascending at EVERY depth, so the dominant gather becomes an
-# ascending, gapped walk instead of a random one -- for the whole tree.
-# The non-bootstrap arms are already ascending (`thrust::sequence`;
-# `copy_if` keeps order) and are not touched.
-#
-# BIT-IDENTITY ARGUMENT (the forest, not the buffer). Sorting permutes
-# the MULTISET of drawn rows and changes nothing else:
-#   * histograms: every (bin, class) cell is an integer (or fixed-point
-#     Int32) atomic sum over the node's row multiset -- commutative and
-#     associative EXACTLY, so cell values cannot move (same argument as
-#     DEVIATION 2001's, and the same reason cuML's own histogram is
-#     order-free);
-#   * split choice: reads only histograms -> identical;
-#   * counts/ranges: `local_nLeft` and instance counts are integer sums
-#     over the same multiset -> identical begins and counts;
-#   * leaves: integer/fixed-point accumulation over the same multiset;
-#   * OOB mask: an idempotent scatter of a constant over the same set;
-#   * predict / importances: read only the tree.
-# What DOES change: the byte ORDER inside `row_ids` (and, under
-# DEVIATION 2001, inside `labels_s`), and therefore the identity-trace
-# `treeT.rows` record -- a diagnostic divergence from cuML's transcribed
-# draw order, stated here so a trace diff against a flag-off build is
-# read as the flag, not as a defect. The forest fingerprints must be
-# UNCHANGED flag-on vs flag-off; that equality is the identity gate.
-#
-# AND ONE CHECK ARM, FOUND RED RATHER THAN PREDICTED (2026-09-01, the
-# flag-on gate run at ffb61151): `forest_check` arm D asserts RAFT's
-# draw SEQUENCE element-by-element against `selected_rows_`, and under
-# this flag that sequence is deliberately not RAFT's -- 1325 rows
-# "disagreed" ("i 0 got 1 want 981") with the flag doing exactly what
-# this block says (same multiset, ascending). The first write-up above
-# anticipated the trace record and missed the check arm; recorded per
-# the fix-docs rule. Arm D is now flag-aware: under the flag it
-# compares against the SORTED oracle expectation (multiset equality
-# plus ascendingness, which still holds the seed chain, bounds and
-# stride through the sort); flag-off keeps the element-by-element
-# sequence assert untouched. Order is not part of the mirror claim
-# under the flag -- the forest is a function of the drawn multiset.
-#
-# PRICE. One `n_selected`-element device sort per tree: ~2*ceil(log2
-# n_rows) even passes x 4 launches (~80-90 launches/tree at 1M-2M) plus
-# ~8 bytes/element of traffic per pass, and 12 bytes/element of
-# once-per-fit scratch (keys + offsets + one block_sums row). The
-# block-sums scan is one serial thread over ceil(n/512) entries per
-# pass, the same shape `core/segmented_sort` already ships. Whether the
-# gather locality buys more than the sort costs at rf@1000000 /
-# rf@2000000 is exactly what the A/B decides; sub-1M behavior does not
-# vote.
-#
-# GATE STATE (2026-09-01 evening, orchestrator's run record at
-# ffb61151): mechanism check (rf_perf_candidates_check S1/S2) GREEN;
-# fingerprint pair FP_2010 flag-off vs flag-on ALL HASH LINES EQUAL --
-# the identity half is in hand. STILL OWED: the flag-on `forest_check`
-# rerun (arm D was red before the flag-aware fix above landed), and the
-# 1M/2M timing A/B that owns any default flip (archive/plans/ensemble/PLAN.md,
-# "2026-09-01 candidate round").
-# =========================================================
+# Optional bootstrap-row sorting preserves the drawn multiset. Stable
+# partitioning then keeps node ranges ascending. Integer/fixed-point
+# histograms, counts, leaves, and the resulting forest remain identical, but
+# `row_ids` order and its diagnostic trace intentionally differ from upstream.
 comptime ROWS_SORTED_SAMPLE = False
 
 
