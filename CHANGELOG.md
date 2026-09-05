@@ -5,6 +5,22 @@ contain the detailed investigation record.
 
 ## Unreleased
 
+### 0.6.0 release candidate
+
+- Added `UMAP.transform` to embed unseen samples against a frozen fitted model.
+  Training input, embedding and fitted parameters are retained privately;
+  changed parameters or numeric mode require refitting.
+- Public UMAP fitting now stores the fuzzy graph in CSR form, using
+  O(n_samples * n_neighbors) graph space. Exact neighbor computation remains
+  quadratic; sparse storage is not an approximate-neighbor implementation.
+- Preserved named IDENTICAL fit layouts and added held-out transform quality
+  checks. Source transform fixtures match across Apple, NVIDIA and AMD;
+  installed artifacts are qualified separately before publication.
+- Bounded binding compilation to two workers by default, configurable through
+  `MOJOLEARN_COMPILE_JOBS`.
+- Retained an experimental specialized small-k selector behind an explicit
+  build flag. It is not enabled in normal wheel builds.
+
 ## 0.5.0 — 2026-09-05
 
 - Published the macOS arm64 wheel with 15 native extensions in all three modes.

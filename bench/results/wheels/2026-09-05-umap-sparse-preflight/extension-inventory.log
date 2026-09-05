@@ -1,0 +1,7 @@
+source of truth: python/mojolearn/_backend.py _MODULES (15 extensions)
+  OK        packaging/linux/pack_wheel.py EXT_NAMES (15)
+  OK        packaging/linux/smoke.py ALL_BINDINGS (15)
+  OK        packaging/linux/build_sets.sh EXT_NAMES (15)
+  OK        packaging/macos/build_release_wheel.sh EXT_NAMES (15)
+
+All extension lists agree.
