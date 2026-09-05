@@ -258,7 +258,6 @@ def bits32_hex(v: Float32) -> String:
         out += String(digits[byte=nib])
     return out^
 
-
 def is_nonfinite_bits(v: Float32) -> Bool:
     """NaN or infinity, BY BITS AND NEVER BY A COMPARE.
 
@@ -1586,39 +1585,3 @@ def describe_case(c: CeCase) raises -> String:
     if c.reduction != REDUCTION_NONE:
         out += "  divisor=" + bits32_hex(ce_case_divisor(c))
     return out^
-
-
-# ===========================================================================
-# OWED, AND WHY IT IS NOT HERE
-#
-# 1. ~~**A COMPILE AND A RUN.** Nothing in this file has been through the
-#    front end and no device has consumed a case from it. Every property
-#    asserted above is asserted by code that has never executed.~~
-#    **PAID ON ONE DEVICE, commit `ecd1a436`.** It compiles, it ran, and the
-#    properties asserted above were measured rather than predicted. What
-#    replaces this item is the OTHER TWO VENDORS, on which none of it has
-#    run.
-#
-# 2. **`training/corpus/`.** Contract 12.3's A3 arm wants a Float64
-#    reference produced OUTSIDE this repository. `ce_forward_f64` in the
-#    oracle is a Float64 arm, but it is OURS and it shares this lane's
-#    algebra, so it can only catch a mistake the FP32 path makes alone. The
-#    mamba lane's `mamba/corpus/` and `tools/mamba_corpus_check.py` are the
-#    pattern and neither has a twin here.
-#
-# 3. **`neg_by_bits` AND `refuse_nonfinite` BELONG IN `checks/
-#    numerics.mojo`.** Contract OWED items 1 and 2, unchanged by this file
-#    -- it imports both from `loss_oracle.mojo` rather than making a fourth
-#    and fifth copy, which is the most this lane can do without touching a
-#    file it may not.
-#
-# 4. **A THIRD splitmix64.** `ce_splitmix64` is the third copy in this
-#    repository. The lift into `core/` or `checks/` is somebody's, and
-#    the mitigation here is a cross-check rather than a fix.
-#
-# 5. **THE SHIPPED VOCABULARY IS OFF BY DEFAULT.** A gate that has never
-#    run `V = 128256` has never run the shape the profile is FOR, and no
-#    amount of `V = 300` closes that. It is one environment variable away
-#    and it is named in the check's SCOPE line so a reader cannot mistake
-#    a default run for a complete one.
-# ===========================================================================
