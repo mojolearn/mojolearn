@@ -1,0 +1,39 @@
+{
+  "status": "PASS",
+  "scope": "named IDENTICAL held-out fixture inputs and embeddings; Linux source bindings, Apple exact installed candidate",
+  "wheel_sha256": "4b7e75e170d1a3855d8d2723a7438d36645c4d8d3b3a9688391e8194656c3b7b",
+  "captures": {
+    "apple_installed": {
+      "path": "bench/results/wheels/2026-09-05-umap-060/installed/quality-identical.json",
+      "sha256": "484a23bd728ec4f2cdd315cde5914bb84536e231c1a58b8a80b1c488872938ac"
+    },
+    "apple_source": {
+      "path": "bench/results/umap/2026-09-05-public-sparse/apple-quality-identical.json",
+      "sha256": "b8e54217c53b8d32cbac3f0ea7394b21b59cd004c8ba8d797402ddec69e0ab0b"
+    },
+    "nvidia_source": {
+      "path": "bench/results/e1g/2026-09-05_103918-nvidia-mamba/remote/followup/transform-quality.json",
+      "sha256": "9fcc0145b9eea5f4acff79a3913eac73523876dad21aa752539393dab6a99659"
+    },
+    "amd_source": {
+      "path": "bench/results/e1/2026-09-05_142553-mojolearn-e2-amd/diag/followup/transform-quality.json",
+      "sha256": "69fdf590f0aad1570adefb58103c0f48725b55db9da7e1aa688f3790746c19fd"
+    }
+  },
+  "profiles": [
+    {
+      "profile": "cubic128_interleaved64_64",
+      "embedding_hashes": {
+        "training_embedding": "ae505e07f21d8496d618db3015bf34b7d6d247b20c217156a5a72973aa091e0a",
+        "query_embedding": "f7c5f2578d1bd437310d926b81f143d46984b7ae0e2499df138fd6d662c74987"
+      }
+    },
+    {
+      "profile": "saddle_grid64_cellcenters49",
+      "embedding_hashes": {
+        "training_embedding": "e71d2cce698e64f2dab2c08b13fca1d717aae668b8ec4f800c64b5dc9d288ae0",
+        "query_embedding": "3c6cca04bfe3d8e4f0a259539784e5133f401e1e9891f249dcacad727b769afb"
+      }
+    }
+  ]
+}

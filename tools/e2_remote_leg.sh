@@ -429,6 +429,8 @@ if [ "$CLONE_OK" != 1 ]; then
       bench/__init__.mojo bench/gemv_serial_layout_main.mojo bench/knn_index_layout_main.mojo \
       bench/knn_smallk_selection_main.mojo bench/knn_smallk_dispatch_check.mojo \
       bench/knn_smallk_dispatch_price.mojo tools/knn_smallk_dispatch_price.sh tools/knn_public_price_do_diag.sh \
+      bench/knn_layout_dispatch_check.mojo bench/knn_layout_dispatch_price.mojo \
+      tools/knn_layout_dispatch_price.sh tools/knn_layout_do_diag.sh \
       mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py \
       tools/mamba_backward_certify.sh tools/mamba_backward_identity.py \
       tools/mamba_gradient_oracle.py tools/with_identical_mode.sh \

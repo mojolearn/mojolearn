@@ -640,6 +640,7 @@ leg_usage() {
     echo "         --ready-timeout SECONDS"
     echo "         --payload gemm|phase8|speed|mamba"
     echo "         --source-ref REF        mamba: archive this commit (default HEAD)"
+    echo "         MOJOLEARN_KNN_LAYOUT_ONLY=1: NVIDIA mamba transport, layout gates/prices only"
     echo "         --apple-dir DIR         phase8: the Apple column to be"
     echo "                                 judged against"
     echo "         --work-timeout SECONDS  phase8/speed/mamba: bound the work"
@@ -860,6 +861,12 @@ NVIDIA_CAMPAIGN=${MOJOLEARN_NVIDIA_CAMPAIGN:-0}
 case "$NVIDIA_CAMPAIGN" in 0|1) ;; *) leg_die "MOJOLEARN_NVIDIA_CAMPAIGN must be 0 or 1" ;; esac
 if [ "$NVIDIA_CAMPAIGN" = 1 ]; then
     [ "$PAYLOAD" = mamba ] && [ "$VENDOR" = nvidia ] || leg_die "NVIDIA campaign requires nvidia --payload mamba"
+fi
+KNN_LAYOUT_ONLY=${MOJOLEARN_KNN_LAYOUT_ONLY:-0}
+case "$KNN_LAYOUT_ONLY" in 0|1) ;; *) leg_die "MOJOLEARN_KNN_LAYOUT_ONLY must be 0 or 1" ;; esac
+if [ "$KNN_LAYOUT_ONLY" = 1 ]; then
+    [ "$PAYLOAD" = mamba ] && [ "$VENDOR" = nvidia ] || leg_die "KNN layout-only requires nvidia --payload mamba"
+    [ "$NVIDIA_CAMPAIGN" = 0 ] || leg_die "KNN layout-only cannot run alongside NVIDIA campaign"
 fi
 
 case "$WORK_TIMEOUT" in
@@ -1150,6 +1157,11 @@ LEG_SOURCE_PATHS_MAMBA=".gitattributes tools/mamba_backward_certify.sh tools/mam
 # pinned commit; do not replace it with a working-tree tar.
 LEG_ARCHIVE_PATHS_MAMBA=".gitattributes mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock umap neighbors spectral core checks/hardware_matrix.mojo tools/umap_identity_compare.py tools/umap_mamba_followup.sh tools/umap_quality_check.py tools/umap_transform_quality_check.py bench/__init__.mojo bench/knn_smallk_dispatch_check.mojo bench/knn_smallk_dispatch_price.mojo tools/knn_smallk_dispatch_price.sh bindings python metrics checks/vendor.mojo cluster checks"
 LEG_MAMBA_ARCHIVE_MAX_BYTES=10485760
+if [ "$KNN_LAYOUT_ONLY" = 1 ]; then
+    _layout_paths="bench/knn_layout_dispatch_check.mojo bench/knn_layout_dispatch_price.mojo tools/knn_layout_dispatch_price.sh"
+    LEG_SOURCE_PATHS_MAMBA="$LEG_SOURCE_PATHS_MAMBA $_layout_paths"
+    LEG_ARCHIVE_PATHS_MAMBA="$LEG_ARCHIVE_PATHS_MAMBA $_layout_paths"
+fi
 if [ "$NVIDIA_CAMPAIGN" = 1 ]; then
     LEG_ARCHIVE_PATHS_MAMBA="$LEG_ARCHIVE_PATHS_MAMBA gemm transformer/__init__.mojo transformer/checks transformer/impl transformer/corpus/gen_corpus.py bench/__init__.mojo bench/gemv_serial_layout_main.mojo bench/knn_index_layout_main.mojo bench/speed bench/gemm_shapes.mojo tools/nvidia_campaign.sh tools/nvidia_public_compare.py tools/speed_torch_seq.py tools/transformer_corpus_check.py"
 fi
@@ -1709,6 +1721,10 @@ leg_archive_required() {
         # on this vendor.
         echo "tools/e1_bootstrap.sh tools/repeat_run_stability.py bench/gemm_card_main.mojo gemm/checks/gemm_identical.mojo solver/cd_main.mojo kde/kde_main.mojo hierarchy/linkage_main.mojo svm/svc_main.mojo metrics/metrics_main.mojo mamba/checks/mamba_check.mojo"
     elif [ "$PAYLOAD" = "mamba" ]; then
+        if [ "$KNN_LAYOUT_ONLY" = 1 ]; then
+            echo "bench/knn_layout_dispatch_check.mojo bench/knn_layout_dispatch_price.mojo tools/knn_layout_dispatch_price.sh pixi.toml pixi.lock"
+            return
+        fi
         echo "tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh mamba/corpus/gen_corpus.py checks/kernel_matrix.mojo mamba/checks/mamba_backward_device_tail_dump.mojo mamba/checks/mamba2_backward_tail_dump.mojo mamba/checks/mamba3_backward_tail_dump.mojo"
         if [ "$NVIDIA_CAMPAIGN" = 1 ]; then
             echo "tools/nvidia_campaign.sh tools/nvidia_public_compare.py tools/speed_torch_seq.py transformer/checks/transformer_backward_check.mojo transformer/corpus/gen_corpus.py bench/gemv_serial_layout_main.mojo bench/knn_index_layout_main.mojo"
@@ -2314,6 +2330,7 @@ taskset -pc "$cores" $$ > "$OUT/cpu-affinity.log" 2>&1 || exit 9
 {
   echo "vendor=@VENDOR@"
   echo "payload=mamba"
+  echo "knn_layout_only=@KNNLAYOUTONLY@"
   echo "commit=@COMMIT@"
   echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$OUT/leg.txt"
@@ -2326,7 +2343,7 @@ uname -a > "$OUT/uname.txt" 2>&1
   | { shasum -a 256 2>/dev/null || sha256sum ; } \
   | awk '{print $1}' > "$OUT/source_sha256.txt"
 if [ ! -x "$HOME/.pixi/bin/pixi" ] && ! command -v pixi >/dev/null 2>&1; then
-  if [ "@NVIDIACAMPAIGN@" = 1 ]; then
+  if [ "@NVIDIACAMPAIGN@" = 1 ] || [ "@KNNLAYOUTONLY@" = 1 ]; then
     timeout -k 10 120 sh -c 'curl -fsSL --max-time 30 https://pixi.sh/install.sh | sh' > "$OUT/pixi_install.log" 2>&1
   else
     curl -fsSL https://pixi.sh/install.sh | sh > "$OUT/pixi_install.log" 2>&1
@@ -2334,12 +2351,34 @@ if [ ! -x "$HOME/.pixi/bin/pixi" ] && ! command -v pixi >/dev/null 2>&1; then
 fi
 PATH="$HOME/.pixi/bin:$PATH"
 export PATH
-if [ "@NVIDIACAMPAIGN@" = 1 ]; then
+if [ "@NVIDIACAMPAIGN@" = 1 ] || [ "@KNNLAYOUTONLY@" = 1 ]; then
     timeout -k 10 600 pixi install > "$OUT/pixi_env.log" 2>&1
 else
 pixi install > "$OUT/pixi_env.log" 2>&1
 fi
 echo "pixi_install_exit=$?" >> "$OUT/leg.txt"
+# Layout-only reuses transport/bootstrap, not the Mamba/UMAP workload.
+if [ "@KNNLAYOUTONLY@" = 1 ]; then
+    layout_rc=124
+    work_remaining=$((@WORKTIMEOUT@ - $(date +%s) + campaign_started))
+    if ! command -v timeout >/dev/null 2>&1; then
+        layout_rc=127
+        echo "timeout is required" > "$OUT/layout-console.log"
+    elif [ "$work_remaining" -gt 0 ]; then
+        MOJOLEARN_LAYOUT_PRICE_OUT="$OUT/layout-price" \
+          timeout -k 30 "$work_remaining" bash tools/knn_layout_dispatch_price.sh \
+          > "$OUT/layout-console.log" 2>&1
+        layout_rc=$?
+    else
+        echo "shared work deadline expired" > "$OUT/layout-console.log"
+    fi
+    echo "layout_exit=$layout_rc" >> "$OUT/leg.txt"
+    echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/leg.txt"
+    tail -40 "$OUT/layout-console.log"
+    : > /root/gemm_leg.done
+    echo REMOTE_BODY_DONE
+    exit "$layout_rc"
+fi
 # Both witnesses share one work deadline, preserving the fetch reserve.
 # Refuse without timeout instead of silently running an unbounded payload.
 work_started=$(date +%s)
@@ -3407,6 +3446,7 @@ leg_check_remote_body() {
         -e "s|@DUMP@|$LEG_DUMP|g" \
         -e "s|@WORKTIMEOUT@|$WORK_TIMEOUT|g" \
         -e "s|@NVIDIACAMPAIGN@|$NVIDIA_CAMPAIGN|g" \
+        -e "s|@KNNLAYOUTONLY@|$KNN_LAYOUT_ONLY|g" \
         -e "s|@E1PHASES@|$E1_PHASES|g" \
         -e "s|@E1LANES@|$E1_LANES|g" \
         -e "s|@P9BINDINGS@|$P9_BINDINGS|g" \
@@ -3491,6 +3531,14 @@ leg_check_remote_body() {
         fi
     fi
     if [ "$PAYLOAD" = "mamba" ]; then
+        if [ "$KNN_LAYOUT_ONLY" = 1 ]; then
+            if ! grep -q 'bash tools/knn_layout_dispatch_price.sh' "$_body" || \
+               ! grep -q 'MOJOLEARN_LAYOUT_PRICE_OUT=' "$_body"; then
+                echo "  the layout-only body is missing its payload or artifact path."
+                return 1
+            fi
+            return 0
+        fi
         if ! grep -q "pixi run mamba-backward-cert-$VENDOR" "$_body"; then
             echo "  the mamba body does not invoke its certification payload."
             return 1
@@ -3790,11 +3838,30 @@ leg_rehearse() {
         rbad "A3 --minutes 90 is refused" "got exit $_rc: $_out"
     fi
 
-    _out=$( ( unset RUNPOD_API_KEY MOJOLEARN_RUNPOD_KEY_FILE MOJOLEARN_NVIDIA_CAMPAIGN; MOJOLEARN_GEMM_LEG_REHEARSAL=1 "$0" nvidia --rent 2>&1 ) ) && _rc=0 || _rc=$?
+    _out=$( ( unset RUNPOD_API_KEY MOJOLEARN_RUNPOD_KEY_FILE MOJOLEARN_NVIDIA_CAMPAIGN MOJOLEARN_KNN_LAYOUT_ONLY; MOJOLEARN_GEMM_LEG_REHEARSAL=1 "$0" nvidia --rent 2>&1 ) ) && _rc=0 || _rc=$?
     if [ "$_rc" != "0" ] && echo "$_out" | grep -q "RUNPOD_API_KEY"; then
         rok "A4 --rent without a key refuses and rents nothing"
     else
         rbad "A4 --rent without a key refuses" "got exit $_rc: $_out"
+    fi
+
+    _out=$(MOJOLEARN_GEMM_LEG_REHEARSAL=1 MOJOLEARN_NVIDIA_CAMPAIGN=0 MOJOLEARN_KNN_LAYOUT_ONLY=1 "$0" amd --payload mamba 2>&1) && _rc=0 || _rc=$?
+    if [ "$_rc" = "2" ] && echo "$_out" | grep -q 'KNN layout-only requires nvidia'; then
+        rok "A4-layout-vendor layout-only refuses AMD"
+    else
+        rbad "A4-layout-vendor layout-only refuses AMD" "got exit $_rc: $_out"
+    fi
+    _out=$(MOJOLEARN_GEMM_LEG_REHEARSAL=1 MOJOLEARN_NVIDIA_CAMPAIGN=0 MOJOLEARN_KNN_LAYOUT_ONLY=1 "$0" nvidia --payload gemm 2>&1) && _rc=0 || _rc=$?
+    if [ "$_rc" = "2" ] && echo "$_out" | grep -q 'KNN layout-only requires nvidia'; then
+        rok "A4-layout-payload layout-only refuses a non-mamba transport"
+    else
+        rbad "A4-layout-payload layout-only refuses a non-mamba transport" "got exit $_rc: $_out"
+    fi
+    _out=$(MOJOLEARN_GEMM_LEG_REHEARSAL=1 MOJOLEARN_NVIDIA_CAMPAIGN=1 MOJOLEARN_KNN_LAYOUT_ONLY=1 "$0" nvidia --payload mamba 2>&1) && _rc=0 || _rc=$?
+    if [ "$_rc" = "2" ] && echo "$_out" | grep -q 'cannot run alongside'; then
+        rok "A4-layout-conflict layout-only refuses NVIDIA campaign"
+    else
+        rbad "A4-layout-conflict layout-only refuses NVIDIA campaign" "got exit $_rc: $_out"
     fi
 
     _out=$(MOJOLEARN_GEMM_LEG_REHEARSAL=1 "$0" nvidia --payload lanes 2>&1) && _rc=0 || _rc=$?
@@ -4572,7 +4639,9 @@ fi
 
 mkdir -p "$OUT"
 echo "== gemm.fp32.v1 remote leg (DEVIATION 536) =="
-if [ "$PAYLOAD" = "mamba" ]; then
+if [ "$KNN_LAYOUT_ONLY" = 1 ]; then
+echo "   profile:  k-NN layout dispatch gates and prices only (mamba transport)"
+elif [ "$PAYLOAD" = "mamba" ]; then
 echo "   profile:  strict Mamba backward certificate with retained native bytes"
 else
 echo "   profile:  mojolearn.identical.gemm.fp32.v1"
@@ -4888,7 +4957,15 @@ RED=$FETCH_RED
 if [ "$PAYLOAD" = "speed" ]; then
     leg_speed_artifacts || RED=1
 elif [ "$PAYLOAD" = "mamba" ]; then
-    leg_mamba_artifacts || RED=1
+    if [ "$KNN_LAYOUT_ONLY" = 1 ]; then
+        if ! grep -qx 'layout_exit=0' "$OUT/remote/leg.txt" 2>/dev/null; then
+            echo "  layout-only payload failed or did not finish; read layout-console.log"
+            RED=1
+        fi
+        leg_require_file "$OUT/remote/layout-console.log" "layout-only console was not fetched" || RED=1
+    else
+        leg_mamba_artifacts || RED=1
+    fi
 elif [ "$PAYLOAD" = "phase8" ] && [ "$_wants_phase8" = "1" ]; then
     leg_phase8_artifacts || RED=1
 elif [ "$PAYLOAD" = "phase8" ]; then
@@ -4977,6 +5054,11 @@ echo "  ARE SLOWER, and for the gemm lane the fair opponent is cublas-tf32"
 echo "  rather than cublas-fp32, because our FAST arm took the same"
 echo "  precision cut. That is written at length in"
 echo "  bench/speed/gemm_speed_main.mojo's docstring."
+elif [ "$KNN_LAYOUT_ONLY" = 1 ]; then
+echo "== step 9: k-NN layout dispatch gates and prices =="
+echo "  Results: $OUT/remote/layout-price"
+echo "  Admission requires layout_exit=0 and source parity."
+echo "  Mamba and UMAP checks were not requested by this payload."
 elif [ "$PAYLOAD" = "mamba" ]; then
 echo "== step 9: Mamba backward certificate =="
 echo "  Strict backward results, manifests, and native gradient bytes:"
@@ -5010,6 +5092,7 @@ fi
     echo "commit=$COMMIT_LINE"
     echo "vendor=$VENDOR"
     echo "payload=$PAYLOAD"
+    echo "knn_layout_only=$KNN_LAYOUT_ONLY"
     echo "pod=$POD_ID"
     echo "gpu_requested=$GPU_ID"
     echo "red=$RED"
@@ -5041,6 +5124,9 @@ if [ "$PAYLOAD" = "speed" ]; then
     echo "the only place the pod's details exist:"
     echo "  python3 tools/fast_speed_table.py $OUT/remote/logs \\"
     echo "      --out bench/results/fast_speed/${STAMP}-${VENDOR}-${SPEED_FAMILY}.md"
+elif [ "$KNN_LAYOUT_ONLY" = 1 ]; then
+    echo "the layout results: $OUT/remote/layout-price"
+    echo "read layout-console.log and layout_exit in remote/leg.txt together."
 elif [ "$PAYLOAD" = "mamba" ]; then
     echo "the certificate: $OUT/remote/mamba-cert"
     echo "read results.tsv, device.csv, commit.txt, and SHA256SUMS together."

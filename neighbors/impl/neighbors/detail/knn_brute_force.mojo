@@ -70,6 +70,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 
 from core.expand_distances import expand_distances_kernel
+from core.column_stats import CUDA_MAX_GRID_YZ, TRANSPOSE_TILE, transpose_kernel
 from core.gemm import gemm_nt
 from core.row_norms import NORM_TPB, row_norm_kernel
 from checks.kernel_matrix import (
@@ -97,6 +98,7 @@ from neighbors.checks.select_smallk_identical_candidate import (
     SMALLK_BLOCK,
     smallk_specialized_kernel,
 )
+from neighbors.checks.transposed_index_distance_candidate import transposed_index_distance_kernel
 from layout import TileTensor
 from layout.tile_layout import row_major
 from nn.topk import top_k
@@ -108,6 +110,18 @@ from nn.topk import top_k
 comptime EXPERIMENTAL_SMALLK_IDENTICAL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and is_defined["MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL"]()
+)
+
+# Independent, default-OFF layout experiment. Enable with the compiler flag
+# -D MOJOLEARN_EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL=1 in an IDENTICAL build.
+# Presence (even =0) enables it; omit for legacy. No environment-only switch.
+# Qualify baseline / selector-only / transpose-only / both separately. Existing
+# bench/knn_smallk_dispatch_check.mojo supplies full output records and varying
+# query tiles; bench/knn_smallk_dispatch_price.mojo includes request allocation,
+# the one index transpose, uploads and downloads in each timed public call.
+comptime EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL"]()
 )
 
 from neighbors.impl.matrix.detail.select_radix import (
@@ -358,6 +372,77 @@ def tiled_brute_force_knn(
     metric: Int = METRIC_FROM_IS_SQRT,
     metric_arg: Float32 = Float32(2.0),
 ) raises:
+    """Own optional transposed index through the complete synchronized request.
+
+    Only expanded Euclidean metrics can use this layout. Original row-major
+    norm computation, ascending per-distance FMA/FTZ, clamp, sqrt BEFORE
+    selection, selector choice and output offsets are preserved. Other metrics
+    and FAST/DETERMINISTIC retain the legacy path without added allocation.
+    The candidate adds 4*n_index*n_features bytes, once per public request.
+    Allocation failure is an explicit failure, never an unrecorded fallback.
+    """
+    comptime if EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL:
+        var resolved = resolve_metric(metric, is_sqrt)
+        if (resolved == DIST_L2_EXPANDED or resolved == DIST_L2_SQRT_EXPANDED) and n_queries > 0 and n_index > 0 and n_features > 0 and n_index <= 2147483647 and n_features <= 2147483647:
+            var transposed = ctx.enqueue_create_buffer[DType.float32](n_index * n_features)
+            try:
+                ctx.enqueue_function[transpose_kernel](
+                    transposed.unsafe_ptr(), index.unsafe_ptr(), Int32(n_index), Int32(n_features),
+                    grid_dim=((n_features + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE,
+                              min((n_index + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE, CUDA_MAX_GRID_YZ), 1),
+                    block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
+                )
+                var transposed_ptr = transposed.unsafe_ptr()
+                _tiled_brute_force_knn_impl(
+                    ctx, queries, query_norm, index, index_norm, dist_tile, buf_val, buf_idx,
+                    out_dist, out_idx, out_idx32, n_queries, n_index, n_features, k,
+                    query_tile, buf_len, is_sqrt, use_vendor_topk, metric, metric_arg,
+                    transposed_ptr, True,
+                )
+            except error:
+                # Even a later launch/refusal must drain pending readers before
+                # unwinding the temporary allocation's owner.
+                ctx.synchronize()
+                _ = transposed^
+                raise error
+            # The implementation synchronizes all query tiles before this
+            # owner is released. No temporary sub-buffer or borrowed view.
+            _ = transposed^
+            return
+    var original_ptr = index.unsafe_ptr()
+    _tiled_brute_force_knn_impl(
+        ctx, queries, query_norm, index, index_norm, dist_tile, buf_val, buf_idx,
+        out_dist, out_idx, out_idx32, n_queries, n_index, n_features, k,
+        query_tile, buf_len, is_sqrt, use_vendor_topk, metric, metric_arg,
+        original_ptr, False,
+    )
+
+
+def _tiled_brute_force_knn_impl(
+    ctx: DeviceContext,
+    mut queries: DeviceBuffer[DType.float32],
+    mut query_norm: DeviceBuffer[DType.float32],
+    mut index: DeviceBuffer[DType.float32],
+    mut index_norm: DeviceBuffer[DType.float32],
+    mut dist_tile: DeviceBuffer[DType.float32],
+    mut buf_val: DeviceBuffer[DType.float32],
+    mut buf_idx: DeviceBuffer[DType.uint32],
+    mut out_dist: DeviceBuffer[DType.float32],
+    mut out_idx: DeviceBuffer[DType.uint32],
+    mut out_idx32: DeviceBuffer[DType.int32],
+    n_queries: Int,
+    n_index: Int,
+    n_features: Int,
+    k: Int,
+    query_tile: Int,
+    buf_len: Int,
+    is_sqrt: Bool,
+    use_vendor_topk: Bool,
+    metric: Int,
+    metric_arg: Float32,
+    transposed_index: MutPointer[Float32, MutAnyOrigin],
+    use_transposed_index: Bool,
+) raises:
     """Tile the QUERIES, keep the whole index resident, top-k per query row.
 
     THEIR FALLBACK, reached from `brute_force_knn_impl` below only when the
@@ -486,25 +571,39 @@ def tiled_brute_force_knn(
                 # walked ascending in a single thread. See
                 # `neighbors/checks/pinned_distance_tile.mojo` for the price
                 # and for why no faster shape was chosen.
-                ctx.enqueue_function[pinned_distance_tile_kernel](
-                    dist_tile.unsafe_ptr(),
-                    queries.unsafe_ptr().unsafe_offset(q * n_features),
-                    index.unsafe_ptr(),
-                    query_norm.unsafe_ptr().unsafe_offset(q),
-                    index_norm.unsafe_ptr(),
-                    Int32(rows),
-                    Int32(n_index),
-                    Int32(n_features),
-                    # `mtr`, not `is_sqrt`: an EXPLICIT `L2Expanded` must
-                    # skip the root even when a caller also passed
-                    # `is_sqrt = True` for the old signature's sake. The
-                    # sentinel path makes the two agree by construction.
-                    Int32(1 if mtr == DIST_L2_SQRT_EXPANDED else 0),
-                    grid_dim=(
-                        (cells + PINNED_TILE_TPB - 1) // PINNED_TILE_TPB, 1, 1
-                    ),
-                    block_dim=(PINNED_TILE_TPB, 1, 1),
-                )
+                var layout_distance_launched = False
+                comptime if EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL:
+                    if use_transposed_index:
+                        ctx.enqueue_function[transposed_index_distance_kernel](
+                            dist_tile.unsafe_ptr(),
+                            queries.unsafe_ptr().unsafe_offset(q * n_features),
+                            transposed_index,
+                            query_norm.unsafe_ptr().unsafe_offset(q),
+                            index_norm.unsafe_ptr(),
+                            Int32(rows), Int32(n_index), Int32(n_features),
+                            Int32(1 if mtr == DIST_L2_SQRT_EXPANDED else 0),
+                            grid_dim=((cells + PINNED_TILE_TPB - 1) // PINNED_TILE_TPB, 1, 1),
+                            block_dim=(PINNED_TILE_TPB, 1, 1),
+                        )
+                        layout_distance_launched = True
+                if not layout_distance_launched:
+                    ctx.enqueue_function[pinned_distance_tile_kernel](
+                        dist_tile.unsafe_ptr(),
+                        queries.unsafe_ptr().unsafe_offset(q * n_features),
+                        index.unsafe_ptr(),
+                        query_norm.unsafe_ptr().unsafe_offset(q),
+                        index_norm.unsafe_ptr(),
+                        Int32(rows),
+                        Int32(n_index),
+                        Int32(n_features),
+                        # An explicit L2Expanded skips root even when the old
+                        # signature's is_sqrt=True; resolve_metric decides it.
+                        Int32(1 if mtr == DIST_L2_SQRT_EXPANDED else 0),
+                        grid_dim=(
+                            (cells + PINNED_TILE_TPB - 1) // PINNED_TILE_TPB, 1, 1
+                        ),
+                        block_dim=(PINNED_TILE_TPB, 1, 1),
+                    )
             else:
                 var q_tile = queries.create_sub_buffer[DType.float32](
                     q * n_features, rows * n_features
