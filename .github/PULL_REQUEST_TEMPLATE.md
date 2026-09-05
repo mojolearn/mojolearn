@@ -28,6 +28,17 @@ Upstream details:
 - Columns still pending:
 - Performance before/after, if relevant:
 
+<!-- External PRs receive automatic hosted CPU checks and a separate metadata
+admission report. Unrun GPU columns remain GPU_PENDING, even if CPU CI is green.
+The workflow does not currently rent GPUs or auto-merge. Existing implementation
+optimizations may enter the future isolated GPU queue; infrastructure, dependency,
+test, contract and public-API changes require review. No second GPU is required
+from contributors. See CONTRIBUTING.md for the exact boundary and pending setup. -->
+
+- Existing feature/path being optimized (if applicable):
+- Reproducible benchmark shape, mode, seed and timing scope:
+- Legacy certified bytes expected to remain unchanged:
+
 ## Public surface
 
 - [ ] Documentation and support matrix are updated where required.

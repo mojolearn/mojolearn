@@ -88,6 +88,85 @@ The pull-request template asks for:
 Maintainers run cross-vendor certification after local review. A contributor
 is not expected to own or rent a second vendor, let alone a third.
 
+## Automatic checks for external pull requests
+
+External PRs to the default branch receive two separate reports from
+[External contribution checks](.github/workflows/external-performance.yml).
+There is no push trigger. PR authors GitHub identifies as `OWNER`, `MEMBER`
+or `COLLABORATOR` are exempt from this additional workflow; existing maintainer
+CI and release work continue as before.
+
+- The **admission report** reads changed-file metadata using the policy from
+  the trusted base commit. It does not fetch or execute the PR. Existing
+  implementation optimizations on its narrow allowlist receive `GPU_PENDING`.
+  Changes to infrastructure, dependencies, tests, contracts, public APIs or
+  files outside that allowlist receive `REVIEW_REQUIRED`. PR text, labels,
+  uploaded results and changes to the gate cannot approve the PR itself.
+- The **hosted CPU report** runs base-version packaging/version/CPU-baseline
+  checks against the candidate, parses Python and package TOML, checks binding
+  shell syntax, and runs trusted comparator negative controls against the
+  candidate helpers. It runs on a disposable GitHub-hosted Ubuntu machine
+  without cloud/release credentials, caches or a writable token. It does not
+  build Mojo, run GPU algorithms or measure GPU performance.
+
+Each report records the exact base/head commits and policy hash. Reports are
+available in the Actions job summary and its JSON artifacts. A green CPU job
+does **not** close `GPU_PENDING` or permit automatic merging. GitHub's fork
+workflow approval policy can hold a first-time contributor's CPU job; this
+repository currently uses `first_time_contributors` approval. Workflow code
+cannot override that repository/organization setting. Metadata admission
+does not require executing the fork's workflow.
+
+### GPU automation integration and current limits
+
+The admission job also emits `external-gpu-request.json`, a typed integration
+request containing exact commits, trusted recipe IDs, required vendor/mode
+evidence, bounded worker requirements and explicit missing configuration.
+Its `enabled` field is currently **false**. No GPU fleet or automatic merge
+service is configured by this change. The repository inspection for this work
+found no registered Actions runners and no repository Actions secrets;
+credentials on a maintainer's local machine are not CI configuration.
+
+The existing [manual GPU workflow](.github/workflows/gpu-validation.yml)
+targets self-hosted labels. It must not receive untrusted external PR code.
+The [release runner](tools/release_runner.sh) is also outside this trust zone.
+
+A controller can consume the request without asking the owner to start every
+run, once an administrator provides these concrete services and limits:
+
+1. A trusted GitHub App/controller with a configured recurring budget and
+   quotas, plus disposable NVIDIA, AMD and Apple GPU capacity. Provider keys
+   stay in the controller. Guest workers receive no provider, release or
+   repository-write credentials and no shared caches. One bounded worker runs
+   at a time, then is destroyed with a retained receipt.
+2. A controller that independently reloads the current PR metadata and trusted
+   base policy, checks the exact base/head commits and recipe IDs, and refuses
+   stale or contributor-supplied commands. The JSON artifact is data, not a
+   signed approval or executable job definition. Benchmark drivers and evidence
+   validators come from the trusted base. Candidate source runs only inside
+   the disposable guest; a trusted collector validates outputs outside it.
+3. Retained correctness and negative controls, unchanged legacy IDENTICAL
+   bytes, cross-vendor certificates, and at least nine interleaved before/after
+   samples on the same device. The controller must apply a reviewed,
+   fixture-specific regression/performance policy. No time is a pass merely
+   because it is faster, and no passing fixture proves every possible input.
+4. Exact-head result publication by that App and repository rules that require
+   its checks. Existing-feature optimizations can become eligible for automatic
+   acceptance only after this proof path is operational; infrastructure,
+   dependencies, test and numerical-contract changes still require review.
+   Automatic merge remains disabled until those conditions are configured.
+
+Any future self-hosted runner groups must restrict access to trusted workflows
+at the administrator level. A `runs-on` line in this workflow cannot prevent a
+fork from proposing a different workflow that requests another runner.
+GitHub documents the separation of untrusted PR execution from privileged
+events in its [secure-use guidance](https://docs.github.com/en/actions/reference/security/secure-use)
+and [workflow event reference](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows).
+
+Maintainers can run the admission negative controls locally with
+`python3 -m unittest discover -s tools -p test_external_contribution_gate.py`.
+No provider account or GPU is needed for those controls.
+
 ## Becoming a maintainer
 
 Maintainership is intentionally transferable. Contributors who repeatedly
