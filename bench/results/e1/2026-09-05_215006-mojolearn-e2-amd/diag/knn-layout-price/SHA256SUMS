@@ -1,0 +1,17 @@
+ad45e6bacb844acc231fa081df4f525d1e08a77d5d4402249beb5a66ca38737d  /root/mojolearn/bench/results/e1/2026-09-05_215006-mojolearn-e2-amd/diag/knn-layout-price/check-baseline
+9ae92846b3910451a376dc048526a20a89603d324eda85e1989c99b8f7b748a3  /root/mojolearn/bench/results/e1/2026-09-05_215006-mojolearn-e2-amd/diag/knn-layout-price/check-selector
+05c7cff03d2ac7a63efe9a64147e206855d535b92dbee49e5bf50853829cd515  /root/mojolearn/bench/results/e1/2026-09-05_215006-mojolearn-e2-amd/diag/knn-layout-price/check-transpose
+1763fe965f77e5da8cb958949db4ef692fea90c77c1c9c41d7cc59c81284459c  /root/mojolearn/bench/results/e1/2026-09-05_215006-mojolearn-e2-amd/diag/knn-layout-price/check-both
+65b065f8057878df332a08227d04def8fec17ef8bffb3bf0ddcff3961d10e012  /root/mojolearn/bench/results/e1/2026-09-05_215006-mojolearn-e2-amd/diag/knn-layout-price/price-baseline
+b42e857efedfebecb3f95f34b5ed0722452ed5f29a865ba7f3dfa2ec2c993f74  /root/mojolearn/bench/results/e1/2026-09-05_215006-mojolearn-e2-amd/diag/knn-layout-price/price-selector
+577fc8731887b6185d0700121c132fda5d185c4c4090462e64990a285cdc7fbd  /root/mojolearn/bench/results/e1/2026-09-05_215006-mojolearn-e2-amd/diag/knn-layout-price/price-transpose
+a17726ad85660c6e6f2790847b4750c83cc3d37547d5cf047e20284e13e86030  /root/mojolearn/bench/results/e1/2026-09-05_215006-mojolearn-e2-amd/diag/knn-layout-price/price-both
+60c909eaaea65b82dec7d1e495aa15a1e0ab99ef301739369adedc78d329b6d2  bench/knn_layout_dispatch_check.mojo
+a19e0d3b5a3a704adbb25075be34a89c30b2258617175d7dbe599805efb356fd  bench/knn_layout_dispatch_price.mojo
+c9eb73305a12489a12c64a98323245ff015886d8b41335479941b7fc400a7155  bench/knn_smallk_dispatch_check.mojo
+3cac34ba0a93522f9f2990bc91b56320dffc75779c7e8b90fd0aae79dcc0637d  bench/knn_smallk_dispatch_price.mojo
+236d4e48c26b0077f3413878cdb917ff33f1df678f2dc48a7642c28ea9938d49  bench/knn_smallk_dispatch_fixture.mojo
+95e1b03feccf570419d3845826eeac73892ef7fb4f7b0e7a527e8ee61ab7dc47  bench/knn_smallk_price_fixture.mojo
+a67dff937fe62f2f3466e1b6e9890793f9885775d0884ababc981d340eb9a891  neighbors/impl/neighbors/detail/knn_brute_force.mojo
+550bf07614190841000786afade7fe3ca68e863b607a94eb1607ce44b274754c  neighbors/checks/transposed_index_distance_candidate.mojo
+51bfaa82bfb5de25ff360d50d7ee8eb79456603a23b5b37d10fabf236a9663c5  neighbors/checks/select_smallk_identical_candidate.mojo

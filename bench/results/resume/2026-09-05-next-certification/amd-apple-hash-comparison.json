@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "scope": "Retained validated Apple summary versus newly validated AMD full outputs",
+  "apple_summary": "bench/results/resume/2026-09-05-layout-apple-price/cross-vendor-summary.json",
+  "amd_nvidia_summary": "bench/results/resume/2026-09-05-next-certification/amd-nvidia-knn-layout.json",
+  "correctness_selected_pairs": 143628,
+  "arms": 4,
+  "query_shapes": [
+    32,
+    128,
+    1000
+  ]
+}

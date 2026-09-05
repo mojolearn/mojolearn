@@ -1,0 +1,54 @@
+[17:41:22 amd] dead-man timer pid 25821 (3600 s, keyed by tag e2 + name mojolearn-e2-amd)
+[17:41:22 amd] creating mojolearn-e2-amd (gpu-mi325x1-256gb, tor1)
+[17:41:24 amd] droplet id 598100258
+[17:42:10 amd] active at 143.198.46.217
+[17:42:34 amd] arming a second dead-man ON THE DROPLET (3600s), which the local one cannot guarantee
+[amd] ON_DROPLET_DEADMAN_ARMED
+[amd gpu] GPU[0]		: Card Series: 		AMD Instinct Mi325X VF
+[17:43:08 amd] ssh settled after 3 probe(s)
+[17:43:08 amd] archive 64e700357c5aa94ba1096f6cb0e9fe79a3e5e099 (git archive, bench/results excluded)
+[17:43:09 amd]   archive 2.6M, sha256 958c4230d887644f
+ARCHIVE-SHA-OK
+64e700357c5aa94ba1096f6cb0e9fe79a3e5e099
+1
+[17:50:02 amd] wave 1: phases=9 lanes=all, bound 2660s
+WAVE-1-EXIT=0  (124 = hit the work bound)
+
+=== phase 1 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 2 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 3 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 4 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 5 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 6 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 7 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 8 SKIPPED (MOJOLEARN_E1_PHASES=9) ===
+
+=== phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon === 21:50:08
+phase 9: DIAG ONLY (MOJOLEARN_P9_ONLY_DIAG=1); no builds, no arms, no probes here
+phase 9 builds: <none>
+phase 9 tiers:  <none>
+concurrent probe SKIPPED: needs all three tiers, P9_TIERS=<none>
+
+=== phase 9 diag: tools/knn_layout_do_diag.sh === 21:50:08
+
+=== done === 21:52:40
+artifacts in /root/mojolearn/bench/results/e1/2026-09-05_215006-mojolearn-e2-amd
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card
+[17:52:40 amd] fetch artifacts
+[17:53:14 amd] fetched: 2026-09-05_215006-mojolearn-e2-amd
+[17:53:20 amd] leg done; destroying
+[17:53:20 amd] teardown (rc=0)
+[17:53:21 amd] DELETE droplet 598100258 -> HTTP 204
+[17:53:22 amd] post-destroy GET droplet 598100258 -> HTTP 200
+[17:53:28 amd] post-destroy GET droplet 598100258 -> HTTP 200
+[17:53:34 amd] post-destroy GET droplet 598100258 -> HTTP 404
+[17:53:34 amd] dead-man timer cancelled

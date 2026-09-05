@@ -73,7 +73,8 @@ The longer Mamba and expanded UMAP fixtures are prepared, not yet certified.
 The serial follow-up payload uses its former two-arm kNN timing slot for the
 long-sequence certificate; kNN timings belong to the dedicated four-arm leg.
 
-UMAP is the next feature focus after the wheel release. Extend the identity
+UMAP and sequence certification are the current feature focus; artifact
+publication remains a separate release gate. Extend the identity
 fixtures beyond the current 8x1 case to multidimensional data, 3D output,
 multiple seeds and parameter settings, alongside independent embedding-quality
 checks. Use RunPod for NVIDIA and **DigitalOcean for AMD**, with tests and
@@ -119,7 +120,14 @@ bit matches across vendors, arms and rounds; see the
 At 1,000 queries, NVIDIA median native request times were 759.333 ms baseline,
 17.241 ms selector-only and 9.273 ms combined. Apple did not reproduce those
 gains, and its combined arm was slower at 32 queries. Keep both experiments
-opt-in: AMD, broader datasets and installed-artifact gates remain pending.
+opt-in: broader datasets and installed-artifact gates remain pending.
+The resumed DigitalOcean AMD MI325X campaign at `64e70035` now passes all
+four correctness arms and 108 timing invocations. Complete outputs match
+NVIDIA and the validated Apple output hashes. At 1,000 queries AMD medians
+were 66.968 ms baseline, 65.703 ms selector, 6.671 ms transpose and 5.522 ms
+combined: its benefit is primarily from transposition. See the
+[AMD record](bench/results/e1/2026-09-05_215006-mojolearn-e2-amd/README.md).
+Collection completed and droplet deletion was verified by GET 404.
 The separate [mode-isolation gate](bench/results/resume/2026-09-05-layout-modes/results.json)
 passed on Apple M4 in FAST and DETERMINISTIC, with neither and both
 experimental defines: both effective flags stayed disabled, and public
