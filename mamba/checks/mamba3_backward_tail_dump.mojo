@@ -90,12 +90,17 @@ def _write_f32(path: String, values: List[Float32]) raises:
 def _check_scale_chain(ctx: DeviceContext) raises:
     # Exact dyadic two-token VJP. The scale branch is live at token zero
     # even though no shifted beta reaches it. The next token receives both.
-    var qdt = mamba_upload(ctx, List[Float32](5, 7))
-    var qtrap = mamba_upload(ctx, List[Float32](11, 13))
+    var qdt_values: List[Float32] = [5, 7]
+    var qtrap_values: List[Float32] = [11, 13]
+    var scale_values: List[Float32] = [4, 8]
+    var dt_values: List[Float32] = [2, 3]
+    var sigma_values: List[Float32] = [0.25, 0.5]
+    var qdt = mamba_upload(ctx, qdt_values)
+    var qtrap = mamba_upload(ctx, qtrap_values)
     var qgamma = mamba_zeros(ctx, 2)
-    var scale = mamba_upload(ctx, List[Float32](4, 8))
-    var dt = mamba_upload(ctx, List[Float32](2, 3))
-    var sigma = mamba_upload(ctx, List[Float32](0.25, 0.5))
+    var scale = mamba_upload(ctx, scale_values)
+    var dt = mamba_upload(ctx, dt_values)
+    var sigma = mamba_upload(ctx, sigma_values)
     var out_gamma = mamba_zeros(ctx, 2)
     var out_dt = mamba_zeros(ctx, 2)
     var out_trap = mamba_zeros(ctx, 2)
