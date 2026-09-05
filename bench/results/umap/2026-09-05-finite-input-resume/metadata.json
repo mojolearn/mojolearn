@@ -1,0 +1,32 @@
+{
+  "source_commit": "27899c5f419c230d4898f4717b3309d02c0d65fe",
+  "dirty": true,
+  "captured_at": "2026-09-05T08:39:32.529727+00:00",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "hardware": "Apple M4",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "lane": "main; checks run sequentially",
+  "scope": "Local finite-input refusal and valid-input regression; no new cross-device or installed-wheel claim",
+  "baseline": "bench/results/umap/2026-09-05_718495cd-apple/identity-1.log",
+  "source_sha256": {
+    "umap/__init__.mojo": "930592d51aadb6fe62bf23fa3db0f61c7dada0015ba2cc4848713b7844061774",
+    "umap/bench/optimizer_bench.mojo": "0a27c340b877cc13896542e796c89ee2418b236bf3b4105f72fdb0cd6421119e",
+    "umap/checks/curve_check.mojo": "2105b904798b136a41c54f186e1669fc370dfff22f754972ffe05d64b196f8bb",
+    "umap/checks/estimator_check.mojo": "ef91d8cb93f484e98485d0d714b5dfdb333f6df3f43bfdd7f2bc3b205920f83f",
+    "umap/checks/finite_optimizer_check.mojo": "8721360dd0368c7ab91c9b6be3b045a24715a69c63eb4e4269302c409f8bcacf",
+    "umap/checks/finite_params_check.mojo": "76b46d602c2cface98d93aa9af4a93096c339a188739cf46abf688cf283356b7",
+    "umap/checks/graph_check.mojo": "7e23a44a06753a41144b73a51b7602db23b2a74a779bf46ef9d939f81224d7e6",
+    "umap/checks/identity_check.mojo": "7f622bdf2c6d60eb40801e057b921f75e1595c7d004cb043ebf98d33c4da37d0",
+    "umap/checks/optimizer_check.mojo": "3fd9bf8ce204872fb1e904c4c94a91340435c26ca45efc270642071f166f6cdd",
+    "umap/checks/spectral_init_check.mojo": "a7862fda0cf16143fb50b5cf2a2c8aaf733cc6766dd43d61c9b92fb52c149b68",
+    "umap/curve.mojo": "3ae9990c550a059eafc48a4abb687174f123b466cd718b0226cf02c8fa51d84f",
+    "umap/estimator.mojo": "c922e5bb173820aad8977760dab58dadcacec3acda09119b88e705bff7da8f55",
+    "umap/graph.mojo": "79ec869cf0521bd9e07d4151ff80bd9097057d8b25c566fae8cdbc9385312bb1",
+    "umap/optimizer.mojo": "f31421c06cab5daf78c6674f96f7747931cd2f6cb8a68eb48a0df0b734359399",
+    "umap/optimizer_fast.mojo": "2124352b040b2e0f702c7649207d9e175116639d178d703b8fbb7e71f96a1446",
+    "umap/params.mojo": "fc0741f8338c02a491be3c57e4a9cd2726f2ceae4476bf47b48291666c4cd9aa",
+    "umap/spectral_init.mojo": "7b6d360a93fbe2a2abdb78edca12bc469bc35b6e17a3d7c9caeb51f60003cb80",
+    "pixi.toml": "4dd496ea23bb9f5409bb256f14386e195ef3994769d4c6eaabff2d09b144228d",
+    "pixi.lock": "8d6452d6d6980d268198f3a42fd0593176af7f9786ed6c6f494ed929b4507dc2"
+  }
+}

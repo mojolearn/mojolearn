@@ -2,6 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
 from std.memory import bitcast
+from std.math import isfinite
 from max.gpu.host import DeviceContext
 from umap.optimizer import optimize_layout_identical
 from umap.optimizer_fast import optimize_layout_fast
@@ -48,7 +49,7 @@ def main() raises:
     )
     var squared_error = Float32(0.0)
     for i in range(8):
-        if fast[i] != fast[i]:
+        if not isfinite(fast[i]):
             raise Error("UMAP FAST optimizer returned a non-finite value")
         var delta = fast[i] - first[i]
         squared_error += delta * delta

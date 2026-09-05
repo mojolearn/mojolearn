@@ -22,13 +22,21 @@ Apple M4 and NVIDIA RTX 4090 at `718495cd` passed all five backward gates;
 all 54 retained gradient tensors and all 186 UMAP stage cells matched by
 bits. See [the comparison record](bench/results/resume/2026-09-05/cross-device.json).
 
-The active next step is the guarded AMD backward/UMAP capture when MI300X
-inventory returns. The plain ROCm 6.4 image needs the new SSH bootstrap;
-the RunPod ROCm 6.1 image starts SSH but is below the compiler's runtime
-minimum. The corrected 6.4 request passed dry-run checks but could not be
-deployed because inventory was unavailable. Compare AMD with fresh Apple
-and NVIDIA certificates from the same source snapshot. No pods remain from
-these attempts. These source checks do not replace installed-wheel gates.
+The subsequent AMD MI300X run at the same `718495cd` source completed all
+five backward gates and the UMAP capture. Its recovered certificate matches
+all 54 gradient tensors and 186 UMAP cells from Apple/NVIDIA; see the
+[three-vendor record](bench/results/e1g/2026-09-05_042552-amd-mamba/cross-device.json).
+The completed AMD pod was terminated and its absence verified by HTTP 404.
+The ROCm 6.4 image with SSH bootstrap therefore has a successful deployment;
+the earlier runtime/inventory failures remain historical evidence.
+
+UMAP's pending non-finite input changes are now checked on Apple M4: both
+optimizer entries and public data entries reject all 42 NaN/infinity cases
+in FAST and IDENTICAL builds, and the named fixture still matches all 186
+baseline cells. The [local record](bench/results/umap/2026-09-05-finite-input-resume/metadata.json)
+retains the dirty source snapshot. This later patch has no new remote claim.
+The next step is the installed-wheel artifact closure below; source checks
+do not replace installed-wheel gates.
 
 ## Now: release truth and artifact closure
 

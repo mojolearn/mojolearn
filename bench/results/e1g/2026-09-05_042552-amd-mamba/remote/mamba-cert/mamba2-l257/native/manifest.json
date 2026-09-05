@@ -1,0 +1,123 @@
+{
+  "case": "m2_base_b1_l257_d64",
+  "family": "mamba2",
+  "mode": "IDENTICAL",
+  "objective": "signed_dyadic_weight_v1",
+  "public_prefill_leaves": [
+    "x",
+    "block_norm.weight",
+    "in_proj.weight",
+    "conv1d.weight",
+    "conv1d.bias",
+    "dt_bias",
+    "A_log",
+    "D",
+    "norm.weight",
+    "out_proj.weight"
+  ],
+  "schema": "mojolearn.mamba.backward-bytes.v1",
+  "source_sha256": "a762a60c6701379577d22c3931791ceb2359376eb264600492f8fb616c9980e3",
+  "state_boundary_leaves": [
+    "initial_state"
+  ],
+  "state_boundary_policy": "incoming_state_before_chunk0; block_output_objective; final_state_cotangent=zero",
+  "tensors": {
+    "A_log": {
+      "dtype": "<f4",
+      "file": "grad.A_log.f32",
+      "sha256": "d1dd565e439f3693d1b998ca83c22110f9e6240c814f9ceac87e0d6b93fbcf1f",
+      "shape": [
+        2
+      ]
+    },
+    "D": {
+      "dtype": "<f4",
+      "file": "grad.D.f32",
+      "sha256": "a3535bbdf4bd85597febab8caa13826cd9ffd65aae8f1db018ec272448d5a7a8",
+      "shape": [
+        2
+      ]
+    },
+    "block_norm.weight": {
+      "dtype": "<f4",
+      "file": "grad.block_norm.weight.f32",
+      "sha256": "d910ed0e5cd08c7cdb620d1be6b20324a5f9e3c332acffc17b1307c5165a5a00",
+      "shape": [
+        64
+      ]
+    },
+    "conv1d.bias": {
+      "dtype": "<f4",
+      "file": "grad.conv1d.bias.f32",
+      "sha256": "77683b320ef72bcd692426b5815ea7bbb06ac9fba9df247bf301d6039c4b2a24",
+      "shape": [
+        384
+      ]
+    },
+    "conv1d.weight": {
+      "dtype": "<f4",
+      "file": "grad.conv1d.weight.f32",
+      "sha256": "f134eb356b2dbe7474f90c58c89de2514da2feba4b72b18a7dbca904ba6e6f3f",
+      "shape": [
+        384,
+        1,
+        4
+      ]
+    },
+    "dt_bias": {
+      "dtype": "<f4",
+      "file": "grad.dt_bias.f32",
+      "sha256": "a46e25637e699a7dd8c96b728db98b77a6137a4342518408d795a82a41ccd0ba",
+      "shape": [
+        2
+      ]
+    },
+    "in_proj.weight": {
+      "dtype": "<f4",
+      "file": "grad.in_proj.weight.f32",
+      "sha256": "5272eced6d6051297807fe3a4ddfa18e25ff2390f8a01a3357ba8b9f4ba1a058",
+      "shape": [
+        514,
+        64
+      ]
+    },
+    "initial_state": {
+      "dtype": "<f4",
+      "file": "grad.initial_state.f32",
+      "sha256": "718ba7e5be0a9288130134339af99086b14a98efd698a9af810437b0dcacd61c",
+      "shape": [
+        1,
+        2,
+        64,
+        128
+      ]
+    },
+    "norm.weight": {
+      "dtype": "<f4",
+      "file": "grad.norm.weight.f32",
+      "sha256": "9afea3a9a6437a0ceb8d8332c176c43b1e0852068fcbfaa1765ccec199e8c0b6",
+      "shape": [
+        128
+      ]
+    },
+    "out_proj.weight": {
+      "dtype": "<f4",
+      "file": "grad.out_proj.weight.f32",
+      "sha256": "8ae9fe49f3d121109b26a7dc8633a5947c3967c31fb08f86c5edc1007975bddd",
+      "shape": [
+        64,
+        128
+      ]
+    },
+    "x": {
+      "dtype": "<f4",
+      "file": "grad.x.f32",
+      "sha256": "7f0eaa4aacace499499dea3f7b088caa7a391cf4398a88bab63b37bde3c511cf",
+      "shape": [
+        1,
+        257,
+        64
+      ]
+    }
+  }
+}

@@ -1,0 +1,2 @@
+BITWISE PASS: bench/results/mamba_backward_cert/2026-09-05-resume-apple == bench/results/e1g/2026-09-05_033031-nvidia-mamba/remote/mamba-cert; devices=apple,nvidia; 54 gradient tensors
+BITWISE PASS: bench/results/mamba_backward_cert/2026-09-05-resume-apple == bench/results/e1g/2026-09-05_042552-amd-mamba/remote/mamba-cert; devices=apple,amd; 54 gradient tensors

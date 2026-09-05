@@ -1,0 +1,199 @@
+diff --git a/pixi.toml b/pixi.toml
+index edbdaca4..2d98add4 100644
+--- a/pixi.toml
++++ b/pixi.toml
+@@ -1250,6 +1250,10 @@ check-umap-spectral = "mojo run -I . umap/checks/spectral_init_check.mojo"
+ check-umap-optimizer = "mojo run -I . umap/checks/optimizer_check.mojo"
+ check-umap-estimator = "mojo run -I . umap/checks/estimator_check.mojo"
+ check-umap-curve = "mojo run -I . umap/checks/curve_check.mojo"
++check-umap-finite-params = "mojo run -I . umap/checks/finite_params_check.mojo"
++check-umap-finite-optimizer = "mojo run -I . umap/checks/finite_optimizer_check.mojo"
++check-umap-finite-optimizer-identical = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . umap/checks/finite_optimizer_check.mojo"
++check-umap-stage-identity = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . umap/checks/identity_check.mojo"
+ bench-umap-optimizer = "mojo run -I . umap/bench/optimizer_bench.mojo"
+ check-if = "mojo run -I . isolation_forest/checks/if_check.mojo"
+ 
+diff --git a/umap/README.md b/umap/README.md
+index b9609b78..8370b9a8 100644
+--- a/umap/README.md
++++ b/umap/README.md
+@@ -13,6 +13,11 @@ commit `718495cd`. The
+ [comparison record](../bench/results/umap/2026-09-05_718495cd-apple/apple-nvidia-comparison.json)
+ links the retained captures and names the hardware.
+ 
++The recovered AMD Instinct MI300X capture at the same `718495cd` source also
++matches all 186 cells; the
++[three-vendor record](../bench/results/e1g/2026-09-05_042552-amd-mamba/cross-device.json)
++links the AMD capture, comparison output and verified teardown.
++
+ The named `umap.identical.8x1.2d.e4.seed19.v1` fixture exports 186 Float32 bit
+ patterns across input, rho, sigma, directed memberships, fuzzy weights,
+ curve parameters, spectral initialization and final layout. It also checks
+@@ -38,3 +43,23 @@ The curve check separately compares default and custom fits with numerical
+ references. These tolerances validate parameter accuracy, not bit identity.
+ `checks/finite_params_check.mojo` verifies rejection of NaN and infinities
+ at the parameter, curve and fuzzy-graph surfaces.
++
++Both optimizer entries also reject non-finite learning rates, repulsion,
++curve parameters, graph weights and initial coordinates. The public
++`fuzzy_graph_from_data` and `fit_transform` entries reject non-finite input
++coordinates before uploading data or running k-NN. The direct FAST check
++bypasses the small-layout serial fallback so the GPU entry's validation is
++covered independently.
++
++Run the refusal checks in the main testing lane:
++
++```sh
++tools/with_build_lock.sh pixi run check-umap-finite-params
++tools/with_build_lock.sh pixi run check-umap-finite-optimizer
++tools/with_build_lock.sh pixi run check-umap-finite-optimizer-identical
++```
++
++The latter two tasks each cover 42 cases: NaN, positive infinity and negative
++infinity across six arguments in each optimizer and the two public data
++entries. `check-umap-stage-identity` captures the named IDENTICAL fixture for
++comparison with the command above.
+diff --git a/umap/checks/estimator_check.mojo b/umap/checks/estimator_check.mojo
+index 75f2d5af..a867bff8 100644
+--- a/umap/checks/estimator_check.mojo
++++ b/umap/checks/estimator_check.mojo
+@@ -3,6 +3,7 @@
+ 
+ from max.gpu.host import DeviceContext
+ from std.memory import bitcast
++from std.math import isfinite
+ 
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from umap.estimator import fit_transform
+@@ -23,7 +24,7 @@ def main() raises:
+         raise Error("UMAP fit_transform returned the wrong layout shape")
+     var changed = False
+     for i in range(16):
+-        if first[i] != first[i]:
++        if not isfinite(first[i]) or not isfinite(second[i]):
+             raise Error("UMAP fit_transform returned a non-finite layout")
+         if first[i] != Float32(0.0):
+             changed = True
+@@ -46,4 +47,3 @@ def main() raises:
+     if not refused:
+         raise Error("UMAP fit_transform admitted an unsupported dimension")
+     print("UMAP end-to-end estimator PASS")
+-
+diff --git a/umap/checks/optimizer_check.mojo b/umap/checks/optimizer_check.mojo
+index d5ef599d..db363b33 100644
+--- a/umap/checks/optimizer_check.mojo
++++ b/umap/checks/optimizer_check.mojo
+@@ -2,6 +2,7 @@
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ 
+ from std.memory import bitcast
++from std.math import isfinite
+ from max.gpu.host import DeviceContext
+ from umap.optimizer import optimize_layout_identical
+ from umap.optimizer_fast import optimize_layout_fast
+@@ -48,7 +49,7 @@ def main() raises:
+     )
+     var squared_error = Float32(0.0)
+     for i in range(8):
+-        if fast[i] != fast[i]:
++        if not isfinite(fast[i]):
+             raise Error("UMAP FAST optimizer returned a non-finite value")
+         var delta = fast[i] - first[i]
+         squared_error += delta * delta
+diff --git a/umap/estimator.mojo b/umap/estimator.mojo
+index 0987fc14..7afd69f0 100644
+--- a/umap/estimator.mojo
++++ b/umap/estimator.mojo
+@@ -3,6 +3,7 @@
+ """End-to-end host-list UMAP surface for the supported 2D/3D slice."""
+ 
+ from max.gpu.host import DeviceContext
++from std.math import isfinite
+ from neighbors.estimator import knn_search
+ from umap.graph import FuzzySimplicialGraph, fuzzy_simplicial_graph
+ from umap.curve import fit_umap_curve
+@@ -22,6 +23,9 @@ def fuzzy_graph_from_data(
+     params.validate(n_samples)
+     if n_features < 1 or len(x_rowmajor) != n_samples * n_features:
+         raise Error("UMAP input does not match its declared shape")
++    for i in range(len(x_rowmajor)):
++        if not isfinite(x_rowmajor[i]):
++            raise Error("UMAP input coordinates must be finite")
+     var hx = ctx.enqueue_create_host_buffer[DType.float32](len(x_rowmajor))
+     for i in range(len(x_rowmajor)):
+         hx.unsafe_ptr().unsafe_store(i, x_rowmajor[i])
+diff --git a/umap/optimizer.mojo b/umap/optimizer.mojo
+index 8a3e976f..840bda14 100644
+--- a/umap/optimizer.mojo
++++ b/umap/optimizer.mojo
+@@ -2,7 +2,7 @@
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """Serial semantic reference for UMAP attractive/repulsive optimization."""
+ 
+-from std.math import pow
++from std.math import isfinite, pow
+ from std.memory import bitcast
+ from max.gpu.host import DeviceContext
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+@@ -63,6 +63,10 @@ def optimize_layout_identical(
+         weights
+     ) != n_samples * n_samples:
+         raise Error("UMAP optimizer input shape mismatch")
++    if not isfinite(initial_learning_rate) or not isfinite(repulsion_strength) or (
++        not isfinite(a) or not isfinite(b)
++    ):
++        raise Error("UMAP optimizer scalar parameters must be finite")
+     if n_epochs < 1 or not (initial_learning_rate > Float32(0.0)):
+         raise Error("UMAP optimizer needs positive epochs and learning rate")
+     if negative_sample_rate < 0 or repulsion_strength < Float32(0.0):
+diff --git a/umap/optimizer_fast.mojo b/umap/optimizer_fast.mojo
+index 72d250be..ceb0903f 100644
+--- a/umap/optimizer_fast.mojo
++++ b/umap/optimizer_fast.mojo
+@@ -4,6 +4,7 @@
+ 
+ from max.gpu.host import DeviceContext
+ from std.gpu import block_dim, block_idx, thread_idx
++from std.math import isfinite
+ 
+ 
+ comptime FAST_OPT_TPB = 128
+@@ -127,6 +128,10 @@ def optimize_layout_fast(
+         n_samples * n_samples
+     ):
+         raise Error("UMAP FAST optimizer input shape mismatch")
++    if not isfinite(learning_rate) or not isfinite(repulsion) or (
++        not isfinite(a) or not isfinite(b)
++    ):
++        raise Error("UMAP FAST optimizer scalar parameters must be finite")
+     if n_epochs < 1 or not (learning_rate > Float32(0.0)) or (
+         negative_rate < 0 or repulsion < Float32(0.0)
+     ):
+@@ -143,7 +148,7 @@ def optimize_layout_fast(
+     for head in range(n_samples):
+         for tail in range(n_samples):
+             var weight = weights[head * n_samples + tail]
+-            if weight != weight or weight < Float32(0.0):
++            if not isfinite(weight) or weight < Float32(0.0):
+                 raise Error("UMAP FAST optimizer graph weight is invalid")
+             if weight > max_weight:
+                 max_weight = weight
+@@ -157,6 +162,9 @@ def optimize_layout_fast(
+         raise Error("UMAP FAST optimizer graph has no positive edges")
+     if len(edge_weights) == 0:
+         raise Error("UMAP FAST optimizer graph has no non-self edges")
++    for i in range(len(initial)):
++        if not isfinite(initial[i]):
++            raise Error("UMAP FAST optimizer initialization is invalid")
+     var h_initial = ctx.enqueue_create_host_buffer[DType.float32](len(initial))
+     var h_offsets = ctx.enqueue_create_host_buffer[DType.uint32](
+         len(row_offsets)
+@@ -166,8 +174,6 @@ def optimize_layout_fast(
+         len(edge_weights)
+     )
+     for i in range(len(initial)):
+-        if initial[i] != initial[i]:
+-            raise Error("UMAP FAST optimizer initialization is invalid")
+         h_initial.unsafe_ptr().unsafe_store(i, initial[i])
+     for i in range(len(row_offsets)):
+         h_offsets.unsafe_ptr().unsafe_store(i, row_offsets[i])

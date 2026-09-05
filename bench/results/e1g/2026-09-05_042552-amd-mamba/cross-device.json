@@ -1,0 +1,31 @@
+{
+  "classification": "PASS",
+  "source_commit": "718495cda991d96d0346b18ad1ef1fadfc8bed14",
+  "recovered_at": "2026-09-05T08:41:39.213547+00:00",
+  "devices": [
+    "Apple M4",
+    "NVIDIA RTX 4090",
+    "AMD Instinct MI300X (gfx942)"
+  ],
+  "mamba": {
+    "cases": 5,
+    "gradient_tensors": 54,
+    "comparison": "bitwise raw float32 bytes; certificate provenance validated",
+    "apple_certificate": "bench/results/mamba_backward_cert/2026-09-05-resume-apple",
+    "nvidia_certificate": "bench/results/e1g/2026-09-05_033031-nvidia-mamba/remote/mamba-cert",
+    "amd_certificate": "bench/results/e1g/2026-09-05_042552-amd-mamba/remote/mamba-cert",
+    "comparison_log": "bench/results/e1g/2026-09-05_042552-amd-mamba/mamba-three-vendor.log"
+  },
+  "umap": {
+    "profile": "umap.identical.8x1.2d.e4.seed19.v1",
+    "stage_cells": 186,
+    "stages": 8,
+    "amd_capture": "bench/results/e1g/2026-09-05_042552-amd-mamba/remote/umap.identity.log",
+    "apple_amd_comparison_log": "bench/results/e1g/2026-09-05_042552-amd-mamba/umap-apple-amd.log",
+    "apple_nvidia_record": "bench/results/umap/2026-09-05_718495cd-apple/apple-nvidia-comparison.json"
+  },
+  "amd_source_archive_hash_matches": true,
+  "amd_terminated_verified": true,
+  "teardown_log": "bench/results/e1g/2026-09-05_042552-amd-mamba/recovery-teardown.log",
+  "scope": "Named source fixtures only; does not certify later dirty UMAP changes or installed wheels"
+}

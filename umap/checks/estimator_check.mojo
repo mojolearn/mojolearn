@@ -3,6 +3,7 @@
 
 from max.gpu.host import DeviceContext
 from std.memory import bitcast
+from std.math import isfinite
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from umap.estimator import fit_transform
@@ -23,7 +24,7 @@ def main() raises:
         raise Error("UMAP fit_transform returned the wrong layout shape")
     var changed = False
     for i in range(16):
-        if first[i] != first[i]:
+        if not isfinite(first[i]) or not isfinite(second[i]):
             raise Error("UMAP fit_transform returned a non-finite layout")
         if first[i] != Float32(0.0):
             changed = True
@@ -46,4 +47,3 @@ def main() raises:
     if not refused:
         raise Error("UMAP fit_transform admitted an unsupported dimension")
     print("UMAP end-to-end estimator PASS")
-

@@ -4,6 +4,7 @@
 
 from max.gpu.host import DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
+from std.math import isfinite
 
 
 comptime FAST_OPT_TPB = 128
@@ -127,6 +128,10 @@ def optimize_layout_fast(
         n_samples * n_samples
     ):
         raise Error("UMAP FAST optimizer input shape mismatch")
+    if not isfinite(learning_rate) or not isfinite(repulsion) or (
+        not isfinite(a) or not isfinite(b)
+    ):
+        raise Error("UMAP FAST optimizer scalar parameters must be finite")
     if n_epochs < 1 or not (learning_rate > Float32(0.0)) or (
         negative_rate < 0 or repulsion < Float32(0.0)
     ):
@@ -143,7 +148,7 @@ def optimize_layout_fast(
     for head in range(n_samples):
         for tail in range(n_samples):
             var weight = weights[head * n_samples + tail]
-            if weight != weight or weight < Float32(0.0):
+            if not isfinite(weight) or weight < Float32(0.0):
                 raise Error("UMAP FAST optimizer graph weight is invalid")
             if weight > max_weight:
                 max_weight = weight
@@ -157,6 +162,9 @@ def optimize_layout_fast(
         raise Error("UMAP FAST optimizer graph has no positive edges")
     if len(edge_weights) == 0:
         raise Error("UMAP FAST optimizer graph has no non-self edges")
+    for i in range(len(initial)):
+        if not isfinite(initial[i]):
+            raise Error("UMAP FAST optimizer initialization is invalid")
     var h_initial = ctx.enqueue_create_host_buffer[DType.float32](len(initial))
     var h_offsets = ctx.enqueue_create_host_buffer[DType.uint32](
         len(row_offsets)
@@ -166,8 +174,6 @@ def optimize_layout_fast(
         len(edge_weights)
     )
     for i in range(len(initial)):
-        if initial[i] != initial[i]:
-            raise Error("UMAP FAST optimizer initialization is invalid")
         h_initial.unsafe_ptr().unsafe_store(i, initial[i])
     for i in range(len(row_offsets)):
         h_offsets.unsafe_ptr().unsafe_store(i, row_offsets[i])

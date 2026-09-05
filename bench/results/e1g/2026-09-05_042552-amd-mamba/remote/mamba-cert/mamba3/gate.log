@@ -1,0 +1,36 @@
+Pixi task (mamba-grad-m3-public in skgpu): oracle=/tmp/mojolearn-mamba3-grad && actual=/tmp/mojolearn-mamba3-actual && mkdir -p $oracle $actual && find $oracle -maxdepth 1 -type f -delete && find $actual -maxdepth 1 -type f -delete && python tools/mamba_gradient_oracle.py --family mamba3 --out $oracle && MOJOLEARN_MAMBA_GRAD_DUMP=$actual tools/with_identical_mode.sh mojo run -I . mamba/checks/mamba3_backward_tail_dump.mojo && python tools/mamba_gradient_oracle.py --compare $oracle $actual --require-public-prefill
+wrote mamba3/m3_base_b2_l4_d32 gradients to /tmp/mojolearn-mamba3-grad
+finite-difference worst relative-scale error: 2.698e-10
+4056 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x515ec0000000, nodemask=1)
+Imported from /root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:10:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:10:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:10:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:10:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/mamba/checks/mamba3_backward_tail_dump.mojo:10:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Mamba gradient public-prefill comparison passed: 86 tensors
+  selected manifest policy=mamba3.public_prefill_leaves.exact10.v1

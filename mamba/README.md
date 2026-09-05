@@ -134,7 +134,9 @@ Mamba2 `m2_base_b2_l4_d32`, Mamba3 `m3_base_b2_l4_d32`, and the Mamba2
 and its linked certificates. This evidence is for these source fixtures,
 not arbitrary shapes or installed wheels.
 
-AMD backward identity remains unmeasured for this certificate: the available
-ROCm 6.1 image was below the compiler's minimum, and the corrected ROCm 6.4
-startup request could not acquire an instance. These attempts are recorded
-as infrastructure failures, not numerical disagreements.
+The subsequent AMD Instinct MI300X run on the ROCm 6.4 image also passed all
+five gates at `718495cd`. Its recovered certificate matches all 54 native
+gradient tensors from Apple and NVIDIA; see the
+[three-vendor record](../bench/results/e1g/2026-09-05_042552-amd-mamba/cross-device.json).
+The completed AMD pod was terminated and verified absent. Earlier runtime
+and inventory failures remain recorded as infrastructure failures.

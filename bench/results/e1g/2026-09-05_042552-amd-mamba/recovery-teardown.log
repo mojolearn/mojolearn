@@ -1,0 +1,4 @@
+reaping 4ml5pw0c6x1g20
+  terminating 4ml5pw0c6x1g20 (layer two, from this machine)
+    DELETE /v1/pods/4ml5pw0c6x1g20 -> HTTP 204
+  VERIFIED: 4ml5pw0c6x1g20 is gone (HTTP 404).

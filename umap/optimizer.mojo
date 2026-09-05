@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Serial semantic reference for UMAP attractive/repulsive optimization."""
 
-from std.math import pow
+from std.math import isfinite, pow
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -63,6 +63,10 @@ def optimize_layout_identical(
         weights
     ) != n_samples * n_samples:
         raise Error("UMAP optimizer input shape mismatch")
+    if not isfinite(initial_learning_rate) or not isfinite(repulsion_strength) or (
+        not isfinite(a) or not isfinite(b)
+    ):
+        raise Error("UMAP optimizer scalar parameters must be finite")
     if n_epochs < 1 or not (initial_learning_rate > Float32(0.0)):
         raise Error("UMAP optimizer needs positive epochs and learning rate")
     if negative_sample_rate < 0 or repulsion_strength < Float32(0.0):

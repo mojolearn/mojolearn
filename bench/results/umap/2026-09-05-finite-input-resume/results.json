@@ -1,0 +1,62 @@
+[
+  {
+    "command": [
+      "tools/with_build_lock.sh",
+      "pixi",
+      "run",
+      "check-umap-finite-params"
+    ],
+    "exit_code": 0,
+    "log": "check-umap-finite-params.log"
+  },
+  {
+    "command": [
+      "tools/with_build_lock.sh",
+      "pixi",
+      "run",
+      "check-umap-finite-optimizer"
+    ],
+    "exit_code": 0,
+    "log": "check-umap-finite-optimizer.log"
+  },
+  {
+    "command": [
+      "tools/with_build_lock.sh",
+      "pixi",
+      "run",
+      "check-umap-finite-optimizer-identical"
+    ],
+    "exit_code": 0,
+    "log": "check-umap-finite-optimizer-identical.log"
+  },
+  {
+    "command": [
+      "tools/with_build_lock.sh",
+      "pixi",
+      "run",
+      "check-umap-optimizer"
+    ],
+    "exit_code": 0,
+    "log": "check-umap-optimizer.log"
+  },
+  {
+    "command": [
+      "tools/with_build_lock.sh",
+      "pixi",
+      "run",
+      "check-umap-estimator"
+    ],
+    "exit_code": 0,
+    "log": "check-umap-estimator.log"
+  },
+  {
+    "command": [
+      "tools/with_build_lock.sh",
+      "pixi",
+      "run",
+      "check-umap-stage-identity"
+    ],
+    "exit_code": 0,
+    "log": "check-umap-stage-identity.log"
+  }
+]

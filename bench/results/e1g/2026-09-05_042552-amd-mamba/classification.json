@@ -1,0 +1,8 @@
+{
+  "classification": "PASS",
+  "mamba_cert_exit": 0,
+  "umap_identity_exit": 0,
+  "source_commit": "718495cda991d96d0346b18ad1ef1fadfc8bed14",
+  "terminated_verified": true,
+  "recovered_completed_run": true
+}

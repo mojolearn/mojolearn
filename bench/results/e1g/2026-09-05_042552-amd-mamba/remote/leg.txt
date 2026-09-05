@@ -1,0 +1,8 @@
+vendor=amd
+payload=mamba
+commit=718495cda991d96d0346b18ad1ef1fadfc8bed14
+started=2026-09-05T08:26:54Z
+pixi_install_exit=0
+umap_identity_exit=0
+mamba_cert_exit=0
+finished=2026-09-05T08:30:54Z

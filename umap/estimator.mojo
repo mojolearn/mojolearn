@@ -3,6 +3,7 @@
 """End-to-end host-list UMAP surface for the supported 2D/3D slice."""
 
 from max.gpu.host import DeviceContext
+from std.math import isfinite
 from neighbors.estimator import knn_search
 from umap.graph import FuzzySimplicialGraph, fuzzy_simplicial_graph
 from umap.curve import fit_umap_curve
@@ -22,6 +23,9 @@ def fuzzy_graph_from_data(
     params.validate(n_samples)
     if n_features < 1 or len(x_rowmajor) != n_samples * n_features:
         raise Error("UMAP input does not match its declared shape")
+    for i in range(len(x_rowmajor)):
+        if not isfinite(x_rowmajor[i]):
+            raise Error("UMAP input coordinates must be finite")
     var hx = ctx.enqueue_create_host_buffer[DType.float32](len(x_rowmajor))
     for i in range(len(x_rowmajor)):
         hx.unsafe_ptr().unsafe_store(i, x_rowmajor[i])

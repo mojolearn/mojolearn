@@ -1,0 +1,2 @@
+✨ Pixi task (check-umap-finite-params in default): mojo run -I . umap/checks/finite_params_check.mojo
+UMAP non-finite parameter refusal PASS: 18 cases
